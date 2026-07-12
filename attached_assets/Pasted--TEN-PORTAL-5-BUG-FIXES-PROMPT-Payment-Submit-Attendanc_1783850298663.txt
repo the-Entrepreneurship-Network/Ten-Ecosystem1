@@ -1,0 +1,497 @@
+# TEN PORTAL — 5 BUG FIXES PROMPT
+## Payment Submit / Attendance Days / Email / Post-Approval Redirect / Attendance Ring
+
+> READ THIS ENTIRE FILE BEFORE TOUCHING ANY CODE.
+> All root causes confirmed by reading actual source files.
+> Every change listed here includes the exact element ID, line range, or function name.
+> DO NOT change anything not listed here. DO NOT destroy any existing feature.
+
+---
+
+## CONFIRMED ROOT CAUSES (read before coding)
+
+- **Submit button double-request**: After first successful UTR submit, `submitTenureUtr()` calls `checkTenurePayment(false)`. The status API returns `requiresPayment: true` (because `shortCoursePaid` is still false — admin hasn't approved yet). This re-shows the QR overlay with the form. Student can enter UTR again and click submit a second time. The server blocks the second submission, but the UI never told the student the first one already worked.
+
+- **Attendance ring/cards show %**: `updateAttRing(pct)` at line 5058 sets `label.textContent = pct + '%'`. Element id `attRingPct` (line 1898) shows `0%`. Cards `selfAttPct`, `classAttPct`, `combinedAttPct` (lines 2278, 2283, 2288) all show `0%`. These are set in the JS block around line 3584–3598.
+
+- **WhatsApp joiner wizard result shows %**: `wizardStep3ResultPct` (line 5320) shows `0%`. Set at line 5511: `document.getElementById('wizardStep3ResultPct').textContent = data.student.calculatedAttendance + '%'`. The API already returns `presentCount` and `daysNeededToAttendMore`.
+
+- **Email to change**: `public/registration-success.html` line 96: `support@tenecosystem.com` → must be `hr@entrepreneurshipnetwork.net`.
+
+- **Post-approval redirect**: `routes/adminPortal.js` route `POST /payments/verify/:paymentId` (line 162). When admin approves from the **Payments tab**, this route handles it. It does NOT set `student.shortCoursePaid = true` for tenure payments — only cert/fine purposes are handled. The `tenure-payment/approve` route (line ~286) DOES set it, but that's only for the Tenure Payments tab. Admin sees tenure payments in BOTH tabs and often uses the Payments tab.
+
+---
+
+## RULES
+
+1. DO NOT change API response field names.
+2. DO NOT remove any HTML element — only change text content and JS logic.
+3. DO NOT modify any route not mentioned here.
+4. DO NOT change any login, logout, session, or authentication behavior.
+5. DO NOT break attendance marking, task submission, notifications, or chat.
+
+---
+
+## FIX 1 — Submit Button: Prevent Double Request + Lock After First Submit
+
+**Files to change:** `public/student-dashboard.html`
+
+### Problem:
+After successful UTR submit, `checkTenurePayment(false)` is called at line 5973 (inside the `.then(data => {...})` block of `submitTenureUtr`). This re-fetches payment status. Since `shortCoursePaid` is still false (pending admin), the overlay re-appears showing the QR and UTR form again — allowing a second submission.
+
+### Fix A — Add a module-level "already submitted" flag:
+
+Find the area near the top of the `<script>` tag that contains `submitTenureUtr` (around line 5926). Add this variable declaration BEFORE the `submitTenureUtr` function:
+
+```js
+var _tenureUtrAlreadySubmitted = false;
+```
+
+### Fix B — Lock at top of `submitTenureUtr` function:
+
+Find the `submitTenureUtr` function. At the very TOP of the function body (first line inside the function), add:
+
+```js
+// Prevent double submission — once submitted, block all further attempts this session
+if (_tenureUtrAlreadySubmitted) {
+  Swal.fire({
+    icon: 'info',
+    title: 'Already Submitted',
+    text: 'Your transaction ID has already been submitted. Please wait for admin verification (24–48 hours).',
+    background: '#0e1428',
+    color: '#F0EEE8',
+    confirmButtonColor: '#D4AF37'
+  });
+  return;
+}
+```
+
+### Fix C — Set the flag immediately before the fetch call:
+
+Inside `submitTenureUtr`, find the line `const submitBtn = document.getElementById('tenureSubmitBtn');`. After disabling the button, set the flag:
+
+```js
+submitBtn.disabled = true;
+submitBtn.textContent = 'Submitting...';
+_tenureUtrAlreadySubmitted = true; // ← ADD THIS LINE
+```
+
+### Fix D — On success, show Pending state instead of re-checking:
+
+Find the `.then(data => {...})` success block inside `submitTenureUtr`. Currently it calls `checkTenurePayment(false)` after showing the SweetAlert. Replace the entire success `.then` block with:
+
+```js
+.then(data => {
+  if (data.success) {
+    // Stop timer
+    if (typeof tenureTimerInterval !== 'undefined' && tenureTimerInterval) {
+      clearInterval(tenureTimerInterval);
+    }
+    // Hide the QR/form state, show the pending state
+    var mainState = document.getElementById('tenurePaymentMainState');
+    var pendingState = document.getElementById('tenurePaymentPendingState');
+    if (mainState) mainState.style.display = 'none';
+    if (pendingState) {
+      pendingState.style.display = 'block';
+      var utrEl = document.getElementById('tenurePendingUtr');
+      if (utrEl) utrEl.textContent = 'Submitted — Awaiting Admin Approval';
+    }
+    // Show success message — do NOT call checkTenurePayment again
+    Swal.fire({
+      icon: 'success',
+      title: 'Submitted! 🎉',
+      text: 'Your transaction has been submitted for admin verification. Access will unlock within 24–48 hours once approved.',
+      background: '#0e1428',
+      color: '#F0EEE8',
+      confirmButtonColor: '#10b981'
+    });
+    // Do NOT re-enable button — submission is done
+  } else {
+    // Submission failed — allow retry
+    _tenureUtrAlreadySubmitted = false;
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Submit UTR for HR Approval';
+    Swal.fire({
+      icon: 'error',
+      title: 'Submission Failed',
+      text: data.error || 'An error occurred. Please try again.',
+      background: '#0e1428',
+      color: '#F0EEE8',
+      confirmButtonColor: '#f43f5e'
+    });
+  }
+})
+```
+
+### Fix E — On error, reset flag so student can retry:
+
+In the `.catch(err => {...})` block of `submitTenureUtr`, add:
+
+```js
+_tenureUtrAlreadySubmitted = false; // Allow retry on network error
+submitBtn.disabled = false;
+submitBtn.textContent = 'Submit UTR for HR Approval';
+```
+
+### Fix F — Clear flag on logout:
+
+Find the logout function (search for `_doLogout` or `sessionStorage.removeItem('tenure_paid_verified')`). On the same line or immediately after, add:
+
+```js
+_tenureUtrAlreadySubmitted = false;
+```
+
+---
+
+## FIX 2 — Post-Admin-Approval Redirect Fix
+
+**File to change:** `routes/adminPortal.js`
+
+### Problem:
+Route `POST /payments/verify/:paymentId` (line 162) handles payment approval from the Payments tab. For tenure payments (purpose starts with `tenure_`), it does NOT set `student.shortCoursePaid = true`. So after admin approves from the Payments tab, the student's `shortCoursePaid` field stays `false`, and on next login the payment wall re-appears.
+
+### Fix:
+
+Inside the `if (action === 'approve')` block of `POST /payments/verify/:paymentId`, find the block that handles `cert_expert`, `cert_nano_degree`, `cert_fellowship`, `fine_low_attendance`. AFTER all those existing `if` checks (but still inside the `try` block and still inside `if (action === 'approve')`), add:
+
+```js
+// If this is a tenure payment, unlock student access
+if (payment.purpose && payment.purpose.startsWith('tenure_')) {
+  try {
+    const tenureStudent = await Student.findById(payment.studentId);
+    if (tenureStudent) {
+      tenureStudent.shortCoursePaid = true;
+      tenureStudent.shortCoursePaymentVerified = true;
+      tenureStudent.shortCoursePaymentId = payment.orderId || payment._id.toString();
+      await tenureStudent.save();
+      console.log('[Admin] Tenure payment approved — student access unlocked:', tenureStudent.employeeId);
+    }
+  } catch (tenureErr) {
+    console.error('[Admin] Error unlocking tenure student:', tenureErr.message);
+    // Do not fail the whole approval — log and continue
+  }
+}
+```
+
+Place this block AFTER the existing `fine_low_attendance` if-block and BEFORE the `Notification.notifyStudent(...)` call.
+
+Also, in the `if (action === 'reject')` block of the SAME route, after `payment.save()`, add:
+
+```js
+// If tenure payment rejected, reset shortCoursePaymentId so student can resubmit
+if (payment.purpose && payment.purpose.startsWith('tenure_')) {
+  try {
+    const tenureStudent = await Student.findById(payment.studentId);
+    if (tenureStudent) {
+      tenureStudent.shortCoursePaymentId = null;
+      await tenureStudent.save();
+    }
+  } catch (e) {
+    console.error('[Admin] Error resetting tenure student on reject:', e.message);
+  }
+}
+```
+
+Place this BEFORE the `Notification.notifyStudent(...)` call in the reject block.
+
+---
+
+## FIX 3 — Email Change in registration-success.html
+
+**File to change:** `public/registration-success.html`
+
+### Find line 96 (search for `support@tenecosystem.com`):
+
+```html
+Need assistance? Please contact support@tenecosystem.com
+```
+
+### Replace with:
+
+```html
+Need assistance? Please contact <a href="mailto:hr@entrepreneurshipnetwork.net" style="color:#D4AF37;text-decoration:none;font-weight:600;">hr@entrepreneurshipnetwork.net</a>
+```
+
+That is the ONLY change in this file. Do not touch anything else in registration-success.html.
+
+---
+
+## FIX 4 — Attendance Ring and Cards: Show Days Not Percentage
+
+**File to change:** `public/student-dashboard.html`
+
+### Fix 4A — Change the ring label from % to days:
+
+Find the `updateAttRing` function (line 5058):
+
+```js
+function updateAttRing(pct) {
+  var circle = document.getElementById('attRingCircle');
+  var label = document.getElementById('attRingPct');
+  if (!circle || !label) return;
+  var circumference = 150.8;
+  var offset = circumference - (Math.min(pct, 100) / 100) * circumference;
+  circle.style.strokeDashoffset = offset;
+  circle.style.stroke = pct >= 75 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#f43f5e';
+  label.textContent = pct + '%';
+}
+```
+
+The function takes `pct` (percentage) for the ring animation — keep that logic. Only change the LABEL. But since `updateAttRing` doesn't have access to the day count, we need to pass it.
+
+**Replace** `updateAttRing` with:
+
+```js
+function updateAttRing(pct, presentDays) {
+  var circle = document.getElementById('attRingCircle');
+  var label = document.getElementById('attRingPct');
+  if (!circle || !label) return;
+  var circumference = 150.8;
+  var offset = circumference - (Math.min(pct, 100) / 100) * circumference;
+  circle.style.strokeDashoffset = offset;
+  circle.style.stroke = pct >= 75 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#f43f5e';
+  // Show days present instead of percentage
+  var days = (presentDays !== undefined && presentDays !== null) ? presentDays : Math.round(pct);
+  label.textContent = days + (days === 1 ? ' day' : ' days');
+}
+```
+
+### Fix 4B — Update the ring call site:
+
+Find all calls to `updateAttRing(...)` in the file. There is one at line 3597:
+```js
+updateAttRing(finalCombinedPct);
+```
+
+Replace with:
+```js
+updateAttRing(finalCombinedPct, s.combinedPresentDays || 0);
+```
+
+### Fix 4C — Update the "Attendance" stat box heading:
+
+Find the stat box HTML (line 1907):
+```html
+<h2>Attendance</h2>
+<h1 id="attendanceText">0%</h1>
+```
+
+Change the `<h2>` label:
+```html
+<h2>Days Present</h2>
+<h1 id="attendanceText">0</h1>
+```
+
+### Fix 4D — Update `attendanceText` value in JS:
+
+Find line 3596:
+```js
+document.getElementById("attendanceText").innerText = finalCombinedPct + "%";
+```
+
+Replace with:
+```js
+document.getElementById("attendanceText").innerText = (s.combinedPresentDays || 0);
+```
+
+### Fix 4E — Update the 3 attendance stat cards:
+
+Find lines 3584–3588:
+```js
+document.getElementById("selfAttPct").innerText   = finalSelfPct + "%";
+document.getElementById("selfAttCount").innerText = (overridePct !== null) ? "WhatsApp Joiner" : ((s.selfTotal||0) + " days marked");
+document.getElementById("classAttPct").innerText  = (s.coordPct||0) + "%";
+document.getElementById("classAttCount").innerText= (s.coordPresent||0) + " present / " + (s.coordTotal||0);
+document.getElementById("combinedAttPct").innerText = finalCombinedPct + "%";
+```
+
+Replace with:
+```js
+// Self attendance — show days not %
+var selfDays = s.selfCount || s.selfPresent || s.selfPresentDays || 0;
+document.getElementById("selfAttPct").innerText   = selfDays + (selfDays === 1 ? " day" : " days");
+document.getElementById("selfAttCount").innerText = (overridePct !== null) ? "WhatsApp Joiner" : "self-marked";
+
+// Coordinator attendance — show days not %
+var coordDays = s.coordPresent || s.coordCount || s.coordinatorPresentDays || 0;
+document.getElementById("classAttPct").innerText  = coordDays + (coordDays === 1 ? " day" : " days");
+document.getElementById("classAttCount").innerText= coordDays + " present";
+
+// Combined — show days not %
+var combinedDays = s.combinedPresentDays || s.combinedCount || 0;
+document.getElementById("combinedAttPct").innerText = combinedDays + (combinedDays === 1 ? " day" : " days");
+```
+
+### Fix 4F — Update the card LABELS in HTML (change "My Attendance", "Class (Coordinator)", "Combined" headings to reflect days):
+
+Find the HTML for the three stat cards (around line 2278–2289). The labels currently say:
+- "My Attendance" → change to "My Days Present"
+- "Class (Coordinator)" → change to "Coordinator Marked"
+- "Combined" → change to "Total Days Present"
+
+Also change the default values:
+- `id="selfAttPct"` default `0%` → `0 days`
+- `id="classAttPct"` default `0%` → `0 days`
+- `id="combinedAttPct"` default `0%` → `0 days`
+
+### Fix 4G — Update the Combined badge to show eligibility in days:
+
+Find lines 3590–3594 (the badge logic):
+```js
+const badge = document.getElementById("combinedAttBadge");
+const isEligible = (finalCombinedPct >= 75);
+if(isEligible){ badge.innerText = "Eligible ✅"; badge.style.color = "#10b981"; }
+else { badge.innerText = "Below 75% ❌"; badge.style.color = "#f43f5e"; }
+```
+
+Keep this logic exactly as-is — only the badge text is correct, no change needed here.
+
+### Fix 4H — Keep the threshold message (already shows days — verify it's correct):
+
+The threshold text at lines 3634–3637 already says things like:
+`"⚠️ 1/20 days present — need 14 more to reach 75% (15 days required)"`
+
+This is already in days format. DO NOT change it. Just verify it still works after the other changes.
+
+---
+
+## FIX 5 — WhatsApp Joiner Wizard: Show Days Not Percentage
+
+**File to change:** `public/student-dashboard.html`
+
+### Fix 5A — Change the wizard result block HTML (around line 5313–5328):
+
+Find the `wizardStep3ResultBlock` div. It currently contains:
+```html
+<p style="font-size:13px;color:#a2b1c6;margin-bottom:6px;">Calculated Attendance Percentage:</p>
+<h3 id="wizardStep3ResultPct" style="font-size:36px;font-weight:800;color:#10b981;">0%</h3>
+
+<div style="margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.08);">
+  <p style="font-size:13px;color:#a2b1c6;margin-bottom:6px;">Days you need to attend more:</p>
+  <h3 id="wizardStep3ResultDays" style="font-size:36px;font-weight:800;color:#fbbf24;">0 days</h3>
+  <p id="wizardStep3ResultDaysDetail" style="font-size:12px;color:#8aa4c8;line-height:1.5;margin-top:8px;">To meet the 75% attendance requirement for your tenure.</p>
+</div>
+```
+
+**Replace the entire inner content of `wizardStep3ResultBlock` with:**
+
+```html
+<!-- Days Present -->
+<div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center;margin-bottom:16px;">
+  <div style="text-align:center;flex:1;min-width:120px;">
+    <p style="font-size:11px;color:#a2b1c6;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Days Present</p>
+    <h3 id="wizardStep3ResultPct" style="font-size:36px;font-weight:800;color:#10b981;">0</h3>
+    <p style="font-size:11px;color:#6a8a9a;margin-top:2px;">days attended</p>
+  </div>
+  <div style="text-align:center;flex:1;min-width:120px;">
+    <p style="font-size:11px;color:#a2b1c6;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Still Need</p>
+    <h3 id="wizardStep3ResultDays" style="font-size:36px;font-weight:800;color:#fbbf24;">0</h3>
+    <p style="font-size:11px;color:#6a8a9a;margin-top:2px;">more days for 75%</p>
+  </div>
+</div>
+<p id="wizardStep3ResultDaysDetail" style="font-size:12px;color:#8aa4c8;line-height:1.6;text-align:center;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08);">Loading attendance details...</p>
+```
+
+**Important:** Keep the element IDs `wizardStep3ResultPct`, `wizardStep3ResultDays`, `wizardStep3ResultDaysDetail` exactly the same — only the surrounding HTML and labels change.
+
+### Fix 5B — Update the JS that sets wizard result values (around line 5511):
+
+Find this block:
+```js
+document.getElementById('wizardStep3ResultPct').textContent = data.student.calculatedAttendance + '%';
+
+var daysMore = (data.student.daysNeededToAttendMore !== undefined) ? data.student.daysNeededToAttendMore : 0;
+document.getElementById('wizardStep3ResultDays').textContent = daysMore + ' days';
+
+var totalTenure = data.student.totalTenureDays || 30;
+var requiredTotal = Math.ceil(totalTenure * 0.75);
+var presentCount = data.student.presentCount || 0;
+var detailMsg = `Based on your ${totalTenure}-day tenure, you must be present for at least ${requiredTotal} days. You have been present for ${presentCount} days, so you need to attend ${daysMore} more days to reach the 75% requirement.`;
+document.getElementById('wizardStep3ResultDaysDetail').textContent = detailMsg;
+```
+
+**Replace entirely with:**
+
+```js
+// Show days — not percentage
+var presentCount  = data.student.presentCount || 0;
+var daysMore      = (data.student.daysNeededToAttendMore !== undefined) ? data.student.daysNeededToAttendMore : 0;
+var totalTenure   = data.student.totalTenureDays || 30;
+var requiredTotal = Math.ceil(totalTenure * 0.75);
+
+// wizardStep3ResultPct now shows PRESENT DAYS (not a percentage)
+document.getElementById('wizardStep3ResultPct').textContent = presentCount;
+
+// wizardStep3ResultDays shows HOW MANY MORE DAYS NEEDED
+document.getElementById('wizardStep3ResultDays').textContent = daysMore;
+
+// Detail message
+var detailMsg;
+if (daysMore <= 0) {
+  detailMsg = '✅ You have already met the 75% attendance requirement! (' + presentCount + ' of ' + requiredTotal + ' required days attended.)';
+} else {
+  detailMsg = 'Your tenure is ' + totalTenure + ' days. You must attend at least ' + requiredTotal + ' days (75%). You have attended ' + presentCount + ' days so far. Attend ' + daysMore + ' more days to meet the requirement.';
+}
+document.getElementById('wizardStep3ResultDaysDetail').textContent = detailMsg;
+```
+
+---
+
+## SUMMARY OF FILES CHANGED
+
+| File | What Changes |
+|------|-------------|
+| `public/student-dashboard.html` | Fix 1 (submit lock), Fix 4 (ring + cards days), Fix 5 (wizard days) |
+| `routes/adminPortal.js` | Fix 2 (set shortCoursePaid on approval from Payments tab) |
+| `public/registration-success.html` | Fix 3 (email address) |
+
+---
+
+## ACCEPTANCE CHECKLIST — VERIFY ALL BEFORE DONE
+
+**Fix 1 — Submit Button:**
+- [ ] Student enters UTR and clicks Submit → request goes to server exactly once
+- [ ] After submit, overlay shows "Awaiting Admin Approval" pending state — NOT the QR form again
+- [ ] Clicking Submit again immediately shows "Already Submitted" info message
+- [ ] On network error, flag resets and student can try again
+- [ ] On logout and re-login (before approval), student sees QR form again (not the pending state — that's correct)
+- [ ] `_tenureUtrAlreadySubmitted` is declared before `submitTenureUtr` function
+
+**Fix 2 — Post-Approval Redirect:**
+- [ ] Admin approves from Payments tab → `student.shortCoursePaid = true` in DB
+- [ ] Admin approves from Tenure Payments tab → `student.shortCoursePaid = true` in DB (already worked, confirm still works)
+- [ ] Student logs out after approval and logs back in → NO payment wall
+- [ ] Admin rejects from Payments tab → `student.shortCoursePaymentId = null` so student can resubmit
+
+**Fix 3 — Email:**
+- [ ] `public/registration-success.html` shows `hr@entrepreneurshipnetwork.net`
+- [ ] Old email `support@tenecosystem.com` is gone from that file
+- [ ] Link is clickable and opens mail client
+
+**Fix 4 — Attendance Ring + Cards:**
+- [ ] Circular ring shows "5 days" not "83%" (or whatever the actual count is)
+- [ ] "Attendance" stat box heading now says "Days Present"
+- [ ] "My Days Present" card shows number like "5 days" not "100%"
+- [ ] "Coordinator Marked" card shows "0 days" not "0%"
+- [ ] "Total Days Present" card shows combined days count not %
+- [ ] Threshold text at bottom still shows: "⚠️ X/Y days present — need Z more to reach 75%"
+- [ ] `Eligible ✅` / `Below 75% ❌` badge still appears correctly
+- [ ] Ring color still changes: green ≥75, orange ≥50, red <50
+
+**Fix 5 — WhatsApp Joiner Wizard:**
+- [ ] After confirming joining date, result screen shows "Days Present: X" and "Still Need: X"
+- [ ] No percentage (%) symbol visible in the result block
+- [ ] If student has 0 present days: shows "Days Present: 0" and "Still Need: 23" (for 1 month)
+- [ ] If student meets 75%: detail message shows "✅ You have already met the requirement"
+- [ ] Detail message correctly calculates required days from tenure
+- [ ] Element IDs `wizardStep3ResultPct`, `wizardStep3ResultDays`, `wizardStep3ResultDaysDetail` all still exist in HTML
+
+**No regression:**
+- [ ] Attendance marking still works (mark button, already-marked state)
+- [ ] Payment overlay still shows for unpaid short-course students on fresh login
+- [ ] Coordinator-marked attendance still displays
+- [ ] Task submission unchanged
+- [ ] Notifications unchanged
+- [ ] Chat unchanged
+- [ ] HR portal unchanged
+- [ ] Admin portal unchanged

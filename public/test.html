@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test Portal</title>
+<link rel="stylesheet" href="ten-theme.css">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+:root {
+  --bg: #080f1c;
+  --surface: #0d1629;
+  --card: #111e35;
+  --border: rgba(99,140,210,0.12);
+  --border-strong: rgba(99,140,210,0.28);
+  --accent: #3b82f6;
+  --cyan: #06b6d4;
+  --green: #10b981;
+  --red: #ef4444;
+  --amber: #f59e0b;
+  --text: #edf2ff;
+  --muted: #8aa4c8;
+}
+*,*::before,*::after { margin:0;padding:0;box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:'Plus Jakarta Sans',sans-serif; min-height:100vh; padding:24px; }
+body::before { content:''; position:fixed; width:500px; height:500px; border-radius:50%; background:radial-gradient(circle,rgba(29,78,216,0.35),transparent 70%); top:-180px; right:-160px; pointer-events:none; filter:blur(130px); opacity:0.35; z-index:0; }
+.wrapper { max-width:900px; margin:0 auto; position:relative; z-index:1; }
+
+/* Header */
+.header { background:linear-gradient(135deg,#1e3a8a,#1e40af,#0369a1); border-radius:22px; padding:32px 40px; margin-bottom:24px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; }
+.header h1 { font-size:28px; font-weight:800; letter-spacing:-0.5px; }
+.header p { font-size:14px; color:rgba(219,234,254,0.75); margin-top:6px; }
+.back-btn { padding:10px 22px; background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.2); border-radius:10px; color:white; cursor:pointer; font-weight:700; font-size:13px; text-decoration:none; display:inline-block; transition:all 0.2s; }
+.back-btn:hover { background:rgba(255,255,255,0.2); }
+
+/* Camera gate */
+#cameraGate { background:var(--surface); border:1px solid var(--border-strong); border-radius:20px; padding:40px; text-align:center; }
+#cameraGate h2 { font-size:22px; font-weight:800; margin-bottom:12px; }
+#cameraGate p { color:var(--muted); margin-bottom:24px; font-size:14px; }
+#videoPreview { width:100%; max-width:400px; border-radius:14px; border:2px solid var(--border-strong); margin-bottom:20px; display:none; }
+.start-btn { padding:14px 36px; background:linear-gradient(135deg,var(--accent),#1d4ed8); color:white; border:none; border-radius:12px; font-size:16px; font-weight:700; cursor:pointer; transition:all 0.2s; }
+.start-btn:hover { transform:translateY(-1px); box-shadow:0 6px 24px rgba(59,130,246,0.4); }
+
+/* Test area */
+#testArea { display:none; }
+.test-header { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:20px 24px; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; }
+.test-meta { font-size:14px; color:var(--muted); }
+.test-meta strong { color:var(--text); }
+.camera-live { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--green); }
+.camera-dot { width:8px; height:8px; background:var(--green); border-radius:50%; animation:pulse 1.5s infinite; }
+@keyframes pulse { 0%,100%{ opacity:1; } 50%{ opacity:0.3; } }
+
+#videoPip { width:160px; border-radius:10px; border:2px solid var(--green); }
+
+.question-card { background:var(--card); border:1px solid var(--border); border-radius:18px; padding:28px; margin-bottom:16px; }
+.q-num { font-size:11px; font-weight:700; color:var(--accent); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:10px; }
+.q-text { font-size:16px; font-weight:600; line-height:1.5; margin-bottom:20px; }
+.options { display:flex; flex-direction:column; gap:10px; }
+.option-btn {
+  display:flex; align-items:center; gap:14px;
+  padding:14px 18px;
+  background:rgba(13,22,41,0.8);
+  border:1px solid var(--border);
+  border-radius:12px;
+  cursor:pointer;
+  transition:all 0.2s;
+  text-align:left;
+  color:var(--text);
+  font-size:14px;
+  font-family:'Plus Jakarta Sans',sans-serif;
+}
+.option-btn:hover { border-color:var(--border-strong); background:rgba(59,130,246,0.06); }
+.option-btn.selected { border-color:var(--accent); background:rgba(59,130,246,0.12); color:var(--accent); }
+.option-letter { width:32px; height:32px; border-radius:8px; background:var(--surface); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; flex-shrink:0; }
+.option-btn.selected .option-letter { background:var(--accent); border-color:var(--accent); color:white; }
+
+.submit-area { text-align:center; margin-top:28px; }
+.submit-btn { padding:16px 48px; background:linear-gradient(135deg,var(--green),#059669); color:white; border:none; border-radius:14px; font-size:17px; font-weight:800; cursor:pointer; transition:all 0.2s; }
+.submit-btn:hover { transform:translateY(-2px); box-shadow:0 8px 28px rgba(16,185,129,0.4); }
+
+/* Result */
+#resultArea { display:none; background:var(--surface); border:1px solid var(--border-strong); border-radius:22px; padding:48px; text-align:center; }
+.result-score { font-size:72px; font-weight:800; background:linear-gradient(135deg,var(--accent),var(--cyan)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; margin-bottom:8px; }
+.result-label { font-size:18px; color:var(--muted); margin-bottom:28px; }
+.result-msg { font-size:22px; font-weight:700; margin-bottom:8px; }
+
+/* Leaderboard */
+.lb-section { background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:28px; margin-top:24px; }
+.lb-section h3 { font-size:18px; font-weight:800; margin-bottom:20px; display:flex; align-items:center; gap:10px; }
+.lb-row { display:flex; align-items:center; gap:14px; padding:12px 16px; border-radius:12px; margin-bottom:8px; background:var(--card); transition:all 0.2s; }
+.lb-row.my-row { border:1px solid var(--accent); background:rgba(59,130,246,0.08); }
+.lb-rank { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; flex-shrink:0; }
+.lb-rank.r1 { background:linear-gradient(135deg,#f59e0b,#d97706); color:white; }
+.lb-rank.r2 { background:linear-gradient(135deg,#94a3b8,#64748b); color:white; }
+.lb-rank.r3 { background:linear-gradient(135deg,#cd7c2f,#b45309); color:white; }
+.lb-rank.rn { background:var(--surface); color:var(--muted); border:1px solid var(--border); }
+.lb-name { flex:1; font-weight:600; font-size:14px; }
+.lb-score-bar { flex:2; display:flex; align-items:center; gap:8px; }
+.lb-bar-bg { flex:1; height:6px; background:rgba(99,140,210,0.15); border-radius:3px; overflow:hidden; }
+.lb-bar-fill { height:100%; background:linear-gradient(90deg,var(--accent),var(--cyan)); border-radius:3px; }
+.lb-pct { font-weight:800; color:var(--accent); font-size:13px; white-space:nowrap; }
+
+/* No test available */
+.no-test { background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:60px; text-align:center; }
+.no-test .icon { font-size:48px; margin-bottom:16px; }
+.no-test h3 { font-size:20px; font-weight:700; color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- Header -->
+  <div class="header">
+    <div>
+      <h1>📝 Test Portal</h1>
+      <p id="headerDomain">Loading...</p>
+    </div>
+    <a href="/student-dashboard.html" class="back-btn">← Back to Dashboard</a>
+  </div>
+
+  <!-- No test available state -->
+  <div id="noTestDiv" class="no-test" style="display:none;">
+    <div class="icon">📭</div>
+    <h3>No test available yet for your domain.</h3>
+    <p style="color:var(--muted);margin-top:8px;font-size:14px;">Your coordinator hasn't uploaded any questions. Check back later.</p>
+  </div>
+
+  <!-- Camera Gate -->
+  <div id="cameraGate">
+    <h2>📷 Camera Required</h2>
+    <p>To maintain test integrity, your camera must be ON throughout the test.<br>Please allow camera access and click the button below to start.</p>
+    <video id="videoPreview" autoplay muted playsinline></video>
+    <br>
+    <button class="start-btn" onclick="requestCameraAndStart()">Enable Camera & Start Test</button>
+  </div>
+
+  <!-- Test Area -->
+  <div id="testArea">
+    <div class="test-header">
+      <div class="test-meta">
+        <strong id="testDomainLabel"></strong> · <span id="questionCount">0</span> Questions
+      </div>
+      <div style="display:flex;align-items:center;gap:16px;">
+        <video id="videoPip" autoplay muted playsinline></video>
+        <div class="camera-live"><div class="camera-dot"></div> Camera ON</div>
+      </div>
+    </div>
+    <div id="questionsContainer"></div>
+    <div class="submit-area">
+      <button class="submit-btn" onclick="submitTest()">Submit Test 🚀</button>
+    </div>
+  </div>
+
+  <!-- Result -->
+  <div id="resultArea">
+    <div class="result-score" id="resultScore"></div>
+    <div class="result-label" id="resultLabel"></div>
+    <div class="result-msg" id="resultMsg"></div>
+    <a href="/student-dashboard.html" class="back-btn" style="margin-top:24px;display:inline-block;">← Back to Dashboard</a>
+  </div>
+
+  <!-- Leaderboard (always visible below) -->
+  <div class="lb-section" id="leaderboardSection" style="display:none;">
+    <h3>🏆 Domain Leaderboard</h3>
+    <div id="leaderboardList"></div>
+  </div>
+
+</div>
+
+<script>
+const student = JSON.parse(localStorage.getItem("student"));
+if(!student){ window.location.href="/login.html"; }
+
+const employeeId = student.employeeId;
+const domain = student.domain;
+const studentName = student.name || student.fullName || "Student";
+
+document.getElementById("headerDomain").innerText = domain + " · " + studentName;
+document.getElementById("testDomainLabel").innerText = domain;
+
+let cameraStream = null;
+let questions = [];
+let answers = [];
+
+// ── Load questions first to check availability ──
+async function checkTestAvailability(){
+  try{
+    const r = await fetch("/get-test-questions/"+encodeURIComponent(domain));
+    const d = await r.json();
+    if(!d.success || d.questions.length === 0){
+      document.getElementById("cameraGate").style.display="none";
+      document.getElementById("noTestDiv").style.display="block";
+      loadLeaderboard(); // still show leaderboard
+    }
+  }catch(e){}
+}
+checkTestAvailability();
+
+// ── Camera request ──
+async function requestCameraAndStart(){
+  try{
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
+    const preview = document.getElementById("videoPreview");
+    preview.srcObject = cameraStream;
+    preview.style.display = "block";
+
+    Swal.fire({
+      icon:"success",
+      title:"Camera Active",
+      text:"Camera is ON. Loading your test...",
+      background:"#080f1c",
+      color:"#edf2ff",
+      timer:1500,
+      showConfirmButton:false
+    }).then(()=>{ startTest(); });
+
+  }catch(err){
+    Swal.fire({
+      icon:"error",
+      title:"Camera Required",
+      text:"You must allow camera access to take the test. Please allow and try again.",
+      background:"#080f1c",
+      color:"#edf2ff",
+      confirmButtonColor:"#ef4444"
+    });
+  }
+}
+
+// ── Start test ──
+async function startTest(){
+  try{
+    const r = await fetch("/get-test-questions/"+encodeURIComponent(domain));
+    const d = await r.json();
+
+    if(!d.success || d.questions.length === 0){
+      document.getElementById("cameraGate").style.display="none";
+      document.getElementById("noTestDiv").style.display="block";
+      return;
+    }
+
+    questions = d.questions;
+    answers = new Array(questions.length).fill(null);
+
+    document.getElementById("questionCount").innerText = questions.length;
+
+    // Attach camera to PiP
+    const pip = document.getElementById("videoPip");
+    pip.srcObject = cameraStream;
+
+    document.getElementById("cameraGate").style.display="none";
+    document.getElementById("testArea").style.display="block";
+
+    renderQuestions();
+    loadLeaderboard();
+
+    // Warn on tab visibility change
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+  }catch(e){
+    Swal.fire({icon:"error",title:"Failed to load test",background:"#080f1c",color:"#edf2ff"});
+  }
+}
+
+// ── Tab visibility: warn student ──
+function handleVisibilityChange(){
+  if(document.hidden){
+    Swal.fire({
+      icon:"warning",
+      title:"⚠️ Tab Switch Detected",
+      text:"Switching tabs during the test is not allowed. This incident has been noted.",
+      background:"#080f1c",
+      color:"#edf2ff",
+      confirmButtonColor:"#f59e0b",
+      allowOutsideClick:false
+    });
+  }
+}
+
+// ── Render questions ──
+function renderQuestions(){
+  const container = document.getElementById("questionsContainer");
+  const letters = ["A","B","C","D"];
+  container.innerHTML = questions.map((q,qi)=>`
+    <div class="question-card" id="qcard-${qi}">
+      <div class="q-num">Question ${qi+1} of ${questions.length}</div>
+      <div class="q-text">${q.question}</div>
+      <div class="options">
+        ${(q.options||[]).map((opt,oi)=>`
+          <button class="option-btn" id="opt-${qi}-${oi}" onclick="selectAnswer(${qi},${oi})">
+            <div class="option-letter">${letters[oi]}</div>
+            <span>${opt}</span>
+          </button>
+        `).join("")}
+      </div>
+    </div>
+  `).join("");
+}
+
+function selectAnswer(qi,oi){
+  answers[qi] = oi;
+  // Clear other options for this question
+  for(let j=0;j<4;j++){
+    const btn = document.getElementById("opt-"+qi+"-"+j);
+    if(btn){ btn.classList.remove("selected"); }
+  }
+  const selected = document.getElementById("opt-"+qi+"-"+oi);
+  if(selected){ selected.classList.add("selected"); }
+}
+
+// ── Submit test ──
+async function submitTest(){
+  const unanswered = answers.filter(a=>a===null).length;
+  if(unanswered > 0){
+    const conf = await Swal.fire({
+      icon:"warning",
+      title:"Unanswered Questions",
+      text:`You have ${unanswered} unanswered question(s). Submit anyway?`,
+      showCancelButton:true,
+      confirmButtonText:"Submit Anyway",
+      cancelButtonText:"Go Back",
+      background:"#080f1c",
+      color:"#edf2ff",
+      confirmButtonColor:"#f59e0b"
+    });
+    if(!conf.isConfirmed) return;
+  }
+
+  try{
+    const r = await fetch("/submit-test",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ employeeId, studentName, domain, answers })
+    });
+    const d = await r.json();
+
+    if(d.success){
+      // Stop camera
+      if(cameraStream){ cameraStream.getTracks().forEach(t=>t.stop()); }
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+
+      document.getElementById("testArea").style.display="none";
+      document.getElementById("resultArea").style.display="block";
+
+      document.getElementById("resultScore").innerText = d.percentage+"%";
+      document.getElementById("resultLabel").innerText = `${d.score} / ${d.totalQuestions} Correct`;
+
+      let msg="", color="";
+      if(d.percentage>=80){ msg="🌟 Excellent Performance!"; color="#10b981"; }
+      else if(d.percentage>=60){ msg="👍 Good Job!"; color="#3b82f6"; }
+      else if(d.percentage>=40){ msg="📚 Keep Practicing!"; color="#f59e0b"; }
+      else { msg="💪 Don't Give Up — Try Again!"; color="#ef4444"; }
+
+      const msgEl = document.getElementById("resultMsg");
+      msgEl.innerText = msg;
+      msgEl.style.color = color;
+
+      loadLeaderboard();
+      document.getElementById("leaderboardSection").style.display="block";
+    } else {
+      Swal.fire({icon:"error",title:"Submission Failed",text:d.message||"Please try again.",background:"#080f1c",color:"#edf2ff"});
+    }
+  }catch(e){
+    Swal.fire({icon:"error",title:"Server Error",background:"#080f1c",color:"#edf2ff"});
+  }
+}
+
+// ── Leaderboard ──
+async function loadLeaderboard(){
+  try{
+    const r = await fetch("/test-leaderboard/"+encodeURIComponent(domain));
+    const d = await r.json();
+    const section = document.getElementById("leaderboardSection");
+    const list = document.getElementById("leaderboardList");
+
+    if(!d.success || d.leaderboard.length===0){
+      return;
+    }
+
+    section.style.display="block";
+    list.innerHTML = d.leaderboard.map((entry,i)=>{
+      const isMe = entry.employeeId === employeeId;
+      const rankClass = i===0?"r1":i===1?"r2":i===2?"r3":"rn";
+      return `
+        <div class="lb-row ${isMe?"my-row":""}">
+          <div class="lb-rank ${rankClass}">${i+1}</div>
+          <div class="lb-name">${entry.studentName}${isMe?" (You)":""}</div>
+          <div class="lb-score-bar">
+            <div class="lb-bar-bg"><div class="lb-bar-fill" style="width:${entry.percentage}%"></div></div>
+            <span class="lb-pct">${entry.percentage}%</span>
+          </div>
+          <div style="font-size:12px;color:var(--muted);">${entry.score}/${entry.totalQuestions}</div>
+        </div>
+      `;
+    }).join("");
+  }catch(e){}
+}
+
+loadLeaderboard();
+document.getElementById("leaderboardSection").style.display="block";
+</script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "Web Development": {
+    "domain": "Web Development",
+    "morningMeeting": "09:30 AM (Google Meet)",
+    "eveningMeeting": "06:00 PM (Sprint Sync)",
+    "meetingLink": "https://meet.google.com/web-dev-interns",
+    "importantNotice": "Submit your React portfolio tasks by Friday evening, 6 PM IST."
+  },
+  "Cloud Computing": {
+    "domain": "Cloud Computing",
+    "morningMeeting": "10:00 AM (AWS Standup)",
+    "eveningMeeting": "05:30 PM (Architecture Review)",
+    "meetingLink": "https://meet.google.com/cloud-computing-sync",
+    "importantNotice": "Complete your AWS IAM and lambda deployment quiz by tomorrow."
+  },
+  "default": {
+    "domain": "Ecosystem Hub",
+    "morningMeeting": "09:45 AM (Daily Alignment)",
+    "eveningMeeting": "05:45 PM (Daily Log Submission)",
+    "meetingLink": "https://meet.google.com/ten-ecosystem",
+    "importantNotice": "Welcome to your TEN startup ecosystem internship! Be sure to submit daily check-ins on our workspace chat."
+  }
+}

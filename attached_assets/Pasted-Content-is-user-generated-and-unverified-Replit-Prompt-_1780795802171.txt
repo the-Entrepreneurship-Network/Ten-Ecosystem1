@@ -1,0 +1,723 @@
+Content is user-generated and unverified.
+Replit Prompt — Full Visual Motion & Animation Upgrade
+TEN Internship Management System
+Apply to ALL public-facing HTML pages
+YOUR MISSION
+Transform every public HTML page into a world-class, motion-rich experience.
+This is a VISUAL UPGRADE ONLY. Zero existing JS logic, API calls, form handlers,
+socket connections, or backend routes should be touched. Only add CSS and
+non-blocking JS animation code.
+
+PAGES TO UPGRADE (all in /public/)
+index.html
+login.html
+register.html
+hr-login.html
+coordinator-login.html
+verify.html
+success.html
+student-dashboard.html
+hr-portal.html
+coordinator-dashboard.html
+promoted-register.html
+reset-password.html
+qr-attendance.html
+groups.html
+edit.html
+EXISTING DESIGN SYSTEM (do not override these, build on top)
+Theme file: ten-theme.css — already imported on all pages
+Key variables: --ten-gold:#D4AF37, --ten-bg:#05070e, --ten-surface:#090d1a, --ten-card:#0e1428, --ten-gold-glow:rgba(212,175,55,0.18), --ten-text:#F0EEE8
+Fonts already loaded: Syne (display), DM Sans (body), JetBrains Mono
+Existing animation on most pages: ten-fadeUp 0.7s ease both on main containers
+STEP 1 — Create one shared animation file
+Create /public/ten-motion.css with ALL the following:
+
+css
+/* ═══════════════════════════════════════
+   TEN MOTION SYSTEM — ten-motion.css
+   Import this on every page after ten-theme.css
+═══════════════════════════════════════ */
+
+/* ── Keyframes ── */
+@keyframes ten-fadeUp {
+  from { opacity:0; transform:translateY(28px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+@keyframes ten-fadeIn {
+  from { opacity:0; } to { opacity:1; }
+}
+@keyframes ten-slideLeft {
+  from { opacity:0; transform:translateX(-32px); }
+  to   { opacity:1; transform:translateX(0); }
+}
+@keyframes ten-slideRight {
+  from { opacity:0; transform:translateX(32px); }
+  to   { opacity:1; transform:translateX(0); }
+}
+@keyframes ten-scaleIn {
+  from { opacity:0; transform:scale(0.88); }
+  to   { opacity:1; transform:scale(1); }
+}
+@keyframes ten-glowPulse {
+  0%,100% { box-shadow: 0 0 20px rgba(212,175,55,0.15); }
+  50%      { box-shadow: 0 0 45px rgba(212,175,55,0.40), 0 0 80px rgba(212,175,55,0.10); }
+}
+@keyframes ten-borderGlow {
+  0%,100% { border-color: rgba(212,175,55,0.12); }
+  50%      { border-color: rgba(212,175,55,0.45); }
+}
+@keyframes ten-float {
+  0%,100% { transform: translateY(0px) rotate(0deg); }
+  33%      { transform: translateY(-12px) rotate(1deg); }
+  66%      { transform: translateY(-6px) rotate(-1deg); }
+}
+@keyframes ten-spinSlow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes ten-scanLine {
+  0%   { transform: translateY(-100%); opacity:0; }
+  10%  { opacity:1; }
+  90%  { opacity:1; }
+  100% { transform: translateY(100vh); opacity:0; }
+}
+@keyframes ten-shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+@keyframes ten-typeCursor {
+  0%,100% { opacity:1; } 50% { opacity:0; }
+}
+@keyframes ten-particleRise {
+  0%   { transform: translateY(0) scale(1); opacity:0.7; }
+  100% { transform: translateY(-120px) scale(0); opacity:0; }
+}
+@keyframes ten-orbitalRing {
+  from { transform: rotate(0deg) translateX(60px) rotate(0deg); }
+  to   { transform: rotate(360deg) translateX(60px) rotate(-360deg); }
+}
+@keyframes ten-countUp {
+  from { opacity:0; transform:translateY(10px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+@keyframes ten-ripple {
+  0%   { transform:scale(0); opacity:0.6; }
+  100% { transform:scale(4); opacity:0; }
+}
+@keyframes ten-waveBar {
+  0%,100% { transform:scaleY(0.4); }
+  50%      { transform:scaleY(1); }
+}
+
+/* ── Utility animation classes ── */
+.ten-fade-up      { animation: ten-fadeUp    0.6s cubic-bezier(0.22,1,0.36,1) both; }
+.ten-fade-in      { animation: ten-fadeIn    0.5s ease both; }
+.ten-slide-left   { animation: ten-slideLeft 0.6s cubic-bezier(0.22,1,0.36,1) both; }
+.ten-slide-right  { animation: ten-slideRight 0.6s cubic-bezier(0.22,1,0.36,1) both; }
+.ten-scale-in     { animation: ten-scaleIn   0.5s cubic-bezier(0.34,1.56,0.64,1) both; }
+.ten-glow-pulse   { animation: ten-glowPulse 3s ease-in-out infinite; }
+.ten-float        { animation: ten-float     6s ease-in-out infinite; }
+.ten-spin-slow    { animation: ten-spinSlow  12s linear infinite; }
+
+/* Stagger delays */
+.ten-d1  { animation-delay: 0.1s; }
+.ten-d2  { animation-delay: 0.2s; }
+.ten-d3  { animation-delay: 0.3s; }
+.ten-d4  { animation-delay: 0.4s; }
+.ten-d5  { animation-delay: 0.5s; }
+.ten-d6  { animation-delay: 0.6s; }
+.ten-d7  { animation-delay: 0.7s; }
+.ten-d8  { animation-delay: 0.8s; }
+
+/* ── Global animated background canvas ── */
+#ten-bg-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+/* ── Particle dots floating up ── */
+.ten-particle {
+  position: fixed;
+  width: 3px; height: 3px;
+  background: var(--ten-gold);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  animation: ten-particleRise linear infinite;
+}
+
+/* ── Scan line effect ── */
+.ten-scanline {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(212,175,55,0.3), transparent);
+  z-index: 1;
+  pointer-events: none;
+  animation: ten-scanLine 8s linear infinite;
+}
+
+/* ── Shimmer on gold elements ── */
+.ten-shimmer {
+  background: linear-gradient(90deg,
+    var(--ten-gold) 0%,
+    var(--ten-gold-light) 40%,
+    #fff8d0 50%,
+    var(--ten-gold-light) 60%,
+    var(--ten-gold) 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: ten-shimmer 3s linear infinite;
+}
+
+/* ── Card hover lift ── */
+.ten-card-hover {
+  transition: transform 0.3s cubic-bezier(0.22,1,0.36,1),
+              box-shadow 0.3s ease,
+              border-color 0.3s ease;
+  cursor: pointer;
+}
+.ten-card-hover:hover {
+  transform: translateY(-5px) scale(1.01);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 40px rgba(212,175,55,0.15);
+  border-color: rgba(212,175,55,0.4) !important;
+}
+
+/* ── Button ripple ── */
+.ten-btn-ripple {
+  position: relative;
+  overflow: hidden;
+}
+.ten-btn-ripple::after {
+  content: '';
+  position: absolute;
+  inset: 50%;
+  background: rgba(255,255,255,0.2);
+  border-radius: 50%;
+  transform: scale(0);
+  opacity: 0;
+  transition: none;
+}
+.ten-btn-ripple:active::after {
+  animation: ten-ripple 0.5s ease-out;
+}
+
+/* ── Input focus glow ── */
+.ten-input-glow {
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.ten-input-glow:focus {
+  outline: none;
+  border-color: var(--ten-gold) !important;
+  box-shadow: 0 0 0 3px rgba(212,175,55,0.12), 0 0 20px rgba(212,175,55,0.08);
+}
+
+/* ── Animated border gradient ── */
+.ten-animated-border {
+  position: relative;
+}
+.ten-animated-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--angle, 0deg),
+    transparent 0deg,
+    rgba(212,175,55,0.6) 60deg,
+    transparent 120deg
+  );
+  z-index: -1;
+  animation: ten-spinSlow 4s linear infinite;
+}
+
+/* ── Progress bar animated fill ── */
+.ten-progress-bar {
+  height: 3px;
+  background: rgba(212,175,55,0.1);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.ten-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--ten-gold-dim), var(--ten-gold), var(--ten-gold-light));
+  background-size: 200% 100%;
+  border-radius: 99px;
+  animation: ten-shimmer 2s linear infinite;
+  transform-origin: left;
+}
+
+/* ── Scroll reveal (added by JS) ── */
+.ten-reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.7s cubic-bezier(0.22,1,0.36,1),
+              transform 0.7s cubic-bezier(0.22,1,0.36,1);
+}
+.ten-reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── Toast notification ── */
+.ten-toast {
+  position: fixed;
+  bottom: 24px; right: 24px;
+  background: var(--ten-card);
+  border: 1px solid rgba(212,175,55,0.3);
+  border-radius: 12px;
+  padding: 14px 20px;
+  font-size: 13px;
+  color: var(--ten-text);
+  z-index: 9999;
+  animation: ten-slideRight 0.4s cubic-bezier(0.22,1,0.36,1) both;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 20px rgba(212,175,55,0.1);
+  max-width: 320px;
+}
+
+/* ── Loading skeleton ── */
+.ten-skeleton {
+  background: linear-gradient(90deg,
+    rgba(255,255,255,0.03) 25%,
+    rgba(212,175,55,0.06) 50%,
+    rgba(255,255,255,0.03) 75%
+  );
+  background-size: 200% 100%;
+  animation: ten-shimmer 1.5s linear infinite;
+  border-radius: 6px;
+}
+
+/* ── Number counter ── */
+.ten-counter {
+  animation: ten-countUp 0.8s cubic-bezier(0.22,1,0.36,1) both;
+}
+
+/* ── Orbital decorative element ── */
+.ten-orbital {
+  position: absolute;
+  width: 8px; height: 8px;
+  background: var(--ten-gold);
+  border-radius: 50%;
+  box-shadow: 0 0 10px var(--ten-gold);
+  animation: ten-orbitalRing 4s linear infinite;
+}
+
+/* ── Wave equalizer bars (for loading states) ── */
+.ten-wave { display:flex; align-items:flex-end; gap:3px; height:20px; }
+.ten-wave span {
+  display:block; width:3px; background:var(--ten-gold); border-radius:2px;
+  animation: ten-waveBar 0.8s ease-in-out infinite;
+}
+.ten-wave span:nth-child(2) { animation-delay:0.1s; }
+.ten-wave span:nth-child(3) { animation-delay:0.2s; }
+.ten-wave span:nth-child(4) { animation-delay:0.3s; }
+.ten-wave span:nth-child(5) { animation-delay:0.4s; }
+
+/* ── Typing cursor ── */
+.ten-cursor::after {
+  content: '|';
+  color: var(--ten-gold);
+  animation: ten-typeCursor 1s step-end infinite;
+  margin-left: 2px;
+}
+
+/* ── Glassmorphism overlay ── */
+.ten-glass {
+  backdrop-filter: blur(16px) saturate(1.5);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  background: rgba(14,20,40,0.7);
+  border: 1px solid rgba(212,175,55,0.1);
+}
+
+/* ── Reduced motion respect ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+STEP 2 — Create one shared motion script
+Create /public/ten-motion.js with this complete code:
+
+javascript
+/* ═══════════════════════════════════════
+   TEN MOTION ENGINE — ten-motion.js
+   Drop this on every page, right before </body>
+═══════════════════════════════════════ */
+(function(){
+  'use strict';
+
+  /* 1. Animated canvas background — constellation of gold dots */
+  function initCanvas(){
+    const c = document.getElementById('ten-bg-canvas');
+    if(!c) return;
+    const ctx = c.getContext('2d');
+    let W, H, dots=[];
+
+    function resize(){
+      W = c.width  = window.innerWidth;
+      H = c.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    function makeDot(){
+      return {
+        x: Math.random()*W,
+        y: Math.random()*H,
+        r: Math.random()*1.5+0.3,
+        vx:(Math.random()-0.5)*0.25,
+        vy:(Math.random()-0.5)*0.25,
+        a: Math.random()
+      };
+    }
+    const COUNT = Math.min(120, Math.floor(W*H/12000));
+    for(let i=0;i<COUNT;i++) dots.push(makeDot());
+
+    let mouse={x:-9999,y:-9999};
+    window.addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY;});
+
+    function draw(){
+      ctx.clearRect(0,0,W,H);
+      /* Draw connecting lines between close dots */
+      for(let i=0;i<dots.length;i++){
+        for(let j=i+1;j<dots.length;j++){
+          const dx=dots[i].x-dots[j].x, dy=dots[i].y-dots[j].y;
+          const dist=Math.sqrt(dx*dx+dy*dy);
+          if(dist<130){
+            ctx.beginPath();
+            ctx.strokeStyle=`rgba(212,175,55,${0.12*(1-dist/130)})`;
+            ctx.lineWidth=0.5;
+            ctx.moveTo(dots[i].x,dots[i].y);
+            ctx.lineTo(dots[j].x,dots[j].y);
+            ctx.stroke();
+          }
+        }
+        /* Mouse repel */
+        const mdx=dots[i].x-mouse.x, mdy=dots[i].y-mouse.y;
+        const md=Math.sqrt(mdx*mdx+mdy*mdy);
+        if(md<100){
+          dots[i].x+=mdx/md*1.5;
+          dots[i].y+=mdy/md*1.5;
+        }
+        dots[i].x+=dots[i].vx;
+        dots[i].y+=dots[i].vy;
+        if(dots[i].x<0||dots[i].x>W) dots[i].vx*=-1;
+        if(dots[i].y<0||dots[i].y>H) dots[i].vy*=-1;
+        /* Draw dot */
+        ctx.beginPath();
+        ctx.arc(dots[i].x,dots[i].y,dots[i].r,0,Math.PI*2);
+        ctx.fillStyle=`rgba(212,175,55,${dots[i].a*0.6})`;
+        ctx.fill();
+      }
+      requestAnimationFrame(draw);
+    }
+    draw();
+  }
+
+  /* 2. Spawn floating particles at bottom */
+  function initParticles(){
+    if(!document.querySelector('#ten-bg-canvas')) return;
+    function spawn(){
+      const p=document.createElement('div');
+      p.className='ten-particle';
+      p.style.cssText=`
+        left:${Math.random()*100}vw;
+        bottom:0;
+        width:${Math.random()*3+1}px;
+        height:${Math.random()*3+1}px;
+        opacity:${Math.random()*0.5+0.2};
+        animation-duration:${Math.random()*6+4}s;
+        animation-delay:${Math.random()*3}s;
+      `;
+      document.body.appendChild(p);
+      setTimeout(()=>p.remove(),(parseFloat(p.style.animationDuration)+parseFloat(p.style.animationDelay))*1000);
+    }
+    setInterval(spawn,800);
+  }
+
+  /* 3. Scroll reveal — adds .visible to .ten-reveal elements */
+  function initScrollReveal(){
+    const els=document.querySelectorAll('.ten-reveal');
+    if(!els.length) return;
+    const io=new IntersectionObserver(entries=>{
+      entries.forEach(e=>{
+        if(e.isIntersecting){ e.target.classList.add('visible'); io.unobserve(e.target); }
+      });
+    },{threshold:0.12});
+    els.forEach(el=>io.observe(el));
+  }
+
+  /* 4. Stagger animate all cards on page load */
+  function initCardStagger(){
+    const selectors=[
+      '.extras-card','.stu-kpi-card','.sec-card','.stat-card',
+      '.nav-card','.portal-option','.dash-card','.insight-card',
+      '.doc-card','.badge-card','.ten-card-hover'
+    ];
+    const cards=document.querySelectorAll(selectors.join(','));
+    cards.forEach((card,i)=>{
+      card.style.opacity='0';
+      card.style.transform='translateY(20px)';
+      card.style.transition='opacity 0.5s ease, transform 0.5s cubic-bezier(0.22,1,0.36,1)';
+      setTimeout(()=>{
+        card.style.opacity='';
+        card.style.transform='';
+      }, 100+i*60);
+    });
+  }
+
+  /* 5. Animate number counters (elements with data-count="N") */
+  function initCounters(){
+    const els=document.querySelectorAll('[data-count]');
+    if(!els.length) return;
+    const io=new IntersectionObserver(entries=>{
+      entries.forEach(e=>{
+        if(!e.isIntersecting) return;
+        const el=e.target;
+        const target=parseInt(el.getAttribute('data-count'))||0;
+        const duration=1200;
+        const start=performance.now();
+        function tick(now){
+          const elapsed=now-start;
+          const progress=Math.min(elapsed/duration,1);
+          const eased=1-Math.pow(1-progress,3);
+          el.textContent=Math.round(eased*target).toLocaleString();
+          if(progress<1) requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+        io.unobserve(el);
+      });
+    },{threshold:0.5});
+    els.forEach(el=>io.observe(el));
+  }
+
+  /* 6. Typing effect for elements with data-typetext attribute */
+  function initTyping(){
+    const els=document.querySelectorAll('[data-typetext]');
+    els.forEach(el=>{
+      const text=el.getAttribute('data-typetext');
+      el.textContent='';
+      el.classList.add('ten-cursor');
+      let i=0;
+      const interval=setInterval(()=>{
+        el.textContent+=text[i];
+        i++;
+        if(i>=text.length){ clearInterval(interval); el.classList.remove('ten-cursor'); }
+      },50);
+    });
+  }
+
+  /* 7. Cursor glow that follows mouse */
+  function initCursorGlow(){
+    const glow=document.createElement('div');
+    glow.style.cssText=`
+      position:fixed;width:300px;height:300px;
+      border-radius:50%;pointer-events:none;z-index:0;
+      background:radial-gradient(circle,rgba(212,175,55,0.06) 0%,transparent 70%);
+      transition:left 0.15s ease,top 0.15s ease;
+      transform:translate(-50%,-50%);
+    `;
+    document.body.appendChild(glow);
+    window.addEventListener('mousemove',e=>{
+      glow.style.left=e.clientX+'px';
+      glow.style.top=e.clientY+'px';
+    });
+  }
+
+  /* 8. Button ripple on click */
+  function initRipples(){
+    document.querySelectorAll('button, .btn, [class*="-btn"], [class*="-button"]').forEach(btn=>{
+      btn.classList.add('ten-btn-ripple');
+      btn.style.position='relative';
+      btn.style.overflow='hidden';
+      btn.addEventListener('click',function(e){
+        const r=document.createElement('span');
+        const rect=btn.getBoundingClientRect();
+        const size=Math.max(rect.width,rect.height)*2;
+        r.style.cssText=`
+          position:absolute;
+          width:${size}px;height:${size}px;
+          left:${e.clientX-rect.left-size/2}px;
+          top:${e.clientY-rect.top-size/2}px;
+          background:rgba(212,175,55,0.2);
+          border-radius:50%;
+          pointer-events:none;
+          transform:scale(0);
+          animation:ten-ripple 0.6s ease-out forwards;
+        `;
+        btn.appendChild(r);
+        setTimeout(()=>r.remove(),700);
+      });
+    });
+  }
+
+  /* 9. Input focus glow */
+  function initInputGlow(){
+    document.querySelectorAll('input,textarea,select').forEach(el=>{
+      el.classList.add('ten-input-glow');
+    });
+  }
+
+  /* 10. Card hover tilt effect (subtle 3D) */
+  function initTilt(){
+    document.querySelectorAll('.ten-card-hover').forEach(card=>{
+      card.addEventListener('mousemove',e=>{
+        const r=card.getBoundingClientRect();
+        const x=(e.clientX-r.left)/r.width-0.5;
+        const y=(e.clientY-r.top)/r.height-0.5;
+        card.style.transform=`translateY(-5px) perspective(600px) rotateY(${x*8}deg) rotateX(${-y*8}deg)`;
+      });
+      card.addEventListener('mouseleave',()=>{
+        card.style.transform='';
+      });
+    });
+  }
+
+  /* 11. Page transition fade-out on link click */
+  function initPageTransition(){
+    const overlay=document.createElement('div');
+    overlay.style.cssText=`
+      position:fixed;inset:0;background:#05070e;z-index:99999;
+      opacity:0;pointer-events:none;
+      transition:opacity 0.3s ease;
+    `;
+    document.body.appendChild(overlay);
+    document.querySelectorAll('a[href]').forEach(a=>{
+      const href=a.getAttribute('href');
+      if(!href||href.startsWith('#')||href.startsWith('mailto')||href.startsWith('javascript')) return;
+      if(a.target==='_blank') return;
+      a.addEventListener('click',function(e){
+        e.preventDefault();
+        overlay.style.opacity='1';
+        overlay.style.pointerEvents='all';
+        setTimeout(()=>{ window.location.href=href; },280);
+      });
+    });
+    /* Fade in on load */
+    overlay.style.opacity='1';
+    overlay.style.pointerEvents='all';
+    requestAnimationFrame(()=>{
+      requestAnimationFrame(()=>{
+        overlay.style.opacity='0';
+        overlay.style.pointerEvents='none';
+      });
+    });
+  }
+
+  /* 12. Add canvas + scanline elements to body */
+  function injectLayerElements(){
+    if(!document.getElementById('ten-bg-canvas')){
+      const canvas=document.createElement('canvas');
+      canvas.id='ten-bg-canvas';
+      document.body.insertBefore(canvas,document.body.firstChild);
+    }
+    if(!document.querySelector('.ten-scanline')){
+      const sl=document.createElement('div');
+      sl.className='ten-scanline';
+      document.body.appendChild(sl);
+    }
+  }
+
+  /* ── Boot sequence ── */
+  function boot(){
+    injectLayerElements();
+    initCanvas();
+    initParticles();
+    initScrollReveal();
+    initCardStagger();
+    initCounters();
+    initTyping();
+    initCursorGlow();
+    initRipples();
+    initInputGlow();
+    initTilt();
+    initPageTransition();
+  }
+
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',boot);
+  } else {
+    boot();
+  }
+})();
+STEP 3 — Add to EVERY HTML page
+For each of the 15 HTML pages listed above, make these changes:
+
+A) In <head>, after the existing CSS link, add:
+
+html
+<link rel="stylesheet" href="ten-motion.css">
+B) Just before </body>, add:
+
+html
+<script src="ten-motion.js"></script>
+C) Add class ten-reveal to all major section wrappers, stat blocks, and table rows that are below the fold, so they animate in as the user scrolls.
+
+D) For every stat number (e.g. "274 interns", "15 new joins"), add data-count="274" attribute to the number element so the counter animation runs.
+
+E) Add class ten-card-hover to every card, panel box, or clickable grid item.
+
+F) On index.html main heading, add data-typetext="The Entrepreneurship Network" so it types out on load.
+
+STEP 4 — Page-specific enhancements
+login.html, hr-login.html, coordinator-login.html
+Wrap the login card in .ten-animated-border class
+Add class ten-float to the TEN logo/icon at the top
+Add ten-fade-up ten-d1 to the heading, ten-fade-up ten-d2 to the form, ten-fade-up ten-d3 to the submit button
+index.html (home/portal selector)
+Add ten-slide-left to the left branding panel
+Add ten-slide-right to the right portal options panel
+Add ten-card-hover ten-scale-in to each portal option card
+Add ten-glow-pulse to the TEN logo wrapper
+register.html, promoted-register.html
+Add ten-fade-up with increasing delays (ten-d1 through ten-d8) to each form field group
+Add ten-shimmer class to the page heading text
+verify.html
+Add ten-scale-in to the result/verification card
+Add ten-glow-pulse to the verified ✅ status indicator when verified=true
+Add ten-float to the shield/verification icon
+success.html
+Add ten-scale-in to the success card
+Add ten-glow-pulse to the checkmark or success icon
+Add confetti: after page loads, call this inline:
+js
+(function confetti(){
+  for(let i=0;i<60;i++){
+    const d=document.createElement('div');
+    d.style.cssText=`position:fixed;top:-10px;left:${Math.random()*100}vw;
+      width:${4+Math.random()*6}px;height:${4+Math.random()*6}px;
+      background:hsl(${Math.random()*60+30},80%,60%);border-radius:${Math.random()>0.5?'50%':'2px'};
+      animation:ten-particleRise ${2+Math.random()*3}s ${Math.random()*2}s linear forwards;
+      transform:rotate(${Math.random()*360}deg);z-index:9999;pointer-events:none;`;
+    document.body.appendChild(d);
+    setTimeout(()=>d.remove(),6000);
+  }
+})();
+qr-attendance.html
+Add ten-float to the QR code container
+Add ten-glow-pulse to the QR code border/wrapper
+Add pulsing radar rings around the QR: three absolutely-positioned ::before/::after pseudo rings that scale-pulse outward with staggered delays
+student-dashboard.html, hr-portal.html, coordinator-dashboard.html
+Add ten-reveal to every section that loads below the fold
+Add ten-card-hover to every stat/KPI card
+Add data-count to all numeric stats so they count up on load
+Add ten-shimmer class to the main page title headings
+Add ten-glow-pulse to the active/online indicator badges
+groups.html
+Add ten-fade-up stagger to each group card with delays
+CRITICAL RULES — DO NOT VIOLATE
+Never remove or modify any existing JS function, event listener, fetch call, socket handler, or form submission handler.
+Never change any CSS variable values — only add classes on top.
+Never add animation to table rows that render from API data dynamically — those already handle their own rendering. Only animate the table wrapper.
+ten-motion.js must load AFTER all existing scripts — place it as the very last <script> before </body>.
+All z-index values for animation elements (canvas, scanline, cursor glow) must use z-index:0 or lower — never block clicks on existing UI.
+Do not use GSAP, Three.js, or any CDN animation library — vanilla CSS + JS only.
+Every animation must respect prefers-reduced-motion — already handled in ten-motion.css.
+Page transitions must not fire on #hash links or javascript: links — already handled in the script.

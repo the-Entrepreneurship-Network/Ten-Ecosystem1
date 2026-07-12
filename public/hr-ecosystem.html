@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HR Ecosystem Dashboard — TEN Platform</title>
+  <link rel="stylesheet" href="/css/design-system.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <script src="/js/theme-toggle.js" defer></script>
+  <script src="/js/components.js" defer></script>
+  <style>
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; margin-bottom: 32px; }
+    .stat-card { background: var(--bg-surface); border-radius: var(--radius-lg); border: 1px solid var(--border-default); padding: 20px; text-align: center; }
+    .stat-value { font-size: 36px; font-weight: 800; color: var(--color-primary); }
+    .stat-label { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 4px; }
+    .stat-sub   { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .section-card { background: var(--bg-surface); border-radius: var(--radius-lg); border: 1px solid var(--border-default); padding: var(--space-5); margin-bottom: var(--space-5); }
+    .section-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+    .pending-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border-default); gap: 12px; flex-wrap: wrap; }
+    .pending-row:last-child { border-bottom: none; }
+    .type-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+    .type-talent   { background: #dbeafe; color: #1e40af; }
+    .type-founder  { background: #ede9fe; color: #5b21b6; }
+    .type-mentor   { background: #d1fae5; color: #065f46; }
+    .type-investor { background: #fef3c7; color: #92400e; }
+    .btn-approve { padding: 5px 12px; font-size: 12px; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; background: #d1fae5; color: #065f46; }
+    .btn-reject  { padding: 5px 12px; font-size: 12px; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; background: #fee2e2; color: #991b1b; }
+    .tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--border-default); margin-bottom: 24px; }
+    .tab-btn { padding: 10px 18px; font-size: 14px; font-weight: 600; border: none; background: transparent; cursor: pointer; color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -2px; }
+    .tab-btn.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
+  </style>
+</head>
+<body class="dashboard-layout">
+  <aside class="sidebar">
+    <a class="sidebar__logo" href="/dashboard">⚡ TEN</a>
+    <nav class="sidebar__nav">
+      <a href="/dashboard"          class="nav-item">🏠 Dashboard</a>
+      <a href="/hr/dashboard"       class="nav-item nav-item--active">🛡 HR Ecosystem</a>
+      <a href="/founder/directory"  class="nav-item">🚀 Founders</a>
+      <a href="/mentor/directory"   class="nav-item">🎓 Mentors</a>
+      <a href="/investor/directory" class="nav-item">💼 Investors</a>
+      <a href="/talent-network"     class="nav-item">🌐 Talent Network</a>
+    </nav>
+    <div class="sidebar__footer">
+      <button id="theme-toggle-btn" class="btn btn--ghost btn--sm" style="width:100%">🌙 Dark Mode</button>
+    </div>
+  </aside>
+
+  <header class="topbar">
+    <button class="btn btn--ghost btn--sm" data-sidebar-toggle>☰</button>
+    <span style="font-weight:600;font-size:16px;">HR Operations Center</span>
+    <div class="topbar__actions">
+      <button class="btn btn--primary btn--sm" onclick="loadOverview()">↻ Refresh</button>
+      <button id="theme-toggle-btn" class="btn btn--ghost btn--sm">🌙</button>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <div class="page-header">
+      <h1 class="page-header__title">🛡 HR Operations Center</h1>
+      <p class="page-header__subtitle">Manage the TEN ecosystem — verifications, stats, and activity</p>
+    </div>
+
+    <!-- Stats grid -->
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-card"><div class="stat-value" id="statUsers">—</div><div class="stat-label">Total Users</div><div class="stat-sub" id="statNewUsers"></div></div>
+      <div class="stat-card"><div class="stat-value" id="statTalentP">—</div><div class="stat-label">Talent Pending</div></div>
+      <div class="stat-card"><div class="stat-value" id="statFounderP">—</div><div class="stat-label">Founders Pending</div></div>
+      <div class="stat-card"><div class="stat-value" id="statMentorP">—</div><div class="stat-label">Mentors Pending</div></div>
+      <div class="stat-card"><div class="stat-value" id="statInvestorP">—</div><div class="stat-label">Investors Pending</div></div>
+      <div class="stat-card"><div class="stat-value" id="statNotifs">—</div><div class="stat-label">Unread Notifs</div></div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('verifications',this)">✅ Verifications</button>
+      <button class="tab-btn" onclick="switchTab('payments',this)">💳 Recent Payments</button>
+    </div>
+
+    <!-- Verifications tab -->
+    <div id="tab-verifications">
+      <div class="section-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <div class="section-title" style="margin-bottom:0;">Pending Verifications</div>
+          <select id="typeFilter" onchange="loadPending()" style="padding:6px 10px;border:1px solid var(--border-default);border-radius:8px;background:var(--bg-surface);color:var(--text-primary);font:inherit;">
+            <option value="all">All Types</option>
+            <option value="talent">Talent</option>
+            <option value="founder">Founder</option>
+            <option value="mentor">Mentor</option>
+            <option value="investor">Investor</option>
+          </select>
+        </div>
+        <div id="pendingList"><div style="text-align:center;padding:40px;color:var(--text-muted);">Loading…</div></div>
+      </div>
+    </div>
+
+    <!-- Payments tab (hidden) -->
+    <div id="tab-payments" style="display:none;">
+      <div class="section-card">
+        <div class="section-title">Recent Payments</div>
+        <div id="paymentList"><div style="text-align:center;padding:40px;color:var(--text-muted);">Loading…</div></div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+  const token = localStorage.getItem('ten_auth_token') || localStorage.getItem('authToken') || '';
+  const headers = token ? { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+
+  function switchTab(tab, btn) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-verifications').style.display = tab === 'verifications' ? '' : 'none';
+    document.getElementById('tab-payments').style.display      = tab === 'payments'      ? '' : 'none';
+    if (tab === 'payments') loadPayments();
+  }
+
+  async function loadOverview() {
+    try {
+      const res  = await fetch('/api/hr/ecosystem-overview', { headers });
+      const data = await res.json();
+      if (data.success) {
+        const s = data.stats;
+        document.getElementById('statUsers').textContent    = s.users.total;
+        document.getElementById('statNewUsers').textContent = '+' + s.users.newThisMonth + ' this month';
+        document.getElementById('statTalentP').textContent   = s.talent.pending;
+        document.getElementById('statFounderP').textContent  = s.founders.pending;
+        document.getElementById('statMentorP').textContent   = s.mentors.pending;
+        document.getElementById('statInvestorP').textContent = s.investors.pending;
+        document.getElementById('statNotifs').textContent    = s.notifications.unread;
+      }
+    } catch(e) {}
+    loadPending();
+  }
+
+  async function loadPending() {
+    const type = document.getElementById('typeFilter').value;
+    const list = document.getElementById('pendingList');
+    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">Loading…</div>';
+    try {
+      const res  = await fetch('/api/verification/pending?type=' + type + '&limit=20', { headers });
+      const data = await res.json();
+      const items = data.data || [];
+      if (!items.length) {
+        list.innerHTML = '<div style="text-align:center;padding:40px;"><div style="font-size:48px;margin-bottom:12px;">✅</div><div style="font-weight:700;">All caught up!</div><div style="color:var(--text-muted);margin-top:4px;">No pending verifications.</div></div>';
+        return;
+      }
+      list.innerHTML = items.map(item => {
+        const name  = (item.userId && item.userId.fullName) || (item.userId && item.userId.email) || 'Unknown';
+        const email = (item.userId && item.userId.email) || '';
+        const ptype = item.profileType || 'profile';
+        const label = item.startupName || item.headline || item.fundName || name;
+        const since = item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-IN') : '';
+        return `<div class="pending-row" id="row-${item._id}">
+          <div style="flex:1;min-width:180px;">
+            <div style="font-weight:600;margin-bottom:2px;">${label}</div>
+            <div style="font-size:12px;color:var(--text-muted);">${name} · ${email}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Submitted: ${since}</div>
+          </div>
+          <span class="type-badge type-${ptype}">${ptype}</span>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-approve" onclick="verify('${item._id}','${ptype}','${(item.userId && item.userId._id) || item.userId}','approved')">✓ Approve</button>
+            <button class="btn-reject"  onclick="rejectPrompt('${item._id}','${ptype}','${(item.userId && item.userId._id) || item.userId}')">✗ Reject</button>
+          </div>
+        </div>`;
+      }).join('');
+    } catch(e) {
+      list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">Could not load pending items. Make sure you are logged in as HR/Admin.</div>';
+    }
+  }
+
+  async function verify(profileId, profileType, userId, status, reason) {
+    const endpoints = { talent: '/api/talent', founder: '/api/founder', mentor: '/api/mentor', investor: '/api/investor' };
+    const base = endpoints[profileType];
+    if (!base) return;
+    const body = { status };
+    if (reason) body.rejectionReason = reason;
+    try {
+      const res = await fetch(base + '/profile/' + userId + '/verify', {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (data.success) {
+        const row = document.getElementById('row-' + profileId);
+        if (row) {
+          row.style.opacity = '0.4';
+          row.style.pointerEvents = 'none';
+          row.querySelector('.btn-approve, .btn-reject') && (row.querySelector('[onclick]').closest('div').innerHTML = `<span style="font-size:13px;color:${status==='approved'?'green':'red'};font-weight:600;">${status==='approved'?'✅ Approved':'❌ Rejected'}</span>`);
+        }
+        loadOverview();
+      } else {
+        alert(data.error || 'Could not update status');
+      }
+    } catch(e) { alert('Error: ' + e.message); }
+  }
+
+  function rejectPrompt(profileId, profileType, userId) {
+    const reason = prompt('Rejection reason (optional):') || '';
+    verify(profileId, profileType, userId, 'rejected', reason);
+  }
+
+  async function loadPayments() {
+    const list = document.getElementById('paymentList');
+    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">Loading payments…</div>';
+    try {
+      const authHdr = localStorage.getItem('hrToken') ? 'Bearer hr_' + localStorage.getItem('hrToken') : (headers['Authorization'] || '');
+      const res  = await fetch('/api/v2/payment/hr-all-payments', { headers: { 'Authorization': authHdr } });
+      const data = await res.json();
+      const payments = data.payments || [];
+      if (!payments.length) {
+        list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">No payments yet.</div>';
+        return;
+      }
+      list.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:14px;">
+        <thead><tr style="border-bottom:2px solid var(--border-default);">
+          <th style="text-align:left;padding:8px;">Student</th>
+          <th style="text-align:left;padding:8px;">Amount</th>
+          <th style="text-align:left;padding:8px;">Status</th>
+          <th style="text-align:left;padding:8px;">Date</th>
+          <th style="text-align:left;padding:8px;">UTR</th>
+          <th style="text-align:left;padding:8px;">Verified By</th>
+          <th style="text-align:left;padding:8px;">Actions</th>
+        </tr></thead>
+        <tbody>${payments.map(p => {
+          let actionsHtml = '—';
+          if (p.status === 'pending_verification') {
+            actionsHtml = `
+              <button onclick="approveManualPayment('${p.orderId}')" style="padding:4px 8px;font-size:11px;background:#10b981;color:white;border:none;border-radius:4px;cursor:pointer;margin-right:4px;font-weight:600;">Approve</button>
+              <button onclick="rejectManualPayment('${p.orderId}')" style="padding:4px 8px;font-size:11px;background:#ef4444;color:white;border:none;border-radius:4px;cursor:pointer;font-weight:600;">Reject</button>
+            `;
+          } else if (p.status === 'success') {
+            actionsHtml = '<span style="color:#10b981;font-weight:600;">✅ Approved</span>';
+          } else if (p.status === 'failed') {
+            actionsHtml = `<span style="color:#ef4444;font-weight:600;" title="${p.rejectionReason || 'Rejected'}">❌ Rejected</span>`;
+          }
+          
+          return `<tr style="border-bottom:1px solid var(--border-default);">
+            <td style="padding:8px;">
+              <strong>${(p.studentId && p.studentId.name) || p.employeeId || '—'}</strong><br/>
+              <span style="font-size:11px;color:var(--text-muted);">${(p.studentId && p.studentId.employeeId) || p.employeeId || ''}</span>
+            </td>
+            <td style="padding:8px;font-weight:600;">₹${p.amountRupees || p.amount || 0}</td>
+            <td style="padding:8px;"><span style="font-size:12px;padding:2px 8px;border-radius:99px;font-weight:600;background:${p.status==='success'?'#d1fae5':p.status==='pending_verification'?'#fef3c7':'#f3f4f6'};color:${p.status==='success'?'#065f46':p.status==='pending_verification'?'#92400e':'#374151'}">${p.status}</span></td>
+            <td style="padding:8px;font-size:12px;color:var(--text-muted);">${new Date(p.createdAt).toLocaleDateString('en-IN')}</td>
+            <td style="padding:8px;font-size:12px;font-family:monospace;font-weight:bold;">${p.txnUtr || '—'}</td>
+            <td style="padding:8px;font-size:12px;color:var(--text-muted);">${p.verifiedBy ? `<strong>${p.verifiedBy}</strong><br/><span style="font-size:10px;">${new Date(p.verifiedAt).toLocaleDateString('en-IN')}</span>` : '—'}</td>
+            <td style="padding:8px;font-size:12px;">${actionsHtml}</td>
+          </tr>`;
+        }).join('')}</tbody></table>`;
+    } catch(e) {
+      list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">Could not load payments.</div>';
+    }
+  }
+
+  async function approveManualPayment(orderId) {
+    if (!confirm('Are you sure you want to approve this manual payment? This will confirm the student\'s payment status.')) return;
+    try {
+      const authHdr = localStorage.getItem('hrToken') ? 'Bearer hr_' + localStorage.getItem('hrToken') : '';
+      const res = await fetch('/api/v2/payment/hr-verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHdr
+        },
+        body: JSON.stringify({ orderId, approve: true })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('Payment approved successfully!');
+        loadPayments();
+      } else {
+        alert(data.error || data.message || 'Approval failed');
+      }
+    } catch (e) {
+      alert('Error: ' + e.message);
+    }
+  }
+
+  async function rejectManualPayment(orderId) {
+    const reason = prompt('Please enter the reason for rejecting this payment (this will be shown to the student):');
+    if (reason === null) return; // cancelled
+    if (!reason.trim()) {
+      alert('A rejection reason is required.');
+      return;
+    }
+    try {
+      const authHdr = localStorage.getItem('hrToken') ? 'Bearer hr_' + localStorage.getItem('hrToken') : '';
+      const res = await fetch('/api/v2/payment/hr-verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHdr
+        },
+        body: JSON.stringify({ orderId, approve: false, reason })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('Payment rejected and student notified.');
+        loadPayments();
+      } else {
+        alert(data.error || data.message || 'Rejection failed');
+      }
+    } catch (e) {
+      alert('Error: ' + e.message);
+    }
+  }
+
+  loadOverview();
+  </script>
+</body>
+</html>

@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TEN — Coordinator Onboarding</title>
+<link rel="stylesheet" href="ten-theme.css">
+<link rel="stylesheet" href="ten-motion.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+body {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.coord-wrap {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 600px;
+  animation: ten-fadeUp 0.65s ease both;
+}
+
+.brand-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+.brand-shield {
+  width: 72px; height: 72px;
+  background: var(--ten-gold-bg);
+  border: 1px solid var(--ten-border-strong);
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  animation: ten-pulse-gold 3s ease infinite;
+}
+.brand-name {
+  font-family: var(--ten-font-display);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 4px;
+  color: var(--ten-gold);
+}
+.brand-sub {
+  font-size: 11px;
+  color: var(--ten-text-muted);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+
+/* ── Progress Indicators ── */
+.progress-rail {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32px;
+  position: relative;
+  padding: 0 10px;
+}
+.progress-rail::before {
+  content: '';
+  position: absolute;
+  top: 50%; left: 0; right: 0;
+  height: 2px;
+  background: rgba(255,255,255,0.06);
+  z-index: 1;
+}
+.progress-bar-fill {
+  position: absolute;
+  top: 50%; left: 0;
+  height: 2px;
+  background: var(--ten-gold);
+  z-index: 2;
+  transition: width 0.35s ease;
+  width: 0%;
+}
+.step-dot {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: #0f1428;
+  border: 2px solid rgba(255,255,255,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: #94a3b8;
+  position: relative;
+  z-index: 3;
+  transition: all 0.3s;
+}
+.step-dot.active {
+  border-color: var(--ten-gold);
+  color: var(--ten-gold);
+  box-shadow: 0 0 12px rgba(212,175,55,0.4);
+}
+.step-dot.completed {
+  border-color: #10b981;
+  background: #10b981;
+  color: #000;
+}
+
+/* ── Glass card ── */
+.onboarding-card {
+  background: var(--ten-card);
+  border: 1px solid var(--ten-border);
+  border-radius: var(--ten-r-xl);
+  padding: 38px;
+  box-shadow: var(--ten-shadow-lg), var(--ten-glow-gold);
+  position: relative;
+  overflow: hidden;
+}
+.onboarding-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--ten-gold), transparent);
+}
+
+.step-panel {
+  display: none;
+}
+.step-panel.active {
+  display: block;
+}
+
+.card-title {
+  font-family: var(--ten-font-display);
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  margin-bottom: 6px;
+  color: #fff;
+}
+.card-sub {
+  font-size: 13px;
+  color: var(--ten-text-sub);
+  margin-bottom: 24px;
+}
+
+/* ── Field elements ── */
+.field-group { margin-bottom: 20px; }
+.field-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--ten-text-sub);
+  margin-bottom: 8px;
+}
+.field-inner {
+  position: relative;
+}
+.field-inner .fi {
+  position: absolute;
+  left: 16px; top: 50%;
+  transform: translateY(-50%);
+  color: var(--ten-gold);
+  font-size: 14px;
+  opacity: 0.7;
+}
+.field-input {
+  width: 100%;
+  padding: 14px 16px 14px 46px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--ten-border);
+  border-radius: var(--ten-r-sm);
+  color: var(--ten-text);
+  font-family: var(--ten-font-body);
+  font-size: 14px;
+  outline: none;
+  transition: all 0.2s;
+}
+.field-input:focus {
+  border-color: var(--ten-gold);
+  box-shadow: 0 0 0 3px rgba(212,175,55,0.1);
+}
+
+/* ── Domain Cards Grid ── */
+.domain-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  max-height: 350px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+.domain-card {
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.02);
+  border-radius: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  display: flex;
+  flex-direction: column;
+}
+.domain-card:hover {
+  border-color: rgba(212,175,55,0.4);
+  background: rgba(212,175,55,0.03);
+}
+.domain-card.selected {
+  border-color: var(--ten-gold) !important;
+  background: rgba(212,175,55,0.1) !important;
+  box-shadow: 0 0 16px rgba(212,175,55,0.15) inset;
+}
+
+.action-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 32px;
+  gap: 16px;
+}
+.nav-btn {
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn-prev {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #fff;
+}
+.btn-prev:hover {
+  background: rgba(255,255,255,0.1);
+}
+.btn-next {
+  background: linear-gradient(135deg, var(--ten-gold), var(--ten-gold-dim));
+  border: none;
+  color: #000;
+}
+.btn-next:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(212,175,55,0.4);
+}
+
+.success-check {
+  width: 72px; height: 72px;
+  border-radius: 50%;
+  background: rgba(16,185,129,0.1);
+  border: 2px solid #10b981;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  color: #10b981;
+  margin: 0 auto 24px auto;
+  animation: ten-scale-in 0.5s ease;
+}
+
+.domain-cards::-webkit-scrollbar { width: 4px; }
+.domain-cards::-webkit-scrollbar-track { background: transparent; }
+.domain-cards::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+
+</style>
+</head>
+<body>
+
+<div class="ten-grid-bg"></div>
+<div class="ten-orb ten-orb-1"></div>
+<div class="ten-orb ten-orb-2"></div>
+
+<div class="coord-wrap">
+
+  <div class="brand-header" style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; margin-bottom: 28px;">
+    <div class="brand-shield ten-float" style="width: 80px; height: 80px; background: #121316; border: 2px solid rgba(212,175,55,0.45); border-radius: 20px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px; box-shadow: 0 0 40px rgba(212,175,55,0.35), inset 0 1px 1px rgba(255,255,255,0.15); transition: all 0.3s ease;">
+      <img src="ten-logo.png" alt="TEN Logo" style="width:56px;height:56px;object-fit:contain;display:block;filter:drop-shadow(0 0 6px rgba(212,175,55,0.35));" />
+    </div>
+    <div class="brand-name" style="font-family: var(--ten-font-display), sans-serif; font-size: 28px; font-weight: 800; color: #D4AF37; letter-spacing: 5px; text-transform: uppercase; margin-bottom: 2px; text-shadow: 0 0 12px rgba(212,175,55,0.3);">TEN</div>
+    <div class="brand-sub" style="font-size: 11px; font-weight: 500; color: rgba(212,175,55,0.85); letter-spacing: 2px; text-transform: uppercase; margin-top: 4px;">THE ENTREPRENEURSHIP NETWORK</div>
+    <div class="brand-sub" style="font-size: 11px; color: #94a3b8; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 6px; opacity: 0.85;">Secure Coordinator Onboarding</div>
+  </div>
+
+  <!-- Progress Bar Line -->
+  <div class="progress-rail">
+    <div class="progress-bar-fill" id="progressBarFill"></div>
+    <div class="step-dot active" id="dot1">1</div>
+    <div class="step-dot" id="dot2">2</div>
+    <div class="step-dot" id="dot3">3</div>
+    <div class="step-dot" id="dot4">4</div>
+    <div class="step-dot" id="dot5">5</div>
+  </div>
+
+  <div class="onboarding-card">
+
+    <form id="onboardingForm">
+
+      <!-- ================= STEP 1: ACCOUNT PROFILE ================= -->
+      <div class="step-panel active" id="stepPanel1">
+        <div class="card-title">1. Profile Creation</div>
+        <p class="card-sub">Establish your unique identity credentials inside human capital core systems.</p>
+
+        <div class="field-group">
+          <label class="field-label">Full Name</label>
+          <div class="field-inner">
+            <i class="fa-solid fa-signature fi"></i>
+            <input class="field-input" type="text" id="coord_name" placeholder="Johnathan Doe" required>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">Preferred Username</label>
+          <div class="field-inner">
+            <i class="fa-solid fa-user-gear fi"></i>
+            <input class="field-input" type="text" id="coord_username" placeholder="john_admin" required>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">Work Email address</label>
+          <div class="field-inner">
+            <i class="fa-solid fa-envelope fi"></i>
+            <input class="field-input" type="email" id="coord_email" placeholder="john.doe@entrepreneurshipnetwork.org" required>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">Secure Access Password</label>
+          <div class="field-inner">
+            <i class="fa-solid fa-shield-halved fi"></i>
+            <input class="field-input" type="password" id="coord_password" placeholder="••••••••••••••" required>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= STEP 2: DOMAIN VERIFY ================= -->
+      <div class="step-panel" id="stepPanel2">
+        <div class="card-title">2. Domain Authorization Check</div>
+        <p class="card-sub">Choose your target workspace. Only one active coordinator is authorized per domain.</p>
+
+        <div class="domain-cards" id="domainSelectorGrid">
+          <!-- Technical Domains Group -->
+          <div style="grid-column: span 2; font-family:var(--ten-font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color:var(--ten-gold); margin: 6px 0 2px 0; border-bottom: 1px dashed rgba(212,175,55,0.2); padding-bottom: 4px;">Technical Domains</div>
+
+          <div class="domain-card" onclick="selectOnboardingDomain('Web Development')">
+            <span style="font-weight:700;color:#fff;font-size:13px;">Web Development</span>
+            <span style="color:#94a3b8;font-size:11px;margin-top:2px;">Front/Back Frameworks</span>
+          </div>
+          <div class="domain-card" onclick="selectOnboardingDomain('Python Development')">
+            <span style="font-weight:700;color:#fff;font-size:13px;">Python Development</span>
+            <span style="color:#94a3b8;font-size:11px;margin-top:2px;">Automation & Scripting</span>
+          </div>
+          <div class="domain-card" onclick="selectOnboardingDomain('Java Development')">
+            <span style="font-weight:700;color:#fff;font-size:13px;">Java Development</span>
+            <span style="color:#94a3b8;font-size:11px;margin-top:2px;">Enterprise Systems</span>
+          </div>
+          <div class="domain-card" onclick="selectOnboardingDomain('MERN Stack Development')">
+            <span style="font-weight:700;color:#fff;font-size:13px;">MERN Stack Development</span>
+            <span style="color:#94a3b8;font-size:11px;margin-top:2px;">Modern Full-stack Apps</span>
+          </div>
+          <div class="domain-card" onclick="selectOnboardingDomain('Artificial Intelligence')">
+            <span style="font-weight:700;color:#fff;font-size:13px;">Artificial Intelligence</span>
+            <span style="color:#94a3b8;font-size:11px;margin-top:2px;">ML, NLP, Computer Vision</span>
+          </div>
+          <div class="domain-card" onclick="selectOnboardingDomain('Data Science')">
+            <span style="font-weight:700;color:#fff;font-size:13px;">Data Science</span>
+            <span style="color:#94a3b8;font-size:11px;margin-top:2px;">Stats, NumPy, Analytics</span>
+          </div>
+          <div class="domain-card" onclick="selectOnboardingDomain('DevOps with AWS')">
+            <span style="font-weight:700;color:#fff;font-size:13px;">DevOps with AWS</span>
+            <span style="color:#94a3b8;font-size:11px;margin-top:2px;">Cloud Architecture</span>
+          </div>
+          <div class="domain-card" onclick="selectOnboardingDomain('Cyber Security')">
+            <span style="font-weight:700;color:#fff;font-size:13px;">Cyber Security</span>
+            <span style="color:#94a3b8;font-size:11px;margin-top:2px;">Pen testing & Systems</span>
+          </div>
+          <div class="domain-card" onclick="selectOnboardingDomain('Software Engineering')">
+            <span style="font-weight:700;color:#fff;font-size:13px;">Software Engineering</span>
+            <span style="color:#94a3b8;font-size:11px;margin-top:2px;">SDLC & Architecture</span>
+          </div>
+          <div class="domain-card" onclick="selectOnboardingDomain('Flutter Development')">
+            <span style="font-weight:700;color:#fff;font-size:13px;">Flutter Development</span>
+            <span style="color:#94a3b8;font-size:11px;margin-top:2px;">Cross-Platform Mobile</span>
+          </div>
+
+          <!-- Business / Non-Technical Domains Group -->
+          <div style="grid-column: span 2; font-family:var(--ten-font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color:#38bdf8; margin: 12px 0 2px 0; border-bottom: 1px dashed rgba(56,189,248,0.2); padding-bottom: 4px;">Business & Non-Technical</div>
+
+          <div class="domain-card" onclick="selectOnboardingDomain('Business Development')">
+            <span style="font-weight:700;color:#fff;font-size:13px;">Business Development</span>
+            <span style="color:#94a3b8;font-size:11px;margin-top:2px;">Sales & Strategy</span>
+          </div>
+          <div class="domain-card" onclick="selectOnboardingDomain('HR')">
+            <span style="font-weight:700;color:#fff;font-size:13px;">HR</span>
+            <span style="color:#94a3b8;font-size:11px;margin-top:2px;">Talent & Recruiting</span>
+          </div>
+          <div class="domain-card" onclick="selectOnboardingDomain('Space Intern')">
+            <span style="font-weight:700;color:#fff;font-size:13px;">Space Intern</span>
+            <span style="color:#94a3b8;font-size:11px;margin-top:2px;">Cosmic Applications</span>
+          </div>
+          <div class="domain-card" onclick="selectOnboardingDomain('Venture Capital')">
+            <span style="font-weight:700;color:#fff;font-size:13px;">Venture Capital</span>
+            <span style="color:#94a3b8;font-size:11px;margin-top:2px;">Startup Deals & Funding</span>
+          </div>
+          <div class="domain-card" onclick="selectOnboardingDomain('Finance')">
+            <span style="font-weight:700;color:#fff;font-size:13px;">Finance</span>
+            <span style="color:#94a3b8;font-size:11px;margin-top:2px;">Planning & Accounting</span>
+          </div>
+        </div>
+
+        <input type="hidden" id="selected_coord_domain">
+
+        <button type="button" onclick="assessDomainAvailability()" style="width:100%;margin-top:20px;padding:12px;background:rgba(212,175,55,0.06);border:1px solid rgba(212,175,55,0.3);border-radius:10px;color:var(--ten-gold);font-weight:bold;cursor:pointer;font-size:13px;letter-spacing:1px;transition:0.2s;" onmouseover="this.style.background='rgba(212,175,55,0.1)'" onmouseout="this.style.background='rgba(212,175,55,0.06)'">
+          <i class="fa-solid fa-magnifying-glass"></i> Assess Domain Availability
+        </button>
+
+        <div style="margin-top:16px;font-family:var(--ten-font-mono);font-size:11px;text-align:center;color:#94a3b8;height:20px;" id="domainCheckingStatus">
+          Select a domain and tap assess to verify slot.
+        </div>
+      </div>
+
+      <!-- ================= STEP 3: EXPERIENCE & RESUME ================= -->
+      <div class="step-panel" id="stepPanel3">
+        <div class="card-title">3. Experience & Credentials</div>
+        <p class="card-sub">Upload your PDF profile resume and describe your expert background domain relevance.</p>
+
+        <div class="field-group">
+          <label class="field-label">Background Experience Summary</label>
+          <div class="field-inner">
+            <i class="fa-solid fa-briefcase fi" style="top:22px;"></i>
+            <textarea class="field-input" id="coord_experience" placeholder="Briefly describe your industrial or engineering oversight background..." style="height:110px;padding-left:46px;padding-top:14px;resize:none;" required></textarea>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label font-bold text-slate-300">Resume PDF Upload (Max 5MB)</label>
+          <div id="resumeUploadContainer" onclick="document.getElementById('fileInputControl').click()" style="border: 2px dashed rgba(212,175,55,0.3); border-radius:12px; padding:24px; text-align:center; background: rgba(0,0,0,0.2); cursor:pointer; transition:0.3s;" onmouseover="this.style.borderColor='var(--ten-gold)'" onmouseout="this.style.borderColor='rgba(212,175,55,0.3)'">
+            <i id="uploadPdfIcon" class="fa-solid fa-file-pdf text-3xl text-[#D4AF37] mb-2"></i>
+            <p id="uploadStatusText" class="text-sm font-semibold text-slate-300">Drag & drop or Click to choose PDF File</p>
+            <p class="text-xs text-slate-500 mt-1">Accepts PDF file format only, max size 5MB.</p>
+          </div>
+          <input type="file" id="fileInputControl" accept="application/pdf" style="display:none;" onchange="uploadResumeFile(this)">
+          <input type="hidden" id="coord_resume_path">
+        </div>
+      </div>
+
+      <!-- ================= STEP 4: HR TELEMETRY ================= -->
+      <div class="step-panel" id="stepPanel4">
+        <div class="card-title">4. HR Level 2 & 5 Notification</div>
+        <p class="card-sub">Verify your application routing before submitting into administrative queues.</p>
+
+        <div style="background:rgba(212,175,55,0.03); border:1px solid rgba(212,175,55,0.18); border-radius:12px; padding:20px; font-family:var(--ten-font-mono); font-size:12px;">
+           <span style="color:var(--ten-gold);">[TELEMETRY ALERT OUTLETS ACTIVE]</span><br><br>
+           · Routing Application: <span style="color:#fff;" id="viewName">Pending</span><br>
+           · Selected Domain: <span style="color:#fff;" id="viewDomain">Pending</span><br>
+           · Resume Attachment: <span style="color:#059669;" id="viewResume">Attached</span><br>
+           · Access Rights Assigned: Level 2 & 5 Admin Auto-Signaling Queue Live.<br><br>
+           <span style="color:#ef4444;">● Acknowledged:</span> By clicking "Launch Onboarding Request", an approval record registers inside HR portals Level 2 (Coordinator Associate) and Level 5 (Talent Acquisition Lead) for review.
+        </div>
+      </div>
+
+      <!-- ================= STEP 5: ONBOARD SUCCESS ================= -->
+      <div class="step-panel" id="stepPanel5">
+        <div class="success-check">
+          <i class="fa-solid fa-paper-plane"></i>
+        </div>
+        <div class="card-title" style="text-align:center;">Application Transmitted</div>
+        <p class="card-sub" style="text-align:center;">Your candidate profile file is securely dispatched and pending HR Review boards.</p>
+
+        <div style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2); border-radius:12px; padding:18px; font-size:13px; line-height:1.6; color:var(--ten-text-sub); text-align:center; margin-bottom:20px;">
+           Congratulations! Our secure system successfully notified HR level managers. An email confirmation has been dispatched. Once approved, you can securely access your assigned domain using the standard Coordinator Login portal.
+        </div>
+
+        <button type="button" onclick="window.location.href='index.html'" class="login-btn" style="width:100%;text-align:center;display:block;">
+          <i class="fa-solid fa-house"></i> Back to Homepage
+        </button>
+      </div>
+
+      <!-- Action Nav Buttons -->
+      <div class="action-row" id="onboardingActionRow">
+        <button type="button" class="nav-btn btn-prev" id="btnPrev" onclick="stepChange(-1)" style="display:none;">
+          <i class="fa-solid fa-arrow-left"></i> Previous
+        </button>
+        <button type="button" class="nav-btn btn-next" id="btnNext" onclick="stepChange(1)" style="margin-left:auto;">
+          Next Step <i class="fa-solid fa-arrow-right"></i>
+        </button>
+      </div>
+
+    </form>
+
+  </div>
+
+  <div class="card-footer" id="cardOnboardFooter">
+    © 2026 TEN Internship Management System &nbsp;·&nbsp;
+    <a href="index.html">← Back to Home</a>
+  </div>
+
+</div>
+
+<script>
+let activeStep = 1;
+
+function updateProgress() {
+  document.getElementById('progressBarFill').style.width = ((activeStep - 1) / 4) * 100 + "%";
+  document.querySelectorAll('.step-dot').forEach((dot, idx) => {
+    dot.className = 'step-dot';
+    if (idx + 1 === activeStep) {
+      dot.classList.add('active');
+    } else if (idx + 1 < activeStep) {
+      dot.classList.add('completed');
+      dot.innerHTML = '<i class="fa-solid fa-check"></i>';
+    } else {
+      dot.textContent = idx + 1;
+    }
+  });
+
+  // Toggle prev button
+  if (activeStep === 1 || activeStep === 5) {
+    document.getElementById('btnPrev').style.display = 'none';
+  } else {
+    document.getElementById('btnPrev').style.display = 'inline-flex';
+  }
+
+  // Toggle next text / type
+  const btnNext = document.getElementById('btnNext');
+  if (activeStep === 4) {
+    btnNext.innerHTML = 'Launch Onboarding Request <i class="fa-solid fa-rocket ml-2"></i>';
+  } else if (activeStep === 5) {
+    document.getElementById('onboardingActionRow').style.display = 'none';
+    document.getElementById('cardOnboardFooter').style.display = 'none';
+  } else {
+    btnNext.innerHTML = 'Next Step <i class="fa-solid fa-arrow-right ml-2"></i>';
+  }
+}
+
+async function stepChange(direction) {
+  // Simple validation for step forward
+  if (direction === 1) {
+    if (activeStep === 1) {
+      if (!validateStep1()) return;
+    } else if (activeStep === 2) {
+      if (!validateStep2()) return;
+    } else if (activeStep === 3) {
+      if (!validateStep3()) return;
+    } else if (activeStep === 4) {
+      await submitCoordinatorApplication();
+      return;
+    }
+  }
+
+  document.getElementById(`stepPanel${activeStep}`).classList.remove('active');
+  activeStep += direction;
+  document.getElementById(`stepPanel${activeStep}`).classList.add('active');
+
+  if (activeStep === 4) {
+    document.getElementById('viewName').textContent = document.getElementById('coord_name').value;
+    document.getElementById('viewDomain').textContent = document.getElementById('selected_coord_domain').value;
+    document.getElementById('viewResume').textContent = document.getElementById('coord_resume_path').value ? "Attached (Valid Live Path)" : "Missing";
+  }
+
+  updateProgress();
+}
+
+function validateStep1() {
+  const name = document.getElementById('coord_name').value.trim();
+  const user = document.getElementById('coord_username').value.trim();
+  const email = document.getElementById('coord_email').value.trim();
+  const pass = document.getElementById('coord_password').value.trim();
+
+  if (!name || !user || !email || !pass) {
+    Swal.fire({
+      icon: 'warning',
+      title: 'Fields Empty',
+      text: 'Please populate all core credentials.',
+      background: '#0e1428',
+      color: '#F0EEE8',
+      confirmButtonColor: '#D4AF37'
+    });
+    return false;
+  }
+  return true;
+}
+
+function selectOnboardingDomain(val) {
+  document.querySelectorAll('.domain-card').forEach(card => card.classList.remove('selected'));
+  event.currentTarget.classList.add('selected');
+  document.getElementById('selected_coord_domain').value = val;
+  document.getElementById('domainCheckingStatus').textContent = `Target Domain Selected: ${val}`;
+  document.getElementById('domainCheckingStatus').className = 'text-amber-400 font-bold';
+}
+
+function validateStep2() {
+  const domain = document.getElementById('selected_coord_domain').value;
+  if (!domain) {
+    Swal.fire({
+      icon: 'warning',
+      title: 'Target Missing',
+      text: 'Please select your domain authorization workspace.',
+      background: '#0e1428',
+      color: '#F0EEE8',
+      confirmButtonColor: '#D4AF37'
+    });
+    return false;
+  }
+  return true;
+}
+
+async function assessDomainAvailability() {
+  const domain = document.getElementById('selected_coord_domain').value;
+  if (!domain) {
+    Swal.fire({
+      icon: 'warning',
+      title: 'Select Domain First',
+      text: 'Please tap a domain card to test availability.',
+      background: '#0e1428',
+      color: '#F0EEE8',
+      confirmButtonColor: '#D4AF37'
+    });
+    return;
+  }
+
+  const stat = document.getElementById('domainCheckingStatus');
+  stat.textContent = 'Verifying domain allocation constraints...';
+  stat.className = 'text-slate-400 animate-pulse';
+
+  try {
+    const res = await fetch('/api/v2/coordinator/check-domain', {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ domain })
+    });
+    const data = await res.json();
+    if (data.success) {
+      stat.textContent = `✓ Domain is Available! Slot assigned.`;
+      stat.className = 'text-green-400 font-bold';
+      Swal.fire({
+        icon: 'success',
+        title: 'Domain Unoccupied',
+        text: 'This domain is unoccupied. You status meets domain guidelines.',
+        background: '#0e1428',
+        color: '#F0EEE8',
+        confirmButtonColor: '#D4AF37'
+      });
+    } else {
+      stat.textContent = `✗ Allocation Rejected: Assigned to ${data.message}`;
+      stat.className = 'text-red-500 font-bold';
+      Swal.fire({
+        icon: 'error',
+        title: 'Allocation Constraint Conflict',
+        text: data.message,
+        background: '#0e1428',
+        color: '#F0EEE8',
+        confirmButtonColor: '#ef4444'
+      });
+    }
+  } catch (err) {
+    console.error(err);
+    stat.textContent = 'Network offline. Retry validation.';
+    stat.className = 'text-red-400';
+  }
+}
+
+function validateStep3() {
+  const exp = document.getElementById('coord_experience').value.trim();
+  const resume = document.getElementById('coord_resume_path').value;
+
+  if (!exp) {
+    Swal.fire({
+      icon: 'warning',
+      title: 'Experience Required',
+      text: 'Please describe your specialist experience overview.',
+      background: '#0e1428',
+      color: '#F0EEE8',
+      confirmButtonColor: '#D4AF37'
+    });
+    return false;
+  }
+  if (!resume) {
+    Swal.fire({
+      icon: 'warning',
+      title: 'Resume Missing',
+      text: 'A resume PDF is compulsory for coordinator credentials check.',
+      background: '#0e1428',
+      color: '#F0EEE8',
+      confirmButtonColor: '#D4AF37'
+    });
+    return false;
+  }
+  return true;
+}
+
+async function uploadResumeFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    Swal.fire({
+      icon: 'error',
+      title: 'Format Rejected',
+      text: 'The resume must be a PDF document.',
+      background: '#0e1428',
+      color: '#F0EEE8',
+      confirmButtonColor: '#D4AF37'
+    });
+    input.value = '';
+    return;
+  }
+
+  if (file.size > 25 * 1024 * 1024) {
+    Swal.fire({
+      icon: 'error',
+      title: 'File Too Large',
+      text: 'The maximum allowed file size is 25MB.',
+      background: '#0e1428',
+      color: '#F0EEE8',
+      confirmButtonColor: '#D4AF37'
+    });
+    input.value = '';
+    return;
+  }
+
+  const uploadStatusText = document.getElementById('uploadStatusText');
+  const uploadPdfIcon = document.getElementById('uploadPdfIcon');
+  const container = document.getElementById('resumeUploadContainer');
+
+  uploadStatusText.textContent = 'Uploading resume PDF...';
+  uploadStatusText.className = 'text-amber-400 animate-pulse';
+  uploadPdfIcon.className = 'fa-solid fa-spinner fa-spin text-3xl text-[#D4AF37] mb-2';
+
+  const formData = new FormData();
+  formData.append('resume', file);
+
+  try {
+    const res = await fetch('/api/v2/upload-resume', {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('coord_resume_path').value = data.filePath;
+      uploadStatusText.textContent = `Uploaded: ${file.name}`;
+      uploadStatusText.className = 'text-green-400 font-bold';
+      uploadPdfIcon.className = 'fa-solid fa-circle-check text-3xl text-emerald-400 mb-2';
+      container.style.borderColor = '#10b981';
+      container.style.background = 'rgba(16,185,129,0.03)';
+    } else {
+      throw new Error(data.message || 'Upload failed');
+    }
+  } catch (err) {
+    console.error(err);
+    uploadStatusText.textContent = 'Upload failed. Tap to retry.';
+    uploadStatusText.className = 'text-red-500 font-bold';
+    uploadPdfIcon.className = 'fa-solid fa-circle-exclamation text-3xl text-red-500 mb-2';
+    container.style.borderColor = '#ef4444';
+    input.value = '';
+  }
+}
+
+async function submitCoordinatorApplication() {
+  Swal.fire({
+    title: 'Transmitting Secure Request...',
+    html: 'Enqueuing credentials inside HR Onboarding telemetry streams...',
+    allowOutsideClick: false,
+    didOpen: () => { Swal.showLoading(); },
+    background: '#0e1428',
+    color: '#F0EEE8'
+  });
+
+  const payload = {
+    name: document.getElementById('coord_name').value,
+    username: document.getElementById('coord_username').value,
+    email: document.getElementById('coord_email').value,
+    password: document.getElementById('coord_password').value,
+    domain: document.getElementById('selected_coord_domain').value,
+    experience: document.getElementById('coord_experience').value,
+    resumePdf: document.getElementById('coord_resume_path').value
+  };
+
+  try {
+    const res = await fetch('/api/v2/coordinator/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    Swal.close();
+
+    if (data.success) {
+      document.getElementById(`stepPanel${activeStep}`).classList.remove('active');
+      activeStep = 5;
+      document.getElementById(`stepPanel5`).classList.add('active');
+      updateProgress();
+    } else {
+      Swal.fire({
+        icon: 'error',
+        title: 'Registration Blocked',
+        text: data.message || 'Error onboarding coordinator credentials.',
+        background: '#0e1428',
+        color: '#F0EEE8',
+        confirmButtonColor: '#ef4444'
+      });
+    }
+  } catch (err) {
+    Swal.close();
+    console.error(err);
+    Swal.fire({
+      icon: 'error',
+      title: 'Server Error',
+      text: 'Please check your connection and try again.',
+      background: '#0e1428',
+      color: '#F0EEE8',
+      confirmButtonColor: '#ef4444'
+    });
+  }
+}
+
+</script>
+<script src="ten-motion.js"></script>
+<script src="/password-toggle.js"></script>
+</body>
+</html>

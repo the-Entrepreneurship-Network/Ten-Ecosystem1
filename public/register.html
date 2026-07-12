@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Register | TEN Ecosystem</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <link rel="stylesheet" href="ten-theme.css">
+  <link rel="stylesheet" href="ten-motion.css">
+  
+  <!-- FontAwesome & Fonts -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Syne:wght@600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #05070e;
+    }
+    .syne {
+      font-family: 'Syne', sans-serif;
+    }
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .glass-card {
+      background: rgba(14, 20, 40, 0.95);
+      border: 1px solid rgba(212, 175, 55, 0.12);
+      backdrop-filter: blur(14px);
+    }
+    .role-card {
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .role-card:hover {
+      border-color: rgba(212, 175, 55, 0.4);
+      background: rgba(212, 175, 55, 0.04);
+      transform: translateY(-3px);
+    }
+    .text-gold {
+      color: #D4AF37;
+    }
+    .bg-gold {
+      background-color: #D4AF37;
+    }
+    .border-gold {
+      border-color: rgba(212, 175, 55, 0.3);
+    }
+    .btn-gold {
+      background: linear-gradient(135deg, #D4AF37, #B8960C);
+      color: #05070e;
+    }
+    .btn-gold:hover {
+      background: linear-gradient(135deg, #F0D060, #D4AF37);
+      box-shadow: 0 8px 24px rgba(212, 175, 55, 0.25);
+    }
+  </style>
+</head>
+<body class="min-h-screen text-slate-100 flex items-center justify-center p-4 md:p-8 relative overflow-x-hidden">
+
+  <!-- Mesh Grid & Ambient Spot Orbs -->
+  <div class="ten-grid-bg"></div>
+  <div class="ten-orb ten-orb-1"></div>
+  <div class="ten-orb ten-orb-2"></div>
+
+  <div class="relative w-full max-w-2xl z-10 transition-all duration-500 ease-in-out">
+    
+    <!-- Brand / Header -->
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 mb-4 animate-pulse">
+        <svg class="w-8 h-8" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="20" cy="20" r="14" stroke="#D4AF37" stroke-width="2.5"></circle>
+          <path d="M15 15 H25 V19 H15" stroke="#D4AF37" stroke-width="2.5" stroke-linecap="round"></path>
+          <path d="M20 19 V25" stroke="#D4AF37" stroke-width="2.5" stroke-linecap="round"></path>
+        </svg>
+      </div>
+      <div class="text-xs uppercase tracking-widest text-[#D4AF37] font-extrabold mb-1">TEN Ecosystem</div>
+      <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight syne text-transparent bg-clip-text bg-gradient-to-r from-slate-100 via-amber-100 to-amber-200">
+        JOIN TEN ECOSYSTEM
+      </h1>
+      <p id="topSubtitle" class="text-slate-400 text-sm mt-2 font-medium">Select your role to unlock personalized networking, opportunities, and workspaces.</p>
+    </div>
+
+    <!-- Container Card -->
+    <div class="glass-card rounded-2xl p-6 md:p-10 shadow-2xl relative overflow-hidden">
+      <div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent"></div>
+
+      <!-- STEP 1: ROLE SELECTION -->
+      <div id="roleSelectionScreen" class="space-y-6">
+        <h2 class="text-xl font-bold text-center text-slate-100 mb-6 uppercase tracking-wider">Register As</h2>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          
+          <!-- Student Card -->
+          <button onclick="selectRole('student')" class="role-card text-left p-5 rounded-xl border border-slate-800 bg-slate-900/30 flex items-start gap-4">
+            <div class="flex-shrink-0 w-12 h-12 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center">
+              <i class="fa-solid fa-graduation-cap text-xl"></i>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-slate-100">Student</h3>
+              <p class="text-slate-400 text-xs mt-1 leading-relaxed">Join as an intern, learn real systems, complete milestones, and earn certifications.</p>
+            </div>
+          </button>
+
+          <!-- Founder Card -->
+          <button onclick="selectRole('founder')" class="role-card text-left p-5 rounded-xl border border-slate-800/80 bg-slate-950/20 flex items-start gap-4 relative overflow-hidden opacity-60 hover:opacity-80 transition duration-300">
+            <span class="absolute top-2 right-2 bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">Coming Soon</span>
+            <div class="flex-shrink-0 w-12 h-12 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center">
+              <i class="fa-solid fa-rocket text-xl"></i>
+            </div>
+            <div class="pr-12">
+              <h3 class="text-base font-bold text-slate-100">Founder</h3>
+              <p class="text-slate-400 text-xs mt-1 leading-relaxed">Manage your venture pipeline, post jobs/milestones, hire talent, and scale your brand.</p>
+            </div>
+          </button>
+
+          <!-- Mentor Card -->
+          <button onclick="selectRole('mentor')" class="role-card text-left p-5 rounded-xl border border-slate-800/80 bg-slate-950/20 flex items-start gap-4 relative overflow-hidden opacity-60 hover:opacity-80 transition duration-300">
+            <span class="absolute top-2 right-2 bg-pink-500/10 text-pink-400 border border-pink-500/20 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">Coming Soon</span>
+            <div class="flex-shrink-0 w-12 h-12 rounded-lg bg-pink-500/10 text-pink-400 border border-pink-500/20 flex items-center justify-center">
+              <i class="fa-solid fa-user-tie text-xl"></i>
+            </div>
+            <div class="pr-12">
+              <h3 class="text-base font-bold text-slate-100">Mentor</h3>
+              <p class="text-slate-400 text-xs mt-1 leading-relaxed">Guide startup ventures, provide professional training, and review milestone completions.</p>
+            </div>
+          </button>
+
+          <!-- Investor Card -->
+          <button onclick="selectRole('investor')" class="role-card text-left p-5 rounded-xl border border-slate-800/80 bg-slate-950/20 flex items-start gap-4 relative overflow-hidden opacity-60 hover:opacity-80 transition duration-300">
+            <span class="absolute top-2 right-2 bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">Coming Soon</span>
+            <div class="flex-shrink-0 w-12 h-12 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center">
+              <i class="fa-solid fa-hand-holding-dollar text-xl"></i>
+            </div>
+            <div class="pr-12">
+              <h3 class="text-base font-bold text-slate-100">Investor</h3>
+              <p class="text-slate-400 text-xs mt-1 leading-relaxed">Access clean deal rooms, explore startup growth metrics, and fund high-potential ventures.</p>
+            </div>
+          </button>
+
+          <!-- Contractor Card -->
+          <button onclick="selectRole('contractor')" class="role-card text-left p-5 rounded-xl border border-slate-800/80 bg-slate-950/20 flex items-start gap-4 md:col-span-2 relative overflow-hidden opacity-60 hover:opacity-80 transition duration-300">
+            <span class="absolute top-2 right-2 bg-orange-500/10 text-orange-400 border border-orange-500/20 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">Coming Soon</span>
+            <div class="flex-shrink-0 w-12 h-12 rounded-lg bg-orange-500/10 text-orange-400 border border-orange-500/20 flex items-center justify-center">
+              <i class="fa-solid fa-screwdriver-wrench text-xl"></i>
+            </div>
+            <div class="pr-12">
+              <h3 class="text-base font-bold text-slate-100">Contractor</h3>
+              <p class="text-slate-400 text-xs mt-1 leading-relaxed font-normal">Apply premium engineering, programming, or operations skills as a trusted milestone freelancer.</p>
+            </div>
+          </button>
+
+        </div>
+
+        <div class="pt-6 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-500">
+          <span>Are you an administrator? <a href="hr-login.html" class="text-[#D4AF37] hover:underline font-bold">HR Login</a></span>
+          <a href="login.html" class="text-slate-400 hover:text-slate-200 hover:underline">Already registered? Log in</a>
+        </div>
+      </div>
+
+
+      <!-- STEP 2: DYNAMIC ONBOARDING FORMS -->
+      <div id="formSectionScreen" class="hidden">
+        
+        <!-- Form Header info -->
+        <div class="flex items-center justify-between border-b border-slate-800 pb-5 mb-6">
+          <div class="flex items-center gap-3">
+            <div id="roleIconBadge" class="w-10 h-10 rounded-lg flex items-center justify-center text-lg font-bold">
+              🎓
+            </div>
+            <div>
+              <h2 id="roleFormTitle" class="text-lg font-extrabold text-slate-100 uppercase tracking-wide">STUDENT REGISTRATION</h2>
+              <p class="text-slate-400 text-xs">Fill out your background to set up your ecosystem workspace.</p>
+            </div>
+          </div>
+          <button type="button" onclick="goBackToSelection()" class="text-xs text-slate-400 hover:text-amber-400 flex items-center gap-1 bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800 transition">
+            <i class="fa-solid fa-arrow-left"></i> Change Role
+          </button>
+        </div>
+
+        <form id="unifiedRegForm" class="space-y-5">
+          <!-- Hidden Input for selected role -->
+          <input type="hidden" id="selectedRoleInput" name="role" required>
+
+          <!-- Standard Fields used by most/all profiles (Names, Creds) -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Full Name <span class="text-red-500">*</span></label>
+              <input type="text" id="reg_fullName" name="fullName" class="w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]" placeholder="e.g. John Doe" required>
+            </div>
+            <div>
+              <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Email address <span class="text-red-500">*</span></label>
+              <input type="email" id="reg_email" name="email" class="w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]" placeholder="john.doe@domain.com" required>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Mobile / WhatsApp <span class="text-red-500">*</span></label>
+              <input type="tel" id="reg_mobile" name="mobile" class="w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]" placeholder="e.g. +91 9876543210" required>
+            </div>
+            <div style="position:relative;">
+              <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Account Password <span class="text-red-500">*</span></label>
+              <input type="password" id="reg_password" name="password" class="w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] pr-12" placeholder="At least 8 characters" minlength="8" required>
+              <span id="togglePasswordBtn"
+                    onclick="toggleRegPwd()"
+                    style="position:absolute;right:16px;top:38px;cursor:pointer;
+                           font-size:18px;color:#8ca0ba;user-select:none;">
+                👁
+              </span>
+            </div>
+          </div>
+
+
+          <!-- ── STUDENT SPECIFIC FIELDS ── -->
+          <div id="studentFormFields" class="form-role-subset hidden space-y-5">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Country <span class="text-red-500">*</span></label>
+                <input type="text" id="stu_country" name="country" class="stu-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="India">
+              </div>
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">City <span class="text-red-500">*</span></label>
+                <input type="text" id="stu_city" name="city" class="stu-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="Mumbai">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div class="md:col-span-2">
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">University / College <span class="text-red-500">*</span></label>
+                <input type="text" id="stu_university" name="university" class="stu-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="Indian Institute of Technology">
+              </div>
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Graduation Year <span class="text-red-500">*</span></label>
+                <input type="number" id="stu_graduationYear" name="graduationYear" class="stu-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="2026">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Degree / Major <span class="text-red-500">*</span></label>
+                <input type="text" id="stu_degree" name="degree" class="stu-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="B.Tech Computer Science & Engineering">
+              </div>
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Internship Tenure <span class="text-red-500">*</span></label>
+                <select id="stu_tenure" name="tenure" class="stu-req w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]">
+                  <option value="">Select Tenure</option>
+                  <option value="1 Week">1 Week</option>
+                  <option value="15 Days">15 Days</option>
+                  <option value="1 Month">1 Month</option>
+                  <option value="45 Days">45 Days</option>
+                  <option value="3 Months">3 Months</option>
+                  <option value="6 Months">6 Months</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Skills <span class="text-slate-500 text-[10px] lowercase font-normal">(comma-separated)</span> <span class="text-red-500">*</span></label>
+              <input type="text" id="stu_skills" name="skills" class="stu-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="React, Node.js, Express, MongoDB">
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Portfolio / Git Website</label>
+                <input type="url" id="stu_portfolio" name="portfolio" class="w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="https://mygithub.io">
+              </div>
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">LinkedIn Profile URL</label>
+                <input type="url" id="stu_linkedin" name="linkedin" class="w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="https://linkedin.com/in/username">
+              </div>
+            </div>
+
+            <!-- Resume PDF Drag & Drop Upload -->
+            <div>
+              <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Resume Upload (PDF only, max 5MB) <span class="text-red-500">*</span></label>
+              <div class="relative flex items-center justify-center border-2 border-dashed border-slate-800 rounded-xl p-6 bg-slate-950/50 hover:border-[#D4AF37] transition cursor-pointer" id="resumeUploadContainer">
+                <input type="file" id="stu_resume_file" accept=".pdf" class="absolute inset-0 opacity-0 cursor-pointer" onchange="uploadResumeFile(this)">
+                <div class="text-center" id="uploadStatusContent">
+                  <i class="fa-solid fa-file-pdf text-3xl text-slate-500 mb-2" id="uploadPdfIcon"></i>
+                  <p class="text-sm font-semibold text-slate-300" id="uploadStatusText">Drag & drop or click to upload PDF</p>
+                  <p class="text-xs text-slate-500 mt-1">Maximum size: 5MB</p>
+                </div>
+              </div>
+              <input type="hidden" id="stu_resume" name="resume" class="stu-req">
+            </div>
+
+            <!-- Domain selection max 2 options -->
+            <div>
+              <label class="block text-slate-[#D4AF37] text-xs font-semibold uppercase tracking-widest mb-3">Domain Selection (Select Max 2) <span class="text-red-500">*</span></label>
+              
+              <div class="mb-4">
+                <p class="text-[11px] text-slate-400 font-bold tracking-wider mb-2">TECH DOMAINS:</p>
+                <div class="grid grid-cols-2 md:grid-cols-2 gap-3" id="techDomainsSelector">
+                  <!-- JS will dynamically print cards OR we can define them directly -->
+                  <div onclick="selectDomainCard('DevOps with AWS')" id="domain_card_DevOps_with_AWS" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-cloud text-amber-500/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">DevOps with AWS</span>
+                  </div>
+                  <div onclick="selectDomainCard('Python Development')" id="domain_card_Python_Development" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-brands fa-python text-amber-500/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Python Development</span>
+                  </div>
+                  <div onclick="selectDomainCard('Java Development')" id="domain_card_Java_Development" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-brands fa-java text-amber-500/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Java Development</span>
+                  </div>
+                  <div onclick="selectDomainCard('Web Development')" id="domain_card_Web_Development" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-code text-amber-500/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Web Development</span>
+                  </div>
+                  <div onclick="selectDomainCard('MERN Stack Development')" id="domain_card_MERN_Stack_Development" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-cubes text-amber-500/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">MERN Stack Dev</span>
+                  </div>
+                  <div onclick="selectDomainCard('Artificial Intelligence')" id="domain_card_Artificial_Intelligence" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-brain text-amber-500/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Artificial Intell</span>
+                  </div>
+                  <div onclick="selectDomainCard('Data Science')" id="domain_card_Data_Science" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-chart-line text-amber-500/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Data Science</span>
+                  </div>
+                  <div onclick="selectDomainCard('Cyber Security')" id="domain_card_Cyber_Security" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-shield-halved text-amber-500/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Cyber Security</span>
+                  </div>
+                  <div onclick="selectDomainCard('Software Engineering')" id="domain_card_Software_Engineering" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-laptop-code text-amber-500/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Software Eng</span>
+                  </div>
+                  <div onclick="selectDomainCard('Flutter Development')" id="domain_card_Flutter_Development" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-mobile-screen-button text-amber-500/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Flutter Dev</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mt-2">
+                <p class="text-[11px] text-slate-400 font-bold tracking-wider mb-2">BUSINESS DOMAINS:</p>
+                <div class="grid grid-cols-2 md:grid-cols-2 gap-3" id="bizDomainsSelector">
+                  <div onclick="selectDomainCard('Business Development')" id="domain_card_Business_Development" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-briefcase text-blue-400/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Business Dev</span>
+                  </div>
+                  <div onclick="selectDomainCard('HR')" id="domain_card_HR" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-users text-blue-400/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">HR</span>
+                  </div>
+                  <div onclick="selectDomainCard('Space Intern')" id="domain_card_Space_Intern" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-user-astronaut text-blue-400/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Space Intern</span>
+                  </div>
+                  <div onclick="selectDomainCard('Venture Capital')" id="domain_card_Venture_Capital" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-handshake text-blue-400/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Venture Capital</span>
+                  </div>
+                  <div onclick="selectDomainCard('Finance')" id="domain_card_Finance" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-receipt text-blue-400/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Finance</span>
+                  </div>
+                </div>
+              </div>
+
+              <input type="hidden" id="selected_domains" name="domains" class="stu-req">
+            </div>
+          </div>
+
+
+          <!-- ── FOUNDER SPECIFIC FIELDS ── -->
+          <div id="founderFormFields" class="form-role-subset hidden space-y-5">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Startup Name <span class="text-red-500">*</span></label>
+                <input type="text" id="fdr_startupName" name="startupName" class="fdr-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="Venture Inc">
+              </div>
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Industry Sector <span class="text-red-500">*</span></label>
+                <input type="text" id="fdr_industry" name="industry" class="fdr-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="e.g. SaaS, FinTech, DeepTech">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Startup Stage <span class="text-red-500">*</span></label>
+                <select id="fdr_stage" name="stage" class="fdr-req w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]">
+                  <option value="Idea">Idea</option>
+                  <option value="Validation">Validation</option>
+                  <option value="MVP" selected>MVP</option>
+                  <option value="Early Revenue">Early Revenue</option>
+                  <option value="Growth">Growth</option>
+                  <option value="Scaling">Scaling</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Active Team Size <span class="text-red-500">*</span></label>
+                <input type="number" id="fdr_teamSize" name="teamSize" class="fdr-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="e.g. 5">
+              </div>
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Funding Stage <span class="text-red-500">*</span></label>
+                <select id="fdr_fundingStage" name="fundingStage" class="fdr-req w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]">
+                  <option value="Bootstrapped">Bootstrapped</option>
+                  <option value="Pre-seed">Pre-seed</option>
+                  <option value="Seed">Seed</option>
+                  <option value="Series A">Series-A</option>
+                  <option value="Profitable">Profitable</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Revenue Range (Monthly in ₹)</label>
+                <input type="text" id="fdr_revenue" name="revenue" class="w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="e.g. ₹50,000 or N/A">
+              </div>
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Startup Website Link</label>
+                <input type="url" id="fdr_website" name="website" class="w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="https://yourstartup.com">
+              </div>
+            </div>
+
+
+
+            <div>
+              <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Startup Description <span class="text-red-500">*</span></label>
+              <textarea id="fdr_description" name="description" class="fdr-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37] h-20" placeholder="Briefly describe what your venture builds..."></textarea>
+            </div>
+
+            <div>
+              <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Core Milestone Goals / Asks <span class="text-red-500">*</span></label>
+              <input type="text" id="fdr_goals" name="goals" class="fdr-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="e.g. Build MVP, Hire React Talent, Seed Angel Fund">
+            </div>
+          </div>
+
+
+          <!-- ── MENTOR SPECIFIC FIELDS ── -->
+          <div id="mentorFormFields" class="form-role-subset hidden space-y-5">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Current Active Company <span class="text-red-500">*</span></label>
+                <input type="text" id="mtr_company" name="company" class="mtr-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="Google India">
+              </div>
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Active Designation / Job Title <span class="text-red-500">*</span></label>
+                <input type="text" id="mtr_designation" name="designation" class="mtr-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="Senior Staff Engineer">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div class="md:col-span-1">
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Years of Tech/Biz Experience <span class="text-red-500">*</span></label>
+                <input type="number" id="mtr_experience" name="experience" class="mtr-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="8">
+              </div>
+              <div class="md:col-span-2">
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">LinkedIn Profile URL <span class="text-red-500">*</span></label>
+                <input type="url" id="mtr_linkedin" name="linkedin" class="mtr-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="https://linkedin.com/in/username">
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Areas of Core Expertise <span class="text-slate-500 text-[10px] lowercase font-normal">(comma-separated)</span> <span class="text-red-500">*</span></label>
+              <input type="text" id="mtr_expertiseAreas" name="expertiseAreas" class="mtr-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="Product Strategy, Systems Design, React Coding, Venture Capital">
+            </div>
+          </div>
+
+
+          <!-- ── INVESTOR SPECIFIC FIELDS ── -->
+          <div id="investorFormFields" class="form-role-subset hidden space-y-5">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Investment Firm Name / Individual <span class="text-red-500">*</span></label>
+                <input type="text" id="inv_firmName" name="firmName" class="inv-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="Acme Unicorn Capital">
+              </div>
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Active / Allocated Fund Size <span class="text-red-500">*</span></label>
+                <input type="text" id="inv_fundSize" name="fundSize" class="inv-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="e.g. ₹5 Crore or Angel">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Investment Stage Preference <span class="text-red-500">*</span></label>
+                <select id="inv_investmentStage" name="investmentStage" class="inv-req w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]">
+                  <option value="Pre-seed">Pre-seed</option>
+                  <option value="Seed" selected>Seed</option>
+                  <option value="Series A">Series A</option>
+                  <option value="Series B">Series B</option>
+                  <option value="Growth">Growth Focus</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Firm Website / Profile Link</label>
+                <input type="url" id="inv_website" name="website" class="w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="https://acmeventures.com">
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Target Sectors / Industry Focus <span class="text-slate-500 text-[10px] lowercase font-normal">(comma-separated)</span> <span class="text-red-500">*</span></label>
+              <input type="text" id="inv_industryFocus" name="industryFocus" class="inv-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="e.g. AI, SaaS, HealthTech, ClimateTech">
+            </div>
+            
+
+          </div>
+
+
+          <!-- ── CONTRACTOR SPECIFIC FIELDS ── -->
+          <div id="contractorFormFields" class="form-role-subset hidden space-y-5">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Work Availability <span class="text-red-500">*</span></label>
+                <select id="con_availability" name="availability" class="con-req w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]">
+                  <option value="Immediately">Immediately</option>
+                  <option value="In 2 weeks">In 2 weeks</option>
+                  <option value="In 1 month">In 1 month</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Desired Hourly Rate (₹) <span class="text-red-500">*</span></label>
+                <input type="number" id="con_hourlyRate" name="hourlyRate" class="con-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="e.g. 1200">
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Core Dev / Operations Skills <span class="text-slate-500 text-[10px] lowercase font-normal">(comma-separated)</span> <span class="text-red-500">*</span></label>
+              <input type="text" id="con_skills" name="skills" class="con-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="Flutter, Swift, Kotlin, Rust Programming">
+            </div>
+
+            <div>
+              <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Portfolio / Git / Behance URL <span class="text-red-500">*</span></label>
+              <input type="url" id="con_portfolio" name="portfolio" class="con-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="https://freelancedeveloper.com">
+            </div>
+
+            <div>
+              <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Freelancing / Engineering Experience Details <span class="text-red-500">*</span></label>
+              <textarea id="con_experience" name="experience" class="con-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37] h-20" placeholder="e.g. 4 years of freelance web design, delivered 12 remote apps..."></textarea>
+            </div>
+          </div>
+
+
+          <!-- SUBMIT TRIGGER BUTTON -->
+          <button type="submit" class="w-full py-4 rounded-xl btn-gold font-extrabold tracking-wide uppercase transition duration-300 transform hover:-translate-y-0.5 mt-2">
+            Submit Registration For Approval <i class="fa-solid fa-cloud-arrow-up ml-1"></i>
+          </button>
+        </form>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    let activeRole = '';
+    let selectedDomains = [];
+
+    function toggleRegPwd() {
+      const input = document.getElementById("reg_password");
+      const icon  = document.getElementById("togglePasswordBtn");
+      if (input.type === "password") {
+        input.type = "text";
+        icon.innerText = "🙈";
+      } else {
+        input.type = "password";
+        icon.innerText = "👁";
+      }
+    }
+
+    function selectDomainCard(domain) {
+      if (!activeRole || activeRole !== 'student') return;
+      
+      const cardId = `domain_card_${domain.replace(/\s+/g, '_')}`;
+      const element = document.getElementById(cardId);
+      if (!element) return;
+
+      const index = selectedDomains.indexOf(domain);
+      if (index !== -1) {
+        selectedDomains.splice(index, 1);
+        element.classList.remove('border-[#D4AF37]', 'bg-amber-500/10');
+      } else {
+        if (selectedDomains.length >= 2) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Selection Limit',
+            text: 'You can select maximum 2 domains.',
+            background: '#0e1428',
+            color: '#F0EEE8',
+            confirmButtonColor: '#D4AF37'
+          });
+          return;
+        }
+        selectedDomains.push(domain);
+        element.classList.add('border-[#D4AF37]', 'bg-amber-500/10');
+      }
+      document.getElementById('selected_domains').value = selectedDomains.join(',');
+    }
+
+    async function uploadResumeFile(input) {
+      const file = input.files[0];
+      if (!file) return;
+
+      if (!file.name.toLowerCase().endsWith('.pdf')) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Format Rejected',
+          text: 'The resume must be a PDF document.',
+          background: '#0e1428',
+          color: '#F0EEE8',
+          confirmButtonColor: '#D4AF37'
+        });
+        input.value = '';
+        return;
+      }
+
+      if (file.size > 25 * 1024 * 1024) {
+        Swal.fire({
+          icon: 'error',
+          title: 'File Too Large',
+          text: 'The maximum allowed file size is 25MB.',
+          background: '#0e1428',
+          color: '#F0EEE8',
+          confirmButtonColor: '#D4AF37'
+        });
+        input.value = '';
+        return;
+      }
+
+      const uploadStatusText = document.getElementById('uploadStatusText');
+      const uploadPdfIcon = document.getElementById('uploadPdfIcon');
+      const container = document.getElementById('resumeUploadContainer');
+
+      uploadStatusText.textContent = 'Uploading resume PDF...';
+      uploadStatusText.className = 'text-sm font-semibold text-amber-400 animate-pulse';
+      uploadPdfIcon.className = 'fa-solid fa-spinner fa-spin text-3xl text-[#D4AF37] mb-2';
+
+      const formData = new FormData();
+      formData.append('resume', file);
+
+      try {
+        const res = await fetch('/api/v2/upload-resume', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('stu_resume').value = data.filePath;
+          uploadStatusText.textContent = `Uploaded: ${file.name}`;
+          uploadStatusText.className = 'text-sm font-semibold text-emerald-400';
+          uploadPdfIcon.className = 'fa-solid fa-circle-check text-3xl text-emerald-400 mb-2';
+          container.className = 'relative flex items-center justify-center border-2 border-solid border-emerald-500/30 rounded-xl p-6 bg-slate-950/50 cursor-pointer';
+        } else {
+          throw new Error(data.message || 'Upload failed');
+        }
+      } catch (err) {
+        console.error(err);
+        uploadStatusText.textContent = 'Upload failed. Please tap to retry.';
+        uploadStatusText.className = 'text-sm font-semibold text-red-500';
+        uploadPdfIcon.className = 'fa-solid fa-circle-exclamation text-3xl text-red-500 mb-2';
+        container.className = 'relative flex items-center justify-center border-2 border-solid border-red-500/30 rounded-xl p-6 bg-slate-950/50 cursor-pointer';
+        input.value = '';
+      }
+    }
+
+    function selectRole(role) {
+      if (role !== 'student') {
+        Swal.fire({
+          icon: 'info',
+          title: 'Portal Coming Soon 🚧',
+          html: `<div style="text-align: left; line-height: 1.6; color: #94a3b8; font-size: 14px;">
+            <p style="margin-bottom: 12px; color: #f1f5f9;">The <strong>${role.charAt(0).toUpperCase() + role.slice(1)}</strong> onboarding portal is currently under active development.</p>
+            <p>We are currently accepting registrations for the <strong style="color: #D4AF37;">Student (Intern)</strong> ecosystem only. Thank you for your patience!</p>
+          </div>`,
+          background: '#0c1220',
+          color: '#f1f5f9',
+          confirmButtonColor: '#D4AF37',
+          confirmButtonText: 'Got it, thanks!',
+          customClass: {
+            popup: 'border border-slate-800 rounded-2xl'
+          }
+        });
+        return;
+      }
+
+      activeRole = role;
+      
+      const titleNode = document.getElementById("roleFormTitle");
+      const iconNode = document.getElementById("roleIconBadge");
+      const subNode = document.getElementById("topSubtitle");
+      const hiddenRole = document.getElementById("selectedRoleInput");
+      const submitBtn = document.querySelector('button[type="submit"]');
+
+      hiddenRole.value = role;
+
+      document.querySelectorAll('.stu-req, .fdr-req, .mtr-req, .inv-req, .con-req').forEach(el => {
+        el.removeAttribute('required');
+      });
+
+      document.querySelectorAll('.form-role-subset').forEach(el => el.classList.add('hidden'));
+
+      if (role === 'student') {
+        titleNode.textContent = "STUDENT ONBOARDING";
+        iconNode.innerHTML = "<i class='fa-solid fa-graduation-cap text-lg'></i>";
+        iconNode.className = "w-10 h-10 rounded-lg flex items-center justify-center text-emerald-400 bg-emerald-500/10 border border-emerald-500/20";
+        document.getElementById("studentFormFields").classList.remove('hidden');
+        document.querySelectorAll('.stu-req').forEach(el => {
+          if (el.id !== 'stu_resume' && el.id !== 'selected_domains') {
+            el.setAttribute('required', 'true');
+          }
+        });
+        subNode.textContent = "Student Portal: Match with prestigious projects and unlock premium coursework.";
+        submitBtn.innerHTML = 'CREATE MY ACCOUNT <i class="fa-solid fa-user-plus ml-1"></i>';
+      } 
+      else {
+        submitBtn.innerHTML = 'Submit Registration For Approval <i class="fa-solid fa-cloud-arrow-up ml-1"></i>';
+
+        if (role === 'founder') {
+          titleNode.textContent = "FOUNDER OS ONBOARDING";
+          iconNode.innerHTML = "<i class='fa-solid fa-rocket text-lg'></i>";
+          iconNode.className = "w-10 h-10 rounded-lg flex items-center justify-center text-blue-400 bg-blue-500/10 border border-blue-500/20";
+          document.getElementById("founderFormFields").classList.remove('hidden');
+          document.querySelectorAll('.fdr-req').forEach(el => el.setAttribute('required', 'true'));
+          subNode.textContent = "Founder OS: Set up your workspace, hire talent, and post milestones.";
+        } 
+        else if (role === 'mentor') {
+          titleNode.textContent = "MENTOR DECK ONBOARDING";
+          iconNode.innerHTML = "<i class='fa-solid fa-user-tie text-lg'></i>";
+          iconNode.className = "w-10 h-10 rounded-lg flex items-center justify-center text-pink-400 bg-pink-500/10 border border-pink-500/20";
+          document.getElementById("mentorFormFields").classList.remove('hidden');
+          document.querySelectorAll('.mtr-req').forEach(el => el.setAttribute('required', 'true'));
+          subNode.textContent = "Mentor Desk: Share your expertise, consult startup teams, and review tasks.";
+        } 
+        else if (role === 'investor') {
+          titleNode.textContent = "INVESTOR PORTAL ONBOARDING";
+          iconNode.innerHTML = "<i class='fa-solid fa-hand-holding-dollar text-lg'></i>";
+          iconNode.className = "w-10 h-10 rounded-lg flex items-center justify-center text-amber-400 bg-amber-500/10 border border-amber-500/20";
+          document.getElementById("investorFormFields").classList.remove('hidden');
+          document.querySelectorAll('.inv-req').forEach(el => el.setAttribute('required', 'true'));
+          subNode.textContent = "Investor Portal: Track high-potential growth teams and fund premium ventures.";
+        } 
+        else if (role === 'contractor') {
+          titleNode.textContent = "CONTRACTOR HUB ONBOARDING";
+          iconNode.innerHTML = "<i class='fa-solid fa-screwdriver-wrench text-lg'></i>";
+          iconNode.className = "w-10 h-10 rounded-lg flex items-center justify-center text-orange-400 bg-orange-500/10 border border-orange-500/20";
+          document.getElementById("contractorFormFields").classList.remove('hidden');
+          document.querySelectorAll('.con-req').forEach(el => el.setAttribute('required', 'true'));
+          subNode.textContent = "Contractor Hub: Earn rewards by applying engineering modules to venture builders.";
+        }
+      }
+
+      // Hide Selection view with standard flow, show form view
+      document.getElementById("roleSelectionScreen").classList.add('hidden');
+      document.getElementById("formSectionScreen").classList.remove('hidden');
+    }
+
+    function goBackToSelection() {
+      document.getElementById("formSectionScreen").classList.add('hidden');
+      document.getElementById("roleSelectionScreen").classList.remove('hidden');
+      document.getElementById("topSubtitle").textContent = "Select your role to unlock personalized networking, opportunities, and workspaces.";
+      activeRole = '';
+    }
+
+    // Submit Dynamic Onboarding Profile
+    document.getElementById("unifiedRegForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      if (!activeRole) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Role Lost',
+          text: 'Role details missing. Please restart selection.',
+          background: '#0e1428',
+          confirmButtonColor: '#D4AF37'
+        });
+        return;
+      }
+
+      const formData = new FormData(e.target);
+      const flatData = Object.fromEntries(formData);
+
+      // Structure nested roleSpecificData for target endpoint /api/register-hub/register
+      const payload = {
+        fullName: flatData.fullName,
+        email: flatData.email,
+        password: flatData.password,
+        role: activeRole,
+        roleSpecificData: {}
+      };
+
+      // Fill values for roleSpecificData
+      payload.roleSpecificData.mobile = flatData.mobile;
+      
+      if (activeRole === 'student') {
+        payload.roleSpecificData.country = flatData.country;
+        payload.roleSpecificData.state = flatData.state;
+        payload.roleSpecificData.city = flatData.city;
+        payload.roleSpecificData.university = flatData.university;
+        payload.roleSpecificData.degree = flatData.degree;
+        payload.roleSpecificData.graduationYear = Number(flatData.graduationYear);
+        payload.roleSpecificData.skills = flatData.skills;
+        payload.roleSpecificData.resume = flatData.resume;
+        payload.roleSpecificData.portfolio = flatData.portfolio;
+        payload.roleSpecificData.linkedin = flatData.linkedin;
+        payload.roleSpecificData.tenure = flatData.tenure;
+        payload.roleSpecificData.domains = flatData.domains;
+      } 
+      else if (activeRole === 'founder') {
+        payload.roleSpecificData.startupName = flatData.startupName;
+        payload.roleSpecificData.industry = flatData.industry;
+        payload.roleSpecificData.stage = flatData.stage;
+        payload.roleSpecificData.teamSize = Number(flatData.teamSize);
+        payload.roleSpecificData.website = flatData.website;
+        payload.roleSpecificData.linkedin = flatData.linkedin;
+        payload.roleSpecificData.revenue = flatData.revenue;
+        payload.roleSpecificData.fundingStage = flatData.fundingStage;
+        payload.roleSpecificData.description = flatData.description;
+        payload.roleSpecificData.goals = flatData.goals;
+      } 
+      else if (activeRole === 'mentor') {
+        payload.roleSpecificData.company = flatData.company;
+        payload.roleSpecificData.designation = flatData.designation;
+        payload.roleSpecificData.experience = Number(flatData.experience);
+        payload.roleSpecificData.linkedin = flatData.linkedin;
+        payload.roleSpecificData.expertiseAreas = flatData.expertiseAreas;
+      } 
+      else if (activeRole === 'investor') {
+        payload.roleSpecificData.firmName = flatData.firmName;
+        payload.roleSpecificData.fundSize = flatData.fundSize;
+        payload.roleSpecificData.investmentStage = flatData.investmentStage;
+        payload.roleSpecificData.industryFocus = flatData.industryFocus;
+        payload.roleSpecificData.website = flatData.website;
+        payload.roleSpecificData.linkedin = flatData.invLinkedIn || flatData.linkedin || "";
+      } 
+      else if (activeRole === 'contractor') {
+        payload.roleSpecificData.availability = flatData.availability;
+        payload.roleSpecificData.hourlyRate = Number(flatData.hourlyRate);
+        payload.roleSpecificData.skills = flatData.skills;
+        payload.roleSpecificData.portfolio = flatData.portfolio;
+        payload.roleSpecificData.experience = flatData.experience;
+      }
+
+      Swal.fire({
+        title: 'Filing Live Application...',
+        html: 'Logging credentials inside Ecosystem security layers...',
+        allowOutsideClick: false,
+        didOpen: () => { Swal.showLoading(); },
+        background: '#0e1428',
+        color: '#F0EEE8'
+      });
+
+      try {
+        const res = await fetch("/api/register-hub/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const json = await res.json();
+
+        if (json.success) {
+          Swal.fire({
+            icon: 'success',
+            title: 'Logged Successfully',
+            text: 'Redirecting to onboarding summary deck...',
+            background: '#0e1428',
+            color: '#F0EEE8',
+            showConfirmButton: false,
+            timer: 1500
+          });
+          
+          setTimeout(() => {
+            const pwdQuery = flatData.password ? `&password=${encodeURIComponent(flatData.password)}` : '';
+            if (json.role === 'founder') {
+              window.location.href = `/founder-registration-success?role=${encodeURIComponent(json.role)}&email=${encodeURIComponent(json.email)}&memberId=${encodeURIComponent(json.memberId)}&startupName=${encodeURIComponent(json.startupName || 'Venture')}&status=Pending%20Approval${pwdQuery}`;
+            } else if (json.role === 'student') {
+              window.location.href = `/registration-success?role=${encodeURIComponent(json.role)}&email=${encodeURIComponent(json.email)}&memberId=${encodeURIComponent(json.memberId)}&status=Approved${pwdQuery}`;
+            } else {
+              window.location.href = `/registration-success?role=${encodeURIComponent(json.role)}&email=${encodeURIComponent(json.email)}&memberId=${encodeURIComponent(json.memberId)}&status=Pending%20Approval${pwdQuery}`;
+            }
+          }, 1500);
+        } else {
+          Swal.fire({
+            icon: 'error',
+            title: 'Onboarding Denied',
+            text: json.error || 'Check input details or check existing emails.',
+            background: '#0e1428',
+            color: '#F0EEE8',
+            confirmButtonColor: '#D4AF37'
+          });
+        }
+      } catch (err) {
+        console.error(err);
+        Swal.fire({
+          icon: 'error',
+          title: 'Secure Interface Busy',
+          text: 'Authentication timeout. Please retry.',
+          background: '#0e1428',
+          color: '#F0EEE8',
+          confirmButtonColor: '#D4AF37'
+        });
+      }
+    });
+  </script>
+  <script src="/password-toggle.js"></script>
+</body>
+</html>

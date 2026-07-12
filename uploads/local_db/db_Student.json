@@ -1,0 +1,27 @@
+[
+  {
+    "_id": "60c72b2f9b1d8b2badcd88a1",
+    "firstName": "Scholar",
+    "lastName": "TEN",
+    "name": "Scholar TEN",
+    "email": "student@entrepreneurshipnetwork.net",
+    "whatsapp": "1234567890",
+    "college": "The Entrepreneurship Network University",
+    "collegeName": "The Entrepreneurship Network University",
+    "domain": "Web Development",
+    "tenure": "3 Months",
+    "joiningDate": "2026-06-01",
+    "employeeId": "TEN-STUDENT-001",
+    "password": "intern123",
+    "currentStreak": 5,
+    "bestStreak": 12,
+    "lastAttendanceDate": "2026-07-12T17:20:00.392Z",
+    "lastActiveDate": "2026-07-12T17:20:00.392Z",
+    "v2Onboarded": true,
+    "v2DurationType": "3months",
+    "locStatus": "not_eligible",
+    "lorStatus": "not_eligible",
+    "starStatus": "not_submitted",
+    "offerLetterStatus": "approved"
+  }
+]

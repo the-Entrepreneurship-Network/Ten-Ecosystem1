@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<!-- NEW FEATURE: Student Certificates Page -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Certificates — TEN Portal</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#05070e;--surface:#090d1a;--card:#0e1428;
+  --gold:#D4AF37;--gold2:#b8952e;
+  --text:#F0EEE8;--muted:#9a9080;
+  --green:#10b981;--red:#ef4444;--amber:#f59e0b;--blue:#3b82f6;--purple:#8b5cf6;
+  --border:rgba(212,175,55,0.1);--border-strong:rgba(212,175,55,0.25);
+  --radius:16px;
+}
+body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;}
+/* Replit watermark removal */
+[data-replit-badge],.replit-ui-theme-root>div:last-child,iframe[src*="replit.com/badge"]{display:none!important;}
+/* Mystery fellowship card */
+.mystery-card{background:linear-gradient(135deg,#100a20 0%,#0a0818 100%);border:1px dashed rgba(139,92,246,0.3);border-radius:var(--radius);overflow:hidden;position:relative;cursor:default;}
+.mystery-card:hover{transform:translateY(-2px);}
+.mystery-preview{min-height:140px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:24px;background:linear-gradient(135deg,rgba(139,92,246,0.06),rgba(10,8,24,0.9));}
+.mystery-orb{font-size:40px;animation:pulse-glow 3s ease-in-out infinite;}
+@keyframes pulse-glow{0%,100%{filter:drop-shadow(0 0 8px rgba(139,92,246,0.4))}50%{filter:drop-shadow(0 0 20px rgba(139,92,246,0.8))}}
+.mystery-qmarks{font-size:28px;font-weight:800;color:rgba(139,92,246,0.6);letter-spacing:8px;}
+.mystery-sub{font-size:12px;color:rgba(139,92,246,0.5);font-style:italic;text-align:center;}
+.mystery-rank-row{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:6px;}
+.mystery-locked-badge{display:inline-block;padding:10px 16px;background:rgba(139,92,246,0.06);border:1px solid rgba(139,92,246,0.15);border-radius:10px;color:rgba(139,92,246,0.6);font-size:12px;font-weight:600;width:100%;text-align:center;}
+.topbar{display:flex;align-items:center;gap:14px;padding:18px 32px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50;}
+.back-btn{background:rgba(212,175,55,0.08);border:1px solid var(--border-strong);border-radius:10px;color:var(--gold);padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px;}
+.back-btn:hover{background:rgba(212,175,55,0.15);}
+.topbar-title{font-size:18px;font-weight:800;flex:1;}
+.topbar-title span{color:var(--gold);}
+.container{max-width:960px;margin:0 auto;padding:32px 24px;}
+
+/* Progress summary */
+.progress-header{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:28px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;}
+.prog-label{font-size:12px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:6px;}
+.prog-value{font-size:32px;font-weight:800;color:var(--gold);}
+.prog-sub{font-size:12px;color:var(--muted);margin-top:4px;}
+.prog-divider{width:1px;height:60px;background:var(--border);flex-shrink:0;}
+.prog-bar-wrap{flex:1;min-width:200px;}
+.prog-bar-track{height:8px;background:rgba(255,255,255,0.06);border-radius:99px;overflow:hidden;margin:8px 0;}
+.prog-bar-fill{height:100%;background:linear-gradient(90deg,var(--gold),var(--gold2));border-radius:99px;transition:width 1s ease;}
+
+/* Certificate cards */
+.cert-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px;}
+
+.cert-card{border-radius:var(--radius);overflow:hidden;position:relative;transition:transform 0.3s ease;}
+.cert-card:hover{transform:translateY(-4px);}
+
+/* Expert — ivory/gold */
+.cert-card.expert{background:linear-gradient(135deg,#1a1300 0%,#0e1428 100%);border:1px solid rgba(212,175,55,0.3);}
+/* Nano — navy */
+.cert-card.nano_degree{background:linear-gradient(135deg,#0A1628 0%,#0d1e38 100%);border:1px solid rgba(212,175,55,0.2);}
+/* Fellowship — forest */
+.cert-card.fellowship{background:linear-gradient(135deg,#0D2818 0%,#0a1f12 100%);border:1px solid rgba(212,175,55,0.15);}
+
+.cert-card-header{padding:24px 24px 0;}
+.cert-tier-badge{display:inline-block;padding:4px 12px;border-radius:99px;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;}
+.expert .cert-tier-badge{background:rgba(212,175,55,0.15);color:#D4AF37;border:1px solid rgba(212,175,55,0.3);}
+.nano_degree .cert-tier-badge{background:rgba(59,130,246,0.15);color:#93c5fd;border:1px solid rgba(59,130,246,0.3);}
+.fellowship .cert-tier-badge{background:rgba(139,92,246,0.15);color:#c4b5fd;border:1px solid rgba(139,92,246,0.3);}
+
+.cert-preview-area{position:relative;margin:16px 0;border-radius:10px;overflow:hidden;min-height:140px;display:flex;align-items:center;justify-content:center;}
+.cert-preview-bg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;text-align:center;padding:20px;}
+.expert  .cert-preview-bg{background:linear-gradient(135deg,rgba(253,250,244,0.06),rgba(201,168,76,0.08));}
+.nano_degree .cert-preview-bg{background:linear-gradient(135deg,rgba(10,22,40,0.8),rgba(15,30,56,0.9));}
+.fellowship .cert-preview-bg{background:linear-gradient(135deg,rgba(13,40,24,0.8),rgba(10,31,18,0.9));}
+
+/* Blurred cert preview */
+.cert-blur{filter:blur(6px);opacity:0.4;font-family:'Playfair Display',serif;font-size:18px;color:var(--gold);text-align:center;pointer-events:none;user-select:none;padding:20px;}
+/* Unlocked preview */
+.cert-name-preview{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:var(--gold);text-align:center;}
+
+.cert-overlay-text{position:relative;z-index:2;text-align:center;padding:20px;}
+.overlay-main{font-size:13px;font-weight:600;color:var(--muted);font-style:italic;}
+
+.cert-body{padding:0 24px 24px;}
+.cert-name{font-size:17px;font-weight:800;margin-bottom:6px;}
+.expert .cert-name{color:#D4AF37;}
+.nano_degree .cert-name{color:#93c5fd;}
+.fellowship .cert-name{color:#c4b5fd;}
+
+.cert-desc{font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.5;}
+
+/* Progress bar */
+.cert-prog-wrap{margin-bottom:16px;}
+.cert-prog-label{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:6px;}
+.cert-prog-track{height:6px;background:rgba(255,255,255,0.06);border-radius:99px;overflow:hidden;}
+.cert-prog-fill{height:100%;border-radius:99px;transition:width 1s ease;}
+.expert  .cert-prog-fill{background:linear-gradient(90deg,#C9A84C,#FFD700);}
+.nano_degree .cert-prog-fill{background:linear-gradient(90deg,#3b82f6,#60a5fa);}
+.fellowship  .cert-prog-fill{background:linear-gradient(90deg,#8b5cf6,#a78bfa);}
+
+.cert-action-btn{width:100%;padding:13px;border:none;border-radius:12px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;transition:all 0.2s;}
+.cert-action-btn.locked{background:rgba(255,255,255,0.04);border:1px solid var(--border);color:var(--muted);cursor:not-allowed;}
+.cert-action-btn.claim-btn{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#0a0600;}
+.cert-action-btn.claim-btn:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(212,175,55,0.3);}
+.cert-action-btn.claimed-btn{background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);color:var(--green);}
+
+.price-tag{display:inline-block;padding:4px 12px;border-radius:99px;font-size:12px;font-weight:700;background:rgba(212,175,55,0.1);color:var(--gold);border:1px solid rgba(212,175,55,0.2);margin-right:8px;}
+
+/* Fellowship whisper card */
+.fellowship-whisper{background:linear-gradient(135deg,rgba(139,92,246,0.1),rgba(10,22,40,0.9));border:1px solid rgba(139,92,246,0.25);border-radius:var(--radius);padding:20px 24px;margin-bottom:24px;animation:slideInRight 0.5s ease;}
+@keyframes slideInRight{from{transform:translateX(40px);opacity:0}to{transform:translateX(0);opacity:1}}
+
+/* Reveal animation overlay */
+#revealOverlay{position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;z-index:1000;transition:opacity 0.5s ease;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+#revealOverlay.show{opacity:1;pointer-events:auto;}
+#revealName{font-size:52px;font-weight:800;color:white;opacity:0;transform:translateY(20px);transition:all 0.8s ease;font-family:'Playfair Display',serif;}
+#revealName.show{opacity:1;transform:translateY(0);}
+#revealCert{opacity:0;transform:scale(0.05);transition:all 1.2s cubic-bezier(0.34,1.56,0.64,1);background:linear-gradient(135deg,#1a1300,#2a1e00);border:2px solid var(--gold);border-radius:16px;padding:40px 60px;text-align:center;max-width:600px;width:90%;margin:24px 0;}
+#revealCert.show{opacity:1;transform:scale(1);}
+#revealCert .rc-org{font-size:12px;letter-spacing:4px;color:var(--gold);text-transform:uppercase;margin-bottom:12px;}
+#revealCert .rc-title{font-family:'Playfair Display',serif;font-size:36px;color:white;margin-bottom:8px;}
+#revealCert .rc-sub{font-size:14px;color:var(--muted);}
+#revealActions{display:flex;gap:12px;opacity:0;transition:opacity 0.5s ease;flex-wrap:wrap;justify-content:center;}
+#revealActions.show{opacity:1;}
+#revealActions button{padding:12px 24px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;}
+.ra-primary{background:linear-gradient(135deg,var(--gold),var(--gold2));border:none;color:#0a0600;}
+.ra-secondary{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:white;}
+#revealClose{position:absolute;top:24px;right:24px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:white;padding:8px 16px;font-size:13px;cursor:pointer;font-family:inherit;}
+#muteBtn{position:absolute;top:24px;left:24px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:white;padding:8px 16px;font-size:13px;cursor:pointer;font-family:inherit;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="back-btn" href="student-dashboard.html">← Back to Dashboard</a>
+  <div class="topbar-title">🏅 <span>My Certificates</span></div>
+</div>
+
+<div class="container">
+
+  <!-- Progress Header -->
+  <div class="progress-header" id="progressHeader">
+    <div>
+      <div class="prog-label">Course Completion</div>
+      <div class="prog-value" id="completionValue">—%</div>
+      <div class="prog-sub">Tasks approved</div>
+    </div>
+    <div class="prog-divider"></div>
+    <div class="prog-bar-wrap">
+      <div class="prog-label">Progress to Expert Certificate (30%)</div>
+      <div class="prog-bar-track">
+        <div class="prog-bar-fill" id="mainProgressBar" style="width:0%"></div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);">Complete more tasks to unlock certificates</div>
+    </div>
+  </div>
+
+  <!-- Fellowship Whisper (only shown to top 10%) -->
+  <div class="fellowship-whisper" id="fellowshipWhisper" style="display:none;">
+    <div style="font-size:13px;color:#c4b5fd;font-weight:700;margin-bottom:6px;">✨ You are one of the few students in your cohort who have qualified for the Fellowship review. This is rare. Most students never see this screen.</div>
+    <div style="font-size:12px;color:var(--muted);">Scroll down to view your Fellowship Certificate.</div>
+  </div>
+
+  <!-- Certificate Grid -->
+  <div class="cert-grid" id="certGrid">
+    <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);">Loading your certificates...</div>
+  </div>
+
+</div>
+
+<!-- Certificate Reveal Overlay -->
+<div id="revealOverlay">
+  <button id="muteBtn" onclick="toggleMute()">🔇 Mute</button>
+  <button id="revealClose" onclick="closeReveal()">✕ Close</button>
+  <div id="revealName"></div>
+  <div id="revealCert">
+    <div class="rc-org">THE ENTREPRENEURSHIP NETWORK</div>
+    <div class="rc-title" id="revealCertTitle">Certificate of Completion</div>
+    <div class="rc-sub" id="revealCertSub">Expert Internship Certificate</div>
+  </div>
+  <div id="revealActions">
+    <button class="ra-primary" id="revealDownloadBtn" onclick="downloadCurrentCert()">⬇ Download PDF</button>
+    <button class="ra-secondary" onclick="shareLinkedIn()">🔗 Share on LinkedIn</button>
+    <button class="ra-secondary" onclick="shareWhatsApp()">📲 Share on WhatsApp</button>
+  </div>
+</div>
+
+<script>
+const EMP_ID   = localStorage.getItem('employeeId') || sessionStorage.getItem('employeeId') || '';
+let muted      = false;
+let certData   = {};
+let currentRevealType = null;
+let currentPdfUrl = null;
+
+const CERT_LABELS = {
+  expert:     { name: 'Expert Certificate',  desc: 'Awarded for 30% course completion', tier: 'TIER 1 — ₹100', tierClass: 'expert' },
+  nano_degree:{ name: 'Nano Degree',         desc: 'Awarded for 70% course completion', tier: 'TIER 2 — ₹1000', tierClass: 'nano_degree' },
+  fellowship: { name: 'Fellowship',          desc: 'Top 10% of cohort only',            tier: 'TIER 3 — ₹2500', tierClass: 'fellowship' }
+};
+
+async function loadCerts() {
+  if (!EMP_ID) { renderError('Please log in to view your certificates.'); return; }
+  try {
+    const r = await fetch('/api/v2/certificates/my-certs', { headers: { 'x-employee-id': EMP_ID } });
+    const d = await r.json();
+    if (!d.success) { renderError('Could not load certificates.'); return; }
+
+    certData = d;
+    document.getElementById('completionValue').textContent = (d.expert?.completionPct || 0) + '%';
+    const pct = Math.min(100, d.expert?.completionPct || 0);
+    document.getElementById('mainProgressBar').style.width = pct + '%';
+
+    // Check psychology triggers
+    checkTriggers();
+
+    // Fellowship whisper for top 10%
+    if (d.fellowship?.unlocked) {
+      document.getElementById('fellowshipWhisper').style.display = 'block';
+      logTrigger('FELLOWSHIP_WHISPER_SHOWN');
+    }
+
+    renderCerts(d);
+  } catch(e) { renderError('Network error. Please try again.'); }
+}
+
+function renderError(msg) {
+  document.getElementById('certGrid').innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);">${msg}</div>`;
+}
+
+function renderCerts(d) {
+  const types = ['expert', 'nano_degree', 'fellowship'];
+  let html = '';
+
+  for (const type of types) {
+    const info     = CERT_LABELS[type];
+    const certInfo = d[type];
+    const unlocked = certInfo?.unlocked;
+    const pct      = certInfo?.completionPct || 0;
+    const rankPct  = d.fellowship?.cohortRankPct ?? 50;
+    const threshold= type === 'expert' ? 30 : type === 'nano_degree' ? 70 : 10;
+    const record   = certInfo?.record;
+    const price    = d.prices?.[type] || 0;
+
+    // Preview area
+    let previewHtml = '';
+    if (unlocked) {
+      previewHtml = `<div class="cert-name-preview">✨ Your Certificate</div>`;
+    } else {
+      previewHtml = `
+        <div class="cert-blur">THE ENTREPRENEURSHIP NETWORK<br>Certificate of Excellence<br>This certifies that<br>[Your Name]<br>has completed the program</div>
+        <div class="cert-overlay-text"><div class="overlay-main">"This is waiting for you. Keep going."</div></div>`;
+    }
+
+    // Action button
+    let actionBtn = '';
+    if (!unlocked) {
+      if (type === 'fellowship') {
+        actionBtn = `<button class="cert-action-btn locked">🔒 Locked — Top 10% ranking needed (Current rank: Top ${rankPct}%)</button>`;
+      } else {
+        actionBtn = `<button class="cert-action-btn locked">🔒 Locked — ${threshold}% completion needed (${Math.min(100,pct)}% done)</button>`;
+      }
+    } else if (record?.pdfUrl) {
+      actionBtn = `<button class="cert-action-btn claimed-btn" onclick="downloadCert('${record.pdfUrl}','${type}')">⬇ Download Certificate</button>`;
+    } else {
+      const payLabel = d.paymentEnabled ? `Claim It → ₹${price}` : `Claim It (Payment coming soon)`;
+      actionBtn = `<button class="cert-action-btn claim-btn" onclick="claimCert('${type}')">🎉 ${payLabel}</button>`;
+    }
+
+    let barPct;
+    let labelLeft = 'Progress';
+    let labelRight = `${pct}% / ${threshold}%`;
+    
+    if (type === 'fellowship') {
+      labelLeft = 'Cohort Rank';
+      labelRight = `Top ${rankPct}% (Needs Top 10%)`;
+      barPct = Math.min(100, Math.max(0, 100 - rankPct));
+    } else {
+      barPct = Math.min(100, Math.round((pct / threshold) * 100));
+    }
+
+    html += `
+    <div class="cert-card ${type}">
+      <div class="cert-card-header">
+        <div class="cert-tier-badge">TIER ${type === 'expert' ? 1 : type === 'nano_degree' ? 2 : 3} — ₹${price}</div>
+      </div>
+      <div class="cert-preview-area">
+        <div class="cert-preview-bg">${previewHtml}</div>
+      </div>
+      <div class="cert-body">
+        <div class="cert-name">${unlocked ? '🎉 ' : ''}${info.name}</div>
+        <div class="cert-desc">${info.desc}</div>
+        <div class="cert-prog-wrap">
+          <div class="cert-prog-label"><span>${labelLeft}</span><span>${labelRight}</span></div>
+          <div class="cert-prog-track"><div class="cert-prog-fill" style="width:${barPct}%"></div></div>
+        </div>
+        ${actionBtn}
+      </div>
+    </div>`;
+  }
+
+  document.getElementById('certGrid').innerHTML = html || '<div style="text-align:center;padding:40px;color:var(--muted);">No certificates available yet. Complete tasks to unlock them!</div>';
+}
+
+async function claimCert(type) {
+  try {
+    const r = await fetch(`/api/v2/certificates/claim/${type}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-employee-id': EMP_ID }
+    });
+    const d = await r.json();
+    if (!d.success) { Swal.fire({ icon: 'error', title: 'Error', text: d.message, background: '#0e1428', color: '#F0EEE8' }); return; }
+
+    if (d.status === 'payment_coming_soon') {
+      Swal.fire({ icon: 'info', title: '🎉 You Qualified!', text: 'Payment is coming soon — we will notify you by email when it is ready to claim!', background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#D4AF37' });
+      // Trigger the reveal animation anyway
+      triggerRevealAnimation(type);
+    } else if (d.status === 'payment_initiated') {
+      // Razorpay checkout (runs only when PAYMENT_ENABLED=true)
+      openRazorpay(d, type);
+    }
+  } catch(e) {
+    Swal.fire({ icon: 'error', title: 'Error', text: 'Network error. Please try again.', background: '#0e1428', color: '#F0EEE8' });
+  }
+}
+
+function openRazorpay(orderData, type) {
+  const options = {
+    key:         orderData.keyId,
+    amount:      orderData.amount,
+    currency:    orderData.currency,
+    order_id:    orderData.orderId,
+    name:        'The Entrepreneurship Network',
+    description: CERT_LABELS[type]?.name + ' Certificate',
+    handler: async function(response) {
+      // Payment successful — generate PDF
+      const r = await fetch(`/api/v2/certificates/generate-pdf/${type}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-employee-id': EMP_ID },
+        body: JSON.stringify({ paymentId: response.razorpay_payment_id })
+      });
+      const d = await r.json();
+      if (d.success) {
+        currentPdfUrl = d.pdfUrl;
+        triggerRevealAnimation(type);
+        loadCerts(); // Refresh
+      }
+    },
+    theme: { color: '#D4AF37' }
+  };
+  const rzp = new Razorpay(options);
+  rzp.open();
+}
+
+async function downloadCert(pdfUrl, type) {
+  currentPdfUrl = pdfUrl;
+  currentRevealType = type;
+  // If no PDF yet, generate it
+  if (!pdfUrl || pdfUrl === 'null') {
+    const r = await fetch(`/api/v2/certificates/generate-pdf/${type}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-employee-id': EMP_ID }
+    });
+    const d = await r.json();
+    if (d.success) {
+      currentPdfUrl = d.pdfUrl;
+      window.open(d.pdfUrl, '_blank');
+    }
+  } else {
+    window.open(pdfUrl, '_blank');
+  }
+}
+
+function downloadCurrentCert() {
+  if (currentPdfUrl) window.open(currentPdfUrl, '_blank');
+}
+
+function shareLinkedIn() {
+  const url = encodeURIComponent(window.location.origin + '/cert-verify.html');
+  window.open(`https://www.linkedin.com/shareArticle?mini=true&url=${url}&title=TEN%20Certificate&summary=I%20just%20earned%20my%20TEN%20Certificate!`, '_blank');
+}
+
+function shareWhatsApp() {
+  window.open(`https://wa.me/?text=I%20just%20earned%20my%20TEN%20Internship%20Certificate!%20${encodeURIComponent(window.location.origin + '/cert-verify.html')}`, '_blank');
+}
+
+// ── Reveal Animation ──
+function triggerRevealAnimation(type) {
+  currentRevealType = type;
+  const label = CERT_LABELS[type];
+  document.getElementById('revealCertTitle').textContent = label?.name || 'Certificate';
+  document.getElementById('revealCertSub').textContent   = label?.desc || '';
+
+  const overlay  = document.getElementById('revealOverlay');
+  const nameEl   = document.getElementById('revealName');
+  const certEl   = document.getElementById('revealCert');
+  const actionsEl= document.getElementById('revealActions');
+  const studentName = localStorage.getItem('studentName') || 'You';
+
+  nameEl.textContent = studentName;
+  overlay.classList.add('show');
+
+  // Sequence
+  setTimeout(() => { nameEl.classList.add('show'); }, 200);
+  setTimeout(() => { certEl.classList.add('show'); }, 600);
+  setTimeout(() => {
+    // Confetti
+    confetti({ particleCount: 200, spread: 120, origin: { y: 0.3 }, colors: ['#D4AF37','#FFD700','#FFFFFF','#b8952e'] });
+    if (!muted) playSuccess();
+  }, 1200);
+  setTimeout(() => { actionsEl.classList.add('show'); }, 2000);
+}
+
+function closeReveal() {
+  const overlay = document.getElementById('revealOverlay');
+  overlay.classList.remove('show');
+  document.getElementById('revealName').classList.remove('show');
+  document.getElementById('revealCert').classList.remove('show');
+  document.getElementById('revealActions').classList.remove('show');
+}
+
+function toggleMute() {
+  muted = !muted;
+  document.getElementById('muteBtn').textContent = muted ? '🔊 Unmute' : '🔇 Mute';
+}
+
+function playSuccess() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const notes = [523, 659, 784, 1047]; // C E G C
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value = freq;
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.15);
+      gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + i * 0.15 + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.15 + 0.5);
+      osc.start(ctx.currentTime + i * 0.15);
+      osc.stop(ctx.currentTime + i * 0.15 + 0.5);
+    });
+  } catch(_) {}
+}
+
+// ── Psychology Triggers ──
+async function checkTriggers() {
+  if (!EMP_ID) return;
+  try {
+    const r = await fetch('/api/v2/psychology/check-triggers', { headers: { 'x-employee-id': EMP_ID } });
+    const d = await r.json();
+    if (!d.success) return;
+
+    for (const trigger of d.triggers) {
+      if (trigger.name === 'EXPERT_CERT_UNLOCKED' || trigger.name === 'NANO_CERT_UNLOCKED') {
+        const type = trigger.name === 'EXPERT_CERT_UNLOCKED' ? 'expert' : 'nano_degree';
+        setTimeout(() => triggerRevealAnimation(type), 1500);
+        await logTrigger(trigger.name);
+        break;
+      }
+      if (trigger.name === 'DAY1_BLUR_SHOWN') {
+        await logTrigger('DAY1_BLUR_SHOWN');
+      }
+      if (trigger.name === 'SOCIAL_PROOF_NOTIFICATION') {
+        showSocialProof(trigger.data?.message);
+        await logTrigger('SOCIAL_PROOF_NOTIFICATION');
+      }
+    }
+  } catch(_) {}
+}
+
+async function logTrigger(name) {
+  if (!EMP_ID) return;
+  try {
+    await fetch('/api/v2/psychology/log-trigger', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-employee-id': EMP_ID },
+      body: JSON.stringify({ triggerName: name })
+    });
+  } catch(_) {}
+}
+
+function showSocialProof(msg) {
+  if (!msg) return;
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#0e1428;border:1px solid rgba(212,175,55,0.2);border-radius:14px;padding:14px 18px;font-size:13px;color:#F0EEE8;z-index:500;animation:slideInRight 0.4s ease;max-width:300px;';
+  el.textContent = '🏅 ' + msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 6000);
+}
+
+loadCerts();
+</script>
+</body>
+</html>

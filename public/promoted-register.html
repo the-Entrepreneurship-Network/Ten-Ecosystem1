@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Complete Your Registration — TEN</title>
+<link rel="stylesheet" href="ten-theme.css">
+<link rel="stylesheet" href="ten-motion.css">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+html, body { height: 100%; }
+body { display:flex; align-items:center; justify-content:center; padding:24px; }
+.wrap { position:relative; z-index:2; width:100%; max-width:520px; animation: ten-fadeUp 0.65s ease both; }
+
+.logo-section { text-align:center; margin-bottom:28px; }
+.logo-badge {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:72px; height:72px;
+  background:linear-gradient(135deg, var(--ten-gold), var(--ten-gold-dim));
+  border-radius:20px; font-size:32px; margin-bottom:14px;
+  box-shadow:0 0 40px rgba(212,175,55,0.4);
+  animation: ten-pulse-gold 2.5s ease-in-out infinite;
+}
+.logo-title { font-family:var(--ten-font-display); font-size:22px; font-weight:800; letter-spacing:-0.5px; color:var(--ten-text); }
+.logo-title span { background:linear-gradient(90deg,var(--ten-gold),var(--ten-gold-light)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+.logo-sub { font-size:11px; color:var(--ten-text-muted); margin-top:5px; letter-spacing:2px; text-transform:uppercase; font-weight:400; }
+
+.card {
+  background:var(--ten-card); border:1px solid var(--ten-border);
+  border-radius:var(--ten-r-xl); padding:36px;
+  box-shadow:var(--ten-shadow-lg), var(--ten-glow-gold); position:relative; overflow:hidden;
+}
+.card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,transparent,var(--ten-gold),var(--ten-gold-dim),transparent); }
+.card-title { font-family:var(--ten-font-display); font-size:22px; font-weight:700; margin-bottom:6px; }
+.card-sub { font-size:13px; color:var(--ten-text-sub); margin-bottom:24px; }
+
+.step-bar { display:flex; gap:8px; margin-bottom:22px; }
+.step { flex:1; height:6px; background:rgba(255,255,255,0.06); border-radius:99px; overflow:hidden; }
+.step .fill { height:100%; background:linear-gradient(90deg,var(--ten-gold),var(--ten-gold-light)); width:0%; transition:width .4s ease; }
+.step.active .fill { width:100%; }
+
+.form-group { margin-bottom:18px; }
+.form-group label { display:block; font-size:11px; font-weight:700; letter-spacing:1.4px; text-transform:uppercase; color:var(--ten-text-sub); margin-bottom:8px; }
+.form-group input {
+  width:100%; padding:13px 16px; background:rgba(255,255,255,0.03);
+  border:1px solid var(--ten-border); border-radius:var(--ten-r-sm);
+  color:var(--ten-text); font-family:var(--ten-font-body); font-size:14.5px; outline:none; transition:all 0.2s;
+}
+.form-group input:focus { border-color:var(--ten-gold); box-shadow:0 0 0 3px rgba(212,175,55,0.10); }
+.form-group input[readonly] { opacity:0.55; cursor:not-allowed; }
+
+.btn {
+  width:100%; padding:14px; border:none; border-radius:var(--ten-r-sm);
+  background:linear-gradient(135deg,var(--ten-gold),var(--ten-gold-dim)); color:#0a0600;
+  font-weight:800; letter-spacing:0.5px; cursor:pointer; font-family:var(--ten-font-body); font-size:14.5px;
+  transition:transform .2s, box-shadow .2s;
+}
+.btn:hover { transform:translateY(-1px); box-shadow:0 8px 24px rgba(212,175,55,0.35); }
+.btn:disabled { opacity:0.65; cursor:not-allowed; transform:none; box-shadow:none; }
+
+.role-pill {
+  display:inline-block; padding:4px 12px; border-radius:99px; font-size:11px; font-weight:700; letter-spacing:0.5px;
+  background:rgba(212,175,55,0.12); color:var(--ten-gold); border:1px solid rgba(212,175,55,0.3); margin-left:8px;
+}
+.hidden { display:none !important; }
+
+.helper { font-size:12px; color:var(--ten-text-muted); margin-top:6px; }
+.error-msg { color:#f43f5e; font-size:13px; margin-top:10px; display:none; }
+
+.back-link { text-align:center; margin-top:18px; }
+.back-link a { color:var(--ten-text-sub); font-size:13px; text-decoration:none; }
+.back-link a:hover { color:var(--ten-gold); }
+
+@media (max-width:520px){
+  .card { padding:28px 22px; }
+}
+</style>
+</head>
+<body>
+<div class="ten-grid-bg"></div>
+<div class="ten-orb ten-orb-1"></div>
+<div class="ten-orb ten-orb-2"></div>
+
+<div class="wrap">
+  <div class="logo-section">
+    <div class="logo-badge ten-float">🚀</div>
+    <div class="logo-title ten-shimmer"><span>TEN</span> Promoted Staff Portal</div>
+    <div class="logo-sub">Complete Your Registration</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Welcome to your new role</div>
+    <p class="card-sub">Use the credentials from your promotion email to finish setting up your account.</p>
+
+    <div class="step-bar">
+      <div class="step active" id="step-1"><div class="fill"></div></div>
+      <div class="step" id="step-2"><div class="fill"></div></div>
+    </div>
+
+    <!-- Step 1: verify -->
+    <div id="step1Box">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="email" placeholder="The email where the promotion was sent" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label>Temporary Password</label>
+        <input type="password" id="tempPassword" placeholder="From the promotion email">
+        <div class="helper">Expires 48 hours after promotion or after first use.</div>
+      </div>
+      <button class="btn" onclick="doVerify()">Verify →</button>
+      <div class="error-msg" id="err1"></div>
+    </div>
+
+    <!-- Step 2: register -->
+    <div id="step2Box" class="hidden">
+      <div class="form-group">
+        <label>Full Name</label>
+        <input type="text" id="name" readonly>
+      </div>
+      <div class="form-group">
+        <label>Employee ID</label>
+        <input type="text" id="employeeId" readonly>
+      </div>
+      <div class="form-group">
+        <label>You will be registered as <span id="roleLabel" class="role-pill">—</span></label>
+      </div>
+      <div class="form-group">
+        <label>Duration</label>
+        <select id="tenure" style="width:100%;padding:11px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(212,175,55,0.18);border-radius:10px;color:var(--ten-text);font-size:14px;outline:none;font-family:inherit;">
+          <option value="">Select Duration</option>
+          <option>45 Days</option>
+          <option>1 Month</option>
+          <option>3 Months</option>
+          <option>6 Months</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>New Password</label>
+        <input type="password" id="newPassword" placeholder="At least 8 characters">
+      </div>
+      <div class="form-group">
+        <label>Confirm New Password</label>
+        <input type="password" id="confirmPassword" placeholder="Repeat your new password">
+      </div>
+      <button class="btn" onclick="doComplete()">Complete Registration</button>
+      <div class="error-msg" id="err2"></div>
+    </div>
+  </div>
+
+  <div class="back-link">
+    <a href="/index.html">← Back to Main Portal</a>
+  </div>
+</div>
+
+<script>
+let verified = null;
+
+function showError(id, msg){
+  const el = document.getElementById(id);
+  el.textContent = msg; el.style.display = "block";
+}
+function clearError(id){ const el = document.getElementById(id); el.style.display = "none"; }
+
+async function doVerify(){
+  clearError("err1");
+  const email = document.getElementById("email").value.trim();
+  const tempPassword = document.getElementById("tempPassword").value;
+  if(!email || !tempPassword){ showError("err1", "Email and temporary password are required."); return; }
+
+  try{
+    const r = await fetch("/promoted/verify",{
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ email, tempPassword })
+    });
+    const d = await r.json();
+    if(!d.valid){ showError("err1", d.message || "Invalid credentials."); return; }
+
+    verified = { email, tempPassword, name:d.name, employeeId:d.employeeId, newRole:d.newRole, domain:d.domain };
+    document.getElementById("name").value = d.name || "";
+    document.getElementById("employeeId").value = d.employeeId || "";
+    const roleLabel = d.newRole === "hr" ? "HR Member" : "Coordinator";
+    document.getElementById("roleLabel").textContent = roleLabel;
+
+    document.getElementById("step1Box").classList.add("hidden");
+    document.getElementById("step2Box").classList.remove("hidden");
+    document.getElementById("step-2").classList.add("active");
+  }catch(e){
+    showError("err1", "Network error. Try again.");
+  }
+}
+
+async function doComplete(){
+  clearError("err2");
+  if(!verified){ showError("err2", "Please verify first."); return; }
+  const newPassword = document.getElementById("newPassword").value;
+  const confirmPassword = document.getElementById("confirmPassword").value;
+  if(newPassword.length < 8){ showError("err2", "New password must be at least 8 characters."); return; }
+  if(newPassword !== confirmPassword){ showError("err2", "Passwords do not match."); return; }
+
+  try{
+    const r = await fetch("/promoted/register",{
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ email: verified.email, tempPassword: verified.tempPassword, newPassword })
+    });
+    const d = await r.json();
+    if(!d.success){ showError("err2", d.message || "Registration failed."); return; }
+
+    Swal.fire({
+      icon:"success",
+      title:"Registration complete!",
+      text:"Welcome to your new role.",
+      background:"#0c1220", color:"#f0eee8", confirmButtonColor:"#f5c542"
+    }).then(()=>{ window.location.href = d.redirect || "/index.html"; });
+  }catch(e){
+    showError("err2", "Network error. Try again.");
+  }
+}
+
+document.addEventListener("keydown", e => {
+  if(e.key !== "Enter") return;
+  if(!document.getElementById("step1Box").classList.contains("hidden")) doVerify();
+  else doComplete();
+});
+</script>
+<script src="ten-motion.js"></script>
+<script src="/password-toggle.js"></script>
+</body>
+</html>

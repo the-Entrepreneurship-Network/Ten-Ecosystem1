@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Internship Dashboard</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:Arial,sans-serif;
+}
+
+body{
+    background:#f1f5f9;
+    padding:20px;
+}
+
+.container{
+    max-width:1600px;
+    margin:auto;
+}
+
+.header{
+    margin-bottom:25px;
+}
+
+.header h1{
+    font-size:38px;
+    color:#0f172a;
+    text-align:center;
+}
+
+.search-box{
+    margin-bottom:25px;
+}
+
+.search-box input{
+    width:100%;
+    padding:16px;
+    border:none;
+    border-radius:14px;
+    background:white;
+    box-shadow:0 4px 10px rgba(0,0,0,0.08);
+    font-size:16px;
+}
+
+.cards-container{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+    gap:20px;
+}
+
+.student-card{
+    background:white;
+    border-radius:20px;
+    padding:20px;
+    box-shadow:0 6px 16px rgba(0,0,0,0.08);
+    transition:0.3s;
+}
+
+.student-card:hover{
+    transform:translateY(-5px);
+}
+
+.student-name{
+    font-size:22px;
+    font-weight:bold;
+    color:#111827;
+    margin-bottom:15px;
+}
+
+.info{
+    margin-bottom:10px;
+    color:#374151;
+    font-size:15px;
+    word-break:break-word;
+}
+
+.label{
+    font-weight:bold;
+    color:#111827;
+}
+
+.badge{
+    display:inline-block;
+    padding:6px 12px;
+    border-radius:20px;
+    background:#dbeafe;
+    color:#1d4ed8;
+    font-size:13px;
+    margin-top:5px;
+}
+
+.button-group{
+    display:flex;
+    gap:10px;
+    margin-top:20px;
+}
+
+button{
+    flex:1;
+    border:none;
+    padding:12px;
+    border-radius:12px;
+    color:white;
+    cursor:pointer;
+    font-size:15px;
+    transition:0.3s;
+}
+
+button:hover{
+    transform:scale(1.03);
+}
+
+.edit-btn{
+    background:#16a34a;
+}
+
+.delete-btn{
+    background:#dc2626;
+}
+
+@media(max-width:600px){
+
+    .header h1{
+        font-size:28px;
+    }
+
+    .student-card{
+        padding:15px;
+    }
+
+}
+
+</style>
+<link rel="stylesheet" href="ten-theme.css">
+</head>
+
+<body>
+
+<script>
+
+const loginTime = sessionStorage.getItem("dashboardLogin");
+
+if(loginTime){
+
+    const currentTime = new Date().getTime();
+
+    if(currentTime - loginTime >= 10 * 60 * 1000){
+
+        sessionStorage.removeItem("dashboardLogin");
+
+        askPassword();
+    }
+
+}else{
+    askPassword();
+}
+
+function askPassword(){
+
+    const password = prompt("Enter Dashboard Password");
+
+    if(password === "SecurePortal@786"){
+
+        sessionStorage.setItem("dashboardLogin", new Date().getTime());
+
+    }else{
+
+        alert("Wrong Password");
+
+        window.location.href = "index.html";
+    }
+}
+
+</script>
+
+<div class="container">
+
+<div class="header">
+<h1>Internship Dashboard</h1>
+</div>
+
+<div id="totalStudentsBox"
+style="
+background:#ffffff;
+padding:15px;
+border-radius:10px;
+margin-bottom:20px;
+font-size:22px;
+font-weight:bold;
+box-shadow:0 2px 10px rgba(0,0,0,0.1);
+">
+Total Registered Students: 0
+</div>
+
+<div class="search-box">
+
+<input type="text"
+id="searchInput"
+placeholder="Search Student">
+
+<br><br>
+
+<button class="delete-btn"
+onclick="deleteSelectedStudents()"
+style="max-width:250px;">
+Delete Selected
+</button>
+
+</div>
+
+<div class="cards-container" id="cardsContainer">
+
+</div>
+
+</div>
+
+<script>
+
+async function loadStudents(){
+
+    const response = await fetch("/students", {
+    headers:{
+        Authorization:"Bearer mysecret123"
+    }
+});
+
+    const students = await response.json();
+
+    document.getElementById("totalStudentsBox").innerText =
+`Total Registered Students: ${students.length}`;
+
+    const cardsContainer = document.getElementById("cardsContainer");
+
+    cardsContainer.innerHTML = "";
+
+    students.forEach(student => {
+
+const card = `
+
+<div class="student-card">
+
+<input type="checkbox"
+class="student-checkbox"
+value="${student._id}"
+style="margin-bottom:15px; width:20px; height:20px;">
+
+<div class="student-name">
+${student.firstName} ${student.lastName}
+</div>
+
+<div class="info">
+<span class="label">Employee ID:</span>
+${student.employeeId}
+</div>
+
+<div class="info">
+<span class="label">Domain:</span><br>
+<span class="badge">${student.domain}</span>
+</div>
+
+<div class="info">
+<span class="label">Email:</span>
+${student.email}
+</div>
+
+<div class="info">
+<span class="label">Whatsapp:</span>
+${student.whatsapp}
+</div>
+
+<div class="info">
+<span class="label">Joining Date:</span>
+${student.joiningDate}
+</div>
+
+<div class="info">
+<span class="label">Tenure:</span>
+${student.tenure}
+</div>
+
+<div class="info">
+<span class="label">Updated Time:</span><br>
+${new Date(student.updatedAt || student.createdAt).toLocaleString()}
+</div>
+
+<div class="button-group">
+
+<button class="edit-btn"
+onclick="editStudent('${student._id}')">
+Edit
+</button>
+
+<button class="delete-btn"
+onclick="deleteStudent('${student._id}')">
+Delete
+</button>
+
+</div>
+
+</div>
+
+`;
+
+cardsContainer.innerHTML += card;
+
+});
+   
+
+}
+
+document.getElementById("searchInput")
+.addEventListener("keyup", function(){
+
+    const value = this.value.toLowerCase();
+
+    const cards = document.querySelectorAll(".student-card");
+
+    cards.forEach(card => {
+
+        card.style.display =
+        card.innerText.toLowerCase().includes(value)
+        ? "block"
+        : "none";
+
+    });
+
+});
+
+function editStudent(id){
+
+    window.location.href = `edit.html?id=${id}`;
+
+}
+
+async function deleteSelectedStudents(){
+
+    const selected =
+    document.querySelectorAll(".student-checkbox:checked");
+
+    if(selected.length === 0){
+
+        alert("Select students first");
+        return;
+    }
+
+    const confirmDelete =
+    confirm("Delete selected students?");
+
+    if(!confirmDelete) return;
+
+    for(const checkbox of selected){
+
+        await fetch(`/students/${checkbox.value}`,{
+            method:"DELETE"
+        });
+
+    }
+
+    alert("Selected Students Deleted");
+
+    selected.forEach(checkbox => {
+
+    checkbox.closest(".student-card").remove();
+
+});
+
+}
+
+async function deleteStudent(id){
+
+    const confirmDelete = confirm("Delete this student?");
+
+    if(!confirmDelete) return;
+
+    await fetch(`/students/${id}`, {
+        method:"DELETE"
+    });
+
+    document
+.querySelector(`button[onclick="deleteStudent('${id}')"]`)
+.closest(".student-card")
+.remove();
+}
+
+loadStudents();
+
+</script>
+</body>
+</html>

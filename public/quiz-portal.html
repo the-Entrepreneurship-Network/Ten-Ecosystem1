@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TEN Quiz Portal</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #060a12;
+    color: #e8dcc8;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  /* ── Pre-quiz camera permission screen ── */
+  #cameraScreen {
+    position: fixed; inset: 0; z-index: 200;
+    background: linear-gradient(160deg, #060a12, #0a0f1e);
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  .camera-card {
+    max-width: 480px; width: 100%;
+    background: linear-gradient(160deg, #0b0d18, #0d1025);
+    border: 1px solid rgba(212,175,55,0.3);
+    border-radius: 20px; padding: 40px 36px; text-align: center;
+    position: relative; box-shadow: 0 30px 80px rgba(0,0,0,0.6);
+  }
+  .camera-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0;
+    height: 3px; background: linear-gradient(90deg, transparent, #D4AF37, transparent);
+    border-radius: 20px 20px 0 0;
+  }
+  .camera-preview {
+    width: 200px; height: 150px; border-radius: 14px;
+    background: #0d1117; border: 2px solid rgba(212,175,55,0.3);
+    overflow: hidden; margin: 20px auto; position: relative;
+  }
+  .camera-preview video { width: 100%; height: 100%; object-fit: cover; }
+  .camera-status { font-size: 12px; color: #9a8a6a; margin-top: 8px; }
+  .btn-primary {
+    display: inline-block; padding: 14px 40px;
+    background: linear-gradient(135deg, #D4AF37, #b8952e);
+    border: none; border-radius: 12px; color: #0a0700;
+    font-size: 15px; font-weight: 800; cursor: pointer;
+    font-family: inherit; margin-top: 20px;
+    box-shadow: 0 8px 28px rgba(212,175,55,0.3);
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 36px rgba(212,175,55,0.4); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  /* ── Full-screen quiz portal ── */
+  #quizScreen {
+    display: none; min-height: 100vh;
+    background: linear-gradient(160deg, #060a12, #0a0f1e);
+  }
+  .quiz-header {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(6,10,18,0.95); backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(212,175,55,0.15);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; flex-wrap: wrap; gap: 12px;
+  }
+  .quiz-brand { display: flex; align-items: center; gap: 10px; }
+  .quiz-brand .logo { width: 32px; height: 32px; background: linear-gradient(135deg,#D4AF37,#b8952e); border-radius: 8px; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:900; color:#0a0700; }
+  .quiz-brand span { font-size: 15px; font-weight: 800; color: #D4AF37; }
+  .quiz-timer-wrap { display: flex; align-items: center; gap: 8px; }
+  .quiz-timer {
+    background: rgba(212,175,55,0.1); border: 1px solid rgba(212,175,55,0.3);
+    border-radius: 8px; padding: 6px 16px;
+    font-size: 20px; font-weight: 800; color: #D4AF37; font-variant-numeric: tabular-nums;
+  }
+  .quiz-timer.urgent { background: rgba(244,63,94,0.12); border-color: rgba(244,63,94,0.4); color: #f43f5e; animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.6; } }
+  .camera-pip {
+    width: 100px; height: 75px; border-radius: 8px;
+    border: 2px solid rgba(212,175,55,0.3); overflow: hidden; background: #000;
+    position: relative;
+  }
+  .camera-pip video { width: 100%; height: 100%; object-fit: cover; }
+  .pip-live {
+    position: absolute; top: 3px; left: 3px;
+    background: #f43f5e; border-radius: 4px;
+    padding: 1px 5px; font-size: 9px; font-weight: 800; color: #fff; letter-spacing: 1px;
+  }
+  .quiz-progress-wrap { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #9a8a6a; }
+  .quiz-progress-bar { width: 120px; height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; }
+  .quiz-progress-fill { height: 100%; background: linear-gradient(90deg,#D4AF37,#10b981); border-radius: 3px; transition: width 0.4s; }
+
+  /* ── Question area ── */
+  .quiz-body {
+    max-width: 720px; margin: 40px auto; padding: 0 24px 80px;
+  }
+  .question-card {
+    background: linear-gradient(160deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    border: 1px solid rgba(212,175,55,0.18); border-radius: 16px;
+    padding: 32px 36px; margin-bottom: 20px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+  }
+  .q-number { font-size: 11px; font-weight: 700; color: #D4AF37; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 14px; }
+  .q-text { font-size: 18px; font-weight: 700; color: #f0e6c8; line-height: 1.6; margin-bottom: 24px; }
+  .options-grid { display: flex; flex-direction: column; gap: 10px; }
+  .option-btn {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 18px; background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.1); border-radius: 10px;
+    cursor: pointer; font-family: inherit; font-size: 14px; color: #c8baa0;
+    text-align: left; transition: all 0.15s;
+  }
+  .option-btn:hover:not(:disabled) { background: rgba(212,175,55,0.06); border-color: rgba(212,175,55,0.3); color: #f0e6c8; }
+  .option-btn.selected { background: rgba(212,175,55,0.1); border-color: rgba(212,175,55,0.5); color: #D4AF37; }
+  .option-btn.correct { background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.4); color: #10b981; }
+  .option-btn.wrong { background: rgba(244,63,94,0.1); border-color: rgba(244,63,94,0.3); color: #f43f5e; }
+  .option-btn:disabled { cursor: default; }
+  .option-letter {
+    width: 28px; height: 28px; min-width: 28px; background: rgba(212,175,55,0.08);
+    border: 1px solid rgba(212,175,55,0.2); border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 800; color: #D4AF37;
+  }
+
+  .quiz-nav {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    flex-wrap: wrap; margin-top: 12px;
+  }
+  .btn-nav {
+    padding: 12px 28px; border: none; border-radius: 10px;
+    font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit;
+    transition: all 0.15s;
+  }
+  .btn-prev { background: rgba(255,255,255,0.06); color: #c8baa0; border: 1px solid rgba(255,255,255,0.12); }
+  .btn-prev:hover { background: rgba(255,255,255,0.1); }
+  .btn-next { background: linear-gradient(135deg,#D4AF37,#b8952e); color: #0a0700; }
+  .btn-next:hover { transform: translateY(-1px); }
+  .btn-submit-quiz { background: linear-gradient(135deg,#10b981,#059669); color: #fff; }
+  .btn-submit-quiz:hover { transform: translateY(-1px); }
+  .btn-submit-quiz:disabled { opacity: 0.5; cursor: not-allowed; }
+  .q-dots { display: flex; gap: 8px; flex-wrap: wrap; }
+  .q-dot {
+    width: 28px; height: 28px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.04); display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: #9aa4bf; cursor: pointer;
+  }
+  .q-dot.answered { background: rgba(212,175,55,0.15); border-color: rgba(212,175,55,0.4); color: #D4AF37; }
+  .q-dot.current { background: rgba(212,175,55,0.25); border-color: #D4AF37; color: #D4AF37; box-shadow: 0 0 8px rgba(212,175,55,0.3); }
+
+  /* ── Result screen ── */
+  #resultScreen {
+    display: none; min-height: 100vh;
+    background: linear-gradient(160deg, #060a12, #0a0f1e);
+    display: none; align-items: center; justify-content: center; padding: 24px;
+  }
+  .result-card {
+    max-width: 520px; width: 100%;
+    background: linear-gradient(160deg, #0b0d18, #0d1025);
+    border: 1px solid rgba(212,175,55,0.3); border-radius: 20px;
+    padding: 44px 40px; text-align: center;
+    position: relative; box-shadow: 0 30px 80px rgba(0,0,0,0.6);
+  }
+  .result-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0;
+    height: 3px; border-radius: 20px 20px 0 0;
+  }
+  .result-card.pass::before { background: linear-gradient(90deg,transparent,#10b981,transparent); }
+  .result-card.fail::before { background: linear-gradient(90deg,transparent,#f43f5e,transparent); }
+  .result-emoji { font-size: 60px; margin-bottom: 16px; }
+  .result-title { font-size: 26px; font-weight: 800; margin-bottom: 8px; }
+  .result-title.pass { color: #10b981; }
+  .result-title.fail { color: #f43f5e; }
+  .result-score { font-size: 48px; font-weight: 900; color: #D4AF37; margin: 16px 0 8px; }
+  .result-desc { font-size: 14px; color: #9a8a6a; line-height: 1.6; margin-bottom: 24px; }
+  .result-coins { background: rgba(212,175,55,0.1); border: 1px solid rgba(212,175,55,0.25); border-radius: 10px; padding: 14px 20px; margin: 16px 0; }
+  .result-coins .coins-value { font-size: 28px; font-weight: 800; color: #D4AF37; }
+  .result-coins .rupee-value { font-size: 14px; color: #10b981; font-weight: 700; margin-top: 4px; }
+  .btn-back { display: inline-block; padding: 14px 36px; background: linear-gradient(135deg,#D4AF37,#b8952e); border: none; border-radius: 12px; color: #0a0700; font-size: 15px; font-weight: 800; cursor: pointer; font-family: inherit; margin-top: 8px; text-decoration: none; }
+  .btn-retry { display: inline-block; padding: 12px 28px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; color: #c8baa0; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; margin-top: 8px; margin-left: 10px; }
+
+  /* ── Security overlay (tab switch warning) ── */
+  #securityWarning {
+    display: none; position: fixed; inset: 0; z-index: 9999;
+    background: rgba(244,63,94,0.12); backdrop-filter: blur(4px);
+    align-items: center; justify-content: center;
+  }
+  .warning-card {
+    background: #0d1025; border: 1px solid rgba(244,63,94,0.5);
+    border-radius: 16px; padding: 32px; text-align: center; max-width: 400px;
+    box-shadow: 0 0 40px rgba(244,63,94,0.2);
+  }
+  .warning-card h3 { color: #f43f5e; font-size: 20px; font-weight: 800; margin-bottom: 10px; }
+  .warning-card p { color: #c8baa0; font-size: 13px; line-height: 1.6; margin-bottom: 20px; }
+  .warning-count { font-size: 36px; font-weight: 900; color: #f43f5e; }
+  @media (max-width: 600px) {
+    .question-card { padding: 20px 18px; }
+    .q-text { font-size: 15px; }
+    .option-btn { font-size: 13px; padding: 12px 14px; }
+    .quiz-header { padding: 10px 14px; }
+    .quiz-body { padding: 0 12px 60px; margin-top: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Camera Permission Screen ── -->
+<div id="cameraScreen">
+  <div class="camera-card">
+    <div style="font-size:40px;margin-bottom:12px;">📷</div>
+    <h2 style="font-size:22px;font-weight:800;color:#D4AF37;margin-bottom:8px;">Quiz Proctoring</h2>
+    <p style="font-size:13px;color:#9a8a6a;line-height:1.6;margin-bottom:16px;">This quiz requires your <strong style="color:#f0e6c8;">front camera</strong> to be active throughout. The camera feed is visible only to you and is used to ensure exam integrity.</p>
+    <div class="camera-preview">
+      <video id="cameraPreviewVideo" autoplay muted playsinline></video>
+    </div>
+    <div class="camera-status" id="cameraStatus">🔄 Requesting camera access…</div>
+    <div style="background:rgba(212,175,55,0.06);border:1px solid rgba(212,175,55,0.15);border-radius:10px;padding:12px 16px;margin-top:16px;font-size:12px;color:#9a8a6a;text-align:left;">
+      <div style="font-weight:700;color:#D4AF37;margin-bottom:6px;">📋 Quiz Rules:</div>
+      <div>• 5 questions · 10 minutes</div>
+      <div>• Score 3/5 or more to pass</div>
+      <div>• Do not switch tabs (3 violations = auto-submit)</div>
+      <div>• Keep camera active throughout</div>
+      <div>• 🪙 50 coins for passing (first attempt)</div>
+    </div>
+    <div id="quizLoadingInfo" style="margin-top:14px;font-size:12px;color:#6a7a94;">Loading quiz questions…</div>
+    <button id="startQuizBtn" class="btn-primary" onclick="startQuiz()" disabled>
+      ▶ Start Quiz
+    </button>
+  </div>
+</div>
+
+<!-- ── Security Warning Overlay ── -->
+<div id="securityWarning">
+  <div class="warning-card">
+    <h3>⚠️ Tab Switch Detected!</h3>
+    <p>You left the quiz tab. This is flagged as a violation.<br>3 violations will auto-submit your quiz.</p>
+    <div class="warning-count" id="violationCount">1</div>
+    <div style="font-size:11px;color:#9a8a6a;margin-top:4px;">violations</div>
+    <button onclick="dismissSecurityWarning()" style="margin-top:16px;padding:10px 24px;background:linear-gradient(135deg,#D4AF37,#b8952e);border:none;border-radius:8px;color:#0a0700;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;">Resume Quiz</button>
+  </div>
+</div>
+
+<!-- ── Full-Screen Quiz Screen ── -->
+<div id="quizScreen">
+  <div class="quiz-header">
+    <div class="quiz-brand">
+      <div class="logo">∞</div>
+      <span>TEN Quiz</span>
+    </div>
+    <div class="quiz-timer-wrap">
+      <div class="quiz-timer" id="quizTimer">10:00</div>
+    </div>
+    <div class="quiz-progress-wrap">
+      <span id="progressText">Q 1 / 5</span>
+      <div class="quiz-progress-bar">
+        <div class="quiz-progress-fill" id="progressFill" style="width:20%"></div>
+      </div>
+    </div>
+    <div class="camera-pip" id="cameraPip">
+      <video id="cameraPipVideo" autoplay muted playsinline></video>
+      <div class="pip-live">● LIVE</div>
+    </div>
+  </div>
+
+  <div class="quiz-body">
+    <!-- Question Dots -->
+    <div class="q-dots" id="qDots" style="margin-bottom:20px;"></div>
+
+    <!-- Question Card -->
+    <div class="question-card" id="questionCard">
+      <div class="q-number" id="qNumber">QUESTION 1 OF 5</div>
+      <div class="q-text" id="qText">Loading question…</div>
+      <div class="options-grid" id="optionsGrid"></div>
+    </div>
+
+    <!-- Navigation -->
+    <div class="quiz-nav">
+      <button class="btn-nav btn-prev" id="prevBtn" onclick="prevQuestion()">← Previous</button>
+      <button class="btn-nav btn-next" id="nextBtn" onclick="nextQuestion()">Next →</button>
+      <button class="btn-nav btn-submit-quiz" id="submitQuizBtn" onclick="submitQuiz()" style="display:none;" disabled>Submit Quiz ✓</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Result Screen ── -->
+<div id="resultScreen">
+  <div class="result-card" id="resultCard">
+    <div class="result-emoji" id="resultEmoji">🎉</div>
+    <div class="result-title" id="resultTitle">Passed!</div>
+    <div class="result-score" id="resultScore">3/5</div>
+    <div class="result-desc" id="resultDesc">Great job! You passed the quiz.</div>
+    <div class="result-coins" id="resultCoins" style="display:none;">
+      <div class="coins-value" id="resultCoinsVal">+50 🪙</div>
+      <div class="rupee-value" id="resultRupeeVal">= ₹25.00 added to your balance</div>
+    </div>
+    <div style="margin-top:24px;">
+      <button onclick="goBack()" class="btn-back">← Back to Task Journey</button>
+      <button onclick="retryQuiz()" class="btn-retry" id="retryBtn" style="display:none;">🔄 Retry</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ── State ─────────────────────────────────────────
+const API = '/api/v2';
+let cameraStream = null;
+let questions    = [];
+let answers      = {};
+let currentQ     = 0;
+let timerInterval = null;
+let timeLeft     = 10 * 60; // 10 minutes in seconds
+let violations   = 0;
+let quizStarted  = false;
+let taskId       = null;
+let domain       = null;
+let weekNum      = 1;
+let isFirstAttempt = true;
+
+function getStudent() {
+  try { return JSON.parse(localStorage.getItem('student') || '{}'); } catch { return {}; }
+}
+function getEmpId() {
+  const s = getStudent();
+  return s.employeeId || localStorage.getItem('employeeId') || localStorage.getItem('ten_employee_id') || '';
+}
+function authHeaders() {
+  return { 'Content-Type': 'application/json', 'x-employee-id': getEmpId() };
+}
+
+// ── Parse URL params ──────────────────────────────
+(function parseParams() {
+  const p = new URLSearchParams(window.location.search);
+  taskId  = p.get('taskId')  || '';
+  domain  = p.get('domain')  || (getStudent().domain || '');
+  weekNum = parseInt(p.get('week')) || 1;
+  isFirstAttempt = p.get('attempt') !== 'retry';
+
+  if (!getEmpId()) { window.location.href = 'login.html'; }
+})();
+
+// ── Camera setup ──────────────────────────────────
+async function setupCamera() {
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+      audio: false
+    });
+    document.getElementById('cameraPreviewVideo').srcObject = cameraStream;
+    document.getElementById('cameraStatus').textContent = '✅ Camera active — front camera detected';
+    document.getElementById('cameraStatus').style.color = '#10b981';
+    return true;
+  } catch(err) {
+    document.getElementById('cameraStatus').textContent = '⚠️ Camera access denied — quiz will continue without proctoring.';
+    document.getElementById('cameraStatus').style.color = '#f59e0b';
+    return false;
+  }
+}
+
+// ── Load questions ────────────────────────────────
+async function loadQuestions() {
+  try {
+    const res = await fetch(`${API}/student/generate-quiz`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ taskId, domain, weekNumber: weekNum })
+    });
+    const data = await res.json();
+    if (data.success && data.questions && data.questions.length) {
+      questions = data.questions;
+      document.getElementById('quizLoadingInfo').textContent = `✅ ${questions.length} questions loaded`;
+      document.getElementById('quizLoadingInfo').style.color = '#10b981';
+      return true;
+    }
+  } catch(e) {
+    document.getElementById('quizLoadingInfo').textContent = '⚠️ Could not load questions from server — using offline bank.';
+    document.getElementById('quizLoadingInfo').style.color = '#f59e0b';
+  }
+  // Offline fallback
+  questions = getOfflineFallback(domain);
+  return true;
+}
+
+function getOfflineFallback(d) {
+  const generic = [
+    { question: `What is the primary objective of ${d || 'this domain'}?`, options: ['Memorization', 'Problem solving with technology', 'Hardware design', 'None of the above'], answer: 1 },
+    { question: 'What does debugging mean?', options: ['Adding features', 'Finding and fixing errors', 'Writing documentation', 'Deploying the app'], answer: 1 },
+    { question: 'What is version control used for?', options: ['Controlling user access', 'Tracking code changes', 'Server management', 'UI design'], answer: 1 },
+    { question: 'What is an API?', options: ['A database', 'Application Programming Interface', 'A frontend framework', 'A server'], answer: 1 },
+    { question: 'What does "open source" mean?', options: ['Paid software', 'Software with publicly available source code', 'Closed network', 'Encrypted code'], answer: 1 }
+  ];
+  return generic;
+}
+
+// ── Initialize on page load ───────────────────────
+(async function init() {
+  const [camOk, qOk] = await Promise.all([setupCamera(), loadQuestions()]);
+  if (qOk) {
+    document.getElementById('startQuizBtn').disabled = false;
+    document.getElementById('startQuizBtn').textContent = '▶ Start Quiz';
+  }
+})();
+
+// ── Start quiz ────────────────────────────────────
+function startQuiz() {
+  if (!questions.length) return;
+  document.getElementById('cameraScreen').style.display = 'none';
+  const quizScreen = document.getElementById('quizScreen');
+  quizScreen.style.display = 'block';
+  document.getElementById('resultScreen').style.display = 'none';
+
+  // Set camera PiP
+  if (cameraStream) {
+    document.getElementById('cameraPipVideo').srcObject = cameraStream;
+    document.getElementById('cameraPip').style.display = 'block';
+  } else {
+    document.getElementById('cameraPip').style.display = 'none';
+  }
+
+  // Build question dots
+  buildDots();
+  renderQuestion(0);
+
+  // Start timer
+  startTimer();
+
+  // Tab visibility tracking
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  quizStarted = true;
+}
+
+function buildDots() {
+  const dots = document.getElementById('qDots');
+  dots.innerHTML = questions.map((_, i) => `
+    <div class="q-dot ${i === 0 ? 'current' : ''}" id="dot-${i}" onclick="goToQuestion(${i})">${i+1}</div>
+  `).join('');
+}
+
+function updateDots() {
+  questions.forEach((_, i) => {
+    const dot = document.getElementById(`dot-${i}`);
+    if (!dot) return;
+    dot.className = 'q-dot' + (answers[i] !== undefined ? ' answered' : '') + (i === currentQ ? ' current' : '');
+  });
+}
+
+function renderQuestion(index) {
+  currentQ = index;
+  const q = questions[index];
+  if (!q) return;
+
+  document.getElementById('qNumber').textContent = `QUESTION ${index + 1} OF ${questions.length}`;
+  document.getElementById('qText').textContent = q.question;
+  document.getElementById('progressText').textContent = `Q ${index + 1} / ${questions.length}`;
+  document.getElementById('progressFill').style.width = ((index + 1) / questions.length * 100) + '%';
+
+  // Options
+  const letters = ['A', 'B', 'C', 'D'];
+  document.getElementById('optionsGrid').innerHTML = q.options.map((opt, i) => `
+    <button class="option-btn ${answers[index] === i ? 'selected' : ''}" id="opt-${index}-${i}"
+      onclick="selectAnswer(${index}, ${i})">
+      <span class="option-letter">${letters[i]}</span>
+      <span>${opt}</span>
+    </button>
+  `).join('');
+
+  // Nav buttons
+  document.getElementById('prevBtn').style.display = index === 0 ? 'none' : 'inline-flex';
+  const isLast = index === questions.length - 1;
+  document.getElementById('nextBtn').style.display = isLast ? 'none' : 'inline-flex';
+  const submitBtn = document.getElementById('submitQuizBtn');
+  submitBtn.style.display = isLast ? 'inline-flex' : 'none';
+  // Enable submit only if all answered
+  submitBtn.disabled = Object.keys(answers).length < questions.length;
+
+  updateDots();
+}
+
+function selectAnswer(qIdx, optIdx) {
+  answers[qIdx] = optIdx;
+  // Update option visuals
+  const q = questions[qIdx];
+  document.querySelectorAll(`[id^="opt-${qIdx}-"]`).forEach(btn => btn.classList.remove('selected'));
+  const sel = document.getElementById(`opt-${qIdx}-${optIdx}`);
+  if (sel) sel.classList.add('selected');
+  // Enable submit if all answered
+  const submitBtn = document.getElementById('submitQuizBtn');
+  if (submitBtn) submitBtn.disabled = Object.keys(answers).length < questions.length;
+  updateDots();
+}
+
+function nextQuestion() {
+  if (currentQ < questions.length - 1) renderQuestion(currentQ + 1);
+}
+
+function prevQuestion() {
+  if (currentQ > 0) renderQuestion(currentQ - 1);
+}
+
+function goToQuestion(idx) {
+  if (idx >= 0 && idx < questions.length) renderQuestion(idx);
+}
+
+// ── Timer ─────────────────────────────────────────
+function startTimer() {
+  updateTimerDisplay();
+  timerInterval = setInterval(() => {
+    timeLeft--;
+    updateTimerDisplay();
+    if (timeLeft <= 60) {
+      document.getElementById('quizTimer').classList.add('urgent');
+    }
+    if (timeLeft <= 0) {
+      clearInterval(timerInterval);
+      submitQuiz(true);
+    }
+  }, 1000);
+}
+
+function updateTimerDisplay() {
+  const m = Math.floor(timeLeft / 60);
+  const s = timeLeft % 60;
+  document.getElementById('quizTimer').textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+// ── Tab visibility (anti-cheat) ───────────────────
+function handleVisibilityChange() {
+  if (document.hidden && quizStarted) {
+    violations++;
+    document.getElementById('violationCount').textContent = violations;
+    document.getElementById('securityWarning').style.display = 'flex';
+    if (violations >= 3) {
+      dismissSecurityWarning();
+      submitQuiz(true);
+    }
+  }
+}
+
+function dismissSecurityWarning() {
+  document.getElementById('securityWarning').style.display = 'none';
+}
+
+// ── Submit quiz ───────────────────────────────────
+async function submitQuiz(autoSubmit = false) {
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  quizStarted = false;
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
+
+  // Stop camera
+  if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
+
+  // Calculate score
+  let correct = 0;
+  questions.forEach((q, i) => {
+    if (answers[i] === q.answer) correct++;
+  });
+  const total   = questions.length;
+  const passed  = correct >= 3;
+  const coins   = isFirstAttempt ? (passed ? 50 : 0) : (passed ? 25 : 0);
+
+  // Show result screen
+  showResult(correct, total, passed, coins, autoSubmit);
+
+  // Report to server
+  try {
+    await fetch(`${API}/student/quiz-result`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ taskId, score: correct, total, passed, coins, violations, autoSubmit })
+    });
+  } catch(e) { /* silent — result already shown */ }
+}
+
+function showResult(correct, total, passed, coins, autoSubmit) {
+  document.getElementById('quizScreen').style.display = 'none';
+  const rs = document.getElementById('resultScreen');
+  rs.style.display = 'flex';
+
+  const card = document.getElementById('resultCard');
+  card.className = 'result-card ' + (passed ? 'pass' : 'fail');
+
+  document.getElementById('resultEmoji').textContent = passed ? '🎉' : (autoSubmit ? '⏱️' : '😔');
+  document.getElementById('resultTitle').textContent = passed ? 'Quiz Passed!' : (autoSubmit ? 'Time Up!' : 'Quiz Failed');
+  document.getElementById('resultTitle').className = 'result-title ' + (passed ? 'pass' : 'fail');
+  document.getElementById('resultScore').textContent = `${correct} / ${total}`;
+  document.getElementById('resultDesc').textContent = passed
+    ? `Excellent! You scored ${correct}/${total}. The task is now marked complete.`
+    : `You scored ${correct}/${total}. You need at least 3/5 to pass. Review the material and try again!`;
+
+  if (passed && coins > 0) {
+    document.getElementById('resultCoins').style.display = 'block';
+    document.getElementById('resultCoinsVal').textContent = `+${coins} 🪙 Coins Earned!`;
+    document.getElementById('resultRupeeVal').textContent = `= ₹${(coins * 0.5).toFixed(2)} added to your balance`;
+  } else {
+    document.getElementById('resultCoins').style.display = 'none';
+  }
+
+  const retryBtn = document.getElementById('retryBtn');
+  if (!passed) { retryBtn.style.display = 'inline-block'; } else { retryBtn.style.display = 'none'; }
+}
+
+function goBack() {
+  window.location.href = 'v2-tasks.html';
+}
+
+function retryQuiz() {
+  const url = new URL(window.location.href);
+  url.searchParams.set('attempt', 'retry');
+  window.location.href = url.toString();
+}
+</script>
+</body>
+</html>

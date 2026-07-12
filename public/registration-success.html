@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registration Success | TEN Ecosystem</title>
+  <!-- Tailwind CSS via import standard -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #080c18;
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(16, 185, 129, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(59, 130, 246, 0.05) 0%, transparent 40%);
+    }
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .success-card {
+      background: rgba(14, 20, 40, 0.95);
+      border: 1px solid rgba(240, 238, 232, 0.1);
+      backdrop-filter: blur(10px);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex items-center justify-center text-slate-100 p-4">
+  
+  <div id="successCard" class="w-full max-w-lg success-card rounded-2xl p-8 md:p-10 shadow-2xl opacity-0 transform translate-y-4 transition-all duration-700 ease-out">
+    
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mb-4 animate-bounce">
+        <i class="fa-solid fa-circle-check text-3xl"></i>
+      </div>
+      <h1 class="text-2xl md:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300 tracking-tight">
+        Registration Successful
+      </h1>
+      <p class="text-slate-400 text-sm mt-2">Your application has been logged into the TEN Ecosystem</p>
+    </div>
+
+    <!-- Details Box -->
+    <div class="bg-slate-900/50 rounded-xl border border-slate-800/80 p-6 space-y-4 mb-8">
+      
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <span class="text-slate-400 text-sm">Role</span>
+        <span id="displayRole" class="font-semibold text-teal-400 font-medium px-2.5 py-0.5 rounded-full bg-teal-500/10 text-xs uppercase tracking-wider">
+          ---
+        </span>
+      </div>
+
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <span class="text-slate-400 text-sm">Member ID</span>
+        <span id="displayMemberId" class="font-bold mono text-emerald-400 tracking-wide text-sm">
+          ---
+        </span>
+      </div>
+
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <span class="text-slate-400 text-sm">Email Address</span>
+        <span id="displayEmail" class="font-medium text-slate-200 text-sm">
+          ---
+        </span>
+      </div>
+
+      <!-- Password row removed for security as requested -->
+
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <span class="text-slate-400 text-sm">Registration Status</span>
+        <span id="displayStatus" class="font-semibold text-amber-400 flex items-center gap-1.5 text-xs uppercase tracking-wider">
+          <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+          Pending Approval
+        </span>
+      </div>
+
+      <div class="flex items-start gap-3 pt-1">
+        <i class="fa-solid fa-circle-info text-slate-500 mt-1"></i>
+        <div>
+          <h4 class="text-slate-300 text-xs font-semibold uppercase tracking-wider">Next Step</h4>
+          <p id="nextStepText" class="text-slate-400 text-xs mt-1 leading-relaxed">
+            Your registration is currently pending HR review. You will receive an email confirmation once the HR Team has approved your profile.
+          </p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Actions -->
+    <div class="space-y-3">
+      <a id="loginBtn" href="/" class="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-900 font-bold py-3.5 px-6 rounded-xl transition duration-300 shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/20">
+        <span>Proceed to Portal Login</span>
+        <i class="fa-solid fa-arrow-right"></i>
+      </a>
+      <div class="text-center text-xs text-slate-500">
+        Need assistance? Please contact <a href="mailto:hr@entrepreneurshipnetwork.net" style="color:#D4AF37;text-decoration:none;font-weight:600;">hr@entrepreneurshipnetwork.net</a>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      // Decode params
+      const params = new URLSearchParams(window.location.search);
+      const role   = params.get("role") || "Member";
+      const email  = params.get("email") || "N/A";
+      const memberId = params.get("memberId") || "PENDING";
+      const rawStatus = params.get("status") || "Pending Approval";
+
+      const isStudent = role.toLowerCase() === "student";
+      const status = isStudent ? "APPROVED" : rawStatus;
+
+      // Populate layout
+      document.getElementById("displayRole").textContent = role;
+      document.getElementById("displayEmail").textContent = email;
+      document.getElementById("displayMemberId").textContent = memberId;
+
+      // Password parameter parsing removed for security as requested
+
+      const statusEl = document.getElementById("displayStatus");
+      const nextStepEl = document.getElementById("nextStepText");
+
+      if (isStudent || status.toLowerCase() === "approved" || status.toLowerCase() === "active") {
+        statusEl.className = "font-semibold text-emerald-400 flex items-center gap-1.5 text-xs uppercase tracking-wider";
+        statusEl.innerHTML = `
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+          APPROVED
+        `;
+        if (nextStepEl) {
+          nextStepEl.textContent = "Your student account has been automatically approved and activated! You can proceed to the portal login to access your learning dashboard and get started immediately.";
+        }
+      } else {
+        statusEl.className = "font-semibold text-amber-400 flex items-center gap-1.5 text-xs uppercase tracking-wider";
+        statusEl.innerHTML = `
+          <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+          ${status}
+        `;
+      }
+
+      // Set specialized login button target dynamically
+      const loginBtn = document.getElementById("loginBtn");
+      if (role && role !== "Member") {
+        loginBtn.href = `/${role.toLowerCase()}-login`;
+      } else {
+        loginBtn.href = "/";
+      }
+
+      // Smooth enter animation
+      const card = document.getElementById("successCard");
+      setTimeout(() => {
+        card.classList.remove("opacity-0", "translate-y-4");
+      }, 100);
+    });
+  </script>
+</body>
+</html>

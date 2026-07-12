@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Mark Attendance — TEN</title>
+<link rel="stylesheet" href="ten-motion.css">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{ --gold:#f5c542; --gold-dim:#c9a227; --bg:#04070f; --card:#0c1220; --border:rgba(245,197,66,.22); --text:#f0eee8; --muted:#9aa4bf; --green:#10b981; --red:#f43f5e; --blue:#3b82f6; }
+body{ background:var(--bg); color:var(--text); font-family:'Plus Jakarta Sans','Outfit',Segoe UI,Arial,sans-serif; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+.bg-grid{ position:fixed; inset:0; background-image:linear-gradient(rgba(245,197,66,.025) 1px,transparent 1px), linear-gradient(90deg,rgba(245,197,66,.025) 1px,transparent 1px); background-size:56px 56px; pointer-events:none; z-index:0; }
+.wrap{ position:relative; z-index:1; width:100%; max-width:440px; }
+.brand{ text-align:center; margin-bottom:24px; }
+.brand-logo{ display:inline-flex; align-items:center; justify-content:center; width:72px; height:72px; background:rgba(212,175,55,0.08); backdrop-filter:blur(10px); border:1.5px solid rgba(212,175,55,0.35); border-radius:18px; font-size:28px; box-shadow:0 0 40px rgba(212,175,55,0.25), inset 0 1px 1px rgba(255,255,255,0.1); margin-bottom:12px; transition:all 0.3s ease; }\n.brand-logo:hover{ background:rgba(212,175,55,0.12); border-color:rgba(212,175,55,0.5); box-shadow:0 0 60px rgba(212,175,55,0.35), inset 0 1px 1px rgba(255,255,255,0.15); transform:translateY(-2px); }
+.brand-title{ font-size:20px; font-weight:800; letter-spacing:-.3px; }
+.brand-title span{ background:linear-gradient(90deg,var(--gold),#fff176); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+.brand-sub{ font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin-top:4px; }
+.card{ background:var(--card); border:1px solid var(--border); border-radius:18px; padding:28px; box-shadow:0 18px 50px rgba(0,0,0,.55); position:relative; overflow:hidden; }
+.card::before{ content:""; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,transparent,var(--gold),transparent); }
+h1{ font-size:20px; font-weight:800; margin-bottom:6px; }
+.sub{ font-size:13px; color:var(--muted); margin-bottom:18px; }
+.dom-pill{ display:inline-block; padding:5px 14px; background:rgba(245,197,66,.12); border:1px solid rgba(245,197,66,.3); color:var(--gold); border-radius:99px; font-weight:700; font-size:11px; letter-spacing:1px; text-transform:uppercase; margin-bottom:18px; }
+.field{ margin-bottom:14px; }
+.field label{ display:block; font-size:11px; font-weight:700; letter-spacing:1.4px; text-transform:uppercase; color:var(--muted); margin-bottom:7px; }
+.field input{ width:100%; padding:13px 16px; background:rgba(255,255,255,.04); border:1px solid var(--border); border-radius:10px; color:var(--text); font-size:14.5px; outline:none; font-family:inherit; transition:all .2s; }
+.field input:focus{ border-color:var(--gold); box-shadow:0 0 0 3px rgba(245,197,66,.1); }
+.btn{ width:100%; padding:14px; border:none; border-radius:11px; background:linear-gradient(135deg,var(--gold),var(--gold-dim)); color:#0a0600; font-weight:800; cursor:pointer; font-family:inherit; font-size:14.5px; letter-spacing:.5px; transition:transform .15s,box-shadow .15s; }
+.btn:hover{ transform:translateY(-1px); box-shadow:0 8px 24px rgba(245,197,66,.35); }
+.btn:disabled{ opacity:.6; cursor:not-allowed; transform:none; box-shadow:none; }
+.alert{ padding:12px 16px; border-radius:10px; margin-bottom:14px; font-size:13px; line-height:1.5; }
+.alert-error{ background:rgba(244,63,94,.1); border:1px solid rgba(244,63,94,.3); color:var(--red); }
+.alert-ok{ background:rgba(16,185,129,.1); border:1px solid rgba(16,185,129,.3); color:var(--green); }
+.alert-warn{ background:rgba(245,158,11,.1); border:1px solid rgba(245,158,11,.3); color:#f5b542; }
+.foot{ text-align:center; margin-top:18px; font-size:11px; color:var(--muted); letter-spacing:.5px; }
+.foot a{ color:var(--gold); text-decoration:none; }
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="wrap">
+  <div class="brand">
+    <div class="brand-logo ten-glow-pulse ten-float">📋</div>
+    <div class="brand-title"><span>TEN</span> Attendance</div>
+    <div class="brand-sub">Coordinator-verified scan</div>
+  </div>
+  <div class="card ten-qr-radar">
+    <div id="domainHeader"></div>
+    <h1 id="title">Mark Your Attendance</h1>
+    <p class="sub" id="subtitle">Scan verified by coordinator. Enter your credentials to record today's class attendance.</p>
+    <div id="msg"></div>
+    <div id="form">
+      <div class="field"><label>Employee ID</label><input type="text" id="employeeId" placeholder="e.g. TEN/WEB/1001" autocomplete="off"></div>
+      <div class="field"><label>Password</label><input type="password" id="password" placeholder="Your portal password"></div>
+      <button class="btn" id="submitBtn" onclick="markIt()">✅ Mark My Attendance</button>
+    </div>
+  </div>
+  <div class="foot">© The Entrepreneurship Network · <a href="/login.html">Back to Login</a></div>
+</div>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const domain = params.get("domain") || "";
+const coordinatorId = params.get("coordinatorId") || "";
+
+if(domain){
+  document.getElementById("domainHeader").innerHTML = '<div class="dom-pill">' + domain + '</div>';
+  document.getElementById("title").textContent = "Mark Your Attendance — " + domain;
+} else {
+  setMsg("This QR is missing a domain — ask your coordinator for a fresh QR.", "warn");
+  document.getElementById("submitBtn").disabled = true;
+}
+
+function setMsg(text, kind){
+  const el = document.getElementById("msg");
+  el.innerHTML = '<div class="alert alert-' + (kind==="ok"?"ok":kind==="warn"?"warn":"error") + '">' + text + '</div>';
+}
+
+async function markIt(){
+  const employeeId = document.getElementById("employeeId").value.trim();
+  const password   = document.getElementById("password").value;
+  if(!employeeId || !password){ setMsg("Employee ID and password are required.", "error"); return; }
+  const btn = document.getElementById("submitBtn");
+  btn.disabled = true; btn.textContent = "Marking...";
+  try{
+    const r = await fetch("/qr-attendance/mark", {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ employeeId, password, domain, coordinatorId })
+    });
+    const d = await r.json();
+    if(d.success){
+      setMsg("✅ " + (d.message || "Attendance marked successfully. Have a great day!"), "ok");
+      document.getElementById("form").style.display = "none";
+    } else if(d.alreadyMarked){
+      setMsg("ℹ️ " + (d.message || "Attendance already marked for today."), "warn");
+      document.getElementById("form").style.display = "none";
+    } else {
+      setMsg("❌ " + (d.message || "Failed to mark attendance."), "error");
+      btn.disabled = false; btn.textContent = "✅ Mark My Attendance";
+    }
+  }catch(e){
+    setMsg("Network error. Please try again.", "error");
+    btn.disabled = false; btn.textContent = "✅ Mark My Attendance";
+  }
+}
+
+document.addEventListener("keydown", e => { if(e.key === "Enter") markIt(); });
+</script>
+<script src="ten-motion.js"></script>
+<script src="/password-toggle.js"></script>
+</body>
+</html>
