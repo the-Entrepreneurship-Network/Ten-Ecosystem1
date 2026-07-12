@@ -804,14 +804,6 @@ router.get('/tenure-status', async (req, res) => {
       return res.json({ success: true, required: false });
     }
 
-    // New rule: Only students registered on or after July 9, 2026 are required to pay.
-    // Existing students can access freely.
-    const thresholdDate = new Date('2026-07-09T00:00:00.000Z');
-    const studentDate = student.createdAt || (student.joiningDate ? new Date(student.joiningDate) : null);
-    if (studentDate && studentDate < thresholdDate) {
-      return res.json({ success: true, required: false });
-    }
-
     // Find any existing successful or pending verification tenure payment
     const payment = await Payment.findOne({
       studentId: student._id,

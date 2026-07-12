@@ -711,8 +711,8 @@ router.get('/system/info', requireAdminAPI, async (req, res) => {
       success: true,
       data: {
         paymentEnabled: process.env.PAYMENT_ENABLED === 'true',
-        mongoConnected: mongoose.connection.readyState === 1,
-        usingLocalDb: mongoose.connection.readyState !== 1,
+        mongoConnected: mongoose.connection.readyState === 1 && !global.isMongoUnhealthy,
+        usingLocalDb: mongoose.connection.readyState !== 1 || !!global.isMongoUnhealthy,
         nodeEnv: process.env.NODE_ENV || 'development',
         port: process.env.PORT || 3000,
         uptimeSeconds: Math.floor(process.uptime()),

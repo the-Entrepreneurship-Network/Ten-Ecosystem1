@@ -17,6 +17,18 @@ if (!fs.existsSync(DB_DIR)) {
     fs.mkdirSync(DB_DIR, { recursive: true });
 }
 
+global.isMongoUnhealthy = false;
+global.lastMongoCheckTime = 0;
+
+function checkMongoStatus() {
+    const now = Date.now();
+    if (global.isMongoUnhealthy && now - global.lastMongoCheckTime > 30000) {
+        console.log("[DB FALLBACK] Cooldown over. Attempting to query MongoDB again...");
+        global.isMongoUnhealthy = false;
+    }
+    return mongoose.connection.readyState === 1 && !global.isMongoUnhealthy;
+}
+
 function getCollectionData(modelName) {
     const file = path.join(DB_DIR, `db_${modelName}.json`);
     if (!fs.existsSync(file)) {
@@ -228,380 +240,621 @@ class FallbackQuery {
 }
 
 function wrapModelWithFileFallback(model) {
-    const originalFind = model.find;
-    model.find = function(query) {
-        if (mongoose.connection.readyState !== 1) {
-            return new FallbackQuery(async (sortVal, limitVal) => {
-                let items = getCollectionData(model.modelName);
-                let matched = items.filter(item => matchQuery(item, query));
-                if (sortVal) {
-                    const sortKeys = Object.keys(sortVal);
-                    if (sortKeys.length > 0) {
-                        const key = sortKeys[0];
-                        const direction = sortVal[key];
-                        matched.sort((a, b) => {
-                            const valA = a[key];
-                            const valB = b[key];
-                            if (valA < valB) return direction === -1 ? 1 : -1;
-                            if (valA > valB) return direction === -1 ? -1 : 1;
-                            return 0;
-                        });
-                    }
-                }
-                if (typeof limitVal === 'number') {
-                    matched = matched.slice(0, limitVal);
-                }
-                return matched.map(item => new model(item));
-            });
+    function isNetworkError(err) {
+        if (!err) return false;
+        const name = err.name || '';
+        const msg = err.message || '';
+        const isNet = name === 'MongoNetworkTimeoutError' ||
+               name === 'MongoNetworkError' ||
+               name === 'MongoTimeoutError' ||
+               name === 'MongooseError' ||
+               msg.toLowerCase().includes('timeout') ||
+               msg.toLowerCase().includes('timed out') ||
+               msg.toLowerCase().includes('connection') ||
+               msg.toLowerCase().includes('network') ||
+               msg.toLowerCase().includes('retryable') ||
+               msg.toLowerCase().includes('failed to connect');
+        if (isNet) {
+            global.isMongoUnhealthy = true;
+            global.lastMongoCheckTime = Date.now();
         }
-        return originalFind.apply(this, arguments);
-    };
+        return isNet;
+    }
 
-    const originalFindOne = model.findOne;
-    model.findOne = function(query) {
-        if (mongoose.connection.readyState !== 1) {
-            return new FallbackQuery(async () => {
-                let items = getCollectionData(model.modelName);
-                let matched = items.find(item => matchQuery(item, query));
-                return matched ? new model(matched) : null;
-            });
+    function runFindFallback(query, sortVal, limitVal) {
+        let items = getCollectionData(model.modelName);
+        let matched = items.filter(item => matchQuery(item, query));
+        if (sortVal) {
+            const sortKeys = Object.keys(sortVal);
+            if (sortKeys.length > 0) {
+                const key = sortKeys[0];
+                const direction = sortVal[key];
+                matched.sort((a, b) => {
+                    const valA = a[key];
+                    const valB = b[key];
+                    if (valA < valB) return direction === -1 ? 1 : -1;
+                    if (valA > valB) return direction === -1 ? -1 : 1;
+                    return 0;
+                });
+            }
         }
-        return originalFindOne.apply(this, arguments);
-    };
-
-    const originalFindById = model.findById;
-    model.findById = function(id) {
-        if (mongoose.connection.readyState !== 1) {
-            return new FallbackQuery(async () => {
-                let items = getCollectionData(model.modelName);
-                let matched = items.find(item => String(item._id) === String(id));
-                return matched ? new model(matched) : null;
-            });
+        if (typeof limitVal === 'number') {
+            matched = matched.slice(0, limitVal);
         }
-        return originalFindById.apply(this, arguments);
-    };
+        return matched.map(item => new model(item));
+    }
 
-    const originalCountDocuments = model.countDocuments;
-    model.countDocuments = function(query) {
-        if (mongoose.connection.readyState !== 1) {
-            return new FallbackQuery(async () => {
-                let items = getCollectionData(model.modelName);
-                let matched = items.filter(item => matchQuery(item, query));
-                return matched.length;
-            });
+    function runFindOneFallback(query) {
+        let items = getCollectionData(model.modelName);
+        let matched = items.find(item => matchQuery(item, query));
+        return matched ? new model(matched) : null;
+    }
+
+    function runFindByIdFallback(id) {
+        let items = getCollectionData(model.modelName);
+        let matched = items.find(item => String(item._id) === String(id));
+        return matched ? new model(matched) : null;
+    }
+
+    function runCountDocumentsFallback(query) {
+        let items = getCollectionData(model.modelName);
+        let matched = items.filter(item => matchQuery(item, query));
+        return matched.length;
+    }
+
+    function runFindOneAndUpdateFallback(query, update, options) {
+        let items = getCollectionData(model.modelName);
+        let index = items.findIndex(item => matchQuery(item, query));
+        if (index === -1) {
+            if (options && options.upsert) {
+                const newItem = { _id: generateId(), createdAt: new Date() };
+                applyUpdate(newItem, update);
+                items.push(newItem);
+                saveCollectionData(model.modelName, items);
+                return new model(newItem);
+            }
+            return null;
         }
-        return originalCountDocuments.apply(this, arguments);
-    };
+        let item = items[index];
+        applyUpdate(item, update);
+        items[index] = item;
+        saveCollectionData(model.modelName, items);
+        return new model(item);
+    }
 
-    const originalFindOneAndUpdate = model.findOneAndUpdate;
-    model.findOneAndUpdate = function(query, update, options) {
-        if (mongoose.connection.readyState !== 1) {
-            return new FallbackQuery(async () => {
-                let items = getCollectionData(model.modelName);
-                let index = items.findIndex(item => matchQuery(item, query));
+    function runFindByIdAndUpdateFallback(id, update, options) {
+        let items = getCollectionData(model.modelName);
+        let index = items.findIndex(item => String(item._id) === String(id));
+        if (index === -1) {
+            if (options && options.upsert) {
+                const newItem = { _id: String(id), createdAt: new Date() };
+                applyUpdate(newItem, update);
+                items.push(newItem);
+                saveCollectionData(model.modelName, items);
+                return new model(newItem);
+            }
+            return null;
+        }
+        let item = items[index];
+        applyUpdate(item, update);
+        items[index] = item;
+        saveCollectionData(model.modelName, items);
+        return new model(item);
+    }
+
+    function runCreateFallback(docOrDocs) {
+        let items = getCollectionData(model.modelName);
+        const isArray = Array.isArray(docOrDocs);
+        const docs = isArray ? docOrDocs : [docOrDocs];
+        const createdDocs = docs.map(d => {
+            const raw = d.toObject ? d.toObject() : { ...d };
+            return { ...raw, _id: raw._id || generateId(), createdAt: new Date(), updatedAt: new Date() };
+        });
+        items.push(...createdDocs);
+        saveCollectionData(model.modelName, items);
+        return isArray ? createdDocs.map(c => new model(c)) : new model(createdDocs[0]);
+    }
+
+    function runDeleteOneFallback(query) {
+        let items = getCollectionData(model.modelName);
+        let index = items.findIndex(item => matchQuery(item, query));
+        if (index !== -1) {
+            items.splice(index, 1);
+            saveCollectionData(model.modelName, items);
+            return { acknowledged: true, deletedCount: 1 };
+        }
+        return { acknowledged: true, deletedCount: 0 };
+    }
+
+    function runDeleteManyFallback(query) {
+        let items = getCollectionData(model.modelName);
+        const originalLength = items.length;
+        items = items.filter(item => !matchQuery(item, query));
+        saveCollectionData(model.modelName, items);
+        return { acknowledged: true, deletedCount: originalLength - items.length };
+    }
+
+    function runUpdateManyFallback(query, update, options) {
+        let items = getCollectionData(model.modelName);
+        let count = 0;
+        for (let item of items) {
+            if (matchQuery(item, query)) {
+                applyUpdate(item, update);
+                count++;
+            }
+        }
+        saveCollectionData(model.modelName, items);
+        return { acknowledged: true, modifiedCount: count };
+    }
+
+    function runUpdateOneFallback(query, update, options) {
+        let items = getCollectionData(model.modelName);
+        let index = items.findIndex(item => matchQuery(item, query));
+        if (index === -1) {
+            if (options && options.upsert) {
+                const newItem = { _id: generateId(), createdAt: new Date() };
+                applyUpdate(newItem, update);
+                items.push(newItem);
+                saveCollectionData(model.modelName, items);
+                return { acknowledged: true, matchedCount: 0, modifiedCount: 1, upsertedId: newItem._id };
+            }
+            return { acknowledged: true, matchedCount: 0, modifiedCount: 0 };
+        }
+        let item = items[index];
+        applyUpdate(item, update);
+        items[index] = item;
+        saveCollectionData(model.modelName, items);
+        return { acknowledged: true, matchedCount: 1, modifiedCount: 1 };
+    }
+
+    function runInsertManyFallback(docs) {
+        let items = getCollectionData(model.modelName);
+        const newDocs = (Array.isArray(docs) ? docs : [docs]).map(d => {
+            const raw = d.toObject ? d.toObject() : { ...d };
+            return { ...raw, _id: raw._id || generateId(), createdAt: new Date() };
+        });
+        items.push(...newDocs);
+        saveCollectionData(model.modelName, items);
+        return newDocs;
+    }
+
+    function runBulkWriteFallback(ops) {
+        let items = getCollectionData(model.modelName);
+        for (const op of ops) {
+            if (op.updateOne) {
+                const { filter, update, upsert } = op.updateOne;
+                let index = items.findIndex(item => matchQuery(item, filter));
                 if (index === -1) {
-                    if (options && options.upsert) {
+                    if (upsert) {
                         const newItem = { _id: generateId(), createdAt: new Date() };
                         applyUpdate(newItem, update);
                         items.push(newItem);
-                        saveCollectionData(model.modelName, items);
-                        return new model(newItem);
                     }
-                    return null;
+                } else {
+                    applyUpdate(items[index], update);
                 }
-                let item = items[index];
-                applyUpdate(item, update);
-                items[index] = item;
-                saveCollectionData(model.modelName, items);
-                return new model(item);
-            });
+            }
         }
-        return originalFindOneAndUpdate.apply(this, arguments);
-    };
+        saveCollectionData(model.modelName, items);
+        return { ok: 1, nModified: ops.length };
+    }
 
-    const originalFindByIdAndUpdate = model.findByIdAndUpdate;
-    model.findByIdAndUpdate = function(id, update, options) {
-        if (mongoose.connection.readyState !== 1) {
-            return new FallbackQuery(async () => {
-                let items = getCollectionData(model.modelName);
-                let index = items.findIndex(item => String(item._id) === String(id));
-                if (index === -1) {
-                    if (options && options.upsert) {
-                        const newItem = { _id: String(id), createdAt: new Date() };
-                        applyUpdate(newItem, update);
-                        items.push(newItem);
-                        saveCollectionData(model.modelName, items);
-                        return new model(newItem);
+    function runAggregateFallback(pipeline) {
+        let items = getCollectionData(model.modelName);
+        let result = JSON.parse(JSON.stringify(items)); // deep copy
+
+        for (const stage of pipeline) {
+            if (stage.$match) {
+                result = result.filter(item => matchQuery(item, stage.$match));
+            } else if (stage.$unwind) {
+                let path = stage.$unwind;
+                if (typeof path === 'object' && path.path) path = path.path;
+                if (typeof path === 'string' && path.startsWith('$')) path = path.slice(1);
+                
+                const unwound = [];
+                for (const item of result) {
+                    const val = item[path];
+                    if (Array.isArray(val)) {
+                        for (const elem of val) {
+                            unwound.push({ ...item, [path]: elem });
+                        }
+                    } else if (val !== undefined && val !== null) {
+                        unwound.push(item);
                     }
-                    return null;
                 }
-                let item = items[index];
-                applyUpdate(item, update);
-                items[index] = item;
-                saveCollectionData(model.modelName, items);
-                return new model(item);
-            });
-        }
-        return originalFindByIdAndUpdate.apply(this, arguments);
-    };
-
-    const originalCreate = model.create;
-    model.create = function(docOrDocs) {
-        if (mongoose.connection.readyState !== 1) {
-            let items = getCollectionData(model.modelName);
-            const isArray = Array.isArray(docOrDocs);
-            const docs = isArray ? docOrDocs : [docOrDocs];
-            const createdDocs = docs.map(d => {
-                const raw = d.toObject ? d.toObject() : { ...d };
-                return { ...raw, _id: raw._id || generateId(), createdAt: new Date(), updatedAt: new Date() };
-            });
-            items.push(...createdDocs);
-            saveCollectionData(model.modelName, items);
-            return isArray ? Promise.resolve(createdDocs.map(c => new model(c))) : Promise.resolve(new model(createdDocs[0]));
-        }
-        return originalCreate.apply(this, arguments);
-    };
-
-    const originalDeleteOne = model.deleteOne;
-    model.deleteOne = function(query) {
-        if (mongoose.connection.readyState !== 1) {
-            let items = getCollectionData(model.modelName);
-            let index = items.findIndex(item => matchQuery(item, query));
-            if (index !== -1) {
-                items.splice(index, 1);
-                saveCollectionData(model.modelName, items);
-                return Promise.resolve({ acknowledged: true, deletedCount: 1 });
-            }
-            return Promise.resolve({ acknowledged: true, deletedCount: 0 });
-        }
-        return originalDeleteOne.apply(this, arguments);
-    };
-
-    const originalDeleteMany = model.deleteMany;
-    model.deleteMany = function(query) {
-        if (mongoose.connection.readyState !== 1) {
-            let items = getCollectionData(model.modelName);
-            const originalLength = items.length;
-            items = items.filter(item => !matchQuery(item, query));
-            saveCollectionData(model.modelName, items);
-            return Promise.resolve({ acknowledged: true, deletedCount: originalLength - items.length });
-        }
-        return originalDeleteMany.apply(this, arguments);
-    };
-
-    const originalUpdateMany = model.updateMany;
-    model.updateMany = function(query, update, options) {
-        if (mongoose.connection.readyState !== 1) {
-            let items = getCollectionData(model.modelName);
-            let count = 0;
-            for (let item of items) {
-                if (matchQuery(item, query)) {
-                    applyUpdate(item, update);
-                    count++;
-                }
-            }
-            saveCollectionData(model.modelName, items);
-            return Promise.resolve({ acknowledged: true, modifiedCount: count });
-        }
-        return originalUpdateMany.apply(this, arguments);
-    };
-
-    const originalUpdateOne = model.updateOne;
-    model.updateOne = function(query, update, options) {
-        if (mongoose.connection.readyState !== 1) {
-            let items = getCollectionData(model.modelName);
-            let index = items.findIndex(item => matchQuery(item, query));
-            if (index === -1) {
-                if (options && options.upsert) {
-                    const newItem = { _id: generateId(), createdAt: new Date() };
-                    applyUpdate(newItem, update);
-                    items.push(newItem);
-                    saveCollectionData(model.modelName, items);
-                    return Promise.resolve({ acknowledged: true, matchedCount: 0, modifiedCount: 1, upsertedId: newItem._id });
-                }
-                return Promise.resolve({ acknowledged: true, matchedCount: 0, modifiedCount: 0 });
-            }
-            let item = items[index];
-            applyUpdate(item, update);
-            items[index] = item;
-            saveCollectionData(model.modelName, items);
-            return Promise.resolve({ acknowledged: true, matchedCount: 1, modifiedCount: 1 });
-        }
-        return originalUpdateOne.apply(this, arguments);
-    };
-
-    const originalInsertMany = model.insertMany;
-    model.insertMany = function(docs) {
-        if (mongoose.connection.readyState !== 1) {
-            let items = getCollectionData(model.modelName);
-            const newDocs = (Array.isArray(docs) ? docs : [docs]).map(d => {
-                const raw = d.toObject ? d.toObject() : { ...d };
-                return { ...raw, _id: raw._id || generateId(), createdAt: new Date() };
-            });
-            items.push(...newDocs);
-            saveCollectionData(model.modelName, items);
-            return Promise.resolve(newDocs);
-        }
-        return originalInsertMany.apply(this, arguments);
-    };
-
-    const originalBulkWrite = model.bulkWrite;
-    model.bulkWrite = function(ops) {
-        if (mongoose.connection.readyState !== 1) {
-            let items = getCollectionData(model.modelName);
-            for (const op of ops) {
-                if (op.updateOne) {
-                    const { filter, update, upsert } = op.updateOne;
-                    let index = items.findIndex(item => matchQuery(item, filter));
-                    if (index === -1) {
-                        if (upsert) {
-                            const newItem = { _id: generateId(), createdAt: new Date() };
-                            applyUpdate(newItem, update);
-                            items.push(newItem);
+                result = unwound;
+            } else if (stage.$group) {
+                const groupById = stage.$group._id;
+                const groups = {}; // key string -> values
+                
+                for (const item of result) {
+                    let idVal = null;
+                    if (typeof groupById === 'string' && groupById.startsWith('$')) {
+                        const key = groupById.slice(1);
+                        idVal = item[key];
+                    } else if (typeof groupById === 'object' && groupById !== null) {
+                        idVal = {};
+                        for (const k of Object.keys(groupById)) {
+                            let pathVal = groupById[k];
+                            if (typeof pathVal === 'string' && pathVal.startsWith('$')) {
+                                idVal[k] = item[pathVal.slice(1)];
+                            } else {
+                                idVal[k] = pathVal;
+                            }
                         }
                     } else {
-                        applyUpdate(items[index], update);
+                        idVal = groupById;
                     }
-                }
-            }
-            saveCollectionData(model.modelName, items);
-            return Promise.resolve({ ok: 1, nModified: ops.length });
-        }
-        return originalBulkWrite.apply(this, arguments);
-    };
-
-    const originalAggregate = model.aggregate;
-    model.aggregate = function(pipeline) {
-        if (mongoose.connection.readyState !== 1) {
-            let items = getCollectionData(model.modelName);
-            let result = JSON.parse(JSON.stringify(items)); // deep copy
-
-            for (const stage of pipeline) {
-                if (stage.$match) {
-                    result = result.filter(item => matchQuery(item, stage.$match));
-                } else if (stage.$unwind) {
-                    let path = stage.$unwind;
-                    if (typeof path === 'object' && path.path) path = path.path;
-                    if (typeof path === 'string' && path.startsWith('$')) path = path.slice(1);
                     
-                    const unwound = [];
-                    for (const item of result) {
-                        const val = item[path];
-                        if (Array.isArray(val)) {
-                            for (const elem of val) {
-                                unwound.push({ ...item, [path]: elem });
-                            }
-                        } else if (val !== undefined && val !== null) {
-                            unwound.push(item);
-                        }
-                    }
-                    result = unwound;
-                } else if (stage.$group) {
-                    const groupById = stage.$group._id;
-                    const groups = {}; // key string -> values
-                    
-                    for (const item of result) {
-                        let idVal = null;
-                        if (typeof groupById === 'string' && groupById.startsWith('$')) {
-                            const key = groupById.slice(1);
-                            idVal = item[key];
-                        } else if (typeof groupById === 'object' && groupById !== null) {
-                            idVal = {};
-                            for (const k of Object.keys(groupById)) {
-                                let pathVal = groupById[k];
-                                if (typeof pathVal === 'string' && pathVal.startsWith('$')) {
-                                    idVal[k] = item[pathVal.slice(1)];
-                                } else {
-                                    idVal[k] = pathVal;
-                                }
-                            }
-                        } else {
-                            idVal = groupById;
-                        }
-                        
-                        const groupKey = (typeof idVal === 'object' && idVal !== null) ? JSON.stringify(idVal) : String(idVal);
-                        if (!groups[groupKey]) {
-                            groups[groupKey] = { _id: idVal, _items: [] };
-                            // Add extra custom accumulators
-                            for (const field of Object.keys(stage.$group)) {
-                                if (field === '_id') continue;
-                                const acc = stage.$group[field];
-                                if (acc.$sum !== undefined) {
-                                    groups[groupKey][field] = 0;
-                                }
-                            }
-                        }
-                        groups[groupKey]._items.push(item);
-                        
+                    const groupKey = (typeof idVal === 'object' && idVal !== null) ? JSON.stringify(idVal) : String(idVal);
+                    if (!groups[groupKey]) {
+                        groups[groupKey] = { _id: idVal, _items: [] };
+                        // Add extra custom accumulators
                         for (const field of Object.keys(stage.$group)) {
                             if (field === '_id') continue;
                             const acc = stage.$group[field];
                             if (acc.$sum !== undefined) {
-                                let addVal = 0;
-                                if (typeof acc.$sum === 'number') {
-                                    addVal = acc.$sum;
-                                } else if (typeof acc.$sum === 'string' && acc.$sum.startsWith('$')) {
-                                    addVal = Number(item[acc.$sum.slice(1)]) || 0;
-                                }
-                                groups[groupKey][field] += addVal;
+                                groups[groupKey][field] = 0;
                             }
                         }
                     }
+                    groups[groupKey]._items.push(item);
                     
-                    result = Object.values(groups).map(g => {
-                        const { _items, ...rest } = g;
-                        return rest;
-                    });
-                } else if (stage.$sort) {
-                    const sortKeys = Object.keys(stage.$sort);
-                    if (sortKeys.length > 0) {
-                        const key = sortKeys[0];
-                        const direction = stage.$sort[key];
-                        result.sort((a, b) => {
-                            let valA = a[key];
-                            let valB = b[key];
-                            if (typeof valA === 'object' && valA !== null) valA = JSON.stringify(valA);
-                            if (typeof valB === 'object' && valB !== null) valB = JSON.stringify(valB);
-                            if (valA < valB) return direction === -1 ? 1 : -1;
-                            if (valA > valB) return direction === -1 ? -1 : 1;
-                            return 0;
-                        });
-                    }
-                } else if (stage.$limit) {
-                    result = result.slice(0, stage.$limit);
-                } else if (stage.$project) {
-                    result = result.map(item => {
-                        const projected = {};
-                        for (const k of Object.keys(stage.$project)) {
-                            const pVal = stage.$project[k];
-                            if (pVal === 1) {
-                                projected[k] = item[k];
-                            } else if (typeof pVal === 'string' && pVal.startsWith('$')) {
-                                projected[k] = item[pVal.slice(1)];
+                    for (const field of Object.keys(stage.$group)) {
+                        if (field === '_id') continue;
+                        const acc = stage.$group[field];
+                        if (acc.$sum !== undefined) {
+                            let addVal = 0;
+                            if (typeof acc.$sum === 'number') {
+                                addVal = acc.$sum;
+                            } else if (typeof acc.$sum === 'string' && acc.$sum.startsWith('$')) {
+                                addVal = Number(item[acc.$sum.slice(1)]) || 0;
                             }
+                            groups[groupKey][field] += addVal;
                         }
-                        // handle _id: 0
-                        if (stage.$project._id === 0) {
-                            delete projected._id;
-                        } else if (projected._id === undefined && item._id !== undefined) {
-                            projected._id = item._id;
-                        }
-                        return projected;
+                    }
+                }
+                
+                result = Object.values(groups).map(g => {
+                    const { _items, ...rest } = g;
+                    return rest;
+                });
+            } else if (stage.$sort) {
+                const sortKeys = Object.keys(stage.$sort);
+                if (sortKeys.length > 0) {
+                    const key = sortKeys[0];
+                    const direction = stage.$sort[key];
+                    result.sort((a, b) => {
+                        let valA = a[key];
+                        let valB = b[key];
+                        if (typeof valA === 'object' && valA !== null) valA = JSON.stringify(valA);
+                        if (typeof valB === 'object' && valB !== null) valB = JSON.stringify(valB);
+                        if (valA < valB) return direction === -1 ? 1 : -1;
+                        if (valA > valB) return direction === -1 ? -1 : 1;
+                        return 0;
                     });
                 }
+            } else if (stage.$limit) {
+                result = result.slice(0, stage.$limit);
+            } else if (stage.$project) {
+                result = result.map(item => {
+                    const projected = {};
+                    for (const k of Object.keys(stage.$project)) {
+                        const pVal = stage.$project[k];
+                        if (pVal === 1) {
+                            projected[k] = item[k];
+                        } else if (typeof pVal === 'string' && pVal.startsWith('$')) {
+                            projected[k] = item[pVal.slice(1)];
+                        }
+                    }
+                    // handle _id: 0
+                    if (stage.$project._id === 0) {
+                        delete projected._id;
+                    } else if (projected._id === undefined && item._id !== undefined) {
+                        projected._id = item._id;
+                    }
+                    return projected;
+                });
             }
-            return Promise.resolve(result);
         }
-        return originalAggregate.apply(this, arguments);
+        return result;
+    }
+
+    // find
+    const originalFind = model.find;
+    model.find = function(query) {
+        if (!checkMongoStatus()) {
+            return new FallbackQuery(async (sortVal, limitVal) => {
+                return runFindFallback(query, sortVal, limitVal);
+            });
+        }
+        const mongooseQuery = originalFind.apply(this, arguments);
+        const originalExec = mongooseQuery.exec;
+        mongooseQuery.exec = function() {
+            return originalExec.apply(this, arguments).catch(err => {
+                if (isNetworkError(err)) {
+                    console.warn(`[DB FALLBACK] find failed with network error: "${err.message}". Falling back to file DB...`);
+                    return runFindFallback(query, mongooseQuery._sort, mongooseQuery._limit);
+                }
+                throw err;
+            });
+        };
+        mongooseQuery.then = function(onResolve, onReject) {
+            return this.exec().then(onResolve, onReject);
+        };
+        mongooseQuery.catch = function(onReject) {
+            return this.exec().catch(onReject);
+        };
+        return mongooseQuery;
+    };
+
+    // findOne
+    const originalFindOne = model.findOne;
+    model.findOne = function(query) {
+        if (!checkMongoStatus()) {
+            return new FallbackQuery(async () => {
+                return runFindOneFallback(query);
+            });
+        }
+        const mongooseQuery = originalFindOne.apply(this, arguments);
+        const originalExec = mongooseQuery.exec;
+        mongooseQuery.exec = function() {
+            return originalExec.apply(this, arguments).catch(err => {
+                if (isNetworkError(err)) {
+                    console.warn(`[DB FALLBACK] findOne failed with network error: "${err.message}". Falling back...`);
+                    return runFindOneFallback(query);
+                }
+                throw err;
+            });
+        };
+        mongooseQuery.then = function(onResolve, onReject) {
+            return this.exec().then(onResolve, onReject);
+        };
+        mongooseQuery.catch = function(onReject) {
+            return this.exec().catch(onReject);
+        };
+        return mongooseQuery;
+    };
+
+    // findById
+    const originalFindById = model.findById;
+    model.findById = function(id) {
+        if (!checkMongoStatus()) {
+            return new FallbackQuery(async () => {
+                return runFindByIdFallback(id);
+            });
+        }
+        const mongooseQuery = originalFindById.apply(this, arguments);
+        const originalExec = mongooseQuery.exec;
+        mongooseQuery.exec = function() {
+            return originalExec.apply(this, arguments).catch(err => {
+                if (isNetworkError(err)) {
+                    console.warn(`[DB FALLBACK] findById failed with network error: "${err.message}". Falling back...`);
+                    return runFindByIdFallback(id);
+                }
+                throw err;
+            });
+        };
+        mongooseQuery.then = function(onResolve, onReject) {
+            return this.exec().then(onResolve, onReject);
+        };
+        mongooseQuery.catch = function(onReject) {
+            return this.exec().catch(onReject);
+        };
+        return mongooseQuery;
+    };
+
+    // countDocuments
+    const originalCountDocuments = model.countDocuments;
+    model.countDocuments = function(query) {
+        if (!checkMongoStatus()) {
+            return new FallbackQuery(async () => {
+                return runCountDocumentsFallback(query);
+            });
+        }
+        const mongooseQuery = originalCountDocuments.apply(this, arguments);
+        const originalExec = mongooseQuery.exec;
+        mongooseQuery.exec = function() {
+            return originalExec.apply(this, arguments).catch(err => {
+                if (isNetworkError(err)) {
+                    console.warn(`[DB FALLBACK] countDocuments failed with network error: "${err.message}". Falling back...`);
+                    return runCountDocumentsFallback(query);
+                }
+                throw err;
+            });
+        };
+        mongooseQuery.then = function(onResolve, onReject) {
+            return this.exec().then(onResolve, onReject);
+        };
+        mongooseQuery.catch = function(onReject) {
+            return this.exec().catch(onReject);
+        };
+        return mongooseQuery;
+    };
+
+    // findOneAndUpdate
+    const originalFindOneAndUpdate = model.findOneAndUpdate;
+    model.findOneAndUpdate = function(query, update, options) {
+        if (!checkMongoStatus()) {
+            return new FallbackQuery(async () => {
+                return runFindOneAndUpdateFallback(query, update, options);
+            });
+        }
+        const mongooseQuery = originalFindOneAndUpdate.apply(this, arguments);
+        const originalExec = mongooseQuery.exec;
+        mongooseQuery.exec = function() {
+            return originalExec.apply(this, arguments).catch(err => {
+                if (isNetworkError(err)) {
+                    console.warn(`[DB FALLBACK] findOneAndUpdate failed with network error: "${err.message}". Falling back...`);
+                    return runFindOneAndUpdateFallback(query, update, options);
+                }
+                throw err;
+            });
+        };
+        mongooseQuery.then = function(onResolve, onReject) {
+            return this.exec().then(onResolve, onReject);
+        };
+        mongooseQuery.catch = function(onReject) {
+            return this.exec().catch(onReject);
+        };
+        return mongooseQuery;
+    };
+
+    // findByIdAndUpdate
+    const originalFindByIdAndUpdate = model.findByIdAndUpdate;
+    model.findByIdAndUpdate = function(id, update, options) {
+        if (!checkMongoStatus()) {
+            return new FallbackQuery(async () => {
+                return runFindByIdAndUpdateFallback(id, update, options);
+            });
+        }
+        const mongooseQuery = originalFindByIdAndUpdate.apply(this, arguments);
+        const originalExec = mongooseQuery.exec;
+        mongooseQuery.exec = function() {
+            return originalExec.apply(this, arguments).catch(err => {
+                if (isNetworkError(err)) {
+                    console.warn(`[DB FALLBACK] findByIdAndUpdate failed with network error: "${err.message}". Falling back...`);
+                    return runFindByIdAndUpdateFallback(id, update, options);
+                }
+                throw err;
+            });
+        };
+        mongooseQuery.then = function(onResolve, onReject) {
+            return this.exec().then(onResolve, onReject);
+        };
+        mongooseQuery.catch = function(onReject) {
+            return this.exec().catch(onReject);
+        };
+        return mongooseQuery;
+    };
+
+    // create
+    const originalCreate = model.create;
+    model.create = function(docOrDocs) {
+        if (!checkMongoStatus()) {
+            return Promise.resolve(runCreateFallback(docOrDocs));
+        }
+        return originalCreate.apply(this, arguments).catch(err => {
+            if (isNetworkError(err)) {
+                console.warn(`[DB FALLBACK] create failed with network error: "${err.message}". Falling back...`);
+                return runCreateFallback(docOrDocs);
+            }
+            throw err;
+        });
+    };
+
+    // deleteOne
+    const originalDeleteOne = model.deleteOne;
+    model.deleteOne = function(query) {
+        if (!checkMongoStatus()) {
+            return Promise.resolve(runDeleteOneFallback(query));
+        }
+        return originalDeleteOne.apply(this, arguments).catch(err => {
+            if (isNetworkError(err)) {
+                console.warn(`[DB FALLBACK] deleteOne failed with network error: "${err.message}". Falling back...`);
+                return runDeleteOneFallback(query);
+            }
+            throw err;
+        });
+    };
+
+    // deleteMany
+    const originalDeleteMany = model.deleteMany;
+    model.deleteMany = function(query) {
+        if (!checkMongoStatus()) {
+            return Promise.resolve(runDeleteManyFallback(query));
+        }
+        return originalDeleteMany.apply(this, arguments).catch(err => {
+            if (isNetworkError(err)) {
+                console.warn(`[DB FALLBACK] deleteMany failed with network error: "${err.message}". Falling back...`);
+                return runDeleteManyFallback(query);
+            }
+            throw err;
+        });
+    };
+
+    // updateMany
+    const originalUpdateMany = model.updateMany;
+    model.updateMany = function(query, update, options) {
+        if (!checkMongoStatus()) {
+            return Promise.resolve(runUpdateManyFallback(query, update, options));
+        }
+        return originalUpdateMany.apply(this, arguments).catch(err => {
+            if (isNetworkError(err)) {
+                console.warn(`[DB FALLBACK] updateMany failed with network error: "${err.message}". Falling back...`);
+                return runUpdateManyFallback(query, update, options);
+            }
+            throw err;
+        });
+    };
+
+    // updateOne
+    const originalUpdateOne = model.updateOne;
+    model.updateOne = function(query, update, options) {
+        if (!checkMongoStatus()) {
+            return Promise.resolve(runUpdateOneFallback(query, update, options));
+        }
+        return originalUpdateOne.apply(this, arguments).catch(err => {
+            if (isNetworkError(err)) {
+                console.warn(`[DB FALLBACK] updateOne failed with network error: "${err.message}". Falling back...`);
+                return runUpdateOneFallback(query, update, options);
+            }
+            throw err;
+        });
+    };
+
+    // insertMany
+    const originalInsertMany = model.insertMany;
+    model.insertMany = function(docs) {
+        if (!checkMongoStatus()) {
+            return Promise.resolve(runInsertManyFallback(docs));
+        }
+        return originalInsertMany.apply(this, arguments).catch(err => {
+            if (isNetworkError(err)) {
+                console.warn(`[DB FALLBACK] insertMany failed with network error: "${err.message}". Falling back...`);
+                return runInsertManyFallback(docs);
+            }
+            throw err;
+        });
+    };
+
+    // bulkWrite
+    const originalBulkWrite = model.bulkWrite;
+    model.bulkWrite = function(ops) {
+        if (!checkMongoStatus()) {
+            return Promise.resolve(runBulkWriteFallback(ops));
+        }
+        return originalBulkWrite.apply(this, arguments).catch(err => {
+            if (isNetworkError(err)) {
+                console.warn(`[DB FALLBACK] bulkWrite failed with network error: "${err.message}". Falling back...`);
+                return runBulkWriteFallback(ops);
+            }
+            throw err;
+        });
+    };
+
+    // aggregate
+    const originalAggregate = model.aggregate;
+    model.aggregate = function(pipeline) {
+        if (!checkMongoStatus()) {
+            return Promise.resolve(runAggregateFallback(pipeline));
+        }
+        return originalAggregate.apply(this, arguments).catch(err => {
+            if (isNetworkError(err)) {
+                console.warn(`[DB FALLBACK] aggregate failed with network error: "${err.message}". Falling back...`);
+                return runAggregateFallback(pipeline);
+            }
+            throw err;
+        });
     };
 }
 
 const originalSave = mongoose.Model.prototype.save;
 mongoose.Model.prototype.save = function() {
-    if (mongoose.connection.readyState !== 1) {
-        const modelName = this.constructor.modelName;
+    const modelName = this.constructor.modelName;
+    function runSaveFallback(instance) {
         let items = getCollectionData(modelName);
-        const obj = this.toObject ? this.toObject() : { ...this };
+        const obj = instance.toObject ? instance.toObject() : { ...instance };
         if (!obj._id) {
             obj._id = generateId();
         } else {
@@ -617,9 +870,39 @@ mongoose.Model.prototype.save = function() {
             items.push(obj);
         }
         saveCollectionData(modelName, items);
-        return Promise.resolve(this);
+        return instance;
     }
-    return originalSave.apply(this, arguments);
+
+    if (!checkMongoStatus()) {
+        return Promise.resolve(runSaveFallback(this));
+    }
+    return originalSave.apply(this, arguments).catch(err => {
+        function isNetworkError(e) {
+            if (!e) return false;
+            const name = e.name || '';
+            const msg = e.message || '';
+            const isNet = name === 'MongoNetworkTimeoutError' ||
+                   name === 'MongoNetworkError' ||
+                   name === 'MongoTimeoutError' ||
+                   name === 'MongooseError' ||
+                   msg.toLowerCase().includes('timeout') ||
+                   msg.toLowerCase().includes('timed out') ||
+                   msg.toLowerCase().includes('connection') ||
+                   msg.toLowerCase().includes('network') ||
+                   msg.toLowerCase().includes('retryable') ||
+                   msg.toLowerCase().includes('failed to connect');
+            if (isNet) {
+                global.isMongoUnhealthy = true;
+                global.lastMongoCheckTime = Date.now();
+            }
+            return isNet;
+        }
+        if (isNetworkError(err)) {
+            console.warn(`[DB FALLBACK] save failed with network error: "${err.message}". Falling back...`);
+            return runSaveFallback(this);
+        }
+        throw err;
+    });
 };
 
 const originalModel = mongoose.model;
@@ -809,7 +1092,7 @@ app.use('/uploads', express.static('uploads', {
 
 // Unauthenticated health check endpoint
 app.get('/health', (req, res) => {
-    const isMongoConnected = mongoose.connection.readyState === 1;
+    const isMongoConnected = checkMongoStatus();
     const uptime = process.uptime();
     const timestamp = new Date().toISOString();
     
@@ -821,11 +1104,11 @@ app.get('/health', (req, res) => {
             mongodb: "connected"
         });
     } else {
-        return res.status(503).json({
+        return res.json({
             status: "degraded",
             uptime,
             timestamp,
-            mongodb: "disconnected"
+            mongodb: global.isMongoUnhealthy ? "unhealthy" : "disconnected"
         });
     }
 });
@@ -1099,7 +1382,7 @@ async function sendActivityMail(student, studentName, mailType){
 
 async function runActivityMailer(){
     try{
-        if (mongoose.connection.readyState !== 1) {
+        if (!checkMongoStatus()) {
             console.warn('[ACTIVITY-MAILER] Mongoose is not connected. Skipping.');
             return;
         }
@@ -1173,7 +1456,7 @@ async function sendAutoDocumentsToStudent(student, docType, sentBy = "System") {
 
 async function runAutoDocumentCheck() {
     try {
-        if (mongoose.connection.readyState !== 1) {
+        if (!checkMongoStatus()) {
             console.warn('[AUTO-DOCS] Mongoose is not connected. Skipping check.');
             return;
         }
@@ -1202,11 +1485,21 @@ setInterval(runAutoDocumentCheck, 6 * 60 * 60 * 1000);
 
 mongoose.set('bufferCommands', false); // CRITICAL: fail fast, don't hang
 
+mongoose.connection.on('connected', () => {
+  console.log("MongoDB connected successfully");
+  global.isMongoUnhealthy = false;
+});
 mongoose.connection.on('disconnected', () => {
   console.log("MongoDB disconnected — attempting to reconnect...");
+  global.isMongoUnhealthy = true;
 });
 mongoose.connection.on('reconnected', () => {
   console.log("MongoDB reconnected successfully");
+  global.isMongoUnhealthy = false;
+});
+mongoose.connection.on('error', (err) => {
+  console.error("MongoDB connection error:", err.message);
+  global.isMongoUnhealthy = true;
 });
 
 async function runWithRetry(fn, retries = 3, delay = 1500) {
@@ -7507,7 +7800,7 @@ app.get('/api/tenure-payment/status', async (req, res) => {
     const rejectionReason = latestPayment && latestPayment.status === 'failed' ? latestPayment.rejectionReason : null;
 
     res.json({
-      requiresPayment: isShortCourse && !isPaid && !isExistingStudent,
+      requiresPayment: isShortCourse && !isPaid,
       isExistingStudent: isExistingStudent,
       isPaid: isPaid,
       pendingVerification: !!pendingVerification,
