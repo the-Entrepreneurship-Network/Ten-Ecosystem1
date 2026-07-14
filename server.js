@@ -8,6 +8,55 @@ const express = require("express");
 const crypto = require("crypto");
 const mongoose = require("mongoose");
 
+const {
+  validate,
+  studentRegisterSchema,
+  studentLoginSchema
+} = require("./middleware/validationSchemas");
+
+// ================= RATE LIMIT CONFIGURATION =================
+const RATE_LIMIT_CONFIG = {
+  // Auth routes — strictest
+  auth: {
+    windowMs: process.env.RATE_AUTH_WINDOW_MS
+      ? parseInt(process.env.RATE_AUTH_WINDOW_MS)
+      : 15 * 60 * 1000,  // 15 minutes
+    max: process.env.RATE_AUTH_MAX
+      ? parseInt(process.env.RATE_AUTH_MAX)
+      : 10,
+    backoffBase: process.env.RATE_AUTH_BACKOFF_BASE
+      ? parseInt(process.env.RATE_AUTH_BACKOFF_BASE)
+      : 2,
+  },
+  // Public/unauthenticated endpoints — moderate
+  public: {
+    windowMs: process.env.RATE_PUBLIC_WINDOW_MS
+      ? parseInt(process.env.RATE_PUBLIC_WINDOW_MS)
+      : 15 * 60 * 1000,
+    max: process.env.RATE_PUBLIC_MAX
+      ? parseInt(process.env.RATE_PUBLIC_MAX)
+      : 100,
+  },
+  // Authenticated user actions — looser
+  authenticated: {
+    windowMs: process.env.RATE_AUTH_USER_WINDOW_MS
+      ? parseInt(process.env.RATE_AUTH_USER_WINDOW_MS)
+      : 15 * 60 * 1000,
+    max: process.env.RATE_AUTH_USER_MAX
+      ? parseInt(process.env.RATE_AUTH_USER_MAX)
+      : 300,
+  },
+  // Payment endpoints — strict
+  payment: {
+    windowMs: process.env.RATE_PAYMENT_WINDOW_MS
+      ? parseInt(process.env.RATE_PAYMENT_WINDOW_MS)
+      : 60 * 60 * 1000,
+    max: process.env.RATE_PAYMENT_MAX
+      ? parseInt(process.env.RATE_PAYMENT_MAX)
+      : 20,
+  },
+};
+
 // ================= MONGOOSE LOCAL FALLBACK ENGINE =================
 // Automatically intercept all model calls if MongoDB isn't connected.
 // This allows the app to store, fetch, and authenticate users/records
@@ -1269,38 +1318,67 @@ function _sanitizeKeys(obj){
 }
 app.use((req, _res, next) => { _sanitizeKeys(req.body); _sanitizeKeys(req.params); next(); });
 
+const consecutiveLimitHits = new Map();
+
 // Per-IP login rate limit (strictest). Applied directly to the login routes
 // further down via the `loginLimiter` reference.
 const loginLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,            // 15 min
-    max: 5,
+    windowMs: RATE_LIMIT_CONFIG.auth.windowMs,
+    max: RATE_LIMIT_CONFIG.auth.max,
     standardHeaders: true,
     legacyHeaders: false,
     validate: false,
     keyGenerator: (req) => {
         const body = req.body || {};
-        return (body.email || body.employeeId || body.username || req.ip || "").toString().toLowerCase().trim();
+        const account = body.email || body.employeeId || body.username || "";
+        return req.ip + ":" + account.toString().toLowerCase().trim();
     },
-    message: { success:false, message:"Too many login attempts. Please wait 15 minutes." }
+    handler: (req, res, next, options) => {
+        const body = req.body || {};
+        const account = body.email || body.employeeId || body.username || "";
+        const key = req.ip + ":" + account.toString().toLowerCase().trim();
+        const hits = (consecutiveLimitHits.get(key) || 0) + 1;
+        consecutiveLimitHits.set(key, hits);
+
+        const backoffBase = RATE_LIMIT_CONFIG.auth.backoffBase || 2;
+        const retryAfterSeconds = Math.min(Math.pow(backoffBase, hits), 3600);
+        res.setHeader('Retry-After', retryAfterSeconds.toString());
+        return res.status(429).json({
+            success: false,
+            message: `Too many login attempts. Please wait ${retryAfterSeconds} seconds.`
+        });
+    }
 });
 
 // Registration rate limit
 const registerLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000,            // 1 hour
-    max: 3,
+    windowMs: RATE_LIMIT_CONFIG.auth.windowMs,
+    max: RATE_LIMIT_CONFIG.auth.max,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { success:false, message:"Too many registration attempts. Please try again later." }
+    handler: (req, res, next, options) => {
+        const key = req.ip;
+        const hits = (consecutiveLimitHits.get(key) || 0) + 1;
+        consecutiveLimitHits.set(key, hits);
+
+        const backoffBase = RATE_LIMIT_CONFIG.auth.backoffBase || 2;
+        const retryAfterSeconds = Math.min(Math.pow(backoffBase, hits), 3600);
+        res.setHeader('Retry-After', retryAfterSeconds.toString());
+        return res.status(429).json({
+            success: false,
+            message: `Too many registration attempts. Please wait ${retryAfterSeconds} seconds.`
+        });
+    }
 });
 
 // General API rate limit — applied broadly to /api but the project has very
 // few endpoints under /api today, so we also expose it for any future use.
 const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
+    windowMs: RATE_LIMIT_CONFIG.authenticated.windowMs,
+    max: RATE_LIMIT_CONFIG.authenticated.max,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { success:false, message:"Too many requests. Please slow down." }
+    message: { success: false, message: "Too many requests. Please slow down." }
 });
 app.use('/api', apiLimiter);
 

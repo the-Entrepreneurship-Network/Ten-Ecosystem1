@@ -8,7 +8,7 @@
     "start": "node server.js",
     "dev": "node server.js",
     "lint": "echo 'No lint issues found'",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "jest --passWithNoTests",
     "seed": "node seeds/domainTasks.seed.js",
     "seed:fresh": "node seeds/dropAndReseed.js",
     "seed:quiz": "node seeds/quizQuestions.seed.js",
@@ -43,5 +43,8 @@
     "razorpay": "^2.9.6",
     "socket.io": "^4.8.3",
     "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "jest": "^30.4.2"
   }
 }

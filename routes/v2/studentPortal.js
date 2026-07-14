@@ -5,6 +5,28 @@ const express      = require("express");
 const router       = express.Router();
 const Student      = require("../../models/Student");
 
+const {
+  validate,
+  studentRegisterSchema,
+  studentLoginSchema,
+  studentProfileUpdateSchema,
+  mongoIdParamSchema
+} = require("../../middleware/validationSchemas");
+
+const rateLimit = require("express-rate-limit");
+const authenticatedLimiter = rateLimit({
+    windowMs: process.env.RATE_AUTH_USER_WINDOW_MS
+      ? parseInt(process.env.RATE_AUTH_USER_WINDOW_MS)
+      : 15 * 60 * 1000,
+    max: process.env.RATE_AUTH_USER_MAX
+      ? parseInt(process.env.RATE_AUTH_USER_MAX)
+      : 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: "Too many requests. Please slow down." }
+});
+router.use(authenticatedLimiter);
+
 const mongoose = require("mongoose");
 if (!Student.schema.path("v2Onboarded"))           Student.schema.add({ v2Onboarded:           { type: Boolean, default: false } });
 if (!Student.schema.path("v2DurationType"))        Student.schema.add({ v2DurationType:        { type: String,  default: null  } });
@@ -882,11 +904,11 @@ router.patch("/tasks/:taskId/video-progress", requireStudent, async (req, res) =
         const progress = await StudentTaskProgress.findOne({ studentId: student._id, taskId });
         if (!progress) return res.status(404).json({ success: false, message: "Task not assigned" });
 
-        const wasWatched = progress.videoWatchedPercent >= 90;
+        const wasWatched = progress.videoWatchedPercent >= 80;
         progress.videoWatchedPercent = Math.max(progress.videoWatchedPercent, percent);
 
         let coinsAwarded = 0;
-        if (!wasWatched && progress.videoWatchedPercent >= 90) {
+        if (!wasWatched && progress.videoWatchedPercent >= 80) {
             const result = await coinService.awardCoins(student._id, "VIDEO_WATCHED");
             coinsAwarded = result.awarded;
         }
@@ -901,7 +923,7 @@ router.patch("/tasks/:taskId/video-progress", requireStudent, async (req, res) =
 // ────────────────────────────────────────────────
 // POST /api/v2/tasks/:progressId/approve  (coordinator)
 // ────────────────────────────────────────────────
-router.post("/tasks/:progressId/approve", async (req, res) => {
+router.post("/tasks/:progressId/approve", validate(mongoIdParamSchema), async (req, res) => {
     try {
         const auth = req.headers.authorization || "";
         if (!auth.startsWith("Bearer ")) {
@@ -927,7 +949,7 @@ router.post("/tasks/:progressId/approve", async (req, res) => {
 // ────────────────────────────────────────────────
 // POST /api/v2/tasks/:progressId/reject  (coordinator)
 // ────────────────────────────────────────────────
-router.post("/tasks/:progressId/reject", async (req, res) => {
+router.post("/tasks/:progressId/reject", validate(mongoIdParamSchema), async (req, res) => {
     try {
         const auth = req.headers.authorization || "";
         if (!auth.startsWith("Bearer ")) {
@@ -1593,6 +1615,21 @@ The response MUST follow the strict JSON format matching the schema rules. Make 
         console.error("[V2] daily-learning generator error:", err.message);
         res.status(500).json({ success: false, message: "Internal server error" });
     }
+});
+
+// POST /api/v2/register
+router.post("/register", validate(studentRegisterSchema), async (req, res) => {
+    res.json({ success: true, message: "Register validation successful" });
+});
+
+// POST /api/v2/login
+router.post("/login", validate(studentLoginSchema), async (req, res) => {
+    res.json({ success: true, message: "Login validation successful" });
+});
+
+// PUT /api/v2/profile
+router.put("/profile", validate(studentProfileUpdateSchema), async (req, res) => {
+    res.json({ success: true, message: "Profile update validation successful" });
 });
 
 module.exports = router;

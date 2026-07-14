@@ -2,6 +2,23 @@
 
 const express      = require('express');
 const router       = express.Router();
+
+const { validate, paymentInitSchema } = require('../../middleware/validationSchemas');
+
+const rateLimit = require("express-rate-limit");
+const paymentLimiter = rateLimit({
+    windowMs: process.env.RATE_PAYMENT_WINDOW_MS
+      ? parseInt(process.env.RATE_PAYMENT_WINDOW_MS)
+      : 60 * 60 * 1000,
+    max: process.env.RATE_PAYMENT_MAX
+      ? parseInt(process.env.RATE_PAYMENT_MAX)
+      : 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: "Too many payment requests. Please try again later." }
+});
+router.use(paymentLimiter);
+
 const crypto       = require('crypto');
 const https        = require('https');
 const Payment      = require('../../models/Payment');
@@ -57,6 +74,55 @@ function sanitizeMobile(phone) {
   const last10 = digits.slice(-10);
   return last10.length === 10 ? last10 : '';
 }
+
+// POST /api/v2/payment/init
+router.post('/payment/init', validate(paymentInitSchema), async (req, res) => {
+  try {
+    const { amount, currency, studentId, programId, description } = req.body;
+    const Student = require('../../models/Student');
+    const student = await Student.findById(studentId);
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student not found' });
+    }
+
+    const orderId = 'PAY-' + (student.employeeId || 'STUD') + '-' + Date.now();
+    const invoiceRef = 'INV-' + (student.employeeId || 'STUD') + '-' + Date.now();
+
+    const payment = new Payment({
+      orderId,
+      invoiceRef,
+      studentId: student._id,
+      employeeId: student.employeeId || '',
+      amount: amount,
+      provider: 'upi',
+      purpose: description || 'Direct Payment',
+      amountRupees: amount,
+      amountPaisa: Math.round(amount * 100),
+      status: 'pending',
+      customerName: student.name || '',
+      customerEmail: student.email || '',
+      customerMobile: sanitizeMobile(student.phone || student.mobile || ''),
+      description: description || '',
+      mode: 'manual'
+    });
+
+    await payment.save();
+
+    res.json({
+      success: true,
+      message: 'Payment initialized successfully',
+      payment: {
+        orderId: payment.orderId,
+        invoiceRef: payment.invoiceRef,
+        amount: payment.amount,
+        status: payment.status
+      }
+    });
+  } catch (err) {
+    console.error('[PAYMENT] payment/init error:', err.message);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
 
 // POST /api/v2/payment/create-order
 router.post('/create-order', async (req, res) => {
