@@ -1106,22 +1106,66 @@ const sessionOptions = {
     }
 };
 
-if (process.env.MONGODB_URI) {
-    const MongoStore = require('connect-mongo').MongoStore;
-    const store = MongoStore.create({
-        mongoUrl: process.env.MONGODB_URI,
-        ttl: 1800, // 30 minutes in seconds
-        collectionName: 'sessions',
-        mongoOptions: {
-            serverSelectionTimeoutMS: 5000,
-            connectTimeoutMS: 5000
+class FallbackStore extends session.Store {
+    constructor() {
+        super();
+        this.memoryStore = new session.MemoryStore();
+        this.mongoStore = null;
+    }
+
+    _getStore() {
+        const isMongoConnected = mongoose.connection.readyState === 1 && !global.isMongoUnhealthy;
+        if (isMongoConnected && process.env.MONGODB_URI) {
+            if (!this.mongoStore) {
+                try {
+                    console.log("[FallbackStore] MongoDB is connected. Initializing MongoStore for session persistence...");
+                    const MongoStore = require('connect-mongo').MongoStore;
+                    this.mongoStore = MongoStore.create({
+                        mongoUrl: process.env.MONGODB_URI,
+                        ttl: 1800, // 30 minutes in seconds
+                        collectionName: 'sessions',
+                        mongoOptions: {
+                            serverSelectionTimeoutMS: 5000,
+                            connectTimeoutMS: 5000
+                        }
+                    });
+                    this.mongoStore.on('error', (err) => {
+                        console.warn("[FallbackStore] MongoStore connection error:", err.message);
+                    });
+                } catch (e) {
+                    console.error("[FallbackStore] Failed to create MongoStore:", e.message);
+                }
+            }
+            if (this.mongoStore) {
+                return this.mongoStore;
+            }
         }
-    });
-    store.on('error', (err) => {
-        console.warn("[MongoStore] Session store connection error (gracefully falling back to MemoryStore behaviors):", err.message);
-    });
-    sessionOptions.store = store;
+        return this.memoryStore;
+    }
+
+    get(sid, callback) {
+        this._getStore().get(sid, callback);
+    }
+
+    set(sid, session, callback) {
+        this._getStore().set(sid, session, callback);
+    }
+
+    destroy(sid, callback) {
+        this._getStore().destroy(sid, callback);
+    }
+
+    touch(sid, session, callback) {
+        const store = this._getStore();
+        if (store.touch) {
+            store.touch(sid, session, callback);
+        } else if (callback) {
+            callback();
+        }
+    }
 }
+
+sessionOptions.store = new FallbackStore();
 
 app.use(session(sessionOptions));
 
