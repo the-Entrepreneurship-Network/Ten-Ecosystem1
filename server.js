@@ -70,11 +70,6 @@ global.isMongoUnhealthy = false;
 global.lastMongoCheckTime = 0;
 
 function checkMongoStatus() {
-    const now = Date.now();
-    if (global.isMongoUnhealthy && now - global.lastMongoCheckTime > 30000) {
-        console.log("[DB FALLBACK] Cooldown over. Attempting to query MongoDB again...");
-        global.isMongoUnhealthy = false;
-    }
     return mongoose.connection.readyState === 1 && !global.isMongoUnhealthy;
 }
 
@@ -1113,11 +1108,19 @@ const sessionOptions = {
 
 if (process.env.MONGODB_URI) {
     const MongoStore = require('connect-mongo').MongoStore;
-    sessionOptions.store = MongoStore.create({
+    const store = MongoStore.create({
         mongoUrl: process.env.MONGODB_URI,
         ttl: 1800, // 30 minutes in seconds
-        collectionName: 'sessions'
+        collectionName: 'sessions',
+        mongoOptions: {
+            serverSelectionTimeoutMS: 5000,
+            connectTimeoutMS: 5000
+        }
     });
+    store.on('error', (err) => {
+        console.warn("[MongoStore] Session store connection error (gracefully falling back to MemoryStore behaviors):", err.message);
+    });
+    sessionOptions.store = store;
 }
 
 app.use(session(sessionOptions));
@@ -2047,7 +2050,10 @@ mongoose.connect(process.env.MONGODB_URI || "mongodb://localhost:27017/internshi
     console.error("Auto seeding tasks failed:", e);
   }
 })
-.catch((err)=>console.warn("MongoDB connection warning: Working in local runtime mode. Some write services may require database configuration. " + err.message));
+.catch((err)=>{
+  console.warn("MongoDB connection warning: Working in local runtime mode. Some write services may require database configuration. " + err.message);
+  global.isMongoUnhealthy = true;
+});
 
 // ================= SCHEMAS =================
 
