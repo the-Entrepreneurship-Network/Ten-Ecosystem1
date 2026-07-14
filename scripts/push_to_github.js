@@ -29,7 +29,7 @@ try {
   if (!status) {
     console.log("Nothing to commit — pushing existing HEAD.");
   } else {
-    run('git -c user.email="agent@replit.com" -c user.name="Replit Agent" commit -m "fix: 2-tab my-documents + fellowship mystery card + watermark removal"', "Committing...");
+    run('git -c user.email="agent@replit.com" -c user.name="Replit Agent" commit -m "feat: implement input validation middleware, API endpoints, 80% quiz threshold, and database fallback fixes"', "Committing...");
   }
 
   run(`git push "${remote}" main`, "Pushing to GitHub...");

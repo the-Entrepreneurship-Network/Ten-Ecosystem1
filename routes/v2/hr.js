@@ -3,6 +3,8 @@
 const express = require("express");
 const router = express.Router();
 
+const { validate, hrApproveCertificatesSchema } = require("../../middleware/validationSchemas");
+
 const Student = require("../../models/Student");
 const Coordinator = require("../../models/Coordinator");
 const StudentDocument = require("../../models/new/StudentDocument");
@@ -352,7 +354,7 @@ router.get("/admin/certificates/pending", requireHR, async (req, res) => {
     }
 });
 
-router.post("/admin/certificates/approve", requireHR, async (req, res) => {
+router.post("/admin/certificates/approve", requireHR, validate(hrApproveCertificatesSchema), async (req, res) => {
     try {
         const { studentId, approveLoC, approveLor, approveStarPerformance, notes } = req.body;
         if (!studentId) return res.status(400).json({ success: false, message: "studentId is required" });
