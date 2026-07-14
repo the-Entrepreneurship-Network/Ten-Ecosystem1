@@ -1623,7 +1623,7 @@ mongoose.connection.on('reconnected', () => {
   global.isMongoUnhealthy = false;
 });
 mongoose.connection.on('error', (err) => {
-  console.error("MongoDB connection error:", err.message);
+  console.warn("[Database] Connection offline (working in memory-fallback mode):", err.message);
   global.isMongoUnhealthy = true;
 });
 
