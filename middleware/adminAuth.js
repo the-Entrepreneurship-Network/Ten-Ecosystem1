@@ -1,6 +1,27 @@
+const bcrypt = require('bcryptjs');
+
 const ADMIN_USERNAME = 'tenadmin';
-const ADMIN_PASSWORD = process.env.ADMIN_PORTAL_PASSWORD || 'TEN@Admin2024';
+const ADMIN_PASSWORD = (process.env.ADMIN_PORTAL_PASSWORD && process.env.ADMIN_PORTAL_PASSWORD.trim()) || 'TEN@Admin2024';
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
+
+async function verifyAdminCredentials(username, password) {
+  if (!username || !password) return false;
+  if (username.trim() !== ADMIN_USERNAME) return false;
+
+  // 1. Plaintext comparison
+  if (password === ADMIN_PASSWORD) return true;
+
+  // 2. Bcrypt comparison (in case ADMIN_PORTAL_PASSWORD is set as a bcrypt hash)
+  if (ADMIN_PASSWORD.startsWith('$2a$') || ADMIN_PASSWORD.startsWith('$2b$')) {
+    try {
+      return await bcrypt.compare(password, ADMIN_PASSWORD);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  return false;
+}
 
 function requireAdmin(req, res, next) {
   const admin = req.session.adminUser;
@@ -28,4 +49,4 @@ function requireAdminAPI(req, res, next) {
   next();
 }
 
-module.exports = { requireAdmin, requireAdminAPI, ADMIN_USERNAME, ADMIN_PASSWORD };
+module.exports = { requireAdmin, requireAdminAPI, ADMIN_USERNAME, ADMIN_PASSWORD, verifyAdminCredentials };
