@@ -6,7 +6,7 @@ const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 
 async function verifyAdminCredentials(username, password) {
   if (!username || !password) return false;
-  if (username.trim() !== ADMIN_USERNAME) return false;
+  if (username.trim().toLowerCase() !== ADMIN_USERNAME.toLowerCase()) return false;
 
   // 1. Plaintext comparison
   if (password === ADMIN_PASSWORD) return true;
