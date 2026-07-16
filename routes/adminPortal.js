@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
-const { requireAdminAPI, ADMIN_USERNAME, ADMIN_PASSWORD } = require('../middleware/adminAuth');
+const { requireAdminAPI, verifyAdminCredentials } = require('../middleware/adminAuth');
 
 // Load models
 const Student = require('../models/Student');
@@ -19,8 +19,9 @@ const CertificateRequest = require('../models/CertificateRequest');
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-    if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
-      req.session.adminUser = { username, lastActivity: Date.now() };
+    const isValid = await verifyAdminCredentials(username, password);
+    if (isValid) {
+      req.session.adminUser = { username: 'tenadmin', lastActivity: Date.now() };
       return res.json({ success: true });
     }
     return res.status(401).json({ error: 'Access denied' });
