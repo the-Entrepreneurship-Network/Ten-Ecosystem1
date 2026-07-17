@@ -4,6 +4,7 @@ const express            = require("express");
 const router             = express.Router();
 const Student            = require("../../models/Student");
 const CertificateRequest = require("../../models/CertificateRequest");
+const { validate, coordinatorApproveCertificatesSchema } = require("../../middleware/validationSchemas");
 
 // ── Coordinator auth middleware ──
 async function requireCoordinator(req, res, next) {
@@ -25,7 +26,7 @@ async function requireCoordinator(req, res, next) {
 }
 
 // POST /api/v2/coordinator/approve-certificates
-router.post("/coordinator/approve-certificates", requireCoordinator, async (req, res) => {
+router.post("/coordinator/approve-certificates", requireCoordinator, validate(coordinatorApproveCertificatesSchema), async (req, res) => {
     try {
         const { studentId, approved, notes } = req.body;
         if (!studentId) return res.status(400).json({ success: false, message: "studentId is required" });

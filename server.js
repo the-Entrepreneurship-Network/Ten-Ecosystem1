@@ -1,12 +1,100 @@
 
 require("dotenv").config();
 
+// Monkeypatch Intl.DateTimeFormat to prevent crashes on environments with small-icu (like some EC2/AWS instances)
+// where 'shortOffset' or 'longOffset' for timeZoneName are not supported by the local ICU data and throw RangeError.
+const OriginalDateTimeFormat = Intl.DateTimeFormat;
+function PatchedDateTimeFormat(locales, options) {
+  const isNew = this instanceof PatchedDateTimeFormat;
+  const tryInstantiate = (opts) => {
+    return isNew ? new OriginalDateTimeFormat(locales, opts) : OriginalDateTimeFormat(locales, opts);
+  };
+  try {
+    return tryInstantiate(options);
+  } catch (e) {
+    if (e instanceof RangeError && options && options.timeZoneName) {
+      const fallbackOptions = { ...options };
+      if (fallbackOptions.timeZoneName === 'shortOffset') {
+        fallbackOptions.timeZoneName = 'short';
+      } else if (fallbackOptions.timeZoneName === 'longOffset') {
+        fallbackOptions.timeZoneName = 'long';
+      } else {
+        delete fallbackOptions.timeZoneName;
+      }
+      try {
+        return tryInstantiate(fallbackOptions);
+      } catch (err) {
+        const safeOptions = { ...options };
+        delete safeOptions.timeZoneName;
+        try {
+          return tryInstantiate(safeOptions);
+        } catch (finalErr) {
+          throw e;
+        }
+      }
+    }
+    throw e;
+  }
+}
+PatchedDateTimeFormat.prototype = OriginalDateTimeFormat.prototype;
+PatchedDateTimeFormat.supportedLocalesOf = OriginalDateTimeFormat.supportedLocalesOf;
+Intl.DateTimeFormat = PatchedDateTimeFormat;
+
 const fs = require("fs");
 const path = require("path");
 const cors = require("cors");
 const express = require("express");
 const crypto = require("crypto");
 const mongoose = require("mongoose");
+
+const {
+  validate,
+  studentRegisterSchema,
+  studentLoginSchema
+} = require("./middleware/validationSchemas");
+
+// ================= RATE LIMIT CONFIGURATION =================
+const RATE_LIMIT_CONFIG = {
+  // Auth routes — strictest
+  auth: {
+    windowMs: process.env.RATE_AUTH_WINDOW_MS
+      ? parseInt(process.env.RATE_AUTH_WINDOW_MS)
+      : 15 * 60 * 1000,  // 15 minutes
+    max: process.env.RATE_AUTH_MAX
+      ? parseInt(process.env.RATE_AUTH_MAX)
+      : 10,
+    backoffBase: process.env.RATE_AUTH_BACKOFF_BASE
+      ? parseInt(process.env.RATE_AUTH_BACKOFF_BASE)
+      : 2,
+  },
+  // Public/unauthenticated endpoints — moderate
+  public: {
+    windowMs: process.env.RATE_PUBLIC_WINDOW_MS
+      ? parseInt(process.env.RATE_PUBLIC_WINDOW_MS)
+      : 15 * 60 * 1000,
+    max: process.env.RATE_PUBLIC_MAX
+      ? parseInt(process.env.RATE_PUBLIC_MAX)
+      : 100,
+  },
+  // Authenticated user actions — looser
+  authenticated: {
+    windowMs: process.env.RATE_AUTH_USER_WINDOW_MS
+      ? parseInt(process.env.RATE_AUTH_USER_WINDOW_MS)
+      : 15 * 60 * 1000,
+    max: process.env.RATE_AUTH_USER_MAX
+      ? parseInt(process.env.RATE_AUTH_USER_MAX)
+      : 300,
+  },
+  // Payment endpoints — strict
+  payment: {
+    windowMs: process.env.RATE_PAYMENT_WINDOW_MS
+      ? parseInt(process.env.RATE_PAYMENT_WINDOW_MS)
+      : 60 * 60 * 1000,
+    max: process.env.RATE_PAYMENT_MAX
+      ? parseInt(process.env.RATE_PAYMENT_MAX)
+      : 20,
+  },
+};
 
 // ================= MONGOOSE LOCAL FALLBACK ENGINE =================
 // Automatically intercept all model calls if MongoDB isn't connected.
@@ -21,11 +109,6 @@ global.isMongoUnhealthy = false;
 global.lastMongoCheckTime = 0;
 
 function checkMongoStatus() {
-    const now = Date.now();
-    if (global.isMongoUnhealthy && now - global.lastMongoCheckTime > 30000) {
-        console.log("[DB FALLBACK] Cooldown over. Attempting to query MongoDB again...");
-        global.isMongoUnhealthy = false;
-    }
     return mongoose.connection.readyState === 1 && !global.isMongoUnhealthy;
 }
 
@@ -1057,21 +1140,114 @@ const sessionOptions = {
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: false,
+        secure: true,
+        sameSite: 'none',
+        httpOnly: true,
         maxAge: 30 * 60 * 1000 // 30 minutes
     }
 };
 
-if (process.env.MONGODB_URI) {
-    const MongoStore = require('connect-mongo').MongoStore;
-    sessionOptions.store = MongoStore.create({
-        mongoUrl: process.env.MONGODB_URI,
-        ttl: 1800, // 30 minutes in seconds
-        collectionName: 'sessions'
-    });
+class FallbackStore extends session.Store {
+    constructor() {
+        super();
+        this.memoryStore = new session.MemoryStore();
+        this.mongoStore = null;
+    }
+
+    _getStore() {
+        const isMongoConnected = mongoose.connection.readyState === 1 && !global.isMongoUnhealthy;
+        if (isMongoConnected && process.env.MONGODB_URI) {
+            if (!this.mongoStore) {
+                try {
+                    console.log("[FallbackStore] MongoDB is connected. Initializing MongoStore for session persistence...");
+                    const MongoStore = require('connect-mongo').MongoStore;
+                    this.mongoStore = MongoStore.create({
+                        mongoUrl: process.env.MONGODB_URI,
+                        ttl: 1800, // 30 minutes in seconds
+                        collectionName: 'sessions',
+                        mongoOptions: {
+                            serverSelectionTimeoutMS: 5000,
+                            connectTimeoutMS: 5000
+                        }
+                    });
+                    this.mongoStore.on('error', (err) => {
+                        console.warn("[FallbackStore] MongoStore connection error:", err.message);
+                    });
+                } catch (e) {
+                    console.error("[FallbackStore] Failed to create MongoStore:", e.message);
+                }
+            }
+            if (this.mongoStore) {
+                return this.mongoStore;
+            }
+        }
+        return this.memoryStore;
+    }
+
+    get(sid, callback) {
+        const store = this._getStore();
+        if (store === this.mongoStore) {
+            // Try mongo first
+            this.mongoStore.get(sid, (err, session) => {
+                if (session) {
+                    return callback(null, session);
+                }
+                // Fallback to memory if not found in mongo (e.g., session was created during startup)
+                this.memoryStore.get(sid, callback);
+            });
+        } else {
+            this.memoryStore.get(sid, callback);
+        }
+    }
+
+    set(sid, session, callback) {
+        // Always write to memoryStore first as local fallback cache
+        this.memoryStore.set(sid, session, (err) => {
+            const store = this._getStore();
+            if (store === this.mongoStore) {
+                this.mongoStore.set(sid, session, callback);
+            } else if (callback) {
+                callback(err);
+            }
+        });
+    }
+
+    destroy(sid, callback) {
+        this.memoryStore.destroy(sid, (err) => {
+            const store = this._getStore();
+            if (store === this.mongoStore) {
+                this.mongoStore.destroy(sid, callback);
+            } else if (callback) {
+                callback(err);
+            }
+        });
+    }
+
+    touch(sid, session, callback) {
+        this.memoryStore.touch(sid, session, (err) => {
+            const store = this._getStore();
+            if (store === this.mongoStore && this.mongoStore.touch) {
+                this.mongoStore.touch(sid, session, callback);
+            } else if (callback) {
+                callback(err);
+            }
+        });
+    }
 }
 
+sessionOptions.store = new FallbackStore();
+
 app.use(session(sessionOptions));
+
+// Dynamic cookie security adjustment for iframe/HTTPS vs HTTP/local environments
+app.use((req, res, next) => {
+    if (req.session && req.session.cookie) {
+        const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+        req.session.cookie.secure = isSecure;
+        req.session.cookie.sameSite = isSecure ? 'none' : 'lax';
+    }
+    next();
+});
 
 // Custom route to serve the logo with the correct JPEG Content-Type since the file has a .png extension but is actually a JPEG (JFIF format)
 app.get(/.*ten-logo\.png$/, (req, res) => {
@@ -1269,38 +1445,67 @@ function _sanitizeKeys(obj){
 }
 app.use((req, _res, next) => { _sanitizeKeys(req.body); _sanitizeKeys(req.params); next(); });
 
+const consecutiveLimitHits = new Map();
+
 // Per-IP login rate limit (strictest). Applied directly to the login routes
 // further down via the `loginLimiter` reference.
 const loginLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,            // 15 min
-    max: 5,
+    windowMs: RATE_LIMIT_CONFIG.auth.windowMs,
+    max: RATE_LIMIT_CONFIG.auth.max,
     standardHeaders: true,
     legacyHeaders: false,
     validate: false,
     keyGenerator: (req) => {
         const body = req.body || {};
-        return (body.email || body.employeeId || body.username || req.ip || "").toString().toLowerCase().trim();
+        const account = body.email || body.employeeId || body.username || "";
+        return req.ip + ":" + account.toString().toLowerCase().trim();
     },
-    message: { success:false, message:"Too many login attempts. Please wait 15 minutes." }
+    handler: (req, res, next, options) => {
+        const body = req.body || {};
+        const account = body.email || body.employeeId || body.username || "";
+        const key = req.ip + ":" + account.toString().toLowerCase().trim();
+        const hits = (consecutiveLimitHits.get(key) || 0) + 1;
+        consecutiveLimitHits.set(key, hits);
+
+        const backoffBase = RATE_LIMIT_CONFIG.auth.backoffBase || 2;
+        const retryAfterSeconds = Math.min(Math.pow(backoffBase, hits), 3600);
+        res.setHeader('Retry-After', retryAfterSeconds.toString());
+        return res.status(429).json({
+            success: false,
+            message: `Too many login attempts. Please wait ${retryAfterSeconds} seconds.`
+        });
+    }
 });
 
 // Registration rate limit
 const registerLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000,            // 1 hour
-    max: 3,
+    windowMs: RATE_LIMIT_CONFIG.auth.windowMs,
+    max: RATE_LIMIT_CONFIG.auth.max,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { success:false, message:"Too many registration attempts. Please try again later." }
+    handler: (req, res, next, options) => {
+        const key = req.ip;
+        const hits = (consecutiveLimitHits.get(key) || 0) + 1;
+        consecutiveLimitHits.set(key, hits);
+
+        const backoffBase = RATE_LIMIT_CONFIG.auth.backoffBase || 2;
+        const retryAfterSeconds = Math.min(Math.pow(backoffBase, hits), 3600);
+        res.setHeader('Retry-After', retryAfterSeconds.toString());
+        return res.status(429).json({
+            success: false,
+            message: `Too many registration attempts. Please wait ${retryAfterSeconds} seconds.`
+        });
+    }
 });
 
 // General API rate limit — applied broadly to /api but the project has very
 // few endpoints under /api today, so we also expose it for any future use.
 const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
+    windowMs: RATE_LIMIT_CONFIG.authenticated.windowMs,
+    max: RATE_LIMIT_CONFIG.authenticated.max,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { success:false, message:"Too many requests. Please slow down." }
+    message: { success: false, message: "Too many requests. Please slow down." }
 });
 app.use('/api', apiLimiter);
 
@@ -1498,7 +1703,7 @@ mongoose.connection.on('reconnected', () => {
   global.isMongoUnhealthy = false;
 });
 mongoose.connection.on('error', (err) => {
-  console.error("MongoDB connection error:", err.message);
+  console.warn("[Database] Connection offline (working in memory-fallback mode):", err.message);
   global.isMongoUnhealthy = true;
 });
 
@@ -1969,7 +2174,10 @@ mongoose.connect(process.env.MONGODB_URI || "mongodb://localhost:27017/internshi
     console.error("Auto seeding tasks failed:", e);
   }
 })
-.catch((err)=>console.warn("MongoDB connection warning: Working in local runtime mode. Some write services may require database configuration. " + err.message));
+.catch((err)=>{
+  console.warn("MongoDB connection warning: Working in local runtime mode. Some write services may require database configuration. " + err.message);
+  global.isMongoUnhealthy = true;
+});
 
 // ================= SCHEMAS =================
 
@@ -7921,9 +8129,30 @@ app.use("/uploads/offer-letters", expressModule.static("uploads/offer-letters"))
 // Admin Portal — Internal Only
 const { requireAdmin } = require('./middleware/adminAuth');
 const adminPortalRoutes = require('./routes/adminPortal');
+
+// URL Cleanup middleware for copy-pasted URLs with trailing quotes, brackets, or braces
+app.use((req, res, next) => {
+    if (req.path && req.path.startsWith('/ten-admin')) {
+        let cleanPath = req.path;
+        // Strip trailing double-quotes, single-quotes, curly braces, square brackets, parentheses, backslashes, percent signs
+        cleanPath = cleanPath.replace(/["'\}\]\\\)\s%]+$/, '');
+        if (cleanPath !== req.path) {
+            console.log(`[RouteCleanup] Redirecting from dirty path "${req.path}" to clean path "${cleanPath}"`);
+            return res.redirect(cleanPath);
+        }
+    }
+    next();
+});
+
 app.use('/api/admin-internal', adminPortalRoutes);
-app.get('/ten-admin/login', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ten-admin-login.html')));
-app.get('/ten-admin', requireAdmin, (req, res) => res.sendFile(path.join(__dirname, 'public', 'ten-admin.html')));
+app.get('/ten-admin/login', (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.sendFile(path.join(__dirname, 'public', 'ten-admin-login.html'));
+});
+app.get('/ten-admin', requireAdmin, (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.sendFile(path.join(__dirname, 'public', 'ten-admin.html'));
+});
 
 // ================= SERVER =================
 

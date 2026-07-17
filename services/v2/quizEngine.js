@@ -153,9 +153,9 @@ async function getQuestionsForTask(student, taskId) {
     if (progress.status === "locked") return { error: "Task locked" };
     if (progress.quiz_passed || progress.status === "approved") return { error: "already_passed" };
 
-    if ((progress.videoWatchedPercent || 0) < 90) {
+    if ((progress.videoWatchedPercent || 0) < 80) {
         return { 
-            error: `Video progress is currently at ${progress.videoWatchedPercent || 0}%. You must watch at least 90% of the associated video lessons before unlocking the quiz.` 
+            error: `Video progress is currently at ${progress.videoWatchedPercent || 0}%. You must watch at least 80% of the associated video lessons before unlocking the quiz.` 
         };
     }
 
