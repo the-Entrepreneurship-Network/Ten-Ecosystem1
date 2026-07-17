@@ -8145,8 +8145,14 @@ app.use((req, res, next) => {
 });
 
 app.use('/api/admin-internal', adminPortalRoutes);
-app.get('/ten-admin/login', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ten-admin-login.html')));
-app.get('/ten-admin', requireAdmin, (req, res) => res.sendFile(path.join(__dirname, 'public', 'ten-admin.html')));
+app.get('/ten-admin/login', (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.sendFile(path.join(__dirname, 'public', 'ten-admin-login.html'));
+});
+app.get('/ten-admin', requireAdmin, (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.sendFile(path.join(__dirname, 'public', 'ten-admin.html'));
+});
 
 // ================= SERVER =================
 
