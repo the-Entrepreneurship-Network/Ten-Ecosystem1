@@ -1,6 +1,45 @@
 
 require("dotenv").config();
 
+// Monkeypatch Intl.DateTimeFormat to prevent crashes on environments with small-icu (like some EC2/AWS instances)
+// where 'shortOffset' or 'longOffset' for timeZoneName are not supported by the local ICU data and throw RangeError.
+const OriginalDateTimeFormat = Intl.DateTimeFormat;
+function PatchedDateTimeFormat(locales, options) {
+  const isNew = this instanceof PatchedDateTimeFormat;
+  const tryInstantiate = (opts) => {
+    return isNew ? new OriginalDateTimeFormat(locales, opts) : OriginalDateTimeFormat(locales, opts);
+  };
+  try {
+    return tryInstantiate(options);
+  } catch (e) {
+    if (e instanceof RangeError && options && options.timeZoneName) {
+      const fallbackOptions = { ...options };
+      if (fallbackOptions.timeZoneName === 'shortOffset') {
+        fallbackOptions.timeZoneName = 'short';
+      } else if (fallbackOptions.timeZoneName === 'longOffset') {
+        fallbackOptions.timeZoneName = 'long';
+      } else {
+        delete fallbackOptions.timeZoneName;
+      }
+      try {
+        return tryInstantiate(fallbackOptions);
+      } catch (err) {
+        const safeOptions = { ...options };
+        delete safeOptions.timeZoneName;
+        try {
+          return tryInstantiate(safeOptions);
+        } catch (finalErr) {
+          throw e;
+        }
+      }
+    }
+    throw e;
+  }
+}
+PatchedDateTimeFormat.prototype = OriginalDateTimeFormat.prototype;
+PatchedDateTimeFormat.supportedLocalesOf = OriginalDateTimeFormat.supportedLocalesOf;
+Intl.DateTimeFormat = PatchedDateTimeFormat;
+
 const fs = require("fs");
 const path = require("path");
 const cors = require("cors");
