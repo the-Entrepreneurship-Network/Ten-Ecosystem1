@@ -8129,6 +8129,21 @@ app.use("/uploads/offer-letters", expressModule.static("uploads/offer-letters"))
 // Admin Portal — Internal Only
 const { requireAdmin } = require('./middleware/adminAuth');
 const adminPortalRoutes = require('./routes/adminPortal');
+
+// URL Cleanup middleware for copy-pasted URLs with trailing quotes, brackets, or braces
+app.use((req, res, next) => {
+    if (req.path && req.path.startsWith('/ten-admin')) {
+        let cleanPath = req.path;
+        // Strip trailing double-quotes, single-quotes, curly braces, square brackets, parentheses, backslashes, percent signs
+        cleanPath = cleanPath.replace(/["'\}\]\\\)\s%]+$/, '');
+        if (cleanPath !== req.path) {
+            console.log(`[RouteCleanup] Redirecting from dirty path "${req.path}" to clean path "${cleanPath}"`);
+            return res.redirect(cleanPath);
+        }
+    }
+    next();
+});
+
 app.use('/api/admin-internal', adminPortalRoutes);
 app.get('/ten-admin/login', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ten-admin-login.html')));
 app.get('/ten-admin', requireAdmin, (req, res) => res.sendFile(path.join(__dirname, 'public', 'ten-admin.html')));
