@@ -1185,30 +1185,69 @@ class FallbackStore extends session.Store {
     }
 
     get(sid, callback) {
-        this._getStore().get(sid, callback);
+        const store = this._getStore();
+        if (store === this.mongoStore) {
+            // Try mongo first
+            this.mongoStore.get(sid, (err, session) => {
+                if (session) {
+                    return callback(null, session);
+                }
+                // Fallback to memory if not found in mongo (e.g., session was created during startup)
+                this.memoryStore.get(sid, callback);
+            });
+        } else {
+            this.memoryStore.get(sid, callback);
+        }
     }
 
     set(sid, session, callback) {
-        this._getStore().set(sid, session, callback);
+        // Always write to memoryStore first as local fallback cache
+        this.memoryStore.set(sid, session, (err) => {
+            const store = this._getStore();
+            if (store === this.mongoStore) {
+                this.mongoStore.set(sid, session, callback);
+            } else if (callback) {
+                callback(err);
+            }
+        });
     }
 
     destroy(sid, callback) {
-        this._getStore().destroy(sid, callback);
+        this.memoryStore.destroy(sid, (err) => {
+            const store = this._getStore();
+            if (store === this.mongoStore) {
+                this.mongoStore.destroy(sid, callback);
+            } else if (callback) {
+                callback(err);
+            }
+        });
     }
 
     touch(sid, session, callback) {
-        const store = this._getStore();
-        if (store.touch) {
-            store.touch(sid, session, callback);
-        } else if (callback) {
-            callback();
-        }
+        this.memoryStore.touch(sid, session, (err) => {
+            const store = this._getStore();
+            if (store === this.mongoStore && this.mongoStore.touch) {
+                this.mongoStore.touch(sid, session, callback);
+            } else if (callback) {
+                callback(err);
+            }
+        });
     }
 }
 
 sessionOptions.store = new FallbackStore();
 
 app.use(session(sessionOptions));
+
+// Dynamic cookie security adjustment for iframe/HTTPS vs HTTP/local environments
+app.use((req, res, next) => {
+    if (req.session && req.session.cookie) {
+        const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+        req.session.cookie.secure = isSecure;
+        req.session.cookie.sameSite = isSecure ? 'none' : 'lax';
+    }
+    next();
+});
 
 // Custom route to serve the logo with the correct JPEG Content-Type since the file has a .png extension but is actually a JPEG (JFIF format)
 app.get(/.*ten-logo\.png$/, (req, res) => {
