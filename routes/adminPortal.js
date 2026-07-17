@@ -19,13 +19,31 @@ const CertificateRequest = require('../models/CertificateRequest');
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
+    console.log(`[AdminPortal] Login request received. Username="${username}", Password length=${password ? password.length : 0}`);
     const isValid = await verifyAdminCredentials(username, password);
     if (isValid) {
+      console.log(`[AdminPortal] Credentials verified successfully for user: "${username}"`);
       req.session.adminUser = { username: 'tenadmin', lastActivity: Date.now() };
       return res.json({ success: true });
     }
-    return res.status(401).json({ error: 'Access denied' });
+    
+    const enteredLen = password ? password.length : 0;
+    const expectedLen = (process.env.ADMIN_PORTAL_PASSWORD && process.env.ADMIN_PORTAL_PASSWORD.trim())
+      ? process.env.ADMIN_PORTAL_PASSWORD.trim().length
+      : 13; // default is TEN@Admin2024
+
+    console.warn(`[AdminPortal] Authentication rejected. Username="${username}", Entered password len=${enteredLen}, Expected password len=${expectedLen}`);
+    return res.status(401).json({ 
+      error: 'Access denied', 
+      success: false,
+      debug: {
+        receivedUsername: username,
+        receivedPasswordLen: enteredLen,
+        expectedPasswordLen: expectedLen
+      }
+    });
   } catch (err) {
+    console.error(`[AdminPortal] Error during login endpoint:`, err.message);
     res.status(500).json({ error: err.message });
   }
 });
