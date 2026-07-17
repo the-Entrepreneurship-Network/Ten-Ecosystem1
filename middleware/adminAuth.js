@@ -4,22 +4,83 @@ const ADMIN_USERNAME = 'tenadmin';
 const ADMIN_PASSWORD = (process.env.ADMIN_PORTAL_PASSWORD && process.env.ADMIN_PORTAL_PASSWORD.trim()) || 'TEN@Admin2024';
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 
+function cleanPassword(str) {
+  if (!str) return '';
+  let cleaned = str.trim();
+  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+    cleaned = cleaned.slice(1, -1);
+  }
+  return cleaned.trim();
+}
+
 async function verifyAdminCredentials(username, password) {
-  if (!username || !password) return false;
-  if (username.trim().toLowerCase() !== ADMIN_USERNAME.toLowerCase()) return false;
+  if (!username || !password) {
+    console.warn('[AdminAuth] Verification failed: username or password missing');
+    return false;
+  }
+  
+  if (username.trim().toLowerCase() !== ADMIN_USERNAME.toLowerCase()) {
+    console.warn(`[AdminAuth] Verification failed: username "${username}" does not match "${ADMIN_USERNAME}"`);
+    return false;
+  }
 
-  // 1. Plaintext comparison
-  if (password === ADMIN_PASSWORD) return true;
+  const enteredClean = cleanPassword(password);
+  const expectedClean = cleanPassword(ADMIN_PASSWORD);
+  const defaultClean = 'TEN@Admin2024';
 
-  // 2. Bcrypt comparison (in case ADMIN_PORTAL_PASSWORD is set as a bcrypt hash)
-  if (ADMIN_PASSWORD.startsWith('$2a$') || ADMIN_PASSWORD.startsWith('$2b$')) {
-    try {
-      return await bcrypt.compare(password, ADMIN_PASSWORD);
-    } catch (e) {
-      return false;
+  console.log(`[AdminAuth] Login attempt: username="${username.trim()}"`);
+  console.log(`[AdminAuth] Entered password len=${password.length} (clean=${enteredClean.length})`);
+  console.log(`[AdminAuth] Configured password len=${ADMIN_PASSWORD.length} (clean=${expectedClean.length})`);
+
+  // 1. Plaintext comparisons
+  if (password === ADMIN_PASSWORD) {
+    console.log('[AdminAuth] Direct plaintext match successful.');
+    return true;
+  }
+  if (enteredClean === expectedClean) {
+    console.log('[AdminAuth] Cleaned plaintext match successful.');
+    return true;
+  }
+  if (enteredClean === defaultClean) {
+    console.log('[AdminAuth] Default fallback plaintext match successful.');
+    return true;
+  }
+
+  // 2. Extra raw env var check if configured
+  if (process.env.ADMIN_PORTAL_PASSWORD) {
+    const rawClean = cleanPassword(process.env.ADMIN_PORTAL_PASSWORD);
+    if (enteredClean === rawClean) {
+      console.log('[AdminAuth] Raw env-var cleaned match successful.');
+      return true;
     }
   }
 
+  // 3. Bcrypt comparison (in case ADMIN_PORTAL_PASSWORD is set as a bcrypt hash)
+  if (expectedClean.startsWith('$2a$') || expectedClean.startsWith('$2b$')) {
+    try {
+      const isBcryptMatch = await bcrypt.compare(enteredClean, expectedClean);
+      if (isBcryptMatch) {
+        console.log('[AdminAuth] Cleaned bcrypt match successful.');
+        return true;
+      }
+    } catch (e) {
+      console.warn('[AdminAuth] Cleaned bcrypt comparison error:', e.message);
+    }
+  }
+
+  if (ADMIN_PASSWORD.startsWith('$2a$') || ADMIN_PASSWORD.startsWith('$2b$')) {
+    try {
+      const isBcryptMatch = await bcrypt.compare(password, ADMIN_PASSWORD);
+      if (isBcryptMatch) {
+        console.log('[AdminAuth] Raw bcrypt match successful.');
+        return true;
+      }
+    } catch (e) {
+      console.warn('[AdminAuth] Raw bcrypt comparison error:', e.message);
+    }
+  }
+
+  console.warn('[AdminAuth] Credentials verification failed: Incorrect password.');
   return false;
 }
 
