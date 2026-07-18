@@ -11,7 +11,7 @@ const HRSchema = new mongoose.Schema({
     email:    { type: String, default: "", lowercase: true, trim: true, unique: true, sparse: true },
     password: { type: String, required: true },   // bcrypt-hashed
     name:     { type: String, required: true },
-    role:     { type: String, default: "hr" },
+    role:     { type: String, default: "hr_1" },  // one of hr_1…hr_8; migration sets legacy "hr" records to hr_1
     employeeId: { type: String, default: "" },
     promotedFrom: { type: String, default: "" },  // e.g. "coordinator"
     failedLoginAttempts: { type: Number, default: 0 },

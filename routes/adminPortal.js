@@ -1,17 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
-const { requireAdminAPI, verifyAdminCredentials } = require('../middleware/adminAuth');
+const { requireRole, verifyAdminCredentials, ROLE_LEVEL } = require('../middleware/adminAuth');
 
 // Load models
-const Student = require('../models/Student');
-const HR = require('../models/HR');
-const Coordinator = require('../models/Coordinator');
-const Payment = require('../models/Payment');
+const Student      = require('../models/Student');
+const HR           = require('../models/HR');
+const AdminUser    = require('../models/AdminUser');
+const Coordinator  = require('../models/Coordinator');
+const Payment      = require('../models/Payment');
 const Notification = require('../models/Notification');
 const DocumentHistory = require('../models/DocumentHistory');
-const AuditLog = require('../models/AuditLog');
-const Attendance = require('../models/Attendance');
+const AuditLog     = require('../models/AuditLog');
+const Attendance   = require('../models/Attendance');
 const CertificateRequest = require('../models/CertificateRequest');
 
 // ─── AUTH ────────────────────────────────────────────────────────────────────
@@ -19,61 +20,45 @@ const CertificateRequest = require('../models/CertificateRequest');
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-    console.log(`[AdminPortal] Login request received. Username="${username}", Password length=${password ? password.length : 0}`);
-    const isValid = await verifyAdminCredentials(username, password);
-    if (isValid) {
-      console.log(`[AdminPortal] Credentials verified successfully for user: "${username}"`);
-      req.session.adminUser = { username: 'tenadmin', lastActivity: Date.now() };
+    const user = await verifyAdminCredentials(username, password);
+    if (user) {
+      req.session.adminUser = {
+        userId:       user.userId,
+        username:     user.username,
+        role:         user.role,
+        level:        user.level,
+        lastActivity: Date.now()
+      };
       return res.json({ success: true });
     }
-    
-    const enteredLen = password ? password.length : 0;
-    const expectedLen = (process.env.ADMIN_PORTAL_PASSWORD && process.env.ADMIN_PORTAL_PASSWORD.trim())
-      ? process.env.ADMIN_PORTAL_PASSWORD.trim().length
-      : 13; // default is TEN@Admin2024
-
-    console.warn(`[AdminPortal] Authentication rejected. Username="${username}", Entered password len=${enteredLen}, Expected password len=${expectedLen}`);
-    return res.status(401).json({ 
-      error: 'Access denied', 
-      success: false,
-      debug: {
-        receivedUsername: username,
-        receivedPasswordLen: enteredLen,
-        expectedPasswordLen: expectedLen
-      }
-    });
+    return res.status(401).json({ success: false, error: 'Access denied' });
   } catch (err) {
-    console.error(`[AdminPortal] Error during login endpoint:`, err.message);
+    console.error('[AdminPortal] Login error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-router.post('/logout', requireAdminAPI, (req, res) => {
+router.post('/logout', requireRole(1), (req, res) => {
   req.session.adminUser = null;
   res.json({ success: true });
 });
 
-router.get('/session-check', requireAdminAPI, (req, res) => {
-  res.json({ success: true, user: req.session.adminUser.username });
+router.get('/session-check', requireRole(1), (req, res) => {
+  const { username, role, level } = req.session.adminUser;
+  res.json({ success: true, user: username, role, level });
 });
 
 // ─── DASHBOARD STATS ─────────────────────────────────────────────────────────
 
-router.get('/stats', requireAdminAPI, async (req, res) => {
+router.get('/stats', requireRole(1), async (req, res) => {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayKey = today.toISOString().split('T')[0];
 
     const [
-      totalStudents,
-      totalHRs,
-      totalCoordinators,
-      activeToday,
-      pendingPayments,
-      pendingCertRequests,
-      lockedAccounts,
-      newToday
+      totalStudents, totalHRs, totalCoordinators, activeToday,
+      pendingPayments, pendingCertRequests, lockedAccounts, newToday
     ] = await Promise.all([
       Student.countDocuments({}),
       HR.countDocuments({}),
@@ -85,7 +70,6 @@ router.get('/stats', requireAdminAPI, async (req, res) => {
       Student.countDocuments({ createdAt: { $gte: today } })
     ]);
 
-    // Domain breakdown
     const domainBreakdown = await Student.aggregate([
       { $group: { _id: '$domain', count: { $sum: 1 } } },
       { $sort: { count: -1 } }
@@ -94,13 +78,8 @@ router.get('/stats', requireAdminAPI, async (req, res) => {
     res.json({
       success: true,
       data: {
-        totalStudents,
-        totalHRs,
-        totalCoordinators,
-        activeToday,
-        pendingPayments,
-        pendingCertRequests,
-        lockedAccounts,
+        totalStudents, totalHRs, totalCoordinators, activeToday,
+        pendingPayments, pendingCertRequests, lockedAccounts,
         newRegistrationsToday: newToday,
         domainBreakdown: domainBreakdown.map(d => ({ domain: d._id || 'Unknown', count: d.count }))
       }
@@ -110,26 +89,23 @@ router.get('/stats', requireAdminAPI, async (req, res) => {
   }
 });
 
-// ─── PAYMENTS ────────────────────────────────────────────────────────────────
+// ─── PAYMENTS (level 2+ read; level 4+ write) ────────────────────────────────
 
-router.get('/payments/pending', requireAdminAPI, async (req, res) => {
+router.get('/payments/pending', requireRole(2), async (req, res) => {
   try {
     const payments = await Payment.find({
-      mode: 'manual',
-      status: 'pending_verification'
+      mode: 'manual', status: 'pending_verification'
     }).sort({ createdAt: 1 });
 
     const enriched = await Promise.all(payments.map(async (p) => {
       let student = null;
-      try {
-        student = await Student.findById(p.studentId).select('name employeeId domain email');
-      } catch (e) {}
+      try { student = await Student.findById(p.studentId).select('name employeeId domain email'); } catch (e) {}
       return {
         ...p.toObject(),
-        studentName: student ? student.name : 'Unknown',
+        studentName:       student ? student.name       : 'Unknown',
         studentEmployeeId: student ? student.employeeId : 'Unknown',
-        studentDomain: student ? student.domain : 'Unknown',
-        studentEmail: student ? student.email : ''
+        studentDomain:     student ? student.domain     : 'Unknown',
+        studentEmail:      student ? student.email      : ''
       };
     }));
 
@@ -139,12 +115,11 @@ router.get('/payments/pending', requireAdminAPI, async (req, res) => {
   }
 });
 
-router.get('/payments/all', requireAdminAPI, async (req, res) => {
+router.get('/payments/all', requireRole(2), async (req, res) => {
   try {
     const { status, page = 1, limit = 50 } = req.query;
     const filter = {};
     if (status) filter.status = status;
-
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const [payments, total] = await Promise.all([
       Payment.find(filter).sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
@@ -153,14 +128,12 @@ router.get('/payments/all', requireAdminAPI, async (req, res) => {
 
     const enriched = await Promise.all(payments.map(async (p) => {
       let student = null;
-      try {
-        student = await Student.findById(p.studentId).select('name employeeId domain');
-      } catch (e) {}
+      try { student = await Student.findById(p.studentId).select('name employeeId domain'); } catch (e) {}
       return {
         ...p.toObject(),
-        studentName: student ? student.name : 'Unknown',
+        studentName:       student ? student.name       : 'Unknown',
         studentEmployeeId: student ? student.employeeId : 'Unknown',
-        studentDomain: student ? student.domain : 'Unknown'
+        studentDomain:     student ? student.domain     : 'Unknown'
       };
     }));
 
@@ -171,29 +144,27 @@ router.get('/payments/all', requireAdminAPI, async (req, res) => {
 });
 
 const PURPOSE_LABELS = {
-  cert_expert: 'Expert Certificate (₹100)',
-  cert_nano_degree: 'Nano Degree Certificate (₹1000)',
-  cert_fellowship: 'Fellowship Certificate (₹2500)',
+  cert_expert:       'Expert Certificate (₹100)',
+  cert_nano_degree:  'Nano Degree Certificate (₹1000)',
+  cert_fellowship:   'Fellowship Certificate (₹2500)',
   fine_low_attendance: 'Attendance Fine (₹400)',
-  donation: 'Program Donation',
-  // Tenure course fees — canonical keys (normalised, no spaces)
-  tenure_1week:   '1 Week Course Fee — ₹2,000',
-  tenure_15days:  '15 Days Course Fee — ₹1,500',
-  tenure_1month:  '1 Month Course Fee — ₹1,000',
-  // Fallback keys with spaces (in case purpose was stored before normalisation)
-  'tenure_1 week':  '1 Week Course Fee — ₹2,000',
-  'tenure_15 days': '15 Days Course Fee — ₹1,500',
-  'tenure_1 month': '1 Month Course Fee — ₹1,000'
+  donation:          'Program Donation',
+  tenure_1week:      '1 Week Course Fee — ₹2,000',
+  tenure_15days:     '15 Days Course Fee — ₹1,500',
+  tenure_1month:     '1 Month Course Fee — ₹1,000',
+  'tenure_1 week':   '1 Week Course Fee — ₹2,000',
+  'tenure_15 days':  '15 Days Course Fee — ₹1,500',
+  'tenure_1 month':  '1 Month Course Fee — ₹1,000'
 };
 
-router.post('/payments/verify/:paymentId', requireAdminAPI, async (req, res) => {
+router.post('/payments/verify/:paymentId', requireRole(4), async (req, res) => {
   try {
     const { action, rejectionReason } = req.body;
     const payment = await Payment.findById(req.params.paymentId);
 
     if (!payment) return res.status(404).json({ error: 'Payment not found' });
     if (payment.status === 'success') return res.status(400).json({ error: 'Already approved — cannot re-process' });
-    if (payment.status === 'failed') return res.status(400).json({ error: 'Already rejected — cannot re-process' });
+    if (payment.status === 'failed')  return res.status(400).json({ error: 'Already rejected — cannot re-process' });
 
     const student = await Student.findById(payment.studentId);
     if (!student) return res.status(404).json({ error: 'Student not found' });
@@ -205,29 +176,17 @@ router.post('/payments/verify/:paymentId', requireAdminAPI, async (req, res) => 
       payment.status = 'success';
       await payment.save();
 
-      // Handle cert generation
       try {
         if (['cert_expert', 'cert_nano_degree', 'cert_fellowship'].includes(payment.purpose)) {
-          const typeMap = {
-            cert_expert: 'expert',
-            cert_nano_degree: 'nano_degree',
-            cert_fellowship: 'fellowship'
-          };
+          const typeMap = { cert_expert: 'expert', cert_nano_degree: 'nano_degree', cert_fellowship: 'fellowship' };
           const certType = typeMap[payment.purpose];
           const { generateAndSaveCert } = require('./v2/certificates');
           await generateAndSaveCert(payment.studentId, certType, student, 'admin');
           await DocumentHistory.logSend({
-            studentId: student._id,
-            studentName: student.name,
-            studentEmail: student.email,
-            employeeId: student.employeeId,
-            college: student.college || student.collegeName,
-            domain: student.domain,
-            documentType: certType,
-            documentKey: certType,
-            sentBy: 'admin',
-            sentToEmail: student.email,
-            method: 'manual'
+            studentId: student._id, studentName: student.name, studentEmail: student.email,
+            employeeId: student.employeeId, college: student.college || student.collegeName,
+            domain: student.domain, documentType: certType, documentKey: certType,
+            sentBy: 'admin', sentToEmail: student.email, method: 'manual'
           }, 'manual');
         }
 
@@ -244,19 +203,12 @@ router.post('/payments/verify/:paymentId', requireAdminAPI, async (req, res) => 
         console.error('Cert generation error after payment approval:', certErr);
       }
 
-      // If this is a tenure payment, unlock student access
       if (payment.purpose && payment.purpose.startsWith('tenure_')) {
         try {
-          // Use updateOne for maximum reliability in both MongoDB and local-fallback modes
           const updateResult = await Student.updateOne(
             { _id: payment.studentId },
-            { $set: {
-                shortCoursePaid: true,
-                shortCoursePaymentVerified: true,
-                shortCoursePaymentId: payment.orderId || String(payment._id)
-            }}
+            { $set: { shortCoursePaid: true, shortCoursePaymentVerified: true, shortCoursePaymentId: payment.orderId || String(payment._id) } }
           );
-          // If updateOne didn't match (e.g. id format mismatch), try findById + save as fallback
           if (!updateResult || updateResult.matchedCount === 0) {
             const tenureStudent = await Student.findById(payment.studentId);
             if (tenureStudent) {
@@ -269,7 +221,6 @@ router.post('/payments/verify/:paymentId', requireAdminAPI, async (req, res) => 
           console.log('[Admin] Tenure payment approved — student access unlocked for studentId:', String(payment.studentId));
         } catch (tenureErr) {
           console.error('[Admin] Error unlocking tenure student:', tenureErr.message);
-          // Do not fail the whole approval — log and continue
         }
       }
 
@@ -278,15 +229,11 @@ router.post('/payments/verify/:paymentId', requireAdminAPI, async (req, res) => 
         message: `Your payment for ${PURPOSE_LABELS[payment.purpose] || payment.purpose} has been approved and processed.`,
         type: 'success'
       });
-
       await AuditLog.create({
-        userId: student._id,
-        actionType: 'payment_approved',
-        performedBy: 'admin',
+        userId: student._id, actionType: 'payment_approved', performedBy: req.session.adminUser.username,
         description: `Admin approved payment ${payment._id} for ${payment.purpose} (₹${payment.amount})`,
         newState: { status: 'success', verifiedBy: req.session.adminUser.username }
       });
-
       return res.json({ success: true, message: 'Payment approved and processed' });
 
     } else if (action === 'reject') {
@@ -297,17 +244,11 @@ router.post('/payments/verify/:paymentId', requireAdminAPI, async (req, res) => 
       payment.rejectionReason = rejectionReason;
       await payment.save();
 
-      // If tenure payment rejected, reset shortCoursePaymentId so student can resubmit
       if (payment.purpose && payment.purpose.startsWith('tenure_')) {
         try {
           const tenureStudent = await Student.findById(payment.studentId);
-          if (tenureStudent) {
-            tenureStudent.shortCoursePaymentId = null;
-            await tenureStudent.save();
-          }
-        } catch (e) {
-          console.error('[Admin] Error resetting tenure student on reject:', e.message);
-        }
+          if (tenureStudent) { tenureStudent.shortCoursePaymentId = null; await tenureStudent.save(); }
+        } catch (e) { console.error('[Admin] Error resetting tenure student on reject:', e.message); }
       }
 
       await Notification.notifyStudent(student, {
@@ -315,15 +256,11 @@ router.post('/payments/verify/:paymentId', requireAdminAPI, async (req, res) => 
         message: `Your payment for ${PURPOSE_LABELS[payment.purpose] || payment.purpose} was rejected. Reason: ${rejectionReason}. You may submit a new payment.`,
         type: 'warning'
       });
-
       await AuditLog.create({
-        userId: student._id,
-        actionType: 'payment_rejected',
-        performedBy: 'admin',
+        userId: student._id, actionType: 'payment_rejected', performedBy: req.session.adminUser.username,
         description: `Admin rejected payment ${payment._id}. Reason: ${rejectionReason}`,
         newState: { status: 'failed', rejectionReason }
       });
-
       return res.json({ success: true, message: 'Payment rejected' });
     }
 
@@ -333,8 +270,7 @@ router.post('/payments/verify/:paymentId', requireAdminAPI, async (req, res) => 
   }
 });
 
-// Approve tenure payment — unlocks student access
-router.post('/tenure-payment/approve/:orderId', requireAdminAPI, async (req, res) => {
+router.post('/tenure-payment/approve/:orderId', requireRole(4), async (req, res) => {
   try {
     const payment = await Payment.findOne({ orderId: req.params.orderId });
     if (!payment) return res.status(404).json({ error: 'Payment not found' });
@@ -345,7 +281,6 @@ router.post('/tenure-payment/approve/:orderId', requireAdminAPI, async (req, res
     payment.verifiedAt = new Date();
     await payment.save();
 
-    // Unlock student — use updateOne for reliability, fallback to findById+save
     const updateResult = await Student.updateOne(
       { _id: payment.studentId },
       { $set: { shortCoursePaid: true, shortCoursePaymentVerified: true } }
@@ -353,11 +288,7 @@ router.post('/tenure-payment/approve/:orderId', requireAdminAPI, async (req, res
     let student = null;
     if (!updateResult || updateResult.matchedCount === 0) {
       student = await Student.findById(payment.studentId);
-      if (student) {
-        student.shortCoursePaid = true;
-        student.shortCoursePaymentVerified = true;
-        await student.save();
-      }
+      if (student) { student.shortCoursePaid = true; student.shortCoursePaymentVerified = true; await student.save(); }
     } else {
       student = await Student.findById(payment.studentId);
     }
@@ -369,18 +300,16 @@ router.post('/tenure-payment/approve/:orderId', requireAdminAPI, async (req, res
       });
     }
     await AuditLog.create({
-      actionType: 'tenure_payment_approved',
-      performedBy: 'admin',
+      actionType: 'tenure_payment_approved', performedBy: req.session.adminUser.username,
       description: `Approved tenure payment ${req.params.orderId}`
     });
     res.json({ success: true });
-  } catch(err) {
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Reject tenure payment
-router.post('/tenure-payment/reject/:orderId', requireAdminAPI, async (req, res) => {
+router.post('/tenure-payment/reject/:orderId', requireRole(4), async (req, res) => {
   try {
     const { rejectionReason } = req.body;
     const payment = await Payment.findOne({ orderId: req.params.orderId });
@@ -401,50 +330,42 @@ router.post('/tenure-payment/reject/:orderId', requireAdminAPI, async (req, res)
       });
     }
     res.json({ success: true });
-  } catch(err) {
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Get pending tenure payments
-router.get('/tenure-payment/pending', requireAdminAPI, async (req, res) => {
+router.get('/tenure-payment/pending', requireRole(2), async (req, res) => {
   try {
     const payments = await Payment.find({
-      purpose: { $regex: /^tenure_/ },
-      status: 'pending_verification'
+      purpose: { $regex: /^tenure_/ }, status: 'pending_verification'
     }).sort({ createdAt: 1 });
 
     const enriched = await Promise.all(payments.map(async p => {
       let student = null;
-      try { student = await Student.findById(p.studentId).select('name employeeId domain tenure'); } catch(e) {}
+      try { student = await Student.findById(p.studentId).select('name employeeId domain tenure'); } catch (e) {}
       return { ...p.toObject(), studentName: student?.name, studentEmployeeId: student?.employeeId, studentDomain: student?.domain, studentTenure: student?.tenure };
     }));
     res.json({ success: true, data: enriched });
-  } catch(err) {
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get('/payments/export', requireAdminAPI, async (req, res) => {
+router.get('/payments/export', requireRole(4), async (req, res) => {
   try {
     const payments = await Payment.find({}).sort({ createdAt: -1 });
-    const rows = [
-      ['Order ID', 'Student ID', 'Purpose', 'Amount', 'Status', 'UTR', 'Created At', 'Verified At', 'Verified By', 'Rejection Reason']
-    ];
+    const rows = [['Order ID','Student ID','Purpose','Amount','Status','UTR','Created At','Verified At','Verified By','Rejection Reason']];
     for (const p of payments) {
       let student = null;
       try { student = await Student.findById(p.studentId).select('name employeeId'); } catch (e) {}
       rows.push([
-        p.orderId || p._id,
-        student ? student.employeeId : 'Unknown',
-        PURPOSE_LABELS[p.purpose] || p.purpose,
-        p.amount,
-        p.status,
+        p.orderId || p._id, student ? student.employeeId : 'Unknown',
+        PURPOSE_LABELS[p.purpose] || p.purpose, p.amount, p.status,
         p.providerPaymentId || '',
         p.createdAt ? p.createdAt.toISOString() : '',
         p.verifiedAt ? p.verifiedAt.toISOString() : '',
-        p.verifiedBy || '',
-        p.rejectionReason || ''
+        p.verifiedBy || '', p.rejectionReason || ''
       ]);
     }
     const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -456,27 +377,25 @@ router.get('/payments/export', requireAdminAPI, async (req, res) => {
   }
 });
 
-// ─── STUDENTS ────────────────────────────────────────────────────────────────
+// ─── STUDENTS (level 1+ read; level 5+ edit/unlock/reset; level 9+ delete) ───
 
-router.get('/students', requireAdminAPI, async (req, res) => {
+router.get('/students', requireRole(1), async (req, res) => {
   try {
     const { domain, search, page = 1, limit = 50 } = req.query;
     const filter = {};
     if (domain) filter.domain = domain;
     if (search) {
       filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
+        { name:       { $regex: search, $options: 'i' } },
         { employeeId: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } }
+        { email:      { $regex: search, $options: 'i' } }
       ];
     }
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const [students, total] = await Promise.all([
       Student.find(filter)
         .select('name employeeId email domain tenure joiningDate locStatus lorStatus starStatus isLockedOut failedLoginAttempts createdAt')
-        .skip(skip)
-        .limit(parseInt(limit))
-        .sort({ createdAt: -1 }),
+        .skip(skip).limit(parseInt(limit)).sort({ createdAt: -1 }),
       Student.countDocuments(filter)
     ]);
     res.json({ success: true, data: students, total, page: parseInt(page), limit: parseInt(limit) });
@@ -485,7 +404,7 @@ router.get('/students', requireAdminAPI, async (req, res) => {
   }
 });
 
-router.get('/students/:id', requireAdminAPI, async (req, res) => {
+router.get('/students/:id', requireRole(1), async (req, res) => {
   try {
     const student = await Student.findById(req.params.id);
     if (!student) return res.status(404).json({ error: 'Student not found' });
@@ -495,9 +414,9 @@ router.get('/students/:id', requireAdminAPI, async (req, res) => {
   }
 });
 
-router.put('/students/:id', requireAdminAPI, async (req, res) => {
+router.put('/students/:id', requireRole(5), async (req, res) => {
   try {
-    const ALLOWED = ['name', 'email', 'domain', 'tenure', 'joiningDate', 'whatsapp', 'gender', 'college', 'collegeName'];
+    const ALLOWED = ['name','email','domain','tenure','joiningDate','whatsapp','gender','college','collegeName'];
     const update = {};
     for (const key of ALLOWED) {
       if (req.body[key] !== undefined) update[key] = req.body[key];
@@ -505,9 +424,7 @@ router.put('/students/:id', requireAdminAPI, async (req, res) => {
     const student = await Student.findByIdAndUpdate(req.params.id, { $set: update }, { new: true });
     if (!student) return res.status(404).json({ error: 'Student not found' });
     await AuditLog.create({
-      userId: student._id,
-      actionType: 'student_updated',
-      performedBy: 'admin',
+      userId: student._id, actionType: 'student_updated', performedBy: req.session.adminUser.username,
       description: `Admin updated student ${student.employeeId}: ${Object.keys(update).join(', ')}`,
       newState: update
     });
@@ -517,7 +434,7 @@ router.put('/students/:id', requireAdminAPI, async (req, res) => {
   }
 });
 
-router.post('/students/:id/unlock', requireAdminAPI, async (req, res) => {
+router.post('/students/:id/unlock', requireRole(5), async (req, res) => {
   try {
     const student = await Student.findById(req.params.id);
     if (!student) return res.status(404).json({ error: 'Student not found' });
@@ -526,9 +443,7 @@ router.post('/students/:id/unlock', requireAdminAPI, async (req, res) => {
     student.lockoutUntil = null;
     await student.save();
     await AuditLog.create({
-      userId: student._id,
-      actionType: 'student_unlocked',
-      performedBy: 'admin',
+      userId: student._id, actionType: 'student_unlocked', performedBy: req.session.adminUser.username,
       description: `Admin unlocked account for ${student.employeeId}`
     });
     res.json({ success: true, message: 'Account unlocked' });
@@ -537,7 +452,7 @@ router.post('/students/:id/unlock', requireAdminAPI, async (req, res) => {
   }
 });
 
-router.post('/students/:id/reset-password', requireAdminAPI, async (req, res) => {
+router.post('/students/:id/reset-password', requireRole(5), async (req, res) => {
   try {
     const { newPassword } = req.body;
     if (!newPassword || newPassword.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
@@ -548,9 +463,7 @@ router.post('/students/:id/reset-password', requireAdminAPI, async (req, res) =>
     student.plainPassword = newPassword;
     await student.save();
     await AuditLog.create({
-      userId: student._id,
-      actionType: 'student_password_reset',
-      performedBy: 'admin',
+      userId: student._id, actionType: 'student_password_reset', performedBy: req.session.adminUser.username,
       description: `Admin reset password for ${student.employeeId}`
     });
     res.json({ success: true, message: 'Password reset successfully' });
@@ -559,7 +472,7 @@ router.post('/students/:id/reset-password', requireAdminAPI, async (req, res) =>
   }
 });
 
-router.delete('/students/:id', requireAdminAPI, async (req, res) => {
+router.delete('/students/:id', requireRole(9), async (req, res) => {
   try {
     const student = await Student.findById(req.params.id);
     if (!student) return res.status(404).json({ error: 'Student not found' });
@@ -567,9 +480,7 @@ router.delete('/students/:id', requireAdminAPI, async (req, res) => {
     if (successfulPayment) return res.status(400).json({ error: 'Cannot delete student with successful payments' });
     await Student.findByIdAndDelete(req.params.id);
     await AuditLog.create({
-      userId: student._id,
-      actionType: 'student_deleted',
-      performedBy: 'admin',
+      userId: student._id, actionType: 'student_deleted', performedBy: req.session.adminUser.username,
       description: `Admin deleted student ${student.employeeId} (${student.email})`
     });
     res.json({ success: true, message: 'Student deleted' });
@@ -578,9 +489,9 @@ router.delete('/students/:id', requireAdminAPI, async (req, res) => {
   }
 });
 
-// ─── HRs ─────────────────────────────────────────────────────────────────────
+// ─── HRs (level 9+ / admin only) ─────────────────────────────────────────────
 
-router.get('/hrs', requireAdminAPI, async (req, res) => {
+router.get('/hrs', requireRole(9), async (req, res) => {
   try {
     const hrs = await HR.find({}).select('username name email role employeeId createdAt');
     res.json({ success: true, data: hrs });
@@ -589,34 +500,119 @@ router.get('/hrs', requireAdminAPI, async (req, res) => {
   }
 });
 
-router.post('/hrs/:id/reset-password', requireAdminAPI, async (req, res) => {
+router.post('/hrs', requireRole(9), async (req, res) => {
+  try {
+    const { username, email, name, password, role = 'hr_1' } = req.body;
+    const validRoles = ['hr_1','hr_2','hr_3','hr_4','hr_5','hr_6','hr_7','hr_8'];
+    if (!username || !email || !name || !password) return res.status(400).json({ error: 'username, email, name, and password are required' });
+    if (!validRoles.includes(role)) return res.status(400).json({ error: `role must be one of: ${validRoles.join(', ')}` });
+    if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    const hashed = await bcrypt.hash(password, 10);
+    const hr = await HR.create({ username, email, name, password: hashed, role });
+    await AuditLog.create({
+      actionType: 'hr_created', performedBy: req.session.adminUser.username,
+      description: `Admin created HR account: ${username} (${role})`
+    });
+    res.json({ success: true, data: { _id: hr._id, username: hr.username, email: hr.email, role: hr.role } });
+  } catch (err) {
+    if (err.code === 11000) return res.status(400).json({ error: 'Username or email already exists' });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/hrs/:id/level', requireRole(9), async (req, res) => {
+  try {
+    const { role } = req.body;
+    const validRoles = ['hr_1','hr_2','hr_3','hr_4','hr_5','hr_6','hr_7','hr_8'];
+    if (!validRoles.includes(role)) return res.status(400).json({ error: `role must be one of: ${validRoles.join(', ')}` });
+    const hr = await HR.findByIdAndUpdate(req.params.id, { role }, { new: true });
+    if (!hr) return res.status(404).json({ error: 'HR not found' });
+    await AuditLog.create({
+      userId: hr._id, actionType: 'hr_level_changed', performedBy: req.session.adminUser.username,
+      description: `Admin changed HR ${hr.username} role to ${role}`
+    });
+    res.json({ success: true, data: { _id: hr._id, username: hr.username, role: hr.role } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/hrs/:id/reset-password', requireRole(9), async (req, res) => {
   try {
     const { newPassword } = req.body;
     if (!newPassword || newPassword.length < 8) return res.status(400).json({ error: 'Min 8 characters' });
     const hashed = await bcrypt.hash(newPassword, 10);
     const hr = await HR.findByIdAndUpdate(req.params.id, { password: hashed }, { new: true });
     if (!hr) return res.status(404).json({ error: 'HR not found' });
-    await AuditLog.create({ userId: hr._id, actionType: 'hr_password_reset', performedBy: 'admin', description: `Admin reset HR password: ${hr.username}` });
+    await AuditLog.create({ userId: hr._id, actionType: 'hr_password_reset', performedBy: req.session.adminUser.username, description: `Admin reset HR password: ${hr.username}` });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.delete('/hrs/:id', requireAdminAPI, async (req, res) => {
+router.delete('/hrs/:id', requireRole(9), async (req, res) => {
   try {
     const hr = await HR.findByIdAndDelete(req.params.id);
     if (!hr) return res.status(404).json({ error: 'HR not found' });
-    await AuditLog.create({ userId: hr._id, actionType: 'hr_deleted', performedBy: 'admin', description: `Admin deleted HR: ${hr.username}` });
+    await AuditLog.create({ userId: hr._id, actionType: 'hr_deleted', performedBy: req.session.adminUser.username, description: `Admin deleted HR: ${hr.username}` });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ─── COORDINATORS ─────────────────────────────────────────────────────────────
+// ─── ADMIN USER MANAGEMENT (founder only — level 10) ─────────────────────────
 
-router.get('/coordinators', requireAdminAPI, async (req, res) => {
+router.get('/admin-users', requireRole(10), async (req, res) => {
+  try {
+    const admins = await AdminUser.find({ role: 'admin' }).select('username email role isActive createdBy lastLogin createdAt');
+    res.json({ success: true, data: admins });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/admin-users', requireRole(10), async (req, res) => {
+  try {
+    const { username, email, password } = req.body;
+    if (!username || !email || !password) return res.status(400).json({ error: 'username, email, and password are required' });
+    if (password.length < 12) return res.status(400).json({ error: 'Admin passwords must be at least 12 characters' });
+    const passwordHash = await bcrypt.hash(password, 12);
+    const admin = await AdminUser.create({
+      username, email, passwordHash, role: 'admin',
+      createdBy: req.session.adminUser.username
+    });
+    await AuditLog.create({
+      actionType: 'admin_created', performedBy: req.session.adminUser.username,
+      description: `Founder created admin account: ${username}`
+    });
+    res.json({ success: true, data: { _id: admin._id, username: admin.username, email: admin.email, role: admin.role } });
+  } catch (err) {
+    if (err.code === 11000) return res.status(400).json({ error: 'Username or email already exists' });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/admin-users/:id', requireRole(10), async (req, res) => {
+  try {
+    const admin = await AdminUser.findById(req.params.id);
+    if (!admin) return res.status(404).json({ error: 'Admin user not found' });
+    if (admin.role === 'founder') return res.status(400).json({ error: 'Cannot delete a founder account via this endpoint' });
+    await AdminUser.findByIdAndDelete(req.params.id);
+    await AuditLog.create({
+      actionType: 'admin_deleted', performedBy: req.session.adminUser.username,
+      description: `Founder deleted admin account: ${admin.username}`
+    });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── COORDINATORS (level 6+) ──────────────────────────────────────────────────
+
+router.get('/coordinators', requireRole(6), async (req, res) => {
   try {
     const coords = await Coordinator.find({}).select('username name email domain employeeId verificationStatus createdAt');
     res.json({ success: true, data: coords });
@@ -625,34 +621,34 @@ router.get('/coordinators', requireAdminAPI, async (req, res) => {
   }
 });
 
-router.post('/coordinators/:id/reset-password', requireAdminAPI, async (req, res) => {
+router.post('/coordinators/:id/reset-password', requireRole(6), async (req, res) => {
   try {
     const { newPassword } = req.body;
     if (!newPassword || newPassword.length < 8) return res.status(400).json({ error: 'Min 8 characters' });
     const hashed = await bcrypt.hash(newPassword, 10);
     const coord = await Coordinator.findByIdAndUpdate(req.params.id, { password: hashed }, { new: true });
     if (!coord) return res.status(404).json({ error: 'Coordinator not found' });
-    await AuditLog.create({ userId: coord._id, actionType: 'coordinator_password_reset', performedBy: 'admin', description: `Admin reset coordinator password: ${coord.username}` });
+    await AuditLog.create({ userId: coord._id, actionType: 'coordinator_password_reset', performedBy: req.session.adminUser.username, description: `Admin reset coordinator password: ${coord.username}` });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.delete('/coordinators/:id', requireAdminAPI, async (req, res) => {
+router.delete('/coordinators/:id', requireRole(6), async (req, res) => {
   try {
     const coord = await Coordinator.findByIdAndDelete(req.params.id);
     if (!coord) return res.status(404).json({ error: 'Coordinator not found' });
-    await AuditLog.create({ userId: coord._id, actionType: 'coordinator_deleted', performedBy: 'admin', description: `Admin deleted coordinator: ${coord.username}` });
+    await AuditLog.create({ userId: coord._id, actionType: 'coordinator_deleted', performedBy: req.session.adminUser.username, description: `Admin deleted coordinator: ${coord.username}` });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ─── CERTIFICATES ─────────────────────────────────────────────────────────────
+// ─── CERTIFICATES (level 2+ read; level 3+ approve/reject) ───────────────────
 
-router.get('/certificates/pending', requireAdminAPI, async (req, res) => {
+router.get('/certificates/pending', requireRole(3), async (req, res) => {
   try {
     const requests = await CertificateRequest.find({ status: 'awaiting_hr' }).sort({ createdAt: 1 });
     const enriched = await Promise.all(requests.map(async (r) => {
@@ -666,7 +662,56 @@ router.get('/certificates/pending', requireAdminAPI, async (req, res) => {
   }
 });
 
-router.get('/certificates/history', requireAdminAPI, async (req, res) => {
+router.post('/certificates/pending/:id/approve', requireRole(3), async (req, res) => {
+  try {
+    const { approveLoC, approveLor, approveStarPerformance, notes } = req.body;
+    const certReq = await CertificateRequest.findById(req.params.id);
+    if (!certReq) return res.status(404).json({ error: 'Certificate request not found' });
+    if (certReq.status !== 'awaiting_hr') return res.status(400).json({ error: 'Request is not awaiting HR approval' });
+
+    certReq.hrApproved = true;
+    certReq.hrApprovedAt = new Date();
+    certReq.hrNotes = notes || '';
+    if (approveLoC !== undefined) certReq.approveLoC = approveLoC;
+    if (approveLor !== undefined) certReq.approveLor = approveLor;
+    if (approveStarPerformance !== undefined) certReq.approveStarPerformance = approveStarPerformance;
+    certReq.status = 'generating';
+    await certReq.save();
+
+    await AuditLog.create({
+      userId: certReq.studentId, actionType: 'certificate_approved', performedBy: req.session.adminUser.username,
+      description: `HR approved certificate request ${certReq._id}`
+    });
+    res.json({ success: true, message: 'Certificate request approved' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/certificates/pending/:id/reject', requireRole(3), async (req, res) => {
+  try {
+    const { reason } = req.body;
+    if (!reason || reason.trim().length < 5) return res.status(400).json({ error: 'Rejection reason required (min 5 characters)' });
+    const certReq = await CertificateRequest.findById(req.params.id);
+    if (!certReq) return res.status(404).json({ error: 'Certificate request not found' });
+    if (certReq.status !== 'awaiting_hr') return res.status(400).json({ error: 'Request is not awaiting HR approval' });
+
+    certReq.hrApproved = false;
+    certReq.hrNotes = reason;
+    certReq.status = 'failed';
+    await certReq.save();
+
+    await AuditLog.create({
+      userId: certReq.studentId, actionType: 'certificate_rejected', performedBy: req.session.adminUser.username,
+      description: `HR rejected certificate request ${certReq._id}. Reason: ${reason}`
+    });
+    res.json({ success: true, message: 'Certificate request rejected' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/certificates/history', requireRole(2), async (req, res) => {
   try {
     const { page = 1, limit = 50, documentType, studentId } = req.query;
     const filter = {};
@@ -683,9 +728,9 @@ router.get('/certificates/history', requireAdminAPI, async (req, res) => {
   }
 });
 
-// ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
+// ─── NOTIFICATIONS (level 7+) ─────────────────────────────────────────────────
 
-router.post('/notifications/broadcast', requireAdminAPI, async (req, res) => {
+router.post('/notifications/broadcast', requireRole(7), async (req, res) => {
   try {
     const { title, message, type = 'info', targetType, targetDomain, targetEmployeeId } = req.body;
     if (!title || !message) return res.status(400).json({ error: 'Title and message required' });
@@ -702,45 +747,34 @@ router.post('/notifications/broadcast', requireAdminAPI, async (req, res) => {
 
     let sent = 0;
     for (const s of students) {
-      try {
-        await Notification.notifyStudent(s, { title, message, type });
-        sent++;
-      } catch (e) {}
+      try { await Notification.notifyStudent(s, { title, message, type }); sent++; } catch (e) {}
     }
 
     await AuditLog.create({
-      userId: req.session.adminUser?.username || 'admin',
-      actionType: 'notification_broadcast',
-      performedBy: 'admin',
-      description: `Admin broadcast: "${title}" → ${targetType} (${sent} students)`
+      userId: req.session.adminUser.username, actionType: 'notification_broadcast', performedBy: req.session.adminUser.username,
+      description: `Broadcast: "${title}" → ${targetType} (${sent} students)`
     });
-
     res.json({ success: true, sent, message: `Notification sent to ${sent} students` });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ─── SYSTEM INFO ──────────────────────────────────────────────────────────────
+// ─── SYSTEM INFO (level 1+) ───────────────────────────────────────────────────
 
-router.get('/system/info', requireAdminAPI, async (req, res) => {
+router.get('/system/info', requireRole(1), async (req, res) => {
   try {
     const mongoose = require('mongoose');
     res.json({
       success: true,
       data: {
-        paymentEnabled: process.env.PAYMENT_ENABLED === 'true',
-        mongoConnected: mongoose.connection.readyState === 1 && !global.isMongoUnhealthy,
-        usingLocalDb: mongoose.connection.readyState !== 1 || !!global.isMongoUnhealthy,
-        nodeEnv: process.env.NODE_ENV || 'development',
-        port: process.env.PORT || 3000,
-        uptimeSeconds: Math.floor(process.uptime()),
-        uptimeFormatted: (() => {
-          const s = Math.floor(process.uptime());
-          const h = Math.floor(s / 3600);
-          const m = Math.floor((s % 3600) / 60);
-          return `${h}h ${m}m`;
-        })()
+        paymentEnabled:   process.env.PAYMENT_ENABLED === 'true',
+        mongoConnected:   mongoose.connection.readyState === 1 && !global.isMongoUnhealthy,
+        usingLocalDb:     mongoose.connection.readyState !== 1 || !!global.isMongoUnhealthy,
+        nodeEnv:          process.env.NODE_ENV || 'development',
+        port:             process.env.PORT || 3000,
+        uptimeSeconds:    Math.floor(process.uptime()),
+        uptimeFormatted:  (() => { const s = Math.floor(process.uptime()); return `${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`; })()
       }
     });
   } catch (err) {
@@ -748,9 +782,9 @@ router.get('/system/info', requireAdminAPI, async (req, res) => {
   }
 });
 
-// ─── AUDIT LOG ────────────────────────────────────────────────────────────────
+// ─── AUDIT LOG (level 8+) ─────────────────────────────────────────────────────
 
-router.get('/audit-log', requireAdminAPI, async (req, res) => {
+router.get('/audit-log', requireRole(8), async (req, res) => {
   try {
     const { page = 1, actionType, performedBy } = req.query;
     const filter = {};
@@ -767,9 +801,9 @@ router.get('/audit-log', requireAdminAPI, async (req, res) => {
   }
 });
 
-// ─── ATTENDANCE RECALCULATE ───────────────────────────────────────────────────
+// ─── ATTENDANCE RECALCULATE (level 8+) ────────────────────────────────────────
 
-router.post('/attendance/recalculate-all', requireAdminAPI, async (req, res) => {
+router.post('/attendance/recalculate-all', requireRole(8), async (req, res) => {
   try {
     const TENURE_DAYS = { '1week': 7, '15days': 15, '1month': 30, '45days': 45, '3months': 90, '6months': 180 };
     const students = await Student.find({});
@@ -794,12 +828,9 @@ router.post('/attendance/recalculate-all', requireAdminAPI, async (req, res) => 
     }
 
     await AuditLog.create({
-      userId: req.session.adminUser?.username || 'admin',
-      actionType: 'attendance_recalculate_all',
-      performedBy: 'admin',
+      userId: req.session.adminUser.username, actionType: 'attendance_recalculate_all', performedBy: req.session.adminUser.username,
       description: `Recalculated attendance for ${updated} students. Errors: ${errors}`
     });
-
     res.json({ success: true, updated, errors });
   } catch (err) {
     res.status(500).json({ error: err.message });
