@@ -146,8 +146,27 @@
 </div>
 
 <script>
+  /* ── Unregister any student/coordinator service workers so they cannot
+        intercept admin portal navigations or fetch calls. ── */
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(regs => {
+      regs.forEach(r => r.unregister());
+    });
+  }
+
   const params = new URLSearchParams(location.search);
   if (params.get('timeout') === '1') document.getElementById('alertTimeout').classList.add('show');
+
+  /* ── If already authenticated as admin, skip the login form. ── */
+  (async () => {
+    try {
+      const res = await fetch('/api/admin-internal/session-check', { credentials: 'same-origin' });
+      if (res.ok) {
+        const d = await res.json();
+        if (d && d.success) { window.location.replace('/ten-admin'); }
+      }
+    } catch (_) {}
+  })();
 
   function togglePw() {
     const pw = document.getElementById('password');

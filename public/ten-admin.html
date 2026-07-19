@@ -1130,6 +1130,18 @@ async function recalcAttendance() {
 /* ════════════════════════════════════════════════════════════════
    HR ACCOUNTS (admin+)
 ══════════════════════════════════════════════════════════════════ */
+/* HR level definitions — used for the level-card layout */
+const HR_LEVEL_INFO = [
+  { role:'hr_1', label:'Associate HR',     color:'#3b82f6', perms:'View students & system stats (read-only)' },
+  { role:'hr_2', label:'HR Support',       color:'#6366f1', perms:'View payments & certificates (read-only)' },
+  { role:'hr_3', label:'HR Verifier',      color:'#8b5cf6', perms:'Approve / reject certificate requests' },
+  { role:'hr_4', label:'HR Finance',       color:'#a855f7', perms:'Verify / reject payments, export CSV' },
+  { role:'hr_5', label:'Account Manager',  color:'#ec4899', perms:'Edit students, reset student passwords' },
+  { role:'hr_6', label:'Coordinator Lead', color:'#f43f5e', perms:'Manage coordinators, reset their passwords' },
+  { role:'hr_7', label:'Comms Lead',       color:'#f97316', perms:'Send broadcast notifications' },
+  { role:'hr_8', label:'HR Head',          color:'#eab308', perms:'View audit log, recalculate attendance' },
+];
+
 async function renderHRs(c) {
   c.innerHTML = '<div style="padding:20px;color:#475569">Loading…</div>';
   document.getElementById('topbarActions').innerHTML =
@@ -1140,34 +1152,91 @@ async function renderHRs(c) {
 async function loadHRs(c) {
   if (!c) c = document.getElementById('content');
   const data = await api('/hrs');
-  c.innerHTML = `<div class="card">
-    <div class="card-header"><h3>HR Accounts (${(data.data||[]).length})</h3></div>
-    <div class="card-body">
-    <table><thead><tr><th>Username</th><th>Name</th><th>Email</th><th>Level</th><th>Actions</th></tr></thead>
-    <tbody>${data.data && data.data.length ? data.data.map(hr => `
-      <tr>
-        <td>${esc(hr.username||'–')}</td>
-        <td>${esc(hr.name||'–')}</td>
-        <td class="text-small">${esc(hr.email||'–')}</td>
-        <td><span class="badge badge-info">${esc(hr.role||'–')}</span></td>
-        <td><div class="flex gap-8">
-          <button class="btn btn-neutral btn-sm" onclick="openChangeHRLevel('${hr._id}','${esc(hr.username)}','${esc(hr.role)}')">Change Level</button>
-          <button class="btn btn-warning btn-sm" onclick="resetHRPw('${hr._id}','${esc(hr.username)}')">Reset PW</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteHR('${hr._id}','${esc(hr.username)}')">Delete</button>
-        </div></td>
-      </tr>`).join('') : '<tr class="empty-row"><td colspan="5">No HR accounts.</td></tr>'}
-    </tbody></table></div></div>`;
+  const hrs = data.data || [];
+
+  /* Group accounts by role */
+  const byRole = {};
+  HR_LEVEL_INFO.forEach(l => { byRole[l.role] = []; });
+  hrs.forEach(hr => {
+    if (byRole[hr.role]) byRole[hr.role].push(hr);
+    else byRole['hr_1'].push(hr);
+  });
+
+  const levelCards = HR_LEVEL_INFO.map((info, i) => {
+    const accounts = byRole[info.role];
+    const count    = accounts.length;
+    return `
+    <div style="border:1px solid #334155;border-radius:10px;overflow:hidden;margin-bottom:10px;">
+      <!-- Level header row -->
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#1e293b;">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="background:${info.color}22;border:1px solid ${info.color}55;color:${info.color};
+                      border-radius:8px;min-width:38px;height:38px;display:flex;align-items:center;
+                      justify-content:center;font-weight:700;font-size:15px;flex-shrink:0">L${i+1}</div>
+          <div>
+            <div style="font-weight:700;color:#e2e8f0;font-size:14px">${info.label}
+              <span style="font-size:11px;color:#475569;font-weight:400;margin-left:6px">${info.role}</span>
+            </div>
+            <div style="font-size:12px;color:#64748b;margin-top:2px">${info.perms}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          <span style="background:#0f172a;border:1px solid #334155;color:${count?'#94a3b8':'#475569'};
+                       border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600">
+            ${count} account${count !== 1 ? 's' : ''}
+          </span>
+          <button class="btn btn-primary btn-sm" onclick="openCreateHR('${info.role}')">+ Add</button>
+        </div>
+      </div>
+      <!-- Accounts under this level -->
+      ${accounts.length ? `
+      <div style="background:#0f172a;padding:8px 12px;display:flex;flex-direction:column;gap:6px;">
+        ${accounts.map(hr => `
+          <div style="display:flex;align-items:center;justify-content:space-between;
+                      background:#1e293b;border:1px solid #334155;border-radius:7px;padding:8px 14px;">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:30px;height:30px;border-radius:50%;background:${info.color}22;
+                          border:1px solid ${info.color}55;display:flex;align-items:center;
+                          justify-content:center;color:${info.color};font-weight:700;font-size:12px">
+                ${esc((hr.username||'?')[0].toUpperCase())}
+              </div>
+              <div>
+                <div style="font-weight:600;color:#e2e8f0;font-size:13px">${esc(hr.username||'–')}</div>
+                <div style="font-size:11.5px;color:#64748b">${esc(hr.name||'')}${hr.email ? ' · '+esc(hr.email) : ''}</div>
+              </div>
+            </div>
+            <div class="flex gap-8">
+              <button class="btn btn-neutral btn-sm" onclick="openChangeHRLevel('${hr._id}','${esc(hr.username)}','${esc(hr.role)}')">Change Level</button>
+              <button class="btn btn-warning btn-sm" onclick="resetHRPw('${hr._id}','${esc(hr.username)}')">Reset PW</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteHR('${hr._id}','${esc(hr.username)}')">Delete</button>
+            </div>
+          </div>`).join('')}
+      </div>` : ''}
+    </div>`;
+  }).join('');
+
+  c.innerHTML = `
+    <div class="card">
+      <div class="card-header">
+        <h3>HR Accounts — ${hrs.length} total · 8 levels</h3>
+        <p class="text-small text-muted" style="margin-top:4px">Each level inherits all permissions from levels below it</p>
+      </div>
+      <div class="card-body" style="padding:12px 16px">
+        ${levelCards}
+      </div>
+    </div>`;
 }
 
-function openCreateHR() {
+function openCreateHR(preselectedRole) {
   openModal('Create HR Account', `
     <div class="form-group"><label>Username</label><input type="text" id="hrUser" placeholder="username"></div>
     <div class="form-group"><label>Email</label><input type="email" id="hrEmail" placeholder="email@example.com"></div>
     <div class="form-group"><label>Full Name</label><input type="text" id="hrName" placeholder="Full name"></div>
     <div class="form-group"><label>Password (min 8 chars)</label><input type="password" id="hrPw" placeholder="Password"></div>
     <div class="form-group"><label>Level</label>
-      <select id="hrRole">${['hr_1','hr_2','hr_3','hr_4','hr_5','hr_6','hr_7','hr_8'].map(r =>
-        `<option value="${r}">${r} — ${ROLE_LABELS[r]}</option>`).join('')}</select></div>`, `
+      <select id="hrRole">${HR_LEVEL_INFO.map(info =>
+        `<option value="${info.role}" ${info.role===(preselectedRole||'hr_1')?'selected':''}>
+          ${info.role} — ${info.label}</option>`).join('')}</select></div>`, `
     <button class="btn btn-neutral" onclick="closeModal()">Cancel</button>
     <button class="btn btn-primary" onclick="confirmCreateHR()">Create</button>`);
 }
@@ -1338,6 +1407,12 @@ function statusBadge(status) {
 }
 
 // ── Boot ──────────────────────────────────────────────────────
+/* Unregister student/coordinator service workers so they cannot
+   intercept admin portal navigations or API calls. */
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
+}
+
 init();
 </script>
 </body>
