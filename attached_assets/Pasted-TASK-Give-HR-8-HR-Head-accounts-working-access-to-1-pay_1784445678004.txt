@@ -1,0 +1,136 @@
+TASK: Give HR-8 (HR Head) accounts working access to (1) payment approval/
+rejection and (2) student password reset, verified end-to-end against a real 
+copy of production data — not empty test data, and not the live production 
+database directly.
+
+Work exclusively on ten-portal-staging (~/ten-portal-staging on the EC2 
+server, branch develop or a new feature branch off it — state which you use). 
+Do NOT touch InternshipManagementSystem-Final or ten-portal-production. Do 
+NOT connect to or modify the ten_production MongoDB database at any point. 
+If unsure whether you're pointed at staging or production, STOP and ask.
+
+═══════════════════════════════════════════════════════════════
+STEP 0 — LOAD REAL DATA INTO STAGING SAFELY (restore, not live connection)
+═══════════════════════════════════════════════════════════════
+1. Confirm ten-portal-staging's MONGODB_URI (check both .env AND .env.local, 
+   since .env.local overrides .env in this codebase) points at ten_staging.
+2. Find the most recent backup from the existing automated backup script 
+   (~/backup-mongo.sh output location — check the script for its dump path, 
+   likely ~/mongo-backups or similar).
+3. Restore that backup's ten_production dump INTO the ten_staging database 
+   (mongorestore --db ten_staging --drop <path to production dump>) — this 
+   creates a real, accurate copy of production data inside the staging 
+   database. Staging's connection string does NOT change and never points 
+   at ten_production itself at any point.
+4. Confirm the restore worked: 
+   mongosh ten_staging --quiet --eval "db.students.countDocuments()"
+   Report the number — it should be close to the real production count 
+   (approximately 610 at last check), not 1.
+5. Restart staging with --update-env to ensure a clean state:
+   pm2 restart ten-portal-staging --update-env
+6. Confirm via the dashboard (with browser cache disabled — DevTools Network 
+   tab, "Disable cache" checked, then hard refresh) that Total Students now 
+   shows the real, restored count. If it still shows an old/wrong number 
+   even after a cache-disabled hard refresh, that confirms a real backend 
+   bug (not a caching issue) — investigate the /stats route and its DB 
+   connection before proceeding to Step 1.
+
+═══════════════════════════════════════════════════════════════
+STEP 1 — ESTABLISH GROUND TRUTH: WHAT ALREADY EXISTS
+═══════════════════════════════════════════════════════════════
+Before changing anything, read and report on:
+1. Current requireRole(N) value on each payments route (approve, reject, 
+   pending list, export) in routes/adminPortal.js.
+2. Current requireRole(N) value on the student password reset route.
+3. The requireRole middleware's actual comparison logic — paste the function. 
+   Confirm it checks `level >= minLevel` (correct) not `level === minLevel` 
+   (bug).
+4. The HR level enum/mapping — confirm hr_8 maps to numeric level 8 
+   consistently across the HR model, the session data set at login, and the 
+   middleware.
+5. The frontend sidebar logic that decides which nav sections render per 
+   role/level.
+Report findings only — no fixes yet.
+
+═══════════════════════════════════════════════════════════════
+STEP 2 — CREATE A TEST HR-8 ACCOUNT (on this now-real-data staging copy)
+═══════════════════════════════════════════════════════════════
+1. Create one test HR account in ten_staging's HR collection, role/level 
+   hr_8, bcryptjs-hashed password, clearly test-labeled username (e.g. 
+   "test-hr8-verify") so it's easy to identify and remove later.
+2. Log in as this account through the real browser login page.
+3. Because Step 0 restored real data, you now have real students and real 
+   payment records to test against — do NOT create synthetic fake payments 
+   for this test; use what's actually in the restored data. Pick one 
+   existing pending payment (if any exist) and one existing student for 
+   the tests below. If no pending payments exist in the restored data, 
+   report that clearly rather than fabricating one.
+
+═══════════════════════════════════════════════════════════════
+STEP 3 — TEST PAYMENTS END TO END, AS HR-8, AGAINST REAL DATA
+═══════════════════════════════════════════════════════════════
+1. Confirm "Payments" appears in the sidebar for hr_8. Report yes/no.
+2. Confirm the pending payments queue loads with real, restored data.
+3. Approve one real pending payment. Confirm success, and confirm (via 
+   direct database check, not just the UI) that any expected certificate 
+   generation and student notification actually occurred.
+4. Reject a different one. Confirm a reason is required, and confirm via 
+   direct database check that the payment status and student's payment 
+   reference were correctly reset.
+5. Report full results, including exact errors for anything that failed.
+
+REMINDER: this is a copy of production data inside ten_staging, not the 
+live ten_production database — so these are safe to actually approve/reject 
+for real, since it only affects the staging copy. Confirm this is still 
+true (staging's MONGODB_URI still says ten_staging) before doing any write 
+action, as a final safety check.
+
+═══════════════════════════════════════════════════════════════
+STEP 4 — TEST STUDENT PASSWORD RESET, WITH INDEPENDENT PROOF
+═══════════════════════════════════════════════════════════════
+1. Pick one real student from the restored data. Confirm the password-reset 
+   action is visible to hr_8. 
+2. Trigger the reset. Capture the exact new password value shown/generated.
+3. VERIFICATION A: query that student's document directly via mongosh, 
+   before and after the reset, and report the exact passwordHash field 
+   change (or equivalent field — check the actual model, don't assume the 
+   name) and any updatedAt-type timestamp.
+4. VERIFICATION B: actually log in AS that student through the real student 
+   login page using the new password. Report success or failure explicitly.
+5. A "success" UI message alone is not sufficient — both verifications must 
+   pass for this to count as working.
+
+═══════════════════════════════════════════════════════════════
+STEP 5 — FIX ONLY WHAT STEPS 3 AND 4 SHOW IS ACTUALLY BROKEN
+═══════════════════════════════════════════════════════════════
+- Permission rejected despite hr_8 qualifying → fix the comparison operator 
+  or session-level assignment bug, not by lowering the required level.
+- Backend accepts but sidebar hides it → fix frontend visibility only.
+- UI says success but Verification A shows no real DB change → find and fix 
+  the actual persistence bug (unawaited save, wrong field/collection, 
+  swallowed error in try/catch) — identify the real cause before fixing.
+- Zero tolerance for any password fallback, default, or bypass logic, 
+  anywhere, for any reason.
+- Do not change Admin/Founder's existing behavior.
+- Do not widen access for any HR level other than hr_8.
+
+═══════════════════════════════════════════════════════════════
+STEP 6 — RE-VERIFY FULLY AFTER ANY FIX
+═══════════════════════════════════════════════════════════════
+Re-run Steps 3 and 4 completely from a fresh login after any change — 
+re-run the actual tests, not just re-read the code. Also confirm Admin/
+Founder's Payments and password reset still work unchanged.
+
+═══════════════════════════════════════════════════════════════
+STEP 7 — CLEAN UP AND REPORT
+═══════════════════════════════════════════════════════════════
+1. Delete the test-hr8-verify account (leave the restored real data in 
+   staging in place — that's now useful for future testing, don't wipe it 
+   back to empty).
+2. Report: what was actually broken (permission bug, session mismatch, 
+   frontend bug, or persistence bug), exact files/lines changed, full 
+   re-test results from Step 6, confirmation Admin/Founder unaffected, and 
+   confirmation ten_production itself was never connected to or modified — 
+   only its backup copy was restored into ten_staging.
+
+Do not merge or open a PR — stop after Step 7 and wait for explicit approval.
