@@ -1518,7 +1518,7 @@ const upload = multer({
 
 // ================= MAIL =================
 
-const { createEmailTransporter } = require("./utils/mailer");
+const { createEmailTransporter, EMAIL_FROM } = require("./utils/mailer");
 const transporter = createEmailTransporter();
 
 const emailUser = process.env.EMAIL_USER || process.env.EMAIL_US;
@@ -1557,7 +1557,7 @@ async function sendActivityMail(student, studentName, mailType){
     let mailError = "";
     try {
         await transporter.sendMail({
-            from: '"TEN HR Department" <hr@entrepreneurshipnetwork.net>',
+            from: EMAIL_FROM,
             to: email,
             subject: spec.subject,
             html: spec.html(studentName)
@@ -2490,7 +2490,7 @@ try{
             let mailError = "";
             try {
                 await transporter.sendMail({
-                    from:"TEN Internship Portal <ten.internshipportal@gmail.com>",
+                    from: EMAIL_FROM,
                     to: emailLc,
                     subject:`🎉 Welcome to The Entrepreneurship Network, ${newStudent.name.trim()}!`,
                     html,
@@ -5855,7 +5855,7 @@ async function sendPromotionEmail({ to, name, fromRoleLabel, toRoleLabel, employ
     const subject = "🎉 Congratulations! You've been promoted at The Entrepreneurship Network";
     try {
         await transporter.sendMail({
-            from: "TEN HR <ten.internshipportal@gmail.com>",
+            from: EMAIL_FROM,
             to, subject, html,
             text: `Hello ${name}, you have been promoted to ${toRoleLabel}. Temporary password: ${tempPassword}. Complete registration at ${loginUrl} within 48 hours.`
         });
@@ -6466,7 +6466,7 @@ app.post("/auth/forgot-password", async(req,res)=>{
                 let mailError = "";
                 try {
                     await transporter.sendMail({
-                        from:"TEN HR <ten.internshipportal@gmail.com>",
+                        from: EMAIL_FROM,
                         to: user.email,
                         subject:"🔐 Password Reset Request — TEN",
                         html,

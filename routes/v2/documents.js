@@ -73,7 +73,7 @@ async function requireHR(req, res, next) {
 }
 
 // ── Mailer helper ──
-const { createEmailTransporter } = require("../../utils/mailer");
+const { createEmailTransporter, EMAIL_FROM } = require("../../utils/mailer");
 function createTransporter() {
     return createEmailTransporter();
 }
@@ -154,7 +154,7 @@ async function tryAutoGenerateLOC(student) {
         try {
             const transporter = createTransporter();
             await transporter.sendMail({
-                from:        process.env.EMAIL_US,
+                from:        EMAIL_FROM,
                 to:          student.email,
                 subject:     "Congratulations! Your Letter of Completion — The Entrepreneurship Network",
                 html:        `<p>Dear ${student.name},</p><p>🎉 Congratulations on completing 100% of your internship programme!</p><p>Your Letter of Completion is now available in your Student Portal under <strong>My Documents</strong>.</p><p>Best regards,<br>HR Team<br>The Entrepreneurship Network</p>`,
@@ -300,7 +300,7 @@ router.post("/documents/submit", requireStudent, async (req, res) => {
         try {
             const transporter = createTransporter();
             await transporter.sendMail({
-                from:    process.env.EMAIL_US,
+                from:    EMAIL_FROM,
                 to:      process.env.EMAIL_US,
                 subject: `[TEN] New Document Submission — ${req.student.name} (${req.student.employeeId})`,
                 html:    `<p>Student <strong>${req.student.name}</strong> (${req.student.employeeId}) has submitted their documents for review.</p><p>Please log in to the HR portal → Generate Documents → Pending to review.</p>`
@@ -439,7 +439,7 @@ router.post("/admin/documents/generate-offer-letters", requireHR, async (req, re
                 try {
                     const transporter = createTransporter();
                     await transporter.sendMail({
-                        from:    process.env.EMAIL_US,
+                        from:    EMAIL_FROM,
                         to:      student.email,
                         subject: `Your Internship Offer Letter — The Entrepreneurship Network`,
                         html:    `<p>Dear ${student.name},</p><p>Congratulations! Please find your Internship Offer Letter attached to this email.</p><p>Welcome to TEN! Log in to your student portal to track your progress.</p><p>Best regards,<br>HR Team<br>The Entrepreneurship Network</p>`,
@@ -649,7 +649,7 @@ router.patch("/admin/documents/reject/:studentId", requireHR, async (req, res) =
             if (student) {
                 const transporter = createTransporter();
                 await transporter.sendMail({
-                    from:    process.env.EMAIL_US,
+                    from:    EMAIL_FROM,
                     to:      student.email,
                     subject: `[TEN] Document Review Update`,
                     html:    `<p>Dear ${student.name},</p><p>Your submitted documents have been reviewed and require re-submission.</p><p><strong>Reason:</strong> ${doc.rejectionReason}</p><p>Please log in to your student portal and re-upload your documents.</p>`
