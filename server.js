@@ -1521,14 +1521,13 @@ const upload = multer({
 const { createEmailTransporter, EMAIL_FROM } = require("./utils/mailer");
 const transporter = createEmailTransporter();
 
-const emailUser = process.env.EMAIL_USER || process.env.EMAIL_US;
-if(emailUser && process.env.EMAIL_PASS){
+if(process.env.SES_SMTP_USER && process.env.SES_SMTP_PASS){
     transporter.verify((error)=>{
-        if(error){ console.log("SMTP verification status (optional SMTP service): offline (using local mock/simulation)"); }
-        else{ console.log("Email Server Ready"); }
+        if(error){ console.log("SMTP verification status: OFFLINE —", error.message); }
+        else{ console.log("Email Server Ready (SES) — sending as", EMAIL_FROM); }
     });
 } else {
-    console.log("Email not configured — skipping SMTP verify.");
+    console.log("Email not configured — SES_SMTP_USER/SES_SMTP_PASS missing, skipping SMTP verify.");
 }
 
 // Sends one activity-cycle HR mail (appreciation or re-engagement), records it
