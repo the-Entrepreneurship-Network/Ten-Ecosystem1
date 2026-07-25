@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TEN — The Entrepreneurship Network | Internship Portal</title>
+<link rel="stylesheet" href="ten-theme.css">
+<link rel="stylesheet" href="ten-motion.css">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  position: relative;
+}
+
+/* ── Main container ── */
+.portal-wrap {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 1180px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 600px;
+  max-height: 92vh;
+  background: var(--ten-card);
+  border: 1px solid var(--ten-border);
+  border-radius: var(--ten-r-xl);
+  box-shadow: var(--ten-shadow-lg), var(--ten-glow-gold);
+  overflow: hidden;
+  animation: ten-fadeUp 0.7s ease both;
+}
+
+/* ── Left branding panel ── */
+.panel-left {
+  position: relative;
+  padding: 56px 52px;
+  background: linear-gradient(160deg, #0b0d14 0%, #100e08 50%, #0b0d14 100%);
+  border-right: 1px solid var(--ten-border);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+}
+
+/* Decorative geometric lines */
+.panel-left::before {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 220px; height: 220px;
+  border: 1px solid rgba(212,175,55,0.06);
+  border-radius: 50%;
+  transform: translate(50%, -50%);
+}
+.panel-left::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0;
+  width: 280px; height: 280px;
+  border: 1px solid rgba(212,175,55,0.04);
+  border-radius: 50%;
+  transform: translate(-50%, 50%);
+}
+
+/* Gold top accent line */
+.panel-left-inner::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--ten-gold), transparent);
+}
+.panel-left-inner { position: relative; z-index: 1; height: 100%; display: flex; flex-direction: column; justify-content: space-between; }
+
+.ten-brand {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 44px;
+}
+.ten-logo-mark {
+  width: 80px; height: 80px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  perspective: 1000px;
+  cursor: pointer;
+}
+.ten-logo-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ten-logo-3d-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  mix-blend-mode: screen;
+  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1), filter 0.6s ease;
+  filter: drop-shadow(0 4px 12px rgba(245,197,66,0.25));
+}
+.ten-shine-sweep {
+  position: absolute;
+  top: 0;
+  left: -150%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0) 20%,
+    rgba(255, 243, 205, 0.45) 50%,
+    rgba(255, 255, 255, 0) 80%,
+    transparent
+  );
+  transform: skewX(-25deg);
+  pointer-events: none;
+  mix-blend-mode: color-dodge;
+}
+
+/* Hover effects */
+.ten-logo-mark:hover .ten-logo-3d-img {
+  transform: scale(1.18) rotateY(18deg) rotateX(-12deg);
+  filter: drop-shadow(0 12px 28px rgba(245,197,66,0.65)) brightness(1.25);
+}
+
+@keyframes shine-sweep-anim {
+  0% { left: -150%; }
+  100% { left: 150%; }
+}
+
+.ten-logo-mark:hover .ten-shine-sweep {
+  animation: shine-sweep-anim 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+.ten-wordmark {
+  font-family: var(--ten-font-display);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 3.4px;
+  color: var(--ten-gold);
+  line-height: 1;
+  text-shadow: 0 0 20px rgba(245,197,66,0.2);
+}
+.ten-wordmark-sub {
+  font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: 1.5px;
+  color: var(--ten-text-sub);
+  margin-top: 6px;
+  text-transform: uppercase;
+}
+
+.hero-text h1 {
+  font-family: var(--ten-font-display);
+  font-size: clamp(32px, 4vw, 52px);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -1.5px;
+  color: var(--ten-text);
+  margin-bottom: 20px;
+}
+.hero-text h1 span {
+  background: linear-gradient(90deg, var(--ten-gold), var(--ten-gold-light));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.hero-text p {
+  font-size: 15px;
+  line-height: 1.8;
+  color: var(--ten-text-sub);
+  max-width: 380px;
+}
+
+.feature-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 36px;
+}
+.feature-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 14px;
+  color: var(--ten-text);
+}
+.feature-dot {
+  width: 32px; height: 32px;
+  background: var(--ten-gold-bg);
+  border: 1px solid var(--ten-border);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.stats-row {
+  display: flex;
+  gap: 24px;
+  margin-top: 36px;
+}
+.stat-chip {
+  text-align: center;
+}
+.stat-chip .val {
+  font-family: var(--ten-font-display);
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--ten-gold);
+  line-height: 1;
+}
+.stat-chip .lbl {
+  font-size: 11px;
+  color: var(--ten-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-top: 4px;
+}
+
+/* ── Right action panel ── */
+.panel-right {
+  padding: 52px 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: var(--ten-card);
+  overflow-y: auto;
+}
+
+.panel-right h2 {
+  font-family: var(--ten-font-display);
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  margin-bottom: 6px;
+}
+.panel-right .sub {
+  font-size: 14px;
+  color: var(--ten-text-sub);
+  margin-bottom: 36px;
+  line-height: 1.6;
+}
+
+.portal-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 18px 22px;
+  border: 1px solid var(--ten-border);
+  border-radius: var(--ten-r-md);
+  background: rgba(255,255,255,0.02);
+  color: var(--ten-text);
+  font-family: var(--ten-font-display);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.22s ease;
+  margin-bottom: 12px;
+  text-decoration: none;
+  position: relative;
+  overflow: hidden;
+}
+.portal-btn::after {
+  content: '→';
+  font-size: 16px;
+  color: var(--ten-text-sub);
+  transition: transform 0.2s, color 0.2s;
+}
+.portal-btn:hover {
+  border-color: var(--ten-border-strong);
+  background: rgba(212,175,55,0.05);
+  transform: translateX(4px);
+}
+.portal-btn:hover::after {
+  transform: translateX(4px);
+  color: var(--ten-gold);
+}
+
+.portal-btn.primary {
+  background: linear-gradient(135deg, var(--ten-gold), var(--ten-gold-dim));
+  border-color: transparent;
+  color: #0a0700;
+  box-shadow: 0 6px 24px rgba(212,175,55,0.3);
+}
+.portal-btn.primary::after { color: rgba(10,7,0,0.5); }
+.portal-btn.primary:hover {
+  transform: translateY(-2px) translateX(0);
+  box-shadow: 0 10px 32px rgba(212,175,55,0.45);
+}
+
+.btn-icon { font-size: 20px; margin-right: 14px; }
+.btn-left { display: flex; align-items: center; }
+
+.divider {
+  height: 1px;
+  background: var(--ten-border-dim);
+  margin: 20px 0;
+}
+
+.page-footer {
+  margin-top: 24px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ten-text-muted);
+  letter-spacing: 0.5px;
+}
+
+@media (max-width: 900px) {
+  html, body { overflow: auto; height: auto; }
+  .portal-wrap { grid-template-columns: 1fr; max-height: none; }
+  .panel-left { display: none; }
+  .panel-right { padding: 40px 28px; }
+}
+
+</style>
+</head>
+<body>
+
+<div class="ten-grid-bg"></div>
+<div class="ten-orb ten-orb-1"></div>
+<div class="ten-orb ten-orb-2"></div>
+
+<div class="portal-wrap">
+
+  <!-- ── Left Branding Panel ── -->
+  <div class="panel-left ten-slide-left">
+    <div class="panel-left-inner">
+
+      <div>
+        <div class="ten-brand">
+          <div class="ten-logo-mark" aria-hidden="true">
+            <div class="ten-logo-wrapper">
+              <img src="ten-3d-logo.jpg" alt="TEN 3D Logo" class="ten-logo-3d-img" />
+              <div class="ten-shine-sweep"></div>
+            </div>
+          </div>
+          <div>
+            <div class="ten-wordmark">TEN</div>
+            <div class="ten-wordmark-sub" data-typetext="The Entrepreneurship Network">The Entrepreneurship Network</div>
+          </div>
+        </div>
+
+        <div class="hero-text">
+          <h1>Launch Your Career <span>with TEN</span></h1>
+          <p>A professional internship platform for tomorrow's entrepreneurs. Real projects, real mentorship, real results.</p>
+        </div>
+
+        <div class="feature-list">
+          <div class="feature-item">
+            <div class="feature-dot">📊</div>
+            Live Attendance & Performance Tracking
+          </div>
+          <div class="feature-item">
+            <div class="feature-dot">🧠</div>
+            Domain-Specific Expert Coordinators
+          </div>
+          <div class="feature-item">
+            <div class="feature-dot">📁</div>
+            Task Submission & Review System
+          </div>
+          <div class="feature-item">
+            <div class="feature-dot">🎓</div>
+            Internship Certificate & Reports
+          </div>
+        </div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-chip">
+          <div class="val">10+</div>
+          <div class="lbl">Domains</div>
+        </div>
+        <div class="stat-chip">
+          <div class="val">500+</div>
+          <div class="lbl">Interns</div>
+        </div>
+        <div class="stat-chip">
+          <div class="val">24/7</div>
+          <div class="lbl">Tracking</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Right Action Panel ── -->
+  <div class="panel-right ten-slide-right">
+
+    <h2>Welcome Back</h2>
+    <p class="sub">Access your internship workspace. Choose your portal to continue.</p>
+
+    <button class="portal-btn primary ten-card-hover ten-scale-in ten-d1" onclick="window.location.href='register.html'">
+      <span class="btn-left"><span class="btn-icon">✦</span> Join TEN Ecosystem</span>
+    </button>
+
+    <button class="portal-btn ten-card-hover ten-scale-in ten-d2" onclick="window.location.href='login.html'">
+      <span class="btn-left"><span class="btn-icon">🎓</span> Member Login</span>
+    </button>
+
+    <div class="divider"></div>
+
+    <button class="portal-btn ten-card-hover ten-scale-in ten-d3" onclick="window.location.href='coordinator-login.html'">
+      <span class="btn-left"><span class="btn-icon">🛡</span> Coordinator Login Portal</span>
+    </button>
+
+    <button class="portal-btn ten-card-hover ten-scale-in ten-d4" style="border: 1px dashed rgba(212,175,55,0.4);" onclick="window.location.href='coordinator-register.html'">
+      <span class="btn-left"><span class="btn-icon">⚡️</span> Coordinator Register</span>
+    </button>
+
+    <button class="portal-btn ten-card-hover ten-scale-in ten-d4" onclick="openHrPositionModal()">
+      <span class="btn-left"><span class="btn-icon">👔</span> HR Portal</span>
+    </button>
+
+    <div class="page-footer">
+      &copy; 2026 TEN — The Entrepreneurship Network · Internship Management System
+    </div>
+
+  </div>
+
+</div><!-- /portal-wrap -->
+
+  <!-- Glassmorphism popup for HR Position selection -->
+  <div id="hrPositionModal" style="position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(6,10,24,0.85); backdrop-filter:blur(24px) saturate(130%); width:100%; height:100%; display:none; align-items:center; justify-content:center; padding:20px; z-index:1000000;">
+    <div style="background:rgba(14,20,40,0.7); border:1px solid rgba(212,175,55,0.25); border-radius:18px; padding:32px; width:100%; max-width:800px; box-shadow:0 32px 72px rgba(0,0,0,0.8), 0 0 54px rgba(212,175,55,0.08); text-align:center; animation: ten-fadeUp 0.4s ease both;">
+       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+          <h3 style="color:#D4AF37; font-size:22px; font-weight:800; letter-spacing:1px; margin:0; text-transform:uppercase; font-family:inherit;">Select Active HR Position</h3>
+          <button onclick="closeHrPositionModal()" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:8px; color:#fff; cursor:pointer; padding:6px 14px; font-size:12px; font-weight:bold; transition:0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">Close</button>
+       </div>
+       <p style="color:#94a3b8; font-size:12px; font-weight:bold; text-transform:uppercase; margin-bottom:24px; letter-spacing:2px;">8 Levels of Secure Onboarding Access Control</p>
+       <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:16px;">
+          <div onclick="selectHrPosition(1)" style="border:1px solid rgba(255,255,255,0.06); background:rgba(30,41,59,0.2); border-radius:12px; padding:20px; cursor:pointer; transition:0.2s;" onmouseover="this.style.borderColor='#D4AF37'; this.style.background='rgba(212,175,55,0.05)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.06)'; this.style.background='rgba(30,41,59,0.2)'">
+              <h5 style="color:#fff; font-size:13px; font-weight:bold; margin:0 0 6px 0;">Level 1</h5>
+              <p style="color:#94a3b8; font-size:11px; margin:0;">Jr HR Associate</p>
+          </div>
+          <div onclick="selectHrPosition(2)" style="border:1px solid rgba(255,255,255,0.06); background:rgba(30,41,59,0.2); border-radius:12px; padding:20px; cursor:pointer; transition:0.2s;" onmouseover="this.style.borderColor='#D4AF37'; this.style.background='rgba(212,175,55,0.05)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.06)'; this.style.background='rgba(30,41,59,0.2)'">
+              <h5 style="color:#fff; font-size:13px; font-weight:bold; margin:0 0 6px 0;">Level 2</h5>
+              <p style="color:#94a3b8; font-size:11px; margin:0;">Sr HR Associate</p>
+          </div>
+          <div onclick="selectHrPosition(3)" style="border:1px solid rgba(255,255,255,0.06); background:rgba(30,41,59,0.2); border-radius:12px; padding:20px; cursor:pointer; transition:0.2s;" onmouseover="this.style.borderColor='#D4AF37'; this.style.background='rgba(212,175,55,0.05)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.06)'; this.style.background='rgba(30,41,59,0.2)'">
+              <h5 style="color:#fff; font-size:13px; font-weight:bold; margin:0 0 6px 0;">Level 3</h5>
+              <p style="color:#94a3b8; font-size:11px; margin:0;">Jr HR Manager</p>
+          </div>
+          <div onclick="selectHrPosition(4)" style="border:1px solid rgba(255,255,255,0.06); background:rgba(30,41,59,0.2); border-radius:12px; padding:20px; cursor:pointer; transition:0.2s;" onmouseover="this.style.borderColor='#D4AF37'; this.style.background='rgba(212,175,55,0.05)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.06)'; this.style.background='rgba(30,41,59,0.2)'">
+              <h5 style="color:#fff; font-size:13px; font-weight:bold; margin:0 0 6px 0;">Level 4</h5>
+              <p style="color:#94a3b8; font-size:11px; margin:0;">Sr HR Manager</p>
+          </div>
+          <div onclick="selectHrPosition(5)" style="border:1px solid rgba(255,255,255,0.06); background:rgba(30,41,59,0.2); border-radius:12px; padding:20px; cursor:pointer; transition:0.2s;" onmouseover="this.style.borderColor='#D4AF37'; this.style.background='rgba(212,175,55,0.05)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.06)'; this.style.background='rgba(30,41,59,0.2)'">
+              <h5 style="color:#fff; font-size:13px; font-weight:bold; margin:0 0 6px 0;">Level 5</h5>
+              <p style="color:#94a3b8; font-size:11px; margin:0;">HR Associate Director</p>
+          </div>
+          <div onclick="selectHrPosition(6)" style="border:1px solid rgba(255,255,255,0.06); background:rgba(30,41,59,0.2); border-radius:12px; padding:20px; cursor:pointer; transition:0.2s;" onmouseover="this.style.borderColor='#D4AF37'; this.style.background='rgba(212,175,55,0.05)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.06)'; this.style.background='rgba(30,41,59,0.2)'">
+              <h5 style="color:#fff; font-size:13px; font-weight:bold; margin:0 0 6px 0;">Level 6</h5>
+              <p style="color:#94a3b8; font-size:11px; margin:0;">Jr HR Director</p>
+          </div>
+          <div onclick="selectHrPosition(7)" style="border:1px solid rgba(255,255,255,0.06); background:rgba(30,41,59,0.2); border-radius:12px; padding:20px; cursor:pointer; transition:0.2s;" onmouseover="this.style.borderColor='#D4AF37'; this.style.background='rgba(212,175,55,0.05)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.06)'; this.style.background='rgba(30,41,59,0.2)'">
+              <h5 style="color:#fff; font-size:13px; font-weight:bold; margin:0 0 6px 0;">Level 7</h5>
+              <p style="color:#94a3b8; font-size:11px; margin:0;">HR Director + HRBP</p>
+          </div>
+          <div onclick="selectHrPosition(8)" style="border:1px solid rgba(255,255,255,0.06); background:rgba(30,41,59,0.2); border-radius:12px; padding:20px; cursor:pointer; transition:0.2s;" onmouseover="this.style.borderColor='#D4AF37'; this.style.background='rgba(212,175,55,0.05)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.06)'; this.style.background='rgba(30,41,59,0.2)'">
+              <h5 style="color:#fff; font-size:13px; font-weight:bold; margin:0 0 6px 0;">Level 8</h5>
+              <p style="color:#94a3b8; font-size:11px; margin:0;">Vice President</p>
+          </div>
+       </div>
+    </div>
+  </div>
+
+
+
+  <script>
+    function openHrPositionModal() {
+      document.getElementById('hrPositionModal').style.display = 'flex';
+    }
+    function closeHrPositionModal() {
+      document.getElementById('hrPositionModal').style.display = 'none';
+    }
+    function selectHrPosition(level) {
+      closeHrPositionModal();
+      Swal.fire({
+          title: 'Do you have credentials from Admin?',
+          text: 'Access is restricted to authorized level managers.',
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonText: 'YES',
+          cancelButtonText: 'NO',
+          background: '#0e1428',
+          color: '#F0EEE8',
+          confirmButtonColor: '#D4AF37',
+          cancelButtonColor: '#ef4444'
+      }).then((result) => {
+          if (result.isConfirmed) {
+              window.location.href = `/hr-login?level=${level}`;
+          } else if (result.dismiss === Swal.DismissReason.cancel) {
+              window.location.href = 'https://chat.whatsapp.com/FsMqgrEqZiDLL2qgHuEqwN?s=sh&p=a&mlu=2';
+          }
+      });
+    }
+
+
+  </script>
+
+<script src="ten-motion.js"></script>
+</body>
+</html>

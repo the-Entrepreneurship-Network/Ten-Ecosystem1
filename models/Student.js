@@ -1,0 +1,156 @@
+const mongoose = require("mongoose");
+
+const studentsSchema = new mongoose.Schema({
+    firstName: String,
+    lastName: String,
+    name: String,
+    domain: String,
+    domains: [String],
+    whatsapp: String,
+    email: String,
+    collegeName: { type: String, default: "" },
+    college: { type: String, default: "" },
+    tenure: String,
+    dualDomains: { type: Boolean, default: false },
+    failedLoginAttempts: { type: Number, default: 0 },
+    lockoutUntil: { type: Date, default: null },
+    isLockedOut: { type: Boolean, default: false },
+    joiningDate: String,
+    employeeId: { type: String, unique: true, sparse: true },
+    password: {
+        type: String,
+        default: "intern123"
+    },
+    plainPassword: {
+        type: String,
+        default: "intern123"
+    },
+
+    certificateApprovedByCoordinator: { type: Boolean, default: false },
+    approvedByCoordinatorId:          { type: String, default: "" },
+    coordinatorRemarks:               { type: String, default: "" },
+
+    certificateApprovedByHR:          { type: Boolean, default: false },
+    hrApprovedAt:                     { type: Date },
+    approvedByHRId:                   { type: String, default: "" },
+    hrRemarks:                        { type: String, default: "" },
+
+    hrRejected:                       { type: Boolean, default: false },
+    hrRejectionReason:                { type: String, default: "" },
+
+    linkedDomains: [{
+        domain:     { type: String, required: true },
+        studentId:  { type: mongoose.Schema.Types.ObjectId, ref: "Student" },
+        employeeId: { type: String, required: true }
+    }],
+
+    passwordResetToken:   { type: String, default: null, index: true },
+    passwordResetExpiry:  { type: Date,   default: null },
+
+    currentStreak:        { type: Number, default: 0 },
+    bestStreak:           { type: Number, default: 0 },
+    lastAttendanceDate:   { type: Date },
+    lastActiveDate:       { type: Date },
+
+    milestones: {
+        firstAttendance:        { type: Date },
+        firstTaskSubmitted:     { type: Date },
+        firstTaskApproved:      { type: Date },
+        reached50Attendance:    { type: Date },
+        reached75Attendance:    { type: Date },
+        certificateEligible:    { type: Date },
+        coordinatorApproved:    { type: Date },
+        hrApproved:             { type: Date },
+        certificatesGenerated:  { type: Date },
+        internshipCompleted:    { type: Date }
+    },
+
+    reminderEmailsSent: {
+        type: Map,
+        of: Date,
+        default: {}
+    },
+    certificateEligibilityEmailSent: { type: Boolean, default: false },
+
+    documentsAutoSent:    { type: Boolean, default: false },
+    documentsAutoSentAt:  { type: Date },
+    autoDocUniqueId:      { type: String, default: "" },
+    documentVerified:     { type: Boolean, default: false },
+    documentVerifiedAt:   { type: Date },
+    documentNumber:       { type: String, default: "" },
+
+    // FEATURE 1 — Onboarding popup shown only once
+    onboardingPopupSeen:  { type: Boolean, default: false },
+
+    // FEATURE 1 — Joiner type popup shown only once
+    joinerTypeSelected:   { type: Boolean, default: false },
+    joinerType:           { type: String, enum: ['new', 'whatsapp', null], default: null },
+
+    employeeIdOverride:  { type: String, default: null },
+    internshipStartDate: { type: Date, default: null },
+    hasSeenWelcome:      { type: Boolean, default: false },
+    hasSeenOnboarding:   { type: Boolean, default: false },
+    calculatedAttendance: { type: Number, default: null },
+
+    // v2 portal fields
+    v2Onboarded:          { type: Boolean, default: false },
+    v2DurationType:       { type: String, default: null },
+
+    locPdfBase64:            { type: String, default: null },
+    locStatus:               { type: String, enum: ['not_eligible','pending_coordinator','pending_hr','fine_pending','issued'], default: 'not_eligible' },
+    locIssuedAt:             { type: Date,   default: null },
+      
+    lorPdfBase64:            { type: String, default: null },
+    lorStatus:               { type: String, enum: ['not_eligible','pending_coordinator','pending_hr','fine_pending','issued'], default: 'not_eligible' },
+    lorIssuedAt:             { type: Date,   default: null },
+      
+    starPdfBase64:           { type: String, default: null },
+    starStatus:              { type: String, enum: ['not_submitted','pending_review','approved','issued','rejected'], default: 'not_submitted' },
+    starIssuedAt:            { type: Date,   default: null },
+    starContribution:        { type: String, default: null },
+
+    // Letter of Promotion (LOP)
+    lopPdfBase64:            { type: String, default: null },
+    lopStatus:               { type: String, enum: ['not_eligible','pending','issued'], default: 'not_eligible' },
+    lopIssuedAt:             { type: Date,   default: null },
+    lopOldRole:              { type: String, default: null },
+    lopNewRole:              { type: String, default: null },
+    lopEffectiveDate:        { type: Date,   default: null },
+    lopDepartment:           { type: String, default: null },
+
+    // Gender — drives correct pronouns in generated documents.
+    // Empty / undefined values fall back to neutral "they/them/their".
+    gender:                  { type: String, enum: ['male','female','',null], default: '' },
+      
+    offerPdfBase64:          { type: String, default: null },
+    offerLetterStatus:       { type: String, enum: ['not_uploaded','pending','under_review','approved','rejected','issued'], default: 'not_uploaded' },
+    offerLetterGeneratedAt:  { type: Date,   default: null },
+    documentRejectionReason: { type: String, default: null },
+    documentsSubmittedAt:    { type: Date,   default: null },
+      
+    attendancePercentage:    { type: Number, default: 0 },
+    calculatedAttendancePercentage: { type: Number, default: null },
+    attendanceLastCalculated: { type: Date, default: null },
+    performanceScore:        { type: Number, default: 0 },
+    internshipCompleted:     { type: Boolean, default: false },
+    internshipCompletedAt:   { type: Date,   default: null },
+    coordinatorApprovedAt:   { type: Date,   default: null },
+    coordinatorApprovalStatus: { type: String, enum: ['pending','approved','escalated_to_hr'], default: 'pending' },
+      
+    pendingFines: [{
+      fineType: { type: String },       // 'loc_attendance' | 'lor_criteria'
+      amount:   { type: Number },       // 100 or 50
+      reason:   { type: String },
+      paid:     { type: Boolean, default: false },
+      createdAt:{ type: Date, default: Date.now },
+    }],
+    shortCoursePaid: { type: Boolean, default: false },
+    shortCoursePaymentId: { type: String, default: null },
+    shortCoursePaymentVerified: { type: Boolean, default: false },
+    shortCoursePaymentSkipped: { type: Boolean, default: false }, // for future use
+    isExistingStudent: { type: Boolean, default: false }, // set on registration
+}, {
+    timestamps: true
+});
+
+module.exports = mongoose.model("Student", studentsSchema);

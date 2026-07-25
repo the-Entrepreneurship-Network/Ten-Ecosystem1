@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Investor Directory — TEN Platform</title>
+  <link rel="stylesheet" href="/css/design-system.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <script src="/js/theme-toggle.js" defer></script>
+  <script src="/js/components.js" defer></script>
+  <style>
+    .profile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-4); }
+    .profile-card { background: var(--bg-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); border: 1px solid var(--border-default); padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-2); transition: box-shadow 0.2s, transform 0.2s; }
+    .profile-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+    .investor-avatar { width: 52px; height: 52px; border-radius: 14px; background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800; flex-shrink: 0; }
+    .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+    .badge-type    { background: #fef3c7; color: #92400e; }
+    .badge-stage   { background: #dbeafe; color: #1e40af; }
+    .badge-sector  { background: #ede9fe; color: #5b21b6; }
+    .filters { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+    .filters select, .filters input { padding: 8px 12px; border: 1.5px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-surface); color: var(--text-primary); font: inherit; outline: none; min-width: 140px; }
+    .filters select:focus, .filters input:focus { border-color: var(--color-primary); }
+  </style>
+</head>
+<body class="dashboard-layout">
+  <aside class="sidebar">
+    <a class="sidebar__logo" href="/dashboard">⚡ TEN</a>
+    <nav class="sidebar__nav">
+      <a href="/dashboard"          class="nav-item">🏠 Dashboard</a>
+      <a href="/founder/directory"  class="nav-item">🚀 Founders</a>
+      <a href="/mentor/directory"   class="nav-item">🎓 Mentors</a>
+      <a href="/investor/directory" class="nav-item nav-item--active">💼 Investors</a>
+      <a href="/talent-network"     class="nav-item">🌐 Talent Network</a>
+      <a href="/programs"           class="nav-item">📋 Programs</a>
+    </nav>
+    <div class="sidebar__footer">
+      <button id="theme-toggle-btn" class="btn btn--ghost btn--sm" style="width:100%">🌙 Dark Mode</button>
+    </div>
+  </aside>
+
+  <header class="topbar">
+    <button class="btn btn--ghost btn--sm" data-sidebar-toggle>☰</button>
+    <input class="topbar__search" type="search" placeholder="Search investors…" />
+    <div class="topbar__actions">
+      <button id="theme-toggle-btn" class="btn btn--ghost btn--sm">🌙</button>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <div class="page-header">
+      <h1 class="page-header__title">💼 Investor Directory</h1>
+      <p class="page-header__subtitle">Connect with verified investors funding the next generation of startups</p>
+    </div>
+
+    <div class="filters">
+      <input type="search" id="searchInput" placeholder="🔍 Search investors…" style="flex:1;min-width:200px;">
+      <select id="typeFilter">
+        <option value="">All Types</option>
+        <option value="angel">Angel</option>
+        <option value="vc">VC</option>
+        <option value="accelerator">Accelerator</option>
+        <option value="individual">Individual</option>
+      </select>
+      <select id="stageFilter">
+        <option value="">All Stages</option>
+        <option value="pre_seed">Pre-Seed</option>
+        <option value="seed">Seed</option>
+        <option value="series_a">Series A</option>
+        <option value="series_b">Series B</option>
+      </select>
+      <button class="btn btn--primary btn--sm" onclick="loadInvestors()">Search</button>
+    </div>
+
+    <div id="investorGrid" class="profile-grid">
+      ${Array(6).fill('<div style="background:var(--bg-surface);border-radius:14px;border:1px solid var(--border-default);padding:20px;"><div style="background:#f0f0f0;height:52px;width:52px;border-radius:14px;margin-bottom:12px;"></div><div style="background:#f0f0f0;height:16px;width:70%;margin-bottom:8px;border-radius:4px;"></div><div style="background:#f0f0f0;height:13px;width:50%;border-radius:4px;"></div></div>').join('')}
+    </div>
+    <div style="text-align:center;margin-top:32px;">
+      <button class="btn btn--outline btn--sm" id="loadMoreBtn" onclick="loadMore()" style="display:none;">Load More</button>
+    </div>
+  </main>
+
+  <script>
+  let page = 1, loading = false;
+
+  async function loadInvestors(reset = true) {
+    if (reset) page = 1;
+    if (loading) return;
+    loading = true;
+    const token    = localStorage.getItem('ten_auth_token') || localStorage.getItem('authToken') || '';
+    const search   = document.getElementById('searchInput').value.trim();
+    const type     = document.getElementById('typeFilter').value;
+    const stage    = document.getElementById('stageFilter').value;
+    const params   = new URLSearchParams({ page, limit: 12 });
+    if (search) params.set('search', search);
+    if (type)   params.set('investorType', type);
+    if (stage)  params.set('stagePreference', stage);
+    try {
+      const res  = await fetch('/api/investor/directory?' + params, { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+      const data = await res.json();
+      const investors = data.data || [];
+      const grid = document.getElementById('investorGrid');
+      if (reset) grid.innerHTML = '';
+      if (!investors.length && reset) {
+        grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;"><div style="font-size:64px;margin-bottom:16px;">💼</div><h2 style="font-size:20px;font-weight:700;margin-bottom:8px;">No investors found</h2><p style="color:var(--text-muted);">Adjust your filters or check back soon.</p></div>';
+      } else {
+        grid.innerHTML += investors.map(inv => `
+          <div class="profile-card">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+              <div class="investor-avatar">${((inv.fundName || (inv.userId && inv.userId.fullName)) || 'I').charAt(0)}</div>
+              <div>
+                <div style="font-size:16px;font-weight:700;">${inv.fundName || (inv.userId && inv.userId.fullName) || 'Investor'}</div>
+                <div style="font-size:13px;color:var(--text-muted);">${inv.investorType ? inv.investorType.replace('_',' ').toUpperCase() : ''}</div>
+              </div>
+            </div>
+            ${inv.thesis ? `<div style="font-size:13px;color:var(--text-secondary);line-height:1.5;">${inv.thesis.slice(0,120)}${inv.thesis.length>120?'…':''}</div>` : ''}
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
+              ${inv.investorType ? `<span class="badge badge-type">${inv.investorType.replace('_',' ')}</span>` : ''}
+              ${(inv.stagePreference||[]).slice(0,2).map(s=>`<span class="badge badge-stage">${s.replace('_',' ')}</span>`).join('')}
+              ${(inv.sectorFocus||[]).slice(0,1).map(s=>`<span class="badge badge-sector">${s}</span>`).join('')}
+            </div>
+            ${inv.portfolioSize > 0 ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Portfolio: ${inv.portfolioSize} companies</div>` : ''}
+            ${inv.investmentRange && (inv.investmentRange.min||inv.investmentRange.max) ? `<div style="font-size:12px;color:var(--text-muted);">Ticket: ₹${(inv.investmentRange.min/100000).toFixed(0)}L – ₹${(inv.investmentRange.max/100000).toFixed(0)}L</div>` : ''}
+          </div>`).join('');
+      }
+      document.getElementById('loadMoreBtn').style.display = (data.page < data.totalPages) ? '' : 'none';
+    } catch(e) {
+      document.getElementById('investorGrid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);">Could not load investors. Please try again.</div>';
+    }
+    loading = false;
+  }
+  function loadMore() { page++; loadInvestors(false); }
+  document.getElementById('searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') loadInvestors(); });
+  loadInvestors();
+  </script>
+</body>
+</html>

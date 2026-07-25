@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TEN — Payment Status</title>
+<link rel="stylesheet" href="ten-theme.css">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-base:        #05070e;
+  --bg-surface:     #090d1a;
+  --bg-card:        #0e1428;
+  --bg-input:       #0b1222;
+  --border:         rgba(212,175,55,0.08);
+  --border-strong:  rgba(212,175,55,0.18);
+  --accent-gold:    #D4AF37;
+  --accent-green:   #10b981;
+  --accent-red:     #ef4444;
+  --accent-amber:   #f59e0b;
+  --text-primary:   #F0EEE8;
+  --text-secondary: #9a9080;
+  --text-muted:     #4E4840;
+  --radius-md:      16px;
+  --radius-lg:      22px;
+  --shadow-card:    0 4px 24px rgba(0,0,0,0.35);
+}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+body::before {
+  content: '';
+  position: fixed;
+  top: -200px; left: -200px;
+  width: 600px; height: 600px;
+  background: radial-gradient(circle, rgba(212,175,55,0.06) 0%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: 48px 40px;
+  width: 100%;
+  max-width: 460px;
+  box-shadow: var(--shadow-card);
+  text-align: center;
+}
+.icon-wrap {
+  width: 80px; height: 80px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 36px;
+  margin: 0 auto 24px;
+}
+.icon-wrap.verifying { background: rgba(212,175,55,0.1); border: 2px solid rgba(212,175,55,0.3); }
+.icon-wrap.success   { background: rgba(16,185,129,0.12); border: 2px solid rgba(16,185,129,0.3); }
+.icon-wrap.pending   { background: rgba(245,158,11,0.12); border: 2px solid rgba(245,158,11,0.3); }
+.icon-wrap.failed    { background: rgba(239,68,68,0.12);  border: 2px solid rgba(239,68,68,0.3); }
+
+.spinner-ring {
+  width: 36px; height: 36px;
+  border: 3px solid rgba(212,175,55,0.2);
+  border-top-color: var(--accent-gold);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+h2 { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+.sub { font-size: 14px; color: var(--text-secondary); margin-bottom: 28px; line-height: 1.6; }
+
+.detail-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.detail-row:last-child { border-bottom: none; }
+.detail-label { color: var(--text-muted); }
+.detail-value { font-weight: 600; }
+.detail-value.mono { font-family: 'DM Mono', monospace; font-size: 13px; }
+.detail-value.amount { color: var(--accent-gold); font-size: 18px; }
+
+.details-box {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 4px 16px;
+  margin-bottom: 28px;
+  text-align: left;
+}
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 13px 24px;
+  border-radius: var(--radius-md);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 15px; font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.2s;
+  width: 100%;
+  margin-bottom: 10px;
+}
+.btn:hover { opacity: 0.88; }
+.btn-gold  { background: linear-gradient(135deg, var(--accent-gold), #b8962c); color: #05070e; }
+.btn-ghost { background: var(--bg-input); border: 1px solid var(--border-strong); color: var(--text-secondary); }
+.btn-red   { background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); color: #fca5a5; }
+
+.poll-info {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 16px;
+}
+</style>
+</head>
+<body>
+<div class="card" id="cardWrap">
+
+  <!-- VERIFYING STATE -->
+  <div id="stateVerifying">
+    <div class="icon-wrap verifying">
+      <div class="spinner-ring"></div>
+    </div>
+    <h2>Verifying Payment</h2>
+    <p class="sub">Please wait while we confirm your payment with the bank...</p>
+    <p class="poll-info" id="pollInfo">Checking status...</p>
+  </div>
+
+  <!-- SUCCESS STATE -->
+  <div id="stateSuccess" style="display:none">
+    <div class="icon-wrap success">&#x2705;</div>
+    <h2 style="color:var(--accent-gold)">Payment Successful!</h2>
+    <p class="sub">Your payment has been confirmed and your account has been updated.</p>
+    <div class="details-box" id="successDetails"></div>
+    <a href="student-dashboard.html" class="btn btn-gold">Back to Dashboard</a>
+    <a href="my-documents.html" class="btn btn-ghost">View My Documents</a>
+  </div>
+
+  <!-- PENDING STATE -->
+  <div id="statePending" style="display:none">
+    <div class="icon-wrap pending">&#x23F3;</div>
+    <h2>Verification in Progress</h2>
+    <p class="sub">Your payment is being verified. This usually takes 1&#x2013;2 minutes. Your account will be updated automatically once confirmed.</p>
+    <button class="btn btn-gold" onclick="restartPoll()">Check Again</button>
+    <a href="student-dashboard.html" class="btn btn-ghost">Back to Dashboard</a>
+  </div>
+
+  <!-- FAILED STATE -->
+  <div id="stateFailed" style="display:none">
+    <div class="icon-wrap failed">&#x274C;</div>
+    <h2>Payment Not Completed</h2>
+    <p class="sub">Your payment was not completed. You have not been charged. Please try again.</p>
+    <a href="payment.html" class="btn btn-red">Try Again</a>
+    <a href="student-dashboard.html" class="btn btn-ghost">Back to Dashboard</a>
+  </div>
+
+</div>
+
+<script>
+const params  = new URLSearchParams(window.location.search);
+const orderId = params.get('orderId') || sessionStorage.getItem('lastOrderId');
+const empId   = localStorage.getItem('employeeId') || sessionStorage.getItem('employeeId');
+
+if (!orderId) {
+  document.getElementById('stateVerifying').style.display = 'none';
+  document.getElementById('stateFailed').style.display    = 'block';
+}
+
+function showSuccess(data) {
+  document.getElementById('stateVerifying').style.display = 'none';
+  document.getElementById('stateSuccess').style.display   = 'block';
+  const details = document.getElementById('successDetails');
+  const txnDate = data.txnTime ? new Date(data.txnTime).toLocaleString('en-IN') : new Date(data.createdAt).toLocaleString('en-IN');
+  details.innerHTML = `
+    <div class="detail-row">
+      <span class="detail-label">Amount Paid</span>
+      <span class="detail-value amount">\u20B9${data.amountRupees}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Transaction ID</span>
+      <span class="detail-value mono">${data.txnUtr || '—'}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Date &amp; Time</span>
+      <span class="detail-value">${txnDate}</span>
+    </div>
+  `;
+}
+
+function showPending() {
+  document.getElementById('stateVerifying').style.display = 'none';
+  document.getElementById('statePending').style.display   = 'block';
+}
+
+function showFailed() {
+  document.getElementById('stateVerifying').style.display = 'none';
+  document.getElementById('stateFailed').style.display    = 'block';
+}
+
+async function pollStatus(oid, attempt) {
+  document.getElementById('pollInfo').textContent =
+    'Attempt ' + attempt + ' of 12 — checking status...';
+
+  if (attempt > 12) {
+    showPending();
+    return;
+  }
+
+  if (!empId) {
+    showFailed();
+    return;
+  }
+
+  try {
+    const r = await fetch('/api/v2/payment/status/' + oid, {
+      headers: { 'x-employee-id': empId }
+    });
+    const d = await r.json();
+    if (d.status === 'success') {
+      showSuccess(d);
+    } else if (d.status === 'failed') {
+      showFailed();
+    } else {
+      setTimeout(() => pollStatus(oid, attempt + 1), 3000);
+    }
+  } catch(_) {
+    setTimeout(() => pollStatus(oid, attempt + 1), 3000);
+  }
+}
+
+function restartPoll() {
+  document.getElementById('statePending').style.display   = 'none';
+  document.getElementById('stateVerifying').style.display = 'block';
+  pollStatus(orderId, 1);
+}
+
+if (orderId && empId) {
+  pollStatus(orderId, 1);
+} else if (orderId && !empId) {
+  showFailed();
+}
+</script>
+</body>
+</html>

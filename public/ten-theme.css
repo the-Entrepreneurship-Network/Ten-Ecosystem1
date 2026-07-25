@@ -1,0 +1,190 @@
+/* ════════════════════════════════════════════════
+   TEN — The Entrepreneurship Network
+   Shared Design System & CSS Variables
+   Version 2.0
+════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+:root {
+  /* ── Brand Colors ── */
+  --ten-bg:        #05070e;
+  --ten-surface:   #090d1a;
+  --ten-card:      #0e1428;
+  --ten-card2:     #121933;
+
+  /* Gold accent (primary brand) */
+  --ten-gold:      #D4AF37;
+  --ten-gold-light:#F0D060;
+  --ten-gold-dim:  #B8960C;
+  --ten-gold-glow: rgba(212,175,55,0.18);
+  --ten-gold-bg:   rgba(212,175,55,0.08);
+
+  /* Cyan accent (tech/digital) */
+  --ten-cyan:      #06B6D4;
+  --ten-cyan-glow: rgba(6,182,212,0.18);
+
+  /* Borders */
+  --ten-border:        rgba(212,175,55,0.10);
+  --ten-border-strong: rgba(212,175,55,0.22);
+  --ten-border-dim:    rgba(255,255,255,0.06);
+
+  /* Text */
+  --ten-text:      #F0EEE8;
+  --ten-text-sub:  #9A9080;
+  --ten-text-muted:#4E4840;
+
+  /* Semantic */
+  --ten-success:   #10B981;
+  --ten-danger:    #EF4444;
+  --ten-warning:   #F59E0B;
+  --ten-blue:      #3B82F6;
+
+  /* Shadows */
+  --ten-shadow-sm: 0 4px 16px rgba(0,0,0,0.4);
+  --ten-shadow:    0 8px 32px rgba(0,0,0,0.5);
+  --ten-shadow-lg: 0 16px 64px rgba(0,0,0,0.6);
+  --ten-glow-gold: 0 0 40px rgba(212,175,55,0.25);
+
+  /* Radius */
+  --ten-r-sm: 10px;
+  --ten-r-md: 16px;
+  --ten-r-lg: 22px;
+  --ten-r-xl: 28px;
+
+  /* Typography */
+  --ten-font-display: 'Syne', sans-serif;
+  --ten-font-body:    'DM Sans', sans-serif;
+  --ten-font-mono:    'JetBrains Mono', monospace;
+}
+
+/* ── Reset & Base ── */
+*, *::before, *::after {
+  margin: 0; padding: 0; box-sizing: border-box;
+}
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--ten-font-body);
+  background: var(--ten-bg);
+  color: var(--ten-text);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+/* ── TEN Logo SVG inline helper ── */
+.ten-logo-svg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Grid background helper ── */
+.ten-grid-bg {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(212,175,55,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(212,175,55,0.025) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+/* ── Ambient glow orbs ── */
+.ten-orb {
+  position: fixed; border-radius: 50%; pointer-events: none;
+  filter: blur(130px); opacity: 0.18; z-index: 0;
+}
+.ten-orb-1 {
+  width: 600px; height: 600px;
+  background: radial-gradient(circle, #b8960c, transparent 70%);
+  top: -200px; right: -200px;
+}
+.ten-orb-2 {
+  width: 400px; height: 400px;
+  background: radial-gradient(circle, #06b6d4, transparent 70%);
+  bottom: -150px; left: -150px;
+}
+
+/* ── Utility Classes ── */
+.ten-card {
+  background: var(--ten-card);
+  border: 1px solid var(--ten-border);
+  border-radius: var(--ten-r-xl);
+  box-shadow: var(--ten-shadow);
+}
+.ten-card-gold-top::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--ten-gold), transparent);
+}
+.ten-btn-gold {
+  background: linear-gradient(135deg, var(--ten-gold), var(--ten-gold-dim));
+  color: #0a0700;
+  font-family: var(--ten-font-display);
+  font-weight: 800;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.ten-btn-gold:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(212,175,55,0.35);
+}
+.ten-badge {
+  background: var(--ten-gold-bg);
+  border: 1px solid var(--ten-border);
+  color: var(--ten-gold);
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+.ten-input {
+  width: 100%;
+  padding: 14px 18px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--ten-border);
+  border-radius: var(--ten-r-sm);
+  color: var(--ten-text);
+  font-family: var(--ten-font-body);
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.ten-input:focus {
+  border-color: var(--ten-gold);
+  box-shadow: 0 0 0 3px rgba(212,175,55,0.1);
+}
+.ten-input::placeholder { color: #3a3424; }
+
+/* ── Footer ── */
+.ten-page-footer {
+  text-align: center;
+  padding: 32px 0 20px;
+  font-size: 12px;
+  color: var(--ten-text-muted);
+  letter-spacing: 1px;
+}
+.ten-page-footer .brand {
+  color: var(--ten-gold);
+  font-weight: 700;
+}
+
+/* ── Animations ── */
+@keyframes ten-fadeUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes ten-fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes ten-pulse-gold {
+  0%, 100% { box-shadow: 0 0 30px rgba(212,175,55,0.3); }
+  50%       { box-shadow: 0 0 50px rgba(212,175,55,0.55); }
+}
+@keyframes ten-shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}

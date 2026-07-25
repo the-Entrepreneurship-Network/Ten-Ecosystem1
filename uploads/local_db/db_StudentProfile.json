@@ -1,0 +1,23 @@
+[
+  {
+    "userId": "6a6489c632405081c03dca06",
+    "memberId": "TEN-STU-000001",
+    "fullName": "grfds",
+    "email": "thdfv@gmail.com",
+    "mobile": "1222121121222",
+    "country": "e",
+    "state": "",
+    "city": "e",
+    "university": "e",
+    "degree": "f",
+    "graduationYear": "2012",
+    "skills": [],
+    "resume": "/uploads/documents/resume-1784973762743-623696958.pdf",
+    "linkedin": "",
+    "portfolio": "",
+    "verificationStatus": "approved",
+    "_id": "6a6489c632405081c03dca08",
+    "createdAt": "2026-07-25T10:02:46.113Z",
+    "updatedAt": "2026-07-25T10:02:46.113Z"
+  }
+]

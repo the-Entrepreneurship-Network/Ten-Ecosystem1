@@ -1,0 +1,568 @@
+Content is user-generated and unverified.
+CERTIFICATE SYSTEM + LOR/LOC + HR SYNC FIX PROMPT
+Platform: The Entrepreneurship Network (TEN)
+Scope: Fix Fellowship bug + Add LOR/LOC section + HR→Student sync
+Version: 1.0
+HOW TO USE THIS PROMPT: Give this to Replit AI and say: "Fix every issue described here exactly as written. Read ALL sections before writing a single line of code."
+
+⚠️ CRITICAL DEFENCE RULES
+NEVER delete or overwrite any existing working feature
+NEVER modify existing authentication or login system
+Only FIX broken features and ADD missing ones
+All fixes must work across ALL 14 domains
+Test every fix before marking complete
+If in doubt → ASK, do not assume
+🐛 SECTION 1: CRITICAL BUG — FELLOWSHIP SHOWING TO WRONG STUDENTS
+Problem:
+A student who is at 0% cohort rank and only 4% course completion
+is seeing the Fellowship certificate card as OPEN with a "Claim It" button.
+
+This is completely wrong.
+
+Fellowship must NEVER be visible to any student unless they meet
+BOTH of these conditions simultaneously:
+
+They are in the TOP 10% of their cohort leaderboard
+They have completed at least 70% of their course
+Root Cause:
+The fellowship eligibility check is either:
+
+Not running at all
+Running but always returning true
+Checking the wrong field
+Not checking cohort rank
+Fix — Fellowship Eligibility Logic:
+javascript
+// NEW FEATURE: Fellowship Eligibility Check
+// This function must be called EVERY TIME the certificates page loads
+
+async function checkFellowshipEligibility(studentId) {
+  try {
+    // Step 1: Get student's course completion percentage
+    const totalTasks = await StudentTaskProgress.countDocuments({
+      student_id: studentId
+    })
+    const completedTasks = await StudentTaskProgress.countDocuments({
+      student_id: studentId,
+      status: 'approved'
+    })
+    const completionPercent = totalTasks > 0
+      ? (completedTasks / totalTasks) * 100
+      : 0
+
+    // Step 2: Get student's cohort rank
+    const student = await User.findById(studentId)
+    const cohortId = student.cohort_id
+
+    // Count total students in same cohort
+    const totalCohortStudents = await User.countDocuments({
+      cohort_id: cohortId,
+      role: 'student'
+    })
+
+    // Get student's coin rank in cohort
+    const studentCoins = await StudentCoin.findOne({ student_id: studentId })
+    const studentTotalCoins = studentCoins?.total_coins || 0
+
+    // Count how many cohort students have MORE coins than this student
+    const studentsAhead = await StudentCoin.countDocuments({
+      student_id: {
+        $in: await User.find({ cohort_id: cohortId, role: 'student' })
+          .distinct('_id')
+      },
+      total_coins: { $gt: studentTotalCoins }
+    })
+
+    // Calculate percentile rank (lower number = better rank)
+    const cohortRankPercent = totalCohortStudents > 0
+      ? (studentsAhead / totalCohortStudents) * 100
+      : 100
+
+    // Step 3: Apply strict eligibility rules
+    const isEligible = (
+      completionPercent >= 70 &&        // Must be 70%+ complete
+      cohortRankPercent <= 10            // Must be in top 10%
+    )
+
+    return {
+      isEligible,
+      completionPercent: Math.round(completionPercent),
+      cohortRankPercent: Math.round(cohortRankPercent),
+      reason: !isEligible
+        ? `Needs ${Math.max(0, 70 - completionPercent).toFixed(0)}% more completion
+           and top 10% cohort rank (currently ${cohortRankPercent.toFixed(0)}%)`
+        : 'Eligible'
+    }
+  } catch (error) {
+    console.error('Fellowship eligibility check error:', error)
+    return { isEligible: false, completionPercent: 0, cohortRankPercent: 100 }
+  }
+}
+Fellowship Display Rules — STRICT:
+IF student IS NOT eligible:
+  → Fellowship card is COMPLETELY HIDDEN
+  → No card shown, no locked icon, no hint
+  → Student has NO idea Fellowship exists
+  → This is intentional — exclusivity is the mechanism
+
+IF student IS eligible:
+  → Show the private sliding card (Fellowship Whisper)
+  → Only show ONCE per student (check psychology_triggers table)
+  → After shown once: show Fellowship card in certificate section
+  → "Learn More" button first (no price on first view)
+  → Price shown only after clicking Learn More
+Fix the Certificate Page API:
+javascript
+// GET /api/v2/certificates/my-certs
+// Must return fellowship_eligible: true/false based on real check
+
+const fellowshipCheck = await checkFellowshipEligibility(studentId)
+
+return {
+  expert: {
+    locked: completionPercent < 30,
+    progress: completionPercent,
+    threshold: 30,
+    status: expertCert ? 'issued' : completionPercent >= 30 ? 'unlocked' : 'locked'
+  },
+  nano_degree: {
+    locked: completionPercent < 70,
+    progress: completionPercent,
+    threshold: 70,
+    status: nanoCert ? 'issued' : completionPercent >= 70 ? 'unlocked' : 'locked'
+  },
+  fellowship: {
+    visible: fellowshipCheck.isEligible,   // KEY: only true if really eligible
+    eligible: fellowshipCheck.isEligible,
+    cohort_rank_percent: fellowshipCheck.cohortRankPercent,
+    status: fellowshipCert ? 'issued' : fellowshipCheck.isEligible ? 'unlocked' : 'hidden'
+  }
+}
+📋 SECTION 2: ADD LOR + LOC SECTION IN STUDENT PORTAL
+Problem:
+Students have no section to view or download:
+
+LOR (Letter of Recommendation)
+LOC (Letter of Completion)
+All their certificates (Expert, Nano Degree, Fellowship)
+Offer Letter
+Fix:
+Add a new section called "My Documents & Certificates" in the student portal sidebar/dashboard.
+
+This section has TWO tabs:
+
+Tab 1: "My Certificates"
+Shows all 3 certificate tiers + their status:
+
+┌──────────────────────────────────────────────────────┐
+│  MY CERTIFICATES                                     │
+│                                                      │
+│  Expert Certificate          [Locked — 4% / 30%]    │
+│  Progress: ████░░░░░░░░  4%                          │
+│                                                      │
+│  Nano Degree                 [Locked — 4% / 70%]    │
+│  Progress: ████░░░░░░░░  4%                          │
+│                                                      │
+│  Fellowship                  [Hidden until eligible] │
+│  (Only top 10% of cohort qualify)                   │
+└──────────────────────────────────────────────────────┘
+When a certificate IS issued:
+
+┌──────────────────────────────────────────────────────┐
+│  Expert Certificate          ✅ ISSUED               │
+│  Issued: 07 Jun 2026                                 │
+│  Certificate ID: TEN-EXP-2026-K4M7R2                │
+│                                                      │
+│  [Download PDF]  [Share LinkedIn]  [Share WhatsApp] │
+└──────────────────────────────────────────────────────┘
+Tab 2: "My Documents"
+Shows all official documents issued to the student:
+
+Document	Status	Date	Action
+Offer Letter	✅ Issued	07 Jun 2026	Download
+LOR	✅ Issued	07 Jun 2026	Download
+LOC	🔒 Available after completion	—	—
+Rules:
+
+Offer Letter: visible after HR approves documents
+LOR: visible after HR generates it
+LOC (Letter of Completion): auto-generated when student completes 100% of course
+Download links must work — open PDF in new tab
+LOC (Letter of Completion) Auto-Generation:
+javascript
+// NEW FEATURE: LOC Auto-Generation
+// Trigger: when student completes 100% of tasks
+
+async function autoGenerateLOC(studentId) {
+  const totalTasks = await StudentTaskProgress.countDocuments({
+    student_id: studentId
+  })
+  const completedTasks = await StudentTaskProgress.countDocuments({
+    student_id: studentId,
+    status: 'approved'
+  })
+
+  if (totalTasks > 0 && completedTasks === totalTasks) {
+    // Student completed 100% — generate LOC
+    const student = await User.findById(studentId)
+
+    const locExists = await DocumentHistory.findOne({
+      student_id: studentId,
+      document_type: 'loc'
+    })
+
+    if (!locExists) {
+      const docNumber = generateDocumentNumber('loc')
+      // Generate LOC PDF using same Puppeteer flow as offer letter
+      const locPdf = await generateLOCPdf(student, docNumber)
+      const locUrl = await saveToStorage(locPdf, `loc_${studentId}.pdf`)
+
+      await DocumentHistory.create({
+        student_id: studentId,
+        student_name: student.name,
+        document_type: 'loc',
+        document_number: docNumber,
+        pdf_url: locUrl,
+        sent_on: new Date(),
+        sent_to_email: student.email
+      })
+
+      // Email LOC to student
+      await sendEmail(student.email, 'Your Letter of Completion', locUrl)
+
+      console.log(`LOC generated for student: ${student.name}`)
+    }
+  }
+}
+📋 SECTION 3: HR APPROVAL → STUDENT PORTAL AUTO-SYNC
+Problem:
+When HR clicks "Offer Letter" and confirms, the student portal
+does NOT automatically update. The student's "My Documents" section
+still shows "Pending" even after HR has approved.
+
+Fix — Complete the HR Approval Flow:
+javascript
+// Route: POST /api/v2/admin/documents/generate-offer-letter/:studentId
+// This is the route called when HR confirms the offer letter dialog
+
+router.post('/generate-offer-letter/:studentId', authAdmin, async (req, res) => {
+  try {
+    const { studentId } = req.params
+    const student = await User.findById(studentId)
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student not found' })
+    }
+
+    // Step 1: Generate document number
+    const docNumber = generateDocumentNumber('offer_letter')
+
+    // Step 2: Generate offer letter PDF using Puppeteer
+    const offerLetterPdf = await generateOfferLetterPdf({
+      student_name: student.name,
+      domain: student.domain,
+      duration: student.duration,
+      start_date: student.startDate || new Date(),
+      cohort: student.cohort || 'N/A',
+      employee_id: student.employeeId,
+      doc_number: docNumber,
+      date_issued: new Date()
+    })
+
+    // Step 3: Save PDF file
+    const fileName = `offer_letter_${studentId}_${Date.now()}.pdf`
+    const filePath = path.join(__dirname, '../uploads/documents', fileName)
+    fs.writeFileSync(filePath, offerLetterPdf)
+    const fileUrl = `/uploads/documents/${fileName}`
+
+    // Step 4: Update StudentDocument — THIS IS THE KEY SYNC STEP
+    await StudentDocument.findOneAndUpdate(
+      { student_id: studentId },
+      {
+        upload_status: 'approved',           // ← Updates student portal status
+        offer_letter_url: fileUrl,           // ← Student can now download
+        offer_letter_sent_at: new Date(),
+        reviewed_by: req.user._id,
+        reviewed_at: new Date()
+      },
+      { upsert: true }
+    )
+
+    // Step 5: Save to document history
+    await DocumentHistory.create({
+      student_id: studentId,
+      student_name: student.name,
+      college: student.college || 'Not provided',
+      employee_id: student.employeeId,
+      document_type: 'offer_letter',
+      document_number: docNumber,
+      pdf_url: fileUrl,
+      sent_to_email: student.email,
+      sent_on: new Date()
+    })
+
+    // Step 6: Send email to student
+    try {
+      await sendEmail(
+        student.email,
+        'Your Internship Offer Letter — The Entrepreneurship Network',
+        `Dear ${student.name},\n\nPlease find your offer letter attached.\n\nBest regards,\nTEN Team`,
+        fileUrl  // attach PDF
+      )
+    } catch (emailErr) {
+      console.error('Email failed but offer letter generated:', emailErr)
+      // Do NOT fail the whole request if email fails
+    }
+
+    // Step 7: Return success to HR
+    return res.status(200).json({
+      success: true,
+      message: `Offer letter generated and sent to ${student.email}`,
+      document_number: docNumber,
+      offer_letter_url: fileUrl
+    })
+
+  } catch (error) {
+    console.error('Offer letter generation error:', error)
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to generate offer letter. Please try again.'
+    })
+  }
+})
+Student Portal Status Auto-Update:
+The student portal's "My Documents" page must call /api/v2/documents/my-status on EVERY page load (not just once). This ensures the latest HR decision is always reflected.
+
+javascript
+// On My Documents page load — always fetch fresh status
+async function loadDocumentStatus() {
+  const response = await fetch('/api/v2/documents/my-status', {
+    headers: { 'Authorization': `Bearer ${getToken()}` }
+  })
+  const data = await response.json()
+
+  updateStatusBadge(data.status)
+
+  if (data.offer_letter_url) {
+    showOfferLetterDownload(data.offer_letter_url)
+  }
+
+  if (data.lor_url) {
+    showLORDownload(data.lor_url)
+  }
+
+  if (data.loc_url) {
+    showLOCDownload(data.loc_url)
+  }
+}
+Status display in student portal after HR approves:
+
+✅ Documents Approved
+✉️ Offer Letter sent to your email
+
+[Download Offer Letter PDF]
+📋 SECTION 4: LOR GENERATION FROM HR SIDE
+Add LOR generation to HR portal:
+HR must be able to generate LOR for any student who has completed
+at least 50% of their internship.
+
+Add an LOR button in HR portal:
+
+In Student Management table → each student row has an "LOR" action button
+Clicking opens a confirmation: "Generate LOR for [Student Name]?"
+On confirm: generate LOR PDF, save, email to student, add to document history
+LOR Template variables:
+
+[STUDENT_NAME]
+[DOMAIN]
+[DURATION]
+[START_DATE]
+[END_DATE]
+[COMPLETION_PERCENT]
+[DIRECTOR_NAME]
+[DATE_ISSUED]
+[DOC_NUMBER]
+LOR auto-appears in student portal "My Documents" tab immediately after generation.
+
+📋 SECTION 5: PSYCHOLOGY AUTOMATION — VERIFY AND FIX
+Verify these automation triggers are working correctly:
+Trigger 1 — DAY1_BLUR:
+
+Must fire on FIRST login only
+Shows blurred certificate preview
+Check: Is this firing? Is it firing only once?
+Fix if: firing every time OR not firing at all
+Trigger 2 — FIRST_TASK_COMPLETE:
+
+Must fire when first task gets approved
+Shows coin popup + progress bar for first time
+Check: Is the task approval webhook triggering this?
+Fix if: not firing after task approval
+Trigger 3 — EXPERT_CERT_UNLOCK:
+
+Must fire at correct TIME based on tenure:
+45 days → Day 10
+1 month → Day 7
+3 months → Week 6 (Day 42)
+6 months → Month 2 (Day 60)
+AND completion must be ≥ 30%
+BOTH conditions required — time AND completion
+Check: Is timing calculated from registration date?
+Fix if: firing too early OR based only on completion
+Trigger 4 — FELLOWSHIP_WHISPER:
+
+Must NEVER fire if student is not top 10% cohort
+Must NEVER fire if completion < 70%
+BOTH conditions required
+Fix: Apply the strict eligibility check from Section 1
+Add a background job to check triggers:
+javascript
+// NEW FEATURE: Psychology Trigger Checker
+// Runs every hour via cron
+
+const cron = require('node-cron')
+
+cron.schedule('0 * * * *', async () => {
+  console.log('[CRON] Checking psychology triggers...')
+
+  const students = await User.find({ role: 'student', isActive: true })
+
+  for (const student of students) {
+    const daysSinceRegistration = Math.floor(
+      (Date.now() - new Date(student.createdAt)) / (1000 * 60 * 60 * 24)
+    )
+    const completionPercent = await getStudentCompletionPercent(student._id)
+    const duration = student.duration || '3months'
+
+    // Check Expert Cert trigger timing
+    const expertThresholds = {
+      '45days': 10, '1month': 7, '3months': 42, '6months': 60
+    }
+    const expertThreshold = expertThresholds[duration]
+
+    if (
+      daysSinceRegistration >= expertThreshold &&
+      completionPercent >= 30
+    ) {
+      await logTriggerIfNotShown(student._id, 'EXPERT_CERT_UNLOCK')
+    }
+
+    // Check Nano Degree trigger
+    const nanoThresholds = {
+      '45days': 30, '1month': 22, '3months': 84, '6months': 120
+    }
+    const nanoThreshold = nanoThresholds[duration]
+
+    if (
+      daysSinceRegistration >= nanoThreshold &&
+      completionPercent >= 70
+    ) {
+      await logTriggerIfNotShown(student._id, 'NANO_CERT_UNLOCK')
+    }
+
+    // Check Fellowship eligibility (strict)
+    const fellowship = await checkFellowshipEligibility(student._id)
+    if (fellowship.isEligible) {
+      await logTriggerIfNotShown(student._id, 'FELLOWSHIP_WHISPER')
+    }
+  }
+})
+
+async function logTriggerIfNotShown(studentId, triggerName) {
+  const existing = await PsychologyTrigger.findOne({ studentId, triggerName })
+  if (!existing) {
+    await PsychologyTrigger.create({ student_id: studentId, trigger_name: triggerName })
+  }
+}
+📋 SECTION 6: APPLY ALL FIXES ACROSS ALL 14 DOMAINS
+Every fix in this document must work for ALL domains:
+
+Python Developer
+Java Developer
+DevOps
+Web Development
+MERN Stack
+Data Science
+Cyber Security
+Flutter
+Software Engineering
+Business Analyst
+Venture Capital
+Space Research
+Vibe Coding
+HR Development
+Domain-specific certificate text: Every certificate PDF must include the student's domain name. The domain name in the cert must match exactly what the student enrolled for.
+
+📋 SECTION 7: UI FIXES FOR CERTIFICATE SECTION
+Current wrong behaviour:
+Fellowship card showing even when ineligible
+"This is waiting for you" text overlapping certificate preview
+Blurred certificates look too similar to each other
+Fix UI:
+Certificate card states:
+
+State 1 — Locked (student hasn't reached threshold):
+
+[Blurred certificate image — student name visible, rest blurred]
+"Keep going — you're X% of the way there"
+Progress bar: ████░░░░  4% (need 30%)
+[🔒 Locked]
+State 2 — Unlocked (threshold reached, not yet claimed):
+
+[Clear certificate preview with student name]
+"🎉 You've qualified! This is yours."
+[✨ Claim It →]  (price shown on click)
+State 3 — Issued (already claimed):
+
+[Full certificate preview]
+Certificate ID: TEN-EXP-2026-K4M7R2
+Issued: 07 Jun 2026
+[Download PDF]  [LinkedIn]  [WhatsApp]
+State 4 — Fellowship Hidden (ineligible):
+
+[Nothing shown — no card, no hint]
+State 5 — Fellowship Eligible but not yet claimed:
+
+[Private sliding card from right edge]
+"You are one of the few students who qualify..."
+[Learn More →]
+✅ FINAL CHECKLIST
+Fellowship Bug Fix
+ Fellowship card is completely hidden for students below top 10%
+ Fellowship card is completely hidden for students below 70% completion
+ Student at 0% rank sees NO fellowship card, no hint
+ Eligibility check runs on every certificate page load
+ Fellowship only shows after BOTH conditions met simultaneously
+LOR / LOC / Documents Section
+ New "My Documents & Certificates" section in student portal
+ Tab 1: My Certificates shows all 3 tiers with correct states
+ Tab 2: My Documents shows Offer Letter, LOR, LOC with download links
+ LOC auto-generates when student hits 100% completion
+ LOR can be generated by HR and appears in student portal
+ Download links open correct PDFs
+HR → Student Portal Sync
+ When HR confirms offer letter → student_document status updates to 'approved'
+ Student portal "My Documents" shows "✅ Approved" immediately
+ Offer letter download link appears in student portal after HR generates
+ Student portal fetches fresh status on every page load
+ Email sent to student (failure doesn't block the process)
+ Document appears in Document History in HR portal
+Psychology Automation
+ DAY1_BLUR fires only on first login
+ FIRST_TASK_COMPLETE fires after first task approved
+ EXPERT_CERT_UNLOCK fires based on TIME + completion (both conditions)
+ NANO_CERT_UNLOCK fires based on TIME + completion (both conditions)
+ FELLOWSHIP_WHISPER only fires for genuinely eligible students
+ Background cron job checks triggers every hour
+All 14 Domains
+ Certificate section works for all 14 domains
+ LOR/LOC generation works for all 14 domains
+ HR approval sync works for all 14 domains
+ Psychology triggers work for all 14 domains
+ Document numbers generated correctly for all domains
+General
+ Zero existing features broken
+ Zero existing routes modified
+ Works on mobile and desktop
+End of Certificate + LOR/LOC + HR Sync Fix Prompt — Version 1.0 Platform: The Entrepreneurship Network (TEN) Fix Fellowship bug first. Then add LOR/LOC. Then fix HR sync. Then verify automation. Apply everything to all 14 domains. Do not break anything that currently works.
+

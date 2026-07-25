@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TEN — Student Login</title>
+<link rel="stylesheet" href="ten-theme.css">
+<link rel="stylesheet" href="ten-motion.css">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+
+html, body {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.login-wrap {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 440px;
+  padding: 24px;
+  animation: ten-fadeUp 0.6s ease both;
+}
+
+/* ── Brand header ── */
+.brand-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+.brand-logo-ring {
+  width: 72px; height: 72px;
+  background: rgba(212,175,55,0.08);
+  backdrop-filter: blur(10px);
+  border: 1.5px solid rgba(212,175,55,0.35);
+  border-radius: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  box-shadow: 0 0 40px rgba(212,175,55,0.25), inset 0 1px 1px rgba(255,255,255,0.1);
+  animation: ten-pulse-gold 3s ease infinite;
+  transition: all 0.3s ease;
+}
+.brand-logo-ring:hover {
+  background: rgba(212,175,55,0.12);
+  border-color: rgba(212,175,55,0.5);
+  box-shadow: 0 0 60px rgba(212,175,55,0.35), inset 0 1px 1px rgba(255,255,255,0.15);
+  transform: translateY(-2px);
+}
+.brand-name {
+  font-family: var(--ten-font-display);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 4px;
+  color: var(--ten-gold);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.brand-full {
+  font-size: 11px;
+  color: var(--ten-text-muted);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+/* ── Card ── */
+.login-card {
+  background: var(--ten-card);
+  border: 1px solid var(--ten-border);
+  border-radius: var(--ten-r-xl);
+  padding: 36px 38px;
+  box-shadow: var(--ten-shadow-lg), var(--ten-glow-gold);
+  position: relative;
+  overflow: hidden;
+}
+.login-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--ten-gold), transparent);
+}
+
+.card-title {
+  font-family: var(--ten-font-display);
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  margin-bottom: 6px;
+}
+.card-sub {
+  font-size: 14px;
+  color: var(--ten-text-sub);
+  margin-bottom: 30px;
+  line-height: 1.6;
+}
+
+.field-group {
+  margin-bottom: 20px;
+}
+.field-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--ten-text-sub);
+  margin-bottom: 9px;
+}
+.field-input {
+  width: 100%;
+  padding: 14px 18px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--ten-border);
+  border-radius: var(--ten-r-sm);
+  color: var(--ten-text);
+  font-family: var(--ten-font-body);
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.field-input:focus {
+  border-color: var(--ten-gold);
+  box-shadow: 0 0 0 3px rgba(212,175,55,0.10);
+}
+.field-input::placeholder { color: #2e2820; }
+
+.login-btn {
+  width: 100%;
+  padding: 15px;
+  background: linear-gradient(135deg, var(--ten-gold), var(--ten-gold-dim));
+  border: none;
+  border-radius: var(--ten-r-sm);
+  color: #0a0700;
+  font-family: var(--ten-font-display);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 6px;
+}
+.login-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px rgba(212,175,55,0.4);
+}
+.login-btn:active { transform: translateY(0); }
+
+.loading-text {
+  display: none;
+  text-align: center;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--ten-gold);
+  font-family: var(--ten-font-mono);
+  letter-spacing: 1px;
+}
+
+/* ── Footer nav ── */
+.card-nav {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 24px;
+  flex-wrap: wrap;
+}
+.card-nav a {
+  font-size: 12px;
+  color: var(--ten-text-muted);
+  text-decoration: none;
+  letter-spacing: 0.5px;
+  transition: color 0.2s;
+  padding: 4px 0;
+}
+.card-nav a:hover { color: var(--ten-gold); }
+.card-nav .sep { color: var(--ten-text-muted); opacity: 0.3; }
+
+.page-footer {
+  text-align: center;
+  margin-top: 24px;
+  font-size: 11px;
+  color: var(--ten-text-muted);
+  letter-spacing: 0.5px;
+}
+
+@media (max-width: 500px) {
+  html, body { overflow: auto; height: auto; padding: 20px 0; }
+  .login-card { padding: 28px 22px; }
+}
+</style>
+</head>
+<body>
+
+<div class="ten-grid-bg"></div>
+<div class="ten-orb ten-orb-1"></div>
+<div class="ten-orb ten-orb-2"></div>
+
+<div class="login-wrap">
+
+  <div class="brand-header" style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; margin-bottom: 32px;">
+    <div class="brand-logo-ring ten-float" style="width: 80px; height: 80px; background: #121316; border: 2px solid rgba(212,175,55,0.45); border-radius: 20px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px; box-shadow: 0 0 40px rgba(212,175,55,0.35), inset 0 1px 1px rgba(255,255,255,0.15); transition: all 0.3s ease;">
+      <img src="ten-logo.png" alt="TEN Logo" style="width:56px;height:56px;object-fit:contain;display:block;filter:drop-shadow(0 0 6px rgba(212,175,55,0.35));" />
+    </div>
+    <div class="brand-name" style="font-family: var(--ten-font-display), sans-serif; font-size: 28px; font-weight: 800; color: #D4AF37; letter-spacing: 5px; text-transform: uppercase; margin-bottom: 2px; text-shadow: 0 0 12px rgba(212,175,55,0.3);">TEN</div>
+    <div class="brand-full" style="font-size: 11px; font-weight: 500; color: rgba(212,175,55,0.85); letter-spacing: 2px; text-transform: uppercase; margin-top: 4px;">THE ENTREPRENEURSHIP NETWORK</div>
+    <div class="brand-full" style="font-size: 11px; color: #94a3b8; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 6px; opacity: 0.85;">Unified Ecosystem Control Center</div>
+  </div>
+
+  <div class="login-card ten-animated-border">
+    <div class="card-title ten-fade-up ten-d1">Sign In</div>
+    <p class="card-sub ten-fade-up ten-d2">Access Students, Founders, Mentors, Investors, and Contractors hubs</p>
+
+    <!-- Role Selection Switcher -->
+    <div style="display:flex; justify-content:space-between; gap:4px; margin-bottom:24px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:4px; border-radius:10px;">
+        <button type="button" class="role-tab" id="tab-student" onclick="setLoginRole('student')" style="flex:1; padding:8px 4px; font-size:10px; font-weight:700; text-transform:uppercase; border:none; background:rgba(212,175,55,0.08); color:var(--ten-gold); border-radius:6px; cursor:pointer; transition:all 0.2s;">Student</button>
+        <button type="button" class="role-tab" id="tab-founder" onclick="setLoginRole('founder')" style="flex:1; padding:8px 4px; font-size:10px; font-weight:700; text-transform:uppercase; border:none; background:none; color:#94a3b8; border-radius:6px; cursor:pointer; transition:all 0.2s;">Founder</button>
+        <button type="button" class="role-tab" id="tab-mentor" onclick="setLoginRole('mentor')" style="flex:1; padding:8px 4px; font-size:10px; font-weight:700; text-transform:uppercase; border:none; background:none; color:#94a3b8; border-radius:6px; cursor:pointer; transition:all 0.2s;">Mentor</button>
+        <button type="button" class="role-tab" id="tab-investor" onclick="setLoginRole('investor')" style="flex:1; padding:8px 4px; font-size:10px; font-weight:700; text-transform:uppercase; border:none; background:none; color:#94a3b8; border-radius:6px; cursor:pointer; transition:all 0.2s;">Investor</button>
+        <button type="button" class="role-tab" id="tab-contractor" onclick="setLoginRole('contractor')" style="flex:1; padding:8px 4px; font-size:10px; font-weight:700; text-transform:uppercase; border:none; background:none; color:#94a3b8; border-radius:6px; cursor:pointer; transition:all 0.2s;">Contractor</button>
+    </div>
+
+    <form id="loginForm" class="ten-fade-up ten-d3">
+      <!-- COMING SOON WARNING BANNER -->
+      <div id="comingSoonBanner" style="display:none; background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25); border-radius:10px; padding:12px; margin-bottom:18px; text-align:center;">
+        <div style="font-size:18px; margin-bottom:4px;">🚧</div>
+        <div id="comingSoonTitle" style="color:#fbbf24; font-weight:700; font-size:13px; text-transform:uppercase; letter-spacing:1px;">Coming Soon</div>
+        <div style="color:#94a3b8; font-size:11px; margin-top:2px;">This portal is under development. Student login is available under the "Student" tab.</div>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" id="fieldLabel">Email Address or Employee ID</label>
+        <input class="field-input" type="text" id="loginId" placeholder="Enter your Email or Employee ID" required>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Password</label>
+        <input class="field-input" type="password" id="password" placeholder="Enter your password" required>
+      </div>
+      <button class="login-btn" type="submit">Sign In to Dashboard</button>
+      <div class="loading-text" id="loadingText">⟳ Authenticating and loading dashboard...</div>
+      
+      <!-- Styled Registration Prompt -->
+      <div style="text-align: center; margin-top: 18px; padding-top: 16px; border-top: 1px solid rgba(255, 255, 255, 0.05); font-size: 13px; color: #94a3b8;">
+        Don't have an account? 
+        <a href="/register" style="color: var(--ten-gold); font-weight: 600; text-decoration: none; margin-left: 4px; transition: color 0.2s;" onmouseover="this.style.color='#f59e0b'" onmouseout="this.style.color='var(--ten-gold)'">
+          Register here
+        </a>
+      </div>
+    </form>
+  </div>
+
+  <div class="card-nav">
+    <a href="/register">Register Account</a>
+    <span class="sep">·</span>
+    <a href="coordinator-login.html">Coordinator Login</a>
+    <span class="sep">·</span>
+    <a href="/">Home</a>
+  </div>
+
+<script src="/forgot-password.js"></script>
+<script>
+let activeRole = 'student';
+
+function setLoginRole(role) {
+  activeRole = role;
+  document.querySelectorAll('.role-tab').forEach(b => {
+    b.style.color = '#94a3b8';
+    b.style.background = 'none';
+  });
+  const activeBtn = document.getElementById('tab-' + role);
+  if (activeBtn) {
+    activeBtn.style.color = 'var(--ten-gold)';
+    activeBtn.style.background = 'rgba(212,175,55,0.08)';
+  }
+  
+  const fieldLabel = document.getElementById('fieldLabel');
+  const loginIdInput = document.getElementById('loginId');
+  const passwordInput = document.getElementById('password');
+  const submitBtn = document.querySelector('.login-btn');
+  const comingSoonBanner = document.getElementById('comingSoonBanner');
+  const comingSoonTitle = document.getElementById('comingSoonTitle');
+
+  if (role === 'student') {
+    fieldLabel.textContent = 'Email Address or Employee ID';
+    loginIdInput.placeholder = 'Enter your Email or Employee ID';
+    loginIdInput.disabled = false;
+    loginIdInput.style.opacity = '1';
+    loginIdInput.style.cursor = 'text';
+
+    passwordInput.placeholder = 'Enter your password';
+    passwordInput.disabled = false;
+    passwordInput.style.opacity = '1';
+    passwordInput.style.cursor = 'text';
+
+    submitBtn.disabled = false;
+    submitBtn.style.opacity = '1';
+    submitBtn.style.cursor = 'pointer';
+    submitBtn.textContent = 'Sign In to Dashboard';
+
+    if (comingSoonBanner) comingSoonBanner.style.display = 'none';
+  } else {
+    fieldLabel.textContent = role.toUpperCase() + ' Email Address';
+    loginIdInput.placeholder = '[Disabled] Portal Under Construction';
+    loginIdInput.disabled = true;
+    loginIdInput.style.opacity = '0.4';
+    loginIdInput.style.cursor = 'not-allowed';
+
+    passwordInput.placeholder = '[Disabled] Portal Under Construction';
+    passwordInput.disabled = true;
+    passwordInput.style.opacity = '0.4';
+    passwordInput.style.cursor = 'not-allowed';
+
+    submitBtn.disabled = true;
+    submitBtn.style.opacity = '0.4';
+    submitBtn.style.cursor = 'not-allowed';
+    submitBtn.textContent = 'Portal Under Construction';
+
+    if (comingSoonTitle) {
+      comingSoonTitle.textContent = role.toUpperCase() + ' PORTAL COMING SOON';
+    }
+    if (comingSoonBanner) comingSoonBanner.style.display = 'block';
+  }
+  if (window.TenForgotPassword) {
+    TenForgotPassword.init({ role: role });
+  }
+}
+</script>
+<script>if(window.TenForgotPassword) TenForgotPassword.init({ role: "student" });</script>
+
+  <div class="page-footer">© 2026 TEN Internship Management System</div>
+
+</div>
+
+<script>
+const form = document.getElementById("loginForm");
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (activeRole !== 'student') {
+    Swal.fire({
+      icon: "error",
+      title: "Portal Under Construction",
+      text: `The ${activeRole.toUpperCase()} portal is under active development. Only student login is currently active.`,
+      background: "#0e1428",
+      color: "#F0EEE8",
+      confirmButtonColor: "#EF4444"
+    });
+    return;
+  }
+  document.getElementById("loadingText").style.display = "block";
+
+  const loginIdInput = document.getElementById("loginId").value.trim();
+  const password = document.getElementById("password").value;
+
+  try {
+    const isEmail = loginIdInput.includes("@");
+    const payload = isEmail 
+      ? { email: loginIdInput, password, role: activeRole } 
+      : { employeeId: loginIdInput, password, role: activeRole };
+
+    const response = await fetch("/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await response.json();
+    document.getElementById("loadingText").style.display = "none";
+
+    if (data.success) {
+      const activeRole = data.role || "student";
+      localStorage.setItem("role", activeRole);
+
+      if (data.user) {
+        localStorage.setItem("user", JSON.stringify(data.user));
+        localStorage.setItem("userId", data.user._id);
+      }
+
+      if (data.student) {
+        sessionStorage.removeItem("tenure_paid_verified");
+        localStorage.setItem("employeeId", data.student.employeeId);
+        localStorage.setItem("student", JSON.stringify(data.student));
+        localStorage.setItem("ten_token", data.student.employeeId);
+        localStorage.setItem("ten_employee_id", data.student.employeeId);
+      }
+
+      Swal.fire({
+        icon: "success",
+        title: "Login Successful",
+        text: `Welcome inside the TEN ${activeRole.toUpperCase()} workspace! 🚀`,
+        background: "#0e1428",
+        color: "#F0EEE8",
+        confirmButtonColor: "#D4AF37",
+        timer: 1500,
+        showConfirmButton: false
+      });
+
+      setTimeout(() => {
+        // Dynamic Role-Based Login Redirects
+        if (activeRole === "student") {
+          window.location.href = "student-dashboard.html";
+        } else if (activeRole === "founder") {
+          window.location.href = "founder-os.html";
+        } else if (activeRole === "mentor") {
+          window.location.href = "mentor-dashboard.html";
+        } else if (activeRole === "investor") {
+          window.location.href = "investor-dashboard.html";
+        } else if (activeRole === "contractor") {
+          window.location.href = "contractor-dashboard.html";
+        } else if (activeRole === "hr" || activeRole === "admin") {
+          window.location.href = "hr-portal.html";
+        } else {
+          window.location.href = "student-dashboard.html";
+        }
+      }, 1500);
+
+    } else {
+      Swal.fire({
+        icon: "error",
+        title: "Login Failed",
+        text: data.message || "Invalid credentials",
+        background: "#0e1428",
+        color: "#F0EEE8",
+        confirmButtonColor: "#ef4444"
+      });
+    }
+  } catch (error) {
+    document.getElementById("loadingText").style.display = "none";
+    console.error(error);
+    Swal.fire({
+      icon: "error",
+      title: "Server Error",
+      text: "Something went wrong. Please try again.",
+      background: "#0e1428",
+      color: "#F0EEE8",
+      confirmButtonColor: "#ef4444"
+    });
+  }
+});
+</script>
+
+<script src="ten-motion.js"></script>
+<script src="/password-toggle.js"></script>
+</body>
+</html>

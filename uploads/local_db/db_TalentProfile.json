@@ -1,0 +1,18 @@
+[
+  {
+    "userId": "6a6489c632405081c03dca06",
+    "headline": "f Student at e",
+    "skills": [],
+    "socialLinks": {
+      "linkedin": "",
+      "github": "",
+      "twitter": "",
+      "website": ""
+    },
+    "visibility": "public",
+    "isVerified": true,
+    "_id": "6a6489c632405081c03dca0c",
+    "createdAt": "2026-07-25T10:02:46.120Z",
+    "updatedAt": "2026-07-25T10:02:46.120Z"
+  }
+]

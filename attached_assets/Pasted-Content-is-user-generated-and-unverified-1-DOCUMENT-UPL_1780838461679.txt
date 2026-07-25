@@ -1,0 +1,533 @@
+Content is user-generated and unverified.
+1
+DOCUMENT UPLOAD + CERTIFICATION SYSTEM — DEVELOPMENT PROMPT
+Platform: The Entrepreneurship Network (TEN)
+Features: Post-Registration Document Upload + 3-Tier Certificate System
+Version: 1.0
+HOW TO USE THIS PROMPT: Give this entire document to Replit AI and say: "Implement both features exactly as described. Read every section before writing any code."
+
+⚠️ CRITICAL DEFENCE RULES — READ BEFORE WRITING ANY CODE
+NEVER delete, modify, or overwrite any existing working file
+NEVER alter existing database models/tables
+NEVER modify existing API routes — only ADD new routes under /api/v2/
+NEVER change existing authentication or login system
+NEVER touch existing student dashboard layout
+All new code goes in new files only
+Every new code block must be commented: // NEW FEATURE: [name]
+If any conflict with existing code → STOP and ask. Never assume.
+Payment system must be built completely but remain INACTIVE
+PAYMENT_ENABLED=false in .env — one flag activates everything when ready
+📌 SECTION 1: FEATURE 1 — POST-REGISTRATION DOCUMENT UPLOAD
+1.1 When Does This Appear?
+Immediately after a student registers and logs in for the first time.
+A banner appears at the TOP of the student dashboard — non-blocking but persistent:
+
+"📋 Complete your profile — Upload 2 documents to receive your Offer Letter"
+
+This banner stays visible until HR approves the documents.
+Student can still use the platform freely — this is NOT a hard block.
+
+1.2 Document Upload Page
+Create a new page/section called "My Documents" accessible from:
+
+The persistent banner (click → goes to document page)
+Student dashboard sidebar/menu
+Page contains TWO upload zones:
+
+Upload Zone 1 — Address Proof
+
+Label:    "Address Proof"
+Subtitle: "Aadhaar Card, Passport, Voter ID, or any government-issued ID"
+Accepted: JPG, PNG, PDF
+Max size: 5MB
+Storage:  AWS S3 or local /uploads/ folder
+Filename: [studentId]_address_proof.[ext]
+Upload Zone 2 — College Marksheet
+
+Label:    "Latest College Marksheet"
+Subtitle: "Most recent semester or year marksheet"
+Accepted: JPG, PNG, PDF
+Max size: 5MB
+Storage:  AWS S3 or local /uploads/ folder
+Filename: [studentId]_marksheet.[ext]
+Upload UI Behaviour:
+
+Both zones support drag-and-drop AND click-to-upload
+After upload: show file preview thumbnail
+Re-upload allowed until HR reviews
+Both files must be uploaded before Submit button activates
+On Submit: status updates to "pending" in database
+1.3 Document Status Display (Student Sees This)
+Show a status badge on the My Documents page:
+
+Status	Badge Colour	Message Shown to Student
+Not Uploaded	Grey	"Please upload your documents to get your Offer Letter"
+Pending Review	Yellow	"📋 Documents submitted — Under HR Review"
+Under Review	Blue	"🔍 Your documents are being reviewed"
+Approved	Green	"✅ Documents approved"
+Offer Letter Sent	Green + ✓	"✉️ Your Offer Letter has been sent to your email"
+Rejected	Red	"❌ Document rejected — please re-upload"
+1.4 New Database Model
+javascript
+// NEW MODEL: StudentDocument
+// File: models/new/StudentDocument.js
+
+const StudentDocumentSchema = new mongoose.Schema({
+  student_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    unique: true
+  },
+  address_proof_url: { type: String, default: null },
+  marksheet_url: { type: String, default: null },
+  upload_status: {
+    type: String,
+    enum: ['not_uploaded', 'pending', 'under_review', 'approved', 'rejected'],
+    default: 'not_uploaded'
+  },
+  uploaded_at: { type: Date },
+  reviewed_by: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  reviewed_at: { type: Date, default: null },
+  rejection_reason: { type: String, default: null },
+  offer_letter_url: { type: String, default: null },
+  offer_letter_sent_at: { type: Date, default: null }
+}, { timestamps: true })
+
+module.exports = mongoose.model('StudentDocument', StudentDocumentSchema)
+1.5 New API Routes (All under /api/v2/documents/)
+POST   /api/v2/documents/upload-address-proof
+       → Multipart upload, saves file, updates StudentDocument
+
+POST   /api/v2/documents/upload-marksheet
+       → Multipart upload, saves file, updates StudentDocument
+
+POST   /api/v2/documents/submit
+       → Marks status as 'pending', triggers HR notification
+
+GET    /api/v2/documents/my-status
+       → Returns current document status for logged-in student
+
+GET    /api/v2/admin/documents/pending
+       → HR sees all students with pending documents (ADMIN ONLY)
+
+POST   /api/v2/admin/documents/generate-offer-letters
+       → Bulk: HR selects students, generates + emails offer letters
+
+PATCH  /api/v2/admin/documents/reject/:studentId
+       → HR rejects documents with a reason
+1.6 HR Admin Panel — Generate Documents Section
+Add a NEW section to the existing HR/Admin portal. Call it: "Generate Documents" Sub-tab inside it: "Pending"
+
+DO NOT modify any existing admin pages. Only ADD this new section.
+
+Pending Tab Shows: A table with columns: Student Name | Domain | Duration | Upload Date | Address Proof | Marksheet | Status | Action
+
+"View" button on Address Proof and Marksheet columns → opens file in new tab
+Checkbox on each row for bulk selection
+"Select All" checkbox at top
+Button: "Generate Offer Letters for Selected" (bulk action)
+Bulk Offer Letter Generation Flow:
+
+HR selects students via checkboxes
+Clicks "Generate Offer Letters"
+System generates PDF offer letter for each student
+Saves to uploads folder
+Sends email to student with PDF attached
+Updates student status to "approved" + "offer_letter_sent"
+Student portal status badge updates automatically
+Student receives email notification
+1.7 Offer Letter Template
+Generate offer letter as PDF using either:
+
+Puppeteer (HTML → PDF) — preferred
+PDFKit — alternative
+Template variables to inject:
+
+[STUDENT_FULL_NAME]
+[DOMAIN_NAME]
+[DURATION_TYPE]
+[START_DATE]
+[END_DATE]
+[DATE_ISSUED]
+[COHORT_NAME]
+Offer letter must include:
+
+TEN organization header with logo
+"INTERNSHIP OFFER LETTER" title
+Student details in a highlighted box
+Body text confirming the internship
+Director signature area
+TEN seal/stamp
+Professional A4 layout
+🏅 SECTION 2: FEATURE 2 — THREE CERTIFICATION TIERS
+2.1 Overview
+Three certificate tiers displayed in the student portal.
+Payment system is BUILT but INACTIVE (PAYMENT_ENABLED=false).
+When PAYMENT_ENABLED=true → everything activates with zero code changes.
+
+Tier	Name	Price	Unlock Condition
+1	Expert Certificate	₹100	30% course completion
+2	Nano Degree	₹1000	70% course completion
+3	Fellowship	₹2500	Top 10% of cohort leaderboard only
+2.2 Where It Appears in Student Portal
+Create a new section in the student dashboard called "My Certificates" Accessible from:
+
+Dashboard sidebar/menu
+A widget on the main dashboard showing "1 of 3 certificates"
+2.3 Certificate Section UI Design
+Before unlock — Blurred Preview (Day 1):
+
+┌─────────────────────────────────────┐
+│  [BLURRED CERTIFICATE IMAGE]        │
+│  Expert Certificate                 │
+│  ████████████████ (blurred)         │
+│                                     │
+│  "This is waiting for you.          │
+│   Keep going."                      │
+│                                     │
+│  Progress: ████░░░░░░  18%          │
+│  [Locked 🔒]                        │
+└─────────────────────────────────────┘
+After unlock — Claim Screen:
+
+┌─────────────────────────────────────┐
+│  🎉 You've qualified!               │
+│                                     │
+│  [CERTIFICATE PREVIEW - YOUR NAME]  │
+│                                     │
+│  Expert Certificate                 │
+│  Your name is already on it.        │
+│                                     │
+│  [Claim It →]  ₹100                 │
+│  (Payment activates when enabled)   │
+└─────────────────────────────────────┘
+2.4 Psychology Triggers Implementation
+IMPORTANT: Follow this exact psychology sequence.
+
+Trigger 1 — DAY1_BLUR (fires on first dashboard load):
+
+Show blurred certificate preview in Certificates section
+Overlay text: "This is waiting for you. Keep going."
+No price. No button. Just the visual.
+Log trigger in database
+Trigger 2 — FIRST_TASK_COMPLETE (fires after first task approved):
+
+Small bottom-right card appears (not a popup):
+"🪙 +20 coins earned. You're building something real."
+
+For the FIRST time, show: "Expert Certificate: 12% complete" progress bar
+No price. No call to action. Just a bar.
+Log trigger in database
+Trigger 3 — EXPERT_CERT_UNLOCK (fires at correct timing per tenure):
+
+Timing per tenure:
+
+Tenure	When to Fire
+45 Days	Day 10
+1 Month	Day 7
+3 Months	End of Week 6
+6 Months	End of Month 2
+What happens:
+
+Screen goes dark (0.5s fade)
+Student name fades in center (0.8s)
+Certificate scales in from center (1.2s ease-out)
+Confetti drops
+Sound plays (subtle, with mute button)
+Text: "You've officially qualified for the Expert Certificate. This is yours now."
+Certificate shown with student name already on it
+Single button: "Claim It →"
+Clicking shows ₹100 price + payment UI
+If PAYMENT_ENABLED=false → show: "Payment coming soon — we'll notify you"
+Log trigger in database
+Trigger 4 — NANO_SLOW_BURN (after Expert cert interaction):
+
+Quiet progress bar appears on dashboard permanently: "Nano Degree: ████░░░░ 42%"
+No price. No sales pitch. Just the bar updating with each task.
+At 70% → same celebration screen as Expert but for Nano Degree
+Log trigger in database
+Trigger 5 — FELLOWSHIP_WHISPER (top 10% cohort only):
+
+ONLY shown to students in top 10% of their cohort leaderboard
+A private card slides in from right edge (NOT a banner or popup):
+"You are one of [X] students in your cohort who have qualified
+for the Fellowship review. This is rare. Most students never see this screen."
+
+"Learn More →" button only — no price on first view
+Second view shows Fellowship design + ₹2500 price
+Students NOT in top 10% NEVER see this — no explanation, no error
+Log trigger in database
+Social Proof (passive, maximum once per day):
+
+A subtle feed item (not a notification):
+"Priya S. from your cohort just received their Expert Certificate"
+
+Log trigger in database
+2.5 Certificate Design Specifications
+Build all 3 as HTML/CSS templates. Use Puppeteer to render to PDF at 300 DPI.
+
+Expert Certificate (₹100)
+Background:    #FDFAF4 (warm ivory)
+Border:        2px solid #C9A84C (gold, thin, with SVG corner ornaments)
+Name Font:     Playfair Display, 48px, centered
+Body Font:     Inter or DM Sans, 14px
+Gold Accent:   #C9A84C
+Layout:        A4 Landscape
+
+Elements:
+1. TEN logo top center
+2. "CERTIFICATE OF COMPLETION" — gold small caps
+3. "This certifies that" — grey italic
+4. [STUDENT NAME] — large Playfair Display
+5. "has successfully completed the [DOMAIN] Internship Program"
+6. Duration + Date
+7. Gold divider line
+8. Bottom row: Signature left | Round seal center | QR code right
+9. Certificate ID bottom left (format: TEN-[YEAR]-EXP-[6CHARS])
+10. Diagonal watermark at 3% opacity
+Nano Degree Certificate (₹1000)
+Background:    #0A1628 (deep navy)
+Pattern:       Subtle hexagon SVG pattern at 4% opacity
+Border:        Double — outer white 1px, inner gold 1px, 8px gap
+Name Font:     Playfair Display, 52px, gold gradient text
+Body Font:     DM Sans, white, 14px
+Gold:          Gradient #B8860B → #FFD700 → #DAA520
+Layout:        A4 Landscape
+
+Special elements:
+- Left edge shimmer strip (CSS gradient animation — static in PDF)
+- Dark ribbon band across top 25% with org name in gold
+- "NANO DEGREE CERTIFICATE" in tracked gold caps
+- Two domain-specific seals (TEN seal + domain icon seal)
+- LinkedIn "Add to LinkedIn →" button with pre-filled URL
+- QR verification center bottom
+- Certificate ID bottom right (format: TEN-[YEAR]-ND-[6CHARS])
+Fellowship Certificate (₹2500)
+Background:    #0D2818 (deep forest green)
+Illustration:  Full background constellation/arch SVG at 5% opacity gold lines
+Gold:          Multi-stop gradient #B8860B → #FFD700 → #DAA520 → #B8860B
+Title Font:    Impact or tracked display — "FELLOW" massive caps full width
+Name Font:     Cormorant Garamond, 60px, gold gradient
+Layout:        A4 Landscape (primary) + A3 poster version
+
+Special elements:
+- "FELLOW" masthead — full width, letter-spacing: 0.5em
+- "of The Entrepreneurship Network" below in small white caps
+- Auto-generated citation paragraph (italic, white, centered):
+  "This certifies that [NAME] has demonstrated exceptional dedication
+   and commitment throughout their [DURATION] journey at TEN.
+   This Fellowship is awarded in recognition of achievement in
+   the top 3% of their cohort in [DOMAIN]."
+- [STUDENT NAME] as largest element — calligraphic serif, gold
+- Large wax seal center bottom (CSS: deep red #8B0000, gold ring, TEN logo)
+- Decorative ribbon flowing from wax seal
+- THREE signature lines: Director | Program Head | Domain Expert
+- NFC-style digital badge (separate SVG export)
+- QR verification bottom right
+- Certificate ID format: TEN-[YEAR]-FEL-[6CHARS]
+- Physical copy option (₹500 extra, activate when payment enabled)
+
+Export formats:
+- PDF A4 (digital delivery)
+- PDF A3 (print-ready, CMYK, 3mm bleed)
+- PNG 2480×3508px
+- SVG badge (email signature + LinkedIn)
+2.6 Certificate Reveal Animation
+When student claims any certificate, show this sequence:
+
+javascript
+// NEW FEATURE: Certificate Reveal Animation
+Sequence:
+1. Screen fades to dark (0.5s)
+2. Subtle particle field appears (stars, not glitter)
+3. Student name fades in center, white, large (0.8s)
+4. Certificate scales from 0.05 to 1.0, center (1.2s cubic-bezier ease-out)
+5. Confetti bursts from top (2s, 200 particles)
+6. Triumphant sound plays (1.5s, subtle — mute button visible)
+7. Certificate fully visible
+8. Three buttons fade in below:
+   [Download PDF]  [Share on LinkedIn]  [Share on WhatsApp]
+9. Background: dark with slow particle field
+Use CSS animations + vanilla JS or Framer Motion.
+Must work on both desktop AND mobile.
+
+2.7 New Database Model for Certificates
+javascript
+// NEW MODEL: StudentCertificate
+// File: models/new/StudentCertificate.js
+
+const StudentCertificateSchema = new mongoose.Schema({
+  student_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  certificate_type: {
+    type: String,
+    enum: ['expert', 'nano_degree', 'fellowship'],
+    required: true
+  },
+  certificate_id: {
+    type: String,
+    unique: true
+    // Format: TEN-2026-EXP-K4M7R2
+  },
+  domain: { type: String },
+  cohort: { type: String },
+  issued_at: { type: Date },
+  pdf_url: { type: String, default: null },
+  payment_status: {
+    type: String,
+    enum: ['pending', 'paid', 'failed'],
+    default: 'pending'
+    // Only relevant when PAYMENT_ENABLED=true
+  },
+  verification_url: { type: String },
+  linkedin_url: { type: String },
+  badge_svg_url: { type: String },
+  physical_copy_requested: { type: Boolean, default: false }
+}, { timestamps: true })
+
+module.exports = mongoose.model('StudentCertificate', StudentCertificateSchema)
+javascript
+// NEW MODEL: PsychologyTrigger
+// File: models/new/PsychologyTrigger.js
+
+const PsychologyTriggerSchema = new mongoose.Schema({
+  student_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  trigger_name: {
+    type: String
+    // DAY1_BLUR | FIRST_TASK_COMPLETE | EXPERT_CERT_UNLOCK
+    // NANO_SLOW_BURN | NANO_CERT_UNLOCK | FELLOWSHIP_WHISPER
+  },
+  shown_at: { type: Date, default: Date.now },
+  clicked: { type: Boolean, default: false },
+  converted: { type: Boolean, default: false }
+  // converted = true when student proceeds to payment
+}, { timestamps: true })
+
+module.exports = mongoose.model('PsychologyTrigger', PsychologyTriggerSchema)
+2.8 New API Routes for Certificates
+GET    /api/v2/certificates/my-certs
+       → Returns all 3 cert statuses + progress % for logged-in student
+
+GET    /api/v2/certificates/preview/:type
+       → Returns cert preview (blurred until unlocked)
+
+POST   /api/v2/certificates/claim/:type
+       → Triggers claim flow
+       → If PAYMENT_ENABLED=false: returns { status: 'payment_coming_soon' }
+       → If PAYMENT_ENABLED=true: initiates Razorpay order
+
+GET    /api/v2/certificates/verify/:certId
+       → PUBLIC route (no auth needed)
+       → Returns: student name, domain, date, cert type, validity
+
+POST   /api/v2/psychology/log-trigger
+       → Logs that a trigger was shown to student
+
+GET    /api/v2/psychology/check-triggers
+       → Returns which triggers should fire for student today
+       → Based on enrollment date + completion % + leaderboard rank
+2.9 Public Verification Page
+Create a public page at: /verify/[certId]
+
+Accessible by anyone (employers, recruiters, HR).
+Shows:
+
+Certificate holder name
+Domain
+Certificate type
+Issue date
+Valid / Invalid status
+TEN branding
+This page requires NO login.
+
+2.10 Payment System Skeleton
+javascript
+// config/payment.js — NEW FEATURE: Payment Skeleton
+module.exports = {
+  PAYMENT_ENABLED: process.env.PAYMENT_ENABLED === 'true' || false,
+  RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID || '',
+  RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || '',
+  CERT_PRICES: {
+    expert: 100,
+    nano_degree: 1000,
+    fellowship: 2500
+  }
+}
+
+// All payment execution wrapped like this:
+async function claimCertificate(studentId, certType) {
+  if (!config.PAYMENT_ENABLED) {
+    return {
+      status: 'payment_disabled',
+      message: 'Payment coming soon. You will be notified by email.'
+    }
+  }
+  // Full Razorpay payment code runs ONLY when flag is true
+  // Build it completely here — it just won't execute until enabled
+}
+Add to .env:
+
+PAYMENT_ENABLED=false
+RAZORPAY_KEY_ID=your_key_here
+RAZORPAY_KEY_SECRET=your_secret_here
+Install: npm install razorpay
+
+✅ FINAL CHECKLIST
+Document Upload
+ "My Documents" section created in student portal
+ Persistent banner on dashboard until documents approved
+ Two upload zones (address proof + marksheet)
+ Drag-and-drop + click-to-upload both work
+ File preview shown after upload
+ Status badge updates through all stages
+ StudentDocument model created in models/new/
+ All document API routes under /api/v2/documents/
+ HR admin "Generate Documents" section added
+ "Pending" tab shows all students awaiting review
+ Bulk offer letter generation works
+ Offer letter PDF generated and emailed to student
+ Student status updates after HR approves
+ Works on mobile
+Certificates
+ "My Certificates" section in student portal
+ All 3 tiers shown (Expert, Nano Degree, Fellowship)
+ Blurred preview shown from Day 1
+ Progress bars update with task completion
+ DAY1_BLUR trigger fires on first login
+ FIRST_TASK_COMPLETE trigger fires after first task
+ EXPERT_CERT_UNLOCK trigger fires at correct tenure timing
+ NANO_SLOW_BURN progress bar appears after Expert
+ FELLOWSHIP_WHISPER only fires for top 10% cohort
+ Social proof feed fires max once per day
+ Certificate reveal animation works (dark screen + confetti)
+ All 3 HTML/CSS certificate templates built
+ Puppeteer renders to PDF at 300 DPI
+ Public verification page at /verify/[certId]
+ StudentCertificate model in models/new/
+ PsychologyTrigger model in models/new/
+ All cert API routes under /api/v2/certificates/
+ PAYMENT_ENABLED=false by default
+ Setting to true activates everything with zero code changes
+ Razorpay SDK installed but inactive
+ Download + LinkedIn + WhatsApp share buttons work
+ Works on mobile
+General
+ Zero existing files modified
+ Zero existing routes changed
+ Zero existing models altered
+ All new models in models/new/ folder
+ All new routes under /api/v2/
+End of Document Upload + Certification System Prompt — Version 1.0 Built for The Entrepreneurship Network (TEN) Any AI reading this: implement exactly as written. When in doubt: ASK. When conflicting with existing code: STOP and flag. Never assume. Never overwrite. Always add.
+

@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TEN — Make Payment</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-base:       #05070e;
+  --bg-card:       #0e1428;
+  --bg-input:      #0b1222;
+  --border:        rgba(212,175,55,0.08);
+  --border-strong: rgba(212,175,55,0.18);
+  --gold:          #D4AF37;
+  --green:         #10b981;
+  --red:           #ef4444;
+  --text:          #F0EEE8;
+  --muted:         #9a9080;
+  --dim:           #4E4840;
+  --radius:        16px;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg-base);color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;}
+body::before{content:'';position:fixed;top:-200px;left:-200px;width:600px;height:600px;background:radial-gradient(circle,rgba(212,175,55,0.06) 0%,transparent 70%);border-radius:50%;pointer-events:none;}
+[data-replit-badge],.replit-ui-theme-root>div:last-child,iframe[src*="replit.com/badge"]{display:none!important;}
+
+.card{background:var(--bg-card);border:1px solid var(--border-strong);border-radius:22px;padding:36px;width:100%;max-width:440px;box-shadow:0 4px 40px rgba(0,0,0,0.45);}
+.back-link{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--dim);text-decoration:none;margin-bottom:22px;transition:color .2s;}
+.back-link:hover{color:var(--muted);}
+.logo-row{display:flex;align-items:center;gap:12px;margin-bottom:26px;}
+.brand{font-size:18px;font-weight:700;color:var(--gold);}
+
+h1{font-size:22px;font-weight:700;margin-bottom:6px;}
+.subtitle{font-size:14px;color:var(--muted);margin-bottom:22px;}
+
+.student-info{background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:22px;display:flex;align-items:center;gap:12px;}
+.avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--gold),#b8962c);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;color:#05070e;flex-shrink:0;}
+.s-name{font-size:15px;font-weight:600;}
+.s-id{font-size:12px;color:var(--dim);font-family:'DM Mono',monospace;}
+
+/* Payment Method Selection */
+.method-selector {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+.method-tab {
+  flex: 1;
+  padding: 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s;
+}
+.method-tab.active {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: rgba(212, 175, 55, 0.05);
+}
+
+label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.6px;}
+.input-wrap{position:relative;margin-bottom:18px;}
+.rupee{position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:17px;font-weight:700;color:var(--gold);pointer-events:none;}
+input[type="number"],input[type="text"],textarea{width:100%;background:var(--bg-input);border:1px solid var(--border-strong);border-radius:var(--radius);color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;font-size:15px;padding:13px 16px;outline:none;transition:border-color .2s;}
+input[type="number"]{padding-left:36px;}
+input[type="number"]:focus,input[type="text"]:focus,textarea:focus{border-color:var(--gold);}
+input[type="number"]::-webkit-outer-spin-button,input[type="number"]::-webkit-inner-spin-button{-webkit-appearance:none;}
+textarea{resize:none;height:70px;}
+
+.btn-pay{width:100%;padding:16px;background:linear-gradient(135deg,var(--gold),#b8962c);color:#05070e;font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:700;border:none;border-radius:var(--radius);cursor:pointer;transition:opacity .2s;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:4px;}
+.btn-pay:hover{opacity:.9;}
+.btn-pay:disabled{opacity:.5;cursor:not-allowed;}
+.spinner{width:18px;height:18px;border:2px solid rgba(0,0,0,.3);border-top-color:#05070e;border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+.error-box{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:var(--radius);padding:14px 16px;margin-top:14px;font-size:14px;color:#fca5a5;display:none;line-height:1.5;}
+
+/* Manual UPI QR CSS */
+.upi-manual-container {
+  display: none;
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 22px;
+  text-align: center;
+}
+.qr-wrapper {
+  background: #fff;
+  border-radius: 14px;
+  padding: 12px;
+  display: inline-block;
+  margin: 14px auto;
+  box-shadow: 0 4px 20px rgba(0,0,0,.3);
+}
+.qr-image {
+  width: 200px;
+  height: 200px;
+  display: block;
+}
+.upi-info {
+  font-size: 13px;
+  font-family: 'DM Mono', monospace;
+  color: var(--gold);
+  margin-top: 8px;
+  font-weight: bold;
+}
+.upi-payee {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.upi-instructions {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+  margin-bottom: 16px;
+  text-align: left;
+}
+.disclosure-note {
+  font-size: 11px;
+  color: var(--gold);
+  border: 1px dashed rgba(212, 175, 55, 0.3);
+  background: rgba(212, 175, 55, 0.02);
+  padding: 10px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.footer-note{text-align:center;font-size:12px;color:var(--dim);margin-top:20px;}
+.footer-note a{color:var(--muted);text-decoration:none;}
+.footer-note a:hover{color:var(--gold);}
+</style>
+</head>
+<body>
+<div class="card">
+  <a class="back-link" href="student-dashboard.html">← Back to Dashboard</a>
+
+  <div class="logo-row">
+    <div style="width:36px;height:36px;background:rgba(212,175,55,0.1);border:1px solid rgba(212,175,55,0.3);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;">💳</div>
+    <div><div class="brand">TEN</div><div style="font-size:11px;color:var(--dim);">Secure Payment</div></div>
+  </div>
+
+  <h1>Make a Payment</h1>
+  <p class="subtitle" id="paymentHeaderSubtitle">Select payment method below</p>
+
+  <div class="student-info">
+    <div class="avatar" id="avatarInitial">S</div>
+    <div>
+      <div class="s-name" id="studentName">Student</div>
+      <div class="s-id" id="studentId">Loading…</div>
+    </div>
+  </div>
+
+  <!-- Method Selection Selector -->
+  <div class="method-selector">
+    <div class="method-tab active" data-method="gateway" onclick="switchMethod('gateway')">
+      💻 Gateway
+    </div>
+    <div class="method-tab" data-method="manual-upi" onclick="switchMethod('manual-upi')">
+      📱 UPI QR (Manual)
+    </div>
+  </div>
+
+  <div id="payFormSection">
+    <label for="amount">Amount (₹)</label>
+    <div class="input-wrap">
+      <span class="rupee">₹</span>
+      <input type="number" id="amount" placeholder="Enter amount" min="1" step="1" autofocus>
+    </div>
+
+    <label for="description">Purpose / Description (optional)</label>
+    <div class="input-wrap">
+      <textarea id="description" placeholder="e.g. Registration fee, Course fee…"></textarea>
+    </div>
+
+    <button class="btn-pay" id="payBtn" onclick="initiatePayment()">
+      🔒 Pay Securely
+    </button>
+
+    <div class="error-box" id="errorBox"></div>
+  </div>
+
+  <!-- Dynamic UPI QR Container -->
+  <div id="upiManualContainer" class="upi-manual-container">
+    <div class="upi-instructions" id="qrInstructions"></div>
+    
+    <div class="qr-wrapper">
+      <img id="qrImage" src="" alt="UPI QR Code" class="qr-image">
+    </div>
+
+    <div class="upi-info" id="qrUpiId"></div>
+    <div class="upi-payee" id="qrPayee"></div>
+
+    <hr style="border: none; border-top: 1px solid var(--border); margin: 20px 0;">
+
+    <div class="disclosure-note">
+      <strong>ℹ️ Manual Verification Disclosure:</strong><br/>
+      This transaction requires manual verification by HR. No fake automated verification timers are used here. Once you pay and submit your 12-digit UTR, HR will manually review and approve the release of benefits.
+    </div>
+
+    <label for="utrInput" style="text-align: left;">12-digit Bank UTR / UPI Ref ID</label>
+    <div class="input-wrap">
+      <input type="text" id="utrInput" placeholder="Enter 12-digit transaction ID" maxlength="20">
+    </div>
+
+    <div class="error-box" id="utrError" style="margin-top: 0; margin-bottom: 14px;"></div>
+
+    <button class="btn-pay" id="submitUtrBtn" onclick="submitUtr()">
+      Submit UTR for HR Approval
+    </button>
+    
+    <button class="back-link" style="background: none; border: none; font-size: 13px; font-weight: 500; cursor: pointer; display: block; margin: 16px auto 0;" onclick="cancelManualFlow()">
+      ← Modify Amount / Cancel
+    </button>
+  </div>
+
+  <p class="footer-note">Payments are processed securely · <a href="student-dashboard.html">Back to Dashboard</a></p>
+</div>
+
+<script>
+const empId = localStorage.getItem('employeeId') || sessionStorage.getItem('employeeId');
+const sName = localStorage.getItem('studentName') || sessionStorage.getItem('studentName') || 'Student';
+
+if (!empId) { window.location.href = 'login.html'; }
+document.getElementById('studentName').textContent   = sName;
+document.getElementById('studentId').textContent     = empId || '—';
+document.getElementById('avatarInitial').textContent = sName.charAt(0).toUpperCase();
+
+function switchMethod(method) {
+  document.querySelectorAll('.method-tab').forEach(tab => {
+    tab.classList.remove('active');
+  });
+  const activeTab = document.querySelector(`.method-tab[data-method="${method}"]`);
+  if (activeTab) activeTab.classList.add('active');
+
+  const btn = document.getElementById('payBtn');
+  const subtitle = document.getElementById('paymentHeaderSubtitle');
+  if (method === 'gateway') {
+    btn.innerHTML = '🔒 Pay Securely';
+    subtitle.textContent = 'Powered by PaymentSetu UPI gateway';
+  } else {
+    btn.innerHTML = '🔒 Generate UPI QR Code';
+    subtitle.textContent = 'Manual UPI Transfer with HR Verification';
+  }
+}
+
+function showError(msg) {
+  const b = document.getElementById('errorBox');
+  b.innerHTML = msg;
+  b.style.display = 'block';
+}
+function hideError() { document.getElementById('errorBox').style.display = 'none'; }
+
+async function initiatePayment() {
+  hideError();
+  const amount = parseFloat(document.getElementById('amount').value);
+  if (!amount || amount < 1 || isNaN(amount)) {
+    showError('Please enter a valid amount (minimum ₹1).');
+    return;
+  }
+  const description = document.getElementById('description').value.trim() || 'TEN Internship Payment';
+  
+  const activeMethod = document.querySelector('.method-tab.active').dataset.method;
+  
+  const btn = document.getElementById('payBtn');
+  btn.disabled = true;
+
+  if (activeMethod === 'gateway') {
+    btn.innerHTML = '<div class="spinner"></div> Creating payment link…';
+    try {
+      const res = await fetch('/api/v2/payment/create-order', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'x-employee-id': empId },
+        body:    JSON.stringify({
+          amount,
+          invoiceRef:  'INV-' + empId + '-' + Date.now(),
+          description,
+          directUpi:   false
+        })
+      });
+      const data = await res.json();
+
+      if (data.success && data.paymentUrl) {
+        btn.innerHTML = '✅ Redirecting to payment page…';
+        window.location.href = data.paymentUrl;
+        return;
+      }
+
+      if (data.alreadyPaid) {
+        showError('✅ This order was already paid successfully.');
+        btn.disabled = false;
+        btn.innerHTML = '🔒 Pay Securely';
+        return;
+      }
+
+      showError(data.message || 'Could not create payment link. Please try again.');
+    } catch (err) {
+      showError('Network error. Please check your connection and try again.');
+    }
+    btn.disabled = false;
+    btn.innerHTML = '🔒 Pay Securely';
+  } else {
+    // Manual UPI Flow
+    btn.innerHTML = '<div class="spinner"></div> Generating QR Code…';
+    try {
+      const res = await fetch('/api/v2/payment/create-order', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'x-employee-id': empId },
+        body:    JSON.stringify({
+          amount,
+          invoiceRef:  'INV-' + empId + '-' + Date.now(),
+          description,
+          method: 'upi'
+        })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        document.getElementById('qrImage').src = data.qrCodeDataUrl;
+        document.getElementById('qrInstructions').textContent = data.instructions;
+        document.getElementById('qrUpiId').textContent = `UPI ID: ${data.upiId}`;
+        document.getElementById('qrPayee').textContent = `Payee: ${data.payeeName}`;
+        window.currentOrderId = data.orderId; // Store order ID for UTR submission
+        
+        document.getElementById('upiManualContainer').style.display = 'block';
+        document.getElementById('payFormSection').style.display = 'none';
+        document.querySelector('.method-selector').style.display = 'none';
+        btn.style.display = 'none';
+      } else {
+        showError(data.message || 'Could not generate dynamic QR. Please try again.');
+        btn.disabled = false;
+        btn.innerHTML = '🔒 Generate UPI QR Code';
+      }
+    } catch (err) {
+      showError('Network error. Please check your connection and try again.');
+      btn.disabled = false;
+      btn.innerHTML = '🔒 Generate UPI QR Code';
+    }
+  }
+}
+
+function cancelManualFlow() {
+  document.getElementById('upiManualContainer').style.display = 'none';
+  document.getElementById('payFormSection').style.display = 'block';
+  document.querySelector('.method-selector').style.display = 'flex';
+  
+  const btn = document.getElementById('payBtn');
+  btn.style.display = 'flex';
+  btn.disabled = false;
+  btn.innerHTML = '🔒 Generate UPI QR Code';
+}
+
+async function submitUtr() {
+  const utr = document.getElementById('utrInput').value.trim();
+  const errorUtr = document.getElementById('utrError');
+  errorUtr.style.display = 'none';
+  
+  if (!utr || utr.length < 6) {
+    errorUtr.innerText = 'Please enter a valid Bank UTR / Transaction ID (minimum 6 digits).';
+    errorUtr.style.display = 'block';
+    return;
+  }
+  
+  const amount = parseFloat(document.getElementById('amount').value);
+  const description = document.getElementById('description').value.trim() || 'Direct UPI Payment';
+  const submitBtn = document.getElementById('submitUtrBtn');
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<div class="spinner" style="border-top-color: white;"></div> Submitting to HR…';
+  
+  try {
+    const res = await fetch('/api/v2/payment/utr-confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-employee-id': empId },
+      body: JSON.stringify({
+        utr,
+        amount,
+        description,
+        orderId: window.currentOrderId
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('upiManualContainer').innerHTML = `
+        <div style="padding:14px 0;text-align:center;">
+          <div style="font-size:48px;margin-bottom:14px;">✅</div>
+          <h2 style="font-size:18px;margin-bottom:8px;color:var(--green);">UTR Submitted Successfully</h2>
+          <p style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:20px;">
+            Your transaction ID (UTR: <strong>${utr}</strong>) has been submitted to HR for manual verification. 
+            Once approved, your payment status will be updated. This typically takes 24–48 hours.
+          </p>
+          <a href="student-dashboard.html" class="btn-pay" style="text-decoration:none;display:inline-flex;width:auto;padding:12px 24px;">Return to Dashboard</a>
+        </div>
+      `;
+    } else {
+      errorUtr.innerText = data.message || 'Submission failed. Please try again.';
+      errorUtr.style.display = 'block';
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = 'Submit UTR for HR Approval';
+    }
+  } catch (err) {
+    errorUtr.innerText = 'Network error. Please try again.';
+    errorUtr.style.display = 'block';
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = 'Submit UTR for HR Approval';
+  }
+}
+</script>
+</body>
+</html>

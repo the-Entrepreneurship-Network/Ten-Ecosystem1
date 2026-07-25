@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contractor Portal Login | TEN Ecosystem</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #060500;
+      background-image: radial-gradient(circle at 10% 20%, rgba(245, 158, 11, 0.08) 0%, transparent 45%);
+    }
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .login-card {
+      background: rgba(14, 20, 40, 0.95);
+      border: 1px solid rgba(245, 158, 11, 0.15);
+      backdrop-filter: blur(10px);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center text-slate-100 p-4">
+
+  <div class="w-full max-w-md">
+    
+    <!-- Header -->
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 mb-4 animate-pulse">
+        <i class="fa-solid fa-screwdriver-wrench text-2xl"></i>
+      </div>
+      <div class="text-xs uppercase tracking-widest text-amber-500 font-extrabold mb-1">TEN Ecosystem</div>
+      <h1 class="text-3xl font-black text-slate-100">Contractor Hub</h1>
+      <p class="text-slate-400 text-sm mt-1.5">Deliver top freelance-to-build services.</p>
+    </div>
+
+    <!-- Login card -->
+    <div class="login-card rounded-2xl p-8 shadow-2xl relative overflow-hidden">
+      <div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-amber-500 to-transparent"></div>
+
+      <!-- COMING SOON BANNER -->
+      <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:14px;margin-bottom:20px;text-align:center;">
+        <div style="font-size:20px;margin-bottom:6px;">🚧</div>
+        <div style="color:#fbbf24;font-weight:700;font-size:14px;">Coming Soon</div>
+        <div style="color:#9a8a6a;font-size:12px;margin-top:4px;">This portal is under development. Student login is available at <a href="/student-login" style="color:#D4AF37;font-weight:700;">/student-login</a></div>
+      </div>
+
+      <form id="loginForm" class="space-y-5">
+        <div>
+          <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Registered Email Address</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
+              <i class="fa-solid fa-envelope"></i>
+            </span>
+            <input class="w-full pl-10 pr-4 py-3 bg-slate-900/40 border border-slate-800 rounded-xl text-slate-400 placeholder-slate-500 cursor-not-allowed" 
+                   type="email" id="loginId" placeholder="[Disabled] Portal Under Construction" disabled autocapitalize="none">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Password</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
+              <i class="fa-solid fa-lock"></i>
+            </span>
+            <input class="w-full pl-10 pr-4 py-3 bg-slate-900/40 border border-slate-800 rounded-xl text-slate-400 placeholder-slate-500 cursor-not-allowed" 
+                   type="password" id="password" placeholder="[Disabled] Portal Under Construction" disabled>
+          </div>
+        </div>
+
+        <button type="submit" disabled style="opacity:0.4;cursor:not-allowed;" class="w-full py-3.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-slate-950 font-bold rounded-xl transition duration-300 shadow-lg shadow-amber-500/10">
+          Enter Contractor Portal
+        </button>
+
+        <div id="loadingText" class="hidden text-center text-xs text-amber-500 animate-pulse mt-3">
+          ⟳ Authenticating contractor workspace...
+        </div>
+      </form>
+    </div>
+
+    <!-- Navigation links -->
+    <div class="flex items-center justify-center gap-4 text-xs text-slate-500 mt-6">
+      <a href="/register" class="hover:text-amber-500 transition">Register Contractor Profile</a>
+      <span>•</span>
+      <a href="/" class="hover:text-amber-500 transition">Back to Home</a>
+    </div>
+
+  </div>
+
+  <script>
+    document.getElementById("loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const loading = document.getElementById("loadingText");
+      loading.classList.remove("hidden");
+
+      const loginIdInput = document.getElementById("loginId").value.trim();
+      const password = document.getElementById("password").value;
+
+      try {
+        const response = await fetch("/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: loginIdInput, password, role: "contractor" })
+        });
+
+        const data = await response.json();
+        loading.classList.add("hidden");
+
+        if (data.success) {
+          const activeRole = data.role || "contractor";
+          if (activeRole !== "contractor") {
+            Swal.fire({
+              icon: "error",
+              title: "Unauthorized Role",
+              text: `This portal is for freelance contractors only. Please use the appropriate login portal.`,
+              background: "#0e1428",
+              color: "#F0EEE8",
+              confirmButtonColor: "#EF4444"
+            });
+            return;
+          }
+
+          localStorage.setItem("role", "contractor");
+          if (data.user) {
+            localStorage.setItem("user", JSON.stringify(data.user));
+            localStorage.setItem("userId", data.user._id);
+          }
+
+          Swal.fire({
+            icon: "success",
+            title: "Access Granted",
+            text: `Welcome to the Contractor Workspace! 🔧`,
+            background: "#0e1428",
+            color: "#F0EEE8",
+            showConfirmButton: false,
+            timer: 1500
+          });
+
+          setTimeout(() => {
+            window.location.href = "/contractor-dashboard";
+          }, 1500);
+
+        } else {
+          Swal.fire({
+            icon: "error",
+            title: "Login Failed",
+            text: data.message || "Invalid credentials",
+            background: "#0e1428",
+            color: "#F0EEE8",
+            confirmButtonColor: "#ef4444"
+          });
+        }
+      } catch (error) {
+        loading.classList.add("hidden");
+        console.error(error);
+        Swal.fire({
+          icon: "error",
+          title: "Network Error",
+          text: "Something went wrong. Please check your connection and try again.",
+          background: "#0e1428",
+          color: "#F0EEE8",
+          confirmButtonColor: "#ef4444"
+        });
+      }
+    });
+  </script>
+  <script src="/password-toggle.js"></script>
+</body>
+</html>

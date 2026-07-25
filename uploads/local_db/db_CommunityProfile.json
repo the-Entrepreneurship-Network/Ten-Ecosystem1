@@ -1,0 +1,19 @@
+[
+  {
+    "userId": "6a6489c632405081c03dca06",
+    "role": "student",
+    "joinedAt": "2026-07-25T10:02:46.122Z",
+    "postsCount": 0,
+    "commentsCount": 0,
+    "activity": [
+      {
+        "action": "joined_ecosystem",
+        "description": "Registered on the TEN Ecosystem platform.",
+        "timestamp": "2026-07-25T10:02:46.122Z"
+      }
+    ],
+    "_id": "6a6489c632405081c03dca0e",
+    "createdAt": "2026-07-25T10:02:46.122Z",
+    "updatedAt": "2026-07-25T10:02:46.122Z"
+  }
+]
