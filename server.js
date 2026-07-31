@@ -1521,6 +1521,8 @@ const upload = multer({
 const { createEmailTransporter, EMAIL_FROM } = require("./utils/mailer");
 const transporter = createEmailTransporter();
 
+
+
 if(process.env.SES_SMTP_USER && process.env.SES_SMTP_PASS){
     transporter.verify((error)=>{
         if(error){ console.log("SMTP verification status: OFFLINE —", error.message); }
@@ -6440,65 +6442,59 @@ async function _findUserByRoleEmail(role, email){
     return null;
 }
 
-app.post("/auth/forgot-password", async(req,res)=>{
-    try{
-        const { email, role } = req.body || {};
-        const validRoles = ["student","coordinator","hr"];
-        if(!validRoles.includes(role)) return res.json({ success:false, message:"Invalid role" });
+// ==================== FORGOT PASSWORD ====================
+app.post("/auth/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
 
-        const user = await _findUserByRoleEmail(role, email);
-        // To avoid user enumeration, we always respond success — but only
-        // actually generate + send the email if we found a matching account.
-        if(user){
-            const token = crypto.randomBytes(32).toString("hex");
-            const expiry = new Date(Date.now() + 60*60*1000);
-            user.passwordResetToken = token;
-            user.passwordResetExpiry = expiry;
-            await user.save();
-            try{
-                const host = (req.headers["x-forwarded-proto"] || req.protocol) + "://" + req.get("host");
-                const html = passwordResetEmailHtml({
-                    name: user.name || user.firstName || user.email || "user",
-                    role, host, token
-                });
-                let mailStatus = "sent";
-                let mailError = "";
-                try {
-                    await transporter.sendMail({
-                        from: EMAIL_FROM,
-                        to: user.email,
-                        subject:"🔐 Password Reset Request — TEN",
-                        html,
-                        text: `A password reset was requested. Open this link to reset (expires in 1 hour):\n\n${host}/reset-password.html?token=${token}&role=${role}`
-                    });
-                } catch (err) {
-                    mailStatus = "failed";
-                    mailError = err && err.message ? String(err.message) : "";
-                } finally {
-                    try {
-                        await MailHistory.create({
-                            recipientEmail: user.email,
-                            recipientName: user.name || user.firstName || user.email || "user",
-                            studentId: role === "student" ? user._id : null,
-                            subject: "🔐 Password Reset Request — TEN",
-                            mailType: "password_reset",
-                            sentAt: new Date(),
-                            status: mailStatus,
-                            errorMessage: mailError
-                        });
-                    } catch (_) {}
-                    if (role === "student") {
-                        await Notification.notifyStudent(user, {
-                            title: "🔐 Password Reset Requested",
-                            message: "A password reset link was sent to your registered email. It expires in 1 hour. If you did not request this, you can ignore the email.",
-                            type: "warning"
-                        });
-                    }
-                }
-            }catch(e){ console.log("forgot-password mail error:", e && e.message); }
-        }
-        res.json({ success:true, message:"If that account exists, a reset link has been sent to its email." });
-    }catch(e){ console.log(e); res.status(500).json({ success:false, message:"Server error" }); }
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Email required hai." });
+    }
+
+    const trimmedEmail = email.toLowerCase().trim();
+
+    // 1. Check user in EcosystemUser
+    const user = await EcosystemUser.findOne({ email: trimmedEmail });
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Is email se koi account nahi mila." });
+    }
+
+    const NOW = new Date();
+    const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+
+    // 2. Reset 24-hour window if expired
+    if (!user.passwordResetWindowStart || (NOW - new Date(user.passwordResetWindowStart) > TWENTY_FOUR_HOURS)) {
+      user.passwordResetAttempts = 0;
+      user.passwordResetWindowStart = NOW;
+    }
+
+    // 3. Limit Check (Max 3 attempts)
+    if (user.passwordResetAttempts >= 3) {
+      return res.status(429).json({
+        success: false,
+        message: "Aapne 3 baar reset try kar liya hai. Kripya 24 ghante baad koshish karein."
+      });
+    }
+
+    // 4. Increment Attempts
+    user.passwordResetAttempts += 1;
+    await user.save();
+
+    // -----------------------------------------------------------
+    // 5. EMAIL SENDING LOGIC (Nodemailer)
+    // -----------------------------------------------------------
+    await sendResetPasswordEmail(user.email, resetToken);
+
+    return res.status(200).json({
+      success: true,
+      message: "Password reset instructions aapke email par bhej diye gaye hain."
+    });
+
+  } catch (error) {
+    console.error("Forgot password error:", error);
+    return res.status(500).json({ success: false, message: "Server error occurred." });
+  }
 });
 
 app.post("/auth/reset-password", async(req,res)=>{
@@ -8384,13 +8380,55 @@ app.post("/api/v2/coordinator/approve", async (req, res) => {
 
         coord.verificationStatus = status;
         await coord.save();
+
+        // ─── SEND EMAIL NOTIFICATION ──────────────────────────────────────────
+        if (coord.email) {
+            try {
+                const isApproved = status === "approved";
+                const subject = isApproved 
+                    ? "Coordinator Application Approved 🎉" 
+                    : "Coordinator Application Status Update";
+
+                const htmlContent = isApproved ? `
+                    <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+                        <h2 style="color: #28a745;">Congratulations, ${coord.name || 'Coordinator'}!</h2>
+                        <p>Your application to become a Coordinator for the domain <b>"${coord.domain}"</b> has been <b>Approved</b>.</p>
+                        <p>You can now log in to access your coordinator dashboard and manage your assigned responsibilities.</p>
+                        <br/>
+                        <p>Best regards,<br/>The Team</p>
+                    </div>
+                ` : `
+                    <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+                        <h2 style="color: #dc3545;">Application Update</h2>
+                        <p>Dear ${coord.name || 'Applicant'},</p>
+                        <p>Thank you for your interest. Unfortunately, your application for Coordinator in the domain <b>"${coord.domain}"</b> was not approved at this time.</p>
+                        <p>If you have any questions, please feel free to contact the administrative team.</p>
+                        <br/>
+                        <p>Best regards,<br/>The Team</p>
+                    </div>
+                `;
+
+                await transporter.sendMail({
+                    from: EMAIL_FROM,
+                    to: coord.email,
+                    subject: subject,
+                    html: htmlContent
+                });
+
+                console.log(`✅ Coordinator status notification email sent to ${coord.email}`);
+            } catch (emailErr) {
+                console.error("❌ Failed to send email to coordinator:", emailErr.message);
+                // Status save ho chuka hai, isliye flow fail nahi karenge
+            }
+        }
+        // ───────────────────────────────────────────────────────────────────────
+
         return res.json({ success: true, message: `Coordinator application successfully ${status}.` });
     } catch (err) {
         console.error(err);
         res.json({ success: false, message: "Server error updating coordinator status." });
     }
 });
-
 
 server.listen(PORT, "0.0.0.0", ()=>{ console.log(`Server running on port ${PORT}`); });
 
@@ -8405,8 +8443,3 @@ process.on('uncaughtException', (error) => {
     // Comment: PM2 will restart the container if the system is truly unstable.
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-    const timestamp = new Date().toISOString();
-    console.error(`[${timestamp}] UNHANDLED REJECTION:`, reason, 'at promise:', promise);
-    // Do NOT exit the process. Keep the server running.
-});
