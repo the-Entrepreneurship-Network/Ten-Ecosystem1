@@ -427,15 +427,85 @@ function wrapModelWithFileFallback(model) {
         return new model(item);
     }
 
+    function getUniqueFieldsFromSchema(schema) {
+        const uniqueFields = [];
+        if (!schema || !schema.paths) return uniqueFields;
+        schema.eachPath((pathName, schemaType) => {
+            if (!schemaType) return;
+            const options = schemaType.options || {};
+            if (options.unique === true) {
+                const isSparse = options.sparse === true;
+                uniqueFields.push({ path: pathName, sparse: isSparse });
+            }
+        });
+        if (schema._indexes && Array.isArray(schema._indexes)) {
+            schema._indexes.forEach(idx => {
+                const spec = idx[0] || {};
+                const opts = idx[1] || {};
+                if (opts.unique === true) {
+                    Object.keys(spec).forEach(f => {
+                        if (!uniqueFields.find(u => u.path === f)) {
+                            uniqueFields.push({ path: f, sparse: !!opts.sparse });
+                        }
+                    });
+                }
+            });
+        }
+        return uniqueFields;
+    }
+
+    function runUniqueFallbackCheck(model, newDoc, existingItems, excludeId) {
+        const uniqueFields = getUniqueFieldsFromSchema(model.schema);
+        if (!uniqueFields.length) return null;
+        for (const uf of uniqueFields) {
+            const path = uf.path;
+            let val = newDoc[path];
+            if (val === undefined || val === null || val === '') {
+                if (uf.sparse) continue;
+            }
+            if (val === undefined || val === null) continue;
+            const normVal = typeof val === 'string' ? val : val;
+            const clash = existingItems.find(item => {
+                const itemVal = item[path];
+                if (itemVal === undefined || itemVal === null) return false;
+                if (uf.sparse && (itemVal === '' || itemVal == null)) return false;
+                if (excludeId && String(item._id) === String(excludeId)) return false;
+                if (typeof normVal === 'string' && typeof itemVal === 'string') {
+                    return normVal === itemVal;
+                }
+                return String(normVal) === String(itemVal);
+            });
+            if (clash) {
+                return {
+                    code: 11000,
+                    name: 'MongoServerError',
+                    errmsg: `E11000 duplicate key error collection: fallback.${model.modelName} index: ${path}_1 dup key`,
+                    keyPattern: { [path]: 1 },
+                    keyValue: { [path]: normVal },
+                    message: `Duplicate value for '${path}': ${normVal}`
+                };
+            }
+        }
+        return null;
+    }
+
     function runCreateFallback(docOrDocs) {
         let items = getCollectionData(model.modelName);
         const isArray = Array.isArray(docOrDocs);
         const docs = isArray ? docOrDocs : [docOrDocs];
-        const createdDocs = docs.map(d => {
+        const createdDocs = [];
+        for (const d of docs) {
             const raw = d.toObject ? d.toObject() : { ...d };
-            return { ...raw, _id: raw._id || generateId(), createdAt: new Date(), updatedAt: new Date() };
-        });
-        items.push(...createdDocs);
+            const candidate = { ...raw, _id: raw._id || generateId(), createdAt: new Date(), updatedAt: new Date() };
+            const dupErr = runUniqueFallbackCheck(model, candidate, items, null);
+            if (dupErr) {
+                const err = new Error(dupErr.message);
+                Object.assign(err, dupErr);
+                throw err;
+            }
+            items.push(candidate);
+            createdDocs.push(candidate);
+        }
         saveCollectionData(model.modelName, items);
         return isArray ? createdDocs.map(c => new model(c)) : new model(createdDocs[0]);
     }
@@ -937,6 +1007,63 @@ function wrapModelWithFileFallback(model) {
 const originalSave = mongoose.Model.prototype.save;
 mongoose.Model.prototype.save = function() {
     const modelName = this.constructor.modelName;
+    const modelRef = mongoose.Model.prototype.constructor;
+    const instanceModel = this.constructor;
+    function runUniqueSaveFallbackCheck(Model, obj, items, excludeId) {
+        const uniqueFields = (function getUniqueFieldsFromSchema(schema) {
+            const fields = [];
+            if (!schema || !schema.paths) return fields;
+            schema.eachPath((pathName, schemaType) => {
+                if (!schemaType) return;
+                const options = schemaType.options || {};
+                if (options.unique === true) {
+                    fields.push({ path: pathName, sparse: !!options.sparse });
+                }
+            });
+            if (schema._indexes && Array.isArray(schema._indexes)) {
+                schema._indexes.forEach(idx => {
+                    const spec = idx[0] || {};
+                    const opts = idx[1] || {};
+                    if (opts.unique === true) {
+                        Object.keys(spec).forEach(f => {
+                            if (!fields.find(u => u.path === f)) {
+                                fields.push({ path: f, sparse: !!opts.sparse });
+                            }
+                        });
+                    }
+                });
+            }
+            return fields;
+        })(Model.schema);
+
+        if (!uniqueFields.length) return null;
+        for (const uf of uniqueFields) {
+            const path = uf.path;
+            const val = obj[path];
+            if (val === undefined || val === null) continue;
+            if (uf.sparse && (val === '')) continue;
+            const clash = items.find(item => {
+                const itemVal = item[path];
+                if (itemVal === undefined || itemVal === null) return false;
+                if (uf.sparse && (itemVal === '' || itemVal == null)) return false;
+                if (excludeId && String(item._id) === String(excludeId)) return false;
+                if (typeof val === 'string' && typeof itemVal === 'string') return val === itemVal;
+                return String(val) === String(itemVal);
+            });
+            if (clash) {
+                return {
+                    code: 11000,
+                    name: 'MongoServerError',
+                    errmsg: `E11000 duplicate key error collection: fallback.${modelName} index: ${path}_1`,
+                    keyPattern: { [path]: 1 },
+                    keyValue: { [path]: val },
+                    message: `Duplicate value for '${path}': ${val}`
+                };
+            }
+        }
+        return null;
+    }
+
     function runSaveFallback(instance) {
         let items = getCollectionData(modelName);
         const obj = instance.toObject ? instance.toObject() : { ...instance };
@@ -945,7 +1072,14 @@ mongoose.Model.prototype.save = function() {
         } else {
             obj._id = String(obj._id);
         }
-        
+
+        const dupErr = runUniqueSaveFallbackCheck(instanceModel, obj, items, obj._id);
+        if (dupErr) {
+            const err = new Error(dupErr.message);
+            Object.assign(err, dupErr);
+            throw err;
+        }
+
         const idx = items.findIndex(item => String(item._id) === String(obj._id));
         if (idx !== -1) {
             items[idx] = { ...items[idx], ...obj, updatedAt: new Date() };
@@ -2330,9 +2464,30 @@ async function generateEmployeeId(domain){
         "Finance":                   "FIN"
     };
     const shortCode = domainShortCodes[domain] || domain.toUpperCase();
-    const totalStudents = await Student.countDocuments();
-    const sequenceNumber = 1001 + totalStudents;
-    return `TEN/${shortCode}/${sequenceNumber}`;
+    // Format: TEN/{shortCode}/{numeric-seq}
+    // Starts from 1001, no zero-padding (e.g., TEN/WEB/1001)
+    // Keep auto-generated numeric sequence within 6 digits.
+    const MAX_ATTEMPTS = 10;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        const totalStudents = await Student.countDocuments();
+        const seqNum = 1001 + totalStudents + attempt;
+        const cappedSeq = Math.min(seqNum, 999999);
+        const candidateId = `TEN/${shortCode}/${cappedSeq}`;
+        const alreadyExists = await Student.findOne({ employeeId: candidateId }).select('_id').lean();
+        if (!alreadyExists) {
+            return candidateId;
+        }
+    }
+    const fallbackRandom = crypto.randomBytes(3).toString('hex').toUpperCase();
+    const paddedFallback = fallbackRandom.slice(0, 6);
+    return `TEN/${shortCode}/${paddedFallback}`;
+}
+
+function isDuplicateEmployeeIdError(err) {
+    if (!err) return false;
+    if (err.code === 11000 && err.keyPattern && err.keyPattern.employeeId) return true;
+    if (err.code === 11000 && err.message && err.message.toLowerCase().includes('employeeid')) return true;
+    return false;
 }
 
 // ================= REGISTER (Feature 1: welcome email + multi-domain) =================
@@ -2433,7 +2588,33 @@ try{
 
     const isFirstRegistration = existingByEmail.length === 0;
 
-    const employeeId = await generateEmployeeId(domain);
+    // Decide which employeeId to use:
+    //   • if body provides one, honor it only if it doesn't clash;
+    //   • otherwise generate a collision-safe one automatically.
+    let employeeId;
+    if (req.body && req.body.employeeId && String(req.body.employeeId).trim() !== '') {
+        const userProvided = String(req.body.employeeId).trim();
+        const clash = await Student.findOne({ employeeId: userProvided }).select('employeeId').lean();
+        if (clash) {
+            return res.status(409).json({
+                success: false,
+                duplicateEmployeeId: true,
+                message: "This Employee ID is already registered. Please use a different Employee ID."
+            });
+        }
+        employeeId = userProvided;
+    } else {
+        employeeId = await generateEmployeeId(domain);
+        const generatedClash = await Student.findOne({ employeeId }).select('employeeId').lean();
+        if (generatedClash) {
+            return res.status(409).json({
+                success: false,
+                duplicateEmployeeId: true,
+                message: "Generated Employee ID already in use. Please refresh and try again."
+            });
+        }
+    }
+
     // Auto-generated password (we kept the original behavior — register form
     // has no password field). For multi-domain registrations we re-use the
     // existing student's password so the user has one password across both.
@@ -2459,22 +2640,44 @@ try{
         plainPassword,
         collegeName: collegeName || ""
     });
-    await newStudent.save();
+
+    let savedStudent;
+    try {
+        savedStudent = await newStudent.save();
+    } catch (saveErr) {
+        if (isDuplicateEmployeeIdError(saveErr)) {
+            return res.status(409).json({
+                success: false,
+                duplicateEmployeeId: true,
+                message: "This Employee ID is already registered. Please try again or contact support."
+            });
+        }
+        if (saveErr.code === 11000 && saveErr.keyPattern && saveErr.keyPattern.email) {
+            return res.status(409).json({
+                success: false,
+                message: "Email already registered. Please login."
+            });
+        }
+        console.error("Registration save error:", saveErr);
+        return res.status(500).json({ success: false, message: "Server Error during save." });
+    }
 
     // Mark if this is a new (paying) student vs existing (free) student
     const PAYMENT_CUTOFF = new Date('2026-07-09T00:00:00.000Z');
-    if (newStudent.createdAt < PAYMENT_CUTOFF) {
-      newStudent.isExistingStudent = true;
-      newStudent.shortCoursePaid = true; // existing students bypass payment
-      await newStudent.save();
+    if (savedStudent && savedStudent.createdAt && savedStudent.createdAt < PAYMENT_CUTOFF) {
+      savedStudent.isExistingStudent = true;
+      savedStudent.shortCoursePaid = true; // existing students bypass payment
+      try { await savedStudent.save(); } catch(_) {}
     }
 
     // Maintain linkedDomains on every (now ≤ 2) student doc with this email.
-    const allForEmail = [...existingByEmail, newStudent];
+    const allForEmail = [...existingByEmail, savedStudent || newStudent];
     const linked = allForEmail.map(s => ({
         domain: s.domain, studentId: s._id, employeeId: s.employeeId
     }));
     await Promise.all(allForEmail.map(s => Student.findByIdAndUpdate(s._id, { linkedDomains: linked })));
+
+    const displayStudent = savedStudent || newStudent;
 
     // Email — only on the FIRST domain registration.
     if(isFirstRegistration){
@@ -2482,7 +2685,7 @@ try{
             const host = (req.headers["x-forwarded-proto"] || req.protocol) + "://" + req.get("host");
             const joinedOn = new Date().toLocaleDateString("en-IN", { day:"numeric", month:"long", year:"numeric" });
             const html = welcomeEmailHtml({
-                name: newStudent.name.trim(), employeeId, domain, email: emailLc, password,
+                name: displayStudent.name.trim(), employeeId, domain, email: emailLc, password,
                 joinedOn, host
             });
             let mailStatus = "sent";
@@ -2491,7 +2694,7 @@ try{
                 await transporter.sendMail({
                     from: EMAIL_FROM,
                     to: emailLc,
-                    subject:`🎉 Welcome to The Entrepreneurship Network, ${newStudent.name.trim()}!`,
+                    subject:`🎉 Welcome to The Entrepreneurship Network, ${displayStudent.name.trim()}!`,
                     html,
                     text: `Hello ${firstName||""}, your Internship Registration is Successful.\n\nEmployee ID: ${employeeId}\nPassword: ${password}\nDomain: ${domain}\n\nLogin: ${host || ""}/login.html`
                 });
@@ -2502,9 +2705,9 @@ try{
                 try {
                     await MailHistory.create({
                         recipientEmail: emailLc,
-                        recipientName: newStudent.name.trim(),
-                        studentId: newStudent._id,
-                        subject: `🎉 Welcome to The Entrepreneurship Network, ${newStudent.name.trim()}!`,
+                        recipientName: displayStudent.name.trim(),
+                        studentId: displayStudent._id,
+                        subject: `🎉 Welcome to The Entrepreneurship Network, ${displayStudent.name.trim()}!`,
                         mailType: "welcome",
                         sentAt: new Date(),
                         status: mailStatus,
@@ -2513,7 +2716,7 @@ try{
                 } catch (_) {}
                 await Notification.notifyStudent({ employeeId, domain }, {
                     title: "🎉 Welcome to TEN!",
-                    message: `Hello ${newStudent.name.trim()}, your internship registration was successful. Your Employee ID is ${employeeId} (${domain}). A welcome email has been sent to ${emailLc}.`,
+                    message: `Hello ${displayStudent.name.trim()}, your internship registration was successful. Your Employee ID is ${employeeId} (${domain}). A welcome email has been sent to ${emailLc}.`,
                     type: "success"
                 });
             }
@@ -2522,7 +2725,23 @@ try{
 
     res.json({ success:true, employeeId, password, secondDomain: !isFirstRegistration });
 
-}catch(error){ console.log(error); res.status(500).json({ success:false, message:"Server Error" }); }
+}catch(error){
+    if (isDuplicateEmployeeIdError(error)) {
+        return res.status(409).json({
+            success: false,
+            duplicateEmployeeId: true,
+            message: "This Employee ID is already registered. Please try again or contact support."
+        });
+    }
+    if (error && error.code === 11000 && error.keyPattern && error.keyPattern.email) {
+        return res.status(409).json({
+            success: false,
+            message: "Email already registered. Please login."
+        });
+    }
+    console.log(error);
+    res.status(500).json({ success:false, message:"Server Error" });
+}
 });
 
 // ================= ACCOUNT LOCKOUT SECURE SERVICE =================

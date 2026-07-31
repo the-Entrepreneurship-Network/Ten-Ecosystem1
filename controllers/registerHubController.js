@@ -126,7 +126,7 @@ function getRoleConfig(req, res) {
   return res.status(200).json({ success: true, roles: ROLE_CONFIG });
 }
 
-// Helper to generate legacy Employee ID
+// Helper to generate legacy Employee ID (collision-safe version)
 async function generateEmployeeId(domain) {
   const domainShortCodes = {
     "DevOps with AWS":          "DEVOPS",
@@ -156,9 +156,45 @@ async function generateEmployeeId(domain) {
     "General":                   "GEN"
   };
   const shortCode = domainShortCodes[domain] || "GEN";
-  const totalStudents = await Student.countDocuments();
-  const sequenceNumber = 1001 + totalStudents;
-  return `TEN/${shortCode}/${sequenceNumber}`;
+  const crypto = require('crypto');
+  // Format: TEN/{shortCode}/{numeric-seq}
+  // Starts from 1001, no zero-padding (e.g., TEN/WEB/1001)
+  // Keep auto-generated numeric sequence within 6 digits.
+  const MAX_ATTEMPTS = 10;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const totalStudents = await Student.countDocuments();
+    const seqNum = 1001 + totalStudents + attempt;
+    
+    // Prevent the auto-generated sequence from exceeding 6 digits to keep IDs manageable
+    const cappedSeq = Math.min(seqNum, 999999);
+    
+    const candidateId = `TEN/${shortCode}/${cappedSeq}`;
+    const alreadyExists = await Student.findOne({ employeeId: candidateId }).select('_id').lean();
+    if (!alreadyExists) {
+      return candidateId;
+    }
+  }
+  const fallbackRandom = crypto.randomBytes(3).toString('hex').toUpperCase();
+  const paddedFallback = fallbackRandom.slice(0, 6);
+  return `TEN/${shortCode}/${paddedFallback}`;
+}
+
+function isDuplicateEmployeeIdError(err) {
+  if (!err) return false;
+  if (err.code === 11000) {
+    if (err.keyPattern && err.keyPattern.employeeId) return true;
+    if (err.message && err.message.toLowerCase().includes('employeeid')) return true;
+    if (err.keyValue && 'employeeId' in err.keyValue) return true;
+  }
+  return false;
+}
+
+function isDuplicateEmailError(err) {
+  if (!err || err.code !== 11000) return false;
+  if (err.keyPattern && err.keyPattern.email) return true;
+  if (err.message && err.message.toLowerCase().includes('email')) return true;
+  if (err.keyValue && 'email' in err.keyValue) return true;
+  return false;
 }
 
 async function registerUser(req, res) {
@@ -260,6 +296,17 @@ async function registerUser(req, res) {
       const domain = parsedDomains[0];
       const employeeId = await generateEmployeeId(domain);
       const tenureValue = roleSpecificData.tenure || "1 Month";
+
+      // Defense in depth: double-check the generated employeeId is not taken
+      const empIdClash = await Student.findOne({ employeeId }).select('_id employeeId').lean();
+      if (empIdClash) {
+        return res.status(409).json({
+          success: false,
+          duplicateEmployeeId: true,
+          message: 'Employee ID is already registered. Please try again or contact support.'
+        });
+      }
+
       await Student.create({
         firstName: name.trim().split(' ')[0] || name.trim(),
         lastName: name.trim().split(' ').slice(1).join(' ') || "",
@@ -464,11 +511,28 @@ async function registerUser(req, res) {
       memberId: genMemberId
     });
   } catch (err) {
-    if (err.code === 11000) {
-      return res.status(409).json({ 
-        success: false, 
+    if (isDuplicateEmployeeIdError(err)) {
+      return res.status(409).json({
+        success: false,
+        duplicateEmployeeId: true,
+        message: 'Employee ID is already registered. Please try again or contact support.',
+        error: 'Employee ID is already registered. Please try again or contact support.'
+      });
+    }
+    if (isDuplicateEmailError(err)) {
+      return res.status(409).json({
+        success: false,
         message: 'Email already registered. Please login.',
-        error: 'Email already registered. Please login.' 
+        error: 'Email already registered. Please login.'
+      });
+    }
+    if (err.code === 11000) {
+      const whichField = err.keyValue ? Object.keys(err.keyValue)[0] : 'record';
+      const prettyField = whichField.charAt(0).toUpperCase() + whichField.slice(1);
+      return res.status(409).json({
+        success: false,
+        message: `Duplicate ${prettyField} already exists. Please login or use different values.`,
+        error: `Duplicate ${whichField} already exists.`
       });
     }
     console.error("Registration error:", err);

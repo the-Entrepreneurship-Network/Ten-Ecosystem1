@@ -12,7 +12,7 @@ const HRSchema = new mongoose.Schema({
     password: { type: String, required: true },   // bcrypt-hashed
     name:     { type: String, required: true },
     role:     { type: String, default: "hr" },
-    employeeId: { type: String, default: "" },
+    employeeId: { type: String, unique: true, sparse: true, default: "" },
     promotedFrom: { type: String, default: "" },  // e.g. "coordinator"
     failedLoginAttempts: { type: Number, default: 0 },
     lockoutUntil: { type: Date, default: null },

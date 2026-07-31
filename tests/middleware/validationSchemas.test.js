@@ -84,7 +84,9 @@ describe('middleware/validationSchemas', () => {
           email: 'bishal@example.com',
           password: 'Password123!',
           phone: '9876543210',
-          domain: 'Web Development'
+          domain: 'Web Development',
+          collegeName: 'Example University',
+          employeeId: 'TEN/WEB/001001'
         }
       };
       const res = mockRes();
@@ -125,6 +127,76 @@ describe('middleware/validationSchemas', () => {
 
       validate(studentRegisterSchema)(req, res, next);
       expect(next).not.toHaveBeenCalled();
+    });
+
+    it('passes valid employee ID (TEN/MQ/130312)', () => {
+      const req = {
+        body: {
+          name: 'Test User',
+          email: 'test@example.com',
+          password: 'Password123!',
+          domain: 'Web Development',
+          employeeId: 'TEN/MQ/130312'
+        }
+      };
+      const res = mockRes();
+      const next = jest.fn();
+
+      validate(studentRegisterSchema)(req, res, next);
+      expect(next).toHaveBeenCalled();
+    });
+
+    it('rejects employee ID with wrong length (too short, < 8 chars)', () => {
+      const req = {
+        body: {
+          name: 'Test User',
+          email: 'test@example.com',
+          password: 'Password123!',
+          domain: 'Web Development',
+          employeeId: 'T/A/1'
+        }
+      };
+      const res = mockRes();
+      const next = jest.fn();
+
+      validate(studentRegisterSchema)(req, res, next);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(400);
+    });
+
+    it('rejects employee ID with invalid format (hyphens instead of slashes)', () => {
+      const req = {
+        body: {
+          name: 'Test User',
+          email: 'test@example.com',
+          password: 'Password123!',
+          domain: 'Web Development',
+          employeeId: 'TEN-MQ-130312'
+        }
+      };
+      const res = mockRes();
+      const next = jest.fn();
+
+      validate(studentRegisterSchema)(req, res, next);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(400);
+    });
+
+    it('rejects missing employee ID', () => {
+      const req = {
+        body: {
+          name: 'Test User',
+          email: 'test@example.com',
+          password: 'Password123!',
+          domain: 'Web Development'
+        }
+      };
+      const res = mockRes();
+      const next = jest.fn();
+
+      validate(studentRegisterSchema)(req, res, next);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(400);
     });
   });
 

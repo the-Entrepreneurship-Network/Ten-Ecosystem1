@@ -62,6 +62,14 @@ const studentRegisterSchema = {
       required: false,
       type: 'string',
       max: 50
+    },
+    employeeId: {
+      required: true,
+      type: 'string',
+      min: 8,
+      max: 50,
+      pattern: /^TEN\/[A-Za-z0-9]+\/[A-Za-z0-9]+$/,
+      message: 'Employee ID must follow the pattern: TEN/{code}/{number} (e.g., "TEN/WEB/001001")'
     }
   }
 };

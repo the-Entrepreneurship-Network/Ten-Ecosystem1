@@ -441,6 +441,13 @@ router.post("/student/complete-onboarding", requireStudent, async (req, res) => 
 
             if (updatedEmployeeId && updatedEmployeeId.trim() !== "" && updatedEmployeeId.trim() !== student.employeeId) {
                 const targetEmpId = updatedEmployeeId.trim();
+                
+                // Prevent extremely long IDs from crashing the database (maxlength: 50) 
+                // and restrict numerical portion length for database consistency
+                if (targetEmpId.length > 50) {
+                    return res.status(400).json({ success: false, message: "Employee ID is too long. Maximum allowed is 50 characters." });
+                }
+
                 const existing = await Student.findOne({ employeeId: targetEmpId });
                 if (existing) {
                     return res.status(400).json({ success: false, message: "This Employee ID is already registered by another student." });

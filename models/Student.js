@@ -16,7 +16,7 @@ const studentsSchema = new mongoose.Schema({
     lockoutUntil: { type: Date, default: null },
     isLockedOut: { type: Boolean, default: false },
     joiningDate: String,
-    employeeId: { type: String, unique: true, sparse: true },
+    employeeId: { type: String, unique: true, sparse: true, maxlength: 50, minlength: 8 },
     password: {
         type: String,
         default: "intern123"

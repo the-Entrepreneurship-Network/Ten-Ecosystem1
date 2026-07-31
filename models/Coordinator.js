@@ -12,7 +12,7 @@ const CoordinatorSchema = new mongoose.Schema({
     password:   { type: String, required: true },   // bcrypt-hashed
     name:       { type: String, required: true },
     domain:     { type: String, required: true },
-    employeeId: { type: String, default: "" },
+    employeeId: { type: String, unique: true, sparse: true, default: "" },
     promotedFrom: { type: String, default: "" },    // e.g. "student"
     verificationStatus: { type: String, default: "pending", enum: ["pending", "approved", "rejected"] },
     resumePdf: { type: String, default: "" },
