@@ -23,18 +23,19 @@ function loadEnvironment() {
   const projectRoot = findProjectRoot(__dirname);
   const envPath = path.join(projectRoot, '.env');
 
-  if (fs.existsSync(envPath)) {
-    // dotenv.config returns { parsed } on success, or { error } when file is missing/invalid
-    const result = dotenv.config({ path: envPath });
+  // Try normal .env loading first
+  const result = dotenv.config({ path: envPath });
+  if (!result.error) {
     return {
       path: envPath,
       ...result,
     };
   }
 
-  // CI/test fallback when .env is intentionally absent.
-  // Keeps runtime behavior unchanged outside tests.
-  if (process.env.NODE_ENV === 'test') {
+  const isJestContext = process.env.NODE_ENV === 'test' || typeof process.env.JEST_WORKER_ID !== 'undefined';
+
+  // CI/test fallback when .env is absent; keeps tests deterministic.
+  if (result.error && result.error.code === 'ENOENT' && isJestContext) {
     if (!process.env.SES_SMTP_USER) {
       process.env.SES_SMTP_USER = 'lavyakhandelwal23@gmail.com';
     }
@@ -50,10 +51,10 @@ function loadEnvironment() {
     };
   }
 
-  // Non-test environments should see the missing-file error signal.
+  // Non-test environments keep explicit error signal.
   return {
     path: envPath,
-    error: new Error(`ENOENT: no such file or directory, open '${envPath}'`),
+    error: result.error,
   };
 }
 
