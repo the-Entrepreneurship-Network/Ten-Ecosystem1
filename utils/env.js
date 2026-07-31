@@ -19,6 +19,13 @@ function findProjectRoot(startDir) {
   }
 }
 
+function isMissingEnvError(err) {
+  if (!err) return false;
+  if (err.code === 'ENOENT') return true;
+  const msg = String(err.message || '').toLowerCase();
+  return msg.includes('enoent') || msg.includes('no such file or directory');
+}
+
 function loadEnvironment() {
   const projectRoot = findProjectRoot(__dirname);
   const envPath = path.join(projectRoot, '.env');
@@ -32,10 +39,13 @@ function loadEnvironment() {
     };
   }
 
-  const isJestContext = process.env.NODE_ENV === 'test' || typeof process.env.JEST_WORKER_ID !== 'undefined';
+  const isJestContext =
+    process.env.NODE_ENV === 'test' ||
+    typeof process.env.JEST_WORKER_ID !== 'undefined' ||
+    process.env.CI === 'true';
 
   // CI/test fallback when .env is absent; keeps tests deterministic.
-  if (result.error && result.error.code === 'ENOENT' && isJestContext) {
+  if (isJestContext && isMissingEnvError(result.error)) {
     if (!process.env.SES_SMTP_USER) {
       process.env.SES_SMTP_USER = 'lavyakhandelwal23@gmail.com';
     }
