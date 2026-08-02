@@ -662,7 +662,7 @@ router.post('/utr-confirm', async (req, res) => {
 
       // Send confirmation email
       try {
-        const { createEmailTransporter, EMAIL_FROM } = require('../../utils/mailer');
+        const { createEmailTransporter } = require('../../utils/mailer');
         const transporter = createEmailTransporter();
         const sName = studentName || student.name || `${student.firstName} ${student.lastName}`;
         const empId = employeeId || student.employeeId;
@@ -670,7 +670,7 @@ router.post('/utr-confirm', async (req, res) => {
         const sEmail = email || student.email;
 
         transporter.sendMail({
-          from: EMAIL_FROM,
+          from: process.env.EMAIL_USER || 'no-reply@entrepreneurshipnetwork.net',
           to: 'growth@entrepreneurshipnetwork.net',
           subject: `Manual Payment Verification Required - ${payment.orderId}`,
           html: `<p>A manual UPI payment has been initiated by <strong>${sName}</strong> (${empId}, ${sDomain}).</p>

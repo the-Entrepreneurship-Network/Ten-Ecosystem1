@@ -1,29 +1,38 @@
 const nodemailer = require("nodemailer");
 
-// Single sender identity used for every outgoing email in the app
-const EMAIL_FROM = process.env.EMAIL_FROM || '"TEN HR" <hr@entrepreneurshipnetwork.net>';
-
 function createEmailTransporter() {
-    const user = process.env.SES_SMTP_USER;
-    const pass = process.env.SES_SMTP_PASS;
-    const host = process.env.SES_SMTP_HOST || "email-smtp.ap-south-1.amazonaws.com";
-    const port = parseInt(process.env.SES_SMTP_PORT) || 587;
+    const user = process.env.EMAIL_USER || process.env.EMAIL_US;
+    const pass = process.env.EMAIL_PASS;
 
+    // If credentials are not set, return a basic transporter that won't crash on init
     if (!user || !pass) {
-        console.warn("[mailer] SES_SMTP_USER/SES_SMTP_PASS not set — emails will not actually be sent.");
-        return nodemailer.createTransport({ jsonTransport: true });
+        return nodemailer.createTransport({
+            jsonTransport: true
+        });
     }
 
-    return nodemailer.createTransport({
-        host: host,
-        port: port,
-        secure: port === 465,
-        auth: { user, pass }
-    });
+    // Auto-detect service: if EMAIL_SERVICE is specified, use it.
+    // Otherwise, if the username contains @gmail.com, default to Gmail service.
+    const service = process.env.EMAIL_SERVICE || (user.includes("@gmail.com") ? "gmail" : undefined);
+
+    const config = {
+        auth: {
+            user: user,
+            pass: pass
+        }
+    };
+
+    if (service) {
+        config.service = service;
+    } else {
+        config.host = process.env.EMAIL_HOST || "smtp-relay.brevo.com";
+        config.port = parseInt(process.env.EMAIL_PORT) || 587;
+        config.secure = process.env.EMAIL_SECURE === "true";
+    }
+
+    return nodemailer.createTransport(config);
 }
 
 module.exports = {
-    createEmailTransporter,
-    EMAIL_FROM
+    createEmailTransporter
 };
-
