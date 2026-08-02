@@ -376,6 +376,28 @@ function renderFineNotices(fines) {
     </div>`).join('');
 }
 
+const STAR_PERFORMER_REPO_URL = 'https://github.com/growth-eng/Ten-Ecosystem1/';
+const STAR_PERFORMER_PR_EXAMPLE = `${STAR_PERFORMER_REPO_URL}pull/1`;
+
+function isOfficialStarPerformerPRUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    const host = url.hostname.toLowerCase().replace(/^www\./, '');
+    const pathSegments = url.pathname.split('/').filter(Boolean);
+
+    return (
+      host === 'github.com' &&
+      pathSegments.length >= 4 &&
+      pathSegments[0] === 'growth-eng' &&
+      pathSegments[1] === 'Ten-Ecosystem1' &&
+      pathSegments[2] === 'pull' &&
+      /^\d+$/.test(pathSegments[3])
+    );
+  } catch (_) {
+    return false;
+  }
+}
+
 function renderStarSubmitForm(data) {
   const container = document.getElementById('star-submit-container');
   if (!container) return;
@@ -409,7 +431,7 @@ function renderStarSubmitForm(data) {
         <div id="star-panel-tech">
           <p style="font-size:12px;color:#94a3b8;margin-bottom:12px;line-height:1.5">
             💡 <strong>Tech Domain requirements:</strong> You must upgrade/improve the portal or ecosystem codebase and create a Pull Request to our official repository.<br>
-            <strong style="color:#fcd34d">Official GitHub Repository:</strong> <a href="https://github.com/growth-eng/Ten-Ecosystem.git" target="_blank" style="color:#60a5fa;text-decoration:underline">https://github.com/growth-eng/Ten-Ecosystem.git</a>
+            <strong style="color:#fcd34d">Official GitHub Repository:</strong> <a href="${STAR_PERFORMER_REPO_URL}" target="_blank" style="color:#60a5fa;text-decoration:underline">${STAR_PERFORMER_REPO_URL}</a>
           </p>
           <div style="display:flex;gap:12px;margin-bottom:12px">
             <div style="flex:1">
@@ -418,7 +440,7 @@ function renderStarSubmitForm(data) {
             </div>
             <div style="flex:2">
               <label style="display:block;font-size:11px;color:#9a9080;margin-bottom:4px;font-weight:600">PULL REQUEST URL</label>
-              <input type="text" id="star-tech-pr" placeholder="e.g. https://github.com/growth-eng/Ten-Ecosystem/pull/1" style="width:100%;padding:10px;background:rgba(0,0,0,.25);border:1px solid rgba(245,158,11,.15);border-radius:8px;color:#f1f5f9;font-size:13px;outline:none;box-sizing:border-box">
+              <input type="text" id="star-tech-pr" placeholder="e.g. ${STAR_PERFORMER_PR_EXAMPLE}" style="width:100%;padding:10px;background:rgba(0,0,0,.25);border:1px solid rgba(245,158,11,.15);border-radius:8px;color:#f1f5f9;font-size:13px;outline:none;box-sizing:border-box">
             </div>
           </div>
           <label style="display:block;font-size:11px;color:#9a9080;margin-bottom:4px;font-weight:600">DETAILS OF CODE CHANGES / FEATURE UPGRADE</label>
@@ -535,8 +557,8 @@ async function submitStarContribNew() {
       alert('Please enter your GitHub Username.');
       return;
     }
-    if (!githubPR || !githubPR.startsWith('https://github.com/')) {
-      alert('Please enter a valid GitHub Pull Request URL.');
+    if (!isOfficialStarPerformerPRUrl(githubPR)) {
+      alert(`Please enter a valid GitHub Pull Request URL for ${STAR_PERFORMER_REPO_URL}`);
       return;
     }
     if (detailedDescription.length < 30) {

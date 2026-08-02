@@ -83,6 +83,88 @@ async function requireStudent(req, res, next) {
     }
 }
 
+async function validateStarContribution(contribution) {
+    let parsed = contribution;
+
+    if (typeof contribution === "string") {
+        try {
+            parsed = JSON.parse(contribution);
+        } catch (_) {
+            return { valid: false, error: "Contribution payload must be valid JSON." };
+        }
+    }
+
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return { valid: false, error: "Contribution payload must be a valid object." };
+    }
+
+    if (parsed.track === "tech") {
+        const githubUsername = String(parsed.githubUsername || "").trim();
+        const githubPR = String(parsed.githubPR || "").trim();
+
+        let isOfficialRepoPR = false;
+        try {
+            const url = new URL(githubPR);
+            const host = url.hostname.toLowerCase().replace(/^www\./, "");
+            const pathSegments = url.pathname.split("/").filter(Boolean);
+
+            isOfficialRepoPR = (
+                host === "github.com" &&
+                pathSegments.length >= 4 &&
+                pathSegments[0] === "growth-eng" &&
+                pathSegments[1] === "Ten-Ecosystem1" &&
+                pathSegments[2] === "pull" &&
+                /^\d+$/.test(pathSegments[3])
+            );
+        } catch (_) {}
+
+        if (!githubUsername) {
+            return { valid: false, error: "GitHub username is required for Tech Track submissions." };
+        }
+        if (!isOfficialRepoPR) {
+            return { valid: false, error: "Tech Track PR URL must point to https://github.com/growth-eng/Ten-Ecosystem1/" };
+        }
+
+        try {
+            const usernameResponse = await fetch(`https://api.github.com/users/${encodeURIComponent(githubUsername)}`, {
+                headers: {
+                    Accept: "application/vnd.github+json",
+                    "User-Agent": "TEN-Portal-Star-Performer-Validator"
+                }
+            });
+            if (!usernameResponse.ok) {
+                return { valid: false, error: "GitHub username could not be verified. Please use a real GitHub username." };
+            }
+
+            const prNumber = githubPR.match(/\/pull\/(\d+)/)?.[1];
+            const prResponse = await fetch(`https://api.github.com/repos/growth-eng/Ten-Ecosystem1/pulls/${prNumber}`, {
+                headers: {
+                    Accept: "application/vnd.github+json",
+                    "User-Agent": "TEN-Portal-Star-Performer-Validator"
+                }
+            });
+            if (!prResponse.ok) {
+                return { valid: false, error: "GitHub PR link could not be verified. Please submit a real pull request link that exists on the official repository." };
+            }
+        } catch (_) {
+            return { valid: false, error: "GitHub verification is currently unavailable. Please try again in a moment." };
+        }
+    } else if (parsed.track === "business") {
+        try {
+            const url = new URL(String(parsed.businessLink || "").trim());
+            if (!["http:", "https:"].includes(url.protocol)) {
+                throw new Error("invalid protocol");
+            }
+        } catch (_) {
+            return { valid: false, error: "Business Track document link must be a valid URL." };
+        }
+    } else {
+        return { valid: false, error: "Contribution track must be either tech or business." };
+    }
+
+    return { valid: true, contribution: parsed };
+}
+
 // ── Compute completion percentage from task progress ──
 async function getCompletionPercent(studentId) {
     try {
@@ -938,10 +1020,34 @@ router.post('/coordinator-approve', async (req, res) => {
 // POST /api/v2/certificates/star-submit — Student submits star contribution
 router.post('/star-submit', async (req, res) => {
   try {
-    const { employeeId, contribution } = req.body;
+    const { employeeId, contribution } = req.body || {};
+    if (!employeeId) {
+      return res.status(400).json({ success: false, error: 'employeeId is required' });
+    }
+
+    const existingStudent = await Student.findOne({ employeeId }).select('starStatus');
+    if (existingStudent?.starStatus === 'pending_review') {
+      return res.status(409).json({
+        success: false,
+        error: 'A Star Performer contribution is already under review. You cannot submit another one until it is approved or rejected.'
+      });
+    }
+
+    if (existingStudent?.starStatus === 'approved') {
+      return res.status(409).json({
+        success: false,
+        error: 'This student already has an approved Star Performer contribution.'
+      });
+    }
+
+    const validation = await validateStarContribution(contribution);
+    if (!validation.valid) {
+      return res.status(400).json({ success: false, error: validation.error });
+    }
+
     await Student.findOneAndUpdate({ employeeId }, {
       starStatus: 'pending_review',
-      starContribution: contribution,
+      starContribution: JSON.stringify(validation.contribution),
     });
     res.json({ success: true });
   } catch(e) {
