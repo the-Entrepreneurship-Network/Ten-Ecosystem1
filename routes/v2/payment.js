@@ -267,18 +267,42 @@ router.post('/webhook',
     const signature = req.headers['x-paymentsetu-signature'] || '';
     const timestamp = req.headers['x-paymentsetu-timestamp'] || '';
 
-    if (signature && timestamp) {
-      const apiKey   = getApiKey();
-      const expected = crypto.createHmac('sha256', apiKey).update(timestamp + '.' + rawBody).digest('hex');
-      try {
-        if (!crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature))) {
-          console.warn('[PAYMENT WEBHOOK] Invalid signature');
-          return res.status(401).send('Invalid signature');
-        }
-      } catch (_) {
-        console.warn('[PAYMENT WEBHOOK] Signature comparison failed');
-        return res.status(401).send('Invalid signature');
-      }
+    // SECURITY: verification used to run only `if (signature && timestamp)`, so
+    // omitting both headers skipped it entirely -- anyone could POST
+    // {"order_id":"...","status":"success"} and mark any order paid. Signature
+    // and timestamp are now mandatory, compared over equal-length buffers
+    // (timingSafeEqual throws on length mismatch, which the old catch treated
+    // as a generic failure), and the timestamp is checked for freshness so a
+    // captured webhook cannot be replayed.
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      console.error('[PAYMENT WEBHOOK] No API key configured; rejecting webhook.');
+      return res.status(503).send('Webhook verification unavailable');
+    }
+    if (!signature || !timestamp) {
+      console.warn('[PAYMENT WEBHOOK] Missing signature or timestamp header');
+      return res.status(401).send('Invalid signature');
+    }
+
+    const MAX_SKEW_MS = 5 * 60 * 1000;
+    const tsMs = Number(timestamp) > 1e12 ? Number(timestamp) : Number(timestamp) * 1000;
+    if (!Number.isFinite(tsMs) || Math.abs(Date.now() - tsMs) > MAX_SKEW_MS) {
+      console.warn('[PAYMENT WEBHOOK] Stale or malformed timestamp; rejecting.');
+      return res.status(401).send('Invalid signature');
+    }
+
+    const expected = crypto.createHmac('sha256', apiKey)
+      .update(timestamp + '.' + rawBody)
+      .digest();
+    let provided;
+    try {
+      provided = Buffer.from(String(signature), 'hex');
+    } catch (_) {
+      return res.status(401).send('Invalid signature');
+    }
+    if (provided.length !== expected.length || !crypto.timingSafeEqual(expected, provided)) {
+      console.warn('[PAYMENT WEBHOOK] Invalid signature');
+      return res.status(401).send('Invalid signature');
     }
 
     let data;

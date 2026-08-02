@@ -6,3 +6,20 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# ── Security: never commit runtime data, uploads or credential logs ──
+# uploads/local_db/*.json is the JSON-fallback database (user records +
+# password hashes). uploads/documents holds private resumes. Both were
+# committed AND served publicly via express.static.
+#
+# NOTE: `uploads/*` not `uploads/` -- a trailing slash makes git skip the
+# directory without descending, so a later negation cannot re-include
+# anything inside it.
+uploads/*
+!uploads/public/
+uploads/public/*
+!uploads/public/.gitkeep
+
+login_attempts.log
+*.pem
+*.key
