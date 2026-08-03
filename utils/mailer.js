@@ -1,30 +1,40 @@
 const nodemailer = require("nodemailer");
 
-// Single sender identity used for every outgoing email in the app
+// Single sender identity used for every outgoing email in the app.
 const EMAIL_FROM = process.env.EMAIL_FROM || '"TEN HR" <lavyakhandelwal23@gmail.com>';
 
 function createEmailTransporter() {
-    const user = process.env.SES_SMTP_USER;
-    const pass = process.env.SES_SMTP_PASS;
-    const host = process.env.SMTP_HOST || process.env.SES_SMTP_HOST || "smtp.gmail.com";
-    const port = parseInt(process.env.SMTP_PORT || process.env.SES_SMTP_PORT) || 587;
+    const user = process.env.SES_SMTP_USER || process.env.EMAIL_USER || process.env.EMAIL_US;
+    const pass = process.env.SES_SMTP_PASS || process.env.EMAIL_PASS;
+    const host = process.env.SMTP_HOST || process.env.SES_SMTP_HOST || process.env.EMAIL_HOST || "smtp.gmail.com";
+    const port = parseInt(process.env.SMTP_PORT || process.env.SES_SMTP_PORT || process.env.EMAIL_PORT, 10) || 587;
+    const service = process.env.EMAIL_SERVICE || (user && user.includes("@gmail.com") ? "gmail" : undefined);
 
     if (!user || !pass) {
-        console.warn("[mailer] SES_SMTP_USER/SES_SMTP_PASS missing, skipping SMTP verify.");
+        console.warn("[mailer] SMTP credentials missing, falling back to a json transport.");
         return nodemailer.createTransport({ jsonTransport: true });
     }
 
-    const transporter = nodemailer.createTransport({
-        host: host,
-        port: port,
+    const config = {
+        host,
+        port,
         secure: port === 465,
-        auth: { 
-            user: user, 
-            pass: pass 
-        }
-    });
+        auth: {
+            user,
+            pass,
+        },
+    };
 
-    transporter.verify((error, success) => {
+    if (service) {
+        config.service = service;
+        delete config.host;
+        delete config.port;
+        delete config.secure;
+    }
+
+    const transporter = nodemailer.createTransport(config);
+
+    transporter.verify((error) => {
         if (error) {
             console.log(`SMTP verification status: OFFLINE — ${error.message}`);
         } else {
@@ -35,7 +45,6 @@ function createEmailTransporter() {
     return transporter;
 }
 
-// 🚀 Send Welcome/Registration Email
 async function sendWelcomeEmail(userEmail, userName) {
     const transporter = createEmailTransporter();
 
@@ -49,20 +58,19 @@ async function sendWelcomeEmail(userEmail, userName) {
                 <p>Thank you for registering on our platform. Your account has been successfully created.</p>
                 <p>We're super excited to have you here! You can now log in and start exploring.</p>
                 <br />
-                <a href="${process.env.APP_URL || 'http://localhost:3000'}/login" 
+                <a href="${process.env.APP_URL || 'http://localhost:3000'}/login"
                    style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
                    Go to Dashboard
                 </a>
                 <br /><br />
                 <p>Best regards,<br />The TEN Team</p>
             </div>
-        `
+        `,
     };
 
-    return await transporter.sendMail(mailOptions);
+    return transporter.sendMail(mailOptions);
 }
 
-// 🔐 Send Password Reset Email
 async function sendPasswordResetEmail(userEmail, resetToken) {
     const transporter = createEmailTransporter();
     const appUrl = process.env.APP_URL || 'http://localhost:3000';
@@ -79,7 +87,7 @@ async function sendPasswordResetEmail(userEmail, resetToken) {
                 <p>We received a request to reset your password for your TEN account.</p>
                 <p>Click the button below to reset it. This link is valid for <strong>1 hour</strong>.</p>
                 <br />
-                <a href="${resetLink}" 
+                <a href="${resetLink}"
                    style="background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
                    Reset Password
                 </a>
@@ -88,15 +96,15 @@ async function sendPasswordResetEmail(userEmail, resetToken) {
                 <hr style="border: none; border-top: 1px solid #eee;" />
                 <p style="font-size: 12px; color: #888;">Best regards,<br />The TEN Team</p>
             </div>
-        `
+        `,
     };
 
-    return await transporter.sendMail(mailOptions);
+    return transporter.sendMail(mailOptions);
 }
 
 module.exports = {
     createEmailTransporter,
     sendWelcomeEmail,
     sendPasswordResetEmail,
-    EMAIL_FROM
+    EMAIL_FROM,
 };
