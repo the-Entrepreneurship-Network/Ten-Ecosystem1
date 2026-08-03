@@ -1982,12 +1982,24 @@ button:active { transform: translateY(0); }
         
         <div class="att-breakdown-grid">
           <div class="att-row att-row-total">
-            <span class="att-label">Total Logs:</span>
+            <span class="att-label">Total Logged Days:</span>
             <span class="att-value" id="attBreakdownTotal">0</span>
           </div>
           <div class="att-row">
-            <span class="att-label">Current Streak:</span>
-            <span class="att-value" id="attBreakdownStreak">0 Days 🔥</span>
+            <span class="att-label">Working Days:</span>
+            <span class="att-value" id="attWorkdays">0</span>
+          </div>
+          <div class="att-row">
+            <span class="att-label">Required for 75%:</span>
+            <span class="att-value" id="attRequiredDays">0</span>
+          </div>
+          <div class="att-row">
+            <span class="att-label">Days Still Needed:</span>
+            <span class="att-value" id="attDaysNeeded">0</span>
+          </div>
+          <div class="att-row">
+            <span class="att-label">Today Marked:</span>
+            <span class="att-value" id="attMarkedToday">No</span>
           </div>
           <div class="att-threshold">
             💡 Attendance requirements must be maintained for certificate eligibility.
@@ -2207,6 +2219,9 @@ function initDashboard() {
   setupUserData();
   initCodeMirror();
   checkTenurePayment();
+  if (currentUser && currentUser.employeeId) {
+    loadAttendanceStats();
+  }
 }
 
 function setupUserData() {
@@ -2354,27 +2369,97 @@ function closeNotifPanel() {
 }
 
 /* ── Attendance ── */
-function markAttendance() {
+async function loadAttendanceStats() {
+  if (!currentUser || !currentUser.employeeId) return;
+  try {
+    const res = await fetch(`/attendance-stats/${encodeURIComponent(currentUser.employeeId)}`);
+    const data = await res.json();
+    if (!data.success || !data.stats) return;
+
+    const stats = data.stats;
+    const btn = document.getElementById('attendanceBtn');
+    const status = document.getElementById('attendanceStatus');
+    const attBreakdownTotal = document.getElementById('attBreakdownTotal');
+    const attWorkdays = document.getElementById('attWorkdays');
+    const attRequiredDays = document.getElementById('attRequiredDays');
+    const attDaysNeeded = document.getElementById('attDaysNeeded');
+    const attMarkedToday = document.getElementById('attMarkedToday');
+    const attBreakdownSub = document.getElementById('attBreakdownSub');
+
+    if (attBreakdownTotal) attBreakdownTotal.textContent = stats.combinedCount ?? 0;
+    if (attWorkdays) attWorkdays.textContent = stats.workingDays ?? 0;
+    if (attRequiredDays) attRequiredDays.textContent = stats.requiredDays ?? 0;
+    if (attDaysNeeded) attDaysNeeded.textContent = stats.daysNeeded ?? 0;
+    if (attMarkedToday) attMarkedToday.textContent = stats.markedToday ? 'Yes' : 'No';
+    if (attBreakdownSub) attBreakdownSub.textContent = `${stats.combinedPct ?? 0}% combined attendance · ${stats.workingDays ?? 0} working days`;
+    if (status) status.textContent = stats.markedToday ? "Today's attendance is recorded." : 'Click to record your attendance for today';
+    if (btn) {
+      btn.disabled = !!stats.markedToday;
+      btn.textContent = stats.markedToday ? 'Attendance Logged ✓' : 'Mark Today\'s Attendance';
+      btn.classList.toggle('attendance-disabled', !!stats.markedToday);
+    }
+  } catch (err) {
+    console.error('Failed to load attendance stats', err);
+  }
+}
+
+async function markAttendance() {
   const btn = document.getElementById('attendanceBtn');
   const status = document.getElementById('attendanceStatus');
-  
+
+  if (!currentUser || !currentUser.employeeId) {
+    if (status) status.textContent = 'Unable to mark attendance: missing Employee ID.';
+    return;
+  }
+
   if (btn) {
     btn.classList.add('attendance-disabled');
     btn.disabled = true;
-    btn.textContent = 'Attendance Logged ✓';
+    btn.textContent = 'Marking...';
   }
   if (status) {
-    status.textContent = 'Attendance successfully recorded for today!';
+    status.textContent = 'Saving attendance...';
   }
-  
-  // Optional SweetAlert
-  if (window.Swal) {
-    Swal.fire({
-      icon: 'success',
-      title: 'Attendance Marked!',
-      text: 'Your attendance for today has been registered.',
-      confirmButtonColor: '#10b981'
+
+  try {
+    const res = await fetch('/mark-attendance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ employeeId: currentUser.employeeId })
     });
+    const data = await res.json();
+
+    if (data.success) {
+      if (status) status.textContent = 'Attendance successfully recorded for today!';
+      if (btn) btn.textContent = 'Attendance Logged ✓';
+      await loadAttendanceStats();
+      return;
+    }
+
+    if (data.alreadyMarked) {
+      if (status) status.textContent = data.message || 'Attendance already marked for today.';
+      if (btn) {
+        btn.textContent = 'Attendance Logged ✓';
+        btn.disabled = true;
+      }
+      await loadAttendanceStats();
+      return;
+    }
+
+    if (status) status.textContent = data.message || 'Failed to mark attendance.';
+    if (btn) {
+      btn.textContent = 'Mark Today\'s Attendance';
+      btn.disabled = false;
+      btn.classList.remove('attendance-disabled');
+    }
+  } catch (err) {
+    console.error('markAttendance error', err);
+    if (status) status.textContent = 'Server error. Please try again later.';
+    if (btn) {
+      btn.textContent = 'Mark Today\'s Attendance';
+      btn.disabled = false;
+      btn.classList.remove('attendance-disabled');
+    }
   }
 }
 

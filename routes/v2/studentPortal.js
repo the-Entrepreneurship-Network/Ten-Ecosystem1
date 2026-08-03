@@ -452,7 +452,7 @@ router.post("/student/complete-onboarding", requireStudent, async (req, res) => 
             const actualJoiningDate = joiningDate || student.joiningDate || student.createdAt;
             if (actualJoiningDate) {
                 const Attendance = require("../../models/Attendance");
-                const { calculateAttendancePercentage, getTenureDays } = require("../../utils/attendanceUtils");
+                const { calculateAttendancePercentage, getTotalWorkingDaysForTenure } = require("../../utils/attendanceUtils");
                 const emp = updates.employeeId || student.employeeId;
                 const attendanceRecords = await Attendance.find({ employeeId: emp });
                 
@@ -464,8 +464,8 @@ router.post("/student/complete-onboarding", requireStudent, async (req, res) => 
                 updates.calculatedAttendancePercentage = calculatedPct;
                 updates.attendancePercentage = calculatedPct;
 
-                totalTenureDays = getTenureDays(student.tenure || student.v2DurationType);
-                const requiredDays = Math.ceil(totalTenureDays * 0.75);
+                totalTenureDays = typeof attResult === 'object' ? attResult.totalWorkingDays : getTotalWorkingDaysForTenure(actualJoiningDate, student.tenure || student.v2DurationType);
+                const requiredDays = typeof attResult === 'object' ? attResult.requiredDays : Math.ceil(totalTenureDays * 0.75);
                 daysNeededToAttendMore = Math.max(0, requiredDays - daysPresent);
             }
         } else {

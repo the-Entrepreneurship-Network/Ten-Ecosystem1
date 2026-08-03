@@ -1,4 +1,3 @@
-
 require("dotenv").config();
 
 // Monkeypatch Intl.DateTimeFormat to prevent crashes on environments with small-icu (like some EC2/AWS instances)
@@ -46,6 +45,8 @@ const cors = require("cors");
 const express = require("express");
 const crypto = require("crypto");
 const mongoose = require("mongoose");
+
+
 
 const {
   validate,
@@ -1041,19 +1042,21 @@ function getTenureTotalDays(tenure) {
 
 function calcAttendancePercentage(student, presentCount) {
   const totalTenureDays = getTenureTotalDays(student.tenure || student.v2DurationType);
-  const joiningDate = student.joiningDate ? new Date(student.joiningDate) : new Date();
+  const startDate = (student.joinerType === "whatsapp" && student.internshipStartDate)
+    ? new Date(student.internshipStartDate)
+    : student.joiningDate ? new Date(student.joiningDate) : (student.createdAt ? new Date(student.createdAt) : new Date());
+  if (isNaN(startDate.getTime())) {
+    startDate = new Date();
+  }
   const today = new Date();
-  const daysElapsed = Math.min(
-    Math.max(Math.floor((today - joiningDate) / 86400000) + 1, 1),
-    totalTenureDays
-  );
+  const workingDays = attendanceUtils.countWorkingDays(startDate, today);
   return {
-    percentage: Math.min(Math.round((presentCount / daysElapsed) * 100), 100),
-    totalDays: daysElapsed,
+    percentage: workingDays > 0 ? Math.min(Math.round((presentCount / workingDays) * 100), 100) : 0,
+    totalDays: workingDays,
     tenureTotalDays: totalTenureDays,
     presentDays: presentCount,
-    absentDays: Math.max(daysElapsed - presentCount, 0),
-    requiredDays: Math.ceil(daysElapsed * 0.75)
+    absentDays: Math.max(workingDays - presentCount, 0),
+    requiredDays: Math.ceil(workingDays * 0.75)
   };
 }
 
@@ -1620,6 +1623,129 @@ async function runActivityMailer(){
     }
 }
 cron.schedule('0 9 * * 1', runActivityMailer);
+
+// ==================================================================
+// ================ LOW ATTENDANCE ALERT EMAIL ======================
+// ==================================================================
+const LOW_ATTENDANCE_THRESHOLD = 75; // matches the 75% requiredDays logic in calcAttendancePercentage
+const LOW_ATTENDANCE_RESEND_COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000; // don't re-alert more than once every 3 days
+
+async function sendLowAttendanceMail(student, studentName, percentage){
+    const email = student.email;
+    const subject = `⚠️ Attendance Alert — Your attendance is at ${percentage}%`;
+    const html = `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6">
+        Hi ${studentName || "Intern"},<br><br>
+        Your current attendance stands at <b>${percentage}%</b>, which is below the required <b>${LOW_ATTENDANCE_THRESHOLD}%</b> threshold for internship completion.<br><br>
+        Please make sure you mark your attendance regularly to stay on track and remain eligible for your certificate and other internship benefits.<br><br>
+        — TEN HR Team
+    </div>`;
+
+    let mailStatus = "sent";
+    let mailError = "";
+    try {
+        await transporter.sendMail({ from: EMAIL_FROM, to: email, subject, html });
+    } catch (err) {
+        mailStatus = "failed";
+        mailError = err && err.message ? String(err.message) : "";
+    } finally {
+        try {
+            await MailHistory.create({
+                recipientEmail: email,
+                recipientName: studentName || "Intern",
+                studentId: student._id,
+                subject,
+                mailType: "low-attendance",
+                sentAt: new Date(),
+                status: mailStatus,
+                errorMessage: mailError
+            });
+        } catch (_) {}
+    }
+    try {
+        await Notification.notifyStudent(student, {
+            title: "⚠️ Low Attendance Alert",
+            message: `Hi ${studentName || "Intern"}, your attendance is at ${percentage}%, which is below the required ${LOW_ATTENDANCE_THRESHOLD}%. Please mark your attendance regularly.`,
+            type: "warning"
+        });
+    } catch (_) {}
+    try {
+        await AutoMailLog.create({ studentName, studentEmail: email, employeeId: student.employeeId || "", mailType: "low-attendance" });
+    } catch (_) {}
+}
+
+async function runLowAttendanceMailer(){
+    try {
+        if (!checkMongoStatus()) {
+            console.warn('[LOW-ATTENDANCE-MAILER] Mongoose is not connected. Skipping.');
+            return;
+        }
+        const students = await Student.find();
+        const now = new Date();
+
+        for (const student of students) {
+            try {
+                const email = student.email;
+                if (!email || !student.employeeId) continue;
+                if (student.internshipCompleted) continue; // no need to alert finished interns
+
+                const presentCount = await Attendance.countDocuments({ employeeId: student.employeeId, status: 'Present' });
+                const stats = calcAttendancePercentage(student, presentCount);
+
+                if (stats.percentage >= LOW_ATTENDANCE_THRESHOLD) continue;
+
+                const lastSent = (student.reminderEmailsSent && student.reminderEmailsSent.get)
+                    ? student.reminderEmailsSent.get('lowAttendance')
+                    : null;
+                if (lastSent && (now - new Date(lastSent)) < LOW_ATTENDANCE_RESEND_COOLDOWN_MS) {
+                    continue; // already alerted recently, don't spam
+                }
+
+                const studentName = (student.name || ((student.firstName||"") + " " + (student.lastName||"")).trim()).trim();
+                await sendLowAttendanceMail(student, studentName, stats.percentage);
+
+                if (!student.reminderEmailsSent) student.reminderEmailsSent = new Map();
+                student.reminderEmailsSent.set('lowAttendance', now);
+                await student.save();
+            } catch (error) {
+                console.log(error);
+            }
+        }
+    } catch (error) {
+        console.log(error);
+    }
+}
+cron.schedule('0 8 * * *', runLowAttendanceMailer); // daily at 8 AM
+
+// TEMPORARY TEST ROUTE — lets you trigger the low-attendance mailer manually
+// instead of waiting for the 8 AM cron. Remove this once you're done testing.
+app.post("/admin/test-low-attendance-mailer", async (req, res) => {
+    try {
+        const { employeeId, email } = req.body || {};
+
+        if (employeeId || email) {
+            // Test a single student, bypassing the 3-day resend cooldown
+            const query = employeeId ? { employeeId } : { email: String(email).toLowerCase().trim() };
+            const student = await Student.findOne(query);
+            if (!student) return res.status(404).json({ success: false, message: "Student not found" });
+
+            const presentCount = await Attendance.countDocuments({ employeeId: student.employeeId, status: 'Present' });
+            const stats = calcAttendancePercentage(student, presentCount);
+            const studentName = (student.name || ((student.firstName||"") + " " + (student.lastName||"")).trim()).trim();
+
+            await sendLowAttendanceMail(student, studentName, stats.percentage);
+
+            return res.json({ success: true, message: `Test email sent to ${student.email}`, percentage: stats.percentage });
+        }
+
+        // No employeeId given — run the full daily job right now
+        await runLowAttendanceMailer();
+        return res.json({ success: true, message: "runLowAttendanceMailer executed for all students" });
+
+    } catch (error) {
+        console.error("[TEST] low-attendance-mailer error:", error);
+        return res.status(500).json({ success: false, message: "Server error" });
+    }
+});
 
 // ======= AUTO DOCUMENT EMAIL HELPERS =======
 function tenureToDays(tenure) {
@@ -4512,80 +4638,71 @@ app.post(["/save-start-date", "/api/v2/student/save-start-date"], async (req, re
 
 // ── HELPER FUNCTION — CALCULATE STATS ──
 async function calculateAttendanceStats(employeeId) {
-  // Get student data for tenure and start date
   const student = await Student.findOne({ employeeId });
   if (!student) return null;
 
-  // Determine tenure total days
-  const tenureDaysMap = {
-    "1 Week": 7,
-    "15 Days": 15,
-    "1 Month": 30,
-    "45 Days": 45,
-    "3 Months": 90,
-    "6 Months": 180
-  };
-  const totalDays = tenureDaysMap[student.tenure] || 30;
+  const startDate = (student.joinerType === "whatsapp" && student.internshipStartDate)
+    ? new Date(student.internshipStartDate)
+    : new Date(student.joiningDate || student.createdAt);
+  if (isNaN(startDate.getTime())) return null;
+  startDate.setHours(0, 0, 0, 0);
 
-  // Determine start date
-  // WhatsApp joiners use internshipStartDate, others use joiningDate
-  let startDate;
-  if (student.joinerType === "whatsapp" && student.internshipStartDate) {
-    startDate = new Date(student.internshipStartDate);
-  } else {
-    startDate = new Date(student.joiningDate || student.createdAt);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const workingDays = attendanceUtils.countWorkingDays(startDate, today);
+
+  const selfPresentDays = new Set();
+  const coordPresentDays = new Set();
+  const combinedPresentDays = new Set();
+
+  const attendanceRecords = await Attendance.find({ employeeId });
+  for (const record of attendanceRecords) {
+    if (!record) continue;
+    const recordDate = record.date ? new Date(record.date) : (record.dateKey ? new Date(record.dateKey) : null);
+    if (!recordDate || isNaN(recordDate.getTime())) continue;
+    recordDate.setHours(0, 0, 0, 0);
+    if (recordDate < startDate || recordDate > today) continue;
+    if (recordDate.getDay() === 0) continue;
+
+    const key = toDateKey(recordDate);
+    if (!key) continue;
+    if (record.status === "Absent") continue;
+
+    if (record.markedBy === "self") {
+      selfPresentDays.add(key);
+    }
+    if (record.markedBy === "coordinator") {
+      coordPresentDays.add(key);
+    }
+    combinedPresentDays.add(key);
   }
 
-  // Get all attendance records for this student
-  const selfRecords = await Attendance.find({
-    employeeId,
-    markedBy: "self"
-  });
-  const coordRecords = await Attendance.find({
-    employeeId,
-    markedBy: "coordinator"
-  });
+  const selfCount = selfPresentDays.size;
+  const coordCount = coordPresentDays.size;
+  const combinedCount = combinedPresentDays.size;
+  const selfPct = workingDays ? Math.min(Math.round((selfCount / workingDays) * 100), 100) : 0;
+  const coordPct = workingDays ? Math.min(Math.round((coordCount / workingDays) * 100), 100) : 0;
+  const combinedPct = workingDays ? Math.min(Math.round((combinedCount / workingDays) * 100), 100) : 0;
+  const requiredDays = Math.ceil(workingDays * 0.75);
+  const daysNeeded = Math.max(0, requiredDays - combinedCount);
 
-  const selfCount = selfRecords.filter(r => r.status === "Present" || !r.status).length;
-  const coordCount = coordRecords.filter(r => r.status === "Present" || !r.status).length;
-
-  // Combined = union of self + coordinator dates (filtered for status !== "Absent")
-  const presentDates = new Set();
-  selfRecords.forEach(r => { if (r.status !== "Absent") presentDates.add(r.dateKey || new Date(r.date).toISOString().split('T')[0]); });
-  coordRecords.forEach(r => { if (r.status !== "Absent") presentDates.add(r.dateKey || new Date(r.date).toISOString().split('T')[0]); });
-
-  const combinedCount = presentDates.size;
-
-  // Calculate percentages (capped at 100%)
-  const selfPct   = Math.min(Math.round((selfCount / totalDays) * 100), 100);
-  const coordPct  = Math.min(Math.round((coordCount / totalDays) * 100), 100);
-  const combinedPct = Math.min(Math.round((combinedCount / totalDays) * 100), 100);
-
-  // Days needed to reach 75%
-  const minDays = Math.ceil(totalDays * 0.75);
-  const daysNeeded = Math.max(0, minDays - combinedCount);
-
-  // Check if today already marked
-  const now = new Date();
-  const istOffset = 5.5 * 60 * 60 * 1000;
-  const istNow = new Date(now.getTime() + istOffset);
-  const today = istNow.toISOString().split("T")[0];
-
-  const markedToday = selfRecords.some(r => r.dateKey === today || new Date(r.date).toISOString().split('T')[0] === today);
+  const todayKey = toDateKey(today);
+  const markedToday = selfPresentDays.has(todayKey);
 
   return {
     selfCount,
     coordCount,
     combinedCount,
-    totalDays,
+    workingDays,
     selfPct,
     coordPct,
     combinedPct,
-    minDays,
+    requiredDays,
     daysNeeded,
     markedToday,
     isAboveMinimum: combinedPct >= 75,
-    tenure: student.tenure
+    tenure: student.tenure,
+    startDate: startDate.toISOString()
   };
 }
 
@@ -4655,30 +4772,13 @@ app.post("/mark-attendance", async (req, res) => {
 app.get("/attendance-stats/:employeeId", async (req, res) => {
   try {
     const employeeId = decodeURIComponent(req.params.employeeId);
-    const originalStats = await calculateAttendanceStats(employeeId);
-    const presentCount = await Attendance.countDocuments({ employeeId, status: 'Present' });
-    const student = await Student.findOne({ employeeId });
-    if (!student) return res.json({ success: false, message: "Student not found" });
-
-    const stats = calcAttendancePercentage(student, presentCount);
-
-    const mergedStats = {
-      ...(originalStats || {}),
-      percentage: stats.percentage,
-      presentDays: stats.presentDays,
-      totalDays: stats.totalDays,
-      absentDays: stats.absentDays,
-      requiredDays: stats.requiredDays,
-      tenureTotalDays: stats.tenureTotalDays,
-      selfPresentDays: originalStats ? originalStats.selfCount : 0,
-      coordinatorPresentDays: originalStats ? originalStats.coordCount : 0,
-      combinedPresentDays: originalStats ? originalStats.combinedCount : 0,
-    };
+    const stats = await calculateAttendanceStats(employeeId);
+    if (!stats) return res.json({ success: false, message: "Student not found" });
 
     return res.json({
       success: true,
-      stats: mergedStats,
-      ...mergedStats
+      stats,
+      ...stats
     });
   } catch (err) {
     console.log(err);
@@ -5355,6 +5455,133 @@ try{
     if(!student.milestones.hrApproved) student.milestones.hrApproved = new Date();
     await student.save();
 
+    // Try to auto-generate and send Offer Letter when HR approves the student.
+    (async function generateAndSendOffer() {
+        try {
+            const StudentDocument = require("./models/new/StudentDocument");
+            const { generateOfferLetterPDF } = require("./services/v2/offerLetterService");
+            const { generateDocumentNumber, normalizeDocumentNumber } = require("./utils/documentNumber");
+            const MailHistory = require("./models/MailHistory");
+            const DocumentHistory = require("./models/DocumentHistory");
+            const transporter = createEmailTransporter();
+            const offerDir = path.join(__dirname, "uploads", "offer-letters");
+            try { fs.mkdirSync(offerDir, { recursive: true }); } catch(_) {}
+
+            // Ensure a StudentDocument record exists and student has uploaded docs
+            let docRec = await StudentDocument.findOne({ studentId: student._id });
+            if (!docRec) {
+                // create empty record so we can attach offer metadata
+                docRec = await StudentDocument.create({ studentId: student._id });
+            }
+
+            // Generate document number
+            const docNumber = normalizeDocumentNumber(generateDocumentNumber("offer_letter"));
+
+            const joining = student.joiningDate ? new Date(student.joiningDate) : new Date();
+            const tenureDays = student.tenure === "45 Days" ? 45 : student.tenure === "1 Month" ? 30 : student.tenure === "3 Months" ? 90 : student.tenure === "6 Months" ? 180 : 45;
+            const endDate = new Date(joining.getTime() + tenureDays * 24 * 3600 * 1000);
+            const fmt = d => d.toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
+
+            const safeEmpId = String(student.employeeId || student._id).replace(/\//g, "-");
+            const pdfPath = path.join(offerDir, `${safeEmpId}_offer_letter.pdf`);
+
+            await generateOfferLetterPDF({
+                studentName: student.name,
+                collegeName: student.collegeName || student.college || "",
+                employeeId: student.employeeId,
+                domain: student.domain,
+                durationText: student.tenure,
+                startDate: fmt(joining),
+                endDate: fmt(endDate),
+                dateIssued: fmt(new Date()),
+                documentNumber: docNumber
+            }, pdfPath);
+
+            // Update StudentDocument
+            docRec.uploadStatus = docRec.uploadStatus === "rejected" ? "approved" : (docRec.uploadStatus || "approved");
+            docRec.reviewedAt = new Date();
+            docRec.offerLetterUrl = `/uploads/offer-letters/${path.basename(pdfPath)}`;
+            docRec.offerLetterSentAt = new Date();
+            docRec.offerLetterDocumentNumber = docNumber;
+            await docRec.save();
+
+            // Sync small fields back to Student
+            try {
+                const pdfBuffer = fs.readFileSync(pdfPath);
+                await Student.findByIdAndUpdate(student._id, {
+                    offerPdfBase64: pdfBuffer.toString('base64'),
+                    offerLetterStatus: 'approved',
+                    offerLetterGeneratedAt: new Date(),
+                    documentRejectionReason: null
+                });
+            } catch (syncErr) {
+                console.error('[Sync] Failed to sync Offer Letter to Student:', syncErr.message);
+            }
+
+            // Send email with attachment
+            let mailStatus = 'sent';
+            let mailErrMsg = '';
+            try {
+                await transporter.sendMail({
+                    from: EMAIL_FROM,
+                    to: student.email,
+                    subject: `Your Internship Offer Letter — The Entrepreneurship Network`,
+                    html: `<p>Dear ${student.name || 'candidate'},</p><p>Congratulations! Please find your Internship Offer Letter attached to this email.</p><p>Welcome to TEN! Log in to your student portal to track your progress.</p><p>Best regards,<br>HR Team<br>The Entrepreneurship Network</p>`,
+                    attachments: [{ filename: 'TEN_Offer_Letter.pdf', path: pdfPath }]
+                });
+            } catch (mErr) {
+                mailStatus = 'failed';
+                mailErrMsg = mErr && mErr.message ? String(mErr.message) : '';
+                console.error('[DOCS] Offer letter email error:', mailErrMsg);
+            }
+
+            // DocumentHistory & MailHistory
+            try {
+                const studentName = (student.name || `${student.firstName || ''} ${student.lastName || ''}`).trim() || student.email || '';
+                await DocumentHistory.create({
+                    studentId: student._id,
+                    studentName,
+                    studentEmail: student.email || "",
+                    employeeId: student.employeeId || "",
+                    college: student.collegeName || student.college || "Not provided",
+                    domain: student.domain || "",
+                    documentType: "Offer Letter",
+                    documentKey: "offer_letter",
+                    documentNumber: docNumber,
+                    sentAt: new Date(),
+                    sentBy: "HR Approval",
+                    sentToEmail: student.email || ""
+                });
+            } catch (_) {}
+
+            try {
+                await MailHistory.create({
+                    recipientEmail: student.email || "",
+                    recipientName: student.name || "",
+                    studentId: student._id,
+                    subject: "Your Internship Offer Letter — The Entrepreneurship Network",
+                    mailType: "offer_letter",
+                    sentAt: new Date(),
+                    status: mailStatus,
+                    errorMessage: mailErrMsg
+                });
+            } catch (_) {}
+
+            // Notify student in-app
+            try {
+                await Notification.notifyStudent(student, {
+                    title: "📄 Offer Letter Sent",
+                    message: `Congratulations ${student.name || ''}! Your Internship Offer Letter (${docNumber}) has been generated and emailed to ${student.email || 'your registered email'}.`,
+                    type: "success"
+                });
+            } catch (_) {}
+
+            console.log(`[HR] Offer Letter generated & emailed for student ${student._id} (${student.employeeId})`);
+        } catch (err) {
+            console.error('[HR] Offer letter generation/send failed during hr-approve:', err && err.message ? err.message : err);
+        }
+    })().catch(()=>{});
+
     const notif = new Notification({
         title:"Certificate Approved 🎉",
         message:"HR has given final approval. Your certificates are now available.",
@@ -5364,7 +5591,7 @@ try{
     await notif.save();
     broadcastNotification(student.domain, student.employeeId, notif);
 
-    res.json({ success:true, message:"Student fully approved for certificates" });
+    res.json({ success:true, message:"Student fully approved for certificates and offer letter (if applicable) queued/sent" });
 }catch(e){ console.log(e); res.json({ success:false, message:"Failed to approve" }); }
 });
 
@@ -6425,6 +6652,20 @@ function passwordResetEmailHtml({ name, role, host, token }){
 </td></tr></table></body></html>`;
 }
 
+async function sendResetPasswordEmail(to, token, { name, role, host } = {}){
+    const html = passwordResetEmailHtml({ name, role, host, token });
+    const base = (host ? host.replace(/\/$/, "") : "");
+    const link = base + "/reset-password.html?token=" + encodeURIComponent(token) + "&role=" + encodeURIComponent(role || "");
+    const subject = "🔐 Password Reset Request — The Entrepreneurship Network";
+    await transporter.sendMail({
+        from: EMAIL_FROM,
+        to,
+        subject,
+        html,
+        text: `Hello ${name || "user"}, reset your password here: ${link} (expires in 1 hour). If you did not request this, ignore this email.`
+    });
+}
+
 async function _findUserByRoleEmail(role, email){
     const e = String(email || "").trim().toLowerCase();
     if(!e) return null;
@@ -6442,54 +6683,84 @@ async function _findUserByRoleEmail(role, email){
     return null;
 }
 
+function getPasswordResetWindow(user) {
+    const NOW = new Date();
+    const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+    let attempts = Number((user.passwordResetAttempts ?? user.passwordResetCount) || 0);
+    let windowStart = user.passwordResetWindowStart ? new Date(user.passwordResetWindowStart) : null;
+
+    if (!windowStart || isNaN(windowStart.getTime())) {
+        windowStart = user.passwordResetLastResetDate ? new Date(user.passwordResetLastResetDate) : new Date(0);
+    }
+
+    if (!windowStart || isNaN(windowStart.getTime())) {
+        windowStart = new Date(0);
+    }
+
+    if (NOW - windowStart > TWENTY_FOUR_HOURS) {
+        attempts = 0;
+        windowStart = NOW;
+    }
+
+    return { NOW, attempts, windowStart };
+}
+
 // ==================== FORGOT PASSWORD ====================
 app.post("/auth/forgot-password", async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email, role } = req.body;
 
     if (!email) {
       return res.status(400).json({ success: false, message: "Email required hai." });
     }
 
+    const validRoles = ["student", "coordinator", "hr"];
+    if (!role || !validRoles.includes(role)) {
+      return res.status(400).json({ success: false, message: "Valid role (student/coordinator/hr) required hai." });
+    }
+
     const trimmedEmail = email.toLowerCase().trim();
 
-    // 1. Check user in EcosystemUser
-    const user = await EcosystemUser.findOne({ email: trimmedEmail });
+    // 1. Check user in the role-specific model (this is what /auth/reset-password
+    //    later looks the token up against, so it must match).
+    const user = await _findUserByRoleEmail(role, trimmedEmail);
 
     if (!user) {
       return res.status(404).json({ success: false, message: "Is email se koi account nahi mila." });
     }
 
-    const NOW = new Date();
-    const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+        const { NOW, attempts, windowStart } = getPasswordResetWindow(user);
 
-    // 2. Reset 24-hour window if expired
-    if (!user.passwordResetWindowStart || (NOW - new Date(user.passwordResetWindowStart) > TWENTY_FOUR_HOURS)) {
-      user.passwordResetAttempts = 0;
-      user.passwordResetWindowStart = NOW;
-    }
+        if (attempts >= 2) {
+            return res.status(429).json({
+                success: false,
+                message: "You have reached the limit of 2 password reset requests in 24 hours. Please try again later."
+            });
+        }
 
-    // 3. Limit Check (Max 3 attempts)
-    if (user.passwordResetAttempts >= 3) {
-      return res.status(429).json({
-        success: false,
-        message: "Aapne 3 baar reset try kar liya hai. Kripya 24 ghante baad koshish karein."
-      });
-    }
+        // Generate a fresh reset token (raw for email) and store only its hash in DB
+        const rawToken = crypto.randomBytes(32).toString("hex");
+        const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+        const expiry = new Date(NOW.getTime() + 60 * 60 * 1000);
+        const nextAttempts = attempts + 1;
 
-    // 4. Increment Attempts
-    user.passwordResetAttempts += 1;
-    await user.save();
+        user.passwordResetToken = hashedToken;
+        user.passwordResetExpiry = expiry;
+        user.passwordResetAttempts = nextAttempts;
+        user.passwordResetWindowStart = windowStart;
+        user.passwordResetCount = nextAttempts;
+        user.passwordResetLastResetDate = NOW;
 
-    // -----------------------------------------------------------
-    // 5. EMAIL SENDING LOGIC (Nodemailer)
-    // -----------------------------------------------------------
-    await sendResetPasswordEmail(user.email, resetToken);
+        await user.save();
 
-    return res.status(200).json({
-      success: true,
-      message: "Password reset instructions aapke email par bhej diye gaye hain."
-    });
+        // Send raw token in email (frontend will post it back when resetting)
+        const host = (req.headers["x-forwarded-proto"] || req.protocol) + "://" + req.get("host");
+        await sendResetPasswordEmail(user.email, rawToken, { name: user.name, role, host });
+
+        return res.status(200).json({
+            success: true,
+            message: "Password reset instructions aapke email par bhej diye gaye hain."
+        });
 
   } catch (error) {
     console.error("Forgot password error:", error);
@@ -6507,7 +6778,8 @@ app.post("/auth/reset-password", async(req,res)=>{
 
         const Models = { student: Student, coordinator: Coordinator, hr: HR };
         const Model = Models[role];
-        const user = await Model.findOne({ passwordResetToken: token });
+        const hashed = crypto.createHash('sha256').update(token).digest('hex');
+        const user = await Model.findOne({ passwordResetToken: hashed });
         if(!user) return res.json({ success:false, message:"Invalid or already-used reset link" });
         if(!user.passwordResetExpiry || user.passwordResetExpiry < new Date()){
             return res.json({ success:false, message:"This reset link has expired. Please request a new one." });
@@ -6526,6 +6798,117 @@ app.post("/auth/reset-password", async(req,res)=>{
         await user.save();
         res.json({ success:true, message:"Password updated! Please log in with your new password." });
     }catch(e){ console.log(e); res.status(500).json({ success:false, message:"Server error" }); }
+});
+
+// ==================================================================
+// ======== STUDENT PASSWORD RESET (merged from authController.js/auth.js) =====
+// ==================================================================
+async function sendPasswordResetEmail(to, rawToken, { name, host } = {}){
+    const html = passwordResetEmailHtml({ name, role: "student", host, token: rawToken });
+    const base = (host ? host.replace(/\/$/, "") : "");
+    const link = base + "/reset-password.html?token=" + encodeURIComponent(rawToken) + "&role=student";
+    const subject = "🔐 Password Reset Request — The Entrepreneurship Network";
+    await transporter.sendMail({
+        from: EMAIL_FROM,
+        to,
+        subject,
+        html,
+        text: `Hello ${name || "user"}, reset your password here: ${link} (expires in 1 hour). If you did not request this, ignore this email.`
+    });
+}
+
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Email is required' });
+    }
+
+    const user = await Student.findOne({ email: email.toLowerCase().trim() });
+
+    if (!user) {
+      return res.json({
+        success: true,
+        message: 'If an account exists with that email, a password reset link has been sent.'
+      });
+    }
+
+    const { NOW, attempts, windowStart } = getPasswordResetWindow(user);
+
+    if (attempts >= 2) {
+      return res.status(429).json({
+        success: false,
+        error: 'Daily limit reached. You can only request up to 2 password resets in 24 hours. Please try again later.'
+      });
+    }
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    user.passwordResetToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+    user.passwordResetExpiry = Date.now() + 60 * 60 * 1000; // 1 hour
+    const nextAttempts = attempts + 1;
+    user.passwordResetAttempts = nextAttempts;
+    user.passwordResetWindowStart = windowStart;
+    user.passwordResetCount = nextAttempts;
+    user.passwordResetLastResetDate = NOW;
+
+    await user.save();
+
+    const host = (req.headers["x-forwarded-proto"] || req.protocol) + "://" + req.get("host");
+    sendPasswordResetEmail(user.email, rawToken, { name: user.name, host }).catch(err => {
+      console.error('[ForgotPassword] Email dispatch error:', err.message);
+    });
+
+    return res.json({
+      success: true,
+      message: 'Password reset link sent to your email.'
+    });
+
+  } catch (error) {
+    console.error('[ForgotPassword] Error:', error.message);
+    return res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        error: 'Token and new password are required'
+      });
+    }
+
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+    const user = await Student.findOne({
+      passwordResetToken: hashedToken,
+      passwordResetExpiry: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid or expired password reset token.'
+      });
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    user.passwordResetToken = null;
+    user.passwordResetExpiry = null;
+
+    await user.save();
+
+    return res.json({
+      success: true,
+      message: 'Password has been reset successfully! You can now log in.'
+    });
+
+  } catch (error) {
+    console.error('[ResetPassword] Error:', error.message);
+    return res.status(500).json({ success: false, error: 'Internal server error' });
+  }
 });
 
 // ==================================================================
@@ -7910,20 +8293,10 @@ try {
             let updatedCount = 0;
 
             for (const student of students) {
-                if (!student.joiningDate) continue;
+                if (!student.employeeId) continue;
 
-                // Count both capitalized and lowercase "Present"
-                const presentCount = await Attendance.countDocuments({
-                    employeeId: student.employeeId,
-                    status: { $in: ["Present", "present"] }
-                });
-
-                const percentage = calculateAttendancePercentage(student, presentCount);
-
-                student.attendancePercentage = percentage;
-                student.calculatedAttendancePercentage = percentage;
-                student.calculatedAttendance = percentage; // auto-heal
-                await student.save();
+                const percentage = await attendanceUtils.recomputeAndSaveAttendance(Student, Attendance, student.employeeId);
+                if (percentage === 0 && !student.employeeId) continue;
                 updatedCount++;
             }
 
@@ -8442,4 +8815,3 @@ process.on('uncaughtException', (error) => {
     // Do NOT exit the process. Keep the server running.
     // Comment: PM2 will restart the container if the system is truly unstable.
 });
-
