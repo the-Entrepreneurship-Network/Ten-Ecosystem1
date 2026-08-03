@@ -1,4 +1,4 @@
-const { loadEnvironment } = require("./utils/env");
+const { loadEnvironment } = require("./utils/mailer");
 loadEnvironment();
 
 // Monkeypatch Intl.DateTimeFormat to prevent crashes on environments with small-icu (like some EC2/AWS instances)
@@ -9330,7 +9330,26 @@ app.post("/api/v2/coordinator/approve", async (req, res) => {
     }
 });
 
-server.listen(PORT, "0.0.0.0", ()=>{ console.log(`Server running on port ${PORT}`); });
+function startServer() {
+    const httpServer = server.listen(PORT, "0.0.0.0", ()=>{ console.log(`Server running on port ${PORT}`); });
+
+    httpServer.on('error', (error) => {
+        if (error && error.code === 'EADDRINUSE') {
+            console.error(`[server] Port ${PORT} is already in use. Retrying with fallback port ${PORT + 1}...`);
+            const fallbackPort = PORT + 1;
+            const fallbackServer = server.listen(fallbackPort, "0.0.0.0", ()=>{
+                console.log(`Server running on fallback port ${fallbackPort}`);
+            });
+            fallbackServer.on('error', (fallbackError) => {
+                console.error('[server] Fallback port also unavailable:', fallbackError.message);
+            });
+        } else {
+            console.error('[server] Server startup error:', error.message);
+        }
+    });
+}
+
+startServer();
 
 // Process-level crash protection and error handlers
 process.on('uncaughtException', (error) => {
