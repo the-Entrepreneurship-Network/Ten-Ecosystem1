@@ -1,4 +1,5 @@
 const router            = require('express').Router();
+const mongoose          = require('mongoose');
 const BotQuery          = require('../../models/BotQuery');
 const SystemKnowledge   = require('../../models/SystemKnowledge');
 
@@ -21,10 +22,17 @@ const DEFAULT_KNOWLEDGE = [
 ];
 
 async function seedKnowledge() {
-  const count = await SystemKnowledge.countDocuments();
-  if (count === 0) {
-    await SystemKnowledge.insertMany(DEFAULT_KNOWLEDGE);
-    console.log('[Bots] Default knowledge seeded.');
+  try {
+    if (mongoose.connection.readyState !== 1) {
+      return;
+    }
+    const count = await SystemKnowledge.countDocuments();
+    if (count === 0) {
+      await SystemKnowledge.insertMany(DEFAULT_KNOWLEDGE);
+      console.log('[Bots] Default knowledge seeded.');
+    }
+  } catch (error) {
+    console.warn('[Bots] Knowledge seeding skipped:', error.message);
   }
 }
 seedKnowledge().catch(console.error);

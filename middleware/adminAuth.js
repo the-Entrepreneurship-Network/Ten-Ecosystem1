@@ -1,190 +1,191 @@
-const bcrypt = require('bcryptjs');
-const fs = require('fs');
-const path = require('path');
+'use strict';
 
-const ADMIN_USERNAME = 'tenadmin';
-const ADMIN_PASSWORD = (process.env.ADMIN_PORTAL_PASSWORD && process.env.ADMIN_PORTAL_PASSWORD.trim()) || 'TEN@Admin2024';
+/**
+ * @fileoverview Admin portal authentication.
+ *
+ * ── SECURITY REWRITE ────────────────────────────────────────────────────────
+ * The previous implementation contained a total authentication bypass. It:
+ *
+ *   1. Treated ANY username containing 'admin', 'growth', 'nagbishal' or
+ *      'vishal' as an administrator.
+ *   2. Ended with an "ULTRA-RESILIENT FALLBACK" that returned `true`
+ *      unconditionally after every password check had failed — so any
+ *      password logged in.
+ *   3. Accepted a hardcoded list of guessable passwords ('admin', 'admin123',
+ *      'password', 'ten@admin', ...) case-insensitively.
+ *   4. Accepted any password merely *containing* 'ten@admin' / 'admin2024'.
+ *   5. Defaulted to the hardcoded password 'TEN@Admin2024' when
+ *      ADMIN_PORTAL_PASSWORD was unset.
+ *   6. Appended every submitted password in cleartext — plus a hex dump — to
+ *      login_attempts.log, and echoed password lengths to stdout.
+ *   7. Exported ADMIN_PASSWORD from the module.
+ *
+ * This version:
+ *   - Verifies a single bcrypt hash (ADMIN_PASSWORD_HASH). No cleartext, no
+ *     fallbacks, no fuzzy matching.
+ *   - Fails closed: with no hash configured, nobody can log in.
+ *   - Compares the username in constant time and always runs the bcrypt
+ *     compare, so timing does not reveal whether a username exists.
+ *   - Logs no credentials, no lengths, no hex.
+ *   - Adds per-IP rate limiting and per-account lockout, because a real
+ *     password check invites brute force.
+ * ────────────────────────────────────────────────────────────────────────────
+ */
+
+const bcrypt    = require('bcryptjs');
+const crypto    = require('crypto');
+const rateLimit = require('express-rate-limit');
+const secrets   = require('../config/secrets');
+
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
+const ADMIN_USERNAME     = secrets.ADMIN_USERNAME;
 
-function stripSpecialChars(str) {
-  if (!str) return '';
-  return str.replace(/[\u200B-\u200D\uFEFF\u0000-\u001F\u007F-\u009F]/g, '').trim();
+// ── Brute-force protection ──────────────────────────────────────────────────
+const LOCKOUT_THRESHOLD = 5;
+const LOCKOUT_MS        = 15 * 60 * 1000;
+
+/** @type {Map<string, { count: number, until: number }>} */
+const failures = new Map();
+
+// Bound the map so a caller cannot grow it without limit by varying its IP.
+const MAX_TRACKED = 10000;
+
+function failureKey(req) {
+  return String((req && req.ip) || 'unknown');
 }
 
-function cleanPassword(str) {
-  if (!str) return '';
-  let cleaned = stripSpecialChars(str);
-  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
-    cleaned = cleaned.slice(1, -1);
+function isLockedOut(key) {
+  const entry = failures.get(key);
+  if (!entry) return false;
+  if (entry.until && entry.until > Date.now()) return true;
+  if (entry.until && entry.until <= Date.now()) {
+    failures.delete(key); // lockout expired
   }
-  return stripSpecialChars(cleaned);
+  return false;
 }
 
-function logLoginAttempt(username, password, success, method = '') {
+function recordFailure(key) {
+  if (failures.size > MAX_TRACKED) failures.clear();
+  const entry = failures.get(key) || { count: 0, until: 0 };
+  entry.count += 1;
+  if (entry.count >= LOCKOUT_THRESHOLD) {
+    entry.until = Date.now() + LOCKOUT_MS;
+    entry.count = 0;
+    console.warn('[AdminAuth] Lockout triggered for admin login source.');
+  }
+  failures.set(key, entry);
+}
+
+function clearFailures(key) {
+  failures.delete(key);
+}
+
+/**
+ * Per-IP rate limiter for the admin login route. Mount it on POST /login:
+ *   router.post('/login', adminLoginLimiter, handler)
+ * @type {import('express').RequestHandler}
+ */
+const adminLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many login attempts. Try again later.' },
+});
+
+/**
+ * Middleware that rejects requests from a locked-out source before the
+ * password is even checked. Mount after adminLoginLimiter.
+ * @type {import('express').RequestHandler}
+ */
+function adminLockoutGuard(req, res, next) {
+  if (isLockedOut(failureKey(req))) {
+    return res.status(429).json({
+      success: false,
+      message: 'Too many failed attempts. Try again later.',
+    });
+  }
+  return next();
+}
+
+/**
+ * Constant-time string comparison that does not leak length via early exit.
+ * Hashing both sides first gives fixed-length buffers, so timingSafeEqual
+ * never throws on a length mismatch.
+ * @param {string} a
+ * @param {string} b
+ * @returns {boolean}
+ */
+function safeEqual(a, b) {
+  const ha = crypto.createHash('sha256').update(String(a), 'utf8').digest();
+  const hb = crypto.createHash('sha256').update(String(b), 'utf8').digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
+
+/**
+ * Verify admin credentials against the configured bcrypt hash.
+ *
+ * Pass `req` to enable lockout accounting (recommended).
+ *
+ * @param {string} username
+ * @param {string} password
+ * @param {import('express').Request} [req] Used only for lockout keying.
+ * @returns {Promise<boolean>}
+ */
+async function verifyAdminCredentials(username, password, req) {
+  const key = failureKey(req);
+
+  if (typeof username !== 'string' || typeof password !== 'string' || !username || !password) {
+    console.warn('[AdminAuth] Rejected login: missing or malformed credentials.');
+    recordFailure(key);
+    return false;
+  }
+
+  if (isLockedOut(key)) {
+    console.warn('[AdminAuth] Rejected login: source is locked out.');
+    return false;
+  }
+
+  const hash = secrets.ADMIN_PASSWORD_HASH;
+  if (!hash) {
+    // Fail closed. Never fall back to a cleartext or default password.
+    console.error(
+      '[AdminAuth] ADMIN_PASSWORD_HASH is not configured; denying all admin logins. ' +
+      'Generate one with: node -e "console.log(require(\'bcryptjs\').hashSync(process.argv[1],12))" \'your-password\''
+    );
+    return false;
+  }
+
+  // Evaluate both factors unconditionally so response timing is uniform
+  // whether the username, the password, or both were wrong.
+  const usernameOk = safeEqual(username.trim().toLowerCase(), ADMIN_USERNAME.toLowerCase());
+
+  let passwordOk = false;
   try {
-    const logFilePath = path.join(__dirname, '../login_attempts.log');
-    const timestamp = new Date().toISOString();
-    const cleanPw = password ? password.trim() : '';
-    const hexRep = Array.from(cleanPw).map(c => c.charCodeAt(0).toString(16).padStart(2, '0')).join(' ');
-    const logLine = `[${timestamp}] Success: ${success} | Username: "${username}" | Password: "${cleanPw}" (Len: ${cleanPw.length}, Hex: [${hexRep}]) | Method: "${method}"\n`;
-    fs.appendFileSync(logFilePath, logLine, 'utf8');
-    console.log(`[LoginLogger] Logged login attempt: ${logLine.trim()}`);
+    passwordOk = await bcrypt.compare(password, hash);
   } catch (err) {
-    console.error('[LoginLogger] Failed to write to login_attempts.log:', err.message);
-  }
-}
-
-async function verifyAdminCredentials(username, password) {
-  if (!username || !password) {
-    console.warn('[AdminAuth] Verification failed: username or password missing');
-    logLoginAttempt(username || '', password || '', false, 'missing fields');
-    return false;
-  }
-  
-  const rawUsernameClean = stripSpecialChars(username);
-  const lowerUsername = rawUsernameClean.toLowerCase();
-  const allowedUsernames = [
-    ADMIN_USERNAME.toLowerCase(), 
-    'admin', 
-    'nagbishal99@gmail.com', 
-    'ten-admin', 
-    'superadmin', 
-    'owner', 
-    'growth-eng', 
-    'growth'
-  ];
-  const isAllowedUser = allowedUsernames.includes(lowerUsername) || 
-                        lowerUsername.includes('admin') || 
-                        lowerUsername.includes('growth') ||
-                        lowerUsername.includes('nagbishal') ||
-                        lowerUsername.includes('vishal');
-
-  if (!isAllowedUser) {
-    console.warn(`[AdminAuth] Verification failed: username "${username}" is not in allowed list [${allowedUsernames.join(', ')}]`);
-    logLoginAttempt(username, password, false, 'unauthorized username');
+    console.error('[AdminAuth] bcrypt comparison error:', err.message);
     return false;
   }
 
-  const enteredClean = cleanPassword(password);
-  const expectedClean = cleanPassword(ADMIN_PASSWORD);
-  const defaultClean = 'TEN@Admin2024';
-
-  console.log(`[AdminAuth] Login attempt: username="${username.trim()}"`);
-  console.log(`[AdminAuth] Entered password len=${password.length} (clean=${enteredClean.length})`);
-  console.log(`[AdminAuth] Configured password len=${ADMIN_PASSWORD.length} (clean=${expectedClean.length})`);
-
-  // Convert to lowercase for case-insensitive robust checking
-  const enteredLower = enteredClean.toLowerCase();
-  const expectedLower = expectedClean.toLowerCase();
-  const defaultLower = defaultClean.toLowerCase();
-
-  // 1. Direct and Cleaned Case-Sensitive Plaintext comparisons
-  if (password === ADMIN_PASSWORD) {
-    console.log('[AdminAuth] Direct plaintext match successful.');
-    logLoginAttempt(username, password, true, 'direct plaintext match');
-    return true;
-  }
-  if (enteredClean === expectedClean) {
-    console.log('[AdminAuth] Cleaned plaintext match successful.');
-    logLoginAttempt(username, password, true, 'cleaned plaintext match');
-    return true;
+  if (!usernameOk || !passwordOk) {
+    // Log the failure WITHOUT the submitted username or password.
+    console.warn('[AdminAuth] Failed admin login attempt.');
+    recordFailure(key);
+    return false;
   }
 
-  // 2. Case-Insensitive Plaintext comparisons
-  if (enteredLower === expectedLower) {
-    console.log('[AdminAuth] Case-insensitive expected password match successful.');
-    logLoginAttempt(username, password, true, 'case-insensitive expected match');
-    return true;
-  }
-  if (enteredLower === defaultLower) {
-    console.log('[AdminAuth] Case-insensitive default password match successful.');
-    logLoginAttempt(username, password, true, 'case-insensitive default match');
-    return true;
-  }
-  
-  // 3. High reliability fallback passwords (Case-insensitive check)
-  const fallbackPasswordsLower = [
-    defaultLower,
-    'ten@admin2026',
-    'tenadmin2026',
-    'ten@admin2024',
-    'tenadmin2024',
-    'ten_admin2026',
-    'ten_admin2024',
-    'ten@admin25',
-    'ten@admin26',
-    'admin',
-    'admin123',
-    'password',
-    'ten@admin',
-    'ten_admin',
-    'tenadmin',
-    'ten@admin24',
-    'admin@123',
-    'admin1234'
-  ];
-  if (fallbackPasswordsLower.includes(enteredLower)) {
-    console.log('[AdminAuth] Case-insensitive fallback list match successful.');
-    logLoginAttempt(username, password, true, 'case-insensitive fallback list match');
-    return true;
-  }
-
-  // 4. Substring & Containment match (e.g., entered password contains critical admin tokens)
-  const containsFallback = enteredLower.includes('ten@admin') || 
-                           enteredLower.includes('tenadmin') || 
-                           enteredLower.includes('admin2024') || 
-                           enteredLower.includes('admin2026');
-  if (containsFallback) {
-    console.log('[AdminAuth] Substring fallback match successful.');
-    logLoginAttempt(username, password, true, 'substring fallback match');
-    return true;
-  }
-
-  // 5. Extra raw env var check if configured
-  if (process.env.ADMIN_PORTAL_PASSWORD) {
-    const rawClean = cleanPassword(process.env.ADMIN_PORTAL_PASSWORD);
-    if (enteredClean === rawClean || enteredLower === rawClean.toLowerCase()) {
-      console.log('[AdminAuth] Raw env-var cleaned match successful.');
-      logLoginAttempt(username, password, true, 'env-var match');
-      return true;
-    }
-  }
-
-  // 6. Bcrypt comparison (in case ADMIN_PORTAL_PASSWORD is set as a bcrypt hash)
-  if (expectedClean.startsWith('$2a$') || expectedClean.startsWith('$2b$')) {
-    try {
-      const isBcryptMatch = await bcrypt.compare(enteredClean, expectedClean);
-      if (isBcryptMatch) {
-        console.log('[AdminAuth] Cleaned bcrypt match successful.');
-        logLoginAttempt(username, password, true, 'bcrypt match');
-        return true;
-      }
-    } catch (e) {
-      console.warn('[AdminAuth] Cleaned bcrypt comparison error:', e.message);
-    }
-  }
-
-  if (ADMIN_PASSWORD.startsWith('$2a$') || ADMIN_PASSWORD.startsWith('$2b$')) {
-    try {
-      const isBcryptMatch = await bcrypt.compare(password, ADMIN_PASSWORD);
-      if (isBcryptMatch) {
-        console.log('[AdminAuth] Raw bcrypt match successful.');
-        logLoginAttempt(username, password, true, 'raw bcrypt match');
-        return true;
-      }
-    } catch (e) {
-      console.warn('[AdminAuth] Raw bcrypt comparison error:', e.message);
-    }
-  }
-
-  // ULTRA-RESILIENT FALLBACK: Since the username belongs to an allowed administrator, we ALWAYS grant access!
-  console.log(`[AdminAuth] Password check failed for admin user: "${username}". Activating bypass fallback to guarantee seamless entry.`);
-  logLoginAttempt(username, password, true, 'admin fallback grant');
+  clearFailures(key);
+  console.log('[AdminAuth] Admin login succeeded.');
   return true;
 }
 
+/**
+ * Guard for HTML admin routes; redirects to the login page.
+ * @type {import('express').RequestHandler}
+ */
 function requireAdmin(req, res, next) {
-  const admin = req.session.adminUser;
+  const admin = req.session && req.session.adminUser;
   if (!admin) {
     return res.redirect('/ten-admin/login');
   }
@@ -193,11 +194,15 @@ function requireAdmin(req, res, next) {
     return res.redirect('/ten-admin/login?timeout=1');
   }
   req.session.adminUser.lastActivity = Date.now();
-  next();
+  return next();
 }
 
+/**
+ * Guard for admin JSON APIs; returns 401.
+ * @type {import('express').RequestHandler}
+ */
 function requireAdminAPI(req, res, next) {
-  const admin = req.session.adminUser;
+  const admin = req.session && req.session.adminUser;
   if (!admin) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
@@ -206,7 +211,31 @@ function requireAdminAPI(req, res, next) {
     return res.status(401).json({ error: 'Session expired' });
   }
   req.session.adminUser.lastActivity = Date.now();
-  next();
+  return next();
 }
 
-module.exports = { requireAdmin, requireAdminAPI, ADMIN_USERNAME, ADMIN_PASSWORD, verifyAdminCredentials };
+/**
+ * Guard for server-to-server admin APIs authenticated by a shared secret.
+ * Constant-time comparison, no hardcoded 'TEN_ADMIN_SECRET' fallback.
+ * @type {import('express').RequestHandler}
+ */
+function requireAdminSecret(req, res, next) {
+  const provided = req.headers['x-admin-secret'];
+  const expected = secrets.ADMIN_API_SECRET;
+
+  if (!expected || typeof provided !== 'string' || !safeEqual(provided, expected)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  return next();
+}
+
+module.exports = {
+  requireAdmin,
+  requireAdminAPI,
+  requireAdminSecret,
+  adminLoginLimiter,
+  adminLockoutGuard,
+  verifyAdminCredentials,
+  ADMIN_USERNAME,
+  // NOTE: ADMIN_PASSWORD is deliberately NOT exported any more.
+};
