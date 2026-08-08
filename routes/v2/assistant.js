@@ -23,6 +23,7 @@
  */
 
 const router     = require('express').Router();
+const mongoose   = require('mongoose');
 const DomainTask = require('../../models/new/DomainTask');
 
 let AssistantUsage = null;
@@ -847,10 +848,57 @@ router.get('/plan', async (req, res) => {
   }
 });
 
-// GET /api/v2/assistant/health
+/*
+ * GET /api/v2/assistant/health
+ *
+ * Reports what the assistant can actually reach. "The assistant could not
+ * answer that" is useless on its own, so this names the cause: whether mongoose
+ * is connected, whether the task library has rows, and whether entitlements can
+ * be read. Safe to expose - it returns counts and states, never data.
+ */
 router.get('/health', async (req, res) => {
-  const domains = await allDomains();
-  return res.json({ ok: true, domains: domains.length, requiresApiKey: false });
+  const STATES = ['disconnected', 'connected', 'connecting', 'disconnecting'];
+  const out = {
+    ok: true,
+    requiresApiKey: false,
+    database: STATES[mongoose.connection.readyState] || 'unknown',
+    curriculum: 'unknown',
+    domains: 0,
+    entitlements: 'unknown',
+    notes: [],
+  };
+
+  try {
+    const domains = await allDomains();
+    out.domains = domains.length;
+    const rows = await DomainTask.estimatedDocumentCount();
+    out.curriculum = rows > 0 ? 'seeded (' + rows + ' tasks)' : 'empty';
+    if (!rows) {
+      out.notes.push('DomainTask is empty. Run: node seeds/domainTasks.seed.js');
+    }
+  } catch (e) {
+    out.curriculum = 'unreadable';
+    out.notes.push('Task library unreadable: ' + e.message);
+  }
+
+  if (!AssistantUsage) {
+    out.entitlements = 'model missing';
+  } else {
+    try {
+      await AssistantUsage.estimatedDocumentCount();
+      out.entitlements = 'readable';
+    } catch (e) {
+      out.entitlements = 'unreadable';
+      out.notes.push('Usage unreadable, tiers will not meter: ' + e.message);
+    }
+  }
+
+  if (out.database !== 'connected') {
+    out.notes.push('MONGODB_URI is not set or the database is unreachable. The assistant still answers, at Starter depth, without track plans.');
+  }
+  if (!out.notes.length) { out.notes.push('All good.'); }
+
+  return res.json(out);
 });
 
 module.exports = router;
