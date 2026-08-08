@@ -1,3 +1,4 @@
+//E:\Downloads\Ten-Ecosystem1\server.js
 
 require("dotenv").config();
 
@@ -4807,7 +4808,7 @@ try{
 });
 
 // ================= TEST: SUBMIT TEST =================
-
+// SECTION 6 — replaces the existing /submit-test route handler in full.
 app.post("/submit-test", async(req,res)=>{
 try{
     const { employeeId, studentName, domain, answers } = req.body;
@@ -4830,12 +4831,33 @@ try{
         { upsert:true, new:true }
     );
 
+    // NEW FEATURE: Notifications Upgrade — quiz result
+    try {
+        const testStudent = await Student.findOne({ employeeId });
+        if (testStudent && testStudent.email) {
+            await notifyByEmail({
+                email: testStudent.email,
+                type: "quiz_result",
+                title: "Domain Test Submitted",
+                message: `You scored ${score}/${questions.length} (${percentage}%) on the ${domain} test.`,
+                legacy: {
+                    employeeId,
+                    domain,
+                    legacyType: "student",
+                    severity: percentage >= 50 ? "success" : "info",
+                    from: "System"
+                }
+            });
+        }
+    } catch(notifErr) { console.error("[submit-test] notifyByEmail failed:", notifErr.message); }
+
     res.json({ success:true, score, totalQuestions:questions.length, percentage });
 }catch(error){
     console.log(error);
     res.json({ success:false, message:"Test submission failed" });
 }
 });
+// =========== END SECTION 6 ===========
 
 // ================= TEST: LEADERBOARD =================
 

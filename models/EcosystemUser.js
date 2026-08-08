@@ -4,7 +4,7 @@ const bcrypt = require("bcryptjs");
 const EcosystemUserSchema = new mongoose.Schema({
   role: {
     type: String,
-    enum: ["founder", "mentor", "investor", "contractor", "student"],
+    enum: ["founder", "mentor", "investor", "contractor", "student", "coordinator", "hr"],
     required: true
   },
   fullName: { type: String, required: true, trim: true },

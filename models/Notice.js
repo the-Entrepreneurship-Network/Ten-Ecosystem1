@@ -1,3 +1,4 @@
+//E:\Downloads\Ten-Ecosystem1\models\Notice.js
 const mongoose = require("mongoose");
 
 const NoticeSchema = new mongoose.Schema({

@@ -1,5 +1,6 @@
 // NEW FEATURE: Payment Skeleton — PAYMENT_ENABLED=false by default
 // Set PAYMENT_ENABLED=true in .env to activate everything with zero code changes.
+//E:\Downloads\Ten-Ecosystem1\config\payment.js
 
 const expert_price = 100;
 const nano_price = 1000;

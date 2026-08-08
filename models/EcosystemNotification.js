@@ -17,7 +17,14 @@ const ecosystemNotificationSchema = new mongoose.Schema({
       'payment_confirmed','payment_failed',
       'mentor_request','mentor_approved',
       'founder_approved','investor_approved',
-      'new_message','system_announcement'
+      'new_message','system_announcement',
+      // NEW FEATURE: Notifications Upgrade — added for attendance, tasks,
+      // certificates, feedback, and coding/quiz results.
+      'attendance_reminder',
+      'task_approved','task_rejected',
+      'certificate_ready',
+      'feedback_received',
+      'coding_result','quiz_result'
     ],
     required: true
   },
