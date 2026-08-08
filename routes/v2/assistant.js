@@ -75,6 +75,23 @@ const PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
  */
 async function loadUsage(userId) {
   if (!AssistantUsage || !userId) { return null; }
+  try {
+    return await loadUsageOrThrow(userId);
+  } catch (e) {
+    /*
+     * The database is unreachable. Answering is more useful than failing, so
+     * this degrades to an unmetered Starter session rather than returning an
+     * error: the questions that need no database (coins, certificates, the
+     * daily posting task) are static text and should never have depended on
+     * Mongo being up. Nothing paid is given away, because a null row reads as
+     * Starter depth everywhere downstream.
+     */
+    console.warn('[assistant] usage unavailable, serving unmetered Starter:', e.message);
+    return null;
+  }
+}
+
+async function loadUsageOrThrow(userId) {
   let row = await AssistantUsage.findOne({ userId });
   if (!row) { row = await AssistantUsage.create({ userId }); }
 
@@ -212,11 +229,18 @@ async function matchDomain(text, fallback) {
 const rupees = coins => 'Rs ' + Math.round(coins * 0.5);
 
 async function tasksFor(domain, duration) {
-  const rows = await DomainTask
-    .find({ domain, durationType: duration.source })
-    .sort({ weekNumber: 1 })
-    .lean();
-  return duration.take ? rows.slice(0, duration.take) : rows;
+  try {
+    const rows = await DomainTask
+      .find({ domain, durationType: duration.source })
+      .sort({ weekNumber: 1 })
+      .lean();
+    return duration.take ? rows.slice(0, duration.take) : rows;
+  } catch (e) {
+    // An empty list renders as "no seeded task list for this track", which is
+    // the honest thing to say when the rows cannot be read.
+    console.warn('[assistant] task lookup failed:', e.message);
+    return [];
+  }
 }
 
 const DEPTH_RANK = { brief: 0, standard: 1, deep: 2, ultimate: 3 };
@@ -451,7 +475,7 @@ router.post('/ask', async (req, res) => {
       answer += '\n\nDeep Dive Mode is available on Plus and Enterprise.';
     }
 
-    if (usage) {
+    try { if (usage) {
       usage.messagesUsed += 1;
       if (q.tier.historyDays === null || q.tier.historyDays > 0) {
         usage.history.push({ question: String(question), answer, askedAt: new Date() });
@@ -467,6 +491,10 @@ router.post('/ask', async (req, res) => {
         usage.history = [];
       }
       await usage.save();
+    } } catch (e) {
+      // The answer is already computed. Losing the counter is worth less than
+      // losing the reply, so this is logged and swallowed.
+      console.warn('[assistant] could not record usage:', e.message);
     }
 
     if (BotQuery && userId) {
@@ -542,7 +570,7 @@ router.get('/history', async (req, res) => {
   try {
     const usage = await loadUsage(req.query.userId);
     const q     = quotaFor(usage);
-    if (!usage || q.tier.historyDays === 0) {
+    if (!usage || !usage.history || q.tier.historyDays === 0) {
       return res.json({ tier: q.tier.key, retained: 0, history: [] });
     }
     return res.json({
