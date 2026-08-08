@@ -24,9 +24,24 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/xterm/5.3.0/xterm.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xterm/5.3.0/xterm.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xterm/5.3.0/addon-fit/addon-fit.min.js"></script>
+<!-- xterm.js terminal (F5 coding challenge). Self-hosted via server.js
+     (/vendor/xterm, /vendor/xterm-addon-fit -> node_modules/@xterm/*) so the
+     terminal no longer depends on any external CDN being reachable. Requires
+     `npm install` to have installed @xterm/xterm and @xterm/addon-fit — see
+     package.json. NOTE: these npm packages do NOT ship minified builds —
+     the real files are lib/xterm.js and css/xterm.css (no ".min."). Using
+     the ".min." filenames here made the self-hosted request 404 every time,
+     silently falling through to the CDN fallback below — so the app was
+     never actually self-hosting despite this comment. If the local files
+     are somehow missing (e.g. npm install wasn't run), each tag falls back
+     to the last-known-working jsDelivr CDN URL automatically, so this still
+     works out of the box either way. -->
+<link id="xtermCss" rel="stylesheet" href="/vendor/xterm/css/xterm.css"
+      onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css';">
+<script src="/vendor/xterm/lib/xterm.js"
+        onerror="this.onerror=null;var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js';document.head.appendChild(s);"></script>
+<script src="/vendor/xterm-addon-fit/lib/addon-fit.js"
+        onerror="this.onerror=null;var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js';document.head.appendChild(s);"></script>
 
 <style>
 @keyframes qr-pulse {
@@ -685,6 +700,56 @@ button:active { transform: translateY(0); }
   color: var(--text-muted);
   font-size: 14px;
 }
+
+/* Leaderboard */
+.lb-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.lb-tab-btn {
+  flex: 1;
+  padding: 10px 16px;
+  background: var(--bg-card-hover);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.lb-tab-btn.active {
+  background: linear-gradient(90deg, var(--accent-blue), var(--accent-cyan));
+  border-color: transparent;
+  color: #fff;
+}
+.lb-table-wrap { overflow-x: auto; }
+.lb-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.lb-table th {
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.lb-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.lb-table tr.lb-me { background: rgba(212,175,55,0.08); }
+.lb-rank { font-weight: 700; color: var(--accent-gold); }
+.lb-error { color: var(--accent-red); text-align: center; padding: 24px; font-size: 14px; }
 .empty-state::before {
   content: '📭';
   display: block;
@@ -2056,8 +2121,12 @@ button:active { transform: translateY(0); }
         <h2>🏆 Leaderboard &amp; Badges</h2>
         <span class="badge">Achievements</span>
       </div>
+      <div class="lb-tabs">
+        <button class="lb-tab-btn active" id="lbTabDomainBtn" onclick="switchLeaderboardTab('domain')">My Domain</button>
+        <button class="lb-tab-btn" id="lbTabOverallBtn" onclick="switchLeaderboardTab('overall')">Overall</button>
+      </div>
       <div id="leaderboardContainer">
-        <div class="empty-state">Leaderboard standings updating soon...</div>
+        <div class="empty-state">Loading leaderboard...</div>
       </div>
     </div>
   </div>
@@ -2187,9 +2256,16 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initDashboard() {
-  const userSession = localStorage.getItem('tenUserSession');
+  // login.html / student-login.html save the real logged-in student under
+  // localStorage key "student" (see their postLogin handlers). This used to
+  // read a different key, "tenUserSession", which nothing ever wrote — so
+  // every session silently fell back to mock data regardless of who was
+  // actually logged in. That's why "My Domain" showed nothing: it was
+  // querying the mock's fake domain instead of the real student's domain.
+  const userSession = localStorage.getItem('student');
   if (!userSession) {
-    // Redirect or set default mock session for demonstration
+    // No real session found (e.g. viewing this page directly without
+    // logging in) — fall back to mock data so the page is still browsable.
     currentUser = {
       name: "Student",
       employeeId: "TEN-STU-2026",
@@ -2211,19 +2287,31 @@ function initDashboard() {
 
 function setupUserData() {
   if (!currentUser) return;
-  
+
+  const displayName = currentUser.name
+    || [currentUser.firstName, currentUser.lastName].filter(Boolean).join(' ')
+    || 'Student';
+
   // Set inline elements
   const welcomeNameInline = document.getElementById('welcomeNameInline');
-  if (welcomeNameInline) welcomeNameInline.textContent = currentUser.name || "Student";
-  
+  if (welcomeNameInline) welcomeNameInline.textContent = displayName;
+
   const welcomeText = document.getElementById('welcomeText');
-  if (welcomeText) welcomeText.textContent = `Welcome, ${currentUser.name || 'Student'} 🚀`;
-  
+  if (welcomeText) welcomeText.textContent = `Welcome, ${displayName} 🚀`;
+
   const employeeText = document.getElementById('employeeText');
   if (employeeText) employeeText.textContent = currentUser.employeeId || "TEN-ID-0000";
 
-  // Handle Domains
-  userDomains = currentUser.domains || ["General"];
+  // Handle Domains — real student records store a single "domain" string,
+  // and only multi-domain students also have a "domains" array. Mock data
+  // (and the pre-existing shape here) uses "domains" (array) directly.
+  if (Array.isArray(currentUser.domains) && currentUser.domains.length) {
+    userDomains = currentUser.domains;
+  } else if (currentUser.domain) {
+    userDomains = [currentUser.domain];
+  } else {
+    userDomains = ["General"];
+  }
   updateDomainDisplay();
 }
 
@@ -2295,6 +2383,9 @@ function switchStudentView(viewId) {
   // Close sidebar on mobile
   const sidebar = document.querySelector('.stu-sidebar');
   if (sidebar) sidebar.classList.remove('open');
+
+  if (viewId === 'stu-view-leaderboard') loadLeaderboardTab(lbActiveTab);
+  if (viewId === 'stu-view-coding') loadCodingProblems();
 }
 
 function toggleSidebar() {
@@ -2331,11 +2422,110 @@ function openSectionModal(viewId) {
 
   if (modalTitle) modalTitle.textContent = titles[viewId] || 'Section';
   if (modal) modal.classList.add('open');
+
+  if (viewId === 'stu-view-leaderboard') loadLeaderboardTab(lbActiveTab);
+  if (viewId === 'stu-view-coding') loadCodingProblems();
 }
 
 function closeSectionModal() {
   const modal = document.getElementById('sectionModal');
   if (modal) modal.classList.remove('open');
+}
+
+/* ── Leaderboard ── */
+let lbActiveTab = 'domain';
+let lbLoadedTabs = {}; // cache so re-opening the view doesn't re-fetch every time
+
+function switchLeaderboardTab(tab) {
+  lbActiveTab = tab;
+  const domainBtn = document.getElementById('lbTabDomainBtn');
+  const overallBtn = document.getElementById('lbTabOverallBtn');
+  if (domainBtn) domainBtn.classList.toggle('active', tab === 'domain');
+  if (overallBtn) overallBtn.classList.toggle('active', tab === 'overall');
+  loadLeaderboardTab(tab);
+}
+
+async function loadLeaderboardTab(tab) {
+  const container = document.getElementById('leaderboardContainer');
+  if (!container) return;
+
+  if (lbLoadedTabs[tab]) {
+    renderLeaderboard(lbLoadedTabs[tab], tab);
+    return;
+  }
+
+  container.innerHTML = '<div class="empty-state">Loading leaderboard...</div>';
+
+  try {
+    let url;
+    if (tab === 'domain') {
+      const myDomain = (userDomains && userDomains[currentDomainIndex]) || (currentUser && currentUser.domain) || '';
+      if (!myDomain) {
+        container.innerHTML = '<div class="empty-state">No domain set on your profile yet.</div>';
+        return;
+      }
+      url = '/leaderboard/domain/' + encodeURIComponent(myDomain);
+    } else {
+      url = '/leaderboard/overall';
+    }
+
+    const res = await fetch(url);
+    const data = await res.json();
+    const rows = (data && data.leaderboard) || [];
+    lbLoadedTabs[tab] = rows;
+    renderLeaderboard(rows, tab);
+  } catch (err) {
+    console.error('Leaderboard load error', err);
+    container.innerHTML = '<div class="lb-error">Could not load leaderboard. Please try again later.</div>';
+  }
+}
+
+function renderLeaderboard(rows, tab) {
+  const container = document.getElementById('leaderboardContainer');
+  if (!container) return;
+
+  if (!rows || rows.length === 0) {
+    container.innerHTML = '<div class="empty-state">No data yet.</div>';
+    return;
+  }
+
+  const myId = currentUser && currentUser.employeeId;
+  const bodyRows = rows.map(r => `
+    <tr class="${r.employeeId === myId ? 'lb-me' : ''}">
+      <td class="lb-rank">#${r.rank}</td>
+      <td>${escapeLbHtml(r.name || r.employeeId || '—')}</td>
+      <td>${escapeLbHtml(r.employeeId || '—')}</td>
+      <td>${(r.score !== undefined && r.score !== null) ? r.score : '—'}</td>
+      <td>${escapeLbHtml(r.grade || '—')}</td>
+      <td>${(r.attendancePct !== undefined && r.attendancePct !== null) ? r.attendancePct + '%' : '—'}</td>
+      <td>${r.approved !== undefined ? r.approved : '—'}</td>
+    </tr>
+  `).join('');
+
+  container.innerHTML = `
+    <div class="lb-table-wrap">
+      <table class="lb-table">
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Name</th>
+            <th>ID</th>
+            <th>Score</th>
+            <th>Grade</th>
+            <th>Attendance</th>
+            <th>Approved</th>
+          </tr>
+        </thead>
+        <tbody>${bodyRows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function escapeLbHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = String(str);
+  return div.innerHTML;
 }
 
 /* ── Notification Panel ── */
@@ -2458,6 +2648,128 @@ function handleTaskSubmission(e) {
 }
 
 /* ── CodeMirror & Coding Modal ── */
+/* ── Coding Problems (F5) ── */
+let codingProblemsCache = null; // list for the currently loaded domain
+let codingProblemsDomain = null;
+
+async function loadCodingProblems() {
+  const container = document.getElementById('codingProblemsList');
+  if (!container) return;
+
+  const domain = (userDomains && userDomains[currentDomainIndex]) || (currentUser && currentUser.domain) || '';
+  if (!domain) {
+    container.innerHTML = '<div class="empty-state">No domain set on your profile yet.</div>';
+    return;
+  }
+
+  if (codingProblemsCache && codingProblemsDomain === domain) {
+    renderCodingProblems(codingProblemsCache);
+    return;
+  }
+
+  container.innerHTML = '<div class="empty-state">Loading practice problems...</div>';
+
+  try {
+    const employeeId = (currentUser && currentUser.employeeId) || '';
+    const url = '/student/coding-questions/' + encodeURIComponent(domain) + '?employeeId=' + encodeURIComponent(employeeId);
+    const res = await fetch(url);
+    const data = await res.json();
+    const list = (data && data.questions) || [];
+    codingProblemsCache = list;
+    codingProblemsDomain = domain;
+    renderCodingProblems(list);
+  } catch (err) {
+    console.error('Coding problems load error', err);
+    container.innerHTML = '<div class="lb-error">Could not load coding problems. Please try again later.</div>';
+  }
+}
+
+function renderCodingProblems(list) {
+  const container = document.getElementById('codingProblemsList');
+  if (!container) return;
+
+  if (!list || list.length === 0) {
+    container.innerHTML = '<div class="empty-state">No coding problems have been added for your domain yet.</div>';
+    return;
+  }
+
+  container.innerHTML = list.map(q => {
+    const diffClass = q.difficulty === 'Hard' ? 'diff-hard' : (q.difficulty === 'Medium' ? 'diff-medium' : 'diff-easy');
+    const tags = [];
+    if (q.isToday) tags.push('<span class="badge" style="margin-left:8px;">Today</span>');
+    if (q.isSolved) tags.push('<span class="diff-badge diff-easy" style="margin-left:8px;">Solved ✓</span>');
+    return `
+      <div class="task-card" style="cursor:pointer;" onclick="openCodingModal('${q._id}')">
+        <div class="task-card-header">
+          <span class="diff-badge ${diffClass}">${escapeLbHtml(q.difficulty || 'Easy')}</span>
+          ${tags.join('')}
+        </div>
+        <h3>${escapeLbHtml(q.title || 'Untitled Problem')}</h3>
+        <p>${escapeLbHtml((q.description || '').slice(0, 160))}${(q.description || '').length > 160 ? '…' : ''}</p>
+      </div>
+    `;
+  }).join('');
+}
+
+async function openCodingModal(id) {
+  const modal = document.getElementById('codingModal');
+  if (!modal) return;
+
+  try {
+    const res = await fetch('/student/coding-questions/question/' + encodeURIComponent(id));
+    const data = await res.json();
+    if (!data || !data.success || !data.question) {
+      if (window.Swal) Swal.fire({ icon: 'error', title: 'Could not load problem', text: 'Please try again.' });
+      return;
+    }
+    activeCodingProblem = data.question;
+
+    document.getElementById('cmTitle').textContent = activeCodingProblem.title || 'Problem';
+    const diffEl = document.getElementById('cmDiff');
+    diffEl.textContent = activeCodingProblem.difficulty || 'Easy';
+    diffEl.className = 'diff-badge ' + (activeCodingProblem.difficulty === 'Hard' ? 'diff-hard' : (activeCodingProblem.difficulty === 'Medium' ? 'diff-medium' : 'diff-easy'));
+    diffEl.style.marginBottom = '12px';
+    document.getElementById('cmDesc').textContent = activeCodingProblem.description || '';
+    document.getElementById('cmFmt').innerHTML =
+      (activeCodingProblem.inputFormat ? `<b>Input:</b> ${escapeLbHtml(activeCodingProblem.inputFormat)}<br>` : '') +
+      (activeCodingProblem.outputFormat ? `<b>Output:</b> ${escapeLbHtml(activeCodingProblem.outputFormat)}` : '');
+    document.getElementById('cmSample').innerHTML =
+      (activeCodingProblem.sampleInput ? `<b>Sample Input</b><pre>${escapeLbHtml(activeCodingProblem.sampleInput)}</pre>` : '') +
+      (activeCodingProblem.sampleOutput ? `<b>Sample Output</b><pre>${escapeLbHtml(activeCodingProblem.sampleOutput)}</pre>` : '');
+
+    modal.style.display = 'flex';
+
+    if (!editorInstance) initCodeMirror();
+    if (editorInstance) {
+      const lang = document.getElementById('cmLangSelect').value || 'python';
+      editorInstance.setValue(cmStarterCode(lang, activeCodingProblem.title));
+      handleLangChange();
+      setTimeout(() => editorInstance.refresh(), 50);
+    }
+    const out = document.getElementById('cmOutput');
+    if (out) { out.classList.remove('is-error'); out.textContent = 'Ready to execute code.'; }
+
+    switchCmTab('editor');
+  } catch (err) {
+    console.error('openCodingModal error', err);
+    if (window.Swal) Swal.fire({ icon: 'error', title: 'Something went wrong', text: 'Could not open this problem.' });
+  }
+}
+
+function cmStarterCode(lang, title) {
+  if (lang === 'python') return '# ' + (title || 'Problem') + '\n\n# Your solution here\n';
+  if (lang === 'javascript') return '// ' + (title || 'Problem') + '\n\n// Your solution here\n';
+  return '// ' + (title || 'Problem') + '\n#include <iostream>\nusing namespace std;\nint main() {\n    // Your solution here\n    return 0;\n}\n';
+}
+
+// Maps the editor's CodeMirror mode selector to the language string the
+// /code/run and /code/submit backend endpoints expect.
+function cmBackendLang() {
+  const lang = document.getElementById('cmLangSelect').value;
+  if (lang === 'clike') return 'cpp';
+  return lang; // 'python' | 'javascript'
+}
+
 function initCodeMirror() {
   const textarea = document.getElementById('codeEditor');
   if (textarea && window.CodeMirror) {
@@ -2493,25 +2805,144 @@ function switchCmTab(tab) {
     editorPane.style.display = 'none';
     terminalPane.classList.add('visible');
     initXterm();
+    if (fitAddon) setTimeout(() => { try { fitAddon.fit(); } catch(_){} }, 50);
   }
 }
 
 function initXterm() {
-  if (!termInstance && window.Terminal) {
-    termInstance = new Terminal({
-      cursorBlink: true,
-      theme: { background: '#0d1117', foreground: '#cdd9ec' }
-    });
-    fitAddon = new FitAddon.FitAddon();
-    termInstance.loadAddon(fitAddon);
-    const container = document.getElementById('xtermContainer');
-    if (container) {
-      termInstance.open(container);
-      fitAddon.fit();
-      termInstance.writeln('Welcome to TEN Interactive Shell');
-      termInstance.write('\r\n$ ');
+  const container = document.getElementById('xtermContainer');
+  if (!container) return;
+
+  // If a previous attempt already succeeded, nothing to do.
+  if (termInstance) return;
+
+  if (!window.Terminal || !window.FitAddon) {
+    container.innerHTML = '<div class="lb-error">Terminal failed to load. Please check your internet connection and reload the page. If this keeps happening, let your coordinator know.</div>';
+    console.error('xterm.js or FitAddon not available on window — CDN script may have failed to load.');
+    return;
+  }
+
+  termInstance = new Terminal({
+    cursorBlink: true,
+    theme: { background: '#0d1117', foreground: '#cdd9ec' }
+  });
+  fitAddon = new FitAddon.FitAddon();
+  termInstance.loadAddon(fitAddon);
+  termInstance.open(container);
+  fitAddon.fit();
+  termInstance.writeln('Welcome to TEN Interactive Shell');
+  termInstance.writeln('Type "help" to see available commands.');
+  cmPrompt();
+
+  // Simple line-buffered shell: commands run against the SAME code
+  // currently in the Code Editor tab, via the real /code/run and
+  // /code/submit backend endpoints — this is what actually lets a
+  // student submit a solution from the terminal.
+  let inputBuffer = '';
+  termInstance.onData(async (data) => {
+    const code = data.charCodeAt(0);
+    if (data === '\r') { // Enter
+      termInstance.write('\r\n');
+      const cmd = inputBuffer.trim();
+      inputBuffer = '';
+      await cmHandleCommand(cmd);
+      cmPrompt();
+    } else if (code === 127) { // Backspace
+      if (inputBuffer.length > 0) {
+        inputBuffer = inputBuffer.slice(0, -1);
+        termInstance.write('\b \b');
+      }
+    } else if (code < 32) {
+      // ignore other control characters
+    } else {
+      inputBuffer += data;
+      termInstance.write(data);
+    }
+  });
+}
+
+function cmPrompt() {
+  if (termInstance) termInstance.write('\r\n$ ');
+}
+
+async function cmHandleCommand(cmd) {
+  if (!termInstance) return;
+  if (!cmd) return;
+
+  if (cmd === 'help') {
+    termInstance.writeln('Available commands:');
+    termInstance.writeln('  run     - run the code from the Code Editor tab against your custom input');
+    termInstance.writeln('  submit  - submit the code from the Code Editor tab for grading');
+    termInstance.writeln('  clear   - clear this terminal');
+    return;
+  }
+  if (cmd === 'clear') {
+    termInstance.clear();
+    return;
+  }
+  if (cmd === 'run' || cmd === 'submit') {
+    if (!activeCodingProblem) {
+      termInstance.writeln('No problem is open. Close the terminal, open a problem, and try again.');
+      return;
+    }
+    if (!editorInstance) {
+      termInstance.writeln('Code editor is not ready yet.');
+      return;
+    }
+    const code = editorInstance.getValue();
+    const language = cmBackendLang();
+
+    if (cmd === 'run') {
+      const input = (document.getElementById('cmCustomInput') || {}).value || '';
+      termInstance.writeln('Running your code...');
+      try {
+        const res = await fetch('/code/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, language, input })
+        });
+        const r = await res.json();
+        if (r.success) {
+          termInstance.writeln('--- Output ---');
+          (r.output || '(no output)').split('\n').forEach(line => termInstance.writeln(line));
+        } else {
+          termInstance.writeln('--- Error ---');
+          (r.error || 'Unknown error').split('\n').forEach(line => termInstance.writeln(line));
+        }
+      } catch (err) {
+        termInstance.writeln('Could not reach the server: ' + err.message);
+      }
+      return;
+    }
+
+    if (cmd === 'submit') {
+      const employeeId = (currentUser && currentUser.employeeId) || '';
+      termInstance.writeln('Submitting your solution for grading...');
+      try {
+        const res = await fetch('/code/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ employeeId, questionId: activeCodingProblem._id, language, code })
+        });
+        const r = await res.json();
+        if (r.message && !r.status) {
+          termInstance.writeln('Could not submit: ' + r.message);
+          return;
+        }
+        termInstance.writeln('Status: ' + r.status + '  (' + r.passedCases + '/' + r.totalCases + ' test cases passed)');
+        if (r.status === 'Accepted') {
+          termInstance.writeln('✔ All test cases passed!');
+        } else {
+          termInstance.writeln('✘ Some test cases did not pass. Review the Output Console in the Code Editor tab, fix your solution, and try again.');
+        }
+      } catch (err) {
+        termInstance.writeln('Could not reach the server: ' + err.message);
+      }
+      return;
     }
   }
+
+  termInstance.writeln('Unknown command: "' + cmd + '". Type "help" for a list of commands.');
 }
 
 function handleLangChange() {
@@ -2522,22 +2953,84 @@ function handleLangChange() {
   else if (lang === 'clike') editorInstance.setOption('mode', 'text/x-c++src');
 }
 
-function runCode() {
+async function runCode() {
   const out = document.getElementById('cmOutput');
-  if (out) {
-    out.classList.remove('is-error');
-    out.textContent = 'Executing code...\nOutput:\nHello, TEN World!';
+  if (!out) return;
+  if (!editorInstance) { out.textContent = 'Editor is not ready yet.'; return; }
+
+  const code = editorInstance.getValue();
+  const language = cmBackendLang();
+  const input = (document.getElementById('cmCustomInput') || {}).value || '';
+
+  out.classList.remove('is-error');
+  out.textContent = 'Executing code...';
+
+  try {
+    const res = await fetch('/code/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, language, input })
+    });
+    const r = await res.json();
+    if (r.success) {
+      out.classList.remove('is-error');
+      out.textContent = 'Output:\n' + (r.output || '(no output)');
+    } else {
+      out.classList.add('is-error');
+      out.textContent = 'Error:\n' + (r.error || 'Unknown error');
+    }
+  } catch (err) {
+    out.classList.add('is-error');
+    out.textContent = 'Could not reach the server: ' + err.message;
   }
 }
 
-function submitCode() {
-  if (window.Swal) {
-    Swal.fire({
-      icon: 'success',
-      title: 'Solution Submitted!',
-      text: 'All test cases passed successfully.',
-      confirmButtonColor: '#10b981'
+async function submitCode() {
+  if (!activeCodingProblem) {
+    if (window.Swal) Swal.fire({ icon: 'error', title: 'No problem open', text: 'Open a coding problem first.' });
+    return;
+  }
+  if (!editorInstance) return;
+
+  const code = editorInstance.getValue();
+  const language = cmBackendLang();
+  const employeeId = (currentUser && currentUser.employeeId) || '';
+
+  try {
+    const res = await fetch('/code/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ employeeId, questionId: activeCodingProblem._id, language, code })
     });
+    const r = await res.json();
+
+    if (r.message && !r.status) {
+      if (window.Swal) Swal.fire({ icon: 'error', title: 'Could not submit', text: r.message });
+      return;
+    }
+
+    if (window.Swal) {
+      if (r.status === 'Accepted') {
+        Swal.fire({
+          icon: 'success',
+          title: 'Solution Submitted!',
+          text: `All ${r.totalCases} test case(s) passed successfully.`,
+          confirmButtonColor: '#10b981'
+        });
+      } else {
+        Swal.fire({
+          icon: 'warning',
+          title: r.status,
+          text: `${r.passedCases} of ${r.totalCases} test case(s) passed. Check the Output Console and try again.`,
+          confirmButtonColor: '#f5c542'
+        });
+      }
+    }
+
+    // Refresh the problem list in the background so "Solved" status updates
+    codingProblemsCache = null;
+  } catch (err) {
+    if (window.Swal) Swal.fire({ icon: 'error', title: 'Submission failed', text: err.message });
   }
 }
 
@@ -2551,7 +3044,19 @@ function refreshDashboard() {
 }
 
 function doStudentLogout() {
-  localStorage.removeItem('tenUserSession');
+  // Clear every key the real login flow actually writes (see login.html /
+  // student-login.html). This used to only remove "tenUserSession", a key
+  // that's never set — so logging out never actually cleared the real
+  // session, and the next visit to this page would still show the
+  // previous student's data.
+  localStorage.removeItem('student');
+  localStorage.removeItem('employeeId');
+  localStorage.removeItem('user');
+  localStorage.removeItem('userId');
+  localStorage.removeItem('role');
+  localStorage.removeItem('ten_token');
+  localStorage.removeItem('ten_employee_id');
+  localStorage.removeItem('tenUserSession'); // legacy key, harmless to also clear
   window.location.href = 'index.html';
 }
 
