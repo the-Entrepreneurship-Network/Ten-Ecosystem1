@@ -234,6 +234,22 @@ async function registerUser(req, res) {
 
     // 2. Create Role-Specific Profiles in Separate collections/tables with Foreign Keys
     if (role === ROLES.STUDENT) {
+      const missingFields = [];
+      const requiredStudentFields = ['mobile', 'country', 'state', 'city', 'university', 'degree', 'graduationYear', 'skills', 'resume'];
+      requiredStudentFields.forEach(field => {
+        const value = roleSpecificData[field];
+        if (value === undefined || value === null || String(value).trim() === '') {
+          missingFields.push(field);
+        }
+      });
+      if (missingFields.length) {
+        return res.status(400).json({
+          success: false,
+          error: 'Missing required student fields.',
+          details: missingFields.map(field => ({ field, message: `${field} is required.` }))
+        });
+      }
+
       // Create student_profiles
       await StudentProfile.create({
         userId: user._id,
@@ -256,11 +272,17 @@ async function registerUser(req, res) {
 
       // BACKWARD COMPATIBILITY: also create legacy Student document in students collection
       let parsedDomains = [];
-      if (roleSpecificData.domains && typeof roleSpecificData.domains === 'string') {
+      if (Array.isArray(roleSpecificData.domains)) {
+        parsedDomains = roleSpecificData.domains.map(d => String(d || '').trim()).filter(Boolean);
+      } else if (roleSpecificData.domains && typeof roleSpecificData.domains === 'string') {
         parsedDomains = roleSpecificData.domains.split(',').map(d => d.trim()).filter(Boolean);
       }
       if (parsedDomains.length === 0) {
-        parsedDomains = ['Web Development'];
+        return res.status(400).json({
+          success: false,
+          error: 'Student registration requires at least one selected domain.',
+          details: [{ field: 'domains', message: 'Please select at least one domain.' }]
+        });
       }
       const domain = parsedDomains[0];
       const employeeId = await generateEmployeeId(domain);

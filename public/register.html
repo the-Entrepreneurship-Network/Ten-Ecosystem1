@@ -706,9 +706,7 @@
         iconNode.className = "w-10 h-10 rounded-lg flex items-center justify-center text-emerald-400 bg-emerald-500/10 border border-emerald-500/20";
         document.getElementById("studentFormFields").classList.remove('hidden');
         document.querySelectorAll('.stu-req').forEach(el => {
-          if (el.id !== 'stu_resume' && el.id !== 'selected_domains') {
-            el.setAttribute('required', 'true');
-          }
+          el.setAttribute('required', 'true');
         });
         subNode.textContent = "Student Portal: Match with prestigious projects and unlock premium coursework.";
         submitBtn.innerHTML = 'CREATE MY ACCOUNT <i class="fa-solid fa-user-plus ml-1"></i>';
@@ -777,7 +775,13 @@
         return;
       }
 
-      const formData = new FormData(e.target);
+      const form = e.target;
+      if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+      }
+
+      const formData = new FormData(form);
       const flatData = Object.fromEntries(formData);
 
       // Structure nested roleSpecificData for target endpoint /api/register-hub/register
@@ -793,6 +797,29 @@
       payload.roleSpecificData.mobile = flatData.mobile;
       
       if (activeRole === 'student') {
+        if (!flatData.domains || !flatData.domains.trim()) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Domain Required',
+            text: 'Please select at least one domain before continuing.',
+            background: '#0e1428',
+            color: '#F0EEE8',
+            confirmButtonColor: '#D4AF37'
+          });
+          return;
+        }
+        if (!flatData.resume || !flatData.resume.trim()) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Resume Required',
+            text: 'Please upload your resume PDF before continuing.',
+            background: '#0e1428',
+            color: '#F0EEE8',
+            confirmButtonColor: '#D4AF37'
+          });
+          return;
+        }
+
         payload.roleSpecificData.country = flatData.country;
         payload.roleSpecificData.state = flatData.state;
         payload.roleSpecificData.city = flatData.city;
