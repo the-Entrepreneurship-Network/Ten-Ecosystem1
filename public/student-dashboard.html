@@ -1593,6 +1593,7 @@ button:active { transform: translateY(0); }
     <button class="stu-nav-btn" onclick="window.location.href='my-certificates.html'" style="background:linear-gradient(135deg,rgba(139,92,246,0.08),rgba(139,92,246,0.02));border:1px solid rgba(139,92,246,0.18);"><span class="nav-icon">🏅</span> My Certificates <span style="font-size:10px;background:rgba(139,92,246,0.2);color:#c4b5fd;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
     <button class="stu-nav-btn" onclick="showPaymentComingSoon()" style="background:linear-gradient(135deg,rgba(16,185,129,0.08),rgba(16,185,129,0.02));border:1px solid rgba(16,185,129,0.2);"><span class="nav-icon">💳</span> Make Payment <span style="font-size:10px;background:rgba(16,185,129,0.2);color:#10b981;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
     <button class="stu-nav-btn" onclick="window.location.href='ten-network.html'" style="background:linear-gradient(135deg,rgba(212,175,55,0.12),rgba(212,175,55,0.04));border:1px solid rgba(212,175,55,0.25);"><span class="nav-icon">🌐</span> TEN Network <span style="font-size:10px;background:rgba(212,175,55,0.25);color:#D4AF37;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
+    <button class="stu-nav-btn" onclick="window.location.href='/assistant'" style="background:linear-gradient(135deg,rgba(212,175,55,0.12),rgba(212,175,55,0.04));border:1px solid rgba(212,175,55,0.25);"><span class="nav-icon">∞</span> TEN Assistant <span style="font-size:10px;background:rgba(212,175,55,0.25);color:#D4AF37;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
     <!-- FEATURE 2 — Logout button -->
     <button class="stu-nav-btn" onclick="tenLogout()" style="background:rgba(244,63,94,0.06);border:1px solid rgba(244,63,94,0.18);margin-top:8px;"><span class="nav-icon">🚪</span> Logout</button>
   </nav>
@@ -1773,6 +1774,12 @@ button:active { transform: translateY(0); }
         <div class="sec-card-icon">💳</div>
         <div class="sec-card-title" style="color:#10b981;">Make Payment <span style="font-size:10px;background:rgba(16,185,129,0.2);color:#10b981;padding:1px 7px;border-radius:4px;margin-left:4px;font-weight:800;vertical-align:middle;">NEW</span></div>
         <div class="sec-card-desc">Pay fees securely via UPI — PhonePe, GPay, Paytm &amp; more</div>
+      </div>
+      <!-- TEN Assistant card -->
+      <div class="sec-card" onclick="window.location.href='/assistant'" style="border-color:rgba(212,175,55,0.3);background:linear-gradient(135deg,rgba(212,175,55,0.08),rgba(212,175,55,0.02));">
+        <div class="sec-card-icon">∞</div>
+        <div class="sec-card-title" style="color:#D4AF37;">TEN Assistant <span style="font-size:10px;background:rgba(212,175,55,0.2);color:#D4AF37;padding:1px 7px;border-radius:4px;margin-left:4px;font-weight:800;vertical-align:middle;">NEW</span></div>
+        <div class="sec-card-desc">Your week-by-week plan, coins &amp; deadlines — ask anything</div>
       </div>
       <!-- TEN Network card -->
       <div class="sec-card" onclick="window.location.href='ten-network.html'" style="border-color:rgba(212,175,55,0.3);background:linear-gradient(135deg,rgba(212,175,55,0.08),rgba(212,175,55,0.02));">
@@ -6379,8 +6386,6 @@ document.addEventListener("DOMContentLoaded", function() {
 </script>
 
 <script src="ten-motion.js"></script>
-  <!-- TEN Assistant -->
-  <script src="/js/ten-assistant.js" defer></script>
 </body>
 </html>
 
