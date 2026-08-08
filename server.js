@@ -8171,13 +8171,14 @@ app.post('/api/tenure-payment/submit-utr', async (req, res) => {
   }
 });
 
-// AI CHATBOT SYSTEM — Task Bot, Query Bot, Voice Bot (Gemini 2.0 Flash)
+// TEN ASSISTANT — answers from the portal's own DomainTask rows, no API key
 try {
-    const v2Bots = require('./routes/v2/bots');
-    app.use('/api/v2/bots', v2Bots);
-    console.log('[V2] Bots routes mounted at /api/v2/bots');
+    const v2Assistant = require('./routes/v2/assistant');
+    app.use('/api/v2/assistant', v2Assistant);
+    app.get('/assistant', (req, res) => res.sendFile(path.join(__dirname, 'public', 'assistant.html')));
+    console.log('[V2] Assistant mounted at /api/v2/assistant, page at /assistant');
 } catch(e) {
-    console.error('[V2] Failed to mount bots routes:', e.message);
+    console.error('[V2] Failed to mount assistant routes:', e.message);
 }
 
 // ── PHASE 2: Ecosystem Platform Routes ────────────────────────────────────

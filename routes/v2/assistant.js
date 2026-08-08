@@ -1,0 +1,828 @@
+/*
+ * TEN Assistant — a self-contained section, new in this change.
+ *
+ * Replaces the old Gemini-backed bot (routes/v2/bots.js, removed). It answers
+ * from this portal's own data instead of a language model: the DomainTask
+ * collection already holds the seeded curriculum — 14 domains across four
+ * duration tracks — so week numbers, task titles, coin values and difficulty
+ * ratings come from the same rows the student's task page reads.
+ *
+ * Two consequences worth stating plainly:
+ *   - No API key. Nothing is called over the network, so the assistant cannot
+ *     stop working because a key expired or a quota ran out.
+ *   - Nothing is generated, so nothing can be invented. When the data cannot
+ *     answer a question, it says so and points at a coordinator rather than
+ *     producing a confident guess.
+ *
+ * Curriculum is read from the database, never copied into this file. A reseed
+ * changes the answers automatically and there is no second copy to drift.
+ *
+ * This file is additive. It defines its own routes under /api/v2/assistant and
+ * shares only the existing BotQuery model for logging, so no existing feature
+ * depends on anything here.
+ */
+
+const router     = require('express').Router();
+const DomainTask = require('../../models/new/DomainTask');
+
+let AssistantUsage = null;
+try { AssistantUsage = require('../../models/new/AssistantUsage'); } catch (_e) { /* optional */ }
+
+// Logging is best-effort and must never break an answer.
+let BotQuery = null;
+try { BotQuery = require('../../models/BotQuery'); } catch (_e) { /* optional */ }
+
+/* ────────────────────────────── tiers ───────────────────────────── */
+/*
+ * Four tiers. `messages` is the cap per 30-day period; null means unlimited.
+ * `depth` is what the answer renderer is allowed to include, so the paid
+ * difference is real content rather than the same answer behind a counter.
+ *
+ * Prices are recorded for display only. Nothing here charges a card: the
+ * entitlement is granted by verifyPayment once a human has matched the UPI
+ * reference against the merchant statement, and written by grantEntitlement.
+ */
+const TIERS = {
+  starter: {
+    key: 'starter', label: 'Starter', price: 0, priceLabel: 'Free',
+    messages: 12, depth: 'brief', historyDays: 0, deepDive: false,
+    blurb: 'Short answers to get you unstuck.',
+  },
+  pro: {
+    key: 'pro', label: 'Pro', price: 500, priceLabel: '₹500/month',
+    messages: 90, depth: 'standard', historyDays: 7, deepDive: false,
+    blurb: 'Fuller answers, and your last 7 days of conversation kept.',
+  },
+  plus: {
+    key: 'plus', label: 'Plus', price: 1200, priceLabel: '₹1,200/month',
+    messages: 350, depth: 'deep', historyDays: 30, deepDive: true,
+    blurb: 'Deep Dive Mode for multi-part questions, 30 days of history.',
+  },
+  enterprise: {
+    key: 'enterprise', label: 'Enterprise', price: 5000, priceLabel: '₹5,000/month',
+    messages: null, depth: 'ultimate', historyDays: null, deepDive: true,
+    blurb: 'Unlimited messages, full portal knowledge, essay-length reasoning.',
+  },
+};
+
+const PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Load (or create) a student's usage row, rolling the period over when it has
+ * expired and downgrading when an entitlement has lapsed. Both are checked on
+ * read rather than by a scheduled job, so there is nothing to keep running and
+ * no window where a lapsed subscription still answers as paid.
+ */
+async function loadUsage(userId) {
+  if (!AssistantUsage || !userId) { return null; }
+  let row = await AssistantUsage.findOne({ userId });
+  if (!row) { row = await AssistantUsage.create({ userId }); }
+
+  let dirty = false;
+  const now = Date.now();
+
+  if (now - new Date(row.periodStart).getTime() >= PERIOD_MS) {
+    row.messagesUsed = 0;
+    row.periodStart  = new Date();
+    dirty = true;
+  }
+  const exp = row.entitlement && row.entitlement.expiresAt;
+  if (row.tier !== 'starter' && exp && new Date(exp).getTime() < now) {
+    row.tier = 'starter';
+    dirty = true;
+  }
+  if (dirty) { await row.save(); }
+  return row;
+}
+
+function quotaFor(row) {
+  const tier = TIERS[(row && row.tier) || 'starter'] || TIERS.starter;
+  const used = (row && row.messagesUsed) || 0;
+  const remaining = tier.messages === null ? null : Math.max(0, tier.messages - used);
+  return { tier, used, remaining, exhausted: remaining === 0 };
+}
+
+/** Single place an entitlement is written, whatever granted it. */
+async function grantEntitlement(userId, tierKey, meta) {
+  if (!AssistantUsage || !userId || !TIERS[tierKey]) { return null; }
+  const row = await AssistantUsage.findOneAndUpdate(
+    { userId },
+    {
+      tier: tierKey,
+      // A new entitlement starts a fresh period, so an upgrade mid-month is
+      // not spent against messages already used on the previous tier.
+      messagesUsed: 0,
+      periodStart: new Date(),
+      entitlement: {
+        productId: (meta && meta.productId) || null,
+        store:     (meta && meta.store) || 'manual',
+        expiresAt: (meta && meta.expiresAt) || new Date(Date.now() + PERIOD_MS),
+        grantedAt: new Date(),
+        appUserId: (meta && meta.appUserId) || userId,
+      },
+    },
+    { upsert: true, new: true }
+  );
+  return row;
+}
+
+/* ──────────────────────────── durations ─────────────────────────── */
+/*
+ * All six the portal offers. Only four have seeded rows: DomainTask's
+ * durationType enum is ["45days","1month","3months","6months"]. Rather than
+ * leave a student on 1 Week or 15 Days staring at an empty plan, those two are
+ * derived from the front of the 1 Month track — and every answer built that
+ * way says so. Presenting a derived plan as the seeded one would be worse than
+ * showing nothing.
+ */
+const DURATIONS = [
+  { key: '1week',   label: '1 Week',   source: '1month',  take: 1,  derived: true },
+  { key: '15days',  label: '15 Days',  source: '1month',  take: 2,  derived: true },
+  { key: '1month',  label: '1 Month',  source: '1month'  },
+  { key: '45days',  label: '45 Days',  source: '45days'  },
+  { key: '3months', label: '3 Months', source: '3months' },
+  { key: '6months', label: '6 Months', source: '6months' },
+];
+
+const DURATION_PATTERNS = [
+  ['6months', /\b(6|six)[\s-]*month/i],
+  ['3months', /\b(3|three)[\s-]*month/i],
+  ['45days',  /\b45[\s-]*day|\bforty[\s-]?five[\s-]*day/i],
+  ['1month',  /\b(1|one)[\s-]*month\b|\b4[\s-]*week/i],
+  ['15days',  /\b15[\s-]*day|\bfifteen[\s-]*day/i],
+  ['1week',   /\b(1|one)[\s-]*week\b/i],
+];
+
+function matchDuration(text) {
+  for (const [key, re] of DURATION_PATTERNS) {
+    if (re.test(text)) { return DURATIONS.find(d => d.key === key); }
+  }
+  return null;
+}
+
+/* ───────────────────────────── domains ──────────────────────────── */
+/*
+ * Aliases are ordered most specific first: "react" must resolve to MERN rather
+ * than Web Development, and "pandas" to Data Science rather than Python, so the
+ * more specific track claims the shared vocabulary.
+ */
+const DOMAIN_ALIASES = [
+  ['MERN Stack Development', ['mern', 'mongodb', 'mongo', 'express', 'react', 'node', 'mean']],
+  ['Data Science',           ['data science', 'machine learning', 'numpy', 'pandas', 'scikit', 'dataset', 'ml model']],
+  ['DevOps with AWS',        ['devops', 'aws', 'docker', 'kubernetes', 'ci/cd', 'jenkins', 'terraform', 'cloud']],
+  ['Cyber Security',         ['cyber', 'security', 'pentest', 'penetration', 'owasp', 'ethical hack', 'vulnerab']],
+  ['Flutter Development',    ['flutter', 'dart', 'mobile app', 'android', 'ios']],
+  ['Vibe Coding',            ['vibe coding', 'vibe-coding', 'cursor', 'copilot', 'prompt engineering']],
+  ['Space Research',         ['space', 'satellite', 'astronomy', 'aerospace', 'orbital']],
+  ['Venture Capital',        ['venture capital', 'term sheet', 'cap table', 'due diligence', 'pitch deck', 'funding']],
+  ['Business Analyst',       ['business analyst', 'business analysis', 'requirement', 'power bi', 'tableau', 'stakeholder']],
+  ['HR Management',          ['hr management', 'human resource', 'recruit', 'hiring', 'payroll', 'onboarding']],
+  ['Software Engineering',   ['software engineering', 'sdlc', 'dsa', 'data structures', 'algorithm', 'system design']],
+  ['Java Development',       ['java', 'spring', 'jdbc', 'hibernate', 'maven']],
+  ['Python Development',     ['python', 'django', 'flask', 'fastapi']],
+  ['Web Development',        ['web development', 'web dev', 'frontend', 'html', 'css', 'tailwind', 'javascript']],
+];
+
+let domainCache = null;
+async function allDomains() {
+  if (domainCache) { return domainCache; }
+  try {
+    const list = await DomainTask.distinct('domain');
+    if (list && list.length) { domainCache = list.sort(); }
+  } catch (_e) { /* database unavailable — fall back to the alias list */ }
+  return domainCache || DOMAIN_ALIASES.map(a => a[0]).sort();
+}
+
+async function matchDomain(text, fallback) {
+  const s = ' ' + String(text || '').toLowerCase() + ' ';
+  for (const [domain, aliases] of DOMAIN_ALIASES) {
+    if (aliases.some(a => s.includes(a))) { return domain; }
+  }
+  const known = await allDomains();
+  const hit = known.find(d => s.includes(d.toLowerCase()));
+  if (hit) { return hit; }
+  if (fallback) {
+    const f = known.find(d => d.toLowerCase() === String(fallback).toLowerCase());
+    if (f) { return f; }
+  }
+  return null;
+}
+
+/* ──────────────────────────── rendering ─────────────────────────── */
+const rupees = coins => 'Rs ' + Math.round(coins * 0.5);
+
+async function tasksFor(domain, duration) {
+  const rows = await DomainTask
+    .find({ domain, durationType: duration.source })
+    .sort({ weekNumber: 1 })
+    .lean();
+  return duration.take ? rows.slice(0, duration.take) : rows;
+}
+
+const DEPTH_RANK = { brief: 0, standard: 1, deep: 2, ultimate: 3 };
+const atLeast = (depth, level) => DEPTH_RANK[depth || 'brief'] >= DEPTH_RANK[level];
+
+/*
+ * Depth is what separates the tiers. Rather than the same answer behind a
+ * counter, each level adds real content. The full answer is always computed
+ * and then cut down, so paid tiers are never a separate code path.
+ */
+function renderPlan(domain, duration, rows, depth) {
+  if (!rows.length) {
+    return `I could not find a seeded task list for ${domain} on the ${duration.label} track. Ask your coordinator which track you are on.`;
+  }
+  const total = rows.reduce((n, r) => n + (r.coinReward || 0), 0);
+  const last  = rows[rows.length - 1];
+
+  const head = [
+    `${domain} — ${duration.label} track`,
+    `${rows.length} weekly task${rows.length === 1 ? '' : 's'}. Task coins: ${total} (${rupees(total)} at 100 coins = Rs 50), before attendance, streaks and the daily posting task.`,
+  ];
+
+  if (duration.derived) {
+    head.push(`Note: ${duration.label} has no task library of its own. This is the first ${duration.take} week${duration.take === 1 ? '' : 's'} of the 1 Month track, so treat it as a starting point and confirm with your coordinator.`);
+  }
+
+  const shown = atLeast(depth, 'standard') ? rows : rows.slice(0, 3);
+  const weeks = shown.map(function (r) {
+    return 'Week ' + r.weekNumber + ' — ' + r.taskTitle +
+           ' (' + r.coinReward + ' coins, ' + r.difficultyLevel + ')\n' + r.taskDescription;
+  });
+
+  const out = [head.join('\n'), weeks.join('\n\n')];
+
+  if (shown.length < rows.length) {
+    out.push('… and ' + (rows.length - shown.length) + ' more weeks on Pro and above.');
+  }
+
+  if (atLeast(depth, 'standard')) {
+    out.push([
+      'How to finish:',
+      '1. Submit by day 5 each week. Tasks go Available → Submitted → Approved, and approval is not instant.',
+      '2. Build toward "' + last.taskTitle + '" from week 1. It is worth ' + last.coinReward + ' coins on its own and every earlier week feeds it.',
+      '3. Bank the recurring coins: 5 a day for attendance, 50 for a 7-day streak, 30 for finishing a full week.',
+      '4. Do the Daily Job Posting task. 3 coins per platform up to 10 platforms is 30 coins a day.'
+    ].join('\n'));
+  }
+
+  if (atLeast(depth, 'deep')) {
+    const hard = rows.filter(function (r) { return r.difficultyLevel === 'hard' || r.difficultyLevel === 'expert'; });
+    out.push([
+      'Where this track gets hard:',
+      hard.length
+        ? hard.map(function (r) { return '• Week ' + r.weekNumber + ' (' + r.difficultyLevel + ') — ' + r.taskTitle; }).join('\n')
+        : '• Difficulty stays moderate throughout.',
+      '',
+      'Keep the two weeks before week ' + (hard.length ? hard[0].weekNumber : rows.length) + ' light. That is where students stall, and the tasks are cumulative.'
+    ].join('\n'));
+  }
+
+  if (atLeast(depth, 'ultimate')) {
+    const totalCoins = rows.reduce(function (n, r) { return n + r.coinReward; }, 0);
+    const byDiff = rows.reduce(function (m, r) { m[r.difficultyLevel] = (m[r.difficultyLevel] || 0) + 1; return m; }, {});
+    out.push([
+      'Full breakdown:',
+      '• Difficulty spread: ' + Object.keys(byDiff).map(function (k) { return byDiff[k] + ' ' + k; }).join(', ') + '.',
+      '• The final task alone is ' + Math.round((last.coinReward / totalCoins) * 100) + '% of this track’s task coins, so an unfinished final week costs far more than one week of effort.',
+      '• These are task coins only. Attendance across ' + rows.length + ' weeks adds roughly ' + (rows.length * 7 * 5) + ' more, plus ' + rows.length + ' week-completion bonuses of 30, plus up to 30 a day from the posting task. The recurring total usually exceeds the task total.',
+      '• Submissions are reviewed against the description, not the title. Read the task text literally and satisfy each clause.'
+    ].join('\n'));
+  }
+
+  return out.filter(Boolean).join('\n\n');
+}
+
+/* ───────────────────────── topic answers ────────────────────────── */
+async function domainListAnswer() {
+  const list = await allDomains();
+  return [
+    `TEN runs ${list.length} domains:`,
+    '',
+    list.map((d, i) => `${i + 1}. ${d}`).join('\n'),
+    '',
+    'Each has a weekly task library on 1 Month, 45 Days, 3 Months and 6 Months. 1 Week and 15 Days are offered too but have no task library of their own.',
+    'Tell me your domain and track and I will list every week.',
+  ].join('\n');
+}
+
+const TOPIC_RULES = [
+  {
+    test: /\bcoin|reward|payout|stipend|money|rupee|\brs\b|salary|paid\b/i,
+    answer: () => [
+      'Coins convert at 100 coins = Rs 50 (1 coin = Rs 0.50).',
+      '',
+      '• Task: 20–100 coins by difficulty',
+      '• Quiz passed first attempt: 50',
+      '• Daily attendance: 5, and a 7-day streak: 50',
+      '• Complete a full week: 30',
+      '• Daily Job Posting: 3 coins per platform, up to 10 platforms',
+      '• Complete the entire course: 500',
+      '',
+      'The recurring ones add up faster than task coins. Attendance alone is about 150 a month, and daily posting at ten platforms beats every individual task on most tracks.',
+    ].join('\n'),
+  },
+  {
+    test: /\bcertificate|certification|\blor\b|\bloc\b|recommendation|star performance/i,
+    answer: () => [
+      'Certificates go through 2-step approval: your coordinator approves first, then HR.',
+      '',
+      '• LOC at 100% completion',
+      '• LOR at 50% or more',
+      '• Star Performance for top scorers',
+      '',
+      'What earns the strongest version: consistent weekly submissions that get approved, a finished final project, and a visible attendance record. Anything specific to your account, ask your coordinator.',
+    ].join('\n'),
+  },
+  {
+    test: /\bdaily post|job posting|posting task|share.*(linkedin|whatsapp)|social/i,
+    answer: () => [
+      'The Daily Job Posting task is mandatory for every intern in every domain, separate from your weekly track tasks.',
+      '',
+      'It pays 3 coins per platform, up to 10 platforms — 30 coins a day.',
+      'Platforms: LinkedIn, LinkedIn Groups, Facebook, Facebook Groups, WhatsApp, WhatsApp Groups, Instagram, Telegram, Telegram Groups.',
+      '',
+      'Done every day for a month that is roughly 900 coins, more than the entire task list of most tracks. It is the highest-return habit in the programme and the one most often treated as optional.',
+    ].join('\n'),
+  },
+  {
+    test: /\battendance|streak|present\b|mark.*attend/i,
+    answer: () => 'Mark attendance daily in your student dashboard: 5 coins a day, plus 50 for a 7-day streak. WhatsApp Re-Joiners must also fill the Google Form twice daily.',
+  },
+  {
+    test: /\bdocument|address proof|marksheet|upload|offer letter/i,
+    answer: () => 'Upload your Address Proof and Marksheet on the my-documents page. PDF, JPG or PNG, under 5MB each. Your offer letter is generated once HR approves them.',
+  },
+  {
+    test: /\b(what|which|list|all|how many)\b.*\b(domain|track|field|stream|course)s?\b/i,
+    answer: domainListAnswer,
+  },
+  {
+    test: /\bduration|how long|track length|which track/i,
+    answer: () => [
+      'Six durations are offered: 1 Week, 15 Days, 1 Month, 45 Days, 3 Months and 6 Months.',
+      '',
+      'The weekly task library is seeded for 1 Month (4 weeks), 45 Days (6), 3 Months (12) and 6 Months (24).',
+      '1 Week and 15 Days do not have a task library of their own. If you picked one and your plan looks empty, that is why — it is not a fault in your account. Ask your coordinator to move you onto a track that has tasks.',
+    ].join('\n'),
+  },
+  {
+    test: /\bsubmit|deadline|approv|late|behind/i,
+    answer: () => [
+      'Tasks move Available → Submitted → Approved. Approval is not instant, so submitting on the last day of a week pushes the approval into the next one. Aim for day 5.',
+      '',
+      'If you are behind, do not skip ahead to the final project. The tasks are cumulative, so a gap in the middle shows up as a broken final week, and reviewers read your commit history.',
+    ].join('\n'),
+  },
+];
+
+/**
+ * The engine. Domain plus duration is the most specific thing a student can
+ * give, so it outranks the topic rules: "how many coins for MERN 3 months"
+ * should return that plan and its coin total, not the generic coin table.
+ */
+async function answerFor(question, ctx) {
+  const q        = String(question || '');
+  const depth    = (ctx && ctx.depth) || 'brief';
+  const domain   = await matchDomain(q, ctx && ctx.domain);
+  const duration = matchDuration(q);
+
+  if (domain && duration) {
+    return renderPlan(domain, duration, await tasksFor(domain, duration), depth);
+  }
+  for (const rule of TOPIC_RULES) {
+    if (rule.test.test(q)) {
+      const full = await rule.answer();
+      // Starter gets the fact, not the commentary around it: the first
+      // paragraphs carry the answer, the later ones carry the advice.
+      if (!atLeast(depth, 'standard')) {
+        const paras = full.split('\n\n');
+        return paras.length > 2 ? paras.slice(0, 2).join('\n\n') : full;
+      }
+      return full;
+    }
+  }
+  if (domain) {
+    return `${domain} runs on 1 Month, 45 Days, 3 Months and 6 Months. Tell me which track you are on and I will list every week with what to build, its coin value and its difficulty.`;
+  }
+  return [
+    'I can help with your weekly tasks, your track plan, coins, attendance, documents, submissions and certificates.',
+    '',
+    'Tell me your domain and duration — for example "MERN 3 months" — and I will give you every week with what to build and what it pays.',
+  ].join('\n');
+}
+
+/* ──────────────────────────── endpoints ─────────────────────────── */
+
+// POST /api/v2/assistant/ask
+router.post('/ask', async (req, res) => {
+  try {
+    const { question, userId, userName, domain, deepDive } = req.body || {};
+    if (!question || !String(question).trim()) {
+      return res.status(400).json({ error: 'question required' });
+    }
+
+    /*
+     * The quota is checked and spent here, on the server, before an answer is
+     * produced. A counter kept in browser storage is cleared by one devtools
+     * command or a reinstall, so anything gated on it is not really gated.
+     * Since this decides who has paid, it cannot live on the client.
+     */
+    const usage = await loadUsage(userId);
+    const q     = quotaFor(usage);
+
+    if (q.exhausted) {
+      return res.status(402).json({
+        error: 'message_limit_reached',
+        paywall: paywallPayload(q.tier),
+        tier: q.tier.key,
+        used: q.used,
+        limit: q.tier.messages,
+      });
+    }
+
+    // Deep Dive is a Plus and Enterprise feature. Asking for it on a lower
+    // tier answers normally rather than failing, and says why.
+    const wantsDeepDive   = !!deepDive;
+    const deepDiveAllowed = wantsDeepDive && q.tier.deepDive;
+    const depth           = deepDiveAllowed ? 'ultimate' : q.tier.depth;
+
+    let answer = await answerFor(question, { domain, depth });
+    if (wantsDeepDive && !deepDiveAllowed) {
+      answer += '\n\nDeep Dive Mode is available on Plus and Enterprise.';
+    }
+
+    if (usage) {
+      usage.messagesUsed += 1;
+      if (q.tier.historyDays === null || q.tier.historyDays > 0) {
+        usage.history.push({ question: String(question), answer, askedAt: new Date() });
+        // Trimmed on write, so nothing is retained longer than the tier the
+        // student is actually on.
+        if (q.tier.historyDays !== null) {
+          const cutoff = Date.now() - q.tier.historyDays * 24 * 60 * 60 * 1000;
+          usage.history = usage.history.filter(function (h) {
+            return new Date(h.askedAt).getTime() >= cutoff;
+          });
+        }
+      } else {
+        usage.history = [];
+      }
+      await usage.save();
+    }
+
+    if (BotQuery && userId) {
+      BotQuery.create({
+        userId, userType: 'student', userName: userName || '',
+        domain: domain || '', botType: 'task', question, answer, status: 'answered',
+      }).catch(function () {});
+    }
+
+    const after = quotaFor(usage);
+    return res.json({
+      answer,
+      source: 'portal-data',
+      tier: after.tier.key,
+      depth,
+      deepDive: deepDiveAllowed,
+      used: after.used,
+      limit: after.tier.messages,
+      remaining: after.remaining,
+    });
+  } catch (e) {
+    console.error('[assistant/ask]', e.message);
+    return res.status(500).json({ error: 'The assistant could not answer that. Try again.' });
+  }
+});
+
+/** Everything the paywall screen needs, so its copy lives in one place. */
+function paywallPayload(currentTier) {
+  return {
+    headline: 'Great minds don’t give advice by the hour.',
+    sub: 'Your mentor has more to say.',
+    current: (currentTier && currentTier.key) || 'starter',
+    upi: { vpa: UPI.vpa, payeeName: UPI.payeeName },
+    plans: ['pro', 'plus', 'enterprise'].map(function (k) {
+      const t = TIERS[k];
+      return {
+        key: t.key,
+        label: t.label,
+        price: t.price,
+        priceLabel: t.priceLabel,
+        blurb: t.blurb,
+        messages: t.messages === null ? 'Unlimited messages' : t.messages + ' messages',
+        history: t.historyDays === null ? 'Full conversation history' : t.historyDays + '-day history',
+        deepDive: t.deepDive,
+      };
+    }),
+  };
+}
+
+// GET /api/v2/assistant/entitlement?userId=...
+router.get('/entitlement', async (req, res) => {
+  try {
+    const usage = await loadUsage(req.query.userId);
+    const q     = quotaFor(usage);
+    return res.json({
+      tier: q.tier.key,
+      label: q.tier.label,
+      depth: q.tier.depth,
+      deepDive: q.tier.deepDive,
+      used: q.used,
+      limit: q.tier.messages,
+      remaining: q.remaining,
+      historyDays: q.tier.historyDays,
+      paywall: paywallPayload(q.tier),
+    });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/v2/assistant/history?userId=...
+router.get('/history', async (req, res) => {
+  try {
+    const usage = await loadUsage(req.query.userId);
+    const q     = quotaFor(usage);
+    if (!usage || q.tier.historyDays === 0) {
+      return res.json({ tier: q.tier.key, retained: 0, history: [] });
+    }
+    return res.json({
+      tier: q.tier.key,
+      retained: q.tier.historyDays,
+      history: usage.history.slice(-100),
+    });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+/* ─────────────────────────── UPI payment ───────────────────────── */
+/*
+ * The same UPI-and-UTR flow the tenure payment already runs, so students see
+ * one payment pattern across the portal rather than two.
+ *
+ * The important property: paying over a static UPI QR cannot be verified
+ * programmatically. Nothing in the UPI response comes back to this server, and
+ * a student can type any string into the reference field. So submitting a UTR
+ * records a claim and grants nothing. The tier is granted only by
+ * verifyPayment, after a human has matched the reference against the merchant
+ * statement. Auto-granting on submission would hand every tier to anyone who
+ * typed twelve characters.
+ */
+const UPI = {
+  vpa: 'paytmqr5k0ods@ptys',
+  payeeName: 'LIMITLESS TECHNOLOGI',
+};
+
+/*
+ * The QR is generated per request rather than served from public/paytm-qr.jpeg.
+ *
+ * Two reasons. That file is corrupt in the repository - it begins with UTF-8
+ * replacement characters instead of the JPEG magic bytes, so it has never
+ * rendered; something committed it through a text-mode tool. And a generated
+ * code can carry the exact amount for the tier, so the payer's UPI app
+ * pre-fills 500, 1200 or 5000 instead of the student typing it and underpaying.
+ *
+ * It encodes the standard UPI URI with the real VPA, so every UPI app resolves
+ * it to the same merchant account as the printed Paytm code.
+ */
+let QRCode = null;
+try { QRCode = require('qrcode'); } catch (_e) { /* route degrades below */ }
+
+/** Deep link so a phone opens its UPI app with the amount already filled. */
+function upiLink(tier) {
+  const q = [
+    'pa=' + encodeURIComponent(UPI.vpa),
+    'pn=' + encodeURIComponent(UPI.payeeName),
+    'am=' + encodeURIComponent(String(tier.price)),
+    'cu=INR',
+    'tn=' + encodeURIComponent('TEN Assistant ' + tier.label),
+  ].join('&');
+  return 'upi://pay?' + q;
+}
+
+// GET /api/v2/assistant/payment-info?tier=pro
+router.get('/payment-info', (req, res) => {
+  const tier = TIERS[req.query.tier];
+  if (!tier || !tier.price) {
+    return res.status(400).json({ error: 'unknown or free tier' });
+  }
+  return res.json({
+    tier: tier.key,
+    label: tier.label,
+    amount: tier.price,
+    priceLabel: tier.priceLabel,
+    vpa: UPI.vpa,
+    payeeName: UPI.payeeName,
+    qrImage: '/api/v2/assistant/payment-qr?tier=' + tier.key,
+    upiLink: upiLink(tier),
+    note: 'Pay the exact amount, then submit the UPI reference number. Your plan activates once the team verifies the payment.',
+  });
+});
+
+// GET /api/v2/assistant/payment-qr?tier=pro
+router.get('/payment-qr', async (req, res) => {
+  try {
+    const tier = TIERS[req.query.tier];
+    if (!tier || !tier.price) { return res.status(400).json({ error: 'unknown or free tier' }); }
+    if (!QRCode) { return res.status(503).json({ error: 'qrcode module unavailable' }); }
+
+    const png = await QRCode.toBuffer(upiLink(tier), {
+      type: 'png',
+      errorCorrectionLevel: 'M',
+      margin: 2,
+      width: 480,
+      color: { dark: '#000000', light: '#FFFFFF' },
+    });
+
+    res.type('image/png');
+    // Deterministic for a given tier, but kept short so a VPA change is picked
+    // up without chasing caches.
+    res.set('Cache-Control', 'public, max-age=600');
+    return res.send(png);
+  } catch (e) {
+    console.error('[assistant/payment-qr]', e.message);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/v2/assistant/submit-utr   { userId, tier, utr }
+router.post('/submit-utr', async (req, res) => {
+  try {
+    const { userId, tier, utr } = req.body || {};
+    if (!userId) { return res.status(400).json({ error: 'userId required' }); }
+
+    const plan = TIERS[tier];
+    if (!plan || !plan.price) { return res.status(400).json({ error: 'unknown or free tier' }); }
+
+    // Same shape the tenure payment flow already accepts, so students are not
+    // told two different things about what a valid reference looks like.
+    const ref = String(utr || '').trim();
+    if (!/^[A-Za-z0-9]{6,25}$/.test(ref)) {
+      return res.status(400).json({
+        error: 'Please enter a valid Transaction ID (6 to 25 characters, letters and numbers only).',
+      });
+    }
+
+    if (!AssistantUsage) { return res.status(503).json({ error: 'payments unavailable' }); }
+
+    const row = await AssistantUsage.findOneAndUpdate(
+      { userId },
+      {
+        $set: {
+          pendingPayment: {
+            tier: plan.key,
+            amount: plan.price,
+            utr: ref,
+            status: 'pending',
+            submittedAt: new Date(),
+            reviewedBy: null,
+            reviewedAt: null,
+            note: null,
+          },
+        },
+      },
+      { upsert: true, new: true }
+    );
+
+    // Deliberately no entitlement here. See the note at the top of this block.
+    return res.json({
+      ok: true,
+      status: 'pending',
+      tier: plan.key,
+      message: 'Reference received. Your ' + plan.label + ' plan activates once the team verifies the payment.',
+      submittedAt: row.pendingPayment.submittedAt,
+    });
+  } catch (e) {
+    console.error('[assistant/submit-utr]', e.message);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/v2/assistant/payment-requests?status=pending
+router.get('/payment-requests', async (req, res) => {
+  try {
+    if (!AssistantUsage) { return res.json({ requests: [] }); }
+    const status = req.query.status || 'pending';
+    const rows = await AssistantUsage
+      .find({ 'pendingPayment.status': status })
+      .sort({ 'pendingPayment.submittedAt': -1 })
+      .lean();
+    return res.json({
+      count: rows.length,
+      requests: rows.map(function (r) {
+        return {
+          userId: r.userId,
+          currentTier: r.tier,
+          requested: r.pendingPayment.tier,
+          amount: r.pendingPayment.amount,
+          utr: r.pendingPayment.utr,
+          submittedAt: r.pendingPayment.submittedAt,
+        };
+      }),
+    });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+/*
+ * POST /api/v2/assistant/verify-payment   { userId, approve, reviewedBy, note }
+ *
+ * The only path that grants a paid tier. Guarded by ASSISTANT_ADMIN_TOKEN,
+ * required rather than optional: an unset token refuses the request, because
+ * an open endpoint here means anyone can approve their own payment.
+ */
+router.post('/verify-payment', async (req, res) => {
+  try {
+    const expected = process.env.ASSISTANT_ADMIN_TOKEN;
+    if (!expected) {
+      console.warn('[assistant] ASSISTANT_ADMIN_TOKEN not set; verification refused');
+      return res.status(503).json({ error: 'verification not configured' });
+    }
+    if (req.get('X-Admin-Token') !== expected) {
+      return res.status(401).json({ error: 'unauthorized' });
+    }
+
+    const { userId, approve, reviewedBy, note } = req.body || {};
+    if (!userId) { return res.status(400).json({ error: 'userId required' }); }
+    if (!AssistantUsage) { return res.status(503).json({ error: 'payments unavailable' }); }
+
+    const row = await AssistantUsage.findOne({ userId });
+    if (!row || !row.pendingPayment || row.pendingPayment.status !== 'pending') {
+      return res.status(404).json({ error: 'no pending payment for this user' });
+    }
+
+    if (!approve) {
+      row.pendingPayment.status     = 'rejected';
+      row.pendingPayment.reviewedBy = reviewedBy || 'admin';
+      row.pendingPayment.reviewedAt = new Date();
+      row.pendingPayment.note       = note || null;
+      await row.save();
+      return res.json({ ok: true, status: 'rejected', tier: row.tier });
+    }
+
+    const tierKey = row.pendingPayment.tier;
+    await grantEntitlement(userId, tierKey, {
+      store: 'upi',
+      productId: 'upi:' + row.pendingPayment.utr,
+      appUserId: userId,
+    });
+
+    const fresh = await AssistantUsage.findOne({ userId });
+    fresh.pendingPayment.status     = 'verified';
+    fresh.pendingPayment.reviewedBy = reviewedBy || 'admin';
+    fresh.pendingPayment.reviewedAt = new Date();
+    await fresh.save();
+
+    return res.json({ ok: true, status: 'verified', tier: tierKey });
+  } catch (e) {
+    console.error('[assistant/verify-payment]', e.message);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/v2/assistant/domains
+router.get('/domains', async (req, res) => {
+  try {
+    return res.json({
+      domains:   await allDomains(),
+      durations: DURATIONS.map(d => ({ key: d.key, label: d.label, derived: !!d.derived })),
+    });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/v2/assistant/plan?domain=...&duration=...
+router.get('/plan', async (req, res) => {
+  try {
+    const duration = DURATIONS.find(d => d.key === req.query.duration);
+    if (!req.query.domain || !duration) {
+      return res.status(400).json({ error: 'domain and a valid duration are required' });
+    }
+    const rows = await tasksFor(req.query.domain, duration);
+    return res.json({
+      domain:   req.query.domain,
+      duration: duration.label,
+      derived:  !!duration.derived,
+      weeks:    rows.map(r => ({
+        week:       r.weekNumber,
+        title:      r.taskTitle,
+        task:       r.taskDescription,
+        coins:      r.coinReward,
+        difficulty: r.difficultyLevel,
+      })),
+      totalCoins: rows.reduce((n, r) => n + (r.coinReward || 0), 0),
+    });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/v2/assistant/health
+router.get('/health', async (req, res) => {
+  const domains = await allDomains();
+  return res.json({ ok: true, domains: domains.length, requiresApiKey: false });
+});
+
+module.exports = router;
