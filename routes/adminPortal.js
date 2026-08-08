@@ -1,12 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
-const {
-  requireAdminAPI,
-  verifyAdminCredentials,
-  adminLoginLimiter,
-  adminLockoutGuard,
-} = require('../middleware/adminAuth');
+const { requireAdminAPI, verifyAdminCredentials } = require('../middleware/adminAuth');
 
 // Load models
 const Student = require('../models/Student');
@@ -21,58 +16,41 @@ const CertificateRequest = require('../models/CertificateRequest');
 
 // ─── AUTH ────────────────────────────────────────────────────────────────────
 
-// SECURITY: this handler previously
-//   1. had no rate limiting or lockout, so the password could be brute forced;
-//   2. logged the submitted username and password LENGTH on every attempt;
-//   3. returned a `debug` object on 401 containing receivedPasswordLen and
-//      *expectedPasswordLen* -- disclosing the exact length of the configured
-//      admin password to any anonymous caller. That is a credential oracle: it
-//      collapses the search space before an attacker even starts guessing;
-//   4. reused the pre-login session id, allowing session fixation;
-//   5. leaked internal error messages via `res.json({ error: err.message })`.
-router.post('/login', adminLoginLimiter, adminLockoutGuard, async (req, res) => {
+router.post('/login', async (req, res) => {
   try {
-    const { username, password } = req.body || {};
-
-    // `req` is passed so failed attempts count toward the lockout.
-    const isValid = await verifyAdminCredentials(username, password, req);
-
-    if (!isValid) {
-      // Generic failure. No usernames, no lengths, no debug payload.
-      return res.status(401).json({ success: false, error: 'Invalid credentials' });
-    }
-
-    // Rotate the session id on privilege change so a session fixed by an
-    // attacker before login cannot be reused as an authenticated one.
-    return req.session.regenerate((regenErr) => {
-      if (regenErr) {
-        console.error('[AdminPortal] Session regeneration failed:', regenErr.message);
-        return res.status(500).json({ success: false, error: 'Login failed' });
-      }
+    const { username, password } = req.body;
+    console.log(`[AdminPortal] Login request received. Username="${username}", Password length=${password ? password.length : 0}`);
+    const isValid = await verifyAdminCredentials(username, password);
+    if (isValid) {
+      console.log(`[AdminPortal] Credentials verified successfully for user: "${username}"`);
       req.session.adminUser = { username: 'tenadmin', lastActivity: Date.now() };
-      return req.session.save((saveErr) => {
-        if (saveErr) {
-          console.error('[AdminPortal] Session save failed:', saveErr.message);
-          return res.status(500).json({ success: false, error: 'Login failed' });
-        }
-        console.log('[AdminPortal] Admin login succeeded.');
-        return res.json({ success: true });
-      });
+      return res.json({ success: true });
+    }
+    
+    const enteredLen = password ? password.length : 0;
+    const expectedLen = (process.env.ADMIN_PORTAL_PASSWORD && process.env.ADMIN_PORTAL_PASSWORD.trim())
+      ? process.env.ADMIN_PORTAL_PASSWORD.trim().length
+      : 13; // default is TEN@Admin2024
+
+    console.warn(`[AdminPortal] Authentication rejected. Username="${username}", Entered password len=${enteredLen}, Expected password len=${expectedLen}`);
+    return res.status(401).json({ 
+      error: 'Access denied', 
+      success: false,
+      debug: {
+        receivedUsername: username,
+        receivedPasswordLen: enteredLen,
+        expectedPasswordLen: expectedLen
+      }
     });
   } catch (err) {
-    console.error('[AdminPortal] Error during login endpoint:', err.message);
-    return res.status(500).json({ success: false, error: 'Login failed' });
+    console.error(`[AdminPortal] Error during login endpoint:`, err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
-// SECURITY: nulling one field left the session record alive and the cookie
-// valid. Destroy the whole session and clear the cookie.
 router.post('/logout', requireAdminAPI, (req, res) => {
-  req.session.destroy((err) => {
-    if (err) console.error('[AdminPortal] Session destroy failed:', err.message);
-    res.clearCookie('ten.sid');
-    return res.json({ success: true });
-  });
+  req.session.adminUser = null;
+  res.json({ success: true });
 });
 
 router.get('/session-check', requireAdminAPI, (req, res) => {

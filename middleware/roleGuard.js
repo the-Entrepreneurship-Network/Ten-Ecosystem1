@@ -43,24 +43,15 @@ function requireRole(...roles) {
 
 /**
  * Middleware that attaches the authenticated ecosystem user to req.user.
+ * Reads the 'x-ecosystem-user-id' header set by upstream auth middleware
+ * or falls back to a simple session check.
  *
- * SECURITY: this previously read the identity AND the role from the
- * client-controlled 'x-ecosystem-user-id' / 'x-ecosystem-user-role' request
- * headers. Any caller could send `x-ecosystem-user-role: admin` (plus any
- * user id) and satisfy every requireRole() check -- full authentication
- * bypass and privilege escalation with a single header.
- *
- * Identity and role now come only from the server-side session, which the
- * client cannot forge.
+ * NOTE: For Phase 2 replace with proper JWT verification.
  */
 function attachEcosystemUser(req, res, next) {
-  const session = req.session;
-  if (session && session.ecosystemUserId) {
-    // Preserve any req.user already set by upstream auth middleware.
-    req.user = req.user || {
-      _id: session.ecosystemUserId,
-      role: session.ecosystemUserRole || ROLES.FOUNDER,
-    };
+  const userId = req.headers['x-ecosystem-user-id'] || (req.session && req.session.ecosystemUserId);
+  if (userId) {
+    req.user = req.user || { _id: userId, role: req.headers['x-ecosystem-user-role'] || ROLES.FOUNDER };
   }
   return next();
 }

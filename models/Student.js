@@ -44,12 +44,8 @@ const studentsSchema = new mongoose.Schema({
         employeeId: { type: String, required: true }
     }],
 
-    passwordResetToken:         { type: String, default: null, index: true },
-    passwordResetExpiry:        { type: Date,   default: null },
-    passwordResetAttempts:      { type: Number, default: 0 },
-    passwordResetWindowStart:   { type: Date,   default: null },
-    passwordResetCount:         { type: Number, default: 0 },
-    passwordResetLastResetDate: { type: Date,   default: null },
+    passwordResetToken:   { type: String, default: null, index: true },
+    passwordResetExpiry:  { type: Date,   default: null },
 
     currentStreak:        { type: Number, default: 0 },
     bestStreak:           { type: Number, default: 0 },

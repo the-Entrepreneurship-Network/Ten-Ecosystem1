@@ -17,12 +17,6 @@ const EcosystemUserSchema = new mongoose.Schema({
   failedLoginAttempts: { type: Number, default: 0 },
   lockoutUntil: { type: Date, default: null },
   isLockedOut: { type: Boolean, default: false },
-
-  // 👇 ADD THESE TWO FIELDS HERE FOR RESET LIMITING 👇
-  passwordResetAttempts: { type: Number, default: 0 },
-  passwordResetWindowStart: { type: Date, default: Date.now },
-  // 👆 ------------------------------------------- 👆
-
   createdAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 

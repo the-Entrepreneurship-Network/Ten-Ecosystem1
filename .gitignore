@@ -6,4 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
-62ca1d7cf8d15114198c440efb171ea9011e0147
+uploads/documents/
+uploads/certificates/
+uploads/offer-letters/

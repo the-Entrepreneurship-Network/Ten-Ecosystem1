@@ -8,8 +8,6 @@
 
 const path          = require('path');
 const bcrypt        = require('bcryptjs');
-const { sendWelcomeEmail } = require('../utils/mailer');
-
 const EcosystemUser = require('../models/EcosystemUser');
 const Student       = require('../models/Student');
 const HR            = require('../models/HR');
@@ -142,7 +140,7 @@ async function generateEmployeeId(domain) {
     "Cyber Security":           "CYBER",
     "Software Engineering":     "SDE",
     "Flutter Development":      "FLUTTER",
-    "HR Management":            "HRM",
+    "HR Management":            "HRMGMT",
     "Venture Capital":           "VC",
     "Vibe Coding":               "VIBE",
     "Space Research":            "SPACE",
@@ -164,9 +162,6 @@ async function generateEmployeeId(domain) {
 }
 
 async function registerUser(req, res) {
-  console.log("-----------------------------------------");
-  console.log(">>> REGISTER HIT RECEIVED:", req.body);
-  console.log("-----------------------------------------");
   try {
     const { fullName, email, password, role, roleSpecificData = {} } = req.body;
     const name = fullName || req.body.name;
@@ -460,14 +455,6 @@ async function registerUser(req, res) {
       }]
     });
 
-    // 🚀 Send Welcome Email (Non-blocking catch for safety)
-    try {
-      await sendWelcomeEmail(trimmedEmail, name.trim());
-      console.log(`[Mailer] Welcome email sent successfully to ${trimmedEmail}`);
-    } catch (emailErr) {
-      console.error("[Mailer] Failed to send welcome email:", emailErr.message);
-    }
-
     return res.status(201).json({ 
       success: true, 
       message: `${role.charAt(0).toUpperCase() + role.slice(1)} account created successfully.`, 
@@ -490,3 +477,4 @@ async function registerUser(req, res) {
 }
 
 module.exports = { getHub, getRoleConfig, registerUser };
+

@@ -21,10 +21,8 @@ const CoordinatorSchema = new mongoose.Schema({
     lockoutUntil: { type: Date, default: null },
     isLockedOut: { type: Boolean, default: false },
     // Forgot password (Feature 9)
-    passwordResetToken:      { type: String, default: null, index: true },
-    passwordResetExpiry:     { type: Date,   default: null },
-    passwordResetAttempts:   { type: Number, default: 0 },
-    passwordResetWindowStart:{ type: Date,   default: null },
+    passwordResetToken:  { type: String, default: null, index: true },
+    passwordResetExpiry: { type: Date,   default: null },
     createdAt:  { type: Date, default: Date.now }
 });
 

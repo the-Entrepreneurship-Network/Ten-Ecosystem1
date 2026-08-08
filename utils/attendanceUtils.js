@@ -51,17 +51,7 @@ function countWorkingDays(startDate, endDate) {
   }
   return count;
 }
-function toDateKey(date) {
-  const dt = new Date(date);
-  if (isNaN(dt.getTime())) return null;
-  dt.setHours(0, 0, 0, 0);
-  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-}
 
-function isSunday(date) {
-  const dt = new Date(date);
-  return !isNaN(dt.getTime()) && dt.getDay() === 0;
-}
 /**
  * Get the total number of working days in the entire internship tenure
  * from internshipStartDate. This is the DENOMINATOR in the attendance % formula.
@@ -115,21 +105,16 @@ function calculateAttendancePercentage(attendanceRecordsOrStudent, internshipSta
     const attendanceRecords = attendanceRecordsOrStudent;
     const internshipStartDate = internshipStartDateOrPresentCount;
     const totalWorkingDays = getTotalWorkingDaysForTenure(internshipStartDate, tenure);
-    const start = new Date(internshipStartDate);
-    start.setHours(0, 0, 0, 0);
     
-    // De-duplicate by date: status !== 'Absent' and ignore Sundays
+    // De-duplicate by date: status === 'Present'
     const presentDays = new Set();
     
     for (const record of attendanceRecords) {
-      if (!record) continue;
-      const recordDate = record.date ? new Date(record.date) : (record.dateKey ? new Date(record.dateKey) : null);
-      if (!recordDate || isSunday(recordDate)) continue;
-      recordDate.setHours(0, 0, 0, 0);
-      if (recordDate < start) continue;
-      if (record.status === 'Absent') continue;
-      const key = toDateKey(recordDate);
-      if (key) presentDays.add(key);
+      if (record && record.status === 'Present') {
+        const key = record.dateKey || 
+                    (record.date ? new Date(record.date).toISOString().split('T')[0] : null);
+        if (key) presentDays.add(key);
+      }
     }
     
     const daysPresent = presentDays.size;
