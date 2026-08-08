@@ -6,6 +6,3 @@ coverage/
 *.log
 .env*
 !.env.example
-uploads/documents/
-uploads/certificates/
-uploads/offer-letters/
