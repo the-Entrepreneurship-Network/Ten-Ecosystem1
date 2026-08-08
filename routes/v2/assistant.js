@@ -499,7 +499,7 @@ function paywallPayload(currentTier) {
     headline: 'Great minds don’t give advice by the hour.',
     sub: 'Your mentor has more to say.',
     current: (currentTier && currentTier.key) || 'starter',
-    upi: { vpa: UPI.vpa, payeeName: UPI.payeeName, qrImage: UPI.qrImage },
+    upi: { vpa: UPI.vpa, payeeName: UPI.payeeName },
     plans: ['pro', 'plus', 'enterprise'].map(function (k) {
       const t = TIERS[k];
       return {
@@ -571,8 +571,22 @@ router.get('/history', async (req, res) => {
 const UPI = {
   vpa: 'paytmqr5k0ods@ptys',
   payeeName: 'LIMITLESS TECHNOLOGI',
-  qrImage: '/paytm-qr.jpeg',
 };
+
+/*
+ * The QR is generated per request rather than served from public/paytm-qr.jpeg.
+ *
+ * Two reasons. That file is corrupt in the repository - it begins with UTF-8
+ * replacement characters instead of the JPEG magic bytes, so it has never
+ * rendered; something committed it through a text-mode tool. And a generated
+ * code can carry the exact amount for the tier, so the payer's UPI app
+ * pre-fills 500, 1200 or 5000 instead of the student typing it and underpaying.
+ *
+ * It encodes the standard UPI URI with the real VPA, so every UPI app resolves
+ * it to the same merchant account as the printed Paytm code.
+ */
+let QRCode = null;
+try { QRCode = require('qrcode'); } catch (_e) { /* route degrades below */ }
 
 /** Deep link so a phone opens its UPI app with the amount already filled. */
 function upiLink(tier) {
@@ -599,10 +613,36 @@ router.get('/payment-info', (req, res) => {
     priceLabel: tier.priceLabel,
     vpa: UPI.vpa,
     payeeName: UPI.payeeName,
-    qrImage: UPI.qrImage,
+    qrImage: '/api/v2/assistant/payment-qr?tier=' + tier.key,
     upiLink: upiLink(tier),
     note: 'Pay the exact amount, then submit the UPI reference number. Your plan activates once the team verifies the payment.',
   });
+});
+
+// GET /api/v2/assistant/payment-qr?tier=pro
+router.get('/payment-qr', async (req, res) => {
+  try {
+    const tier = TIERS[req.query.tier];
+    if (!tier || !tier.price) { return res.status(400).json({ error: 'unknown or free tier' }); }
+    if (!QRCode) { return res.status(503).json({ error: 'qrcode module unavailable' }); }
+
+    const png = await QRCode.toBuffer(upiLink(tier), {
+      type: 'png',
+      errorCorrectionLevel: 'M',
+      margin: 2,
+      width: 480,
+      color: { dark: '#000000', light: '#FFFFFF' },
+    });
+
+    res.type('image/png');
+    // Deterministic for a given tier, but kept short so a VPA change is picked
+    // up without chasing caches.
+    res.set('Cache-Control', 'public, max-age=600');
+    return res.send(png);
+  } catch (e) {
+    console.error('[assistant/payment-qr]', e.message);
+    return res.status(500).json({ error: e.message });
+  }
 });
 
 // POST /api/v2/assistant/submit-utr   { userId, tier, utr }
