@@ -39,9 +39,8 @@ try { BotQuery = require('../../models/BotQuery'); } catch (_e) { /* optional */
  * difference is real content rather than the same answer behind a counter.
  *
  * Prices are recorded for display only. Nothing here charges a card: the
- * entitlement arrives from whichever billing system you run (RevenueCat's
- * webhook, or the Setu rails already in this repo) and is written by
- * grantEntitlement below.
+ * entitlement is granted by verifyPayment once a human has matched the UPI
+ * reference against the merchant statement, and written by grantEntitlement.
  */
 const TIERS = {
   starter: {
@@ -52,27 +51,19 @@ const TIERS = {
   pro: {
     key: 'pro', label: 'Pro', price: 500, priceLabel: '₹500/month',
     messages: 90, depth: 'standard', historyDays: 7, deepDive: false,
-    productId: 'tentech_pro_monthly',
     blurb: 'Fuller answers, and your last 7 days of conversation kept.',
   },
   plus: {
     key: 'plus', label: 'Plus', price: 1200, priceLabel: '₹1,200/month',
     messages: 350, depth: 'deep', historyDays: 30, deepDive: true,
-    productId: 'tentech_plus_monthly',
     blurb: 'Deep Dive Mode for multi-part questions, 30 days of history.',
   },
   enterprise: {
     key: 'enterprise', label: 'Enterprise', price: 5000, priceLabel: '₹5,000/month',
     messages: null, depth: 'ultimate', historyDays: null, deepDive: true,
-    productId: 'tentech_enterprise_monthly',
     blurb: 'Unlimited messages, full portal knowledge, essay-length reasoning.',
   },
 };
-
-/** RevenueCat product id -> tier. Used by the webhook and by /entitlement. */
-const PRODUCT_TO_TIER = Object.values(TIERS)
-  .filter(t => t.productId)
-  .reduce((m, t) => { m[t.productId] = t.key; return m; }, {});
 
 const PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -123,7 +114,7 @@ async function grantEntitlement(userId, tierKey, meta) {
       messagesUsed: 0,
       periodStart: new Date(),
       entitlement: {
-        productId: (meta && meta.productId) || TIERS[tierKey].productId || null,
+        productId: (meta && meta.productId) || null,
         store:     (meta && meta.store) || 'manual',
         expiresAt: (meta && meta.expiresAt) || new Date(Date.now() + PERIOD_MS),
         grantedAt: new Date(),
@@ -508,6 +499,7 @@ function paywallPayload(currentTier) {
     headline: 'Great minds don’t give advice by the hour.',
     sub: 'Your mentor has more to say.',
     current: (currentTier && currentTier.key) || 'starter',
+    upi: { vpa: UPI.vpa, payeeName: UPI.payeeName, qrImage: UPI.qrImage },
     plans: ['pro', 'plus', 'enterprise'].map(function (k) {
       const t = TIERS[k];
       return {
@@ -515,7 +507,6 @@ function paywallPayload(currentTier) {
         label: t.label,
         price: t.price,
         priceLabel: t.priceLabel,
-        productId: t.productId,
         blurb: t.blurb,
         messages: t.messages === null ? 'Unlimited messages' : t.messages + ' messages',
         history: t.historyDays === null ? 'Full conversation history' : t.historyDays + '-day history',
@@ -564,59 +555,188 @@ router.get('/history', async (req, res) => {
   }
 });
 
+/* ─────────────────────────── UPI payment ───────────────────────── */
 /*
- * POST /api/v2/assistant/revenuecat/webhook
+ * The same UPI-and-UTR flow the tenure payment already runs, so students see
+ * one payment pattern across the portal rather than two.
  *
- * RevenueCat's webhook is server-to-server and platform-agnostic, so it works
- * for this portal even though their React Native SDK does not. Point RevenueCat
- * at this URL and set REVENUECAT_WEBHOOK_AUTH to the Authorization value
- * configured in their dashboard.
- *
- * The shared secret is required, not optional. Without it any caller could
- * grant themselves a paid tier by posting JSON, so an unset secret refuses the
- * request rather than accepting everything.
+ * The important property: paying over a static UPI QR cannot be verified
+ * programmatically. Nothing in the UPI response comes back to this server, and
+ * a student can type any string into the reference field. So submitting a UTR
+ * records a claim and grants nothing. The tier is granted only by
+ * verifyPayment, after a human has matched the reference against the merchant
+ * statement. Auto-granting on submission would hand every tier to anyone who
+ * typed twelve characters.
  */
-router.post('/revenuecat/webhook', async (req, res) => {
+const UPI = {
+  vpa: 'paytmqr5k0ods@ptys',
+  payeeName: 'LIMITLESS TECHNOLOGI',
+  qrImage: '/paytm-qr.jpeg',
+};
+
+/** Deep link so a phone opens its UPI app with the amount already filled. */
+function upiLink(tier) {
+  const q = [
+    'pa=' + encodeURIComponent(UPI.vpa),
+    'pn=' + encodeURIComponent(UPI.payeeName),
+    'am=' + encodeURIComponent(String(tier.price)),
+    'cu=INR',
+    'tn=' + encodeURIComponent('TEN Assistant ' + tier.label),
+  ].join('&');
+  return 'upi://pay?' + q;
+}
+
+// GET /api/v2/assistant/payment-info?tier=pro
+router.get('/payment-info', (req, res) => {
+  const tier = TIERS[req.query.tier];
+  if (!tier || !tier.price) {
+    return res.status(400).json({ error: 'unknown or free tier' });
+  }
+  return res.json({
+    tier: tier.key,
+    label: tier.label,
+    amount: tier.price,
+    priceLabel: tier.priceLabel,
+    vpa: UPI.vpa,
+    payeeName: UPI.payeeName,
+    qrImage: UPI.qrImage,
+    upiLink: upiLink(tier),
+    note: 'Pay the exact amount, then submit the UPI reference number. Your plan activates once the team verifies the payment.',
+  });
+});
+
+// POST /api/v2/assistant/submit-utr   { userId, tier, utr }
+router.post('/submit-utr', async (req, res) => {
   try {
-    const expected = process.env.REVENUECAT_WEBHOOK_AUTH;
-    if (!expected) {
-      console.warn('[assistant] REVENUECAT_WEBHOOK_AUTH not set; webhook refused');
-      return res.status(503).json({ error: 'webhook not configured' });
+    const { userId, tier, utr } = req.body || {};
+    if (!userId) { return res.status(400).json({ error: 'userId required' }); }
+
+    const plan = TIERS[tier];
+    if (!plan || !plan.price) { return res.status(400).json({ error: 'unknown or free tier' }); }
+
+    // Same shape the tenure payment flow already accepts, so students are not
+    // told two different things about what a valid reference looks like.
+    const ref = String(utr || '').trim();
+    if (!/^[A-Za-z0-9]{6,25}$/.test(ref)) {
+      return res.status(400).json({
+        error: 'Please enter a valid Transaction ID (6 to 25 characters, letters and numbers only).',
+      });
     }
-    if (req.get('Authorization') !== expected) {
+
+    if (!AssistantUsage) { return res.status(503).json({ error: 'payments unavailable' }); }
+
+    const row = await AssistantUsage.findOneAndUpdate(
+      { userId },
+      {
+        $set: {
+          pendingPayment: {
+            tier: plan.key,
+            amount: plan.price,
+            utr: ref,
+            status: 'pending',
+            submittedAt: new Date(),
+            reviewedBy: null,
+            reviewedAt: null,
+            note: null,
+          },
+        },
+      },
+      { upsert: true, new: true }
+    );
+
+    // Deliberately no entitlement here. See the note at the top of this block.
+    return res.json({
+      ok: true,
+      status: 'pending',
+      tier: plan.key,
+      message: 'Reference received. Your ' + plan.label + ' plan activates once the team verifies the payment.',
+      submittedAt: row.pendingPayment.submittedAt,
+    });
+  } catch (e) {
+    console.error('[assistant/submit-utr]', e.message);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/v2/assistant/payment-requests?status=pending
+router.get('/payment-requests', async (req, res) => {
+  try {
+    if (!AssistantUsage) { return res.json({ requests: [] }); }
+    const status = req.query.status || 'pending';
+    const rows = await AssistantUsage
+      .find({ 'pendingPayment.status': status })
+      .sort({ 'pendingPayment.submittedAt': -1 })
+      .lean();
+    return res.json({
+      count: rows.length,
+      requests: rows.map(function (r) {
+        return {
+          userId: r.userId,
+          currentTier: r.tier,
+          requested: r.pendingPayment.tier,
+          amount: r.pendingPayment.amount,
+          utr: r.pendingPayment.utr,
+          submittedAt: r.pendingPayment.submittedAt,
+        };
+      }),
+    });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+/*
+ * POST /api/v2/assistant/verify-payment   { userId, approve, reviewedBy, note }
+ *
+ * The only path that grants a paid tier. Guarded by ASSISTANT_ADMIN_TOKEN,
+ * required rather than optional: an unset token refuses the request, because
+ * an open endpoint here means anyone can approve their own payment.
+ */
+router.post('/verify-payment', async (req, res) => {
+  try {
+    const expected = process.env.ASSISTANT_ADMIN_TOKEN;
+    if (!expected) {
+      console.warn('[assistant] ASSISTANT_ADMIN_TOKEN not set; verification refused');
+      return res.status(503).json({ error: 'verification not configured' });
+    }
+    if (req.get('X-Admin-Token') !== expected) {
       return res.status(401).json({ error: 'unauthorized' });
     }
 
-    const ev        = (req.body && req.body.event) || {};
-    const userId    = ev.app_user_id || ev.original_app_user_id;
-    const productId = ev.product_id;
-    const type      = String(ev.type || '').toUpperCase();
+    const { userId, approve, reviewedBy, note } = req.body || {};
+    if (!userId) { return res.status(400).json({ error: 'userId required' }); }
+    if (!AssistantUsage) { return res.status(503).json({ error: 'payments unavailable' }); }
 
-    if (!userId) { return res.status(400).json({ error: 'app_user_id required' }); }
-
-    const GRANT  = ['INITIAL_PURCHASE', 'RENEWAL', 'PRODUCT_CHANGE', 'UNCANCELLATION'];
-    const REVOKE = ['CANCELLATION', 'EXPIRATION', 'REFUND', 'SUBSCRIPTION_PAUSED'];
-
-    if (GRANT.indexOf(type) !== -1) {
-      const tierKey = PRODUCT_TO_TIER[productId];
-      if (!tierKey) { return res.status(400).json({ error: 'unknown product ' + productId }); }
-      await grantEntitlement(userId, tierKey, {
-        productId: productId,
-        store: 'revenuecat',
-        appUserId: userId,
-        expiresAt: ev.expiration_at_ms ? new Date(Number(ev.expiration_at_ms)) : undefined,
-      });
-      return res.json({ ok: true, tier: tierKey });
+    const row = await AssistantUsage.findOne({ userId });
+    if (!row || !row.pendingPayment || row.pendingPayment.status !== 'pending') {
+      return res.status(404).json({ error: 'no pending payment for this user' });
     }
 
-    if (REVOKE.indexOf(type) !== -1 && AssistantUsage) {
-      await AssistantUsage.findOneAndUpdate({ userId: userId }, { tier: 'starter' });
-      return res.json({ ok: true, tier: 'starter' });
+    if (!approve) {
+      row.pendingPayment.status     = 'rejected';
+      row.pendingPayment.reviewedBy = reviewedBy || 'admin';
+      row.pendingPayment.reviewedAt = new Date();
+      row.pendingPayment.note       = note || null;
+      await row.save();
+      return res.json({ ok: true, status: 'rejected', tier: row.tier });
     }
 
-    return res.json({ ok: true, ignored: type });
+    const tierKey = row.pendingPayment.tier;
+    await grantEntitlement(userId, tierKey, {
+      store: 'upi',
+      productId: 'upi:' + row.pendingPayment.utr,
+      appUserId: userId,
+    });
+
+    const fresh = await AssistantUsage.findOne({ userId });
+    fresh.pendingPayment.status     = 'verified';
+    fresh.pendingPayment.reviewedBy = reviewedBy || 'admin';
+    fresh.pendingPayment.reviewedAt = new Date();
+    await fresh.save();
+
+    return res.json({ ok: true, status: 'verified', tier: tierKey });
   } catch (e) {
-    console.error('[assistant/webhook]', e.message);
+    console.error('[assistant/verify-payment]', e.message);
     return res.status(500).json({ error: e.message });
   }
 });

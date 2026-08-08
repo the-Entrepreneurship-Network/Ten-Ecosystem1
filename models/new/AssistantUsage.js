@@ -27,11 +27,30 @@ const assistantUsageSchema = new mongoose.Schema({
   // Entitlement, as reported by whichever billing system granted it.
   entitlement: {
     productId:  { type: String, default: null },
-    store:      { type: String, default: null },  // revenuecat | setu | manual
+    store:      { type: String, default: null },  // upi | setu | manual
     expiresAt:  { type: Date,   default: null },
     grantedAt:  { type: Date,   default: null },
-    // RevenueCat's stable customer id, so a webhook can find this row.
+    // Stable id for whichever billing system granted this, so a later
+    // callback can find the row again.
     appUserId:  { type: String, default: null, index: true },
+  },
+
+  /*
+   * A submitted UPI reference, awaiting human verification.
+   *
+   * Kept separate from `entitlement` on purpose: this is a claim, not a
+   * grant. A static UPI QR reports nothing back to this server, so the only
+   * thing a submission proves is that the student typed something.
+   */
+  pendingPayment: {
+    tier:        { type: String, default: null },
+    amount:      { type: Number, default: null },
+    utr:         { type: String, default: null },
+    status:      { type: String, enum: ['pending', 'verified', 'rejected'], default: null },
+    submittedAt: { type: Date,   default: null },
+    reviewedBy:  { type: String, default: null },
+    reviewedAt:  { type: Date,   default: null },
+    note:        { type: String, default: null },
   },
 
   // Retained per tier: 7 days on Pro, 30 on Plus, unbounded on Enterprise.
