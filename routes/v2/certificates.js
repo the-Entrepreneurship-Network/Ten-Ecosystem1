@@ -541,17 +541,17 @@ const PDFDocument         = require("pdfkit");
 const cron                = require("node-cron");
 
 // Find the existing transporter and make it fault-tolerant
-const { createEmailTransporter, EMAIL_FROM } = require("../../utils/mailer");
+const { createEmailTransporter } = require("../../utils/mailer");
 const transporter = createEmailTransporter();
 
 async function sendCertificateEmail(toEmail, studentName, certType, pdfBuffer) {
   try {
-    if (!process.env.SES_SMTP_USER && !process.env.EMAIL_USER) {
-      console.warn('[Email] SES_SMTP_USER or EMAIL_USER not set — skipping email');
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      console.warn('[Email] EMAIL_USER or EMAIL_PASS not set — skipping email');
       return { sent: false, reason: 'Email not configured' };
     }
     await transporter.sendMail({
-      from:    EMAIL_FROM,
+      from:    `"TEN Internship" <${process.env.EMAIL_USER}>`,
       to:      toEmail,
       subject: `🎓 Your ${certType} — TEN Internship Network`,
       html:    buildCertEmailHTML(studentName, certType),

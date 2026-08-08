@@ -23,7 +23,7 @@ describe("loadEnvironment", () => {
     delete process.env.SES_SMTP_USER;
     delete process.env.SES_SMTP_PASS;
 
-    const { loadEnvironment } = require("../../utils/env");
+    const { loadEnvironment } = require("../../utils/mailer");
     const result = loadEnvironment();
 
     expect(result.error).toBeUndefined();
