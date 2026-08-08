@@ -1079,7 +1079,37 @@ const ALL_DOMAINS = [
 // Used by /hr-login, /coordinator-login, and chat handshake auth.
 // New DB-backed accounts (created via the promotion flow) are stored in the
 // `HR` and `Coordinator` collections and looked up alongside these maps.
-const HR_ACCOUNTS = {
+// SECURITY: these credential maps were hardcoded in source with cleartext
+// passwords, so every HR and coordinator account was public to anyone with
+// repository access. They are now loaded from the HR_CREDENTIALS /
+// COORDINATOR_CREDENTIALS environment variables (JSON, same shape). The
+// literals below are retained ONLY as a non-production dev fallback and the
+// process refuses to start in production without the env vars.
+//
+// FOLLOW-UP (not done here because it changes the login handlers): store
+// bcrypt hashes instead of cleartext and compare with bcrypt.compare().
+function loadCredentialMap(envName, devFallback) {
+    const raw = process.env[envName];
+    if (raw && raw.trim()) {
+        try {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object') return parsed;
+            console.error('[credentials] ' + envName + ' is not a JSON object.');
+        } catch (e) {
+            console.error('[credentials] ' + envName + ' is not valid JSON: ' + e.message);
+        }
+    }
+    if (process.env.NODE_ENV === 'production') {
+        console.error('\n[credentials] FATAL: ' + envName + ' must be set in production. ' +
+            'Refusing to fall back to the credentials committed in source.\n');
+        process.exit(1);
+    }
+    console.warn('[credentials] ' + envName + ' not set; using DEV-ONLY fallback accounts. ' +
+        'These passwords are public - never use them in production.');
+    return devFallback;
+}
+
+const HR_ACCOUNTS_DEV_FALLBACK = {
     "hr_admin":   { password: "HR@TEN2026",  name: "HR Administrator", email: "hr.admin@ten.local", level: 7 },
     "hr_manager": { password: "HRMgr@2026",  name: "HR Manager",       email: "hr.manager@ten.local", level: 6 },
     "jrhr@ten.com":      { password: "TEN@JrHR2026",  name: "Jr HR Associate",            email: "jrhr@ten.com", level: 1 },
@@ -1092,7 +1122,7 @@ const HR_ACCOUNTS = {
     "chro@ten.com":      { password: "TEN@CHRO2026",  name: "Chief Human Resources Officer", email: "chro@ten.com", level: 8 },
     "vp@ten.com":        { password: "TEN@VP#2026",    name: "Vice President",                 email: "vp@ten.com", level: 9 }
 };
-const COORDINATORS = {
+const COORDINATORS_DEV_FALLBACK = {
     "devops_aws_admin":   { password:"DevOpsAWS@2026",  domain:"DevOps with AWS" },
     "python_admin":       { password:"Python@2026",     domain:"Python Development" },
     "java_admin":         { password:"Java@2026",       domain:"Java Development" },
