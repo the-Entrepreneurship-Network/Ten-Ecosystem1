@@ -1150,37 +1150,37 @@ function loadCredentialMap(envName, devFallback) {
 }
 
 const HR_ACCOUNTS_DEV_FALLBACK = {
-    "hr_admin":   { password: "HR@TEN2026",  name: "HR Administrator", email: "hr.admin@ten.local", level: 7 },
-    "hr_manager": { password: "HRMgr@2026",  name: "HR Manager",       email: "hr.manager@ten.local", level: 6 },
-    "jrhr@ten.com":      { password: "TEN@JrHR2026",  name: "Jr HR Associate",            email: "jrhr@ten.com", level: 1 },
-    "srhr@ten.com":      { password: "TEN@SrHR2026",  name: "Sr HR Associate",            email: "srhr@ten.com", level: 2 },
-    "jrmanager@ten.com": { password: "TEN@JrMgr2026",  name: "Jr HR Manager",             email: "jrmanager@ten.com", level: 3 },
-    "srmanager@ten.com": { password: "TEN@SrMgr2026",  name: "Sr HR Manager",             email: "srmanager@ten.com", level: 4 },
-    "hrad@ten.com":      { password: "TEN@HRAD2026",  name: "HR Associate Director",      email: "hrad@ten.com", level: 5 },
-    "jrdir@ten.com":     { password: "TEN@JrDir2026",  name: "Jr HR Director",            email: "jrdir@ten.com", level: 6 },
-    "hrdirector@ten.com":{ password: "TEN@HRDir2026",  name: "HR Director & HRBP",         email: "hrdirector@ten.com", level: 7 },
-    "chro@ten.com":      { password: "TEN@CHRO2026",  name: "Chief Human Resources Officer", email: "chro@ten.com", level: 8 },
-    "vp@ten.com":        { password: "TEN@VP#2026",    name: "Vice President",                 email: "vp@ten.com", level: 9 }
+    "hr_admin":   { password: "CHANGE_ME_DEV_ONLY",  name: "HR Administrator", email: "hr.admin@ten.local", level: 7 },
+    "hr_manager": { password: "CHANGE_ME_DEV_ONLY",  name: "HR Manager",       email: "hr.manager@ten.local", level: 6 },
+    "jrhr@ten.com":      { password: "CHANGE_ME_DEV_ONLY",  name: "Jr HR Associate",            email: "jrhr@ten.com", level: 1 },
+    "srhr@ten.com":      { password: "CHANGE_ME_DEV_ONLY",  name: "Sr HR Associate",            email: "srhr@ten.com", level: 2 },
+    "jrmanager@ten.com": { password: "CHANGE_ME_DEV_ONLY",  name: "Jr HR Manager",             email: "jrmanager@ten.com", level: 3 },
+    "srmanager@ten.com": { password: "CHANGE_ME_DEV_ONLY",  name: "Sr HR Manager",             email: "srmanager@ten.com", level: 4 },
+    "hrad@ten.com":      { password: "CHANGE_ME_DEV_ONLY",  name: "HR Associate Director",      email: "hrad@ten.com", level: 5 },
+    "jrdir@ten.com":     { password: "CHANGE_ME_DEV_ONLY",  name: "Jr HR Director",            email: "jrdir@ten.com", level: 6 },
+    "hrdirector@ten.com":{ password: "CHANGE_ME_DEV_ONLY",  name: "HR Director & HRBP",         email: "hrdirector@ten.com", level: 7 },
+    "chro@ten.com":      { password: "CHANGE_ME_DEV_ONLY",  name: "Chief Human Resources Officer", email: "chro@ten.com", level: 8 },
+    "vp@ten.com":        { password: "CHANGE_ME_DEV_ONLY",    name: "Vice President",                 email: "vp@ten.com", level: 9 }
 };
 const COORDINATORS_DEV_FALLBACK = {
-    "devops_aws_admin":   { password:"DevOpsAWS@2026",  domain:"DevOps with AWS" },
-    "python_admin":       { password:"Python@2026",     domain:"Python Development" },
-    "java_admin":         { password:"Java@2026",       domain:"Java Development" },
-    "web_admin":          { password:"Web@2026",        domain:"Web Development" },
-    "mern_admin":         { password:"Mern@2026",       domain:"MERN Stack Development" },
-    "ai_admin":           { password:"AI@2026",         domain:"Artificial Intelligence" },
-    "datascience_admin":  { password:"DS@2026",         domain:"Data Science" },
-    "cyber_admin":        { password:"Cyber@2026",      domain:"Cyber Security" },
-    "software_admin":     { password:"Software@2026",   domain:"Software Engineering" },
-    "flutter_admin":      { password:"Flutter@2026",    domain:"Flutter Development" },
+    "devops_aws_admin":   { password:"CHANGE_ME_DEV_ONLY",  domain:"DevOps with AWS" },
+    "python_admin":       { password:"CHANGE_ME_DEV_ONLY",     domain:"Python Development" },
+    "java_admin":         { password:"CHANGE_ME_DEV_ONLY",       domain:"Java Development" },
+    "web_admin":          { password:"CHANGE_ME_DEV_ONLY",        domain:"Web Development" },
+    "mern_admin":         { password:"CHANGE_ME_DEV_ONLY",       domain:"MERN Stack Development" },
+    "ai_admin":           { password:"CHANGE_ME_DEV_ONLY",         domain:"Artificial Intelligence" },
+    "datascience_admin":  { password:"CHANGE_ME_DEV_ONLY",         domain:"Data Science" },
+    "cyber_admin":        { password:"CHANGE_ME_DEV_ONLY",      domain:"Cyber Security" },
+    "software_admin":     { password:"CHANGE_ME_DEV_ONLY",   domain:"Software Engineering" },
+    "flutter_admin":      { password:"CHANGE_ME_DEV_ONLY",    domain:"Flutter Development" },
     // Requirement 5 — HR Management treated like any other domain
-    "hrmgmt_admin":       { password:"HRMgmt@2026",     domain:"HR Management" },
+    "hrmgmt_admin":       { password:"CHANGE_ME_DEV_ONLY",     domain:"HR Management" },
     // New domains added
-    "venturecapital_admin":  { password: "VC@TEN2026",        domain: "Venture Capital" },
-    "vibecoding_admin":      { password: "Vibe@TEN2026",       domain: "Vibe Coding" },
-    "spaceresearch_admin":   { password: "Space@TEN2026",      domain: "Space Research" },
-    "businessanalyst_admin": { password: "BA@TEN2026",         domain: "Business Analyst" },
-    "hr_domain_admin":       { password: "HRDomain@TEN2026",   domain: "HR" }
+    "venturecapital_admin":  { password: "CHANGE_ME_DEV_ONLY",        domain: "Venture Capital" },
+    "vibecoding_admin":      { password: "CHANGE_ME_DEV_ONLY",       domain: "Vibe Coding" },
+    "spaceresearch_admin":   { password: "CHANGE_ME_DEV_ONLY",      domain: "Space Research" },
+    "businessanalyst_admin": { password: "CHANGE_ME_DEV_ONLY",         domain: "Business Analyst" },
+    "hr_domain_admin":       { password: "CHANGE_ME_DEV_ONLY",   domain: "HR" }
 };
 
 // Resolve the live credential maps: environment first, dev fallback otherwise.
@@ -1861,7 +1861,7 @@ const upload = multer({
 
 // ================= MAIL =================
 
-const { createEmailTransporter } = require("./utils/mailer");
+const { createEmailTransporter, EMAIL_FROM } = require("./utils/mailer");
 const transporter = createEmailTransporter();
 
 
@@ -2957,7 +2957,7 @@ try{
             let mailError = "";
             try {
                 await transporter.sendMail({
-                    from:"TEN Internship Portal <ten.internshipportal@gmail.com>",
+                    from: EMAIL_FROM,
                     to: emailLc,
                     subject:`🎉 Welcome to The Entrepreneurship Network, ${newStudent.name.trim()}!`,
                     html,
@@ -6491,7 +6491,7 @@ async function sendPromotionEmail({ to, name, fromRoleLabel, toRoleLabel, employ
     const subject = "🎉 Congratulations! You've been promoted at The Entrepreneurship Network";
     try {
         await transporter.sendMail({
-            from: "TEN HR <ten.internshipportal@gmail.com>",
+            from: EMAIL_FROM,
             to, subject, html,
             text: `Hello ${name}, you have been promoted to ${toRoleLabel}. Temporary password: ${tempPassword}. Complete registration at ${loginUrl} within 48 hours.`
         });
