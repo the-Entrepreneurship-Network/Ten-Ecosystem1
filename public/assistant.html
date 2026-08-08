@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TEN Assistant</title>
+<!--
+  TEN Assistant — standalone section.
+
+  Self-contained by design: no framework, no build step, no external request.
+  It talks only to /api/v2/assistant, which answers from the portal's own
+  DomainTask rows, so this page works with no API key and cannot invent a task
+  that is not in the database.
+-->
+<style>
+  :root{
+    --void:#05070E; --ink:#090D1A; --card:#0E1428; --edge:#121933;
+    --gold:#D4AF37; --gold-lift:#F0D060; --gold-dim:#B8960C;
+    --text:#F0EEE8; --sub:#9A9080;
+    --r-sm:10px; --r-md:16px; --r-lg:22px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--void);color:var(--text);
+       font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.6}
+  a{color:var(--gold);text-decoration:none}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+
+  header{border-bottom:1px solid rgba(212,175,55,.14);background:var(--ink);position:sticky;top:0;z-index:10}
+  .bar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0}
+  .brand{display:flex;align-items:center;gap:11px;font-weight:700;letter-spacing:.02em}
+  .brand .mark{font-size:26px;color:var(--gold);line-height:1}
+  .brand small{display:block;color:var(--sub);font-size:11.5px;font-weight:400;letter-spacing:.06em;text-transform:uppercase}
+  .back{color:var(--sub);font-size:13px;border:1px solid rgba(212,175,55,.22);padding:7px 14px;border-radius:999px}
+  .back:hover{color:var(--text);border-color:rgba(212,175,55,.5)}
+
+  .hero{padding:34px 0 22px}
+  .hero h1{margin:0 0 8px;font-size:clamp(1.6rem,4vw,2.3rem);line-height:1.15}
+  .hero p{margin:0;color:var(--sub);max-width:60ch}
+
+  .grid{display:grid;grid-template-columns:1fr;gap:18px;padding-bottom:44px}
+  @media(min-width:900px){.grid{grid-template-columns:1.05fr .95fr}}
+
+  .card{background:var(--card);border:1px solid rgba(212,175,55,.13);border-radius:var(--r-lg);padding:20px}
+  .card h2{margin:0 0 4px;font-size:15px;letter-spacing:.02em}
+  .card .hint{margin:0 0 15px;color:var(--sub);font-size:12.5px}
+
+  label{display:block;font-size:11.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--sub);margin:0 0 6px}
+  select,input[type=text]{width:100%;background:var(--void);color:var(--text);
+    border:1px solid rgba(212,175,55,.22);border-radius:var(--r-sm);padding:11px 12px;font:inherit;font-size:14px;outline:none}
+  select:focus,input[type=text]:focus{border-color:rgba(212,175,55,.55)}
+  .row{display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:14px}
+  @media(min-width:560px){.row{grid-template-columns:1fr 1fr}}
+
+  button.primary{width:100%;background:linear-gradient(145deg,var(--gold-lift),var(--gold-dim));
+    color:#05070E;border:0;border-radius:var(--r-sm);padding:12px;font:inherit;font-weight:700;cursor:pointer}
+  button.primary:disabled{opacity:.55;cursor:default}
+
+  .note{margin-top:14px;padding:11px 13px;border-radius:var(--r-sm);
+    background:rgba(245,158,11,.09);border:1px solid rgba(245,158,11,.28);color:#F5C87A;font-size:12.5px}
+
+  .summary{display:flex;flex-wrap:wrap;gap:9px;margin:16px 0 6px}
+  .pill{background:rgba(212,175,55,.1);border:1px solid rgba(212,175,55,.26);
+        color:var(--gold);border-radius:999px;padding:5px 12px;font-size:12px;font-weight:600}
+
+  ol.weeks{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:10px}
+  ol.weeks li{background:var(--edge);border:1px solid rgba(212,175,55,.1);border-radius:var(--r-md);padding:13px 15px}
+  .wk{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:4px}
+  .wk b{font-size:13.5px}
+  .wk span{font-size:11.5px;color:var(--sub);white-space:nowrap}
+  .wk-body{font-size:13px;color:#D9D4C9;margin:0}
+
+  #chat{display:flex;flex-direction:column;height:min(560px,70vh)}
+  #log{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding-right:4px}
+  .msg{max-width:92%;padding:10px 13px;border-radius:13px;font-size:13px;white-space:pre-wrap;word-break:break-word}
+  .me{align-self:flex-end;background:rgba(212,175,55,.15);border:1px solid rgba(212,175,55,.2)}
+  .it{align-self:flex-start;background:var(--edge);border:1px solid rgba(212,175,55,.1);color:#E4DFD5}
+  #ask{display:flex;gap:8px;margin-top:12px}
+  #ask input{flex:1}
+  #ask button{background:var(--gold);color:#05070E;border:0;border-radius:var(--r-sm);padding:0 16px;font:inherit;font-weight:700;cursor:pointer}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .chip{background:rgba(212,175,55,.1);border:1px solid rgba(212,175,55,.24);color:var(--gold);
+        border-radius:999px;padding:5px 11px;font-size:11.5px;cursor:pointer;font:inherit}
+  .chip:hover{background:rgba(212,175,55,.2)}
+  footer{border-top:1px solid rgba(212,175,55,.12);color:var(--sub);font-size:12px;padding:18px 0 30px}
+  :focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap bar">
+    <div class="brand">
+      <span class="mark" aria-hidden="true">&#8734;</span>
+      <span>TEN Assistant<small>The Entrepreneurship Network</small></span>
+    </div>
+    <a class="back" href="/student-dashboard.html">&larr; Dashboard</a>
+  </div>
+</header>
+
+<div class="wrap hero">
+  <h1>Know exactly what to build, and by when.</h1>
+  <p>Pick your domain and track for the full week-by-week plan — every task, what it pays, and how hard it is. Straight from the portal's own task library, so it matches what you'll actually be assigned.</p>
+</div>
+
+<main class="wrap grid">
+
+  <section class="card">
+    <h2>Your track plan</h2>
+    <p class="hint">14 domains, 6 durations.</p>
+
+    <div class="row">
+      <div>
+        <label for="domain">Domain</label>
+        <select id="domain"><option value="">Loading…</option></select>
+      </div>
+      <div>
+        <label for="duration">Duration</label>
+        <select id="duration"><option value="">Loading…</option></select>
+      </div>
+    </div>
+
+    <button class="primary" id="go" type="button">Show my plan</button>
+    <div id="planOut" aria-live="polite"></div>
+  </section>
+
+  <section class="card">
+    <h2>Ask anything</h2>
+    <p class="hint">Tasks, coins, attendance, documents, certificates.</p>
+    <div id="chat">
+      <div id="log" aria-live="polite"></div>
+      <div class="chips" id="chips"></div>
+      <form id="ask">
+        <input type="text" id="q" autocomplete="off" placeholder="e.g. MERN 3 months" aria-label="Ask the assistant">
+        <button type="submit">Send</button>
+      </form>
+    </div>
+  </section>
+
+</main>
+
+<footer class="wrap">Answers come from this portal's task library. Anything about your own account, ask your coordinator.</footer>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ---- populate the pickers from the API, so this page never carries a
+          hardcoded domain list that can fall out of step with the seed ---- */
+  fetch('/api/v2/assistant/domains')
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var ds = $('domain');
+      ds.innerHTML = '<option value="">Select your domain…</option>';
+      (d.domains || []).forEach(function (name) {
+        var o = document.createElement('option');
+        o.value = name; o.textContent = name;
+        ds.appendChild(o);
+      });
+      var du = $('duration');
+      du.innerHTML = '';
+      (d.durations || []).forEach(function (x) {
+        var o = document.createElement('option');
+        o.value = x.key;
+        o.textContent = x.label + (x.derived ? ' (no task library)' : '');
+        du.appendChild(o);
+      });
+      du.value = '3months';
+      // Preselect the student's own domain when the portal already stored it.
+      try {
+        var mine = localStorage.getItem('domain') || localStorage.getItem('studentDomain');
+        if (mine) { ds.value = mine; }
+      } catch (e) {}
+    })
+    .catch(function () {
+      $('domain').innerHTML = '<option value="">Could not load domains</option>';
+    });
+
+  /* ---- the plan ---- */
+  $('go').addEventListener('click', function () {
+    var domain = $('domain').value, duration = $('duration').value;
+    var out = $('planOut');
+    if (!domain) { out.innerHTML = '<div class="note">Choose a domain first.</div>'; return; }
+
+    out.innerHTML = '<p class="hint" style="margin-top:16px">Loading…</p>';
+    fetch('/api/v2/assistant/plan?domain=' + encodeURIComponent(domain) + '&duration=' + encodeURIComponent(duration))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.error) { out.innerHTML = '<div class="note">' + d.error + '</div>'; return; }
+        if (!d.weeks || !d.weeks.length) {
+          out.innerHTML = '<div class="note">No seeded tasks for this combination. Ask your coordinator which track you are on.</div>';
+          return;
+        }
+        out.innerHTML = '';
+
+        var sum = document.createElement('div');
+        sum.className = 'summary';
+        [d.duration, d.weeks.length + ' weeks', d.totalCoins + ' coins', '≈ Rs ' + Math.round(d.totalCoins * 0.5)]
+          .forEach(function (t) {
+            var p = document.createElement('span'); p.className = 'pill'; p.textContent = t; sum.appendChild(p);
+          });
+        out.appendChild(sum);
+
+        if (d.derived) {
+          var n = document.createElement('div');
+          n.className = 'note';
+          n.textContent = d.duration + ' has no task library of its own. This is the front of the 1 Month track — treat it as a starting point and confirm with your coordinator.';
+          out.appendChild(n);
+        }
+
+        var ol = document.createElement('ol');
+        ol.className = 'weeks';
+        d.weeks.forEach(function (w) {
+          var li = document.createElement('li');
+          var head = document.createElement('div');
+          head.className = 'wk';
+          var b = document.createElement('b');
+          b.textContent = 'Week ' + w.week + ' — ' + w.title;
+          var meta = document.createElement('span');
+          meta.textContent = w.coins + ' coins · ' + w.difficulty;
+          head.appendChild(b); head.appendChild(meta);
+          var body = document.createElement('p');
+          body.className = 'wk-body';
+          body.textContent = w.task;
+          li.appendChild(head); li.appendChild(body);
+          ol.appendChild(li);
+        });
+        out.appendChild(ol);
+      })
+      .catch(function () {
+        out.innerHTML = '<div class="note">Could not load the plan. Check your connection.</div>';
+      });
+  });
+
+  /* ---- chat ---- */
+  var log = $('log');
+  function say(text, mine) {
+    var d = document.createElement('div');
+    d.className = 'msg ' + (mine ? 'me' : 'it');
+    d.textContent = text; // text node, never innerHTML
+    log.appendChild(d);
+    log.scrollTop = log.scrollHeight;
+    return d;
+  }
+  function me() {
+    var o = { userId: '', userName: '', domain: '' };
+    try {
+      o.userId   = localStorage.getItem('employeeId') || localStorage.getItem('userId') || '';
+      o.userName = localStorage.getItem('name') || '';
+      o.domain   = localStorage.getItem('domain') || '';
+    } catch (e) {}
+    return o;
+  }
+  var busy = false;
+  function ask(q) {
+    if (busy || !q) { return; }
+    busy = true;
+    say(q, true);
+    var pending = say('…', false);
+    var who = me();
+    fetch('/api/v2/assistant/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: q, userId: who.userId, userName: who.userName, domain: who.domain || $('domain').value })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { pending.textContent = d.answer || d.error || 'No answer available.'; })
+      .catch(function () { pending.textContent = 'Could not reach the assistant. Check your connection.'; })
+      .then(function () { busy = false; log.scrollTop = log.scrollHeight; });
+  }
+  $('ask').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var v = $('q').value.trim();
+    if (!v) { return; }
+    $('q').value = '';
+    ask(v);
+  });
+
+  say('Ask me about your weekly tasks, coins, attendance, documents or certificates. Try "MERN 3 months".', false);
+  [['How do coins work?', 'How do coins work and how do I earn the most?'],
+   ['All domains', 'What are all the domains available?'],
+   ['Certificates', 'What certificates does TEN issue and how do I qualify?'],
+   ['Daily posting task', 'What is the daily job posting task worth?']]
+    .forEach(function (pair) {
+      var c = document.createElement('button');
+      c.type = 'button'; c.className = 'chip'; c.textContent = pair[0];
+      c.addEventListener('click', function () { ask(pair[1]); });
+      $('chips').appendChild(c);
+    });
+})();
+</script>
+</body>
+</html>
