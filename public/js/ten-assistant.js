@@ -46,6 +46,18 @@
     '#tenai-input:focus{border-color:rgba(212,175,55,.5)}',
     '#tenai-send{background:' + GOLD + ';color:#05070E;border:0;border-radius:10px;padding:0 15px;font-weight:600;font-size:13px;cursor:pointer;font-family:inherit}',
     '#tenai-send:disabled{opacity:.5;cursor:default}',
+    '#tenai-meter{padding:0 14px 8px;color:#6d685e;font-size:11px;letter-spacing:.03em}',
+    '.tenai-wall{align-self:stretch;max-width:none;background:linear-gradient(165deg,#0B1020,#131A2E);',
+    'border:1px solid rgba(212,175,55,.3);border-radius:16px;padding:18px 16px;text-align:center}',
+    '.tenai-wall h3{margin:0 0 6px;font-size:15px;line-height:1.35;color:#F0EEE8;font-weight:700}',
+    '.tenai-wall p{margin:0 0 14px;font-size:12.5px;color:#9A9080}',
+    '.tenai-plan{display:block;width:100%;text-align:left;background:rgba(212,175,55,.07);',
+    'border:1px solid rgba(212,175,55,.22);border-radius:12px;padding:11px 13px;margin-bottom:8px;',
+    'cursor:pointer;font:inherit;color:#F0EEE8}',
+    '.tenai-plan:hover{background:rgba(212,175,55,.15);border-color:rgba(212,175,55,.5)}',
+    '.tenai-plan b{display:block;font-size:13.5px}',
+    '.tenai-plan em{display:block;font-style:normal;color:#D4AF37;font-size:12.5px;font-weight:600;margin:1px 0 3px}',
+    '.tenai-plan span{display:block;color:#9A9080;font-size:11.5px;line-height:1.45}',
     '@media (prefers-reduced-motion:reduce){#tenai-fab{transition:none}}'
   ].join('');
 
@@ -107,7 +119,11 @@
 
   panel.appendChild(top);
   panel.appendChild(log);
+  var meter = document.createElement('div');
+  meter.id = 'tenai-meter';
+
   panel.appendChild(chips);
+  panel.appendChild(meter);
   panel.appendChild(form);
 
   function mount() {
@@ -168,9 +184,20 @@
         domain:   me.domain
       })
     })
-      .then(function (r) { return r.json(); })
-      .then(function (d) {
+      .then(function (r) { return r.json().then(function (j) { return { status: r.status, body: j }; }); })
+      .then(function (res) {
+        var d = res.body;
+        if (res.status === 402 && d.paywall) {
+          pending.remove();
+          showPaywall(d.paywall);
+          return;
+        }
         pending.textContent = d.answer || d.error || 'No answer available.';
+        if (typeof d.remaining === 'number') {
+          meter.textContent = d.remaining + ' of ' + d.limit + ' messages left this month';
+        } else if (d.limit === null) {
+          meter.textContent = 'Unlimited messages';
+        }
       })
       .catch(function () {
         pending.textContent = 'Could not reach the assistant. Check your connection and try again.';
@@ -180,6 +207,48 @@
         send.disabled = false;
         log.scrollTop = log.scrollHeight;
       });
+  }
+
+  /*
+   * Shown when the server refuses with 402. The copy and the plans come from
+   * the server payload rather than being duplicated here, so pricing changes
+   * in one place.
+   */
+  function showPaywall(wall) {
+    var box = document.createElement('div');
+    box.className = 'tenai-msg tenai-it tenai-wall';
+
+    var h = document.createElement('h3');
+    h.textContent = wall.headline;
+    var sub = document.createElement('p');
+    sub.textContent = wall.sub;
+    box.appendChild(h);
+    box.appendChild(sub);
+
+    (wall.plans || []).forEach(function (plan) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tenai-plan';
+      var name = document.createElement('b');
+      name.textContent = plan.label;
+      var price = document.createElement('em');
+      price.textContent = plan.priceLabel;
+      var detail = document.createElement('span');
+      detail.textContent = plan.messages + ' · ' + plan.history +
+        (plan.deepDive ? ' · Deep Dive Mode' : '');
+      btn.appendChild(name);
+      btn.appendChild(price);
+      btn.appendChild(detail);
+      btn.addEventListener('click', function () {
+        window.location.href = '/assistant#upgrade=' + encodeURIComponent(plan.key);
+      });
+      box.appendChild(btn);
+    });
+
+    log.appendChild(box);
+    log.scrollTop = log.scrollHeight;
+    form.style.display = 'none';
+    meter.textContent = '';
   }
 
   var SUGGESTIONS = ['My week-by-week plan', 'How do coins work?', 'All 14 domains', 'Certificates'];

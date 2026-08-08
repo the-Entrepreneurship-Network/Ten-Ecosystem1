@@ -25,9 +25,115 @@
 const router     = require('express').Router();
 const DomainTask = require('../../models/new/DomainTask');
 
+let AssistantUsage = null;
+try { AssistantUsage = require('../../models/new/AssistantUsage'); } catch (_e) { /* optional */ }
+
 // Logging is best-effort and must never break an answer.
 let BotQuery = null;
 try { BotQuery = require('../../models/BotQuery'); } catch (_e) { /* optional */ }
+
+/* ────────────────────────────── tiers ───────────────────────────── */
+/*
+ * Four tiers. `messages` is the cap per 30-day period; null means unlimited.
+ * `depth` is what the answer renderer is allowed to include, so the paid
+ * difference is real content rather than the same answer behind a counter.
+ *
+ * Prices are recorded for display only. Nothing here charges a card: the
+ * entitlement arrives from whichever billing system you run (RevenueCat's
+ * webhook, or the Setu rails already in this repo) and is written by
+ * grantEntitlement below.
+ */
+const TIERS = {
+  starter: {
+    key: 'starter', label: 'Starter', price: 0, priceLabel: 'Free',
+    messages: 12, depth: 'brief', historyDays: 0, deepDive: false,
+    blurb: 'Short answers to get you unstuck.',
+  },
+  pro: {
+    key: 'pro', label: 'Pro', price: 500, priceLabel: '₹500/month',
+    messages: 90, depth: 'standard', historyDays: 7, deepDive: false,
+    productId: 'tentech_pro_monthly',
+    blurb: 'Fuller answers, and your last 7 days of conversation kept.',
+  },
+  plus: {
+    key: 'plus', label: 'Plus', price: 1200, priceLabel: '₹1,200/month',
+    messages: 350, depth: 'deep', historyDays: 30, deepDive: true,
+    productId: 'tentech_plus_monthly',
+    blurb: 'Deep Dive Mode for multi-part questions, 30 days of history.',
+  },
+  enterprise: {
+    key: 'enterprise', label: 'Enterprise', price: 5000, priceLabel: '₹5,000/month',
+    messages: null, depth: 'ultimate', historyDays: null, deepDive: true,
+    productId: 'tentech_enterprise_monthly',
+    blurb: 'Unlimited messages, full portal knowledge, essay-length reasoning.',
+  },
+};
+
+/** RevenueCat product id -> tier. Used by the webhook and by /entitlement. */
+const PRODUCT_TO_TIER = Object.values(TIERS)
+  .filter(t => t.productId)
+  .reduce((m, t) => { m[t.productId] = t.key; return m; }, {});
+
+const PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Load (or create) a student's usage row, rolling the period over when it has
+ * expired and downgrading when an entitlement has lapsed. Both are checked on
+ * read rather than by a scheduled job, so there is nothing to keep running and
+ * no window where a lapsed subscription still answers as paid.
+ */
+async function loadUsage(userId) {
+  if (!AssistantUsage || !userId) { return null; }
+  let row = await AssistantUsage.findOne({ userId });
+  if (!row) { row = await AssistantUsage.create({ userId }); }
+
+  let dirty = false;
+  const now = Date.now();
+
+  if (now - new Date(row.periodStart).getTime() >= PERIOD_MS) {
+    row.messagesUsed = 0;
+    row.periodStart  = new Date();
+    dirty = true;
+  }
+  const exp = row.entitlement && row.entitlement.expiresAt;
+  if (row.tier !== 'starter' && exp && new Date(exp).getTime() < now) {
+    row.tier = 'starter';
+    dirty = true;
+  }
+  if (dirty) { await row.save(); }
+  return row;
+}
+
+function quotaFor(row) {
+  const tier = TIERS[(row && row.tier) || 'starter'] || TIERS.starter;
+  const used = (row && row.messagesUsed) || 0;
+  const remaining = tier.messages === null ? null : Math.max(0, tier.messages - used);
+  return { tier, used, remaining, exhausted: remaining === 0 };
+}
+
+/** Single place an entitlement is written, whatever granted it. */
+async function grantEntitlement(userId, tierKey, meta) {
+  if (!AssistantUsage || !userId || !TIERS[tierKey]) { return null; }
+  const row = await AssistantUsage.findOneAndUpdate(
+    { userId },
+    {
+      tier: tierKey,
+      // A new entitlement starts a fresh period, so an upgrade mid-month is
+      // not spent against messages already used on the previous tier.
+      messagesUsed: 0,
+      periodStart: new Date(),
+      entitlement: {
+        productId: (meta && meta.productId) || TIERS[tierKey].productId || null,
+        store:     (meta && meta.store) || 'manual',
+        expiresAt: (meta && meta.expiresAt) || new Date(Date.now() + PERIOD_MS),
+        grantedAt: new Date(),
+        appUserId: (meta && meta.appUserId) || userId,
+      },
+    },
+    { upsert: true, new: true }
+  );
+  return row;
+}
 
 /* ──────────────────────────── durations ─────────────────────────── */
 /*
@@ -122,7 +228,15 @@ async function tasksFor(domain, duration) {
   return duration.take ? rows.slice(0, duration.take) : rows;
 }
 
-function renderPlan(domain, duration, rows) {
+const DEPTH_RANK = { brief: 0, standard: 1, deep: 2, ultimate: 3 };
+const atLeast = (depth, level) => DEPTH_RANK[depth || 'brief'] >= DEPTH_RANK[level];
+
+/*
+ * Depth is what separates the tiers. Rather than the same answer behind a
+ * counter, each level adds real content. The full answer is always computed
+ * and then cut down, so paid tiers are never a separate code path.
+ */
+function renderPlan(domain, duration, rows, depth) {
   if (!rows.length) {
     return `I could not find a seeded task list for ${domain} on the ${duration.label} track. Ask your coordinator which track you are on.`;
   }
@@ -138,17 +252,53 @@ function renderPlan(domain, duration, rows) {
     head.push(`Note: ${duration.label} has no task library of its own. This is the first ${duration.take} week${duration.take === 1 ? '' : 's'} of the 1 Month track, so treat it as a starting point and confirm with your coordinator.`);
   }
 
-  const weeks = rows.map(r =>
-    `Week ${r.weekNumber} — ${r.taskTitle} (${r.coinReward} coins, ${r.difficultyLevel})\n${r.taskDescription}`
-  );
+  const shown = atLeast(depth, 'standard') ? rows : rows.slice(0, 3);
+  const weeks = shown.map(function (r) {
+    return 'Week ' + r.weekNumber + ' — ' + r.taskTitle +
+           ' (' + r.coinReward + ' coins, ' + r.difficultyLevel + ')\n' + r.taskDescription;
+  });
 
-  return head.join('\n') + '\n\n' + weeks.join('\n\n') + '\n\n' + [
-    'How to finish:',
-    '1. Submit by day 5 each week. Tasks go Available → Submitted → Approved, and approval is not instant.',
-    `2. Build toward "${last.taskTitle}" from week 1. It is worth ${last.coinReward} coins on its own and every earlier week feeds it.`,
-    '3. Bank the recurring coins: 5 a day for attendance, 50 for a 7-day streak, 30 for finishing a full week.',
-    '4. Do the Daily Job Posting task. 3 coins per platform up to 10 platforms is 30 coins a day.',
-  ].join('\n');
+  const out = [head.join('\n'), weeks.join('\n\n')];
+
+  if (shown.length < rows.length) {
+    out.push('… and ' + (rows.length - shown.length) + ' more weeks on Pro and above.');
+  }
+
+  if (atLeast(depth, 'standard')) {
+    out.push([
+      'How to finish:',
+      '1. Submit by day 5 each week. Tasks go Available → Submitted → Approved, and approval is not instant.',
+      '2. Build toward "' + last.taskTitle + '" from week 1. It is worth ' + last.coinReward + ' coins on its own and every earlier week feeds it.',
+      '3. Bank the recurring coins: 5 a day for attendance, 50 for a 7-day streak, 30 for finishing a full week.',
+      '4. Do the Daily Job Posting task. 3 coins per platform up to 10 platforms is 30 coins a day.'
+    ].join('\n'));
+  }
+
+  if (atLeast(depth, 'deep')) {
+    const hard = rows.filter(function (r) { return r.difficultyLevel === 'hard' || r.difficultyLevel === 'expert'; });
+    out.push([
+      'Where this track gets hard:',
+      hard.length
+        ? hard.map(function (r) { return '• Week ' + r.weekNumber + ' (' + r.difficultyLevel + ') — ' + r.taskTitle; }).join('\n')
+        : '• Difficulty stays moderate throughout.',
+      '',
+      'Keep the two weeks before week ' + (hard.length ? hard[0].weekNumber : rows.length) + ' light. That is where students stall, and the tasks are cumulative.'
+    ].join('\n'));
+  }
+
+  if (atLeast(depth, 'ultimate')) {
+    const totalCoins = rows.reduce(function (n, r) { return n + r.coinReward; }, 0);
+    const byDiff = rows.reduce(function (m, r) { m[r.difficultyLevel] = (m[r.difficultyLevel] || 0) + 1; return m; }, {});
+    out.push([
+      'Full breakdown:',
+      '• Difficulty spread: ' + Object.keys(byDiff).map(function (k) { return byDiff[k] + ' ' + k; }).join(', ') + '.',
+      '• The final task alone is ' + Math.round((last.coinReward / totalCoins) * 100) + '% of this track’s task coins, so an unfinished final week costs far more than one week of effort.',
+      '• These are task coins only. Attendance across ' + rows.length + ' weeks adds roughly ' + (rows.length * 7 * 5) + ' more, plus ' + rows.length + ' week-completion bonuses of 30, plus up to 30 a day from the posting task. The recurring total usually exceeds the task total.',
+      '• Submissions are reviewed against the description, not the title. Read the task text literally and satisfy each clause.'
+    ].join('\n'));
+  }
+
+  return out.filter(Boolean).join('\n\n');
 }
 
 /* ───────────────────────── topic answers ────────────────────────── */
@@ -241,14 +391,24 @@ const TOPIC_RULES = [
  */
 async function answerFor(question, ctx) {
   const q        = String(question || '');
+  const depth    = (ctx && ctx.depth) || 'brief';
   const domain   = await matchDomain(q, ctx && ctx.domain);
   const duration = matchDuration(q);
 
   if (domain && duration) {
-    return renderPlan(domain, duration, await tasksFor(domain, duration));
+    return renderPlan(domain, duration, await tasksFor(domain, duration), depth);
   }
   for (const rule of TOPIC_RULES) {
-    if (rule.test.test(q)) { return await rule.answer(); }
+    if (rule.test.test(q)) {
+      const full = await rule.answer();
+      // Starter gets the fact, not the commentary around it: the first
+      // paragraphs carry the answer, the later ones carry the advice.
+      if (!atLeast(depth, 'standard')) {
+        const paras = full.split('\n\n');
+        return paras.length > 2 ? paras.slice(0, 2).join('\n\n') : full;
+      }
+      return full;
+    }
   }
   if (domain) {
     return `${domain} runs on 1 Month, 45 Days, 3 Months and 6 Months. Tell me which track you are on and I will list every week with what to build, its coin value and its difficulty.`;
@@ -265,25 +425,199 @@ async function answerFor(question, ctx) {
 // POST /api/v2/assistant/ask
 router.post('/ask', async (req, res) => {
   try {
-    const { question, userId, userName, domain } = req.body || {};
+    const { question, userId, userName, domain, deepDive } = req.body || {};
     if (!question || !String(question).trim()) {
       return res.status(400).json({ error: 'question required' });
     }
 
-    const answer = await answerFor(question, { domain });
+    /*
+     * The quota is checked and spent here, on the server, before an answer is
+     * produced. A counter kept in browser storage is cleared by one devtools
+     * command or a reinstall, so anything gated on it is not really gated.
+     * Since this decides who has paid, it cannot live on the client.
+     */
+    const usage = await loadUsage(userId);
+    const q     = quotaFor(usage);
 
-    // Logging must never take the answer down with it.
+    if (q.exhausted) {
+      return res.status(402).json({
+        error: 'message_limit_reached',
+        paywall: paywallPayload(q.tier),
+        tier: q.tier.key,
+        used: q.used,
+        limit: q.tier.messages,
+      });
+    }
+
+    // Deep Dive is a Plus and Enterprise feature. Asking for it on a lower
+    // tier answers normally rather than failing, and says why.
+    const wantsDeepDive   = !!deepDive;
+    const deepDiveAllowed = wantsDeepDive && q.tier.deepDive;
+    const depth           = deepDiveAllowed ? 'ultimate' : q.tier.depth;
+
+    let answer = await answerFor(question, { domain, depth });
+    if (wantsDeepDive && !deepDiveAllowed) {
+      answer += '\n\nDeep Dive Mode is available on Plus and Enterprise.';
+    }
+
+    if (usage) {
+      usage.messagesUsed += 1;
+      if (q.tier.historyDays === null || q.tier.historyDays > 0) {
+        usage.history.push({ question: String(question), answer, askedAt: new Date() });
+        // Trimmed on write, so nothing is retained longer than the tier the
+        // student is actually on.
+        if (q.tier.historyDays !== null) {
+          const cutoff = Date.now() - q.tier.historyDays * 24 * 60 * 60 * 1000;
+          usage.history = usage.history.filter(function (h) {
+            return new Date(h.askedAt).getTime() >= cutoff;
+          });
+        }
+      } else {
+        usage.history = [];
+      }
+      await usage.save();
+    }
+
     if (BotQuery && userId) {
       BotQuery.create({
         userId, userType: 'student', userName: userName || '',
         domain: domain || '', botType: 'task', question, answer, status: 'answered',
-      }).catch(() => {});
+      }).catch(function () {});
     }
 
-    return res.json({ answer, source: 'portal-data' });
+    const after = quotaFor(usage);
+    return res.json({
+      answer,
+      source: 'portal-data',
+      tier: after.tier.key,
+      depth,
+      deepDive: deepDiveAllowed,
+      used: after.used,
+      limit: after.tier.messages,
+      remaining: after.remaining,
+    });
   } catch (e) {
     console.error('[assistant/ask]', e.message);
     return res.status(500).json({ error: 'The assistant could not answer that. Try again.' });
+  }
+});
+
+/** Everything the paywall screen needs, so its copy lives in one place. */
+function paywallPayload(currentTier) {
+  return {
+    headline: 'Great minds don’t give advice by the hour.',
+    sub: 'Your mentor has more to say.',
+    current: (currentTier && currentTier.key) || 'starter',
+    plans: ['pro', 'plus', 'enterprise'].map(function (k) {
+      const t = TIERS[k];
+      return {
+        key: t.key,
+        label: t.label,
+        price: t.price,
+        priceLabel: t.priceLabel,
+        productId: t.productId,
+        blurb: t.blurb,
+        messages: t.messages === null ? 'Unlimited messages' : t.messages + ' messages',
+        history: t.historyDays === null ? 'Full conversation history' : t.historyDays + '-day history',
+        deepDive: t.deepDive,
+      };
+    }),
+  };
+}
+
+// GET /api/v2/assistant/entitlement?userId=...
+router.get('/entitlement', async (req, res) => {
+  try {
+    const usage = await loadUsage(req.query.userId);
+    const q     = quotaFor(usage);
+    return res.json({
+      tier: q.tier.key,
+      label: q.tier.label,
+      depth: q.tier.depth,
+      deepDive: q.tier.deepDive,
+      used: q.used,
+      limit: q.tier.messages,
+      remaining: q.remaining,
+      historyDays: q.tier.historyDays,
+      paywall: paywallPayload(q.tier),
+    });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/v2/assistant/history?userId=...
+router.get('/history', async (req, res) => {
+  try {
+    const usage = await loadUsage(req.query.userId);
+    const q     = quotaFor(usage);
+    if (!usage || q.tier.historyDays === 0) {
+      return res.json({ tier: q.tier.key, retained: 0, history: [] });
+    }
+    return res.json({
+      tier: q.tier.key,
+      retained: q.tier.historyDays,
+      history: usage.history.slice(-100),
+    });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+/*
+ * POST /api/v2/assistant/revenuecat/webhook
+ *
+ * RevenueCat's webhook is server-to-server and platform-agnostic, so it works
+ * for this portal even though their React Native SDK does not. Point RevenueCat
+ * at this URL and set REVENUECAT_WEBHOOK_AUTH to the Authorization value
+ * configured in their dashboard.
+ *
+ * The shared secret is required, not optional. Without it any caller could
+ * grant themselves a paid tier by posting JSON, so an unset secret refuses the
+ * request rather than accepting everything.
+ */
+router.post('/revenuecat/webhook', async (req, res) => {
+  try {
+    const expected = process.env.REVENUECAT_WEBHOOK_AUTH;
+    if (!expected) {
+      console.warn('[assistant] REVENUECAT_WEBHOOK_AUTH not set; webhook refused');
+      return res.status(503).json({ error: 'webhook not configured' });
+    }
+    if (req.get('Authorization') !== expected) {
+      return res.status(401).json({ error: 'unauthorized' });
+    }
+
+    const ev        = (req.body && req.body.event) || {};
+    const userId    = ev.app_user_id || ev.original_app_user_id;
+    const productId = ev.product_id;
+    const type      = String(ev.type || '').toUpperCase();
+
+    if (!userId) { return res.status(400).json({ error: 'app_user_id required' }); }
+
+    const GRANT  = ['INITIAL_PURCHASE', 'RENEWAL', 'PRODUCT_CHANGE', 'UNCANCELLATION'];
+    const REVOKE = ['CANCELLATION', 'EXPIRATION', 'REFUND', 'SUBSCRIPTION_PAUSED'];
+
+    if (GRANT.indexOf(type) !== -1) {
+      const tierKey = PRODUCT_TO_TIER[productId];
+      if (!tierKey) { return res.status(400).json({ error: 'unknown product ' + productId }); }
+      await grantEntitlement(userId, tierKey, {
+        productId: productId,
+        store: 'revenuecat',
+        appUserId: userId,
+        expiresAt: ev.expiration_at_ms ? new Date(Number(ev.expiration_at_ms)) : undefined,
+      });
+      return res.json({ ok: true, tier: tierKey });
+    }
+
+    if (REVOKE.indexOf(type) !== -1 && AssistantUsage) {
+      await AssistantUsage.findOneAndUpdate({ userId: userId }, { tier: 'starter' });
+      return res.json({ ok: true, tier: 'starter' });
+    }
+
+    return res.json({ ok: true, ignored: type });
+  } catch (e) {
+    console.error('[assistant/webhook]', e.message);
+    return res.status(500).json({ error: e.message });
   }
 });
 
