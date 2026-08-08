@@ -1,5 +1,5 @@
-
-require("dotenv").config();
+const { loadEnvironment } = require("./utils/mailer");
+loadEnvironment();
 
 // Monkeypatch Intl.DateTimeFormat to prevent crashes on environments with small-icu (like some EC2/AWS instances)
 // where 'shortOffset' or 'longOffset' for timeZoneName are not supported by the local ICU data and throw RangeError.
@@ -47,11 +47,17 @@ const express = require("express");
 const crypto = require("crypto");
 const mongoose = require("mongoose");
 
+
+
 const {
   validate,
   studentRegisterSchema,
   studentLoginSchema
 } = require("./middleware/validationSchemas");
+
+const attendanceUtils = require("./utils/attendanceUtils");
+const secrets = require("./config/secrets");
+const { requireAdminSecret, requireAdminAPI } = require("./middleware/adminAuth");
 
 // ================= RATE LIMIT CONFIGURATION =================
 const RATE_LIMIT_CONFIG = {
@@ -108,8 +114,39 @@ if (!fs.existsSync(DB_DIR)) {
 global.isMongoUnhealthy = false;
 global.lastMongoCheckTime = 0;
 
-function checkMongoStatus() {
+// SECURITY / DATA INTEGRITY: the JSON-file fallback engine below silently
+// activates whenever MongoDB is unreachable. That means a transient network
+// blip switches the whole application onto a store with:
+//   - no unique constraints (duplicate accounts become possible),
+//   - no transactions or atomicity,
+//   - a separate code path for authentication,
+//   - and writes that are silently lost when Mongo comes back.
+//
+// Failing loudly is safer than serving from a shadow database, so the fallback
+// is now OFF unless ENABLE_LOCAL_DB_FALLBACK=true is set explicitly.
+const LOCAL_DB_FALLBACK_ENABLED = String(process.env.ENABLE_LOCAL_DB_FALLBACK || '').toLowerCase() === 'true';
+if (LOCAL_DB_FALLBACK_ENABLED) {
+    console.warn('[db] ENABLE_LOCAL_DB_FALLBACK=true - the JSON shadow database is ACTIVE. ' +
+        'Writes made while MongoDB is down will NOT be replayed into MongoDB.');
+}
+
+/**
+ * True state of the MongoDB connection. Use this for health reporting.
+ * @returns {boolean}
+ */
+function isMongoLive() {
     return mongoose.connection.readyState === 1 && !global.isMongoUnhealthy;
+}
+
+/**
+ * Whether model calls should go to MongoDB. When the fallback is disabled we
+ * always answer true, so the real Mongoose call runs and its error surfaces
+ * instead of being masked by the JSON engine.
+ * @returns {boolean}
+ */
+function checkMongoStatus() {
+    if (!LOCAL_DB_FALLBACK_ENABLED) return true;
+    return isMongoLive();
 }
 
 function getCollectionData(modelName) {
@@ -130,7 +167,10 @@ function getCollectionData(modelName) {
                     tenure: "3 Months",
                     joiningDate: "2026-06-01",
                     employeeId: "TEN-STUDENT-001",
-                    password: "intern123",
+                    // SECURITY: was the cleartext literal "intern123". The demo account is
+                    // now seeded with a random password that is never printed, so the
+                    // JSON-fallback database ships with no usable known credential.
+                    password: require("bcryptjs").hashSync(crypto.randomBytes(24).toString("hex"), 10),
                     currentStreak: 5,
                     bestStreak: 12,
                     lastAttendanceDate: new Date().toISOString(),
@@ -1039,19 +1079,21 @@ function getTenureTotalDays(tenure) {
 
 function calcAttendancePercentage(student, presentCount) {
   const totalTenureDays = getTenureTotalDays(student.tenure || student.v2DurationType);
-  const joiningDate = student.joiningDate ? new Date(student.joiningDate) : new Date();
+  const startDate = (student.joinerType === "whatsapp" && student.internshipStartDate)
+    ? new Date(student.internshipStartDate)
+    : student.joiningDate ? new Date(student.joiningDate) : (student.createdAt ? new Date(student.createdAt) : new Date());
+  if (isNaN(startDate.getTime())) {
+    startDate = new Date();
+  }
   const today = new Date();
-  const daysElapsed = Math.min(
-    Math.max(Math.floor((today - joiningDate) / 86400000) + 1, 1),
-    totalTenureDays
-  );
+  const workingDays = attendanceUtils.countWorkingDays(startDate, today);
   return {
-    percentage: Math.min(Math.round((presentCount / daysElapsed) * 100), 100),
-    totalDays: daysElapsed,
+    percentage: workingDays > 0 ? Math.min(Math.round((presentCount / workingDays) * 100), 100) : 0,
+    totalDays: workingDays,
     tenureTotalDays: totalTenureDays,
     presentDays: presentCount,
-    absentDays: Math.max(daysElapsed - presentCount, 0),
-    requiredDays: Math.ceil(daysElapsed * 0.75)
+    absentDays: Math.max(workingDays - presentCount, 0),
+    requiredDays: Math.ceil(workingDays * 0.75)
   };
 }
 
@@ -1077,39 +1119,122 @@ const ALL_DOMAINS = [
 // Used by /hr-login, /coordinator-login, and chat handshake auth.
 // New DB-backed accounts (created via the promotion flow) are stored in the
 // `HR` and `Coordinator` collections and looked up alongside these maps.
-const HR_ACCOUNTS = {
-    "hr_admin":   { password: "HR@TEN2026",  name: "HR Administrator", email: "hr.admin@ten.local", level: 7 },
-    "hr_manager": { password: "HRMgr@2026",  name: "HR Manager",       email: "hr.manager@ten.local", level: 6 },
-    "jrhr@ten.com":      { password: "TEN@JrHR2026",  name: "Jr HR Associate",            email: "jrhr@ten.com", level: 1 },
-    "srhr@ten.com":      { password: "TEN@SrHR2026",  name: "Sr HR Associate",            email: "srhr@ten.com", level: 2 },
-    "jrmanager@ten.com": { password: "TEN@JrMgr2026",  name: "Jr HR Manager",             email: "jrmanager@ten.com", level: 3 },
-    "srmanager@ten.com": { password: "TEN@SrMgr2026",  name: "Sr HR Manager",             email: "srmanager@ten.com", level: 4 },
-    "hrad@ten.com":      { password: "TEN@HRAD2026",  name: "HR Associate Director",      email: "hrad@ten.com", level: 5 },
-    "jrdir@ten.com":     { password: "TEN@JrDir2026",  name: "Jr HR Director",            email: "jrdir@ten.com", level: 6 },
-    "hrdirector@ten.com":{ password: "TEN@HRDir2026",  name: "HR Director & HRBP",         email: "hrdirector@ten.com", level: 7 },
-    "chro@ten.com":      { password: "TEN@CHRO2026",  name: "Chief Human Resources Officer", email: "chro@ten.com", level: 8 },
-    "vp@ten.com":        { password: "TEN@VP#2026",    name: "Vice President",                 email: "vp@ten.com", level: 9 }
+// SECURITY: these credential maps were hardcoded in source with cleartext
+// passwords, so every HR and coordinator account was public to anyone with
+// repository access. They are now loaded from the HR_CREDENTIALS /
+// COORDINATOR_CREDENTIALS environment variables (JSON, same shape). The
+// literals below are retained ONLY as a non-production dev fallback and the
+// process refuses to start in production without the env vars.
+//
+// FOLLOW-UP (not done here because it changes the login handlers): store
+// bcrypt hashes instead of cleartext and compare with bcrypt.compare().
+function loadCredentialMap(envName, devFallback) {
+    const raw = process.env[envName];
+    if (raw && raw.trim()) {
+        try {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object') return parsed;
+            console.error('[credentials] ' + envName + ' is not a JSON object.');
+        } catch (e) {
+            console.error('[credentials] ' + envName + ' is not valid JSON: ' + e.message);
+        }
+    }
+    if (process.env.NODE_ENV === 'production') {
+        console.error('\n[credentials] FATAL: ' + envName + ' must be set in production. ' +
+            'Refusing to fall back to the credentials committed in source.\n');
+        process.exit(1);
+    }
+    console.warn('[credentials] ' + envName + ' not set; using DEV-ONLY fallback accounts. ' +
+        'These passwords are public - never use them in production.');
+    return devFallback;
+}
+
+const HR_ACCOUNTS_DEV_FALLBACK = {
+    "hr_admin":   { password: "CHANGE_ME_DEV_ONLY",  name: "HR Administrator", email: "hr.admin@ten.local", level: 7 },
+    "hr_manager": { password: "CHANGE_ME_DEV_ONLY",  name: "HR Manager",       email: "hr.manager@ten.local", level: 6 },
+    "jrhr@ten.com":      { password: "CHANGE_ME_DEV_ONLY",  name: "Jr HR Associate",            email: "jrhr@ten.com", level: 1 },
+    "srhr@ten.com":      { password: "CHANGE_ME_DEV_ONLY",  name: "Sr HR Associate",            email: "srhr@ten.com", level: 2 },
+    "jrmanager@ten.com": { password: "CHANGE_ME_DEV_ONLY",  name: "Jr HR Manager",             email: "jrmanager@ten.com", level: 3 },
+    "srmanager@ten.com": { password: "CHANGE_ME_DEV_ONLY",  name: "Sr HR Manager",             email: "srmanager@ten.com", level: 4 },
+    "hrad@ten.com":      { password: "CHANGE_ME_DEV_ONLY",  name: "HR Associate Director",      email: "hrad@ten.com", level: 5 },
+    "jrdir@ten.com":     { password: "CHANGE_ME_DEV_ONLY",  name: "Jr HR Director",            email: "jrdir@ten.com", level: 6 },
+    "hrdirector@ten.com":{ password: "CHANGE_ME_DEV_ONLY",  name: "HR Director & HRBP",         email: "hrdirector@ten.com", level: 7 },
+    "chro@ten.com":      { password: "CHANGE_ME_DEV_ONLY",  name: "Chief Human Resources Officer", email: "chro@ten.com", level: 8 },
+    "vp@ten.com":        { password: "CHANGE_ME_DEV_ONLY",    name: "Vice President",                 email: "vp@ten.com", level: 9 }
 };
-const COORDINATORS = {
-    "devops_aws_admin":   { password:"DevOpsAWS@2026",  domain:"DevOps with AWS" },
-    "python_admin":       { password:"Python@2026",     domain:"Python Development" },
-    "java_admin":         { password:"Java@2026",       domain:"Java Development" },
-    "web_admin":          { password:"Web@2026",        domain:"Web Development" },
-    "mern_admin":         { password:"Mern@2026",       domain:"MERN Stack Development" },
-    "ai_admin":           { password:"AI@2026",         domain:"Artificial Intelligence" },
-    "datascience_admin":  { password:"DS@2026",         domain:"Data Science" },
-    "cyber_admin":        { password:"Cyber@2026",      domain:"Cyber Security" },
-    "software_admin":     { password:"Software@2026",   domain:"Software Engineering" },
-    "flutter_admin":      { password:"Flutter@2026",    domain:"Flutter Development" },
+const COORDINATORS_DEV_FALLBACK = {
+    "devops_aws_admin":   { password:"CHANGE_ME_DEV_ONLY",  domain:"DevOps with AWS" },
+    "python_admin":       { password:"CHANGE_ME_DEV_ONLY",     domain:"Python Development" },
+    "java_admin":         { password:"CHANGE_ME_DEV_ONLY",       domain:"Java Development" },
+    "web_admin":          { password:"CHANGE_ME_DEV_ONLY",        domain:"Web Development" },
+    "mern_admin":         { password:"CHANGE_ME_DEV_ONLY",       domain:"MERN Stack Development" },
+    "ai_admin":           { password:"CHANGE_ME_DEV_ONLY",         domain:"Artificial Intelligence" },
+    "datascience_admin":  { password:"CHANGE_ME_DEV_ONLY",         domain:"Data Science" },
+    "cyber_admin":        { password:"CHANGE_ME_DEV_ONLY",      domain:"Cyber Security" },
+    "software_admin":     { password:"CHANGE_ME_DEV_ONLY",   domain:"Software Engineering" },
+    "flutter_admin":      { password:"CHANGE_ME_DEV_ONLY",    domain:"Flutter Development" },
     // Requirement 5 — HR Management treated like any other domain
-    "hrmgmt_admin":       { password:"HRMgmt@2026",     domain:"HR Management" },
+    "hrmgmt_admin":       { password:"CHANGE_ME_DEV_ONLY",     domain:"HR Management" },
     // New domains added
-    "venturecapital_admin":  { password: "VC@TEN2026",        domain: "Venture Capital" },
-    "vibecoding_admin":      { password: "Vibe@TEN2026",       domain: "Vibe Coding" },
-    "spaceresearch_admin":   { password: "Space@TEN2026",      domain: "Space Research" },
-    "businessanalyst_admin": { password: "BA@TEN2026",         domain: "Business Analyst" },
-    "hr_domain_admin":       { password: "HRDomain@TEN2026",   domain: "HR" }
+    "venturecapital_admin":  { password: "CHANGE_ME_DEV_ONLY",        domain: "Venture Capital" },
+    "vibecoding_admin":      { password: "CHANGE_ME_DEV_ONLY",       domain: "Vibe Coding" },
+    "spaceresearch_admin":   { password: "CHANGE_ME_DEV_ONLY",      domain: "Space Research" },
+    "businessanalyst_admin": { password: "CHANGE_ME_DEV_ONLY",         domain: "Business Analyst" },
+    "hr_domain_admin":       { password: "CHANGE_ME_DEV_ONLY",   domain: "HR" }
 };
+
+// Resolve the live credential maps: environment first, dev fallback otherwise.
+const HR_ACCOUNTS  = loadCredentialMap('HR_CREDENTIALS',          HR_ACCOUNTS_DEV_FALLBACK);
+const COORDINATORS = loadCredentialMap('COORDINATOR_CREDENTIALS', COORDINATORS_DEV_FALLBACK);
+
+
+// ================= PASSWORD VERIFICATION =================
+// SECURITY: login handlers used to run `record.password === plaintext` FIRST and
+// only fall back to bcrypt. Any account stored unhashed therefore authenticated
+// on a raw string compare (uploads/local_db/db_Student.json shipped exactly such
+// a record next to a properly hashed one), and the compare was not constant time.
+//
+// safePasswordEqual   - constant-time compare for the legacy cleartext maps.
+// verifyPassword      - bcrypt when the stored value is a hash; otherwise a
+//                       constant-time cleartext compare, and on success the
+//                       record is transparently upgraded to bcrypt so the
+//                       cleartext value disappears after the next login.
+function safePasswordEqual(stored, provided) {
+    if (typeof stored !== 'string' || typeof provided !== 'string') return false;
+    const a = crypto.createHash('sha256').update(stored,   'utf8').digest();
+    const b = crypto.createHash('sha256').update(provided, 'utf8').digest();
+    return crypto.timingSafeEqual(a, b);
+}
+
+function isBcryptHash(v) {
+    return typeof v === 'string' && /^\$2[aby]\$/.test(v);
+}
+
+async function verifyPassword(record, provided, opts) {
+    if (!record || typeof provided !== 'string' || !provided) return false;
+    const stored = record.password;
+    if (typeof stored !== 'string' || !stored) return false;
+
+    if (isBcryptHash(stored)) {
+        try { return await bcrypt.compare(provided, stored); }
+        catch (e) { console.error('[auth] bcrypt error:', e.message); return false; }
+    }
+
+    // Legacy cleartext row. Constant-time compare, then migrate.
+    if (!safePasswordEqual(stored, provided)) return false;
+
+    if (!opts || opts.migrate !== false) {
+        try {
+            record.password = await bcrypt.hash(provided, 10);
+            if (record.plainPassword !== undefined) record.plainPassword = undefined;
+            if (typeof record.save === 'function') await record.save();
+            console.warn('[auth] Migrated a cleartext password to bcrypt on login.');
+        } catch (e) {
+            console.error('[auth] Password migration failed:', e.message);
+        }
+    }
+    return true;
+}
 
 const app = express();
 
@@ -1131,12 +1256,34 @@ try { fs.mkdirSync(path.join(uploadsAbs, "certificates"), { recursive: true }); 
 try { fs.mkdirSync(path.join(uploadsAbs, "offer-letters"), { recursive: true }); } catch(_) {}
 
 app.set('trust proxy', 1);
-app.use(cors());
+// SECURITY: CORS was previously wide open (`cors()` => Access-Control-Allow-Origin: *).
+// Restrict to an explicit allowlist from CORS_ALLOWED_ORIGINS (comma-separated).
+// Same-origin / non-browser requests (no Origin header) are still allowed.
+const ALLOWED_ORIGINS = secrets.CORS_ALLOWED_ORIGINS
+    ? secrets.CORS_ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
+    : [];
+app.use(cors({
+    origin(origin, cb) {
+        if (!origin) return cb(null, true);
+        if (ALLOWED_ORIGINS.length === 0) {
+            if (process.env.NODE_ENV === 'production') {
+                return cb(new Error('CORS_ALLOWED_ORIGINS is not configured'));
+            }
+            return cb(null, true); // dev convenience only
+        }
+        return ALLOWED_ORIGINS.includes(origin)
+            ? cb(null, true)
+            : cb(new Error('Origin not allowed by CORS policy'));
+    },
+    credentials: true,
+}));
 app.use(express.json());
 
 const session = require('express-session');
 const sessionOptions = {
-    secret: process.env.SESSION_SECRET || 'ten-admin-secret-key-123',
+    // SECURITY: no hardcoded fallback. config/secrets.js fails closed in production.
+    secret: secrets.SESSION_SECRET,
+    name: 'ten.sid',
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -1155,7 +1302,7 @@ class FallbackStore extends session.Store {
     }
 
     _getStore() {
-        const isMongoConnected = mongoose.connection.readyState === 1 && !global.isMongoUnhealthy;
+        const isMongoConnected = isMongoLive();
         if (isMongoConnected && process.env.MONGODB_URI) {
             if (!this.mongoStore) {
                 try {
@@ -1260,15 +1407,62 @@ app.use(express.static("public", {
     etag: true,
     lastModified: true
 }));
-app.use('/uploads', express.static('uploads', {
+// SECURITY: the blanket `/uploads` static mount exposed EVERY file under
+// uploads/ to anonymous visitors, including uploads/local_db/*.json (the
+// JSON-fallback database, containing user records and password hashes) and
+// uploads/documents/*.pdf (private resumes). Only the explicitly public
+// subdirectory is served now; private files must go through an authenticated
+// route that checks ownership.
+app.use('/uploads/public', express.static(path.join(__dirname, 'uploads', 'public'), {
     maxAge: '30d',
     etag: true,
-    lastModified: true
+    lastModified: true,
+    dotfiles: 'ignore',
+    index: false,
 }));
+
+// Authenticated download route for non-public uploads (coordinator task files,
+// student submissions). Replaces the blanket static mount: the caller must hold
+// a session, uploads/local_db is never reachable, and the resolved path is
+// confined to uploads/ so "../" cannot escape it.
+const UPLOADS_ROOT = path.join(__dirname, 'uploads');
+const UPLOADS_DENYLIST = new Set(['local_db']);
+
+app.get('/uploads/file/:name', (req, res) => {
+    const isAuthed = req.session && (
+        req.session.student || req.session.adminUser ||
+        req.session.hrUser || req.session.coordinator ||
+        req.session.ecosystemUserId
+    );
+    if (!isAuthed) return res.status(401).json({ error: 'Authentication required' });
+
+    // basename() strips any traversal sequences or path separators.
+    const name = path.basename(String(req.params.name || ''));
+    if (!name || name.startsWith('.')) return res.status(400).json({ error: 'Invalid file name' });
+
+    const abs = path.resolve(UPLOADS_ROOT, name);
+    const rel = path.relative(UPLOADS_ROOT, abs);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+        return res.status(400).json({ error: 'Invalid path' });
+    }
+    if (UPLOADS_DENYLIST.has(rel.split(path.sep)[0])) {
+        return res.status(404).json({ error: 'Not found' });
+    }
+    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+        return res.status(404).json({ error: 'Not found' });
+    }
+    // Never let an uploaded file execute in this origin's context.
+    res.setHeader('Content-Disposition', 'attachment; filename="' + name + '"');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    return res.sendFile(abs);
+});
+
+// Explicitly refuse anything else under /uploads so no future mount leaks it.
+app.use('/uploads', (req, res) => res.status(404).json({ error: 'Not found' }));
 
 // Unauthenticated health check endpoint
 app.get('/health', (req, res) => {
-    const isMongoConnected = checkMongoStatus();
+    const isMongoConnected = isMongoLive();
     const uptime = process.uptime();
     const timestamp = new Date().toISOString();
     
@@ -1289,137 +1483,20 @@ app.get('/health', (req, res) => {
     }
 });
 
-// GET /api/secrets-status: check which environment variables are configured
-app.get('/api/secrets-status', (req, res) => {
-    const keys = [
-        'MONGODB_URI',
-        'ADMIN_API_SECRET',
-        'CORS_ALLOWED_ORIGINS',
-        'EMAIL_USER',
-        'EMAIL_PASS',
-        'PAYMENTSETU_API_KEY',
-        'BASE_URL',
-        'HR_CREDENTIALS',
-        'COORDINATOR_CREDENTIALS',
-        'GITHUB_PERSONAL_ACCESS_TOKEN'
-    ];
-    
-    const status = {};
-    keys.forEach(key => {
-        status[key] = {
-            configured: !!process.env[key],
-            valuePlaceholder: process.env[key] ? (key === 'MONGODB_URI' || key === 'EMAIL_PASS' || key === 'PAYMENTSETU_API_KEY' || key === 'ADMIN_API_SECRET' || key === 'GITHUB_PERSONAL_ACCESS_TOKEN' ? '********' : process.env[key]) : ''
-        };
-    });
-    
-    res.json({
-        success: true,
-        secrets: status,
-        mongodbState: mongoose.connection.readyState
-    });
-});
-
-// POST /api/save-secrets: save updated credentials to .env and apply to memory
-app.post('/api/save-secrets', async (req, res) => {
-    try {
-        const updates = req.body;
-        if (!updates || typeof updates !== 'object') {
-            return res.status(400).json({ success: false, message: "Invalid request body" });
-        }
-        
-        // Read existing .env if any
-        let envContent = '';
-        const envPath = path.join(__dirname, '.env');
-        if (fs.existsSync(envPath)) {
-            envContent = fs.readFileSync(envPath, 'utf8');
-        } else {
-            // fallback to reading .env.example
-            const examplePath = path.join(__dirname, '.env.example');
-            if (fs.existsSync(examplePath)) {
-                envContent = fs.readFileSync(examplePath, 'utf8');
-            }
-        }
-        
-        // Parse current lines
-        const lines = envContent.split(/\r?\n/);
-        const envVars = {};
-        
-        // Extract existing env vars
-        lines.forEach(line => {
-            const trimmed = line.trim();
-            if (trimmed && !trimmed.startsWith('#')) {
-                const parts = trimmed.split('=');
-                if (parts.length >= 2) {
-                    const k = parts[0].trim();
-                    const v = parts.slice(1).join('=').trim();
-                    envVars[k] = v;
-                }
-            }
-        });
-        
-        // Merge updates
-        for (const [key, val] of Object.entries(updates)) {
-            if (val !== undefined && val !== null && val !== '') {
-                envVars[key] = val;
-                process.env[key] = val; // Apply to running memory instantly!
-            }
-        }
-        
-        // Write back to .env
-        let newEnvContent = '';
-        newEnvContent += "# ── Core ──────────────────────────────────────────────────────────\n";
-        newEnvContent += `MONGODB_URI=${envVars['MONGODB_URI'] || ''}\n`;
-        newEnvContent += `PORT=${envVars['PORT'] || process.env.PORT || '3000'}\n\n`;
-        
-        newEnvContent += "# ── Security ─────────────────────────────────────────────────────\n";
-        newEnvContent += `ADMIN_API_SECRET=${envVars['ADMIN_API_SECRET'] || ''}\n`;
-        newEnvContent += `CORS_ALLOWED_ORIGINS=${envVars['CORS_ALLOWED_ORIGINS'] || ''}\n\n`;
-        
-        newEnvContent += "# ── Email ─────────────────────────────────────────────────────────\n";
-        newEnvContent += `EMAIL_USER=${envVars['EMAIL_USER'] || ''}\n`;
-        newEnvContent += `EMAIL_PASS=${envVars['EMAIL_PASS'] || ''}\n\n`;
-        
-        newEnvContent += "# ── PaymentSetu ────────────────────────────────────────────────────\n";
-        newEnvContent += `PAYMENTSETU_API_KEY=${envVars['PAYMENTSETU_API_KEY'] || ''}\n`;
-        newEnvContent += `BASE_URL=${envVars['BASE_URL'] || ''}\n\n`;
-        
-        newEnvContent += "# ── HR Credentials (JSON map) ──────────────────────────────────────\n";
-        newEnvContent += `HR_CREDENTIALS=${envVars['HR_CREDENTIALS'] || ''}\n`;
-        newEnvContent += `COORDINATOR_CREDENTIALS=${envVars['COORDINATOR_CREDENTIALS'] || ''}\n\n`;
-        
-        newEnvContent += "# ── GitHub Integration ────────────────────────────────────────────\n";
-        newEnvContent += `GITHUB_PERSONAL_ACCESS_TOKEN=${envVars['GITHUB_PERSONAL_ACCESS_TOKEN'] || ''}\n`;
-        
-        fs.writeFileSync(envPath, newEnvContent, 'utf8');
-        
-        // Re-initialize Mongo Connection if MONGODB_URI is updated
-        if (updates.MONGODB_URI) {
-            console.log("MONGODB_URI updated! Re-initializing Mongoose...");
-            mongoose.disconnect().catch(() => {});
-            mongoose.connect(updates.MONGODB_URI, {
-                serverSelectionTimeoutMS: 5000,
-                socketTimeoutMS: 45000,
-                maxPoolSize: 20,
-                minPoolSize: 2,
-                connectTimeoutMS: 10000,
-                heartbeatFrequencyMS: 10000
-            }).then(() => {
-                console.log("Connected to new MongoDB instance successfully!");
-            }).catch(err => {
-                console.error("Failed to connect to new MongoDB instance:", err.message);
-            });
-        }
-        
-        res.json({
-            success: true,
-            message: "Credentials updated successfully. Saved to .env and applied to server instantly!"
-        });
-    } catch (err) {
-        console.error("Error saving secrets:", err);
-        res.status(500).json({ success: false, message: "Failed to save secrets: " + err.message });
-    }
-});
-
+// SECURITY: /api/secrets-status and /api/save-secrets were REMOVED.
+//
+// Both were completely unauthenticated. /api/save-secrets accepted an
+// arbitrary JSON body from any anonymous caller, wrote it into .env on disk,
+// assigned it into process.env at runtime, and reconnected Mongoose to a
+// caller-supplied MONGODB_URI -- letting anyone repoint the database at their
+// own server, rotate ADMIN_API_SECRET to a value they chose, and overwrite
+// EMAIL_PASS / GITHUB_PERSONAL_ACCESS_TOKEN / HR_CREDENTIALS.
+// /api/secrets-status leaked which secrets existed and returned
+// HR_CREDENTIALS and COORDINATOR_CREDENTIALS in cleartext (they were absent
+// from the masking list).
+//
+// Manage secrets through the hosting platform's environment configuration.
+// An application must never rewrite its own .env from an HTTP request.
 
 // ===== Feature 14: security hardening =====
 // helmet sets secure HTTP headers; we keep CSP off so the existing inline
@@ -1428,11 +1505,242 @@ app.post('/api/save-secrets', async (req, res) => {
 // injection. We do not touch req.query because Express 5 makes it a
 // read-only getter; this is fine because all routes that use ?params read
 // strings, not objects.
+// SECURITY: CSP was disabled outright (`contentSecurityPolicy: false`) so that
+// inline scripts and CDN loads keep working. Combined with the ~58 innerHTML
+// sinks in public/*.js, any stored XSS runs with nothing in its way.
+//
+// Enforcing a policy now would break the UI immediately, so this ships
+// report-only: violations are reported to /csp-report and logged, nothing is
+// blocked. Work through the reports, then flip reportOnly to false.
+//
+// 'unsafe-inline' is present because the existing pages rely on inline
+// handlers; removing it is the goal, not the starting point.
 app.use(helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+        reportOnly: true,
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'", 'https://cdnjs.cloudflare.com', 'https://cdn.jsdelivr.net', 'https://cdn.socket.io'],
+            styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdnjs.cloudflare.com'],
+            fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+            imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+            connectSrc: ["'self'", 'wss:', 'https:'],
+            frameAncestors: ["'self'"],
+            objectSrc: ["'none'"],
+            baseUri: ["'self'"],
+            reportUri: ['/csp-report'],
+        },
+    },
     crossOriginEmbedderPolicy: false,
     crossOriginResourcePolicy: false
 }));
+
+// Collector for the report-only policy above. Cheap, rate-limited by apiLimiter
+// only if mounted under /api, so keep the body small and never echo it back.
+app.post('/csp-report', express.json({ type: ['application/csp-report', 'application/json'], limit: '16kb' }), (req, res) => {
+    try {
+        const r = (req.body && (req.body['csp-report'] || req.body)) || {};
+        console.warn('[csp] violation: directive=' + (r['violated-directive'] || r.effectiveDirective || '?') +
+            ' blocked=' + (r['blocked-uri'] || r.blockedURL || '?') +
+            ' doc=' + (r['document-uri'] || r.documentURL || '?'));
+    } catch (_) {}
+    return res.status(204).end();
+});
+// ================= CSRF PROTECTION =================
+// SECURITY: the app authenticates with session cookies and sets
+// sameSite:'none' (for iframe embedding), so every state-changing endpoint was
+// cross-site forgeable: any page could POST to it and the browser would attach
+// the victim's session cookie.
+//
+// A synchroniser-token scheme would mean editing ~50 static HTML files, so this
+// uses Origin/Referer verification instead: for unsafe methods the request must
+// declare an origin, and it must be one we trust. This is effective because a
+// cross-site attacker cannot forge or suppress the Origin header from script.
+//
+// Provider webhooks are exempt (they are server-to-server, have no Origin, and
+// carry their own HMAC signature).
+const CSRF_EXEMPT_PATHS = [
+    '/api/v2/payment/webhook',
+    '/api/payment/webhook',
+    '/api/payment-setu/webhook',
+];
+
+function _csrfTrustedOrigins() {
+    const list = ALLOWED_ORIGINS.slice();
+    if (BASE_URL) { try { list.push(new URL(BASE_URL).origin); } catch (_) {} }
+    return list;
+}
+
+app.use((req, res, next) => {
+    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+    if (CSRF_EXEMPT_PATHS.some(p => req.path.startsWith(p))) return next();
+
+    const origin  = req.headers.origin;
+    const referer = req.headers.referer;
+    let declared = null;
+    if (origin && origin !== 'null') {
+        declared = origin;
+    } else if (referer) {
+        try { declared = new URL(referer).origin; } catch (_) { declared = null; }
+    }
+
+    // Same-origin requests: compare against the host this request arrived on.
+    const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim();
+    const selfOrigin = req.headers.host ? proto + '://' + req.headers.host : null;
+
+    const trusted = _csrfTrustedOrigins();
+    if (selfOrigin) trusted.push(selfOrigin);
+
+    if (!declared) {
+        // No Origin and no usable Referer. Browsers always send one of these for
+        // cross-site form/fetch posts, so this is either a non-browser client or
+        // a stripped request. Allow only outside production.
+        if (process.env.NODE_ENV === 'production') {
+            console.warn('[csrf] Blocked ' + req.method + ' ' + req.path + ' - no Origin or Referer.');
+            return res.status(403).json({ success: false, error: 'Missing origin. Request blocked.' });
+        }
+        return next();
+    }
+
+    if (!trusted.includes(declared)) {
+        console.warn('[csrf] Blocked ' + req.method + ' ' + req.path + ' from origin ' + declared);
+        return res.status(403).json({ success: false, error: 'Cross-site request blocked.' });
+    }
+    return next();
+});
+
+// ================= CALLER IDENTITY (IDOR PREVENTION) =================
+// SECURITY: handlers routinely read the acting employeeId straight from
+// req.body.employeeId or the x-employee-id header, e.g.
+//     const employeeId = req.body.employeeId || req.headers['x-employee-id'];
+// Both are attacker-controlled, so any signed-in student could pass another
+// student's id and read or modify that account (IDOR / broken object-level
+// authorization).
+//
+// resolveStudentId() derives the id from the session instead. Staff (HR,
+// coordinator, admin) legitimately act on behalf of a student, so they -- and
+// only they -- may supply an explicit id.
+
+/** @returns {boolean} true when the session belongs to HR, a coordinator or an admin. */
+function isStaffSession(req) {
+    const sess = req.session;
+    return !!(sess && (sess.hrUser || sess.coordinator || sess.adminUser));
+}
+
+/** @returns {string} the employeeId in the session, or ''. */
+function sessionEmployeeId(req) {
+    const st = req.session && req.session.student;
+    if (!st) return '';
+    return String(st.employeeId || st.id || st._id || '');
+}
+
+/**
+ * Resolve the employeeId this request is allowed to act on.
+ *
+ * - Student session: always their own id. A mismatching client-supplied id is
+ *   rejected rather than silently ignored, so misuse is visible.
+ * - Staff session: may target any student via body/header/query.
+ * - No session: null.
+ *
+ * @param {import('express').Request} req
+ * @returns {{ ok: boolean, employeeId: string|null, reason?: string }}
+ */
+function resolveStudentId(req) {
+    const claimed = String(
+        (req.body && req.body.employeeId) ||
+        req.headers['x-employee-id'] ||
+        req.headers['employeeid'] ||
+        (req.query && req.query.employeeId) ||
+        ''
+    ).trim();
+
+    if (isStaffSession(req)) {
+        if (claimed) return { ok: true, employeeId: claimed };
+        return { ok: false, employeeId: null, reason: 'staff_missing_target' };
+    }
+
+    const own = sessionEmployeeId(req);
+    if (!own) return { ok: false, employeeId: null, reason: 'not_authenticated' };
+    if (claimed && claimed !== own) {
+        console.warn('[idor] Session ' + own + ' attempted to act as ' + claimed + ' on ' + req.path);
+        return { ok: false, employeeId: null, reason: 'id_mismatch' };
+    }
+    return { ok: true, employeeId: own };
+}
+
+/**
+ * Express guard wrapping resolveStudentId(). Sets req.employeeId on success.
+ * @type {import('express').RequestHandler}
+ */
+function requireStudentIdentity(req, res, next) {
+    const r = resolveStudentId(req);
+    if (!r.ok) {
+        if (r.reason === 'id_mismatch') {
+            return res.status(403).json({ success: false, message: 'You are not allowed to act on that account.' });
+        }
+        if (r.reason === 'staff_missing_target') {
+            return res.status(400).json({ success: false, message: 'employeeId is required.' });
+        }
+        return res.status(401).json({ success: false, message: 'Please sign in again.' });
+    }
+    req.employeeId = r.employeeId;
+    return next();
+}
+
+// ================= ROUTE AUTHORISATION BY PATH PREFIX =================
+// SECURITY: many state-changing routes had no authentication at all, e.g.
+//   DELETE /hr/notifications/:id, PUT /students/:id, DELETE /students/:id,
+//   POST /api/ecosystem/users/:id/approve|reject|suspend
+// Anyone on the internet could call them.
+//
+// Adding a guard to ~60 individual handlers by hand is error prone, so this
+// applies a default-deny policy by path prefix in one place. It runs after the
+// session middleware and only affects unsafe methods, so GET traffic and the
+// login endpoints are untouched.
+//
+// NOTE: this is a coarse net, deliberately. It is not a substitute for
+// per-route authorisation, and anything not matched here still needs review.
+const ROUTE_POLICY = [
+    // HR-only surfaces
+    { prefix: '/hr/',                 principals: ['hrUser', 'adminUser'] },
+    { prefix: '/api/v2/hr/',          principals: ['hrUser', 'adminUser'] },
+    // Coordinator surfaces (HR and admin may also act)
+    { prefix: '/coordinator/',        principals: ['coordinator', 'hrUser', 'adminUser'] },
+    { prefix: '/coordinator-',        principals: ['coordinator', 'hrUser', 'adminUser'] },
+    // Admin-only surfaces
+    { prefix: '/api/ecosystem/users', principals: ['adminUser'] },
+    { prefix: '/students',            principals: ['adminUser', 'hrUser'] },
+    { prefix: '/api/admin/',          principals: ['adminUser'] },
+];
+
+// Endpoints that must stay reachable without a session (logins, registration,
+// password reset, provider webhooks). Checked before the policy table.
+const PUBLIC_POST_PATHS = [
+    '/hr-login', '/coordinator-login', '/student-login', '/login',
+    '/register', '/api/v2/register', '/founder-login', '/mentor-login',
+    '/investor-login', '/contractor-login',
+    '/forgot-password', '/reset-password', '/request-password-reset',
+    '/api/v2/payment/webhook', '/api/payment/webhook', '/api/payment-setu/webhook',
+    '/ten-admin/login', '/api/admin-internal/login',
+];
+
+app.use((req, res, next) => {
+    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+    if (PUBLIC_POST_PATHS.some(p => req.path === p || req.path.startsWith(p + '/'))) return next();
+
+    const rule = ROUTE_POLICY.find(r => req.path.startsWith(r.prefix));
+    if (!rule) return next();
+
+    const sess = req.session || {};
+    const ok = rule.principals.some(k => !!sess[k]);
+    if (!ok) {
+        console.warn('[authz] Blocked ' + req.method + ' ' + req.path +
+            ' - requires one of: ' + rule.principals.join(', '));
+        return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+    return next();
+});
+
 function _sanitizeKeys(obj){
     if(!obj || typeof obj !== "object") return;
     for(const k of Object.keys(obj)){
@@ -1509,24 +1817,62 @@ const apiLimiter = rateLimit({
 });
 app.use('/api', apiLimiter);
 
+// SECURITY: this instance had no fileFilter, so any file type could be
+// uploaded. Combined with the old blanket `/uploads` static mount that gave
+// stored XSS on this origin (upload .html/.svg, then link a victim to it).
+// Filenames are randomised so a caller cannot choose the stored extension or
+// traverse with path separators in `originalname`.
+const ALLOWED_UPLOAD_MIME = new Set([
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/msword',
+  'application/vnd.ms-excel',
+  'text/csv',
+]);
+const MIME_EXTENSION = {
+  'application/pdf': '.pdf',
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+  'application/msword': '.doc',
+  'application/vnd.ms-excel': '.xls',
+  'text/csv': '.csv',
+};
 const upload = multer({
-  dest: "uploads/",
-  limits: { fileSize: 25 * 1024 * 1024 } // 25MB limit
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, path.join(__dirname, 'uploads')),
+    filename: (req, file, cb) => {
+      const ext = MIME_EXTENSION[file.mimetype] || '.bin';
+      cb(null, crypto.randomBytes(16).toString('hex') + ext);
+    },
+  }),
+  limits: { fileSize: 25 * 1024 * 1024, files: 5 }, // 25MB limit
+  fileFilter: (req, file, cb) => {
+    if (!ALLOWED_UPLOAD_MIME.has(file.mimetype)) {
+      return cb(new Error('Unsupported file type: ' + file.mimetype), false);
+    }
+    cb(null, true);
+  },
 });
 
 // ================= MAIL =================
 
-const { createEmailTransporter } = require("./utils/mailer");
+const { createEmailTransporter, EMAIL_FROM } = require("./utils/mailer");
 const transporter = createEmailTransporter();
 
-const emailUser = process.env.EMAIL_USER || process.env.EMAIL_US;
-if(emailUser && process.env.EMAIL_PASS){
+
+
+if(process.env.SES_SMTP_USER && process.env.SES_SMTP_PASS){
     transporter.verify((error)=>{
-        if(error){ console.log("SMTP verification status (optional SMTP service): offline (using local mock/simulation)"); }
-        else{ console.log("Email Server Ready"); }
+        if(error){ console.log("SMTP verification status: OFFLINE —", error.message); }
+        else{ console.log("Email Server Ready (SES) — sending as", EMAIL_FROM); }
     });
 } else {
-    console.log("Email not configured — skipping SMTP verify.");
+    console.log("Email not configured — SES_SMTP_USER/SES_SMTP_PASS missing, skipping SMTP verify.");
 }
 
 // Sends one activity-cycle HR mail (appreciation or re-engagement), records it
@@ -1617,6 +1963,129 @@ async function runActivityMailer(){
     }
 }
 cron.schedule('0 9 * * 1', runActivityMailer);
+
+// ==================================================================
+// ================ LOW ATTENDANCE ALERT EMAIL ======================
+// ==================================================================
+const LOW_ATTENDANCE_THRESHOLD = 75; // matches the 75% requiredDays logic in calcAttendancePercentage
+const LOW_ATTENDANCE_RESEND_COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000; // don't re-alert more than once every 3 days
+
+async function sendLowAttendanceMail(student, studentName, percentage){
+    const email = student.email;
+    const subject = `⚠️ Attendance Alert — Your attendance is at ${percentage}%`;
+    const html = `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6">
+        Hi ${studentName || "Intern"},<br><br>
+        Your current attendance stands at <b>${percentage}%</b>, which is below the required <b>${LOW_ATTENDANCE_THRESHOLD}%</b> threshold for internship completion.<br><br>
+        Please make sure you mark your attendance regularly to stay on track and remain eligible for your certificate and other internship benefits.<br><br>
+        — TEN HR Team
+    </div>`;
+
+    let mailStatus = "sent";
+    let mailError = "";
+    try {
+        await transporter.sendMail({ from: EMAIL_FROM, to: email, subject, html });
+    } catch (err) {
+        mailStatus = "failed";
+        mailError = err && err.message ? String(err.message) : "";
+    } finally {
+        try {
+            await MailHistory.create({
+                recipientEmail: email,
+                recipientName: studentName || "Intern",
+                studentId: student._id,
+                subject,
+                mailType: "low-attendance",
+                sentAt: new Date(),
+                status: mailStatus,
+                errorMessage: mailError
+            });
+        } catch (_) {}
+    }
+    try {
+        await Notification.notifyStudent(student, {
+            title: "⚠️ Low Attendance Alert",
+            message: `Hi ${studentName || "Intern"}, your attendance is at ${percentage}%, which is below the required ${LOW_ATTENDANCE_THRESHOLD}%. Please mark your attendance regularly.`,
+            type: "warning"
+        });
+    } catch (_) {}
+    try {
+        await AutoMailLog.create({ studentName, studentEmail: email, employeeId: student.employeeId || "", mailType: "low-attendance" });
+    } catch (_) {}
+}
+
+async function runLowAttendanceMailer(){
+    try {
+        if (!checkMongoStatus()) {
+            console.warn('[LOW-ATTENDANCE-MAILER] Mongoose is not connected. Skipping.');
+            return;
+        }
+        const students = await Student.find();
+        const now = new Date();
+
+        for (const student of students) {
+            try {
+                const email = student.email;
+                if (!email || !student.employeeId) continue;
+                if (student.internshipCompleted) continue; // no need to alert finished interns
+
+                const presentCount = await Attendance.countDocuments({ employeeId: student.employeeId, status: 'Present' });
+                const stats = calcAttendancePercentage(student, presentCount);
+
+                if (stats.percentage >= LOW_ATTENDANCE_THRESHOLD) continue;
+
+                const lastSent = (student.reminderEmailsSent && student.reminderEmailsSent.get)
+                    ? student.reminderEmailsSent.get('lowAttendance')
+                    : null;
+                if (lastSent && (now - new Date(lastSent)) < LOW_ATTENDANCE_RESEND_COOLDOWN_MS) {
+                    continue; // already alerted recently, don't spam
+                }
+
+                const studentName = (student.name || ((student.firstName||"") + " " + (student.lastName||"")).trim()).trim();
+                await sendLowAttendanceMail(student, studentName, stats.percentage);
+
+                if (!student.reminderEmailsSent) student.reminderEmailsSent = new Map();
+                student.reminderEmailsSent.set('lowAttendance', now);
+                await student.save();
+            } catch (error) {
+                console.log(error);
+            }
+        }
+    } catch (error) {
+        console.log(error);
+    }
+}
+cron.schedule('0 8 * * *', runLowAttendanceMailer); // daily at 8 AM
+
+// TEMPORARY TEST ROUTE — lets you trigger the low-attendance mailer manually
+// instead of waiting for the 8 AM cron. Remove this once you're done testing.
+app.post("/admin/test-low-attendance-mailer", async (req, res) => {
+    try {
+        const { employeeId, email } = req.body || {};
+
+        if (employeeId || email) {
+            // Test a single student, bypassing the 3-day resend cooldown
+            const query = employeeId ? { employeeId } : { email: String(email).toLowerCase().trim() };
+            const student = await Student.findOne(query);
+            if (!student) return res.status(404).json({ success: false, message: "Student not found" });
+
+            const presentCount = await Attendance.countDocuments({ employeeId: student.employeeId, status: 'Present' });
+            const stats = calcAttendancePercentage(student, presentCount);
+            const studentName = (student.name || ((student.firstName||"") + " " + (student.lastName||"")).trim()).trim();
+
+            await sendLowAttendanceMail(student, studentName, stats.percentage);
+
+            return res.json({ success: true, message: `Test email sent to ${student.email}`, percentage: stats.percentage });
+        }
+
+        // No employeeId given — run the full daily job right now
+        await runLowAttendanceMailer();
+        return res.json({ success: true, message: "runLowAttendanceMailer executed for all students" });
+
+    } catch (error) {
+        console.error("[TEST] low-attendance-mailer error:", error);
+        return res.status(500).json({ success: false, message: "Server error" });
+    }
+});
 
 // ======= AUTO DOCUMENT EMAIL HELPERS =======
 function tenureToDays(tenure) {
@@ -2488,7 +2957,7 @@ try{
             let mailError = "";
             try {
                 await transporter.sendMail({
-                    from:"TEN Internship Portal <ten.internshipportal@gmail.com>",
+                    from: EMAIL_FROM,
                     to: emailLc,
                     subject:`🎉 Welcome to The Entrepreneurship Network, ${newStudent.name.trim()}!`,
                     html,
@@ -2712,12 +3181,12 @@ try{
             }
             if (await checkLockout(res, student, Student)) return;
 
-            let pwdMatch = student.password === password;
-            if (!pwdMatch) {
-                try {
-                    pwdMatch = await bcrypt.compare(password, student.password);
-                } catch(e) {}
-            }
+            // SECURITY: was a raw `student.password === password` compare first, so any
+            // account stored unhashed authenticated on a string match (and not in
+            // constant time). verifyPassword() uses bcrypt for hashed rows, a
+            // constant-time compare for legacy cleartext rows, and upgrades those
+            // rows to bcrypt on successful login.
+            let pwdMatch = await verifyPassword(student, password);
             if (pwdMatch) {
                 await clearFailedAttempts(student, Student);
                 await Student.findOneAndUpdate({ email: loginId.toLowerCase() }, { lastActiveDate: new Date(), plainPassword: password });
@@ -2761,12 +3230,12 @@ try{
             }
             if (await checkLockout(res, hr, HR)) return;
 
-            let pwdMatch = hr.password === password;
-            if (!pwdMatch) {
-                try {
-                    pwdMatch = await bcrypt.compare(password, hr.password);
-                } catch(e) {}
-            }
+            // SECURITY: was a raw `hr.password === password` compare first, so any
+            // account stored unhashed authenticated on a string match (and not in
+            // constant time). verifyPassword() uses bcrypt for hashed rows, a
+            // constant-time compare for legacy cleartext rows, and upgrades those
+            // rows to bcrypt on successful login.
+            let pwdMatch = await verifyPassword(hr, password);
             if (pwdMatch) {
                 await clearFailedAttempts(hr, HR);
                 return res.json({
@@ -2792,12 +3261,12 @@ try{
 
         if (await checkLockout(res, student, Student)) return;
 
-        let pwdMatch = student.password === password;
-        if (!pwdMatch) {
-            try {
-                pwdMatch = await bcrypt.compare(password, student.password);
-            } catch(e) {}
-        }
+        // SECURITY: was a raw `student.password === password` compare first, so any
+        // account stored unhashed authenticated on a string match (and not in
+        // constant time). verifyPassword() uses bcrypt for hashed rows, a
+        // constant-time compare for legacy cleartext rows, and upgrades those
+        // rows to bcrypt on successful login.
+        let pwdMatch = await verifyPassword(student, password);
         if (!pwdMatch) {
             return await recordFailedAttempt(res, student, Student, "Invalid Password");
         }
@@ -3237,7 +3706,7 @@ Sound like a real mentor — not a bot. Vary your opening (don't always start wi
 Keep it under 80 words. Do not use bullet points.`;
 
         const response = await ai.models.generateContent({
-          model: "gemini-3.5-flash",
+          model: "gemini-2.0-flash",
           contents: prompt,
           config: { maxOutputTokens: 150, temperature: 0.8 }
         });
@@ -3688,6 +4157,17 @@ try{
                 return await recordFailedAttempt(res, dbHR, HR, "Invalid HR credentials");
             }
             await clearFailedAttempts(dbHR, HR);
+            // SECURITY: HR logins previously created NO server-side session --
+            // the client just held the identity in localStorage. That is why the
+            // Socket.io handshake had to trust a self-declared role. Record the
+            // session so identity can be verified server-side.
+            req.session.hrUser = {
+                username: dbHR.username || dbHR.email,
+                email:    dbHR.email,
+                name:     dbHR.name,
+                level:    dbHR.level || 1,
+                lastActivity: Date.now(),
+            };
             return res.json({ success:true, hr:{
                 username: dbHR.username || dbHR.email,
                 email:    dbHR.email,
@@ -3702,11 +4182,15 @@ try{
         );
         if(legacy){
             const [u, v] = legacy;
-            let currentPassOk = (v.password === password);
-            if (u === "hrdirector@ten.com" && password === "TEN@HRBP2026") {
-                currentPassOk = true;
-            }
+            // SECURITY: removed a hardcoded override that accepted the literal
+            // password "TEN@HRBP2026" for hrdirector@ten.com regardless of the
+            // configured credential -- a deliberate backdoor committed to source.
+            let currentPassOk = safePasswordEqual(v.password, password);
             if(!currentPassOk) return res.json({ success:false, message:"Invalid HR credentials" });
+            req.session.hrUser = {
+                username: u, email: v.email, name: v.name,
+                level: v.level || 1, lastActivity: Date.now(),
+            };
             return res.json({ success:true, hr:{ username:u, email:v.email, name:v.name, role:"hr", level: v.level || 1 } });
         }
         return res.json({ success:false, message:"Invalid HR credentials" });
@@ -3714,13 +4198,15 @@ try{
 
     // 2) Legacy username path
     const hr = HR_ACCOUNTS[identifier];
-    let currentPassOk = hr && (hr.password === password);
-    if (identifier === "hrdirector@ten.com" && password === "TEN@HRBP2026") {
-        currentPassOk = true;
-    }
+    // SECURITY: removed the same hardcoded "TEN@HRBP2026" backdoor here.
+    let currentPassOk = hr && safePasswordEqual(hr.password, password);
     if(!hr || !currentPassOk){
         return res.json({ success:false, message:"Invalid HR credentials" });
     }
+    req.session.hrUser = {
+        username: identifier, email: hr.email || "", name: hr.name,
+        level: hr.level || 1, lastActivity: Date.now(),
+    };
     res.json({ success:true, hr:{ username: identifier, email: hr.email || "", name:hr.name, role:"hr", level: hr.level || 1 } });
 }catch(error){
     console.log(error);
@@ -4221,11 +4707,9 @@ try{
 
 // ================= ALL STUDENTS (legacy admin) =================
 
-app.get("/students", async(req,res)=>{
-    const adminPassword = req.headers.authorization;
-    if(adminPassword !== "Bearer mysecret123"){
-        return res.status(401).json({ message:"Unauthorized" });
-    }
+// SECURITY: was gated on the hardcoded literal "Bearer mysecret123", which is
+// committed to the repository and therefore public. Now requires an admin session.
+app.get("/students", requireAdminAPI, async(req,res)=>{
     try{
         const students = await Student.find().select('firstName lastName email whatsapp domain collegeName college employeeId tenure joiningDate createdAt').sort({ createdAt:-1 });
         res.json(students);
@@ -4269,12 +4753,12 @@ try{
 
     if (await checkLockout(res, student, Student)) return;
 
-    let pwdMatch = student.password === password;
-    if (!pwdMatch) {
-        try {
-            pwdMatch = await bcrypt.compare(password, student.password);
-        } catch(e) {}
-    }
+    // SECURITY: was a raw `student.password === password` compare first, so any
+    // account stored unhashed authenticated on a string match (and not in
+    // constant time). verifyPassword() uses bcrypt for hashed rows, a
+    // constant-time compare for legacy cleartext rows, and upgrades those
+    // rows to bcrypt on successful login.
+    let pwdMatch = await verifyPassword(student, password);
 
     if(!pwdMatch){
         return await recordFailedAttempt(res, student, Student, "Invalid Employee ID or Password");
@@ -4356,37 +4840,37 @@ try{
 
 // ================= STUDENT PORTAL API ENDPOINTS =================
 
-app.post("/get-my-password", async (req, res) => {
-  try {
-    const { employeeId, confirmedPassword } = req.body;
-    const student = await Student.findOne({ employeeId });
-    if (!student) {
-      return res.json({ success: false, message: "Not verified" });
-    }
-    const displayPassword = student.plainPassword || (student.password && !student.password.startsWith("$2b$") && !student.password.startsWith("$2a$") ? student.password : "intern123");
-    if (confirmedPassword !== undefined && confirmedPassword !== null) {
-      let pwdMatch = student.password === confirmedPassword;
-      if (!pwdMatch) {
-        try {
-          pwdMatch = await bcrypt.compare(confirmedPassword, student.password);
-        } catch (e) {}
-      }
-      if (!pwdMatch) {
-        return res.json({ success: false, message: "Not verified" });
-      }
-      return res.json({ success: true, password: displayPassword });
-    } else {
-      // Direct verification-free reveal
-      return res.json({ success: true, password: displayPassword });
-    }
-  } catch (err) {
-    res.json({ success: false });
-  }
+// SECURITY: /get-my-password was REMOVED.
+//
+// It returned an account's password to any anonymous caller who knew (or
+// guessed) an employeeId: when `confirmedPassword` was omitted the handler
+// took the "Direct verification-free reveal" branch and responded with
+// { success: true, password }. It also fell back to disclosing the literal
+// "intern123" when no plaintext was stored, and relied on a `plainPassword`
+// column -- passwords must never be recoverable, only resettable.
+//
+// Use the existing reset flow (/reset-password + utils/mailer) instead.
+app.post("/get-my-password", (req, res) => {
+    return res.status(410).json({
+        success: false,
+        message: "This endpoint has been removed for security reasons. Please use 'Forgot password' to reset your password."
+    });
 });
 
 app.post(["/mark-onboarding-seen", "/api/v2/student/mark-onboarding-seen"], async (req, res) => {
   try {
-    const employeeId = req.body.employeeId || req.headers['x-employee-id'] || req.headers['employeeid'];
+        // SECURITY: employeeId used to come straight from the request body or the
+    // x-employee-id header, so any signed-in student could act on another
+    // student's account. resolveStudentId() takes it from the session; only
+    // staff (HR / coordinator / admin) may target a specific student.
+    const _id = resolveStudentId(req);
+    if (!_id.ok) {
+        return res.status(_id.reason === 'id_mismatch' ? 403 : (_id.reason === 'staff_missing_target' ? 400 : 401))
+            .json({ success: false, message: _id.reason === 'id_mismatch'
+                ? 'You are not allowed to act on that account.'
+                : (_id.reason === 'staff_missing_target' ? 'employeeId is required.' : 'Please sign in again.') });
+    }
+    const employeeId = _id.employeeId;
     await Student.findOneAndUpdate(
       { employeeId },
       { hasSeenOnboarding: true, onboardingPopupSeen: true },
@@ -4400,7 +4884,18 @@ app.post(["/mark-onboarding-seen", "/api/v2/student/mark-onboarding-seen"], asyn
 
 app.post(["/mark-welcome-seen", "/api/v2/student/mark-welcome-seen"], async (req, res) => {
   try {
-    const employeeId = req.body.employeeId || req.headers['x-employee-id'] || req.headers['employeeid'];
+        // SECURITY: employeeId used to come straight from the request body or the
+    // x-employee-id header, so any signed-in student could act on another
+    // student's account. resolveStudentId() takes it from the session; only
+    // staff (HR / coordinator / admin) may target a specific student.
+    const _id = resolveStudentId(req);
+    if (!_id.ok) {
+        return res.status(_id.reason === 'id_mismatch' ? 403 : (_id.reason === 'staff_missing_target' ? 400 : 401))
+            .json({ success: false, message: _id.reason === 'id_mismatch'
+                ? 'You are not allowed to act on that account.'
+                : (_id.reason === 'staff_missing_target' ? 'employeeId is required.' : 'Please sign in again.') });
+    }
+    const employeeId = _id.employeeId;
     await Student.findOneAndUpdate(
       { employeeId },
       { hasSeenWelcome: true },
@@ -4414,7 +4909,18 @@ app.post(["/mark-welcome-seen", "/api/v2/student/mark-welcome-seen"], async (req
 
 app.post(["/save-joiner-type", "/api/v2/student/set-joiner-type"], async (req, res) => {
   try {
-    const employeeId = req.body.employeeId || req.headers['x-employee-id'] || req.headers['employeeid'];
+        // SECURITY: employeeId used to come straight from the request body or the
+    // x-employee-id header, so any signed-in student could act on another
+    // student's account. resolveStudentId() takes it from the session; only
+    // staff (HR / coordinator / admin) may target a specific student.
+    const _id = resolveStudentId(req);
+    if (!_id.ok) {
+        return res.status(_id.reason === 'id_mismatch' ? 403 : (_id.reason === 'staff_missing_target' ? 400 : 401))
+            .json({ success: false, message: _id.reason === 'id_mismatch'
+                ? 'You are not allowed to act on that account.'
+                : (_id.reason === 'staff_missing_target' ? 'employeeId is required.' : 'Please sign in again.') });
+    }
+    const employeeId = _id.employeeId;
     const { joinerType } = req.body;
     await Student.findOneAndUpdate(
       { employeeId },
@@ -4429,7 +4935,18 @@ app.post(["/save-joiner-type", "/api/v2/student/set-joiner-type"], async (req, r
 
 app.post(["/save-employee-id-override", "/api/v2/student/save-employee-id-override"], async (req, res) => {
   try {
-    const employeeId = req.body.employeeId || req.headers['x-employee-id'] || req.headers['employeeid'] || (req.session && req.session.student && req.session.student.employeeId);
+        // SECURITY: employeeId used to come straight from the request body or the
+    // x-employee-id header, so any signed-in student could act on another
+    // student's account. resolveStudentId() takes it from the session; only
+    // staff (HR / coordinator / admin) may target a specific student.
+    const _id = resolveStudentId(req);
+    if (!_id.ok) {
+        return res.status(_id.reason === 'id_mismatch' ? 403 : (_id.reason === 'staff_missing_target' ? 400 : 401))
+            .json({ success: false, message: _id.reason === 'id_mismatch'
+                ? 'You are not allowed to act on that account.'
+                : (_id.reason === 'staff_missing_target' ? 'employeeId is required.' : 'Please sign in again.') });
+    }
+    const employeeId = _id.employeeId;
     const { employeeIdOverride } = req.body;
     if (!employeeIdOverride || employeeIdOverride.trim() === "") {
       return res.json({
@@ -4477,7 +4994,18 @@ app.post(["/save-employee-id-override", "/api/v2/student/save-employee-id-overri
 
 app.post(["/save-start-date", "/api/v2/student/save-start-date"], async (req, res) => {
   try {
-    const employeeId = req.body.employeeId || req.headers['x-employee-id'] || req.headers['employeeid'];
+        // SECURITY: employeeId used to come straight from the request body or the
+    // x-employee-id header, so any signed-in student could act on another
+    // student's account. resolveStudentId() takes it from the session; only
+    // staff (HR / coordinator / admin) may target a specific student.
+    const _id = resolveStudentId(req);
+    if (!_id.ok) {
+        return res.status(_id.reason === 'id_mismatch' ? 403 : (_id.reason === 'staff_missing_target' ? 400 : 401))
+            .json({ success: false, message: _id.reason === 'id_mismatch'
+                ? 'You are not allowed to act on that account.'
+                : (_id.reason === 'staff_missing_target' ? 'employeeId is required.' : 'Please sign in again.') });
+    }
+    const employeeId = _id.employeeId;
     const { internshipStartDate } = req.body;
     if (!internshipStartDate) {
       return res.json({
@@ -4509,80 +5037,71 @@ app.post(["/save-start-date", "/api/v2/student/save-start-date"], async (req, re
 
 // ── HELPER FUNCTION — CALCULATE STATS ──
 async function calculateAttendanceStats(employeeId) {
-  // Get student data for tenure and start date
   const student = await Student.findOne({ employeeId });
   if (!student) return null;
 
-  // Determine tenure total days
-  const tenureDaysMap = {
-    "1 Week": 7,
-    "15 Days": 15,
-    "1 Month": 30,
-    "45 Days": 45,
-    "3 Months": 90,
-    "6 Months": 180
-  };
-  const totalDays = tenureDaysMap[student.tenure] || 30;
+  const startDate = (student.joinerType === "whatsapp" && student.internshipStartDate)
+    ? new Date(student.internshipStartDate)
+    : new Date(student.joiningDate || student.createdAt);
+  if (isNaN(startDate.getTime())) return null;
+  startDate.setHours(0, 0, 0, 0);
 
-  // Determine start date
-  // WhatsApp joiners use internshipStartDate, others use joiningDate
-  let startDate;
-  if (student.joinerType === "whatsapp" && student.internshipStartDate) {
-    startDate = new Date(student.internshipStartDate);
-  } else {
-    startDate = new Date(student.joiningDate || student.createdAt);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const workingDays = attendanceUtils.countWorkingDays(startDate, today);
+
+  const selfPresentDays = new Set();
+  const coordPresentDays = new Set();
+  const combinedPresentDays = new Set();
+
+  const attendanceRecords = await Attendance.find({ employeeId });
+  for (const record of attendanceRecords) {
+    if (!record) continue;
+    const recordDate = record.date ? new Date(record.date) : (record.dateKey ? new Date(record.dateKey) : null);
+    if (!recordDate || isNaN(recordDate.getTime())) continue;
+    recordDate.setHours(0, 0, 0, 0);
+    if (recordDate < startDate || recordDate > today) continue;
+    if (recordDate.getDay() === 0) continue;
+
+    const key = toDateKey(recordDate);
+    if (!key) continue;
+    if (record.status === "Absent") continue;
+
+    if (record.markedBy === "self") {
+      selfPresentDays.add(key);
+    }
+    if (record.markedBy === "coordinator") {
+      coordPresentDays.add(key);
+    }
+    combinedPresentDays.add(key);
   }
 
-  // Get all attendance records for this student
-  const selfRecords = await Attendance.find({
-    employeeId,
-    markedBy: "self"
-  });
-  const coordRecords = await Attendance.find({
-    employeeId,
-    markedBy: "coordinator"
-  });
+  const selfCount = selfPresentDays.size;
+  const coordCount = coordPresentDays.size;
+  const combinedCount = combinedPresentDays.size;
+  const selfPct = workingDays ? Math.min(Math.round((selfCount / workingDays) * 100), 100) : 0;
+  const coordPct = workingDays ? Math.min(Math.round((coordCount / workingDays) * 100), 100) : 0;
+  const combinedPct = workingDays ? Math.min(Math.round((combinedCount / workingDays) * 100), 100) : 0;
+  const requiredDays = Math.ceil(workingDays * 0.75);
+  const daysNeeded = Math.max(0, requiredDays - combinedCount);
 
-  const selfCount = selfRecords.filter(r => r.status === "Present" || !r.status).length;
-  const coordCount = coordRecords.filter(r => r.status === "Present" || !r.status).length;
-
-  // Combined = union of self + coordinator dates (filtered for status !== "Absent")
-  const presentDates = new Set();
-  selfRecords.forEach(r => { if (r.status !== "Absent") presentDates.add(r.dateKey || new Date(r.date).toISOString().split('T')[0]); });
-  coordRecords.forEach(r => { if (r.status !== "Absent") presentDates.add(r.dateKey || new Date(r.date).toISOString().split('T')[0]); });
-
-  const combinedCount = presentDates.size;
-
-  // Calculate percentages (capped at 100%)
-  const selfPct   = Math.min(Math.round((selfCount / totalDays) * 100), 100);
-  const coordPct  = Math.min(Math.round((coordCount / totalDays) * 100), 100);
-  const combinedPct = Math.min(Math.round((combinedCount / totalDays) * 100), 100);
-
-  // Days needed to reach 75%
-  const minDays = Math.ceil(totalDays * 0.75);
-  const daysNeeded = Math.max(0, minDays - combinedCount);
-
-  // Check if today already marked
-  const now = new Date();
-  const istOffset = 5.5 * 60 * 60 * 1000;
-  const istNow = new Date(now.getTime() + istOffset);
-  const today = istNow.toISOString().split("T")[0];
-
-  const markedToday = selfRecords.some(r => r.dateKey === today || new Date(r.date).toISOString().split('T')[0] === today);
+  const todayKey = toDateKey(today);
+  const markedToday = selfPresentDays.has(todayKey);
 
   return {
     selfCount,
     coordCount,
     combinedCount,
-    totalDays,
+    workingDays,
     selfPct,
     coordPct,
     combinedPct,
-    minDays,
+    requiredDays,
     daysNeeded,
     markedToday,
     isAboveMinimum: combinedPct >= 75,
-    tenure: student.tenure
+    tenure: student.tenure,
+    startDate: startDate.toISOString()
   };
 }
 
@@ -4652,30 +5171,13 @@ app.post("/mark-attendance", async (req, res) => {
 app.get("/attendance-stats/:employeeId", async (req, res) => {
   try {
     const employeeId = decodeURIComponent(req.params.employeeId);
-    const originalStats = await calculateAttendanceStats(employeeId);
-    const presentCount = await Attendance.countDocuments({ employeeId, status: 'Present' });
-    const student = await Student.findOne({ employeeId });
-    if (!student) return res.json({ success: false, message: "Student not found" });
-
-    const stats = calcAttendancePercentage(student, presentCount);
-
-    const mergedStats = {
-      ...(originalStats || {}),
-      percentage: stats.percentage,
-      presentDays: stats.presentDays,
-      totalDays: stats.totalDays,
-      absentDays: stats.absentDays,
-      requiredDays: stats.requiredDays,
-      tenureTotalDays: stats.tenureTotalDays,
-      selfPresentDays: originalStats ? originalStats.selfCount : 0,
-      coordinatorPresentDays: originalStats ? originalStats.coordCount : 0,
-      combinedPresentDays: originalStats ? originalStats.combinedCount : 0,
-    };
+    const stats = await calculateAttendanceStats(employeeId);
+    if (!stats) return res.json({ success: false, message: "Student not found" });
 
     return res.json({
       success: true,
-      stats: mergedStats,
-      ...mergedStats
+      stats,
+      ...stats
     });
   } catch (err) {
     console.log(err);
@@ -4743,7 +5245,12 @@ try{
 
     // 1) Hardcoded coordinator (legacy) — exact-username match
     const legacy = COORDINATORS[identifier];
-    if(legacy && legacy.password === password){
+    if(legacy && safePasswordEqual(legacy.password, password)){
+        // SECURITY: coordinator logins created no server-side session either.
+        req.session.coordinator = {
+            username: identifier, email: "", domain: legacy.domain,
+            lastActivity: Date.now(),
+        };
         return res.json({ success:true, coordinator:{ username:identifier, domain:legacy.domain } });
     }
 
@@ -4762,6 +5269,12 @@ try{
                 return res.json({ success: false, message: "Your coordinator account application is pending HR interview & approval." });
             }
             await clearFailedAttempts(dbCoord, Coordinator);
+            req.session.coordinator = {
+                username: dbCoord.username || dbCoord.email,
+                email:    dbCoord.email || "",
+                domain:   dbCoord.domain,
+                lastActivity: Date.now(),
+            };
             return res.json({ success:true, coordinator:{
                 username: dbCoord.username || dbCoord.email,
                 domain:   dbCoord.domain
@@ -4959,14 +5472,7 @@ function parseJoinDate(joiningDate){
 // Working days from joining date to today (inclusive), excluding Sundays only.
 // Saturday IS a working day. Used for ALL attendance percentage calculations.
 function countDaysExcludingSundays(start, end){
-    let count = 0;
-    const cur = new Date(start); cur.setHours(0,0,0,0);
-    const e = new Date(end);     e.setHours(0,0,0,0);
-    while(cur <= e){
-        if(cur.getDay() !== 0) count++;   // 0 = Sunday → skip
-        cur.setDate(cur.getDate() + 1);
-    }
-    return count;
+    return attendanceUtils.countWorkingDays(start, end);
 }
 
 // Attendance % = (present days) / (working days since joining) * 100.
@@ -5229,11 +5735,9 @@ try{
 });
 
 // Admin-only: recalculate attendance for all students
-app.post('/api/admin/recalculate-attendance', async (req, res) => {
-  // Verify admin secret
-  if (req.headers['x-admin-secret'] !== (process.env.ADMIN_API_SECRET || 'TEN_ADMIN_SECRET')) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
+app.post('/api/admin/recalculate-attendance', requireAdminSecret, async (req, res) => {
+  // SECURITY: admin secret is verified by requireAdminSecret (constant-time,
+  // no hardcoded 'TEN_ADMIN_SECRET' fallback).
   try {
     const students = await Student.find({});
     let updated = 0, skipped = 0, errors = 0;
@@ -5359,6 +5863,133 @@ try{
     if(!student.milestones.hrApproved) student.milestones.hrApproved = new Date();
     await student.save();
 
+    // Try to auto-generate and send Offer Letter when HR approves the student.
+    (async function generateAndSendOffer() {
+        try {
+            const StudentDocument = require("./models/new/StudentDocument");
+            const { generateOfferLetterPDF } = require("./services/v2/offerLetterService");
+            const { generateDocumentNumber, normalizeDocumentNumber } = require("./utils/documentNumber");
+            const MailHistory = require("./models/MailHistory");
+            const DocumentHistory = require("./models/DocumentHistory");
+            const transporter = createEmailTransporter();
+            const offerDir = path.join(__dirname, "uploads", "offer-letters");
+            try { fs.mkdirSync(offerDir, { recursive: true }); } catch(_) {}
+
+            // Ensure a StudentDocument record exists and student has uploaded docs
+            let docRec = await StudentDocument.findOne({ studentId: student._id });
+            if (!docRec) {
+                // create empty record so we can attach offer metadata
+                docRec = await StudentDocument.create({ studentId: student._id });
+            }
+
+            // Generate document number
+            const docNumber = normalizeDocumentNumber(generateDocumentNumber("offer_letter"));
+
+            const joining = student.joiningDate ? new Date(student.joiningDate) : new Date();
+            const tenureDays = student.tenure === "45 Days" ? 45 : student.tenure === "1 Month" ? 30 : student.tenure === "3 Months" ? 90 : student.tenure === "6 Months" ? 180 : 45;
+            const endDate = new Date(joining.getTime() + tenureDays * 24 * 3600 * 1000);
+            const fmt = d => d.toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
+
+            const safeEmpId = String(student.employeeId || student._id).replace(/\//g, "-");
+            const pdfPath = path.join(offerDir, `${safeEmpId}_offer_letter.pdf`);
+
+            await generateOfferLetterPDF({
+                studentName: student.name,
+                collegeName: student.collegeName || student.college || "",
+                employeeId: student.employeeId,
+                domain: student.domain,
+                durationText: student.tenure,
+                startDate: fmt(joining),
+                endDate: fmt(endDate),
+                dateIssued: fmt(new Date()),
+                documentNumber: docNumber
+            }, pdfPath);
+
+            // Update StudentDocument
+            docRec.uploadStatus = docRec.uploadStatus === "rejected" ? "approved" : (docRec.uploadStatus || "approved");
+            docRec.reviewedAt = new Date();
+            docRec.offerLetterUrl = `/uploads/offer-letters/${path.basename(pdfPath)}`;
+            docRec.offerLetterSentAt = new Date();
+            docRec.offerLetterDocumentNumber = docNumber;
+            await docRec.save();
+
+            // Sync small fields back to Student
+            try {
+                const pdfBuffer = fs.readFileSync(pdfPath);
+                await Student.findByIdAndUpdate(student._id, {
+                    offerPdfBase64: pdfBuffer.toString('base64'),
+                    offerLetterStatus: 'approved',
+                    offerLetterGeneratedAt: new Date(),
+                    documentRejectionReason: null
+                });
+            } catch (syncErr) {
+                console.error('[Sync] Failed to sync Offer Letter to Student:', syncErr.message);
+            }
+
+            // Send email with attachment
+            let mailStatus = 'sent';
+            let mailErrMsg = '';
+            try {
+                await transporter.sendMail({
+                    from: EMAIL_FROM,
+                    to: student.email,
+                    subject: `Your Internship Offer Letter — The Entrepreneurship Network`,
+                    html: `<p>Dear ${student.name || 'candidate'},</p><p>Congratulations! Please find your Internship Offer Letter attached to this email.</p><p>Welcome to TEN! Log in to your student portal to track your progress.</p><p>Best regards,<br>HR Team<br>The Entrepreneurship Network</p>`,
+                    attachments: [{ filename: 'TEN_Offer_Letter.pdf', path: pdfPath }]
+                });
+            } catch (mErr) {
+                mailStatus = 'failed';
+                mailErrMsg = mErr && mErr.message ? String(mErr.message) : '';
+                console.error('[DOCS] Offer letter email error:', mailErrMsg);
+            }
+
+            // DocumentHistory & MailHistory
+            try {
+                const studentName = (student.name || `${student.firstName || ''} ${student.lastName || ''}`).trim() || student.email || '';
+                await DocumentHistory.create({
+                    studentId: student._id,
+                    studentName,
+                    studentEmail: student.email || "",
+                    employeeId: student.employeeId || "",
+                    college: student.collegeName || student.college || "Not provided",
+                    domain: student.domain || "",
+                    documentType: "Offer Letter",
+                    documentKey: "offer_letter",
+                    documentNumber: docNumber,
+                    sentAt: new Date(),
+                    sentBy: "HR Approval",
+                    sentToEmail: student.email || ""
+                });
+            } catch (_) {}
+
+            try {
+                await MailHistory.create({
+                    recipientEmail: student.email || "",
+                    recipientName: student.name || "",
+                    studentId: student._id,
+                    subject: "Your Internship Offer Letter — The Entrepreneurship Network",
+                    mailType: "offer_letter",
+                    sentAt: new Date(),
+                    status: mailStatus,
+                    errorMessage: mailErrMsg
+                });
+            } catch (_) {}
+
+            // Notify student in-app
+            try {
+                await Notification.notifyStudent(student, {
+                    title: "📄 Offer Letter Sent",
+                    message: `Congratulations ${student.name || ''}! Your Internship Offer Letter (${docNumber}) has been generated and emailed to ${student.email || 'your registered email'}.`,
+                    type: "success"
+                });
+            } catch (_) {}
+
+            console.log(`[HR] Offer Letter generated & emailed for student ${student._id} (${student.employeeId})`);
+        } catch (err) {
+            console.error('[HR] Offer letter generation/send failed during hr-approve:', err && err.message ? err.message : err);
+        }
+    })().catch(()=>{});
+
     const notif = new Notification({
         title:"Certificate Approved 🎉",
         message:"HR has given final approval. Your certificates are now available.",
@@ -5368,7 +5999,7 @@ try{
     await notif.save();
     broadcastNotification(student.domain, student.employeeId, notif);
 
-    res.json({ success:true, message:"Student fully approved for certificates" });
+    res.json({ success:true, message:"Student fully approved for certificates and offer letter (if applicable) queued/sent" });
 }catch(e){ console.log(e); res.json({ success:false, message:"Failed to approve" }); }
 });
 
@@ -5626,28 +6257,41 @@ async function calculatePerformance(studentRefOrId){
     if(!student) return null;
 
     const stats = (await calculateAttendanceStats(student.employeeId)) || { combinedPct: 0 };
-    const submissions = await Submission.find({ employeeId: student.employeeId });
-    const totalSubmitted = submissions.length;
-    const approved = submissions.filter(s => s.status === "Approved").length;
+    
+    // Legacy submissions
+    const legacySubmissions = await Submission.find({ employeeId: student.employeeId });
+    const legacySubmitted = legacySubmissions.length;
+    const legacyApproved = legacySubmissions.filter(s => s.status === "Approved").length;
 
-    // Factor 1
+    // V2 Task Progress
+    const StudentTaskProgress = mongoose.model("StudentTaskProgress");
+    const v2Progress = await StudentTaskProgress.find({ studentId: student._id });
+    const v2Submitted = v2Progress.filter(p => ["submitted", "approved", "rejected"].includes(p.status)).length;
+    const v2Approved = v2Progress.filter(p => p.status === "approved").length;
+
+    // Combined task counts
+    const totalSubmitted = legacySubmitted + v2Submitted;
+    const approved = legacyApproved + v2Approved;
+
+    // Factor 1 — Attendance (30%)
     const attendanceScore = (Math.min(100, stats.combinedPct || 0) / 100) * 30;
 
-    // Factor 2
+    // Factor 2 — Task completion rate (35%)
     const taskScore = totalSubmitted > 0 ? (approved / totalSubmitted) * 35 : 0;
 
-    // Factor 3 (per spec)
+    // Factor 3 — Quality score (25%)
     const qualityScore = (approved / Math.max(totalSubmitted, 1)) * 25;
 
-    // Factor 4 — consistency: weeks-since-joining vs weeks with at least one mark
+    // Factor 4 — Consistency: active weeks vs total weeks since joining (10%)
     let consistencyScore = 0;
     const jd = parseJoinDate(student.joiningDate);
+    const records = await Attendance.find({ employeeId: student.employeeId });
+
     if(jd){
         const today = new Date(); today.setHours(0,0,0,0);
         const j = new Date(jd); j.setHours(0,0,0,0);
         const ms = today - j;
         const totalWeeks = Math.max(1, Math.ceil(ms / (7 * 24 * 3600 * 1000)) || 1);
-        const records = await Attendance.find({ employeeId: student.employeeId });
         const activeWeeks = new Set();
         records.forEach(r => {
             const d = new Date(r.date);
@@ -5657,19 +6301,76 @@ async function calculatePerformance(studentRefOrId){
         consistencyScore = (Math.min(activeWeeks.size, totalWeeks) / totalWeeks) * 10;
     }
 
+    // Calculate Streaks
+    const presentDates = new Set();
+    records.forEach(r => {
+        if (r && r.status === "Present") {
+            const key = r.dateKey || (r.date ? new Date(r.date).toISOString().split("T")[0] : null);
+            if (key) presentDates.add(key);
+        }
+    });
+
+    let currentStreak = 0;
+    let bestStreak = 0;
+    
+    if (presentDates.size > 0) {
+        const sortedDates = Array.from(presentDates).sort();
+        let runningStreak = 0;
+        let prevDate = null;
+
+        for (const dateStr of sortedDates) {
+            if (!prevDate) {
+                runningStreak = 1;
+            } else {
+                const curr = new Date(dateStr);
+                const prev = new Date(prevDate);
+                const diffDays = Math.round((curr - prev) / (1000 * 60 * 60 * 24));
+                if (diffDays === 1 || (diffDays === 2 && prev.getDay() === 6)) {
+                    runningStreak++;
+                } else {
+                    runningStreak = 1;
+                }
+            }
+            if (runningStreak > bestStreak) bestStreak = runningStreak;
+            prevDate = dateStr;
+        }
+
+        let checkDate = new Date();
+        if (checkDate.getDay() === 0) checkDate.setDate(checkDate.getDate() - 1);
+        let dateKey = checkDate.toISOString().split("T")[0];
+
+        if (!presentDates.has(dateKey)) {
+            checkDate.setDate(checkDate.getDate() - 1);
+            if (checkDate.getDay() === 0) checkDate.setDate(checkDate.getDate() - 1);
+            dateKey = checkDate.toISOString().split("T")[0];
+        }
+
+        while (presentDates.has(dateKey)) {
+            currentStreak++;
+            checkDate.setDate(checkDate.getDate() - 1);
+            if (checkDate.getDay() === 0) checkDate.setDate(checkDate.getDate() - 1);
+            dateKey = checkDate.toISOString().split("T")[0];
+        }
+    }
+
     const total = attendanceScore + taskScore + qualityScore + consistencyScore;
     const score = Math.round(total * 10) / 10;
+
     return {
         score,
         grade: gradeForScore(score),
+        currentStreak,
+        bestStreak: Math.max(bestStreak, currentStreak),
         breakdown: {
             attendance:  Math.round(attendanceScore  * 10) / 10,
             task:        Math.round(taskScore        * 10) / 10,
             quality:     Math.round(qualityScore     * 10) / 10,
             consistency: Math.round(consistencyScore * 10) / 10,
-            // Inputs (useful for UI tooltips)
             combinedAttendancePct: stats.combinedPct,
-            approved, totalSubmitted
+            approved, 
+            totalSubmitted,
+            legacySubmitted,
+            v2Submitted
         }
     };
 }
@@ -5790,7 +6491,7 @@ async function sendPromotionEmail({ to, name, fromRoleLabel, toRoleLabel, employ
     const subject = "🎉 Congratulations! You've been promoted at The Entrepreneurship Network";
     try {
         await transporter.sendMail({
-            from: "TEN HR <ten.internshipportal@gmail.com>",
+            from: EMAIL_FROM,
             to, subject, html,
             text: `Hello ${name}, you have been promoted to ${toRoleLabel}. Temporary password: ${tempPassword}. Complete registration at ${loginUrl} within 48 hours.`
         });
@@ -6359,6 +7060,20 @@ function passwordResetEmailHtml({ name, role, host, token }){
 </td></tr></table></body></html>`;
 }
 
+async function sendResetPasswordEmail(to, token, { name, role, host } = {}){
+    const html = passwordResetEmailHtml({ name, role, host, token });
+    const base = (host ? host.replace(/\/$/, "") : "");
+    const link = base + "/reset-password.html?token=" + encodeURIComponent(token) + "&role=" + encodeURIComponent(role || "");
+    const subject = "🔐 Password Reset Request — The Entrepreneurship Network";
+    await transporter.sendMail({
+        from: EMAIL_FROM,
+        to,
+        subject,
+        html,
+        text: `Hello ${name || "user"}, reset your password here: ${link} (expires in 1 hour). If you did not request this, ignore this email.`
+    });
+}
+
 async function _findUserByRoleEmail(role, email){
     const e = String(email || "").trim().toLowerCase();
     if(!e) return null;
@@ -6376,11 +7091,41 @@ async function _findUserByRoleEmail(role, email){
     return null;
 }
 
-app.post("/auth/forgot-password", async(req,res)=>{
-    try{
-        const { email, role } = req.body || {};
-        const validRoles = ["student","coordinator","hr"];
-        if(!validRoles.includes(role)) return res.json({ success:false, message:"Invalid role" });
+function getPasswordResetWindow(user) {
+    const NOW = new Date();
+    const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+    let attempts = Number((user.passwordResetAttempts ?? user.passwordResetCount) || 0);
+    let windowStart = user.passwordResetWindowStart ? new Date(user.passwordResetWindowStart) : null;
+
+    if (!windowStart || isNaN(windowStart.getTime())) {
+        windowStart = user.passwordResetLastResetDate ? new Date(user.passwordResetLastResetDate) : new Date(0);
+    }
+
+    if (!windowStart || isNaN(windowStart.getTime())) {
+        windowStart = new Date(0);
+    }
+
+    if (NOW - windowStart > TWENTY_FOUR_HOURS) {
+        attempts = 0;
+        windowStart = NOW;
+    }
+
+    return { NOW, attempts, windowStart };
+}
+
+// ==================== FORGOT PASSWORD ====================
+app.post("/auth/forgot-password", async (req, res) => {
+  try {
+    const { email, role } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Email required hai." });
+    }
+
+    const validRoles = ["student", "coordinator", "hr"];
+    if (!role || !validRoles.includes(role)) {
+      return res.status(400).json({ success: false, message: "Valid role (student/coordinator/hr) required hai." });
+    }
 
         const user = await _findUserByRoleEmail(role, email);
         // To avoid user enumeration, we always respond success — but only
@@ -6401,7 +7146,7 @@ app.post("/auth/forgot-password", async(req,res)=>{
                 let mailError = "";
                 try {
                     await transporter.sendMail({
-                        from:"TEN HR <ten.internshipportal@gmail.com>",
+                        from: EMAIL_FROM,
                         to: user.email,
                         subject:"🔐 Password Reset Request — TEN",
                         html,
@@ -6447,7 +7192,8 @@ app.post("/auth/reset-password", async(req,res)=>{
 
         const Models = { student: Student, coordinator: Coordinator, hr: HR };
         const Model = Models[role];
-        const user = await Model.findOne({ passwordResetToken: token });
+        const hashed = crypto.createHash('sha256').update(token).digest('hex');
+        const user = await Model.findOne({ passwordResetToken: hashed });
         if(!user) return res.json({ success:false, message:"Invalid or already-used reset link" });
         if(!user.passwordResetExpiry || user.passwordResetExpiry < new Date()){
             return res.json({ success:false, message:"This reset link has expired. Please request a new one." });
@@ -6466,6 +7212,117 @@ app.post("/auth/reset-password", async(req,res)=>{
         await user.save();
         res.json({ success:true, message:"Password updated! Please log in with your new password." });
     }catch(e){ console.log(e); res.status(500).json({ success:false, message:"Server error" }); }
+});
+
+// ==================================================================
+// ======== STUDENT PASSWORD RESET (merged from authController.js/auth.js) =====
+// ==================================================================
+async function sendPasswordResetEmail(to, rawToken, { name, host } = {}){
+    const html = passwordResetEmailHtml({ name, role: "student", host, token: rawToken });
+    const base = (host ? host.replace(/\/$/, "") : "");
+    const link = base + "/reset-password.html?token=" + encodeURIComponent(rawToken) + "&role=student";
+    const subject = "🔐 Password Reset Request — The Entrepreneurship Network";
+    await transporter.sendMail({
+        from: EMAIL_FROM,
+        to,
+        subject,
+        html,
+        text: `Hello ${name || "user"}, reset your password here: ${link} (expires in 1 hour). If you did not request this, ignore this email.`
+    });
+}
+
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Email is required' });
+    }
+
+    const user = await Student.findOne({ email: email.toLowerCase().trim() });
+
+    if (!user) {
+      return res.json({
+        success: true,
+        message: 'If an account exists with that email, a password reset link has been sent.'
+      });
+    }
+
+    const { NOW, attempts, windowStart } = getPasswordResetWindow(user);
+
+    if (attempts >= 2) {
+      return res.status(429).json({
+        success: false,
+        error: 'Daily limit reached. You can only request up to 2 password resets in 24 hours. Please try again later.'
+      });
+    }
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    user.passwordResetToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+    user.passwordResetExpiry = Date.now() + 60 * 60 * 1000; // 1 hour
+    const nextAttempts = attempts + 1;
+    user.passwordResetAttempts = nextAttempts;
+    user.passwordResetWindowStart = windowStart;
+    user.passwordResetCount = nextAttempts;
+    user.passwordResetLastResetDate = NOW;
+
+    await user.save();
+
+    const host = (req.headers["x-forwarded-proto"] || req.protocol) + "://" + req.get("host");
+    sendPasswordResetEmail(user.email, rawToken, { name: user.name, host }).catch(err => {
+      console.error('[ForgotPassword] Email dispatch error:', err.message);
+    });
+
+    return res.json({
+      success: true,
+      message: 'Password reset link sent to your email.'
+    });
+
+  } catch (error) {
+    console.error('[ForgotPassword] Error:', error.message);
+    return res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        error: 'Token and new password are required'
+      });
+    }
+
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+    const user = await Student.findOne({
+      passwordResetToken: hashedToken,
+      passwordResetExpiry: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid or expired password reset token.'
+      });
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    user.passwordResetToken = null;
+    user.passwordResetExpiry = null;
+
+    await user.save();
+
+    return res.json({
+      success: true,
+      message: 'Password has been reset successfully! You can now log in.'
+    });
+
+  } catch (error) {
+    console.error('[ResetPassword] Error:', error.message);
+    return res.status(500).json({ success: false, error: 'Internal server error' });
+  }
 });
 
 // ==================================================================
@@ -7330,7 +8187,18 @@ function getStudentDayNumber(student) {
 app.get("/student/coding-questions/:domain", async(req,res)=>{
     try {
         const domain = decodeURIComponent(req.params.domain);
-        const employeeId = req.headers['x-employee-id'] || req.headers['employeeid'] || req.query.employeeId || (req.session && req.session.student && req.session.student.employeeId);
+                // SECURITY: employeeId used to come straight from the request body or the
+        // x-employee-id header, so any signed-in student could act on another
+        // student's account. resolveStudentId() takes it from the session; only
+        // staff (HR / coordinator / admin) may target a specific student.
+        const _id = resolveStudentId(req);
+        if (!_id.ok) {
+            return res.status(_id.reason === 'id_mismatch' ? 403 : (_id.reason === 'staff_missing_target' ? 400 : 401))
+                .json({ success: false, message: _id.reason === 'id_mismatch'
+                    ? 'You are not allowed to act on that account.'
+                    : (_id.reason === 'staff_missing_target' ? 'employeeId is required.' : 'Please sign in again.') });
+        }
+        const employeeId = _id.employeeId;
         const student = employeeId ? await Student.findOne({ employeeId }) : null;
         
         // Case-insensitive matching for domain
@@ -7514,7 +8382,32 @@ async function runSourceCode({ code, language, stdin }){
     } finally { cleanup(); }
 }
 
+// SECURITY: /code/run executes attacker-supplied source code with
+// child_process.spawn on the application host. It was unauthenticated, so any
+// anonymous visitor had remote code execution as the Node user: read .env and
+// MONGODB_URI, reach internal network services, or establish persistence. The
+// 5-second timeout limits CPU, not capability.
+//
+// A timeout is not a sandbox. This endpoint is now disabled unless
+// ENABLE_CODE_RUNNER=true AND the caller has a student session. Before
+// re-enabling, move execution into a locked-down runner: a per-request
+// container with no network, a read-only root filesystem, a non-root user,
+// dropped capabilities/seccomp, and memory/pid/file-size limits.
 app.post("/code/run", async(req,res)=>{
+    if (!secrets.ENABLE_CODE_RUNNER) {
+        return res.status(503).json({
+            success: false, output: "",
+            error: "Code execution is disabled on this server.",
+            executionTime: 0
+        });
+    }
+    if (!(req.session && req.session.student)) {
+        return res.status(401).json({
+            success: false, output: "",
+            error: "Sign in to run code.",
+            executionTime: 0
+        });
+    }
     try {
         const { code, language, input } = req.body || {};
         if(!code) return res.json({ success:false, output:"", error:"No code provided", executionTime: 0 });
@@ -7850,20 +8743,10 @@ try {
             let updatedCount = 0;
 
             for (const student of students) {
-                if (!student.joiningDate) continue;
+                if (!student.employeeId) continue;
 
-                // Count both capitalized and lowercase "Present"
-                const presentCount = await Attendance.countDocuments({
-                    employeeId: student.employeeId,
-                    status: { $in: ["Present", "present"] }
-                });
-
-                const percentage = calculateAttendancePercentage(student, presentCount);
-
-                student.attendancePercentage = percentage;
-                student.calculatedAttendancePercentage = percentage;
-                student.calculatedAttendance = percentage; // auto-heal
-                await student.save();
+                const percentage = await attendanceUtils.recomputeAndSaveAttendance(Student, Attendance, student.employeeId);
+                if (percentage === 0 && !student.employeeId) continue;
                 updatedCount++;
             }
 
@@ -7943,10 +8826,7 @@ const SHORT_COURSE_LABELS = {
 const PAYMENT_CUTOFF_DATE = new Date('2026-07-09T00:00:00.000Z');
 
 // One-time migration: mark all pre-cutoff students as exempt
-app.post('/api/admin/mark-existing-students', async (req, res) => {
-  if (req.headers['x-admin-secret'] !== (process.env.ADMIN_API_SECRET || 'TEN_ADMIN_SECRET')) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
+app.post('/api/admin/mark-existing-students', requireAdminSecret, async (req, res) => {
   try {
     const CUTOFF = new Date('2026-07-09T00:00:00.000Z');
     const result = await Student.updateMany(
@@ -7962,7 +8842,18 @@ app.post('/api/admin/mark-existing-students', async (req, res) => {
 // Check if student needs to pay for their tenure
 app.get('/api/tenure-payment/status', async (req, res) => {
   try {
-    const employeeId = req.headers['x-employee-id'] || req.headers['employeeid'] || (req.session && req.session.student && (req.session.student.employeeId || req.session.student._id || req.session.student.id));
+        // SECURITY: employeeId used to come straight from the request body or the
+    // x-employee-id header, so any signed-in student could act on another
+    // student's account. resolveStudentId() takes it from the session; only
+    // staff (HR / coordinator / admin) may target a specific student.
+    const _id = resolveStudentId(req);
+    if (!_id.ok) {
+        return res.status(_id.reason === 'id_mismatch' ? 403 : (_id.reason === 'staff_missing_target' ? 400 : 401))
+            .json({ success: false, message: _id.reason === 'id_mismatch'
+                ? 'You are not allowed to act on that account.'
+                : (_id.reason === 'staff_missing_target' ? 'employeeId is required.' : 'Please sign in again.') });
+    }
+    const employeeId = _id.employeeId;
     if (!employeeId) return res.status(401).json({ error: 'Not authenticated' });
 
     // Try finding by employeeId first, then by id/email
@@ -8026,7 +8917,18 @@ app.get('/api/tenure-payment/status', async (req, res) => {
 // Student submits transaction ID for tenure payment
 app.post('/api/tenure-payment/submit-utr', async (req, res) => {
   try {
-    const employeeId = req.headers['x-employee-id'] || req.headers['employeeid'] || (req.session && req.session.student && (req.session.student.employeeId || req.session.student._id || req.session.student.id));
+        // SECURITY: employeeId used to come straight from the request body or the
+    // x-employee-id header, so any signed-in student could act on another
+    // student's account. resolveStudentId() takes it from the session; only
+    // staff (HR / coordinator / admin) may target a specific student.
+    const _id = resolveStudentId(req);
+    if (!_id.ok) {
+        return res.status(_id.reason === 'id_mismatch' ? 403 : (_id.reason === 'staff_missing_target' ? 400 : 401))
+            .json({ success: false, message: _id.reason === 'id_mismatch'
+                ? 'You are not allowed to act on that account.'
+                : (_id.reason === 'staff_missing_target' ? 'employeeId is required.' : 'Please sign in again.') });
+    }
+    const employeeId = _id.employeeId;
     if (!employeeId) return res.status(401).json({ error: 'Not authenticated' });
 
     const { utr } = req.body;
@@ -8159,19 +9061,77 @@ app.get('/ten-admin', requireAdmin, (req, res) => {
 // (PORT already declared earlier)
 const server = http.createServer(app);
 
+// SECURITY: socket CORS was `origin: "*"`, so any site could open an
+// authenticated socket against this server. Reuse the HTTP allowlist.
 const io = new SocketIOServer(server, {
-    cors: { origin: "*", methods: ["GET","POST"] }
+    cors: {
+        origin: ALLOWED_ORIGINS.length ? ALLOWED_ORIGINS : (process.env.NODE_ENV === 'production' ? [] : true),
+        methods: ["GET","POST"],
+        credentials: true,
+    }
 });
+
+// Run the express-session middleware over the socket handshake so the socket
+// can see the same session the browser holds.
+io.engine.use(session(sessionOptions));
+
+/**
+ * SECURITY: the handshake used to be trusted outright. verifyChatIdentity()
+ * merely LOOKED UP the claimed role + id, so `{ role: "hr", username:
+ * "chro@ten.com" }` connected you as the CHRO with no password and no session --
+ * existence was treated as proof of identity. Anyone could read every chat room,
+ * post as any user, and reach delete_message.
+ *
+ * The claim is now checked against the server-side session before the lookup:
+ * the session must hold a matching principal, and for students the claimed
+ * employeeId must equal the one in the session.
+ */
+function claimMatchesSession(claim, sess) {
+    if (!sess) return false;
+    const role = claim && claim.role;
+
+    if (role === 'student') {
+        const sid = sess.student && (sess.student.employeeId || sess.student.id);
+        return !!sid && String(sid) === String(claim.employeeId || '');
+    }
+    if (role === 'hr') {
+        const hr = sess.hrUser;
+        if (!hr) return false;
+        const claimed = String(claim.username || claim.email || '').toLowerCase();
+        return claimed === String(hr.username || '').toLowerCase()
+            || claimed === String(hr.email || '').toLowerCase();
+    }
+    if (role === 'coordinator') {
+        const co = sess.coordinator;
+        if (!co) return false;
+        const claimed = String(claim.username || claim.email || '').toLowerCase();
+        return claimed === String(co.username || '').toLowerCase()
+            || claimed === String(co.email || '').toLowerCase();
+    }
+    // Admins use the admin portal, not the chat handshake.
+    return false;
+}
 
 io.use(async (socket, next) => {
     try{
-        const identity = await verifyChatIdentity(socket.handshake.auth || {});
+        const claim = socket.handshake.auth || {};
+        const sess  = socket.request && socket.request.session;
+
+        if (!claimMatchesSession(claim, sess)) {
+            console.warn('[socket] Rejected handshake: claim does not match session.');
+            return next(new Error("unauthorized"));
+        }
+
+        const identity = await verifyChatIdentity(claim);
         if(!identity) return next(new Error("unauthorized"));
         socket.data.identity = identity;
         // Auto-join all rooms this user is allowed in
         roomsAllowedFor(identity).forEach(r => socket.join(r));
         next();
-    } catch(e){ next(new Error("auth_error")); }
+    } catch(e){
+        console.error('[socket] Handshake error:', e && e.message);
+        next(new Error("auth_error"));
+    }
 });
 
 io.on("connection", (socket) => {
@@ -8320,6 +9280,49 @@ app.post("/api/v2/coordinator/approve", async (req, res) => {
 
         coord.verificationStatus = status;
         await coord.save();
+
+        // ─── SEND EMAIL NOTIFICATION ──────────────────────────────────────────
+        if (coord.email) {
+            try {
+                const isApproved = status === "approved";
+                const subject = isApproved 
+                    ? "Coordinator Application Approved 🎉" 
+                    : "Coordinator Application Status Update";
+
+                const htmlContent = isApproved ? `
+                    <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+                        <h2 style="color: #28a745;">Congratulations, ${coord.name || 'Coordinator'}!</h2>
+                        <p>Your application to become a Coordinator for the domain <b>"${coord.domain}"</b> has been <b>Approved</b>.</p>
+                        <p>You can now log in to access your coordinator dashboard and manage your assigned responsibilities.</p>
+                        <br/>
+                        <p>Best regards,<br/>The Team</p>
+                    </div>
+                ` : `
+                    <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+                        <h2 style="color: #dc3545;">Application Update</h2>
+                        <p>Dear ${coord.name || 'Applicant'},</p>
+                        <p>Thank you for your interest. Unfortunately, your application for Coordinator in the domain <b>"${coord.domain}"</b> was not approved at this time.</p>
+                        <p>If you have any questions, please feel free to contact the administrative team.</p>
+                        <br/>
+                        <p>Best regards,<br/>The Team</p>
+                    </div>
+                `;
+
+                await transporter.sendMail({
+                    from: EMAIL_FROM,
+                    to: coord.email,
+                    subject: subject,
+                    html: htmlContent
+                });
+
+                console.log(`✅ Coordinator status notification email sent to ${coord.email}`);
+            } catch (emailErr) {
+                console.error("❌ Failed to send email to coordinator:", emailErr.message);
+                // Status save ho chuka hai, isliye flow fail nahi karenge
+            }
+        }
+        // ───────────────────────────────────────────────────────────────────────
+
         return res.json({ success: true, message: `Coordinator application successfully ${status}.` });
     } catch (err) {
         console.error(err);
@@ -8327,8 +9330,26 @@ app.post("/api/v2/coordinator/approve", async (req, res) => {
     }
 });
 
+function startServer() {
+    const httpServer = server.listen(PORT, "0.0.0.0", ()=>{ console.log(`Server running on port ${PORT}`); });
 
-server.listen(PORT, "0.0.0.0", ()=>{ console.log(`Server running on port ${PORT}`); });
+    httpServer.on('error', (error) => {
+        if (error && error.code === 'EADDRINUSE') {
+            console.error(`[server] Port ${PORT} is already in use. Retrying with fallback port ${PORT + 1}...`);
+            const fallbackPort = PORT + 1;
+            const fallbackServer = server.listen(fallbackPort, "0.0.0.0", ()=>{
+                console.log(`Server running on fallback port ${fallbackPort}`);
+            });
+            fallbackServer.on('error', (fallbackError) => {
+                console.error('[server] Fallback port also unavailable:', fallbackError.message);
+            });
+        } else {
+            console.error('[server] Server startup error:', error.message);
+        }
+    });
+}
+
+startServer();
 
 // Process-level crash protection and error handlers
 process.on('uncaughtException', (error) => {
@@ -8346,3 +9367,4 @@ process.on('unhandledRejection', (reason, promise) => {
     console.error(`[${timestamp}] UNHANDLED REJECTION:`, reason, 'at promise:', promise);
     // Do NOT exit the process. Keep the server running.
 });
+// this is my whole code //
