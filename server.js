@@ -6812,6 +6812,7 @@ async function checkCertificateEligibility(employeeId){
  */
 async function _buildLeaderboard(filter, limit){
     const StudentCoin = require("./models/new/StudentCoin");
+    const hasFilter = !!(filter && Object.keys(filter).length);
 
     // 1. Candidate students (already narrowed by domain when one is given).
     const students = await Student.find(filter || {})
@@ -6826,10 +6827,25 @@ async function _buildLeaderboard(filter, limit){
         StudentCoin.find({ studentId: { $in: studentIds } })
             .select("studentId totalCoins")
             .lean(),
-        Submission.aggregate([
-            { $match: { employeeId: { $in: students.map(s => s.employeeId) }, status: "Approved" } },
-            { $group: { _id: "$employeeId", count: { $sum: 1 } } }
-        ]).catch(() => [])
+        // No filter means "every student", so an $in listing all of them is
+        // both pointless and large enough to push $group past the 100 MB
+        // in-memory limit (MongoDB error 292,
+        // QueryExceededMemoryLimitNoDiskUseAllowed). Match on status alone in
+        // that case, and let the grouping spill to disk either way.
+        Submission.aggregate(
+            [
+                {
+                    $match: hasFilter
+                        ? { employeeId: { $in: students.map(s => s.employeeId) }, status: "Approved" }
+                        : { status: "Approved" }
+                },
+                { $group: { _id: "$employeeId", count: { $sum: 1 } } }
+            ],
+            { allowDiskUse: true }
+        ).catch((e) => {
+            console.error("[leaderboard] approved-submission counts unavailable:", e.message);
+            return [];
+        })
     ]);
 
     const coinsByStudent = new Map();
@@ -9036,14 +9052,25 @@ server.listen(PORT, "0.0.0.0", ()=>{
         console.error("[employeeId] Counter initialisation failed:", err.message);
     });
 
-    if (String(process.env.ENABLE_AUTOMATION_CRON || "true").toLowerCase() !== "false") {
+    // Under PM2 cluster mode every worker runs this file, so N workers would
+    // each schedule the same jobs against the same database — N offer letters,
+    // N certificate emails, N attendance rows per student. PM2 numbers its
+    // workers in NODE_APP_INSTANCE, so only worker 0 schedules anything. Fork
+    // mode and a bare `node server.js` leave the variable unset, which reads as
+    // "the only instance" and runs the jobs normally.
+    const clusterWorker = process.env.NODE_APP_INSTANCE;
+    const isCronWorker = clusterWorker === undefined || clusterWorker === "0";
+
+    if (String(process.env.ENABLE_AUTOMATION_CRON || "true").toLowerCase() === "false") {
+        console.log("[AUTO-CRON] Disabled via ENABLE_AUTOMATION_CRON=false.");
+    } else if (!isCronWorker) {
+        console.log(`[AUTO-CRON] Skipped on cluster worker ${clusterWorker}; worker 0 runs the jobs.`);
+    } else {
         try {
             require("./services/automationCron").initAutomation();
         } catch (err) {
             console.error("[AUTO-CRON] Failed to start automation jobs:", err.message);
         }
-    } else {
-        console.log("[AUTO-CRON] Disabled via ENABLE_AUTOMATION_CRON=false.");
     }
 });
 
