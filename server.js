@@ -102,10 +102,36 @@ const RATE_LIMIT_CONFIG = {
 // Automatically intercept all model calls if MongoDB isn't connected.
 // This allows the app to store, fetch, and authenticate users/records
 // in a single-file or multi-file local storage database.
-const DB_DIR = path.join(__dirname, 'uploads', 'local_db');
+// The fallback store lives OUTSIDE the statically served tree. It used to sit
+// at uploads/local_db, and `app.use('/uploads', express.static('uploads'))`
+// meant the whole user table — including password hashes, emails and phone
+// numbers — was downloadable at /uploads/local_db/db_Student.json by anyone.
+// LOCAL_DB_DIR is gitignored; see .gitignore.
+const DB_DIR = process.env.LOCAL_DB_DIR
+    ? path.resolve(process.env.LOCAL_DB_DIR)
+    : path.join(__dirname, '.data', 'local_db');
 if (!fs.existsSync(DB_DIR)) {
     fs.mkdirSync(DB_DIR, { recursive: true });
 }
+
+// One-time migration: if a previous deploy left data at the old public path,
+// move it into the private directory rather than silently starting empty.
+(function migrateLegacyLocalDb() {
+    const legacyDir = path.join(__dirname, 'uploads', 'local_db');
+    if (legacyDir === DB_DIR || !fs.existsSync(legacyDir)) return;
+    try {
+        for (const name of fs.readdirSync(legacyDir)) {
+            if (!name.endsWith('.json')) continue;
+            const target = path.join(DB_DIR, name);
+            if (!fs.existsSync(target)) fs.copyFileSync(path.join(legacyDir, name), target);
+            fs.unlinkSync(path.join(legacyDir, name));
+        }
+        fs.rmdirSync(legacyDir);
+        console.warn('[local-db] Moved the fallback database out of the public uploads/ tree into ' + DB_DIR + '.');
+    } catch (err) {
+        console.error('[local-db] Could not migrate uploads/local_db — delete it by hand, it is publicly served: ' + err.message);
+    }
+})();
 
 global.isMongoUnhealthy = false;
 global.lastMongoCheckTime = 0;
@@ -1058,6 +1084,7 @@ function calcAttendancePercentage(student, presentCount) {
 }
 
 const bcrypt = require("bcryptjs");
+const { requireAdminAPI } = require("./middleware/adminAuth");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const QRCode = require("qrcode");
@@ -1086,62 +1113,218 @@ const ALL_DOMAINS = [
 // literals below are retained ONLY as a non-production dev fallback and the
 // process refuses to start in production without the env vars.
 //
-// FOLLOW-UP (not done here because it changes the login handlers): store
-// bcrypt hashes instead of cleartext and compare with bcrypt.compare().
-function loadCredentialMap(envName, devFallback) {
+// There are NO passwords in this file. The roster below carries only the
+// non-secret org structure — display name, contact email, seniority level for
+// HR; assigned domain for coordinators. Every password is supplied at runtime
+// via the HR_CREDENTIALS / COORDINATOR_CREDENTIALS environment variables, as
+// bcrypt hashes:
+//
+//   HR_CREDENTIALS={"jrhr@ten.com":{"passwordHash":"$2b$12$..."}, ...}
+//
+// Generate that value with:  node scripts/generate-credentials-env.js
+//
+// An account in the roster with no matching env entry simply cannot log in.
+
+const HR_ROSTER = {
+    "jrhr@ten.com":       { name: "Jr HR Associate",                    email: "jrhr@ten.com",       level: 1 },
+    "srhr@ten.com":       { name: "Sr HR Associate",                    email: "srhr@ten.com",       level: 2 },
+    "jrmanager@ten.com":  { name: "Jr HR Manager",                      email: "jrmanager@ten.com",  level: 3 },
+    "srmanager@ten.com":  { name: "Sr HR Manager",                      email: "srmanager@ten.com",  level: 4 },
+    "hrad@ten.com":       { name: "HR Associate Director",              email: "hrad@ten.com",       level: 5 },
+    "jrdir@ten.com":      { name: "Jr HR Director",                     email: "jrdir@ten.com",      level: 6 },
+    "hrdirector@ten.com": { name: "HR Director & HRBP",                 email: "hrdirector@ten.com", level: 7 },
+    "chro@ten.com":       { name: "Chief Human Resources Officer",      email: "chro@ten.com",       level: 8 },
+    "vp@ten.com":         { name: "Vice President",                     email: "vp@ten.com",         level: 9 }
+};
+
+const COORDINATOR_ROSTER = {
+    "devops_aws_admin":      { domain: "DevOps with AWS" },
+    "python_admin":          { domain: "Python Development" },
+    "java_admin":            { domain: "Java Development" },
+    "web_admin":             { domain: "Web Development" },
+    "mern_admin":            { domain: "MERN Stack Development" },
+    "ai_admin":              { domain: "Artificial Intelligence" },
+    "datascience_admin":     { domain: "Data Science" },
+    "cyber_admin":           { domain: "Cyber Security" },
+    "software_admin":        { domain: "Software Engineering" },
+    "flutter_admin":         { domain: "Flutter Development" },
+    "hrmgmt_admin":          { domain: "HR Management" },
+    "venturecapital_admin":  { domain: "Venture Capital" },
+    "vibecoding_admin":      { domain: "Vibe Coding" },
+    "spaceresearch_admin":   { domain: "Space Research" },
+    "businessanalyst_admin": { domain: "Business Analyst" },
+    "hr_domain_admin":       { domain: "HR" }
+};
+
+/**
+ * Merge a non-secret roster with the password material in `envName`.
+ * Entries in the env var may also override roster metadata (name/email/level/
+ * domain), so a new account can be added without a code change.
+ */
+function loadCredentialMap(envName, roster) {
+    const merged = {};
+    let secrets = {};
+
     const raw = process.env[envName];
     if (raw && raw.trim()) {
         try {
             const parsed = JSON.parse(raw);
-            if (parsed && typeof parsed === 'object') return parsed;
-            console.error('[credentials] ' + envName + ' is not a JSON object.');
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                secrets = parsed;
+            } else {
+                console.error('[credentials] ' + envName + ' is not a JSON object; ignoring it.');
+            }
         } catch (e) {
             console.error('[credentials] ' + envName + ' is not valid JSON: ' + e.message);
         }
     }
-    if (process.env.NODE_ENV === 'production') {
-        console.error('\n[credentials] FATAL: ' + envName + ' must be set in production. ' +
-            'Refusing to fall back to the credentials committed in source.\n');
-        process.exit(1);
+
+    for (const username of new Set([...Object.keys(roster), ...Object.keys(secrets)])) {
+        const entry = { ...(roster[username] || {}), ...(secrets[username] || {}) };
+        if (!entry.passwordHash && !entry.password) continue; // no credential → no account
+        if (entry.password && !entry.passwordHash) {
+            console.warn('[credentials] ' + envName + '.' + username +
+                ' uses a cleartext "password". Switch it to "passwordHash" — run scripts/generate-credentials-env.js.');
+        }
+        merged[username] = entry;
     }
-    console.warn('[credentials] ' + envName + ' not set; using DEV-ONLY fallback accounts. ' +
-        'These passwords are public - never use them in production.');
-    return devFallback;
+
+    const configured = Object.keys(merged).length;
+    if (configured === 0) {
+        const msg = '[credentials] ' + envName + ' provides no usable accounts. ' +
+            'Nobody can log in through this map.';
+        if (process.env.NODE_ENV === 'production') {
+            console.error('\n' + msg + ' Refusing to start.\n');
+            process.exit(1);
+        }
+        console.warn(msg);
+    } else {
+        console.log('[credentials] ' + envName + ': ' + configured + ' account(s) configured.');
+    }
+    return merged;
 }
 
-const HR_ACCOUNTS_DEV_FALLBACK = {
-    "hr_admin":   { password: "HR@TEN2026",  name: "HR Administrator", email: "hr.admin@ten.local", level: 7 },
-    "hr_manager": { password: "HRMgr@2026",  name: "HR Manager",       email: "hr.manager@ten.local", level: 6 },
-    "jrhr@ten.com":      { password: "TEN@JrHR2026",  name: "Jr HR Associate",            email: "jrhr@ten.com", level: 1 },
-    "srhr@ten.com":      { password: "TEN@SrHR2026",  name: "Sr HR Associate",            email: "srhr@ten.com", level: 2 },
-    "jrmanager@ten.com": { password: "TEN@JrMgr2026",  name: "Jr HR Manager",             email: "jrmanager@ten.com", level: 3 },
-    "srmanager@ten.com": { password: "TEN@SrMgr2026",  name: "Sr HR Manager",             email: "srmanager@ten.com", level: 4 },
-    "hrad@ten.com":      { password: "TEN@HRAD2026",  name: "HR Associate Director",      email: "hrad@ten.com", level: 5 },
-    "jrdir@ten.com":     { password: "TEN@JrDir2026",  name: "Jr HR Director",            email: "jrdir@ten.com", level: 6 },
-    "hrdirector@ten.com":{ password: "TEN@HRDir2026",  name: "HR Director & HRBP",         email: "hrdirector@ten.com", level: 7 },
-    "chro@ten.com":      { password: "TEN@CHRO2026",  name: "Chief Human Resources Officer", email: "chro@ten.com", level: 8 },
-    "vp@ten.com":        { password: "TEN@VP#2026",    name: "Vice President",                 email: "vp@ten.com", level: 9 }
-};
-const COORDINATORS_DEV_FALLBACK = {
-    "devops_aws_admin":   { password:"DevOpsAWS@2026",  domain:"DevOps with AWS" },
-    "python_admin":       { password:"Python@2026",     domain:"Python Development" },
-    "java_admin":         { password:"Java@2026",       domain:"Java Development" },
-    "web_admin":          { password:"Web@2026",        domain:"Web Development" },
-    "mern_admin":         { password:"Mern@2026",       domain:"MERN Stack Development" },
-    "ai_admin":           { password:"AI@2026",         domain:"Artificial Intelligence" },
-    "datascience_admin":  { password:"DS@2026",         domain:"Data Science" },
-    "cyber_admin":        { password:"Cyber@2026",      domain:"Cyber Security" },
-    "software_admin":     { password:"Software@2026",   domain:"Software Engineering" },
-    "flutter_admin":      { password:"Flutter@2026",    domain:"Flutter Development" },
-    // Requirement 5 — HR Management treated like any other domain
-    "hrmgmt_admin":       { password:"HRMgmt@2026",     domain:"HR Management" },
-    // New domains added
-    "venturecapital_admin":  { password: "VC@TEN2026",        domain: "Venture Capital" },
-    "vibecoding_admin":      { password: "Vibe@TEN2026",       domain: "Vibe Coding" },
-    "spaceresearch_admin":   { password: "Space@TEN2026",      domain: "Space Research" },
-    "businessanalyst_admin": { password: "BA@TEN2026",         domain: "Business Analyst" },
-    "hr_domain_admin":       { password: "HRDomain@TEN2026",   domain: "HR" }
-};
+/**
+ * Constant-time-ish password check for a roster account. Prefers the bcrypt
+ * hash; falls back to a length-safe comparison for legacy cleartext entries.
+ */
+async function verifyCredentialPassword(account, submitted) {
+    if (!account || typeof submitted !== 'string' || !submitted) return false;
+    if (account.passwordHash) {
+        try {
+            return await bcrypt.compare(submitted, account.passwordHash);
+        } catch (_) {
+            return false;
+        }
+    }
+    if (typeof account.password === 'string' && account.password.length === submitted.length) {
+        return crypto.timingSafeEqual(Buffer.from(account.password), Buffer.from(submitted));
+    }
+    return false;
+}
+
+// NOTE: `HR_ACCOUNTS` and `COORDINATORS` were referenced in the login, chat and
+// promotion handlers but never actually declared anywhere, so every legacy
+// lookup threw a ReferenceError into the enclosing try/catch and surfaced as a
+// generic server error. They are declared here.
+const HR_ACCOUNTS  = loadCredentialMap('HR_CREDENTIALS', HR_ROSTER);
+const COORDINATORS = loadCredentialMap('COORDINATOR_CREDENTIALS', COORDINATOR_ROSTER);
+
+// ─── Session identity ────────────────────────────────────────────────────────
+//
+// Handlers used to resolve the acting user like this:
+//
+//   req.body.employeeId || req.headers['x-employee-id'] || req.session.student...
+//
+// which lets a caller act as ANY student just by setting a header — the
+// client-supplied value won over the session. The helpers below are the only
+// sanctioned way to answer "who is making this request": they read the session
+// and nothing else.
+
+// Fields that must never leave the server in an API response. Login used to
+// return `student.toObject()` wholesale, which shipped the bcrypt password
+// hash and the live password-reset token to the browser (and into anything
+// that logged the response). The base64 PDF blobs are stripped too: they are
+// megabytes each and the client fetches documents through their own routes.
+const STUDENT_PRIVATE_FIELDS = [
+    "password", "plainPassword",
+    "passwordResetToken", "passwordResetExpiry",
+    "locPdfBase64", "lorPdfBase64", "starPdfBase64", "offerPdfBase64", "lopPdfBase64"
+];
+
+/**
+ * Strip private fields from a Student document/object before returning it.
+ * Adds `has*Pdf` booleans so the UI can still tell which documents exist.
+ */
+function sanitizeStudent(student) {
+    if (!student) return student;
+    const obj = student.toObject ? student.toObject() : { ...student };
+    const safe = {
+        ...obj,
+        hasLocPdf:   !!obj.locPdfBase64,
+        hasLorPdf:   !!obj.lorPdfBase64,
+        hasStarPdf:  !!obj.starPdfBase64,
+        hasOfferPdf: !!obj.offerPdfBase64,
+        hasLopPdf:   !!obj.lopPdfBase64
+    };
+    for (const field of STUDENT_PRIVATE_FIELDS) delete safe[field];
+    return safe;
+}
+
+function establishStudentSession(req, student) {
+    if (!req.session || !student) return;
+    req.session.student = {
+        _id:        String(student._id || ""),
+        employeeId: student.employeeId || "",
+        email:      student.email || "",
+        name:       student.name || "",
+        domain:     student.domain || ""
+    };
+}
+
+/** @returns {string} the session student's employeeId, or "" when unauthenticated. */
+function sessionEmployeeId(req) {
+    return (req.session && req.session.student && req.session.student.employeeId) || "";
+}
+
+function requireStudentSession(req, res, next) {
+    if (!sessionEmployeeId(req)) {
+        return res.status(401).json({ success: false, message: "Please sign in to continue." });
+    }
+    next();
+}
+
+function requireCoordinatorSession(req, res, next) {
+    if (!req.session || !req.session.coordinator) {
+        return res.status(401).json({ success: false, message: "Coordinator sign-in required." });
+    }
+    next();
+}
+
+/**
+ * Is this request carrying an HR (or admin) session?
+ *
+ * The legacy HR endpoints used to gate on
+ * `req.headers.authorization.startsWith("Bearer hr_")` — a prefix check with
+ * no token validation, so the literal string "Bearer hr_" passed. Every one of
+ * those checks now calls this instead.
+ */
+function isHRSession(req) {
+    return !!(req.session && (req.session.hr || req.session.adminUser));
+}
+
+function requireHRSession(req, res, next) {
+    if (!req.session || !req.session.hr) {
+        return res.status(401).json({ success: false, message: "HR sign-in required." });
+    }
+    next();
+}
+
+/** Coordinators and HR both review student work; admins can do anything. */
+function requireStaffSession(req, res, next) {
+    if (req.session && (req.session.coordinator || req.session.hr || req.session.adminUser)) return next();
+    return res.status(401).json({ success: false, message: "Staff sign-in required." });
+}
 
 const app = express();
 
@@ -1162,18 +1345,55 @@ try { fs.mkdirSync(path.join(uploadsAbs, "documents"), { recursive: true }); } c
 try { fs.mkdirSync(path.join(uploadsAbs, "certificates"), { recursive: true }); } catch(_) {}
 try { fs.mkdirSync(path.join(uploadsAbs, "offer-letters"), { recursive: true }); } catch(_) {}
 
+// Validate required secrets before anything is wired up. In production a
+// missing secret aborts the boot rather than silently falling back to a value
+// that is public in this repository.
+const { assertSecrets, IS_PRODUCTION } = require('./config/secrets');
+assertSecrets();
+
 app.set('trust proxy', 1);
-app.use(cors());
+
+// CORS: an explicit origin allowlist in production. Credentials ride these
+// requests (the session cookie), so a wildcard origin is never acceptable
+// there. Outside production an empty allowlist means "reflect any origin" so
+// local development against file:// and localhost ports keeps working.
+const CORS_ALLOWED_ORIGINS = (process.env.CORS_ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+
+app.use(cors({
+    origin(origin, callback) {
+        // Same-origin / curl / server-to-server requests send no Origin header.
+        if (!origin) return callback(null, true);
+        if (CORS_ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+        if (!IS_PRODUCTION && CORS_ALLOWED_ORIGINS.length === 0) return callback(null, true);
+        return callback(null, false);
+    },
+    credentials: true
+}));
 app.use(express.json());
 
 const session = require('express-session');
+
+// No fallback secret: a committed signing key lets anyone mint a session for
+// any role. config/secrets.js has already refused the boot in production if
+// this is unset; outside production we generate a throwaway key per process so
+// sessions simply do not survive a restart.
+const SESSION_SECRET = (process.env.SESSION_SECRET || '').trim()
+    || crypto.randomBytes(32).toString('hex');
+if (!process.env.SESSION_SECRET) {
+    console.warn('[session] SESSION_SECRET is unset; using a random per-process key. Sessions will not survive a restart.');
+}
+
 const sessionOptions = {
-    secret: process.env.SESSION_SECRET || 'ten-admin-secret-key-123',
+    name: 'ten.sid',
+    secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: true,
-        sameSite: 'none',
+        secure: IS_PRODUCTION,
+        sameSite: IS_PRODUCTION ? 'none' : 'lax',
         httpOnly: true,
         maxAge: 30 * 60 * 1000 // 30 minutes
     }
@@ -1271,15 +1491,11 @@ sessionOptions.store = new FallbackStore();
 
 app.use(session(sessionOptions));
 
-// Dynamic cookie security adjustment for iframe/HTTPS vs HTTP/local environments
-app.use((req, res, next) => {
-    if (req.session && req.session.cookie) {
-        const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
-        req.session.cookie.secure = isSecure;
-        req.session.cookie.sameSite = isSecure ? 'none' : 'lax';
-    }
-    next();
-});
+// NOTE: the session cookie's `secure` / `sameSite` flags are fixed at
+// configuration time from NODE_ENV (see sessionOptions above). They used to be
+// recomputed per request from `x-forwarded-proto`, which is client-controlled —
+// sending `x-forwarded-proto: http` cleared the Secure flag and the session
+// cookie was then transmitted in plaintext. Do not reintroduce that.
 
 // Custom route to serve the logo with the correct JPEG Content-Type since the file has a .png extension but is actually a JPEG (JFIF format)
 app.get(/.*ten-logo\.png$/, (req, res) => {
@@ -1292,10 +1508,20 @@ app.use(express.static("public", {
     etag: true,
     lastModified: true
 }));
+// Defence in depth: the fallback database no longer lives under uploads/, but
+// refuse to serve anything that looks like it regardless, so a stray copy left
+// by an older deploy can never be downloaded.
+app.use('/uploads', (req, res, next) => {
+    if (/(^|\/)(local_db|\.env)/i.test(req.path)) {
+        return res.status(404).end();
+    }
+    next();
+});
 app.use('/uploads', express.static('uploads', {
     maxAge: '30d',
     etag: true,
-    lastModified: true
+    lastModified: true,
+    dotfiles: 'ignore'
 }));
 
 // Unauthenticated health check endpoint
@@ -1321,136 +1547,13 @@ app.get('/health', (req, res) => {
     }
 });
 
-// GET /api/secrets-status: check which environment variables are configured
-app.get('/api/secrets-status', (req, res) => {
-    const keys = [
-        'MONGODB_URI',
-        'ADMIN_API_SECRET',
-        'CORS_ALLOWED_ORIGINS',
-        'EMAIL_USER',
-        'EMAIL_PASS',
-        'PAYMENTSETU_API_KEY',
-        'BASE_URL',
-        'HR_CREDENTIALS',
-        'COORDINATOR_CREDENTIALS',
-        'GITHUB_PERSONAL_ACCESS_TOKEN'
-    ];
-    
-    const status = {};
-    keys.forEach(key => {
-        status[key] = {
-            configured: !!process.env[key],
-            valuePlaceholder: process.env[key] ? (key === 'MONGODB_URI' || key === 'EMAIL_PASS' || key === 'PAYMENTSETU_API_KEY' || key === 'ADMIN_API_SECRET' || key === 'GITHUB_PERSONAL_ACCESS_TOKEN' ? '********' : process.env[key]) : ''
-        };
-    });
-    
-    res.json({
-        success: true,
-        secrets: status,
-        mongodbState: mongoose.connection.readyState
-    });
-});
-
-// POST /api/save-secrets: save updated credentials to .env and apply to memory
-app.post('/api/save-secrets', async (req, res) => {
-    try {
-        const updates = req.body;
-        if (!updates || typeof updates !== 'object') {
-            return res.status(400).json({ success: false, message: "Invalid request body" });
-        }
-        
-        // Read existing .env if any
-        let envContent = '';
-        const envPath = path.join(__dirname, '.env');
-        if (fs.existsSync(envPath)) {
-            envContent = fs.readFileSync(envPath, 'utf8');
-        } else {
-            // fallback to reading .env.example
-            const examplePath = path.join(__dirname, '.env.example');
-            if (fs.existsSync(examplePath)) {
-                envContent = fs.readFileSync(examplePath, 'utf8');
-            }
-        }
-        
-        // Parse current lines
-        const lines = envContent.split(/\r?\n/);
-        const envVars = {};
-        
-        // Extract existing env vars
-        lines.forEach(line => {
-            const trimmed = line.trim();
-            if (trimmed && !trimmed.startsWith('#')) {
-                const parts = trimmed.split('=');
-                if (parts.length >= 2) {
-                    const k = parts[0].trim();
-                    const v = parts.slice(1).join('=').trim();
-                    envVars[k] = v;
-                }
-            }
-        });
-        
-        // Merge updates
-        for (const [key, val] of Object.entries(updates)) {
-            if (val !== undefined && val !== null && val !== '') {
-                envVars[key] = val;
-                process.env[key] = val; // Apply to running memory instantly!
-            }
-        }
-        
-        // Write back to .env
-        let newEnvContent = '';
-        newEnvContent += "# ── Core ──────────────────────────────────────────────────────────\n";
-        newEnvContent += `MONGODB_URI=${envVars['MONGODB_URI'] || ''}\n`;
-        newEnvContent += `PORT=${envVars['PORT'] || process.env.PORT || '3000'}\n\n`;
-        
-        newEnvContent += "# ── Security ─────────────────────────────────────────────────────\n";
-        newEnvContent += `ADMIN_API_SECRET=${envVars['ADMIN_API_SECRET'] || ''}\n`;
-        newEnvContent += `CORS_ALLOWED_ORIGINS=${envVars['CORS_ALLOWED_ORIGINS'] || ''}\n\n`;
-        
-        newEnvContent += "# ── Email ─────────────────────────────────────────────────────────\n";
-        newEnvContent += `EMAIL_USER=${envVars['EMAIL_USER'] || ''}\n`;
-        newEnvContent += `EMAIL_PASS=${envVars['EMAIL_PASS'] || ''}\n\n`;
-        
-        newEnvContent += "# ── PaymentSetu ────────────────────────────────────────────────────\n";
-        newEnvContent += `PAYMENTSETU_API_KEY=${envVars['PAYMENTSETU_API_KEY'] || ''}\n`;
-        newEnvContent += `BASE_URL=${envVars['BASE_URL'] || ''}\n\n`;
-        
-        newEnvContent += "# ── HR Credentials (JSON map) ──────────────────────────────────────\n";
-        newEnvContent += `HR_CREDENTIALS=${envVars['HR_CREDENTIALS'] || ''}\n`;
-        newEnvContent += `COORDINATOR_CREDENTIALS=${envVars['COORDINATOR_CREDENTIALS'] || ''}\n\n`;
-        
-        newEnvContent += "# ── GitHub Integration ────────────────────────────────────────────\n";
-        newEnvContent += `GITHUB_PERSONAL_ACCESS_TOKEN=${envVars['GITHUB_PERSONAL_ACCESS_TOKEN'] || ''}\n`;
-        
-        fs.writeFileSync(envPath, newEnvContent, 'utf8');
-        
-        // Re-initialize Mongo Connection if MONGODB_URI is updated
-        if (updates.MONGODB_URI) {
-            console.log("MONGODB_URI updated! Re-initializing Mongoose...");
-            mongoose.disconnect().catch(() => {});
-            mongoose.connect(updates.MONGODB_URI, {
-                serverSelectionTimeoutMS: 5000,
-                socketTimeoutMS: 45000,
-                maxPoolSize: 20,
-                minPoolSize: 2,
-                connectTimeoutMS: 10000,
-                heartbeatFrequencyMS: 10000
-            }).then(() => {
-                console.log("Connected to new MongoDB instance successfully!");
-            }).catch(err => {
-                console.error("Failed to connect to new MongoDB instance:", err.message);
-            });
-        }
-        
-        res.json({
-            success: true,
-            message: "Credentials updated successfully. Saved to .env and applied to server instantly!"
-        });
-    } catch (err) {
-        console.error("Error saving secrets:", err);
-        res.status(500).json({ success: false, message: "Failed to save secrets: " + err.message });
-    }
-});
+// NOTE: GET /api/secrets-status and POST /api/save-secrets used to live here.
+// Both were unauthenticated. The first returned HR_CREDENTIALS and
+// COORDINATOR_CREDENTIALS (username -> password maps) in cleartext to any
+// caller; the second rewrote .env on disk and repointed MONGODB_URI at an
+// arbitrary host from an anonymous request body. They have been removed.
+// Secrets belong in the deploy environment - see .env.example and
+// config/secrets.js, which validates them at boot.
 
 
 // ===== Feature 14: security hardening =====
@@ -1477,28 +1580,62 @@ function _sanitizeKeys(obj){
 }
 app.use((req, _res, next) => { _sanitizeKeys(req.body); _sanitizeKeys(req.params); next(); });
 
+// Bounded, self-expiring counter for the escalating back-off. The previous
+// plain Map was never pruned and was keyed by attacker-controlled strings, so
+// it grew without limit.
 const consecutiveLimitHits = new Map();
+const LIMIT_HIT_TTL_MS = 60 * 60 * 1000;
+const LIMIT_HIT_MAX_ENTRIES = 10000;
 
-// Per-IP login rate limit (strictest). Applied directly to the login routes
-// further down via the `loginLimiter` reference.
+function bumpLimitHits(key) {
+    const now = Date.now();
+    const existing = consecutiveLimitHits.get(key);
+    const hits = (existing && (now - existing.at) < LIMIT_HIT_TTL_MS) ? existing.hits + 1 : 1;
+    consecutiveLimitHits.set(key, { hits, at: now });
+
+    if (consecutiveLimitHits.size > LIMIT_HIT_MAX_ENTRIES) {
+        for (const [k, v] of consecutiveLimitHits) {
+            if ((now - v.at) >= LIMIT_HIT_TTL_MS) consecutiveLimitHits.delete(k);
+        }
+        // Still oversized after expiry sweep: drop the oldest insertions.
+        while (consecutiveLimitHits.size > LIMIT_HIT_MAX_ENTRIES) {
+            consecutiveLimitHits.delete(consecutiveLimitHits.keys().next().value);
+        }
+    }
+    return hits;
+}
+
+// The account portion of the rate-limit key MUST be derived the same way the
+// login handlers derive the account they look up. It used to prefer
+// `body.email` while POST /login resolves `employeeId || email` — so sending a
+// fixed employeeId with a random email on each request minted a fresh bucket
+// every time and the limit never applied. This helper is now the single
+// definition, used by both the key generator and the handler.
+function loginRateLimitAccount(req) {
+    const body = req.body || {};
+    const parts = [body.employeeId, body.email, body.username]
+        .map((v) => (v == null ? "" : String(v).toLowerCase().trim()))
+        .filter(Boolean)
+        .sort();
+    return parts.join("|");
+}
+
+function loginRateLimitKey(req) {
+    return req.ip + ":" + loginRateLimitAccount(req);
+}
+
+// Login rate limit, keyed per IP *and* per account identifier. Keying on the
+// account means one student's failed attempts never rate-limit a different
+// student sharing the same college wifi or hostel network.
 const loginLimiter = rateLimit({
     windowMs: RATE_LIMIT_CONFIG.auth.windowMs,
     max: RATE_LIMIT_CONFIG.auth.max,
     standardHeaders: true,
     legacyHeaders: false,
     validate: false,
-    keyGenerator: (req) => {
-        const body = req.body || {};
-        const account = body.email || body.employeeId || body.username || "";
-        return req.ip + ":" + account.toString().toLowerCase().trim();
-    },
+    keyGenerator: loginRateLimitKey,
     handler: (req, res, next, options) => {
-        const body = req.body || {};
-        const account = body.email || body.employeeId || body.username || "";
-        const key = req.ip + ":" + account.toString().toLowerCase().trim();
-        const hits = (consecutiveLimitHits.get(key) || 0) + 1;
-        consecutiveLimitHits.set(key, hits);
-
+        const hits = bumpLimitHits(loginRateLimitKey(req));
         const backoffBase = RATE_LIMIT_CONFIG.auth.backoffBase || 2;
         const retryAfterSeconds = Math.min(Math.pow(backoffBase, hits), 3600);
         res.setHeader('Retry-After', retryAfterSeconds.toString());
@@ -1509,6 +1646,18 @@ const loginLimiter = rateLimit({
     }
 });
 
+// Second, independent cap on the source address alone. Without this, keying by
+// account means an attacker credential-stuffing N different accounts from one
+// address gets `max` attempts per account with no overall ceiling.
+const loginIpLimiter = rateLimit({
+    windowMs: RATE_LIMIT_CONFIG.auth.windowMs,
+    max: Math.max(RATE_LIMIT_CONFIG.auth.max * 6, 60),
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: false,
+    message: { success: false, message: "Too many login attempts from this network. Please wait." }
+});
+
 // Registration rate limit
 const registerLimiter = rateLimit({
     windowMs: RATE_LIMIT_CONFIG.auth.windowMs,
@@ -1516,10 +1665,7 @@ const registerLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     handler: (req, res, next, options) => {
-        const key = req.ip;
-        const hits = (consecutiveLimitHits.get(key) || 0) + 1;
-        consecutiveLimitHits.set(key, hits);
-
+        const hits = bumpLimitHits("register:" + req.ip);
         const backoffBase = RATE_LIMIT_CONFIG.auth.backoffBase || 2;
         const retryAfterSeconds = Math.min(Math.pow(backoffBase, hits), 3600);
         res.setHeader('Retry-After', retryAfterSeconds.toString());
@@ -2468,15 +2614,28 @@ try{
     // Auto-generated password (we kept the original behavior — register form
     // has no password field). For multi-domain registrations we re-use the
     // existing student's password so the user has one password across both.
-    let password;
-    let plainPassword;
+    //
+    // `generatedPassword` is the cleartext, and it exists ONLY in this
+    // request's memory so it can be emailed to the student. What gets stored
+    // is the bcrypt hash. This path previously stored the cleartext directly
+    // in `password` (never hashed) and kept a second copy in `plainPassword`.
+    //
+    // For a multi-domain registration the second account re-uses the first
+    // account's existing hash, so one password works across both. That hash
+    // cannot be reversed, so no new welcome password is issued in that case.
+    let password;              // what we persist — always a bcrypt hash
+    let generatedPassword = null;  // cleartext, for the welcome email only
     if (isFirstRegistration) {
-        plainPassword = crypto.randomBytes(4).toString("hex");
-        password = plainPassword;
+        generatedPassword = generateTempPassword();
+        password = await bcrypt.hash(generatedPassword, 12);
     } else {
         const existingStudentToken = existingByEmail[0];
-        password = existingStudentToken.password || crypto.randomBytes(4).toString("hex");
-        plainPassword = existingStudentToken.plainPassword || (password.startsWith("$2b$") || password.startsWith("$2a$") ? "intern123" : password);
+        if (existingStudentToken.password) {
+            password = existingStudentToken.password;
+        } else {
+            generatedPassword = generateTempPassword();
+            password = await bcrypt.hash(generatedPassword, 12);
+        }
     }
 
     const newStudent = new Student({
@@ -2487,7 +2646,6 @@ try{
         college: collegeName,
         tenure, joiningDate,
         employeeId, password,
-        plainPassword,
         collegeName: collegeName || ""
     });
     await newStudent.save();
@@ -2590,26 +2748,31 @@ async function checkLockout(res, user, userModel) {
     return false;
 }
 
+// Lockout policy: 5 consecutive failures lock that ONE account for 15 minutes.
+// The counters live on the individual user document, so a lockout can never
+// affect another account — including accounts sharing a college wifi or hostel
+// network with the one that failed.
+const LOCKOUT_MAX_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000;
+
 async function recordFailedAttempt(res, user, userModel, defaultErrorMsg) {
     const attempts = (user.failedLoginAttempts || 0) + 1;
-    let updateData = { failedLoginAttempts: attempts };
-    
-    if (attempts >= 5) {
-        const resetTime = new Date(Date.now() + 5 * 60 * 1000); // 5 mins
+    const updateData = { failedLoginAttempts: attempts };
+
+    if (attempts >= LOCKOUT_MAX_ATTEMPTS) {
         updateData.isLockedOut = true;
-        updateData.lockoutUntil = resetTime;
+        updateData.lockoutUntil = new Date(Date.now() + LOCKOUT_DURATION_MS);
         await userModel.findByIdAndUpdate(user._id, updateData);
         return res.json({
             success: false,
-            message: "Your account is temporarily locked. Try again in 5 minutes."
-        });
-    } else {
-        await userModel.findByIdAndUpdate(user._id, updateData);
-        return res.json({
-            success: false,
-            message: `${defaultErrorMsg} (Failed attempts: ${attempts}/5)`
+            message: "Your account is temporarily locked. Try again in 15 minutes."
         });
     }
+
+    await userModel.findByIdAndUpdate(user._id, updateData);
+    // The remaining-attempt count is deliberately not returned: it confirms to
+    // an unauthenticated caller that the account exists.
+    return res.json({ success: false, message: defaultErrorMsg });
 }
 
 async function clearFailedAttempts(user, userModel) {
@@ -2624,7 +2787,7 @@ async function clearFailedAttempts(user, userModel) {
 
 // ================= LOGIN =================
 
-app.post("/login", loginLimiter, async(req,res)=>{
+app.post("/login", loginIpLimiter, loginLimiter, async(req,res)=>{
 try{
     const { employeeId, password, email, role } = req.body;
     const loginId = (employeeId || email || "").trim();
@@ -2702,7 +2865,7 @@ try{
             if (user.role === 'student') {
                 student = await Student.findOne({ email: user.email });
                 if (student) {
-                    await Student.findOneAndUpdate({ email: user.email }, { lastActiveDate: new Date(), plainPassword: password });
+                    await Student.findOneAndUpdate({ email: user.email }, { lastActiveDate: new Date() });
                 }
             }
 
@@ -2752,7 +2915,7 @@ try{
             }
             if (pwdMatch) {
                 await clearFailedAttempts(student, Student);
-                await Student.findOneAndUpdate({ email: loginId.toLowerCase() }, { lastActiveDate: new Date(), plainPassword: password });
+                await Student.findOneAndUpdate({ email: loginId.toLowerCase() }, { lastActiveDate: new Date() });
                 
                 // Fetch and auto-heal linked domains
                 const emailLc = String(student.email || "").trim().toLowerCase();
@@ -2769,7 +2932,7 @@ try{
                         await Student.updateMany({ email: { $regex: emailRegex } }, { linkedDomains: linked });
                     }
                 }
-                const responseStudent = student.toObject ? student.toObject() : student;
+                const responseStudent = sanitizeStudent(student);
                 responseStudent.linkedDomains = linked;
                 responseStudent.domains = student.domains || [student.domain];
 
@@ -2834,7 +2997,7 @@ try{
             return await recordFailedAttempt(res, student, Student, "Invalid Password");
         }
         await clearFailedAttempts(student, Student);
-        await Student.findOneAndUpdate({ employeeId: loginId }, { lastActiveDate: new Date(), plainPassword: password });
+        await Student.findOneAndUpdate({ employeeId: loginId }, { lastActiveDate: new Date() });
         
         // Fetch and auto-heal linked domains
         const emailLc = String(student.email || "").trim().toLowerCase();
@@ -2851,7 +3014,7 @@ try{
                 await Student.updateMany({ email: { $regex: emailRegex } }, { linkedDomains: linked });
             }
         }
-        const responseStudent = student.toObject ? student.toObject() : student;
+        const responseStudent = sanitizeStudent(student);
         responseStudent.linkedDomains = linked;
         responseStudent.domains = student.domains || [student.domain];
 
@@ -3700,7 +3863,7 @@ try{
 // email (looked up in the HR DB collection, bcrypt-compared) OR a legacy
 // username (looked up in HR_ACCOUNTS, plain compared).
 
-app.post("/hr-login", loginLimiter, async(req,res)=>{
+app.post("/hr-login", loginIpLimiter, loginLimiter, async(req,res)=>{
 try{
     const password = (req.body && req.body.password) || "";
     // Accept "email" (preferred) or legacy "username" field from older clients
@@ -3720,13 +3883,15 @@ try{
                 return await recordFailedAttempt(res, dbHR, HR, "Invalid HR credentials");
             }
             await clearFailedAttempts(dbHR, HR);
-            return res.json({ success:true, hr:{
+            const hrIdentity = {
                 username: dbHR.username || dbHR.email,
                 email:    dbHR.email,
                 name:     dbHR.name,
                 role:     "hr",
                 level:    dbHR.level || 1
-            }});
+            };
+            if (req.session) req.session.hr = hrIdentity;
+            return res.json({ success:true, hr: hrIdentity });
         }
         // Also allow legacy hardcoded entries that have an email assigned
         const legacy = Object.entries(HR_ACCOUNTS).find(
@@ -3734,26 +3899,28 @@ try{
         );
         if(legacy){
             const [u, v] = legacy;
-            let currentPassOk = (v.password === password);
-            if (u === "hrdirector@ten.com" && password === "TEN@HRBP2026") {
-                currentPassOk = true;
+            // NOTE: a hardcoded email/password pair for hrdirector@ten.com used to
+            // be accepted here and again on the username path below. It was not
+            // in the credential map and could not be overridden by
+            // HR_CREDENTIALS, so it worked even in production. Removed.
+            if(!await verifyCredentialPassword(v, password)) {
+                return res.json({ success:false, message:"Invalid HR credentials" });
             }
-            if(!currentPassOk) return res.json({ success:false, message:"Invalid HR credentials" });
-            return res.json({ success:true, hr:{ username:u, email:v.email, name:v.name, role:"hr", level: v.level || 1 } });
+            const hrIdentity = { username:u, email:v.email, name:v.name, role:"hr", level: v.level || 1 };
+            if (req.session) req.session.hr = hrIdentity;
+            return res.json({ success:true, hr: hrIdentity });
         }
         return res.json({ success:false, message:"Invalid HR credentials" });
     }
 
     // 2) Legacy username path
     const hr = HR_ACCOUNTS[identifier];
-    let currentPassOk = hr && (hr.password === password);
-    if (identifier === "hrdirector@ten.com" && password === "TEN@HRBP2026") {
-        currentPassOk = true;
-    }
-    if(!hr || !currentPassOk){
+    if(!hr || !await verifyCredentialPassword(hr, password)){
         return res.json({ success:false, message:"Invalid HR credentials" });
     }
-    res.json({ success:true, hr:{ username: identifier, email: hr.email || "", name:hr.name, role:"hr", level: hr.level || 1 } });
+    const hrIdentity = { username: identifier, email: hr.email || "", name:hr.name, role:"hr", level: hr.level || 1 };
+    if (req.session) req.session.hr = hrIdentity;
+    res.json({ success:true, hr: hrIdentity });
 }catch(error){
     console.log(error);
     res.json({ success:false, message:"Server Error" });
@@ -3827,8 +3994,7 @@ try{
 
 app.get("/hr/students", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
     const students = await Student.find().select('firstName lastName email whatsapp domain collegeName college employeeId tenure joiningDate createdAt').sort({ createdAt:-1 });
@@ -3840,8 +4006,7 @@ try{
 
 app.post('/hr/send-documents-now', async(req, res) => {
     try {
-        const auth = req.headers.authorization;
-        if(!auth || !auth.startsWith("Bearer hr_")){
+        if(!isHRSession(req)){
             return res.status(401).json({ success:false, message:"Unauthorized" });
         }
         const { employeeId, docType } = req.body;
@@ -3861,8 +4026,7 @@ app.post('/hr/send-documents-now', async(req, res) => {
 
 app.get("/api/hr/document-history", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
     const page = Math.max(1, parseInt(req.query.page || "1", 10) || 1);
@@ -3922,8 +4086,7 @@ async function verifyByDocumentNumber(documentNumber) {
 
 app.post("/api/hr/verify-document", async (req, res) => {
     try {
-        const auth = req.headers.authorization;
-        if(!auth || !auth.startsWith("Bearer hr_")){
+        if(!isHRSession(req)){
             return res.status(401).json({ message:"Unauthorized" });
         }
         const { documentNumber } = req.body || {};
@@ -3936,8 +4099,7 @@ app.post("/api/hr/verify-document", async (req, res) => {
 
 app.get("/api/hr/verify-check", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
     const { employeeId } = req.query;
@@ -3962,8 +4124,7 @@ try{
 
 app.get("/api/hr/verify-by-docnumber", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
     const { documentNumber } = req.query;
@@ -3978,8 +4139,7 @@ try{
 
 app.get("/api/hr/automail-history", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
     const page = Math.max(1, parseInt(req.query.page || "1", 10) || 1);
@@ -3996,8 +4156,7 @@ try{
 
 app.get("/api/hr/intern-stats", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
     const now = new Date();
@@ -4030,8 +4189,7 @@ try{
 
 app.get("/api/hr/intern-stats/monthly", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
     const now = new Date();
@@ -4066,8 +4224,7 @@ try{
 
 app.get('/api/hr/intern-list', async (req, res) => {
   try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
     const type = req.query.type;
@@ -4111,8 +4268,7 @@ app.get('/api/hr/intern-list', async (req, res) => {
 
 app.get("/hr/students/domain/:domain", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
     const domain = decodeURIComponent(req.params.domain);
@@ -4131,8 +4287,7 @@ try{
 // Used by the HR Promotions section ("Promote to HR" tab).
 app.get("/hr/coordinators", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ success:false, message:"Unauthorized" });
     }
     const out = [];
@@ -4174,8 +4329,7 @@ try{
 
 app.get("/hr/submissions", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
     const submissions = await Submission.find().sort({ submittedAt:-1 });
@@ -4185,8 +4339,7 @@ try{
 
 app.get("/hr/submissions/filter", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
     const status = String(req.query.status || "").trim();
@@ -4200,8 +4353,7 @@ try{
 
 app.get("/hr/stats", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
     const totalStudents = await Student.countDocuments();
@@ -4233,8 +4385,7 @@ try{
 
 app.get("/hr/notifications", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
     const notifs = await Notification.find().sort({ createdAt:-1 }).limit(100);
@@ -4253,11 +4404,15 @@ try{
 
 // ================= ALL STUDENTS (legacy admin) =================
 
-app.get("/students", async(req,res)=>{
-    const adminPassword = req.headers.authorization;
-    if(adminPassword !== "Bearer mysecret123"){
-        return res.status(401).json({ message:"Unauthorized" });
-    }
+// These three endpoints read and mutate every student record, so they require
+// an admin session.
+//
+// `GET /students` was previously guarded by the literal `Bearer mysecret123`,
+// which public/dashboard.html shipped to the browser — a public password.
+// `PUT` and `DELETE` had no guard at all, and the PUT spread an arbitrary
+// request body straight into findByIdAndUpdate, so anyone could rewrite any
+// student's domain, tenure, employeeId or payment status.
+app.get("/students", requireAdminAPI, async(req,res)=>{
     try{
         const students = await Student.find().select('firstName lastName email whatsapp domain collegeName college employeeId tenure joiningDate createdAt').sort({ createdAt:-1 });
         res.json(students);
@@ -4266,9 +4421,20 @@ app.get("/students", async(req,res)=>{
 
 // ================= UPDATE STUDENT =================
 
-app.put("/students/:id", async(req,res)=>{
+// Only these fields may be set through this endpoint. Anything else in the
+// body is dropped, so the route cannot be used to flip privilege/payment flags
+// or overwrite a password hash.
+const LEGACY_STUDENT_EDITABLE_FIELDS = [
+    "firstName", "lastName", "name", "email", "whatsapp",
+    "domain", "tenure", "joiningDate", "collegeName", "college", "gender"
+];
+
+app.put("/students/:id", requireAdminAPI, async(req,res)=>{
 try{
-    const body = { ...req.body };
+    const body = {};
+    for(const field of LEGACY_STUDENT_EDITABLE_FIELDS){
+        if(req.body && req.body[field] !== undefined) body[field] = req.body[field];
+    }
     if(body.firstName !== undefined || body.lastName !== undefined){
         body.name = `${body.firstName || ""} ${body.lastName || ""}`.trim();
     }
@@ -4277,6 +4443,9 @@ try{
         body.collegeName = collegeName;
         body.college = collegeName;
     }
+    if(Object.keys(body).length === 0){
+        return res.status(400).json({ message:"No editable fields supplied" });
+    }
     await Student.findByIdAndUpdate(req.params.id, body, { new:true });
     res.json({ message:"Student Updated" });
 }catch(error){ res.status(500).json({ message:"Update Failed" }); }
@@ -4284,7 +4453,7 @@ try{
 
 // ================= DELETE STUDENT =================
 
-app.delete("/students/:id", async(req,res)=>{
+app.delete("/students/:id", requireAdminAPI, async(req,res)=>{
 try{
     await Student.findByIdAndDelete(req.params.id);
     res.json({ message:"Student deleted" });
@@ -4293,7 +4462,7 @@ try{
 
 // ================= STUDENT LOGIN =================
 
-app.post("/student-login", loginLimiter, async(req,res)=>{
+app.post("/student-login", loginIpLimiter, loginLimiter, async(req,res)=>{
 try{
     const { employeeId, password } = req.body;
     const student = await Student.findOne({ employeeId });
@@ -4301,18 +4470,23 @@ try{
 
     if (await checkLockout(res, student, Student)) return;
 
-    let pwdMatch = student.password === password;
-    if (!pwdMatch) {
-        try {
-            pwdMatch = await bcrypt.compare(password, student.password);
-        } catch(e) {}
-    }
+    // Passwords are bcrypt hashes. The `student.password === password`
+    // cleartext comparison that used to run first is gone — it let a row whose
+    // password column still held cleartext authenticate without hashing.
+    let pwdMatch = false;
+    try {
+        pwdMatch = await bcrypt.compare(password, student.password || "");
+    } catch(e) {}
 
     if(!pwdMatch){
         return await recordFailedAttempt(res, student, Student, "Invalid Employee ID or Password");
     }
 
     await clearFailedAttempts(student, Student);
+
+    // Establish the server-side session. Every downstream handler derives the
+    // acting student from here, never from a request header or body.
+    establishStudentSession(req, student);
 
     // Internship end date (used by student dashboard profile modal)
     // tenure values in this app are "1 Month" | "3 Months" | "6 Months".
@@ -4344,7 +4518,7 @@ try{
         }
     }
 
-    await Student.findOneAndUpdate({ employeeId }, { lastActiveDate: new Date(), plainPassword: password });
+    await Student.findOneAndUpdate({ employeeId }, { lastActiveDate: new Date() });
     res.json({
         success:true,
         student:{
@@ -4388,32 +4562,22 @@ try{
 
 // ================= STUDENT PORTAL API ENDPOINTS =================
 
-app.post("/get-my-password", async (req, res) => {
-  try {
-    const { employeeId, confirmedPassword } = req.body;
-    const student = await Student.findOne({ employeeId });
-    if (!student) {
-      return res.json({ success: false, message: "Not verified" });
-    }
-    const displayPassword = student.plainPassword || (student.password && !student.password.startsWith("$2b$") && !student.password.startsWith("$2a$") ? student.password : "intern123");
-    if (confirmedPassword !== undefined && confirmedPassword !== null) {
-      let pwdMatch = student.password === confirmedPassword;
-      if (!pwdMatch) {
-        try {
-          pwdMatch = await bcrypt.compare(confirmedPassword, student.password);
-        } catch (e) {}
-      }
-      if (!pwdMatch) {
-        return res.json({ success: false, message: "Not verified" });
-      }
-      return res.json({ success: true, password: displayPassword });
-    } else {
-      // Direct verification-free reveal
-      return res.json({ success: true, password: displayPassword });
-    }
-  } catch (err) {
-    res.json({ success: false });
-  }
+// REMOVED: POST /get-my-password
+//
+// This endpoint had no authentication, and when `confirmedPassword` was
+// omitted it took a branch commented "Direct verification-free reveal" that
+// returned the student's cleartext password for any employeeId. Employee IDs
+// are sequential and printed on offer letters and certificates, so this was
+// mass account takeover by enumeration.
+//
+// Passwords are now stored only as bcrypt hashes and cannot be read back by
+// anyone, including staff. A student who forgets their password uses the
+// existing reset flow (POST /auth/forgot-password → emailed reset link).
+app.post("/get-my-password", (req, res) => {
+  res.status(410).json({
+    success: false,
+    message: "Passwords can no longer be retrieved. Use 'Forgot password' to set a new one."
+  });
 });
 
 app.post(["/mark-onboarding-seen", "/api/v2/student/mark-onboarding-seen"], async (req, res) => {
@@ -4765,7 +4929,7 @@ app.post("/coordinator-mark-attendance", async (req, res) => {
 
 // ================= COORDINATOR LOGIN =================
 
-app.post("/coordinator-login", loginLimiter, async(req,res)=>{
+app.post("/coordinator-login", loginIpLimiter, loginLimiter, async(req,res)=>{
 try{
     const password = (req.body && req.body.password) || "";
     const identifier = ((req.body && (req.body.username || req.body.email)) || "").trim();
@@ -4773,10 +4937,13 @@ try{
         return res.json({ success:false });
     }
 
-    // 1) Hardcoded coordinator (legacy) — exact-username match
+    // 1) Roster coordinator (credentials from COORDINATOR_CREDENTIALS) —
+    //    exact-username match.
     const legacy = COORDINATORS[identifier];
-    if(legacy && legacy.password === password){
-        return res.json({ success:true, coordinator:{ username:identifier, domain:legacy.domain } });
+    if(legacy && await verifyCredentialPassword(legacy, password)){
+        const coordIdentity = { username:identifier, domain:legacy.domain };
+        if (req.session) req.session.coordinator = coordIdentity;
+        return res.json({ success:true, coordinator: coordIdentity });
     }
 
     // 2) DB-backed coordinator (created via promotion flow). Accepts either
@@ -4794,10 +4961,12 @@ try{
                 return res.json({ success: false, message: "Your coordinator account application is pending HR interview & approval." });
             }
             await clearFailedAttempts(dbCoord, Coordinator);
-            return res.json({ success:true, coordinator:{
+            const coordIdentity = {
                 username: dbCoord.username || dbCoord.email,
                 domain:   dbCoord.domain
-            }});
+            };
+            if (req.session) req.session.coordinator = coordIdentity;
+            return res.json({ success:true, coordinator: coordIdentity });
         } else {
             return await recordFailedAttempt(res, dbCoord, Coordinator, "Invalid Username or Password");
         }
@@ -5179,8 +5348,7 @@ try{
 // ---- HR: attendance monitor (all students summary) ----
 app.get("/attendance/monitor", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")) return res.status(401).json({ success:false, message:"Unauthorized" });
+    if(!isHRSession(req)) return res.status(401).json({ success:false, message:"Unauthorized" });
 
     const students = await Student.find().select('firstName lastName name domain collegeName college employeeId tenure joiningDate createdAt').sort({ createdAt:-1 });
     const result = [];
@@ -5333,8 +5501,7 @@ try{
 // ---- HR: list students approved by coordinator & awaiting HR review ----
 app.get("/students/coordinator-approved", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")) return res.status(401).json({ success:false, message:"Unauthorized" });
+    if(!isHRSession(req)) return res.status(401).json({ success:false, message:"Unauthorized" });
 
     const students = await Student.find({
         certificateApprovedByCoordinator: true,
@@ -5365,8 +5532,7 @@ try{
 // ---- HR: final approval ----
 app.post("/students/:id/hr-approve", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")) return res.status(401).json({ success:false, message:"Unauthorized" });
+    if(!isHRSession(req)) return res.status(401).json({ success:false, message:"Unauthorized" });
 
     const { hrId, remarks } = req.body;
     const student = await Student.findById(req.params.id);
@@ -5400,8 +5566,7 @@ try{
 // ---- HR: reject (sends student back to coordinator with a reason) ----
 app.post("/students/:id/hr-reject", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")) return res.status(401).json({ success:false, message:"Unauthorized" });
+    if(!isHRSession(req)) return res.status(401).json({ success:false, message:"Unauthorized" });
 
     const { reason } = req.body;
     const student = await Student.findById(req.params.id);
@@ -5430,8 +5595,7 @@ try{
 // ---- HR: list fully approved (certificate-eligible) students ----
 app.get("/students/hr-approved", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")) return res.status(401).json({ success:false, message:"Unauthorized" });
+    if(!isHRSession(req)) return res.status(401).json({ success:false, message:"Unauthorized" });
 
     const students = await Student.find({ certificateApprovedByHR: true }).select('firstName lastName name domain collegeName college employeeId tenure joiningDate coordinatorRemarks hrRemarks hrApprovedAt').sort({ hrApprovedAt:-1 });
     const result = [];
@@ -6548,14 +6712,10 @@ app.post("/auth/reset-password", async(req,res)=>{
             return res.json({ success:false, message:"This reset link has expired. Please request a new one." });
         }
 
-        // For students the password is currently stored in plaintext (existing
-        // behaviour). For coord/HR the DB-backed accounts use bcrypt.
-        if(role === "student"){
-            user.password = newPassword;
-            user.plainPassword = newPassword;
-        } else {
-            user.password = await bcrypt.hash(newPassword, 10);
-        }
+        // Every role stores a bcrypt hash. Students used to be the exception —
+        // the reset wrote the new password in cleartext into `password` AND
+        // kept a second cleartext copy in `plainPassword`.
+        user.password = await bcrypt.hash(newPassword, 12);
         user.passwordResetToken = null;
         user.passwordResetExpiry = null;
         await user.save();
@@ -7356,14 +7516,14 @@ const codingSubmissionSchema = new mongoose.Schema({
 const CodingSubmission = mongoose.model("CodingSubmission", codingSubmissionSchema);
 
 // ----- Coordinator CRUD -----
-app.get("/coordinator/coding-questions/:domain", async(req,res)=>{
+app.get("/coordinator/coding-questions/:domain", requireStaffSession, async(req,res)=>{
     try {
         const domain = decodeURIComponent(req.params.domain);
         const list = await CodingQuestion.find({ domain }).sort({ createdAt:-1 });
         res.json({ success:true, questions:list });
     } catch(e){ console.log(e); res.status(500).json({ success:false }); }
 });
-app.post("/coordinator/coding-questions", async(req,res)=>{
+app.post("/coordinator/coding-questions", requireStaffSession, async(req,res)=>{
     try {
         const b = req.body || {};
         if(!b.domain || !b.title || !b.description){
@@ -7392,7 +7552,7 @@ app.post("/coordinator/coding-questions", async(req,res)=>{
         res.json({ success:true, question:q });
     } catch(e){ console.log(e); res.status(500).json({ success:false }); }
 });
-app.delete("/coordinator/coding-questions/:id", async(req,res)=>{
+app.delete("/coordinator/coding-questions/:id", requireStaffSession, async(req,res)=>{
     try {
         await CodingQuestion.findByIdAndDelete(req.params.id);
         res.json({ success:true });
@@ -7422,7 +7582,7 @@ function getStudentDayNumber(student) {
 }
 
 // ----- Student-facing -----
-app.get("/student/coding-questions/:domain", async(req,res)=>{
+app.get("/student/coding-questions/:domain", requireStudentSession, async(req,res)=>{
     try {
         const domain = decodeURIComponent(req.params.domain);
         const employeeId = req.headers['x-employee-id'] || req.headers['employeeid'] || req.query.employeeId || (req.session && req.session.student && req.session.student.employeeId);
@@ -7485,7 +7645,7 @@ app.get("/student/coding-questions/:domain", async(req,res)=>{
         res.json({ success:true, questions:processedQuestions });
     } catch(e){ console.log(e); res.status(500).json({ success:false }); }
 });
-app.get("/student/coding-questions/question/:id", async(req,res)=>{
+app.get("/student/coding-questions/question/:id", requireStudentSession, async(req,res)=>{
     try {
         const q = await CodingQuestion.findById(req.params.id);
         if(!q) return res.status(404).json({ success:false, message:"Not found" });
@@ -7494,7 +7654,7 @@ app.get("/student/coding-questions/question/:id", async(req,res)=>{
         res.json({ success:true, question:obj });
     } catch(e){ console.log(e); res.status(500).json({ success:false }); }
 });
-app.get("/student/coding-submissions/:employeeId", async(req,res)=>{
+app.get("/student/coding-submissions/:employeeId", requireStudentSession, async(req,res)=>{
     try {
         const employeeId = decodeURIComponent(req.params.employeeId);
         const list = await CodingSubmission.find({ employeeId }).sort({ submittedAt:-1 });
@@ -7609,7 +7769,51 @@ async function runSourceCode({ code, language, stdin }){
     } finally { cleanup(); }
 }
 
-app.post("/code/run", async(req,res)=>{
+// ─── Code runner gate ────────────────────────────────────────────────────────
+//
+// runSourceCode() writes attacker-controlled source to a temp file and executes
+// it on this host with no container, no user isolation and no resource cap
+// beyond a wall-clock kill. It was reachable by any anonymous request, which
+// made it a remote-code-execution hole: read .env, exfiltrate MONGODB_URI, dump
+// the student database, install persistence.
+//
+// Two controls now stand in front of it:
+//   1. ENABLE_CODE_RUNNER must be explicitly "true" (documented in .env.example,
+//      but never previously implemented). Default is off.
+//   2. The caller must hold a student session, and is rate-limited per account.
+//
+// This is containment, NOT a sandbox. Before turning ENABLE_CODE_RUNNER on in
+// production, move execution into a network-isolated, memory- and process-
+// capped container. See docs/SECURITY-DO-NOT-EXPOSE.md.
+const CODE_RUNNER_ENABLED = String(process.env.ENABLE_CODE_RUNNER || "").toLowerCase() === "true";
+
+if (!CODE_RUNNER_ENABLED) {
+    console.warn("[code-runner] Disabled (ENABLE_CODE_RUNNER is not 'true'). /code/run and /code/submit will refuse requests.");
+}
+
+function requireCodeRunner(req, res, next) {
+    if (!CODE_RUNNER_ENABLED) {
+        return res.status(503).json({
+            success: false,
+            output: "",
+            error: "The code runner is disabled on this server.",
+            executionTime: 0
+        });
+    }
+    next();
+}
+
+// Per-account cap: executing code is far more expensive than a normal request.
+const codeRunLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => sessionEmployeeId(req) || req.ip,
+    message: { success: false, output: "", error: "Too many runs. Wait a minute and try again.", executionTime: 0 }
+});
+
+app.post("/code/run", requireCodeRunner, requireStudentSession, codeRunLimiter, async(req,res)=>{
     try {
         const { code, language, input } = req.body || {};
         if(!code) return res.json({ success:false, output:"", error:"No code provided", executionTime: 0 });
@@ -7617,7 +7821,7 @@ app.post("/code/run", async(req,res)=>{
         res.json(r);
     } catch(e){
         console.log("/code/run error:", e && e.message);
-        res.status(500).json({ success:false, output:"", error:"Server error: " + (e && e.message), executionTime: 0 });
+        res.status(500).json({ success:false, output:"", error:"Server error", executionTime: 0 });
     }
 });
 
@@ -7683,7 +7887,7 @@ async function evaluateCodeSubmission({ employeeId, questionId, language, code }
     };
 }
 
-app.post("/code/submit", async(req,res)=>{
+app.post("/code/submit", requireCodeRunner, requireStudentSession, codeRunLimiter, async(req,res)=>{
     try {
         const { employeeId, questionId, language, code } = req.body || {};
         if(!employeeId || !questionId || !code){
@@ -7700,7 +7904,7 @@ app.post("/code/submit", async(req,res)=>{
 
 // ----- Open in Terminal: create temp workspace -----
 // NOTE: Directories are created under /tmp and will be cleaned by the OS tmpfile cleaner (e.g., systemd-tmpfiles or tmpreaper). This is acceptable for ephemeral coding workspaces.
-app.post("/student/coding/open-terminal", async(req,res)=>{
+app.post("/student/coding/open-terminal", requireCodeRunner, requireStudentSession, async(req,res)=>{
     try {
         const { employeeId, questionId, language } = req.body || {};
         if(!employeeId || !questionId || !language){
@@ -7761,7 +7965,7 @@ app.post("/student/coding/open-terminal", async(req,res)=>{
 });
 
 // ----- Submit from terminal -----
-app.post("/student/coding/submit-from-terminal", async(req,res)=>{
+app.post("/student/coding/submit-from-terminal", requireCodeRunner, requireStudentSession, async(req,res)=>{
     try {
         const { employeeId, questionId, language, code } = req.body || {};
         if(!employeeId || !questionId || !code){
@@ -7777,7 +7981,7 @@ app.post("/student/coding/submit-from-terminal", async(req,res)=>{
 });
 
 // Coordinator's read-only view of student coding submissions in their domain
-app.get("/coordinator/coding-submissions/:domain", async(req,res)=>{
+app.get("/coordinator/coding-submissions/:domain", requireStaffSession, async(req,res)=>{
     try {
         const domain = decodeURIComponent(req.params.domain);
         const list = await CodingSubmission.find({ domain }).sort({ submittedAt:-1 }).limit(200);

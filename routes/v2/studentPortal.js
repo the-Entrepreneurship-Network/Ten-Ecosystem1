@@ -223,19 +223,13 @@ const FALLBACK_VIDEOS = {
     }
 };
 
-// FEATURE 2 — Auth middleware using x-employee-id or token
-async function requireStudent(req, res, next) {
-    try {
-        const employeeId = req.headers["x-employee-id"] || req.body.employeeId || req.query.employeeId;
-        if (!employeeId) return res.status(401).json({ success: false, message: "Authentication required" });
-        const student = await Student.findOne({ employeeId: String(employeeId) });
-        if (!student) return res.status(401).json({ success: false, message: "Student not found" });
-        req.student = student;
-        next();
-    } catch (err) {
-        res.status(500).json({ success: false, message: "Auth error" });
-    }
-}
+// Auth middleware — session-derived.
+//
+// This used to read the employeeId from an `x-employee-id` header, the body or
+// the query string, so any caller could act as any student simply by naming
+// their employee ID. It also crashed on GET requests (`req.body.employeeId`
+// with no body parsed), which surfaced as a 500 "Auth error".
+const { requireStudent, requireStaff, sessionEmployeeId } = require("../../middleware/sessionAuth");
 
 // ────────────────────────────────────────────────
 // FEATURE 2 — GET /api/v2/student/me
@@ -1039,12 +1033,8 @@ router.patch("/tasks/:taskId/video-progress", requireStudent, async (req, res) =
 // ────────────────────────────────────────────────
 // POST /api/v2/tasks/:progressId/approve  (coordinator)
 // ────────────────────────────────────────────────
-router.post("/tasks/:progressId/approve", validate(mongoIdParamSchema), async (req, res) => {
+router.post("/tasks/:progressId/approve", requireStaff, validate(mongoIdParamSchema), async (req, res) => {
     try {
-        const auth = req.headers.authorization || "";
-        if (!auth.startsWith("Bearer ")) {
-            return res.status(401).json({ success: false, message: "Coordinator auth required" });
-        }
 
         const { feedback, studentEmployeeId } = req.body;
         if (!studentEmployeeId) return res.status(400).json({ success: false, message: "studentEmployeeId required" });
@@ -1065,12 +1055,8 @@ router.post("/tasks/:progressId/approve", validate(mongoIdParamSchema), async (r
 // ────────────────────────────────────────────────
 // POST /api/v2/tasks/:progressId/reject  (coordinator)
 // ────────────────────────────────────────────────
-router.post("/tasks/:progressId/reject", validate(mongoIdParamSchema), async (req, res) => {
+router.post("/tasks/:progressId/reject", requireStaff, validate(mongoIdParamSchema), async (req, res) => {
     try {
-        const auth = req.headers.authorization || "";
-        if (!auth.startsWith("Bearer ")) {
-            return res.status(401).json({ success: false, message: "Coordinator auth required" });
-        }
 
         const { feedback, studentEmployeeId } = req.body;
         if (!studentEmployeeId) return res.status(400).json({ success: false, message: "studentEmployeeId required" });
@@ -1097,12 +1083,8 @@ router.post("/tasks/:progressId/reject", validate(mongoIdParamSchema), async (re
 // ────────────────────────────────────────────────
 // GET /api/v2/coordinator/submissions
 // ────────────────────────────────────────────────
-router.get("/coordinator/submissions", async (req, res) => {
+router.get("/coordinator/submissions", requireStaff, async (req, res) => {
     try {
-        const auth = req.headers.authorization || "";
-        if (!auth.startsWith("Bearer ")) {
-            return res.status(401).json({ success: false, message: "Coordinator auth required" });
-        }
         let domain = req.query.domain;
         if (!domain) return res.status(400).json({ success: false, message: "domain query param required" });
         if (domain === "Artificial Intelligence" || domain === "AI") domain = "Data Science";
@@ -1164,7 +1146,7 @@ router.get("/coins/history", requireStudent, async (req, res) => {
 // ────────────────────────────────────────────────
 // GET /api/v2/leaderboard
 // ────────────────────────────────────────────────
-router.get("/leaderboard", async (req, res) => {
+router.get("/leaderboard", requireStudent, async (req, res) => {
     try {
         const top = await require("../../models/new/StudentCoin").find()
             .sort({ totalCoins: -1 })

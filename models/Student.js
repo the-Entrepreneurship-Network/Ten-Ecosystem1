@@ -17,13 +17,17 @@ const studentsSchema = new mongoose.Schema({
     isLockedOut: { type: Boolean, default: false },
     joiningDate: String,
     employeeId: { type: String, unique: true, sparse: true },
+    // Always a bcrypt hash. There is deliberately no default: an account
+    // without a password must fail to authenticate, not fall back to a shared
+    // well-known one.
+    //
+    // NOTE: a `plainPassword` field used to sit here holding the cleartext
+    // password alongside this hash, refreshed on every successful login and
+    // readable through an unauthenticated endpoint. It has been removed. Do
+    // not reintroduce a reversible copy of a password in any form.
     password: {
         type: String,
-        default: "intern123"
-    },
-    plainPassword: {
-        type: String,
-        default: "intern123"
+        required: true
     },
 
     certificateApprovedByCoordinator: { type: Boolean, default: false },

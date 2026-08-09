@@ -52,36 +52,13 @@ function getCertificatePrice(type, studentTenure) {
 }
 
 // ── HR Auth middleware (for future admin cert routes if needed) ──
-async function requireHR(req, res, next) {
-    try {
-        const auth = (req && req.headers && (req.headers["authorization"] || req.headers["Authorization"])) || "";
-        if (auth && auth.startsWith("Bearer hr_")) {
-            if (req) req.hrUser = { token: auth };
-            return next();
-        }
-        return res.status(401).json({ success: false, message: "HR authentication required" });
-    } catch (err) {
-        res.status(500).json({ success: false, message: "HR auth error" });
-    }
-}
-
 // ── Auth middleware ──
-async function requireStudent(req, res, next) {
-    try {
-        const employeeId = req && (
-            (req.headers && (req.headers["x-employee-id"] || req.headers["X-Employee-Id"])) || 
-            (req.body && req.body.employeeId) || 
-            (req.query && req.query.employeeId)
-        );
-        if (!employeeId) return res.status(401).json({ success: false, message: "Authentication required" });
-        const student = await Student.findOne({ employeeId: String(employeeId) });
-        if (!student) return res.status(401).json({ success: false, message: "Student not found" });
-        if (req) req.student = student;
-        next();
-    } catch (err) {
-        res.status(500).json({ success: false, message: "Auth error" });
-    }
-}
+// Both guards used to trust the client: requireHR accepted any Authorization
+// header starting with "Bearer hr_", and requireStudent read the employeeId
+// straight out of a header/body/query. They now come from the shared
+// session-derived guards.
+const { requireHR, requireStudent, requireStaff } = require("../../middleware/sessionAuth");
+const { validateOfficialPullRequestUrl } = require("../../config/github");
 
 // ── Compute completion percentage from task progress ──
 async function getCompletionPercent(studentId) {
@@ -137,12 +114,28 @@ async function getCertStatus(student) {
 // ════════════════════════════════
 
 // GET /api/v2/certificates/my-certs — smart unified handler
+//
+// "my-certs" means the signed-in student's certificates. The employeeId used
+// to be taken from the query string, the body or an x-employee-id header, so
+// anyone could read anyone else's certificate state — including the base64
+// PDFs — by naming their employee ID. It now comes from the session, and staff
+// may look up another student explicitly.
 async function handleMyCerts(req, res) {
   try {
-    const employeeId = req && ((req.query && req.query.employeeId) || (req.body && req.body.employeeId));
-    const headerEmployeeId = req && req.headers && (req.headers["x-employee-id"] || req.headers["X-Employee-Id"]);
+    const session = req.session || {};
+    const isStaff = !!(session.coordinator || session.hr || session.adminUser);
+    const sessionEmployeeId = (session.student && session.student.employeeId) || "";
 
-    // If no query parameter employeeId and we have headers, check if it's the old portal (my-certificates.html)
+    // Staff may target a specific student; everyone else only ever sees self.
+    const requestedId = (req.query && req.query.employeeId) || (req.body && req.body.employeeId);
+    const employeeId = isStaff ? requestedId : null;
+    const headerEmployeeId = isStaff ? null : sessionEmployeeId;
+
+    if (!isStaff && !sessionEmployeeId) {
+      return res.status(401).json({ success: false, message: "Please sign in to continue." });
+    }
+
+    // Legacy portal shape (my-certificates.html) — full status payload.
     if (!employeeId && headerEmployeeId) {
       const student = await Student.findOne({ employeeId: String(headerEmployeeId) });
       if (!student) return res.status(401).json({ success: false, message: "Student not found" });
@@ -936,22 +929,63 @@ router.post('/coordinator-approve', async (req, res) => {
 });
   
 // POST /api/v2/certificates/star-submit — Student submits star contribution
-router.post('/star-submit', async (req, res) => {
+//
+// The submitted value is rendered back into the HR review queue, so it is
+// validated here rather than only in the browser. Previously this route had no
+// authentication, no schema and no URL check — the only gate was a client-side
+// `startsWith('https://github.com/')` that was trivially skipped by posting
+// directly, and the stored string was then interpolated raw into innerHTML in
+// the HR portal.
+router.post('/star-submit', requireStudent, async (req, res) => {
   try {
-    const { employeeId, contribution } = req.body;
-    await Student.findOneAndUpdate({ employeeId }, {
+    const raw = req.body && req.body.contribution;
+
+    // The contribution is either a plain description (non-tech track) or a
+    // JSON blob carrying a githubPR URL (tech track).
+    let payload = raw;
+    let parsed = null;
+    if (typeof raw === 'string') {
+      try { parsed = JSON.parse(raw); } catch (_) { parsed = null; }
+    } else if (raw && typeof raw === 'object') {
+      parsed = raw;
+    }
+
+    if (parsed && typeof parsed === 'object') {
+      if (parsed.githubPR !== undefined) {
+        const verdict = validateOfficialPullRequestUrl(parsed.githubPR);
+        if (!verdict.ok) {
+          return res.status(400).json({ success: false, message: verdict.message });
+        }
+        parsed.githubPR = verdict.url;
+      }
+      if (parsed.description !== undefined) {
+        parsed.description = String(parsed.description).slice(0, 4000);
+      }
+      if (parsed.githubUsername !== undefined) {
+        parsed.githubUsername = String(parsed.githubUsername).slice(0, 100);
+      }
+      payload = JSON.stringify(parsed);
+    } else {
+      if (typeof payload !== 'string' || !payload.trim()) {
+        return res.status(400).json({ success: false, message: 'Please describe your contribution.' });
+      }
+      payload = payload.slice(0, 4000);
+    }
+
+    // Act on the signed-in student — not on an employeeId the caller supplied.
+    await Student.findByIdAndUpdate(req.student._id, {
       starStatus: 'pending_review',
-      starContribution: contribution,
+      starContribution: payload
     });
     res.json({ success: true });
   } catch(e) {
     console.error('[Star-Submit] Error:', e.message);
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ success: false, message: 'Could not save your submission.' });
   }
 });
 
 // GET /api/v2/certificates/star-pending — HR retrieves pending star performance submissions
-router.get('/star-pending', async (req, res) => {
+router.get('/star-pending', requireStaff, async (req, res) => {
   try {
     const students = await Student.find({
       starStatus: 'pending_review'
@@ -964,7 +998,7 @@ router.get('/star-pending', async (req, res) => {
 });
 
 // POST /api/v2/certificates/star-review — HR approves or rejects a star performer submission
-router.post('/star-review', async (req, res) => {
+router.post('/star-review', requireStaff, async (req, res) => {
   try {
     const { studentId, approved, feedback } = req.body;
     const update = {};

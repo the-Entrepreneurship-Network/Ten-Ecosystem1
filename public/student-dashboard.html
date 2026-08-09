@@ -5175,7 +5175,7 @@ setupDomainSwitcher();
         <div style="font-size:10px;color:#8aa4c8;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Portal Password</div>
         <div style="display:flex;align-items:center;gap:8px;">
           <div id="pmPassword" style="font-size:14px;font-weight:700;color:#f0eee8;font-family:monospace;letter-spacing:3px;">••••••••</div>
-          <button onclick="togglePmPassword()" id="pmPassToggle" style="background:rgba(255,255,255,0.08);border:none;border-radius:6px;padding:3px 8px;color:#8aa4c8;cursor:pointer;font-size:11px;">Reveal</button>
+          <button onclick="changeMyPassword()" id="pmPassToggle" style="background:rgba(255,255,255,0.08);border:none;border-radius:6px;padding:3px 8px;color:#8aa4c8;cursor:pointer;font-size:11px;">Change</button>
         </div>
       </div>
     </div>
@@ -5204,59 +5204,59 @@ function openProfileModal() {
   document.getElementById('pmJoined').textContent = joined ? new Date(joined).toLocaleDateString('en-IN') : '—';
   var end = stu.internshipEnd || stu.endDate;
   document.getElementById('pmEnd').textContent = end ? new Date(end).toLocaleDateString('en-IN') : '—';
-  var rawPass = stu.plainPassword || stu.password || '';
-  if (rawPass && !rawPass.startsWith("$2b$") && !rawPass.startsWith("$2a$") && rawPass !== "intern123") {
-    _pmPassVal = rawPass;
-  } else {
-    _pmPassVal = '';
-  }
+  // Passwords are stored only as bcrypt hashes and cannot be read back — not
+  // by this page, not by staff, not by anyone. The old "Reveal" button called
+  // an unauthenticated endpoint that returned the cleartext password for any
+  // employee ID. Students change their password through the reset flow.
   _pmPassVisible = false;
+  _pmPassVal = '';
   document.getElementById('pmPassword').textContent = '••••••••';
-  document.getElementById('pmPassToggle').textContent = 'Reveal';
+  document.getElementById('pmPassToggle').textContent = 'Change';
   var modal = document.getElementById('profileModal');
   modal.style.display = 'flex';
   document.body.style.overflow = 'hidden';
 }
-async function togglePmPassword() {
-  if (_pmPassVisible) {
-    _pmPassVisible = false;
-    document.getElementById('pmPassword').textContent = '••••••••';
-    document.getElementById('pmPassToggle').textContent = 'Reveal';
-    return;
-  }
-
+async function changeMyPassword() {
   var stu = JSON.parse(localStorage.getItem('student') || '{}');
-  var empId = stu.employeeId || stu.employee_id || '';
+  var email = stu.email || '';
+  var result = await Swal.fire({
+    icon: 'info',
+    title: 'Change your password',
+    html: 'We will email a secure reset link to<br><strong>' + (email || 'your registered address') + '</strong>.',
+    background: '#0e1428',
+    color: '#F0EEE8',
+    showCancelButton: true,
+    confirmButtonText: 'Send reset link',
+    confirmButtonColor: '#D4AF37',
+    cancelButtonColor: '#334155'
+  });
+  if (!result.isConfirmed) return;
 
   try {
-    var res = await fetch('/get-my-password', {
+    var res = await fetch('/auth/forgot-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ employeeId: empId })
+      body: JSON.stringify({ email: email, role: 'student' })
     });
     var data = await res.json();
-    if (data.success && data.password && data.password !== 'intern123') {
-      _pmPassVal = data.password;
-    } else {
-      var fallback = stu.plainPassword || stu.password || '';
-      if (fallback && !fallback.startsWith("$2b$") && !fallback.startsWith("$2a$") && fallback !== 'intern123') {
-        _pmPassVal = fallback;
-      } else {
-        _pmPassVal = 'intern123';
-      }
-    }
+    Swal.fire({
+      icon: data.success ? 'success' : 'error',
+      title: data.success ? 'Check your inbox' : 'Could not send the link',
+      text: data.message || (data.success ? 'A reset link is on its way.' : 'Please try again shortly.'),
+      background: '#0e1428',
+      color: '#F0EEE8',
+      confirmButtonColor: '#D4AF37'
+    });
   } catch (err) {
-    var fallback = stu.plainPassword || stu.password || '';
-    if (fallback && !fallback.startsWith("$2b$") && !fallback.startsWith("$2a$") && fallback !== 'intern123') {
-      _pmPassVal = fallback;
-    } else {
-      _pmPassVal = 'intern123';
-    }
+    Swal.fire({
+      icon: 'error',
+      title: 'Network error',
+      text: 'Could not reach the server. Please try again.',
+      background: '#0e1428',
+      color: '#F0EEE8',
+      confirmButtonColor: '#D4AF37'
+    });
   }
-
-  _pmPassVisible = true;
-  document.getElementById('pmPassword').textContent = _pmPassVal;
-  document.getElementById('pmPassToggle').textContent = 'Hide';
 }
 function closeProfileModal() {
   document.getElementById('profileModal').style.display = 'none';

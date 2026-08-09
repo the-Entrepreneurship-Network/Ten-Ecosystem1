@@ -267,7 +267,6 @@ async function registerUser(req, res) {
         email: trimmedEmail,
         whatsapp: roleSpecificData.mobile || "",
         password: hashedPassword,
-        plainPassword: password,
         employeeId: employeeId,
         domain: domain,
         domains: parsedDomains,

@@ -1,7 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
-const { requireAdminAPI, verifyAdminCredentials } = require('../middleware/adminAuth');
+const rateLimit = require('express-rate-limit');
+const { requireAdminAPI, verifyAdminCredentials, ADMIN_USERNAME } = require('../middleware/adminAuth');
+
+// Brute-force guard on the admin login. Keyed by IP only — there is a single
+// admin account, so there is no per-account key to add and no other user to
+// lock out from a shared address.
+const adminLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many login attempts. Try again in 15 minutes.' }
+});
 
 // Load models
 const Student = require('../models/Student');
@@ -16,35 +28,33 @@ const CertificateRequest = require('../models/CertificateRequest');
 
 // ─── AUTH ────────────────────────────────────────────────────────────────────
 
-router.post('/login', async (req, res) => {
+router.post('/login', adminLoginLimiter, async (req, res) => {
   try {
-    const { username, password } = req.body;
-    console.log(`[AdminPortal] Login request received. Username="${username}", Password length=${password ? password.length : 0}`);
+    const { username, password } = req.body || {};
     const isValid = await verifyAdminCredentials(username, password);
     if (isValid) {
-      console.log(`[AdminPortal] Credentials verified successfully for user: "${username}"`);
-      req.session.adminUser = { username: 'tenadmin', lastActivity: Date.now() };
-      return res.json({ success: true });
-    }
-    
-    const enteredLen = password ? password.length : 0;
-    const expectedLen = (process.env.ADMIN_PORTAL_PASSWORD && process.env.ADMIN_PORTAL_PASSWORD.trim())
-      ? process.env.ADMIN_PORTAL_PASSWORD.trim().length
-      : 13; // default is TEN@Admin2024
-
-    console.warn(`[AdminPortal] Authentication rejected. Username="${username}", Entered password len=${enteredLen}, Expected password len=${expectedLen}`);
-    return res.status(401).json({ 
-      error: 'Access denied', 
-      success: false,
-      debug: {
-        receivedUsername: username,
-        receivedPasswordLen: enteredLen,
-        expectedPasswordLen: expectedLen
+      // Regenerate the session id on privilege change (session fixation).
+      const grant = () => {
+        req.session.adminUser = { username: ADMIN_USERNAME, lastActivity: Date.now() };
+        res.json({ success: true });
+      };
+      if (req.session && typeof req.session.regenerate === 'function') {
+        return req.session.regenerate((err) => {
+          if (err) {
+            console.error('[AdminPortal] Session regeneration failed:', err.message);
+            return res.status(500).json({ success: false, error: 'Login failed' });
+          }
+          grant();
+        });
       }
-    });
+      return grant();
+    }
+
+    console.warn('[AdminPortal] Admin authentication rejected.');
+    return res.status(401).json({ success: false, error: 'Invalid username or password' });
   } catch (err) {
-    console.error(`[AdminPortal] Error during login endpoint:`, err.message);
-    res.status(500).json({ error: err.message });
+    console.error('[AdminPortal] Error during login endpoint:', err.message);
+    res.status(500).json({ success: false, error: 'Login failed' });
   }
 });
 
@@ -545,7 +555,6 @@ router.post('/students/:id/reset-password', requireAdminAPI, async (req, res) =>
     const student = await Student.findById(req.params.id);
     if (!student) return res.status(404).json({ error: 'Student not found' });
     student.password = hashed;
-    student.plainPassword = newPassword;
     await student.save();
     await AuditLog.create({
       userId: student._id,
