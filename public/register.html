@@ -916,10 +916,13 @@
           // say which field was wrong.
           showFieldErrors(json.errors);
         } else {
+          // "Onboarding Denied" told a student their application had been
+          // rejected, when a field was simply blank. Nothing here is a denial —
+          // it is a form that needs one more thing.
           Swal.fire({
-            icon: 'error',
-            title: 'Onboarding Denied',
-            text: json.error || 'Check input details or check existing emails.',
+            icon: 'warning',
+            title: 'Almost there',
+            text: json.error || 'Please check your details and try again. If you already have an account, sign in instead.',
             background: '#0e1428',
             color: '#F0EEE8',
             confirmButtonColor: '#D4AF37'
@@ -927,10 +930,13 @@
         }
       } catch (err) {
         console.error(err);
+        // This branch is a network or server failure, not an authentication
+        // problem — "Authentication timeout" sent students hunting for a
+        // password mistake that did not exist.
         Swal.fire({
           icon: 'error',
-          title: 'Secure Interface Busy',
-          text: 'Authentication timeout. Please retry.',
+          title: 'Could not reach the server',
+          text: 'Your details were not saved. Please check your internet connection and try again.',
           background: '#0e1428',
           color: '#F0EEE8',
           confirmButtonColor: '#D4AF37'

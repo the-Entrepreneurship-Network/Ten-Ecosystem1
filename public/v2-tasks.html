@@ -690,6 +690,28 @@ async function init() {
     updateStats(status);
 
     if (!status.v2Onboarded) {
+      // Do not ask a question with one possible answer.
+      //
+      // The tenure is fixed at registration, and this popup cannot change it —
+      // every option except the registered one is disabled below. So for a
+      // student who registered normally, the dialog exists only to be
+      // dismissed, and it reappeared on every visit until they happened to
+      // press the button. Complete onboarding for them instead.
+      //
+      // The popup still opens when the tenure is genuinely unknown (older
+      // records, WhatsApp joiners), and as a fallback if this call fails — so
+      // a student is never left with no way through.
+      if (status.registeredTenure) {
+        const auto = await apiFetch('/student/onboard', {
+          method: 'POST',
+          body: JSON.stringify({ durationType: status.registeredTenure })
+        });
+        if (auto && (auto.success || auto.alreadyOnboarded)) {
+          loadTasks();
+          return;
+        }
+      }
+
       document.getElementById('onboard-domain').textContent = studentData.domain || 'Unknown';
       document.getElementById('onboard-overlay').style.display = 'flex';
 
