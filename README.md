@@ -71,7 +71,26 @@ npm test
 
 ## Documentation
 
+**Architecture**
 - `docs/current-system-map.md` — architecture overview
 - `docs/api-map.md` — endpoint inventory
 - `docs/database-map.md` — collections and fields
-- `docs/SECURITY-DO-NOT-EXPOSE.md` — what must never be made public
+
+**Security**
+- `docs/SECURITY-DO-NOT-EXPOSE.md` — what must never be made public, and why
+
+**Product**
+- `docs/design-system.md` — colour, spacing, type, components
+- `docs/notifications-plan.md` — the two notification systems and the plan
+- `docs/portal-specs.md` — founder / mentor / investor / contractor specs
+- `docs/certificate-verification-technical.md` — how verification works
+- `docs/certificate-verification-for-students.md` — the same, in plain language
+
+## Operational scripts
+
+| Script | Purpose |
+|---|---|
+| `scripts/generate-credentials-env.js` | Turn cleartext passwords into the bcrypt-hashed `HR_CREDENTIALS` / `COORDINATOR_CREDENTIALS` value |
+| `scripts/audit-domain-tenure.js` | Find (and optionally fix) students whose domain / tenure / offer letter disagree. Dry run by default |
+| `scripts/seed-dev-student.js` | Seed a local test student (development only) |
+| `scripts/verify-security.sh` | Drive a running server through the security and regression checks |
