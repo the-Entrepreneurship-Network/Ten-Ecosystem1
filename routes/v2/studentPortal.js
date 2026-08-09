@@ -915,9 +915,72 @@ router.post("/student/onboard", requireStudent, requireTenurePaid, async (req, r
 // ────────────────────────────────────────────────
 // GET /api/v2/student/status
 // ────────────────────────────────────────────────
+/**
+ * Onboard a student who already has a tenure but has never pressed the setup
+ * button, and report whether this call did it.
+ *
+ * The setup popup asks for an internship length the student cannot choose:
+ * tenure is fixed at registration, the popup disables every other option, and
+ * POST /student/onboard rejects anything else with a 409. Its only real effect
+ * is writing v2Onboarded, and it wrote that only when the button was pressed —
+ * so a student who opened the page and navigated away met the same dialog on
+ * every visit, forever.
+ *
+ * This runs on the SERVER for a reason. The same fix on the page could not
+ * reach anyone: public/ was served with maxAge '7d', so browsers held week-old
+ * markup and kept rendering the popup no matter what shipped. Deciding it here
+ * means even a stale page is told v2Onboarded is true and never opens the
+ * dialog — the fix does not depend on a browser fetching new JavaScript.
+ *
+ * The popup still opens for a student with no tenure on file, which is the case
+ * it was actually built for: older records and WhatsApp joiners.
+ */
+async function ensureOnboarded(student) {
+    if (!student || student.v2Onboarded) return false;
+
+    const registered = student.tenure ? normalizeTenure(student.tenure) : null;
+    if (!registered) return false;   // nothing to infer — let the popup ask
+
+    // Claim the transition conditionally. Two page loads racing each other
+    // would otherwise both assign tasks and both award the welcome bonus.
+    const claim = await Student.updateOne(
+        { _id: student._id, v2Onboarded: { $ne: true } },
+        { $set: { v2Onboarded: true, v2DurationType: registered } }
+    );
+
+    student.v2Onboarded    = true;
+    student.v2DurationType = registered;
+
+    // modifiedCount is 0 when another request won the race; it is undefined on
+    // the JSON fallback engine, which has no such guarantee to offer.
+    if (claim && claim.modifiedCount === 0) return false;
+
+    // Tasks and coins are the reward half. If either fails the student is still
+    // onboarded — the popup must not come back — and the failure is logged
+    // rather than turned into an error on a page that only asked for status.
+    try {
+        await taskEngine.assignTasksForStudent(student);
+        await coinService.awardCoins(student._id, "ONBOARD_BONUS");
+    } catch (err) {
+        console.error("[V2] auto-onboard follow-up failed for " + student.employeeId + ":", err.message);
+    }
+    return true;
+}
+
 router.get("/student/status", requireStudent, async (req, res) => {
     try {
         const student = req.student;
+
+        // Before anything is measured, so the task counts below include what
+        // this just assigned.
+        try {
+            await ensureOnboarded(student);
+        } catch (err) {
+            // A failure here must not break the status call; the student simply
+            // sees the popup, which is the old behaviour.
+            console.error("[V2] ensureOnboarded failed:", err.message);
+        }
+
         let domain = student.domain;
         if (domain === "HR") domain = "HR Management";
         if (domain === "Business Development") domain = "Business Analyst";
@@ -992,6 +1055,16 @@ router.get("/student/status", requireStudent, async (req, res) => {
 router.get("/tasks/my-tasks", requireStudent, requireTenurePaid, async (req, res) => {
     try {
         const student = req.student;
+
+        // Also here, not only in /student/status: a student who reaches the task
+        // list by any other route — a bookmark, a link from the dashboard —
+        // gets onboarded the same way rather than landing on an empty list.
+        try {
+            await ensureOnboarded(student);
+        } catch (err) {
+            console.error("[V2] ensureOnboarded failed:", err.message);
+        }
+
         let domain = student.domain;
         if (domain === "HR") domain = "HR Management";
         if (domain === "Business Development") domain = "Business Analyst";
