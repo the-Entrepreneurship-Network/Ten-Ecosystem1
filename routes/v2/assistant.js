@@ -400,15 +400,75 @@ const TOPIC_RULES = [
   },
 ];
 
+/* ────────────────────────── intent ───────────────────────── */
+/*
+ * Read the message before answering it.
+ *
+ * The engine used to reach for an answer on every input, so "hi" came back
+ * with the student's registered domain and its four track lengths. That is
+ * worse than saying nothing: it reads as though the assistant did not look at
+ * the message. These checks classify the input first, so a greeting gets a
+ * greeting and only a question about their work reaches the curriculum.
+ */
+
+/** Greetings, thanks, acknowledgements. Anchored to the whole message, so "hi"
+ *  matches but "which track is this" does not. */
+const SMALL_TALK = /^[\s!.?,]*(hi+|hey+|hello+|yo|hola|namaste|greetings|good\s*(morning|afternoon|evening|day|night)|thank(s| you)?|thx|ty|ok(ay)?|k|cool|nice|great|awesome|got it|sure|yep|yes|no|bye|see ya)[\s!.?,]*$/i;
+
+/** "who are you", "what can you do", "help". */
+const CAPABILITY = /\b(who are you|what (can|do) you do|what are you|how (do|can) i use|help me|what is this)\b|^\s*help\s*$/i;
+
+/**
+ * Does the message actually concern their work?
+ *
+ * Only then is it fair to fall back to the domain on their account. Without
+ * this gate the fallback fires on anything unrecognised, which is precisely
+ * how "hi" became a Java Development answer.
+ */
+const ABOUT_WORK = /\b(plan|track|week|task|schedule|deadline|roadmap|syllabus|curriculum|project|assignment|build|submit|due|domain|internship|course|module|learn|start|next|do)\b/i;
+
+function greeting(ctx) {
+  const name = (ctx && ctx.userName) ? String(ctx.userName).trim().split(/\s+/)[0] : '';
+  const dom  = (ctx && ctx.domain) ? String(ctx.domain) : '';
+  return [
+    (name ? 'Hi ' + name + '. ' : 'Hi. ') +
+      'I can help with your weekly tasks, coins, attendance, documents and certificates.',
+    '',
+    dom
+      ? 'You are on ' + dom + '. Tell me your track and I will list every week: "' + dom + ' 3 months".'
+      : 'Tell me your domain and track and I will list every week, for example "MERN 3 months".',
+  ].join('\n');
+}
+
+function capabilities(ctx) {
+  const dom = (ctx && ctx.domain) ? String(ctx.domain) : '';
+  return [
+    'I am the TEN Assistant. I answer from this portal’s own task library, so what I tell you matches what you will actually be assigned.',
+    '',
+    'Ask me for:',
+    '• Your week-by-week plan, with what to build, its coin value and difficulty',
+    '• How coins add up, and the recurring ones students miss',
+    '• Certificates, attendance, documents, submissions',
+    '',
+    dom ? 'Start with: "' + dom + ' 3 months".' : 'Start with your domain and track, for example "MERN 3 months".',
+  ].join('\n');
+}
+
 /**
  * The engine. Domain plus duration is the most specific thing a student can
  * give, so it outranks the topic rules: "how many coins for MERN 3 months"
  * should return that plan and its coin total, not the generic coin table.
  */
 async function answerFor(question, ctx) {
-  const q        = String(question || '');
-  const depth    = (ctx && ctx.depth) || 'brief';
-  const domain   = await matchDomain(q, ctx && ctx.domain);
+  const q     = String(question || '').trim();
+  const depth = (ctx && ctx.depth) || 'brief';
+
+  if (!q) { return greeting(ctx); }
+  if (SMALL_TALK.test(q)) { return greeting(ctx); }
+  if (CAPABILITY.test(q)) { return capabilities(ctx); }
+
+  const mayUseRegistered = ABOUT_WORK.test(q);
+  const domain   = await matchDomain(q, mayUseRegistered ? (ctx && ctx.domain) : null);
   const duration = matchDuration(q);
 
   if (domain && duration) {
@@ -429,10 +489,18 @@ async function answerFor(question, ctx) {
   if (domain) {
     return `${domain} runs on 1 Month, 45 Days, 3 Months and 6 Months. Tell me which track you are on and I will list every week with what to build, its coin value and its difficulty.`;
   }
+  // Nothing matched. Say so plainly rather than answering a question that
+  // was not asked.
   return [
-    'I can help with your weekly tasks, your track plan, coins, attendance, documents, submissions and certificates.',
+    'I could not tell what you need from that.',
     '',
-    'Tell me your domain and duration — for example "MERN 3 months" — and I will give you every week with what to build and what it pays.',
+    'I can answer:',
+    '• Your week-by-week plan — try "MERN 3 months" or "Python 45 days"',
+    '• How coins add up',
+    '• Certificates, attendance, documents',
+    '• Which domains and durations exist',
+    '',
+    'Anything about your own account, marks or payments, ask your coordinator.',
   ].join('\n');
 }
 
@@ -471,7 +539,7 @@ router.post('/ask', async (req, res) => {
     const deepDiveAllowed = wantsDeepDive && q.tier.deepDive;
     const depth           = deepDiveAllowed ? 'ultimate' : q.tier.depth;
 
-    let answer = await answerFor(question, { domain, depth });
+    let answer = await answerFor(question, { domain, depth, userName });
     if (wantsDeepDive && !deepDiveAllowed) {
       answer += '\n\nDeep Dive Mode is available on Plus and Enterprise.';
     }
