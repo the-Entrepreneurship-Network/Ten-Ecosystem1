@@ -26,6 +26,19 @@ const router     = require('express').Router();
 const mongoose   = require('mongoose');
 const DomainTask = require('../../models/new/DomainTask');
 
+/*
+ * Taught answers live in the existing SystemKnowledge collection rather than
+ * a new one, and are written only by an admin through /teach.
+ *
+ * Students never write here. If they could, one student could teach the
+ * assistant something false and it would repeat it confidently to everyone
+ * else, and a wrong answer about a fee or a deadline costs real money. So an
+ * unanswered question is captured as a question, and a coordinator supplies
+ * the answer once.
+ */
+let SystemKnowledge = null;
+try { SystemKnowledge = require('../../models/SystemKnowledge'); } catch (_e) { /* optional */ }
+
 let AssistantUsage = null;
 try { AssistantUsage = require('../../models/new/AssistantUsage'); } catch (_e) { /* optional */ }
 
@@ -46,7 +59,7 @@ try { BotQuery = require('../../models/BotQuery'); } catch (_e) { /* optional */
 const TIERS = {
   starter: {
     key: 'starter', label: 'Starter', price: 0, priceLabel: 'Free',
-    messages: 12, depth: 'brief', historyDays: 0, deepDive: false,
+    messages: 25, depth: 'brief', historyDays: 0, deepDive: false,
     blurb: 'Short answers to get you unstuck.',
   },
   pro: {
@@ -62,7 +75,8 @@ const TIERS = {
   enterprise: {
     key: 'enterprise', label: 'Enterprise', price: 5000, priceLabel: '₹5,000/month',
     messages: null, depth: 'ultimate', historyDays: null, deepDive: true,
-    blurb: 'Unlimited messages, full portal knowledge, essay-length reasoning.',
+    // Does not repeat "unlimited messages" - the card lists that on its own line.
+    blurb: 'Full portal knowledge, and essay-length reasoning.',
   },
 };
 
@@ -117,7 +131,13 @@ function quotaFor(row) {
   const tier = TIERS[(row && row.tier) || 'starter'] || TIERS.starter;
   const used = (row && row.messagesUsed) || 0;
   const remaining = tier.messages === null ? null : Math.max(0, tier.messages - used);
-  return { tier, used, remaining, exhausted: remaining === 0 };
+
+  let resetsOn = null;
+  if (row && row.periodStart) {
+    const d = new Date(new Date(row.periodStart).getTime() + PERIOD_MS);
+    resetsOn = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  }
+  return { tier, used, remaining, exhausted: remaining === 0, resetsOn };
 }
 
 /** Single place an entitlement is written, whatever granted it. */
@@ -318,6 +338,15 @@ function renderPlan(domain, duration, rows, depth) {
 }
 
 /* ───────────────────────── topic answers ────────────────────────── */
+/* "is there an AI domain", "do you have UI UX" - a real question with a real
+   answer, which is that TEN seeds fourteen and that is not one of them. */
+const ASKS_IF_DOMAIN_EXISTS = new RegExp(
+  '(?:\\b(?:is there|do you have|do you offer|can i (?:do|take|join|pick|choose)|is|any)\\b'
+  + '.{0,30}\\b(?:domain|track|course)s?\\b)'
+  + '|(?:\\b(?:is there|do you have|do you offer|can i (?:do|take|join|pick|choose))\\b.{0,20}'
+  + '\\b(?:ai|ml|ui\\s*/?\\s*ux|design|digital\\s*marketing|content\\s*writing|sales|finance|'
+  + 'marketing|blockchain|game\\s*dev|graphic|video|seo|hr)\\b)', 'i');
+
 async function domainListAnswer() {
   const list = await allDomains();
   return [
@@ -331,6 +360,95 @@ async function domainListAnswer() {
 }
 
 const TOPIC_RULES = [
+  {
+    test: /\b(plan|plans|pricing|tier|subscription|pro\b|plus\b|enterprise|upgrade|starter)\b.{0,20}\b(cost|price|much|available|are|do|work|mean)?\b|\bwhat are the plans\b|\bhow much is (pro|plus|enterprise)\b|\bupgrade\b/i,
+    answer: () => [
+      'The assistant itself has four tiers. Everything about your internship, tasks and coins is unaffected by them.',
+      '',
+      '• Starter, free: 25 messages a month, short answers',
+      '• Pro, Rs 500/month: 90 messages, fuller answers, 7-day history',
+      '• Plus, Rs 1,200/month: 350 messages, Deep Dive Mode, 30-day history',
+      '• Enterprise, Rs 5,000/month: unlimited messages, full depth and history',
+      '',
+      'Open Plans in the sidebar to see them and pay by UPI. Paying does not change your tasks, your coins or your certificate: it only changes how much you can ask me and how deeply I answer.',
+    ].join('\n'),
+  },
+  {
+    test: /\brefund|money back|cancel.{0,20}(subscription|plan)|charged|double.?paid|payment failed|paid but/i,
+    answer: () => [
+      'I cannot process refunds, cancellations or payment problems, and I cannot see your payment record.',
+      '',
+      'Take it to your coordinator through Domain Chat, with the UPI reference number from your payment app. That reference is what lets them match it against the account.',
+      '',
+      'If you submitted a reference and your tier has not changed, that is expected until someone verifies it: submitting a reference is a claim, not an activation.',
+    ].join('\n'),
+  },
+  {
+    test: /\b(fee|fees|charge|pay anything|have to pay|cost)\b/i,
+    answer: () => [
+      'Be careful with this one, and confirm it with your coordinator rather than with me.',
+      '',
+      'Two places money appears in the portal:',
+      '• The Crash Course tracks (1 Week, 15 Days, 1 Month) show a programme fee before the dashboard activates.',
+      '• Certificates carry a payment step; issuance is not automatic on completion.',
+      '',
+      'I deliberately do not quote amounts. I can read that a payment step exists, not what it costs, and a wrong number here costs you real money. Ask your coordinator for the figure before you pay anything.',
+    ].join('\n'),
+  },
+  {
+    test: /\bscam|fake|legit|genuine|trust|fraud|real company|worth it\b/i,
+    answer: () => [
+      'Not something I should answer about my own employer, so here is what you can check yourself.',
+      '',
+      '• Certificates carry a certificate ID and a verification URL, so any certificate you receive can be verified independently.',
+      '• The task library, coin rates and approval flow are the same ones this portal runs on, which is why I can quote them exactly.',
+      '• Anything involving money, ask your coordinator for specifics in writing before you pay.',
+      '',
+      'If something feels wrong, raise it with your coordinator and keep the reply. That is better evidence than my opinion.',
+    ].join('\n'),
+  },
+  {
+    test: /\b(stress|stressed|anxious|anxiety|depress|overwhelm|burn ?out|panic|can'?t cope|too much pressure|giving up|quit)\b/i,
+    answer: () => [
+      'That is worth saying out loud to a person, not to me.',
+      '',
+      'Message your coordinator through Domain Chat and tell them you are struggling. Durations here are flexible and falling behind is recoverable; going quiet is what turns it into a problem.',
+      '',
+      'If it helps: partial work is not wasted. A recommendation needs 50% completion, not 100%. And if this is bigger than the internship, please talk to someone you trust or a professional, not a chatbot.',
+    ].join('\n'),
+  },
+  {
+    test: /\bnext task|due this week|what.{0,12}(due|next)\b|current task|this week.?s task/i,
+    answer: () => [
+      'I cannot see which week you are on, because I do not have access to your submissions.',
+      '',
+      'Your task page shows it: tasks unlock weekly and move Available → Submitted → Approved.',
+      '',
+      'Tell me your track and a week number and I will give you exactly what that week wants, for example "MERN week 5".',
+    ].join('\n'),
+  },
+  {
+    test: /\b(how many|total|number of)\b.{0,16}\btasks?\b/i,
+    answer: () => [
+      'It depends on your track: 4 tasks on 1 Month, 6 on 45 Days, 12 on 3 Months and 24 on 6 Months, one per week.',
+      '',
+      'On top of that, every intern has the Daily Job Posting task every day, regardless of domain.',
+      '',
+      'Tell me your domain and track and I will list all of them.',
+    ].join('\n'),
+  },
+  {
+    test: /\btask (was |got )?(rejected|not approved|declined|returned)|rejected my|why.{0,20}rejected/i,
+    answer: () => [
+      'I cannot see why yours was rejected, only what reviewers usually send back for.',
+      '',
+      '• The submission does not do what the task description literally asks. Read it clause by clause.',
+      '• A link that is not reachable: a private repo, a dead deployment, a file nobody else can open.',
+      '• Work that arrived without the earlier weeks it builds on.',
+      '',
+      'Ask your coordinator for the specific reason through Domain Chat, fix that one thing, and resubmit.',
+    ].join('\n'),
+  },
   {
     test: /\bcoin|reward|payout|stipend|money|rupee|\brs\b|salary|paid\b/i,
     answer: () => [
@@ -376,6 +494,19 @@ const TOPIC_RULES = [
   {
     test: /\bdocument|address proof|marksheet|upload|offer letter/i,
     answer: () => 'Upload your Address Proof and Marksheet on the my-documents page. PDF, JPG or PNG, under 5MB each. Your offer letter is generated once HR approves them.',
+  },
+  {
+    test: ASKS_IF_DOMAIN_EXISTS,
+    answer: async () => {
+      const list = await allDomains();
+      return [
+        'TEN seeds ' + list.length + ' domains, and only these have a weekly task library:',
+        '',
+        list.map((d, i) => (i + 1) + '. ' + d).join('\n'),
+        '',
+        'If the one you are asking about is not on that list, it has no task library here. Other subjects may exist elsewhere in the TEN ecosystem, so ask your coordinator, but I can only plan the fourteen above.',
+      ].join('\n');
+    },
   },
   {
     test: /\b(what|which|list|all|how many)\b.*\b(domain|track|field|stream|course)s?\b/i,
@@ -431,7 +562,7 @@ const TOPIC_RULES = [
     ].join('\n'),
   },
   {
-    test: /\bstart|begin|first day|new here|what (do|should) i do first/i,
+    test: /\bstart|begin|first day|new here|just joined|what (do|should) i do( first)?\b|where do i (start|begin)/i,
     answer: () => [
       'Start in this order:',
       '',
@@ -467,7 +598,17 @@ const TOPIC_RULES = [
 
 /** Greetings, thanks, acknowledgements. Anchored to the whole message, so "hi"
  *  matches but "which track is this" does not. */
-const SMALL_TALK = /^[\s!.?,]*(hi+|hey+|hello+|yo|hola|namaste|greetings|good\s*(morning|afternoon|evening|day|night)|thank(s| you)?|thx|ty|ok(ay)?|k|cool|nice|great|awesome|got it|sure|yep|yes|no|bye|see ya)[\s!.?,]*$/i;
+/* Trailing words like "bro", "sir" or "a lot" are still small talk. Ending a
+   conversation with "thanks bro" and being told the assistant could not tell
+   what you needed is a bad last impression for no reason. */
+const GREET = "hi+|hey+|hello+|yo|hola|namaste|greetings|good\\s*(?:morning|afternoon|evening|day|night)|"
+            + "thank(?:s| you)?|thx|ty|ok(?:ay)?|k|cool|nice|great|awesome|got it|sure|yep|yes|no|bye|see ya";
+const TAIL  = "you|u|so much|a lot|bro|bhai|sir|ma'?am|mate|man|dude|buddy|ji|there|again|everyone|all";
+/* Two greetings in a row ("ok cool", "hello there") are still small talk.
+   Being told the assistant could not tell what you needed, because you said
+   two friendly words instead of one, is a silly way to end a conversation. */
+const SMALL_TALK = new RegExp(
+  '^[\\s!.?,]*(?:' + GREET + ')(?:[\\s!.?,]+(?:' + GREET + '|' + TAIL + '))*[\\s!.?,]*$', 'i');
 
 /** "who are you", "what can you do", "help". */
 const CAPABILITY = /\b(who are you|what (can|do) you do|what are you|how (do|can) i use|help me|what is this)\b|^\s*help\s*$/i;
@@ -479,7 +620,7 @@ const CAPABILITY = /\b(who are you|what (can|do) you do|what are you|how (do|can
  * this gate the fallback fires on anything unrecognised, which is precisely
  * how "hi" became a Java Development answer.
  */
-const ABOUT_WORK = /\b(plan|track|week|task|schedule|deadline|roadmap|syllabus|curriculum|project|assignment|build|submit|due|domain|internship|course|module|learn|start|next|do)\b/i;
+const ABOUT_WORK = /\b(plan|track|week|task|schedule|deadline|roadmap|syllabus|curriculum|project|assignment|build|submit|due|domain|internship|course|module|learn|start|next|do|earn|money|coin|make|pay|paid)\b/i;
 
 function greeting(ctx) {
   const name = (ctx && ctx.userName) ? String(ctx.userName).trim().split(/\s+/)[0] : '';
@@ -513,6 +654,210 @@ function capabilities(ctx) {
  * give, so it outranks the topic rules: "how many coins for MERN 3 months"
  * should return that plan and its coin total, not the generic coin table.
  */
+/* ─────────────────────────── learning ──────────────────────────── */
+
+const STOPWORDS = new Set(['what', 'when', 'where', 'which', 'this', 'that', 'they',
+  'have', 'does', 'the', 'and', 'for', 'with', 'from', 'about', 'your', 'you',
+  'can', 'how', 'get', 'tell', 'give', 'please', 'need', 'want', 'are']);
+
+function keywords(text) {
+  return String(text).toLowerCase().split(/[^a-z0-9]+/)
+    .filter(function (w) { return w.length > 2 && !STOPWORDS.has(w); });
+}
+
+/**
+ * Match against what a coordinator has taught.
+ *
+ * A topic hit counts double: matching the topic name is a far stronger signal
+ * than matching one word in the body, and requiring two body matches meant
+ * single-subject questions fell through to the generic reply.
+ */
+async function taughtAnswer(question) {
+  if (!SystemKnowledge) { return null; }
+  try {
+    const items = await SystemKnowledge.find({}).lean();
+    const words = keywords(question);
+    if (!words.length) { return null; }
+
+    let best = null, bestScore = 0;
+    for (const item of items) {
+      const topic = String(item.topic || '').toLowerCase().replace(/_/g, ' ');
+      const body  = String(item.content || '').toLowerCase();
+      let score = 0;
+      for (const w of words) {
+        if (topic.includes(w)) { score += 2; }
+        else if (body.includes(w)) { score += 1; }
+      }
+      if (score > bestScore) { bestScore = score; best = item; }
+    }
+    return bestScore >= 2 ? best.content : null;
+  } catch (_e) {
+    return null;
+  }
+}
+
+/** Record a question nobody could answer, so it can be taught later. Fire and
+ *  forget: a logging failure must never take the reply down with it. */
+function noteUnanswered(question, ctx) {
+  if (!BotQuery) { return; }
+  BotQuery.create({
+    userId:   (ctx && ctx.userId) || 'unknown',
+    userType: 'student',
+    userName: (ctx && ctx.userName) || '',
+    domain:   (ctx && ctx.domain) || '',
+    botType:  'query',
+    question: String(question).slice(0, 500),
+    answer:   null,
+    status:   'open',
+  }).catch(function () {});
+}
+
+/*
+ * What counts as "about TEN".
+ *
+ * Two things hang off this. Off-topic questions get an honest out-of-scope
+ * reply instead of the menu, and they are never queued for a coordinator to
+ * answer. Without that gate the learning queue fills with weather and cricket
+ * and buries the one useful question a student actually asked.
+ *
+ * Stems carry \w* rather than a closing \b: "certificat\b" does not match
+ * "certificate", which silently put half the real questions out of scope.
+ */
+const PORTAL_TERMS = new RegExp(
+  '\\b(?:' + [
+    'ten', 'portal', 'intern\\w*', 'task\\w*', 'week\\w*', 'coin\\w*',
+    'certificat\\w*', 'attendance', 'document\\w*', 'offer\\s*letter',
+    'domain\\w*', 'track\\w*', 'duration\\w*', 'coordinator\\w*', 'mentor\\w*',
+    'submit\\w*', 'submission\\w*', 'approv\\w*', 'quiz\\w*', 'mcq',
+    'leaderboard', 'badge\\w*', 'project\\w*', 'deadline\\w*', 'stipend',
+    'payment\\w*', 'pay\\w*', 'fee\\w*', 'login', 'log\\s*in', 'employee',
+    'discord', 'streak\\w*', 'dashboard', 'course\\w*', 'module\\w*',
+    'marksheet', 'lor', 'loc', 'star\\s*performer', 'deploy\\w*',
+    'assignment\\w*', 'finish\\w*', 'complet\\w*', 'money', 'earn\\w*',
+    'rupee\\w*', 'salary', 'programme', 'program', 'mern', 'python', 'java',
+    'flutter', 'devops', 'cyber', 'data\\s*science',
+  ].join('|') + ')',
+  'i'
+);
+
+/** Asking the assistant to do the work rather than help with it. */
+const DO_IT_FOR_ME = /\b(write|do|make|build|complete|finish|give me)\b.{0,24}\b(my|the)\b.{0,24}\b(code|project|assignment|task|homework|report)\b|\bdo it for me\b/i;
+
+/** "can I change/switch my domain|track|duration" - an account action. */
+const ACCOUNT_ACTION = /\b(change|switch|move|swap|cancel|quit|leave|extend|reset|update)\b.{0,20}\b(domain|track|duration|plan|tenure|internship|account|password|email)\b/i;
+
+/** "what if I don't finish", "what happens if I drop out". */
+const NOT_FINISHING = /\b(not|don'?t|dont|cannot|can'?t|fail|drop|quit|leave|incomplete|unable)\b.{0,24}\b(finish|complete|submit|do it|continue)\b|\bwhat happens if\b/i;
+
+/** "what is my week 5 task", "week 7", "3rd week". */
+const WEEK_NUMBER = /\bweek\s*(\d{1,2})\b|\b(\d{1,2})(st|nd|rd|th)\s*week\b/i;
+
+/** "how much can I earn", "how much money". */
+const HOW_MUCH = /\bhow much\b.{0,24}\b(earn|make|money|paid|get|rupee|rs|income)\b|\bhow much (money|can i)\b/i;
+
+/* ─────────────────────── extra answers ──────────────────────────── */
+
+/*
+ * One message for both "I did not understand that" and "that is not about
+ * TEN". Telling them apart reliably is not possible here, and guessing wrong
+ * is worse than saying both: answering gibberish with "I only cover TEN" reads
+ * as a brush-off, and answering an off-topic question with "I could not tell"
+ * implies it would have helped if only it had parsed.
+ */
+function outOfScope() {
+  return [
+    'I could not tell what you need from that.',
+    '',
+    'I only cover TEN: your weekly tasks, tracks, coins, attendance, documents and certificates. Ask me about your internship and I will give you a straight answer.',
+    '',
+    'Try "MERN 3 months", "how do coins work", or "what should I do first".',
+  ].join('\n');
+}
+
+function doItForMe(domain) {
+  return [
+    'I will not write your submission for you. Your coordinator reviews the work and asks about it, and the point of the task is that you can build it.',
+    '',
+    'What I can do:',
+    '• Break the task into steps and tell you what "done" looks like',
+    '• Explain the concept or the error you are stuck on',
+    '• Review your approach before you commit to it',
+    '',
+    domain ? 'Tell me which week of ' + domain + ' you are on and where you are stuck.'
+           : 'Tell me your track and which week you are stuck on.',
+  ].join('\n');
+}
+
+function accountAction() {
+  return [
+    'That is a change to your record, so it goes through your coordinator rather than me. Reach them through Domain Chat in the portal.',
+    '',
+    'I can see how the programme works, not your account, so anything that changes what is on file for you needs a human.',
+  ].join('\n');
+}
+
+function notFinishing() {
+  return [
+    'Finishing matters more than finishing fast.',
+    '',
+    '• The Certificate of Completion (LOC) needs 100% completion.',
+    '• A recommendation (LOR) needs 50% or more, so partial work is not wasted.',
+    '• The final task alone is worth several normal weeks, so stopping near the end costs far more than the weeks it saves.',
+    '',
+    'If you are behind, tell your coordinator now rather than at the end. Durations are flexible; silence is what causes problems.',
+  ].join('\n');
+}
+
+async function weekAnswer(domain, duration, n, depth) {
+  const rows = await tasksFor(domain, duration);
+  if (!rows.length) {
+    return 'I could not read the task list for ' + domain + ' on that track. Ask your coordinator which track you are on.';
+  }
+  const row = rows.filter(function (r) { return r.weekNumber === n; })[0];
+  if (!row) {
+    return domain + ' on the ' + duration.label + ' track has ' + rows.length +
+      ' weeks, so there is no week ' + n + '. Ask me for any week from 1 to ' + rows.length + '.';
+  }
+  return [
+    domain + ' — week ' + row.weekNumber + ' of ' + rows.length + ' (' + duration.label + ')',
+    '',
+    row.taskTitle + ' — ' + row.coinReward + ' coins, ' + row.difficultyLevel,
+    row.taskDescription,
+    '',
+    'Submit by day 5. Tasks go Available → Submitted → Approved and approval is not instant.',
+  ].join('\n');
+}
+
+async function earnings(domain, duration) {
+  // Without a domain there is no task list to price, and printing the
+  // variable anyway produced "the honest arithmetic for null".
+  const rows = (domain && duration) ? await tasksFor(domain, duration) : [];
+  const weeks = rows.length || 12;
+  const taskCoins = rows.reduce(function (n, r) { return n + (r.coinReward || 0); }, 0);
+  const days = weeks * 7;
+  const attendance = days * 5;
+  const streaks = Math.floor(days / 7) * 50;
+  const weekly = weeks * 30;
+  const posting = days * 30;
+  const course = 500;
+  const total = taskCoins + attendance + streaks + weekly + posting + course;
+
+  return [
+    'Here is the honest arithmetic' + (rows.length && domain ? ' for ' + domain + ' on the ' + duration.label + ' track' : '') + '.',
+    '',
+    (rows.length ? '• Tasks: ' + taskCoins + ' coins\n' : '') +
+    '• Attendance, ' + days + ' days at 5: ' + attendance + '\n' +
+    '• Weekly streaks: ' + streaks + '\n' +
+    '• Finishing each week, ' + weeks + ' at 30: ' + weekly + '\n' +
+    '• Daily posting at ten platforms: ' + posting + '\n' +
+    '• Finishing the course: ' + course,
+    '',
+    'That is roughly ' + total + ' coins, about Rs ' + Math.round(total * 0.5) + ', if you do everything every day.',
+    '',
+    'Two honest caveats. The posting task is the largest single line and it only pays if you actually post to ten platforms daily. And I can tell you the published rates, not how or when your account is settled: ask your coordinator about payout.',
+  ].join('\n');
+}
+
 async function answerFor(question, ctx) {
   const q     = String(question || '').trim();
   const depth = (ctx && ctx.depth) || 'brief';
@@ -522,8 +867,37 @@ async function answerFor(question, ctx) {
   if (CAPABILITY.test(q)) { return capabilities(ctx); }
 
   const mayUseRegistered = ABOUT_WORK.test(q);
-  const domain   = await matchDomain(q, mayUseRegistered ? (ctx && ctx.domain) : null);
+
+  // Two different things: a domain the student named, and the one on their
+  // account. The second is fine for "what is my week 5 task", but it must not
+  // turn every unrecognised sentence into a summary of their track - which is
+  // how "when is the TEN hackathon" became a list of Java durations.
+  const namedDomain = await matchDomain(q, null);
+  const domain = namedDomain ||
+    (mayUseRegistered ? await matchDomain('', ctx && ctx.domain) : null);
   const duration = matchDuration(q);
+
+  // Specific intents outrank the generic plan lookup, because each of these
+  // otherwise falls through to a domain dump that answers a different question.
+  if (DO_IT_FOR_ME.test(q))    { return doItForMe(domain); }
+  if (ACCOUNT_ACTION.test(q))  { return accountAction(); }
+  if (NOT_FINISHING.test(q))   { return notFinishing(); }
+  if (HOW_MUCH.test(q))        { return earnings(domain, duration || DURATIONS.find(function (d) { return d.key === '3months'; })); }
+
+  // "3 months" on its own: they mean their own track. A bare duration is about
+  // their work by definition, so this does not wait for ABOUT_WORK to agree -
+  // "3 months" contains no other work vocabulary and matched nothing at all.
+  if (!namedDomain && duration && ctx && ctx.domain) {
+    const own = await matchDomain('', ctx.domain);
+    if (own) { return renderPlan(own, duration, await tasksFor(own, duration), depth); }
+  }
+
+  const wk = WEEK_NUMBER.exec(q);
+  if (wk && domain) {
+    const n = parseInt(wk[1] || wk[2], 10);
+    const d = duration || DURATIONS.find(function (x) { return x.key === '3months'; });
+    return weekAnswer(domain, d, n, depth);
+  }
 
   if (domain && duration) {
     return renderPlan(domain, duration, await tasksFor(domain, duration), depth);
@@ -540,11 +914,23 @@ async function answerFor(question, ctx) {
       return full;
     }
   }
-  if (domain) {
-    return `${domain} runs on 1 Month, 45 Days, 3 Months and 6 Months. Tell me which track you are on and I will list every week with what to build, its coin value and its difficulty.`;
+  // Only when they actually named it. Otherwise fall through, so the question
+  // they did ask gets a chance at the taught answers and the learning queue.
+  if (namedDomain) {
+    return `${namedDomain} runs on 1 Month, 45 Days, 3 Months and 6 Months. Tell me which track you are on and I will list every week with what to build, its coin value and its difficulty.`;
   }
-  // Nothing matched. Say so plainly rather than answering a question that
-  // was not asked.
+  // Anything a coordinator has already taught for this kind of question.
+  const taught = await taughtAnswer(q);
+  if (taught) { return taught; }
+
+  // Nothing matched. Record it so it can be taught, then say so plainly.
+  // Nothing recognised it. If it does not even mention the programme, say so
+  // rather than offering a menu of things it did not ask about.
+  if (!PORTAL_TERMS.test(q)) { return outOfScope(); }
+
+  // It is about TEN but nothing here covers it, so it is worth a coordinator's
+  // time. Only these reach the queue: the knowledge base stays about TEN.
+  noteUnanswered(q, ctx);
   return [
     'I could not tell what you need from that.',
     '',
@@ -580,7 +966,7 @@ router.post('/ask', async (req, res) => {
     if (q.exhausted) {
       return res.status(402).json({
         error: 'message_limit_reached',
-        paywall: paywallPayload(q.tier),
+        paywall: paywallPayload(q.tier, q),
         tier: q.tier.key,
         used: q.used,
         limit: q.tier.messages,
@@ -593,7 +979,7 @@ router.post('/ask', async (req, res) => {
     const deepDiveAllowed = wantsDeepDive && q.tier.deepDive;
     const depth           = deepDiveAllowed ? 'ultimate' : q.tier.depth;
 
-    let answer = await answerFor(question, { domain, depth, userName });
+    let answer = await answerFor(question, { domain, depth, userName, userId });
     if (wantsDeepDive && !deepDiveAllowed) {
       answer += '\n\nDeep Dive Mode is available on Plus and Enterprise.';
     }
@@ -644,14 +1030,35 @@ router.post('/ask', async (req, res) => {
   }
 });
 
-/** Everything the paywall screen needs, so its copy lives in one place. */
-function paywallPayload(currentTier) {
+/**
+ * Everything the paywall screen needs, so its copy lives in one place.
+ *
+ * `sub` states plainly what happened before any pitch. A student who hits the
+ * limit mid-question and is shown only "Great minds don't give advice by the
+ * hour" has no idea whether they ran out of messages or the thing broke - and
+ * the second reading is the one people reach for.
+ */
+function paywallPayload(currentTier, quota) {
+  const used  = quota && typeof quota.used === 'number' ? quota.used : null;
+  const limit = currentTier && currentTier.messages;
+  const resets = quota && quota.resetsOn
+    ? ' Your free messages reset on ' + quota.resetsOn + '.'
+    : '';
+
   return {
     headline: 'Great minds don’t give advice by the hour.',
-    sub: 'Your mentor has more to say.',
+    sub: (used !== null && limit)
+      ? 'You have used all ' + limit + ' of your free messages this month.' + resets + ' Pick a plan to keep going.'
+      : 'Your mentor has more to say.',
+    reason: 'message_limit_reached',
+    used: used,
+    limit: limit,
     current: (currentTier && currentTier.key) || 'starter',
     upi: { vpa: UPI.vpa, payeeName: UPI.payeeName },
-    plans: ['pro', 'plus', 'enterprise'].map(function (k) {
+    // Starter is listed here too. It used to be typed out again in the page,
+    // which is how the card came to promise 12 free messages long after the
+    // limit became 25.
+    plans: ['starter', 'pro', 'plus', 'enterprise'].map(function (k) {
       const t = TIERS[k];
       return {
         key: t.key,
@@ -660,7 +1067,9 @@ function paywallPayload(currentTier) {
         priceLabel: t.priceLabel,
         blurb: t.blurb,
         messages: t.messages === null ? 'Unlimited messages' : t.messages + ' messages',
-        history: t.historyDays === null ? 'Full conversation history' : t.historyDays + '-day history',
+        history: t.historyDays === null ? 'Full conversation history'
+               : t.historyDays === 0 ? 'No history kept'
+               : t.historyDays + '-day history',
         deepDive: t.deepDive,
       };
     }),
@@ -681,7 +1090,7 @@ router.get('/entitlement', async (req, res) => {
       limit: q.tier.messages,
       remaining: q.remaining,
       historyDays: q.tier.historyDays,
-      paywall: paywallPayload(q.tier),
+      paywall: paywallPayload(q.tier, q),
     });
   } catch (e) {
     return res.status(500).json({ error: e.message });
@@ -849,9 +1258,24 @@ router.post('/submit-utr', async (req, res) => {
   }
 });
 
-// GET /api/v2/assistant/payment-requests?status=pending
+/*
+ * GET /api/v2/assistant/payment-requests?status=pending
+ *
+ * Admin only. This lists other students' user IDs and UPI references, so it
+ * carries the same guard as verify-payment: an unset token refuses rather
+ * than serving, because the failure mode of getting this wrong is every
+ * student being able to read everyone else's payment claims.
+ */
 router.get('/payment-requests', async (req, res) => {
   try {
+    const expected = process.env.ASSISTANT_ADMIN_TOKEN;
+    if (!expected) {
+      console.warn('[assistant] ASSISTANT_ADMIN_TOKEN not set; payment-requests refused');
+      return res.status(503).json({ error: 'not configured' });
+    }
+    if (req.get('X-Admin-Token') !== expected) {
+      return res.status(401).json({ error: 'unauthorized' });
+    }
     if (!AssistantUsage) { return res.json({ requests: [] }); }
     const status = req.query.status || 'pending';
     const rows = await AssistantUsage
@@ -978,6 +1402,94 @@ router.get('/plan', async (req, res) => {
  * is connected, whether the task library has rows, and whether entitlements can
  * be read. Safe to expose - it returns counts and states, never data.
  */
+/*
+ * The learning loop, both admin-only.
+ *
+ *   GET  /unanswered   what the assistant could not answer
+ *   POST /teach        { topic, answer } - answer it once, for everyone
+ *
+ * Behind the admin token for the same reason /verify-payment is: whoever can
+ * write here can make the assistant say anything to every student.
+ */
+function adminOk(req, res) {
+  const expected = process.env.ASSISTANT_ADMIN_TOKEN;
+  if (!expected) { res.status(503).json({ error: 'not configured' }); return false; }
+  if (req.get('X-Admin-Token') !== expected) { res.status(401).json({ error: 'unauthorized' }); return false; }
+  return true;
+}
+
+router.get('/unanswered', async (req, res) => {
+  if (!adminOk(req, res)) { return; }
+  try {
+    if (!BotQuery) { return res.json({ total: 0, questions: [] }); }
+    const rows = await BotQuery.find({ answer: null, status: 'open' })
+      .sort({ createdAt: -1 }).limit(200).lean();
+
+    // Group near-duplicates, so the same question asked forty times is one job
+    // rather than forty rows to read.
+    const groups = {};
+    rows.forEach(function (r) {
+      const key = keywords(r.question).sort().join(' ').slice(0, 60) || String(r.question).slice(0, 40);
+      if (!groups[key]) { groups[key] = { sample: r.question, count: 0, domains: {} }; }
+      groups[key].count++;
+      if (r.domain) { groups[key].domains[r.domain] = true; }
+    });
+
+    const questions = Object.keys(groups).map(function (k) {
+      return {
+        question: groups[k].sample,
+        askedTimes: groups[k].count,
+        domains: Object.keys(groups[k].domains),
+      };
+    }).sort(function (a, b) { return b.askedTimes - a.askedTimes; });
+
+    return res.json({ total: rows.length, questions: questions });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/teach', async (req, res) => {
+  if (!adminOk(req, res)) { return; }
+  try {
+    const { topic, answer } = req.body || {};
+    if (!topic || !answer) { return res.status(400).json({ error: 'topic and answer required' }); }
+    // The knowledge base is for TEN. Refusing off-topic entries keeps it from
+    // drifting into a general FAQ nobody is maintaining.
+    if (!PORTAL_TERMS.test(String(topic) + ' ' + String(answer))) {
+      return res.status(400).json({ error: 'off topic: this assistant only covers TEN and its portal' });
+    }
+    if (!SystemKnowledge) { return res.status(503).json({ error: 'knowledge store unavailable' }); }
+
+    await SystemKnowledge.findOneAndUpdate(
+      { topic: String(topic).toLowerCase().trim() },
+      { content: String(answer).trim(), updatedAt: new Date() },
+      { upsert: true, new: true }
+    );
+
+    // Close the open questions this now answers, so the queue drains instead
+    // of growing forever.
+    let closed = 0;
+    if (BotQuery) {
+      const words = keywords(topic + ' ' + answer);
+      const open = await BotQuery.find({ answer: null, status: 'open' }).lean();
+      const ids = open.filter(function (r) {
+        const hay = String(r.question).toLowerCase();
+        return words.filter(function (w) { return hay.indexOf(w) !== -1; }).length >= 2;
+      }).map(function (r) { return r._id; });
+      if (ids.length) {
+        await BotQuery.updateMany({ _id: { $in: ids } }, { status: 'answered' });
+        closed = ids.length;
+      }
+    }
+
+    return res.json({ ok: true, topic: topic, closedQuestions: closed });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+
 router.get('/health', async (req, res) => {
   const STATES = ['disconnected', 'connected', 'connecting', 'disconnecting'];
   const out = {
