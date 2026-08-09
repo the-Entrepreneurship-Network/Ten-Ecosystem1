@@ -2,193 +2,207 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>TEN Assistant</title>
 <!--
-  TEN Assistant — standalone section.
+  TEN Assistant — full-height chat.
 
-  Self-contained by design: no framework, no build step, no external request.
-  It talks only to /api/v2/assistant, which answers from the portal's own
-  DomainTask rows, so this page works with no API key and cannot invent a task
-  that is not in the database.
+  The page itself never scrolls. The shell is exactly one viewport tall and the
+  message list is the only scrolling region, which is what stops the window
+  jumping when an answer arrives. Everything else — picker, plans, payment —
+  lives in panels over the top rather than pushing the conversation around.
+
+  Self-contained: no framework, no build step, no external request. It talks
+  only to /api/v2/assistant, which answers from the portal's own DomainTask
+  rows, so it cannot invent a task that is not in the database.
 -->
 <style>
   :root{
-    --void:#05070E; --ink:#090D1A; --card:#0E1428; --edge:#121933;
+    --void:#05070E; --ink:#090D1A; --card:#0E1428; --edge:#121933; --line:rgba(212,175,55,.13);
     --gold:#D4AF37; --gold-lift:#F0D060; --gold-dim:#B8960C;
-    --text:#F0EEE8; --sub:#9A9080;
+    --text:#F0EEE8; --sub:#9A9080; --faint:#6D685E;
     --r-sm:10px; --r-md:16px; --r-lg:22px;
+    --col:760px;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--void);color:var(--text);
-       font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.6}
+  html,body{height:100%;margin:0;overflow:hidden}
+  body{background:var(--void);color:var(--text);
+       font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.6;
+       -webkit-font-smoothing:antialiased}
+  button,input,select,textarea{font-family:inherit;font-size:inherit}
   a{color:var(--gold);text-decoration:none}
-  .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+  :focus-visible{outline:3px solid var(--gold);outline-offset:2px}
 
-  header{border-bottom:1px solid rgba(212,175,55,.14);background:var(--ink);position:sticky;top:0;z-index:10}
-  .bar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0}
-  .brand{display:flex;align-items:center;gap:11px;font-weight:700;letter-spacing:.02em}
-  .brand .mark{font-size:26px;color:var(--gold);line-height:1}
-  .brand small{display:block;color:var(--sub);font-size:11.5px;font-weight:400;letter-spacing:.06em;text-transform:uppercase}
-  .back{color:var(--sub);font-size:13px;border:1px solid rgba(212,175,55,.22);padding:7px 14px;border-radius:999px}
-  .back:hover{color:var(--text);border-color:rgba(212,175,55,.5)}
+  /* ── shell ───────────────────────────────────────────────────────────── */
+  .app{height:100dvh;display:grid;grid-template-columns:272px 1fr}
+  @media(max-width:900px){.app{grid-template-columns:1fr}}
 
-  .hero{padding:34px 0 22px}
-  .hero h1{margin:0 0 8px;font-size:clamp(1.6rem,4vw,2.3rem);line-height:1.15}
-  .hero p{margin:0;color:var(--sub);max-width:60ch}
+  /* ── sidebar ─────────────────────────────────────────────────────────── */
+  .side{background:var(--ink);border-right:1px solid var(--line);
+        display:flex;flex-direction:column;min-height:0;overflow-y:auto;padding:16px 14px}
+  @media(max-width:900px){.side{display:none}}
+  .side.open{display:flex;position:fixed;inset:0;z-index:60;width:100%;border:0}
 
-  .grid{display:grid;grid-template-columns:1fr;gap:18px;padding-bottom:44px}
-  @media(min-width:900px){.grid{grid-template-columns:1.05fr .95fr}}
+  .brand{display:flex;align-items:center;gap:10px;padding:2px 4px 16px}
+  .brand .mk{font-size:24px;color:var(--gold);line-height:1}
+  .brand b{font-size:14px;font-weight:700;letter-spacing:.01em;display:block}
+  .brand small{color:var(--sub);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase}
 
-  .card{background:var(--card);border:1px solid rgba(212,175,55,.13);border-radius:var(--r-lg);padding:20px}
-  .card h2{margin:0 0 4px;font-size:15px;letter-spacing:.02em}
-  .card .hint{margin:0 0 15px;color:var(--sub);font-size:12.5px}
+  .side h3{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);
+           margin:16px 4px 8px;font-weight:600}
+  .side select{width:100%;background:var(--void);color:var(--text);border:1px solid rgba(212,175,55,.2);
+               border-radius:var(--r-sm);padding:9px 10px;font-size:13px;outline:none;margin-bottom:8px}
+  .side select:focus{border-color:rgba(212,175,55,.5)}
+  .side .go{width:100%;background:linear-gradient(145deg,var(--gold-lift),var(--gold-dim));color:#05070E;
+            border:0;border-radius:var(--r-sm);padding:10px;font-weight:700;font-size:13px;cursor:pointer}
 
-  label{display:block;font-size:11.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--sub);margin:0 0 6px}
-  select,input[type=text]{width:100%;background:var(--void);color:var(--text);
-    border:1px solid rgba(212,175,55,.22);border-radius:var(--r-sm);padding:11px 12px;font:inherit;font-size:14px;outline:none}
-  select:focus,input[type=text]:focus{border-color:rgba(212,175,55,.55)}
-  .row{display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:14px}
-  @media(min-width:560px){.row{grid-template-columns:1fr 1fr}}
+  .quick{display:flex;flex-direction:column;gap:6px}
+  .quick button{text-align:left;background:transparent;border:1px solid transparent;color:var(--sub);
+                border-radius:var(--r-sm);padding:8px 10px;font-size:12.5px;cursor:pointer}
+  .quick button:hover{background:rgba(212,175,55,.07);border-color:var(--line);color:var(--text)}
 
-  button.primary{width:100%;background:linear-gradient(145deg,var(--gold-lift),var(--gold-dim));
-    color:#05070E;border:0;border-radius:var(--r-sm);padding:12px;font:inherit;font-weight:700;cursor:pointer}
-  button.primary:disabled{opacity:.55;cursor:default}
+  .side .foot{margin-top:auto;padding-top:14px;border-top:1px solid var(--line)}
+  .plan-chip{display:flex;align-items:center;justify-content:space-between;gap:8px;
+             background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);padding:10px 12px}
+  .plan-chip b{color:var(--gold);font-size:12.5px;display:block}
+  .plan-chip small{color:var(--sub);font-size:11px}
+  .plan-chip button{background:none;border:1px solid rgba(212,175,55,.3);color:var(--gold);
+                    border-radius:999px;padding:5px 11px;font-size:11px;cursor:pointer}
+  .side .back{display:block;margin-top:10px;color:var(--faint);font-size:12px;text-align:center}
 
-  .note{margin-top:14px;padding:11px 13px;border-radius:var(--r-sm);
-    background:rgba(245,158,11,.09);border:1px solid rgba(245,158,11,.28);color:#F5C87A;font-size:12.5px}
+  /* ── main column ─────────────────────────────────────────────────────── */
+  .main{display:flex;flex-direction:column;min-height:0;min-width:0}
+  .top{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);
+       background:rgba(9,13,26,.85);backdrop-filter:blur(8px)}
+  .top .burger{display:none;background:none;border:1px solid var(--line);color:var(--sub);
+               border-radius:var(--r-sm);padding:6px 10px;cursor:pointer}
+  @media(max-width:900px){.top .burger{display:block}}
+  .top h1{font-size:14px;margin:0;font-weight:600;flex:1}
+  .top h1 span{display:block;color:var(--faint);font-size:11px;font-weight:400}
 
-  .summary{display:flex;flex-wrap:wrap;gap:9px;margin:16px 0 6px}
-  .pill{background:rgba(212,175,55,.1);border:1px solid rgba(212,175,55,.26);
-        color:var(--gold);border-radius:999px;padding:5px 12px;font-size:12px;font-weight:600}
+  /* The only scrolling region on the page. */
+  #log{flex:1;overflow-y:auto;overscroll-behavior:contain;scroll-behavior:smooth}
+  .row{border-bottom:1px solid rgba(212,175,55,.05)}
+  .row.me{background:rgba(212,175,55,.035)}
+  .row .in{max-width:var(--col);margin:0 auto;padding:20px;display:flex;gap:14px}
+  @media(max-width:640px){.row .in{padding:16px 14px;gap:10px}}
+  .av{flex:none;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;
+      font-size:13px;font-weight:700}
+  .av.ai{background:linear-gradient(145deg,var(--gold-lift),var(--gold-dim));color:#05070E}
+  .av.you{background:var(--edge);color:var(--sub);border:1px solid var(--line)}
+  .body{min-width:0;flex:1;font-size:14.5px;white-space:pre-wrap;word-break:break-word}
+  .body .who{font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px}
 
-  ol.weeks{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:10px}
-  ol.weeks li{background:var(--edge);border:1px solid rgba(212,175,55,.1);border-radius:var(--r-md);padding:13px 15px}
-  .wk{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:4px}
-  .wk b{font-size:13.5px}
-  .wk span{font-size:11.5px;color:var(--sub);white-space:nowrap}
-  .wk-body{font-size:13px;color:#D9D4C9;margin:0}
+  .dots span{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--sub);
+             margin-right:4px;animation:blink 1.2s infinite}
+  .dots span:nth-child(2){animation-delay:.2s}
+  .dots span:nth-child(3){animation-delay:.4s}
+  @keyframes blink{0%,80%,100%{opacity:.25}40%{opacity:1}}
 
-  #chat{display:flex;flex-direction:column;height:min(560px,70vh)}
-  #log{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding-right:4px}
-  .msg{max-width:92%;padding:10px 13px;border-radius:13px;font-size:13px;white-space:pre-wrap;word-break:break-word}
-  .me{align-self:flex-end;background:rgba(212,175,55,.15);border:1px solid rgba(212,175,55,.2)}
-  .it{align-self:flex-start;background:var(--edge);border:1px solid rgba(212,175,55,.1);color:#E4DFD5}
-  #ask{display:flex;gap:8px;margin-top:12px}
-  #ask input{flex:1}
-  #ask button{background:var(--gold);color:#05070E;border:0;border-radius:var(--r-sm);padding:0 16px;font:inherit;font-weight:700;cursor:pointer}
-  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
-  .chip{background:rgba(212,175,55,.1);border:1px solid rgba(212,175,55,.24);color:var(--gold);
-        border-radius:999px;padding:5px 11px;font-size:11.5px;cursor:pointer;font:inherit}
-  .chip:hover{background:rgba(212,175,55,.2)}
-  footer{border-top:1px solid rgba(212,175,55,.12);color:var(--sub);font-size:12px;padding:18px 0 30px}
-  .tierbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
-    background:var(--card);border:1px solid rgba(212,175,55,.13);border-radius:var(--r-md);padding:11px 15px;margin-bottom:18px}
-  .tierbar b{color:var(--gold);font-size:13px}
-  .tierbar span{color:var(--sub);font-size:12.5px}
-  .tierbar button{background:none;border:1px solid rgba(212,175,55,.35);color:var(--gold);
-    border-radius:999px;padding:6px 14px;font:inherit;font-size:12px;cursor:pointer}
-  .tierbar button:hover{background:rgba(212,175,55,.12)}
+  .empty{max-width:var(--col);margin:0 auto;padding:48px 20px;text-align:center}
+  .empty .mk{font-size:44px;color:var(--gold);line-height:1}
+  .empty h2{font-size:clamp(1.3rem,3.4vw,1.75rem);margin:14px 0 6px}
+  .empty p{color:var(--sub);margin:0 auto;max-width:46ch;font-size:14px}
+  .starters{display:grid;grid-template-columns:1fr;gap:8px;margin-top:22px;text-align:left}
+  @media(min-width:560px){.starters{grid-template-columns:1fr 1fr}}
+  .starters button{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);
+                   padding:12px 14px;cursor:pointer;color:var(--text);font-size:13px}
+  .starters button:hover{border-color:rgba(212,175,55,.4);background:rgba(212,175,55,.06)}
+  .starters b{display:block;font-size:13px}
+  .starters small{color:var(--sub);font-size:11.5px}
 
-  /* Paywall. Dark and quiet on purpose: a loud upsell after someone has hit a
-     wall reads as a shakedown, and this is aimed at students. */
-  #paywall{display:none;position:fixed;inset:0;z-index:200;background:rgba(3,5,10,.94);
-    backdrop-filter:blur(10px);overflow-y:auto;padding:32px 18px}
-  #paywall.on{display:block}
-  .pw{max-width:840px;margin:0 auto}
-  .pw-head{text-align:center;margin-bottom:26px}
-  .pw-head h2{font-size:clamp(1.5rem,4.4vw,2.15rem);line-height:1.2;margin:0 0 10px;
+  /* ── composer ────────────────────────────────────────────────────────── */
+  .composer{border-top:1px solid var(--line);background:rgba(5,7,14,.9);
+            padding:14px 16px calc(14px + env(safe-area-inset-bottom))}
+  .composer form{max-width:var(--col);margin:0 auto;display:flex;gap:10px;align-items:flex-end;
+                 background:var(--card);border:1px solid rgba(212,175,55,.22);border-radius:var(--r-lg);
+                 padding:8px 8px 8px 16px}
+  .composer form:focus-within{border-color:rgba(212,175,55,.5)}
+  .composer textarea{flex:1;background:none;border:0;color:var(--text);resize:none;outline:none;
+                     font-size:14.5px;line-height:1.5;max-height:180px;padding:8px 0}
+  .composer textarea::placeholder{color:var(--faint)}
+  .composer .send{flex:none;width:38px;height:38px;border-radius:12px;border:0;cursor:pointer;
+                  background:linear-gradient(145deg,var(--gold-lift),var(--gold-dim));color:#05070E;
+                  font-size:17px;font-weight:700}
+  .composer .send:disabled{opacity:.4;cursor:default}
+  .meter{max-width:var(--col);margin:8px auto 0;color:var(--faint);font-size:11px;text-align:center}
+
+  /* ── panels ──────────────────────────────────────────────────────────── */
+  .panel{position:fixed;inset:0;z-index:70;background:rgba(3,5,10,.94);backdrop-filter:blur(10px);
+         overflow-y:auto;padding:32px 18px;display:none}
+  .panel.on{display:block}
+  .panel .inner{max-width:900px;margin:0 auto}
+  .panel h2{font-size:clamp(1.4rem,4vw,2rem);text-align:center;margin:0 0 8px;
     background:linear-gradient(150deg,#F5E3A3,#D4AF37 55%,#9C7C14);-webkit-background-clip:text;
     background-clip:text;color:transparent}
-  .pw-head p{color:var(--sub);margin:0;font-size:14px}
-  .pw-grid{display:grid;grid-template-columns:1fr;gap:14px}
-  @media(min-width:760px){.pw-grid{grid-template-columns:repeat(3,1fr)}}
-  .plan{background:linear-gradient(168deg,#0B1020,#131A2E);border:1px solid rgba(212,175,55,.2);
-    border-radius:var(--r-lg);padding:20px;display:flex;flex-direction:column}
-  .plan.featured{border-color:rgba(212,175,55,.55);box-shadow:0 0 0 1px rgba(212,175,55,.14)}
-  .plan h3{margin:0;font-size:15px}
-  .plan .amt{font-size:26px;font-weight:800;color:var(--gold);margin:6px 0 2px}
-  .plan .per{color:var(--sub);font-size:12px;margin-bottom:12px}
-  .plan ul{list-style:none;margin:0 0 16px;padding:0;display:flex;flex-direction:column;gap:7px;flex:1}
-  .plan li{font-size:12.5px;color:#D9D4C9;padding-left:17px;position:relative}
-  .plan li:before{content:"\2022";position:absolute;left:3px;color:var(--gold)}
-  .plan button{background:linear-gradient(145deg,var(--gold-lift),var(--gold-dim));color:#05070E;
-    border:0;border-radius:var(--r-sm);padding:11px;font:inherit;font-weight:700;cursor:pointer}
-  .pay{max-width:430px;margin:0 auto;text-align:center}
-  .pay .qrbox{background:#fff;border-radius:var(--r-md);padding:12px;display:inline-block;margin-bottom:12px}
-  .pay .qrbox img{display:block;width:min(240px,60vw);height:auto}
-  .pay .amt2{font-size:24px;font-weight:800;color:var(--gold);margin:2px 0}
-  .pay .vpa{font-family:ui-monospace,monospace;font-size:12.5px;color:#D9D4C9;
-    background:var(--edge);border:1px solid rgba(212,175,55,.16);border-radius:var(--r-sm);
-    padding:8px 10px;margin:10px 0;word-break:break-all}
-  .pay input{margin:6px 0 4px;text-align:center;letter-spacing:.06em}
-  .pay .warn{background:rgba(245,158,11,.09);border:1px solid rgba(245,158,11,.28);
-    color:#F5C87A;border-radius:var(--r-sm);padding:10px 12px;font-size:12px;margin:12px 0;text-align:left;line-height:1.55}
-  .pay .ok{background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);
-    color:#6EE7B7;border-radius:var(--r-sm);padding:11px 13px;font-size:12.5px;margin-top:12px;line-height:1.55}
-  .pw-close{display:block;margin:22px auto 0;background:none;border:0;color:var(--sub);
-    font:inherit;font-size:13px;cursor:pointer;text-decoration:underline}
-  .pw-note{text-align:center;color:var(--sub);font-size:11.5px;margin-top:16px;line-height:1.6}
-  /* ── Intro ──────────────────────────────────────────────────────────────
-     The logo settles out of the dark over a gold bloom, holds, then lifts.
-     Plays once per session: a ceremony on every navigation stops being a
-     ceremony and becomes an obstacle. */
+  .panel .lede{color:var(--sub);text-align:center;margin:0 auto 24px;max-width:52ch;font-size:13.5px}
+  .close{display:block;margin:22px auto 0;background:none;border:0;color:var(--sub);
+         font-size:13px;cursor:pointer;text-decoration:underline}
+
+  .plans{display:grid;grid-template-columns:1fr;gap:14px}
+  @media(min-width:820px){.plans{grid-template-columns:repeat(4,1fr)}}
+  .tier{background:var(--card);border:1px solid rgba(212,175,55,.16);border-radius:var(--r-lg);
+        padding:18px;display:flex;flex-direction:column}
+  .tier.on{border-color:rgba(212,175,55,.55)}
+  .tier .nm{font-size:13.5px;font-weight:700}
+  .tier .amt{font-size:24px;font-weight:800;color:var(--gold);margin:6px 0 0}
+  .tier .per{color:var(--sub);font-size:11px;margin-bottom:12px}
+  .tier ul{list-style:none;margin:0 0 14px;padding:0;display:flex;flex-direction:column;gap:6px;flex:1}
+  .tier li{font-size:12.5px;color:#D9D4C9;padding-left:15px;position:relative}
+  .tier li:before{content:"\2022";position:absolute;left:2px;color:var(--gold)}
+  .tier button{background:linear-gradient(145deg,var(--gold-lift),var(--gold-dim));color:#05070E;
+               border:0;border-radius:var(--r-sm);padding:9px;font-weight:700;font-size:13px;cursor:pointer}
+  .tier button[disabled]{background:none;border:1px solid rgba(212,175,55,.3);color:var(--sub);cursor:default}
+
+  .pay{margin-top:20px;background:var(--card);border:1px solid rgba(212,175,55,.2);
+       border-radius:var(--r-lg);padding:20px;max-width:400px;margin-inline:auto;text-align:center;display:none}
+  .pay.on{display:block}
+  .pay .qrbox{background:#fff;border-radius:var(--r-md);padding:11px;display:inline-block;margin-bottom:10px}
+  .pay .qrbox img{display:block;width:min(210px,56vw);height:auto}
+  .pay .amt2{font-size:22px;font-weight:800;color:var(--gold)}
+  .pay .vpa{font-family:ui-monospace,monospace;font-size:12px;color:#D9D4C9;background:var(--edge);
+            border:1px solid rgba(212,175,55,.16);border-radius:var(--r-sm);padding:8px;margin:10px 0;word-break:break-all}
+  .pay input{width:100%;background:var(--void);color:var(--text);border:1px solid rgba(212,175,55,.22);
+             border-radius:var(--r-sm);padding:10px;text-align:center;letter-spacing:.06em;outline:none;margin:6px 0}
+  .pay .warn{background:rgba(245,158,11,.09);border:1px solid rgba(245,158,11,.28);color:#F5C87A;
+             border-radius:var(--r-sm);padding:10px;font-size:12px;margin:10px 0;text-align:left;line-height:1.5}
+  .pay .ok{background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);color:#6EE7B7;
+           border-radius:var(--r-sm);padding:10px;font-size:12.5px;margin-top:10px;line-height:1.5}
+  .pay .cta{width:100%;background:linear-gradient(145deg,var(--gold-lift),var(--gold-dim));color:#05070E;
+            border:0;border-radius:var(--r-sm);padding:11px;font-weight:700;cursor:pointer}
+
+  .weeks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}
+  .weeks li{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);padding:12px 14px}
+  .weeks .hd{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+  .weeks b{font-size:13px}
+  .weeks .mt{font-size:11px;color:var(--sub);white-space:nowrap}
+  .weeks p{margin:3px 0 0;font-size:12.5px;color:#D9D4C9}
+  .pill{display:inline-block;background:rgba(212,175,55,.1);border:1px solid rgba(212,175,55,.26);
+        color:var(--gold);border-radius:999px;padding:4px 11px;font-size:11.5px;font-weight:600;margin:0 6px 10px 0}
+
+  /* ── intro (unchanged behaviour) ─────────────────────────────────────── */
   #intro{position:fixed;inset:0;z-index:9999;background:#05070E;display:grid;place-items:center;
     animation:introOut .6s cubic-bezier(.7,0,.84,0) 2.6s forwards}
   #intro .stage{position:relative;display:grid;place-items:center}
   #intro .bloom{position:absolute;width:78%;height:78%;border-radius:50%;
     background:radial-gradient(circle,rgba(255,243,196,.5) 0%,rgba(212,175,55,.22) 42%,transparent 70%);
     opacity:0;animation:bloomIn 1.95s cubic-bezier(.34,.01,.24,1) .2s forwards}
-  /* Screen blending drops the artwork's black matte to the backdrop exactly,
-     so the logo never sits in a faintly visible box. */
   #intro img{position:relative;width:min(78vw,30rem);height:auto;mix-blend-mode:screen;
     opacity:0;transform:scale(1.06);animation:markIn 1.1s cubic-bezier(.16,1,.3,1) .2s forwards}
   #intro .skip{position:absolute;bottom:34px;right:26px;background:rgba(255,255,255,.03);
     border:1px solid rgba(212,175,55,.25);color:var(--sub);border-radius:999px;padding:8px 16px;
-    font:inherit;font-size:12px;cursor:pointer;opacity:0;animation:fadeIn .34s ease 1.2s forwards}
+    font-size:12px;cursor:pointer;opacity:0;animation:fadeIn .34s ease 1.2s forwards}
   @keyframes markIn{to{opacity:1;transform:scale(1)}}
   @keyframes bloomIn{0%{opacity:0;transform:scale(.86)}62%{opacity:.55;transform:scale(1.08)}100%{opacity:.34;transform:scale(1)}}
   @keyframes introOut{to{opacity:0;transform:scale(1.055);filter:blur(9px);visibility:hidden}}
   @keyframes fadeIn{to{opacity:1}}
   #intro.done{display:none}
-  /* Reduced motion: hold the finished frame briefly, travel nothing. */
   @media (prefers-reduced-motion:reduce){
     #intro img,#intro .bloom{animation-duration:.01ms;animation-delay:0ms;opacity:1;transform:none}
     #intro{animation:introOut .01ms linear 1.6s forwards}
+    #log{scroll-behavior:auto}
+    .dots span{animation:none}
   }
-
-  /* ── Pricing ────────────────────────────────────────────────────────── */
-  .pricing{padding:10px 0 52px}
-  .pricing h2{font-size:clamp(1.35rem,3.6vw,1.9rem);margin:0 0 6px;text-align:center}
-  .pricing .lede{color:var(--sub);text-align:center;margin:0 auto 26px;max-width:52ch;font-size:13.5px}
-  .plans{display:grid;grid-template-columns:1fr;gap:14px}
-  @media(min-width:820px){.plans{grid-template-columns:repeat(4,1fr)}}
-  .tier{background:var(--card);border:1px solid rgba(212,175,55,.16);border-radius:var(--r-lg);
-    padding:20px;display:flex;flex-direction:column}
-  .tier.on{border-color:rgba(212,175,55,.55);box-shadow:0 0 0 1px rgba(212,175,55,.14)}
-  .tier .nm{font-size:14px;font-weight:700}
-  .tier .amt{font-size:25px;font-weight:800;color:var(--gold);margin:7px 0 0}
-  .tier .per{color:var(--sub);font-size:11.5px;margin-bottom:13px}
-  .tier ul{list-style:none;margin:0 0 15px;padding:0;display:flex;flex-direction:column;gap:7px;flex:1}
-  .tier li{font-size:12.5px;color:#D9D4C9;padding-left:16px;position:relative}
-  .tier li:before{content:"\2022";position:absolute;left:2px;color:var(--gold)}
-  .tier button{background:linear-gradient(145deg,var(--gold-lift),var(--gold-dim));color:#05070E;
-    border:0;border-radius:var(--r-sm);padding:10px;font:inherit;font-weight:700;cursor:pointer}
-  .tier button[disabled]{background:none;border:1px solid rgba(212,175,55,.3);color:var(--sub);cursor:default}
-  .pay{margin-top:20px;background:var(--card);border:1px solid rgba(212,175,55,.2);
-    border-radius:var(--r-lg);padding:22px;max-width:420px;margin-inline:auto;text-align:center;display:none}
-  .pay.on{display:block}
-  .pay .qrbox{background:#fff;border-radius:var(--r-md);padding:12px;display:inline-block;margin-bottom:12px}
-  .pay .qrbox img{display:block;width:min(228px,58vw);height:auto}
-  .pay .amt2{font-size:23px;font-weight:800;color:var(--gold)}
-  .pay .vpa{font-family:ui-monospace,monospace;font-size:12.5px;color:#D9D4C9;background:var(--edge);
-    border:1px solid rgba(212,175,55,.16);border-radius:var(--r-sm);padding:8px 10px;margin:10px 0;word-break:break-all}
-  .pay input{margin:6px 0 4px;text-align:center;letter-spacing:.06em}
-  .pay .warn{background:rgba(245,158,11,.09);border:1px solid rgba(245,158,11,.28);color:#F5C87A;
-    border-radius:var(--r-sm);padding:10px 12px;font-size:12px;margin:12px 0;text-align:left;line-height:1.55}
-  .pay .ok{background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);color:#6EE7B7;
-    border-radius:var(--r-sm);padding:11px 13px;font-size:12.5px;margin-top:12px;line-height:1.55}
-  :focus-visible{outline:3px solid var(--gold);outline-offset:2px}
 </style>
 </head>
 <body>
@@ -201,236 +215,80 @@
   <button class="skip" type="button" id="introSkip">Skip intro</button>
 </div>
 
-<header>
-  <div class="wrap bar">
+<div class="app">
+
+  <aside class="side" id="side">
     <div class="brand">
-      <span class="mark" aria-hidden="true">&#8734;</span>
-      <span>TEN Assistant<small>The Entrepreneurship Network</small></span>
-    </div>
-    <a class="back" href="/student-dashboard.html">&larr; Dashboard</a>
-  </div>
-</header>
-
-<div class="wrap hero">
-  <h1>Know exactly what to build, and by when.</h1>
-  <p>Pick your domain and track for the full week-by-week plan — every task, what it pays, and how hard it is. Straight from the portal's own task library, so it matches what you'll actually be assigned.</p>
-</div>
-
-<div class="wrap">
-  <div class="tierbar" id="tierbar" hidden>
-    <span><b id="tierName">Starter</b> &nbsp;<span id="tierMeter"></span></span>
-    <button type="button" id="tierUpgrade">See plans</button>
-  </div>
-</div>
-
-<main class="wrap grid">
-
-  <section class="card">
-    <h2>Your track plan</h2>
-    <p class="hint">14 domains, 6 durations.</p>
-
-    <div class="row">
-      <div>
-        <label for="domain">Domain</label>
-        <select id="domain"><option value="">Loading…</option></select>
-      </div>
-      <div>
-        <label for="duration">Duration</label>
-        <select id="duration"><option value="">Loading…</option></select>
-      </div>
+      <span class="mk" aria-hidden="true">&#8734;</span>
+      <span><b>TEN Assistant</b><small>The Entrepreneurship Network</small></span>
     </div>
 
-    <button class="primary" id="go" type="button">Show my plan</button>
-    <div id="planOut" aria-live="polite"></div>
-  </section>
+    <h3>Your track</h3>
+    <select id="domain" aria-label="Domain"><option value="">Loading…</option></select>
+    <select id="duration" aria-label="Duration"><option value="">Loading…</option></select>
+    <button class="go" type="button" id="showPlan">Show my full plan</button>
 
-  <section class="card">
-    <h2>Ask anything</h2>
-    <p class="hint">Tasks, coins, attendance, documents, certificates.</p>
-    <div id="chat">
-      <div id="log" aria-live="polite"></div>
-      <div class="chips" id="chips"></div>
+    <h3>Ask about</h3>
+    <div class="quick" id="quick"></div>
+
+    <div class="foot">
+      <div class="plan-chip">
+        <span><b id="tierName">Starter</b><small id="tierMeter">&nbsp;</small></span>
+        <button type="button" id="openPlans">Plans</button>
+      </div>
+      <a class="back" href="/student-dashboard.html">&larr; Back to dashboard</a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="top">
+      <button class="burger" type="button" id="burger" aria-label="Menu">&#9776;</button>
+      <h1>TEN Assistant<span>Answers from the portal's own task library</span></h1>
+    </div>
+
+    <div id="log" aria-live="polite"></div>
+
+    <div class="composer">
       <form id="ask">
-        <input type="text" id="q" autocomplete="off" placeholder="e.g. MERN 3 months" aria-label="Ask the assistant">
-        <button type="submit">Send</button>
+        <textarea id="q" rows="1" placeholder="Ask about your tasks, coins, certificates…" aria-label="Message"></textarea>
+        <button class="send" type="submit" id="send" aria-label="Send">&uarr;</button>
       </form>
+      <div class="meter" id="meter"></div>
     </div>
-  </section>
+  </main>
+</div>
 
-</main>
+<div class="panel" id="plansPanel" role="dialog" aria-modal="true" aria-label="Plans">
+  <div class="inner">
+    <h2 id="pwHead">Great minds don’t give advice by the hour.</h2>
+    <p class="lede" id="pwSub">Starter gets you unstuck. The paid tiers go deeper on the same question.</p>
+    <div class="plans" id="plans"></div>
+    <div class="pay" id="pay"></div>
+    <button class="close" type="button" id="closePlans">Close</button>
+  </div>
+</div>
 
-<section class="wrap pricing" id="pricing">
-  <h2>Great minds don’t give advice by the hour.</h2>
-  <p class="lede">Starter gets you unstuck. The paid tiers go deeper on the same question — more of your track, the parts that trip students up, and the full breakdown.</p>
-  <div class="plans" id="plans"></div>
-  <div class="pay" id="pay"></div>
-</section>
-
-<footer class="wrap">Answers come from this portal's task library. Anything about your own account, ask your coordinator.</footer>
+<div class="panel" id="planPanel" role="dialog" aria-modal="true" aria-label="Track plan">
+  <div class="inner">
+    <h2 id="planTitle">Your plan</h2>
+    <div id="planBody"></div>
+    <button class="close" type="button" id="closePlan">Close</button>
+  </div>
+</div>
 
 <script>
 (function () {
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
 
-  /* ---- populate the pickers from the API, so this page never carries a
-          hardcoded domain list that can fall out of step with the seed ---- */
-  fetch('/api/v2/assistant/domains')
-    .then(function (r) { return r.json(); })
-    .then(function (d) {
-      var ds = $('domain');
-      ds.innerHTML = '<option value="">Select your domain…</option>';
-      (d.domains || []).forEach(function (name) {
-        var o = document.createElement('option');
-        o.value = name; o.textContent = name;
-        ds.appendChild(o);
-      });
-      var du = $('duration');
-      du.innerHTML = '';
-      (d.durations || []).forEach(function (x) {
-        var o = document.createElement('option');
-        o.value = x.key;
-        o.textContent = x.label + (x.derived ? ' (no task library)' : '');
-        du.appendChild(o);
-      });
-      du.value = '3months';
-      // Preselect the student's own domain when the portal already stored it.
-      try {
-        var mine = localStorage.getItem('domain') || localStorage.getItem('studentDomain');
-        if (mine) { ds.value = mine; }
-      } catch (e) {}
-    })
-    .catch(function () {
-      $('domain').innerHTML = '<option value="">Could not load domains</option>';
-    });
-
-  /* ---- the plan ---- */
-  $('go').addEventListener('click', function () {
-    var domain = $('domain').value, duration = $('duration').value;
-    var out = $('planOut');
-    if (!domain) { out.innerHTML = '<div class="note">Choose a domain first.</div>'; return; }
-
-    out.innerHTML = '<p class="hint" style="margin-top:16px">Loading…</p>';
-    fetch('/api/v2/assistant/plan?domain=' + encodeURIComponent(domain) + '&duration=' + encodeURIComponent(duration))
-      .then(function (r) { return r.json(); })
-      .then(function (d) {
-        if (d.error) { out.innerHTML = '<div class="note">' + d.error + '</div>'; return; }
-        if (!d.weeks || !d.weeks.length) {
-          out.innerHTML = '<div class="note">No seeded tasks for this combination. Ask your coordinator which track you are on.</div>';
-          return;
-        }
-        out.innerHTML = '';
-
-        var sum = document.createElement('div');
-        sum.className = 'summary';
-        [d.duration, d.weeks.length + ' weeks', d.totalCoins + ' coins', '≈ Rs ' + Math.round(d.totalCoins * 0.5)]
-          .forEach(function (t) {
-            var p = document.createElement('span'); p.className = 'pill'; p.textContent = t; sum.appendChild(p);
-          });
-        out.appendChild(sum);
-
-        if (d.derived) {
-          var n = document.createElement('div');
-          n.className = 'note';
-          n.textContent = d.duration + ' has no task library of its own. This is the front of the 1 Month track — treat it as a starting point and confirm with your coordinator.';
-          out.appendChild(n);
-        }
-
-        var ol = document.createElement('ol');
-        ol.className = 'weeks';
-        d.weeks.forEach(function (w) {
-          var li = document.createElement('li');
-          var head = document.createElement('div');
-          head.className = 'wk';
-          var b = document.createElement('b');
-          b.textContent = 'Week ' + w.week + ' — ' + w.title;
-          var meta = document.createElement('span');
-          meta.textContent = w.coins + ' coins · ' + w.difficulty;
-          head.appendChild(b); head.appendChild(meta);
-          var body = document.createElement('p');
-          body.className = 'wk-body';
-          body.textContent = w.task;
-          li.appendChild(head); li.appendChild(body);
-          ol.appendChild(li);
-        });
-        out.appendChild(ol);
-      })
-      .catch(function () {
-        out.innerHTML = '<div class="note">Could not load the plan. Check your connection.</div>';
-      });
-  });
-
-  /* ---- chat ---- */
-  var log = $('log');
-  function say(text, mine) {
-    var d = document.createElement('div');
-    d.className = 'msg ' + (mine ? 'me' : 'it');
-    d.textContent = text; // text node, never innerHTML
-    log.appendChild(d);
-    log.scrollTop = log.scrollHeight;
-    return d;
-  }
-  function me() {
-    var o = { userId: '', userName: '', domain: '' };
-    try {
-      o.userId   = localStorage.getItem('employeeId') || localStorage.getItem('userId') || '';
-      o.userName = localStorage.getItem('name') || '';
-      o.domain   = localStorage.getItem('domain') || '';
-    } catch (e) {}
-    return o;
-  }
-  var busy = false;
-  function ask(q) {
-    if (busy || !q) { return; }
-    busy = true;
-    say(q, true);
-    var pending = say('…', false);
-    var who = me();
-    fetch('/api/v2/assistant/ask', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question: q, userId: who.userId, userName: who.userName, domain: who.domain || $('domain').value })
-    })
-      .then(function (r) { return r.json().then(function (j) { return { status: r.status, body: j }; }); })
-      .then(function (out) {
-        var d = out.body;
-        if (out.status === 402 && d.paywall) {
-          pending.textContent = d.paywall.headline + '\n\n' + d.paywall.sub;
-          renderPlans(d.paywall);
-          $('pricing').scrollIntoView({ behavior: 'smooth', block: 'start' });
-          return;
-        }
-        pending.textContent = d.answer || d.error || 'No answer available.';
-        if (typeof d.remaining === 'number') {
-          $('tierMeter').textContent = d.remaining + ' of ' + d.limit + ' messages left this month';
-        }
-      })
-      .catch(function () { pending.textContent = 'Could not reach the assistant. Check your connection.'; })
-      .then(function () { busy = false; log.scrollTop = log.scrollHeight; });
-  }
-  $('ask').addEventListener('submit', function (e) {
-    e.preventDefault();
-    var v = $('q').value.trim();
-    if (!v) { return; }
-    $('q').value = '';
-    ask(v);
-  });
-
-  /* ---- intro ---------------------------------------------------------
-     Once per session. Returning to this page ten times a day should not mean
-     watching the same ceremony ten times. */
+  /* ── intro: once per session ─────────────────────────────────────────── */
   (function () {
     var intro = $('intro');
-    if (!intro) { return; }
-    var KEY = 'ten.assistant.intro.v1';
-    var seen = false;
+    var KEY = 'ten.assistant.intro.v1', seen = false;
     try { seen = sessionStorage.getItem(KEY) === '1'; } catch (e) {}
     if (seen) { intro.classList.add('done'); return; }
     try { sessionStorage.setItem(KEY, '1'); } catch (e) {}
-
     function end() { intro.classList.add('done'); }
-    // The CSS animation hides it; this removes it from the tree so it can
-    // never trap focus or swallow a click afterwards.
     intro.addEventListener('animationend', function (e) {
       if (e.animationName === 'introOut') { end(); }
     });
@@ -438,116 +296,319 @@
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { end(); }
     }, { once: true });
-    // Belt and braces: if the animation never fires, do not strand the page.
     setTimeout(end, 4000);
   })();
 
-  /* ---- pricing -------------------------------------------------------- */
-  var TIER_ORDER = ['starter', 'pro', 'plus', 'enterprise'];
+  /* ── who is asking (read-only) ───────────────────────────────────────── */
+  function me() {
+    var o = { userId: '', userName: '', domain: '' };
+    try {
+      var keys = ['employeeId', 'employee_id', 'userId', 'studentId', 'empId'];
+      for (var i = 0; i < keys.length; i++) {
+        var v = localStorage.getItem(keys[i]);
+        if (v) { o.userId = v; break; }
+      }
+      o.userName = localStorage.getItem('name') || localStorage.getItem('studentName') || '';
+      o.domain   = localStorage.getItem('domain') || localStorage.getItem('studentDomain') || '';
+      var raw = localStorage.getItem('student') || localStorage.getItem('user');
+      if (raw) {
+        var p = JSON.parse(raw);
+        o.userId   = o.userId   || p.employeeId || p.userId || p._id || '';
+        o.userName = o.userName || p.name || '';
+        o.domain   = o.domain   || p.domain || '';
+      }
+    } catch (e) {}
+    return o;
+  }
+
+  /* ── message list ────────────────────────────────────────────────────── */
+  var log = $('log');
+
+  function atBottom() {
+    return log.scrollHeight - log.scrollTop - log.clientHeight < 90;
+  }
+  /* Only follow the conversation when the reader is already at the bottom.
+     Yanking someone back down while they are re-reading an earlier answer is
+     the thing that makes a chat feel like it is fighting you. */
+  function follow(force) {
+    if (force || atBottom()) { log.scrollTop = log.scrollHeight; }
+  }
+
+  function bubble(who, text) {
+    var row = document.createElement('div');
+    row.className = 'row' + (who === 'me' ? ' me' : '');
+    var inner = document.createElement('div'); inner.className = 'in';
+    var av = document.createElement('div');
+    av.className = 'av ' + (who === 'me' ? 'you' : 'ai');
+    av.textContent = who === 'me' ? (me().userName ? me().userName[0].toUpperCase() : 'Y') : '∞';
+    var body = document.createElement('div'); body.className = 'body';
+    var lab = document.createElement('div'); lab.className = 'who';
+    lab.textContent = who === 'me' ? 'You' : 'TEN Assistant';
+    var txt = document.createElement('div');
+    txt.textContent = text;                      // text node, never innerHTML
+    body.appendChild(lab); body.appendChild(txt);
+    inner.appendChild(av); inner.appendChild(body);
+    row.appendChild(inner);
+    log.appendChild(row);
+    follow(who === 'me');                        // always follow your own message
+    return txt;
+  }
+
+  function thinking() {
+    var t = bubble('ai', '');
+    t.innerHTML = '<span class="dots"><span></span><span></span><span></span></span>';
+    return t;
+  }
+
+  /* ── empty state ─────────────────────────────────────────────────────── */
+  var STARTERS = [
+    ['My week-by-week plan', 'Every task, coin value and difficulty', 'Give me my week by week plan'],
+    ['How do coins work?', '100 coins = ₹50, and the ones students miss', 'How do coins work and how do I earn the most?'],
+    ['What domains exist?', 'All 14 tracks and 6 durations', 'What are all the domains available?'],
+    ['Certificates', 'Types, and what earns the strongest one', 'What certificates does TEN issue and how do I qualify?']
+  ];
+
+  function showEmpty() {
+    var who = me();
+    var wrap = document.createElement('div');
+    wrap.className = 'empty';
+    var mk = document.createElement('div'); mk.className = 'mk'; mk.textContent = '∞';
+    var h = document.createElement('h2');
+    h.textContent = who.userName ? 'Hello, ' + who.userName.split(' ')[0] + '.' : 'How can I help?';
+    var p = document.createElement('p');
+    p.textContent = who.domain
+      ? 'You are on ' + who.domain + '. Ask me anything about your tasks, coins, certificates or deadlines.'
+      : 'Ask me about your weekly tasks, coins, attendance, documents or certificates.';
+    wrap.appendChild(mk); wrap.appendChild(h); wrap.appendChild(p);
+
+    var grid = document.createElement('div'); grid.className = 'starters';
+    STARTERS.forEach(function (s) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      var t = document.createElement('b'); t.textContent = s[0];
+      var d = document.createElement('small'); d.textContent = s[1];
+      b.appendChild(t); b.appendChild(d);
+      b.addEventListener('click', function () { send(s[2]); });
+      grid.appendChild(b);
+    });
+    wrap.appendChild(grid);
+    log.appendChild(wrap);
+  }
+
+  function clearEmpty() {
+    var e = log.querySelector('.empty');
+    if (e) { e.remove(); }
+  }
+
+  /* ── sending ─────────────────────────────────────────────────────────── */
+  var busy = false;
+  function send(text) {
+    var q = String(text || '').trim();
+    if (!q || busy) { return; }
+    busy = true;
+    $('send').disabled = true;
+    clearEmpty();
+    bubble('me', q);
+    var pending = thinking();
+    var who = me();
+
+    fetch('/api/v2/assistant/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: q, userId: who.userId, userName: who.userName, domain: who.domain })
+    })
+      .then(function (r) { return r.json().then(function (j) { return { status: r.status, body: j }; }); })
+      .then(function (out) {
+        var d = out.body;
+        if (out.status === 402 && d.paywall) {
+          pending.textContent = d.paywall.headline + '\n\n' + d.paywall.sub;
+          if (d.paywall.plans) { renderPlans(d.paywall); }
+          openPanel('plansPanel');
+          return;
+        }
+        pending.textContent = d.answer || d.error || 'No answer available.';
+        if (typeof d.remaining === 'number') {
+          $('meter').textContent = d.remaining + ' of ' + d.limit + ' messages left this month';
+        } else if (d.limit === null) {
+          $('meter').textContent = 'Unlimited messages';
+        }
+      })
+      .catch(function () {
+        pending.textContent = 'Could not reach the assistant. Check your connection and try again.';
+      })
+      .then(function () { busy = false; $('send').disabled = false; follow(); });
+  }
+
+  var box = $('q');
+  function grow() { box.style.height = 'auto'; box.style.height = Math.min(box.scrollHeight, 180) + 'px'; }
+  box.addEventListener('input', grow);
+  box.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('ask').requestSubmit(); }
+  });
+  $('ask').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var v = box.value;
+    box.value = ''; grow();
+    send(v);
+  });
+
+  /* ── panels ──────────────────────────────────────────────────────────── */
+  function openPanel(id) { $(id).classList.add('on'); }
+  function closePanel(id) { $(id).classList.remove('on'); }
+  $('openPlans').addEventListener('click', function () { openPanel('plansPanel'); });
+  $('closePlans').addEventListener('click', function () { closePanel('plansPanel'); });
+  $('closePlan').addEventListener('click', function () { closePanel('planPanel'); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { closePanel('plansPanel'); closePanel('planPanel'); $('side').classList.remove('open'); }
+  });
+  $('burger').addEventListener('click', function () { $('side').classList.toggle('open'); });
+
+  /* ── track picker ────────────────────────────────────────────────────── */
+  fetch('/api/v2/assistant/domains')
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var ds = $('domain');
+      ds.innerHTML = '<option value="">Select domain…</option>';
+      (d.domains || []).forEach(function (n) {
+        var o = document.createElement('option'); o.value = n; o.textContent = n; ds.appendChild(o);
+      });
+      var du = $('duration'); du.innerHTML = '';
+      (d.durations || []).forEach(function (x) {
+        var o = document.createElement('option');
+        o.value = x.key;
+        o.textContent = x.label + (x.derived ? ' (no tasks)' : '');
+        du.appendChild(o);
+      });
+      du.value = '3months';
+      var mine = me().domain;
+      if (mine) { ds.value = mine; }
+    })
+    .catch(function () { $('domain').innerHTML = '<option>Could not load</option>'; });
+
+  $('showPlan').addEventListener('click', function () {
+    var domain = $('domain').value, duration = $('duration').value;
+    if (!domain) { send('What are all the domains available?'); return; }
+    var body = $('planBody');
+    body.textContent = 'Loading…';
+    $('planTitle').textContent = domain;
+    openPanel('planPanel');
+
+    fetch('/api/v2/assistant/plan?domain=' + encodeURIComponent(domain) + '&duration=' + encodeURIComponent(duration))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        body.innerHTML = '';
+        if (d.error || !d.weeks || !d.weeks.length) {
+          body.textContent = 'No seeded tasks for this combination. Ask your coordinator which track you are on.';
+          return;
+        }
+        [d.duration, d.weeks.length + ' weeks', d.totalCoins + ' coins', '≈ ₹' + Math.round(d.totalCoins * 0.5)]
+          .forEach(function (t) {
+            var s = document.createElement('span'); s.className = 'pill'; s.textContent = t; body.appendChild(s);
+          });
+        if (d.derived) {
+          var n = document.createElement('div'); n.className = 'warn';
+          n.style.cssText = 'background:rgba(245,158,11,.09);border:1px solid rgba(245,158,11,.28);color:#F5C87A;border-radius:10px;padding:10px;font-size:12.5px;margin:6px 0 14px';
+          n.textContent = d.duration + ' has no task library of its own. This is the front of the 1 Month track — confirm with your coordinator.';
+          body.appendChild(n);
+        }
+        var ol = document.createElement('ul'); ol.className = 'weeks';
+        d.weeks.forEach(function (w) {
+          var li = document.createElement('li');
+          var hd = document.createElement('div'); hd.className = 'hd';
+          var b = document.createElement('b'); b.textContent = 'Week ' + w.week + ' — ' + w.title;
+          var mt = document.createElement('span'); mt.className = 'mt';
+          mt.textContent = w.coins + ' coins · ' + w.difficulty;
+          hd.appendChild(b); hd.appendChild(mt);
+          var p = document.createElement('p'); p.textContent = w.task;
+          li.appendChild(hd); li.appendChild(p);
+          ol.appendChild(li);
+        });
+        body.appendChild(ol);
+      })
+      .catch(function () { body.textContent = 'Could not load the plan.'; });
+  });
+
+  /* ── quick prompts ───────────────────────────────────────────────────── */
+  [['Coins & rewards', 'How do coins work and how do I earn the most?'],
+   ['Certificates', 'What certificates does TEN issue and how do I qualify?'],
+   ['Daily posting task', 'What is the daily job posting task worth?'],
+   ['Attendance', 'How does attendance work?'],
+   ['Documents & offer letter', 'What documents do I need to upload?'],
+   ['All domains', 'What are all the domains available?']]
+    .forEach(function (pair) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.textContent = pair[0];
+      b.addEventListener('click', function () { $('side').classList.remove('open'); send(pair[1]); });
+      $('quick').appendChild(b);
+    });
+
+  /* ── plans + payment ─────────────────────────────────────────────────── */
   var CURRENT = 'starter';
 
   function renderPlans(wall) {
-    var grid = $('plans');
-    grid.innerHTML = '';
-
-    var free = {
-      key: 'starter', label: 'Starter', priceLabel: 'Free',
-      messages: '12 messages', history: 'No history kept',
-      blurb: 'Short answers to get you unstuck.', deepDive: false
-    };
+    var grid = $('plans'); grid.innerHTML = '';
+    $('pwHead').textContent = wall.headline;
+    $('pwSub').textContent = wall.sub;
+    var free = { key: 'starter', label: 'Starter', priceLabel: 'Free', messages: '12 messages',
+                 history: 'No history kept', blurb: 'Short answers to get you unstuck.', deepDive: false };
     [free].concat(wall.plans || []).forEach(function (plan) {
       var card = document.createElement('div');
       card.className = 'tier' + (plan.key === CURRENT ? ' on' : '');
-
       var nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = plan.label;
-      var amt = document.createElement('div'); amt.className = 'amt';
-      amt.textContent = plan.priceLabel.split('/')[0];
+      var amt = document.createElement('div'); amt.className = 'amt'; amt.textContent = plan.priceLabel.split('/')[0];
       var per = document.createElement('div'); per.className = 'per';
       per.textContent = plan.key === 'starter' ? 'always' : 'per month';
-
       var ul = document.createElement('ul');
-      // Only add the Deep Dive line when the blurb has not already said it,
-      // otherwise Plus lists the same feature twice.
       var feats = [plan.messages, plan.history, plan.blurb];
-      if (plan.deepDive && plan.blurb.toLowerCase().indexOf('deep dive') === -1) {
-        feats.push('Deep Dive Mode');
-      }
-      feats
-        .forEach(function (t) { var li = document.createElement('li'); li.textContent = t; ul.appendChild(li); });
-
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      if (plan.key === CURRENT) {
-        btn.textContent = 'Your plan';
-        btn.disabled = true;
-      } else if (plan.key === 'starter') {
-        btn.textContent = 'Included';
-        btn.disabled = true;
-      } else {
-        btn.textContent = 'Choose ' + plan.label;
-        btn.addEventListener('click', function () { showPayment(plan); });
-      }
-
+      if (plan.deepDive && plan.blurb.toLowerCase().indexOf('deep dive') === -1) { feats.push('Deep Dive Mode'); }
+      feats.forEach(function (t) { var li = document.createElement('li'); li.textContent = t; ul.appendChild(li); });
+      var btn = document.createElement('button'); btn.type = 'button';
+      if (plan.key === CURRENT) { btn.textContent = 'Your plan'; btn.disabled = true; }
+      else if (plan.key === 'starter') { btn.textContent = 'Included'; btn.disabled = true; }
+      else { btn.textContent = 'Choose ' + plan.label; btn.addEventListener('click', function () { showPayment(plan); }); }
       [nm, amt, per, ul, btn].forEach(function (el) { card.appendChild(el); });
       grid.appendChild(card);
     });
   }
 
   /*
-   * The UPI step, in the pricing section rather than a modal.
-   *
-   * The button reads "I have paid", not "Pay": a static UPI QR reports nothing
-   * back to the server, so this submits a claim that a human verifies. Nothing
-   * here unlocks a tier, because a tier unlocked in the browser is a tier
-   * anyone can unlock.
+   * The button says "I have paid", not "Pay". A static UPI QR reports nothing
+   * back to the server, so this submits a claim a human then verifies. Nothing
+   * here unlocks a tier: a tier unlocked in the browser is one anyone can
+   * unlock.
    */
   function showPayment(plan) {
-    var box = $('pay');
-    box.className = 'pay on';
-    box.innerHTML = '';
-    box.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
+    var box2 = $('pay');
+    box2.className = 'pay on';
+    box2.innerHTML = '';
     fetch('/api/v2/assistant/payment-info?tier=' + encodeURIComponent(plan.key))
       .then(function (r) { return r.json(); })
       .then(function (info) {
-        if (info.error) { box.textContent = info.error; return; }
-
+        if (info.error) { box2.textContent = info.error; return; }
         var h = document.createElement('div');
-        h.style.cssText = 'font-weight:700;font-size:15px;margin-bottom:4px';
-        h.textContent = plan.label + ' \u2014 ' + info.priceLabel;
-
+        h.style.cssText = 'font-weight:700;font-size:14px;margin-bottom:6px';
+        h.textContent = plan.label + ' — ' + info.priceLabel;
         var qr = document.createElement('div'); qr.className = 'qrbox';
         var img = document.createElement('img');
-        img.src = info.qrImage;
-        img.alt = 'UPI QR for ' + info.payeeName + ', \u20b9' + info.amount;
+        img.src = info.qrImage; img.alt = 'UPI QR for ' + info.payeeName;
         qr.appendChild(img);
-
-        var amt = document.createElement('div'); amt.className = 'amt2';
-        amt.textContent = '\u20b9' + info.amount;
+        var amt = document.createElement('div'); amt.className = 'amt2'; amt.textContent = '₹' + info.amount;
         var payee = document.createElement('div');
-        payee.style.cssText = 'color:var(--sub);font-size:12px';
-        payee.textContent = info.payeeName;
+        payee.style.cssText = 'color:var(--sub);font-size:12px'; payee.textContent = info.payeeName;
         var vpa = document.createElement('div'); vpa.className = 'vpa'; vpa.textContent = info.vpa;
-
         var open = document.createElement('a');
-        open.href = info.upiLink;
-        open.textContent = 'Open in UPI app';
-        open.style.cssText = 'display:inline-block;font-size:12.5px;margin-bottom:8px';
-
-        var label = document.createElement('label');
-        label.setAttribute('for', 'utr');
-        label.textContent = 'UPI reference / transaction ID';
+        open.href = info.upiLink; open.textContent = 'Open in UPI app';
+        open.style.cssText = 'display:inline-block;font-size:12.5px;margin-bottom:6px';
+        var lab = document.createElement('label');
+        lab.setAttribute('for', 'utr');
+        lab.style.cssText = 'display:block;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--sub);margin-top:6px';
+        lab.textContent = 'UPI reference / transaction ID';
         var utr = document.createElement('input');
         utr.type = 'text'; utr.id = 'utr'; utr.placeholder = 'e.g. 412345678901';
-
         var warn = document.createElement('div'); warn.className = 'warn';
         warn.textContent = 'Pay the exact amount from your own UPI app first. Submitting a reference does not activate the plan by itself: the team matches it against the payment record, and your tier turns on after that.';
-
-        var go = document.createElement('button');
-        go.type = 'button';
-        go.style.cssText = 'width:100%;background:linear-gradient(145deg,var(--gold-lift),var(--gold-dim));color:#05070E;border:0;border-radius:var(--r-sm);padding:11px;font:inherit;font-weight:700;cursor:pointer';
-        go.textContent = 'I have paid \u2014 submit reference';
-
+        var go = document.createElement('button'); go.type = 'button'; go.className = 'cta';
+        go.textContent = 'I have paid — submit reference';
         var out = document.createElement('div');
 
         go.addEventListener('click', function () {
@@ -559,16 +620,13 @@
           }
           go.disabled = true;
           fetch('/api/v2/assistant/submit-utr', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ userId: me().userId, tier: plan.key, utr: ref })
           })
             .then(function (r) { return r.json(); })
             .then(function (d) {
               if (d.error) { out.className = 'warn'; out.textContent = d.error; go.disabled = false; return; }
-              out.className = 'ok';
-              out.textContent = d.message;
-              utr.disabled = true;
+              out.className = 'ok'; out.textContent = d.message; utr.disabled = true;
             })
             .catch(function () {
               out.className = 'warn';
@@ -577,45 +635,30 @@
             });
         });
 
-        [h, qr, amt, payee, vpa, open, label, utr, warn, go, out]
-          .forEach(function (el) { box.appendChild(el); });
+        [h, qr, amt, payee, vpa, open, lab, utr, warn, go, out].forEach(function (el) { box2.appendChild(el); });
       })
-      .catch(function () { box.textContent = 'Could not load payment details.'; });
+      .catch(function () { box2.textContent = 'Could not load payment details.'; });
   }
 
-  function refreshTier() {
+  /* ── tier ────────────────────────────────────────────────────────────── */
+  (function refreshTier() {
     var id = me().userId;
     fetch('/api/v2/assistant/entitlement' + (id ? '?userId=' + encodeURIComponent(id) : ''))
       .then(function (r) { return r.json(); })
       .then(function (d) {
         CURRENT = d.tier || 'starter';
         if (d.paywall) { renderPlans(d.paywall); }
-        $('tierbar').hidden = false;
         $('tierName').textContent = d.label || 'Starter';
-        $('tierMeter').textContent = d.limit === null
-          ? 'Unlimited messages'
-          : (d.remaining + ' of ' + d.limit + ' messages left this month');
+        var m = d.limit === null ? 'Unlimited' : d.remaining + ' of ' + d.limit + ' left';
+        $('tierMeter').textContent = m;
+        $('meter').textContent = d.limit === null ? 'Unlimited messages'
+          : d.remaining + ' of ' + d.limit + ' messages left this month';
       })
-      .catch(function () { /* pricing is optional chrome; the page still works */ });
-  }
+      .catch(function () {});
+  })();
 
-  $('tierUpgrade').addEventListener('click', function () {
-    $('pricing').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
-
-  refreshTier();
-
-  say('Ask me about your weekly tasks, coins, attendance, documents or certificates. Try "MERN 3 months".', false);
-  [['How do coins work?', 'How do coins work and how do I earn the most?'],
-   ['All domains', 'What are all the domains available?'],
-   ['Certificates', 'What certificates does TEN issue and how do I qualify?'],
-   ['Daily posting task', 'What is the daily job posting task worth?']]
-    .forEach(function (pair) {
-      var c = document.createElement('button');
-      c.type = 'button'; c.className = 'chip'; c.textContent = pair[0];
-      c.addEventListener('click', function () { ask(pair[1]); });
-      $('chips').appendChild(c);
-    });
+  showEmpty();
+  setTimeout(function () { box.focus(); }, 3000);
 })();
 </script>
 </body>

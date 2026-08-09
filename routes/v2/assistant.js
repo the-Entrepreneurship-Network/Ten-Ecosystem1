@@ -391,6 +391,60 @@ const TOPIC_RULES = [
     ].join('\n'),
   },
   {
+    test: /\bquiz|mcq|test\b|domain test/i,
+    answer: () => [
+      'The Domain MCQ Test is on the quiz portal.',
+      '',
+      'Passing on your first attempt pays 50 coins. A later attempt still counts for completion but not for that bonus, so read the material before you start rather than treating attempt one as practice.',
+    ].join('\n'),
+  },
+  {
+    test: /\bleaderboard|badge|rank|star performer|top perform/i,
+    answer: () => [
+      'The leaderboard ranks on total coins, so it rewards consistency rather than one good week.',
+      '',
+      'Attendance, streaks and the daily posting task move it more than individual tasks do: they repeat every day, and task coins do not. Star Performance recognition goes to top scorers.',
+    ].join('\n'),
+  },
+  {
+    test: /\bcoordinator|mentor|who (do|should) i (ask|contact)|domain chat|support/i,
+    answer: () => [
+      'Your coordinator manages your tasks and approvals, and you reach them through Domain Chat in the portal.',
+      '',
+      'Ask them for anything specific to you: approval status, a fee, an extension, a correction to your record. I can explain how the programme works, but I cannot see your account.',
+    ].join('\n'),
+  },
+  {
+    test: /\bdiscord|community|group|network\b/i,
+    answer: () => [
+      'The TEN alumni Discord is at https://discord.gg/GYnZFbDE7, and the QR code is in the attendance section.',
+      '',
+      'TEN Network in your dashboard is the wider ecosystem: founders, mentors, investors and other interns.',
+    ].join('\n'),
+  },
+  {
+    test: /\b(log ?in|password|employee ?id|cannot access|forgot)/i,
+    answer: () => [
+      'Log in with your Employee ID and the password you registered with. Your registration details, including a masked password, are in the Profile modal on your dashboard.',
+      '',
+      'On first login you choose New Joiner or WhatsApp Re-Joiner, and that choice cannot be changed later. If you are locked out, your coordinator can help; I cannot reset anything.',
+    ].join('\n'),
+  },
+  {
+    test: /\bstart|begin|first day|new here|what (do|should) i do first/i,
+    answer: () => [
+      'Start in this order:',
+      '',
+      '1. Set your duration on the tasks page. That unlocks your weekly plan.',
+      '2. Mark attendance today, and every day after. 5 coins each, 50 for a 7-day streak.',
+      '3. Do the Daily Job Posting task. Mandatory in every domain, up to 30 coins a day.',
+      '4. Open week 1 and start it now rather than at the weekend. Tasks are cumulative.',
+      '5. Upload your documents so your offer letter can be generated.',
+      '',
+      'Tell me your domain and track and I will lay out every week.',
+    ].join('\n'),
+  },
+  {
     test: /\bsubmit|deadline|approv|late|behind/i,
     answer: () => [
       'Tasks move Available → Submitted → Approved. Approval is not instant, so submitting on the last day of a week pushes the approval into the next one. Aim for day 5.',
