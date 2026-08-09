@@ -8,26 +8,26 @@ const {
 
 describe('config/github', () => {
   it('defaults to the official contribution repository', () => {
-    expect(OFFICIAL_REPO_SLUG).toBe('growth-eng/Ten-Ecosystem1');
-    expect(OFFICIAL_REPO_URL).toBe('https://github.com/growth-eng/Ten-Ecosystem1/');
+    expect(OFFICIAL_REPO_SLUG).toBe('the-Entrepreneurship-Network/Ten-Ecosystem1');
+    expect(OFFICIAL_REPO_URL).toBe('https://github.com/the-Entrepreneurship-Network/Ten-Ecosystem1/');
   });
 
   describe('validateOfficialPullRequestUrl', () => {
     it('accepts a well-formed pull request against the official repo', () => {
-      const result = validateOfficialPullRequestUrl('https://github.com/growth-eng/Ten-Ecosystem1/pull/42');
+      const result = validateOfficialPullRequestUrl('https://github.com/the-Entrepreneurship-Network/Ten-Ecosystem1/pull/42');
       expect(result).toEqual({
         ok: true,
-        url: 'https://github.com/growth-eng/Ten-Ecosystem1/pull/42',
+        url: 'https://github.com/the-Entrepreneurship-Network/Ten-Ecosystem1/pull/42',
         prNumber: 42
       });
     });
 
     it('normalises what the student pasted', () => {
-      expect(validateOfficialPullRequestUrl('  https://github.com/growth-eng/Ten-Ecosystem1/pull/7/files  ').url)
-        .toBe('https://github.com/growth-eng/Ten-Ecosystem1/pull/7');
-      expect(validateOfficialPullRequestUrl('https://github.com/GROWTH-ENG/ten-ecosystem1/pull/7').url)
-        .toBe('https://github.com/growth-eng/Ten-Ecosystem1/pull/7');
-      expect(validateOfficialPullRequestUrl('https://github.com/growth-eng/Ten-Ecosystem1.git/pull/7').ok)
+      expect(validateOfficialPullRequestUrl('  https://github.com/the-Entrepreneurship-Network/Ten-Ecosystem1/pull/7/files  ').url)
+        .toBe('https://github.com/the-Entrepreneurship-Network/Ten-Ecosystem1/pull/7');
+      expect(validateOfficialPullRequestUrl('https://github.com/THE-ENTREPRENEURSHIP-NETWORK/ten-ecosystem1/pull/7').url)
+        .toBe('https://github.com/the-Entrepreneurship-Network/Ten-Ecosystem1/pull/7');
+      expect(validateOfficialPullRequestUrl('https://github.com/the-Entrepreneurship-Network/Ten-Ecosystem1.git/pull/7').ok)
         .toBe(true);
     });
 
@@ -37,11 +37,11 @@ describe('config/github', () => {
     it.each([
       ['javascript: URL',        'javascript:alert(document.cookie)'],
       ['data: URL',              'data:text/html,<script>alert(1)</script>'],
-      ['quote breakout',         'https://github.com/growth-eng/Ten-Ecosystem1/pull/1"><script>alert(1)</script>'],
-      ['host suffix look-alike', 'https://github.com.evil.tld/growth-eng/Ten-Ecosystem1/pull/1'],
-      ['userinfo trick',         'https://github.com@evil.tld/growth-eng/Ten-Ecosystem1/pull/1'],
-      ['subdomain look-alike',   'https://evil-github.com/growth-eng/Ten-Ecosystem1/pull/1'],
-      ['plain http',             'http://github.com/growth-eng/Ten-Ecosystem1/pull/1']
+      ['quote breakout',         'https://github.com/the-Entrepreneurship-Network/Ten-Ecosystem1/pull/1"><script>alert(1)</script>'],
+      ['host suffix look-alike', 'https://github.com.evil.tld/the-Entrepreneurship-Network/Ten-Ecosystem1/pull/1'],
+      ['userinfo trick',         'https://github.com@evil.tld/the-Entrepreneurship-Network/Ten-Ecosystem1/pull/1'],
+      ['subdomain look-alike',   'https://evil-github.com/the-Entrepreneurship-Network/Ten-Ecosystem1/pull/1'],
+      ['plain http',             'http://github.com/the-Entrepreneurship-Network/Ten-Ecosystem1/pull/1']
     ])('rejects %s', (_label, url) => {
       expect(validateOfficialPullRequestUrl(url).ok).toBe(false);
     });
@@ -57,12 +57,12 @@ describe('config/github', () => {
     });
 
     it.each([
-      ['the repo root',      'https://github.com/growth-eng/Ten-Ecosystem1'],
-      ['an issue not a PR',  'https://github.com/growth-eng/Ten-Ecosystem1/issues/1'],
-      ['a commit',           'https://github.com/growth-eng/Ten-Ecosystem1/commit/abc123'],
-      ['a missing number',   'https://github.com/growth-eng/Ten-Ecosystem1/pull/'],
-      ['a non-numeric PR',   'https://github.com/growth-eng/Ten-Ecosystem1/pull/abc'],
-      ['PR zero',            'https://github.com/growth-eng/Ten-Ecosystem1/pull/0']
+      ['the repo root',      'https://github.com/the-Entrepreneurship-Network/Ten-Ecosystem1'],
+      ['an issue not a PR',  'https://github.com/the-Entrepreneurship-Network/Ten-Ecosystem1/issues/1'],
+      ['a commit',           'https://github.com/the-Entrepreneurship-Network/Ten-Ecosystem1/commit/abc123'],
+      ['a missing number',   'https://github.com/the-Entrepreneurship-Network/Ten-Ecosystem1/pull/'],
+      ['a non-numeric PR',   'https://github.com/the-Entrepreneurship-Network/Ten-Ecosystem1/pull/abc'],
+      ['PR zero',            'https://github.com/the-Entrepreneurship-Network/Ten-Ecosystem1/pull/0']
     ])('rejects %s', (_label, url) => {
       expect(validateOfficialPullRequestUrl(url).ok).toBe(false);
     });

@@ -1328,9 +1328,14 @@ const HR_ROSTER = {
     "hrad@ten.com":       { name: "HR Associate Director",              email: "hrad@ten.com",       level: 5 },
     "jrdir@ten.com":      { name: "Jr HR Director",                     email: "jrdir@ten.com",      level: 6 },
     "hrdirector@ten.com": { name: "HR Director & HRBP",                 email: "hrdirector@ten.com", level: 7 },
-    "chro@ten.com":       { name: "Chief Human Resources Officer",      email: "chro@ten.com",       level: 8 },
-    "vp@ten.com":         { name: "Vice President",                     email: "vp@ten.com",         level: 9 }
+    "vp@ten.com":         { name: "Vice President",                     email: "vp@ten.com",         level: 8 }
 };
+// Eight levels, and level 8 is the Vice President. There is no ninth level and
+// no CHRO account: the portal's own level switcher, its hrLevelDetails map and
+// the position selector on the landing page all stop at 8, and the account list
+// runs jrhr → vp with nothing in between. A chro@ten.com entry at level 8 had
+// pushed vp to a level 9 that no part of the UI can select, so the highest HR
+// account could never match the privileges meant for the top of the hierarchy.
 
 const COORDINATOR_ROSTER = {
     "devops_aws_admin":      { domain: "DevOps with AWS" },
@@ -4243,7 +4248,7 @@ try{
     if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
-    const students = await Student.find().select('firstName lastName email whatsapp domain collegeName college employeeId tenure joiningDate createdAt').sort({ createdAt:-1 });
+    const students = await Student.find().select('firstName lastName email whatsapp domain collegeName college employeeId tenure joiningDate createdAt').sort({ createdAt:-1 }).lean();
     res.json({ success:true, students });
 }catch(error){ res.status(500).json({ message:"Error fetching students" }); }
 });
@@ -4417,7 +4422,7 @@ try{
     ]});
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    const joins = await Student.find().select("joiningDate joinDate");
+    const joins = await Student.find().select("joiningDate joinDate").lean();
     let newJoinsThisMonth = 0;
     for(const s of joins){
         const jd = s.joinDate || s.joiningDate;
@@ -4451,7 +4456,7 @@ try{
         months.push(obj);
         keyMap.set(key, obj);
     }
-    const students = await Student.find().select("joiningDate joinDate");
+    const students = await Student.find().select("joiningDate joinDate").lean();
     for(const s of students){
         const jd = s.joinDate || s.joiningDate;
         if(!jd) continue;
@@ -4665,7 +4670,7 @@ try{
 // student's domain, tenure, employeeId or payment status.
 app.get("/students", requireAdminAPI, async(req,res)=>{
     try{
-        const students = await Student.find().select('firstName lastName email whatsapp domain collegeName college employeeId tenure joiningDate createdAt').sort({ createdAt:-1 });
+        const students = await Student.find().select('firstName lastName email whatsapp domain collegeName college employeeId tenure joiningDate createdAt').sort({ createdAt:-1 }).lean();
         res.json(students);
     }catch(error){ res.status(500).json({ message:"Error fetching students" }); }
 });
@@ -5600,7 +5605,7 @@ app.get("/attendance/monitor", async(req,res)=>{
 try{
     if(!isHRSession(req)) return res.status(401).json({ success:false, message:"Unauthorized" });
 
-    const students = await Student.find().select('firstName lastName name domain collegeName college employeeId tenure joiningDate createdAt').sort({ createdAt:-1 });
+    const students = await Student.find().select('firstName lastName name domain collegeName college employeeId tenure joiningDate createdAt').sort({ createdAt:-1 }).lean();
     const result = [];
     for(const s of students){
         const stats = await computeAttendanceStats(s.employeeId, s.joiningDate);
@@ -6821,7 +6826,35 @@ async function checkCertificateEligibility(employeeId){
  * and ranks by StudentCoin.totalCoins — the source of truth the task document
  * points at ("sort all students by totalCoins descending").
  */
+// Leaderboard results are identical for everyone who asks, and rebuilding one
+// reads every candidate student plus their coin rows. Thirty students opening
+// the board in the same minute produced thirty identical rebuilds. Cached for
+// 60 seconds, which is well inside how often coin balances actually move, and
+// keyed so the overall board and each domain board stay separate.
+//
+// LeaderboardCache (models/new/LeaderboardCache.js) is the durable version of
+// this and is still unpopulated; this in-process cache is the cheap half, and
+// it is correct on a single worker — which is what ecosystem.config.js runs.
+const LEADERBOARD_CACHE_MS = 60 * 1000;
+const _leaderboardCache = new Map();
+
+function _leaderboardCacheKey(filter, limit) {
+    return JSON.stringify(filter || {}) + "|" + limit;
+}
+
 async function _buildLeaderboard(filter, limit){
+    const cacheKey = _leaderboardCacheKey(filter, limit);
+    const cached = _leaderboardCache.get(cacheKey);
+    if (cached && (Date.now() - cached.at) < LEADERBOARD_CACHE_MS) {
+        return cached.rows;
+    }
+
+    const rows = await _computeLeaderboard(filter, limit);
+    _leaderboardCache.set(cacheKey, { at: Date.now(), rows });
+    return rows;
+}
+
+async function _computeLeaderboard(filter, limit){
     const StudentCoin = require("./models/new/StudentCoin");
     const hasFilter = !!(filter && Object.keys(filter).length);
 
