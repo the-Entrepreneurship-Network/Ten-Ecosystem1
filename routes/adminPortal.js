@@ -3,6 +3,10 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 const { requireAdminAPI, verifyAdminCredentials, ADMIN_USERNAME } = require('../middleware/adminAuth');
+const { broadcastNotification } = require('../utils/sseHub');
+const { normalizeDomain } = require('../config/domains');
+const { normalizeTenure, getTenureLabel, getInternshipEndDate } = require('../utils/tenure');
+const { isEmployeeIdAvailable } = require('../utils/employeeId');
 
 // Brute-force guard on the admin login. Keyed by IP only — there is a single
 // admin account, so there is no per-account key to add and no other user to
@@ -505,24 +509,173 @@ router.get('/students/:id', requireAdminAPI, async (req, res) => {
   }
 });
 
+/**
+ * Edit any detail on a student (section 15).
+ *
+ * Widened from the previous nine fields to everything the task document names,
+ * with the constraints that matter enforced here:
+ *   - employeeId must stay unique (section 1.3)
+ *   - domain and tenure must be real values, not free text
+ *   - internship dates stay consistent with the tenure
+ *
+ * AuditLog now records oldState as well as newState. Every caller only ever set
+ * newState, so the log could say what a field became but never what it was —
+ * and the section's Definition of Done asks for both.
+ */
+const ADMIN_EDITABLE_FIELDS = [
+  'name', 'firstName', 'lastName', 'email', 'whatsapp',
+  'domain', 'tenure', 'joiningDate', 'gender',
+  'college', 'collegeName', 'employeeId',
+  'internshipStartDate', 'internshipEndDate', 'joinerType', 'preportalAbsentDays'
+];
+
 router.put('/students/:id', requireAdminAPI, async (req, res) => {
   try {
-    const ALLOWED = ['name', 'email', 'domain', 'tenure', 'joiningDate', 'whatsapp', 'gender', 'college', 'collegeName'];
+    const existing = await Student.findById(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Student not found' });
+
     const update = {};
-    for (const key of ALLOWED) {
+    for (const key of ADMIN_EDITABLE_FIELDS) {
       if (req.body[key] !== undefined) update[key] = req.body[key];
     }
+    if (!Object.keys(update).length) {
+      return res.status(400).json({ error: 'No editable fields supplied' });
+    }
+
+    // Domain must be one we recognise, so it cannot drift out of the enum the
+    // task engine and employee-ID generator rely on.
+    if (update.domain !== undefined) {
+      const domain = normalizeDomain(update.domain);
+      if (!domain) return res.status(400).json({ error: `Unknown domain: ${update.domain}` });
+      update.domain = domain;
+    }
+
+    // Tenure must be real, and v2DurationType must follow it — the two drifting
+    // apart is the root of the section 6.1 mismatch.
+    if (update.tenure !== undefined) {
+      const durationType = normalizeTenure(update.tenure);
+      if (!durationType) return res.status(400).json({ error: `Unknown tenure: ${update.tenure}` });
+      update.tenure = getTenureLabel(durationType);
+      update.v2DurationType = durationType;
+    }
+
+    // Employee IDs are unique (section 1.3).
+    if (update.employeeId !== undefined && update.employeeId !== existing.employeeId) {
+      const availability = await isEmployeeIdAvailable(update.employeeId, existing._id);
+      if (!availability.available) return res.status(409).json({ error: availability.reason });
+    }
+
+    // Keep the end date consistent whenever the tenure or start date moves.
+    const effectiveTenure = update.tenure !== undefined ? update.tenure : existing.tenure;
+    const effectiveStart = update.internshipStartDate || update.joiningDate
+      || existing.internshipStartDate || existing.joiningDate;
+    if ((update.tenure !== undefined || update.joiningDate !== undefined || update.internshipStartDate !== undefined)
+        && effectiveStart && effectiveTenure) {
+      const end = getInternshipEndDate(effectiveStart, effectiveTenure);
+      if (end) update.internshipEndDate = end;
+    }
+
+    // Snapshot only the fields being changed, so the log is readable.
+    const oldState = {};
+    for (const key of Object.keys(update)) oldState[key] = existing[key];
+
     const student = await Student.findByIdAndUpdate(req.params.id, { $set: update }, { new: true });
-    if (!student) return res.status(404).json({ error: 'Student not found' });
+
     await AuditLog.create({
       userId: student._id,
       actionType: 'student_updated',
-      performedBy: 'admin',
+      performedBy: req.session.adminUser?.username || 'admin',
       description: `Admin updated student ${student.employeeId}: ${Object.keys(update).join(', ')}`,
+      oldState,
       newState: update
     });
-    res.json({ success: true, data: student });
+
+    // If domain or tenure changed after an offer letter was issued, the PDF now
+    // disagrees with the record. Tell the admin so they can reissue — the two
+    // silently drifting apart is exactly issue 6.1.
+    const identityChanged = update.domain !== undefined || update.tenure !== undefined;
+    const hasIssuedOffer = !!existing.offerPdfBase64 ||
+      ['issued', 'approved'].includes(existing.offerLetterStatus);
+
+    res.json({
+      success: true,
+      data: student,
+      offerLetterNeedsRegeneration: identityChanged && hasIssuedOffer,
+      offerLetterMessage: (identityChanged && hasIssuedOffer)
+        ? "This student's offer letter was issued with the previous domain/tenure and no longer matches their record. Regenerate it so the two agree."
+        : null
+    });
   } catch (err) {
+    console.error('[admin] student update failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Extend (or change) a student's tenure — section 15.
+ *
+ * Updates tenure, v2DurationType and the internship dates together, so the
+ * attendance day targets, the task journey and the offer-letter data all agree
+ * afterwards. There was no endpoint for this at all.
+ */
+router.post('/students/:id/extend-tenure', requireAdminAPI, async (req, res) => {
+  try {
+    const { tenure, internshipStartDate } = req.body || {};
+
+    const durationType = normalizeTenure(tenure);
+    if (!durationType) {
+      return res.status(400).json({ error: 'Please choose a valid tenure (1 Week, 15 Days, 1 Month, 45 Days, 3 Months or 6 Months).' });
+    }
+
+    const student = await Student.findById(req.params.id);
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+
+    const startDate = internshipStartDate
+      || student.internshipStartDate
+      || student.joiningDate
+      || student.createdAt;
+    const endDate = getInternshipEndDate(startDate, durationType);
+
+    const oldState = {
+      tenure: student.tenure,
+      v2DurationType: student.v2DurationType,
+      internshipStartDate: student.internshipStartDate,
+      internshipEndDate: student.internshipEndDate
+    };
+    const update = {
+      tenure: getTenureLabel(durationType),
+      v2DurationType: durationType,
+      internshipEndDate: endDate
+    };
+    if (internshipStartDate) update.internshipStartDate = new Date(internshipStartDate);
+
+    const updated = await Student.findByIdAndUpdate(req.params.id, { $set: update }, { new: true });
+
+    await AuditLog.create({
+      userId: student._id,
+      actionType: 'student_tenure_extended',
+      performedBy: req.session.adminUser?.username || 'admin',
+      description: `Tenure ${oldState.tenure || 'unset'} → ${update.tenure} for ${student.employeeId}`,
+      oldState,
+      newState: update
+    });
+
+    const hasIssuedOffer = !!student.offerPdfBase64 ||
+      ['issued', 'approved'].includes(student.offerLetterStatus);
+
+    res.json({
+      success: true,
+      data: updated,
+      previousTenure: oldState.tenure,
+      newTenure: update.tenure,
+      internshipEndDate: endDate,
+      offerLetterNeedsRegeneration: hasIssuedOffer,
+      offerLetterMessage: hasIssuedOffer
+        ? "This student's offer letter states the previous duration. Regenerate it so the two agree."
+        : null
+    });
+  } catch (err) {
+    console.error('[admin] extend tenure failed:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -531,6 +684,11 @@ router.post('/students/:id/unlock', requireAdminAPI, async (req, res) => {
   try {
     const student = await Student.findById(req.params.id);
     if (!student) return res.status(404).json({ error: 'Student not found' });
+    const oldState = {
+      isLockedOut: student.isLockedOut,
+      failedLoginAttempts: student.failedLoginAttempts,
+      lockoutUntil: student.lockoutUntil
+    };
     student.isLockedOut = false;
     student.failedLoginAttempts = 0;
     student.lockoutUntil = null;
@@ -538,8 +696,10 @@ router.post('/students/:id/unlock', requireAdminAPI, async (req, res) => {
     await AuditLog.create({
       userId: student._id,
       actionType: 'student_unlocked',
-      performedBy: 'admin',
-      description: `Admin unlocked account for ${student.employeeId}`
+      performedBy: req.session.adminUser?.username || 'admin',
+      description: `Admin unlocked account for ${student.employeeId}`,
+      oldState,
+      newState: { isLockedOut: false, failedLoginAttempts: 0, lockoutUntil: null }
     });
     res.json({ success: true, message: 'Account unlocked' });
   } catch (err) {
@@ -559,8 +719,12 @@ router.post('/students/:id/reset-password', requireAdminAPI, async (req, res) =>
     await AuditLog.create({
       userId: student._id,
       actionType: 'student_password_reset',
-      performedBy: 'admin',
-      description: `Admin reset password for ${student.employeeId}`
+      performedBy: req.session.adminUser?.username || 'admin',
+      description: `Admin reset password for ${student.employeeId}`,
+      // Deliberately records only THAT the password changed. Never log a
+      // password, a hash, or its length.
+      oldState: { password: '[redacted]' },
+      newState: { password: '[redacted]' }
     });
     res.json({ success: true, message: 'Password reset successfully' });
   } catch (err) {
@@ -578,8 +742,16 @@ router.delete('/students/:id', requireAdminAPI, async (req, res) => {
     await AuditLog.create({
       userId: student._id,
       actionType: 'student_deleted',
-      performedBy: 'admin',
-      description: `Admin deleted student ${student.employeeId} (${student.email})`
+      performedBy: req.session.adminUser?.username || 'admin',
+      description: `Admin deleted student ${student.employeeId} (${student.email})`,
+      oldState: {
+        employeeId: student.employeeId,
+        name: student.name,
+        email: student.email,
+        domain: student.domain,
+        tenure: student.tenure
+      },
+      newState: {}
     });
     res.json({ success: true, message: 'Student deleted' });
   } catch (err) {
@@ -712,7 +884,11 @@ router.post('/notifications/broadcast', requireAdminAPI, async (req, res) => {
     let sent = 0;
     for (const s of students) {
       try {
-        await Notification.notifyStudent(s, { title, message, type });
+        const notif = await Notification.notifyStudent(s, { title, message, type });
+        // Push it live as well as storing it. This loop used to only write the
+        // row, so an admin broadcast sat invisible until the student's next
+        // poll — the notification bell showed nothing in the meantime.
+        if (notif) broadcastNotification(s.domain, s.employeeId, notif);
         sent++;
       } catch (e) {}
     }

@@ -3845,42 +3845,27 @@ try{
 // key for students: "student:employeeId"
 // key for coordinators: "coord:domain"
 // key for HR: "hr:all"
-const sseClients = new Map();
-
-function addSSEClient(key, res, meta = {}){
-    if(!sseClients.has(key)) sseClients.set(key, []);
-    sseClients.get(key).push({ res, ...meta });
-}
-
-function removeSSEClient(key, res){
-    const arr = sseClients.get(key) || [];
-    const idx = arr.findIndex(c => c.res === res);
-    if(idx !== -1) arr.splice(idx, 1);
-}
-
-function sendSSE(res, data){
-    try{ res.write(`data: ${JSON.stringify(data)}\n\n`); } catch(e){}
-}
-
-function broadcastNotification(domain, employeeId, notif){
-    // to specific student
-    if(employeeId){
-        const key = `student:${employeeId}`;
-        const clients = sseClients.get(key) || [];
-        clients.forEach(c => sendSSE(c.res, { event:"notification", notification:notif }));
-    }
-    // to domain coordinator
-    if(domain){
-        const key = `coord:${domain}`;
-        const clients = sseClients.get(key) || [];
-        clients.forEach(c => sendSSE(c.res, { event:"notification", notification:notif }));
-    }
-}
+// The registry lives in utils/sseHub.js so routes outside this file can push
+// too. routes/adminPortal.js previously wrote Notification rows for a broadcast
+// and never pushed them, because it had no access to this Map — an admin
+// announcement did not appear until the student happened to poll.
+const {
+    sseClients,
+    addSSEClient,
+    removeSSEClient,
+    sendSSE,
+    broadcastNotification
+} = require("./utils/sseHub");
 
 // ================= STUDENT SSE =================
 
 app.get("/student-events/:employeeId", (req,res)=>{
-    const employeeId = decodeURIComponent(req.params.employeeId);
+    // Stream the SIGNED-IN student's events. The employeeId in the path used to
+    // be taken at face value, so anyone could subscribe to any student's
+    // notification stream by guessing an ID.
+    const employeeId = sessionEmployeeId(req);
+    if (!employeeId) return res.status(401).end();
+
     res.setHeader("Content-Type","text/event-stream");
     res.setHeader("Cache-Control","no-cache");
     res.setHeader("Connection","keep-alive");
@@ -3888,15 +3873,29 @@ app.get("/student-events/:employeeId", (req,res)=>{
     res.write("data: connected\n\n");
 
     const key = `student:${employeeId}`;
-    addSSEClient(key, res);
+    // The domain MUST be recorded here. The domain-targeted fan-out filters on
+    // `c.studentDomain`, and this call passed no meta at all — so it was always
+    // undefined and a domain-wide notification never reached a single student
+    // in real time.
+    addSSEClient(key, res, { domain: (req.session.student && req.session.student.domain) || "" });
 
-    req.on("close",()=>{ removeSSEClient(key, res); });
+    // Proxies drop idle event streams; a periodic comment keeps them open.
+    const heartbeat = setInterval(() => {
+        try { res.write(": ping\n\n"); } catch (_) {}
+    }, 25000);
+
+    req.on("close",()=>{ clearInterval(heartbeat); removeSSEClient(key, res); });
 });
 
 // ================= COORDINATOR SSE =================
 
 app.get("/coord-events/:domain", (req,res)=>{
-    const domain = decodeURIComponent(req.params.domain);
+    // Stream the signed-in coordinator's own domain — the path parameter used
+    // to be taken at face value, so anyone could listen to any domain.
+    if(!req.session || !req.session.coordinator){
+        return res.status(401).end();
+    }
+    const domain = req.session.coordinator.domain || decodeURIComponent(req.params.domain);
     res.setHeader("Content-Type","text/event-stream");
     res.setHeader("Cache-Control","no-cache");
     res.setHeader("Connection","keep-alive");
@@ -4049,6 +4048,35 @@ try{
 
 // ================= NOTIFICATIONS - MARK READ =================
 
+// The student dashboard has always POSTed here, but the route did not exist:
+// it 404d inside an empty catch, so the badge cleared visually and the count
+// came back on reload because `readBy` was never written.
+app.post("/notifications/mark-all-read", async(req,res)=>{
+try{
+    const readerId = sessionEmployeeId(req)
+        || (req.session && req.session.coordinator && `coord:${req.session.coordinator.domain}`)
+        || "";
+    if(!readerId) return res.status(401).json({ success:false, message:"Please sign in." });
+
+    const domain = (req.session.student && req.session.student.domain) || "";
+    const result = await Notification.updateMany(
+        {
+            $or: [
+                { targetType: "all" },
+                { targetType: "domain", targetDomain: domain },
+                { targetType: "student", targetEmployeeId: readerId }
+            ],
+            readBy: { $ne: readerId }
+        },
+        { $addToSet: { readBy: readerId } }
+    );
+    res.json({ success:true, marked: (result && (result.modifiedCount ?? result.nModified)) || 0 });
+}catch(e){
+    console.error("[notifications] mark-all-read failed:", e.message);
+    res.status(500).json({ success:false });
+}
+});
+
 app.post("/notifications/mark-read", async(req,res)=>{
 try{
     const { notifId, readerId } = req.body;
@@ -4160,11 +4188,14 @@ try{
                 arr.forEach(c => sendSSE(c.res, { event:"notification", notification:notif }));
             }
         }
-        // Also need to notify students - broadcast to all SSE clients and they filter on client side
+        // Students of that domain. This filtered on `c.studentDomain`, a
+        // property nothing ever set — the SSE registration passed no meta — so
+        // this branch silently reached nobody and domain notifications only
+        // appeared on the next poll.
         for(const [key, arr] of sseClients.entries()){
             if(key.startsWith("student:")){
                 arr.forEach(c => {
-                    if(c.studentDomain === targetDomain){
+                    if((c.domain || c.studentDomain) === targetDomain){
                         sendSSE(c.res, { event:"notification", notification:notif });
                     }
                 });
@@ -4599,8 +4630,13 @@ try{
 
 // ================= HR - DELETE NOTIFICATION =================
 
+// This had no auth check at all, while the sibling GET /hr/notifications did —
+// anyone could delete any notification.
 app.delete("/hr/notifications/:id", async(req,res)=>{
 try{
+    if(!isHRSession(req)){
+        return res.status(401).json({ success:false, message:"Unauthorized" });
+    }
     await Notification.findByIdAndDelete(req.params.id);
     res.json({ success:true });
 }catch(error){ res.json({ success:false }); }

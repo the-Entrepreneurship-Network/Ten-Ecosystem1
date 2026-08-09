@@ -4752,9 +4752,16 @@ async function loadNotifications(){
 }
 
 function updateNotifBadge(count){
-  const badge = document.getElementById('notifBadge');
-  if(count > 0){ badge.style.display = 'flex'; badge.textContent = count > 99 ? '99+' : count; }
-  else { badge.style.display = 'none'; }
+  // There are TWO bells on this page — one in the sidebar (#notifBadge) and one
+  // in the top bar (#notifBadge2). Only the first was ever updated, so the
+  // topbar badge sat at 0 permanently no matter how many unread notifications
+  // a student had.
+  ['notifBadge', 'notifBadge2'].forEach(function(id){
+    const badge = document.getElementById(id);
+    if (!badge) return;
+    if (count > 0) { badge.style.display = 'flex'; badge.textContent = count > 99 ? '99+' : count; }
+    else { badge.style.display = 'none'; }
+  });
 }
 
 function renderNotifications(){
@@ -4783,10 +4790,10 @@ async function markRead(id, el){
       body:JSON.stringify({notifId:id,readerId:student.employeeId})
     });
     el.classList.remove('unread');
-    // Decrease badge
+    // Decrease the count on both bells.
     const badge = document.getElementById('notifBadge');
-    const cur = parseInt(badge.textContent)||0;
-    updateNotifBadge(Math.max(0,cur-1));
+    const cur = parseInt(badge && badge.textContent) || 0;
+    updateNotifBadge(Math.max(0, cur - 1));
   }catch(e){}
 }
 
