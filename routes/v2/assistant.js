@@ -75,7 +75,8 @@ const TIERS = {
   enterprise: {
     key: 'enterprise', label: 'Enterprise', price: 5000, priceLabel: '₹5,000/month',
     messages: null, depth: 'ultimate', historyDays: null, deepDive: true,
-    blurb: 'Unlimited messages, full portal knowledge, essay-length reasoning.',
+    // Does not repeat "unlimited messages" - the card lists that on its own line.
+    blurb: 'Full portal knowledge, and essay-length reasoning.',
   },
 };
 
@@ -1054,7 +1055,10 @@ function paywallPayload(currentTier, quota) {
     limit: limit,
     current: (currentTier && currentTier.key) || 'starter',
     upi: { vpa: UPI.vpa, payeeName: UPI.payeeName },
-    plans: ['pro', 'plus', 'enterprise'].map(function (k) {
+    // Starter is listed here too. It used to be typed out again in the page,
+    // which is how the card came to promise 12 free messages long after the
+    // limit became 25.
+    plans: ['starter', 'pro', 'plus', 'enterprise'].map(function (k) {
       const t = TIERS[k];
       return {
         key: t.key,
@@ -1063,7 +1067,9 @@ function paywallPayload(currentTier, quota) {
         priceLabel: t.priceLabel,
         blurb: t.blurb,
         messages: t.messages === null ? 'Unlimited messages' : t.messages + ' messages',
-        history: t.historyDays === null ? 'Full conversation history' : t.historyDays + '-day history',
+        history: t.historyDays === null ? 'Full conversation history'
+               : t.historyDays === 0 ? 'No history kept'
+               : t.historyDays + '-day history',
         deepDive: t.deepDive,
       };
     }),
