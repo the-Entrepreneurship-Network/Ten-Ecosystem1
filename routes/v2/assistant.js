@@ -337,6 +337,15 @@ function renderPlan(domain, duration, rows, depth) {
 }
 
 /* ───────────────────────── topic answers ────────────────────────── */
+/* "is there an AI domain", "do you have UI UX" - a real question with a real
+   answer, which is that TEN seeds fourteen and that is not one of them. */
+const ASKS_IF_DOMAIN_EXISTS = new RegExp(
+  '(?:\\b(?:is there|do you have|do you offer|can i (?:do|take|join|pick|choose)|is|any)\\b'
+  + '.{0,30}\\b(?:domain|track|course)s?\\b)'
+  + '|(?:\\b(?:is there|do you have|do you offer|can i (?:do|take|join|pick|choose))\\b.{0,20}'
+  + '\\b(?:ai|ml|ui\\s*/?\\s*ux|design|digital\\s*marketing|content\\s*writing|sales|finance|'
+  + 'marketing|blockchain|game\\s*dev|graphic|video|seo|hr)\\b)', 'i');
+
 async function domainListAnswer() {
   const list = await allDomains();
   return [
@@ -350,6 +359,95 @@ async function domainListAnswer() {
 }
 
 const TOPIC_RULES = [
+  {
+    test: /\b(plan|plans|pricing|tier|subscription|pro\b|plus\b|enterprise|upgrade|starter)\b.{0,20}\b(cost|price|much|available|are|do|work|mean)?\b|\bwhat are the plans\b|\bhow much is (pro|plus|enterprise)\b|\bupgrade\b/i,
+    answer: () => [
+      'The assistant itself has four tiers. Everything about your internship, tasks and coins is unaffected by them.',
+      '',
+      '• Starter, free: 25 messages a month, short answers',
+      '• Pro, Rs 500/month: 90 messages, fuller answers, 7-day history',
+      '• Plus, Rs 1,200/month: 350 messages, Deep Dive Mode, 30-day history',
+      '• Enterprise, Rs 5,000/month: unlimited messages, full depth and history',
+      '',
+      'Open Plans in the sidebar to see them and pay by UPI. Paying does not change your tasks, your coins or your certificate: it only changes how much you can ask me and how deeply I answer.',
+    ].join('\n'),
+  },
+  {
+    test: /\brefund|money back|cancel.{0,20}(subscription|plan)|charged|double.?paid|payment failed|paid but/i,
+    answer: () => [
+      'I cannot process refunds, cancellations or payment problems, and I cannot see your payment record.',
+      '',
+      'Take it to your coordinator through Domain Chat, with the UPI reference number from your payment app. That reference is what lets them match it against the account.',
+      '',
+      'If you submitted a reference and your tier has not changed, that is expected until someone verifies it: submitting a reference is a claim, not an activation.',
+    ].join('\n'),
+  },
+  {
+    test: /\b(fee|fees|charge|pay anything|have to pay|cost)\b/i,
+    answer: () => [
+      'Be careful with this one, and confirm it with your coordinator rather than with me.',
+      '',
+      'Two places money appears in the portal:',
+      '• The Crash Course tracks (1 Week, 15 Days, 1 Month) show a programme fee before the dashboard activates.',
+      '• Certificates carry a payment step; issuance is not automatic on completion.',
+      '',
+      'I deliberately do not quote amounts. I can read that a payment step exists, not what it costs, and a wrong number here costs you real money. Ask your coordinator for the figure before you pay anything.',
+    ].join('\n'),
+  },
+  {
+    test: /\bscam|fake|legit|genuine|trust|fraud|real company|worth it\b/i,
+    answer: () => [
+      'Not something I should answer about my own employer, so here is what you can check yourself.',
+      '',
+      '• Certificates carry a certificate ID and a verification URL, so any certificate you receive can be verified independently.',
+      '• The task library, coin rates and approval flow are the same ones this portal runs on, which is why I can quote them exactly.',
+      '• Anything involving money, ask your coordinator for specifics in writing before you pay.',
+      '',
+      'If something feels wrong, raise it with your coordinator and keep the reply. That is better evidence than my opinion.',
+    ].join('\n'),
+  },
+  {
+    test: /\b(stress|stressed|anxious|anxiety|depress|overwhelm|burn ?out|panic|can'?t cope|too much pressure|giving up|quit)\b/i,
+    answer: () => [
+      'That is worth saying out loud to a person, not to me.',
+      '',
+      'Message your coordinator through Domain Chat and tell them you are struggling. Durations here are flexible and falling behind is recoverable; going quiet is what turns it into a problem.',
+      '',
+      'If it helps: partial work is not wasted. A recommendation needs 50% completion, not 100%. And if this is bigger than the internship, please talk to someone you trust or a professional, not a chatbot.',
+    ].join('\n'),
+  },
+  {
+    test: /\bnext task|due this week|what.{0,12}(due|next)\b|current task|this week.?s task/i,
+    answer: () => [
+      'I cannot see which week you are on, because I do not have access to your submissions.',
+      '',
+      'Your task page shows it: tasks unlock weekly and move Available → Submitted → Approved.',
+      '',
+      'Tell me your track and a week number and I will give you exactly what that week wants, for example "MERN week 5".',
+    ].join('\n'),
+  },
+  {
+    test: /\b(how many|total|number of)\b.{0,16}\btasks?\b/i,
+    answer: () => [
+      'It depends on your track: 4 tasks on 1 Month, 6 on 45 Days, 12 on 3 Months and 24 on 6 Months, one per week.',
+      '',
+      'On top of that, every intern has the Daily Job Posting task every day, regardless of domain.',
+      '',
+      'Tell me your domain and track and I will list all of them.',
+    ].join('\n'),
+  },
+  {
+    test: /\btask (was |got )?(rejected|not approved|declined|returned)|rejected my|why.{0,20}rejected/i,
+    answer: () => [
+      'I cannot see why yours was rejected, only what reviewers usually send back for.',
+      '',
+      '• The submission does not do what the task description literally asks. Read it clause by clause.',
+      '• A link that is not reachable: a private repo, a dead deployment, a file nobody else can open.',
+      '• Work that arrived without the earlier weeks it builds on.',
+      '',
+      'Ask your coordinator for the specific reason through Domain Chat, fix that one thing, and resubmit.',
+    ].join('\n'),
+  },
   {
     test: /\bcoin|reward|payout|stipend|money|rupee|\brs\b|salary|paid\b/i,
     answer: () => [
@@ -395,6 +493,19 @@ const TOPIC_RULES = [
   {
     test: /\bdocument|address proof|marksheet|upload|offer letter/i,
     answer: () => 'Upload your Address Proof and Marksheet on the my-documents page. PDF, JPG or PNG, under 5MB each. Your offer letter is generated once HR approves them.',
+  },
+  {
+    test: ASKS_IF_DOMAIN_EXISTS,
+    answer: async () => {
+      const list = await allDomains();
+      return [
+        'TEN seeds ' + list.length + ' domains, and only these have a weekly task library:',
+        '',
+        list.map((d, i) => (i + 1) + '. ' + d).join('\n'),
+        '',
+        'If the one you are asking about is not on that list, it has no task library here. Other subjects may exist elsewhere in the TEN ecosystem, so ask your coordinator, but I can only plan the fourteen above.',
+      ].join('\n');
+    },
   },
   {
     test: /\b(what|which|list|all|how many)\b.*\b(domain|track|field|stream|course)s?\b/i,
@@ -450,7 +561,7 @@ const TOPIC_RULES = [
     ].join('\n'),
   },
   {
-    test: /\bstart|begin|first day|new here|what (do|should) i do first/i,
+    test: /\bstart|begin|first day|new here|just joined|what (do|should) i do( first)?\b|where do i (start|begin)/i,
     answer: () => [
       'Start in this order:',
       '',
@@ -489,7 +600,14 @@ const TOPIC_RULES = [
 /* Trailing words like "bro", "sir" or "a lot" are still small talk. Ending a
    conversation with "thanks bro" and being told the assistant could not tell
    what you needed is a bad last impression for no reason. */
-const SMALL_TALK = /^[\s!.?,]*(hi+|hey+|hello+|yo|hola|namaste|greetings|good\s*(morning|afternoon|evening|day|night)|thank(s| you)?|thx|ty|ok(ay)?|k|cool|nice|great|awesome|got it|sure|yep|yes|no|bye|see ya)(\s+(you|u|so much|a lot|bro|bhai|sir|ma'?am|mate|man|dude|buddy|ji))*[\s!.?,]*$/i;
+const GREET = "hi+|hey+|hello+|yo|hola|namaste|greetings|good\\s*(?:morning|afternoon|evening|day|night)|"
+            + "thank(?:s| you)?|thx|ty|ok(?:ay)?|k|cool|nice|great|awesome|got it|sure|yep|yes|no|bye|see ya";
+const TAIL  = "you|u|so much|a lot|bro|bhai|sir|ma'?am|mate|man|dude|buddy|ji|there|again|everyone|all";
+/* Two greetings in a row ("ok cool", "hello there") are still small talk.
+   Being told the assistant could not tell what you needed, because you said
+   two friendly words instead of one, is a silly way to end a conversation. */
+const SMALL_TALK = new RegExp(
+  '^[\\s!.?,]*(?:' + GREET + ')(?:[\\s!.?,]+(?:' + GREET + '|' + TAIL + '))*[\\s!.?,]*$', 'i');
 
 /** "who are you", "what can you do", "help". */
 const CAPABILITY = /\b(who are you|what (can|do) you do|what are you|how (do|can) i use|help me|what is this)\b|^\s*help\s*$/i;
@@ -764,6 +882,14 @@ async function answerFor(question, ctx) {
   if (ACCOUNT_ACTION.test(q))  { return accountAction(); }
   if (NOT_FINISHING.test(q))   { return notFinishing(); }
   if (HOW_MUCH.test(q))        { return earnings(domain, duration || DURATIONS.find(function (d) { return d.key === '3months'; })); }
+
+  // "3 months" on its own: they mean their own track. A bare duration is about
+  // their work by definition, so this does not wait for ABOUT_WORK to agree -
+  // "3 months" contains no other work vocabulary and matched nothing at all.
+  if (!namedDomain && duration && ctx && ctx.domain) {
+    const own = await matchDomain('', ctx.domain);
+    if (own) { return renderPlan(own, duration, await tasksFor(own, duration), depth); }
+  }
 
   const wk = WEEK_NUMBER.exec(q);
   if (wk && domain) {
