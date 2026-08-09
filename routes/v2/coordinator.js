@@ -6,23 +6,20 @@ const Student            = require("../../models/Student");
 const CertificateRequest = require("../../models/CertificateRequest");
 const { validate, coordinatorApproveCertificatesSchema } = require("../../middleware/validationSchemas");
 
-// ── Coordinator auth middleware ──
-async function requireCoordinator(req, res, next) {
-    try {
-        const auth = req.headers["authorization"] || req.headers["Authorization"] || "";
-        if (auth && (auth.startsWith("Bearer coord_") || auth.startsWith("Bearer hr_"))) {
-            req.coordinatorUser = { token: auth };
-            return next();
-        }
-        const coordId = req.headers["x-coordinator-id"] || req.body.coordinatorId;
-        if (coordId) {
-            req.coordinatorUser = { id: coordId };
-            return next();
-        }
-        return res.status(401).json({ success: false, message: "Coordinator authentication required" });
-    } catch (_) {
-        return res.status(500).json({ success: false, message: "Auth error" });
-    }
+// ── Coordinator auth middleware ── session-derived.
+//
+// This previously accepted any Authorization header starting with
+// "Bearer coord_" or "Bearer hr_", and failing that accepted an
+// `x-coordinator-id` header naming whichever coordinator the caller liked.
+// Coordinators approve certificates and mark attendance, so both were a direct
+// route to acting as staff. HR may act here too, matching the old behaviour.
+const { requireStaff } = require("../../middleware/sessionAuth");
+
+function requireCoordinator(req, res, next) {
+    return requireStaff(req, res, () => {
+        req.coordinatorUser = req.coordinator || req.hrUser || null;
+        next();
+    });
 }
 
 // POST /api/v2/coordinator/approve-certificates

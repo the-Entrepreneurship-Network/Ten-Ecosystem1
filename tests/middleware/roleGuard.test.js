@@ -52,22 +52,34 @@ describe('middleware/roleGuard', () => {
   });
 
   describe('attachEcosystemUser', () => {
-    it('attaches user from x-ecosystem-user-id header', () => {
+    // Identity must come from the server-side session only. These headers were
+    // previously trusted, which let any caller claim any role — including
+    // admin — and walk straight through every requireRole() guard.
+    it('IGNORES the x-ecosystem-user-id / -role headers', () => {
       const req = { headers: { 'x-ecosystem-user-id': 'user123', 'x-ecosystem-user-role': 'mentor' } };
       const next = jest.fn();
       attachEcosystemUser(req, mockRes(), next);
 
-      expect(req.user).toEqual(expect.objectContaining({ _id: 'user123', role: 'mentor' }));
+      expect(req.user).toBeUndefined();
       expect(next).toHaveBeenCalled();
     });
 
-    it('defaults role to FOUNDER when x-ecosystem-user-role header is absent', () => {
-      const req = { headers: { 'x-ecosystem-user-id': 'user456' } };
+    it('does not let a spoofed header escalate to admin', () => {
+      const req = { headers: { 'x-ecosystem-user-id': 'attacker', 'x-ecosystem-user-role': ROLES.ADMIN } };
       attachEcosystemUser(req, mockRes(), jest.fn());
-      expect(req.user.role).toBe(ROLES.FOUNDER);
+      expect(req.user).toBeUndefined();
     });
 
-    it('falls back to session ecosystemUserId', () => {
+    it('a header cannot override the role held in the session', () => {
+      const req = {
+        headers: { 'x-ecosystem-user-role': ROLES.ADMIN },
+        session: { ecosystemUserId: 'sess-user', ecosystemUserRole: ROLES.MENTOR }
+      };
+      attachEcosystemUser(req, mockRes(), jest.fn());
+      expect(req.user).toEqual({ _id: 'sess-user', role: ROLES.MENTOR });
+    });
+
+    it('attaches the ecosystem user from the session', () => {
       const req = { headers: {}, session: { ecosystemUserId: 'sess-user' } };
       const next = jest.fn();
       attachEcosystemUser(req, mockRes(), next);
@@ -76,15 +88,34 @@ describe('middleware/roleGuard', () => {
       expect(next).toHaveBeenCalled();
     });
 
-    it('does not overwrite an existing req.user', () => {
-      const existingUser = { _id: 'existing', role: 'admin' };
-      const req = { headers: { 'x-ecosystem-user-id': 'new-id' }, user: existingUser };
+    it('defaults an ecosystem session with no stored role to FOUNDER', () => {
+      const req = { headers: {}, session: { ecosystemUserId: 'user456' } };
       attachEcosystemUser(req, mockRes(), jest.fn());
-      expect(req.user).toBe(existingUser);
+      expect(req.user.role).toBe(ROLES.FOUNDER);
     });
 
-    it('calls next without setting user when no id is available', () => {
+    it.each([
+      ['adminUser',   { adminUser: { username: 'tenadmin' } },              'tenadmin',      ROLES.ADMIN],
+      ['hr',          { hr: { username: 'vp@ten.com' } },                   'vp@ten.com',    ROLES.HR],
+      ['coordinator', { coordinator: { username: 'web_admin' } },           'web_admin',     ROLES.COORDINATOR],
+      ['student',     { student: { _id: 'stu1', employeeId: 'TEN/WEB/1' } },'stu1',          ROLES.STUDENT]
+    ])('maps a legacy %s session onto req.user', (_label, session, expectedId, expectedRole) => {
+      const req = { headers: {}, session };
+      attachEcosystemUser(req, mockRes(), jest.fn());
+      expect(req.user).toEqual({ _id: expectedId, role: expectedRole });
+    });
+
+    it('calls next without setting user when there is no session', () => {
       const req = { headers: {} };
+      const next = jest.fn();
+      attachEcosystemUser(req, mockRes(), next);
+
+      expect(req.user).toBeUndefined();
+      expect(next).toHaveBeenCalled();
+    });
+
+    it('calls next without setting user for an empty session', () => {
+      const req = { headers: {}, session: {} };
       const next = jest.fn();
       attachEcosystemUser(req, mockRes(), next);
 

@@ -91,11 +91,7 @@
       if (data.success) {
         window.location.href = '/ten-admin';
       } else {
-        if (data.debug) {
-          err.textContent = `Access denied. Sent username: "${data.debug.receivedUsername}", Password length: ${data.debug.receivedPasswordLen}. (Expected: ${data.debug.expectedPasswordLen})`;
-        } else {
-          err.textContent = data.error || 'Access denied. Check your credentials.';
-        }
+        err.textContent = 'Access denied. Check your credentials.';
         err.style.display = 'block';
         btn.disabled = false;
         btn.textContent = 'Sign In';

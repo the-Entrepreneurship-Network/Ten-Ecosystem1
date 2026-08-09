@@ -58,19 +58,10 @@ async function requireStudent(req, res, next) {
     }
 }
 
-// ── Auth middleware (HR) ──
-async function requireHR(req, res, next) {
-    try {
-        const auth = req.headers["authorization"] || req.headers["Authorization"] || "";
-        if (auth && auth.startsWith("Bearer hr_")) {
-            req.hrUser = { token: auth };
-            return next();
-        }
-        return res.status(401).json({ success: false, message: "HR authentication required — please log in to the HR portal" });
-    } catch (err) {
-        res.status(500).json({ success: false, message: "HR auth error" });
-    }
-}
+// ── Auth middleware (HR) ── session-derived.
+// The previous check was `authorization.startsWith("Bearer hr_")`, which the
+// literal string "Bearer hr_" satisfied.
+const { requireHR } = require("../../middleware/sessionAuth");
 
 // ── Mailer helper ──
 const { createEmailTransporter } = require("../../utils/mailer");

@@ -224,11 +224,15 @@ Delete Selected
 
 async function loadStudents(){
 
-    const response = await fetch("/students", {
-    headers:{
-        Authorization:"Bearer mysecret123"
+    // Authenticated by the admin session cookie. The hardcoded
+    // "Bearer mysecret123" header that used to sit here was a password shipped
+    // to every visitor's browser.
+    const response = await fetch("/students", { credentials: "include" });
+
+    if (response.status === 401) {
+        window.location.href = "/ten-admin/login";
+        return;
     }
-});
 
     const students = await response.json();
 

@@ -24,9 +24,14 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/xterm/5.3.0/xterm.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xterm/5.3.0/xterm.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xterm/5.3.0/addon-fit/addon-fit.min.js"></script>
+  <!-- xterm.js is self-hosted. It used to come from a CDN, and the fit-addon
+       URL (.../xterm/5.3.0/addon-fit/addon-fit.min.js) was not a real cdnjs
+       path at all — it 404d, so FitAddon was never defined. Serving it from
+       public/vendor/ also means a network that blocks the CDN no longer
+       breaks the coding challenges. -->
+  <link rel="stylesheet" href="/vendor/xterm.css">
+  <script src="/vendor/xterm.js"></script>
+  <script src="/vendor/xterm-addon-fit.js"></script>
 
 <style>
 @keyframes qr-pulse {
@@ -1479,6 +1484,7 @@ button:active { transform: translateY(0); }
   font-size: 12px; font-weight: 800; color: #D4AF37;
 }
 </style>
+  <link rel="stylesheet" href="/css/ten-brand.css">
 </head>
 
 <body>
@@ -1587,6 +1593,8 @@ button:active { transform: translateY(0); }
     <button class="stu-nav-btn" data-view="stu-view-test" onclick="switchStudentView('stu-view-test')"><span class="nav-icon">📝</span> Take Test</button>
     <button class="stu-nav-btn" data-view="stu-view-guidelines" onclick="switchStudentView('stu-view-guidelines')"><span class="nav-icon">📋</span> Guidelines</button>
     <button class="stu-nav-btn" data-view="stu-view-leaderboard" onclick="switchStudentView('stu-view-leaderboard')"><span class="nav-icon">🏆</span> Leaderboard &amp; Badges</button>
+    <!-- Section 9 — student feedback, shown once the internship is complete. -->
+    <button class="stu-nav-btn" id="stuNavFeedback" data-view="stu-view-feedback" onclick="switchStudentView('stu-view-feedback')" style="display:none;"><span class="nav-icon">💌</span> Share Feedback</button>
     <!-- NEW FEATURE: Document Upload + Certificates nav links -->
     <button class="stu-nav-btn" onclick="window.location.href='my-documents.html'" style="background:linear-gradient(135deg,rgba(245,158,11,0.08),rgba(245,158,11,0.02));border:1px solid rgba(245,158,11,0.18);"><span class="nav-icon">📋</span> My Documents <span style="font-size:10px;background:rgba(245,158,11,0.2);color:#f59e0b;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
     <a class="stu-nav-btn" href="https://discord.gg/GYnZFbDE7" target="_blank" rel="noopener" style="background:linear-gradient(135deg,rgba(88,101,242,0.12),rgba(88,101,242,0.04));border:1px solid rgba(88,101,242,0.25);text-decoration:none;display:flex;align-items:center;gap:8px;"><span class="nav-icon">💬</span> Discord Community</a>
@@ -2262,6 +2270,8 @@ button:active { transform: translateY(0); }
       <div>
         <h2>🪪 Daily Attendance</h2>
         <p id="attendanceStatus">Mark your attendance once every day.</p>
+        <!-- How far into the programme the student is: "Day 12 of 45". -->
+        <p id="attendanceDayProgress" style="display:none;font-size:12px;color:#8aa4c8;margin-top:4px;"></p>
         <p id="attendanceThreshold" style="font-size:12px;color:#f59e0b;margin-top:4px;"></p>
       </div>
       <button id="attendanceBtn" class="attendance-btn" onclick="markSelfAttendance()">
@@ -2360,6 +2370,39 @@ button:active { transform: translateY(0); }
     <strong>TEN</strong> — The Entrepreneurship Network &nbsp;·&nbsp; Student Portal
   </div>
   </div><!-- /stu-view-leaderboard -->
+
+  <!-- ══ Section 9 — Share Feedback ═══════════════════════════════════════ -->
+  <div id="stu-view-feedback" class="stu-view" style="display:none;">
+    <div class="section-card">
+      <h2>💌 Share Your Experience</h2>
+      <p style="color:#8aa4c8;font-size:13px;margin-bottom:16px;">
+        You have completed your internship — thank you. Tell the TEN team how it went.
+        Your feedback goes straight to HR.
+      </p>
+
+      <div id="feedbackHistory" style="margin-bottom:16px;"></div>
+
+      <div id="feedbackComposer" style="background:rgba(12,18,32,0.6);border:1px solid rgba(99,140,210,0.18);border-radius:12px;padding:14px;">
+        <label style="display:block;font-size:11px;color:#8aa4c8;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">How would you rate your internship?</label>
+        <div id="feedbackStars" style="display:flex;gap:6px;margin-bottom:14px;">
+          <button type="button" class="fb-star" data-value="1" aria-label="1 star"  style="background:none;border:none;font-size:26px;cursor:pointer;opacity:0.3;padding:0;color:#f5c542;">★</button>
+          <button type="button" class="fb-star" data-value="2" aria-label="2 stars" style="background:none;border:none;font-size:26px;cursor:pointer;opacity:0.3;padding:0;color:#f5c542;">★</button>
+          <button type="button" class="fb-star" data-value="3" aria-label="3 stars" style="background:none;border:none;font-size:26px;cursor:pointer;opacity:0.3;padding:0;color:#f5c542;">★</button>
+          <button type="button" class="fb-star" data-value="4" aria-label="4 stars" style="background:none;border:none;font-size:26px;cursor:pointer;opacity:0.3;padding:0;color:#f5c542;">★</button>
+          <button type="button" class="fb-star" data-value="5" aria-label="5 stars" style="background:none;border:none;font-size:26px;cursor:pointer;opacity:0.3;padding:0;color:#f5c542;">★</button>
+        </div>
+
+        <textarea id="feedbackMessage" rows="5" maxlength="4000" placeholder="What worked well? What could TEN do better? Anything you would tell the next intern?"
+          style="width:100%;background:#101a2e;border:1px solid rgba(99,140,210,0.25);color:#e2eaf7;border-radius:10px;padding:11px 13px;outline:none;font:500 13px inherit;resize:vertical;box-sizing:border-box;"></textarea>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;">
+          <span id="feedbackCount" style="font-size:11px;color:#5a7299;">0 / 4000</span>
+          <button id="feedbackSend" onclick="submitStudentFeedback()"
+            style="background:linear-gradient(135deg,#f5c542,#c9a227);color:#0c1220;border:none;font-weight:700;padding:9px 20px;border-radius:10px;cursor:pointer;">Send Feedback</button>
+        </div>
+        <p id="feedbackError" style="color:#f43f5e;font-size:12px;margin-top:8px;display:none;"></p>
+      </div>
+    </div>
+  </div><!-- /stu-view-feedback -->
 
     </div><!-- /section-modal-body -->
   </div><!-- /sectionModal -->
@@ -3637,43 +3680,45 @@ async function loadAttendance(){
 
     const threshEl = document.getElementById("attendanceThreshold");
     if(threshEl){
-      // Tenure-based threshold calculation
-      const tenure = (student.tenure || "").toLowerCase();
+      // The 75% target comes from the server, which computes it from the
+      // student's actual tenure with Sundays excluded and the WhatsApp
+      // pre-portal period credited. This page used to recompute its own
+      // number — a sixth copy of the tenure table, dividing by elapsed
+      // CALENDAR days — so the banner routinely disagreed with the
+      // percentage shown right above it.
+      const totalDays = s.workingDays || s.totalDays || 0;
+      const requiredDays = s.requiredDays || s.minDays || 0;
+      const present = s.combinedPresentDays || s.combinedCount || 0;
+      const remaining = (s.daysNeeded !== undefined)
+        ? s.daysNeeded
+        : Math.max(0, requiredDays - present);
 
-      // Correct tenure-to-days mapping
-      function getTenureTotalDays(t) {
-        if (t.includes('1week') || t.includes('1 week') || t === 'week') return 7;
-        if (t.includes('15day') || t.includes('15 day')) return 15;
-        if (t.includes('45day') || t.includes('45 day')) return 45;
-        if (t.includes('3month') || t.includes('3 month')) return 90;
-        if (t.includes('6month') || t.includes('6 month')) return 180;
-        return 30; // default: 1 month
-      }
-
-      const totalTenureDays = getTenureTotalDays(tenure);
-
-      // Days elapsed since joining (capped at tenure total)
-      let daysElapsed = totalTenureDays;
-      if (student.joiningDate) {
-        const joining = new Date(student.joiningDate);
-        const today = new Date();
-        const diff = Math.floor((today - joining) / 86400000) + 1;
-        daysElapsed = Math.min(Math.max(diff, 1), totalTenureDays);
-      }
-
-      // Required days = 75% of days elapsed so far
-      const requiredDays = Math.ceil(daysElapsed * 0.75);
-      const totalDays = daysElapsed;
-
-      const present = s.combinedPresentDays || 0;
-      const remaining = Math.max(0, requiredDays - present);
-
-      if(remaining === 0){
+      if(remaining === 0 && totalDays > 0){
         threshEl.innerText = "✅ You have met the 75% attendance requirement! (" + present + "/" + totalDays + " days)";
         threshEl.style.color = "#10b981";
       } else {
         threshEl.innerText = "⚠️ " + present + "/" + totalDays + " days present — need " + remaining + " more to reach 75% (" + requiredDays + " days required)";
         threshEl.style.color = "#f59e0b";
+      }
+    }
+
+    // Section 3 — show how far into the programme the student is.
+    var progEl = document.getElementById("attendanceDayProgress");
+    if (progEl) {
+      if (s.dayNumber && s.totalCalendarDays) {
+        var remainingDays = (s.daysRemaining !== undefined)
+          ? s.daysRemaining
+          : Math.max(0, s.totalCalendarDays - s.dayNumber);
+        progEl.innerHTML = "Day <strong>" + s.dayNumber + "</strong> of <strong>" +
+          s.totalCalendarDays + "</strong>" +
+          " &nbsp;·&nbsp; " + remainingDays + " day" + (remainingDays === 1 ? "" : "s") + " remaining" +
+          (s.preportalCreditedDays
+            ? " &nbsp;·&nbsp; " + s.preportalCreditedDays + " day" +
+              (s.preportalCreditedDays === 1 ? "" : "s") + " credited from WhatsApp"
+            : "");
+        progEl.style.display = "block";
+      } else {
+        progEl.style.display = "none";
       }
     }
 
@@ -3703,6 +3748,129 @@ async function loadAttendance(){
   }catch(e){ console.log(e); }
 }
 
+// ══════════════════════════════════════════════════════════════
+//  Section 9 — Student feedback
+// ══════════════════════════════════════════════════════════════
+var _feedbackRating = null;
+
+function _fbEscape(s){
+  return String(s == null ? "" : s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+
+/**
+ * Show the Share Feedback nav item only once the internship is complete, and
+ * render anything the student has already sent.
+ */
+async function initStudentFeedback(){
+  try {
+    const res = await fetch("/api/feedback/my-status", { credentials: "same-origin" });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.success) return;
+
+    const nav = document.getElementById("stuNavFeedback");
+    if (nav) nav.style.display = data.eligible ? "" : "none";
+    if (!data.eligible) return;
+
+    renderFeedbackHistory(data.feedback || []);
+  } catch (e) { /* the nav item simply stays hidden */ }
+}
+
+function renderFeedbackHistory(items){
+  const box = document.getElementById("feedbackHistory");
+  if (!box) return;
+
+  if (!items.length) {
+    box.innerHTML = "";
+    return;
+  }
+
+  box.innerHTML = '<div style="font-size:11px;color:#8aa4c8;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">You have already shared</div>' +
+    items.map(function(f){
+      const stars = f.rating ? "★".repeat(f.rating) + "☆".repeat(5 - f.rating) : "";
+      const when = f.submittedAt ? new Date(f.submittedAt).toLocaleDateString("en-IN", { day:"numeric", month:"short", year:"numeric" }) : "";
+      return '<div style="background:rgba(16,26,46,0.7);border:1px solid rgba(99,140,210,0.15);border-radius:10px;padding:11px 13px;margin-bottom:8px;">' +
+               '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
+                 '<span style="color:#f5c542;font-size:13px;">' + stars + '</span>' +
+                 '<span style="color:#5a7299;font-size:11px;">' + _fbEscape(when) + '</span>' +
+               '</div>' +
+               '<div style="color:#cdd9ec;font-size:13px;white-space:pre-wrap;">' + _fbEscape(f.message) + '</div>' +
+             '</div>';
+    }).join("");
+}
+
+async function submitStudentFeedback(){
+  const msgEl = document.getElementById("feedbackMessage");
+  const errEl = document.getElementById("feedbackError");
+  const btn   = document.getElementById("feedbackSend");
+  if (!msgEl || !btn) return;
+
+  errEl.style.display = "none";
+  const message = msgEl.value.trim();
+  if (message.length < 10) {
+    errEl.textContent = "Please write at least a sentence or two.";
+    errEl.style.display = "block";
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "Sending…";
+  try {
+    const res = await fetch("/api/feedback/submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ message: message, rating: _feedbackRating })
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      msgEl.value = "";
+      _feedbackRating = null;
+      _paintFeedbackStars(0);
+      document.getElementById("feedbackCount").textContent = "0 / 4000";
+      Swal.fire({
+        icon: "success", title: "Thank you!", text: data.message,
+        background: "#0e1428", color: "#F0EEE8", confirmButtonColor: "#D4AF37"
+      });
+      initStudentFeedback();
+    } else {
+      errEl.textContent = data.message || "Could not send your feedback.";
+      errEl.style.display = "block";
+    }
+  } catch (e) {
+    errEl.textContent = "Network error. Please try again.";
+    errEl.style.display = "block";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Send Feedback";
+  }
+}
+
+function _paintFeedbackStars(value){
+  document.querySelectorAll("#feedbackStars .fb-star").forEach(function(star){
+    star.style.opacity = (Number(star.dataset.value) <= value) ? "1" : "0.3";
+  });
+}
+
+document.addEventListener("DOMContentLoaded", function(){
+  document.querySelectorAll("#feedbackStars .fb-star").forEach(function(star){
+    star.addEventListener("click", function(){
+      _feedbackRating = Number(star.dataset.value);
+      _paintFeedbackStars(_feedbackRating);
+    });
+  });
+  const msgEl = document.getElementById("feedbackMessage");
+  if (msgEl) {
+    msgEl.addEventListener("input", function(){
+      document.getElementById("feedbackCount").textContent = msgEl.value.length + " / 4000";
+    });
+  }
+  initStudentFeedback();
+});
+
 function attPill(status){
   if(!status) return '<span style="color:#5a7299;">—</span>';
   const color = status==="Present" ? "#10b981" : "#f43f5e";
@@ -3712,38 +3880,54 @@ function attPill(status){
 
 function renderAttendanceHistory(records){
   const c = document.getElementById("attendanceHistory");
+
+  // Effective start date. For a WhatsApp joiner the internship began BEFORE
+  // they registered on the portal, so internshipStartDate wins; for everyone
+  // else it is the joining date. This used to be the other way round, which
+  // contradicted the server.
   let startDate = null;
-  if (student && student.joiningDate) {
-    startDate = new Date(student.joiningDate);
-  } else if (student && student.internshipStartDate) {
-    startDate = new Date(student.internshipStartDate);
+  const isWhatsappJoiner = !!(student && student.joinerType === 'whatsapp');
+  const preferred = isWhatsappJoiner
+    ? [student && student.internshipStartDate, student && student.joiningDate]
+    : [student && student.joiningDate, student && student.internshipStartDate];
+  for (const candidate of preferred) {
+    if (!candidate) continue;
+    const d = new Date(candidate);
+    if (!isNaN(d.getTime())) { startDate = d; break; }
   }
-  if (!startDate || isNaN(startDate.getTime())) {
-    startDate = new Date();
+  if (!startDate) startDate = new Date();
+
+  // The day the student started using the portal — days before it cannot have
+  // attendance records and are shown as WhatsApp-credited, not absent.
+  let portalStart = null;
+  if (isWhatsappJoiner && student && student.joiningDate) {
+    const d = new Date(student.joiningDate);
+    if (!isNaN(d.getTime())) portalStart = d;
   }
+  const keyOf = (d) => d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+  const portalStartKey = portalStart ? keyOf(portalStart) : null;
 
   const now = new Date();
   const startZero = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
   const nowZero = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
+  // Build the roster, SKIPPING Sundays entirely. Sundays are not days a student
+  // has to attend, so they must not appear as rows that count against them —
+  // they used to render as red "Absent" even though the percentage excluded them.
   const roster = [];
   let dayNum = 1;
   const temp = new Date(startZero);
   while (temp <= nowZero) {
-    const yyyy = temp.getFullYear();
-    const mm = String(temp.getMonth() + 1).padStart(2, '0');
-    const dd = String(temp.getDate()).padStart(2, '0');
-    const dateKey = `${yyyy}-${mm}-${dd}`;
-    roster.push({
-      dayNum: dayNum,
-      date: new Date(temp),
-      dateKey: dateKey
-    });
-    dayNum++;
+    if (temp.getDay() !== 0) {
+      roster.push({ dayNum: dayNum, date: new Date(temp), dateKey: keyOf(temp) });
+      dayNum++;
+    }
     temp.setDate(temp.getDate() + 1);
   }
 
-  // Reverse so the latest day (Current Day) is on top
+  // Latest day on top
   roster.reverse();
 
   const byDate = {};
@@ -3752,22 +3936,33 @@ function renderAttendanceHistory(records){
     byDate[r.dateKey][r.markedBy] = r.status;
   });
 
+  if (!roster.length) {
+    c.innerHTML = '<div style="padding:16px;color:#8aa4c8;">No attendance days yet.</div>';
+    return;
+  }
+
   let html = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">';
   html += '<thead><tr style="text-align:left;color:#8aa4c8;font-size:11px;text-transform:uppercase;letter-spacing:1px;">'+
           '<th style="padding:8px 10px;">Day</th><th style="padding:8px 10px;">Date</th><th style="padding:8px 10px;">Self</th><th style="padding:8px 10px;">Class</th></tr></thead><tbody>';
-  
+
   roster.forEach(day => {
     const fmt = day.date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-    const selfStatus = (byDate[day.dateKey] && byDate[day.dateKey].self) || "Absent";
-    const coordStatus = (byDate[day.dateKey] && byDate[day.dateKey].coordinator) || "Absent";
-    
+    const isPreportal = !!(portalStartKey && day.dateKey < portalStartKey);
+    const marks = byDate[day.dateKey] || {};
+    const selfStatus = marks.self || (isPreportal ? "Present" : "Absent");
+    const coordStatus = marks.coordinator || (isPreportal ? "Present" : "Absent");
+    const note = isPreportal
+      ? ' <span style="font-size:10px;color:#8aa4c8;font-weight:500;">via WhatsApp</span>'
+      : '';
+
     html += `<tr style="border-top:1px solid rgba(99,140,210,0.12);">
       <td style="padding:8px 10px;color:#f59e0b;font-weight:700;">Day ${day.dayNum}</td>
-      <td style="padding:8px 10px;color:#cdd9ec;font-weight:600;">${fmt}</td>
+      <td style="padding:8px 10px;color:#cdd9ec;font-weight:600;">${fmt}${note}</td>
       <td style="padding:8px 10px;">${attPill(selfStatus)}</td>
       <td style="padding:8px 10px;">${attPill(coordStatus)}</td></tr>`;
   });
   html += '</tbody></table></div>';
+  html += '<div style="padding:8px 10px;color:#8aa4c8;font-size:11px;">Sundays are not working days and are not listed.</div>';
   c.innerHTML = html;
 }
 
@@ -4237,6 +4432,28 @@ async function runCode(){
       body: JSON.stringify({ code: _readCode(), language: lang, input: stdin })
     });
     const d = await r.json();
+
+    // The runner is gated server-side: it needs a signed-in student and the
+    // ENABLE_CODE_RUNNER flag. Say which, rather than printing a raw error.
+    if (r.status === 401) {
+      out.classList.add("is-error");
+      out.textContent = "Your session has expired. Please sign in again.";
+      return;
+    }
+    if (r.status === 503) {
+      out.classList.add("is-warn");
+      out.textContent = d.error || "The code runner is currently unavailable.";
+      return;
+    }
+    if (r.status === 429) {
+      out.classList.add("is-warn");
+      out.textContent = "You are running code very quickly — please wait a moment.";
+      return;
+    }
+
+    // Mirror the result into the Terminal tab, which shows run output.
+    if (typeof _writeRunToTerminal === "function") _writeRunToTerminal(d);
+
     const time = (d.executionTime != null) ? "  ·  " + d.executionTime + " ms" : "";
     if(d.success){
       out.classList.remove("is-error","is-warn");
@@ -4349,7 +4566,6 @@ let _cmActiveTab = 'editor';
 let _xtermInstance = null;
 let _xtermFit = null;
 let _termConnected = false;
-let _termSocket = null;
 
 function switchCmTab(tab) {
     _cmActiveTab = tab;
@@ -4376,11 +4592,21 @@ function switchCmTab(tab) {
 
 function _initCodingTerminal() {
     if (_termConnected) return;
-    if (typeof Terminal === 'undefined') {
-        var c = document.getElementById('xtermContainer');
-        if (c) c.innerHTML = '<div style="padding:20px;color:#f43f5e;">xterm.js failed to load from CDN.</div>';
+
+    var container = document.getElementById('xtermContainer');
+
+    // Guard on BOTH globals. The old check tested only `Terminal`, so when the
+    // fit-addon script 404d (its CDN path did not exist) the friendly message
+    // never appeared — instead `new FitAddon.FitAddon()` threw a ReferenceError
+    // and the pane just stayed blank.
+    if (typeof Terminal === 'undefined' || typeof FitAddon === 'undefined') {
+        if (container) {
+            container.innerHTML = '<div style="padding:20px;color:#f43f5e;">' +
+                'The terminal could not start. Please refresh the page.</div>';
+        }
         return;
     }
+
     var q = _currentCodingQuestion;
     if (!q) return;
     var lang = (document.getElementById('cmLang') || {}).value || 'javascript';
@@ -4392,53 +4618,66 @@ function _initCodingTerminal() {
         theme: { background:'#0d1117', foreground:'#cdd9ec', cursor:'#f5c542' },
         fontFamily: 'Consolas, Monaco, monospace',
         fontSize: 14,
-        cursorBlink: true,
+        cursorBlink: false,
         convertEol: true,
         scrollback: 1000,
+        disableStdin: true
     });
     var fitAddon = new FitAddon.FitAddon();
     term.loadAddon(fitAddon);
-    var container = document.getElementById('xtermContainer');
     if (container) container.innerHTML = '';
     term.open(container);
     fitAddon.fit();
     _xtermInstance = term;
     _xtermFit = fitAddon;
 
-    // Use socket.io - either the existing global `io` or create new connection
-    _termSocket = (typeof io !== 'undefined') ? io({ path: '/socket.io', auth: { role:'student', employeeId: employeeId } }) : null;
-    if (!_termSocket) {
-        term.writeln('\x1b[31mSocket.IO not available.\x1b[0m');
-        return;
-    }
-
-    _termSocket.emit('terminal:start', {
-        questionId: q._id,
-        employeeId: employeeId,
-        language: lang,
-        title: q.title || '',
-        description: q.description || '',
-        sampleInput: q.sampleInput || '',
-        sampleOutput: q.sampleOutput || '',
-    });
-
-    _termSocket.on('terminal:data', function(d) { term.write(d); });
-    _termSocket.on('terminal:error', function(msg) { term.writeln('\r\n\x1b[31m' + msg + '\x1b[0m\r\n'); });
-
-    term.onData(function(input) { _termSocket.emit('terminal:input', input); });
+    // The Terminal tab shows the OUTPUT of running your code.
+    //
+    // It previously spoke a socket protocol — terminal:start / terminal:input /
+    // terminal:data — that the server never implemented: there are no such
+    // handlers and no node-pty dependency, so even with xterm loading perfectly
+    // the pane could never receive a byte. It now drives the same
+    // POST /code/run path the "Run" button uses.
+    term.writeln('\x1b[90mTEN code runner — ' + lang + '\x1b[0m');
+    term.writeln('\x1b[90mWrite your solution in the Editor tab, then press Run.\x1b[0m');
+    term.writeln('');
 
     window.addEventListener('resize', function() { if (_xtermFit) _xtermFit.fit(); });
     _termConnected = true;
 }
 
-function _destroyCodingTerminal() {
-    if (_termSocket) {
-        _termSocket.emit('terminal:kill');
-        _termSocket.off('terminal:data');
-        _termSocket.off('terminal:error');
-        _termSocket.disconnect();
-        _termSocket = null;
+/**
+ * Render one run's result into the terminal pane.
+ * Called by runCode() so the Editor and Terminal tabs show the same thing.
+ */
+function _writeRunToTerminal(payload) {
+    var term = _xtermInstance;
+    if (!term) return;
+
+    var stamp = new Date().toLocaleTimeString();
+    term.writeln('\x1b[90m$ run  (' + stamp + ')\x1b[0m');
+
+    if (payload.output) {
+        String(payload.output).split('\n').forEach(function (line) { term.writeln(line); });
     }
+    if (payload.error) {
+        String(payload.error).split('\n').forEach(function (line) {
+            term.writeln('\x1b[31m' + line + '\x1b[0m');
+        });
+    }
+    if (!payload.output && !payload.error) {
+        term.writeln('\x1b[90m(no output)\x1b[0m');
+    }
+    if (payload.executionTime !== undefined) {
+        term.writeln('\x1b[90m— finished in ' + payload.executionTime + 'ms\x1b[0m');
+    }
+    term.writeln('');
+}
+
+function _destroyCodingTerminal() {
+    // The terminal:* socket events this used to emit were never handled by the
+    // server — there are no such listeners and no node-pty dependency — so the
+    // whole socket path was dead code.
     if (_xtermInstance) { _xtermInstance.dispose(); _xtermInstance = null; }
     _xtermFit = null;
     _termConnected = false;
@@ -4514,9 +4753,16 @@ async function loadNotifications(){
 }
 
 function updateNotifBadge(count){
-  const badge = document.getElementById('notifBadge');
-  if(count > 0){ badge.style.display = 'flex'; badge.textContent = count > 99 ? '99+' : count; }
-  else { badge.style.display = 'none'; }
+  // There are TWO bells on this page — one in the sidebar (#notifBadge) and one
+  // in the top bar (#notifBadge2). Only the first was ever updated, so the
+  // topbar badge sat at 0 permanently no matter how many unread notifications
+  // a student had.
+  ['notifBadge', 'notifBadge2'].forEach(function(id){
+    const badge = document.getElementById(id);
+    if (!badge) return;
+    if (count > 0) { badge.style.display = 'flex'; badge.textContent = count > 99 ? '99+' : count; }
+    else { badge.style.display = 'none'; }
+  });
 }
 
 function renderNotifications(){
@@ -4545,10 +4791,10 @@ async function markRead(id, el){
       body:JSON.stringify({notifId:id,readerId:student.employeeId})
     });
     el.classList.remove('unread');
-    // Decrease badge
+    // Decrease the count on both bells.
     const badge = document.getElementById('notifBadge');
-    const cur = parseInt(badge.textContent)||0;
-    updateNotifBadge(Math.max(0,cur-1));
+    const cur = parseInt(badge && badge.textContent) || 0;
+    updateNotifBadge(Math.max(0, cur - 1));
   }catch(e){}
 }
 
@@ -5175,7 +5421,7 @@ setupDomainSwitcher();
         <div style="font-size:10px;color:#8aa4c8;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Portal Password</div>
         <div style="display:flex;align-items:center;gap:8px;">
           <div id="pmPassword" style="font-size:14px;font-weight:700;color:#f0eee8;font-family:monospace;letter-spacing:3px;">••••••••</div>
-          <button onclick="togglePmPassword()" id="pmPassToggle" style="background:rgba(255,255,255,0.08);border:none;border-radius:6px;padding:3px 8px;color:#8aa4c8;cursor:pointer;font-size:11px;">Reveal</button>
+          <button onclick="changeMyPassword()" id="pmPassToggle" style="background:rgba(255,255,255,0.08);border:none;border-radius:6px;padding:3px 8px;color:#8aa4c8;cursor:pointer;font-size:11px;">Change</button>
         </div>
       </div>
     </div>
@@ -5204,59 +5450,59 @@ function openProfileModal() {
   document.getElementById('pmJoined').textContent = joined ? new Date(joined).toLocaleDateString('en-IN') : '—';
   var end = stu.internshipEnd || stu.endDate;
   document.getElementById('pmEnd').textContent = end ? new Date(end).toLocaleDateString('en-IN') : '—';
-  var rawPass = stu.plainPassword || stu.password || '';
-  if (rawPass && !rawPass.startsWith("$2b$") && !rawPass.startsWith("$2a$") && rawPass !== "intern123") {
-    _pmPassVal = rawPass;
-  } else {
-    _pmPassVal = '';
-  }
+  // Passwords are stored only as bcrypt hashes and cannot be read back — not
+  // by this page, not by staff, not by anyone. The old "Reveal" button called
+  // an unauthenticated endpoint that returned the cleartext password for any
+  // employee ID. Students change their password through the reset flow.
   _pmPassVisible = false;
+  _pmPassVal = '';
   document.getElementById('pmPassword').textContent = '••••••••';
-  document.getElementById('pmPassToggle').textContent = 'Reveal';
+  document.getElementById('pmPassToggle').textContent = 'Change';
   var modal = document.getElementById('profileModal');
   modal.style.display = 'flex';
   document.body.style.overflow = 'hidden';
 }
-async function togglePmPassword() {
-  if (_pmPassVisible) {
-    _pmPassVisible = false;
-    document.getElementById('pmPassword').textContent = '••••••••';
-    document.getElementById('pmPassToggle').textContent = 'Reveal';
-    return;
-  }
-
+async function changeMyPassword() {
   var stu = JSON.parse(localStorage.getItem('student') || '{}');
-  var empId = stu.employeeId || stu.employee_id || '';
+  var email = stu.email || '';
+  var result = await Swal.fire({
+    icon: 'info',
+    title: 'Change your password',
+    html: 'We will email a secure reset link to<br><strong>' + (email || 'your registered address') + '</strong>.',
+    background: '#0e1428',
+    color: '#F0EEE8',
+    showCancelButton: true,
+    confirmButtonText: 'Send reset link',
+    confirmButtonColor: '#D4AF37',
+    cancelButtonColor: '#334155'
+  });
+  if (!result.isConfirmed) return;
 
   try {
-    var res = await fetch('/get-my-password', {
+    var res = await fetch('/auth/forgot-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ employeeId: empId })
+      body: JSON.stringify({ email: email, role: 'student' })
     });
     var data = await res.json();
-    if (data.success && data.password && data.password !== 'intern123') {
-      _pmPassVal = data.password;
-    } else {
-      var fallback = stu.plainPassword || stu.password || '';
-      if (fallback && !fallback.startsWith("$2b$") && !fallback.startsWith("$2a$") && fallback !== 'intern123') {
-        _pmPassVal = fallback;
-      } else {
-        _pmPassVal = 'intern123';
-      }
-    }
+    Swal.fire({
+      icon: data.success ? 'success' : 'error',
+      title: data.success ? 'Check your inbox' : 'Could not send the link',
+      text: data.message || (data.success ? 'A reset link is on its way.' : 'Please try again shortly.'),
+      background: '#0e1428',
+      color: '#F0EEE8',
+      confirmButtonColor: '#D4AF37'
+    });
   } catch (err) {
-    var fallback = stu.plainPassword || stu.password || '';
-    if (fallback && !fallback.startsWith("$2b$") && !fallback.startsWith("$2a$") && fallback !== 'intern123') {
-      _pmPassVal = fallback;
-    } else {
-      _pmPassVal = 'intern123';
-    }
+    Swal.fire({
+      icon: 'error',
+      title: 'Network error',
+      text: 'Could not reach the server. Please try again.',
+      background: '#0e1428',
+      color: '#F0EEE8',
+      confirmButtonColor: '#D4AF37'
+    });
   }
-
-  _pmPassVisible = true;
-  document.getElementById('pmPassword').textContent = _pmPassVal;
-  document.getElementById('pmPassToggle').textContent = 'Hide';
 }
 function closeProfileModal() {
   document.getElementById('profileModal').style.display = 'none';
@@ -5933,9 +6179,20 @@ function checkTenurePayment(isStatusCheckClick) {
       }
     })
     .catch(err => {
+      // A network error must NOT be treated as "no fee due". This used to fall
+      // straight through to the welcome modal, so the paywall failed open
+      // whenever the status call hiccuped. It also only ever ran on this page,
+      // so the real enforcement is server-side — see requireTenurePayment in
+      // server.js. This is the visible half of the gate; if we cannot confirm
+      // the student's status, say so rather than silently letting them past.
       console.error('[TENURE] check error:', err);
-      if (typeof showWelcomeModalIfNeeded === 'function') {
-        showWelcomeModalIfNeeded();
+      if (isStatusCheckClick) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Could not check your payment status',
+          text: 'Please check your connection and try again.',
+          background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#D4AF37'
+        });
       }
     });
 }
@@ -5948,7 +6205,18 @@ function initiateTenurePaymentTimer(data) {
   document.getElementById('tenureAmountText').textContent = '₹' + parseFloat(currentTenureAmount).toFixed(2);
   document.getElementById('tenureUpiIdText').textContent = 'UPI ID: ' + currentTenureUpiId;
   if (document.getElementById('tenureExplanation')) {
+    // `data.label` is now the tenure name only ("1 Month"). It used to be
+    // "1 Month Internship Program", so this sentence read
+    // "Under the TEN 1 Month Internship Program Internship Program, ...".
     document.getElementById('tenureExplanation').innerHTML = `Under the TEN ${data.label || 'Short Course'} Internship Program, a training and certification fee of <strong>₹${currentTenureAmount}</strong> is required to activate your dashboard.`;
+  }
+  var headingEl = document.getElementById('tenurePaymentHeading');
+  if (headingEl) {
+    // The heading was hardcoded "Crash Course Program Fee Required" whatever
+    // the student's tenure was.
+    headingEl.textContent = data.label
+      ? (data.label + ' Internship Program Fee')
+      : 'Internship Program Fee Required';
   }
   if (document.getElementById('tenureQrReasonText')) {
     document.getElementById('tenureQrReasonText').textContent = (data.label || 'Short Course') + ' Fee';
@@ -6107,7 +6375,7 @@ function submitTenureUtr() {
     <div id="tenurePaymentMainState">
       <!-- Icon/Heading -->
       <div style="font-size:42px;margin-bottom:12px;">🛡️</div>
-      <h2 style="font-size:22px;font-weight:800;color:#D4AF37;margin-bottom:8px;letter-spacing:0.5px;">Crash Course Program Fee Required</h2>
+      <h2 id="tenurePaymentHeading" style="font-size:22px;font-weight:800;color:#D4AF37;margin-bottom:8px;letter-spacing:0.5px;">Internship Program Fee Required</h2>
       
       <!-- Rejection Banner (Hidden by default) -->
       <div id="tenureRejectionBanner" style="display:none;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:12px;padding:12px 16px;margin-bottom:16px;text-align:left;font-size:13px;line-height:1.5;color:#fca5a5;">

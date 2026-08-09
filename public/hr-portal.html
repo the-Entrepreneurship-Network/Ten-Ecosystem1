@@ -373,6 +373,8 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
     <div class="nav-section-title">Certificates</div>
     <button class="nav-btn" onclick="showView('certificates')" data-view="certificates"><span class="icon">🎓</span> Certificate Approvals</button>
     <button class="nav-btn" onclick="showView('star-submissions')" data-view="star-submissions"><span class="icon">⭐</span> Star Submissions</button>
+    <!-- Section 9 — student feedback. Every HR account sees every submission. -->
+    <button class="nav-btn" onclick="showView('feedback')" data-view="feedback"><span class="icon">💌</span> Student Feedback <span id="feedbackUnreadBadge" style="display:none;background:#f43f5e;color:#fff;font-size:10px;font-weight:800;padding:1px 6px;border-radius:99px;margin-left:4px;">0</span></button>
     <div class="nav-divider"></div>
     <div class="nav-section-title">Promotions</div>
     <button class="nav-btn" onclick="showView('promotions')" data-view="promotions"><span class="icon">🚀</span> Promotions</button>
@@ -1208,6 +1210,28 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
   </div>
 
   <!-- LEADERBOARD (Phase 1) -->
+  <!-- ══ Section 9 — Student Feedback ══════════════════════════════════════ -->
+  <div class="view" id="view-feedback">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+        <div>
+          <h2 style="margin:0;">💌 Student Feedback</h2>
+          <p style="color:#8aa4c8;font-size:13px;margin:4px 0 0;">Experience feedback from interns who have completed their internship. All HR staff see all feedback.</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <select id="feedbackStatusFilter" onchange="loadHRFeedback()" style="background:#101a2e;border:1px solid rgba(99,140,210,0.25);color:#e2eaf7;border-radius:8px;padding:7px 10px;font-size:13px;">
+            <option value="">All</option>
+            <option value="new">Unread</option>
+            <option value="read">Read</option>
+            <option value="actioned">Actioned</option>
+          </select>
+          <button onclick="loadHRFeedback()" style="background:rgba(245,197,66,0.15);color:#f5c542;border:1px solid rgba(245,197,66,0.3);border-radius:8px;padding:7px 14px;cursor:pointer;font-weight:600;">↻ Refresh</button>
+        </div>
+      </div>
+      <div id="hrFeedbackList"><p style="color:#8aa4c8;">Loading…</p></div>
+    </div>
+  </div>
+
   <div class="view" id="view-leaderboard">
     <div id="ten-extras-hr-mount"></div>
   </div>
@@ -1835,12 +1859,91 @@ async function generateQRDataUrl(text) {
     });
 }
 
+// ══════════════════════════════════════════════════════════════
+//  Section 9 — Student feedback (HR side)
+//  Every HR account sees every submission; nothing is scoped to one account.
+// ══════════════════════════════════════════════════════════════
+function _hrEsc(s){
+  return String(s == null ? "" : s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+
+async function loadHRFeedback(){
+  const box = document.getElementById('hrFeedbackList');
+  if (!box) return;
+  box.innerHTML = '<p style="color:#8aa4c8;">Loading…</p>';
+
+  const status = (document.getElementById('feedbackStatusFilter') || {}).value || '';
+  try {
+    const res = await fetch('/api/feedback/hr/all' + (status ? '?status=' + encodeURIComponent(status) : ''), { credentials:'same-origin' });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message || 'Could not load feedback.');
+
+    const badge = document.getElementById('feedbackUnreadBadge');
+    if (badge) {
+      badge.textContent = data.unread || 0;
+      badge.style.display = data.unread ? 'inline-block' : 'none';
+    }
+
+    if (!data.data.length) {
+      box.innerHTML = '<p style="color:#8aa4c8;padding:16px 0;">No feedback yet.</p>';
+      return;
+    }
+
+    box.innerHTML = data.data.map(function(f){
+      const stars = f.rating ? '★'.repeat(f.rating) + '☆'.repeat(5 - f.rating) : '—';
+      const when  = f.submittedAt ? new Date(f.submittedAt).toLocaleString('en-IN') : '';
+      const isNew = f.status === 'new';
+      return '<div style="background:rgba(16,26,46,0.6);border:1px solid ' + (isNew ? 'rgba(245,197,66,0.35)' : 'rgba(99,140,210,0.15)') + ';border-radius:10px;padding:13px 15px;margin-bottom:10px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">' +
+          '<div>' +
+            '<strong style="color:#e2eaf7;">' + _hrEsc(f.studentName || f.employeeId) + '</strong>' +
+            '<span style="color:#5a7299;font-size:12px;margin-left:8px;">' + _hrEsc(f.employeeId) + '</span>' +
+            (f.domain ? '<span style="background:rgba(99,140,210,0.15);color:#8aa4c8;font-size:11px;padding:2px 8px;border-radius:99px;margin-left:8px;">' + _hrEsc(f.domain) + '</span>' : '') +
+            (f.tenure ? '<span style="color:#5a7299;font-size:11px;margin-left:8px;">' + _hrEsc(f.tenure) + '</span>' : '') +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:10px;">' +
+            '<span style="color:#f5c542;font-size:13px;">' + stars + '</span>' +
+            '<span style="color:#5a7299;font-size:11px;">' + _hrEsc(when) + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div style="color:#cdd9ec;font-size:13px;white-space:pre-wrap;line-height:1.55;">' + _hrEsc(f.message) + '</div>' +
+        '<div style="margin-top:10px;display:flex;gap:8px;align-items:center;">' +
+          (isNew
+            ? '<button onclick="markFeedback(\'' + _hrEsc(f._id) + '\',\'read\')" style="background:rgba(99,140,210,0.15);color:#8aa4c8;border:1px solid rgba(99,140,210,0.3);border-radius:7px;padding:5px 12px;cursor:pointer;font-size:12px;">Mark read</button>'
+            : '<span style="color:#5a7299;font-size:11px;">' + _hrEsc(f.status) + (f.readBy ? ' by ' + _hrEsc(f.readBy) : '') + '</span>') +
+          '<button onclick="markFeedback(\'' + _hrEsc(f._id) + '\',\'actioned\')" style="background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.3);border-radius:7px;padding:5px 12px;cursor:pointer;font-size:12px;">Mark actioned</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  } catch (err) {
+    box.innerHTML = '<p style="color:#f43f5e;">' + _hrEsc(err.message || 'Could not load feedback.') + '</p>';
+  }
+}
+
+async function markFeedback(id, status){
+  try {
+    const res = await fetch('/api/feedback/hr/' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ status: status })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message);
+    loadHRFeedback();
+  } catch (err) {
+    alert(err.message || 'Could not update that feedback.');
+  }
+}
+
 function showView(v){
   document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(el=>el.classList.remove('active'));
   document.getElementById('view-'+v).classList.add('active');
   document.querySelector(`[data-view="${v}"]`)?.classList.add('active');
-  const t={overview:'<span>Dashboard</span> Overview',ecosystem:'<span>TEN</span> Ecosystem Control Center',insights:'<span>Insights</span>',students:'<span>All</span> Students',tracker:'<span>Internship</span> Tracker',submissions:'<span>Task</span> Submissions',domains:'<span>Domain</span> Analytics',documents:'<span>Generate</span> Documents','send-notif':'<span>Send</span> Notification','notif-history':'<span>Notification</span> History','attendance-monitor':'<span>Attendance</span> Monitor',certificates:'<span>Certificate</span> Approvals','star-submissions':'<span>Star Performer</span> Submissions',promotions:'<span>Promotions</span>',leaderboard:'<span>Performance</span> Leaderboard'};
+  const t={overview:'<span>Dashboard</span> Overview',ecosystem:'<span>TEN</span> Ecosystem Control Center',insights:'<span>Insights</span>',students:'<span>All</span> Students',tracker:'<span>Internship</span> Tracker',submissions:'<span>Task</span> Submissions',domains:'<span>Domain</span> Analytics',documents:'<span>Generate</span> Documents','send-notif':'<span>Send</span> Notification','notif-history':'<span>Notification</span> History','attendance-monitor':'<span>Attendance</span> Monitor',certificates:'<span>Certificate</span> Approvals','star-submissions':'<span>Star Performer</span> Submissions',feedback:'<span>Student</span> Feedback',promotions:'<span>Promotions</span>',leaderboard:'<span>Performance</span> Leaderboard'};
   document.getElementById('pageTitle').innerHTML=t[v]||v;
   if(v==='ecosystem') loadEcosystem();
   if(v==='insights') initInsights();
@@ -1853,6 +1956,7 @@ function showView(v){
   if(v==='attendance-monitor') loadAttendanceMonitor();
   if(v==='certificates') loadCertPending();
   if(v==='star-submissions') loadStarSubmissions();
+  if(v==='feedback') loadHRFeedback();
   if(v==='promotions') loadPromoCandidatesStudents();
   if(v==='leaderboard'){
     if(window.TenExtras){
