@@ -13,8 +13,8 @@
  *
  *   1. Write a temporary JSON file, e.g. /tmp/hr.json:
  *        {
- *          "jrhr@ten.com":       "TEN@JrHR2026",
- *          "hrdirector@ten.com": "TEN@HRDir2026"
+ *          "jrhr@ten.com":       "<the-password-for-this-account>",
+ *          "hrdirector@ten.com": "<the-password-for-this-account>"
  *        }
  *
  *   2. node scripts/generate-credentials-env.js --in /tmp/hr.json --var HR_CREDENTIALS
