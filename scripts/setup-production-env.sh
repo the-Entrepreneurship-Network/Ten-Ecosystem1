@@ -23,8 +23,31 @@
 
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
-ROOT="$(pwd)"
+# Find the application root — the directory holding server.js.
+#
+# This must not assume the script sits in scripts/. It is meant to be curl'd
+# straight onto a server during an outage, and `cd "$(dirname "$0")/.."` from a
+# copy dropped in the app root resolves one level too high, writing .env to the
+# parent directory where nothing reads it.
+find_app_root() {
+  local script_dir candidate
+  script_dir="$(cd "$(dirname "$0")" && pwd)"
+  for candidate in "$script_dir/.." "$script_dir" "$PWD"; do
+    if [ -f "$candidate/server.js" ] && [ -f "$candidate/package.json" ]; then
+      (cd "$candidate" && pwd)
+      return 0
+    fi
+  done
+  return 1
+}
+
+ROOT="$(find_app_root)" || {
+  printf '\033[31mERROR: could not find server.js.\033[0m\n' >&2
+  printf 'Run this from the application directory, e.g.\n' >&2
+  printf '  cd /home/ec2-user/ten-portal-production && bash %s\n' "$0" >&2
+  exit 1
+}
+cd "$ROOT"
 ENV_FILE="$ROOT/.env"
 CREDS_FILE="$ROOT/credentials-to-distribute.txt"
 

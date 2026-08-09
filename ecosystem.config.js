@@ -31,33 +31,37 @@ const base = {
   time: true
 };
 
+// PORT is deliberately NOT set here.
+//
+// It was, and it broke the site. PM2 puts anything in `env` into the process
+// environment before node starts, and dotenv never overrides a variable that is
+// already set — so a PORT here silently wins over the deployment's own .env.
+// Production had been listening on 5000 (nginx: proxy_pass 127.0.0.1:5000) and
+// a hardcoded 3000 moved it out from under nginx, which then had nothing to
+// proxy to. The app answered fine on 3000; the site was still down.
+//
+// Each deployment directory has its own .env, which is the right place for the
+// port: production sets PORT=5000, staging PORT=5001. server.js falls back to
+// 3000 only when neither is set.
+
 module.exports = {
   apps: [
     {
       ...base,
       name: "ten-portal-production",
-      env: {
-        NODE_ENV: "production",
-        PORT: 3000
-      }
+      env: { NODE_ENV: "production" }
     },
     {
       ...base,
       name: "ten-portal-staging",
-      env: {
-        NODE_ENV: "production",
-        PORT: 3001
-      }
+      env: { NODE_ENV: "production" }
     },
     {
       // Kept so an existing `pm2 restart ten-portal` on the server, or anything
       // else referring to the old name, does not break.
       ...base,
       name: "ten-portal",
-      env: {
-        NODE_ENV: "production",
-        PORT: 3000
-      }
+      env: { NODE_ENV: "production" }
     }
   ]
 };
