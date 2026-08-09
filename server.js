@@ -1328,9 +1328,14 @@ const HR_ROSTER = {
     "hrad@ten.com":       { name: "HR Associate Director",              email: "hrad@ten.com",       level: 5 },
     "jrdir@ten.com":      { name: "Jr HR Director",                     email: "jrdir@ten.com",      level: 6 },
     "hrdirector@ten.com": { name: "HR Director & HRBP",                 email: "hrdirector@ten.com", level: 7 },
-    "chro@ten.com":       { name: "Chief Human Resources Officer",      email: "chro@ten.com",       level: 8 },
-    "vp@ten.com":         { name: "Vice President",                     email: "vp@ten.com",         level: 9 }
+    "vp@ten.com":         { name: "Vice President",                     email: "vp@ten.com",         level: 8 }
 };
+// Eight levels, and level 8 is the Vice President. There is no ninth level and
+// no CHRO account: the portal's own level switcher, its hrLevelDetails map and
+// the position selector on the landing page all stop at 8, and the account list
+// runs jrhr → vp with nothing in between. A chro@ten.com entry at level 8 had
+// pushed vp to a level 9 that no part of the UI can select, so the highest HR
+// account could never match the privileges meant for the top of the hierarchy.
 
 const COORDINATOR_ROSTER = {
     "devops_aws_admin":      { domain: "DevOps with AWS" },

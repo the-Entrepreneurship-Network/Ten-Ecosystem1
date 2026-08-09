@@ -135,8 +135,7 @@ say
 # The rosters must match HR_ROSTER / COORDINATOR_ROSTER in server.js.
 HR_USERS=(
   "jrhr@ten.com" "srhr@ten.com" "jrmanager@ten.com" "srmanager@ten.com"
-  "hrad@ten.com" "jrdir@ten.com" "hrdirector@ten.com" "chro@ten.com"
-  "vp@ten.com"
+  "hrad@ten.com" "jrdir@ten.com" "hrdirector@ten.com" "vp@ten.com"
 )
 COORD_USERS=(
   "devops_aws_admin" "python_admin" "java_admin" "web_admin" "mern_admin"
