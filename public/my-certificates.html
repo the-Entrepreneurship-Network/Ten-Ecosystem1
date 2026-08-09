@@ -6,6 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>My Certificates — TEN Portal</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
+<script src="/session-guard.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <style>
@@ -201,9 +202,14 @@ const CERT_LABELS = {
 async function loadCerts() {
   if (!EMP_ID) { renderError('Please log in to view your certificates.'); return; }
   try {
-    const r = await fetch('/api/v2/certificates/my-certs', { headers: { 'x-employee-id': EMP_ID } });
+    // No x-employee-id: the server takes identity from the session and ignores
+    // that header, so sending it only implies a trust model that no longer
+    // exists. A 401 here is handled by session-guard.js, which redirects to the
+    // login page — so anything reaching the check below is a real failure, and
+    // the server's own message says more than "Could not load certificates."
+    const r = await fetch('/api/v2/certificates/my-certs', { credentials: 'same-origin' });
     const d = await r.json();
-    if (!d.success) { renderError('Could not load certificates.'); return; }
+    if (!d.success) { renderError(d.message || 'Could not load certificates.'); return; }
 
     certData = d;
     document.getElementById('completionValue').textContent = (d.expert?.completionPct || 0) + '%';
@@ -224,7 +230,14 @@ async function loadCerts() {
 }
 
 function renderError(msg) {
-  document.getElementById('certGrid').innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);">${msg}</div>`;
+  // textContent, not innerHTML: msg can now carry a server-supplied string, and
+  // interpolating that into markup would make any message an injection point.
+  const grid = document.getElementById('certGrid');
+  grid.innerHTML = '';
+  const box = document.createElement('div');
+  box.style.cssText = 'grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);';
+  box.textContent = msg;
+  grid.appendChild(box);
 }
 
 function renderCerts(d) {
