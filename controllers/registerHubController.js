@@ -43,16 +43,27 @@ const ROLE_CONFIG = [
       { name: 'university', type: 'text', label: 'University / College', placeholder: 'Your university', required: true },
       { name: 'degree', type: 'text', label: 'Degree', placeholder: 'e.g. B.Tech Computer Science', required: true },
       { name: 'graduationYear', type: 'number', label: 'Graduation Year', placeholder: 'e.g. 2026', required: true },
-      // Label is the field's NAME, not its formatting hint — it ends up in
-      // error messages, and "Skills (comma-separated) is required." is not a
-      // sentence anyone wants to read. The hint lives in the placeholder.
-      { name: 'skills', type: 'text', label: 'Skills', placeholder: 'e.g. HTML, CSS, React', required: true },
       // A résumé is uploaded, not typed, so the generic "Please enter your…"
       // sentence would point at the wrong control.
       { name: 'resume', type: 'text', label: 'Resume', placeholder: 'Link to your resume', required: true,
         requiredMessage: 'Please upload your resume as a PDF.' },
-      { name: 'linkedin', type: 'url', label: 'LinkedIn URL', placeholder: 'https://linkedin.com/in/...', required: true },
-      { name: 'portfolio', type: 'url', label: 'Portfolio URL', placeholder: 'https://...', required: true },
+
+      // Skills, LinkedIn and portfolio are OPTIONAL, deliberately.
+      //
+      // A first-year student with no portfolio and no LinkedIn profile is
+      // exactly who this internship exists to train — refusing their
+      // registration over three blank boxes turns away the applicants the
+      // programme is for. Everything that identifies a student or places them
+      // in a cohort (name, email, mobile, location, college, degree, graduation
+      // year, résumé, domain, tenure) stays required, because the portal cannot
+      // run without it.
+      //
+      // The `skills` label carries no "(comma-separated)" suffix: a label is the
+      // field's name, and it ends up in error messages. The hint belongs in the
+      // placeholder, where it is.
+      { name: 'skills', type: 'text', label: 'Skills', placeholder: 'e.g. HTML, CSS, React', required: false },
+      { name: 'linkedin', type: 'url', label: 'LinkedIn URL', placeholder: 'https://linkedin.com/in/...', required: false },
+      { name: 'portfolio', type: 'url', label: 'Portfolio URL', placeholder: 'https://...', required: false },
     ],
   },
   {
