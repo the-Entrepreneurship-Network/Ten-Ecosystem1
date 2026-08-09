@@ -261,18 +261,18 @@
             </div>
 
             <div>
-              <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Skills <span class="text-slate-500 text-[10px] lowercase font-normal">(comma-separated)</span> <span class="text-red-500">*</span></label>
-              <input type="text" id="stu_skills" name="skills" class="stu-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="React, Node.js, Express, MongoDB">
+              <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Skills <span class="text-slate-500 text-[10px] lowercase font-normal">(comma-separated, optional)</span></label>
+              <input type="text" id="stu_skills" name="skills" class="w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="React, Node.js, Express, MongoDB">
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Portfolio / Git Website <span class="text-red-500">*</span></label>
-                <input type="url" id="stu_portfolio" name="portfolio" class="stu-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="https://mygithub.io">
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Portfolio / Git Website <span class="text-slate-500 text-[10px] lowercase font-normal">(optional)</span></label>
+                <input type="url" id="stu_portfolio" name="portfolio" class="w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="https://mygithub.io">
               </div>
               <div>
-                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">LinkedIn Profile URL <span class="text-red-500">*</span></label>
-                <input type="url" id="stu_linkedin" name="linkedin" class="stu-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="https://linkedin.com/in/username">
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">LinkedIn Profile URL <span class="text-slate-500 text-[10px] lowercase font-normal">(optional)</span></label>
+                <input type="url" id="stu_linkedin" name="linkedin" class="w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="https://linkedin.com/in/username">
               </div>
             </div>
 
@@ -526,7 +526,7 @@
             </div>
 
             <div>
-              <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Core Dev / Operations Skills <span class="text-slate-500 text-[10px] lowercase font-normal">(comma-separated)</span> <span class="text-red-500">*</span></label>
+              <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Core Dev / Operations Skills <span class="text-slate-500 text-[10px] lowercase font-normal">(comma-separated, optional)</span></label>
               <input type="text" id="con_skills" name="skills" class="con-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="Flutter, Swift, Kotlin, Rust Programming">
             </div>
 
@@ -946,12 +946,31 @@
 
     // ── Inline field validation messages ─────────────────────────────────
     // Maps a server error key to the element the message should sit under.
+    // Server error key → the element the message belongs under.
+    //
+    // showFieldErrors falls back to `key` when there is no entry here, and the
+    // student inputs are all prefixed (`skills` → `stu_skills`), so every
+    // student-specific error missed its field, `firstEl` stayed null, and the
+    // page fell through to the summary popup. Inline messages had therefore
+    // never appeared for anything below the account section.
     const FIELD_TARGETS = {
-      fullName: 'reg_fullName',
-      email:    'reg_email',
-      password: 'reg_password',
-      domains:  'techDomainsSelector',
-      tenure:   'stu_tenure'
+      fullName:       'reg_fullName',
+      email:          'reg_email',
+      password:       'reg_password',
+      mobile:         'reg_mobile',
+      domains:        'techDomainsSelector',
+      tenure:         'stu_tenure',
+      country:        'stu_country',
+      city:           'stu_city',
+      university:     'stu_university',
+      degree:         'stu_degree',
+      graduationYear: 'stu_graduationYear',
+      skills:         'stu_skills',
+      linkedin:       'stu_linkedin',
+      portfolio:      'stu_portfolio',
+      // The résumé input is hidden, so a message beside it would be invisible.
+      // Point at the drop zone the student can actually see.
+      resume:         'resumeUploadContainer'
     };
 
     function clearFieldErrors() {
