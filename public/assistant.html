@@ -70,17 +70,24 @@
 
   .side h3{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);
            margin:16px 4px 8px;font-weight:600}
-  .side select{width:100%;background:var(--void);color:var(--text);border:1px solid rgba(212,175,55,.2);
-               border-radius:var(--r-sm);padding:9px 10px;font-size:13px;outline:none;margin-bottom:8px}
-  .side select:focus{border-color:rgba(212,175,55,.5)}
-  .side .go{width:100%;background:linear-gradient(145deg,var(--gold-lift),var(--gold-dim));color:#05070E;
-            border:0;border-radius:var(--r-sm);padding:10px;font-weight:700;font-size:13px;cursor:pointer}
-
-  .quick{display:flex;flex-direction:column;gap:6px}
-  .quick button{text-align:left;background:transparent;border:1px solid transparent;color:var(--sub);
-                border-radius:var(--r-sm);padding:8px 10px;font-size:12.5px;cursor:pointer}
-  .quick button:hover{background:rgba(212,175,55,.07);border-color:var(--line);color:var(--text)}
-
+  .newchat{display:flex;align-items:center;gap:8px;width:100%;background:transparent;
+           border:1px solid rgba(212,175,55,.28);color:var(--text);border-radius:var(--r-sm);
+           padding:10px 12px;font-size:13px;font-weight:600;cursor:pointer;text-align:left}
+  .newchat:hover{background:rgba(212,175,55,.09);border-color:rgba(212,175,55,.5)}
+  .newchat span{color:var(--gold);font-size:15px;line-height:1}
+  .sessions{display:flex;flex-direction:column;gap:2px;overflow-y:auto;flex:1;min-height:0}
+  .nochats{color:var(--faint);font-size:12px;padding:6px 10px;margin:0}
+  .sess{display:flex;align-items:center;border-radius:var(--r-sm)}
+  .sess:hover{background:rgba(212,175,55,.07)}
+  .sess.on{background:rgba(212,175,55,.12)}
+  .sess-open{flex:1;min-width:0;background:none;border:0;color:var(--sub);text-align:left;
+             padding:8px 4px 8px 10px;font-size:12.5px;cursor:pointer;
+             white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sess.on .sess-open,.sess:hover .sess-open{color:var(--text)}
+  .sess-del{background:none;border:0;color:transparent;font-size:16px;line-height:1;
+            padding:6px 9px;cursor:pointer}
+  .sess:hover .sess-del{color:var(--faint)}
+  .sess-del:hover{color:#EF4444}
   .side .foot{margin-top:auto;padding-top:14px;border-top:1px solid var(--line)}
   .plan-chip{display:flex;align-items:center;justify-content:space-between;gap:8px;
              background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);padding:10px 12px}
@@ -244,13 +251,12 @@
       <span><b>TEN Assistant</b><small>The Entrepreneurship Network</small></span>
     </div>
 
-    <h3>Your track</h3>
-    <select id="domain" aria-label="Domain"><option value="">Loading…</option></select>
-    <select id="duration" aria-label="Duration"><option value="">Loading…</option></select>
-    <button class="go" type="button" id="showPlan">Show my full plan</button>
+    <button class="newchat" type="button" id="newChat">
+      <span aria-hidden="true">&#43;</span> New chat
+    </button>
 
-    <h3>Ask about</h3>
-    <div class="quick" id="quick"></div>
+    <h3>Chats</h3>
+    <div class="sessions" id="sessions"></div>
 
     <div class="foot">
       <div class="plan-chip">
@@ -430,6 +436,7 @@
     $('send').disabled = true;
     clearEmpty();
     bubble('me', q);
+    remember('me', q);
     var pending = thinking();
     var who = me();
 
@@ -448,6 +455,7 @@
           return;
         }
         pending.textContent = d.answer || d.error || 'No answer available.';
+        remember('ai', pending.textContent);
         if (typeof d.remaining === 'number') {
           $('meter').textContent = d.remaining + ' of ' + d.limit + ' messages left this month';
         } else if (d.limit === null) {
@@ -492,85 +500,6 @@
   }
   $('burger').addEventListener('click', toggleSide);
   $('scrim').addEventListener('click', function () { $('app').classList.remove('mobile-open'); });
-
-  /* ── track picker ────────────────────────────────────────────────────── */
-  fetch('/api/v2/assistant/domains')
-    .then(function (r) { return r.json(); })
-    .then(function (d) {
-      var ds = $('domain');
-      ds.innerHTML = '<option value="">Select domain…</option>';
-      (d.domains || []).forEach(function (n) {
-        var o = document.createElement('option'); o.value = n; o.textContent = n; ds.appendChild(o);
-      });
-      var du = $('duration'); du.innerHTML = '';
-      (d.durations || []).forEach(function (x) {
-        var o = document.createElement('option');
-        o.value = x.key;
-        o.textContent = x.label + (x.derived ? ' (no tasks)' : '');
-        du.appendChild(o);
-      });
-      du.value = '3months';
-      var mine = me().domain;
-      if (mine) { ds.value = mine; }
-    })
-    .catch(function () { $('domain').innerHTML = '<option>Could not load</option>'; });
-
-  $('showPlan').addEventListener('click', function () {
-    var domain = $('domain').value, duration = $('duration').value;
-    if (!domain) { send('What are all the domains available?'); return; }
-    var body = $('planBody');
-    body.textContent = 'Loading…';
-    $('planTitle').textContent = domain;
-    openPanel('planPanel');
-
-    fetch('/api/v2/assistant/plan?domain=' + encodeURIComponent(domain) + '&duration=' + encodeURIComponent(duration))
-      .then(function (r) { return r.json(); })
-      .then(function (d) {
-        body.innerHTML = '';
-        if (d.error || !d.weeks || !d.weeks.length) {
-          body.textContent = 'No seeded tasks for this combination. Ask your coordinator which track you are on.';
-          return;
-        }
-        [d.duration, d.weeks.length + ' weeks', d.totalCoins + ' coins', '≈ ₹' + Math.round(d.totalCoins * 0.5)]
-          .forEach(function (t) {
-            var s = document.createElement('span'); s.className = 'pill'; s.textContent = t; body.appendChild(s);
-          });
-        if (d.derived) {
-          var n = document.createElement('div'); n.className = 'warn';
-          n.style.cssText = 'background:rgba(245,158,11,.09);border:1px solid rgba(245,158,11,.28);color:#F5C87A;border-radius:10px;padding:10px;font-size:12.5px;margin:6px 0 14px';
-          n.textContent = d.duration + ' has no task library of its own. This is the front of the 1 Month track — confirm with your coordinator.';
-          body.appendChild(n);
-        }
-        var ol = document.createElement('ul'); ol.className = 'weeks';
-        d.weeks.forEach(function (w) {
-          var li = document.createElement('li');
-          var hd = document.createElement('div'); hd.className = 'hd';
-          var b = document.createElement('b'); b.textContent = 'Week ' + w.week + ' — ' + w.title;
-          var mt = document.createElement('span'); mt.className = 'mt';
-          mt.textContent = w.coins + ' coins · ' + w.difficulty;
-          hd.appendChild(b); hd.appendChild(mt);
-          var p = document.createElement('p'); p.textContent = w.task;
-          li.appendChild(hd); li.appendChild(p);
-          ol.appendChild(li);
-        });
-        body.appendChild(ol);
-      })
-      .catch(function () { body.textContent = 'Could not load the plan.'; });
-  });
-
-  /* ── quick prompts ───────────────────────────────────────────────────── */
-  [['Coins & rewards', 'How do coins work and how do I earn the most?'],
-   ['Certificates', 'What certificates does TEN issue and how do I qualify?'],
-   ['Daily posting task', 'What is the daily job posting task worth?'],
-   ['Attendance', 'How does attendance work?'],
-   ['Documents & offer letter', 'What documents do I need to upload?'],
-   ['All domains', 'What are all the domains available?']]
-    .forEach(function (pair) {
-      var b = document.createElement('button');
-      b.type = 'button'; b.textContent = pair[0];
-      b.addEventListener('click', function () { $('app').classList.remove('mobile-open'); send(pair[1]); });
-      $('quick').appendChild(b);
-    });
 
   /* ── plans + payment ─────────────────────────────────────────────────── */
   var CURRENT = 'starter';
@@ -686,6 +615,117 @@
       })
       .catch(function () {});
   })();
+
+  /* ── sessions ────────────────────────────────────────────────────────
+     Conversations live in this browser, keyed per student so two people on a
+     shared machine never see each other's chats.
+
+     Local, not server-side, on purpose: the sidebar has to be useful on the
+     free tier, and server-side history is what the paid tiers actually buy -
+     it survives a different browser, a cleared cache and a new device. This
+     list does not. */
+  var SKEY = 'ten.assistant.sessions.' + (me().userId || 'guest');
+  var sessions = [];
+  var currentId = null;
+
+  function loadSessions() {
+    try { sessions = JSON.parse(localStorage.getItem(SKEY) || '[]'); }
+    catch (e) { sessions = []; }
+    if (!Array.isArray(sessions)) { sessions = []; }
+  }
+  function saveSessions() {
+    try { localStorage.setItem(SKEY, JSON.stringify(sessions.slice(0, 50))); }
+    catch (e) { /* storage full or blocked; the chat still works */ }
+  }
+  function current() {
+    return sessions.filter(function (s) { return s.id === currentId; })[0] || null;
+  }
+
+  /* A title from the first thing they said, because "Chat 3" tells nobody
+     which conversation was which. */
+  function titleFrom(text) {
+    var t = String(text).replace(/\s+/g, ' ').trim();
+    return t.length > 38 ? t.slice(0, 38) + '…' : t;
+  }
+
+  function renderSessions() {
+    var box = $('sessions');
+    box.innerHTML = '';
+    if (!sessions.length) {
+      var none = document.createElement('p');
+      none.className = 'nochats';
+      none.textContent = 'Your chats will appear here.';
+      box.appendChild(none);
+      return;
+    }
+    sessions.forEach(function (s) {
+      var row = document.createElement('div');
+      row.className = 'sess' + (s.id === currentId ? ' on' : '');
+
+      var open = document.createElement('button');
+      open.type = 'button';
+      open.className = 'sess-open';
+      open.textContent = s.title;
+      open.title = s.title;
+      open.addEventListener('click', function () { openSession(s.id); });
+
+      var del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'sess-del';
+      del.setAttribute('aria-label', 'Delete chat: ' + s.title);
+      del.innerHTML = '&times;';
+      del.addEventListener('click', function (e) {
+        e.stopPropagation();
+        sessions = sessions.filter(function (x) { return x.id !== s.id; });
+        saveSessions();
+        if (s.id === currentId) { newChat(); } else { renderSessions(); }
+      });
+
+      row.appendChild(open);
+      row.appendChild(del);
+      box.appendChild(row);
+    });
+  }
+
+  function newChat() {
+    currentId = null;
+    log.innerHTML = '';
+    showEmpty();
+    renderSessions();
+    $('app').classList.remove('mobile-open');
+    box.focus();
+  }
+
+  function openSession(id) {
+    var s = sessions.filter(function (x) { return x.id === id; })[0];
+    if (!s) { return; }
+    currentId = id;
+    log.innerHTML = '';
+    s.messages.forEach(function (m) { bubble(m.role === 'me' ? 'me' : 'ai', m.text); });
+    renderSessions();
+    follow(true);
+    $('app').classList.remove('mobile-open');
+  }
+
+  function remember(role, text) {
+    var s = current();
+    if (!s) {
+      s = { id: String(Date.now()), title: titleFrom(text), messages: [], updatedAt: Date.now() };
+      currentId = s.id;
+      sessions.unshift(s);
+    }
+    s.messages.push({ role: role, text: text });
+    s.updatedAt = Date.now();
+    // Most recent first, the order people actually look for.
+    sessions.sort(function (a, b) { return b.updatedAt - a.updatedAt; });
+    saveSessions();
+    renderSessions();
+  }
+
+  $('newChat').addEventListener('click', newChat);
+  loadSessions();
+  renderSessions();
+
 
   showEmpty();
   setTimeout(function () { box.focus(); }, 3000);
