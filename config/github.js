@@ -12,7 +12,7 @@
  * Override with GITHUB_OFFICIAL_REPO ("owner/name") if the repo is ever moved.
  */
 
-const DEFAULT_REPO = 'growth-eng/Ten-Ecosystem1';
+const DEFAULT_REPO = 'the-Entrepreneurship-Network/Ten-Ecosystem1';
 
 const configured = String(process.env.GITHUB_OFFICIAL_REPO || DEFAULT_REPO).trim();
 const [OFFICIAL_REPO_OWNER, OFFICIAL_REPO_NAME] = configured.split('/');
