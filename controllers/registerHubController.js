@@ -35,15 +35,18 @@ const ROLE_CONFIG = [
     fields: [
       { name: 'mobile', type: 'text', label: 'Mobile', placeholder: 'Your mobile number', required: true },
       { name: 'country', type: 'text', label: 'Country', placeholder: 'Your country', required: true },
-      { name: 'state', type: 'text', label: 'State', placeholder: 'Your state', required: true },
+      // NOT required: public/register.html has no State input at all, so this
+      // value is never sent. Enforcing it would reject every single student
+      // registration. Add the field to the form first if it is wanted.
+      { name: 'state', type: 'text', label: 'State', placeholder: 'Your state', required: false },
       { name: 'city', type: 'text', label: 'City', placeholder: 'Your city', required: true },
       { name: 'university', type: 'text', label: 'University / College', placeholder: 'Your university', required: true },
       { name: 'degree', type: 'text', label: 'Degree', placeholder: 'e.g. B.Tech Computer Science', required: true },
       { name: 'graduationYear', type: 'number', label: 'Graduation Year', placeholder: 'e.g. 2026', required: true },
       { name: 'skills', type: 'text', label: 'Skills (comma-separated)', placeholder: 'e.g. HTML, CSS, React', required: true },
-      { name: 'resume', type: 'text', label: 'Resume Link', placeholder: 'Link to your resume', required: false },
-      { name: 'linkedin', type: 'url', label: 'LinkedIn URL', placeholder: 'https://linkedin.com/in/...', required: false },
-      { name: 'portfolio', type: 'url', label: 'Portfolio URL', placeholder: 'https://...', required: false },
+      { name: 'resume', type: 'text', label: 'Resume', placeholder: 'Link to your resume', required: true },
+      { name: 'linkedin', type: 'url', label: 'LinkedIn URL', placeholder: 'https://linkedin.com/in/...', required: true },
+      { name: 'portfolio', type: 'url', label: 'Portfolio URL', placeholder: 'https://...', required: true },
     ],
   },
   {
@@ -202,6 +205,37 @@ async function registerUser(req, res) {
         errors.tenure = 'Please select your internship tenure.';
       } else if (!isValidTenure(roleSpecificData.tenure)) {
         errors.tenure = 'Please select a valid internship tenure.';
+      }
+
+      // Every field the student form marks with an asterisk, enforced here too.
+      //
+      // The browser's `required` attribute is a convenience, not a control:
+      // this endpoint takes JSON, so a request built by hand — or by a script —
+      // never sees the form at all. Only country, city, university, degree,
+      // graduation year and skills carried `required`; résumé, LinkedIn and
+      // portfolio were optional on both sides, and the hidden résumé input
+      // could not carry `required` even in the browser, so its asterisk
+      // enforced nothing anywhere.
+      //
+      // Driven from the field spec above so the two cannot drift apart. Scoped
+      // to students on purpose: the founder, mentor, investor and contractor
+      // forms have not been checked field-by-field against their specs, and
+      // enforcing an unsent field would lock those roles out of registering —
+      // which is exactly what `state` would have done here.
+      const studentFields = (ROLE_CONFIG.find((r) => r.id === ROLES.STUDENT) || {}).fields || [];
+      for (const field of studentFields) {
+        if (!field.required || errors[field.name]) continue;
+
+        const value = roleSpecificData[field.name];
+        const missing =
+          value === undefined ||
+          value === null ||
+          (typeof value === 'string' && value.trim() === '') ||
+          // Number('') is 0 and Number.isFinite(0) is true, so an empty
+          // graduation year would otherwise pass as a valid number.
+          (field.type === 'number' && !(Number(value) > 0));
+
+        if (missing) errors[field.name] = `${field.label} is required.`;
       }
     }
 
