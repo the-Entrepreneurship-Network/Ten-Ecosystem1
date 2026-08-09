@@ -1709,10 +1709,36 @@ app.get(/.*ten-logo\.png$/, (req, res) => {
     res.sendFile(path.join(__dirname, "public", "ten-logo.png"));
 });
 
+// maxAge: '7d' was applied to EVERY file in public/, including the HTML.
+//
+// That sends `Cache-Control: public, max-age=604800` on a page, so a browser
+// that once loaded v2-tasks.html keeps using its copy for a week without ever
+// asking the server whether it changed. Deploying a fix did nothing visible:
+// the server ran the new code while students kept running last week's page.
+// It is why several fixes this week were reported as "still broken" while the
+// server-side half of the same fix was demonstrably live — the new API replies
+// were arriving at old markup.
+//
+// HTML is the entry point to everything else; it names the CSS and JS to load,
+// so one stale page pins the whole view. It now revalidates on every request.
+// `no-cache` does not mean "do not store" — the browser keeps the file and
+// checks its ETag, so an unchanged page still returns 304 with no body. The
+// cost is one conditional request per page load.
+//
+// JavaScript revalidates for the same reason: it carries behaviour, so a stale
+// chat-widget.js or session-guard.js reproduces exactly this class of bug. A
+// stylesheet or an image going a week out of date is cosmetic, so those keep
+// the long max-age. None of these filenames are content-hashed, which is what
+// would otherwise let them be cached indefinitely and safely.
 app.use(express.static("public", {
     maxAge: '7d',
     etag: true,
-    lastModified: true
+    lastModified: true,
+    setHeaders(res, filePath) {
+        if (/\.(html?|js)$/i.test(filePath)) {
+            res.setHeader('Cache-Control', 'no-cache');
+        }
+    }
 }));
 // Defence in depth: the fallback database no longer lives under uploads/, but
 // refuse to serve anything that looks like it regardless, so a stray copy left
