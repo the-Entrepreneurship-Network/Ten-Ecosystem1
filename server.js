@@ -1281,6 +1281,7 @@ const bcrypt = require("bcryptjs");
 const { requireAdminAPI } = require("./middleware/adminAuth");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
+const { ipKeyGenerator } = require("express-rate-limit");
 const QRCode = require("qrcode");
 const cron = require("node-cron");
 const http = require("http");
@@ -1814,8 +1815,12 @@ function loginRateLimitAccount(req) {
     return parts.join("|");
 }
 
+// req.ip alone is the wrong key for IPv6. A single household is routinely
+// handed a /64, so keying on the full /128 address lets one attacker rotate
+// through billions of distinct keys and never hit the limit. ipKeyGenerator
+// collapses an address to its subnet; IPv4 passes through unchanged.
 function loginRateLimitKey(req) {
-    return req.ip + ":" + loginRateLimitAccount(req);
+    return ipKeyGenerator(req.ip) + ":" + loginRateLimitAccount(req);
 }
 
 // Login rate limit, keyed per IP *and* per account identifier. Keying on the
@@ -8194,7 +8199,10 @@ const codeRunLimiter = rateLimit({
     max: 20,
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: (req) => sessionEmployeeId(req) || req.ip,
+    // Same IPv6 caveat as loginRateLimitKey. express-rate-limit raises
+    // ERR_ERL_KEY_GEN_IPV6 at startup for a raw req.ip, which is how this was
+    // spotted in the production logs.
+    keyGenerator: (req) => sessionEmployeeId(req) || ipKeyGenerator(req.ip),
     message: { success: false, output: "", error: "Too many runs. Wait a minute and try again.", executionTime: 0 }
 });
 
