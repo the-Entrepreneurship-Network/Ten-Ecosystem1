@@ -90,6 +90,7 @@ npm test
 
 | Script | Purpose |
 |---|---|
+| `scripts/setup-production-env.sh` | Build a complete production `.env` on the server — generates every secret locally, so none of them ever leaves the machine |
 | `scripts/generate-credentials-env.js` | Turn cleartext passwords into the bcrypt-hashed `HR_CREDENTIALS` / `COORDINATOR_CREDENTIALS` value |
 | `scripts/audit-domain-tenure.js` | Find (and optionally fix) students whose domain / tenure / offer letter disagree. Dry run by default |
 | `scripts/seed-dev-student.js` | Seed a local test student (development only) |
