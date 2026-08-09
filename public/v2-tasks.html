@@ -616,11 +616,31 @@ function authHeaders(extra = {}) {
   };
 }
 
+// A signed-out visit used to render the whole page from localStorage and then
+// pop "Error — Please sign in to continue" on the first API call, because the
+// cached studentData outlives the session cookie (rotating SESSION_SECRET, a
+// timeout, or signing out in another tab all end the session while
+// localStorage stays put). Treat 401 as what it is: send them to the login
+// page and clear the stale copy so the next visit starts clean.
 async function apiFetch(path, opts = {}) {
   const res = await fetch(API + path, {
     headers: authHeaders(),
+    credentials: 'same-origin',
     ...opts
   });
+
+  if (res.status === 401) {
+    try {
+      localStorage.removeItem('studentData');
+      localStorage.removeItem('v2StudentData');
+    } catch (_) { /* private mode — nothing to clear */ }
+    const back = encodeURIComponent(location.pathname + location.search);
+    location.replace('/student-login.html?next=' + back);
+    // Never resolves: the navigation is already underway, and resolving would
+    // let the caller render an error dialog over a page that is going away.
+    return new Promise(() => {});
+  }
+
   return res.json();
 }
 

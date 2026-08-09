@@ -1586,11 +1586,17 @@ const sessionOptions = {
     secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
+    // Refresh the cookie's expiry on every request. Without this, maxAge counts
+    // from LOGIN, not from last activity, so a student working through a task
+    // journey was signed out 30 minutes in — mid-video, mid-submission — and
+    // got "Please sign in to continue" with no warning. Now the 30 minutes is
+    // 30 minutes of inactivity, which is what it was always meant to be.
+    rolling: true,
     cookie: {
         secure: IS_PRODUCTION,
         sameSite: IS_PRODUCTION ? 'none' : 'lax',
         httpOnly: true,
-        maxAge: 30 * 60 * 1000 // 30 minutes
+        maxAge: 30 * 60 * 1000 // 30 minutes of inactivity
     }
 };
 
