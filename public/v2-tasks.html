@@ -381,7 +381,8 @@ body::after {
     <div class="onboard-header">
       <div class="icon">🚀</div>
       <h2>Set Up Your Task Journey</h2>
-      <p>Choose your internship duration to unlock your personalised task plan.<br>Your domain is already set to:</p>
+      <p id="onboard-subtitle">Choose your internship duration to unlock your personalised task plan.</p>
+      <p>Your domain is already set to:</p>
       <div class="onboard-domain-badge">🎯 <span id="onboard-domain">—</span></div>
     </div>
     <div class="duration-grid" id="durationGrid">
@@ -715,34 +716,42 @@ async function init() {
       document.getElementById('onboard-domain').textContent = studentData.domain || 'Unknown';
       document.getElementById('onboard-overlay').style.display = 'flex';
 
-      // The server tells us which tenure the student is registered on — this
-      // page used to hand-roll a seventh copy of the tenure parser, and its
-      // answer could disagree with the server's.
-      const registered = status.durationType || '1month';
+      // Show ONE option: the tenure this student registered on.
+      //
+      // The other five were displayed and dimmed, which invited a click that
+      // could only ever fail — POST /student/onboard rejects any tenure but the
+      // registered one with a 409, so a student who clicked "1 Month" while
+      // registered on 3 Months got a red Error box telling them off for using
+      // the interface as presented. Showing a choice the server will refuse is
+      // not a safeguard, it is a trap.
+      //
+      // registeredTenure comes from Student.tenure. durationType is the
+      // resolved value used to assign tasks, and is the fallback so a record
+      // with no tenure still shows the track it is actually being taught on.
+      const registered = status.registeredTenure || status.durationType || '1month';
 
-      const el = document.querySelector(`.duration-option[data-duration="${registered}"]`);
-      if (el) selectDuration(el);
-
-      // The tenure is set at registration and cannot be changed here — a
-      // student on the paid 1-Month track could otherwise pick 6 Months and be
-      // assigned the full six-month task set. Other options are shown but
-      // disabled, so the student can see what they are on and why.
+      let shown = 0;
       document.querySelectorAll('.duration-option').forEach(function (opt) {
-        if (opt.dataset.duration === registered) return;
-        opt.style.opacity = '0.35';
-        opt.style.cursor = 'not-allowed';
-        opt.setAttribute('aria-disabled', 'true');
-        opt.onclick = function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          Swal.fire({
-            icon: 'info',
-            title: 'Set at registration',
-            text: 'Your internship length was set when you registered. Ask your coordinator if it needs to change.',
-            background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#D4AF37'
-          });
-        };
+        if (opt.dataset.duration === registered) {
+          opt.style.display = '';
+          selectDuration(opt);
+          shown++;
+        } else {
+          opt.style.display = 'none';
+        }
       });
+
+      // Never leave the student with nothing to press. If the registered value
+      // matches no card — an unexpected tenure string — put them all back
+      // rather than showing an empty dialog with a dead button.
+      if (shown === 0) {
+        document.querySelectorAll('.duration-option').forEach(function (opt) {
+          opt.style.display = '';
+        });
+      }
+
+      var sub = document.getElementById('onboard-subtitle');
+      if (sub) sub.textContent = 'This is the internship length you registered for.';
       return;
     }
 
