@@ -486,7 +486,10 @@ const TOPIC_RULES = [
 
 /** Greetings, thanks, acknowledgements. Anchored to the whole message, so "hi"
  *  matches but "which track is this" does not. */
-const SMALL_TALK = /^[\s!.?,]*(hi+|hey+|hello+|yo|hola|namaste|greetings|good\s*(morning|afternoon|evening|day|night)|thank(s| you)?|thx|ty|ok(ay)?|k|cool|nice|great|awesome|got it|sure|yep|yes|no|bye|see ya)[\s!.?,]*$/i;
+/* Trailing words like "bro", "sir" or "a lot" are still small talk. Ending a
+   conversation with "thanks bro" and being told the assistant could not tell
+   what you needed is a bad last impression for no reason. */
+const SMALL_TALK = /^[\s!.?,]*(hi+|hey+|hello+|yo|hola|namaste|greetings|good\s*(morning|afternoon|evening|day|night)|thank(s| you)?|thx|ty|ok(ay)?|k|cool|nice|great|awesome|got it|sure|yep|yes|no|bye|see ya)(\s+(you|u|so much|a lot|bro|bhai|sir|ma'?am|mate|man|dude|buddy|ji))*[\s!.?,]*$/i;
 
 /** "who are you", "what can you do", "help". */
 const CAPABILITY = /\b(who are you|what (can|do) you do|what are you|how (do|can) i use|help me|what is this)\b|^\s*help\s*$/i;
@@ -498,7 +501,7 @@ const CAPABILITY = /\b(who are you|what (can|do) you do|what are you|how (do|can
  * this gate the fallback fires on anything unrecognised, which is precisely
  * how "hi" became a Java Development answer.
  */
-const ABOUT_WORK = /\b(plan|track|week|task|schedule|deadline|roadmap|syllabus|curriculum|project|assignment|build|submit|due|domain|internship|course|module|learn|start|next|do)\b/i;
+const ABOUT_WORK = /\b(plan|track|week|task|schedule|deadline|roadmap|syllabus|curriculum|project|assignment|build|submit|due|domain|internship|course|module|learn|start|next|do|earn|money|coin|make|pay|paid)\b/i;
 
 function greeting(ctx) {
   const name = (ctx && ctx.userName) ? String(ctx.userName).trim().split(/\s+/)[0] : '';
@@ -590,6 +593,152 @@ function noteUnanswered(question, ctx) {
   }).catch(function () {});
 }
 
+/*
+ * What counts as "about TEN".
+ *
+ * Two things hang off this. Off-topic questions get an honest out-of-scope
+ * reply instead of the menu, and they are never queued for a coordinator to
+ * answer. Without that gate the learning queue fills with weather and cricket
+ * and buries the one useful question a student actually asked.
+ *
+ * Stems carry \w* rather than a closing \b: "certificat\b" does not match
+ * "certificate", which silently put half the real questions out of scope.
+ */
+const PORTAL_TERMS = new RegExp(
+  '\\b(?:' + [
+    'ten', 'portal', 'intern\\w*', 'task\\w*', 'week\\w*', 'coin\\w*',
+    'certificat\\w*', 'attendance', 'document\\w*', 'offer\\s*letter',
+    'domain\\w*', 'track\\w*', 'duration\\w*', 'coordinator\\w*', 'mentor\\w*',
+    'submit\\w*', 'submission\\w*', 'approv\\w*', 'quiz\\w*', 'mcq',
+    'leaderboard', 'badge\\w*', 'project\\w*', 'deadline\\w*', 'stipend',
+    'payment\\w*', 'pay\\w*', 'fee\\w*', 'login', 'log\\s*in', 'employee',
+    'discord', 'streak\\w*', 'dashboard', 'course\\w*', 'module\\w*',
+    'marksheet', 'lor', 'loc', 'star\\s*performer', 'deploy\\w*',
+    'assignment\\w*', 'finish\\w*', 'complet\\w*', 'money', 'earn\\w*',
+    'rupee\\w*', 'salary', 'programme', 'program', 'mern', 'python', 'java',
+    'flutter', 'devops', 'cyber', 'data\\s*science',
+  ].join('|') + ')',
+  'i'
+);
+
+/** Asking the assistant to do the work rather than help with it. */
+const DO_IT_FOR_ME = /\b(write|do|make|build|complete|finish|give me)\b.{0,24}\b(my|the)\b.{0,24}\b(code|project|assignment|task|homework|report)\b|\bdo it for me\b/i;
+
+/** "can I change/switch my domain|track|duration" - an account action. */
+const ACCOUNT_ACTION = /\b(change|switch|move|swap|cancel|quit|leave|extend|reset|update)\b.{0,20}\b(domain|track|duration|plan|tenure|internship|account|password|email)\b/i;
+
+/** "what if I don't finish", "what happens if I drop out". */
+const NOT_FINISHING = /\b(not|don'?t|dont|cannot|can'?t|fail|drop|quit|leave|incomplete|unable)\b.{0,24}\b(finish|complete|submit|do it|continue)\b|\bwhat happens if\b/i;
+
+/** "what is my week 5 task", "week 7", "3rd week". */
+const WEEK_NUMBER = /\bweek\s*(\d{1,2})\b|\b(\d{1,2})(st|nd|rd|th)\s*week\b/i;
+
+/** "how much can I earn", "how much money". */
+const HOW_MUCH = /\bhow much\b.{0,24}\b(earn|make|money|paid|get|rupee|rs|income)\b|\bhow much (money|can i)\b/i;
+
+/* ─────────────────────── extra answers ──────────────────────────── */
+
+/*
+ * One message for both "I did not understand that" and "that is not about
+ * TEN". Telling them apart reliably is not possible here, and guessing wrong
+ * is worse than saying both: answering gibberish with "I only cover TEN" reads
+ * as a brush-off, and answering an off-topic question with "I could not tell"
+ * implies it would have helped if only it had parsed.
+ */
+function outOfScope() {
+  return [
+    'I could not tell what you need from that.',
+    '',
+    'I only cover TEN: your weekly tasks, tracks, coins, attendance, documents and certificates. Ask me about your internship and I will give you a straight answer.',
+    '',
+    'Try "MERN 3 months", "how do coins work", or "what should I do first".',
+  ].join('\n');
+}
+
+function doItForMe(domain) {
+  return [
+    'I will not write your submission for you. Your coordinator reviews the work and asks about it, and the point of the task is that you can build it.',
+    '',
+    'What I can do:',
+    '• Break the task into steps and tell you what "done" looks like',
+    '• Explain the concept or the error you are stuck on',
+    '• Review your approach before you commit to it',
+    '',
+    domain ? 'Tell me which week of ' + domain + ' you are on and where you are stuck.'
+           : 'Tell me your track and which week you are stuck on.',
+  ].join('\n');
+}
+
+function accountAction() {
+  return [
+    'That is a change to your record, so it goes through your coordinator rather than me. Reach them through Domain Chat in the portal.',
+    '',
+    'I can see how the programme works, not your account, so anything that changes what is on file for you needs a human.',
+  ].join('\n');
+}
+
+function notFinishing() {
+  return [
+    'Finishing matters more than finishing fast.',
+    '',
+    '• The Certificate of Completion (LOC) needs 100% completion.',
+    '• A recommendation (LOR) needs 50% or more, so partial work is not wasted.',
+    '• The final task alone is worth several normal weeks, so stopping near the end costs far more than the weeks it saves.',
+    '',
+    'If you are behind, tell your coordinator now rather than at the end. Durations are flexible; silence is what causes problems.',
+  ].join('\n');
+}
+
+async function weekAnswer(domain, duration, n, depth) {
+  const rows = await tasksFor(domain, duration);
+  if (!rows.length) {
+    return 'I could not read the task list for ' + domain + ' on that track. Ask your coordinator which track you are on.';
+  }
+  const row = rows.filter(function (r) { return r.weekNumber === n; })[0];
+  if (!row) {
+    return domain + ' on the ' + duration.label + ' track has ' + rows.length +
+      ' weeks, so there is no week ' + n + '. Ask me for any week from 1 to ' + rows.length + '.';
+  }
+  return [
+    domain + ' — week ' + row.weekNumber + ' of ' + rows.length + ' (' + duration.label + ')',
+    '',
+    row.taskTitle + ' — ' + row.coinReward + ' coins, ' + row.difficultyLevel,
+    row.taskDescription,
+    '',
+    'Submit by day 5. Tasks go Available → Submitted → Approved and approval is not instant.',
+  ].join('\n');
+}
+
+async function earnings(domain, duration) {
+  // Without a domain there is no task list to price, and printing the
+  // variable anyway produced "the honest arithmetic for null".
+  const rows = (domain && duration) ? await tasksFor(domain, duration) : [];
+  const weeks = rows.length || 12;
+  const taskCoins = rows.reduce(function (n, r) { return n + (r.coinReward || 0); }, 0);
+  const days = weeks * 7;
+  const attendance = days * 5;
+  const streaks = Math.floor(days / 7) * 50;
+  const weekly = weeks * 30;
+  const posting = days * 30;
+  const course = 500;
+  const total = taskCoins + attendance + streaks + weekly + posting + course;
+
+  return [
+    'Here is the honest arithmetic' + (rows.length && domain ? ' for ' + domain + ' on the ' + duration.label + ' track' : '') + '.',
+    '',
+    (rows.length ? '• Tasks: ' + taskCoins + ' coins\n' : '') +
+    '• Attendance, ' + days + ' days at 5: ' + attendance + '\n' +
+    '• Weekly streaks: ' + streaks + '\n' +
+    '• Finishing each week, ' + weeks + ' at 30: ' + weekly + '\n' +
+    '• Daily posting at ten platforms: ' + posting + '\n' +
+    '• Finishing the course: ' + course,
+    '',
+    'That is roughly ' + total + ' coins, about Rs ' + Math.round(total * 0.5) + ', if you do everything every day.',
+    '',
+    'Two honest caveats. The posting task is the largest single line and it only pays if you actually post to ten platforms daily. And I can tell you the published rates, not how or when your account is settled: ask your coordinator about payout.',
+  ].join('\n');
+}
+
 async function answerFor(question, ctx) {
   const q     = String(question || '').trim();
   const depth = (ctx && ctx.depth) || 'brief';
@@ -599,8 +748,29 @@ async function answerFor(question, ctx) {
   if (CAPABILITY.test(q)) { return capabilities(ctx); }
 
   const mayUseRegistered = ABOUT_WORK.test(q);
-  const domain   = await matchDomain(q, mayUseRegistered ? (ctx && ctx.domain) : null);
+
+  // Two different things: a domain the student named, and the one on their
+  // account. The second is fine for "what is my week 5 task", but it must not
+  // turn every unrecognised sentence into a summary of their track - which is
+  // how "when is the TEN hackathon" became a list of Java durations.
+  const namedDomain = await matchDomain(q, null);
+  const domain = namedDomain ||
+    (mayUseRegistered ? await matchDomain('', ctx && ctx.domain) : null);
   const duration = matchDuration(q);
+
+  // Specific intents outrank the generic plan lookup, because each of these
+  // otherwise falls through to a domain dump that answers a different question.
+  if (DO_IT_FOR_ME.test(q))    { return doItForMe(domain); }
+  if (ACCOUNT_ACTION.test(q))  { return accountAction(); }
+  if (NOT_FINISHING.test(q))   { return notFinishing(); }
+  if (HOW_MUCH.test(q))        { return earnings(domain, duration || DURATIONS.find(function (d) { return d.key === '3months'; })); }
+
+  const wk = WEEK_NUMBER.exec(q);
+  if (wk && domain) {
+    const n = parseInt(wk[1] || wk[2], 10);
+    const d = duration || DURATIONS.find(function (x) { return x.key === '3months'; });
+    return weekAnswer(domain, d, n, depth);
+  }
 
   if (domain && duration) {
     return renderPlan(domain, duration, await tasksFor(domain, duration), depth);
@@ -617,14 +787,22 @@ async function answerFor(question, ctx) {
       return full;
     }
   }
-  if (domain) {
-    return `${domain} runs on 1 Month, 45 Days, 3 Months and 6 Months. Tell me which track you are on and I will list every week with what to build, its coin value and its difficulty.`;
+  // Only when they actually named it. Otherwise fall through, so the question
+  // they did ask gets a chance at the taught answers and the learning queue.
+  if (namedDomain) {
+    return `${namedDomain} runs on 1 Month, 45 Days, 3 Months and 6 Months. Tell me which track you are on and I will list every week with what to build, its coin value and its difficulty.`;
   }
   // Anything a coordinator has already taught for this kind of question.
   const taught = await taughtAnswer(q);
   if (taught) { return taught; }
 
   // Nothing matched. Record it so it can be taught, then say so plainly.
+  // Nothing recognised it. If it does not even mention the programme, say so
+  // rather than offering a menu of things it did not ask about.
+  if (!PORTAL_TERMS.test(q)) { return outOfScope(); }
+
+  // It is about TEN but nothing here covers it, so it is worth a coordinator's
+  // time. Only these reach the queue: the knowledge base stays about TEN.
   noteUnanswered(q, ctx);
   return [
     'I could not tell what you need from that.',
@@ -1144,6 +1322,11 @@ router.post('/teach', async (req, res) => {
   try {
     const { topic, answer } = req.body || {};
     if (!topic || !answer) { return res.status(400).json({ error: 'topic and answer required' }); }
+    // The knowledge base is for TEN. Refusing off-topic entries keeps it from
+    // drifting into a general FAQ nobody is maintaining.
+    if (!PORTAL_TERMS.test(String(topic) + ' ' + String(answer))) {
+      return res.status(400).json({ error: 'off topic: this assistant only covers TEN and its portal' });
+    }
     if (!SystemKnowledge) { return res.status(503).json({ error: 'knowledge store unavailable' }); }
 
     await SystemKnowledge.findOneAndUpdate(
