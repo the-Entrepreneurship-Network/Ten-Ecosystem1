@@ -43,8 +43,14 @@ const ROLE_CONFIG = [
       { name: 'university', type: 'text', label: 'University / College', placeholder: 'Your university', required: true },
       { name: 'degree', type: 'text', label: 'Degree', placeholder: 'e.g. B.Tech Computer Science', required: true },
       { name: 'graduationYear', type: 'number', label: 'Graduation Year', placeholder: 'e.g. 2026', required: true },
-      { name: 'skills', type: 'text', label: 'Skills (comma-separated)', placeholder: 'e.g. HTML, CSS, React', required: true },
-      { name: 'resume', type: 'text', label: 'Resume', placeholder: 'Link to your resume', required: true },
+      // Label is the field's NAME, not its formatting hint — it ends up in
+      // error messages, and "Skills (comma-separated) is required." is not a
+      // sentence anyone wants to read. The hint lives in the placeholder.
+      { name: 'skills', type: 'text', label: 'Skills', placeholder: 'e.g. HTML, CSS, React', required: true },
+      // A résumé is uploaded, not typed, so the generic "Please enter your…"
+      // sentence would point at the wrong control.
+      { name: 'resume', type: 'text', label: 'Resume', placeholder: 'Link to your resume', required: true,
+        requiredMessage: 'Please upload your resume as a PDF.' },
       { name: 'linkedin', type: 'url', label: 'LinkedIn URL', placeholder: 'https://linkedin.com/in/...', required: true },
       { name: 'portfolio', type: 'url', label: 'Portfolio URL', placeholder: 'https://...', required: true },
     ],
@@ -162,6 +168,36 @@ function parseDomainSelection(raw) {
   return { domains, unknown };
 }
 
+/**
+ * A message a student can act on, in the words the form uses.
+ *
+ * "Skills (comma-separated) is required." reads like a database complaint: it
+ * repeats a formatting hint the student cannot do anything about, and never
+ * says what to do. Parenthetical hints are dropped, and the sentence tells them
+ * the action — select for a dropdown, enter for anything they type.
+ */
+function requiredFieldMessage(field) {
+  if (field.requiredMessage) return field.requiredMessage;
+
+  const name = String(field.label || field.name)
+    .replace(/\s*\([^)]*\)\s*/g, ' ')
+    .trim()
+    .split(/\s+/)
+    // Mid-sentence, "Please enter your Graduation Year." reads like a form
+    // label pasted into a sentence. Lower-case each word unless it is an
+    // acronym (URL) or carries an internal capital (LinkedIn) — those are
+    // spelled that way on purpose.
+    .map((word) => {
+      const isAcronym = word.length > 1 && word === word.toUpperCase() && /[A-Z]/.test(word);
+      const hasInnerCapital = /[A-Z]/.test(word.slice(1));
+      return isAcronym || hasInnerCapital ? word : word.toLowerCase();
+    })
+    .join(' ');
+
+  const verb = field.type === 'select' ? 'select' : 'enter';
+  return `Please ${verb} your ${name}.`;
+}
+
 async function registerUser(req, res) {
   try {
     const { fullName, email, password, role, roleSpecificData = {} } = req.body;
@@ -235,7 +271,7 @@ async function registerUser(req, res) {
           // graduation year would otherwise pass as a valid number.
           (field.type === 'number' && !(Number(value) > 0));
 
-        if (missing) errors[field.name] = `${field.label} is required.`;
+        if (missing) errors[field.name] = requiredFieldMessage(field);
       }
     }
 
