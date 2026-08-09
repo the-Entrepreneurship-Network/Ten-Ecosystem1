@@ -142,6 +142,75 @@ function checkMongoStatus() {
     return mongoose.connection.readyState === 1 && !global.isMongoUnhealthy;
 }
 
+
+// ── Unique-index enforcement for the JSON fallback engine ───────────────────
+// The fallback had no concept of an index: every write path was a bare append.
+// While degraded, /register cheerfully wrote duplicate employeeId AND duplicate
+// email rows, and Student.findOne({employeeId}) then returned whichever
+// duplicate happened to be first in the file — so two students could share one
+// login identity. These helpers read the real schema and emulate MongoDB's
+// E11000 so behaviour matches whichever backend is live.
+
+function getUniqueIndexPaths(schema) {
+    const paths = [];
+    if (!schema) return paths;
+    try {
+        // Field-level `unique: true`
+        schema.eachPath((name, type) => {
+            if (name === '_id') return;
+            const opts = (type && type.options) || {};
+            if (opts.unique) paths.push({ fields: [name], sparse: !!opts.sparse });
+        });
+        // Compound indexes declared with schema.index({...}, {unique:true})
+        for (const [spec, options] of schema.indexes()) {
+            if (!options || !options.unique) continue;
+            const fields = Object.keys(spec).filter(f => f !== '_id');
+            if (fields.length) paths.push({ fields, sparse: !!options.sparse });
+        }
+    } catch (_) { /* schema shape unavailable — enforce nothing */ }
+    return paths;
+}
+
+function makeDuplicateKeyError(fields, doc) {
+    const keyValue = {};
+    for (const f of fields) keyValue[f] = doc[f];
+    const err = new Error(
+        'E11000 duplicate key error collection: ' + JSON.stringify(keyValue)
+    );
+    err.code = 11000;
+    err.keyPattern = fields.reduce((a, f) => { a[f] = 1; return a; }, {});
+    err.keyValue = keyValue;
+    return err;
+}
+
+/**
+ * Throw an E11000-shaped error if `doc` would violate a unique index.
+ * @param {object} schema      the Mongoose schema
+ * @param {Array}  items       rows already stored
+ * @param {object} doc         the row being written
+ * @param {string} [ignoreId]  existing _id to skip (updates)
+ */
+function assertNoDuplicate(schema, items, doc, ignoreId) {
+    for (const index of getUniqueIndexPaths(schema)) {
+        const values = index.fields.map(f => doc[f]);
+        // Sparse indexes ignore documents missing the field — this is what
+        // makes `employeeId: {unique:true, sparse:true}` allow many nulls.
+        if (values.some(v => v === undefined || v === null || v === '')) {
+            if (index.sparse) continue;
+        }
+        const clash = items.some(item => {
+            if (ignoreId && String(item._id) === String(ignoreId)) return false;
+            return index.fields.every((f, i) => {
+                const a = item[f];
+                const b = values[i];
+                if (a === undefined || a === null) return b === undefined || b === null;
+                return String(a) === String(b);
+            });
+        });
+        if (clash) throw makeDuplicateKeyError(index.fields, doc);
+    }
+}
+
 function getCollectionData(modelName) {
     const file = path.join(DB_DIR, `db_${modelName}.json`);
     if (!fs.existsSync(file)) {
@@ -303,23 +372,59 @@ function matchQuery(item, query) {
     return true;
 }
 
+// Update operators supported by the JSON fallback engine.
+//
+// $inc and $unset were previously MISSING and silently ignored — an update
+// using them appeared to succeed while changing nothing. That broke the
+// atomic employee-ID counter (models/Counter.js), which relies on $inc:
+// the sequence never advanced, so every registration in fallback mode would
+// have been handed the same employee ID.
 function applyUpdate(item, update) {
     if (!update) return;
     if (update.$set) {
         Object.assign(item, update.$set);
     }
+    if (update.$inc) {
+        for (const k of Object.keys(update.$inc)) {
+            const delta = Number(update.$inc[k]) || 0;
+            item[k] = (Number(item[k]) || 0) + delta;
+        }
+    }
+    if (update.$unset) {
+        for (const k of Object.keys(update.$unset)) {
+            delete item[k];
+        }
+    }
     if (update.$push) {
         for (const k of Object.keys(update.$push)) {
             if (!Array.isArray(item[k])) item[k] = [];
-            item[k].push(update.$push[k]);
+            const value = update.$push[k];
+            // { $push: { arr: { $each: [...] } } }
+            if (value && typeof value === 'object' && Array.isArray(value.$each)) {
+                item[k].push(...value.$each);
+            } else {
+                item[k].push(value);
+            }
         }
     }
     if (update.$addToSet) {
         for (const k of Object.keys(update.$addToSet)) {
             if (!Array.isArray(item[k])) item[k] = [];
-            if (!item[k].includes(update.$addToSet[k])) {
-                item[k].push(update.$addToSet[k]);
+            const value = update.$addToSet[k];
+            const candidates = (value && typeof value === 'object' && Array.isArray(value.$each))
+                ? value.$each
+                : [value];
+            for (const candidate of candidates) {
+                const exists = item[k].some(existing => String(existing) === String(candidate));
+                if (!exists) item[k].push(candidate);
             }
+        }
+    }
+    if (update.$pull) {
+        for (const k of Object.keys(update.$pull)) {
+            if (!Array.isArray(item[k])) continue;
+            const value = update.$pull[k];
+            item[k] = item[k].filter(existing => String(existing) !== String(value));
         }
     }
     for (const key of Object.keys(update)) {
@@ -335,14 +440,57 @@ class FallbackQuery {
         this.promiseFn = promiseFn;
         this._sort = null;
         this._limit = null;
+        this._select = null;
     }
     sort(s) { this._sort = s; return this; }
     limit(l) { this._limit = l; return this; }
     populate() { return this; }
-    select() { return this; }
+    // `select()` used to be a no-op that returned `this`. Callers use it as a
+    // security projection — e.g. `.select('name employeeId')` to avoid shipping
+    // the password hash — so while the fallback was active those projections
+    // silently returned the FULL document. It now actually projects.
+    select(fields) { this._select = fields; return this; }
     lean() { return this; }
+
+    _applySelect(result) {
+        if (!this._select || result == null) return result;
+
+        // Mongoose accepts "a b -c" or { a: 1, c: 0 }.
+        const include = new Set();
+        const exclude = new Set();
+        if (typeof this._select === 'string') {
+            for (const token of this._select.split(/\s+/).filter(Boolean)) {
+                if (token.startsWith('-')) exclude.add(token.slice(1));
+                else include.add(token);
+            }
+        } else if (typeof this._select === 'object') {
+            for (const [key, value] of Object.entries(this._select)) {
+                if (value) include.add(key); else exclude.add(key);
+            }
+        }
+        if (!include.size && !exclude.size) return result;
+
+        const project = (doc) => {
+            if (!doc || typeof doc !== 'object') return doc;
+            const raw = doc.toObject ? doc.toObject() : doc;
+            if (include.size) {
+                const out = {};
+                if (!exclude.has('_id')) out._id = raw._id;
+                for (const field of include) {
+                    if (raw[field] !== undefined) out[field] = raw[field];
+                }
+                return out;
+            }
+            const out = { ...raw };
+            for (const field of exclude) delete out[field];
+            return out;
+        };
+
+        return Array.isArray(result) ? result.map(project) : project(result);
+    }
+
     exec() {
-        return this.promiseFn(this._sort, this._limit);
+        return this.promiseFn(this._sort, this._limit).then(r => this._applySelect(r));
     }
     then(onResolve, onReject) {
         return this.exec().then(onResolve, onReject);
@@ -420,8 +568,20 @@ function wrapModelWithFileFallback(model) {
         let index = items.findIndex(item => matchQuery(item, query));
         if (index === -1) {
             if (options && options.upsert) {
-                const newItem = { _id: generateId(), createdAt: new Date() };
+                // MongoDB seeds an upserted document from the query's equality
+                // conditions. Without this, findOneAndUpdate({_id: "employeeId"},
+                // ..., {upsert:true}) created a row with a RANDOM _id, so the
+                // next call did not find it and inserted another one — the
+                // employee-ID counter could never advance.
+                const newItem = { createdAt: new Date() };
+                for (const [key, value] of Object.entries(query || {})) {
+                    if (key.startsWith('$')) continue;
+                    if (value !== null && typeof value === 'object') continue; // operator, not a literal
+                    newItem[key] = value;
+                }
+                if (!newItem._id) newItem._id = generateId();
                 applyUpdate(newItem, update);
+                assertNoDuplicate(model.schema, items, newItem);
                 items.push(newItem);
                 saveCollectionData(model.modelName, items);
                 return new model(newItem);
@@ -463,7 +623,11 @@ function wrapModelWithFileFallback(model) {
             const raw = d.toObject ? d.toObject() : { ...d };
             return { ...raw, _id: raw._id || generateId(), createdAt: new Date(), updatedAt: new Date() };
         });
-        items.push(...createdDocs);
+        // Enforce unique indexes, which the fallback previously ignored.
+        for (const doc of createdDocs) {
+            assertNoDuplicate(model.schema, items, doc);
+            items.push(doc);
+        }
         saveCollectionData(model.modelName, items);
         return isArray ? createdDocs.map(c => new model(c)) : new model(createdDocs[0]);
     }
@@ -976,10 +1140,13 @@ mongoose.Model.prototype.save = function() {
         
         const idx = items.findIndex(item => String(item._id) === String(obj._id));
         if (idx !== -1) {
-            items[idx] = { ...items[idx], ...obj, updatedAt: new Date() };
+            const merged = { ...items[idx], ...obj, updatedAt: new Date() };
+            assertNoDuplicate(instance.schema || (instance.constructor && instance.constructor.schema), items, merged, obj._id);
+            items[idx] = merged;
         } else {
             obj.createdAt = obj.createdAt || new Date();
             obj.updatedAt = obj.updatedAt || new Date();
+            assertNoDuplicate(instance.schema || (instance.constructor && instance.constructor.schema), items, obj);
             items.push(obj);
         }
         saveCollectionData(modelName, items);
@@ -2487,33 +2654,43 @@ app.get("/payment-return",    (req,res)=>{ res.sendFile(path.join(__dirname,"pub
 
 // ================= EMPLOYEE ID =================
 
-async function generateEmployeeId(domain){
-    const domainShortCodes = {
-        "DevOps with AWS":          "DEVOPS",
-        "Python Development":       "PY",
-        "Java Development":         "JAVA",
-        "Web Development":          "WEB",
-        "MERN Stack Development":   "MERN",
-        "Artificial Intelligence":  "AI",
-        "Data Science":             "DS",
-        "Cyber Security":           "CYBER",
-        "Software Engineering":     "SDE",
-        "Flutter Development":      "FLUTTER",
-        "HR Management":            "HRMGMT",
-        "Venture Capital":           "VC",
-        "Vibe Coding":               "VIBE",
-        "Space Research":            "SPACE",
-        "Business Analyst":          "BA",
-        "HR":                        "HR",
-        "Business Development":      "BD",
-        "Space Intern":              "SPACE",
-        "Finance":                   "FIN"
-    };
-    const shortCode = domainShortCodes[domain] || domain.toUpperCase();
-    const totalStudents = await Student.countDocuments();
-    const sequenceNumber = 1001 + totalStudents;
-    return `TEN/${shortCode}/${sequenceNumber}`;
-}
+// Employee-ID generation lives in utils/employeeId.js. There were two copies of
+// this function with different domain maps and different unknown-domain
+// fallbacks, and both derived the sequence from Student.countDocuments() — which
+// collides under concurrent registration and rewinds when a student is deleted.
+const {
+    generateEmployeeId,
+    isEmployeeIdAvailable,
+    initEmployeeIdCounter
+} = require("./utils/employeeId");
+
+// Availability check the registration form calls before submitting, so a
+// student sees "This Employee ID is already taken" against the field instead of
+// a generic server error — or, in JSON-fallback mode, instead of a silent
+// duplicate.
+// Public config the front-end needs so pages cannot drift from the server.
+app.get("/api/public-config", (req, res) => {
+    const { OFFICIAL_REPO_SLUG, OFFICIAL_REPO_URL } = require("./config/github");
+    const { SELECTABLE_DOMAIN_NAMES } = require("./config/domains");
+    const { DURATION_TYPES, TENURE_LABELS } = require("./utils/tenure");
+    res.json({
+        success: true,
+        officialRepoSlug: OFFICIAL_REPO_SLUG,
+        officialRepoUrl: OFFICIAL_REPO_URL,
+        domains: SELECTABLE_DOMAIN_NAMES,
+        tenures: DURATION_TYPES.map((key) => ({ key, label: TENURE_LABELS[key] }))
+    });
+});
+
+app.get("/api/employee-id/available", async (req, res) => {
+    try {
+        const result = await isEmployeeIdAvailable(req.query.employeeId);
+        res.json({ success: true, ...result });
+    } catch (err) {
+        console.error("[employeeId] availability check failed:", err.message);
+        res.status(500).json({ success: false, available: false, reason: "Could not check that Employee ID right now." });
+    }
+});
 
 // ================= REGISTER (Feature 1: welcome email + multi-domain) =================
 // A student can register for UP TO 2 domains using the same email + phone.
@@ -8640,6 +8817,12 @@ server.listen(PORT, "0.0.0.0", ()=>{
     //
     // ENABLE_AUTOMATION_CRON=false turns them off (useful when several
     // instances share one database and only one should run the jobs).
+    // Align the employee-ID counter with IDs already issued, so the first ID
+    // generated after this deploy cannot collide with an existing student.
+    initEmployeeIdCounter().catch((err) => {
+        console.error("[employeeId] Counter initialisation failed:", err.message);
+    });
+
     if (String(process.env.ENABLE_AUTOMATION_CRON || "true").toLowerCase() !== "false") {
         try {
             require("./services/automationCron").initAutomation();

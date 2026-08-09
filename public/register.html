@@ -857,6 +857,7 @@
           body: JSON.stringify(payload)
         });
         const json = await res.json();
+        clearFieldErrors();
 
         if (json.success) {
           Swal.fire({
@@ -870,7 +871,10 @@
           });
           
           setTimeout(() => {
-            const pwdQuery = flatData.password ? `&password=${encodeURIComponent(flatData.password)}` : '';
+            // The password is deliberately NOT put in the query string: a URL
+            // ends up in browser history, in the Referer header sent to other
+            // sites, and in every server access log.
+            const pwdQuery = '';
             if (json.role === 'founder') {
               window.location.href = `/founder-registration-success?role=${encodeURIComponent(json.role)}&email=${encodeURIComponent(json.email)}&memberId=${encodeURIComponent(json.memberId)}&startupName=${encodeURIComponent(json.startupName || 'Venture')}&status=Pending%20Approval${pwdQuery}`;
             } else if (json.role === 'student') {
@@ -879,6 +883,11 @@
               window.location.href = `/registration-success?role=${encodeURIComponent(json.role)}&email=${encodeURIComponent(json.email)}&memberId=${encodeURIComponent(json.memberId)}&status=Pending%20Approval${pwdQuery}`;
             }
           }, 1500);
+        } else if (json.errors && typeof json.errors === 'object') {
+          // Show a message directly under each field that failed, the way a
+          // normal form does — this used to be one generic alert that did not
+          // say which field was wrong.
+          showFieldErrors(json.errors);
         } else {
           Swal.fire({
             icon: 'error',
@@ -901,6 +910,62 @@
         });
       }
     });
+
+    // ── Inline field validation messages ─────────────────────────────────
+    // Maps a server error key to the element the message should sit under.
+    const FIELD_TARGETS = {
+      fullName: 'reg_fullName',
+      email:    'reg_email',
+      password: 'reg_password',
+      domains:  'techDomainsSelector',
+      tenure:   'stu_tenure'
+    };
+
+    function clearFieldErrors() {
+      document.querySelectorAll('.field-error-msg').forEach(function (el) { el.remove(); });
+      document.querySelectorAll('.field-error-outline').forEach(function (el) {
+        el.classList.remove('field-error-outline');
+        el.style.borderColor = '';
+      });
+    }
+
+    function showFieldErrors(errors) {
+      clearFieldErrors();
+      let firstEl = null;
+
+      Object.keys(errors).forEach(function (key) {
+        const targetId = FIELD_TARGETS[key] || key;
+        const el = document.getElementById(targetId);
+        if (!el) return;
+
+        el.classList.add('field-error-outline');
+        el.style.borderColor = '#ef4444';
+
+        const msg = document.createElement('p');
+        msg.className = 'field-error-msg';
+        msg.setAttribute('role', 'alert');
+        msg.style.cssText = 'color:#ef4444;font-size:12px;margin-top:6px;font-weight:600;';
+        msg.textContent = errors[key];
+        (el.parentNode || el).insertBefore(msg, el.nextSibling);
+
+        if (!firstEl) firstEl = el;
+      });
+
+      if (firstEl) {
+        firstEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (typeof firstEl.focus === 'function') { try { firstEl.focus({ preventScroll: true }); } catch (e) {} }
+      } else {
+        // Nothing on this page matched — fall back to a readable summary.
+        Swal.fire({
+          icon: 'error',
+          title: 'Please check your details',
+          html: Object.values(errors).map(function (m) { return '• ' + m; }).join('<br>'),
+          background: '#0e1428',
+          color: '#F0EEE8',
+          confirmButtonColor: '#D4AF37'
+        });
+      }
+    }
   </script>
   <script src="/password-toggle.js"></script>
 </body>
