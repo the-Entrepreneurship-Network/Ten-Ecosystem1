@@ -127,38 +127,36 @@ function getRoleConfig(req, res) {
 }
 
 // Helper to generate legacy Employee ID
-async function generateEmployeeId(domain) {
-  const domainShortCodes = {
-    "DevOps with AWS":          "DEVOPS",
-    "Python Development":       "PY",
-    "Java Development":         "JAVA",
-    "Web Development":          "WEB",
-    "MERN Stack Development":   "MERN",
-    "MERN Stack Dev":           "MERN",
-    "Artificial Intelligence":  "AI",
-    "Data Science":             "DS",
-    "Cyber Security":           "CYBER",
-    "Software Engineering":     "SDE",
-    "Flutter Development":      "FLUTTER",
-    "HR Management":            "HRMGMT",
-    "Venture Capital":           "VC",
-    "Vibe Coding":               "VIBE",
-    "Space Research":            "SPACE",
-    "Business Analyst":          "BA",
-    "HR":                        "HR",
-    "Business Development":      "BD",
-    "Space Intern":              "SPACE",
-    "Finance":                   "FIN",
-    "Machine Learning":          "ML",
-    "Android":                   "AND",
-    "UI/UX":                     "UIUX",
-    "Digital Marketing":         "MKTG",
-    "General":                   "GEN"
-  };
-  const shortCode = domainShortCodes[domain] || "GEN";
-  const totalStudents = await Student.countDocuments();
-  const sequenceNumber = 1001 + totalStudents;
-  return `TEN/${shortCode}/${sequenceNumber}`;
+// Shared with server.js — see utils/employeeId.js.
+const { generateEmployeeId } = require('../utils/employeeId');
+const { normalizeDomain } = require('../config/domains');
+const { isValidTenure, getTenureLabel } = require('../utils/tenure');
+
+/**
+ * Parse the domain selection, which the form sends as a comma-joined string.
+ * Returns canonical names, or a list of the values it could not recognise.
+ */
+function parseDomainSelection(raw) {
+  let values = [];
+  if (typeof raw === 'string') {
+    values = raw.split(',').map((d) => d.trim()).filter(Boolean);
+  } else if (Array.isArray(raw)) {
+    // The old code only handled the string case, so an array body silently
+    // fell through to the "Web Development" default.
+    values = raw.map((d) => String(d).trim()).filter(Boolean);
+  }
+
+  const domains = [];
+  const unknown = [];
+  for (const value of values) {
+    const canonical = normalizeDomain(value);
+    if (canonical) {
+      if (!domains.includes(canonical)) domains.push(canonical);
+    } else {
+      unknown.push(value);
+    }
+  }
+  return { domains, unknown };
 }
 
 async function registerUser(req, res) {
@@ -166,17 +164,54 @@ async function registerUser(req, res) {
     const { fullName, email, password, role, roleSpecificData = {} } = req.body;
     const name = fullName || req.body.name;
 
+    // Collect EVERY failing field before answering, so the form can show a
+    // message under each one rather than a single generic alert. Registration
+    // previously returned on the first failure, and skipped `domain` entirely —
+    // an unset domain silently became "Web Development" and the account was
+    // created anyway.
+    const errors = {};
+
     if (!name || typeof name !== 'string' || name.trim().length < 2) {
-      return res.status(400).json({ success: false, error: 'Full name must be at least 2 characters.' });
+      errors.fullName = 'Please enter your full name (at least 2 characters).';
     }
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return res.status(400).json({ success: false, error: 'Valid email is required.' });
+    if (!email || typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.email = 'Please enter a valid email address.';
     }
-    if (!password || password.length < 8) {
-      return res.status(400).json({ success: false, error: 'Password must be at least 8 characters.' });
+    if (!password || typeof password !== 'string' || password.length < 8) {
+      errors.password = 'Password must be at least 8 characters.';
     }
     if (!role || !ALL_ROLES.includes(role)) {
-      return res.status(400).json({ success: false, error: `role must be one of: ${ALL_ROLES.join(', ')}` });
+      errors.role = 'Please choose what you are registering as.';
+    }
+
+    // Student-specific required fields.
+    let studentDomains = [];
+    if (role === ROLES.STUDENT) {
+      const { domains, unknown } = parseDomainSelection(roleSpecificData.domains);
+      studentDomains = domains;
+
+      if (unknown.length) {
+        errors.domains = `We do not recognise: ${unknown.join(', ')}. Please pick from the list.`;
+      } else if (domains.length === 0) {
+        errors.domains = 'Please select your internship domain.';
+      } else if (domains.length > 2) {
+        errors.domains = 'You can select at most 2 domains.';
+      }
+
+      if (!roleSpecificData.tenure) {
+        errors.tenure = 'Please select your internship tenure.';
+      } else if (!isValidTenure(roleSpecificData.tenure)) {
+        errors.tenure = 'Please select a valid internship tenure.';
+      }
+    }
+
+    if (Object.keys(errors).length > 0) {
+      return res.status(400).json({
+        success: false,
+        errors,
+        // Kept so older clients that only read `error` still show something.
+        error: Object.values(errors)[0]
+      });
     }
 
     const trimmedEmail = email.toLowerCase().trim();
@@ -250,16 +285,15 @@ async function registerUser(req, res) {
       });
 
       // BACKWARD COMPATIBILITY: also create legacy Student document in students collection
-      let parsedDomains = [];
-      if (roleSpecificData.domains && typeof roleSpecificData.domains === 'string') {
-        parsedDomains = roleSpecificData.domains.split(',').map(d => d.trim()).filter(Boolean);
-      }
-      if (parsedDomains.length === 0) {
-        parsedDomains = ['Web Development'];
-      }
+      //
+      // Domains were validated above. There is deliberately no
+      // `parsedDomains = ['Web Development']` fallback any more: an unselected
+      // domain used to enrol the student in Web Development with a TEN/WEB/...
+      // employee ID and no error shown, which is exactly what section 4 reports.
+      const parsedDomains = studentDomains;
       const domain = parsedDomains[0];
       const employeeId = await generateEmployeeId(domain);
-      const tenureValue = roleSpecificData.tenure || "1 Month";
+      const tenureValue = getTenureLabel(roleSpecificData.tenure);
       await Student.create({
         firstName: name.trim().split(' ')[0] || name.trim(),
         lastName: name.trim().split(' ').slice(1).join(' ') || "",
@@ -267,7 +301,6 @@ async function registerUser(req, res) {
         email: trimmedEmail,
         whatsapp: roleSpecificData.mobile || "",
         password: hashedPassword,
-        plainPassword: password,
         employeeId: employeeId,
         domain: domain,
         domains: parsedDomains,

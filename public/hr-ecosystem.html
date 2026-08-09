@@ -75,6 +75,8 @@
     <div class="tabs">
       <button class="tab-btn active" onclick="switchTab('verifications',this)">✅ Verifications</button>
       <button class="tab-btn" onclick="switchTab('payments',this)">💳 Recent Payments</button>
+      <!-- Section 9: student feedback must appear in EVERY HR portal, not one. -->
+      <button class="tab-btn" onclick="switchTab('feedback',this)">💌 Student Feedback <span id="ecoFeedbackBadge" style="display:none;background:#ef4444;color:#fff;font-size:10px;font-weight:800;padding:1px 6px;border-radius:99px;margin-left:4px;">0</span></button>
     </div>
 
     <!-- Verifications tab -->
@@ -91,6 +93,15 @@
           </select>
         </div>
         <div id="pendingList"><div style="text-align:center;padding:40px;color:var(--text-muted);">Loading…</div></div>
+      </div>
+    </div>
+
+    <!-- Student feedback tab (hidden) -->
+    <div id="tab-feedback" style="display:none;">
+      <div class="section-card">
+        <div class="section-title">Student Feedback</div>
+        <p style="color:var(--text-muted);font-size:13px;margin:-8px 0 14px;">Experience feedback from interns who have completed their internship. Visible to all HR staff.</p>
+        <div id="ecoFeedbackList"><div style="text-align:center;padding:40px;color:var(--text-muted);">Loading…</div></div>
       </div>
     </div>
 
@@ -112,7 +123,54 @@
     btn.classList.add('active');
     document.getElementById('tab-verifications').style.display = tab === 'verifications' ? '' : 'none';
     document.getElementById('tab-payments').style.display      = tab === 'payments'      ? '' : 'none';
+    document.getElementById('tab-feedback').style.display      = tab === 'feedback'      ? '' : 'none';
     if (tab === 'payments') loadPayments();
+    if (tab === 'feedback') loadEcoFeedback();
+  }
+
+  // ── Section 9 — student feedback ────────────────────────────────────────
+  // The same list as hr-portal.html, because the task document requires
+  // feedback to be visible wherever HR logs in — not in one place only.
+  function _ecoEsc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  async function loadEcoFeedback() {
+    const box = document.getElementById('ecoFeedbackList');
+    box.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">Loading…</div>';
+    try {
+      const res  = await fetch('/api/feedback/hr/all', { credentials: 'same-origin' });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || 'Could not load feedback.');
+
+      const badge = document.getElementById('ecoFeedbackBadge');
+      if (badge) {
+        badge.textContent = data.unread || 0;
+        badge.style.display = data.unread ? 'inline-block' : 'none';
+      }
+
+      if (!data.data.length) {
+        box.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);">No feedback yet.</div>';
+        return;
+      }
+
+      box.innerHTML = data.data.map(function (f) {
+        const stars = f.rating ? '★'.repeat(f.rating) + '☆'.repeat(5 - f.rating) : '—';
+        const when  = f.submittedAt ? new Date(f.submittedAt).toLocaleString('en-IN') : '';
+        return '<div style="border:1px solid var(--border-default);border-radius:10px;padding:14px;margin-bottom:10px;">' +
+          '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">' +
+            '<strong>' + _ecoEsc(f.studentName || f.employeeId) + '</strong>' +
+            '<span style="color:var(--text-muted);font-size:12px;">' + _ecoEsc(f.domain) + ' · ' + _ecoEsc(when) + '</span>' +
+          '</div>' +
+          '<div style="color:#f5c542;margin-bottom:6px;">' + stars + '</div>' +
+          '<div style="white-space:pre-wrap;line-height:1.55;">' + _ecoEsc(f.message) + '</div>' +
+        '</div>';
+      }).join('');
+    } catch (err) {
+      box.innerHTML = '<div style="text-align:center;padding:40px;color:#ef4444;">' + _ecoEsc(err.message) + '</div>';
+    }
   }
 
   async function loadOverview() {

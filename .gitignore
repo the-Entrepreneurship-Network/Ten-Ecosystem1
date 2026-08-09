@@ -6,3 +6,17 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Local JSON fallback database — contains user records and password hashes.
+.data/
+uploads/local_db/
+
+# User-uploaded files: resumes, marksheets, generated certificates and letters.
+# These are personal data and must never be committed.
+uploads/documents/
+uploads/certificates/
+uploads/offer-letters/
+uploads/*.pdf
+uploads/*.jpg
+uploads/*.jpeg
+uploads/*.png

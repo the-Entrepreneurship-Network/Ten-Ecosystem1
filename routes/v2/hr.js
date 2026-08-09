@@ -18,18 +18,9 @@ const MailHistory = require("../../models/MailHistory");
 const taskEngine = require("../../services/v2/taskEngine");
 const { generateDocumentNumber, normalizeDocumentNumber } = require("../../utils/documentNumber");
 
-async function requireHR(req, res, next) {
-  try {
-    const auth = req.headers["authorization"] || req.headers["Authorization"] || "";
-    if (auth && auth.startsWith("Bearer hr_")) {
-      req.hrUser = { token: auth };
-      return next();
-    }
-    return res.status(401).json({ success: false, message: "HR authentication required" });
-  } catch (_) {
-    return res.status(500).json({ success: false, message: "HR auth error" });
-  }
-}
+// Session-derived HR guard. The previous check was
+// `authorization.startsWith("Bearer hr_")` — any string with that prefix passed.
+const { requireHR } = require("../../middleware/sessionAuth");
 
 function startOfToday() {
   const d = new Date();

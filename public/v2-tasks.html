@@ -353,6 +353,7 @@ body::after {
   .week-progress { display:none; }
 }
 </style>
+  <link rel="stylesheet" href="/css/ten-brand.css">
 </head>
 <body>
 
@@ -671,17 +672,34 @@ async function init() {
       document.getElementById('onboard-domain').textContent = studentData.domain || 'Unknown';
       document.getElementById('onboard-overlay').style.display = 'flex';
 
-      // Pre-select based on tenure
-      const tenure = (studentData.tenure || '').replace(/\s+/g,'').toLowerCase();
-      let preSelect = '1month';
-      if (tenure.includes('1w') || tenure.includes('1week') || tenure.includes('7dy') || tenure.includes('7day')) preSelect = '1week';
-      else if (tenure.includes('15d') || tenure.includes('15day')) preSelect = '15days';
-      else if (tenure.includes('45')) preSelect = '45days';
-      else if (tenure.includes('6m')) preSelect = '6months';
-      else if (tenure.includes('3m')) preSelect = '3months';
+      // The server tells us which tenure the student is registered on — this
+      // page used to hand-roll a seventh copy of the tenure parser, and its
+      // answer could disagree with the server's.
+      const registered = status.durationType || '1month';
 
-      const el = document.querySelector(`.duration-option[data-duration="${preSelect}"]`);
+      const el = document.querySelector(`.duration-option[data-duration="${registered}"]`);
       if (el) selectDuration(el);
+
+      // The tenure is set at registration and cannot be changed here — a
+      // student on the paid 1-Month track could otherwise pick 6 Months and be
+      // assigned the full six-month task set. Other options are shown but
+      // disabled, so the student can see what they are on and why.
+      document.querySelectorAll('.duration-option').forEach(function (opt) {
+        if (opt.dataset.duration === registered) return;
+        opt.style.opacity = '0.35';
+        opt.style.cursor = 'not-allowed';
+        opt.setAttribute('aria-disabled', 'true');
+        opt.onclick = function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          Swal.fire({
+            icon: 'info',
+            title: 'Set at registration',
+            text: 'Your internship length was set when you registered. Ask your coordinator if it needs to change.',
+            background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#D4AF37'
+          });
+        };
+      });
       return;
     }
 
@@ -735,6 +753,10 @@ async function completeOnboarding() {
     if (res.success) {
       document.getElementById('onboard-overlay').style.display = 'none';
       Swal.fire({ icon:'success', title:`Welcome! 🎉`, text:`${res.tasksAssigned} tasks assigned. You earned ${res.coinsAwarded} welcome coins!`, background:'#0e1428', color:'#F0EEE8', confirmButtonColor:'#D4AF37', timer:3000, timerProgressBar:true });
+      loadTasks();
+    } else if (res.alreadyOnboarded) {
+      // Onboarding is a one-time event; a repeated submit is not an error.
+      document.getElementById('onboard-overlay').style.display = 'none';
       loadTasks();
     } else {
       Swal.fire({ icon:'error', title:'Error', text:res.message, background:'#0e1428', color:'#F0EEE8', confirmButtonColor:'#D4AF37' });
