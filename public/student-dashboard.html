@@ -5964,9 +5964,20 @@ function checkTenurePayment(isStatusCheckClick) {
       }
     })
     .catch(err => {
+      // A network error must NOT be treated as "no fee due". This used to fall
+      // straight through to the welcome modal, so the paywall failed open
+      // whenever the status call hiccuped. It also only ever ran on this page,
+      // so the real enforcement is server-side — see requireTenurePayment in
+      // server.js. This is the visible half of the gate; if we cannot confirm
+      // the student's status, say so rather than silently letting them past.
       console.error('[TENURE] check error:', err);
-      if (typeof showWelcomeModalIfNeeded === 'function') {
-        showWelcomeModalIfNeeded();
+      if (isStatusCheckClick) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Could not check your payment status',
+          text: 'Please check your connection and try again.',
+          background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#D4AF37'
+        });
       }
     });
 }
@@ -5979,7 +5990,18 @@ function initiateTenurePaymentTimer(data) {
   document.getElementById('tenureAmountText').textContent = '₹' + parseFloat(currentTenureAmount).toFixed(2);
   document.getElementById('tenureUpiIdText').textContent = 'UPI ID: ' + currentTenureUpiId;
   if (document.getElementById('tenureExplanation')) {
+    // `data.label` is now the tenure name only ("1 Month"). It used to be
+    // "1 Month Internship Program", so this sentence read
+    // "Under the TEN 1 Month Internship Program Internship Program, ...".
     document.getElementById('tenureExplanation').innerHTML = `Under the TEN ${data.label || 'Short Course'} Internship Program, a training and certification fee of <strong>₹${currentTenureAmount}</strong> is required to activate your dashboard.`;
+  }
+  var headingEl = document.getElementById('tenurePaymentHeading');
+  if (headingEl) {
+    // The heading was hardcoded "Crash Course Program Fee Required" whatever
+    // the student's tenure was.
+    headingEl.textContent = data.label
+      ? (data.label + ' Internship Program Fee')
+      : 'Internship Program Fee Required';
   }
   if (document.getElementById('tenureQrReasonText')) {
     document.getElementById('tenureQrReasonText').textContent = (data.label || 'Short Course') + ' Fee';
@@ -6138,7 +6160,7 @@ function submitTenureUtr() {
     <div id="tenurePaymentMainState">
       <!-- Icon/Heading -->
       <div style="font-size:42px;margin-bottom:12px;">🛡️</div>
-      <h2 style="font-size:22px;font-weight:800;color:#D4AF37;margin-bottom:8px;letter-spacing:0.5px;">Crash Course Program Fee Required</h2>
+      <h2 id="tenurePaymentHeading" style="font-size:22px;font-weight:800;color:#D4AF37;margin-bottom:8px;letter-spacing:0.5px;">Internship Program Fee Required</h2>
       
       <!-- Rejection Banner (Hidden by default) -->
       <div id="tenureRejectionBanner" style="display:none;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:12px;padding:12px 16px;margin-bottom:16px;text-align:left;font-size:13px;line-height:1.5;color:#fca5a5;">

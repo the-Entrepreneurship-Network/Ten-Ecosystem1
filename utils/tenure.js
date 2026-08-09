@@ -64,15 +64,38 @@ function normalizeTenure(tenure) {
   // Exact canonical match first — the common case once data is clean.
   if (Object.prototype.hasOwnProperty.call(TENURE_DAYS, t)) return t;
 
-  // Order matters: check the longer/more specific patterns before the shorter
-  // ones, so "15days" is not mistaken for "1..." and "6months" is not caught by
-  // a bare month test.
-  if (/^(45|45days?|45d)$/.test(t) || t.includes('45')) return '45days';
-  if (/(^|[^0-9])15(d|day|days)?([^0-9]|$)/.test(t) || t.startsWith('15')) return '15days';
-  if (/^(6|6months?|6m|sixmonths?|halfyear)$/.test(t) || /(^|[^0-9])6(m|month|months)/.test(t)) return '6months';
-  if (/^(3|3months?|3m|threemonths?|quarter)$/.test(t) || /(^|[^0-9])3(m|month|months)/.test(t)) return '3months';
-  if (/^(1week|1w|7days?|7d|oneweek|week)$/.test(t) || /(^|[^0-9])1?(w|week)/.test(t)) return '1week';
-  if (/^(1month|1m|30days?|30d|onemonth|month)$/.test(t) || /(^|[^0-9])1?(m|month)/.test(t)) return '1month';
+  // Written-out numbers, so "one month" and "six months" parse.
+  const WORD_NUMBERS = { one: '1', two: '2', three: '3', four: '4', five: '5', six: '6', seven: '7', fifteen: '15', thirty: '30', fortyfive: '45', ninety: '90' };
+  let normalized = t;
+  for (const [word, digit] of Object.entries(WORD_NUMBERS)) {
+    normalized = normalized.replace(new RegExp('^' + word), digit);
+  }
+
+  // Match a leading count followed by an optional unit, and NOTHING else.
+  // Anchoring both ends matters: a loose substring test treats "unknown" as a
+  // week, because the word contains a "w".
+  const match = /^(\d+)(w|wk|wks|week|weeks|d|day|days|m|mo|mon|month|months|y|yr|year|years)?$/.exec(normalized);
+  if (!match) return null;
+
+  const count = Number.parseInt(match[1], 10);
+  const unit = match[2] || '';
+
+  if (/^(w|wk|wks|week|weeks)$/.test(unit)) {
+    return count === 1 ? '1week' : null;
+  }
+
+  if (/^(m|mo|mon|month|months)$/.test(unit)) {
+    if (count === 1) return '1month';
+    if (count === 3) return '3months';
+    if (count === 6) return '6months';
+    return null;
+  }
+
+  if (/^(y|yr|year|years)$/.test(unit)) return null;   // no yearly tenure exists
+
+  // A day count, or a bare number, maps to whichever tenure has that length.
+  const byDays = { 7: '1week', 15: '15days', 30: '1month', 45: '45days', 90: '3months', 180: '6months' };
+  if (byDays[count]) return byDays[count];
 
   return null;
 }

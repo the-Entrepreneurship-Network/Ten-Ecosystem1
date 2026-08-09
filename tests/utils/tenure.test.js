@@ -93,6 +93,28 @@ describe('utils/tenure', () => {
       'returns null for unrecognised input %p',
       (input) => { expect(normalizeTenure(input)).toBeNull(); }
     );
+
+    // A loose substring match reads "unknown" as a week, because the word
+    // contains a "w". Matching must be anchored, not "does it contain a unit".
+    it.each([
+      'unknown', 'whatever', 'wednesday', 'nomad', 'summer', 'dummy', 'moment',
+      '2 weeks', '1 year', '4 months', '10 days', '99', 'month1'
+    ])('rejects %p rather than guessing', (input) => {
+      expect(normalizeTenure(input)).toBeNull();
+    });
+
+    it('accepts written-out numbers', () => {
+      expect(normalizeTenure('one month')).toBe('1month');
+      expect(normalizeTenure('six months')).toBe('6months');
+      expect(normalizeTenure('three months')).toBe('3months');
+    });
+
+    it('maps a bare day count to the tenure of that length', () => {
+      expect(normalizeTenure('7')).toBe('1week');
+      expect(normalizeTenure('30 days')).toBe('1month');
+      expect(normalizeTenure('90')).toBe('3months');
+      expect(normalizeTenure('180 days')).toBe('6months');
+    });
   });
 
   describe('toDurationType', () => {

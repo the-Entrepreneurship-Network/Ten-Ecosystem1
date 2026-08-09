@@ -230,6 +230,8 @@ const FALLBACK_VIDEOS = {
 // their employee ID. It also crashed on GET requests (`req.body.employeeId`
 // with no body parsed), which surfaced as a 500 "Auth error".
 const { requireStudent, requireStaff, sessionEmployeeId } = require("../../middleware/sessionAuth");
+const { normalizeTenure, getTenureLabel } = require("../../utils/tenure");
+const { requireTenurePaid } = require("../../middleware/tenurePaymentGate");
 
 // ────────────────────────────────────────────────
 // FEATURE 2 — GET /api/v2/student/me
@@ -428,8 +430,31 @@ router.post("/student/complete-onboarding", requireStudent, async (req, res) => 
             if (joiningDate) {
                 const startDate = new Date(joiningDate);
                 if (!isNaN(startDate.getTime())) {
-                    updates.joiningDate = joiningDate;
+                    // Only internshipStartDate moves. This used to overwrite
+                    // joiningDate with the same value, which silently defeated
+                    // the whole feature: the pre-portal credit is the gap
+                    // BETWEEN the real start and the portal registration date,
+                    // so making them equal left a gap of zero and the student
+                    // was still marked absent for the WhatsApp months.
                     updates.internshipStartDate = startDate;
+
+                    // Keep a portal-registration date to measure that gap from.
+                    if (!student.joiningDate) {
+                        updates.joiningDate = (student.createdAt || new Date()).toISOString().slice(0, 10);
+                    }
+
+                    // A start date in the future, or after the student already
+                    // registered, is not a WhatsApp back-date.
+                    const portalStart = new Date(updates.joiningDate || student.joiningDate || student.createdAt);
+                    if (startDate > new Date()) {
+                        return res.status(400).json({ success: false, message: "Your start date cannot be in the future." });
+                    }
+                    if (!isNaN(portalStart.getTime()) && startDate > portalStart) {
+                        return res.status(400).json({
+                            success: false,
+                            message: "Your WhatsApp start date should be on or before the day you registered on the portal."
+                        });
+                    }
                 }
             }
 
@@ -827,22 +852,49 @@ router.post("/student/generate-quiz", requireStudent, async (req, res) => {
 // ────────────────────────────────────────────────
 // POST /api/v2/student/onboard
 // ────────────────────────────────────────────────
-router.post("/student/onboard", requireStudent, async (req, res) => {
+router.post("/student/onboard", requireStudent, requireTenurePaid, async (req, res) => {
     try {
         const { durationType } = req.body;
         const student = req.student;
 
-        const validDurations = ["1week", "15days", "45days", "1month", "3months", "6months"];
-        if (!validDurations.includes(durationType)) {
-            return res.status(400).json({ success: false, message: "Invalid duration type" });
+        const requested = normalizeTenure(durationType);
+        if (!requested) {
+            return res.status(400).json({ success: false, message: "Please choose a valid internship length." });
+        }
+
+        // The popup must not be able to change what a student is enrolled on.
+        // It previously wrote v2DurationType with no cross-check, so a student
+        // on the paid 1-Month track could pick "6months" here and be assigned
+        // the full six-month task set. The registered tenure wins.
+        const registered = student.tenure ? normalizeTenure(student.tenure) : null;
+        if (registered && registered !== requested) {
+            return res.status(409).json({
+                success: false,
+                message: `Your internship is registered as ${getTenureLabel(registered)}. ` +
+                         `Ask your coordinator if this is wrong — it cannot be changed here.`,
+                registeredTenure: registered
+            });
+        }
+
+        const durationToStore = registered || requested;
+
+        // Idempotent: onboarding is a one-time event, so a repeated submit must
+        // not re-award the bonus or reassign tasks.
+        if (student.v2Onboarded) {
+            return res.json({
+                success: true,
+                message: "You have already set up your task journey.",
+                alreadyOnboarded: true,
+                durationType: student.v2DurationType || durationToStore
+            });
         }
 
         await Student.updateOne(
             { _id: student._id },
-            { $set: { v2Onboarded: true, v2DurationType: durationType } }
+            { $set: { v2Onboarded: true, v2DurationType: durationToStore } }
         );
         student.v2Onboarded    = true;
-        student.v2DurationType = durationType;
+        student.v2DurationType = durationToStore;
 
         const result = await taskEngine.assignTasksForStudent(student);
         const coinResult = await coinService.awardCoins(student._id, "ONBOARD_BONUS");
@@ -885,8 +937,21 @@ router.get("/student/status", requireStudent, async (req, res) => {
             coinService.getBalance(student._id)
         ]);
 
-        const v2Onboarded  = !!(student.v2Onboarded || sampleProgress);
-        const durationType = (sampleProgress?.taskId?.durationType) || student.v2DurationType || taskEngine.tenureToDurationType(student.tenure);
+        // v2Onboarded is a STORED flag, not something inferred from data.
+        //
+        // It used to be `student.v2Onboarded || sampleProgress`, and
+        // GET /tasks/my-tasks auto-assigns tasks when a student has none — so
+        // simply opening the task list created progress rows and the flag
+        // flipped true forever. The tenure popup then never appeared again for
+        // a student who had never actually chosen a tenure, while for anyone
+        // whose completion path did not set the flag it reappeared on every
+        // visit. Section 5 asks for exactly once, ever.
+        const v2Onboarded = !!student.v2Onboarded;
+
+        // The duration comes from the student's record, not from whichever task
+        // happened to be assigned first (that value is remapped to "1month" for
+        // short tenures, so it misreported 1-week and 15-day students).
+        const durationType = taskEngine.resolveStudentDuration(student);
 
         const stats = {};
         for (const s of progressStats) stats[s._id] = s.count;
@@ -917,7 +982,7 @@ router.get("/student/status", requireStudent, async (req, res) => {
 // ────────────────────────────────────────────────
 // GET /api/v2/tasks/my-tasks
 // ────────────────────────────────────────────────
-router.get("/tasks/my-tasks", requireStudent, async (req, res) => {
+router.get("/tasks/my-tasks", requireStudent, requireTenurePaid, async (req, res) => {
     try {
         const student = req.student;
         let domain = student.domain;
@@ -931,7 +996,12 @@ router.get("/tasks/my-tasks", requireStudent, async (req, res) => {
         const taskIds = domainTasks.map(t => t._id);
         const progressCount = await StudentTaskProgress.countDocuments({ studentId: student._id, taskId: { $in: taskIds } });
 
-        if (progressCount === 0) {
+        // Only auto-assign for a student who has actually completed onboarding.
+        // This used to run unconditionally, which — combined with v2Onboarded
+        // being inferred from the existence of progress rows — meant merely
+        // opening the task list marked a student as onboarded and the tenure
+        // popup never appeared for them again.
+        if (progressCount === 0 && student.v2Onboarded) {
             await taskEngine.assignTasksForStudent(student);
         }
 

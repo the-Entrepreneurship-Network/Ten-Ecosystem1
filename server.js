@@ -56,6 +56,7 @@ const {
 const attendanceUtils = require("./utils/attendanceUtils");
 const tenureUtils = require("./utils/tenure");
 const { istNow, istDateKey } = require("./utils/dateKey");
+const tenurePaymentConfig = require("./config/tenurePayment");
 
 // ================= RATE LIMIT CONFIGURATION =================
 const RATE_LIMIT_CONFIG = {
@@ -8413,10 +8414,14 @@ const SHORT_COURSE_PRICES = {
   '15days':  1500,
   '1month':  1000
 };
+// Just the tenure name. The dashboard composes the sentence around it, and
+// these values used to already contain "Internship Program", producing
+// "Under the TEN 1 Month Internship Program Internship Program, ..." —
+// the wrong-label bug reported in issue 6.2 / Screenshot 8.
 const SHORT_COURSE_LABELS = {
-  '1week':   '1 Week Internship Program',
-  '15days':  '15 Days Internship Program',
-  '1month':  '1 Month Internship Program'
+  '1week':   '1 Week',
+  '15days':  '15 Days',
+  '1month':  '1 Month'
 };
 const PAYMENT_CUTOFF_DATE = new Date('2026-07-09T00:00:00.000Z');
 
@@ -8457,7 +8462,10 @@ app.get('/api/tenure-payment/status', async (req, res) => {
     }
     if (!stu) return res.status(404).json({ error: 'Student not found' });
 
-    const tenure = (stu.tenure || '').toLowerCase().replace(/[-_\s]/g, '');
+    // Shared tenure parsing. The ad-hoc lowercase+strip here only worked for
+    // values that already matched a key exactly; anything else fell through as
+    // "not a short course" and skipped payment, or the reverse.
+    const tenure = tenureUtils.normalizeTenure(stu.tenure) || '';
     const isShortCourse = ['1week', '15days', '1month'].includes(tenure);
     const price = SHORT_COURSE_PRICES[tenure] || 0;
     let isPaid = stu.shortCoursePaid || false;
@@ -8526,7 +8534,10 @@ app.post('/api/tenure-payment/submit-utr', async (req, res) => {
     }
     if (!stu) return res.status(404).json({ error: 'Student not found' });
 
-    const tenure = (stu.tenure || '').toLowerCase().replace(/[-_\s]/g, '');
+    // Shared tenure parsing. The ad-hoc lowercase+strip here only worked for
+    // values that already matched a key exactly; anything else fell through as
+    // "not a short course" and skipped payment, or the reverse.
+    const tenure = tenureUtils.normalizeTenure(stu.tenure) || '';
     const price = SHORT_COURSE_PRICES[tenure] || 0;
 
     // Save payment record
