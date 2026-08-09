@@ -441,10 +441,15 @@ class FallbackQuery {
         this.promiseFn = promiseFn;
         this._sort = null;
         this._limit = null;
+        this._skip = 0;
         this._select = null;
     }
     sort(s) { this._sort = s; return this; }
     limit(l) { this._limit = l; return this; }
+    // `skip()` was missing entirely, so any paginated query threw
+    // "….sort(...).skip is not a function" the moment the fallback engine was
+    // active — including the admin panel's student and audit-log lists.
+    skip(n) { this._skip = n; return this; }
     populate() { return this; }
     // `select()` used to be a no-op that returned `this`. Callers use it as a
     // security projection — e.g. `.select('name employeeId')` to avoid shipping
@@ -491,7 +496,15 @@ class FallbackQuery {
     }
 
     exec() {
-        return this.promiseFn(this._sort, this._limit).then(r => this._applySelect(r));
+        // Skip must be applied BEFORE limit, the way MongoDB does: ask the
+        // underlying reader for skip+limit rows, then drop the skipped ones.
+        const fetchLimit = (this._limit != null && this._skip)
+            ? this._limit + this._skip
+            : this._limit;
+        return this.promiseFn(this._sort, fetchLimit).then(r => {
+            const sliced = (this._skip && Array.isArray(r)) ? r.slice(this._skip) : r;
+            return this._applySelect(sliced);
+        });
     }
     then(onResolve, onReject) {
         return this.exec().then(onResolve, onReject);
@@ -621,8 +634,18 @@ function wrapModelWithFileFallback(model) {
         const isArray = Array.isArray(docOrDocs);
         const docs = isArray ? docOrDocs : [docOrDocs];
         const createdDocs = docs.map(d => {
-            const raw = d.toObject ? d.toObject() : { ...d };
-            return { ...raw, _id: raw._id || generateId(), createdAt: new Date(), updatedAt: new Date() };
+            // Hydrate through the model so SCHEMA DEFAULTS are applied. The
+            // raw object passed to create() only carries the fields the caller
+            // supplied, so anything with a default — status, enums, counters —
+            // was stored as undefined, and later queries filtering on those
+            // fields silently matched nothing.
+            let raw;
+            try {
+                raw = new model(d.toObject ? d.toObject() : d).toObject();
+            } catch (_) {
+                raw = d.toObject ? d.toObject() : { ...d };
+            }
+            return { ...raw, _id: raw._id || generateId(), createdAt: raw.createdAt || new Date(), updatedAt: new Date() };
         });
         // Enforce unique indexes, which the fallback previously ignored.
         for (const doc of createdDocs) {
@@ -5927,15 +5950,33 @@ function canDeleteIn(identity, room){
     return true;
 }
 
+/**
+ * Chat identity from the SESSION.
+ *
+ * The REST and upload endpoints used to take `role` + `employeeId`/`username`
+ * from the query string, so anyone who knew an employee ID could read that
+ * student's domain room. The Socket.IO handshake is separately verified by
+ * verifyChatIdentity(); this covers the HTTP surface.
+ */
+function chatIdentityFromSession(req) {
+    const s = req.session || {};
+    if (s.student) {
+        return { role: "student", id: s.student.employeeId, name: s.student.name || s.student.employeeId, domain: s.student.domain || "" };
+    }
+    if (s.coordinator) {
+        return { role: "coordinator", id: s.coordinator.username, name: s.coordinator.username, domain: s.coordinator.domain || "" };
+    }
+    if (s.hr) {
+        return { role: "hr", id: s.hr.username || s.hr.email, name: s.hr.name || s.hr.username, domain: "" };
+    }
+    return null;
+}
+
 // REST: load last 50 messages for a room (after permission check)
 app.get("/chat/messages/:room", async(req,res)=>{
 try{
     const room = decodeURIComponent(req.params.room);
-    const identity = await verifyChatIdentity({
-        role: req.query.role,
-        employeeId: req.query.employeeId,
-        username: req.query.username
-    });
+    const identity = chatIdentityFromSession(req);
     if(!identity) return res.status(401).json({ success:false, message:"Unauthorized" });
     if(!canAccessRoom(identity, room)) return res.status(403).json({ success:false, message:"Forbidden" });
 
@@ -5943,6 +5984,59 @@ try{
     messages.reverse();   // chronological for the UI
     res.json({ success:true, messages });
 }catch(e){ console.log(e); res.status(500).json({ success:false, messages:[] }); }
+});
+
+// ── Chat image upload ───────────────────────────────────────────────────────
+// Uses an extension + mimetype whitelist and a size cap, following the pattern
+// in routes/v2/documents.js rather than the generic `upload` instance, which
+// has no fileFilter and accepts any content type.
+const chatUploadDir = path.join(__dirname, "uploads", "chat");
+try { fs.mkdirSync(chatUploadDir, { recursive: true }); } catch (_) {}
+
+const CHAT_IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
+const CHAT_IMAGE_MIMES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+
+const chatImageUpload = multer({
+    storage: multer.diskStorage({
+        destination: (_req, _file, cb) => cb(null, chatUploadDir),
+        filename: (_req, file, cb) => {
+            // Never trust the client filename for the path on disk.
+            const ext = path.extname(file.originalname || "").toLowerCase();
+            const safeExt = CHAT_IMAGE_EXTENSIONS.includes(ext) ? ext : ".img";
+            cb(null, "chat-" + Date.now() + "-" + crypto.randomBytes(6).toString("hex") + safeExt);
+        }
+    }),
+    limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+    fileFilter: (_req, file, cb) => {
+        const ext = path.extname(file.originalname || "").toLowerCase();
+        if (!CHAT_IMAGE_EXTENSIONS.includes(ext) || !CHAT_IMAGE_MIMES.includes(file.mimetype)) {
+            return cb(new Error("Only JPG, PNG, GIF and WebP images can be sent in chat."));
+        }
+        cb(null, true);
+    }
+});
+
+app.post("/chat/upload-image", (req, res) => {
+    const identity = chatIdentityFromSession(req);
+    if (!identity) return res.status(401).json({ success: false, message: "Please sign in to send an image." });
+
+    chatImageUpload.single("image")(req, res, (err) => {
+        if (err) {
+            const tooBig = err.code === "LIMIT_FILE_SIZE";
+            return res.status(tooBig ? 413 : 400).json({
+                success: false,
+                message: tooBig ? "That image is larger than 5MB." : (err.message || "Could not upload that image.")
+            });
+        }
+        if (!req.file) return res.status(400).json({ success: false, message: "No image was received." });
+
+        res.json({
+            success: true,
+            imageUrl: "/uploads/chat/" + req.file.filename,
+            imageName: (req.file.originalname || "image").slice(0, 120),
+            imageMime: req.file.mimetype
+        });
+    });
 });
 
 // REST fallback for delete (Socket.IO event is the primary path)
@@ -8648,6 +8742,7 @@ try {
     app.use('/api/mentor', mentorProfileRoutes);
     app.use('/api/investor', investorProfileRoutes);
     app.use('/api/ecosystem-notifications', notificationRoutes);
+    app.use('/api/feedback', require('./routes/studentFeedback'));
     app.use('/api/verification', verificationRoutes);
     app.use('/api/hr', hrDashboardRoutes);
     app.use('/api', programApiRoutes);
@@ -8736,7 +8831,16 @@ io.on("connection", (socket) => {
         try{
             const room = payload && payload.room;
             const text = (payload && payload.text || "").toString().trim().slice(0, 4000);
-            if(!room || !text) { if(ack) ack({ success:false, message:"empty" }); return; }
+
+            // An image-only message is valid. The URL must be one this server
+            // issued via POST /chat/upload-image — never an arbitrary address
+            // supplied by the caller, which would let chat embed remote content
+            // or a tracking pixel.
+            const rawImageUrl = (payload && payload.imageUrl || "").toString();
+            const imageUrl = /^\/uploads\/chat\/[A-Za-z0-9._-]+$/.test(rawImageUrl) ? rawImageUrl : null;
+            if (rawImageUrl && !imageUrl) { if(ack) ack({ success:false, message:"bad_image" }); return; }
+
+            if(!room || (!text && !imageUrl)) { if(ack) ack({ success:false, message:"empty" }); return; }
             if(!canAccessRoom(identity, room)) { if(ack) ack({ success:false, message:"forbidden" }); return; }
 
             // Feature 8: block check — sender silenced in this room?
@@ -8755,6 +8859,9 @@ io.on("connection", (socket) => {
                 senderRole:   identity.role,
                 senderDomain: identity.domain || "",
                 message:      text,
+                imageUrl:     imageUrl,
+                imageName:    imageUrl ? String((payload && payload.imageName) || "image").slice(0, 120) : null,
+                imageMime:    imageUrl ? String((payload && payload.imageMime) || "").slice(0, 60) : null,
                 timestamp:    new Date()
             });
             io.to(room).emit("receive_message", doc);

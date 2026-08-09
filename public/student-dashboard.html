@@ -1592,6 +1592,8 @@ button:active { transform: translateY(0); }
     <button class="stu-nav-btn" data-view="stu-view-test" onclick="switchStudentView('stu-view-test')"><span class="nav-icon">📝</span> Take Test</button>
     <button class="stu-nav-btn" data-view="stu-view-guidelines" onclick="switchStudentView('stu-view-guidelines')"><span class="nav-icon">📋</span> Guidelines</button>
     <button class="stu-nav-btn" data-view="stu-view-leaderboard" onclick="switchStudentView('stu-view-leaderboard')"><span class="nav-icon">🏆</span> Leaderboard &amp; Badges</button>
+    <!-- Section 9 — student feedback, shown once the internship is complete. -->
+    <button class="stu-nav-btn" id="stuNavFeedback" data-view="stu-view-feedback" onclick="switchStudentView('stu-view-feedback')" style="display:none;"><span class="nav-icon">💌</span> Share Feedback</button>
     <!-- NEW FEATURE: Document Upload + Certificates nav links -->
     <button class="stu-nav-btn" onclick="window.location.href='my-documents.html'" style="background:linear-gradient(135deg,rgba(245,158,11,0.08),rgba(245,158,11,0.02));border:1px solid rgba(245,158,11,0.18);"><span class="nav-icon">📋</span> My Documents <span style="font-size:10px;background:rgba(245,158,11,0.2);color:#f59e0b;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
     <a class="stu-nav-btn" href="https://discord.gg/GYnZFbDE7" target="_blank" rel="noopener" style="background:linear-gradient(135deg,rgba(88,101,242,0.12),rgba(88,101,242,0.04));border:1px solid rgba(88,101,242,0.25);text-decoration:none;display:flex;align-items:center;gap:8px;"><span class="nav-icon">💬</span> Discord Community</a>
@@ -2367,6 +2369,39 @@ button:active { transform: translateY(0); }
     <strong>TEN</strong> — The Entrepreneurship Network &nbsp;·&nbsp; Student Portal
   </div>
   </div><!-- /stu-view-leaderboard -->
+
+  <!-- ══ Section 9 — Share Feedback ═══════════════════════════════════════ -->
+  <div id="stu-view-feedback" class="stu-view" style="display:none;">
+    <div class="section-card">
+      <h2>💌 Share Your Experience</h2>
+      <p style="color:#8aa4c8;font-size:13px;margin-bottom:16px;">
+        You have completed your internship — thank you. Tell the TEN team how it went.
+        Your feedback goes straight to HR.
+      </p>
+
+      <div id="feedbackHistory" style="margin-bottom:16px;"></div>
+
+      <div id="feedbackComposer" style="background:rgba(12,18,32,0.6);border:1px solid rgba(99,140,210,0.18);border-radius:12px;padding:14px;">
+        <label style="display:block;font-size:11px;color:#8aa4c8;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">How would you rate your internship?</label>
+        <div id="feedbackStars" style="display:flex;gap:6px;margin-bottom:14px;">
+          <button type="button" class="fb-star" data-value="1" aria-label="1 star"  style="background:none;border:none;font-size:26px;cursor:pointer;opacity:0.3;padding:0;color:#f5c542;">★</button>
+          <button type="button" class="fb-star" data-value="2" aria-label="2 stars" style="background:none;border:none;font-size:26px;cursor:pointer;opacity:0.3;padding:0;color:#f5c542;">★</button>
+          <button type="button" class="fb-star" data-value="3" aria-label="3 stars" style="background:none;border:none;font-size:26px;cursor:pointer;opacity:0.3;padding:0;color:#f5c542;">★</button>
+          <button type="button" class="fb-star" data-value="4" aria-label="4 stars" style="background:none;border:none;font-size:26px;cursor:pointer;opacity:0.3;padding:0;color:#f5c542;">★</button>
+          <button type="button" class="fb-star" data-value="5" aria-label="5 stars" style="background:none;border:none;font-size:26px;cursor:pointer;opacity:0.3;padding:0;color:#f5c542;">★</button>
+        </div>
+
+        <textarea id="feedbackMessage" rows="5" maxlength="4000" placeholder="What worked well? What could TEN do better? Anything you would tell the next intern?"
+          style="width:100%;background:#101a2e;border:1px solid rgba(99,140,210,0.25);color:#e2eaf7;border-radius:10px;padding:11px 13px;outline:none;font:500 13px inherit;resize:vertical;box-sizing:border-box;"></textarea>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;">
+          <span id="feedbackCount" style="font-size:11px;color:#5a7299;">0 / 4000</span>
+          <button id="feedbackSend" onclick="submitStudentFeedback()"
+            style="background:linear-gradient(135deg,#f5c542,#c9a227);color:#0c1220;border:none;font-weight:700;padding:9px 20px;border-radius:10px;cursor:pointer;">Send Feedback</button>
+        </div>
+        <p id="feedbackError" style="color:#f43f5e;font-size:12px;margin-top:8px;display:none;"></p>
+      </div>
+    </div>
+  </div><!-- /stu-view-feedback -->
 
     </div><!-- /section-modal-body -->
   </div><!-- /sectionModal -->
@@ -3711,6 +3746,129 @@ async function loadAttendance(){
     if(bThresh && threshEl) bThresh.innerText = threshEl.innerText;
   }catch(e){ console.log(e); }
 }
+
+// ══════════════════════════════════════════════════════════════
+//  Section 9 — Student feedback
+// ══════════════════════════════════════════════════════════════
+var _feedbackRating = null;
+
+function _fbEscape(s){
+  return String(s == null ? "" : s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+
+/**
+ * Show the Share Feedback nav item only once the internship is complete, and
+ * render anything the student has already sent.
+ */
+async function initStudentFeedback(){
+  try {
+    const res = await fetch("/api/feedback/my-status", { credentials: "same-origin" });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.success) return;
+
+    const nav = document.getElementById("stuNavFeedback");
+    if (nav) nav.style.display = data.eligible ? "" : "none";
+    if (!data.eligible) return;
+
+    renderFeedbackHistory(data.feedback || []);
+  } catch (e) { /* the nav item simply stays hidden */ }
+}
+
+function renderFeedbackHistory(items){
+  const box = document.getElementById("feedbackHistory");
+  if (!box) return;
+
+  if (!items.length) {
+    box.innerHTML = "";
+    return;
+  }
+
+  box.innerHTML = '<div style="font-size:11px;color:#8aa4c8;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">You have already shared</div>' +
+    items.map(function(f){
+      const stars = f.rating ? "★".repeat(f.rating) + "☆".repeat(5 - f.rating) : "";
+      const when = f.submittedAt ? new Date(f.submittedAt).toLocaleDateString("en-IN", { day:"numeric", month:"short", year:"numeric" }) : "";
+      return '<div style="background:rgba(16,26,46,0.7);border:1px solid rgba(99,140,210,0.15);border-radius:10px;padding:11px 13px;margin-bottom:8px;">' +
+               '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
+                 '<span style="color:#f5c542;font-size:13px;">' + stars + '</span>' +
+                 '<span style="color:#5a7299;font-size:11px;">' + _fbEscape(when) + '</span>' +
+               '</div>' +
+               '<div style="color:#cdd9ec;font-size:13px;white-space:pre-wrap;">' + _fbEscape(f.message) + '</div>' +
+             '</div>';
+    }).join("");
+}
+
+async function submitStudentFeedback(){
+  const msgEl = document.getElementById("feedbackMessage");
+  const errEl = document.getElementById("feedbackError");
+  const btn   = document.getElementById("feedbackSend");
+  if (!msgEl || !btn) return;
+
+  errEl.style.display = "none";
+  const message = msgEl.value.trim();
+  if (message.length < 10) {
+    errEl.textContent = "Please write at least a sentence or two.";
+    errEl.style.display = "block";
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "Sending…";
+  try {
+    const res = await fetch("/api/feedback/submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ message: message, rating: _feedbackRating })
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      msgEl.value = "";
+      _feedbackRating = null;
+      _paintFeedbackStars(0);
+      document.getElementById("feedbackCount").textContent = "0 / 4000";
+      Swal.fire({
+        icon: "success", title: "Thank you!", text: data.message,
+        background: "#0e1428", color: "#F0EEE8", confirmButtonColor: "#D4AF37"
+      });
+      initStudentFeedback();
+    } else {
+      errEl.textContent = data.message || "Could not send your feedback.";
+      errEl.style.display = "block";
+    }
+  } catch (e) {
+    errEl.textContent = "Network error. Please try again.";
+    errEl.style.display = "block";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Send Feedback";
+  }
+}
+
+function _paintFeedbackStars(value){
+  document.querySelectorAll("#feedbackStars .fb-star").forEach(function(star){
+    star.style.opacity = (Number(star.dataset.value) <= value) ? "1" : "0.3";
+  });
+}
+
+document.addEventListener("DOMContentLoaded", function(){
+  document.querySelectorAll("#feedbackStars .fb-star").forEach(function(star){
+    star.addEventListener("click", function(){
+      _feedbackRating = Number(star.dataset.value);
+      _paintFeedbackStars(_feedbackRating);
+    });
+  });
+  const msgEl = document.getElementById("feedbackMessage");
+  if (msgEl) {
+    msgEl.addEventListener("input", function(){
+      document.getElementById("feedbackCount").textContent = msgEl.value.length + " / 4000";
+    });
+  }
+  initStudentFeedback();
+});
 
 function attPill(status){
   if(!status) return '<span style="color:#5a7299;">—</span>';

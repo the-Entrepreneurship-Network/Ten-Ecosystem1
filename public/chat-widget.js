@@ -93,6 +93,19 @@
             ".tc-form input:focus{border-color:#f5c542;}",
             ".tc-form button{background:linear-gradient(135deg,#f5c542,#c9a227);color:#0c1220;border:none;font-weight:700;padding:0 16px;border-radius:10px;cursor:pointer;font-family:inherit;}",
             ".tc-empty{color:#5a7299;font-size:12px;text-align:center;padding:20px 8px;}",
+            // Date divider — a centred pill between days, WhatsApp style.
+            ".tc-datesep{display:flex;align-items:center;justify-content:center;margin:14px 0 8px;}",
+            ".tc-datesep span{background:rgba(99,140,210,0.14);color:#8aa4c8;font-size:11px;font-weight:700;letter-spacing:0.4px;padding:3px 12px;border-radius:99px;text-transform:uppercase;}",
+            // Image messages sit in the same bubble as text, so the sender
+            // name and role badge above them are identical either way.
+            ".tc-img{display:block;max-width:220px;max-height:220px;width:auto;height:auto;border-radius:8px;margin-bottom:4px;cursor:pointer;object-fit:cover;}",
+            ".tc-text{white-space:pre-wrap;}",
+            ".tc-attach{background:transparent !important;color:#8aa4c8 !important;padding:0 8px !important;font-size:17px;line-height:1;border-radius:8px;}",
+            ".tc-attach:hover{color:#f5c542 !important;}",
+            ".tc-attach:disabled{opacity:0.4;cursor:wait;}",
+            ".tc-preview{position:relative;padding:8px 12px 0;background:#0c1220;}",
+            ".tc-preview img{max-height:70px;border-radius:8px;border:1px solid rgba(245,197,66,0.25);}",
+            ".tc-preview-x{position:absolute;top:4px;left:66px;background:#0c1220;color:#f43f5e;border:1px solid rgba(244,63,94,0.4);border-radius:99px;width:20px;height:20px;line-height:1;cursor:pointer;font-weight:700;}",
             "@media (max-width:600px){.tc-win{right:0;left:0;bottom:0;width:100%;height:90vh;border-radius:14px 14px 0 0;}#tc-dock{right:10px;bottom:10px;}.tc-btn{padding:8px 12px;font-size:12px;}}"
         ].join("\n");
         var s = document.createElement("style");
@@ -169,13 +182,61 @@
 
         win.innerHTML = headerHtml +
             '<div class="tc-msgs"></div>' +
-            '<form class="tc-form"><input type="text" placeholder="Type a message…" maxlength="2000" autocomplete="off"/>' +
-            '<button type="submit">Send</button></form>';
+            '<div class="tc-preview" hidden><img alt="Selected image"><button type="button" class="tc-preview-x" title="Remove">×</button></div>' +
+            '<form class="tc-form">' +
+              '<input type="file" class="tc-file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>' +
+              '<button type="button" class="tc-attach" title="Send an image" aria-label="Send an image">📎</button>' +
+              '<input type="text" placeholder="Type a message…" maxlength="2000" autocomplete="off"/>' +
+              '<button type="submit">Send</button>' +
+            '</form>';
             
         document.body.appendChild(win);
         var msgsEl = win.querySelector(".tc-msgs");
         var form = win.querySelector(".tc-form");
-        var inputEl = form.querySelector("input");
+        var inputEl = form.querySelector('input[type="text"]');
+        var fileEl = form.querySelector(".tc-file");
+        var attachBtn = form.querySelector(".tc-attach");
+        var previewEl = win.querySelector(".tc-preview");
+        var previewImg = previewEl.querySelector("img");
+        var pendingImage = null;   // { imageUrl, imageName, imageMime }
+
+        function clearPendingImage() {
+            pendingImage = null;
+            fileEl.value = "";
+            previewEl.hidden = true;
+            previewImg.removeAttribute("src");
+        }
+
+        win.querySelector(".tc-preview-x").addEventListener("click", clearPendingImage);
+        attachBtn.addEventListener("click", function () { fileEl.click(); });
+
+        fileEl.addEventListener("change", function () {
+            var file = fileEl.files && fileEl.files[0];
+            if (!file) return;
+            if (file.size > 5 * 1024 * 1024) {
+                alert("That image is larger than 5MB.");
+                fileEl.value = "";
+                return;
+            }
+            // Show it immediately, upload in the background.
+            previewImg.src = URL.createObjectURL(file);
+            previewEl.hidden = false;
+            attachBtn.disabled = true;
+
+            var fd = new FormData();
+            fd.append("image", file);
+            fetch("/chat/upload-image", { method: "POST", body: fd, credentials: "same-origin" })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (!d || !d.success) throw new Error((d && d.message) || "Upload failed");
+                    pendingImage = { imageUrl: d.imageUrl, imageName: d.imageName, imageMime: d.imageMime };
+                })
+                .catch(function (err) {
+                    alert(err.message || "Could not upload that image.");
+                    clearPendingImage();
+                })
+                .finally(function () { attachBtn.disabled = false; });
+        });
 
         win.querySelector(".x").addEventListener("click", function () {
             win.classList.remove("open"); openWin = null;
@@ -199,15 +260,65 @@
         form.addEventListener("submit", function (e) {
             e.preventDefault();
             var t = inputEl.value.trim();
-            if (!t) return;
+            // An image on its own is a valid message.
+            if (!t && !pendingImage) return;
+
             var targetRoom = (cfg.role === "hr" && room === "general") ? (win.dataset.currentRoom || "general") : room;
-            socket.emit("send_message", { room: targetRoom, text: t });
+            var payload = { room: targetRoom, text: t };
+            if (pendingImage) {
+                payload.imageUrl  = pendingImage.imageUrl;
+                payload.imageName = pendingImage.imageName;
+                payload.imageMime = pendingImage.imageMime;
+            }
+            socket.emit("send_message", payload);
             inputEl.value = "";
+            clearPendingImage();
         });
         return { room: room, label: label, el: win, msgsEl: msgsEl, inputEl: inputEl };
     }
 
+    // ── WhatsApp-style date grouping ────────────────────────────────────────
+    // Computed from the VIEWER's clock, so "Today" stays correct as days pass
+    // without any stored flag — a message sent today reads "Today" now and
+    // "Yesterday" tomorrow, with no server involvement.
+    function dayKeyOf(ts) {
+        var d = new Date(ts);
+        if (isNaN(d.getTime())) return "";
+        return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
+    }
+
+    function dayLabelOf(ts) {
+        var d = new Date(ts);
+        if (isNaN(d.getTime())) return "";
+        var today = new Date();
+        var yesterday = new Date();
+        yesterday.setDate(today.getDate() - 1);
+
+        if (dayKeyOf(d) === dayKeyOf(today)) return "Today";
+        if (dayKeyOf(d) === dayKeyOf(yesterday)) return "Yesterday";
+
+        // Within the last week, the weekday is friendlier than a date.
+        var daysAgo = Math.floor((today.setHours(0,0,0,0) - new Date(d).setHours(0,0,0,0)) / 86400000);
+        if (daysAgo > 0 && daysAgo < 7) {
+            return d.toLocaleDateString(undefined, { weekday: "long" });
+        }
+        return d.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
+    }
+
+    /** Insert a divider if this message starts a new calendar day. */
+    function maybeAppendDateDivider(w, ts) {
+        var key = dayKeyOf(ts);
+        if (!key || w._lastDayKey === key) return;
+        w._lastDayKey = key;
+
+        var sep = document.createElement("div");
+        sep.className = "tc-datesep";
+        sep.innerHTML = '<span>' + escapeHtml(dayLabelOf(ts)) + '</span>';
+        w.msgsEl.appendChild(sep);
+    }
+
     function appendMessage(w, m) {
+        maybeAppendDateDivider(w, m.timestamp);
         var mine = (m.senderId === ownId() && m.senderRole === cfg.role);
         var roleTag =
             m.senderRole === "student" ? "INTERN" :
@@ -240,7 +351,7 @@
                 '<span class="tc-time">' + escapeHtml(fmtTime(m.timestamp)) + '</span>' +
                 delBtn +
             '</div>' +
-            '<div class="' + bubbleClass + '">' + escapeHtml(m.message) + '</div>';
+            '<div class="' + bubbleClass + '">' + bubbleBody(m) + '</div>';
         var dEl = row.querySelector(".tc-del");
         if (dEl) dEl.addEventListener("click", function () {
             if (!confirm("Delete this message for everyone?")) return;
@@ -252,16 +363,34 @@
         w.msgsEl.scrollTop = w.msgsEl.scrollHeight;
     }
 
+    /**
+     * The contents of a message bubble: an image, text, or both.
+     * Image messages go through the SAME row markup as text, so the sender name
+     * and role badge are identical — which is what section 8 asks for.
+     */
+    function bubbleBody(m) {
+        var html = "";
+        if (m.imageUrl && /^\/uploads\/chat\//.test(m.imageUrl)) {
+            var alt = escapeHtml(m.imageName || "shared image");
+            html += '<a href="' + escapeHtml(m.imageUrl) + '" target="_blank" rel="noopener noreferrer">' +
+                    '<img class="tc-img" src="' + escapeHtml(m.imageUrl) + '" alt="' + alt + '" loading="lazy">' +
+                    '</a>';
+        }
+        if (m.message) {
+            html += '<div class="tc-text">' + escapeHtml(m.message) + '</div>';
+        }
+        return html;
+    }
+
     function loadHistory(room, w) {
-        var qs = new URLSearchParams({
-            role: cfg.role,
-            employeeId: cfg.employeeId || "",
-            username: cfg.username || ""
-        }).toString();
-        fetch("/chat/messages/" + encodeURIComponent(room) + "?" + qs)
+        // Identity comes from the session cookie now. It used to be passed as
+        // ?role=&employeeId=, so anyone who knew an employee ID could read that
+        // student's domain room.
+        fetch("/chat/messages/" + encodeURIComponent(room), { credentials: "same-origin" })
             .then(function (r) { return r.json(); })
             .then(function (d) {
                 w.msgsEl.innerHTML = "";
+                w._lastDayKey = null;   // dividers restart with the list
                 if (!d.success || !d.messages || !d.messages.length) {
                     w.msgsEl.innerHTML = '<div class="tc-empty">No messages yet — say hi 👋</div>';
                     return;
