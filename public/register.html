@@ -267,12 +267,12 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Portfolio / Git Website</label>
-                <input type="url" id="stu_portfolio" name="portfolio" class="w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="https://mygithub.io">
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Portfolio / Git Website <span class="text-red-500">*</span></label>
+                <input type="url" id="stu_portfolio" name="portfolio" class="stu-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="https://mygithub.io">
               </div>
               <div>
-                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">LinkedIn Profile URL</label>
-                <input type="url" id="stu_linkedin" name="linkedin" class="w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="https://linkedin.com/in/username">
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">LinkedIn Profile URL <span class="text-red-500">*</span></label>
+                <input type="url" id="stu_linkedin" name="linkedin" class="stu-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="https://linkedin.com/in/username">
               </div>
             </div>
 
@@ -780,6 +780,32 @@
 
       const formData = new FormData(e.target);
       const flatData = Object.fromEntries(formData);
+
+      // The résumé and domain inputs are hidden — they are filled by the upload
+      // handler and the domain picker — and a hidden field cannot carry
+      // `required`, because the browser refuses to submit while being unable to
+      // focus the element it wants to complain about. So both are excluded from
+      // the .stu-req loop and were, until now, checked nowhere: the red asterisk
+      // beside "Resume Upload" enforced nothing at all. Check them here.
+      if (activeRole === 'student') {
+        if (!String(flatData.resume || '').trim()) {
+          Swal.fire({
+            icon: 'warning', title: 'Resume required',
+            text: 'Please upload your resume as a PDF before submitting.',
+            background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#D4AF37'
+          });
+          document.getElementById('resumeUploadContainer')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          return;
+        }
+        if (!String(flatData.domains || '').trim()) {
+          Swal.fire({
+            icon: 'warning', title: 'Domain required',
+            text: 'Please select at least one internship domain.',
+            background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#D4AF37'
+          });
+          return;
+        }
+      }
 
       // Structure nested roleSpecificData for target endpoint /api/register-hub/register
       const payload = {
