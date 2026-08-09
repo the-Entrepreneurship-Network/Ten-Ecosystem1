@@ -51,10 +51,13 @@ check 'POST /api/save-secrets (rewrote .env)' 404 \
 check 'POST /get-my-password (revealed any password)' 410 \
   "$(code -X POST "$BASE/get-my-password" -H 'Content-Type: application/json' -d "{\"employeeId\":\"$EMP\"}")"
 
-check 'POST /code/run anonymous (was RCE)' 503 \
-  "$(code -X POST "$BASE/code/run" -H 'Content-Type: application/json' -d '{"code":"1","language":"javascript"}')"
-check 'POST /code/submit anonymous' 503 \
-  "$(code -X POST "$BASE/code/submit" -H 'Content-Type: application/json' -d '{"code":"1"}')"
+# Rejected either way: 503 when ENABLE_CODE_RUNNER is off, 401 when it is on
+# but the caller has no session. What must never happen is a 200.
+rejected() { case "$1" in 401|503) echo rejected ;; *) echo "$1" ;; esac; }
+check 'POST /code/run anonymous (was RCE)' rejected \
+  "$(rejected "$(code -X POST "$BASE/code/run" -H 'Content-Type: application/json' -d '{"code":"1","language":"javascript"}')")"
+check 'POST /code/submit anonymous' rejected \
+  "$(rejected "$(code -X POST "$BASE/code/submit" -H 'Content-Type: application/json' -d '{"code":"1"}')")"
 
 check 'GET /students with Bearer mysecret123' 401 \
   "$(code "$BASE/students" -H 'Authorization: Bearer mysecret123')"
@@ -96,6 +99,9 @@ check 'student status with a real session' 200 "$(code -b "$JAR" "$BASE/api/v2/s
 check 'attendance with a real session' 200 "$(code -b "$JAR" "$BASE/attendance/student/$(printf '%s' "$EMP" | sed 's|/|%2F|g')")"
 check 'leaderboard with a real session' 200 "$(code -b "$JAR" "$BASE/api/v2/leaderboard")"
 check 'public health check' 200 "$(code "$BASE/health")"
+check 'overall leaderboard returns data' 200 "$(code "$BASE/leaderboard/overall")"
+check 'xterm is self-hosted (no CDN)' 200 "$(code "$BASE/vendor/xterm.js")"
+check 'xterm fit addon is self-hosted' 200 "$(code "$BASE/vendor/xterm-addon-fit.js")"
 # An unknown document number must give a clean "not found", never a 500.
 check 'unknown document verifies as not-found' 404 "$(code "$BASE/api/verify-document/TEN-OL-2026-ABCDEF")"
 check 'malformed document number does not 500' 404 "$(code "$BASE/api/verify-document/%3Cscript%3E")"

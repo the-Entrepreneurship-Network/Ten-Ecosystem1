@@ -6664,28 +6664,77 @@ async function checkCertificateEligibility(employeeId){
 }
 
 // ---- Build leaderboard entries for a domain or globally ----
+/**
+ * Build a leaderboard.
+ *
+ * The previous implementation loaded EVERY student and then, serially in a for
+ * loop, ran roughly eight more queries per student (computeAttendanceStats,
+ * calculatePerformance — itself five queries — plus a submission count). With
+ * thousands of students the "Overall" request exceeded the database timeout,
+ * the catch block returned `{ leaderboard: [] }`, and the front end rendered
+ * that as "No data yet" — indistinguishable from a genuinely empty board.
+ * That is Screenshot 10. The domain tab looked fine only because it filtered to
+ * a single domain first.
+ *
+ * This version issues a fixed number of queries regardless of student count,
+ * and ranks by StudentCoin.totalCoins — the source of truth the task document
+ * points at ("sort all students by totalCoins descending").
+ */
 async function _buildLeaderboard(filter, limit){
-    const students = await Student.find(filter || {}).sort({ createdAt: 1 });
-    const rows = [];
-    for(const s of students){
-        const stats = await computeAttendanceStats(s.employeeId, s.joiningDate);
-        const perf = await calculatePerformance(s);
-        const approved = await Submission.countDocuments({ employeeId: s.employeeId, status:"Approved" });
-        rows.push({
-            employeeId: s.employeeId,
-            name: (s.name || ((s.firstName||"")+" "+(s.lastName||""))).trim() || s.employeeId,
-            domain: s.domain || "",
-            score: perf ? perf.score : 0,
-            grade: perf ? perf.grade : "—",
-            attendancePct: stats.combinedPct || 0,
-            approved,
-            currentStreak: s.currentStreak || 0
-        });
-    }
-    rows.sort((a,b) => b.score - a.score
-                    || b.attendancePct - a.attendancePct
-                    || b.approved - a.approved);
+    const StudentCoin = require("./models/new/StudentCoin");
+
+    // 1. Candidate students (already narrowed by domain when one is given).
+    const students = await Student.find(filter || {})
+        .select("employeeId name firstName lastName domain currentStreak")
+        .lean();
+    if (!students.length) return [];
+
+    const studentIds = students.map(s => s._id);
+
+    // 2. Coin balances and approved-submission counts, in two queries total.
+    const [coinRows, approvedRows] = await Promise.all([
+        StudentCoin.find({ studentId: { $in: studentIds } })
+            .select("studentId totalCoins")
+            .lean(),
+        Submission.aggregate([
+            { $match: { employeeId: { $in: students.map(s => s.employeeId) }, status: "Approved" } },
+            { $group: { _id: "$employeeId", count: { $sum: 1 } } }
+        ]).catch(() => [])
+    ]);
+
+    const coinsByStudent = new Map();
+    for (const row of coinRows) coinsByStudent.set(String(row.studentId), row.totalCoins || 0);
+
+    const approvedByEmployee = new Map();
+    for (const row of approvedRows || []) approvedByEmployee.set(row._id, row.count || 0);
+
+    const rows = students.map(s => ({
+        employeeId: s.employeeId,
+        name: (s.name || ((s.firstName||"")+" "+(s.lastName||""))).trim() || s.employeeId,
+        domain: s.domain || "",
+        totalCoins: coinsByStudent.get(String(s._id)) || 0,
+        // Kept for the existing table columns; the stored value is refreshed by
+        // the attendance recalculation, not recomputed per row here.
+        attendancePct: s.attendancePercentage || 0,
+        score: coinsByStudent.get(String(s._id)) || 0,
+        grade: s.performanceScore ? gradeForScore(s.performanceScore) : "—",
+        approved: approvedByEmployee.get(s.employeeId) || 0,
+        currentStreak: s.currentStreak || 0
+    }));
+
+    rows.sort((a,b) => b.totalCoins - a.totalCoins
+                    || b.approved - a.approved
+                    || b.attendancePct - a.attendancePct);
+
     return rows.slice(0, limit).map((r, i) => Object.assign({ rank: i+1 }, r));
+}
+
+function gradeForScore(score){
+    if (score >= 90) return "A+";
+    if (score >= 80) return "A";
+    if (score >= 70) return "B";
+    if (score >= 60) return "C";
+    return "D";
 }
 async function buildDomainLeaderboard(domain, limit=10){ return _buildLeaderboard({ domain }, limit); }
 async function buildOverallLeaderboard(limit=20)        { return _buildLeaderboard({}, limit); }
@@ -6693,18 +6742,28 @@ async function buildOverallLeaderboard(limit=20)        { return _buildLeaderboa
 // ---- API ----
 
 // Feature 5 — leaderboards
+// NOTE: both handlers used to swallow a failure into
+// `{ success:false, leaderboard: [] }`, which the front end rendered as
+// "No data yet" — so a timeout looked exactly like an empty board and the real
+// problem stayed invisible. They now report the failure.
 app.get("/leaderboard/domain/:domain", async(req,res)=>{
     try{
         const domain = decodeURIComponent(req.params.domain);
         const rows = await buildDomainLeaderboard(domain, 10);
         res.json({ success:true, leaderboard: rows, domain });
-    }catch(e){ console.log(e); res.status(500).json({ success:false, leaderboard:[] }); }
+    }catch(e){
+        console.error("[leaderboard] domain failed:", e.message);
+        res.status(500).json({ success:false, error:"Could not load the leaderboard.", leaderboard:null });
+    }
 });
 app.get("/leaderboard/overall", async(req,res)=>{
     try{
         const rows = await buildOverallLeaderboard(20);
         res.json({ success:true, leaderboard: rows });
-    }catch(e){ console.log(e); res.status(500).json({ success:false, leaderboard:[] }); }
+    }catch(e){
+        console.error("[leaderboard] overall failed:", e.message);
+        res.status(500).json({ success:false, error:"Could not load the leaderboard.", leaderboard:null });
+    }
 });
 
 // Feature 6 — badges

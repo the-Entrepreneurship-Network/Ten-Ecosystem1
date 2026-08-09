@@ -237,7 +237,14 @@
             : "/leaderboard/overall";
         const r = await fetch(url);
         const d = await r.json();
-        return (d && d.leaderboard) || [];
+        // `|| []` used to turn a server failure into an empty array, which
+        // rendered as "No data yet" — a timeout and a genuinely empty board
+        // looked identical, which is why the Overall tab appeared broken with
+        // no clue why. A failure now throws so the caller can say so.
+        if (!r.ok || !d || d.success === false || d.leaderboard == null) {
+            throw new Error((d && d.error) || "Could not load the leaderboard.");
+        }
+        return d.leaderboard;
     }
     function renderLbTable(rows, opts){
         if(!rows.length) return '<div class="ten-x-empty">No data yet</div>';

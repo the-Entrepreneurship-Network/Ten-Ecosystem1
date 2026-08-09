@@ -24,9 +24,14 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/xterm/5.3.0/xterm.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xterm/5.3.0/xterm.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xterm/5.3.0/addon-fit/addon-fit.min.js"></script>
+  <!-- xterm.js is self-hosted. It used to come from a CDN, and the fit-addon
+       URL (.../xterm/5.3.0/addon-fit/addon-fit.min.js) was not a real cdnjs
+       path at all — it 404d, so FitAddon was never defined. Serving it from
+       public/vendor/ also means a network that blocks the CDN no longer
+       breaks the coding challenges. -->
+  <link rel="stylesheet" href="/vendor/xterm.css">
+  <script src="/vendor/xterm.js"></script>
+  <script src="/vendor/xterm-addon-fit.js"></script>
 
 <style>
 @keyframes qr-pulse {
@@ -4268,6 +4273,28 @@ async function runCode(){
       body: JSON.stringify({ code: _readCode(), language: lang, input: stdin })
     });
     const d = await r.json();
+
+    // The runner is gated server-side: it needs a signed-in student and the
+    // ENABLE_CODE_RUNNER flag. Say which, rather than printing a raw error.
+    if (r.status === 401) {
+      out.classList.add("is-error");
+      out.textContent = "Your session has expired. Please sign in again.";
+      return;
+    }
+    if (r.status === 503) {
+      out.classList.add("is-warn");
+      out.textContent = d.error || "The code runner is currently unavailable.";
+      return;
+    }
+    if (r.status === 429) {
+      out.classList.add("is-warn");
+      out.textContent = "You are running code very quickly — please wait a moment.";
+      return;
+    }
+
+    // Mirror the result into the Terminal tab, which shows run output.
+    if (typeof _writeRunToTerminal === "function") _writeRunToTerminal(d);
+
     const time = (d.executionTime != null) ? "  ·  " + d.executionTime + " ms" : "";
     if(d.success){
       out.classList.remove("is-error","is-warn");
@@ -4380,7 +4407,6 @@ let _cmActiveTab = 'editor';
 let _xtermInstance = null;
 let _xtermFit = null;
 let _termConnected = false;
-let _termSocket = null;
 
 function switchCmTab(tab) {
     _cmActiveTab = tab;
@@ -4407,11 +4433,21 @@ function switchCmTab(tab) {
 
 function _initCodingTerminal() {
     if (_termConnected) return;
-    if (typeof Terminal === 'undefined') {
-        var c = document.getElementById('xtermContainer');
-        if (c) c.innerHTML = '<div style="padding:20px;color:#f43f5e;">xterm.js failed to load from CDN.</div>';
+
+    var container = document.getElementById('xtermContainer');
+
+    // Guard on BOTH globals. The old check tested only `Terminal`, so when the
+    // fit-addon script 404d (its CDN path did not exist) the friendly message
+    // never appeared — instead `new FitAddon.FitAddon()` threw a ReferenceError
+    // and the pane just stayed blank.
+    if (typeof Terminal === 'undefined' || typeof FitAddon === 'undefined') {
+        if (container) {
+            container.innerHTML = '<div style="padding:20px;color:#f43f5e;">' +
+                'The terminal could not start. Please refresh the page.</div>';
+        }
         return;
     }
+
     var q = _currentCodingQuestion;
     if (!q) return;
     var lang = (document.getElementById('cmLang') || {}).value || 'javascript';
@@ -4423,53 +4459,66 @@ function _initCodingTerminal() {
         theme: { background:'#0d1117', foreground:'#cdd9ec', cursor:'#f5c542' },
         fontFamily: 'Consolas, Monaco, monospace',
         fontSize: 14,
-        cursorBlink: true,
+        cursorBlink: false,
         convertEol: true,
         scrollback: 1000,
+        disableStdin: true
     });
     var fitAddon = new FitAddon.FitAddon();
     term.loadAddon(fitAddon);
-    var container = document.getElementById('xtermContainer');
     if (container) container.innerHTML = '';
     term.open(container);
     fitAddon.fit();
     _xtermInstance = term;
     _xtermFit = fitAddon;
 
-    // Use socket.io - either the existing global `io` or create new connection
-    _termSocket = (typeof io !== 'undefined') ? io({ path: '/socket.io', auth: { role:'student', employeeId: employeeId } }) : null;
-    if (!_termSocket) {
-        term.writeln('\x1b[31mSocket.IO not available.\x1b[0m');
-        return;
-    }
-
-    _termSocket.emit('terminal:start', {
-        questionId: q._id,
-        employeeId: employeeId,
-        language: lang,
-        title: q.title || '',
-        description: q.description || '',
-        sampleInput: q.sampleInput || '',
-        sampleOutput: q.sampleOutput || '',
-    });
-
-    _termSocket.on('terminal:data', function(d) { term.write(d); });
-    _termSocket.on('terminal:error', function(msg) { term.writeln('\r\n\x1b[31m' + msg + '\x1b[0m\r\n'); });
-
-    term.onData(function(input) { _termSocket.emit('terminal:input', input); });
+    // The Terminal tab shows the OUTPUT of running your code.
+    //
+    // It previously spoke a socket protocol — terminal:start / terminal:input /
+    // terminal:data — that the server never implemented: there are no such
+    // handlers and no node-pty dependency, so even with xterm loading perfectly
+    // the pane could never receive a byte. It now drives the same
+    // POST /code/run path the "Run" button uses.
+    term.writeln('\x1b[90mTEN code runner — ' + lang + '\x1b[0m');
+    term.writeln('\x1b[90mWrite your solution in the Editor tab, then press Run.\x1b[0m');
+    term.writeln('');
 
     window.addEventListener('resize', function() { if (_xtermFit) _xtermFit.fit(); });
     _termConnected = true;
 }
 
-function _destroyCodingTerminal() {
-    if (_termSocket) {
-        _termSocket.emit('terminal:kill');
-        _termSocket.off('terminal:data');
-        _termSocket.off('terminal:error');
-        _termSocket.disconnect();
-        _termSocket = null;
+/**
+ * Render one run's result into the terminal pane.
+ * Called by runCode() so the Editor and Terminal tabs show the same thing.
+ */
+function _writeRunToTerminal(payload) {
+    var term = _xtermInstance;
+    if (!term) return;
+
+    var stamp = new Date().toLocaleTimeString();
+    term.writeln('\x1b[90m$ run  (' + stamp + ')\x1b[0m');
+
+    if (payload.output) {
+        String(payload.output).split('\n').forEach(function (line) { term.writeln(line); });
     }
+    if (payload.error) {
+        String(payload.error).split('\n').forEach(function (line) {
+            term.writeln('\x1b[31m' + line + '\x1b[0m');
+        });
+    }
+    if (!payload.output && !payload.error) {
+        term.writeln('\x1b[90m(no output)\x1b[0m');
+    }
+    if (payload.executionTime !== undefined) {
+        term.writeln('\x1b[90m— finished in ' + payload.executionTime + 'ms\x1b[0m');
+    }
+    term.writeln('');
+}
+
+function _destroyCodingTerminal() {
+    // The terminal:* socket events this used to emit were never handled by the
+    // server — there are no such listeners and no node-pty dependency — so the
+    // whole socket path was dead code.
     if (_xtermInstance) { _xtermInstance.dispose(); _xtermInstance = null; }
     _xtermFit = null;
     _termConnected = false;
