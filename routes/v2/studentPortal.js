@@ -956,11 +956,18 @@ router.get("/student/status", requireStudent, async (req, res) => {
         const stats = {};
         for (const s of progressStats) stats[s._id] = s.count;
 
+        // The tenure the student registered on. The setup popup cannot change
+        // it — every option except this one is disabled there — so when it is
+        // known the popup is a required dialog with exactly one possible
+        // answer, and the page completes onboarding without showing it.
+        const registeredTenure = student.tenure ? normalizeTenure(student.tenure) : null;
+
         res.json({
             success:       true,
             v2Onboarded,
             domain:        student.domain,
             durationType,
+            registeredTenure,
             totalCoins:    coinData.totalCoins,
             rupeeValue:    coinData.rupeeValue || (coinData.totalCoins * 0.5).toFixed(2),
             onboardingPopupSeen: student.onboardingPopupSeen || false,
