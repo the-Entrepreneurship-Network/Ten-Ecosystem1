@@ -938,18 +938,48 @@ router.post("/student/onboard", requireStudent, requireTenurePaid, async (req, r
 async function ensureOnboarded(student) {
     if (!student || student.v2Onboarded) return false;
 
-    const registered = student.tenure ? normalizeTenure(student.tenure) : null;
-    if (!registered) return false;   // nothing to infer — let the popup ask
+    // Resolve the duration exactly the way the rest of the portal does.
+    //
+    // The first version of this required student.tenure and gave up otherwise,
+    // and that is why the popup survived the fix. Some records have no tenure
+    // stored at all, and the two helpers disagree about them:
+    //
+    //   toDurationType(null)  -> "1month"   (a default)
+    //   normalizeTenure(null) -> null
+    //
+    // The page preselects "1 Month" from the first, so the popup looked like it
+    // knew the answer, while this function read the second, saw null, and left
+    // the dialog up. Every screenshot of the popup that survived is one of
+    // these students.
+    //
+    // resolveStudentDuration is what assigns the tasks and drives the
+    // attendance target, so onboarding on the same value cannot introduce a
+    // disagreement — it is already the duration this student is being taught
+    // and marked on.
+    const duration = taskEngine.resolveStudentDuration(student);
+    if (!duration) return false;
+
+    // A missing tenure is a data defect, not something to paper over. The
+    // record is left untouched so scripts/audit-domain-tenure.js can still find
+    // it, and it is logged once, at the moment it matters, with the ID needed
+    // to correct it in the admin panel.
+    if (!student.tenure) {
+        console.warn(
+            "[V2] " + student.employeeId + " has no tenure on record; " +
+            "onboarding on the resolved default (" + duration + "). " +
+            "Set the correct tenure in the admin panel."
+        );
+    }
 
     // Claim the transition conditionally. Two page loads racing each other
     // would otherwise both assign tasks and both award the welcome bonus.
     const claim = await Student.updateOne(
         { _id: student._id, v2Onboarded: { $ne: true } },
-        { $set: { v2Onboarded: true, v2DurationType: registered } }
+        { $set: { v2Onboarded: true, v2DurationType: duration } }
     );
 
     student.v2Onboarded    = true;
-    student.v2DurationType = registered;
+    student.v2DurationType = duration;
 
     // modifiedCount is 0 when another request won the race; it is undefined on
     // the JSON fallback engine, which has no such guarantee to offer.
