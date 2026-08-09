@@ -46,6 +46,24 @@ try { AssistantUsage = require('../../models/new/AssistantUsage'); } catch (_e) 
 let BotQuery = null;
 try { BotQuery = require('../../models/BotQuery'); } catch (_e) { /* optional */ }
 
+/*
+ * The student's own records.
+ *
+ * Until now the assistant read four collections and so could not answer the
+ * commonest question of all - "what is my employee ID". Everything below is
+ * about one student and one student only; see meFor() for why the identity
+ * comes from the session and never from the request body.
+ */
+const OWN = {};
+[['Student', '../../models/Student'],
+ ['Attendance', '../../models/Attendance'],
+ ['Submission', '../../models/Submission'],
+ ['TaskAssignment', '../../models/TaskAssignment'],
+ ['CertificateRequest', '../../models/CertificateRequest'],
+ ['Coordinator', '../../models/Coordinator']].forEach(function (pair) {
+  try { OWN[pair[0]] = require(pair[1]); } catch (_e) { OWN[pair[0]] = null; }
+});
+
 /* ────────────────────────────── tiers ───────────────────────────── */
 /*
  * Four tiers. `messages` is the cap per 30-day period; null means unlimited.
@@ -318,7 +336,11 @@ function renderPlan(domain, duration, rows, depth) {
         ? hard.map(function (r) { return '• Week ' + r.weekNumber + ' (' + r.difficultyLevel + ') — ' + r.taskTitle; }).join('\n')
         : '• Difficulty stays moderate throughout.',
       '',
-      'Keep the two weeks before week ' + (hard.length ? hard[0].weekNumber : rows.length) + ' light. That is where students stall, and the tasks are cumulative.'
+      // On a short track there is no "two weeks before" to keep light, and
+      // saying so anyway ("the two weeks before week 1") reads as nonsense.
+      (hard.length && hard[0].weekNumber > 2)
+        ? 'Keep the two weeks before week ' + hard[0].weekNumber + ' light. That is where students stall, and the tasks are cumulative.'
+        : 'The tasks are cumulative, so do not let an early week slide - later ones build on it.'
     ].join('\n'));
   }
 
@@ -329,7 +351,7 @@ function renderPlan(domain, duration, rows, depth) {
       'Full breakdown:',
       '• Difficulty spread: ' + Object.keys(byDiff).map(function (k) { return byDiff[k] + ' ' + k; }).join(', ') + '.',
       '• The final task alone is ' + Math.round((last.coinReward / totalCoins) * 100) + '% of this track’s task coins, so an unfinished final week costs far more than one week of effort.',
-      '• These are task coins only. Attendance across ' + rows.length + ' weeks adds roughly ' + (rows.length * 7 * 5) + ' more, plus ' + rows.length + ' week-completion bonuses of 30, plus up to 30 a day from the posting task. The recurring total usually exceeds the task total.',
+      '• These are task coins only. Attendance across ' + rows.length + (rows.length === 1 ? ' week' : ' weeks') + ' adds roughly ' + (rows.length * 7 * 5) + ' more, plus ' + rows.length + ' week-completion ' + (rows.length === 1 ? 'bonus' : 'bonuses') + ' of 30, plus up to 30 a day from the posting task. The recurring total usually exceeds the task total.',
       '• Submissions are reviewed against the description, not the title. Read the task text literally and satisfy each clause.'
     ].join('\n'));
   }
@@ -360,8 +382,78 @@ async function domainListAnswer() {
 }
 
 const TOPIC_RULES = [
+  /* These four sit above the coins rule on purpose. Every one of them used to
+     be answered with the coin conversion table, which is a fact but not the
+     one that was asked for - "when do I get paid" is a question about timing,
+     and answering it with a rate card is how an assistant looks like it is
+     matching keywords rather than reading. */
   {
-    test: /\b(plan|plans|pricing|tier|subscription|pro\b|plus\b|enterprise|upgrade|starter)\b.{0,20}\b(cost|price|much|available|are|do|work|mean)?\b|\bwhat are the plans\b|\bhow much is (pro|plus|enterprise)\b|\bupgrade\b/i,
+    test: /\bwhen\b.{0,30}\b(?:paid|payment|stipend|payout|money|salary|settle)\b|\b(?:payout|payment)\s+(?:date|day|cycle|schedule|timeline)\b|\bhow long.{0,20}(?:paid|payout)\b/i,
+    answer: () => [
+      'I cannot give you a payout date, and I would rather say so than guess at one.',
+      '',
+      'What I can tell you is how the amount is arrived at: coins convert at 100 coins = Rs 50, and they '
+        + 'accrue as tasks are approved, attendance is marked and the recurring bonuses land. That part is '
+        + 'published and I can quote it exactly.',
+      '',
+      'When it is actually released, and by what route, is settled per student and is not in the task '
+        + 'library I read from. Ask your coordinator for your payout schedule in writing, and keep the reply.',
+    ].join('\n'),
+  },
+  {
+    test: /\b(?:is|are)\b.{0,24}\b(?:stipend|payment|money|payout)\b.{0,20}\b(?:guaranteed|assured|certain|sure|confirmed)\b|\bguaranteed\b.{0,16}\b(?:stipend|payment|money)\b|\bwill i (?:definitely |certainly )?get (?:paid|money|the stipend)\b/i,
+    answer: () => [
+      'No, and be wary of anyone who tells you otherwise.',
+      '',
+      'Coins are earned against work that is approved. The rates are fixed and published - 100 coins = Rs 50 '
+        + '- so what you can earn is knowable in advance. What is not automatic is the earning: unapproved '
+        + 'submissions, missed attendance and the daily posting task you skipped all reduce it.',
+      '',
+      'The published rate is a ceiling you work up to, not a salary that arrives regardless. For anything '
+        + 'about your own settlement, ask your coordinator and get it in writing.',
+    ].join('\n'),
+  },
+  {
+    test: /\b(?:why|reason).{0,30}\b(?:rejected|declined|not approved|disapproved|failed)\b|\b(?:task|submission).{0,20}\brejected\b|\brejected\b.{0,20}\b(?:task|submission|why)\b/i,
+    answer: () => [
+      'A rejection is a review decision, and the reason is written on the submission itself rather than '
+        + 'held anywhere I can read.',
+      '',
+      'Open the task in the portal and read the coordinator feedback on it. That is the actual reason, in '
+        + 'their words.',
+      '',
+      'The usual causes, in the order they come up:',
+      '• The submission answered the title but not every clause of the description. Reviews go against the '
+        + 'description, so read it literally and satisfy each line.',
+      '• The repository link was private, empty, or pointed at the wrong branch.',
+      '• Work from a previous week was resubmitted.',
+      '',
+      'Fix what the feedback names and resubmit. If the feedback is unclear, ask your coordinator directly '
+        + 'through Domain Chat - a rejection is not a penalty, and resubmission is normal.',
+    ].join('\n'),
+  },
+  {
+    test: /\b(?:coins?|balance|points?).{0,24}\b(?:wrong|incorrect|missing|not (?:added|credited|showing|updated)|short|less|mismatch)\b|\b(?:did ?n[o']?t|have ?n[o']?t|not) (?:get|receive|got).{0,16}\bcoins?\b/i,
+    answer: () => [
+      'Coin totals are held on your account, which I cannot read or adjust - so take this to your '
+        + 'coordinator rather than to me. But check these first, because they explain most of it.',
+      '',
+      '• Task coins land on approval, not on submission. Anything still pending review has not paid yet.',
+      '• Attendance is 5 a day and only where attendance was actually marked, which follows an accepted '
+        + 'submission.',
+      '• A 7-day streak pays 50, and it resets on the first missed day rather than pausing.',
+      '• The Daily Job Posting task pays 3 per platform up to 10, and only for the platforms you posted to.',
+      '',
+      'If it still does not reconcile, message your coordinator with your employee ID, the week in question '
+        + 'and what you expected. A written record is what gets it corrected.',
+    ].join('\n'),
+  },
+  {
+    /* The trailing group used to be optional, which made this match a bare
+       "plan" anywhere in the sentence - so "give me my week by week plan"
+       was answered with the subscription tiers. A subscription signal is
+       now required, and "plan" on its own means the curriculum. */
+    test: /\b(?:pricing|subscription|upgrade|premium)\b|\b(?:what|which|show|list)\b.{0,12}\bplans\b|\bhow much (?:is|are|does)\b.{0,16}\b(?:pro|plus|enterprise|assistant)\b|\b(?:pro|plus|enterprise|starter)\s+(?:plan|tier)\b/i,
     answer: () => [
       'The assistant itself has four tiers. Everything about your internship, tasks and coins is unaffected by them.',
       '',
@@ -601,14 +693,323 @@ const TOPIC_RULES = [
 /* Trailing words like "bro", "sir" or "a lot" are still small talk. Ending a
    conversation with "thanks bro" and being told the assistant could not tell
    what you needed is a bad last impression for no reason. */
-const GREET = "hi+|hey+|hello+|yo|hola|namaste|greetings|good\\s*(?:morning|afternoon|evening|day|night)|"
-            + "thank(?:s| you)?|thx|ty|ok(?:ay)?|k|cool|nice|great|awesome|got it|sure|yep|yes|no|bye|see ya";
-const TAIL  = "you|u|so much|a lot|bro|bhai|sir|ma'?am|mate|man|dude|buddy|ji|there|again|everyone|all";
-/* Two greetings in a row ("ok cool", "hello there") are still small talk.
-   Being told the assistant could not tell what you needed, because you said
-   two friendly words instead of one, is a silly way to end a conversation. */
-const SMALL_TALK = new RegExp(
-  '^[\\s!.?,]*(?:' + GREET + ')(?:[\\s!.?,]+(?:' + GREET + '|' + TAIL + '))*[\\s!.?,]*$', 'i');
+/* ─────────────────────── the student's own record ───────────────────────
+ *
+ * Identity comes from the login session and nothing else.
+ *
+ * /ask also receives a userId in the body, because the page sends one for
+ * usage metering. It is NOT used here: a student can edit the request in
+ * devtools, and keying attendance or an employee ID off it would let anyone
+ * read anyone's record just by changing a number. The session cookie is set
+ * by the portal's own login and cannot be chosen by the caller.
+ */
+function sessionEmployeeId(req) {
+  const s = req && req.session && req.session.student;
+  return (s && (s.employeeId || s.employee_id)) ? String(s.employeeId || s.employee_id) : '';
+}
+
+/**
+ * Their own record, reduced to the fields an answer may mention.
+ *
+ * Explicitly listed rather than passing the document through: Student also
+ * carries `password` and `plainPassword`, and a chat assistant is exactly
+ * the wrong place for either to surface.
+ */
+async function meFor(req) {
+  const employeeId = sessionEmployeeId(req);
+  if (!employeeId || !OWN.Student) { return null; }
+  try {
+    const row = await OWN.Student.findOne({ employeeId })
+      .select('name firstName lastName employeeId domain domains tenure joiningDate collegeName college email '
+            + 'certificateApprovedByCoordinator certificateApprovedByHR')
+      .lean();
+    if (!row) { return null; }
+    return {
+      employeeId: row.employeeId,
+      name: row.name || [row.firstName, row.lastName].filter(Boolean).join(' ') || '',
+      domain: row.domain || (Array.isArray(row.domains) && row.domains[0]) || '',
+      domains: Array.isArray(row.domains) ? row.domains : [],
+      tenure: row.tenure || '',
+      joiningDate: row.joiningDate || '',
+      college: row.collegeName || row.college || '',
+      certCoordinator: !!row.certificateApprovedByCoordinator,
+      certHR: !!row.certificateApprovedByHR,
+    };
+  } catch (_e) { return null; }
+}
+
+/* Asked about themselves but not signed in. Saying so beats a shrug. */
+const NEED_SIGN_IN = 'I can only read your own record while you are signed in on this browser. '
+  + 'Open the portal, sign in, then ask me again and I will pull it up.';
+
+/* ── answers drawn from their own record ────────────────────────────────
+ * Every one of these is wrapped, because a slow or unreachable Mongo must
+ * degrade to "I could not read that" and never to a 500 mid-conversation. */
+const only = (arr) => arr.filter(Boolean).join('\n');
+const plural = (n, word) => n + ' ' + word + (n === 1 ? '' : 's');
+
+async function safely(fn, whenBroken) {
+  try { return await fn(); } catch (_e) { return whenBroken; }
+}
+
+function myProfile(me) {
+  return only([
+    'Here is what your record says:',
+    '',
+    'Employee ID: ' + me.employeeId,
+    me.domains.length > 1 ? 'Domains: ' + me.domains.join(' and ')
+      : me.domain ? 'Domain: ' + me.domain : null,
+    me.tenure ? 'Track: ' + me.tenure : null,
+    me.joiningDate ? 'Joined: ' + me.joiningDate : null,
+    me.college ? 'College: ' + me.college : null,
+  ]);
+}
+
+function myEmployeeId(me) {
+  return 'Your employee ID is ' + me.employeeId + '.'
+    + (me.domain ? ' You are registered on ' + me.domain + '.' : '')
+    + ' Quote it whenever you write to your coordinator or to HR.';
+}
+
+async function myAttendance(me) {
+  if (!OWN.Attendance) { return null; }
+  return safely(async () => {
+    const rows = await OWN.Attendance.find({ employeeId: me.employeeId })
+      .select('status dateKey').lean();
+    if (!rows.length) {
+      return 'Nothing has been marked against ' + me.employeeId + ' yet. Attendance is marked by your '
+        + 'coordinator when a submission is accepted, so it appears once your first task is reviewed.';
+    }
+    const tally = {};
+    rows.forEach((r) => {
+      const k = String(r.status || 'unrecorded').toLowerCase();
+      tally[k] = (tally[k] || 0) + 1;
+    });
+    const parts = Object.keys(tally).sort().map((k) => plural(tally[k], 'day') + ' ' + k);
+    return only([
+      'Your attendance so far: ' + parts.join(', ') + '.',
+      '',
+      'That is ' + plural(rows.length, 'day') + ' on record in total. Attendance follows accepted '
+        + 'submissions, so the way to raise it is to keep clearing tasks.',
+    ]);
+  }, 'I could not read your attendance just now. Try again in a moment.');
+}
+
+async function myNextTask(me) {
+  if (!OWN.TaskAssignment) { return null; }
+  return safely(async () => {
+    const rows = await OWN.TaskAssignment.find({ employeeId: me.employeeId })
+      .select('title status dayNumber taskNumber deadline difficulty').lean();
+    if (!rows.length) {
+      return 'No tasks have been assigned to ' + me.employeeId + ' yet. They unlock on a schedule once '
+        + 'your track starts - ask me for your week-by-week plan to see what is coming.';
+    }
+    const done = /approv|complete|accept/i;
+    const open = rows
+      .filter((r) => !done.test(String(r.status || '')))
+      .sort((a, b) => (a.dayNumber || a.taskNumber || 0) - (b.dayNumber || b.taskNumber || 0));
+    if (!open.length) {
+      return 'Everything assigned to you is cleared - ' + plural(rows.length, 'task') + ', all approved. '
+        + 'Nothing is pending on your side.';
+    }
+    const n = open[0];
+    return only([
+      'Your next task is: ' + (n.title || 'untitled task'),
+      '',
+      n.dayNumber ? 'Day ' + n.dayNumber : n.taskNumber ? 'Task ' + n.taskNumber : null,
+      n.difficulty ? 'Difficulty: ' + n.difficulty : null,
+      n.status ? 'Status: ' + n.status : null,
+      n.deadline ? 'Deadline: ' + new Date(n.deadline).toDateString() : null,
+      '',
+      plural(open.length, 'task') + ' still open out of ' + rows.length + ' assigned.',
+    ]);
+  }, 'I could not read your task list just now. Try again in a moment.');
+}
+
+async function mySubmissions(me) {
+  if (!OWN.Submission) { return null; }
+  return safely(async () => {
+    const rows = await OWN.Submission.find({ employeeId: me.employeeId })
+      .select('status task coordinatorRating submittedAt').lean();
+    if (!rows.length) {
+      return 'You have not submitted anything yet under ' + me.employeeId + '. A submission is how a task '
+        + 'gets reviewed, marks your attendance and releases its coins.';
+    }
+    const tally = {};
+    rows.forEach((r) => {
+      const k = String(r.status || 'awaiting review').toLowerCase();
+      tally[k] = (tally[k] || 0) + 1;
+    });
+    const rated = rows.filter((r) => typeof r.coordinatorRating === 'number' && r.coordinatorRating > 0);
+    const avg = rated.length
+      ? (rated.reduce((s, r) => s + r.coordinatorRating, 0) / rated.length).toFixed(1)
+      : null;
+    return only([
+      'You have ' + plural(rows.length, 'submission') + ' on record:',
+      '',
+      Object.keys(tally).sort().map((k) => '• ' + plural(tally[k], 'submission') + ' ' + k).join('\n'),
+      avg ? '' : null,
+      avg ? 'Average coordinator rating: ' + avg + ' out of 5, across ' + plural(rated.length, 'rated submission') + '.' : null,
+    ]);
+  }, 'I could not read your submissions just now. Try again in a moment.');
+}
+
+async function myCertificate(me) {
+  return safely(async () => {
+    const bits = [];
+    if (OWN.CertificateRequest && OWN.Student) {
+      const stu = await OWN.Student.findOne({ employeeId: me.employeeId }).select('_id').lean();
+      const req = stu && await OWN.CertificateRequest.findOne({ studentId: stu._id })
+        .select('status coordinatorApproved hrApproved locEligible lorEligible starPerformanceLabel').lean();
+      if (req) {
+        bits.push(req.status ? 'Your certificate request is: ' + req.status + '.' : null);
+        bits.push('Coordinator approval: ' + (req.coordinatorApproved ? 'done' : 'still pending') + '.');
+        bits.push('HR approval: ' + (req.hrApproved ? 'done' : 'still pending') + '.');
+        if (req.locEligible || req.lorEligible || req.starPerformanceLabel) {
+          bits.push('');
+          bits.push('You are currently eligible for: '
+            + [req.locEligible ? 'Letter of Completion' : null,
+               req.lorEligible ? 'Letter of Recommendation' : null,
+               req.starPerformanceLabel ? 'Star Performance (' + req.starPerformanceLabel + ')' : null]
+              .filter(Boolean).join(', ') + '.');
+        }
+      }
+    }
+    if (!bits.length) {
+      bits.push('No certificate request has been raised for ' + me.employeeId + ' yet.');
+      bits.push('Coordinator approval: ' + (me.certCoordinator ? 'done' : 'still pending') + '.');
+      bits.push('HR approval: ' + (me.certHR ? 'done' : 'still pending') + '.');
+      bits.push('');
+      bits.push('A certificate is raised once your track is finished and your submissions are approved.');
+    }
+    return only(bits);
+  }, 'I could not read your certificate status just now. Try again in a moment.');
+}
+
+async function myCoordinator(me) {
+  if (!OWN.Coordinator || !me.domain) { return null; }
+  return safely(async () => {
+    const rows = await OWN.Coordinator.find({ domain: me.domain })
+      .select('name email employeeId domain').lean();
+    if (!rows.length) {
+      return 'No coordinator is listed against ' + me.domain + ' right now. Raise it with HR through the '
+        + 'portal and they will assign one.';
+    }
+    return only([
+      'Your coordinator for ' + me.domain + ':',
+      '',
+      rows.map((c) => '• ' + (c.name || 'name not listed') + (c.email ? ' - ' + c.email : '')).join('\n'),
+      '',
+      'Quote your employee ID, ' + me.employeeId + ', when you write to them.',
+    ]);
+  }, 'I could not look up your coordinator just now. Try again in a moment.');
+}
+
+/* ── typo tolerance ──────────────────────────────────────────────────────
+ *
+ * "attendence" and "certificat" were answered with a shrug, which is a poor
+ * showing for two words this assistant is entirely about. Rather than listing
+ * misspellings, each long word is compared against the vocabulary the rules
+ * actually use, and anything within a character or two is corrected.
+ *
+ * Applied only on the retry, after the normal pipeline has already failed, so
+ * it cannot change an answer that was working.
+ */
+const VOCAB = ['attendance', 'certificate', 'certificates', 'submission', 'submissions', 'submitted',
+  'coordinator', 'stipend', 'internship', 'domain', 'domains', 'duration', 'coins', 'tasks', 'weeks',
+  'payment', 'deadline', 'approval', 'approved', 'rejected', 'profile', 'employee', 'eligible',
+  'recommendation', 'completion', 'streak', 'leaderboard', 'discord', 'portal', 'dashboard',
+  'certification', 'documents', 'months', 'refund', 'salary', 'project'];
+
+function editDistance(a, b) {
+  const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let diag = prev[0];
+    prev[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = prev[j];
+      prev[j] = Math.min(prev[j] + 1, prev[j - 1] + 1, diag + (a[i - 1] === b[j - 1] ? 0 : 1));
+      diag = tmp;
+    }
+  }
+  return prev[b.length];
+}
+
+function correctTypos(text) {
+  return String(text).replace(/[A-Za-z]{5,}/g, (word) => {
+    const w = word.toLowerCase();
+    if (VOCAB.indexOf(w) !== -1) { return word; }
+    let best = null, bestD = 3;
+    for (const v of VOCAB) {
+      if (Math.abs(v.length - w.length) > 2) { continue; }
+      const d = editDistance(w, v);
+      if (d < bestD) { bestD = d; best = v; }
+    }
+    // Two edits on a five-letter word is a different word; scale with length.
+    const allowed = w.length >= 8 ? 2 : 1;
+    return best && bestD <= allowed ? best : word;
+  });
+}
+
+/* "my", "I", "me" - the sentence is about them and not about the programme.
+   "how does attendance work" is a policy question; "what is my attendance" is
+   a lookup, and answering the first when asked the second is the complaint. */
+const IS_PERSONAL = /\b(?:my|mine|me|i|i'?m|am i|do i|did i|have i|was i|can i)\b/i;
+
+/** Which of their own records the question is reaching for, if any. */
+function personalSubject(q) {
+  // An ID is always theirs - nobody asks what an employee ID is in general.
+  if (/\b(?:emp(?:loyee)?|intern|student)\s*(?:id|code|number|no\b)/i.test(q)) { return myEmployeeId; }
+  if (!IS_PERSONAL.test(q)) { return null; }
+  if (/\b(?:coordinator|mentor|reviewer)\b/i.test(q))                       { return myCoordinator; }
+  if (/\b(?:attendance|present|absent|days? marked)\b/i.test(q))            { return myAttendance; }
+  // "why was my task rejected" wants the reason, which lives in the
+  // coordinator's feedback - a tally of submissions does not answer it.
+  if (/\b(?:submissions?|submitted|approved|rejected|rating)\b/i.test(q) && !/\bwhy\b/i.test(q)) { return mySubmissions; }
+  if (/\b(?:certificate|certification|loc|lor|letter of (?:recommendation|completion))\b/i.test(q)) { return myCertificate; }
+  if (/\b(?:next task|current task|pending|what should i do|today'?s task)\b/i.test(q)) { return myNextTask; }
+  if (/\b(?:profile|details|record|who am i|which domain|domain am i|my track|my tenure|my college|joining date)\b/i.test(q)) { return myProfile; }
+  return null;
+}
+
+const GREET_W = "hi+|hey+|hello+|yo|hola|namaste|greetings|good\\s*(?:morning|afternoon|evening|day)";
+const THANK_W = "thank(?:s| you| u)?|thx|tysm|ty|appreciate(?: it)?|much appreciated";
+const ACK_W   = "ok(?:ay)?|k|cool|nice|great|awesome|got it|understood|sure|yep|yeah|yes|no|fine|alright|right|hmm+";
+const BYE_W   = "bye|goodbye|see ya|see you|cya|later|good\\s*night|gn";
+const TAIL    = "you|u|so much|a lot|bro|bhai|sir|ma'?am|mate|man|dude|buddy|ji|there|again|everyone|all|then|now";
+
+/* "are you ok", "how are you", "are you a bot" - people check in on it, and
+   being told it could not tell what you needed is a strange reply to that. */
+const HOW_ARE_YOU = new RegExp(
+  '\\b(?:how (?:are|r|is) (?:you|u|it going)|are (?:you|u) (?:ok(?:ay)?|ohk|fine|good|there|alive|real|human|a bot|an ai|a robot)'
+  + '|(?:you|u) (?:there|ok(?:ay)?|good)|what(?:\'| i)?s up|sup|who (?:made|built|created) (?:you|u))\\b', 'i');
+
+/**
+ * Which kind of pleasantry this is, or null when it is a real question.
+ *
+ * One reply for all of them was the bug: "Thank you" and "Hi" returned a
+ * byte-identical paragraph pitching what the assistant can do, which reads
+ * like a machine that did not listen. Thanks deserves "you're welcome".
+ */
+function smallTalkKind(text) {
+  const s = String(text || '').trim();
+  if (!s) { return null; }
+  if (HOW_ARE_YOU.test(s)) { return 'howru'; }
+
+  // Every word has to be conversational filler, or this is a real question
+  // that merely happens to open with "hi".
+  const ALL = [GREET_W, THANK_W, ACK_W, BYE_W, TAIL].join('|');
+  const onlyFiller = new RegExp(
+    '^[\\s!.?,]*(?:' + ALL + ')(?:[\\s!.?,]+(?:' + ALL + '))*[\\s!.?,]*$', 'i');
+  if (!onlyFiller.test(s)) { return null; }
+
+  // Then the strongest intent present wins, so "ok thanks bye" is a thank-you.
+  const has = (w) => new RegExp('(?:^|[\\s!.?,])(?:' + w + ')(?:[\\s!.?,]|$)', 'i').test(s);
+  if (has(THANK_W)) { return 'thanks'; }
+  if (has(BYE_W))   { return 'bye'; }
+  if (has(GREET_W)) { return 'greet'; }
+  return 'ack';
+}
 
 /** "who are you", "what can you do", "help". */
 const CAPABILITY = /\b(who are you|what (can|do) you do|what are you|how (do|can) i use|help me|what is this)\b|^\s*help\s*$/i;
@@ -622,12 +1023,53 @@ const CAPABILITY = /\b(who are you|what (can|do) you do|what are you|how (do|can
  */
 const ABOUT_WORK = /\b(plan|track|week|task|schedule|deadline|roadmap|syllabus|curriculum|project|assignment|build|submit|due|domain|internship|course|module|learn|start|next|do|earn|money|coin|make|pay|paid)\b/i;
 
-function greeting(ctx) {
-  const name = (ctx && ctx.userName) ? String(ctx.userName).trim().split(/\s+/)[0] : '';
-  const dom  = (ctx && ctx.domain) ? String(ctx.domain) : '';
+/**
+ * The name to greet them by.
+ *
+ * Prefers the name on their own record. The page falls back to whatever the
+ * portal left in localStorage, which is often a login handle - students were
+ * being greeted as "dcx".
+ */
+function firstNameOf(ctx) {
+  const raw = String((ctx && ctx.me && ctx.me.name) || (ctx && ctx.userName) || '').trim();
+  if (!raw) { return ''; }
+  const first = raw.split(/\s+/)[0];
+  return first.charAt(0).toUpperCase() + first.slice(1);
+}
+
+/**
+ * A different reply for each kind of pleasantry.
+ *
+ * A greeting is also shorter the second time. Repeating the full "here is
+ * what I can do" paragraph at someone who has been talking to you for ten
+ * minutes is the clearest possible sign that nothing is being read.
+ */
+function smallTalk(kind, ctx) {
+  const name  = firstNameOf(ctx);
+  const comma = name ? ', ' + name : '';
+  const dom   = (ctx && ctx.domain) ? String(ctx.domain) : '';
+  const first = !(ctx && ctx.turn > 0);
+
+  if (kind === 'thanks') {
+    return 'You’re welcome' + comma + '. Ask me anything else about your tasks, coins, attendance or certificate.';
+  }
+  if (kind === 'bye') {
+    return 'See you' + comma + '. Come back when your next task unlocks.';
+  }
+  if (kind === 'ack') {
+    return 'Anything else you want to know?';
+  }
+  if (kind === 'howru') {
+    return 'I am the TEN Assistant - a program rather than a person, so I am always fine. '
+         + 'I answer from this portal’s own records. What do you need?';
+  }
+
+  // "Hi Shounak", not "Hi, Shounak" - the comma belongs in "you're welcome,
+  // Shounak" but reads as a stumble in a greeting.
+  const hi = name ? ' ' + name : '';
+  if (!first) { return 'Hi again' + hi + '. What do you need?'; }
   return [
-    (name ? 'Hi ' + name + '. ' : 'Hi. ') +
-      'I can help with your weekly tasks, coins, attendance, documents and certificates.',
+    'Hi' + hi + '. I can help with your weekly tasks, coins, attendance, documents and certificates.',
     '',
     dom
       ? 'You are on ' + dom + '. Tell me your track and I will list every week: "' + dom + ' 3 months".'
@@ -749,6 +1191,12 @@ const ACCOUNT_ACTION = /\b(change|switch|move|swap|cancel|quit|leave|extend|rese
 /** "what if I don't finish", "what happens if I drop out". */
 const NOT_FINISHING = /\b(not|don'?t|dont|cannot|can'?t|fail|drop|quit|leave|incomplete|unable)\b.{0,24}\b(finish|complete|submit|do it|continue)\b|\bwhat happens if\b/i;
 
+/** Asking for the curriculum itself, rather than a fact about it. */
+const WANTS_PLAN = /\b(?:plan|schedule|roadmap|syllabus|curriculum|week by week|week-by-week|weekly|timeline|every week|all (?:the )?weeks|what will i (?:do|build|learn))\b/i;
+
+/** "which week is the hardest", "toughest task". */
+const HARDEST = /\b(?:hardest|toughest|most difficult|difficultest|heaviest|worst)\b.{0,20}\b(?:week|task|part|month)\b|\bwhich week\b.{0,24}\b(?:hard|tough|difficult)/i;
+
 /** "what is my week 5 task", "week 7", "3rd week". */
 const WEEK_NUMBER = /\bweek\s*(\d{1,2})\b|\b(\d{1,2})(st|nd|rd|th)\s*week\b/i;
 
@@ -766,7 +1214,9 @@ const HOW_MUCH = /\bhow much\b.{0,24}\b(earn|make|money|paid|get|rupee|rs|income
  */
 function outOfScope() {
   return [
-    'I could not tell what you need from that.',
+    // Not "I could not tell what you need" - a question about the capital of
+    // France was understood perfectly well. It is simply not this job.
+    'That one is outside what I cover.',
     '',
     'I only cover TEN: your weekly tasks, tracks, coins, attendance, documents and certificates. Ask me about your internship and I will give you a straight answer.',
     '',
@@ -862,9 +1312,21 @@ async function answerFor(question, ctx) {
   const q     = String(question || '').trim();
   const depth = (ctx && ctx.depth) || 'brief';
 
-  if (!q) { return greeting(ctx); }
-  if (SMALL_TALK.test(q)) { return greeting(ctx); }
+  if (!q) { return smallTalk('greet', ctx); }
+  const talk = smallTalkKind(q);
+  if (talk) { return smallTalk(talk, ctx); }
   if (CAPABILITY.test(q)) { return capabilities(ctx); }
+
+  /* Their own record beats the generic rule. Someone asking "what is my
+     employee ID" wants their ID, not an explanation of what employee IDs
+     are. Only attempted when signed in; if not, the question still gets a
+     shot at the general answers below and only falls back to asking them to
+     sign in when nothing else fits. */
+  const personal = personalSubject(q);
+  if (personal && ctx && ctx.me) {
+    const own = await personal(ctx.me);
+    if (own) { return own; }
+  }
 
   const mayUseRegistered = ABOUT_WORK.test(q);
 
@@ -879,9 +1341,12 @@ async function answerFor(question, ctx) {
 
   // Specific intents outrank the generic plan lookup, because each of these
   // otherwise falls through to a domain dump that answers a different question.
+  // Struggling is checked before cheating. "I cannot finish my task on time"
+  // matches both, and answering it with "I will not write your submission for
+  // you" accuses someone who was only asking for help with a deadline.
+  if (NOT_FINISHING.test(q))   { return notFinishing(); }
   if (DO_IT_FOR_ME.test(q))    { return doItForMe(domain); }
   if (ACCOUNT_ACTION.test(q))  { return accountAction(); }
-  if (NOT_FINISHING.test(q))   { return notFinishing(); }
   if (HOW_MUCH.test(q))        { return earnings(domain, duration || DURATIONS.find(function (d) { return d.key === '3months'; })); }
 
   // "3 months" on its own: they mean their own track. A bare duration is about
@@ -899,8 +1364,52 @@ async function answerFor(question, ctx) {
     return weekAnswer(domain, d, n, depth);
   }
 
+  // "the final week" is a week number too - it is just one the student has to
+  // count to, and they were asking precisely because they had not.
+  if (/\b(?:final|last)\s+(?:week|task|project|assignment)\b/i.test(q) && domain) {
+    const d = duration || DURATIONS.find(function (x) { return x.key === '3months'; });
+    const rows = await tasksFor(domain, d);
+    if (rows.length) { return weekAnswer(domain, d, rows.length, depth); }
+  }
+
   if (domain && duration) {
     return renderPlan(domain, duration, await tasksFor(domain, duration), depth);
+  }
+
+  /* Their record knows which track they are on, so "give me my week by week
+     plan" needs no duration from them. Gated on the question actually asking
+     for a plan - without that gate, "how do coins work" would also have a
+     domain and a track and would answer with a curriculum dump. */
+  const ownDuration = (ctx && ctx.me && ctx.me.tenure) ? matchDuration(ctx.me.tenure) : null;
+  if (domain && !duration && ownDuration && WANTS_PLAN.test(q)) {
+    return renderPlan(domain, ownDuration, await tasksFor(domain, ownDuration), depth);
+  }
+
+  // "which week is the hardest" - the data to answer it was already loaded
+  // for every plan; it just was not reachable as its own question.
+  if (HARDEST.test(q) && domain) {
+    const d = duration || ownDuration || DURATIONS.find(function (x) { return x.key === '3months'; });
+    const rows = await tasksFor(domain, d);
+    const hard = rows.filter(function (r) {
+      return r.difficultyLevel === 'hard' || r.difficultyLevel === 'expert';
+    });
+    if (rows.length) {
+      return only([
+        hard.length
+          ? 'On ' + domain + ' — ' + d.label + ', it steepens at week ' + hard[0].weekNumber + '.'
+          : 'On ' + domain + ' — ' + d.label + ', no week is graded above easy.',
+        '',
+        hard.length
+          ? hard.map(function (r) {
+              return '• Week ' + r.weekNumber + ' (' + r.difficultyLevel + ') — ' + r.taskTitle
+                   + ' — ' + r.coinReward + ' coins';
+            }).join('\n')
+          : null,
+        hard.length ? '' : null,
+        'The last week is the one that costs most to miss: ' + rows[rows.length - 1].taskTitle
+          + ' is worth ' + rows[rows.length - 1].coinReward + ' coins on its own, and every earlier week feeds it.',
+      ]);
+    }
   }
   for (const rule of TOPIC_RULES) {
     if (rule.test.test(q)) {
@@ -926,6 +1435,20 @@ async function answerFor(question, ctx) {
   // Nothing matched. Record it so it can be taught, then say so plainly.
   // Nothing recognised it. If it does not even mention the programme, say so
   // rather than offering a menu of things it did not ask about.
+  // One retry with the spelling repaired. Everything above has already had a
+  // go at the text as typed, so this can only rescue a question that was
+  // about to be answered with a shrug.
+  if (!(ctx && ctx.retried)) {
+    const fixed = correctTypos(q);
+    if (fixed.toLowerCase() !== q.toLowerCase()) {
+      return answerFor(fixed, Object.assign({}, ctx, { retried: true }));
+    }
+  }
+
+  // They asked about themselves and nothing generic covered it, so the real
+  // obstacle is that we cannot see who they are.
+  if (personal) { return NEED_SIGN_IN; }
+
   if (!PORTAL_TERMS.test(q)) { return outOfScope(); }
 
   // It is about TEN but nothing here covers it, so it is worth a coordinator's
@@ -979,7 +1502,14 @@ router.post('/ask', async (req, res) => {
     const deepDiveAllowed = wantsDeepDive && q.tier.deepDive;
     const depth           = deepDiveAllowed ? 'ultimate' : q.tier.depth;
 
-    let answer = await answerFor(question, { domain, depth, userName, userId });
+    // Identity for personal answers comes from the session, never from the
+    // body - see meFor(). `turn` is what stops a second "hi" replaying the
+    // whole introduction.
+    const me = await meFor(req);
+    let answer = await answerFor(question, {
+      domain: (me && me.domain) || domain,
+      depth, userName, userId, me, turn: q.used,
+    });
     if (wantsDeepDive && !deepDiveAllowed) {
       answer += '\n\nDeep Dive Mode is available on Plus and Enterprise.';
     }
