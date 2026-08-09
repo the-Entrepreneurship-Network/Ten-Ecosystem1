@@ -26,6 +26,19 @@ const router     = require('express').Router();
 const mongoose   = require('mongoose');
 const DomainTask = require('../../models/new/DomainTask');
 
+/*
+ * Taught answers live in the existing SystemKnowledge collection rather than
+ * a new one, and are written only by an admin through /teach.
+ *
+ * Students never write here. If they could, one student could teach the
+ * assistant something false and it would repeat it confidently to everyone
+ * else, and a wrong answer about a fee or a deadline costs real money. So an
+ * unanswered question is captured as a question, and a coordinator supplies
+ * the answer once.
+ */
+let SystemKnowledge = null;
+try { SystemKnowledge = require('../../models/SystemKnowledge'); } catch (_e) { /* optional */ }
+
 let AssistantUsage = null;
 try { AssistantUsage = require('../../models/new/AssistantUsage'); } catch (_e) { /* optional */ }
 
@@ -46,7 +59,7 @@ try { BotQuery = require('../../models/BotQuery'); } catch (_e) { /* optional */
 const TIERS = {
   starter: {
     key: 'starter', label: 'Starter', price: 0, priceLabel: 'Free',
-    messages: 12, depth: 'brief', historyDays: 0, deepDive: false,
+    messages: 25, depth: 'brief', historyDays: 0, deepDive: false,
     blurb: 'Short answers to get you unstuck.',
   },
   pro: {
@@ -117,7 +130,13 @@ function quotaFor(row) {
   const tier = TIERS[(row && row.tier) || 'starter'] || TIERS.starter;
   const used = (row && row.messagesUsed) || 0;
   const remaining = tier.messages === null ? null : Math.max(0, tier.messages - used);
-  return { tier, used, remaining, exhausted: remaining === 0 };
+
+  let resetsOn = null;
+  if (row && row.periodStart) {
+    const d = new Date(new Date(row.periodStart).getTime() + PERIOD_MS);
+    resetsOn = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  }
+  return { tier, used, remaining, exhausted: remaining === 0, resetsOn };
 }
 
 /** Single place an entitlement is written, whatever granted it. */
@@ -513,6 +532,64 @@ function capabilities(ctx) {
  * give, so it outranks the topic rules: "how many coins for MERN 3 months"
  * should return that plan and its coin total, not the generic coin table.
  */
+/* ─────────────────────────── learning ──────────────────────────── */
+
+const STOPWORDS = new Set(['what', 'when', 'where', 'which', 'this', 'that', 'they',
+  'have', 'does', 'the', 'and', 'for', 'with', 'from', 'about', 'your', 'you',
+  'can', 'how', 'get', 'tell', 'give', 'please', 'need', 'want', 'are']);
+
+function keywords(text) {
+  return String(text).toLowerCase().split(/[^a-z0-9]+/)
+    .filter(function (w) { return w.length > 2 && !STOPWORDS.has(w); });
+}
+
+/**
+ * Match against what a coordinator has taught.
+ *
+ * A topic hit counts double: matching the topic name is a far stronger signal
+ * than matching one word in the body, and requiring two body matches meant
+ * single-subject questions fell through to the generic reply.
+ */
+async function taughtAnswer(question) {
+  if (!SystemKnowledge) { return null; }
+  try {
+    const items = await SystemKnowledge.find({}).lean();
+    const words = keywords(question);
+    if (!words.length) { return null; }
+
+    let best = null, bestScore = 0;
+    for (const item of items) {
+      const topic = String(item.topic || '').toLowerCase().replace(/_/g, ' ');
+      const body  = String(item.content || '').toLowerCase();
+      let score = 0;
+      for (const w of words) {
+        if (topic.includes(w)) { score += 2; }
+        else if (body.includes(w)) { score += 1; }
+      }
+      if (score > bestScore) { bestScore = score; best = item; }
+    }
+    return bestScore >= 2 ? best.content : null;
+  } catch (_e) {
+    return null;
+  }
+}
+
+/** Record a question nobody could answer, so it can be taught later. Fire and
+ *  forget: a logging failure must never take the reply down with it. */
+function noteUnanswered(question, ctx) {
+  if (!BotQuery) { return; }
+  BotQuery.create({
+    userId:   (ctx && ctx.userId) || 'unknown',
+    userType: 'student',
+    userName: (ctx && ctx.userName) || '',
+    domain:   (ctx && ctx.domain) || '',
+    botType:  'query',
+    question: String(question).slice(0, 500),
+    answer:   null,
+    status:   'open',
+  }).catch(function () {});
+}
+
 async function answerFor(question, ctx) {
   const q     = String(question || '').trim();
   const depth = (ctx && ctx.depth) || 'brief';
@@ -543,8 +620,12 @@ async function answerFor(question, ctx) {
   if (domain) {
     return `${domain} runs on 1 Month, 45 Days, 3 Months and 6 Months. Tell me which track you are on and I will list every week with what to build, its coin value and its difficulty.`;
   }
-  // Nothing matched. Say so plainly rather than answering a question that
-  // was not asked.
+  // Anything a coordinator has already taught for this kind of question.
+  const taught = await taughtAnswer(q);
+  if (taught) { return taught; }
+
+  // Nothing matched. Record it so it can be taught, then say so plainly.
+  noteUnanswered(q, ctx);
   return [
     'I could not tell what you need from that.',
     '',
@@ -580,7 +661,7 @@ router.post('/ask', async (req, res) => {
     if (q.exhausted) {
       return res.status(402).json({
         error: 'message_limit_reached',
-        paywall: paywallPayload(q.tier),
+        paywall: paywallPayload(q.tier, q),
         tier: q.tier.key,
         used: q.used,
         limit: q.tier.messages,
@@ -593,7 +674,7 @@ router.post('/ask', async (req, res) => {
     const deepDiveAllowed = wantsDeepDive && q.tier.deepDive;
     const depth           = deepDiveAllowed ? 'ultimate' : q.tier.depth;
 
-    let answer = await answerFor(question, { domain, depth, userName });
+    let answer = await answerFor(question, { domain, depth, userName, userId });
     if (wantsDeepDive && !deepDiveAllowed) {
       answer += '\n\nDeep Dive Mode is available on Plus and Enterprise.';
     }
@@ -644,11 +725,29 @@ router.post('/ask', async (req, res) => {
   }
 });
 
-/** Everything the paywall screen needs, so its copy lives in one place. */
-function paywallPayload(currentTier) {
+/**
+ * Everything the paywall screen needs, so its copy lives in one place.
+ *
+ * `sub` states plainly what happened before any pitch. A student who hits the
+ * limit mid-question and is shown only "Great minds don't give advice by the
+ * hour" has no idea whether they ran out of messages or the thing broke - and
+ * the second reading is the one people reach for.
+ */
+function paywallPayload(currentTier, quota) {
+  const used  = quota && typeof quota.used === 'number' ? quota.used : null;
+  const limit = currentTier && currentTier.messages;
+  const resets = quota && quota.resetsOn
+    ? ' Your free messages reset on ' + quota.resetsOn + '.'
+    : '';
+
   return {
     headline: 'Great minds don’t give advice by the hour.',
-    sub: 'Your mentor has more to say.',
+    sub: (used !== null && limit)
+      ? 'You have used all ' + limit + ' of your free messages this month.' + resets + ' Pick a plan to keep going.'
+      : 'Your mentor has more to say.',
+    reason: 'message_limit_reached',
+    used: used,
+    limit: limit,
     current: (currentTier && currentTier.key) || 'starter',
     upi: { vpa: UPI.vpa, payeeName: UPI.payeeName },
     plans: ['pro', 'plus', 'enterprise'].map(function (k) {
@@ -681,7 +780,7 @@ router.get('/entitlement', async (req, res) => {
       limit: q.tier.messages,
       remaining: q.remaining,
       historyDays: q.tier.historyDays,
-      paywall: paywallPayload(q.tier),
+      paywall: paywallPayload(q.tier, q),
     });
   } catch (e) {
     return res.status(500).json({ error: e.message });
@@ -849,9 +948,24 @@ router.post('/submit-utr', async (req, res) => {
   }
 });
 
-// GET /api/v2/assistant/payment-requests?status=pending
+/*
+ * GET /api/v2/assistant/payment-requests?status=pending
+ *
+ * Admin only. This lists other students' user IDs and UPI references, so it
+ * carries the same guard as verify-payment: an unset token refuses rather
+ * than serving, because the failure mode of getting this wrong is every
+ * student being able to read everyone else's payment claims.
+ */
 router.get('/payment-requests', async (req, res) => {
   try {
+    const expected = process.env.ASSISTANT_ADMIN_TOKEN;
+    if (!expected) {
+      console.warn('[assistant] ASSISTANT_ADMIN_TOKEN not set; payment-requests refused');
+      return res.status(503).json({ error: 'not configured' });
+    }
+    if (req.get('X-Admin-Token') !== expected) {
+      return res.status(401).json({ error: 'unauthorized' });
+    }
     if (!AssistantUsage) { return res.json({ requests: [] }); }
     const status = req.query.status || 'pending';
     const rows = await AssistantUsage
@@ -978,6 +1092,89 @@ router.get('/plan', async (req, res) => {
  * is connected, whether the task library has rows, and whether entitlements can
  * be read. Safe to expose - it returns counts and states, never data.
  */
+/*
+ * The learning loop, both admin-only.
+ *
+ *   GET  /unanswered   what the assistant could not answer
+ *   POST /teach        { topic, answer } - answer it once, for everyone
+ *
+ * Behind the admin token for the same reason /verify-payment is: whoever can
+ * write here can make the assistant say anything to every student.
+ */
+function adminOk(req, res) {
+  const expected = process.env.ASSISTANT_ADMIN_TOKEN;
+  if (!expected) { res.status(503).json({ error: 'not configured' }); return false; }
+  if (req.get('X-Admin-Token') !== expected) { res.status(401).json({ error: 'unauthorized' }); return false; }
+  return true;
+}
+
+router.get('/unanswered', async (req, res) => {
+  if (!adminOk(req, res)) { return; }
+  try {
+    if (!BotQuery) { return res.json({ total: 0, questions: [] }); }
+    const rows = await BotQuery.find({ answer: null, status: 'open' })
+      .sort({ createdAt: -1 }).limit(200).lean();
+
+    // Group near-duplicates, so the same question asked forty times is one job
+    // rather than forty rows to read.
+    const groups = {};
+    rows.forEach(function (r) {
+      const key = keywords(r.question).sort().join(' ').slice(0, 60) || String(r.question).slice(0, 40);
+      if (!groups[key]) { groups[key] = { sample: r.question, count: 0, domains: {} }; }
+      groups[key].count++;
+      if (r.domain) { groups[key].domains[r.domain] = true; }
+    });
+
+    const questions = Object.keys(groups).map(function (k) {
+      return {
+        question: groups[k].sample,
+        askedTimes: groups[k].count,
+        domains: Object.keys(groups[k].domains),
+      };
+    }).sort(function (a, b) { return b.askedTimes - a.askedTimes; });
+
+    return res.json({ total: rows.length, questions: questions });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/teach', async (req, res) => {
+  if (!adminOk(req, res)) { return; }
+  try {
+    const { topic, answer } = req.body || {};
+    if (!topic || !answer) { return res.status(400).json({ error: 'topic and answer required' }); }
+    if (!SystemKnowledge) { return res.status(503).json({ error: 'knowledge store unavailable' }); }
+
+    await SystemKnowledge.findOneAndUpdate(
+      { topic: String(topic).toLowerCase().trim() },
+      { content: String(answer).trim(), updatedAt: new Date() },
+      { upsert: true, new: true }
+    );
+
+    // Close the open questions this now answers, so the queue drains instead
+    // of growing forever.
+    let closed = 0;
+    if (BotQuery) {
+      const words = keywords(topic + ' ' + answer);
+      const open = await BotQuery.find({ answer: null, status: 'open' }).lean();
+      const ids = open.filter(function (r) {
+        const hay = String(r.question).toLowerCase();
+        return words.filter(function (w) { return hay.indexOf(w) !== -1; }).length >= 2;
+      }).map(function (r) { return r._id; });
+      if (ids.length) {
+        await BotQuery.updateMany({ _id: { $in: ids } }, { status: 'answered' });
+        closed = ids.length;
+      }
+    }
+
+    return res.json({ ok: true, topic: topic, closedQuestions: closed });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+
 router.get('/health', async (req, res) => {
   const STATES = ['disconnected', 'connected', 'connecting', 'disconnecting'];
   const out = {
