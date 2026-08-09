@@ -54,6 +54,8 @@ const {
 } = require("./middleware/validationSchemas");
 
 const attendanceUtils = require("./utils/attendanceUtils");
+const tenureUtils = require("./utils/tenure");
+const { istNow, istDateKey } = require("./utils/dateKey");
 
 // ================= RATE LIMIT CONFIGURATION =================
 const RATE_LIMIT_CONFIG = {
@@ -1055,31 +1057,32 @@ const autoMailLogSchema = new mongoose.Schema({
 });
 const AutoMailLog = mongoose.model('AutoMailLog', autoMailLogSchema);
 
+// Tenure interpretation lives in utils/tenure.js. This wrapper is kept only
+// because several call sites still ask for a day count by name.
 function getTenureTotalDays(tenure) {
-  const t = (tenure || '').toLowerCase();
-  if (t.includes('1week') || t.includes('1 week') || t === 'week') return 7;
-  if (t.includes('15day') || t.includes('15 day')) return 15;
-  if (t.includes('45day') || t.includes('45 day')) return 45;
-  if (t.includes('3month') || t.includes('3 month')) return 90;
-  if (t.includes('6month') || t.includes('6 month')) return 180;
-  return 30; // default 1 month
+  return tenureUtils.getTenureDays(tenure);
 }
 
+/**
+ * Legacy shape, computed from the shared attendance module.
+ *
+ * The original implementation here divided by ELAPSED CALENDAR days —
+ * Sundays included — while utils/attendanceUtils excluded them and two other
+ * copies in this file used the full tenure as the denominator. The same student
+ * therefore had up to four different attendance percentages depending on which
+ * endpoint was asked. The numbers below now come from one calculation.
+ */
 function calcAttendancePercentage(student, presentCount) {
-  const totalTenureDays = getTenureTotalDays(student.tenure || student.v2DurationType);
-  const joiningDate = student.joiningDate ? new Date(student.joiningDate) : new Date();
-  const today = new Date();
-  const daysElapsed = Math.min(
-    Math.max(Math.floor((today - joiningDate) / 86400000) + 1, 1),
-    totalTenureDays
-  );
+  const summary = attendanceUtils.getAttendanceSummary([], student);
+  const elapsed = summary.workingDaysElapsed;
+  const present = Math.min(Number(presentCount) || 0, elapsed);
   return {
-    percentage: Math.min(Math.round((presentCount / daysElapsed) * 100), 100),
-    totalDays: daysElapsed,
-    tenureTotalDays: totalTenureDays,
-    presentDays: presentCount,
-    absentDays: Math.max(daysElapsed - presentCount, 0),
-    requiredDays: Math.ceil(daysElapsed * 0.75)
+    percentage: elapsed > 0 ? Math.min(Math.round((present / elapsed) * 100), 100) : 0,
+    totalDays: elapsed,
+    tenureTotalDays: summary.totalCalendarDays,
+    presentDays: present,
+    absentDays: Math.max(elapsed - present, 0),
+    requiredDays: Math.ceil(elapsed * attendanceUtils.ATTENDANCE_THRESHOLD)
   };
 }
 
@@ -4704,81 +4707,65 @@ app.post(["/save-start-date", "/api/v2/student/save-start-date"], async (req, re
 });
 
 // ── HELPER FUNCTION — CALCULATE STATS ──
+//
+// Rewritten onto utils/attendanceUtils. The previous version:
+//   - had its own tenure map keyed by the exact spaced strings, so anything
+//     that did not match fell to 30 days;
+//   - divided by the FULL tenure length with Sundays INCLUDED, so a student on
+//     day 3 of 45 could show at most 6%;
+//   - computed `startDate` from internshipStartDate for WhatsApp joiners and
+//     then never used the variable, so the section 2 bug was visible right here.
 async function calculateAttendanceStats(employeeId) {
-  // Get student data for tenure and start date
   const student = await Student.findOne({ employeeId });
   if (!student) return null;
 
-  // Determine tenure total days
-  const tenureDaysMap = {
-    "1 Week": 7,
-    "15 Days": 15,
-    "1 Month": 30,
-    "45 Days": 45,
-    "3 Months": 90,
-    "6 Months": 180
+  const records = await Attendance.find({ employeeId });
+  const selfRecords  = records.filter(r => r.markedBy === "self");
+  const coordRecords = records.filter(r => r.markedBy === "coordinator");
+
+  const summary = attendanceUtils.getAttendanceSummary(records, student);
+  const elapsed = summary.workingDaysElapsed;
+
+  const countPresent = (rows) => {
+    const days = new Set();
+    for (const r of rows) {
+      if (r.status === "Absent") continue;
+      const key = r.dateKey || attendanceUtils.toDateKey(r.date);
+      if (key) days.add(key);
+    }
+    return days.size;
   };
-  const totalDays = tenureDaysMap[student.tenure] || 30;
 
-  // Determine start date
-  // WhatsApp joiners use internshipStartDate, others use joiningDate
-  let startDate;
-  if (student.joinerType === "whatsapp" && student.internshipStartDate) {
-    startDate = new Date(student.internshipStartDate);
-  } else {
-    startDate = new Date(student.joiningDate || student.createdAt);
-  }
+  const selfCount  = countPresent(selfRecords);
+  const coordCount = countPresent(coordRecords);
+  const pct = (n) => (elapsed > 0 ? Math.min(Math.round((n / elapsed) * 100), 100) : 0);
 
-  // Get all attendance records for this student
-  const selfRecords = await Attendance.find({
-    employeeId,
-    markedBy: "self"
-  });
-  const coordRecords = await Attendance.find({
-    employeeId,
-    markedBy: "coordinator"
-  });
-
-  const selfCount = selfRecords.filter(r => r.status === "Present" || !r.status).length;
-  const coordCount = coordRecords.filter(r => r.status === "Present" || !r.status).length;
-
-  // Combined = union of self + coordinator dates (filtered for status !== "Absent")
-  const presentDates = new Set();
-  selfRecords.forEach(r => { if (r.status !== "Absent") presentDates.add(r.dateKey || new Date(r.date).toISOString().split('T')[0]); });
-  coordRecords.forEach(r => { if (r.status !== "Absent") presentDates.add(r.dateKey || new Date(r.date).toISOString().split('T')[0]); });
-
-  const combinedCount = presentDates.size;
-
-  // Calculate percentages (capped at 100%)
-  const selfPct   = Math.min(Math.round((selfCount / totalDays) * 100), 100);
-  const coordPct  = Math.min(Math.round((coordCount / totalDays) * 100), 100);
-  const combinedPct = Math.min(Math.round((combinedCount / totalDays) * 100), 100);
-
-  // Days needed to reach 75%
-  const minDays = Math.ceil(totalDays * 0.75);
-  const daysNeeded = Math.max(0, minDays - combinedCount);
-
-  // Check if today already marked
-  const now = new Date();
-  const istOffset = 5.5 * 60 * 60 * 1000;
-  const istNow = new Date(now.getTime() + istOffset);
-  const today = istNow.toISOString().split("T")[0];
-
-  const markedToday = selfRecords.some(r => r.dateKey === today || new Date(r.date).toISOString().split('T')[0] === today);
+  const todayKey = istDateKey();
+  const markedToday = selfRecords.some(r =>
+    (r.dateKey || attendanceUtils.toDateKey(r.date)) === todayKey);
 
   return {
     selfCount,
     coordCount,
-    combinedCount,
-    totalDays,
-    selfPct,
-    coordPct,
-    combinedPct,
-    minDays,
-    daysNeeded,
+    combinedCount: summary.daysPresent,
+    // `totalDays` is the denominator the percentages use: elapsed working days.
+    totalDays: elapsed,
+    tenureTotalDays: summary.totalCalendarDays,
+    totalWorkingDays: summary.totalWorkingDays,
+    selfPct:  pct(selfCount),
+    coordPct: pct(coordCount),
+    combinedPct: summary.percentage,
+    minDays: summary.requiredDays,
+    daysNeeded: summary.stillNeeds,
     markedToday,
-    isAboveMinimum: combinedPct >= 75,
-    tenure: student.tenure
+    isAboveMinimum: summary.isEligible,
+    tenure: student.tenure,
+    // Section 3: "Day 12 of 45".
+    dayNumber: summary.dayNumber,
+    daysRemaining: summary.daysRemaining,
+    preportalCreditedDays: summary.preportalCreditedDays,
+    startDate: summary.startDate,
+    endDate: summary.endDate
   };
 }
 
@@ -4791,10 +4778,9 @@ app.post("/mark-attendance", async (req, res) => {
     const student = await Student.findOne({ employeeId });
     if (!student) return res.json({ success: false, message: "Student not found" });
 
-    const now = new Date();
-    const istOffset = 5.5 * 60 * 60 * 1000;
-    const istNow = new Date(now.getTime() + istOffset);
-    const today = istNow.toISOString().split("T")[0];
+    // Shared IST day key — the cron job used a UTC key, so the two disagreed
+    // about which day it was after 18:30 UTC.
+    const today = istDateKey();
 
     // Check if already marked today
     const existing = await Attendance.findOne({
@@ -4848,30 +4834,31 @@ app.post("/mark-attendance", async (req, res) => {
 app.get("/attendance-stats/:employeeId", async (req, res) => {
   try {
     const employeeId = decodeURIComponent(req.params.employeeId);
-    const originalStats = await calculateAttendanceStats(employeeId);
-    const presentCount = await Attendance.countDocuments({ employeeId, status: 'Present' });
     const student = await Student.findOne({ employeeId });
     if (!student) return res.json({ success: false, message: "Student not found" });
 
-    const stats = calcAttendancePercentage(student, presentCount);
+    // This endpoint used to run two different calculators and merge their
+    // output, so `percentage` (elapsed calendar days, Sundays counted) could
+    // contradict `selfPct`/`coordPct` (full tenure, Sundays counted) inside a
+    // single response. There is one calculation now.
+    const stats = await calculateAttendanceStats(employeeId);
+    if (!stats) return res.json({ success: false, message: "Student not found" });
 
-    const mergedStats = {
-      ...(originalStats || {}),
-      percentage: stats.percentage,
-      presentDays: stats.presentDays,
-      totalDays: stats.totalDays,
-      absentDays: stats.absentDays,
-      requiredDays: stats.requiredDays,
-      tenureTotalDays: stats.tenureTotalDays,
-      selfPresentDays: originalStats ? originalStats.selfCount : 0,
-      coordinatorPresentDays: originalStats ? originalStats.coordCount : 0,
-      combinedPresentDays: originalStats ? originalStats.combinedCount : 0,
+    const payload = {
+      ...stats,
+      percentage: stats.combinedPct,
+      presentDays: stats.combinedCount,
+      absentDays: Math.max(0, stats.totalDays - stats.combinedCount),
+      requiredDays: stats.minDays,
+      selfPresentDays: stats.selfCount,
+      coordinatorPresentDays: stats.coordCount,
+      combinedPresentDays: stats.combinedCount
     };
 
     return res.json({
       success: true,
-      stats: mergedStats,
-      ...mergedStats
+      stats: payload,
+      ...payload
     });
   } catch (err) {
     console.log(err);
@@ -5183,40 +5170,55 @@ async function computeAttendanceStats(employeeId, joiningDate, domain){
     // Union of distinct calendar days the student was Present in EITHER source
     const presentDayKeys = new Set();
     records.forEach(r => { if(r.status === "Present") presentDayKeys.add(r.dateKey); });
-    const combinedPresentDays = presentDayKeys.size;
 
-    // Denominator: working days from joining date → today (inclusive), excluding Sundays.
-    let workingDays = 0;
-    const jd = parseJoinDate(joiningDate);
-    if(jd){
-        const today = new Date();
-        const j = new Date(jd); j.setHours(0,0,0,0);
-        const t = new Date(today); t.setHours(0,0,0,0);
-        if(j <= t) workingDays = countDaysExcludingSundays(j, t);
-    }
+    // Denominator: elapsed working days, Sundays excluded, from the student's
+    // EFFECTIVE start date — which for a WhatsApp joiner is internshipStartDate,
+    // earlier than the joiningDate this function used to be handed. A WhatsApp
+    // joiner's pre-portal period is credited as attended (see
+    // utils/attendanceUtils.getPreportalCreditedDays).
+    const student = await Student.findOne({ employeeId }).lean();
+    const summary = attendanceUtils.getAttendanceSummary(
+        records,
+        student || { joiningDate, tenure: null }
+    );
+    const workingDays = summary.workingDaysElapsed;
 
-    // No valid joining date / no working days yet → percentages are not defined (0).
+    // Includes any pre-portal days credited to a WhatsApp joiner.
+    const combinedPresentDays = summary.daysPresent;
+
+    // No valid start date / no working days yet → percentages are not defined (0).
     if(workingDays < 1){
         return {
             selfPresent, selfTotal: self.length,
             coordPresent, coordAbsent, coordTotal: coord.length,
-            combinedPresentDays, workingDays: 0,
+            combinedPresentDays: 0, workingDays: 0,
             selfPct: 0, coordPct: 0, combinedPct: 0,
+            requiredDays: 0, daysNeeded: 0,
+            dayNumber: 0, daysRemaining: summary.totalCalendarDays,
+            preportalCreditedDays: 0,
             eligible: false
         };
     }
 
     // Cap at 100 to guard against marks on excluded days (e.g. Sunday entries).
-    const combinedPct = Math.min(100, Math.round((combinedPresentDays / workingDays) * 100));
-    const selfPct     = Math.min(100, Math.round((selfPresent  / workingDays) * 100));
-    const coordPct    = Math.min(100, Math.round((coordPresent / workingDays) * 100));
+    const selfPct  = Math.min(100, Math.round((selfPresent  / workingDays) * 100));
+    const coordPct = Math.min(100, Math.round((coordPresent / workingDays) * 100));
 
     return {
         selfPresent, selfTotal: self.length,
         coordPresent, coordAbsent, coordTotal: coord.length,
         combinedPresentDays, workingDays,
-        selfPct, coordPct, combinedPct,
-        eligible: combinedPct >= 75
+        selfPct, coordPct,
+        combinedPct: summary.percentage,
+        // Section 3: the real 75% target and the day counter for the panel.
+        requiredDays: summary.requiredDays,
+        daysNeeded: summary.stillNeeds,
+        totalWorkingDays: summary.totalWorkingDays,
+        totalCalendarDays: summary.totalCalendarDays,
+        dayNumber: summary.dayNumber,
+        daysRemaining: summary.daysRemaining,
+        preportalCreditedDays: summary.preportalCreditedDays,
+        eligible: summary.isEligible
     };
 }
 
@@ -8628,7 +8630,26 @@ app.post("/api/v2/coordinator/approve", async (req, res) => {
 });
 
 
-server.listen(PORT, "0.0.0.0", ()=>{ console.log(`Server running on port ${PORT}`); });
+server.listen(PORT, "0.0.0.0", ()=>{
+    console.log(`Server running on port ${PORT}`);
+
+    // Start the scheduled jobs. services/automationCron.js defined
+    // initAutomation() but nothing ever called it, so offer-letter auto-send,
+    // completed-internship detection, approval escalation and the auto-mark
+    // attendance job had never run in production.
+    //
+    // ENABLE_AUTOMATION_CRON=false turns them off (useful when several
+    // instances share one database and only one should run the jobs).
+    if (String(process.env.ENABLE_AUTOMATION_CRON || "true").toLowerCase() !== "false") {
+        try {
+            require("./services/automationCron").initAutomation();
+        } catch (err) {
+            console.error("[AUTO-CRON] Failed to start automation jobs:", err.message);
+        }
+    } else {
+        console.log("[AUTO-CRON] Disabled via ENABLE_AUTOMATION_CRON=false.");
+    }
+});
 
 // Process-level crash protection and error handlers
 process.on('uncaughtException', (error) => {

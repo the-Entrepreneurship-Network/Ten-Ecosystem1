@@ -2262,6 +2262,8 @@ button:active { transform: translateY(0); }
       <div>
         <h2>🪪 Daily Attendance</h2>
         <p id="attendanceStatus">Mark your attendance once every day.</p>
+        <!-- How far into the programme the student is: "Day 12 of 45". -->
+        <p id="attendanceDayProgress" style="display:none;font-size:12px;color:#8aa4c8;margin-top:4px;"></p>
         <p id="attendanceThreshold" style="font-size:12px;color:#f59e0b;margin-top:4px;"></p>
       </div>
       <button id="attendanceBtn" class="attendance-btn" onclick="markSelfAttendance()">
@@ -3637,43 +3639,45 @@ async function loadAttendance(){
 
     const threshEl = document.getElementById("attendanceThreshold");
     if(threshEl){
-      // Tenure-based threshold calculation
-      const tenure = (student.tenure || "").toLowerCase();
+      // The 75% target comes from the server, which computes it from the
+      // student's actual tenure with Sundays excluded and the WhatsApp
+      // pre-portal period credited. This page used to recompute its own
+      // number — a sixth copy of the tenure table, dividing by elapsed
+      // CALENDAR days — so the banner routinely disagreed with the
+      // percentage shown right above it.
+      const totalDays = s.workingDays || s.totalDays || 0;
+      const requiredDays = s.requiredDays || s.minDays || 0;
+      const present = s.combinedPresentDays || s.combinedCount || 0;
+      const remaining = (s.daysNeeded !== undefined)
+        ? s.daysNeeded
+        : Math.max(0, requiredDays - present);
 
-      // Correct tenure-to-days mapping
-      function getTenureTotalDays(t) {
-        if (t.includes('1week') || t.includes('1 week') || t === 'week') return 7;
-        if (t.includes('15day') || t.includes('15 day')) return 15;
-        if (t.includes('45day') || t.includes('45 day')) return 45;
-        if (t.includes('3month') || t.includes('3 month')) return 90;
-        if (t.includes('6month') || t.includes('6 month')) return 180;
-        return 30; // default: 1 month
-      }
-
-      const totalTenureDays = getTenureTotalDays(tenure);
-
-      // Days elapsed since joining (capped at tenure total)
-      let daysElapsed = totalTenureDays;
-      if (student.joiningDate) {
-        const joining = new Date(student.joiningDate);
-        const today = new Date();
-        const diff = Math.floor((today - joining) / 86400000) + 1;
-        daysElapsed = Math.min(Math.max(diff, 1), totalTenureDays);
-      }
-
-      // Required days = 75% of days elapsed so far
-      const requiredDays = Math.ceil(daysElapsed * 0.75);
-      const totalDays = daysElapsed;
-
-      const present = s.combinedPresentDays || 0;
-      const remaining = Math.max(0, requiredDays - present);
-
-      if(remaining === 0){
+      if(remaining === 0 && totalDays > 0){
         threshEl.innerText = "✅ You have met the 75% attendance requirement! (" + present + "/" + totalDays + " days)";
         threshEl.style.color = "#10b981";
       } else {
         threshEl.innerText = "⚠️ " + present + "/" + totalDays + " days present — need " + remaining + " more to reach 75% (" + requiredDays + " days required)";
         threshEl.style.color = "#f59e0b";
+      }
+    }
+
+    // Section 3 — show how far into the programme the student is.
+    var progEl = document.getElementById("attendanceDayProgress");
+    if (progEl) {
+      if (s.dayNumber && s.totalCalendarDays) {
+        var remainingDays = (s.daysRemaining !== undefined)
+          ? s.daysRemaining
+          : Math.max(0, s.totalCalendarDays - s.dayNumber);
+        progEl.innerHTML = "Day <strong>" + s.dayNumber + "</strong> of <strong>" +
+          s.totalCalendarDays + "</strong>" +
+          " &nbsp;·&nbsp; " + remainingDays + " day" + (remainingDays === 1 ? "" : "s") + " remaining" +
+          (s.preportalCreditedDays
+            ? " &nbsp;·&nbsp; " + s.preportalCreditedDays + " day" +
+              (s.preportalCreditedDays === 1 ? "" : "s") + " credited from WhatsApp"
+            : "");
+        progEl.style.display = "block";
+      } else {
+        progEl.style.display = "none";
       }
     }
 
@@ -3712,38 +3716,54 @@ function attPill(status){
 
 function renderAttendanceHistory(records){
   const c = document.getElementById("attendanceHistory");
+
+  // Effective start date. For a WhatsApp joiner the internship began BEFORE
+  // they registered on the portal, so internshipStartDate wins; for everyone
+  // else it is the joining date. This used to be the other way round, which
+  // contradicted the server.
   let startDate = null;
-  if (student && student.joiningDate) {
-    startDate = new Date(student.joiningDate);
-  } else if (student && student.internshipStartDate) {
-    startDate = new Date(student.internshipStartDate);
+  const isWhatsappJoiner = !!(student && student.joinerType === 'whatsapp');
+  const preferred = isWhatsappJoiner
+    ? [student && student.internshipStartDate, student && student.joiningDate]
+    : [student && student.joiningDate, student && student.internshipStartDate];
+  for (const candidate of preferred) {
+    if (!candidate) continue;
+    const d = new Date(candidate);
+    if (!isNaN(d.getTime())) { startDate = d; break; }
   }
-  if (!startDate || isNaN(startDate.getTime())) {
-    startDate = new Date();
+  if (!startDate) startDate = new Date();
+
+  // The day the student started using the portal — days before it cannot have
+  // attendance records and are shown as WhatsApp-credited, not absent.
+  let portalStart = null;
+  if (isWhatsappJoiner && student && student.joiningDate) {
+    const d = new Date(student.joiningDate);
+    if (!isNaN(d.getTime())) portalStart = d;
   }
+  const keyOf = (d) => d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+  const portalStartKey = portalStart ? keyOf(portalStart) : null;
 
   const now = new Date();
   const startZero = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
   const nowZero = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
+  // Build the roster, SKIPPING Sundays entirely. Sundays are not days a student
+  // has to attend, so they must not appear as rows that count against them —
+  // they used to render as red "Absent" even though the percentage excluded them.
   const roster = [];
   let dayNum = 1;
   const temp = new Date(startZero);
   while (temp <= nowZero) {
-    const yyyy = temp.getFullYear();
-    const mm = String(temp.getMonth() + 1).padStart(2, '0');
-    const dd = String(temp.getDate()).padStart(2, '0');
-    const dateKey = `${yyyy}-${mm}-${dd}`;
-    roster.push({
-      dayNum: dayNum,
-      date: new Date(temp),
-      dateKey: dateKey
-    });
-    dayNum++;
+    if (temp.getDay() !== 0) {
+      roster.push({ dayNum: dayNum, date: new Date(temp), dateKey: keyOf(temp) });
+      dayNum++;
+    }
     temp.setDate(temp.getDate() + 1);
   }
 
-  // Reverse so the latest day (Current Day) is on top
+  // Latest day on top
   roster.reverse();
 
   const byDate = {};
@@ -3752,22 +3772,33 @@ function renderAttendanceHistory(records){
     byDate[r.dateKey][r.markedBy] = r.status;
   });
 
+  if (!roster.length) {
+    c.innerHTML = '<div style="padding:16px;color:#8aa4c8;">No attendance days yet.</div>';
+    return;
+  }
+
   let html = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">';
   html += '<thead><tr style="text-align:left;color:#8aa4c8;font-size:11px;text-transform:uppercase;letter-spacing:1px;">'+
           '<th style="padding:8px 10px;">Day</th><th style="padding:8px 10px;">Date</th><th style="padding:8px 10px;">Self</th><th style="padding:8px 10px;">Class</th></tr></thead><tbody>';
-  
+
   roster.forEach(day => {
     const fmt = day.date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-    const selfStatus = (byDate[day.dateKey] && byDate[day.dateKey].self) || "Absent";
-    const coordStatus = (byDate[day.dateKey] && byDate[day.dateKey].coordinator) || "Absent";
-    
+    const isPreportal = !!(portalStartKey && day.dateKey < portalStartKey);
+    const marks = byDate[day.dateKey] || {};
+    const selfStatus = marks.self || (isPreportal ? "Present" : "Absent");
+    const coordStatus = marks.coordinator || (isPreportal ? "Present" : "Absent");
+    const note = isPreportal
+      ? ' <span style="font-size:10px;color:#8aa4c8;font-weight:500;">via WhatsApp</span>'
+      : '';
+
     html += `<tr style="border-top:1px solid rgba(99,140,210,0.12);">
       <td style="padding:8px 10px;color:#f59e0b;font-weight:700;">Day ${day.dayNum}</td>
-      <td style="padding:8px 10px;color:#cdd9ec;font-weight:600;">${fmt}</td>
+      <td style="padding:8px 10px;color:#cdd9ec;font-weight:600;">${fmt}${note}</td>
       <td style="padding:8px 10px;">${attPill(selfStatus)}</td>
       <td style="padding:8px 10px;">${attPill(coordStatus)}</td></tr>`;
   });
   html += '</tbody></table></div>';
+  html += '<div style="padding:8px 10px;color:#8aa4c8;font-size:11px;">Sundays are not working days and are not listed.</div>';
   c.innerHTML = html;
 }
 

@@ -91,7 +91,24 @@ const studentsSchema = new mongoose.Schema({
     joinerType:           { type: String, enum: ['new', 'whatsapp', null], default: null },
 
     employeeIdOverride:  { type: String, default: null },
+
+    // For a WhatsApp joiner this is deliberately EARLIER than joiningDate:
+    // they attended through WhatsApp before they had a portal account. The
+    // attendance calculation credits that pre-portal stretch as attended,
+    // because no daily records can exist for days before the student was in
+    // the system.
     internshipStartDate: { type: Date, default: null },
+
+    // Coordinator override for the pre-portal period above. If a WhatsApp
+    // joiner actually missed some of those days, set the count here and it is
+    // deducted from the credited total.
+    preportalAbsentDays: { type: Number, default: 0 },
+
+    // Last day of the internship, derived from internshipStartDate/joiningDate
+    // and tenure. Kept on the document so the admin panel can extend a tenure
+    // and so scheduled jobs can query it — the auto-mark cron queried an
+    // `internshipEnd` field that never existed, matching zero students.
+    internshipEndDate:   { type: Date, default: null },
     hasSeenWelcome:      { type: Boolean, default: false },
     hasSeenOnboarding:   { type: Boolean, default: false },
     calculatedAttendance: { type: Number, default: null },
