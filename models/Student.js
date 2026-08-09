@@ -174,4 +174,16 @@ const studentsSchema = new mongoose.Schema({
     timestamps: true
 });
 
+// Indexes for the fields actually queried in bulk.
+//
+// Only employeeId was indexed, so `Student.findOne({ email })` — the login
+// path, and the second most common query in the codebase — did a full
+// collection scan of every student on every attempt. `find({ domain })` behind
+// the domain leaderboard and the coordinator views did the same.
+//
+// email is deliberately NOT unique: production may already hold duplicates,
+// and a unique index that cannot be built would fail at startup.
+studentsSchema.index({ email: 1 });
+studentsSchema.index({ domain: 1 });
+
 module.exports = mongoose.model("Student", studentsSchema);
