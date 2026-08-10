@@ -141,46 +141,80 @@ a{color:inherit}
 #cineVeil{position:absolute;inset:0;pointer-events:none;
   background:radial-gradient(ellipse 74% 64% at 50% 46%,rgba(1,2,6,.10) 0%,rgba(1,2,6,.40) 60%,rgba(1,2,6,.68) 100%)}
 
-#cineStage{position:absolute;inset:0;pointer-events:none;transform-style:preserve-3d;
-  --px:0;--py:0}
-.mark{position:absolute;left:50%;top:47%;width:104px;height:104px;margin:-52px 0 0 -52px;
-      transform-style:preserve-3d;will-change:transform}
-.mark .face{width:100%;height:100%;border-radius:24px;display:grid;place-items:center;
-  font-weight:800;font-size:13px;letter-spacing:.02em;color:#F6F2E6;text-align:center;
-  background:linear-gradient(150deg,var(--c1),var(--c2));position:relative;overflow:hidden;
-  box-shadow:0 18px 44px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.32),
-             inset 0 -14px 26px rgba(0,0,0,.34);border:1px solid rgba(255,255,255,.14)}
-.mark img{width:100%;height:100%;object-fit:cover;border-radius:24px;display:block;
-  box-shadow:0 18px 44px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.2);
-  border:1px solid rgba(255,255,255,.13)}
-/* The generator's sparkle sits bottom-right on every render; object-fit:cover
-   already crops most of it, and this covers what is left. */
-.mark .corner{position:absolute;right:0;bottom:0;width:34%;height:32%;border-radius:0 0 24px 0;
-  background:radial-gradient(ellipse 70% 74% at 62% 58%,rgba(2,4,10,1) 0%,
-    rgba(2,4,10,.95) 42%,transparent 88%)}
-/* Specular sweep that follows the pointer, so a plate reads as an object. */
-.mark .sheen{position:absolute;inset:0;border-radius:24px;mix-blend-mode:screen;
-  opacity:calc(.18 + var(--near,0) * .45);
-  background:radial-gradient(circle 55% at calc(var(--mx,50) * 1%) calc(var(--my,50) * 1%),
-    rgba(255,255,255,.6) 0%,rgba(170,205,255,.22) 30%,transparent 62%)}
-.mark .tag{position:absolute;left:50%;top:112%;transform:translateX(-50%);white-space:nowrap;
-  font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:rgba(240,238,232,.55);
-  opacity:0;transition:opacity .5s ease}
-#cine.spread .mark .tag{opacity:1}
-.mark .trail{position:absolute;left:50%;top:50%;width:190px;height:2px;margin-top:-1px;
-  transform-origin:0 50%;opacity:0;pointer-events:none;
-  background:linear-gradient(90deg,rgba(190,215,255,.6),rgba(212,175,55,.25),transparent)}
+#cineStage{position:absolute;inset:0;pointer-events:none;transform-style:preserve-3d}
+#cineFx{position:absolute;inset:0;pointer-events:none;z-index:2}
 
-/* On a phone the plates are a quarter of the screen wide and their labels run
-   off both edges. Smaller plates, smaller labels, and the names wrap instead
-   of overflowing. */
+/* A logo and nothing else. The renders are on black, so screen blending drops
+   their background into the starfield - that is what stops them reading as
+   plates stamped over the scene. No frame, no label, no plinth. */
+.mark{position:absolute;left:50%;top:47%;width:124px;height:124px;margin:-62px 0 0 -62px;
+      transform-style:preserve-3d;will-change:transform;pointer-events:auto;cursor:pointer}
+.mark img{width:100%;height:100%;object-fit:contain;display:block;
+  mix-blend-mode:screen;filter:drop-shadow(0 0 26px rgba(120,170,255,.30));
+  /* Screen blending alone leaves a visible rectangle, because the renders have
+     lifted blacks and a vignette at the frame edge. Feathering the corners
+     dissolves the crop so the logo floats rather than sits on a card. */
+  -webkit-mask-image:radial-gradient(circle at 50% 50%,#000 52%,rgba(0,0,0,.6) 68%,transparent 80%);
+  mask-image:radial-gradient(circle at 50% 50%,#000 52%,rgba(0,0,0,.6) 68%,transparent 80%);
+  transition:filter .35s ease,transform .5s var(--ease-out)}
+.mark:hover img{filter:drop-shadow(0 0 40px rgba(160,200,255,.55)) brightness(1.12)}
+.mark .halo{position:absolute;inset:-24%;border-radius:50%;pointer-events:none;opacity:0;
+  background:radial-gradient(circle,var(--tint,rgba(120,170,255,.5)) 0%,transparent 62%);
+  transition:opacity .4s ease;mix-blend-mode:screen}
+.mark:hover .halo{opacity:.5}
+.mark.busy .halo{opacity:.9}
+
+/* ── per-domain reactions ──────────────────────────────────────────────
+   Each is a transform on the logo; the particle half is drawn on #cineFx.
+   Momentum lives in the easing rather than in a physics loop, which is the
+   cheapest way to make a spin feel like it has weight. */
+.mark.fx-spin img{animation:fxSpin 2.6s cubic-bezier(.12,.72,.16,1) both}
+@keyframes fxSpin{to{transform:rotateY(1440deg)}}
+.mark.fx-jump img{animation:fxJump 1.5s cubic-bezier(.3,-0.2,.4,1) both}
+@keyframes fxJump{0%{transform:translateY(0) scale(1)}
+  16%{transform:translateY(6px) scale(1.06,.92)}
+  52%{transform:translateY(-118px) scale(.94,1.08)}
+  86%{transform:translateY(4px) scale(1.09,.9)}
+  100%{transform:translateY(0) scale(1)}}
+.mark.fx-shatter img{animation:fxShatter 1.5s cubic-bezier(.2,.9,.2,1) both}
+@keyframes fxShatter{0%{transform:scale(1)}
+  38%{transform:scale(1.32) rotateZ(7deg);filter:drop-shadow(0 0 60px rgba(90,180,255,.95)) brightness(1.5)}
+  68%{transform:scale(.9) rotateZ(-3deg)}
+  100%{transform:scale(1) rotateZ(0)}}
+.mark.fx-stack img{animation:fxStack 1.7s cubic-bezier(.25,.9,.25,1) both}
+@keyframes fxStack{0%,100%{transform:translateY(0)}
+  18%{transform:translateY(-26px)}34%{transform:translateY(2px)}
+  50%{transform:translateY(-18px)}66%{transform:translateY(2px)}
+  82%{transform:translateY(-9px)}}
+.mark.fx-rings img{animation:fxRings 2.1s cubic-bezier(.15,.8,.2,1) both}
+@keyframes fxRings{0%{transform:rotate(0)}100%{transform:rotate(720deg)}}
+.mark.fx-pulse img{animation:fxPulse 1.5s cubic-bezier(.2,.9,.2,1) both}
+@keyframes fxPulse{0%,100%{transform:scale(1)}
+  30%{transform:scale(1.22);filter:drop-shadow(0 0 54px var(--tint,rgba(120,190,255,.9))) brightness(1.35)}
+  60%{transform:scale(.95)}}
+.mark.fx-rise img{animation:fxRise 2s ease-in-out both}
+@keyframes fxRise{0%,100%{transform:translateY(0)}
+  40%{transform:translateY(-16px);filter:drop-shadow(0 0 46px rgba(255,150,60,.8)) brightness(1.25)}}
+.mark.fx-launch img{animation:fxLaunch 1.8s cubic-bezier(.2,.85,.25,1) both}
+@keyframes fxLaunch{0%{transform:translateY(0)}
+  30%{transform:translateY(-70px) scale(1.05)}
+  100%{transform:translateY(0) scale(1)}}
+
+/* ── the panel beside a logo ───────────────────────────────────────────
+   Right of the logo, never under it. */
+#cineInfo{position:absolute;z-index:5;width:min(300px,74vw);pointer-events:none;opacity:0;
+  transform:translateX(-14px);transition:opacity .4s var(--ease-out),transform .5s var(--ease-out);
+  background:rgba(4,8,18,.86);backdrop-filter:blur(12px);
+  border:1px solid rgba(212,175,55,.22);border-left:2px solid var(--tint,var(--accent-gold));
+  border-radius:14px;padding:16px 18px;box-shadow:0 22px 60px rgba(0,0,0,.7)}
+#cineInfo.on{opacity:1;transform:translateX(0)}
+#cineInfo h4{font-size:15px;font-weight:800;letter-spacing:-.01em;margin-bottom:8px}
+#cineInfo ul{list-style:none;display:flex;flex-direction:column;gap:6px}
+#cineInfo li{font-size:12px;line-height:1.45;color:var(--text-secondary);display:flex;gap:8px}
+#cineInfo li::before{content:'\2022';color:var(--tint,var(--accent-gold));flex:none;font-weight:800}
 @media(max-width:640px){
-  .mark{width:66px;height:66px;margin:-33px 0 0 -33px}
-  .mark .face,.mark img,.mark .sheen{border-radius:17px}
-  .mark .corner{border-radius:0 0 17px 0}
-  .mark .face{font-size:10px}
-  .mark .tag{font-size:8px;letter-spacing:.03em;white-space:normal;width:80px;line-height:1.25}
-  .mark .trail{width:110px}
+  .mark{width:78px;height:78px;margin:-39px 0 0 -39px}
+  #cineInfo{width:min(280px,84vw)}
 }
 
 #cineCopy{position:absolute;left:0;right:0;top:10%;text-align:center;pointer-events:none;padding:0 22px}
@@ -256,7 +290,9 @@ a{color:inherit}
   <canvas id="cineNeb" aria-hidden="true"></canvas>
   <canvas id="cineStars" aria-hidden="true"></canvas>
   <div id="cineVeil" aria-hidden="true"></div>
-  <div id="cineStage" aria-hidden="true"></div>
+  <div id="cineStage"></div>
+  <canvas id="cineFx" aria-hidden="true"></canvas>
+  <div id="cineInfo" role="status"></div>
 
   <div id="cineCopy">
     <h2>Fourteen domains. <span>One way in.</span></h2>
@@ -387,58 +423,183 @@ a{color:inherit}
     var reduced = false;
     try { reduced = window.matchMedia('(prefers-reduced-motion:reduce)').matches; } catch (_e) {}
 
-    /* All fourteen. `img` is the artwork where we have it; the rest fall back
-       to the coloured plate, so the set is always complete. */
+    /* All fourteen, each with what it unlocks and how it reacts when clicked.
+       `fx` names the transform on the logo, `burst` the particle behaviour on
+       the canvas - a handful of primitives composed differently rather than
+       fourteen bespoke animations, which is what keeps this one code path
+       instead of fourteen. */
     var ART = '/img/domains/';
     var DOMAINS14 = [
-      ['DevOps with AWS',         'AWS',  '#FF9900', '#8A4B00', null],
-      ['Python Development',      'PY',   '#4B8BBE', '#1B3A54', 'python'],
-      ['Java Development',        'JAVA', '#E76F00', '#7A2E00', 'java'],
-      ['Web Development',         'WEB',  '#E34F26', '#6B1E0C', 'webdev'],
-      ['MERN Stack',              'MERN', '#00ED64', '#04512A', 'mern'],
-      ['Artificial Intelligence', 'AI',   '#8B5CF6', '#3B1E70', null],
-      ['Data Science',            'DATA', '#06B6D4', '#0A4A58', null],
-      ['Cyber Security',          'SEC',  '#EF4444', '#6B1414', null],
-      ['Software Engineering',    'SWE',  '#3B82F6', '#12356E', 'swe'],
-      ['Flutter Development',     'FLTR', '#54C5F8', '#0E4C6B', 'flutter'],
-      ['Business Development',    'BIZ',  '#F59E0B', '#7A4A00', null],
-      ['Human Resources',         'HR',   '#EC4899', '#6B1140', null],
-      ['Venture Capital',         'VC',   '#10B981', '#064C36', null],
-      ['Finance',                 'FIN',  '#D4AF37', '#6B5410', null],
-    ];
+      { slug: 'python',  name: 'Python Development',      tint: '#F1C40F', fx: 'spin',    burst: 'trail',
+        feat: ['Data handling, automation and backend services', 'Django and FastAPI project work',
+               'Written assessments marked on your reasoning'] },
+      { slug: 'java',    name: 'Java Development',        tint: '#FF8A3D', fx: 'rise',    burst: 'vapour',
+        feat: ['Core Java, OOP and collections in depth', 'Spring Boot services you actually deploy',
+               'The track most Indian service firms hire against'] },
+      { slug: 'space',   name: 'Space Intern Program',    tint: '#CBD5E1', fx: 'jump',    burst: 'dust',
+        feat: ['Orbital mechanics and mission-design basics', 'Payload and telemetry data projects',
+               'The programme with the smallest intake'] },
+      { slug: 'flutter', name: 'Flutter Development',     tint: '#54C5F8', fx: 'shatter', burst: 'shards',
+        feat: ['One codebase, Android and iOS', 'State management and platform channels',
+               'A store-ready app as the final project'] },
+      { slug: 'mern',    name: 'MERN Stack',              tint: '#00ED64', fx: 'stack',   burst: 'lift',
+        feat: ['Mongo, Express, React and Node end to end', 'Auth, payments and deployment',
+               'The full-stack track, and the busiest one'] },
+      { slug: 'webdev',  name: 'Web Development',         tint: '#4EA8FF', fx: 'rings',   burst: 'ripple',
+        feat: ['Semantic HTML, modern CSS, real JavaScript', 'Responsive and accessible by default',
+               'Performance budgets, not just pretty pages'] },
+      { slug: 'swe',     name: 'Software Engineering',    tint: '#7DD3FC', fx: 'rings',   burst: 'code',
+        feat: ['Design patterns, testing and code review', 'Version control and CI as habits',
+               'How software is built in a team, not alone'] },
+      { slug: 'ai',      name: 'Artificial Intelligence', tint: '#8B5CF6', fx: 'pulse',   burst: 'neural',
+        feat: ['Neural networks from the maths up', 'Training, evaluation and honest metrics',
+               'Where models fail, and how you find out'] },
+      { slug: 'data',    name: 'Data Science',            tint: '#22D3EE', fx: 'pulse',   burst: 'orbit',
+        feat: ['Cleaning, exploring and modelling real data', 'Statistics you can defend in a review',
+               'Dashboards that answer a question'] },
+      { slug: 'cyber',   name: 'Cyber Security',          tint: '#38BDF8', fx: 'pulse',   burst: 'shield',
+        feat: ['Threat modelling and secure design', 'Web, network and application security',
+               'Findings written up the way a client reads them'] },
+      { slug: 'aws',     name: 'DevOps with AWS',         tint: '#FF9900', fx: 'rings',   burst: 'deploy',
+        feat: ['Pipelines, containers and infrastructure as code', 'AWS services you will actually be asked about',
+               'Shipping without breaking what is running'] },
+      { slug: 'biz',     name: 'Business Development',    tint: '#F5B301', fx: 'launch',  burst: 'arrows',
+        feat: ['Pipeline, outreach and qualification', 'Pricing and proposals that close',
+               'Numbers you can stand behind in a room'] },
+      { slug: 'hr',      name: 'Human Resources',         tint: '#7EA6FF', fx: 'pulse',   burst: 'network',
+        feat: ['Hiring, onboarding and retention', 'Policy that survives contact with people',
+               'Difficult conversations, handled properly'] },
+      { slug: 'vc',      name: 'Venture Capital',         tint: '#34D399', fx: 'launch',  burst: 'coins',
+        feat: ['How rounds, terms and dilution work', 'Diligence and building a thesis',
+               'Reading a startup the way an investor does'] },
+      { slug: 'finance', name: 'Finance',                 tint: '#D4AF37', fx: 'pulse',   burst: 'candles',
+        feat: ['Statements, valuation and modelling', 'Markets and instruments explained plainly',
+               'Models a analyst would not be embarrassed by'] },
+    ].slice(0, 14);
 
+    /* Venture Capital has no render of its own yet; it borrows Finance's until
+       one arrives, rather than showing a gap in the set. */
+    var FILE = { vc: 'finance' };
+
+    var info = $('cineInfo'), infoFor = null;
     var marks = DOMAINS14.map(function (d, i) {
       var node = el('div', 'mark');
-      var trail = el('div', 'trail');
-      var face = el('div', 'face', d[1]);
-      face.style.setProperty('--c1', d[2]);
-      face.style.setProperty('--c2', d[3]);
-      node.appendChild(trail);
-      node.appendChild(face);
-      var sheen = el('div', 'sheen');
-      face.appendChild(sheen);
-      if (d[4]) {
-        var img = new Image();
-        img.alt = d[0];
-        // Swap only once decoded, so a missing file never blanks a plate. The
-        // corner mask goes on here and nowhere else: only the renders carry
-        // the generator's sparkle, and on a plain plate it is just a smudge.
-        img.onload = function () {
-          face.textContent = '';
-          face.appendChild(img);
-          face.appendChild(el('div', 'corner'));
-          face.appendChild(sheen);
-        };
-        img.src = ART + d[4] + '.webp';
-      }
-      node.appendChild(el('div', 'tag', d[0]));
+      node.style.setProperty('--tint', d.tint);
+      node.appendChild(el('div', 'halo'));
+      var img = new Image();
+      img.alt = d.name;
+      img.src = ART + (FILE[d.slug] || d.slug) + '.webp';
+      node.appendChild(img);
       stage.appendChild(node);
       var a = (i / DOMAINS14.length) * Math.PI * 2 - Math.PI / 2;
-      return { node: node, face: face, trail: trail, angle: a,
-               ring: 1 + (i % 3) * 0.26, phase: i * 0.7,
-               spin: (i % 2 ? 1 : -1) * (0.5 + (i % 4) * 0.11) };
+      var m = { node: node, img: img, data: d, angle: a,
+                ring: 1 + (i % 3) * 0.26, phase: i * 0.7,
+                spin: (i % 2 ? 1 : -1) * (0.5 + (i % 4) * 0.11) };
+      node.addEventListener('click', function () { react(m); });
+      return m;
     });
 
+    /* ── particles ─────────────────────────────────────────────────────
+       One pool, one loop. Each burst seeds it differently: where particles
+       start, which way they go, whether gravity pulls them down or the logo
+       pulls them back. That covers all fourteen without fourteen systems. */
+    var fx = $('cineFx'), fxc = fx.getContext('2d'), bits = [];
+    function seedBurst(kind, cx, cy, tint) {
+      var n = kind === 'neural' ? 90 : kind === 'dust' ? 70 : 54;
+      for (var i = 0; i < n; i++) {
+        var ang = Math.random() * 6.2832;
+        var sp = 1 + Math.random() * 4;
+        var b = { x: cx, y: cy, life: 1, kind: kind, tint: tint,
+                  r: 1 + Math.random() * 2.4, back: 0 };
+        if (kind === 'vapour') {
+          b.x = cx + (Math.random() - 0.5) * 26; b.y = cy - 10;
+          b.vx = (Math.random() - 0.5) * 0.5; b.vy = -0.5 - Math.random() * 1.1;
+          b.r = 2.5 + Math.random() * 5; b.decay = 0.010;
+        } else if (kind === 'dust') {
+          b.y = cy + 44; b.vx = Math.cos(ang) * sp * 1.6; b.vy = -Math.abs(Math.sin(ang)) * 1.4;
+          b.g = 0.06; b.decay = 0.012;
+        } else if (kind === 'arrows' || kind === 'coins' || kind === 'lift') {
+          b.vx = (Math.random() - 0.5) * 1.6; b.vy = -2 - Math.random() * 3.4;
+          b.g = 0.045; b.decay = 0.011;
+        } else if (kind === 'candles') {
+          b.x = cx + (Math.random() - 0.5) * 90; b.y = cy + 30;
+          b.vx = 0; b.vy = -1 - Math.random() * 2.6; b.decay = 0.014;
+        } else if (kind === 'neural' || kind === 'orbit' || kind === 'network' || kind === 'code') {
+          // Out, then pulled back in - the logo keeps its own.
+          b.vx = Math.cos(ang) * sp; b.vy = Math.sin(ang) * sp;
+          b.back = 1; b.cx = cx; b.cy = cy; b.decay = 0.009;
+        } else {
+          b.vx = Math.cos(ang) * sp; b.vy = Math.sin(ang) * sp; b.decay = 0.014;
+        }
+        bits.push(b);
+      }
+      if (bits.length > 900) { bits.splice(0, bits.length - 900); }
+    }
+    function drawBits() {
+      fxc.clearRect(0, 0, vw, vh);
+      for (var i = bits.length - 1; i >= 0; i--) {
+        var b = bits[i];
+        if (b.back) {
+          // Spring back toward the logo once it has travelled out.
+          b.vx += (b.cx - b.x) * 0.004; b.vy += (b.cy - b.y) * 0.004;
+          b.vx *= 0.97; b.vy *= 0.97;
+        }
+        if (b.g) { b.vy += b.g; }
+        b.x += b.vx; b.y += b.vy;
+        b.life -= b.decay;
+        if (b.life <= 0) { bits.splice(i, 1); continue; }
+        fxc.globalAlpha = Math.max(0, b.life) * (b.kind === 'vapour' ? 0.13 : 0.85);
+        fxc.fillStyle = b.kind === 'vapour' ? '#E8EEF6' : b.tint;
+        fxc.beginPath();
+        fxc.arc(b.x, b.y, b.r * (b.kind === 'vapour' ? (1.6 - b.life) * 2 + 1 : b.life), 0, 6.2832);
+        fxc.fill();
+      }
+      fxc.globalAlpha = 1;
+    }
+
+    /* ── click ─────────────────────────────────────────────────────────── */
+    function react(m) {
+      var r = m.node.getBoundingClientRect();
+      seedBurst(m.data.burst, r.left + r.width / 2, r.top + r.height / 2, m.data.tint);
+
+      m.node.classList.add('busy');
+      var cls = 'fx-' + m.data.fx;
+      m.node.classList.remove(cls);
+      void m.node.offsetWidth;          // restart the animation on a re-click
+      m.node.classList.add(cls);
+      setTimeout(function () { m.node.classList.remove(cls, 'busy'); }, 2700);
+
+      showInfo(m);
+    }
+
+    function showInfo(m) {
+      if (infoFor === m && info.classList.contains('on')) {
+        info.classList.remove('on'); infoFor = null; return;
+      }
+      infoFor = m;
+      info.innerHTML = '';
+      info.style.setProperty('--tint', m.data.tint);
+      info.appendChild(el('h4', null, m.data.name));
+      var ul = el('ul');
+      m.data.feat.forEach(function (f) { ul.appendChild(el('li', null, f)); });
+      info.appendChild(ul);
+      info.classList.add('on');
+      placeInfo();
+    }
+    /* Beside the logo, never under it - and flipped to the left when the logo
+       is far enough right that the panel would leave the screen. */
+    function placeInfo() {
+      if (!infoFor) { return; }
+      var r = infoFor.node.getBoundingClientRect();
+      var w = info.offsetWidth || 300, h = info.offsetHeight || 120;
+      var left = r.right + 18;
+      if (left + w > vw - 12) { left = r.left - w - 18; }
+      if (left < 12) { left = Math.max(12, (vw - w) / 2); }
+      info.style.left = Math.round(left) + 'px';
+      info.style.top = Math.round(Math.min(Math.max(12, r.top + r.height / 2 - h / 2), vh - h - 12)) + 'px';
+    }
+
+    var vw = 0, vh = 0;
     var vw = 0, vh = 0;
     function measure() { vw = cine.clientWidth; vh = cine.clientHeight; }
 
@@ -528,11 +689,12 @@ a{color:inherit}
     function sizeCanvases() {
       measure();
       dpr = Math.min(window.devicePixelRatio || 1, 2);
-      [neb, starCv].forEach(function (c) {
+      [neb, starCv, fx].forEach(function (c) {
         c.width = Math.floor(vw * dpr); c.height = Math.floor(vh * dpr);
       });
       nctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      fxc.setTransform(dpr, 0, 0, dpr, 0, 0);
       paintNebula(vw, vh);
       seedStars(vw, vh);
     }
@@ -592,12 +754,10 @@ a{color:inherit}
           + z.toFixed(1) + 'px) rotateY(' + rot.toFixed(1) + 'deg) rotateX('
           + (Math.sin(t * 0.4 + m.phase) * 7 * (1 - p * 0.7)).toFixed(1)
           + 'deg) scale(' + scale.toFixed(3) + ')';
-        var moving = p > 0.06 && p < 0.94;
-        m.trail.style.opacity = moving && !reduced ? (0.55 * Math.sin(p * Math.PI)).toFixed(3) : 0;
-        m.trail.style.transform = 'rotate(' + ((m.angle * 180) / Math.PI + 180).toFixed(1)
-          + 'deg) scaleX(' + (0.25 + p * 1.15).toFixed(2) + ')';
       });
 
+      drawBits();
+      placeInfo();
       if (!reduced) {
         drawStars(t, p);
         // The gas drifts and pushes in very slightly; any more and it reads
@@ -639,15 +799,6 @@ a{color:inherit}
         queued = true;
         requestAnimationFrame(function () {
           queued = false;
-          marks.forEach(function (m) {
-            var r = m.node.getBoundingClientRect();
-            if (!r.width) { return; }
-            m.face.style.setProperty('--mx', (((mx - r.left) / r.width) * 100).toFixed(1));
-            m.face.style.setProperty('--my', (((my - r.top) / r.height) * 100).toFixed(1));
-            var d = Math.hypot(mx - (r.left + r.width / 2), my - (r.top + r.height / 2))
-                  / (r.width * 1.6);
-            m.face.style.setProperty('--near', Math.max(0, 1 - d).toFixed(3));
-          });
         });
       });
     }
