@@ -171,6 +171,18 @@ a{color:inherit}
   transform-origin:0 50%;opacity:0;pointer-events:none;
   background:linear-gradient(90deg,rgba(190,215,255,.6),rgba(212,175,55,.25),transparent)}
 
+/* On a phone the plates are a quarter of the screen wide and their labels run
+   off both edges. Smaller plates, smaller labels, and the names wrap instead
+   of overflowing. */
+@media(max-width:640px){
+  .mark{width:66px;height:66px;margin:-33px 0 0 -33px}
+  .mark .face,.mark img,.mark .sheen{border-radius:17px}
+  .mark .corner{border-radius:0 0 17px 0}
+  .mark .face{font-size:10px}
+  .mark .tag{font-size:8px;letter-spacing:.03em;white-space:normal;width:80px;line-height:1.25}
+  .mark .trail{width:110px}
+}
+
 #cineCopy{position:absolute;left:0;right:0;top:10%;text-align:center;pointer-events:none;padding:0 22px}
 #cineCopy h2{font-size:clamp(26px,4.6vw,48px);font-weight:800;letter-spacing:-.03em;line-height:1.06}
 #cineCopy h2 span{background:linear-gradient(100deg,#F4E9C0,var(--accent-gold),#b8962c);
