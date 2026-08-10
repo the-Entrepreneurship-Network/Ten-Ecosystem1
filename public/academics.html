@@ -453,7 +453,7 @@ a{color:inherit}
       { slug: 'space',   name: 'Space Intern Program',    tint: '#CBD5E1', fx: 'jump',    burst: 'dust',
         feat: ['Orbital mechanics and mission-design basics', 'Payload and telemetry data projects',
                'The programme with the smallest intake'] },
-      { slug: 'flutter', name: 'Flutter Development',     tint: '#54C5F8', fx: 'shatter', burst: 'shards',
+      { dur: 1500, slug: 'flutter', name: 'Flutter Development',     tint: '#54C5F8', fx: 'shatter', burst: 'shards',
         feat: ['One codebase, Android and iOS', 'State management and platform channels',
                'A store-ready app as the final project'] },
       { slug: 'mern',    name: 'MERN Stack',              tint: '#00ED64', fx: 'stack',   burst: 'lift',
@@ -483,17 +483,15 @@ a{color:inherit}
       { slug: 'hr',      name: 'Human Resources',         tint: '#7EA6FF', fx: 'pulse',   burst: 'network',
         feat: ['Hiring, onboarding and retention', 'Policy that survives contact with people',
                'Difficult conversations, handled properly'] },
-      { slug: 'vc',      name: 'Venture Capital',         tint: '#34D399', fx: 'launch',  burst: 'coins',
+      { slug: 'vc', name: 'Venture Capital', tint: '#F3C64A', fx: 'launch', burst: 'coins', dur: 2200,
         feat: ['How rounds, terms and dilution work', 'Diligence and building a thesis',
                'Reading a startup the way an investor does'] },
-      { slug: 'finance', name: 'Finance',                 tint: '#D4AF37', fx: 'pulse',   burst: 'candles',
+      { dur: 2000, slug: 'finance', name: 'Finance',                 tint: '#D4AF37', fx: 'pulse',   burst: 'candles',
         feat: ['Statements, valuation and modelling', 'Markets and instruments explained plainly',
                'Models a analyst would not be embarrassed by'] },
-    ].slice(0, 14);
+    ];
 
-    /* Venture Capital has no render of its own yet; it borrows Finance's until
-       one arrives, rather than showing a gap in the set. */
-    var FILE = { vc: 'finance' };
+    var FILE = {};
 
     var info = $('cineInfo'), infoFor = null;
     var marks = DOMAINS14.map(function (d, i) {
@@ -586,68 +584,307 @@ a{color:inherit}
       redrawReveal(m);
     }
 
-    /* ── particles ─────────────────────────────────────────────────────
-       One pool, one loop. Each burst seeds it differently: where particles
-       start, which way they go, whether gravity pulls them down or the logo
-       pulls them back. That covers all fourteen without fourteen systems. */
-    var fx = $('cineFx'), fxc = fx.getContext('2d'), bits = [];
-    function seedBurst(kind, cx, cy, tint) {
-      var n = kind === 'neural' ? 90 : kind === 'dust' ? 70 : 54;
-      for (var i = 0; i < n; i++) {
-        var ang = Math.random() * 6.2832;
-        var sp = 1 + Math.random() * 4;
-        var b = { x: cx, y: cy, life: 1, kind: kind, tint: tint,
-                  r: 1 + Math.random() * 2.4, back: 0 };
-        if (kind === 'vapour') {
-          b.x = cx + (Math.random() - 0.5) * 26; b.y = cy - 10;
-          b.vx = (Math.random() - 0.5) * 0.5; b.vy = -0.5 - Math.random() * 1.1;
-          b.r = 2.5 + Math.random() * 5; b.decay = 0.010;
-        } else if (kind === 'dust') {
-          b.y = cy + 44; b.vx = Math.cos(ang) * sp * 1.6; b.vy = -Math.abs(Math.sin(ang)) * 1.4;
-          b.g = 0.06; b.decay = 0.012;
-        } else if (kind === 'arrows' || kind === 'coins' || kind === 'lift') {
-          b.vx = (Math.random() - 0.5) * 1.6; b.vy = -2 - Math.random() * 3.4;
-          b.g = 0.045; b.decay = 0.011;
-        } else if (kind === 'candles') {
-          b.x = cx + (Math.random() - 0.5) * 90; b.y = cy + 30;
-          b.vx = 0; b.vy = -1 - Math.random() * 2.6; b.decay = 0.014;
-        } else if (kind === 'neural' || kind === 'orbit' || kind === 'network' || kind === 'code') {
-          // Out, then pulled back in - the logo keeps its own.
-          b.vx = Math.cos(ang) * sp; b.vy = Math.sin(ang) * sp;
-          b.back = 1; b.cx = cx; b.cy = cy; b.decay = 0.009;
-        } else {
-          b.vx = Math.cos(ang) * sp; b.vy = Math.sin(ang) * sp; b.decay = 0.014;
-        }
-        bits.push(b);
-      }
-      if (bits.length > 900) { bits.splice(0, bits.length - 900); }
+    /* ── signature effects ─────────────────────────────────────────────
+       One effect per domain, each drawn around its logo on a shared canvas.
+       Drawn rather than decomposed: these renders are single flat images, so
+       a gear or a MERN icon cannot be moved independently of the rest. What
+       is drawn instead is the thing the effect is about - the neural mesh,
+       the orbiting charts, the candlesticks - registered to the logo it
+       belongs to. See the note in README about what layered art would add.
+
+       Each entry gets {x, y, r, t, tint} where t runs 0 to 1. */
+    var fx = $('cineFx'), fxc = fx.getContext('2d'), running = [];
+
+    function fire(m, dur) {
+      var d = m.data;
+      running.push({ m: m, kind: d.burst, tint: d.tint, t0: performance.now(),
+                     dur: dur || 1800, seed: Math.random() * 6.283 });
+      if (running.length > 6) { running.shift(); }
     }
+
+    var TAU = 6.28318;
+    function hexPath(c, x, y, r) {
+      c.beginPath();
+      for (var i = 0; i < 6; i++) {
+        var a = (i / 6) * TAU - Math.PI / 2;
+        var px = x + Math.cos(a) * r, py = y + Math.sin(a) * r;
+        i ? c.lineTo(px, py) : c.moveTo(px, py);
+      }
+      c.closePath();
+    }
+    function glowLine(c, x1, y1, x2, y2, col, w, a) {
+      c.strokeStyle = col; c.globalAlpha = a; c.lineWidth = w;
+      c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke();
+    }
+    /* EASE, not ease: the scroll easing further down is also called `ease`,
+       and being a var in the same scope it overwrote this object - every
+       effect after the first two then died on ease.out per frame. */
+    var EASE = { out: function (t) { return 1 - Math.pow(1 - t, 3); },
+                 inOut: function (t) { return t < .5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2; } };
+
+    var EFFECT = {
+      /* Python: light trails chasing the rotation the CSS is driving. */
+      trail: function (c, e) {
+        var n = 5;
+        for (var i = 0; i < n; i++) {
+          var a = e.seed + e.t * TAU * 3 - i * 0.28;
+          var rr = e.r * (0.92 + i * 0.04);
+          c.globalAlpha = (1 - e.t) * (0.5 - i * 0.08);
+          c.strokeStyle = e.tint; c.lineWidth = 3 - i * 0.4;
+          c.beginPath(); c.arc(e.x, e.y, rr, a, a + 0.7); c.stroke();
+        }
+      },
+      /* Java: a plume with turbulence, and a warm glow inside the cup. */
+      vapour: function (c, e) {
+        var g = c.createRadialGradient(e.x, e.y + e.r * 0.15, 0, e.x, e.y + e.r * 0.15, e.r * 0.5);
+        g.addColorStop(0, 'rgba(255,150,60,' + (0.45 * Math.sin(e.t * Math.PI)).toFixed(3) + ')');
+        g.addColorStop(1, 'rgba(255,120,40,0)');
+        c.fillStyle = g; c.fillRect(e.x - e.r, e.y - e.r, e.r * 2, e.r * 2);
+        for (var i = 0; i < 34; i++) {
+          var life = (e.t + i / 34) % 1;
+          var rise = life * e.r * 2.2;
+          var sway = Math.sin(life * 5 + i + e.seed) * e.r * 0.20 * life;
+          var rad = (4 + life * 20) * (0.5 + (i % 3) * 0.25);
+          c.globalAlpha = Math.sin(life * Math.PI) * 0.16 * Math.sin(e.t * Math.PI);
+          c.fillStyle = '#EEF3F8';
+          c.beginPath(); c.arc(e.x + sway, e.y - e.r * 0.35 - rise, rad, 0, TAU); c.fill();
+        }
+      },
+      /* Flutter: layers pulling apart, energy between them, then snapping. */
+      shards: function (c, e) {
+        var open = Math.sin(Math.min(1, e.t * 1.25) * Math.PI);
+        for (var i = -2; i <= 2; i++) {
+          if (!i) { continue; }
+          var off = i * open * e.r * 0.5;
+          c.globalAlpha = open * 0.4;
+          c.strokeStyle = '#7CC7FF'; c.lineWidth = 2;
+          c.strokeRect(e.x - e.r * 0.45 + off * 0.4, e.y - e.r * 0.45 + off, e.r * 0.9, e.r * 0.9);
+          c.globalAlpha = open * 0.22;
+          c.fillStyle = '#2E7FD6';
+          c.fillRect(e.x - e.r * 0.45 + off * 0.4, e.y - e.r * 0.45 + off, e.r * 0.9, e.r * 0.9);
+        }
+      },
+      /* MERN: a spark at each of the four icons, staggered. */
+      lift: function (c, e) {
+        var pts = [[-0.30, -0.30], [0.30, -0.30], [-0.30, 0.30], [0.30, 0.30]];
+        pts.forEach(function (q, i) {
+          var lt = Math.max(0, Math.min(1, (e.t - i * 0.14) * 3));
+          if (!lt) { return; }
+          var up = Math.sin(lt * Math.PI) * e.r * 0.4;
+          c.globalAlpha = Math.sin(lt * Math.PI) * 0.75;
+          c.fillStyle = e.tint;
+          c.beginPath(); c.arc(e.x + q[0] * e.r, e.y + q[1] * e.r - up, 4.5, 0, TAU); c.fill();
+          glowLine(c, e.x + q[0] * e.r, e.y + q[1] * e.r,
+                      e.x + q[0] * e.r, e.y + q[1] * e.r - up, e.tint, 2, c.globalAlpha * 0.5);
+        });
+      },
+      /* Web: counter-rotating rings and outgoing waves. */
+      ripple: function (c, e) {
+        for (var k = 0; k < 3; k++) {
+          var w = (e.t + k / 3) % 1;
+          c.globalAlpha = (1 - w) * 0.5 * (1 - e.t);
+          c.strokeStyle = e.tint; c.lineWidth = 2.5 - k * 0.5;
+          c.beginPath(); c.arc(e.x, e.y, e.r * (0.6 + w * 1.5), 0, TAU); c.stroke();
+        }
+        [[1, 0.86, 3], [-1.6, 0.68, 2]].forEach(function (r) {
+          var a0 = e.seed + e.t * TAU * r[0] * 2;
+          c.globalAlpha = 0.55 * (1 - e.t); c.lineWidth = r[2];
+          c.strokeStyle = e.tint;
+          for (var d = 0; d < 3; d++) {
+            c.beginPath(); c.arc(e.x, e.y, e.r * r[1], a0 + d * 2.09, a0 + d * 2.09 + 0.9); c.stroke();
+          }
+        });
+      },
+      /* Software engineering: meshing rings, and binary thrown out and back. */
+      code: function (c, e) {
+        [[1, 0.9, 14], [-1.7, 0.6, 9]].forEach(function (g) {
+          var a0 = e.seed + e.t * TAU * g[0] * 1.6;
+          c.globalAlpha = 0.5 * (1 - e.t * 0.6); c.strokeStyle = e.tint; c.lineWidth = 2;
+          for (var i = 0; i < g[2]; i++) {
+            var a = a0 + (i / g[2]) * TAU;
+            var r1 = e.r * g[1], r2 = r1 + 7;
+            glowLine(c, e.x + Math.cos(a) * r1, e.y + Math.sin(a) * r1,
+                        e.x + Math.cos(a) * r2, e.y + Math.sin(a) * r2, e.tint, 2, c.globalAlpha);
+          }
+        });
+        c.font = '10px ui-monospace,monospace';
+        for (var i = 0; i < 22; i++) {
+          var a = e.seed + i * 0.9;
+          var out = Math.sin(Math.min(1, e.t * 1.3) * Math.PI) * e.r * 1.5;
+          c.globalAlpha = Math.sin(Math.min(1, e.t * 1.3) * Math.PI) * 0.7;
+          c.fillStyle = e.tint;
+          c.fillText(i % 2 ? '1' : '0', e.x + Math.cos(a) * out, e.y + Math.sin(a) * out);
+        }
+      },
+      /* AI: a mesh that expands, pulses along its edges, then contracts. */
+      neural: function (c, e) {
+        var N = 16, grow = Math.sin(Math.min(1, e.t) * Math.PI);
+        var pts = [];
+        for (var i = 0; i < N; i++) {
+          var a = e.seed + (i / N) * TAU;
+          var rr = e.r * (0.55 + ((i % 3) * 0.22)) * (0.7 + grow * 1.1);
+          pts.push([e.x + Math.cos(a) * rr, e.y + Math.sin(a) * rr * 0.9]);
+        }
+        for (var i = 0; i < N; i++) {
+          for (var k = 1; k <= 2; k++) {
+            var q = pts[(i + k) % N];
+            glowLine(c, pts[i][0], pts[i][1], q[0], q[1], e.tint, 1, grow * 0.28);
+          }
+        }
+        for (var i = 0; i < N; i++) {
+          var pulse = 0.5 + 0.5 * Math.sin(e.t * 14 + i);
+          c.globalAlpha = grow * (0.4 + pulse * 0.6);
+          c.fillStyle = '#CFE6FF';
+          c.beginPath(); c.arc(pts[i][0], pts[i][1], 2 + pulse * 2.4, 0, TAU); c.fill();
+        }
+      },
+      /* Data science: charts orbiting the cube, then collapsing back. */
+      orbit: function (c, e) {
+        var out = Math.sin(Math.min(1, e.t) * Math.PI);
+        for (var i = 0; i < 5; i++) {
+          var a = e.seed + e.t * TAU * 1.7 + (i / 5) * TAU;
+          var rr = e.r * (0.7 + out * 0.9);
+          var x = e.x + Math.cos(a) * rr, y = e.y + Math.sin(a) * rr * 0.55;
+          c.globalAlpha = out * 0.85; c.fillStyle = e.tint;
+          for (var b = 0; b < 3; b++) {
+            var h = 5 + b * 4;
+            c.fillRect(x + b * 4 - 6, y - h / 2, 3, h);
+          }
+        }
+      },
+      /* Cyber: the shield going out, fragments scattering and reassembling. */
+      shield: function (c, e) {
+        var g = EASE.out(Math.min(1, e.t * 1.5));
+        c.globalAlpha = (1 - e.t) * 0.85; c.strokeStyle = e.tint; c.lineWidth = 3;
+        hexPath(c, e.x, e.y, e.r * (0.5 + g * 1.35)); c.stroke();
+        c.globalAlpha = (1 - e.t) * 0.14; c.fillStyle = e.tint; c.fill();
+        for (var i = 0; i < 18; i++) {
+          var a = e.seed + i * 0.35;
+          var d = Math.sin(Math.min(1, e.t * 1.2) * Math.PI) * e.r * 1.35;
+          c.globalAlpha = Math.sin(Math.min(1, e.t * 1.2) * Math.PI) * 0.8;
+          c.fillStyle = e.tint;
+          c.fillRect(e.x + Math.cos(a) * d, e.y + Math.sin(a) * d, 3, 3);
+        }
+      },
+      /* DevOps: particles running the infinity path, continuously. */
+      deploy: function (c, e) {
+        for (var i = 0; i < 26; i++) {
+          var u = (e.t * 1.6 + i / 26) % 1, a = u * TAU;
+          var k = 1 + Math.sin(a) * Math.sin(a);
+          var x = e.x + (Math.cos(a) * e.r * 0.95) / k;
+          var y = e.y + (Math.cos(a) * Math.sin(a) * e.r * 0.95) / k;
+          c.globalAlpha = (1 - e.t * 0.5) * 0.9;
+          c.fillStyle = i % 3 ? '#FF9900' : '#D6DCE4';
+          c.beginPath(); c.arc(x, y, 2.6, 0, TAU); c.fill();
+        }
+      },
+      /* Business development: arrows away with trails. */
+      arrows: function (c, e) {
+        for (var i = 0; i < 7; i++) {
+          var lt = Math.max(0, Math.min(1, (e.t - i * 0.06) * 1.7));
+          if (!lt) { continue; }
+          var x = e.x + (i - 3) * e.r * 0.22;
+          var y = e.y + e.r * 0.5 - EASE.out(lt) * e.r * 1.7;
+          c.globalAlpha = (1 - lt) * 0.95; c.strokeStyle = e.tint; c.lineWidth = 2.5;
+          c.beginPath(); c.moveTo(x, y + 20); c.lineTo(x, y); c.stroke();
+          c.beginPath(); c.moveTo(x - 5, y + 7); c.lineTo(x, y); c.lineTo(x + 5, y + 7); c.stroke();
+        }
+      },
+      /* HR: the figures joining up, then the lines letting go. */
+      network: function (c, e) {
+        var N = 9, joined = Math.min(1, e.t * 2.2), fade = e.t > 0.62 ? 1 - (e.t - 0.62) / 0.38 : 1;
+        var pts = [];
+        for (var i = 0; i < N; i++) {
+          var a = e.seed + (i / N) * TAU;
+          pts.push([e.x + Math.cos(a) * e.r * 0.85, e.y + Math.sin(a) * e.r * 0.85]);
+        }
+        for (var i = 0; i < N; i++) {
+          if (i / N > joined) { break; }
+          glowLine(c, e.x, e.y, pts[i][0], pts[i][1], e.tint, 1.6, 0.6 * fade);
+          glowLine(c, pts[i][0], pts[i][1], pts[(i + 1) % N][0], pts[(i + 1) % N][1],
+                   e.tint, 1.2, 0.34 * fade);
+          c.globalAlpha = 0.9 * fade; c.fillStyle = '#DCE9FF';
+          c.beginPath(); c.arc(pts[i][0], pts[i][1], 3, 0, TAU); c.fill();
+        }
+      },
+      /* Venture capital: thrust under the rocket, coins tumbling around it. */
+      coins: function (c, e) {
+        for (var i = 0; i < 40; i++) {
+          var life = (e.t * 1.4 + i / 40) % 1;
+          c.globalAlpha = (1 - life) * 0.85 * Math.sin(Math.min(1, e.t * 1.4) * Math.PI);
+          c.fillStyle = i % 4 ? '#F3C64A' : '#FFF0BF';
+          var sp = (Math.random() - 0.5) * e.r * 0.35;
+          c.beginPath();
+          c.arc(e.x + sp, e.y + e.r * 0.35 + life * e.r * 1.5, 1.6 + (1 - life) * 2.6, 0, TAU);
+          c.fill();
+        }
+        for (var i = 0; i < 8; i++) {
+          var a = e.seed + e.t * 5 + i * 0.8;
+          var rr = e.r * (0.6 + Math.sin(e.t * 3 + i) * 0.25);
+          c.globalAlpha = Math.sin(Math.min(1, e.t * 1.3) * Math.PI) * 0.9;
+          c.fillStyle = '#E8B93C';
+          c.beginPath();
+          c.ellipse(e.x + Math.cos(a) * rr, e.y + Math.sin(a) * rr * 0.7,
+                    5, 5 * Math.abs(Math.cos(e.t * 6 + i)), 0, 0, TAU);
+          c.fill();
+        }
+      },
+      /* Finance: the chart drawing itself left to right, last candle pulsing. */
+      candles: function (c, e) {
+        var n = 9, drawn = Math.min(1, e.t * 1.5) * n;
+        for (var i = 0; i < n; i++) {
+          if (i > drawn) { break; }
+          var x = e.x - e.r * 0.8 + (i / (n - 1)) * e.r * 1.6;
+          var h = e.r * (0.16 + ((i * 7) % 5) * 0.09);
+          var y = e.y + e.r * 0.35 - (i / n) * e.r * 0.7;
+          var last = (i === n - 1) && drawn >= n;
+          c.globalAlpha = last ? 0.6 + 0.4 * Math.sin(e.t * 20) : 0.85;
+          c.fillStyle = i % 3 === 2 ? '#D4AF37' : '#2FAF6B';
+          c.fillRect(x - 3, y - h / 2, 6, h);
+          glowLine(c, x, y - h / 2 - 7, x, y + h / 2 + 7, c.fillStyle, 1.4, c.globalAlpha * 0.8);
+        }
+      },
+      /* Space intern: dust thrown out on landing. */
+      dust: function (c, e) {
+        var land = Math.max(0, (e.t - 0.55) / 0.45);
+        if (!land) { return; }
+        for (var i = 0; i < 46; i++) {
+          var a = e.seed + i * 0.42;
+          var d = EASE.out(land) * e.r * (0.9 + (i % 5) * 0.22);
+          c.globalAlpha = (1 - land) * 0.75;
+          c.fillStyle = '#C9CBCF';
+          c.beginPath();
+          c.arc(e.x + Math.cos(a) * d, e.y + e.r * 0.5 + Math.abs(Math.sin(a)) * d * 0.28,
+                1.5 + (1 - land) * 2, 0, TAU);
+          c.fill();
+        }
+      },
+    };
+
     function drawBits() {
       fxc.clearRect(0, 0, vw, vh);
-      for (var i = bits.length - 1; i >= 0; i--) {
-        var b = bits[i];
-        if (b.back) {
-          // Spring back toward the logo once it has travelled out.
-          b.vx += (b.cx - b.x) * 0.004; b.vy += (b.cy - b.y) * 0.004;
-          b.vx *= 0.97; b.vy *= 0.97;
-        }
-        if (b.g) { b.vy += b.g; }
-        b.x += b.vx; b.y += b.vy;
-        b.life -= b.decay;
-        if (b.life <= 0) { bits.splice(i, 1); continue; }
-        fxc.globalAlpha = Math.max(0, b.life) * (b.kind === 'vapour' ? 0.13 : 0.85);
-        fxc.fillStyle = b.kind === 'vapour' ? '#E8EEF6' : b.tint;
-        fxc.beginPath();
-        fxc.arc(b.x, b.y, b.r * (b.kind === 'vapour' ? (1.6 - b.life) * 2 + 1 : b.life), 0, 6.2832);
-        fxc.fill();
+      var now = performance.now();
+      for (var i = running.length - 1; i >= 0; i--) {
+        var r = running[i];
+        var t = (now - r.t0) / r.dur;
+        if (t >= 1) { running.splice(i, 1); continue; }
+        var box = r.m.node.getBoundingClientRect();
+        if (!box.width) { continue; }
+        var fn = EFFECT[r.kind];
+        if (!fn) { continue; }
+        fxc.save();
+        fxc.globalCompositeOperation = 'lighter';
+        fxc.lineCap = 'round';
+        fn(fxc, { x: box.left + box.width / 2, y: box.top + box.height / 2,
+                  r: box.width * 0.62, t: t, tint: r.tint, seed: r.seed });
+        fxc.restore();
       }
       fxc.globalAlpha = 1;
     }
 
     /* ── click ─────────────────────────────────────────────────────────── */
     function react(m) {
-      var r = m.node.getBoundingClientRect();
-      seedBurst(m.data.burst, r.left + r.width / 2, r.top + r.height / 2, m.data.tint);
+      fire(m, m.data.dur || 1900);
 
       m.node.classList.add('busy');
       var cls = 'fx-' + m.data.fx;
