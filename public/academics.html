@@ -130,21 +130,128 @@ a{color:inherit}
    Scrollytelling: one full-height beat per scroll, one logo and one benefit
    each. The artwork is fixed and cross-fades between beats, so the logo is
    what stays still while the words move past it. */
-#cine{position:fixed;inset:0;z-index:60;background:#02040a;overflow:hidden}
+/* The starfield and the Earth are the real pixels from the Space Intern
+   artwork, not a gradient imitating them - it is the look that was asked for,
+   and cutting the two clean regions out of that render is exact where a
+   hand-built approximation was only close. */
+#cine{position:fixed;inset:0;z-index:60;overflow:hidden;
+      background:#02040a url('/img/domains/space-stars.webp') center/112% no-repeat;
+      --zoom:0}
 #cine.gone{display:none}
 #cineCanvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 #cine .depth{position:absolute;inset:0;pointer-events:none;
   background:radial-gradient(ellipse 60% 55% at 68% 46%,rgba(59,130,246,.16) 0%,transparent 62%),
              radial-gradient(ellipse 55% 45% at 30% 60%,rgba(212,175,55,.07) 0%,transparent 64%)}
 
-#cineArt{position:absolute;right:6vw;top:50%;transform:translateY(-50%);
-  width:min(38vw,430px);aspect-ratio:1;pointer-events:none;perspective:1000px}
+/* The scene the logos stand in: Earth low in frame, lunar ground beneath,
+   dust above. Taken from the Space Intern artwork so the whole preview looks
+   like one place rather than eight separate renders. */
+#cineEarth{position:absolute;left:-6vw;bottom:-8vh;width:min(62vw,760px);aspect-ratio:780/700;
+  pointer-events:none;opacity:.95;
+  background:url('/img/domains/space-earth.webp') left bottom/contain no-repeat;
+  /* The crop is a rectangle; without this its top and right edges read as a
+     pasted box instead of a planet sitting in space. */
+  -webkit-mask-image:radial-gradient(ellipse 104% 104% at 10% 92%,#000 52%,transparent 84%);
+  mask-image:radial-gradient(ellipse 104% 104% at 10% 92%,#000 52%,transparent 84%);
+  animation:earthDrift 34s ease-in-out infinite}
+@keyframes earthDrift{0%,100%{transform:translate3d(0,0,0) scale(1)}
+                      50%{transform:translate3d(10px,-12px,0) scale(1.02)}}
+
+#cineScrim{position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(90deg,rgba(2,4,10,.9) 0%,rgba(2,4,10,.62) 34%,
+                                   rgba(2,4,10,.15) 56%,transparent 70%)}
+@media(max-width:900px){#cineScrim{background:linear-gradient(0deg,rgba(2,4,10,.92) 26%,transparent 72%)}}
+
+/* The lunar surface belongs to one beat only. Everything else is open space,
+   so this is hidden by default and the camera brings it up. */
+#cineMoon{position:absolute;left:-14vw;right:-14vw;bottom:-10vh;height:46vh;pointer-events:none;
+  border-radius:50% 50% 0 0 / 30vh 30vh 0 0;opacity:0;
+  background:linear-gradient(180deg,#3A3F49 0%,#22262E 30%,#12151B 68%,#080A0E 100%);
+  box-shadow:inset 0 4px 0 rgba(226,232,240,.22),0 -40px 90px rgba(0,0,0,.7);
+  /* Far away and low at the start of the beat; the camera rises onto it. */
+  transform:translateY(46vh) scale(.55);
+  transition:opacity .6s var(--ease-out)}
+#cineMoon::before{content:'';position:absolute;inset:0;border-radius:inherit;opacity:.62;
+  background:
+    radial-gradient(ellipse 6% 20% at 14% 40%,rgba(0,0,0,.66) 0%,transparent 70%),
+    radial-gradient(ellipse 4% 14% at 27% 58%,rgba(0,0,0,.54) 0%,transparent 70%),
+    radial-gradient(ellipse 8% 24% at 44% 34%,rgba(0,0,0,.6) 0%,transparent 70%),
+    radial-gradient(ellipse 3% 12% at 58% 62%,rgba(0,0,0,.5) 0%,transparent 70%),
+    radial-gradient(ellipse 7% 21% at 71% 42%,rgba(0,0,0,.56) 0%,transparent 70%),
+    radial-gradient(ellipse 4% 13% at 86% 60%,rgba(0,0,0,.5) 0%,transparent 70%),
+    radial-gradient(ellipse 5% 16% at 34% 76%,rgba(0,0,0,.44) 0%,transparent 70%)}
+/* Grazing light along the limb, which is what sells it as a sphere. */
+#cineMoon::after{content:'';position:absolute;left:0;right:0;top:0;height:36%;
+  border-radius:inherit;
+  background:linear-gradient(180deg,rgba(226,232,240,.16) 0%,transparent 100%)}
+
+/* The camera move. --zoom runs 0 to 1 across the Space Intern beat: the
+   surface climbs into frame and fills it, the starfield pushes in behind, and
+   the badge comes from far away to standing on the ground. A drone descent,
+   driven by the scrollbar rather than a timeline. */
+#cine.moonbeat #cineMoon{opacity:1;
+  transform:translateY(calc((1 - var(--zoom)) * 46vh)) scale(calc(.55 + var(--zoom) * .75))}
+#cine.moonbeat{background-size:calc(112% + var(--zoom) * 46%)}
+#cine.moonbeat #cineArt .art.on{
+  transform:scale(calc(.30 + var(--zoom) * .72)) translateY(calc((1 - var(--zoom)) * -12vh))}
+#cine.moonbeat #cineEarth{transform:scale(calc(1 + var(--zoom) * .3));opacity:calc(.95 - var(--zoom) * .45)}
+
+#cineArt{position:absolute;right:6vw;top:46%;transform:translateY(-50%);
+  width:min(38vw,430px);aspect-ratio:1;pointer-events:none;perspective:900px;
+  --px:0;--py:0;--mx:50;--my:50;--near:0}
 #cineArt .art{position:absolute;inset:0;display:grid;place-items:center;opacity:0;
   transform:scale(.9) rotateY(-14deg);
   transition:opacity .7s var(--ease-out),transform .9s var(--ease-out)}
 #cineArt .art.on{opacity:1;transform:scale(1) rotateY(0)}
-#cineArt img{max-width:100%;max-height:100%;object-fit:contain;
+/* Every logo drifts, whether it is a real render or the stand-in. The pointer
+   offsets ride on the same element, so tilt and float compose instead of
+   fighting over the transform. */
+/* Cursor-reactive, not a pasted image: the plate leans toward the pointer,
+   drifts toward it, and carries a specular sweep that tracks where the
+   pointer actually is. Everything rides on CSS variables so the idle drift
+   keyframes keep running underneath instead of being overwritten. */
+/* Shrink-wraps the artwork instead of filling the square stage. The renders
+   are different shapes; a fixed square frame letterboxes the wide ones and
+   the overlays below then sit on empty black rather than on the image. */
+#cineArt .orb{width:auto;height:auto;max-width:100%;max-height:100%;
+  display:inline-grid;place-items:center;position:relative;
+  transform:translate3d(calc(var(--px) * 22px),calc(var(--py) * 18px),0)
+            rotateY(calc(var(--px) * 16deg)) rotateX(calc(var(--py) * -13deg))
+            scale(calc(1 + var(--near) * 0.05));
+  transition:transform .34s var(--ease-out);will-change:transform;
+  transform-style:preserve-3d}
+/* The moving highlight. Sits over the artwork and is masked to its shape by
+   being the same box, so it reads as light on the object. */
+#cineArt .sheen{position:absolute;inset:0;border-radius:20px;pointer-events:none;
+  opacity:calc(.20 + var(--near) * .5);mix-blend-mode:screen;
+  background:radial-gradient(circle 42% at calc(var(--mx) * 1%) calc(var(--my) * 1%),
+    rgba(255,255,255,.55) 0%,rgba(180,215,255,.20) 26%,transparent 58%);
+  transition:opacity .3s ease}
+/* A cold rim that swings to the far side of the light, the way a bevel does. */
+/* The generator's sparkle sits in the bottom-right of every render. delogo
+   removes it but drags streaks across any texture, which is worse than the
+   mark. A soft corner fall-off hides it without touching a pixel of the
+   artwork - and the corner is empty background on all of them anyway. */
+#cineArt .orb .corner{position:absolute;right:0;bottom:0;width:30%;height:28%;
+  pointer-events:none;border-radius:0 0 20px 0;
+  /* Centred on the mark itself (about 88% across, 88% down the plate), not on
+     the corner of this box - off-centre it only shades around the sparkle. */
+  background:radial-gradient(ellipse 62% 66% at 62% 57%,
+    rgba(4,7,15,1) 0%,rgba(4,7,15,.96) 40%,rgba(4,7,15,.7) 66%,transparent 88%)}
+
+#cineArt .rim{position:absolute;inset:0;border-radius:20px;pointer-events:none;
+  box-shadow:inset calc(var(--px) * -12px) calc(var(--py) * -10px) 34px rgba(120,170,235,.24),
+             inset calc(var(--px) * 8px) calc(var(--py) * 7px) 22px rgba(0,0,0,.5);
+  transition:box-shadow .34s var(--ease-out)}
+#cineArt .orb > *{animation:drift 7s ease-in-out infinite}
+@keyframes drift{0%,100%{transform:translateY(-10px) rotate(-1.2deg)}
+                 50%{transform:translateY(10px) rotate(1.2deg)}}
+#cineArt img{max-width:100%;max-height:100%;object-fit:contain;border-radius:20px;
   filter:drop-shadow(0 26px 60px rgba(0,0,0,.7))}
+/* The renders carry their own backgrounds, so a frame makes them read as
+   plates on the scene rather than photos pasted over it. */
+#cineArt img.plate{border:1px solid rgba(255,255,255,.12);
+  box-shadow:0 30px 70px rgba(0,0,0,.66),inset 0 1px 0 rgba(255,255,255,.2)}
 /* Stand-in, shown only while the real artwork is missing, so the sequence
    still reads and the swap is a file drop rather than a code change. */
 #cineArt .fallback{width:62%;aspect-ratio:1;border-radius:28%;display:grid;place-items:center;
@@ -152,9 +259,7 @@ a{color:inherit}
   background:linear-gradient(150deg,var(--c1),var(--c2));
   box-shadow:0 26px 60px rgba(0,0,0,.66),inset 0 2px 0 rgba(255,255,255,.3),
              inset 0 -22px 40px rgba(0,0,0,.34);border:1px solid rgba(255,255,255,.14);
-  animation:hover 6s ease-in-out infinite}
-@keyframes hover{0%,100%{transform:translateY(-8px) rotate(-1.5deg)}
-                 50%{transform:translateY(8px) rotate(1.5deg)}}
+}
 #cineArt .cap{position:absolute;left:0;right:0;bottom:-7%;text-align:center;font-size:11px;
   letter-spacing:.16em;text-transform:uppercase;color:rgba(240,238,232,.45)}
 #cineArt .all14{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;width:100%}
@@ -215,8 +320,9 @@ a{color:inherit}
 #cineSkip:hover{color:var(--text-primary)}
 
 @media (prefers-reduced-motion:reduce){
-  #cineArt .art,.beat .in{transition:none}
-  #cineArt .fallback{animation:none}
+  #cineArt .art,.beat .in,#cineArt .orb,#cineArt .rim{transition:none}
+  #cineArt .orb > *{animation:none}
+  #cineArt .sheen{display:none}
   #cineHint{animation:none}
 }
 </style>
@@ -226,6 +332,9 @@ a{color:inherit}
 <div id="cine" aria-label="Academics preview">
   <canvas id="cineCanvas" aria-hidden="true"></canvas>
   <div class="depth" aria-hidden="true"></div>
+  <div id="cineEarth" aria-hidden="true"></div>
+  <div id="cineMoon" aria-hidden="true"></div>
+  <div id="cineScrim" aria-hidden="true"></div>
   <div id="cineArt" aria-hidden="true"></div>
   <div id="cineDots" aria-hidden="true"></div>
   <div id="cineHud"><span>TEN &middot; Academics</span><span id="cineCount">01 / 09</span></div>
@@ -330,6 +439,7 @@ a{color:inherit}
        coloured medallion stands in, so the sequence is testable now and the
        upgrade is a file drop rather than a code change. */
     var ART = '/img/domains/';
+    var EXT = '.webp';
     var BEATS = [
       { slug: 'ten', mark: '\u221E', c1: '#F4E9C0', c2: '#8A6E1F',
         idx: 'Academics', h: 'Fourteen domains.', em: 'One way in.',
@@ -351,15 +461,18 @@ a{color:inherit}
         idx: '04 \u2014 Job readiness', h: 'Ready end to end,', em: 'not just qualified.',
         p: 'Portfolio, resume and interview preparation for the domain you actually studied, so the '
          + 'thing you learned and the thing you are asked about are the same thing.' },
-      { slug: 'cybersecurity', mark: 'SEC', c1: '#EF4444', c2: '#6B1414', cap: 'Cyber Security',
+      { slug: 'swe', mark: 'SWE', c1: '#3B82F6', c2: '#12356E', cap: 'Software Engineering',
         idx: '05 \u2014 Job findings', h: 'The jobs,', em: 'brought to you.',
         p: 'Openings across every major hiring platform, filtered to your domain and your level, '
          + 'with the original apply link rather than a rewrite of it.' },
-      { slug: 'ai', mark: 'AI', c1: '#8B5CF6', c2: '#3B1E70', cap: 'Artificial Intelligence',
+      { slug: 'webdev', mark: 'WEB', c1: '#E34F26', c2: '#6B1E0C', cap: 'Web Development',
         idx: '06 \u2014 Hackathons', h: 'Hackathons and', em: 'idea-thons.',
         p: 'College, national and international. Start building before the event opens, form a team, '
          + 'track milestones, and come out with something that was judged.' },
-      { all14: true, idx: '07 \u2014 Every track', h: 'All fourteen.', em: 'Same depth.',
+      // The only beat with ground under it, and the one the camera descends onto.
+      { slug: 'space', mark: 'SPACE', c1: '#94A3B8', c2: '#1E293B', cap: 'Space Intern Program',
+        moon: true,
+        idx: '07 \u2014 Every track', h: 'All fourteen.', em: 'Same depth.',
         p: 'Whichever domain you are on, the modules, the marking, the resume, the jobs and the '
          + 'hackathons are the same. Nothing here is reserved for one track.' },
       { pay: true, idx: '08 \u2014 Unlock', h: 'Unlock', em: 'Everything.' },
@@ -375,6 +488,8 @@ a{color:inherit}
 
     var layers = BEATS.map(function (b) {
       var wrap = el('div', 'art');
+      var orb = el('div', 'orb');
+      wrap.appendChild(orb);
       if (b.all14) {
         var g = el('div', 'all14');
         DOM14.forEach(function (d) {
@@ -383,7 +498,7 @@ a{color:inherit}
           sp.style.setProperty('--c2', d[2]);
           g.appendChild(sp);
         });
-        wrap.appendChild(g);
+        orb.appendChild(g);
       } else if (!b.pay) {
         var fb = el('div', 'fallback', b.mark);
         fb.style.setProperty('--c1', b.c1);
@@ -392,10 +507,18 @@ a{color:inherit}
         img.alt = b.cap || 'TEN';
         // Swap only once the real file has decoded, so a missing or broken
         // image never leaves an empty frame mid-sequence.
-        img.onload = function () { wrap.replaceChild(img, fb); };
-        img.src = ART + b.slug + '.png';
-        wrap.appendChild(fb);
+        img.onload = function () { orb.replaceChild(img, fb); };
+        img.className = 'plate';
+        img.src = ART + b.slug + EXT;
+        orb.appendChild(fb);
         if (b.cap) { wrap.appendChild(el('div', 'cap', b.cap)); }
+      }
+      /* After the artwork, never before: these three sit on top of it. Added
+         first they render behind the image and do nothing at all. */
+      if (!b.pay) {
+        orb.appendChild(el('div', 'corner'));
+        orb.appendChild(el('div', 'sheen'));
+        orb.appendChild(el('div', 'rim'));
       }
       art.appendChild(wrap);
       return wrap;
@@ -443,6 +566,7 @@ a{color:inherit}
       beats.forEach(function (sec, i) { sec.classList.toggle('live', i === n); });
       layers.forEach(function (l, i) { l.classList.toggle('on', i === n); });
       for (var i = 0; i < dots.length; i++) { dots[i].classList.toggle('on', i === n); }
+      cine.classList.toggle('moonbeat', !!BEATS[n].moon);
       $('cineCount').textContent = pad(n + 1) + ' / ' + pad(BEATS.length);
       $('cineHint').style.opacity = n === 0 ? '' : '0';
     }
@@ -462,6 +586,62 @@ a{color:inherit}
       }, { passive: true });
     }
     activate(0);
+
+    /* --zoom is how far through the Space Intern beat the student has scrolled.
+       Measured against that one section rather than the whole track, so the
+       descent starts and ends exactly where the beat does however many beats
+       sit either side of it. */
+    var moonIndex = BEATS.map(function (b) { return !!b.moon; }).indexOf(true);
+    if (moonIndex > -1) {
+      var moonBeat = beats[moonIndex], ticking = false;
+      var setZoom = function () {
+        ticking = false;
+        var top = moonBeat.offsetTop - track.scrollTop;
+        var z = 1 - (top / Math.max(1, track.clientHeight));
+        cine.style.setProperty('--zoom', Math.max(0, Math.min(1, z)).toFixed(3));
+      };
+      track.addEventListener('scroll', function () {
+        if (ticking) { return; }
+        ticking = true;
+        requestAnimationFrame(setZoom);
+      }, { passive: true });
+      setZoom();
+    }
+
+    /* Pointer tracking, written as CSS variables rather than a transform, so
+       the idle drift keyframes keep running underneath.
+
+       Three numbers: -1..1 across the viewport for the lean, 0..100 across
+       the plate itself for the highlight, and how close the pointer is to the
+       plate, which is what makes it come alive as you approach rather than
+       reacting the same from across the screen.
+
+       Coalesced into one rAF - pointermove fires far more often than the
+       screen refreshes, and writing a variable per event is work thrown away. */
+    if (!reduced && window.matchMedia('(hover:hover)').matches) {
+      var mx = 0, my = 0, queued = false;
+      cine.addEventListener('pointermove', function (e) {
+        mx = e.clientX; my = e.clientY;
+        if (queued) { return; }
+        queued = true;
+        requestAnimationFrame(function () {
+          queued = false;
+          var w = cine.clientWidth, h = cine.clientHeight;
+          art.style.setProperty('--px', ((mx / w) * 2 - 1).toFixed(3));
+          art.style.setProperty('--py', ((my / h) * 2 - 1).toFixed(3));
+
+          var r = art.getBoundingClientRect();
+          if (!r.width) { return; }
+          art.style.setProperty('--mx', (((mx - r.left) / r.width) * 100).toFixed(1));
+          art.style.setProperty('--my', (((my - r.top) / r.height) * 100).toFixed(1));
+
+          // 1 over the plate, falling to 0 about a plate-width away.
+          var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+          var d = Math.hypot(mx - cx, my - cy) / (r.width * 1.15);
+          art.style.setProperty('--near', Math.max(0, 1 - d).toFixed(3));
+        });
+      });
+    }
 
     var cv = $('cineCanvas'), ctx = cv.getContext('2d'), dust = [], vw = 0, vh = 0;
     function sizeCanvas() {

@@ -1,23 +1,27 @@
 # Domain artwork
 
-The Academics preview shows one logo per scroll beat. Each looks for a PNG in
-this folder and falls back to a coloured medallion if the file is missing, so
-the sequence works with none, some, or all of them present.
+Used by the Academics preview, one plate per scroll beat.
 
-Drop files here with these exact names. Transparent PNG, square, 1024px or
-larger:
-
-| File | Domain |
+| File | Used for |
 | --- | --- |
-| `ten.png` | TEN (opening beat) |
-| `flutter.png` | Flutter Development |
-| `java.png` | Java Development |
-| `python.png` | Python Development |
-| `mern.png` | MERN Stack |
-| `cybersecurity.png` | Cyber Security |
-| `ai.png` | Artificial Intelligence |
+| `ten.webp` | Opening beat |
+| `flutter.webp` | Learn by building |
+| `java.webp` | Assignments, marked |
+| `python.webp` | Resume builder |
+| `mern.webp` | Job readiness |
+| `swe.webp` | Job findings |
+| `webdev.webp` | Hackathons |
+| `space.webp` | Every track (the beat the camera descends onto) |
+| `space-stars.webp` | Page background — starfield and nebulae |
+| `space-earth.webp` | Earth on the horizon |
 
-Nothing else needs changing — the page picks them up on the next load.
+The last two are crops of the Space Intern render: the right-hand starfield,
+clear of the astronaut and the emblem, and the Earth limb above the podium.
 
-To add or reorder beats, edit `BEATS` in `public/academics.html`; the `slug`
-field is the filename without the extension.
+To add or reorder beats, edit `BEATS` in `public/academics.html`. `slug` is the
+filename without its extension; a beat with no matching file falls back to a
+coloured medallion, so nothing breaks while artwork is missing.
+
+Source PNGs were 1.6–7.5 MB each. Re-encode with:
+
+    ffmpeg -i in.png -vf "scale='min(1000,iw)':-2" -c:v libwebp -quality 86 -o out.webp
