@@ -16,7 +16,7 @@ const ALL_INDIAN_STATES_AND_UTS = [
 ];
 
 const ALL_WORLD_COUNTRIES = [
-  "India", "United States", "United Kingdom", "Canada", "Australia", "Germany",
+  "India", "United States", "USA", "United Kingdom", "Canada", "Australia", "Germany",
   "United Arab Emirates", "Singapore", "France", "Japan", "China", "Brazil",
   "South Africa", "Netherlands", "Switzerland", "Spain", "Italy", "Sweden",
   "Ireland", "New Zealand", "Saudi Arabia", "Qatar", "Kuwait", "Oman",
