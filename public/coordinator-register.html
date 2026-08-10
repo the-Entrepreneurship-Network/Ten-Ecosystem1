@@ -8,7 +8,18 @@
 <link rel="stylesheet" href="ten-motion.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
+
+:root {
+  --ten-font-display: 'Outfit', sans-serif;
+  --ten-font-body: 'Plus Jakarta Sans', sans-serif;
+}
+
+* {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
 body {
   min-height: 100vh;
   display: flex;
@@ -16,6 +27,8 @@ body {
   justify-content: center;
   padding: 24px;
   overflow-y: auto;
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  background: radial-gradient(circle at center, #0a0d18 0%, #04050a 100%);
 }
 
 .coord-wrap {
@@ -32,23 +45,26 @@ body {
 }
 .brand-shield {
   width: 72px; height: 72px;
-  background: var(--ten-gold-bg);
-  border: 1px solid var(--ten-border-strong);
+  background: rgba(212,175,55,0.08);
+  backdrop-filter: blur(10px);
+  border: 1.5px solid rgba(212,175,55,0.35);
   border-radius: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 16px;
+  box-shadow: 0 0 40px rgba(212,175,55,0.25), inset 0 1px 1px rgba(255,255,255,0.1);
   animation: ten-pulse-gold 3s ease infinite;
 }
 .brand-name {
-  font-family: var(--ten-font-display);
+  font-family: 'Outfit', sans-serif !important;
   font-size: 13px;
   font-weight: 800;
   letter-spacing: 4px;
   color: var(--ten-gold);
 }
 .brand-sub {
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
   font-size: 11px;
   color: var(--ten-text-muted);
   letter-spacing: 1.5px;
@@ -92,6 +108,7 @@ body {
   justify-content: center;
   font-size: 11px;
   font-weight: 800;
+  font-family: 'Outfit', sans-serif !important;
   color: #94a3b8;
   position: relative;
   z-index: 3;
@@ -110,11 +127,16 @@ body {
 
 /* ── Glass card ── */
 .onboarding-card {
-  background: var(--ten-card);
-  border: 1px solid var(--ten-border);
+  background: rgba(10, 15, 30, 0.45);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(212, 175, 55, 0.18);
   border-radius: var(--ten-r-xl);
   padding: 38px;
-  box-shadow: var(--ten-shadow-lg), var(--ten-glow-gold);
+  box-shadow: 
+    0 24px 72px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 40px rgba(212, 175, 55, 0.05);
   position: relative;
   overflow: hidden;
 }
@@ -122,7 +144,7 @@ body {
   content: '';
   position: absolute;
   top: 0; left: 0; right: 0; height: 2px;
-  background: linear-gradient(90deg, transparent, var(--ten-gold), transparent);
+  background: linear-gradient(90deg, transparent, rgba(212,175,55,0.4), transparent);
 }
 
 .step-panel {
@@ -133,23 +155,26 @@ body {
 }
 
 .card-title {
-  font-family: var(--ten-font-display);
-  font-size: 22px;
+  font-family: 'Outfit', sans-serif !important;
+  font-size: 24px;
   font-weight: 800;
   letter-spacing: -0.5px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   color: #fff;
 }
 .card-sub {
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
   font-size: 13px;
   color: var(--ten-text-sub);
   margin-bottom: 24px;
+  line-height: 1.5;
 }
 
 /* ── Field elements ── */
 .field-group { margin-bottom: 20px; }
 .field-label {
   display: block;
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -168,21 +193,36 @@ body {
   font-size: 14px;
   opacity: 0.7;
 }
+/* ── Chrome / Edge Autofill Fix ── */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 1000px #0a0d18 inset !important;
+    -webkit-text-fill-color: #f8fafc !important;
+    border-color: rgba(212, 175, 55, 0.45) !important;
+    caret-color: #f5c542 !important;
+}
+
 .field-input {
   width: 100%;
   padding: 14px 16px 14px 46px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid var(--ten-border);
-  border-radius: var(--ten-r-sm);
-  color: var(--ten-text);
-  font-family: var(--ten-font-body);
+  background: rgba(0, 0, 0, 0.25) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 10px;
+  color: #f8fafc !important;
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
   font-size: 14px;
   outline: none;
-  transition: all 0.2s;
+  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 .field-input:focus {
-  border-color: var(--ten-gold);
-  box-shadow: 0 0 0 3px rgba(212,175,55,0.1);
+  border-color: rgba(212, 175, 55, 0.45) !important;
+  box-shadow: 
+    0 0 16px rgba(212, 175, 55, 0.15),
+    inset 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+  background: rgba(0, 0, 0, 0.4) !important;
 }
 
 /* ── Domain Cards Grid ── */
@@ -196,38 +236,47 @@ body {
 }
 .domain-card {
   border: 1px solid rgba(255,255,255,0.08);
-  background: rgba(255,255,255,0.02);
+  background: rgba(0, 0, 0, 0.2);
   border-radius: 12px;
-  padding: 14px 16px;
+  padding: 16px;
   cursor: pointer;
-  transition: all 0.25s ease;
-  display: flex;
-  flex-direction: column;
+  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .domain-card:hover {
-  border-color: rgba(212,175,55,0.4);
-  background: rgba(212,175,55,0.03);
+  border-color: rgba(212,175,55,0.35);
+  background: rgba(212,175,55,0.06);
+  transform: translateY(-2px);
 }
 .domain-card.selected {
-  border-color: var(--ten-gold) !important;
-  background: rgba(212,175,55,0.1) !important;
-  box-shadow: 0 0 16px rgba(212,175,55,0.15) inset;
+  border-color: var(--ten-gold);
+  background: rgba(212,175,55,0.1);
+  box-shadow: 0 4px 16px rgba(212,175,55,0.15);
+}
+.domain-title {
+  font-family: 'Outfit', sans-serif !important;
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 4px;
+}
+.domain-meta {
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  font-size: 11px;
+  color: var(--ten-text-sub);
 }
 
 .action-row {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 32px;
-  gap: 16px;
+  margin-top: 28px;
+  gap: 12px;
 }
 .nav-btn {
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 700;
+  padding: 14px 24px;
+  border-radius: 10px;
+  font-family: 'Outfit', sans-serif !important;
   font-size: 13px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -239,15 +288,23 @@ body {
 }
 .btn-prev:hover {
   background: rgba(255,255,255,0.1);
+  transform: translateY(-1px);
 }
 .btn-next {
-  background: linear-gradient(135deg, var(--ten-gold), var(--ten-gold-dim));
-  border: none;
-  color: #000;
+  background: linear-gradient(135deg, var(--ten-gold) 0%, var(--ten-gold-dim) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #0c1220;
+  box-shadow: 
+    0 8px 24px rgba(212, 175, 55, 0.25), 
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 .btn-next:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(212,175,55,0.4);
+  background: linear-gradient(135deg, var(--ten-gold-light) 0%, var(--ten-gold) 100%);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-2px) scale(1.015);
+  box-shadow: 
+    0 12px 32px rgba(212, 175, 55, 0.45), 
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 .success-check {
@@ -262,11 +319,34 @@ body {
   color: #10b981;
   margin: 0 auto 24px auto;
   animation: ten-scale-in 0.5s ease;
+  font-family: 'Outfit', sans-serif !important;
 }
 
 .domain-cards::-webkit-scrollbar { width: 4px; }
 .domain-cards::-webkit-scrollbar-track { background: transparent; }
 .domain-cards::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+
+/* ── Footer ── */
+.card-footer {
+  margin-top: 24px;
+  padding: 14px 20px;
+  background: rgba(10, 15, 30, 0.45);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(212, 175, 55, 0.18);
+  border-radius: 14px;
+  text-align: center;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  font-size: 11px;
+  color: var(--ten-text-muted);
+}
+.card-footer a {
+  color: var(--ten-gold);
+  text-decoration: none;
+  font-weight: 700;
+  transition: color 0.2s;
+}
+.card-footer a:hover { color: var(--ten-gold-light); }
 
 </style>
 </head>
@@ -282,7 +362,7 @@ body {
     <div class="brand-shield ten-float" style="width: 80px; height: 80px; background: #121316; border: 2px solid rgba(212,175,55,0.45); border-radius: 20px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px; box-shadow: 0 0 40px rgba(212,175,55,0.35), inset 0 1px 1px rgba(255,255,255,0.15); transition: all 0.3s ease;">
       <img src="ten-logo.png" alt="TEN Logo" style="width:56px;height:56px;object-fit:contain;display:block;filter:drop-shadow(0 0 6px rgba(212,175,55,0.35));" />
     </div>
-    <div class="brand-name" style="font-family: var(--ten-font-display), sans-serif; font-size: 28px; font-weight: 800; color: #D4AF37; letter-spacing: 5px; text-transform: uppercase; margin-bottom: 2px; text-shadow: 0 0 12px rgba(212,175,55,0.3);">TEN</div>
+    <div class="brand-name" style="font-family: 'Outfit', sans-serif; font-size: 28px; font-weight: 800; color: #D4AF37; letter-spacing: 5px; text-transform: uppercase; margin-bottom: 2px; text-shadow: 0 0 12px rgba(212,175,55,0.3);">TEN</div>
     <div class="brand-sub" style="font-size: 11px; font-weight: 500; color: rgba(212,175,55,0.85); letter-spacing: 2px; text-transform: uppercase; margin-top: 4px;">THE ENTREPRENEURSHIP NETWORK</div>
     <div class="brand-sub" style="font-size: 11px; color: #94a3b8; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 6px; opacity: 0.85;">Secure Coordinator Onboarding</div>
   </div>
@@ -477,9 +557,14 @@ body {
            Congratulations! Our secure system successfully notified HR level managers. An email confirmation has been dispatched. Once approved, you can securely access your assigned domain using the standard Coordinator Login portal.
         </div>
 
-        <button type="button" onclick="window.location.href='index.html'" class="login-btn" style="width:100%;text-align:center;display:block;">
-          <i class="fa-solid fa-house"></i> Back to Homepage
-        </button>
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:20px;">
+          <button type="button" onclick="window.location.href='coordinator-dashboard.html'" class="login-btn" style="width:100%;text-align:center;display:block;padding:14px;background:linear-gradient(135deg,#38bdf8,#0284c7);color:#0c1220;font-weight:900;border:none;border-radius:10px;font-size:14px;cursor:pointer;box-shadow:0 4px 16px rgba(56,189,248,0.4);">
+            🚀 Enter Coordinator Workspace Now →
+          </button>
+          <button type="button" onclick="window.location.href='coordinator-login.html'" class="btn-prev" style="width:100%;text-align:center;display:block;padding:11px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;">
+            🔑 Go to Coordinator Login Portal
+          </button>
+        </div>
       </div>
 
       <!-- Action Nav Buttons -->

@@ -126,33 +126,6 @@
       }
 
       function selectRole(r) {
-        // Only student registration is open — all others are coming soon
-        const OPEN_ROLES = ['student'];
-        if (!OPEN_ROLES.includes(r.id)) {
-          // Show coming soon modal
-          var overlay = document.getElementById('coming-soon-overlay');
-          if (!overlay) {
-            overlay = document.createElement('div');
-            overlay.id = 'coming-soon-overlay';
-            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;';
-            overlay.innerHTML = `
-              <div style="background:#1e293b;border-radius:16px;padding:40px;max-width:380px;width:90%;text-align:center;border:1px solid rgba(212,175,55,0.25);">
-                <div style="font-size:48px;margin-bottom:16px;">🚀</div>
-                <h2 style="color:#f1f5f9;font-size:20px;font-weight:800;margin-bottom:8px;">${r.label} Registration</h2>
-                <p style="color:#94a3b8;font-size:14px;line-height:1.6;margin-bottom:24px;">
-                  This role is coming soon. We are currently accepting <strong style="color:#D4AF37;">Student (Intern)</strong> registrations only.
-                </p>
-                <button onclick="document.getElementById('coming-soon-overlay').remove()" style="background:#D4AF37;color:#0c1220;border:none;border-radius:8px;padding:12px 28px;font-weight:800;font-size:14px;cursor:pointer;">Got it</button>
-              </div>`;
-            document.body.appendChild(overlay);
-          } else {
-            overlay.style.display = 'flex';
-          }
-          overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
-          return; // Stop here — don't select the role
-        }
-
-        // Only runs for student role
         selectedRole = r.id;
         roleInput.value = r.id;
         roleGrid.querySelectorAll('.role-card').forEach(function(c) { c.classList.remove('role-card--active'); });

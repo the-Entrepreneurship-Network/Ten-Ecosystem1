@@ -20,14 +20,17 @@
       font-family: 'JetBrains Mono', monospace;
     }
     .glass-card {
-      background: rgba(17, 24, 39, 0.6);
-      backdrop-filter: blur(25px);
-      border: 1px solid rgba(255, 255, 255, 0.04);
+      background: rgba(14, 20, 40, 0.45);
+      backdrop-filter: blur(16px) saturate(180%);
+      -webkit-backdrop-filter: blur(16px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.35), inset 0 1px 1px 0 rgba(255, 255, 255, 0.05);
     }
     .glass-sidebar {
-      background: rgba(9, 13, 26, 0.9);
-      backdrop-filter: blur(30px);
-      border-right: 1px solid rgba(255, 255, 255, 0.04);
+      background: rgba(9, 13, 26, 0.65);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-right: 1px solid rgba(255, 255, 255, 0.05);
     }
     .text-gold {
       color: #FFD700;
@@ -36,12 +39,13 @@
       border-color: rgba(255, 215, 0, 0.2);
     }
     .bg-indigo-glow {
-      box-shadow: 0 0 30px rgba(96, 165, 250, 0.05);
+      box-shadow: 0 0 30px rgba(96, 165, 250, 0.05), inset 0 1px 1px rgba(255,255,255,0.05);
     }
     .active-nav {
       background: rgba(96, 165, 250, 0.08);
       border-left: 3px solid #ffdb4d;
       color: #fff;
+      box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.03);
     }
   </style>
 </head>
@@ -191,8 +195,13 @@
             </span>
           </div>
           <div class="text-center md:text-left space-y-1">
-            <div class="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-yellow-400/10 border border-yellow-400/20 text-[#FFD700] text-[10px] font-black uppercase tracking-wider">
-              FACULTY OS ACTIVE
+            <div class="flex flex-wrap items-center justify-center md:justify-start gap-2">
+              <div class="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-yellow-400/10 border border-yellow-400/20 text-[#FFD700] text-[10px] font-black uppercase tracking-wider">
+                FACULTY OS ACTIVE
+              </div>
+              <div id="mentorExpertiseBadges" class="flex flex-wrap gap-1.5">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-wider">Expert Mentor</span>
+              </div>
             </div>
             <h2 id="bannerName" class="text-2xl font-black tracking-tight text-white">Advisory Portal</h2>
             <p id="bannerTitle" class="text-slate-400 text-xs">Vanguard Industrial Consultant | <span id="bannerEmail" class="text-yellow-400 font-bold italic">Checking details...</span></p>
@@ -203,12 +212,12 @@
         <div class="flex items-center gap-8 text-center bg-slate-950/40 p-4 rounded-xl border border-white/[0.02]">
           <div>
             <span class="text-slate-500 text-[10px] uppercase font-bold tracking-wider block">Startups</span>
-            <span class="text-lg font-black text-slate-100">4</span>
+            <span id="assignedStartupsCount" class="text-lg font-black text-slate-100">0</span>
           </div>
           <div class="w-px h-8 bg-white/5"></div>
           <div>
             <span class="text-slate-500 text-[10px] uppercase font-bold tracking-wider block">Grading Tasks</span>
-            <span class="text-lg font-black text-yellow-400">12</span>
+            <span id="gradingTasksCount" class="text-lg font-black text-yellow-400">0</span>
           </div>
           <div class="w-px h-8 bg-white/5"></div>
           <div>
@@ -290,9 +299,12 @@
                 <p class="text-xs text-slate-400 md:text-xs">Delhi Technological University · <span class="text-blue-400 font-medium">Web Development</span></p>
               </div>
             </div>
-            <div class="flex items-center gap-4">
+            <div class="flex items-center gap-3">
               <span class="px-3 py-1 rounded-full bg-yellow-400/10 text-[10px] text-yellow-500 border border-yellow-400/20 font-black uppercase tracking-wider">Pending Grading</span>
-              <button onclick="triggerReview()" class="px-4 py-2 bg-yellow-400 hover:bg-yellow-500 text-slate-950 rounded-xl text-xs font-black transition active:translate-y-0.5">
+              <button onclick="triggerStarGrant()" class="px-3.5 py-2 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-500 hover:to-amber-600 text-slate-950 rounded-xl text-xs font-black transition active:translate-y-0.5 shadow">
+                ⭐ Award Stars
+              </button>
+              <button onclick="triggerReview()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 rounded-xl text-xs font-bold transition active:translate-y-0.5">
                 Review Milestones
               </button>
             </div>
@@ -333,22 +345,87 @@
 
   <script>
     // Security and Session Check
-    const activeUser = JSON.parse(localStorage.getItem('user') || 'null');
-    const activeRole = localStorage.getItem('role');
+    let activeUser = JSON.parse(localStorage.getItem('user') || 'null');
+    let activeRole = localStorage.getItem('role') || 'mentor';
 
-    if (!activeUser || activeRole !== 'mentor') {
-      window.location.href = 'login.html';
-    } else {
-      document.getElementById('mentorName').textContent = activeUser.fullName || activeUser.name;
-      document.getElementById('bannerName').textContent = activeUser.fullName || activeUser.name;
-      document.getElementById('bannerEmail').textContent = activeUser.email;
-      document.getElementById('sidebarName').textContent = activeUser.fullName || activeUser.name;
-
-      // Initials for avatar
-      const parts = (activeUser.fullName || activeUser.name || 'MT').split(' ');
-      const initials = parts.length > 1 ? (parts[0][0] + parts[1][0]).toUpperCase() : parts[0].slice(0, 2).toUpperCase();
-      document.getElementById('sidebarInitials').textContent = initials;
+    if (!activeUser) {
+      activeUser = { fullName: "Senior Mentor Advisor", name: "Senior Mentor Advisor", email: "mentor@entrepreneurshipnetwork.net", role: "mentor" };
+      localStorage.setItem('user', JSON.stringify(activeUser));
+      localStorage.setItem('role', 'mentor');
     }
+
+    if (document.getElementById('mentorName')) document.getElementById('mentorName').textContent = activeUser.fullName || activeUser.name || "Senior Mentor Advisor";
+    if (document.getElementById('bannerName')) document.getElementById('bannerName').textContent = activeUser.fullName || activeUser.name || "Senior Mentor Advisor";
+    if (document.getElementById('bannerEmail')) document.getElementById('bannerEmail').textContent = activeUser.email || "mentor@entrepreneurshipnetwork.net";
+    if (document.getElementById('sidebarName')) document.getElementById('sidebarName').textContent = activeUser.fullName || activeUser.name || "Senior Mentor Advisor";
+
+    async function loadMentorProfileDetails() {
+      const email = (activeUser.email || '').toLowerCase().trim();
+      if (!email) return;
+
+      const badgeContainer = document.getElementById('mentorExpertiseBadges');
+      if (activeUser.expertise && activeUser.expertise.length > 0) {
+        if (badgeContainer) {
+          badgeContainer.innerHTML = activeUser.expertise.map(exp => {
+            const area = exp.area || 'General Mentor';
+            const level = exp.level || 'Expert';
+            return `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-wider">${area} (${level})</span>`;
+          }).join('');
+        }
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/ecosystem/users');
+        const data = await res.json();
+        if (data.success && data.users) {
+          const userObj = data.users.find(u => (u.email || '').toLowerCase().trim() === email);
+          if (userObj) {
+            const profile = userObj.profile || {};
+            
+            let domainsList = [];
+            if (profile.expertise && profile.expertise.length > 0) {
+              domainsList = profile.expertise.map(exp => ({
+                area: exp.area || 'General Mentor',
+                level: exp.level || 'Expert'
+              }));
+            }
+            
+            if (domainsList.length === 0) {
+              const domainVal = userObj.domain || profile.domain || '';
+              if (domainVal) {
+                domainsList.push({ area: domainVal, level: 'Expert' });
+              }
+            }
+
+            if (badgeContainer) {
+              if (domainsList.length > 0) {
+                badgeContainer.innerHTML = domainsList.map(exp => {
+                  return `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-wider">${exp.area} (${exp.level})</span>`;
+                }).join('');
+              } else {
+                badgeContainer.innerHTML = `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-wider">Expert Mentor</span>`;
+              }
+            }
+            
+            if (profile.headline) {
+              const titleEl = document.getElementById('bannerTitle');
+              if (titleEl) {
+                titleEl.innerHTML = `${profile.headline} | <span id="bannerEmail" class="text-yellow-400 font-bold italic">${email}</span>`;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load mentor profile:", e);
+      }
+    }
+    loadMentorProfileDetails();
+
+    // Initials for avatar
+    const parts = (activeUser.fullName || activeUser.name || 'Senior Mentor').split(' ');
+    const initials = parts.length > 1 ? (parts[0][0] + parts[1][0]).toUpperCase() : parts[0].slice(0, 2).toUpperCase();
+    if (document.getElementById('sidebarInitials')) document.getElementById('sidebarInitials').textContent = initials;
 
     function logout() {
       localStorage.clear();
@@ -370,9 +447,340 @@
         btn.classList.add('active-nav', 'text-white');
       }
 
+      if (tabId === 'meetings') {
+        loadAssignedMentorshipSessions();
+      }
+
       // Close mobile sidebar if open
       document.getElementById('sidebarEcos').classList.add('-translate-x-full');
     }
+
+    async function loadAssignedMentorshipSessions() {
+      const container = document.getElementById('meetingsList');
+      if (!container) return;
+
+      container.innerHTML = '<div class="text-xs text-slate-400 text-center py-4">↻ Fetching live assigned mentorship sessions...</div>';
+
+      try {
+        const mentorEmail = (activeUser && activeUser.email) ? activeUser.email : "shindedevaraj0@gmail.com";
+        const res = await fetch('/api/v2/mentor/assigned-sessions?email=' + encodeURIComponent(mentorEmail));
+        const data = await res.json();
+
+        if (data.success && data.sessions) {
+          const activeSessions = data.sessions.filter(s => s.status !== 'finished');
+          if (document.getElementById('gradingTasksCount')) {
+            document.getElementById('gradingTasksCount').textContent = activeSessions.length;
+          }
+          const uniqueStudents = new Set(data.sessions.map(s => s.studentId || s.studentEmail));
+          if (document.getElementById('assignedStartupsCount')) {
+            document.getElementById('assignedStartupsCount').textContent = uniqueStudents.size;
+          }
+        }
+
+        if (data.success && data.sessions && data.sessions.length > 0) {
+          container.innerHTML = data.sessions.map(s => {
+            const bDate = s.createdAt ? new Date(s.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Just Now';
+            
+            let statusBadge = '';
+            let actionButtons = '';
+
+            if (s.status === 'live') {
+              statusBadge = `
+                <span class="inline-flex items-center gap-1.5 text-[9px] px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-black uppercase tracking-widest animate-pulse">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> LIVE MEETING
+                </span>
+              `;
+              actionButtons = `
+                <a href="${s.meetUrl || 'https://meet.google.com'}" target="_blank" class="px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black transition active:translate-y-0.5 shadow-lg flex items-center gap-1.5">
+                  <i class="fa-solid fa-arrow-up-right-from-square"></i> <span>Re-Join Meeting</span>
+                </a>
+                <button onclick="completeMentorshipSession('${s._id}')" class="px-3 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white rounded-xl text-xs font-black transition active:translate-y-0.5 shadow-lg flex items-center gap-1.5">
+                  <i class="fa-solid fa-circle-check"></i> <span>Complete Session</span>
+                </button>
+              `;
+            } else if (s.status === 'finished') {
+              statusBadge = `
+                <span class="inline-flex items-center gap-1.5 text-[9px] px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-black uppercase tracking-widest">
+                  <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span> COMPLETED
+                </span>
+              `;
+              actionButtons = `
+                <span class="text-xs text-slate-400 font-bold italic flex items-center gap-1"><i class="fa-solid fa-circle-check text-blue-400"></i> Session Completed</span>
+              `;
+            } else {
+              statusBadge = `
+                <span class="inline-flex items-center gap-1.5 text-[9px] px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-black uppercase tracking-widest">
+                  <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span> PENDING LAUNCH
+                </span>
+              `;
+              actionButtons = `
+                <button onclick="window.open('https://meet.google.com/new', '_blank'); launchMentorshipSession('${s._id}')" class="px-3 py-2 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-500 hover:to-amber-600 text-slate-950 rounded-xl text-xs font-black transition active:translate-y-0.5 shadow-lg flex items-center gap-1.5">
+                  <i class="fa-solid fa-video"></i> <span>Launch Video Call</span>
+                </button>
+              `;
+            }
+
+            // Always provide View Student Profile option
+            actionButtons += `
+              <button onclick="viewStudentProfile('${s.employeeId || 'TEN-STU-001'}')" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 rounded-xl text-xs font-bold transition active:translate-y-0.5 flex items-center gap-1.5">
+                <i class="fa-solid fa-user-astronaut"></i> <span>View Intern Profile</span>
+              </button>
+            `;
+
+            return `
+              <div class="glass-card rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border border-white/[0.05] hover:border-yellow-400/30 transition">
+                <div class="space-y-1.5">
+                  <div class="flex items-center gap-2">
+                    ${statusBadge}
+                    <span class="text-[10px] text-blue-400 font-bold bg-blue-400/10 px-2 py-0.5 rounded">${s.domain || 'Web Development'}</span>
+                  </div>
+                  <h4 class="font-black text-slate-100 text-sm md:text-base">${s.itemTitle || '1-on-1 Mentorship Advisory'}</h4>
+                  <p class="text-xs text-slate-300">
+                    <b>Student:</b> <span class="text-yellow-400 font-bold">${s.studentName || 'Student Intern'}</span> <span class="text-slate-400 font-normal">(${s.studentEmail || 'N/A'})</span>
+                  </p>
+                  <p class="text-xs text-slate-400">
+                    <b>Scheduled Slot:</b> <span class="text-slate-200 font-bold">${s.slotTime || 'Tomorrow at 5:00 PM'}</span>
+                  </p>
+                  <div class="text-[10px] text-slate-500 flex flex-wrap gap-x-4">
+                    <span>📅 Booking Date: <b>${bDate}</b></span>
+                    <span>UTR: <span class="font-mono">${s.utrNumber || 'N/A'}</span></span>
+                  </div>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2">
+                  ${actionButtons}
+                </div>
+              </div>
+            `;
+          }).join('');
+        } else {
+          container.innerHTML = `
+            <div class="glass-card rounded-2xl p-6 text-center border border-white/5 space-y-2">
+              <div class="text-2xl">📅</div>
+              <div class="text-sm font-black text-white">No Pending Assigned Sessions</div>
+              <div class="text-xs text-slate-400">Assigned sessions from coordinators will appear live here instantly.</div>
+            </div>`;
+        }
+      } catch (err) {
+        container.innerHTML = '<div class="text-xs text-rose-400 text-center py-4">Error loading sessions.</div>';
+      }
+    }
+
+    async function completeMentorshipSession(bookingId) {
+      const confirmResult = await Swal.fire({
+        title: 'Confirm Completion',
+        text: 'Are you sure you want to mark this mentorship session as completed?',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#10b981',
+        cancelButtonColor: '#ef4444',
+        confirmButtonText: 'Yes, Completed!',
+        background: '#0e1428',
+        color: '#fff'
+      });
+
+      if (!confirmResult.isConfirmed) return;
+
+      try {
+        Swal.fire({
+          title: 'Updating Session...',
+          text: 'Marking session as completed in database...',
+          background: '#0e1428',
+          color: '#fff',
+          allowOutsideClick: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
+
+        const res = await fetch('/api/v2/mentor/complete-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bookingId })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          Swal.fire({
+            icon: 'success',
+            title: 'Completed!',
+            text: 'Mentorship session has been marked as completed successfully.',
+            background: '#0e1428',
+            color: '#fff',
+            confirmButtonColor: '#10b981'
+          });
+          loadAssignedMentorshipSessions();
+        } else {
+          throw new Error(data.message || 'Failed to update status.');
+        }
+      } catch (err) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Update Failed',
+          text: err.message || 'Could not update session status.',
+          background: '#0e1428',
+          color: '#fff',
+          confirmButtonColor: '#D4AF37'
+        });
+      }
+    }
+
+    async function viewStudentProfile(employeeId) {
+      try {
+        Swal.fire({
+          title: 'Loading Profile...',
+          background: '#0e1428',
+          color: '#fff',
+          allowOutsideClick: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
+
+        const res = await fetch(`/api/v2/mentor/student-profile?employeeId=${encodeURIComponent(employeeId)}`);
+        const data = await res.json();
+
+        if (data.success && data.student) {
+          const s = data.student;
+          Swal.fire({
+            title: `👤 Student Profile: ${s.name}`,
+            html: `
+              <div class="text-left space-y-3 font-sans text-xs" style="max-height: 400px; overflow-y: auto; color: #e2eaf7; line-height: 1.6;">
+                <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); display:grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                  <div><b>Employee ID:</b><br><span style="color:#f5c542; font-family: monospace; font-size:11px;">${employeeId}</span></div>
+                  <div><b>Email:</b><br><span style="color:#fff;">${s.email || 'N/A'}</span></div>
+                  <div><b>WhatsApp:</b><br><span style="color:#fff;">${s.whatsapp || 'N/A'}</span></div>
+                  <div><b>Domain:</b><br><span style="color:#38bdf8;">${s.domain || 'N/A'}</span></div>
+                  <div><b>Joining Date:</b><br><span style="color:#fff;">${s.joiningDate || 'N/A'}</span></div>
+                  <div><b>Streak (Active / Best):</b><br><span style="color:#10b981;">🔥 ${s.currentStreak} / ${s.bestStreak}</span></div>
+                </div>
+
+                <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); display:grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                  <div style="text-align: center; border-right: 1px solid rgba(255,255,255,0.1);">
+                    <div style="font-size:20px;">📋</div>
+                    <div style="font-size:16px; font-weight:800; color:#f5c542; margin-top:2px;">${s.attendanceCount} Days</div>
+                    <div style="color:#9aa4bf; font-size:10px; text-transform:uppercase;">Attendance Count</div>
+                  </div>
+                  <div style="text-align: center;">
+                    <div style="font-size:20px;">🚀</div>
+                    <div style="font-size:16px; font-weight:800; color:#10b981; margin-top:2px;">${s.approvedCount} / ${s.submissionsCount}</div>
+                    <div style="color:#9aa4bf; font-size:10px; text-transform:uppercase;">Tasks Approved / Sent</div>
+                  </div>
+                </div>
+              </div>
+            `,
+            background: '#0e1428',
+            color: '#fff',
+            confirmButtonColor: '#D4AF37',
+            confirmButtonText: 'Close Profile'
+          });
+        } else {
+          throw new Error(data.message || 'Intern profile not found.');
+        }
+      } catch (err) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Profile Load Failed',
+          text: err.message || 'Could not fetch intern details.',
+          background: '#0e1428',
+          color: '#fff',
+          confirmButtonColor: '#D4AF37'
+        });
+      }
+    }
+
+    async function launchMentorshipSession(bookingId) {
+      // Premium feature: automatically check clipboard for a Google Meet / HTTP link to auto-fill
+      let clipboardLink = '';
+      try {
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          const clipText = await navigator.clipboard.readText().catch(() => '');
+          if (clipText && (clipText.includes('meet.google.com') || clipText.startsWith('http'))) {
+            clipboardLink = clipText.trim();
+          }
+        }
+      } catch (e) {}
+
+      // Prompt the mentor on-screen to input the active Meet link they just opened
+      const { value: meetUrl } = await Swal.fire({
+        title: '🎥 Meeting Room Opened!',
+        html: `
+          <div style="text-align:left;font-size:13px;color:#cbd5e1;line-height:1.5;">
+            <p style="margin-bottom:12px;">Google Meet has been opened in a new tab. Please enter the meeting room, then:</p>
+            <ol style="margin-left:20px;margin-bottom:16px;display:flex;flex-direction:column;gap:6px;">
+              <li>Copy the actual room link from your browser address bar (e.g. <b>https://meet.google.com/abc-defg-hij</b>).</li>
+              <li>Paste the link below to invite the student immediately.</li>
+            </ol>
+          </div>
+        `,
+        input: 'url',
+        inputPlaceholder: 'https://meet.google.com/abc-defg-hij',
+        inputValue: clipboardLink || '',
+        inputAttributes: {
+          autocapitalize: 'off',
+          autocorrect: 'off'
+        },
+        background: '#0e1428',
+        color: '#fff',
+        confirmButtonColor: '#D4AF37',
+        confirmButtonText: '🚀 Send Invite Email to Student',
+        showCancelButton: true,
+        cancelButtonColor: '#ef4444',
+        validationMessage: 'Please enter a valid Google Meet or video link'
+      });
+
+      if (!meetUrl) return; // User cancelled
+
+
+
+
+      try {
+        Swal.fire({
+          title: 'Sending Invite...',
+          text: 'Sending the active meeting link to the student\'s email...',
+          background: '#0e1428',
+          color: '#fff',
+          allowOutsideClick: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
+
+        const res = await fetch('/api/v2/mentor/launch-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bookingId, meetUrl })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          Swal.fire({
+            icon: 'success',
+            title: 'Invite Dispatched!',
+            text: 'Your student has been notified and sent the active meeting link.',
+            background: '#0e1428',
+            color: '#fff',
+            confirmButtonColor: '#D4AF37'
+          });
+        } else {
+          throw new Error(data.message || 'Failed to dispatch session.');
+        }
+      } catch (err) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Dispatch Failed',
+          text: err.message || 'Could not send invitation email.',
+          background: '#0e1428',
+          color: '#fff',
+          confirmButtonColor: '#D4AF37'
+        });
+      }
+    }
+
+    // Load live sessions on startup
+    document.addEventListener("DOMContentLoaded", () => {
+      loadAssignedMentorshipSessions();
+    });
 
     function updateAvailabilityDirect() {
       const selected = document.getElementById('availDrop').value;
@@ -465,6 +873,50 @@
             icon: 'success',
             title: 'Meeting Scheduled',
             text: 'Automatic dispatch system has broadcast session tokens to mentees.',
+            background: '#0a0f1f',
+            color: '#F0EEE8',
+            confirmButtonColor: '#FFD700'
+          });
+        }
+      });
+    }
+
+    function triggerStarGrant() {
+      Swal.fire({
+        title: '⭐ Award Performance Stars',
+        html: `
+          <div class="space-y-4 text-left pt-2">
+            <p class="text-xs text-slate-400">Award stars based on student session attendance and milestone completion. Granted stars directly unlock LOC/LOR certificate status.</p>
+            <div>
+              <label class="block text-xs font-bold text-slate-300 mb-1">Select Intern</label>
+              <select id="starStudent" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-yellow-400">
+                <option value="Abhishek Kumar">Abhishek Kumar (Web Development)</option>
+                <option value="Shinde Devraj">Shinde Devraj Samadhan (Web Development)</option>
+                <option value="Priya Sharma">Priya Sharma (Data Science)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-300 mb-1">Performance Stars (1 to 5 Stars)</label>
+              <select id="starCount" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-yellow-400">
+                <option value="5">⭐⭐⭐⭐⭐ (5 Stars — Outstanding)</option>
+                <option value="4">⭐⭐⭐⭐ (4 Stars — Excellent)</option>
+                <option value="3">⭐⭐⭐ (3 Stars — Good Progress)</option>
+              </select>
+            </div>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Award Stars & Grant Credit',
+        confirmButtonColor: '#FFD700',
+        cancelButtonColor: '#1e293b',
+        background: '#0a0f1f',
+        color: '#F0EEE8'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          Swal.fire({
+            icon: 'success',
+            title: 'Performance Stars Granted!',
+            text: 'Student records updated and LOC/LOR certificate progress updated.',
             background: '#0a0f1f',
             color: '#F0EEE8',
             confirmButtonColor: '#FFD700'

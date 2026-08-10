@@ -330,6 +330,27 @@ async function claimCert(type) {
     } else if (d.status === 'payment_initiated') {
       // Razorpay checkout (runs only when PAYMENT_ENABLED=true)
       openRazorpay(d, type);
+    } else if (d.status === 'payment_bypassed') {
+      Swal.fire({
+        title: 'Verifying Purchase...',
+        text: 'Please wait while we generate your certificate PDF.',
+        background: '#0e1428', color: '#F0EEE8',
+        allowOutsideClick: false,
+        didOpen: () => { Swal.showLoading(); }
+      });
+      const pdfRes = await fetch(`/api/v2/certificates/generate-pdf/${type}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-employee-id': EMP_ID }
+      });
+      const pdfData = await pdfRes.json();
+      Swal.close();
+      if (pdfData.success) {
+        currentPdfUrl = pdfData.pdfUrl;
+        triggerRevealAnimation(type);
+        loadCerts(); // Refresh
+      } else {
+        Swal.fire({ icon: 'error', title: 'Generation Failed', text: pdfData.message || 'Error generating PDF.', background: '#0e1428', color: '#F0EEE8' });
+      }
     }
   } catch(e) {
     Swal.fire({ icon: 'error', title: 'Error', text: 'Network error. Please try again.', background: '#0e1428', color: '#F0EEE8' });

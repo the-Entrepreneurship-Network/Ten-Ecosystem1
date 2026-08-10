@@ -34,12 +34,8 @@
     }
 
     function injectLink(role) {
-        // If the page already has a link with id="tfp-link" we leave it alone.
         let a = document.getElementById("tfp-link");
-        if (a) {
-            return;
-        }
-        // Otherwise, append after the first password input we find.
+        if (a) return;
         const pwd = document.querySelector('input[type="password"]');
         if (!pwd) return;
         a = document.createElement("a");
@@ -48,7 +44,6 @@
         a.href = "#";
         a.textContent = "Forgot password?";
         a.addEventListener("click", e => { e.preventDefault(); openModal(cfgRole); });
-        // Insert right after the password input's parent group when possible.
         let host = pwd.closest(".form-group, .field-group, .field-inner") || pwd.parentNode;
         host.appendChild(a);
     }
@@ -61,7 +56,7 @@
         wrap.innerHTML =
             '<div class="tfp-modal">'
             + '<div class="tfp-title">🔐 Reset your password</div>'
-            + '<div class="tfp-sub">Enter the email associated with your <span id="tfp-role">account</span>. We will send you a reset link that expires in 1 hour.</div>'
+            + '<div class="tfp-sub">Enter the email associated with your <span id="tfp-role">account</span>. We will send you a password reset link that expires in 1 hour.</div>'
             + '<div class="tfp-row"><label>Email</label><input id="tfp-email" type="email" placeholder="you@example.com" autocomplete="email"></div>'
             + '<div class="tfp-actions">'
             +   '<button class="tfp-btn tfp-btn-primary" id="tfp-send">Send Reset Link</button>'
@@ -86,10 +81,12 @@
         document.getElementById("tfp-overlay").classList.add("open");
         setTimeout(() => document.getElementById("tfp-email").focus(), 100);
     }
+
     function closeModal() {
         const o = document.getElementById("tfp-overlay");
         if (o) o.classList.remove("open");
     }
+
     async function submit() {
         const email = (document.getElementById("tfp-email").value || "").trim();
         const msg = document.getElementById("tfp-msg");
@@ -106,10 +103,13 @@
                 body: JSON.stringify({ email, role: cfgRole })
             });
             const d = await r.json();
-            msg.className = "tfp-msg ok";
-            msg.textContent = d && d.message
-                ? d.message
-                : "If that account exists, a reset link has been sent.";
+            if (d && d.success) {
+                msg.className = "tfp-msg ok";
+                msg.textContent = d.message || "A password reset link has been sent to your email inbox.";
+            } else {
+                msg.className = "tfp-msg err";
+                msg.textContent = (d && d.message) ? d.message : "Error sending password reset email.";
+            }
         } catch (e) {
             msg.className = "tfp-msg err";
             msg.textContent = "Network error. Please try again.";

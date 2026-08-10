@@ -78,6 +78,13 @@ async function assignTasksForStudent(student) {
     }));
 
     const result = await StudentTaskProgress.bulkWrite(ops);
+
+    const week1Tasks = allTasks.filter(t => t.weekNumber === 1).map(t => t._id);
+    await StudentTaskProgress.updateMany(
+        { studentId: student._id, taskId: { $in: week1Tasks }, status: "locked" },
+        { $set: { status: "available" } }
+    );
+
     return { assigned: result.upsertedCount, total: allTasks.length };
 }
 

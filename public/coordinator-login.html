@@ -8,7 +8,13 @@
 <link rel="stylesheet" href="ten-motion.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
+
+:root {
+  --ten-font-display: 'Outfit', sans-serif;
+  --ten-font-body: 'Plus Jakarta Sans', sans-serif;
+}
 
 body {
   min-height: 100vh;
@@ -17,6 +23,8 @@ body {
   justify-content: center;
   padding: 24px;
   overflow-y: auto;
+  font-family: var(--ten-font-body);
+  background: radial-gradient(circle at center, #0a0d18 0%, #04050a 100%);
 }
 
 .coord-wrap {
@@ -34,13 +42,15 @@ body {
 }
 .brand-shield {
   width: 72px; height: 72px;
-  background: var(--ten-gold-bg);
-  border: 1px solid var(--ten-border-strong);
+  background: rgba(212,175,55,0.08);
+  backdrop-filter: blur(10px);
+  border: 1.5px solid rgba(212,175,55,0.35);
   border-radius: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 16px;
+  box-shadow: 0 0 40px rgba(212,175,55,0.25), inset 0 1px 1px rgba(255,255,255,0.1);
   animation: ten-pulse-gold 3s ease infinite;
 }
 .brand-name {
@@ -60,11 +70,15 @@ body {
 
 /* ── Main card ── */
 .login-card {
-  background: var(--ten-card);
-  border: 1px solid var(--ten-border);
+  background: rgba(14, 20, 40, 0.55);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: var(--ten-r-xl);
   padding: 36px 38px;
-  box-shadow: var(--ten-shadow-lg), var(--ten-glow-gold);
+  box-shadow: 
+    0 24px 72px rgba(0, 0, 0, 0.7),
+    inset 0 1px 1px rgba(255, 255, 255, 0.05);
   position: relative;
   overflow: hidden;
 }
@@ -72,7 +86,7 @@ body {
   content: '';
   position: absolute;
   top: 0; left: 0; right: 0; height: 2px;
-  background: linear-gradient(90deg, transparent, var(--ten-gold), transparent);
+  background: linear-gradient(90deg, transparent, rgba(212,175,55,0.4), transparent);
 }
 
 .card-title {
@@ -112,42 +126,64 @@ body {
   opacity: 0.7;
   pointer-events: none;
 }
+/* ── Chrome / Edge Autofill Fix ── */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 1000px #0a0d18 inset !important;
+    -webkit-text-fill-color: #f8fafc !important;
+    border-color: rgba(212, 175, 55, 0.45) !important;
+    caret-color: #f5c542 !important;
+}
+
 .field-input {
   width: 100%;
   padding: 14px 16px 14px 46px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid var(--ten-border);
-  border-radius: var(--ten-r-sm);
-  color: var(--ten-text);
-  font-family: var(--ten-font-body);
+  background: rgba(0, 0, 0, 0.25) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 10px;
+  color: #f8fafc !important;
+  font-family: inherit;
   font-size: 15px;
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 .field-input:focus {
-  border-color: var(--ten-gold);
-  box-shadow: 0 0 0 3px rgba(212,175,55,0.10);
+  border-color: rgba(212, 175, 55, 0.45) !important;
+  box-shadow: 
+    0 0 16px rgba(212, 175, 55, 0.15),
+    inset 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+  background: rgba(0, 0, 0, 0.4) !important;
 }
-.field-input::placeholder { color: #2a2018; }
+.field-input::placeholder { color: rgba(255, 255, 255, 0.15); }
 
 .login-btn {
   width: 100%;
   padding: 15px;
-  background: linear-gradient(135deg, var(--ten-gold), var(--ten-gold-dim));
-  border: none;
+  background: linear-gradient(135deg, var(--ten-gold) 0%, var(--ten-gold-dim) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: var(--ten-r-sm);
-  color: #0a0700;
+  color: #0c1220;
   font-family: var(--ten-font-display);
   font-size: 15px;
   font-weight: 800;
   letter-spacing: 0.5px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
   margin-top: 6px;
+  box-shadow: 
+    0 8px 24px rgba(212, 175, 55, 0.25), 
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 .login-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 28px rgba(212,175,55,0.4);
+  background: linear-gradient(135deg, var(--ten-gold-light) 0%, var(--ten-gold) 100%);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-3px) scale(1.015);
+  box-shadow: 
+    0 12px 32px rgba(212, 175, 55, 0.45), 
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 .loading-text {
@@ -222,21 +258,37 @@ body {
 
 /* ── Footer ── */
 .card-footer {
-  margin-top: 22px;
+  margin-top: 24px;
+  padding: 14px 20px;
+  background: rgba(10, 15, 30, 0.45);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(212, 175, 55, 0.18);
+  border-radius: 14px;
   text-align: center;
-  font-size: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  font-size: 11px;
   color: var(--ten-text-muted);
 }
 .card-footer a {
   color: var(--ten-gold);
   text-decoration: none;
+  font-weight: 700;
+  transition: color 0.2s;
 }
-.card-footer a:hover { text-decoration: underline; }
+.card-footer a:hover { color: var(--ten-gold-light); }
 
 /* scrollbar */
 .domain-info::-webkit-scrollbar { width: 4px; }
 .domain-info::-webkit-scrollbar-track { background: transparent; }
 .domain-info::-webkit-scrollbar-thumb { background: var(--ten-border); border-radius: 2px; }
+
+@media (max-width: 500px) {
+  body { padding: 16px; }
+  .login-card { padding: 28px 20px; }
+  .card-title { font-size: 20px; }
+  .card-footer { padding: 10px 14px; }
+}
 
 </style>
 </head>
@@ -257,7 +309,7 @@ body {
     <div class="brand-sub" style="font-size: 11px; color: #94a3b8; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 6px; opacity: 0.85;">Coordinator Secure Access</div>
   </div>
 
-  <div class="login-card ten-animated-border">
+  <div class="login-card">
 
     <div class="card-title ten-fade-up ten-d1">Coordinator Login</div>
     <p class="card-sub ten-fade-up ten-d2">Domain-based secure access for the Internship Management System</p>
@@ -323,34 +375,34 @@ form.addEventListener("submit", async (e) => {
   const password = document.getElementById("password").value;
 
   try {
-    const response = await fetch("/coordinator-login", {
+    const res = await fetch("/coordinator-login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password })
     });
-
-    const data = await response.json();
-    document.getElementById("loadingText").style.display = "none";
-
-    console.log(data);
-    console.log(data.coordinator);
-
+    const data = await res.json();
     if (data.success) {
       sessionStorage.setItem("coordinatorLoggedIn", "true");
-      sessionStorage.setItem("coordinatorDomain", JSON.stringify(data.coordinator.domain || []));
       sessionStorage.setItem("coordinatorUsername", data.coordinator.username);
+      const domains = Array.isArray(data.coordinator.domain) ? data.coordinator.domain : [data.coordinator.domain];
+      sessionStorage.setItem("coordinatorDomain", JSON.stringify(domains));
 
       Swal.fire({
         icon: "success",
-        title: "Login Successful",
-        text: "Welcome, Coordinator",
+        title: "Access Granted",
+        text: "Welcome to Coordinator Dashboard",
         background: "#0e1428",
         color: "#F0EEE8",
-        confirmButtonColor: "#D4AF37"
+        confirmButtonColor: "#38bdf8",
+        timer: 1000,
+        showConfirmButton: false
       });
 
-      window.location.href = "coordinator-dashboard.html";
+      setTimeout(() => {
+        window.location.href = "coordinator-dashboard.html";
+      }, 500);
     } else {
+      document.getElementById("loadingText").style.display = "none";
       Swal.fire({
         icon: "error",
         title: "Login Failed",
@@ -360,13 +412,12 @@ form.addEventListener("submit", async (e) => {
         confirmButtonColor: "#ef4444"
       });
     }
-  } catch (error) {
-    console.log(error);
+  } catch (err) {
     document.getElementById("loadingText").style.display = "none";
     Swal.fire({
       icon: "error",
-      title: "Server Error",
-      text: "Please try again later",
+      title: "Error",
+      text: "Something went wrong during login. Please try again.",
       background: "#0e1428",
       color: "#F0EEE8",
       confirmButtonColor: "#ef4444"

@@ -1,0 +1,14 @@
+[
+  {
+    "chatRoom": "domain_Web Development",
+    "senderId": "TEN/WEB/1003",
+    "senderName": "Shinde Devraj Samadhan",
+    "senderRole": "student",
+    "senderDomain": "Web Development",
+    "message": "hello sir",
+    "timestamp": "2026-08-04T16:01:15.965Z",
+    "_id": "6a720ccb9159a2dc22d83933",
+    "createdAt": "2026-08-04T16:01:15.965Z",
+    "updatedAt": "2026-08-04T16:01:15.965Z"
+  }
+]

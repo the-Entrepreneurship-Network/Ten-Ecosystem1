@@ -42,13 +42,6 @@
     <div class="login-card rounded-2xl p-8 shadow-2xl relative overflow-hidden">
       <div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent"></div>
 
-      <!-- COMING SOON BANNER -->
-      <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:14px;margin-bottom:20px;text-align:center;">
-        <div style="font-size:20px;margin-bottom:6px;">🚧</div>
-        <div style="color:#fbbf24;font-weight:700;font-size:14px;">Coming Soon</div>
-        <div style="color:#9a8a6a;font-size:12px;margin-top:4px;">This portal is under development. Student login is available at <a href="/student-login" style="color:#D4AF37;font-weight:700;">/student-login</a></div>
-      </div>
-
       <form id="loginForm" class="space-y-5">
         <div>
           <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Registered Email Address</label>
@@ -56,8 +49,8 @@
             <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
               <i class="fa-solid fa-envelope"></i>
             </span>
-            <input class="w-full pl-10 pr-4 py-3 bg-slate-900/40 border border-slate-800 rounded-xl text-slate-400 placeholder-slate-500 cursor-not-allowed" 
-                   type="email" id="loginId" placeholder="[Disabled] Portal Under Construction" disabled autocapitalize="none">
+            <input class="w-full pl-10 pr-4 py-3 bg-slate-900/40 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500" 
+                   type="email" id="loginId" placeholder="Enter your Investor email address" required autocapitalize="none">
           </div>
         </div>
 
@@ -67,12 +60,12 @@
             <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
               <i class="fa-solid fa-lock"></i>
             </span>
-            <input class="w-full pl-10 pr-4 py-3 bg-slate-900/40 border border-slate-800 rounded-xl text-slate-400 placeholder-slate-500 cursor-not-allowed" 
-                   type="password" id="password" placeholder="[Disabled] Portal Under Construction" disabled>
+            <input class="w-full pl-10 pr-4 py-3 bg-slate-900/40 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500" 
+                   type="password" id="password" placeholder="Enter your password" required>
           </div>
         </div>
 
-        <button type="submit" disabled style="opacity:0.4;cursor:not-allowed;" class="w-full py-3.5 bg-gradient-to-r from-[#D4AF37] to-yellow-600 hover:from-amber-500 hover:to-yellow-700 text-slate-950 font-bold rounded-xl transition duration-300 shadow-lg shadow-amber-500/10">
+        <button type="submit" class="w-full py-3.5 bg-gradient-to-r from-[#D4AF37] to-yellow-600 hover:from-amber-500 hover:to-yellow-700 text-slate-950 font-bold rounded-xl transition duration-300 shadow-lg shadow-amber-500/10 cursor-pointer">
           Enter Deal Room
         </button>
 
@@ -141,7 +134,7 @@
           });
 
           setTimeout(() => {
-            window.location.href = "/investor-dashboard";
+            window.location.href = "investor-dashboard.html";
           }, 1500);
 
         } else {

@@ -142,21 +142,21 @@ body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans
     <!-- Upload Grid -->
     <div class="upload-grid" id="uploadGrid">
       <div class="upload-zone" id="zone-address" ondragover="handleDragOver(event,'address')" ondragleave="handleDragLeave(event,'address')" ondrop="handleDrop(event,'address')">
-        <input type="file" id="file-address" class="file-input" accept=".jpg,.jpeg,.png,.pdf" onchange="handleFileSelect('address',this)">
+        <input type="file" id="file-address" class="file-input" accept=".pdf" onchange="handleFileSelect('address',this)">
         <div class="zone-icon">🪪</div>
         <div class="zone-label">Address Proof</div>
-        <div class="zone-sub">Aadhaar Card, Passport, Voter ID,<br>or any government-issued ID</div>
-        <div class="zone-accepted">JPG · PNG · PDF · Max 25MB</div>
+        <div class="zone-sub">Aadhaar Card, Passport, Voter ID,<br>or any government-issued ID (PDF)</div>
+        <div class="zone-accepted">PDF Only · Max 25MB</div>
         <button class="zone-btn" onclick="document.getElementById('file-address').click()">📁 Choose File</button>
         <div class="upload-progress" id="progress-address"><div class="upload-bar-wrap"><div class="upload-bar" id="bar-address"></div></div></div>
         <div id="preview-address" style="display:none;"></div>
       </div>
       <div class="upload-zone" id="zone-marksheet" ondragover="handleDragOver(event,'marksheet')" ondragleave="handleDragLeave(event,'marksheet')" ondrop="handleDrop(event,'marksheet')">
-        <input type="file" id="file-marksheet" class="file-input" accept=".jpg,.jpeg,.png,.pdf" onchange="handleFileSelect('marksheet',this)">
+        <input type="file" id="file-marksheet" class="file-input" accept=".pdf" onchange="handleFileSelect('marksheet',this)">
         <div class="zone-icon">📚</div>
         <div class="zone-label">Latest College Marksheet</div>
-        <div class="zone-sub">Most recent semester or<br>year marksheet</div>
-        <div class="zone-accepted">JPG · PNG · PDF · Max 25MB</div>
+        <div class="zone-sub">Most recent semester or<br>year marksheet (PDF)</div>
+        <div class="zone-accepted">PDF Only · Max 25MB</div>
         <button class="zone-btn" onclick="document.getElementById('file-marksheet').click()">📁 Choose File</button>
         <div class="upload-progress" id="progress-marksheet"><div class="upload-bar-wrap"><div class="upload-bar" id="bar-marksheet"></div></div></div>
         <div id="preview-marksheet" style="display:none;"></div>
@@ -665,6 +665,18 @@ function lockZones() {
 }
 
 async function uploadFile(type, file) {
+  const ext = (file.name || '').split('.').pop().toLowerCase();
+  if (ext !== 'pdf' || (file.type && file.type !== 'application/pdf')) {
+    return Swal.fire({
+      icon: 'error',
+      title: 'Invalid File Format 🛑',
+      text: 'Only PDF documents (.pdf) are allowed. Unsupported formats (PNG, JPG, JPEG, SVG, etc.) are blocked.',
+      background: '#0e1428',
+      color: '#F0EEE8',
+      confirmButtonColor: '#D4AF37'
+    });
+  }
+
   if (file.size > 25 * 1024 * 1024) {
     return Swal.fire({ icon: 'error', title: 'File too large', text: 'Maximum file size is 25MB', background: '#0e1428', color: '#F0EEE8' });
   }
@@ -706,17 +718,18 @@ async function uploadFile(type, file) {
           confirmButtonColor: '#D4AF37'
         });
       } else {
+        const currentLabel = type === 'address' ? 'Address Proof' : 'College Marksheet';
         const otherLabel = type === 'address' ? 'College Marksheet' : 'Address Proof';
         Swal.fire({
           icon: 'success',
-          title: 'Uploaded!',
-          text: `Now upload your ${otherLabel} to complete submission.`,
+          title: `✅ ${currentLabel} Uploaded!`,
+          text: `Next step: Please upload your ${otherLabel} to complete document submission.`,
           background: '#0e1428',
           color: '#F0EEE8',
           confirmButtonColor: '#D4AF37',
-          timer: 3000,
+          timer: 4000,
           timerProgressBar: true,
-          showConfirmButton: false
+          showConfirmButton: true
         });
       }
     } else {

@@ -138,12 +138,18 @@
         `;
       }
 
+      // Save last registered email into session storage
+      if (email && email !== "N/A") {
+        sessionStorage.setItem("lastRegisteredEmail", email);
+      }
+
       // Set specialized login button target dynamically
       const loginBtn = document.getElementById("loginBtn");
+      const emailQuery = (email && email !== "N/A") ? `?email=${encodeURIComponent(email)}` : '';
       if (role && role !== "Member") {
-        loginBtn.href = `/${role.toLowerCase()}-login`;
+        loginBtn.href = `/${role.toLowerCase()}-login${emailQuery}`;
       } else {
-        loginBtn.href = "/";
+        loginBtn.href = `/${emailQuery}${emailQuery ? '&' : '?'}role=student`;
       }
 
       // Smooth enter animation

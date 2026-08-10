@@ -17,6 +17,8 @@ const EcosystemUserSchema = new mongoose.Schema({
   failedLoginAttempts: { type: Number, default: 0 },
   lockoutUntil: { type: Date, default: null },
   isLockedOut: { type: Boolean, default: false },
+  activeSessionToken: { type: String, default: null },
+  lastLoginAt: { type: Date, default: null },
   createdAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 
