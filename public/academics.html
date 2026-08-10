@@ -216,6 +216,26 @@ a{color:inherit}
 
 /* ── the panel beside a logo ───────────────────────────────────────────
    Right of the logo, never under it. */
+/* Each logo carries its own name and features, beside it rather than under
+   it, and always visible once the cluster opens - the point of the preview is
+   that a student can read what the fourteen tracks contain without clicking
+   fourteen times. They fade up with the spread so they never crowd the
+   cluster while it is still tight. */
+.mark .side{position:absolute;left:114%;top:50%;transform:translateY(-50%);width:164px;
+  pointer-events:none;opacity:0;transition:opacity .45s var(--ease-out)}
+.mark.crowded .side{opacity:0!important}
+.mark.flip .side{left:auto;right:118%;text-align:right}
+#cine.spread .mark .side{opacity:1}
+.mark .side h4{font-size:12.5px;font-weight:800;letter-spacing:.01em;color:#F2EFE7;
+  margin-bottom:5px;text-shadow:0 2px 10px rgba(0,0,0,.9)}
+.mark .side ul{list-style:none;display:flex;flex-direction:column;gap:3px}
+.mark .side li{font-size:10px;line-height:1.32;color:rgba(214,222,236,.82);
+  text-shadow:0 1px 8px rgba(0,0,0,.95);display:flex;gap:6px}
+.mark.flip .side li{flex-direction:row-reverse}
+.mark .side li::before{content:'\2022';color:var(--tint,var(--accent-gold));flex:none;font-weight:800}
+@media(max-width:900px){.mark .side{display:none}}
+
+/* The panel a click opens keeps the fuller copy. */
 #cineInfo{position:absolute;z-index:5;width:min(300px,74vw);pointer-events:none;opacity:0;
   transform:translateX(-14px);transition:opacity .4s var(--ease-out),transform .5s var(--ease-out);
   background:rgba(4,8,18,.86);backdrop-filter:blur(12px);
@@ -258,24 +278,75 @@ a{color:inherit}
 #cineTrack .runway{height:460vh}
 
 /* Payment rises once the cluster has opened out. */
-#cinePay{position:absolute;left:50%;bottom:0;transform:translate(-50%,44px);width:min(440px,92vw);
-  z-index:3;background:rgba(6,10,22,.92);border:1px solid var(--border-strong);
-  border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding:24px 24px 28px;
-  backdrop-filter:blur(14px);box-shadow:0 -18px 60px rgba(0,0,0,.7);
+/* Blocks of dark metal floating behind the panel, lit on their edges. They
+   are what stops the payment reading as a card dropped onto the nebula. */
+#cineBlocks{position:absolute;left:50%;bottom:0;transform:translateX(-50%);width:min(760px,98vw);
+  height:340px;z-index:2;pointer-events:none;opacity:0;perspective:900px;
+  transition:opacity .7s var(--ease-out)}
+#cinePay.up ~ #cineBlocks,#cineBlocks.up{opacity:1}
+#cineBlocks i{position:absolute;display:block;background:linear-gradient(150deg,#1A1D22,#0A0C10);
+  border:1px solid rgba(255,138,45,.32);border-radius:6px;
+  box-shadow:0 0 22px rgba(255,120,30,.20),inset 0 1px 0 rgba(255,175,105,.28);
+  animation:blockDrift 12s ease-in-out infinite}
+@keyframes blockDrift{0%,100%{transform:translateY(0) rotate(var(--rot,0deg))}
+                      50%{transform:translateY(-14px) rotate(calc(var(--rot,0deg) + 3deg))}}
+
+#cinePay{position:absolute;left:50%;bottom:0;transform:translate(-50%,44px);width:min(720px,96vw);
+  z-index:3;padding:22px 26px 26px;
+  background:linear-gradient(180deg,rgba(14,10,8,.72),rgba(8,6,6,.94));
+  border:1px solid rgba(255,138,45,.30);
+  border-radius:var(--radius-lg) var(--radius-lg) 0 0;
+  backdrop-filter:blur(16px);
+  box-shadow:0 -18px 70px rgba(0,0,0,.8),0 0 60px rgba(255,120,30,.16),
+             inset 0 1px 0 rgba(255,175,105,.30);
   opacity:0;pointer-events:none;
   transition:opacity .5s var(--ease-out),transform .6s var(--ease-out)}
+/* The glow the panel sits in, rather than on. */
+#cinePay::before{content:'';position:absolute;left:-40%;right:-40%;bottom:-40px;height:220px;
+  z-index:-1;pointer-events:none;
+  background:radial-gradient(ellipse 50% 60% at 50% 100%,rgba(255,132,40,.30) 0%,transparent 70%)}
 #cinePay.up{opacity:1;transform:translate(-50%,0);pointer-events:auto}
 /* .stack is scoped to .sheet, so this panel needs its own: the two options
    must read as first choice then second, stacked, not as a pair side by side. */
 #cinePay .stack{display:flex;flex-direction:column;gap:10px}
 #cinePay .btn{width:100%;justify-content:center}
-#cinePay h3{font-size:20px;font-weight:800;text-align:center}
+#cinePay .btn.gold{background:linear-gradient(135deg,#FFA24A,#E2681A);color:#170A02;
+  box-shadow:0 8px 26px rgba(255,120,30,.34)}
+#cinePay .btn.ghost{border-color:rgba(255,138,45,.34);color:#E8CDB4}
+#cinePay .btn.ghost:hover{color:#fff;border-color:rgba(255,138,45,.7)}
+#cinePay h3{font-size:20px;font-weight:800;text-align:center;
+  background:linear-gradient(100deg,#FFD9B0,#FF8A2D);-webkit-background-clip:text;
+  background-clip:text;color:transparent}
 #cinePay .why{font-size:12.5px;color:var(--text-secondary);text-align:center;margin:7px 0 15px;line-height:1.55}
 /* QR slot. Empty until a real code is supplied - a payment QR is not something
    to invent, and a wrong one takes real money to the wrong place. */
+/* Cube on the left, the two options on the right. */
+.payrow{display:flex;align-items:center;gap:22px}
+@media(max-width:640px){.payrow{flex-direction:column;gap:14px}}
+.payrow .opts{flex:1;min-width:0;display:flex;flex-direction:column;gap:10px}
+
+/* The housing is artwork and the code printed on it is not a real one - it is
+   never presented as scannable. The live UPI code renders into .qrlive, over
+   the lit panel at its centre, once a real one is supplied. */
+.qrcube{position:relative;width:230px;flex:none;aspect-ratio:760/1042;
+  background:url('/img/domains/qr-housing.webp') center/contain no-repeat;
+  mix-blend-mode:screen;animation:cubeFloat 9s ease-in-out infinite;
+  filter:drop-shadow(0 0 40px rgba(255,132,40,.34))}
+@keyframes cubeFloat{0%,100%{transform:translateY(-8px) rotate(-1deg) scale(1)}
+                     50%{transform:translateY(8px) rotate(1deg) scale(1.015)}}
+.qrlive{position:absolute;left:40.5%;top:36.5%;width:29%;height:22.5%;
+  border-radius:6px;display:grid;place-items:center;overflow:hidden}
+.qrlive img{width:100%;height:100%;display:block;object-fit:cover}
+.qrnote{font-size:10.5px;line-height:1.45;color:rgba(255,190,140,.72);margin-top:4px}
+@media(max-width:640px){.qrcube{width:190px}}
+@media (prefers-reduced-motion:reduce){.qrcube{animation:none}}
+.qrslot{display:none}
+
 .qrslot{background:#fff;border-radius:14px;width:190px;height:190px;margin:0 auto 15px;
-  display:grid;place-items:center;box-shadow:0 4px 22px rgba(0,0,0,.45)}
-.qrslot.empty{background:rgba(255,255,255,.04);border:1px dashed var(--border-strong);
+  display:grid;place-items:center;
+  box-shadow:0 4px 22px rgba(0,0,0,.6),0 0 34px rgba(255,132,40,.34),
+             0 0 0 1px rgba(255,150,60,.35)}
+.qrslot.empty{background:rgba(255,255,255,.03);border:1px dashed rgba(255,138,45,.4);
   color:var(--text-muted);font-size:12px;text-align:center;padding:18px;line-height:1.5}
 .qrslot img{width:100%;height:100%;border-radius:14px;display:block}
 
@@ -330,14 +401,22 @@ a{color:inherit}
   <button id="cineSkip" type="button">Skip preview</button>
   <div id="cineCredit">Deep field rendered in-browser</div>
 
+  <div id="cineBlocks" aria-hidden="true"></div>
   <div id="cinePay">
     <h3>Unlock Everything</h3>
     <p class="why">Every module, every assessment, the project reviews and the certificate.
       One payment per domain.</p>
-    <div class="qrslot empty" id="cineQr">QR goes here once you send it</div>
-    <div class="stack">
-      <button class="btn gold" id="cinePayNow">Pay Now</button>
-      <button class="btn ghost" id="cineLater">Pay after Completion</button>
+    <div class="payrow">
+      <!-- The housing is artwork and the code inside it is not a real one. The
+           live UPI code renders into .qrlive, over the lit panel at its centre,
+           the moment a real one is supplied. -->
+      <div class="qrcube"><div class="qrlive" id="cineQr"></div></div>
+      <div class="opts">
+        <button class="btn gold" id="cinePayNow">Pay before completion</button>
+        <button class="btn ghost" id="cineLater">Pay after completion</button>
+        <p class="qrnote">The code shown in the housing is artwork. Your real UPI code drops
+          into it and this becomes scannable.</p>
+      </div>
     </div>
     <p class="meta" style="text-align:center">Start the modules now. Payment is only needed for the certificate.</p>
   </div>
@@ -513,6 +592,14 @@ a{color:inherit}
       body.appendChild(base);
       body.appendChild(rev);
       node.appendChild(body);
+
+      var side = el('div', 'side');
+      side.appendChild(el('h4', null, d.name));
+      var sul = el('ul');
+      d.feat.forEach(function (f) { sul.appendChild(el('li', null, f)); });
+      side.appendChild(sul);
+      node.appendChild(side);
+
       stage.appendChild(node);
 
       var a = (i / DOMAINS14.length) * Math.PI * 2 - Math.PI / 2;
@@ -923,6 +1010,26 @@ a{color:inherit}
       info.style.top = Math.round(Math.min(Math.max(12, r.top + r.height / 2 - h / 2), vh - h - 12)) + 'px';
     }
 
+    /* Blocks of dark metal behind the payment panel. Sizes and offsets are
+       fixed rather than random so the arrangement is the same every load, and
+       the middle is left clear for the panel to sit in. */
+    (function blocks() {
+      var box = $('cineBlocks');
+      if (!box) { return; }
+      [[2, 74, 96, -8], [12, 40, 150, 6], [24, 120, 62, -4], [78, 22, 82, 9],
+       [84, 96, 118, -6], [92, 52, 70, 5], [34, 8, 54, -10], [64, 6, 46, 7],
+       [6, 200, 58, 4], [90, 190, 64, -5]].forEach(function (b) {
+        var i = document.createElement('i');
+        i.style.left = b[0] + '%';
+        i.style.bottom = b[1] + 'px';
+        i.style.width = b[2] + 'px';
+        i.style.height = Math.round(b[2] * 0.62) + 'px';
+        i.style.setProperty('--rot', b[3] + 'deg');
+        i.style.animationDelay = (b[0] * 0.04).toFixed(2) + 's';
+        box.appendChild(i);
+      });
+    })();
+
     var vw = 0, vh = 0;
     var vw = 0, vh = 0;
     function measure() { vw = cine.clientWidth; vh = cine.clientHeight; }
@@ -1025,7 +1132,7 @@ a{color:inherit}
     sizeCanvases();
     window.addEventListener('resize', sizeCanvases);
 
-    var prog = 0, target = 0, raf = 0, pointX = 0, pointY = 0;
+    var prog = 0, target = 0, raf = 0, pointX = 0, pointY = 0, lastFit = 0;
     function readScroll() {
       var max = track.scrollHeight - track.clientHeight;
       target = max > 0 ? Math.min(1, Math.max(0, track.scrollTop / max)) : 0;
@@ -1074,11 +1181,37 @@ a{color:inherit}
         // Spins freely while clustered, settles facing front as it spreads.
         var rot = reduced ? 0 : (t * 11 * m.spin) * (1 - p * 0.92) + p * 14 * m.spin;
         var scale = (0.62 + m.ring * 0.22) * (1 + p * 0.14);
+        // Copy sits on whichever side has room.
+        if (x > 0) { m.node.classList.add('flip'); } else { m.node.classList.remove('flip'); }
         m.node.style.transform = 'translate3d(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px,'
           + z.toFixed(1) + 'px) rotateY(' + rot.toFixed(1) + 'deg) rotateX('
           + (Math.sin(t * 0.4 + m.phase) * 7 * (1 - p * 0.7)).toFixed(1)
           + 'deg) scale(' + scale.toFixed(3) + ')';
       });
+
+      /* Fifteen logos and fifteen blocks of copy cannot all have room. Any
+         block that would overlap one already shown is dropped for this frame,
+         so what remains is always readable rather than stacked. Recomputed on
+         a slow cadence because the logos drift and the answer changes. */
+      if (p > 0.5 && now - lastFit > 240) {
+        lastFit = now;
+        var shown = [];
+        for (var q = 0; q < marks.length; q++) {
+          var side = marks[q].node.querySelector('.side');
+          if (!side) { continue; }
+          marks[q].node.classList.remove('crowded');
+          var b = side.getBoundingClientRect();
+          if (!b.width) { continue; }
+          var clash = b.left < 4 || b.right > vw - 4;
+          for (var w = 0; w < shown.length && !clash; w++) {
+            var o = shown[w];
+            clash = !(b.right < o.left - 6 || b.left > o.right + 6
+                   || b.bottom < o.top - 4 || b.top > o.bottom + 4);
+          }
+          if (clash) { marks[q].node.classList.add('crowded'); }
+          else { shown.push({ left: b.left, right: b.right, top: b.top, bottom: b.bottom }); }
+        }
+      }
 
       drawBits();
       placeInfo();
@@ -1102,6 +1235,7 @@ a{color:inherit}
       $('cineBenefits').style.opacity = String(Math.max(0, Math.min(1, (0.40 - p) / 0.18)));
       cine.classList.toggle('spread', p > 0.55);
       $('cinePay').classList.toggle('up', p > 0.76);
+      $('cineBlocks').classList.toggle('up', p > 0.70);
       $('cineHint').style.opacity = p > 0.08 ? 0 : '';
       $('cineSkip').classList.toggle('on', p > 0.12);
       $('cineCopy').style.opacity = String(Math.max(0, 1 - p * 1.9));
