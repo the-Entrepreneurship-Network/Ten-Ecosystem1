@@ -126,106 +126,98 @@ a{color:inherit}
        border:1px dashed var(--border-strong);border-radius:var(--radius-md)}
 @media (prefers-reduced-motion:reduce){.sheet{animation:none}.card{transition:none}}
 
-/* ── cinematic entry ──────────────────────────────────────────────────
-   A scroll-driven sequence, not a timed one: the student controls the pace,
-   so nothing is ever waiting on an animation it cannot skip past.
-
-   Fourteen medallions in CSS 3D rather than a WebGL scene. The motion asked
-   for is float, slow rotate and radial spread — all of it transform-only, so
-   it runs on the compositor and costs nothing to download. Three.js would be
-   ~600KB before the first model, on a page opened from a phone. */
-#cine{position:fixed;inset:0;z-index:60;background:#02040a;overflow:hidden;
-      display:grid;place-items:center;perspective:1400px}
+/* ── cinematic entry ──────────────────────────────────────
+   Scrollytelling: one full-height beat per scroll, one logo and one benefit
+   each. The artwork is fixed and cross-fades between beats, so the logo is
+   what stays still while the words move past it. */
+#cine{position:fixed;inset:0;z-index:60;background:#02040a;overflow:hidden}
 #cine.gone{display:none}
-/* The scroller is last in the DOM so it catches the wheel everywhere; the
-   two things that take clicks have to be lifted back above it. */
-#cineTrack{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;z-index:1;
-           -webkit-overflow-scrolling:touch}
-#cineTrack .runway{height:420vh}          /* the scroll distance the sequence uses */
 #cineCanvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-
-/* Depth wash behind everything, so the black is not flat. */
 #cine .depth{position:absolute;inset:0;pointer-events:none;
-  background:radial-gradient(ellipse 70% 50% at 50% 42%,rgba(59,130,246,.10) 0%,transparent 60%),
-             radial-gradient(ellipse 60% 45% at 50% 58%,rgba(212,175,55,.08) 0%,transparent 62%)}
+  background:radial-gradient(ellipse 60% 55% at 68% 46%,rgba(59,130,246,.16) 0%,transparent 62%),
+             radial-gradient(ellipse 55% 45% at 30% 60%,rgba(212,175,55,.07) 0%,transparent 64%)}
 
-#cineStage{position:absolute;inset:0;pointer-events:none;transform-style:preserve-3d}
-.mark{position:absolute;left:50%;top:46%;width:86px;height:86px;margin:-43px 0 0 -43px;
-      transform-style:preserve-3d;will-change:transform;pointer-events:none}
-.mark .face{width:100%;height:100%;border-radius:22px;display:grid;place-items:center;
-  font-weight:800;font-size:13px;letter-spacing:.01em;color:#F6F2E6;text-align:center;line-height:1.15;
+#cineArt{position:absolute;right:6vw;top:50%;transform:translateY(-50%);
+  width:min(38vw,430px);aspect-ratio:1;pointer-events:none;perspective:1000px}
+#cineArt .art{position:absolute;inset:0;display:grid;place-items:center;opacity:0;
+  transform:scale(.9) rotateY(-14deg);
+  transition:opacity .7s var(--ease-out),transform .9s var(--ease-out)}
+#cineArt .art.on{opacity:1;transform:scale(1) rotateY(0)}
+#cineArt img{max-width:100%;max-height:100%;object-fit:contain;
+  filter:drop-shadow(0 26px 60px rgba(0,0,0,.7))}
+/* Stand-in, shown only while the real artwork is missing, so the sequence
+   still reads and the swap is a file drop rather than a code change. */
+#cineArt .fallback{width:62%;aspect-ratio:1;border-radius:28%;display:grid;place-items:center;
+  font-weight:800;font-size:clamp(20px,3.6vw,38px);color:#F6F2E6;letter-spacing:.02em;
   background:linear-gradient(150deg,var(--c1),var(--c2));
-  box-shadow:0 18px 44px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.32),
-             inset 0 -14px 26px rgba(0,0,0,.34);
-  border:1px solid rgba(255,255,255,.14);position:relative;overflow:hidden}
-/* The specular sweep is what sells these as objects rather than swatches. */
-.mark .face::after{content:'';position:absolute;inset:0;
-  background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.42) 47%,transparent 62%);
-  transform:translateX(-120%);animation:sheen 5.5s ease-in-out infinite}
-@keyframes sheen{0%,72%{transform:translateX(-120%)}88%,100%{transform:translateX(120%)}}
-.mark .tag{position:absolute;left:50%;top:112%;transform:translateX(-50%);white-space:nowrap;
-  font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(240,238,232,.5);
-  opacity:0;transition:opacity .4s ease}
-#cine.spread .mark .tag{opacity:1}
-/* Trails only exist while the cluster is opening out. */
-.mark .trail{position:absolute;left:50%;top:50%;width:180px;height:2px;margin-top:-1px;
-  transform-origin:0 50%;opacity:0;pointer-events:none;
-  background:linear-gradient(90deg,rgba(212,175,55,.55),transparent)}
+  box-shadow:0 26px 60px rgba(0,0,0,.66),inset 0 2px 0 rgba(255,255,255,.3),
+             inset 0 -22px 40px rgba(0,0,0,.34);border:1px solid rgba(255,255,255,.14);
+  animation:hover 6s ease-in-out infinite}
+@keyframes hover{0%,100%{transform:translateY(-8px) rotate(-1.5deg)}
+                 50%{transform:translateY(8px) rotate(1.5deg)}}
+#cineArt .cap{position:absolute;left:0;right:0;bottom:-7%;text-align:center;font-size:11px;
+  letter-spacing:.16em;text-transform:uppercase;color:rgba(240,238,232,.45)}
+#cineArt .all14{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;width:100%}
+#cineArt .all14 span{aspect-ratio:1;border-radius:24%;display:grid;place-items:center;
+  font-size:10px;font-weight:800;color:#F6F2E6;
+  background:linear-gradient(150deg,var(--c1),var(--c2));
+  box-shadow:0 8px 20px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.26)}
 
-#cineCopy{position:absolute;left:0;right:0;top:11%;text-align:center;pointer-events:none;padding:0 22px}
-#cineCopy h2{font-size:clamp(26px,4.6vw,46px);font-weight:800;letter-spacing:-.025em;line-height:1.08}
-#cineCopy h2 span{background:linear-gradient(100deg,#F4E9C0,var(--accent-gold),#b8962c);
+#cineTrack{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;z-index:1;
+  -webkit-overflow-scrolling:touch}
+.beat{min-height:100vh;display:grid;align-content:center;padding:0 6vw;
+  max-width:min(52vw,660px)}
+.beat .idx{font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--accent-gold);
+  font-weight:800;margin-bottom:14px;display:flex;align-items:center;gap:10px}
+.beat .idx::after{content:'';height:1px;flex:1;max-width:80px;background:rgba(212,175,55,.35)}
+.beat h2{font-size:clamp(28px,4.4vw,54px);font-weight:800;letter-spacing:-.03em;line-height:1.03}
+.beat h2 em{font-style:normal;display:block;
+  background:linear-gradient(100deg,#F4E9C0,var(--accent-gold),#b8962c);
   -webkit-background-clip:text;background-clip:text;color:transparent}
-#cineCopy p{margin-top:10px;color:var(--text-secondary);font-size:14px}
-/* Benefits sit in front of the cluster. Every line is something the student
-   gets inside each of the 14 domains, not a feature of the platform. */
-#cineBenefits{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2;
-  width:min(560px,90vw);pointer-events:none;text-align:center;
-  background:rgba(2,4,10,.52);backdrop-filter:blur(7px);
-  border:1px solid rgba(212,175,55,.16);border-radius:var(--radius-lg);padding:22px 24px;
-  box-shadow:0 20px 60px rgba(0,0,0,.5);transition:opacity .35s ease}
-#cineBenefits .kicker{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;
-  color:var(--accent-gold);font-weight:800;margin-bottom:13px}
-#cineBenefits ul{list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:9px 18px;text-align:left}
-#cineBenefits li{display:flex;gap:9px;font-size:13px;line-height:1.45;color:#DCD8CE}
-#cineBenefits li b{color:#fff;font-weight:700}
-#cineBenefits .tick{color:var(--accent-green);font-weight:800;flex:none}
-#cineBenefits .all{margin-top:14px;padding-top:12px;border-top:1px solid rgba(212,175,55,.14);
-  font-size:12px;color:var(--text-secondary)}
-#cineBenefits .all b{color:var(--accent-gold)}
-@media(max-width:640px){#cineBenefits ul{grid-template-columns:1fr}#cineBenefits li{font-size:12.5px}}
+.beat p{margin-top:16px;color:var(--text-secondary);font-size:14.5px;line-height:1.7;max-width:46ch}
+.beat .in{opacity:0;transform:translateY(22px);
+  transition:opacity .6s var(--ease-out),transform .7s var(--ease-out)}
+.beat.live .in{opacity:1;transform:none}
+.beat.pay{max-width:min(58vw,520px)}
+@media(max-width:900px){
+  #cineArt{right:auto;left:50%;transform:translate(-50%,-50%);top:32%;width:min(62vw,290px);opacity:.4}
+  .beat,.beat.pay{max-width:100%;padding:0 26px;align-content:end;padding-bottom:14vh}
+}
 
-#cineHint{position:absolute;left:0;right:0;bottom:30px;text-align:center;color:var(--text-muted);
-  font-size:12px;letter-spacing:.08em;text-transform:uppercase;pointer-events:none;
-  animation:bob 2.4s ease-in-out infinite}
-@keyframes bob{0%,100%{transform:translateY(0);opacity:.55}50%{transform:translateY(7px);opacity:1}}
-
-/* Payment rises once the cluster has opened. */
-#cinePay{position:absolute;left:50%;bottom:0;z-index:3;transform:translate(-50%,40px);width:min(460px,92vw);
-  background:rgba(14,20,40,.9);border:1px solid var(--border-strong);border-radius:var(--radius-lg) var(--radius-lg) 0 0;
-  padding:26px 26px 30px;backdrop-filter:blur(14px);box-shadow:0 -18px 60px rgba(0,0,0,.66);
-  opacity:0;pointer-events:none;transition:opacity .5s var(--ease-out),transform .6s var(--ease-out)}
-#cinePay.up{opacity:1;transform:translate(-50%,0);pointer-events:auto}
-#cinePay h3{font-size:20px;font-weight:800;text-align:center}
-#cinePay .why{font-size:13px;color:var(--text-secondary);text-align:center;margin:8px 0 16px;line-height:1.55}
-/* The QR slot. Empty until a real code is supplied — a payment QR is not
-   something to invent, and a wrong one takes real money to the wrong place. */
-.qrslot{background:#fff;border-radius:14px;width:190px;height:190px;margin:0 auto 14px;
+.paycard{background:rgba(14,20,40,.88);border:1px solid var(--border-strong);
+  border-radius:var(--radius-lg);padding:26px;backdrop-filter:blur(14px);
+  box-shadow:0 24px 70px rgba(0,0,0,.6);margin-top:22px}
+.paycard h3{font-size:22px;font-weight:800}
+.paycard .why{font-size:13px;color:var(--text-secondary);margin:8px 0 16px;line-height:1.6}
+/* QR slot. Empty until a real code is supplied - a payment QR is not something
+   to invent, and a wrong one takes real money to the wrong place. */
+.qrslot{background:#fff;border-radius:14px;width:186px;height:186px;margin:0 auto 16px;
   display:grid;place-items:center;box-shadow:0 4px 22px rgba(0,0,0,.4)}
 .qrslot.empty{background:rgba(255,255,255,.04);border:1px dashed var(--border-strong);
   color:var(--text-muted);font-size:12px;text-align:center;padding:18px;line-height:1.5}
 .qrslot img{width:100%;height:100%;border-radius:14px;display:block}
+
+#cineHud{position:absolute;left:6vw;bottom:24px;z-index:2;display:flex;gap:16px;align-items:center;
+  font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);
+  pointer-events:none}
+#cineDots{position:absolute;right:22px;top:50%;transform:translateY(-50%);z-index:2;
+  display:flex;flex-direction:column;gap:9px;pointer-events:none}
+#cineDots i{width:6px;height:6px;border-radius:50%;background:rgba(240,238,232,.22);
+  transition:background .3s,transform .3s}
+#cineDots i.on{background:var(--accent-gold);transform:scale(1.5)}
+#cineHint{position:absolute;left:0;right:0;bottom:24px;text-align:center;color:var(--text-muted);
+  font-size:11px;letter-spacing:.18em;text-transform:uppercase;pointer-events:none;
+  animation:bob 2.4s ease-in-out infinite;transition:opacity .4s}
+@keyframes bob{0%,100%{transform:translateY(0);opacity:.5}50%{transform:translateY(6px);opacity:1}}
 #cineSkip{position:absolute;right:20px;top:18px;z-index:3;background:rgba(255,255,255,.04);
   border:1px solid var(--border);color:var(--text-muted);border-radius:999px;padding:7px 14px;
-  font:inherit;font-size:12px;cursor:pointer;opacity:0;transition:opacity .4s ease}
-#cineSkip.on{opacity:1}
+  font:inherit;font-size:12px;cursor:pointer}
 #cineSkip:hover{color:var(--text-primary)}
 
 @media (prefers-reduced-motion:reduce){
-  .mark{transition:none!important}
-  .mark .face::after{animation:none}
+  #cineArt .art,.beat .in{transition:none}
+  #cineArt .fallback{animation:none}
   #cineHint{animation:none}
-  #cinePay{transition:none}
 }
 </style>
 </head>
@@ -234,40 +226,12 @@ a{color:inherit}
 <div id="cine" aria-label="Academics preview">
   <canvas id="cineCanvas" aria-hidden="true"></canvas>
   <div class="depth" aria-hidden="true"></div>
-  <div id="cineStage" aria-hidden="true"></div>
-  <div id="cineCopy">
-    <h2>Fourteen domains. <span>One way in.</span></h2>
-    <p>Modules, written assessments, a project you can show, and a certificate that means it.</p>
-  </div>
-  <div id="cineBenefits">
-    <div class="kicker">What every domain gives you</div>
-    <ul>
-      <li><span class="tick">&#10003;</span><span><b>Learning by building</b> — practice projects, not slides</span></li>
-      <li><span class="tick">&#10003;</span><span><b>Assignments</b> marked against what the question asks</span></li>
-      <li><span class="tick">&#10003;</span><span><b>Resume builder</b> that puts the work on the page</span></li>
-      <li><span class="tick">&#10003;</span><span><b>Full job readiness</b> — portfolio, resume, interview prep</span></li>
-      <li><span class="tick">&#10003;</span><span><b>Job findings</b> across every major hiring platform</span></li>
-      <li><span class="tick">&#10003;</span><span><b>Hackathons &amp; idea-thons</b> exposure and team building</span></li>
-    </ul>
-    <p class="all">All of it, in <b>every one of the 14 domains</b> &mdash; not just one track.</p>
-  </div>
-
+  <div id="cineArt" aria-hidden="true"></div>
+  <div id="cineDots" aria-hidden="true"></div>
+  <div id="cineHud"><span>TEN &middot; Academics</span><span id="cineCount">01 / 09</span></div>
   <div id="cineHint">Scroll</div>
   <button id="cineSkip" type="button">Skip preview</button>
-
-  <div id="cinePay">
-    <h3>Unlock Everything</h3>
-    <p class="why">Every module, every assessment, the project reviews and the certificate.
-      One payment per domain.</p>
-    <div class="qrslot empty" id="cineQr">QR goes here once you send it</div>
-    <div class="stack">
-      <button class="btn gold" id="cinePayNow">Unlock Everything — Pay Now</button>
-      <button class="btn ghost" id="cineLater">Pay after Completion</button>
-    </div>
-    <p class="meta" style="text-align:center">Start the modules now. Payment is only needed for the certificate.</p>
-  </div>
-
-  <div id="cineTrack"><div class="runway"></div></div>
+  <div id="cineTrack"></div>
 </div>
 
 <nav class="nav">
@@ -357,119 +321,181 @@ a{color:inherit}
   ];
 
   (function cinematic() {
-    var cine = $('cine'), stage = $('cineStage'), track = $('cineTrack');
+    var cine = $('cine'), art = $('cineArt'), track = $('cineTrack');
     if (!cine) { return; }
     var reduced = false;
     try { reduced = window.matchMedia('(prefers-reduced-motion:reduce)').matches; } catch (_e) {}
 
-    /* Each medallion gets a fixed seat on a circle and a fixed drift phase, so
-       the cluster looks arranged rather than scattered, and every reload is
-       the same arrangement. */
-    var marks = DOMAINS14.map(function (d, i) {
-      var el0 = el('div', 'mark');
-      var face = el('div', 'face', d[1]);
-      face.style.setProperty('--c1', d[2]);
-      face.style.setProperty('--c2', d[3]);
-      var trail = el('div', 'trail');
-      var tag = el('div', 'tag', d[0]);
-      el0.appendChild(trail); el0.appendChild(face); el0.appendChild(tag);
-      stage.appendChild(el0);
-      var a = (i / DOMAINS14.length) * Math.PI * 2 - Math.PI / 2;
-      return {
-        node: el0, trail: trail, angle: a,
-        ring: 1 + (i % 3) * 0.26,          // three depths, so it reads 3D
-        phase: i * 0.7, spin: (i % 2 ? 1 : -1) * (0.5 + (i % 4) * 0.11),
-      };
+    /* Artwork lives at /img/domains/<slug>.png. Until those files exist the
+       coloured medallion stands in, so the sequence is testable now and the
+       upgrade is a file drop rather than a code change. */
+    var ART = '/img/domains/';
+    var BEATS = [
+      { slug: 'ten', mark: '\u221E', c1: '#F4E9C0', c2: '#8A6E1F',
+        idx: 'Academics', h: 'Fourteen domains.', em: 'One way in.',
+        p: 'Modules you work through, assessments that are actually marked, a project you can show '
+         + 'someone, and a certificate that stands behind it.' },
+      { slug: 'flutter', mark: 'FLTR', c1: '#54C5F8', c2: '#0E4C6B', cap: 'Flutter Development',
+        idx: '01 \u2014 Learn by building', h: 'You do not watch.', em: 'You build.',
+        p: 'Every module ends in something that runs. Practice projects, not slides \u2014 the only '
+         + 'proof that survives an interview is work you can open and explain.' },
+      { slug: 'java', mark: 'JAVA', c1: '#E76F00', c2: '#7A2E00', cap: 'Java Development',
+        idx: '02 \u2014 Assignments, marked', h: 'Written answers.', em: 'Marked properly.',
+        p: 'No multiple choice. You write, and it is scored against the points the question asked '
+         + 'for, then told exactly which ones you missed. Pass mark 70%.' },
+      { slug: 'python', mark: 'PY', c1: '#4B8BBE', c2: '#1B3A54', cap: 'Python Development',
+        idx: '03 \u2014 Resume builder', h: 'A resume that', em: 'shows the work.',
+        p: 'ATS-clean, and it pulls in the projects and certificates you earned here rather than '
+         + 'asking you to describe them from memory.' },
+      { slug: 'mern', mark: 'MERN', c1: '#00ED64', c2: '#04512A', cap: 'MERN Stack',
+        idx: '04 \u2014 Job readiness', h: 'Ready end to end,', em: 'not just qualified.',
+        p: 'Portfolio, resume and interview preparation for the domain you actually studied, so the '
+         + 'thing you learned and the thing you are asked about are the same thing.' },
+      { slug: 'cybersecurity', mark: 'SEC', c1: '#EF4444', c2: '#6B1414', cap: 'Cyber Security',
+        idx: '05 \u2014 Job findings', h: 'The jobs,', em: 'brought to you.',
+        p: 'Openings across every major hiring platform, filtered to your domain and your level, '
+         + 'with the original apply link rather than a rewrite of it.' },
+      { slug: 'ai', mark: 'AI', c1: '#8B5CF6', c2: '#3B1E70', cap: 'Artificial Intelligence',
+        idx: '06 \u2014 Hackathons', h: 'Hackathons and', em: 'idea-thons.',
+        p: 'College, national and international. Start building before the event opens, form a team, '
+         + 'track milestones, and come out with something that was judged.' },
+      { all14: true, idx: '07 \u2014 Every track', h: 'All fourteen.', em: 'Same depth.',
+        p: 'Whichever domain you are on, the modules, the marking, the resume, the jobs and the '
+         + 'hackathons are the same. Nothing here is reserved for one track.' },
+      { pay: true, idx: '08 \u2014 Unlock', h: 'Unlock', em: 'Everything.' },
+    ];
+
+    var DOM14 = [
+      ['AWS', '#FF9900', '#8A4B00'], ['PY', '#4B8BBE', '#1B3A54'], ['JAVA', '#E76F00', '#7A2E00'],
+      ['WEB', '#E34F26', '#6B1E0C'], ['MERN', '#00ED64', '#04512A'], ['AI', '#8B5CF6', '#3B1E70'],
+      ['DATA', '#06B6D4', '#0A4A58'], ['SEC', '#EF4444', '#6B1414'], ['SWE', '#3B82F6', '#12356E'],
+      ['FLTR', '#54C5F8', '#0E4C6B'], ['BIZ', '#F59E0B', '#7A4A00'], ['HR', '#EC4899', '#6B1140'],
+      ['VC', '#10B981', '#064C36'], ['FIN', '#D4AF37', '#6B5410'],
+    ];
+
+    var layers = BEATS.map(function (b) {
+      var wrap = el('div', 'art');
+      if (b.all14) {
+        var g = el('div', 'all14');
+        DOM14.forEach(function (d) {
+          var sp = el('span', null, d[0]);
+          sp.style.setProperty('--c1', d[1]);
+          sp.style.setProperty('--c2', d[2]);
+          g.appendChild(sp);
+        });
+        wrap.appendChild(g);
+      } else if (!b.pay) {
+        var fb = el('div', 'fallback', b.mark);
+        fb.style.setProperty('--c1', b.c1);
+        fb.style.setProperty('--c2', b.c2);
+        var img = new Image();
+        img.alt = b.cap || 'TEN';
+        // Swap only once the real file has decoded, so a missing or broken
+        // image never leaves an empty frame mid-sequence.
+        img.onload = function () { wrap.replaceChild(img, fb); };
+        img.src = ART + b.slug + '.png';
+        wrap.appendChild(fb);
+        if (b.cap) { wrap.appendChild(el('div', 'cap', b.cap)); }
+      }
+      art.appendChild(wrap);
+      return wrap;
     });
 
-    var vw = 0, vh = 0;
-    function measure() { vw = cine.clientWidth; vh = cine.clientHeight; }
-    measure();
-    window.addEventListener('resize', measure);
+    var dotsBox = $('cineDots');
+    var beats = BEATS.map(function (b) {
+      var sec = el('section', 'beat' + (b.pay ? ' pay' : ''));
+      var inner = el('div', 'in');
+      inner.appendChild(el('div', 'idx', b.idx));
+      var h = el('h2', null, b.h);
+      h.appendChild(el('em', null, b.em));
+      inner.appendChild(h);
+      if (b.p) { inner.appendChild(el('p', null, b.p)); }
 
-    /* ── depth particles ── */
-    var cv = $('cineCanvas'), ctx = cv.getContext('2d'), dots = [], dpr = 1;
+      if (b.pay) {
+        var card = el('div', 'paycard');
+        card.appendChild(el('h3', null, 'Unlock Everything'));
+        card.appendChild(el('p', 'why', 'Every module, every assessment, the project reviews and '
+          + 'the certificate. One payment per domain.'));
+        var qr = el('div', 'qrslot empty', 'QR goes here once you send it');
+        qr.id = 'cineQr';
+        card.appendChild(qr);
+        var stack = el('div', 'stack');
+        var now = el('button', 'btn gold', 'Unlock Everything \u2014 Pay Now');
+        now.id = 'cinePayNow';
+        var later = el('button', 'btn ghost', 'Pay after Completion');
+        later.id = 'cineLater';
+        stack.appendChild(now);
+        stack.appendChild(later);
+        card.appendChild(stack);
+        card.appendChild(el('p', 'meta',
+          'Start the modules now. Payment is only needed for the certificate.'));
+        inner.appendChild(card);
+      }
+      sec.appendChild(inner);
+      track.appendChild(sec);
+      dotsBox.appendChild(el('i'));
+      return sec;
+    });
+
+    var dots = dotsBox.querySelectorAll('i');
+    var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+    function activate(n) {
+      beats.forEach(function (sec, i) { sec.classList.toggle('live', i === n); });
+      layers.forEach(function (l, i) { l.classList.toggle('on', i === n); });
+      for (var i = 0; i < dots.length; i++) { dots[i].classList.toggle('on', i === n); }
+      $('cineCount').textContent = pad(n + 1) + ' / ' + pad(BEATS.length);
+      $('cineHint').style.opacity = n === 0 ? '' : '0';
+    }
+
+    /* The browser already knows which section is on screen; asking it beats
+       recomputing offsets on every scroll event. */
+    if ('IntersectionObserver' in window) {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) { activate(beats.indexOf(e.target)); }
+        });
+      }, { root: track, threshold: 0.55 });
+      beats.forEach(function (sec) { io.observe(sec); });
+    } else {
+      track.addEventListener('scroll', function () {
+        activate(Math.round(track.scrollTop / track.clientHeight));
+      }, { passive: true });
+    }
+    activate(0);
+
+    var cv = $('cineCanvas'), ctx = cv.getContext('2d'), dust = [], vw = 0, vh = 0;
     function sizeCanvas() {
-      dpr = Math.min(window.devicePixelRatio || 1, 2);
-      cv.width = Math.floor(vw * dpr); cv.height = Math.floor(vh * dpr);
+      vw = cine.clientWidth; vh = cine.clientHeight;
+      var dpr = Math.min(window.devicePixelRatio || 1, 2);
+      cv.width = Math.floor(vw * dpr);
+      cv.height = Math.floor(vh * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      // Count scales with area so a phone does not paint a laptop's worth.
-      var n = Math.min(150, Math.round((vw * vh) / 14000));
-      dots = Array.from({ length: n }, function () {
-        return { x: Math.random() * vw, y: Math.random() * vh,
-                 z: Math.random(), r: Math.random() * 1.5 + 0.35 };
+      var n = reduced ? 0 : Math.min(140, Math.round((vw * vh) / 15000));
+      dust = Array.from({ length: n }, function () {
+        return { x: Math.random() * vw, y: Math.random() * vh, z: Math.random(),
+                 r: Math.random() * 1.4 + 0.35 };
       });
     }
     sizeCanvas();
-    window.addEventListener('resize', function () { measure(); sizeCanvas(); });
+    window.addEventListener('resize', sizeCanvas);
 
-    var prog = 0, target = 0, raf = 0;
-    function readScroll() {
-      var max = track.scrollHeight - track.clientHeight;
-      target = max > 0 ? Math.min(1, Math.max(0, track.scrollTop / max)) : 0;
-    }
-    track.addEventListener('scroll', readScroll, { passive: true });
-
-    var ease = function (t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; };
-
-    function frame(now) {
-      // Chase the scroll rather than snapping to it — this is what makes the
-      // spread feel weighted instead of pinned to the wheel.
-      prog += (target - prog) * 0.09;
-      var p = ease(Math.min(1, prog * 1.06));
-      var t = now / 1000;
-
-      // Keep the widest ring inside the viewport - at 0.42 the outer ring
-      // pushed the left-hand marks off the edge on a 16:9 screen.
-      var reach = Math.min(vw, vh) * 0.355;
-      marks.forEach(function (m, i) {
-        var spread = p * reach * m.ring;
-        // Wide enough that 14 tiles do not cover each other; the ring
-        // multiplier then pushes three depths apart.
-        var clusterR = 132 * m.ring * (1 - p * 0.42);
-        var r = clusterR + spread;
-        var drift = reduced ? 0 : Math.sin(t * 0.55 + m.phase) * (7 - p * 4);
-        var x = Math.cos(m.angle) * r;
-        var y = Math.sin(m.angle) * r * 0.82 + drift;
-        var z = (m.ring - 1.34) * 180 * (0.4 + p);
-        // Spin freely while clustered, then settle facing front. Left to run,
-        // the rotation carries past 90 degrees and half the cluster ends up
-        // edge-on or mirrored, with the domain names reading backwards.
-        var rot = reduced ? 0 : (t * 11 * m.spin) * (1 - p * 0.92) + p * 14 * m.spin;
-        var scale = (0.62 + m.ring * 0.22) * (1 + p * 0.14);
-        m.node.style.transform = 'translate3d(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px,'
-          + z.toFixed(1) + 'px) rotateY(' + rot.toFixed(1) + 'deg) rotateX('
-          + (Math.sin(t * 0.4 + m.phase) * 7 * (1 - p * 0.7)).toFixed(1) + 'deg) scale(' + scale.toFixed(3) + ')';
-        // Trails belong to the movement, so they live and die with it.
-        var moving = p > 0.06 && p < 0.94;
-        m.trail.style.opacity = moving && !reduced ? (0.5 * Math.sin(p * Math.PI)).toFixed(3) : 0;
-        m.trail.style.transform = 'rotate(' + ((m.angle * 180) / Math.PI + 180).toFixed(1)
-          + 'deg) scaleX(' + (0.25 + p * 1.1).toFixed(2) + ')';
-      });
-
-      // particles
+    var raf = 0;
+    function frame() {
       ctx.clearRect(0, 0, vw, vh);
-      for (var i = 0; i < dots.length; i++) {
-        var d = dots[i];
-        d.y -= (0.06 + d.z * 0.28) * (1 + p * 2.2);
+      for (var i = 0; i < dust.length; i++) {
+        var d = dust[i];
+        d.y -= 0.08 + d.z * 0.3;
         if (d.y < -4) { d.y = vh + 4; d.x = Math.random() * vw; }
-        ctx.globalAlpha = 0.10 + d.z * 0.34;
+        ctx.globalAlpha = 0.1 + d.z * 0.32;
         ctx.fillStyle = i % 7 === 0 ? '#D4AF37' : '#8FA6C8';
-        ctx.beginPath(); ctx.arc(d.x, d.y, d.r * (1 + p * 0.5), 0, 6.284); ctx.fill();
+        ctx.beginPath();
+        ctx.arc(d.x, d.y, d.r, 0, 6.284);
+        ctx.fill();
       }
       ctx.globalAlpha = 1;
-
-      // Benefits hold through the float, then clear before payment rises.
-      $('cineBenefits').style.opacity = String(Math.max(0, Math.min(1, (0.62 - p) / 0.22)));
-      cine.classList.toggle('spread', p > 0.55);
-      $('cinePay').classList.toggle('up', p > 0.76);
-      $('cineHint').style.opacity = p > 0.08 ? 0 : '';
-      $('cineSkip').classList.toggle('on', p > 0.12);
-      $('cineCopy').style.opacity = String(Math.max(0, 1 - p * 1.9));
-
       raf = requestAnimationFrame(frame);
     }
-    raf = requestAnimationFrame(frame);
+    if (!reduced) { raf = requestAnimationFrame(frame); }
 
     function leave() {
       cancelAnimationFrame(raf);
@@ -480,8 +506,6 @@ a{color:inherit}
     $('cineSkip').addEventListener('click', leave);
     $('cinePayNow').addEventListener('click', function () { window.location.href = '/payment.html'; });
     $('cineLater').addEventListener('click', leave);
-
-    if (reduced) { target = 1; prog = 1; $('cineSkip').classList.add('on'); }
   })();
 
   /* ── the four Academics cards ───────────────────────────────────────── */
