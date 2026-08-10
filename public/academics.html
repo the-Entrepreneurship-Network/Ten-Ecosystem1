@@ -148,16 +148,30 @@ a{color:inherit}
    their background into the starfield - that is what stops them reading as
    plates stamped over the scene. No frame, no label, no plinth. */
 .mark{position:absolute;left:50%;top:47%;width:124px;height:124px;margin:-62px 0 0 -62px;
-      transform-style:preserve-3d;will-change:transform;pointer-events:auto;cursor:pointer}
-.mark img{width:100%;height:100%;object-fit:contain;display:block;
-  mix-blend-mode:screen;filter:drop-shadow(0 0 26px rgba(120,170,255,.30));
+      transform-style:preserve-3d;will-change:transform;pointer-events:none}
+/* The scroll track has to stay on top to catch the wheel, so it cannot let the
+   logos take pointer events themselves. Hit testing happens on the track and
+   is forwarded; see hitMark(). */
+#cineTrack.over{cursor:pointer}
+/* Both layers live in .body so a click animation moves the black form and the
+   revealed colour together. */
+.mark .body{position:absolute;inset:0;transform-style:preserve-3d}
+.mark .base,.mark .rev{position:absolute;inset:0;width:100%;height:100%;display:block;
+  object-fit:contain;mix-blend-mode:screen;
   /* Screen blending alone leaves a visible rectangle, because the renders have
      lifted blacks and a vignette at the frame edge. Feathering the corners
      dissolves the crop so the logo floats rather than sits on a card. */
   -webkit-mask-image:radial-gradient(circle at 50% 50%,#000 52%,rgba(0,0,0,.6) 68%,transparent 80%);
-  mask-image:radial-gradient(circle at 50% 50%,#000 52%,rgba(0,0,0,.6) 68%,transparent 80%);
-  transition:filter .35s ease,transform .5s var(--ease-out)}
-.mark:hover img{filter:drop-shadow(0 0 40px rgba(160,200,255,.55)) brightness(1.12)}
+  mask-image:radial-gradient(circle at 50% 50%,#000 52%,rgba(0,0,0,.6) 68%,transparent 80%)}
+/* At rest the logo is a dark matte form. Not filter:brightness(0), which would
+   erase it against a black sky - the highlights are what keep the shape and
+   the sense that it is a solid object. */
+.mark .base{filter:grayscale(1) brightness(.30) contrast(1.25)
+            drop-shadow(0 0 18px rgba(120,150,200,.18));
+  transition:filter .6s var(--ease-out)}
+.mark .rev{filter:drop-shadow(0 0 26px rgba(120,170,255,.34));pointer-events:none}
+.mark.lit .base{filter:grayscale(1) brightness(.18) contrast(1.25)}
+.mark:hover .rev{filter:drop-shadow(0 0 40px rgba(160,200,255,.55)) brightness(1.08)}
 .mark .halo{position:absolute;inset:-24%;border-radius:50%;pointer-events:none;opacity:0;
   background:radial-gradient(circle,var(--tint,rgba(120,170,255,.5)) 0%,transparent 62%);
   transition:opacity .4s ease;mix-blend-mode:screen}
@@ -168,34 +182,34 @@ a{color:inherit}
    Each is a transform on the logo; the particle half is drawn on #cineFx.
    Momentum lives in the easing rather than in a physics loop, which is the
    cheapest way to make a spin feel like it has weight. */
-.mark.fx-spin img{animation:fxSpin 2.6s cubic-bezier(.12,.72,.16,1) both}
+.mark.fx-spin .body{animation:fxSpin 2.6s cubic-bezier(.12,.72,.16,1) both}
 @keyframes fxSpin{to{transform:rotateY(1440deg)}}
-.mark.fx-jump img{animation:fxJump 1.5s cubic-bezier(.3,-0.2,.4,1) both}
+.mark.fx-jump .body{animation:fxJump 1.5s cubic-bezier(.3,-0.2,.4,1) both}
 @keyframes fxJump{0%{transform:translateY(0) scale(1)}
   16%{transform:translateY(6px) scale(1.06,.92)}
   52%{transform:translateY(-118px) scale(.94,1.08)}
   86%{transform:translateY(4px) scale(1.09,.9)}
   100%{transform:translateY(0) scale(1)}}
-.mark.fx-shatter img{animation:fxShatter 1.5s cubic-bezier(.2,.9,.2,1) both}
+.mark.fx-shatter .body{animation:fxShatter 1.5s cubic-bezier(.2,.9,.2,1) both}
 @keyframes fxShatter{0%{transform:scale(1)}
   38%{transform:scale(1.32) rotateZ(7deg);filter:drop-shadow(0 0 60px rgba(90,180,255,.95)) brightness(1.5)}
   68%{transform:scale(.9) rotateZ(-3deg)}
   100%{transform:scale(1) rotateZ(0)}}
-.mark.fx-stack img{animation:fxStack 1.7s cubic-bezier(.25,.9,.25,1) both}
+.mark.fx-stack .body{animation:fxStack 1.7s cubic-bezier(.25,.9,.25,1) both}
 @keyframes fxStack{0%,100%{transform:translateY(0)}
   18%{transform:translateY(-26px)}34%{transform:translateY(2px)}
   50%{transform:translateY(-18px)}66%{transform:translateY(2px)}
   82%{transform:translateY(-9px)}}
-.mark.fx-rings img{animation:fxRings 2.1s cubic-bezier(.15,.8,.2,1) both}
+.mark.fx-rings .body{animation:fxRings 2.1s cubic-bezier(.15,.8,.2,1) both}
 @keyframes fxRings{0%{transform:rotate(0)}100%{transform:rotate(720deg)}}
-.mark.fx-pulse img{animation:fxPulse 1.5s cubic-bezier(.2,.9,.2,1) both}
+.mark.fx-pulse .body{animation:fxPulse 1.5s cubic-bezier(.2,.9,.2,1) both}
 @keyframes fxPulse{0%,100%{transform:scale(1)}
   30%{transform:scale(1.22);filter:drop-shadow(0 0 54px var(--tint,rgba(120,190,255,.9))) brightness(1.35)}
   60%{transform:scale(.95)}}
-.mark.fx-rise img{animation:fxRise 2s ease-in-out both}
+.mark.fx-rise .body{animation:fxRise 2s ease-in-out both}
 @keyframes fxRise{0%,100%{transform:translateY(0)}
   40%{transform:translateY(-16px);filter:drop-shadow(0 0 46px rgba(255,150,60,.8)) brightness(1.25)}}
-.mark.fx-launch img{animation:fxLaunch 1.8s cubic-bezier(.2,.85,.25,1) both}
+.mark.fx-launch .body{animation:fxLaunch 1.8s cubic-bezier(.2,.85,.25,1) both}
 @keyframes fxLaunch{0%{transform:translateY(0)}
   30%{transform:translateY(-70px) scale(1.05)}
   100%{transform:translateY(0) scale(1)}}
@@ -486,18 +500,91 @@ a{color:inherit}
       var node = el('div', 'mark');
       node.style.setProperty('--tint', d.tint);
       node.appendChild(el('div', 'halo'));
-      var img = new Image();
-      img.alt = d.name;
-      img.src = ART + (FILE[d.slug] || d.slug) + '.webp';
-      node.appendChild(img);
+      var body = el('div', 'body');
+
+      /* Two layers of the same render: a dark matte one always visible, and
+         the colour one on a canvas that starts fully masked out. The cursor
+         paints into that mask, so colour spreads along the path it took and
+         stays where it has been. A CSS mask cannot do this - it has no memory
+         of where the pointer has already been. */
+      var base = new Image();
+      base.className = 'base';
+      base.alt = d.name;
+      var rev = document.createElement('canvas');
+      rev.className = 'rev';
+      body.appendChild(base);
+      body.appendChild(rev);
+      node.appendChild(body);
       stage.appendChild(node);
+
       var a = (i / DOMAINS14.length) * Math.PI * 2 - Math.PI / 2;
-      var m = { node: node, img: img, data: d, angle: a,
+      var m = { node: node, base: base, rev: rev, data: d, angle: a,
                 ring: 1 + (i % 3) * 0.26, phase: i * 0.7,
-                spin: (i % 2 ? 1 : -1) * (0.5 + (i % 4) * 0.11) };
-      node.addEventListener('click', function () { react(m); });
+                spin: (i % 2 ? 1 : -1) * (0.5 + (i % 4) * 0.11),
+                mask: null, ctx: null, ready: false, covered: 0, done: false };
+      base.onload = function () { initReveal(m); };
+      base.src = ART + (FILE[d.slug] || d.slug) + '.webp';
       return m;
     });
+
+    /* ── colour reveal ─────────────────────────────────────────────────
+       Per logo: an offscreen mask that the cursor paints into, and a visible
+       canvas holding the colour render clipped to that mask. Only the logo
+       under the pointer is redrawn, so fourteen of these cost nothing at rest. */
+    var REV = 220;                       // reveal canvas resolution, square
+    function initReveal(m) {
+      m.rev.width = REV; m.rev.height = REV;
+      m.ctx = m.rev.getContext('2d');
+      m.mask = document.createElement('canvas');
+      m.mask.width = REV; m.mask.height = REV;
+      m.mctx = m.mask.getContext('2d');
+      m.ready = true;
+      redrawReveal(m);
+    }
+
+    function redrawReveal(m) {
+      var c = m.ctx;
+      c.clearRect(0, 0, REV, REV);
+      // Letterbox the render into the square the way object-fit:contain would.
+      var iw = m.base.naturalWidth, ih = m.base.naturalHeight;
+      var sc = Math.min(REV / iw, REV / ih);
+      var w = iw * sc, h = ih * sc;
+      c.drawImage(m.base, (REV - w) / 2, (REV - h) / 2, w, h);
+      // Keep only what the cursor has uncovered.
+      c.globalCompositeOperation = 'destination-in';
+      c.drawImage(m.mask, 0, 0);
+      c.globalCompositeOperation = 'source-over';
+    }
+
+    function paint(m, e) {
+      if (!m.ready || m.done) { return; }
+      var r = m.node.getBoundingClientRect();
+      if (!r.width) { return; }
+      var x = ((e.clientX - r.left) / r.width) * REV;
+      var y = ((e.clientY - r.top) / r.height) * REV;
+      var mc = m.mctx;
+      // A soft dab, and a wider faint one behind it, so colour bleeds outward
+      // from the stroke rather than ending on a hard circle.
+      [[REV * 0.30, 0.55], [REV * 0.52, 0.14]].forEach(function (pair) {
+        var g = mc.createRadialGradient(x, y, 0, x, y, pair[0]);
+        g.addColorStop(0, 'rgba(0,0,0,' + pair[1] + ')');
+        g.addColorStop(0.6, 'rgba(0,0,0,' + (pair[1] * 0.45).toFixed(3) + ')');
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        mc.fillStyle = g;
+        mc.beginPath(); mc.arc(x, y, pair[0], 0, 6.2832); mc.fill();
+      });
+      m.node.classList.add('lit');
+      m.covered++;
+      /* Once the cursor has worked across it, fill the rest and stop redrawing.
+         Colour stays - a logo that fades back to black loses the record of
+         what the student has already looked at. */
+      if (m.covered > 26) {
+        mc.fillStyle = '#000';
+        mc.fillRect(0, 0, REV, REV);
+        m.done = true;
+      }
+      redrawReveal(m);
+    }
 
     /* ── particles ─────────────────────────────────────────────────────
        One pool, one loop. Each burst seeds it differently: where particles
@@ -802,6 +889,29 @@ a{color:inherit}
         });
       });
     }
+
+    /* The track covers the stage, so hover and click are hit-tested here and
+       forwarded. Nearest centre within its own radius wins, which is stable
+       even while the logos are drifting. */
+    function hitMark(e) {
+      var best = null, bestD = 1e9;
+      for (var i = 0; i < marks.length; i++) {
+        var r = marks[i].node.getBoundingClientRect();
+        if (!r.width) { continue; }
+        var d = Math.hypot(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2));
+        if (d < r.width * 0.52 && d < bestD) { bestD = d; best = marks[i]; }
+      }
+      return best;
+    }
+    track.addEventListener('pointermove', function (e) {
+      var m = hitMark(e);
+      track.classList.toggle('over', !!m);
+      if (m) { paint(m, e); }
+    }, { passive: true });
+    track.addEventListener('click', function (e) {
+      var m = hitMark(e);
+      if (m) { react(m); }
+    });
 
     function leave() {
       cancelAnimationFrame(raf);
