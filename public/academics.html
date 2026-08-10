@@ -134,9 +134,24 @@ a{color:inherit}
    artwork, not a gradient imitating them - it is the look that was asked for,
    and cutting the two clean regions out of that render is exact where a
    hand-built approximation was only close. */
-#cine{position:fixed;inset:0;z-index:60;overflow:hidden;
-      background:#02040a url('/img/domains/space-stars.webp') center/112% no-repeat;
-      --zoom:0}
+#cine{position:fixed;inset:0;z-index:60;overflow:hidden;background:#02040a;--zoom:0}
+/* The starfield is its own layer rather than a background on #cine, so it can
+   drift on its own while the zoom scales it. Two layers at different speeds:
+   parallax is what stops a starfield reading as wallpaper. */
+#cineSky,#cineSky2{position:absolute;inset:-8%;pointer-events:none;
+  background:url('/img/domains/space-stars.webp') center/cover no-repeat;
+  will-change:transform}
+#cineSky{opacity:1;animation:sky 150s linear infinite}
+#cineSky2{opacity:.4;transform:scaleX(-1);animation:sky2 220s linear infinite;
+  mix-blend-mode:screen}
+@keyframes sky{0%{transform:translate3d(0,0,0) scale(1.06)}
+               50%{transform:translate3d(-2.5%,1.6%,0) scale(1.12)}
+               100%{transform:translate3d(0,0,0) scale(1.06)}}
+@keyframes sky2{0%{transform:scaleX(-1) translate3d(0,0,0) scale(1.1)}
+                50%{transform:scaleX(-1) translate3d(2%,-2.2%,0) scale(1.16)}
+                100%{transform:scaleX(-1) translate3d(0,0,0) scale(1.1)}}
+#cine.moonbeat #cineSky{transform:scale(calc(1.06 + var(--zoom) * .5));animation:none}
+#cine.moonbeat #cineSky2{opacity:calc(.4 - var(--zoom) * .4)}
 #cine.gone{display:none}
 #cineCanvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 #cine .depth{position:absolute;inset:0;pointer-events:none;
@@ -147,13 +162,18 @@ a{color:inherit}
    dust above. Taken from the Space Intern artwork so the whole preview looks
    like one place rather than eight separate renders. */
 #cineEarth{position:absolute;left:-6vw;bottom:-8vh;width:min(62vw,760px);aspect-ratio:780/700;
-  pointer-events:none;opacity:.95;
+  pointer-events:none;opacity:0;
   background:url('/img/domains/space-earth.webp') left bottom/contain no-repeat;
   /* The crop is a rectangle; without this its top and right edges read as a
      pasted box instead of a planet sitting in space. */
   -webkit-mask-image:radial-gradient(ellipse 104% 104% at 10% 92%,#000 52%,transparent 84%);
   mask-image:radial-gradient(ellipse 104% 104% at 10% 92%,#000 52%,transparent 84%);
-  animation:earthDrift 34s ease-in-out infinite}
+  transform:translate3d(-8%,14%,0) scale(.82);
+  transition:opacity 1s var(--ease-out),transform 1.2s var(--ease-out)}
+/* Earth belongs to the Space Intern beat only. Everywhere else the frame is
+   deep space, so it rises into view with the descent rather than sitting
+   under every headline. */
+#cine.moonbeat #cineEarth{opacity:.95;animation:earthDrift 34s ease-in-out infinite}
 @keyframes earthDrift{0%,100%{transform:translate3d(0,0,0) scale(1)}
                       50%{transform:translate3d(10px,-12px,0) scale(1.02)}}
 
@@ -191,10 +211,11 @@ a{color:inherit}
    driven by the scrollbar rather than a timeline. */
 #cine.moonbeat #cineMoon{opacity:1;
   transform:translateY(calc((1 - var(--zoom)) * 46vh)) scale(calc(.55 + var(--zoom) * .75))}
-#cine.moonbeat{background-size:calc(112% + var(--zoom) * 46%)}
 #cine.moonbeat #cineArt .art.on{
   transform:scale(calc(.30 + var(--zoom) * .72)) translateY(calc((1 - var(--zoom)) * -12vh))}
-#cine.moonbeat #cineEarth{transform:scale(calc(1 + var(--zoom) * .3));opacity:calc(.95 - var(--zoom) * .45)}
+#cine.moonbeat #cineEarth{
+  transform:translate3d(0,0,0) scale(calc(.82 + var(--zoom) * .4));
+  opacity:calc(.30 + var(--zoom) * .65)}
 
 #cineArt{position:absolute;right:6vw;top:46%;transform:translateY(-50%);
   width:min(38vw,430px);aspect-ratio:1;pointer-events:none;perspective:900px;
@@ -320,6 +341,7 @@ a{color:inherit}
 #cineSkip:hover{color:var(--text-primary)}
 
 @media (prefers-reduced-motion:reduce){
+  #cineSky,#cineSky2,#cineEarth{animation:none}
   #cineArt .art,.beat .in,#cineArt .orb,#cineArt .rim{transition:none}
   #cineArt .orb > *{animation:none}
   #cineArt .sheen{display:none}
@@ -330,6 +352,8 @@ a{color:inherit}
 <body>
 
 <div id="cine" aria-label="Academics preview">
+  <div id="cineSky" aria-hidden="true"></div>
+  <div id="cineSky2" aria-hidden="true"></div>
   <canvas id="cineCanvas" aria-hidden="true"></canvas>
   <div class="depth" aria-hidden="true"></div>
   <div id="cineEarth" aria-hidden="true"></div>
