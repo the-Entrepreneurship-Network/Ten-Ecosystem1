@@ -939,6 +939,20 @@ router.get("/tasks/my-tasks", requireStudent, async (req, res) => {
 
         if (progressCount === 0) {
             await taskEngine.assignTasksForStudent(student);
+        } else {
+            // Self-healing: Force Week 1 tasks to be available if they are currently locked
+            try {
+                const week1Tasks = await DomainTask.find({ domain, weekNumber: 1 }).select("_id").lean();
+                const week1Ids = week1Tasks.map(t => t._id);
+                if (week1Ids.length > 0) {
+                    await StudentTaskProgress.updateMany(
+                        { studentId: student._id, taskId: { $in: week1Ids }, status: "locked" },
+                        { $set: { status: "available" } }
+                    );
+                }
+            } catch (healErr) {
+                console.error("V2 self-healing error:", healErr.message);
+            }
         }
 
         const data = await taskEngine.getStudentTasks(student);
@@ -1000,6 +1014,40 @@ router.post("/tasks/:taskId/submit", requireStudent, async (req, res) => {
         progress.submittedAt     = new Date();
         if (!progress.startedAt) progress.startedAt = new Date();
         await progress.save();
+
+        try {
+            const Submission = require("../../models/Submission");
+            const DomainTask = require("../../models/new/DomainTask");
+            const taskDoc = await DomainTask.findById(taskId);
+            
+            if (taskDoc) {
+                let legSub = await Submission.findOne({
+                    employeeId: student.employeeId,
+                    task: taskDoc.taskTitle
+                });
+                
+                if (legSub) {
+                    legSub.githubLink = submissionUrl || "";
+                    legSub.note = submissionNotes || "";
+                    legSub.status = "Pending";
+                    legSub.reviewedOnce = false;
+                    legSub.submittedAt = new Date();
+                    await legSub.save();
+                } else {
+                    await Submission.create({
+                        employeeId: student.employeeId,
+                        domain: student.domain,
+                        task: taskDoc.taskTitle,
+                        githubLink: submissionUrl || "",
+                        note: submissionNotes || "",
+                        status: "Pending",
+                        submittedAt: new Date()
+                    });
+                }
+            }
+        } catch (subErr) {
+            console.error("V2 Sync Submission Create error:", subErr.message);
+        }
 
         res.json({ success: true, message: "Task submitted successfully", status: "submitted" });
     } catch (err) {

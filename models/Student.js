@@ -46,6 +46,7 @@ const studentsSchema = new mongoose.Schema({
 
     passwordResetToken:   { type: String, default: null, index: true },
     passwordResetExpiry:  { type: Date,   default: null },
+    activeSessionToken:   { type: String, default: null },
 
     currentStreak:        { type: Number, default: 0 },
     bestStreak:           { type: Number, default: 0 },

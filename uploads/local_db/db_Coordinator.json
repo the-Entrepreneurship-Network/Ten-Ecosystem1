@@ -1,0 +1,42 @@
+[
+  {
+    "username": "shindedevaraj0@gmail.com",
+    "email": "shindedevaraj0@gmail.com",
+    "password": "$2b$10$a5/6LBtz291gJ2eUhHdrv.fgz.CLfDrXnEPwVMY3dMan9raV2nV.y",
+    "name": "Devraj",
+    "domain": "Web Development",
+    "employeeId": "",
+    "promotedFrom": "",
+    "verificationStatus": "approved",
+    "resumePdf": "/uploads/documents/resume-1785851128740-314524878.pdf",
+    "experience": "....",
+    "failedLoginAttempts": 0,
+    "lockoutUntil": null,
+    "isLockedOut": false,
+    "passwordResetToken": null,
+    "passwordResetExpiry": null,
+    "_id": "6a71ecfc9159a2dc22d837b3",
+    "createdAt": "2026-08-04T13:45:32.268Z",
+    "updatedAt": "2026-08-09T06:00:24.997Z"
+  },
+  {
+    "username": "ddd",
+    "email": "devraj.induskiller@gmail,com",
+    "password": "$2b$10$ba.y.JV5WTel6cRoQ3QTY.aFE7VznKYiIvkJpttMOoH7E3eZ9o6dW",
+    "name": "dd",
+    "domain": "Java Development",
+    "employeeId": "",
+    "promotedFrom": "",
+    "verificationStatus": "approved",
+    "resumePdf": "/uploads/documents/resume-1786258660248-860925681.pdf",
+    "experience": "iuytfrd uygt",
+    "failedLoginAttempts": 0,
+    "lockoutUntil": null,
+    "isLockedOut": false,
+    "passwordResetToken": null,
+    "passwordResetExpiry": null,
+    "_id": "6a7824f2da3aec7aae023dea",
+    "createdAt": "2026-08-09T06:57:54.848Z",
+    "updatedAt": "2026-08-09T06:57:54.851Z"
+  }
+]

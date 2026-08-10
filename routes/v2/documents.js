@@ -37,10 +37,12 @@ const docUpload = multer({
     storage: docStorage,
     limits:  { fileSize: 25 * 1024 * 1024 }, // 25MB
     fileFilter: (_, file, cb) => {
-        const allowed = [".jpg", ".jpeg", ".png", ".pdf"];
-        const ext = path.extname(file.originalname).toLowerCase();
-        if (allowed.includes(ext)) return cb(null, true);
-        cb(new Error("Only JPG, PNG, PDF files are allowed"));
+        const ext = path.extname(file.originalname || "").toLowerCase();
+        if (ext === ".pdf" && file.mimetype === "application/pdf") {
+            cb(null, true);
+        } else {
+            cb(new Error("Invalid file format. Only PDF documents (.pdf) are allowed. Unsupported formats (PNG, JPG, JPEG, SVG, etc.) are blocked."));
+        }
     }
 });
 

@@ -50,16 +50,25 @@ async function awardCoins(studentId, action, actionArg) {
     const entry = COIN_ACTIONS[action] ? COIN_ACTIONS[action](actionArg) : { label: action, coins: actionArg || 0 };
     if (!entry.coins || entry.coins <= 0) return { totalCoins: 0, awarded: 0 };
 
-    const updated = await StudentCoinModel.findOneAndUpdate(
-        { studentId },
-        {
-            $inc:  { totalCoins: entry.coins },
-            $push: { coinsHistory: { action: entry.label, coins: entry.coins, timestamp: new Date() } },
-            $set:  { lastUpdated: new Date() }
-        },
-        { upsert: true, new: true }
-    );
-    return { totalCoins: updated.totalCoins, awarded: entry.coins };
+    let coinDoc = await StudentCoinModel.findOne({ studentId });
+    if (!coinDoc) {
+        coinDoc = new StudentCoinModel({
+            studentId,
+            totalCoins: 250,
+            coinsHistory: [{ action: "Welcome Bonus Coins", coins: 250, timestamp: new Date() }]
+        });
+    }
+
+    coinDoc.totalCoins += entry.coins;
+    coinDoc.coinsHistory.push({
+        action: entry.label,
+        coins: entry.coins,
+        timestamp: new Date()
+    });
+    coinDoc.lastUpdated = new Date();
+    await coinDoc.save();
+
+    return { totalCoins: coinDoc.totalCoins, awarded: entry.coins };
 }
 
 /**

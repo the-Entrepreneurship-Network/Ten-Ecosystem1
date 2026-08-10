@@ -4639,6 +4639,10 @@ setTimeout(loadPendingDocsBadge, 2000);
         attributes = [`Rate: ₹${pf.hourlyRate || 0}/hr`, `Avail: ${pf.availability || 'N/A'}`];
       }
 
+      const approveButton = u.role === 'mentor'
+        ? `<button onclick="openMentorReviewModal('${u._id}', '${u.fullName.replace(/'/g, "\\'")}', '${u.email.replace(/'/g, "\\'")}', '${(pf.company || '').replace(/'/g, "\\'")}', '${(pf.designation || '').replace(/'/g, "\\'")}', '${(pf.linkedinUrl || '').replace(/'/g, "\\'")}')" class="btn-edit-hr" style="background:rgba(212,175,55,0.1); border-color:var(--gold); color:var(--gold);">Review & Interview</button>`
+        : `<button onclick="approveEcosystemUser('${u._id}')" class="btn-edit-hr" style="background:rgba(16,185,129,0.1); border-color:var(--green); color:var(--green);">Approve</button>`;
+
       return `
         <tr style="border-bottom:1px solid rgba(255,255,255,0.03);">
           <td style="padding:12px;">
@@ -4653,7 +4657,7 @@ setTimeout(loadPendingDocsBadge, 2000);
           </td>
           <td style="text-align:right; padding:12px;">
             <div style="display:flex; gap:8px; justify-content:flex-end;">
-              <button onclick="approveEcosystemUser('${u._id}')" class="btn-edit-hr" style="background:rgba(16,185,129,0.1); border-color:var(--green); color:var(--green);">Approve</button>
+              ${approveButton}
               <button onclick="rejectEcosystemUser('${u._id}')" class="btn-del-hr">Reject</button>
             </div>
           </td>
@@ -4943,6 +4947,127 @@ setTimeout(loadPendingDocsBadge, 2000);
     } catch(e) {
       showToastHR('Network error', 'error');
     }
+  };
+
+  window.openMentorReviewModal = function(id, name, email, company, designation, linkedin) {
+    Swal.fire({
+      title: '🧑‍🏫 Mentor Onboarding & Interview Review',
+      html: `
+        <div style="text-align:left; font-family:'Outfit',sans-serif; color:#f0eee8; max-height:450px; overflow-y:auto; padding:5px 15px;">
+          <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); padding:12px; border-radius:10px; margin-bottom:15px; font-size:13px;">
+            <div style="margin-bottom:6px;"><strong>Name:</strong> ${name}</div>
+            <div style="margin-bottom:6px;"><strong>Email:</strong> ${email}</div>
+            <div style="margin-bottom:6px;"><strong>Company:</strong> ${company || 'N/A'}</div>
+            <div style="margin-bottom:6px;"><strong>Designation:</strong> ${designation || 'N/A'}</div>
+            <div style="margin-bottom:6px;">
+              <strong>LinkedIn:</strong> 
+              ${linkedin ? `<a href="${linkedin}" target="_blank" style="color:#D4AF37; text-decoration:underline;">View Profile <i class="fa-solid fa-up-right-from-square"></i></a>` : 'Not provided'}
+            </div>
+          </div>
+
+          <h4 style="margin-bottom:10px; color:#D4AF37; font-size:14px; font-weight:700; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:5px;">Hiring Interview Evaluation</h4>
+          
+          <div style="margin-bottom:12px;">
+            <label style="display:block; font-size:11px; color:#a0aec0; text-transform:uppercase; margin-bottom:4px; font-weight:600;">Interviewer / Conducting Official</label>
+            <select id="review_interviewer" style="width:100%; padding:10px; border-radius:8px; background:#0f172a; border:1px solid #334155; color:#fff; font-size:13px;">
+              <option value="Sr HR Manager">Sr HR Manager</option>
+              <option value="HR Director">HR Director & HRBP</option>
+              <option value="Chief Human Resources Officer (CHRO)">Chief Human Resources Officer (CHRO)</option>
+              <option value="Vice President">Vice President</option>
+            </select>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+            <div>
+              <label style="display:block; font-size:11px; color:#a0aec0; text-transform:uppercase; margin-bottom:4px; font-weight:600;">Technical Score (1-5)</label>
+              <select id="review_technical_score" style="width:100%; padding:8px; border-radius:8px; background:#0f172a; border:1px solid #334155; color:#fff; font-size:13px;">
+                <option value="5">5/5 - Outstanding</option>
+                <option value="4" selected>4/5 - Strong</option>
+                <option value="3">3/5 - Average</option>
+                <option value="2">2/5 - Fair</option>
+                <option value="1">1/5 - Unsatisfactory</option>
+              </select>
+            </div>
+            <div>
+              <label style="display:block; font-size:11px; color:#a0aec0; text-transform:uppercase; margin-bottom:4px; font-weight:600;">Communication (1-5)</label>
+              <select id="review_comm_score" style="width:100%; padding:8px; border-radius:8px; background:#0f172a; border:1px solid #334155; color:#fff; font-size:13px;">
+                <option value="5" selected>5/5 - Clear & Engaging</option>
+                <option value="4">4/5 - Professional</option>
+                <option value="3">3/5 - Adequate</option>
+                <option value="2">2/5 - Poor</option>
+                <option value="1">1/5 - Low</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="margin-bottom:12px;">
+            <label style="display:block; font-size:11px; color:#a0aec0; text-transform:uppercase; margin-bottom:4px; font-weight:600;">Interview Assessment & Onboarding Notes</label>
+            <textarea id="review_notes" style="width:100%; height:80px; padding:10px; border-radius:8px; background:#0f172a; border:1px solid #334155; color:#fff; font-size:13px; font-family:sans-serif;" placeholder="Enter interview feedback, panel recommendations, or background screening notes..."></textarea>
+          </div>
+        </div>
+      `,
+      showCancelButton: true,
+      showDenyButton: true,
+      background: '#0b0f19',
+      color: '#F0EEE8',
+      confirmButtonText: '✅ Approve & Active Workspace',
+      denyButtonText: '❌ Reject Application',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#10B981',
+      denyButtonColor: '#EF4444',
+      preConfirm: () => {
+        const interviewer = document.getElementById('review_interviewer').value;
+        const techScore = document.getElementById('review_technical_score').value;
+        const commScore = document.getElementById('review_comm_score').value;
+        const notes = document.getElementById('review_notes').value;
+        if (!notes || notes.trim().length < 5) {
+          Swal.showValidationMessage('Please write brief interview notes before approving.');
+          return false;
+        }
+        return { interviewer, techScore, commScore, notes };
+      }
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        Swal.fire({
+          title: 'Authorizing Onboarding...',
+          didOpen: () => { Swal.showLoading(); },
+          background: '#0b0f19',
+          color: '#F0EEE8'
+        });
+
+        try {
+          const hrToken = localStorage.getItem('hrToken');
+          const res = await fetch(`/api/ecosystem/users/${id}/approve`, {
+            method: "POST",
+            headers: { 
+              Authorization: hrToken,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              interviewDetails: result.value
+            })
+          });
+          const d = await res.json();
+          if (d.success) {
+            Swal.fire({
+              icon: 'success',
+              title: 'Mentor Onboarded!',
+              text: 'The mentor profile is active and portal access has been granted.',
+              background: '#0b0f19',
+              color: '#F0EEE8',
+              confirmButtonColor: '#D4AF37'
+            });
+            window.loadEcosystem();
+          } else {
+            showToastHR(d.error || 'Approval failed', 'error');
+          }
+        } catch(e) {
+          showToastHR('Network error occurred.', 'error');
+        }
+      } else if (result.isDenied) {
+        window.rejectEcosystemUser(id);
+      }
+    });
   };
 
   window.suspendEcosystemUser = async function(id) {

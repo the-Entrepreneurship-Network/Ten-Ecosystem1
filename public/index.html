@@ -7,7 +7,13 @@
 <link rel="stylesheet" href="ten-theme.css">
 <link rel="stylesheet" href="ten-motion.css">
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
+
+:root {
+  --ten-font-display: 'Outfit', sans-serif;
+  --ten-font-body: 'Plus Jakarta Sans', sans-serif;
+}
 
 html, body { height: 100%; overflow: hidden; }
 
@@ -17,6 +23,8 @@ body {
   justify-content: center;
   padding: 24px;
   position: relative;
+  font-family: var(--ten-font-body);
+  background: radial-gradient(circle at center, #0a0d18 0%, #04050a 100%);
 }
 
 /* ── Main container ── */
@@ -29,20 +37,25 @@ body {
   grid-template-columns: 1fr 1fr;
   min-height: 600px;
   max-height: 92vh;
-  background: var(--ten-card);
-  border: 1px solid var(--ten-border);
+  background: rgba(10, 15, 30, 0.45);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(212, 175, 55, 0.15);
   border-radius: var(--ten-r-xl);
-  box-shadow: var(--ten-shadow-lg), var(--ten-glow-gold);
+  box-shadow: 
+    0 24px 72px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 40px rgba(212, 175, 55, 0.05);
   overflow: hidden;
-  animation: ten-fadeUp 0.7s ease both;
+  animation: ten-fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 /* ── Left branding panel ── */
 .panel-left {
   position: relative;
   padding: 56px 52px;
-  background: linear-gradient(160deg, #0b0d14 0%, #100e08 50%, #0b0d14 100%);
-  border-right: 1px solid var(--ten-border);
+  background: linear-gradient(160deg, rgba(11, 13, 22, 0.95) 0%, rgba(16, 14, 8, 0.7) 50%, rgba(11, 13, 22, 0.95) 100%);
+  border-right: 1px solid rgba(212, 175, 55, 0.12);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -74,7 +87,7 @@ body {
   content: '';
   position: absolute;
   top: 0; left: 0; right: 0; height: 2px;
-  background: linear-gradient(90deg, transparent, var(--ten-gold), transparent);
+  background: linear-gradient(90deg, transparent, rgba(212,175,55,0.4), transparent);
 }
 .panel-left-inner { position: relative; z-index: 1; height: 100%; display: flex; flex-direction: column; justify-content: space-between; }
 
@@ -146,16 +159,16 @@ body {
 }
 .ten-wordmark {
   font-family: var(--ten-font-display);
-  font-size: 17px;
+  font-size: 20px;
   font-weight: 800;
-  letter-spacing: 3.4px;
+  letter-spacing: 4px;
   color: var(--ten-gold);
   line-height: 1;
   text-shadow: 0 0 20px rgba(245,197,66,0.2);
 }
 .ten-wordmark-sub {
-  font-size: 10.5px;
-  font-weight: 400;
+  font-size: 11px;
+  font-weight: 500;
   letter-spacing: 1.5px;
   color: var(--ten-text-sub);
   margin-top: 6px;
@@ -164,10 +177,10 @@ body {
 
 .hero-text h1 {
   font-family: var(--ten-font-display);
-  font-size: clamp(32px, 4vw, 52px);
+  font-size: clamp(32px, 4vw, 48px);
   font-weight: 800;
-  line-height: 1.1;
-  letter-spacing: -1.5px;
+  line-height: 1.15;
+  letter-spacing: -1px;
   color: var(--ten-text);
   margin-bottom: 20px;
 }
@@ -176,6 +189,7 @@ body {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  text-shadow: 0 0 30px rgba(212,175,55,0.2);
 }
 .hero-text p {
   font-size: 15px;
@@ -196,17 +210,19 @@ body {
   gap: 14px;
   font-size: 14px;
   color: var(--ten-text);
+  font-weight: 500;
 }
 .feature-dot {
   width: 32px; height: 32px;
-  background: var(--ten-gold-bg);
-  border: 1px solid var(--ten-border);
+  background: rgba(212, 175, 55, 0.08);
+  border: 1px solid rgba(212, 175, 55, 0.2);
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 15px;
   flex-shrink: 0;
+  box-shadow: 0 4px 10px rgba(212, 175, 55, 0.05);
 }
 
 .stats-row {
@@ -216,20 +232,26 @@ body {
 }
 .stat-chip {
   text-align: center;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  padding: 10px 18px;
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
 .stat-chip .val {
   font-family: var(--ten-font-display);
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 800;
   color: var(--ten-gold);
   line-height: 1;
 }
 .stat-chip .lbl {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--ten-text-muted);
   text-transform: uppercase;
   letter-spacing: 1.5px;
-  margin-top: 4px;
+  margin-top: 6px;
+  font-weight: 600;
 }
 
 /* ── Right action panel ── */
@@ -238,16 +260,17 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  background: var(--ten-card);
+  background: rgba(14, 20, 40, 0.2);
   overflow-y: auto;
 }
 
 .panel-right h2 {
   font-family: var(--ten-font-display);
-  font-size: 28px;
+  font-size: 30px;
   font-weight: 800;
   letter-spacing: -0.5px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
+  color: #fff;
 }
 .panel-right .sub {
   font-size: 14px;
@@ -262,30 +285,36 @@ body {
   justify-content: space-between;
   width: 100%;
   padding: 18px 22px;
-  border: 1px solid var(--ten-border);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: var(--ten-r-md);
-  background: rgba(255,255,255,0.02);
+  background: rgba(255, 255, 255, 0.02);
   color: var(--ten-text);
   font-family: var(--ten-font-display);
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.22s ease;
+  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
   margin-bottom: 12px;
   text-decoration: none;
   position: relative;
   overflow: hidden;
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.2), 
+    inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
 .portal-btn::after {
   content: '→';
   font-size: 16px;
   color: var(--ten-text-sub);
-  transition: transform 0.2s, color 0.2s;
+  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), color 0.25s ease;
 }
 .portal-btn:hover {
-  border-color: var(--ten-border-strong);
-  background: rgba(212,175,55,0.05);
-  transform: translateX(4px);
+  border-color: rgba(212, 175, 55, 0.35);
+  background: rgba(212, 175, 55, 0.06);
+  transform: translateX(6px) translateY(-1px);
+  box-shadow: 
+    0 8px 20px rgba(212, 175, 55, 0.08), 
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 .portal-btn:hover::after {
   transform: translateX(4px);
@@ -293,15 +322,24 @@ body {
 }
 
 .portal-btn.primary {
-  background: linear-gradient(135deg, var(--ten-gold), var(--ten-gold-dim));
-  border-color: transparent;
-  color: #0a0700;
-  box-shadow: 0 6px 24px rgba(212,175,55,0.3);
+  background: linear-gradient(135deg, var(--ten-gold) 0%, var(--ten-gold-dim) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #0c1220;
+  box-shadow: 
+    0 10px 28px rgba(212, 175, 55, 0.3), 
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
-.portal-btn.primary::after { color: rgba(10,7,0,0.5); }
+.portal-btn.primary::after { color: rgba(12, 18, 32, 0.6); }
 .portal-btn.primary:hover {
-  transform: translateY(-2px) translateX(0);
-  box-shadow: 0 10px 32px rgba(212,175,55,0.45);
+  background: linear-gradient(135deg, var(--ten-gold-light) 0%, var(--ten-gold) 100%);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-3px) scale(1.015);
+  box-shadow: 
+    0 14px 36px rgba(212, 175, 55, 0.45), 
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.portal-btn.primary:hover::after {
+  color: #0c1220;
 }
 
 .btn-icon { font-size: 20px; margin-right: 14px; }
@@ -309,16 +347,17 @@ body {
 
 .divider {
   height: 1px;
-  background: var(--ten-border-dim);
-  margin: 20px 0;
+  background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.2) 50%, transparent);
+  margin: 24px 0;
 }
 
 .page-footer {
   margin-top: 24px;
   text-align: center;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--ten-text-muted);
   letter-spacing: 0.5px;
+  font-weight: 500;
 }
 
 @media (max-width: 900px) {
@@ -484,7 +523,14 @@ body {
 
   <script>
     function openHrPositionModal() {
-      document.getElementById('hrPositionModal').style.display = 'flex';
+      Swal.fire({
+        icon: 'info',
+        title: '🚧 HR Portal Under Construction',
+        text: 'The HR Management Portal is currently under development. Active portals include Student, Mentor, and Coordinator.',
+        background: '#0e1428',
+        color: '#F0EEE8',
+        confirmButtonColor: '#D4AF37'
+      });
     }
     function closeHrPositionModal() {
       document.getElementById('hrPositionModal').style.display = 'none';

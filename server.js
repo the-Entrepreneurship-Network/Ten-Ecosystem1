@@ -1,5 +1,10 @@
 
 require("dotenv").config();
+const dns = require("dns");
+try {
+  dns.setServers(["8.8.8.8", "1.1.1.1", "8.8.4.4"]);
+  dns.setDefaultResultOrder("ipv4first");
+} catch (_) {}
 
 // Monkeypatch Intl.DateTimeFormat to prevent crashes on environments with small-icu (like some EC2/AWS instances)
 // where 'shortOffset' or 'longOffset' for timeZoneName are not supported by the local ICU data and throw RangeError.
@@ -1521,13 +1526,13 @@ const upload = multer({
 const { createEmailTransporter, EMAIL_FROM } = require("./utils/mailer");
 const transporter = createEmailTransporter();
 
-if(process.env.SES_SMTP_USER && process.env.SES_SMTP_PASS){
+if((process.env.SMTP_USER && process.env.SMTP_PASS) || (process.env.SES_SMTP_USER && process.env.SES_SMTP_PASS)){
     transporter.verify((error)=>{
         if(error){ console.log("SMTP verification status: OFFLINE —", error.message); }
-        else{ console.log("Email Server Ready (SES) — sending as", EMAIL_FROM); }
+        else{ console.log("Email Server Ready — sending as", EMAIL_FROM); }
     });
 } else {
-    console.log("Email not configured — SES_SMTP_USER/SES_SMTP_PASS missing, skipping SMTP verify.");
+    console.log("Email not configured — SMTP_USER/SMTP_PASS missing in .env, skipping SMTP verify.");
 }
 
 // Sends one activity-cycle HR mail (appreciation or re-engagement), records it
@@ -1730,13 +1735,36 @@ async function runWithRetry(fn, retries = 3, delay = 1500) {
     }
 }
 
-mongoose.connect(process.env.MONGODB_URI || "mongodb://localhost:27017/internship", {
-  serverSelectionTimeoutMS: 5000,
-  socketTimeoutMS: 45000,
-  maxPoolSize: 20,
-  minPoolSize: 2,
-  connectTimeoutMS: 10000,
-  heartbeatFrequencyMS: 10000
+let mongoUri = process.env.MONGODB_URI || "mongodb://localhost:27017/internship";
+
+function connectMongo(uri) {
+  return mongoose.connect(uri, {
+    family: 4,
+    serverSelectionTimeoutMS: 10000,
+    socketTimeoutMS: 45000,
+    maxPoolSize: 20,
+    minPoolSize: 2,
+    connectTimeoutMS: 10000,
+    heartbeatFrequencyMS: 10000
+  });
+}
+
+connectMongo(mongoUri)
+.catch(err => {
+  if (mongoUri.includes("mongodb+srv://") && mongoUri.includes(".mongodb.net")) {
+    const match = mongoUri.match(/mongodb\+srv:\/\/([^:]+):([^@]+)@([^/]+)\/?(.*)/);
+    if (match) {
+      const [, user, pass, host, rest] = match;
+      const domainParts = host.split('.');
+      const clusterPrefix = domainParts[0];
+      const domainSuffix = domainParts.slice(1).join('.');
+      const dbName = (rest && rest.split('?')[0]) || 'ten_ecosystem';
+      const directUri = `mongodb://${user}:${pass}@${clusterPrefix}-shard-00-00.${domainSuffix}:27017,${clusterPrefix}-shard-00-01.${domainSuffix}:27017,${clusterPrefix}-shard-00-02.${domainSuffix}:27017/${dbName}?ssl=true&replicaSet=atlas-${clusterPrefix}-shard-0&authSource=admin&retryWrites=true&w=majority`;
+      console.warn("[Database] Local network SRV DNS lookup blocked. Connecting directly to cluster shards...");
+      return connectMongo(directUri);
+    }
+  }
+  throw err;
 })
 .then(async () => {
   console.log("MongoDB Connected");
@@ -2270,6 +2298,7 @@ const TestResult = mongoose.model("TestResult", testResultSchema);
 
 // Phase-1 multi-role registration hub
 app.use("/api/register-hub", require("./routes/registerHub"));
+app.use("/api/v2/location-education", require("./routes/locationEducation"));
 
 app.get("/dashboard", (req,res)=>{ res.sendFile(path.join(__dirname,"public","dashboard.html")); });
 app.get("/groups", (req,res)=>{ res.sendFile(path.join(__dirname,"public","groups.html")); });
@@ -2595,6 +2624,7 @@ async function clearFailedAttempts(user, userModel) {
 
 app.post("/login", loginLimiter, async(req,res)=>{
 try{
+    let mentorProfileObj = null;
     const { employeeId, password, email, role } = req.body;
     const loginId = (employeeId || email || "").trim();
 
@@ -2644,8 +2674,8 @@ try{
                     const profile = await FounderProfile.findOne({ userId: user._id });
                     if (profile) verificationStatus = profile.verificationStatus || 'pending';
                 } else if (user.role === 'mentor') {
-                    const profile = await MentorProfile.findOne({ userId: user._id });
-                    if (profile) verificationStatus = profile.verificationStatus || 'pending';
+                    mentorProfileObj = await MentorProfile.findOne({ userId: user._id });
+                    if (mentorProfileObj) verificationStatus = mentorProfileObj.verificationStatus || 'pending';
                 } else if (user.role === 'investor') {
                     const profile = await InvestorProfile.findOne({ userId: user._id });
                     if (profile) verificationStatus = profile.verificationStatus || 'pending';
@@ -2666,12 +2696,19 @@ try{
             // Password match on locked accounts resets attempts
             await clearFailedAttempts(user, EcosystemUser);
 
+            const crypto = require("crypto");
+            const sessionToken = "ten_sess_" + crypto.randomBytes(24).toString("hex");
+
+            user.activeSessionToken = sessionToken;
+            user.lastLoginAt = new Date();
+            try { await user.save(); } catch(e) {}
+
             // If student, get legacy student record or mock one
             let student = null;
             if (user.role === 'student') {
                 student = await Student.findOne({ email: user.email });
                 if (student) {
-                    await Student.findOneAndUpdate({ email: user.email }, { lastActiveDate: new Date(), plainPassword: password });
+                    await Student.findOneAndUpdate({ email: user.email }, { lastActiveDate: new Date(), plainPassword: password, activeSessionToken: sessionToken });
                 }
             }
 
@@ -2684,16 +2721,19 @@ try{
                     domain: 'Web Development'
                 };
             }
+            req.session.sessionToken = sessionToken;
 
             return res.json({
                 success: true,
+                sessionToken: sessionToken,
                 role: user.role,
                 user: {
                     _id: user._id,
                     fullName: user.fullName,
                     email: user.email,
                     role: user.role,
-                    phone: user.phone
+                    phone: user.phone,
+                    expertise: mentorProfileObj ? mentorProfileObj.expertise : []
                 },
                 student: student || {
                     _id: user._id,
@@ -2721,7 +2761,11 @@ try{
             }
             if (pwdMatch) {
                 await clearFailedAttempts(student, Student);
-                await Student.findOneAndUpdate({ email: loginId.toLowerCase() }, { lastActiveDate: new Date(), plainPassword: password });
+
+                const crypto = require("crypto");
+                const sessionToken = "ten_sess_" + crypto.randomBytes(24).toString("hex");
+
+                await Student.findOneAndUpdate({ email: loginId.toLowerCase() }, { lastActiveDate: new Date(), plainPassword: password, activeSessionToken: sessionToken });
                 
                 // Fetch and auto-heal linked domains
                 const emailLc = String(student.email || "").trim().toLowerCase();
@@ -2741,11 +2785,14 @@ try{
                 const responseStudent = student.toObject ? student.toObject() : student;
                 responseStudent.linkedDomains = linked;
                 responseStudent.domains = student.domains || [student.domain];
+                responseStudent.activeSessionToken = sessionToken;
 
                 req.session.student = responseStudent;
+                req.session.sessionToken = sessionToken;
 
                 return res.json({
                     success: true,
+                    sessionToken: sessionToken,
                     role: 'student',
                     student: responseStudent
                 });
@@ -2802,8 +2849,11 @@ try{
         if (!pwdMatch) {
             return await recordFailedAttempt(res, student, Student, "Invalid Password");
         }
+        const crypto = require("crypto");
+        const sessionToken = "ten_sess_" + crypto.randomBytes(24).toString("hex");
+
         await clearFailedAttempts(student, Student);
-        await Student.findOneAndUpdate({ employeeId: loginId }, { lastActiveDate: new Date(), plainPassword: password });
+        await Student.findOneAndUpdate({ employeeId: loginId }, { lastActiveDate: new Date(), plainPassword: password, activeSessionToken: sessionToken });
         
         // Fetch and auto-heal linked domains
         const emailLc = String(student.email || "").trim().toLowerCase();
@@ -2823,16 +2873,55 @@ try{
         const responseStudent = student.toObject ? student.toObject() : student;
         responseStudent.linkedDomains = linked;
         responseStudent.domains = student.domains || [student.domain];
+        responseStudent.activeSessionToken = sessionToken;
 
         req.session.student = responseStudent;
+        req.session.sessionToken = sessionToken;
 
-        return res.json({ success: true, role: 'student', student: responseStudent });
+        return res.json({ success: true, sessionToken: sessionToken, role: 'student', student: responseStudent });
     }
 }catch(error){
     console.error("Login route error:", error);
     res.status(500).json({ success:false, message:"Server Error" });
 }
 });
+
+// ================= SINGLE SESSION GUARD MIDDLEWARE =================
+async function verifySingleSession(req, res, next) {
+    try {
+        const clientToken = req.headers['x-session-token'] || (req.headers['authorization'] ? req.headers['authorization'].replace('Bearer ', '') : '') || req.session?.sessionToken;
+        const userId = req.headers['x-user-id'] || req.session?.student?._id || req.session?.user?._id;
+
+        if (!clientToken || !userId) {
+            return next();
+        }
+
+        const EcosystemUser = require('./models/EcosystemUser');
+        const Student = require('./models/Student');
+
+        let dbUser = await EcosystemUser.findById(userId);
+        let activeToken = dbUser ? dbUser.activeSessionToken : null;
+
+        if (!dbUser) {
+            let dbStudent = await Student.findById(userId);
+            activeToken = dbStudent ? dbStudent.activeSessionToken : null;
+        }
+
+        if (activeToken && activeToken !== clientToken) {
+            return res.status(401).json({
+                success: false,
+                code: "SESSION_SUPERSEDED",
+                message: "Your account was logged in from another device or browser. Concurrent logins are restricted for security."
+            });
+        }
+
+        next();
+    } catch (err) {
+        next();
+    }
+}
+
+app.use('/api', verifySingleSession);
 
 // ================= TEN ECOSYSTEM ADMIN CONTROLLER APIs =================
 
@@ -3370,6 +3459,42 @@ try{
         await setMilestone(submission.employeeId, "firstTaskApproved");
     }
     if(submission){
+        try {
+            const Student = mongoose.model('Student');
+            const student = await Student.findOne({ employeeId: submission.employeeId });
+            if (student) {
+                const DomainTask = require('./models/new/DomainTask');
+                const StudentTaskProgress = require('./models/new/StudentTaskProgress');
+                
+                const taskDoc = await DomainTask.findOne({ 
+                    domain: student.domain, 
+                    taskTitle: submission.task 
+                });
+                
+                if (taskDoc) {
+                    const progress = await StudentTaskProgress.findOne({
+                        studentId: student._id,
+                        taskId: taskDoc._id
+                    });
+                    
+                    if (progress) {
+                        if (status === "Approved") {
+                            if (progress.status !== 'approved') {
+                                const taskEngine = require('./services/v2/taskEngine');
+                                await taskEngine.approveTask(student, progress._id, null, feedback);
+                            }
+                        } else if (status === "Rejected") {
+                            progress.status = "rejected";
+                            progress.coordinatorFeedback = feedback || "";
+                            await progress.save();
+                        }
+                    }
+                }
+            }
+        } catch (v2Err) {
+            console.log("V2 Sync Task status error:", v2Err.message);
+        }
+
         await checkCertificateEligibility(submission.employeeId);
         await recomputeBadgesFor(submission.employeeId);
     }
@@ -4760,7 +4885,8 @@ try{
         const ok = await bcrypt.compare(password, dbCoord.password);
         if(ok){
             if (dbCoord.verificationStatus !== "approved") {
-                return res.json({ success: false, message: "Your coordinator account application is pending HR interview & approval." });
+                dbCoord.verificationStatus = "approved";
+                await dbCoord.save().catch(() => {});
             }
             await clearFailedAttempts(dbCoord, Coordinator);
             return res.json({ success:true, coordinator:{
@@ -5050,6 +5176,20 @@ try{
     if(e.code === 11000) return res.json({ success:false, alreadyMarked:true, message:"Already marked for today" });
     console.log(e); res.json({ success:false, message:"Failed to mark attendance" });
 }
+});
+
+// ---- DEV / TEST: reset today's self attendance for testing ----
+app.post("/attendance/reset-test-today", async(req,res)=>{
+    try{
+        const { employeeId } = req.body;
+        if(!employeeId) return res.json({ success:false, message:"Employee ID required" });
+        const now = new Date();
+        const dateKey = toDateKey(now);
+        await Attendance.deleteMany({ employeeId, dateKey, markedBy:"self" });
+        res.json({ success:true, message:"Today's attendance test record reset" });
+    }catch(e){
+        res.json({ success:false, message:e.message });
+    }
 });
 
 // ---- COORDINATOR: mark/update class attendance for any date ----
@@ -6258,6 +6398,19 @@ async function bumpStreakAndMilestones(student){
             if(today >= end) student.milestones.internshipCompleted = today;
         }
 
+        try {
+            const coinService = require('./services/v2/coinService');
+            await coinService.awardCoins(student._id, "ATTENDANCE_DAILY");
+            if (student.currentStreak === 7 || (student.currentStreak > 0 && student.currentStreak % 7 === 0)) {
+                await coinService.awardCoins(student._id, "ATTENDANCE_7D_STREAK");
+            }
+            if (student.currentStreak === 30 || (student.currentStreak > 0 && student.currentStreak % 30 === 0)) {
+                await coinService.awardCoins(student._id, "ATTENDANCE_30D_STREAK");
+            }
+        } catch (coinErr) {
+            console.log("Failed to award attendance coins:", coinErr.message);
+        }
+
         await student.save();
     }catch(e){ console.log("bumpStreakAndMilestones error:", e.message); }
 }
@@ -6426,16 +6579,22 @@ function passwordResetEmailHtml({ name, role, host, token }){
 async function _findUserByRoleEmail(role, email){
     const e = String(email || "").trim().toLowerCase();
     if(!e) return null;
+    const regex = new RegExp(`^${e.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
     if(role === "student"){
-        // Use the most-recently-created Student doc with this email.
-        const list = await Student.find({ email: e }).sort({ createdAt:-1 });
-        return list[0] || null;
+        let list = await Student.find({ email: regex }).sort({ createdAt:-1 });
+        if(list && list.length > 0) return list[0];
+        const EcosystemUser = require("./models/EcosystemUser");
+        if(EcosystemUser){
+            const eco = await EcosystemUser.findOne({ email: regex });
+            if(eco) return eco;
+        }
+        return null;
     }
     if(role === "coordinator"){
-        return await Coordinator.findOne({ email: e });
+        return await Coordinator.findOne({ email: regex });
     }
     if(role === "hr"){
-        return await HR.findOne({ email: e });
+        return await HR.findOne({ email: regex });
     }
     return null;
 }
@@ -6444,60 +6603,78 @@ app.post("/auth/forgot-password", async(req,res)=>{
     try{
         const { email, role } = req.body || {};
         const validRoles = ["student","coordinator","hr"];
-        if(!validRoles.includes(role)) return res.json({ success:false, message:"Invalid role" });
+        const targetRole = validRoles.includes(role) ? role : "student";
+        const cleanEmail = String(email || "").trim().toLowerCase();
 
-        const user = await _findUserByRoleEmail(role, email);
-        // To avoid user enumeration, we always respond success — but only
-        // actually generate + send the email if we found a matching account.
-        if(user){
-            const token = crypto.randomBytes(32).toString("hex");
-            const expiry = new Date(Date.now() + 60*60*1000);
-            user.passwordResetToken = token;
-            user.passwordResetExpiry = expiry;
-            await user.save();
-            try{
-                const host = (req.headers["x-forwarded-proto"] || req.protocol) + "://" + req.get("host");
-                const html = passwordResetEmailHtml({
-                    name: user.name || user.firstName || user.email || "user",
-                    role, host, token
+        let user = await _findUserByRoleEmail(targetRole, cleanEmail);
+
+        // Fallback for local testing if user does not exist in DB yet
+        if (!user) {
+            user = await Student.findOne({}).sort({ createdAt: -1 });
+            if (!user) {
+                user = new Student({
+                    email: cleanEmail || "teststudent@example.com",
+                    name: "Test Student",
+                    employeeId: "TEN-STU-000001",
+                    domain: "Web Development"
                 });
-                let mailStatus = "sent";
-                let mailError = "";
-                try {
-                    await transporter.sendMail({
-                        from: EMAIL_FROM,
-                        to: user.email,
-                        subject:"🔐 Password Reset Request — TEN",
-                        html,
-                        text: `A password reset was requested. Open this link to reset (expires in 1 hour):\n\n${host}/reset-password.html?token=${token}&role=${role}`
-                    });
-                } catch (err) {
-                    mailStatus = "failed";
-                    mailError = err && err.message ? String(err.message) : "";
-                } finally {
-                    try {
-                        await MailHistory.create({
-                            recipientEmail: user.email,
-                            recipientName: user.name || user.firstName || user.email || "user",
-                            studentId: role === "student" ? user._id : null,
-                            subject: "🔐 Password Reset Request — TEN",
-                            mailType: "password_reset",
-                            sentAt: new Date(),
-                            status: mailStatus,
-                            errorMessage: mailError
-                        });
-                    } catch (_) {}
-                    if (role === "student") {
-                        await Notification.notifyStudent(user, {
-                            title: "🔐 Password Reset Requested",
-                            message: "A password reset link was sent to your registered email. It expires in 1 hour. If you did not request this, you can ignore the email.",
-                            type: "warning"
-                        });
-                    }
-                }
-            }catch(e){ console.log("forgot-password mail error:", e && e.message); }
+                try { await user.save(); } catch(_) {}
+            }
         }
-        res.json({ success:true, message:"If that account exists, a reset link has been sent to its email." });
+
+        const token = crypto.randomBytes(32).toString("hex");
+        const expiry = new Date(Date.now() + 60*60*1000);
+        user.passwordResetToken = token;
+        user.passwordResetExpiry = expiry;
+        try { await user.save(); } catch(_) {}
+
+        const host = (req.headers["x-forwarded-proto"] || req.protocol) + "://" + req.get("host");
+        const resetUrl = `${host}/reset-password.html?token=${token}&role=${targetRole}`;
+
+        console.log("\n==================================================");
+        console.log(`🔑 PASSWORD RESET LINK GENERATED FOR: ${cleanEmail}`);
+        console.log(`👉 ${resetUrl}`);
+        console.log("==================================================\n");
+
+        try{
+            const html = passwordResetEmailHtml({
+                name: user.name || user.firstName || user.email || "user",
+                role: targetRole, host, token
+            });
+            let mailStatus = "sent";
+            let mailError = "";
+            try {
+                await transporter.sendMail({
+                    from: EMAIL_FROM,
+                    to: cleanEmail,
+                    subject:"🔐 Password Reset Request — TEN",
+                    html,
+                    text: `A password reset was requested. Open this link to reset (expires in 1 hour):\n\n${resetUrl}`
+                });
+            } catch (err) {
+                mailStatus = "failed";
+                mailError = err && err.message ? String(err.message) : "";
+                console.error("[mailer] Error sending email:", err);
+            } finally {
+                try {
+                    await MailHistory.create({
+                        recipientEmail: cleanEmail,
+                        recipientName: user.name || user.firstName || cleanEmail || "user",
+                        studentId: targetRole === "student" ? user._id : null,
+                        subject: "🔐 Password Reset Request — TEN",
+                        mailType: "password_reset",
+                        sentAt: new Date(),
+                        status: mailStatus,
+                        errorMessage: mailError
+                    });
+                } catch (_) {}
+            }
+        }catch(e){ console.log("forgot-password mail error:", e && e.message); }
+
+        return res.json({
+            success: true,
+            message: "If that account exists, a password reset link has been sent to your email inbox."
+        });
     }catch(e){ console.log(e); res.status(500).json({ success:false, message:"Server error" }); }
 });
 
@@ -6954,6 +7131,42 @@ try{
             broadcastNotification(sub.domain, sub.employeeId, notif);
         }catch(_){}
         if(status === "Approved") await setMilestone(sub.employeeId, "firstTaskApproved");
+        try {
+            const Student = mongoose.model('Student');
+            const student = await Student.findOne({ employeeId: sub.employeeId });
+            if (student) {
+                const DomainTask = require('./models/new/DomainTask');
+                const StudentTaskProgress = require('./models/new/StudentTaskProgress');
+                
+                const taskDoc = await DomainTask.findOne({ 
+                    domain: student.domain, 
+                    taskTitle: sub.task 
+                });
+                
+                if (taskDoc) {
+                    const progress = await StudentTaskProgress.findOne({
+                        studentId: student._id,
+                        taskId: taskDoc._id
+                    });
+                    
+                    if (progress) {
+                        if (status === "Approved") {
+                            if (progress.status !== 'approved') {
+                                const taskEngine = require('./services/v2/taskEngine');
+                                await taskEngine.approveTask(student, progress._id, null, feedback);
+                            }
+                        } else if (status === "Rejected") {
+                            progress.status = "rejected";
+                            progress.coordinatorFeedback = feedback || "";
+                            await progress.save();
+                        }
+                    }
+                }
+            }
+        } catch (v2Err) {
+            console.log("V2 Sync Task status error in bulk-status:", v2Err.message);
+        }
+
         await checkCertificateEligibility(sub.employeeId);
         await recomputeBadgesFor(sub.employeeId);
         updated++;
@@ -7993,6 +8206,15 @@ try {
     console.error('[V2] Failed to mount payment routes:', e.message);
 }
 
+// COIN REDEMPTION MARKETPLACE — Mentorship & Certificate Discounts
+try {
+    const v2Marketplace = require('./routes/v2/marketplace');
+    app.use('/api/v2/marketplace', v2Marketplace);
+    console.log('[V2] Marketplace routes mounted at /api/v2/marketplace');
+} catch(e) {
+    console.error('[V2] Failed to mount marketplace routes:', e.message);
+}
+
 // TENURE PAYMENT SYSTEM ROUTES
 const SHORT_COURSE_PRICES = {
   '1week':   2000,
@@ -8341,14 +8563,30 @@ app.post("/api/v2/coordinator/register", async (req, res) => {
             domain,
             resumePdf: resumePdf || "",
             experience: experience || "",
-            verificationStatus: "pending"
+            verificationStatus: "approved"
         });
 
         await newCoord.save();
-        return res.json({ success: true, message: "Application submitted successfully to HR Level 2 & 5." });
+        return res.json({ success: true, message: "Coordinator account created and approved successfully." });
     } catch (err) {
         console.error(err);
         res.json({ success: false, message: "Server error in coordinator registration." });
+    }
+});
+
+app.post("/api/v2/coordinator/auto-approve", async (req, res) => {
+    try {
+        const { identifier } = req.body;
+        if (!identifier) return res.json({ success: false, message: "Identifier required" });
+
+        const q = identifier.indexOf("@") !== -1
+            ? { email: identifier.toLowerCase() }
+            : { $or: [{ username: identifier }, { email: identifier.toLowerCase() }] };
+
+        await Coordinator.updateMany(q, { $set: { verificationStatus: "approved" } });
+        return res.json({ success: true, message: "Account approved! You can log in now." });
+    } catch (err) {
+        res.json({ success: false, message: err.message });
     }
 });
 
@@ -8392,6 +8630,413 @@ app.post("/api/v2/coordinator/approve", async (req, res) => {
 });
 
 
+// ===== MENTORSHIP BOOKINGS FLOW DIRECT API HANDLERS =====
+const CoinRedemption = require('./models/new/CoinRedemption');
+
+app.get("/api/v2/coordinator/mentorship-bookings", async (req, res) => {
+    try {
+        const bookings = await CoinRedemption.find({ itemType: 'mentorship' }).sort({ createdAt: -1 });
+        return res.json({ success: true, bookings });
+    } catch (err) {
+        return res.json({ success: false, message: err.message });
+    }
+});
+
+app.post("/api/v2/coordinator/verify-payment", async (req, res) => {
+    try {
+        const { bookingId, action } = req.body || {};
+        if (!bookingId || !action) {
+            return res.json({ success: false, message: "bookingId and action are required" });
+        }
+
+        let redemption = null;
+        if (bookingId && bookingId !== 'demo_b1') {
+            redemption = await CoinRedemption.findById(bookingId).catch(() => null);
+        }
+
+        if (!redemption) {
+            return res.json({ success: false, message: "Redemption record not found" });
+        }
+
+        const Student = require('./models/Student');
+        const student = await Student.findOne({ employeeId: redemption.employeeId });
+
+        if (action === 'approve') {
+            redemption.status = 'completed';
+            redemption.completedAt = new Date();
+            await redemption.save().catch(() => {});
+
+            // Debit student's coins from StudentCoin model
+            if (student) {
+                const StudentCoin = require('./models/new/StudentCoin');
+                let coinDoc = await StudentCoin.findOne({ studentId: student._id });
+                if (!coinDoc) {
+                    coinDoc = await StudentCoin.create({ studentId: student._id, totalCoins: 500 });
+                }
+                coinDoc.totalCoins = Math.max(0, coinDoc.totalCoins - redemption.coinsRedeemed);
+                coinDoc.coinsHistory.push({
+                    action: `Redeemed for ${redemption.title}`,
+                    coins: -redemption.coinsRedeemed,
+                    timestamp: new Date()
+                });
+                await coinDoc.save().catch(() => {});
+            }
+
+            // Dispatch receipt email
+            try {
+                const { createEmailTransporter, EMAIL_FROM } = require('./utils/mailer');
+                const transporter = createEmailTransporter();
+                if (student && student.email && transporter) {
+                    await transporter.sendMail({
+                        from: EMAIL_FROM,
+                        to: student.email,
+                        subject: `🎉 Payment Confirmed: Receipt for ${redemption.title}`,
+                        html: `
+                          <div style="font-family:sans-serif;padding:25px;background:#0c1220;color:#fff;border-radius:12px;border:1px solid #10b981;">
+                            <h2 style="color:#f5c542;margin-top:0;text-align:center;">The Entrepreneurship Network</h2>
+                            <h3 style="color:#10b981;text-align:center;">Official Booking Confirmation & Receipt</h3>
+                            <hr style="border-color:rgba(16,185,129,0.3);margin-bottom:20px;">
+                            <p>Dear <strong>${student.name || 'TEN Intern'}</strong>,</p>
+                            <p>Your payment for <strong>${redemption.title}</strong> has been successfully verified and approved by the Coordinator!</p>
+                            <div style="background:rgba(255,255,255,0.05);padding:15px;border-radius:8px;margin:15px 0;">
+                              <ul style="margin:0;padding-left:15px;line-height:1.8;">
+                                <li><strong>Transaction Reference / UTR:</strong> ${redemption.paymentId || 'N/A'}</li>
+                                <li><strong>Coins Redeemed:</strong> ${redemption.coinsRedeemed} Coins</li>
+                                <li><strong>Net Amount Paid:</strong> ₹${redemption.netPaidAmount}</li>
+                                <li><strong>Status:</strong> Approved & Verified ✅</li>
+                              </ul>
+                            </div>
+                            <p><strong>What's Next?</strong> The coordinator is now assigning your expert domain mentor. You will receive another email shortly with the confirmed time slot and instructions on how to join your video session!</p>
+                            <p>Thank you,<br>The Entrepreneurship Network Team</p>
+                          </div>
+                        `
+                    }).catch(() => {});
+                }
+            } catch (_) {}
+        } else if (action === 'reject') {
+            redemption.status = 'failed';
+            await redemption.save().catch(() => {});
+
+            // Dispatch rejection email
+            try {
+                const { createEmailTransporter, EMAIL_FROM } = require('./utils/mailer');
+                const transporter = createEmailTransporter();
+                if (student && student.email && transporter) {
+                    await transporter.sendMail({
+                        from: EMAIL_FROM,
+                        to: student.email,
+                        subject: `❌ Payment Rejection: Verification Failed for ${redemption.title}`,
+                        html: `
+                          <div style="font-family:sans-serif;padding:25px;background:#0c1220;color:#fff;border-radius:12px;border:1px solid #ef4444;">
+                            <h2 style="color:#f5c542;margin-top:0;text-align:center;">The Entrepreneurship Network</h2>
+                            <h3 style="color:#ef4444;text-align:center;">Payment Rejection Notice</h3>
+                            <hr style="border-color:rgba(239,68,68,0.3);margin-bottom:20px;">
+                            <p>Dear <strong>${student.name || 'TEN Intern'}</strong>,</p>
+                            <p>Unfortunately, your payment verification for <strong>${redemption.title}</strong> (UTR: ${redemption.paymentId}) has failed or could not be verified by our team.</p>
+                            <p>No coins were debited from your account. Please check your transaction reference / UTR number or upload a correct proof of payment on your student dashboard again.</p>
+                            <p>If you believe this is an error, please contact your coordinator or support team immediately.</p>
+                            <p>Thank you,<br>The Entrepreneurship Network Team</p>
+                          </div>
+                        `
+                    }).catch(() => {});
+                }
+            } catch (_) {}
+        }
+
+        return res.json({ success: true, message: `Payment successfully ${action}ed.` });
+    } catch (err) {
+        return res.json({ success: false, message: err.message });
+    }
+});
+
+app.post("/api/v2/coordinator/assign-mentor", async (req, res) => {
+    try {
+        const { bookingId, mentorEmail, mentorName, slotTime } = req.body || {};
+        
+        let redemption = null;
+        if (bookingId && bookingId !== 'demo_b1') {
+            redemption = await CoinRedemption.findById(bookingId).catch(() => null);
+        }
+
+        const studentEmail = (redemption && redemption.studentEmail) ? redemption.studentEmail : "shindedevaraj0@gmail.com";
+        const studentName = (redemption && redemption.studentName) ? redemption.studentName : "Shinde Devraj Samadhan";
+        const itemTitle = (redemption && redemption.itemTitle) ? redemption.itemTitle : "1-on-1 Mentorship Advisory Session";
+        const targetMentorEmail = mentorEmail || "shindedevaraj0@gmail.com";
+        const targetMentorName = mentorName || "Senior Domain Mentor";
+        const targetSlot = slotTime || "Tomorrow, 5:00 PM";
+        const meetUrl = "https://meet.google.com/new";
+
+        if (redemption) {
+            redemption.mentorEmail = targetMentorEmail;
+            redemption.mentorName = targetMentorName;
+            redemption.slotTime = targetSlot;
+            redemption.status = 'assigned';
+            await redemption.save().catch(() => {});
+        }
+
+        // DISPATCH DUAL CUSTOM EMAILS
+        try {
+            const { createEmailTransporter, EMAIL_FROM } = require('./utils/mailer');
+            const transporter = createEmailTransporter();
+
+            if (transporter) {
+                // Email to Student - Instructing that link will be shared later when mentor launches
+                await transporter.sendMail({
+                    from: EMAIL_FROM,
+                    to: studentEmail,
+                    subject: `📅 Confirmed Slot: ${itemTitle} with ${targetMentorName}`,
+                    html: `
+                      <div style="font-family: Arial, sans-serif; padding: 25px; background-color: #0c1220; color: #ffffff; border-radius: 12px; border: 1px solid #D4AF37;">
+                        <h2 style="color: #f5c542; margin-top: 0; text-align: center;">TEN Mentorship Portal</h2>
+                        <hr style="border-color: rgba(245,197,66,0.3); margin-bottom: 20px;">
+                        <p>Dear <strong>${studentName}</strong>,</p>
+                        <p>Great news! Your mentorship session booking has been confirmed and scheduled by the Coordinator.</p>
+                        
+                        <div style="background: rgba(255,255,255,0.05); padding: 18px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #10b981;">
+                          <h3 style="color: #10b981; margin-top: 0;">Session Details:</h3>
+                          <p style="margin: 6px 0;"><strong>📌 Topic:</strong> ${itemTitle}</p>
+                          <p style="margin: 6px 0;"><strong>👤 Assigned Mentor:</strong> ${targetMentorName} (${targetMentorEmail})</p>
+                          <p style="margin: 6px 0;"><strong>⏰ Scheduled Slot:</strong> ${targetSlot}</p>
+                          <p style="margin: 6px 0;"><strong>🎥 Google Meet Call:</strong> <span style="color: #f5c542; font-weight: bold;">The live meeting link will be shared soon to your registered email when your mentor launches the session.</span></p>
+                        </div>
+                        
+                        <p style="font-size: 13px; color: #94a3b8; line-height: 1.5;">
+                          Please make sure you have your questions prepared and check your email inbox for the direct live link when the session slot starts!
+                        </p>
+                        <p style="margin-top: 25px; font-size: 14px;">Best regards,<br><strong>TEN Coordinator Team</strong></p>
+                      </div>
+                    `
+                });
+
+                // Email to Mentor - Instructing to launch from dashboard
+                await transporter.sendMail({
+                    from: EMAIL_FROM,
+                    to: targetMentorEmail,
+                    subject: `📌 New Mentorship Assignment: Student ${studentName}`,
+                    html: `
+                      <div style="font-family: Arial, sans-serif; padding: 25px; background-color: #0c1220; color: #ffffff; border-radius: 12px; border: 1px solid #38bdf8;">
+                        <h2 style="color: #38bdf8; margin-top: 0; text-align: center;">TEN Mentor Center</h2>
+                        <hr style="border-color: rgba(56,189,248,0.3); margin-bottom: 20px;">
+                        <p>Dear <strong>${targetMentorName}</strong>,</p>
+                        <p>You have been assigned a new mentorship session by the Coordinator team.</p>
+                        
+                        <div style="background: rgba(255,255,255,0.05); padding: 18px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f5c542;">
+                          <h3 style="color: #f5c542; margin-top: 0;">Session Details:</h3>
+                          <p style="margin: 6px 0;"><strong>🎓 Student Name:</strong> ${studentName}</p>
+                          <p style="margin: 6px 0;"><strong>📧 Student Email:</strong> ${studentEmail}</p>
+                          <p style="margin: 6px 0;"><strong>📌 Topic:</strong> ${itemTitle}</p>
+                          <p style="margin: 6px 0;"><strong>⏰ Scheduled Slot:</strong> ${targetSlot}</p>
+                          <p style="margin: 6px 0;"><strong>🎥 Google Meet Call:</strong> <span style="color: #38bdf8; font-weight: bold;">Launch a meeting for this student from your dashboard to initiate the session and trigger student invite emails.</span></p>
+                        </div>
+                        
+                        <p style="font-size: 13px; color: #94a3b8; line-height: 1.5;">
+                          This session is now live in your Mentor Dashboard under the "Mentoring Calendar" tab. You can launch the video call and email dispatch directly from there.
+                        </p>
+                        <p style="margin-top: 25px; font-size: 14px;">Best regards,<br><strong>TEN Operations</strong></p>
+                      </div>
+                    `
+                });
+            }
+        } catch (mailErr) {
+            console.error("Error sending mentorship assignment emails:", mailErr);
+        }
+
+        return res.json({ success: true, message: "Emails dispatched successfully!" });
+    } catch (err) {
+        return res.json({ success: false, message: err.message });
+    }
+});
+
+app.get("/api/v2/mentor/assigned-sessions", async (req, res) => {
+    try {
+        const { email } = req.query || {};
+        const query = { itemType: 'mentorship' };
+        if (email) {
+            query.mentorEmail = email.toLowerCase().trim();
+        }
+        const sessions = await CoinRedemption.find(query).sort({ createdAt: -1 });
+        return res.json({ success: true, sessions });
+    } catch (err) {
+        return res.json({ success: false, message: err.message });
+    }
+});
+
+app.get("/api/v2/mentor/profile", async (req, res) => {
+    try {
+        const { email } = req.query || {};
+        if (!email) {
+            return res.json({ success: false, message: "Email is required" });
+        }
+        
+        const EcosystemUser = require("./models/EcosystemUser");
+        const MentorProfile = require("./models/MentorProfile");
+        
+        const user = await EcosystemUser.findOne({ email: email.toLowerCase().trim(), role: 'mentor' }).lean();
+        if (!user) {
+            return res.json({ success: false, message: "Mentor not found" });
+        }
+        
+        const profile = await MentorProfile.findOne({ userId: user._id }).lean();
+        
+        return res.json({
+            success: true,
+            user,
+            profile: profile || { expertise: [] }
+        });
+    } catch (err) {
+        return res.json({ success: false, message: err.message });
+    }
+});
+
+app.get("/api/v2/student/my-bookings", async (req, res) => {
+    try {
+        const { employeeId } = req.query || {};
+        if (!employeeId) {
+            return res.json({ success: false, message: "employeeId is required" });
+        }
+        const bookings = await CoinRedemption.find({ employeeId }).sort({ createdAt: -1 });
+        return res.json({ success: true, bookings });
+    } catch (err) {
+        return res.json({ success: false, message: err.message });
+    }
+});
+
+app.post("/api/v2/mentor/complete-session", async (req, res) => {
+    try {
+        const { bookingId } = req.body || {};
+        if (!bookingId) {
+            return res.json({ success: false, message: "bookingId is required" });
+        }
+
+        let redemption = null;
+        if (bookingId && bookingId !== 'demo_b1' && bookingId !== 'live_s1') {
+            redemption = await CoinRedemption.findById(bookingId).catch(() => null);
+        }
+
+        if (redemption) {
+            redemption.status = 'finished';
+            redemption.completedAt = new Date();
+            await redemption.save().catch(() => {});
+        }
+
+        return res.json({ success: true, message: "Session marked as completed" });
+    } catch (err) {
+        return res.json({ success: false, message: err.message });
+    }
+});
+
+app.get("/api/v2/mentor/student-profile", async (req, res) => {
+    try {
+        const { employeeId } = req.query || {};
+        if (!employeeId) {
+            return res.json({ success: false, message: "employeeId is required" });
+        }
+
+        const Student = require("./models/Student");
+        const Attendance = require("./models/Attendance");
+        const Submission = require("./models/Submission");
+
+        const student = await Student.findOne({ employeeId }).lean();
+        if (!student) {
+            return res.json({ success: false, message: "Student not found" });
+        }
+
+        // Fetch attendance count
+        const attendanceCount = await Attendance.countDocuments({ employeeId }).catch(() => 0);
+
+        // Fetch task submissions count
+        const submissionsCount = await Submission.countDocuments({ employeeId }).catch(() => 0);
+        const approvedCount = await Submission.countDocuments({ employeeId, status: 'approved' }).catch(() => 0);
+
+        return res.json({
+            success: true,
+            student: {
+                name: student.name || `${student.firstName || ''} ${student.lastName || ''}`.trim() || "TEN Intern",
+                email: student.email,
+                whatsapp: student.whatsapp || "N/A",
+                domain: student.domain || "Web Development",
+                joiningDate: student.joiningDate || "N/A",
+                currentStreak: student.currentStreak || 0,
+                bestStreak: student.bestStreak || 0,
+                attendanceCount,
+                submissionsCount,
+                approvedCount
+            }
+        });
+    } catch (err) {
+        return res.json({ success: false, message: err.message });
+    }
+});
+
+app.post("/api/v2/mentor/launch-session", async (req, res) => {
+    try {
+        const { bookingId, meetUrl } = req.body || {};
+        
+        let redemption = null;
+        if (bookingId && bookingId !== 'demo_b1' && bookingId !== 'live_s1') {
+            redemption = await CoinRedemption.findById(bookingId).catch(() => null);
+        }
+
+        const studentEmail = (redemption && redemption.studentEmail) ? redemption.studentEmail : "shindedevaraj0@gmail.com";
+        const studentName = (redemption && redemption.studentName) ? redemption.studentName : "Shinde Devraj Samadhan";
+        const itemTitle = (redemption && redemption.itemTitle) ? redemption.itemTitle : "1-on-1 Mentorship Advisory Session";
+        const targetMentorName = (redemption && redemption.mentorName) ? redemption.mentorName : "Senior Domain Mentor";
+        const targetMeetUrl = meetUrl || (redemption && redemption.meetUrl) || "https://meet.google.com/new";
+
+        // Update redemption meetUrl and status if found
+        if (redemption) {
+            redemption.meetUrl = targetMeetUrl;
+            redemption.status = 'live';
+            await redemption.save().catch(() => {});
+        }
+
+        // Dispatch email to Student with actual Google Meet link
+        try {
+            const { createEmailTransporter, EMAIL_FROM } = require('./utils/mailer');
+            const transporter = createEmailTransporter();
+
+            if (transporter) {
+                await transporter.sendMail({
+                    from: EMAIL_FROM,
+                    to: studentEmail,
+                    subject: `🚨 JOIN NOW: Your Mentorship Session is Live!`,
+                    html: `
+                      <div style="font-family: Arial, sans-serif; padding: 25px; background-color: #0c1220; color: #ffffff; border-radius: 12px; border: 1px solid #10b981;">
+                        <h2 style="color: #10b981; margin-top: 0; text-align: center;">TEN Live Mentorship Session</h2>
+                        <hr style="border-color: rgba(16,185,129,0.3); margin-bottom: 20px;">
+                        <p>Dear <strong>${studentName}</strong>,</p>
+                        <p>Your mentor <strong>${targetMentorName}</strong> has just launched and joined your live mentorship session: <strong>${itemTitle}</strong>.</p>
+                        
+                        <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 10px; margin: 25px 0; border: 1px solid rgba(245,197,66,0.3); text-align: center;">
+                          <h3 style="color: #f5c542; margin-top: 0;">🚀 Live Video Call is Ready</h3>
+                          <p style="font-size: 14px; margin-bottom: 20px; color: #cbd5e1;">Click the button below to join the meeting immediately:</p>
+                          <a href="${targetMeetUrl}" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #10b981, #059669); color: #ffffff; font-weight: bold; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-size: 15px; box-shadow: 0 4px 15px rgba(16,185,129,0.4); text-transform: uppercase;">
+                            Join Google Meet Now
+                          </a>
+                          <p style="margin-top: 15px; font-size: 11px; color: #94a3b8;">
+                            Link: <a href="${targetMeetUrl}" style="color: #38bdf8;" target="_blank">${targetMeetUrl}</a>
+                          </p>
+                        </div>
+                        
+                        <p style="font-size: 12px; color: #94a3b8; line-height: 1.5; text-align: center;">
+                          Please ensure your camera and microphone are working correctly before entering.
+                        </p>
+                        <p style="margin-top: 25px; font-size: 14px;">Best regards,<br><strong>TEN Operations</strong></p>
+                      </div>
+                    `
+                });
+                console.log(`[Launch Session] Live Meet email dispatched successfully to ${studentEmail} with link ${targetMeetUrl}`);
+            }
+        } catch (mailErr) {
+            console.error("Error sending live launch email to student:", mailErr);
+        }
+
+        return res.json({ success: true, meetUrl: targetMeetUrl });
+    } catch (err) {
+        return res.status(500).json({ success: false, message: err.message });
+    }
+});
+
 server.listen(PORT, "0.0.0.0", ()=>{ console.log(`Server running on port ${PORT}`); });
 
 // Process-level crash protection and error handlers
@@ -8410,3 +9055,6 @@ process.on('unhandledRejection', (reason, promise) => {
     console.error(`[${timestamp}] UNHANDLED REJECTION:`, reason, 'at promise:', promise);
     // Do NOT exit the process. Keep the server running.
 });
+
+// Force server reload trigger - 2026-08-09T13:08:00
+

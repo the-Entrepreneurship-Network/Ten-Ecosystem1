@@ -1,0 +1,200 @@
+[
+  {
+    "studentId": "6a6973d2e43e889353aac320",
+    "employeeId": "TEN/PY/1004",
+    "badgeId": "first_step",
+    "badgeName": "First Step",
+    "badgeIcon": "👣",
+    "awardedAt": "2026-07-29T03:36:21.974Z",
+    "_id": "6a697535e43e889353aac55b",
+    "createdAt": "2026-07-29T03:36:21.974Z",
+    "updatedAt": "2026-07-29T03:36:21.974Z"
+  },
+  {
+    "studentId": "6a6973d2e43e889353aac320",
+    "employeeId": "TEN/PY/1004",
+    "badgeId": "halfway_there",
+    "badgeName": "Halfway There",
+    "badgeIcon": "🎯",
+    "awardedAt": "2026-07-29T03:36:21.985Z",
+    "_id": "6a697535e43e889353aac55e",
+    "createdAt": "2026-07-29T03:36:21.985Z",
+    "updatedAt": "2026-07-29T03:36:21.985Z"
+  },
+  {
+    "studentId": "6a6973d2e43e889353aac320",
+    "employeeId": "TEN/PY/1004",
+    "badgeId": "graduate",
+    "badgeName": "Graduate",
+    "badgeIcon": "🎓",
+    "awardedAt": "2026-07-29T03:36:21.990Z",
+    "_id": "6a697535e43e889353aac561",
+    "createdAt": "2026-07-29T03:36:21.990Z",
+    "updatedAt": "2026-07-29T03:36:21.990Z"
+  },
+  {
+    "studentId": "6a6973d2e43e889353aac320",
+    "employeeId": "TEN/PY/1004",
+    "badgeId": "top_performer",
+    "badgeName": "Top Performer",
+    "badgeIcon": "👑",
+    "awardedAt": "2026-07-29T03:36:22.005Z",
+    "_id": "6a697536e43e889353aac569",
+    "createdAt": "2026-07-29T03:36:22.005Z",
+    "updatedAt": "2026-07-29T03:36:22.005Z"
+  },
+  {
+    "studentId": "6a691878e43e889353aac239",
+    "employeeId": "TEN/WEB/1003",
+    "badgeId": "first_step",
+    "badgeName": "First Step",
+    "badgeIcon": "👣",
+    "awardedAt": "2026-07-29T04:28:22.428Z",
+    "_id": "6a698166e43e889353aaca00",
+    "createdAt": "2026-07-29T04:28:22.429Z",
+    "updatedAt": "2026-07-29T04:28:22.429Z"
+  },
+  {
+    "studentId": "6a691878e43e889353aac239",
+    "employeeId": "TEN/WEB/1003",
+    "badgeId": "top_performer",
+    "badgeName": "Top Performer",
+    "badgeIcon": "👑",
+    "awardedAt": "2026-07-29T04:28:22.439Z",
+    "_id": "6a698166e43e889353aaca0a",
+    "createdAt": "2026-07-29T04:28:22.439Z",
+    "updatedAt": "2026-07-29T04:28:22.439Z"
+  },
+  {
+    "studentId": "6a691878e43e889353aac239",
+    "employeeId": "TEN/WEB/1003",
+    "badgeId": "first_step",
+    "badgeName": "First Step",
+    "badgeIcon": "👣",
+    "awardedAt": "2026-08-01T13:57:53.401Z",
+    "_id": "6a6dfb6190d010a3541296cd",
+    "createdAt": "2026-08-01T13:57:53.401Z",
+    "updatedAt": "2026-08-01T13:57:53.401Z"
+  },
+  {
+    "studentId": "6a691878e43e889353aac239",
+    "employeeId": "TEN/WEB/1003",
+    "badgeId": "top_performer",
+    "badgeName": "Top Performer",
+    "badgeIcon": "👑",
+    "awardedAt": "2026-08-01T13:57:53.415Z",
+    "_id": "6a6dfb6190d010a3541296da",
+    "createdAt": "2026-08-01T13:57:53.416Z",
+    "updatedAt": "2026-08-01T13:57:53.416Z"
+  },
+  {
+    "studentId": "6a691878e43e889353aac239",
+    "employeeId": "TEN/WEB/1003",
+    "badgeId": "first_step",
+    "badgeName": "First Step",
+    "badgeIcon": "👣",
+    "awardedAt": "2026-08-03T09:30:11.719Z",
+    "_id": "6a705fa3fb592e90f34f6a38",
+    "createdAt": "2026-08-03T09:30:11.720Z",
+    "updatedAt": "2026-08-03T09:30:11.720Z"
+  },
+  {
+    "studentId": "6a691878e43e889353aac239",
+    "employeeId": "TEN/WEB/1003",
+    "badgeId": "top_performer",
+    "badgeName": "Top Performer",
+    "badgeIcon": "👑",
+    "awardedAt": "2026-08-03T09:30:11.733Z",
+    "_id": "6a705fa3fb592e90f34f6a48",
+    "createdAt": "2026-08-03T09:30:11.733Z",
+    "updatedAt": "2026-08-03T09:30:11.733Z"
+  },
+  {
+    "studentId": "6a691878e43e889353aac239",
+    "employeeId": "TEN/WEB/1003",
+    "badgeId": "first_step",
+    "badgeName": "First Step",
+    "badgeIcon": "👣",
+    "awardedAt": "2026-08-03T19:02:42.045Z",
+    "_id": "6a70e5d2fb592e90f34f8078",
+    "createdAt": "2026-08-03T19:02:42.047Z",
+    "updatedAt": "2026-08-03T19:02:42.047Z"
+  },
+  {
+    "studentId": "6a691878e43e889353aac239",
+    "employeeId": "TEN/WEB/1003",
+    "badgeId": "top_performer",
+    "badgeName": "Top Performer",
+    "badgeIcon": "👑",
+    "awardedAt": "2026-08-03T19:02:42.068Z",
+    "_id": "6a70e5d2fb592e90f34f808b",
+    "createdAt": "2026-08-03T19:02:42.068Z",
+    "updatedAt": "2026-08-03T19:02:42.068Z"
+  },
+  {
+    "studentId": "6a691878e43e889353aac239",
+    "employeeId": "TEN/WEB/1003",
+    "badgeId": "first_step",
+    "badgeName": "First Step",
+    "badgeIcon": "👣",
+    "awardedAt": "2026-08-07T03:58:21.888Z",
+    "_id": "6a7557dd461c3b735118a6d2",
+    "createdAt": "2026-08-07T03:58:21.889Z",
+    "updatedAt": "2026-08-07T03:58:21.889Z"
+  },
+  {
+    "studentId": "6a691878e43e889353aac239",
+    "employeeId": "TEN/WEB/1003",
+    "badgeId": "top_performer",
+    "badgeName": "Top Performer",
+    "badgeIcon": "👑",
+    "awardedAt": "2026-08-07T03:58:21.903Z",
+    "_id": "6a7557dd461c3b735118a6f4",
+    "createdAt": "2026-08-07T03:58:21.903Z",
+    "updatedAt": "2026-08-07T03:58:21.903Z"
+  },
+  {
+    "studentId": "6a761bc543658b96302b2da5",
+    "employeeId": "TEN/WEB/1005",
+    "badgeId": "first_step",
+    "badgeName": "First Step",
+    "badgeIcon": "👣",
+    "awardedAt": "2026-08-07T17:55:12.003Z",
+    "_id": "6a761c0043658b96302b2f44",
+    "createdAt": "2026-08-07T17:55:12.004Z",
+    "updatedAt": "2026-08-07T17:55:12.004Z"
+  },
+  {
+    "studentId": "6a761bc543658b96302b2da5",
+    "employeeId": "TEN/WEB/1005",
+    "badgeId": "attendance_champion",
+    "badgeName": "Attendance Champion",
+    "badgeIcon": "🏆",
+    "awardedAt": "2026-08-07T17:55:12.008Z",
+    "_id": "6a761c0043658b96302b2f47",
+    "createdAt": "2026-08-07T17:55:12.008Z",
+    "updatedAt": "2026-08-07T17:55:12.008Z"
+  },
+  {
+    "studentId": "6a691878e43e889353aac239",
+    "employeeId": "TEN/WEB/1003",
+    "badgeId": "first_step",
+    "badgeName": "First Step",
+    "badgeIcon": "👣",
+    "awardedAt": "2026-08-09T17:12:38.744Z",
+    "_id": "6a78b506db3011e942db02c2",
+    "createdAt": "2026-08-09T17:12:38.747Z",
+    "updatedAt": "2026-08-09T17:12:38.747Z"
+  },
+  {
+    "studentId": "6a691878e43e889353aac239",
+    "employeeId": "TEN/WEB/1003",
+    "badgeId": "top_performer",
+    "badgeName": "Top Performer",
+    "badgeIcon": "👑",
+    "awardedAt": "2026-08-09T17:12:38.814Z",
+    "_id": "6a78b506db3011e942db02ec",
+    "createdAt": "2026-08-09T17:12:38.815Z",
+    "updatedAt": "2026-08-09T17:12:38.815Z"
+  }
+]

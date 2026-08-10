@@ -124,10 +124,22 @@ async function getCertStatus(student) {
         daysSinceJoin = Math.floor((Date.now() - j.getTime()) / (1000 * 60 * 60 * 24));
     }
 
-    const expertUnlocked     = completionPct >= 30;
-    const nanoDegreeUnlocked = completionPct >= 70;
-    // Fellowship requires BOTH conditions: top 10% cohort rank AND 70%+ completion
-    const fellowshipUnlocked = cohortRankPct <= 10 && completionPct >= 70;
+    // Check if student has completed coin redemptions for each certificate type
+    let redeemedKeys = new Set();
+    try {
+        const CoinRedemption = require('../../models/new/CoinRedemption');
+        const completedRedemptions = await CoinRedemption.find({
+            employeeId: student.employeeId,
+            itemType: 'certificate',
+            status: 'completed'
+        }).select('itemKey').lean();
+        redeemedKeys = new Set(completedRedemptions.map(r => r.itemKey));
+    } catch (_) {}
+
+    const expertUnlocked     = completionPct >= 30 || redeemedKeys.has('cert_expert');
+    const nanoDegreeUnlocked = completionPct >= 70 || redeemedKeys.has('cert_nano');
+    // Fellowship requires BOTH conditions: top 10% cohort rank AND 70%+ completion, or purchased
+    const fellowshipUnlocked = (cohortRankPct <= 10 && completionPct >= 70) || redeemedKeys.has('cert_fellowship');
 
     return { completionPct, cohortRankPct, daysSinceJoin, expertUnlocked, nanoDegreeUnlocked, fellowshipUnlocked };
 }
@@ -301,6 +313,23 @@ router.post("/certificates/claim/:type", requireStudent, async (req, res) => {
 
         if (!unlocked) {
             return res.status(403).json({ success: false, message: "You have not yet unlocked this certificate" });
+        }
+
+        // Check if student has already paid for this certificate upgrade via marketplace
+        const CoinRedemption = require('../../models/new/CoinRedemption');
+        const redemption = await CoinRedemption.findOne({
+            employeeId: student.employeeId,
+            itemType: 'certificate',
+            itemKey: type === 'expert' ? 'cert_expert' : type === 'nano_degree' ? 'cert_nano' : 'cert_fellowship',
+            status: 'completed'
+        });
+
+        if (redemption) {
+            return res.json({
+                success: true,
+                status: "payment_bypassed",
+                message: "Subsidized payment verified! Generating certificate..."
+            });
         }
 
         // Check for existing cert record

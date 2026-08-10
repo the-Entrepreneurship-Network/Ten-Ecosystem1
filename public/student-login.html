@@ -85,6 +85,20 @@
   </div>
 
   <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const params = new URLSearchParams(window.location.search);
+      const urlEmail = params.get("email");
+      const savedEmail = sessionStorage.getItem("lastRegisteredEmail");
+      const emailToUse = urlEmail || savedEmail;
+
+      if (emailToUse) {
+        const loginInput = document.getElementById("loginId");
+        if (loginInput) {
+          loginInput.value = emailToUse;
+        }
+      }
+    });
+
     document.getElementById("loginForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const loading = document.getElementById("loadingText");
@@ -123,6 +137,9 @@
           }
 
           localStorage.setItem("role", "student");
+          if (data.sessionToken) {
+            localStorage.setItem("sessionToken", data.sessionToken);
+          }
           if (data.user) {
             localStorage.setItem("user", JSON.stringify(data.user));
             localStorage.setItem("userId", data.user._id);
@@ -130,7 +147,7 @@
           if (data.student) {
             localStorage.setItem("employeeId", data.student.employeeId);
             localStorage.setItem("student", JSON.stringify(data.student));
-            localStorage.setItem("ten_token", data.student.employeeId);
+            localStorage.setItem("ten_token", data.sessionToken || data.student.employeeId);
             localStorage.setItem("ten_employee_id", data.student.employeeId);
           }
 
@@ -173,5 +190,13 @@
     });
   </script>
   <script src="/password-toggle.js"></script>
+  <script src="/forgot-password.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      if (window.TenForgotPassword) {
+        TenForgotPassword.init({ role: "student" });
+      }
+    });
+  </script>
 </body>
 </html>

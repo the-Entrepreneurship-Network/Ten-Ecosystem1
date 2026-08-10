@@ -175,8 +175,40 @@ async function registerUser(req, res) {
     if (!password || password.length < 8) {
       return res.status(400).json({ success: false, error: 'Password must be at least 8 characters.' });
     }
+    if (req.body.confirmPassword && req.body.confirmPassword !== password) {
+      return res.status(400).json({ success: false, error: 'Password and Confirm Password do not match.' });
+    }
     if (!role || !ALL_ROLES.includes(role)) {
       return res.status(400).json({ success: false, error: `role must be one of: ${ALL_ROLES.join(', ')}` });
+    }
+
+    // Role specific mandatory field validations for Student
+    if (role === ROLES.STUDENT) {
+      const mobile = roleSpecificData.mobile || req.body.mobile;
+      if (!mobile || !/^\+?[0-9]{10,15}$/.test(mobile.replace(/[\s-]/g, ''))) {
+        return res.status(400).json({ success: false, error: 'Valid 10+ digit mobile number is required.' });
+      }
+      if (!roleSpecificData.country || !roleSpecificData.state || !roleSpecificData.city) {
+        return res.status(400).json({ success: false, error: 'Country, State, and City selection are mandatory.' });
+      }
+      if (!roleSpecificData.university || !roleSpecificData.degree || !roleSpecificData.academicYear) {
+        return res.status(400).json({ success: false, error: 'College/University, Degree, and Academic Year are mandatory.' });
+      }
+      if (!roleSpecificData.skills || (typeof roleSpecificData.skills === 'string' && !roleSpecificData.skills.trim())) {
+        return res.status(400).json({ success: false, error: 'At least one skill is required.' });
+      }
+      if (!roleSpecificData.portfolio || !/^https?:\/\/.+\..+/.test(roleSpecificData.portfolio.trim())) {
+        return res.status(400).json({ success: false, error: 'Valid Portfolio URL is mandatory (e.g. https://myportfolio.com).' });
+      }
+      if (!roleSpecificData.linkedin || !/^https?:\/\/(www\.)?linkedin\.com\/.+/.test(roleSpecificData.linkedin.trim())) {
+        return res.status(400).json({ success: false, error: 'Valid LinkedIn profile URL is mandatory.' });
+      }
+      if (roleSpecificData.resume && typeof roleSpecificData.resume === 'string') {
+        const resumePath = roleSpecificData.resume.toLowerCase();
+        if (!resumePath.endsWith('.pdf') && !resumePath.includes('pdf')) {
+          return res.status(400).json({ success: false, error: 'Resume must strictly be a PDF file.' });
+        }
+      }
     }
 
     const trimmedEmail = email.toLowerCase().trim();
@@ -205,7 +237,7 @@ async function registerUser(req, res) {
       password: hashedPassword,
       role:     role,
       phone:    roleSpecificData.mobile || "",
-      isVerified: true
+      isVerified: role === ROLES.MENTOR ? false : true
     });
 
     let genMemberId = '';
@@ -369,7 +401,7 @@ async function registerUser(req, res) {
         memberId: genMemberId,
         headline: `${roleSpecificData.designation} at ${roleSpecificData.company}`,
         linkedinUrl: roleSpecificData.linkedin || "",
-        verificationStatus: 'approved'
+        verificationStatus: 'pending'
       });
 
       // Automatically create Talent Profile for mentors

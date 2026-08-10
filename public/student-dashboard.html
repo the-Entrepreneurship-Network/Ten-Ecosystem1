@@ -12,7 +12,7 @@
 <title>TEN — Student Dashboard</title>
 <link rel="stylesheet" href="ten-theme.css">
 <link rel="stylesheet" href="ten-motion.css">
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
@@ -43,11 +43,11 @@
 :root {
   --bg-base:        #05070e;
   --bg-surface:     #090d1a;
-  --bg-card:        #0e1428;
-  --bg-card-hover:  #121933;
+  --bg-card:        rgba(14, 20, 40, 0.55);
+  --bg-card-hover:  rgba(18, 25, 51, 0.65);
   --bg-input:       #0b1222;
-  --border:         rgba(212,175,55,0.08);
-  --border-strong:  rgba(212,175,55,0.18);
+  --border:         rgba(255, 255, 255, 0.05);
+  --border-strong:  rgba(255, 255, 255, 0.15);
   --accent-blue:    #3b82f6;
   --accent-cyan:    #06b6d4;
   --accent-green:   #10b981;
@@ -55,13 +55,13 @@
   --accent-red:     #ef4444;
   --accent-gold:    #D4AF37;
   --text-primary:   #F0EEE8;
-  --text-secondary: #9a9080;
+  --text-secondary: #94a3b8;
   --text-muted:     #4E4840;
   --radius-sm:      10px;
   --radius-md:      16px;
   --radius-lg:      22px;
   --radius-xl:      28px;
-  --shadow-card:    0 4px 24px rgba(0,0,0,0.35);
+  --shadow-card:    0 8px 32px rgba(0,0,0,0.3);
   --shadow-glow:    0 0 40px rgba(59,130,246,0.12);
   /* Domain colour — set by JS on load */
   --domain-color:   #3b82f6;
@@ -1173,16 +1173,21 @@ button:active { transform: translateY(0); }
   padding: 20px 0;
 }
 .section-cards-heading {
-  font-size: 28px;
-  font-weight: 800;
+  font-family: 'Outfit', sans-serif;
+  font-size: 32px;
+  font-weight: 900;
   letter-spacing: -0.5px;
-  margin-bottom: 6px;
-  color: var(--text-primary);
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, #ffffff 40%, #c9a227 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: inline-block;
 }
 .section-cards-sub {
   font-size: 14px;
-  color: var(--text-secondary);
+  color: #94a3b8;
   margin-bottom: 28px;
+  font-weight: 500;
 }
 .section-card-grid {
   display: grid;
@@ -1191,13 +1196,20 @@ button:active { transform: translateY(0); }
 }
 .sec-card {
   position: relative;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  background: rgba(14, 20, 40, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 24px;
   padding: 28px 24px;
   cursor: pointer;
-  transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), 
+              border-color 0.3s ease, 
+              box-shadow 0.3s ease, 
+              background-color 0.3s ease;
   overflow: hidden;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.35), 
+              inset 0 1px 1px 0 rgba(255, 255, 255, 0.05);
 }
 .sec-card::before {
   content: '';
@@ -1206,29 +1218,40 @@ button:active { transform: translateY(0); }
   width: 100%; height: 3px;
   background: linear-gradient(90deg, var(--accent-blue), var(--accent-cyan));
   opacity: 0;
-  transition: opacity 0.22s;
+  transition: opacity 0.3s ease;
 }
 .sec-card:hover {
-  transform: translateY(-5px);
-  border-color: var(--border-strong);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(59,130,246,0.1);
+  transform: translateY(-6px) scale(1.015);
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(18, 25, 51, 0.65);
+  box-shadow: 0 16px 48px 0 rgba(0, 0, 0, 0.55), 
+              0 0 20px 0 rgba(59, 130, 246, 0.15), 
+              inset 0 1px 2px 0 rgba(255, 255, 255, 0.1);
 }
 .sec-card:hover::before { opacity: 1; }
 .sec-card-icon {
-  font-size: 32px;
-  margin-bottom: 14px;
+  font-size: 34px;
+  margin-bottom: 16px;
   line-height: 1;
+  transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+.sec-card:hover .sec-card-icon {
+  transform: scale(1.18) rotate(6deg);
 }
 .sec-card-title {
-  font-size: 16px;
-  font-weight: 700;
+  font-family: 'Outfit', sans-serif;
+  font-size: 17px;
+  font-weight: 800;
   color: var(--text-primary);
-  margin-bottom: 6px;
+  margin-bottom: 8px;
+  letter-spacing: 0.3px;
+  transition: color 0.3s ease;
 }
 .sec-card-desc {
   font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.5;
+  color: #94a3b8;
+  line-height: 1.6;
+  font-weight: 500;
 }
 
 /* ════════════════════════════════
@@ -1751,31 +1774,31 @@ button:active { transform: translateY(0); }
         <div class="sec-card-desc">Leaderboard, badges and achievements</div>
       </div>
       <!-- NEW FEATURE: V2 Task Journey card -->
-      <div class="sec-card" onclick="window.location.href='v2-tasks.html'" style="border-color:rgba(212,175,55,0.25);background:linear-gradient(135deg,rgba(212,175,55,0.06),rgba(212,175,55,0.02));">
+      <div class="sec-card" onclick="window.location.href='v2-tasks.html'" style="border-color:rgba(212,175,55,0.3);background:linear-gradient(135deg,rgba(212,175,55,0.1),rgba(14,20,40,0.45));">
         <div class="sec-card-icon">🪙</div>
         <div class="sec-card-title" style="color:#D4AF37;">Task Journey <span style="font-size:10px;background:rgba(212,175,55,0.2);color:#D4AF37;padding:1px 7px;border-radius:4px;margin-left:4px;font-weight:800;vertical-align:middle;">NEW</span></div>
         <div class="sec-card-desc">Weekly tasks, coins &amp; sequential unlocks</div>
       </div>
       <!-- NEW FEATURE: My Documents card -->
-      <div class="sec-card" onclick="window.location.href='my-documents.html'" style="border-color:rgba(245,158,11,0.25);background:linear-gradient(135deg,rgba(245,158,11,0.06),rgba(245,158,11,0.02));">
+      <div class="sec-card" onclick="window.location.href='my-documents.html'" style="border-color:rgba(245,158,11,0.3);background:linear-gradient(135deg,rgba(245,158,11,0.1),rgba(14,20,40,0.45));">
         <div class="sec-card-icon">📋</div>
         <div class="sec-card-title" style="color:#f59e0b;">My Documents <span style="font-size:10px;background:rgba(245,158,11,0.2);color:#f59e0b;padding:1px 7px;border-radius:4px;margin-left:4px;font-weight:800;vertical-align:middle;">NEW</span></div>
         <div class="sec-card-desc">Upload address proof &amp; marksheet to get your Offer Letter</div>
       </div>
       <!-- NEW FEATURE: My Certificates card -->
-      <div class="sec-card" onclick="window.location.href='my-certificates.html'" style="border-color:rgba(139,92,246,0.25);background:linear-gradient(135deg,rgba(139,92,246,0.06),rgba(139,92,246,0.02));">
+      <div class="sec-card" onclick="window.location.href='my-certificates.html'" style="border-color:rgba(139,92,246,0.3);background:linear-gradient(135deg,rgba(139,92,246,0.1),rgba(14,20,40,0.45));">
         <div class="sec-card-icon">🏅</div>
         <div class="sec-card-title" style="color:#c4b5fd;">My Certificates <span style="font-size:10px;background:rgba(139,92,246,0.2);color:#c4b5fd;padding:1px 7px;border-radius:4px;margin-left:4px;font-weight:800;vertical-align:middle;">NEW</span></div>
         <div class="sec-card-desc">Expert, Nano Degree &amp; Fellowship certificates</div>
       </div>
       <!-- Payment card -->
-      <div class="sec-card" onclick="showPaymentComingSoon()" style="border-color:rgba(16,185,129,0.25);background:linear-gradient(135deg,rgba(16,185,129,0.06),rgba(16,185,129,0.02));">
+      <div class="sec-card" onclick="showPaymentComingSoon()" style="border-color:rgba(16,185,129,0.3);background:linear-gradient(135deg,rgba(16,185,129,0.1),rgba(14,20,40,0.45));">
         <div class="sec-card-icon">💳</div>
         <div class="sec-card-title" style="color:#10b981;">Make Payment <span style="font-size:10px;background:rgba(16,185,129,0.2);color:#10b981;padding:1px 7px;border-radius:4px;margin-left:4px;font-weight:800;vertical-align:middle;">NEW</span></div>
         <div class="sec-card-desc">Pay fees securely via UPI — PhonePe, GPay, Paytm &amp; more</div>
       </div>
       <!-- TEN Network card -->
-      <div class="sec-card" onclick="window.location.href='ten-network.html'" style="border-color:rgba(212,175,55,0.3);background:linear-gradient(135deg,rgba(212,175,55,0.08),rgba(212,175,55,0.02));">
+      <div class="sec-card" onclick="window.location.href='ten-network.html'" style="border-color:rgba(212,175,55,0.35);background:linear-gradient(135deg,rgba(212,175,55,0.12),rgba(14,20,40,0.45));">
         <div class="sec-card-icon">🌐</div>
         <div class="sec-card-title" style="color:#D4AF37;">TEN Network <span style="font-size:10px;background:rgba(212,175,55,0.2);color:#D4AF37;padding:1px 7px;border-radius:4px;margin-left:4px;font-weight:800;vertical-align:middle;">NEW</span></div>
         <div class="sec-card-desc">Explore TEN global community, ecosystem &amp; programs</div>
@@ -2014,7 +2037,7 @@ button:active { transform: translateY(0); }
         <b style="color:#D4AF37;font-size:13px;">📋 Attendance (Mandatory)</b>
         <p style="font-size:13px;color:#9a8a6a;margin:6px 0 0;line-height:1.8;">Fill the attendance form twice daily (morning &amp; evening). Screenshot and share in group if allowed.</p>
         <div style="margin-top: 10px;">
-          <a href="https://forms.gle/attendanceFormPlaceholder" target="_blank" rel="noopener" style="display: inline-block; background: #D4AF37; color: #0c1220; font-weight: bold; font-size: 11px; padding: 6px 12px; border-radius: 6px; text-decoration: none; transition: background 0.2s;" onmouseover="this.style.background='#f5c542'" onmouseout="this.style.background='#D4AF37'">
+          <a href="https://docs.google.com/forms/d/e/1FAIpQLSf3qZwNUgQl7vqqTnGW4PKrMDwRWPJEMiVQ-NUI6h4NnJa8Zg/viewform" target="_blank" rel="noopener" style="display: inline-block; background: #D4AF37; color: #0c1220; font-weight: bold; font-size: 11px; padding: 6px 12px; border-radius: 6px; text-decoration: none; transition: background 0.2s;" onmouseover="this.style.background='#f5c542'" onmouseout="this.style.background='#D4AF37'">
             📝 Submit Attendance Google Form
           </a>
         </div>
@@ -2249,17 +2272,64 @@ button:active { transform: translateY(0); }
 
   <!-- ══════ VIEW: ATTENDANCE ══════ -->
   <div class="stu-view" id="stu-view-attendance">
-  <!-- ── ATTENDANCE BOX (NEW: daily self-attendance) ── -->
+  <!-- ── ATTENDANCE BOX (Daily Self-Attendance + Mandatory Google Form Workflow) ── -->
   <div class="attendance-box">
-    <div class="section-title">
+    <div class="section-title" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
       <div>
-        <h2>🪪 Daily Attendance</h2>
-        <p id="attendanceStatus">Mark your attendance once every day.</p>
+        <h2>🪪 Daily Attendance Dashboard</h2>
+        <p id="attendanceStatus" style="font-size:13px;color:#94a3b8;">🔒 Step 1 Required: Complete the Mandatory Google Form to unlock today's attendance button.</p>
         <p id="attendanceThreshold" style="font-size:12px;color:#f59e0b;margin-top:4px;"></p>
       </div>
-      <button id="attendanceBtn" class="attendance-btn" onclick="markSelfAttendance()">
-        ✅ Mark Today's Attendance
+      <button type="button" onclick="resetTodayAttendanceTest()" style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); color: #cbd5e1; font-size: 11px; font-weight: 700; padding: 6px 14px; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;">
+        🔄 Reset Today (Re-test Lock Flow)
       </button>
+    </div>
+
+    <!-- Clean 2-Step Attendance Completion Card -->
+    <div style="background: rgba(15,23,42,0.8); border: 1px solid rgba(212,175,55,0.2); border-radius: 16px; padding: 20px; margin-bottom: 24px; box-shadow: 0 8px 32px rgba(0,0,0,0.2);">
+      
+      <!-- STEP 1 CONTAINER -->
+      <div id="gformStepContainer" style="background: rgba(245,158,11,0.06); border: 1px solid rgba(245,158,11,0.25); border-radius: 12px; padding: 18px; transition: all 0.3s ease;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="background: #D4AF37; color: #0c1220; font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 6px;">STEP 1</span>
+            <h4 style="font-size: 14px; font-weight: 800; color: #f59e0b; margin: 0;">Fill Mandatory Google Form</h4>
+          </div>
+          <span id="gformBadgeStatus" style="font-size: 10px; font-weight: 800; padding: 3px 10px; border-radius: 20px; background: rgba(239,68,68,0.2); color: #ef4444; border: 1px solid rgba(239,68,68,0.4);">
+            LOCKED 🔒
+          </span>
+        </div>
+        <p style="font-size: 12px; color: #94a3b8; margin: 0 0 14px 0; line-height: 1.6;">
+          Submit the official TEN Attendance Google Form. Once opened and submitted, click <strong>"✓ Confirm Form Submitted"</strong> to verify and unlock Step 2.
+        </p>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <button id="openGFormBtn" type="button" onclick="openMandatoryGoogleForm()" style="padding: 11px 20px; background: linear-gradient(135deg, #D4AF37, #b8952e); border: none; border-radius: 10px; color: #0c1220; font-weight: 800; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: all 0.2s ease;">
+            <span>📝 Step 1: Open Official Google Form</span>
+            <span>→</span>
+          </button>
+          <button id="verifyGFormBtn" type="button" disabled onclick="verifyGoogleFormCompletion()" style="padding: 11px 20px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; color: #64748b; font-weight: 700; font-size: 12px; cursor: not-allowed; opacity: 0.5; transition: all 0.3s ease;">
+            🔒 Step 1 Required First
+          </button>
+        </div>
+      </div>
+
+      <!-- DIVIDER -->
+      <div style="height: 1px; background: rgba(255,255,255,0.08); margin: 16px 0;"></div>
+
+      <!-- STEP 2 CONTAINER -->
+      <div id="step2Container" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; background: rgba(13,22,41,0.6); padding: 16px 18px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06);">
+        <div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="background: rgba(148,163,184,0.2); color: #94a3b8; font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 6px;" id="step2Pill">STEP 2</span>
+            <h4 style="font-size: 14px; font-weight: 800; color: #e2e8f0; margin: 0;">Record Portal Attendance</h4>
+          </div>
+          <p style="font-size: 12px; color: #94a3b8; margin: 4px 0 0 0;" id="step2StatusText">Complete Step 1 above to enable this button</p>
+        </div>
+        <button id="attendanceBtn" class="attendance-btn attendance-disabled" disabled onclick="markSelfAttendance()" style="margin:0;">
+          🔒 Mark Today's Attendance (Locked)
+        </button>
+      </div>
+
     </div>
 
     <!-- Attendance percentage cards -->
@@ -3564,26 +3634,261 @@ async function loadV2TaskJourney() {
   } catch(_) { /* silent — non-critical */ }
 }
 
-// ── NEW dual-attendance system ──
+// ── NEW Mandatory Google Form & Dual-Attendance System ──
+function getTodayDateKey() {
+  return new Date().toISOString().split('T')[0];
+}
+
+function checkGoogleFormStatusToday() {
+  const todayKey = getTodayDateKey();
+  const isCompleted = localStorage.getItem('gform_completed_' + todayKey) === 'true';
+  const isOpened = sessionStorage.getItem('gform_opened_' + todayKey) === 'true';
+  const btn = document.getElementById("attendanceBtn");
+  const step1Container = document.getElementById("gformStepContainer");
+  const badgeStatus = document.getElementById("gformBadgeStatus");
+  const step2Pill = document.getElementById("step2Pill");
+  const step2Text = document.getElementById("step2StatusText");
+  const statusEl = document.getElementById("attendanceStatus");
+  const verifyBtn = document.getElementById("verifyGFormBtn");
+
+  if (isCompleted) {
+    if (step1Container) {
+      step1Container.style.background = "rgba(16,185,129,0.08)";
+      step1Container.style.borderColor = "rgba(16,185,129,0.3)";
+    }
+    if (badgeStatus) {
+      badgeStatus.textContent = "VERIFIED ✓";
+      badgeStatus.style.background = "rgba(16,185,129,0.2)";
+      badgeStatus.style.color = "#10b981";
+      badgeStatus.style.borderColor = "rgba(16,185,129,0.4)";
+    }
+    if (verifyBtn) {
+      verifyBtn.disabled = true;
+      verifyBtn.style.opacity = "0.8";
+      verifyBtn.style.cursor = "default";
+      verifyBtn.style.background = "rgba(16,185,129,0.15)";
+      verifyBtn.style.color = "#10b981";
+      verifyBtn.style.border = "1px solid rgba(16,185,129,0.3)";
+      verifyBtn.innerHTML = "✓ Form Verified";
+    }
+    if (step2Pill) {
+      step2Pill.style.background = "#10b981";
+      step2Pill.style.color = "#0c1220";
+    }
+    if (step2Text) {
+      step2Text.textContent = "✓ Step 1 verified. Click button to record portal attendance!";
+      step2Text.style.color = "#10b981";
+    }
+    if (statusEl && !statusEl.textContent.includes("Marked")) {
+      statusEl.textContent = "🔓 Step 1 Google Form Verified! You can now mark today's attendance.";
+    }
+    if (btn && !btn.getAttribute('data-already-marked')) {
+      btn.disabled = false;
+      btn.classList.remove("attendance-disabled");
+      btn.innerHTML = "✅ Mark Today's Attendance";
+    }
+  } else if (isOpened) {
+    if (step1Container) {
+      step1Container.style.background = "rgba(245,158,11,0.06)";
+      step1Container.style.borderColor = "rgba(245,158,11,0.25)";
+    }
+    if (badgeStatus) {
+      badgeStatus.textContent = "FORM OPENED 📝";
+      badgeStatus.style.background = "rgba(245,158,11,0.2)";
+      badgeStatus.style.color = "#f59e0b";
+      badgeStatus.style.borderColor = "rgba(245,158,11,0.4)";
+    }
+    if (verifyBtn) {
+      verifyBtn.disabled = false;
+      verifyBtn.style.opacity = "1";
+      verifyBtn.style.cursor = "pointer";
+      verifyBtn.style.background = "linear-gradient(135deg, #10b981, #059669)";
+      verifyBtn.style.color = "#ffffff";
+      verifyBtn.style.border = "none";
+      verifyBtn.style.boxShadow = "0 4px 14px rgba(16,185,129,0.3)";
+      verifyBtn.innerHTML = "✓ Confirm Form Submitted";
+    }
+    if (step2Pill) {
+      step2Pill.style.background = "rgba(148,163,184,0.2)";
+      step2Pill.style.color = "#94a3b8";
+    }
+    if (step2Text) {
+      step2Text.textContent = "🔒 Confirm form submission above to enable this button";
+      step2Text.style.color = "#94a3b8";
+    }
+    if (statusEl && !statusEl.textContent.includes("Marked")) {
+      statusEl.textContent = "📝 Google Form Opened: Please submit the form and click 'Confirm Form Submitted'.";
+    }
+    if (btn && !btn.getAttribute('data-already-marked')) {
+      btn.disabled = true;
+      btn.classList.add("attendance-disabled");
+      btn.innerHTML = "🔒 Mark Today's Attendance (Locked)";
+    }
+  } else {
+    if (step1Container) {
+      step1Container.style.background = "rgba(245,158,11,0.06)";
+      step1Container.style.borderColor = "rgba(245,158,11,0.25)";
+    }
+    if (badgeStatus) {
+      badgeStatus.textContent = "LOCKED 🔒";
+      badgeStatus.style.background = "rgba(239,68,68,0.2)";
+      badgeStatus.style.color = "#ef4444";
+      badgeStatus.style.borderColor = "rgba(239,68,68,0.4)";
+    }
+    if (verifyBtn) {
+      verifyBtn.disabled = true;
+      verifyBtn.style.opacity = "0.5";
+      verifyBtn.style.cursor = "not-allowed";
+      verifyBtn.style.background = "rgba(255,255,255,0.03)";
+      verifyBtn.style.color = "#64748b";
+      verifyBtn.style.border = "1px solid rgba(255,255,255,0.08)";
+      verifyBtn.innerHTML = "🔒 Step 1 Required First";
+    }
+    if (step2Pill) {
+      step2Pill.style.background = "rgba(148,163,184,0.2)";
+      step2Pill.style.color = "#94a3b8";
+    }
+    if (step2Text) {
+      step2Text.textContent = "🔒 Complete Step 1 above to enable this button";
+      step2Text.style.color = "#94a3b8";
+    }
+    if (statusEl && !statusEl.textContent.includes("Marked")) {
+      statusEl.textContent = "🔒 Step 1 Required: Complete the Mandatory Google Form to unlock today's attendance button.";
+    }
+    if (btn && !btn.getAttribute('data-already-marked')) {
+      btn.disabled = true;
+      btn.classList.add("attendance-disabled");
+      btn.innerHTML = "🔒 Mark Today's Attendance (Locked)";
+    }
+  }
+}
+
+function openMandatoryGoogleForm() {
+  const todayKey = getTodayDateKey();
+  const empId = (typeof employeeId !== 'undefined') ? employeeId : (student && student.employeeId) || '';
+  const email = (student && student.email) || '';
+  
+  // Official TEN Attendance Google Form URL
+  const gformUrl = `https://docs.google.com/forms/d/e/1FAIpQLSf3qZwNUgQl7vqqTnGW4PKrMDwRWPJEMiVQ-NUI6h4NnJa8Zg/viewform?usp=pp_url&entry.email=${encodeURIComponent(email)}&entry.empId=${encodeURIComponent(empId)}`;
+
+  window.open(gformUrl, '_blank', 'noopener,noreferrer');
+  sessionStorage.setItem('gform_opened_' + todayKey, 'true');
+  checkGoogleFormStatusToday();
+
+  Swal.fire({
+    icon: 'info',
+    title: '📝 Google Form Opened in New Tab',
+    html: `<div style="text-align:left;line-height:1.6;font-size:13px;color:#cbd5e1;">
+      <p>The official TEN Attendance Google Form is now open in your new tab.</p>
+      <p style="margin-top:8px;color:#D4AF37;font-weight:600;">Please fill out and submit the Google Form. Once submitted, click <strong>"✓ Confirm Form Submitted"</strong> to unlock Step 2!</p>
+    </div>`,
+    background: '#0c1220',
+    color: '#f1f5f9',
+    confirmButtonColor: '#D4AF37',
+    confirmButtonText: 'I Understood'
+  });
+}
+
+function verifyGoogleFormCompletion() {
+  const todayKey = getTodayDateKey();
+  const wasOpened = sessionStorage.getItem('gform_opened_' + todayKey) === 'true';
+
+  if (!wasOpened) {
+    return Swal.fire({
+      icon: 'warning',
+      title: '📝 Please Open Google Form First',
+      html: `<div style="text-align:left;line-height:1.6;font-size:13px;color:#cbd5e1;">
+        <p>You must click <strong>"📝 Step 1: Open Official Google Form"</strong> to open and submit the Google Form before verifying!</p>
+      </div>`,
+      background: '#0c1220',
+      color: '#f1f5f9',
+      confirmButtonColor: '#f59e0b'
+    });
+  }
+
+  localStorage.setItem('gform_completed_' + todayKey, 'true');
+  checkGoogleFormStatusToday();
+
+  Swal.fire({
+    icon: 'success',
+    title: '🔓 Attendance Unlocked!',
+    text: 'Google Form submission verified for today. You can now click "Mark Today\'s Attendance" to record your attendance!',
+    background: '#0c1220',
+    color: '#f1f5f9',
+    confirmButtonColor: '#10b981'
+  });
+}
+
+async function resetTodayAttendanceTest() {
+  const todayKey = getTodayDateKey();
+  localStorage.removeItem('gform_completed_' + todayKey);
+  sessionStorage.removeItem('gform_opened_' + todayKey);
+  try {
+    await fetch('/attendance/reset-test-today', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ employeeId })
+    });
+  } catch(_) {}
+  
+  const btn = document.getElementById("attendanceBtn");
+  if (btn) btn.removeAttribute('data-already-marked');
+
+  Swal.fire({
+    icon: 'success',
+    title: '🔄 Reset Complete!',
+    text: 'Today\'s attendance state has been reset so you can test the 2-Step Lock & Unlock flow from scratch again.',
+    background: '#0c1220',
+    color: '#f1f5f9',
+    confirmButtonColor: '#10b981'
+  });
+
+  loadAttendance();
+}
+
 async function markSelfAttendance(){
+  const todayKey = getTodayDateKey();
+  const isCompleted = localStorage.getItem('gform_completed_' + todayKey) === 'true';
+
+  if (!isCompleted) {
+    return Swal.fire({
+      icon: 'warning',
+      title: '🔒 Step 1 Mandatory!',
+      text: 'You must fill the Mandatory Google Form first before marking today\'s attendance.',
+      background: '#0c1220',
+      color: '#f1f5f9',
+      confirmButtonColor: '#f59e0b'
+    });
+  }
+
   const btn = document.getElementById("attendanceBtn");
   try{
     btn.disabled = true; btn.innerText = "Marking...";
     const r = await fetch("/attendance/self",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({ employeeId })
+      body:JSON.stringify({ employeeId, gformVerified: true })
     });
     const d = await r.json();
     if(d.success){
+      btn.setAttribute('data-already-marked', 'true');
+      btn.disabled = true;
+      btn.classList.add("attendance-disabled");
+      btn.innerText = "Today's Attendance Marked ✅";
       Swal.fire({icon:"success",title:"Attendance Marked",text:"Your attendance for today is recorded ✅",background:"#101820",color:"#ffffff",confirmButtonColor:"#10b981"});
     } else if(d.alreadyMarked){
+      btn.setAttribute('data-already-marked', 'true');
+      btn.disabled = true;
+      btn.classList.add("attendance-disabled");
+      btn.innerText = "Today's Attendance Marked ✅";
       Swal.fire({icon:"info",title:"Already Marked",text:"You have already marked attendance for today.",background:"#101820",color:"#ffffff",confirmButtonColor:"#3b82f6"});
     } else {
+      btn.disabled = false;
       Swal.fire({icon:"error",title:"Failed",text:d.message||"Could not mark attendance.",background:"#101820",color:"#ffffff"});
     }
   }catch(error){
     console.log(error);
+    btn.disabled = false;
     Swal.fire({icon:"error",title:"Error",text:"Network error. Please try again.",background:"#101820",color:"#ffffff"});
   }
   loadAttendance();
@@ -3673,13 +3978,18 @@ async function loadAttendance(){
     const btn = document.getElementById("attendanceBtn");
     const statusEl = document.getElementById("attendanceStatus");
     if(d.markedToday){
-      btn.innerText = "Already marked for today ✅";
+      btn.setAttribute('data-already-marked', 'true');
+      btn.innerText = "Today's Attendance Marked ✅";
       btn.disabled = true; btn.classList.add("attendance-disabled");
       if(statusEl) statusEl.innerText = "You marked your attendance today. Come back tomorrow.";
+      const step2Text = document.getElementById("step2StatusText");
+      if(step2Text) {
+        step2Text.textContent = "✅ Today's attendance is already recorded and saved in the system!";
+        step2Text.style.color = "#10b981";
+      }
     } else {
-      btn.innerText = "✅ Mark Today's Attendance";
-      btn.disabled = false; btn.classList.remove("attendance-disabled");
-      if(statusEl) statusEl.innerText = "Mark your attendance once every day.";
+      btn.removeAttribute('data-already-marked');
+      checkGoogleFormStatusToday();
     }
 
     renderAttendanceHistory(d.attendance||[]);
@@ -4684,30 +4994,34 @@ startStudentSSE();
 </script>
 
 <!-- ===== Phase 1 extras: streak, badges, timeline, leaderboard, LinkedIn, GCal ===== -->
-<script src="/ten-extras.js"></script>
-<script src="/ten-extras2.js"></script>
+<script src="/ten-extras.js?v=20260809_v205"></script>
+<script src="/ten-extras2.js?v=20260804_v48"></script>
 <script src="/session-timeout.js"></script>
 <script>
 (function(){
-  if(window.TenExtras2 && student){
-    TenExtras2.injectStudent({ student, mountId: "ten-extras2-mount" });
+  var st = (typeof student !== 'undefined' && student) ? student : JSON.parse(localStorage.getItem("student") || "{}");
+  var empId = st.employeeId || localStorage.getItem("employeeId") || "TEN-STU-001";
+
+  if(window.TenExtras2){
+    TenExtras2.injectStudent({ student: st, mountId: "ten-extras2-mount" });
   }
-  if(!window.TenExtras || !student) return;
-  // Compute internship end date for the GCal button
+  if(!window.TenExtras) return;
+
   var end = null;
   try {
-    var t = (student.tenure || "").toLowerCase();
+    var t = (st.tenure || "").toLowerCase();
     var days = t.indexOf("6")>=0 ? 180 : t.indexOf("3")>=0 ? 90 : 30;
-    if(student.joiningDate){
-      var d = new Date(student.joiningDate);
+    if(st.joiningDate){
+      var d = new Date(st.joiningDate);
       d.setDate(d.getDate() + days);
       end = d;
     }
   } catch(e) {}
+
   TenExtras.injectStudent({
-    employeeId: student.employeeId,
-    domain: student.domain || "",
-    name: ((student.firstName||"") + " " + (student.lastName||"")).trim(),
+    employeeId: empId,
+    domain: st.domain || "",
+    name: st.name || ((st.firstName||"") + " " + (st.lastName||"")).trim() || "TEN Intern",
     mountId: "ten-extras-mount",
     internshipEndDate: end
   });
@@ -4739,6 +5053,20 @@ function switchStudentView(viewId) {
   var navBtn = document.querySelector('.stu-nav-btn[data-view="' + viewId + '"]');
   if (navBtn) navBtn.classList.add('active');
   if (window.innerWidth <= 768) closeSidebar();
+
+  if (viewId === 'stu-view-leaderboard') {
+    var st = (typeof student !== 'undefined' && student) ? student : JSON.parse(localStorage.getItem("student") || "{}");
+    var empId = st.employeeId || localStorage.getItem("employeeId") || "TEN-STU-001";
+    if (window.TenExtras) {
+      TenExtras.injectStudent({
+        employeeId: empId,
+        domain: st.domain || "",
+        name: st.name || ((st.firstName||"") + " " + (st.lastName||"")).trim() || "TEN Intern",
+        mountId: "ten-extras-mount"
+      });
+    }
+  }
+
   openSectionModal(viewId);
 }
 
@@ -4782,6 +5110,18 @@ function openSectionModal(sectionId) {
   if (sectionId === 'stu-view-attendance' && typeof loadAttendance === 'function') loadAttendance();
   if (sectionId === 'stu-view-notice' && typeof loadNotice === 'function') loadNotice();
   if (sectionId === 'stu-view-submissions' && typeof loadStudentSubmissions === 'function') loadStudentSubmissions();
+  if (sectionId === 'stu-view-leaderboard') {
+    var st = (typeof student !== 'undefined' && student) ? student : JSON.parse(localStorage.getItem("student") || "{}");
+    var empId = st.employeeId || localStorage.getItem("employeeId") || "TEN-STU-001";
+    if (window.TenExtras) {
+      TenExtras.injectStudent({
+        employeeId: empId,
+        domain: st.domain || "",
+        name: st.name || ((st.firstName||"") + " " + (st.lastName||"")).trim() || "TEN Intern",
+        mountId: "ten-extras-mount"
+      });
+    }
+  }
   if (sectionId === 'stu-view-coordinator-tasks' && typeof loadCoordinatorTasks === 'function') loadCoordinatorTasks();
   if (sectionId === 'stu-view-domain-tasks' && typeof renderTasks === 'function') renderTasks();
   if (sectionId === 'stu-view-coding' && typeof loadCodingProblems === 'function') loadCodingProblems();
