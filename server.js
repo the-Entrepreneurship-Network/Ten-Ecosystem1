@@ -59,6 +59,9 @@ const {
 } = require("./middleware/validationSchemas");
 
 const attendanceUtils = require("./utils/attendanceUtils");
+const tenureUtils = require("./utils/tenure");
+const { istNow, istDateKey } = require("./utils/dateKey");
+const tenurePaymentConfig = require("./config/tenurePayment");
 
 // ================= RATE LIMIT CONFIGURATION =================
 const RATE_LIMIT_CONFIG = {
@@ -107,16 +110,111 @@ const RATE_LIMIT_CONFIG = {
 // Automatically intercept all model calls if MongoDB isn't connected.
 // This allows the app to store, fetch, and authenticate users/records
 // in a single-file or multi-file local storage database.
-const DB_DIR = path.join(__dirname, 'uploads', 'local_db');
+// The fallback store lives OUTSIDE the statically served tree. It used to sit
+// at uploads/local_db, and `app.use('/uploads', express.static('uploads'))`
+// meant the whole user table — including password hashes, emails and phone
+// numbers — was downloadable at /uploads/local_db/db_Student.json by anyone.
+// LOCAL_DB_DIR is gitignored; see .gitignore.
+const DB_DIR = process.env.LOCAL_DB_DIR
+    ? path.resolve(process.env.LOCAL_DB_DIR)
+    : path.join(__dirname, '.data', 'local_db');
 if (!fs.existsSync(DB_DIR)) {
     fs.mkdirSync(DB_DIR, { recursive: true });
 }
+
+// One-time migration: if a previous deploy left data at the old public path,
+// move it into the private directory rather than silently starting empty.
+(function migrateLegacyLocalDb() {
+    const legacyDir = path.join(__dirname, 'uploads', 'local_db');
+    if (legacyDir === DB_DIR || !fs.existsSync(legacyDir)) return;
+    try {
+        for (const name of fs.readdirSync(legacyDir)) {
+            if (!name.endsWith('.json')) continue;
+            const target = path.join(DB_DIR, name);
+            if (!fs.existsSync(target)) fs.copyFileSync(path.join(legacyDir, name), target);
+            fs.unlinkSync(path.join(legacyDir, name));
+        }
+        fs.rmdirSync(legacyDir);
+        console.warn('[local-db] Moved the fallback database out of the public uploads/ tree into ' + DB_DIR + '.');
+    } catch (err) {
+        console.error('[local-db] Could not migrate uploads/local_db — delete it by hand, it is publicly served: ' + err.message);
+    }
+})();
 
 global.isMongoUnhealthy = false;
 global.lastMongoCheckTime = 0;
 
 function checkMongoStatus() {
     return mongoose.connection.readyState === 1 && !global.isMongoUnhealthy;
+}
+
+
+// ── Unique-index enforcement for the JSON fallback engine ───────────────────
+// The fallback had no concept of an index: every write path was a bare append.
+// While degraded, /register cheerfully wrote duplicate employeeId AND duplicate
+// email rows, and Student.findOne({employeeId}) then returned whichever
+// duplicate happened to be first in the file — so two students could share one
+// login identity. These helpers read the real schema and emulate MongoDB's
+// E11000 so behaviour matches whichever backend is live.
+
+function getUniqueIndexPaths(schema) {
+    const paths = [];
+    if (!schema) return paths;
+    try {
+        // Field-level `unique: true`
+        schema.eachPath((name, type) => {
+            if (name === '_id') return;
+            const opts = (type && type.options) || {};
+            if (opts.unique) paths.push({ fields: [name], sparse: !!opts.sparse });
+        });
+        // Compound indexes declared with schema.index({...}, {unique:true})
+        for (const [spec, options] of schema.indexes()) {
+            if (!options || !options.unique) continue;
+            const fields = Object.keys(spec).filter(f => f !== '_id');
+            if (fields.length) paths.push({ fields, sparse: !!options.sparse });
+        }
+    } catch (_) { /* schema shape unavailable — enforce nothing */ }
+    return paths;
+}
+
+function makeDuplicateKeyError(fields, doc) {
+    const keyValue = {};
+    for (const f of fields) keyValue[f] = doc[f];
+    const err = new Error(
+        'E11000 duplicate key error collection: ' + JSON.stringify(keyValue)
+    );
+    err.code = 11000;
+    err.keyPattern = fields.reduce((a, f) => { a[f] = 1; return a; }, {});
+    err.keyValue = keyValue;
+    return err;
+}
+
+/**
+ * Throw an E11000-shaped error if `doc` would violate a unique index.
+ * @param {object} schema      the Mongoose schema
+ * @param {Array}  items       rows already stored
+ * @param {object} doc         the row being written
+ * @param {string} [ignoreId]  existing _id to skip (updates)
+ */
+function assertNoDuplicate(schema, items, doc, ignoreId) {
+    for (const index of getUniqueIndexPaths(schema)) {
+        const values = index.fields.map(f => doc[f]);
+        // Sparse indexes ignore documents missing the field — this is what
+        // makes `employeeId: {unique:true, sparse:true}` allow many nulls.
+        if (values.some(v => v === undefined || v === null || v === '')) {
+            if (index.sparse) continue;
+        }
+        const clash = items.some(item => {
+            if (ignoreId && String(item._id) === String(ignoreId)) return false;
+            return index.fields.every((f, i) => {
+                const a = item[f];
+                const b = values[i];
+                if (a === undefined || a === null) return b === undefined || b === null;
+                return String(a) === String(b);
+            });
+        });
+        if (clash) throw makeDuplicateKeyError(index.fields, doc);
+    }
 }
 
 function getCollectionData(modelName) {
@@ -280,23 +378,59 @@ function matchQuery(item, query) {
     return true;
 }
 
+// Update operators supported by the JSON fallback engine.
+//
+// $inc and $unset were previously MISSING and silently ignored — an update
+// using them appeared to succeed while changing nothing. That broke the
+// atomic employee-ID counter (models/Counter.js), which relies on $inc:
+// the sequence never advanced, so every registration in fallback mode would
+// have been handed the same employee ID.
 function applyUpdate(item, update) {
     if (!update) return;
     if (update.$set) {
         Object.assign(item, update.$set);
     }
+    if (update.$inc) {
+        for (const k of Object.keys(update.$inc)) {
+            const delta = Number(update.$inc[k]) || 0;
+            item[k] = (Number(item[k]) || 0) + delta;
+        }
+    }
+    if (update.$unset) {
+        for (const k of Object.keys(update.$unset)) {
+            delete item[k];
+        }
+    }
     if (update.$push) {
         for (const k of Object.keys(update.$push)) {
             if (!Array.isArray(item[k])) item[k] = [];
-            item[k].push(update.$push[k]);
+            const value = update.$push[k];
+            // { $push: { arr: { $each: [...] } } }
+            if (value && typeof value === 'object' && Array.isArray(value.$each)) {
+                item[k].push(...value.$each);
+            } else {
+                item[k].push(value);
+            }
         }
     }
     if (update.$addToSet) {
         for (const k of Object.keys(update.$addToSet)) {
             if (!Array.isArray(item[k])) item[k] = [];
-            if (!item[k].includes(update.$addToSet[k])) {
-                item[k].push(update.$addToSet[k]);
+            const value = update.$addToSet[k];
+            const candidates = (value && typeof value === 'object' && Array.isArray(value.$each))
+                ? value.$each
+                : [value];
+            for (const candidate of candidates) {
+                const exists = item[k].some(existing => String(existing) === String(candidate));
+                if (!exists) item[k].push(candidate);
             }
+        }
+    }
+    if (update.$pull) {
+        for (const k of Object.keys(update.$pull)) {
+            if (!Array.isArray(item[k])) continue;
+            const value = update.$pull[k];
+            item[k] = item[k].filter(existing => String(existing) !== String(value));
         }
     }
     for (const key of Object.keys(update)) {
@@ -312,14 +446,70 @@ class FallbackQuery {
         this.promiseFn = promiseFn;
         this._sort = null;
         this._limit = null;
+        this._skip = 0;
+        this._select = null;
     }
     sort(s) { this._sort = s; return this; }
     limit(l) { this._limit = l; return this; }
+    // `skip()` was missing entirely, so any paginated query threw
+    // "….sort(...).skip is not a function" the moment the fallback engine was
+    // active — including the admin panel's student and audit-log lists.
+    skip(n) { this._skip = n; return this; }
     populate() { return this; }
-    select() { return this; }
+    // `select()` used to be a no-op that returned `this`. Callers use it as a
+    // security projection — e.g. `.select('name employeeId')` to avoid shipping
+    // the password hash — so while the fallback was active those projections
+    // silently returned the FULL document. It now actually projects.
+    select(fields) { this._select = fields; return this; }
     lean() { return this; }
+
+    _applySelect(result) {
+        if (!this._select || result == null) return result;
+
+        // Mongoose accepts "a b -c" or { a: 1, c: 0 }.
+        const include = new Set();
+        const exclude = new Set();
+        if (typeof this._select === 'string') {
+            for (const token of this._select.split(/\s+/).filter(Boolean)) {
+                if (token.startsWith('-')) exclude.add(token.slice(1));
+                else include.add(token);
+            }
+        } else if (typeof this._select === 'object') {
+            for (const [key, value] of Object.entries(this._select)) {
+                if (value) include.add(key); else exclude.add(key);
+            }
+        }
+        if (!include.size && !exclude.size) return result;
+
+        const project = (doc) => {
+            if (!doc || typeof doc !== 'object') return doc;
+            const raw = doc.toObject ? doc.toObject() : doc;
+            if (include.size) {
+                const out = {};
+                if (!exclude.has('_id')) out._id = raw._id;
+                for (const field of include) {
+                    if (raw[field] !== undefined) out[field] = raw[field];
+                }
+                return out;
+            }
+            const out = { ...raw };
+            for (const field of exclude) delete out[field];
+            return out;
+        };
+
+        return Array.isArray(result) ? result.map(project) : project(result);
+    }
+
     exec() {
-        return this.promiseFn(this._sort, this._limit);
+        // Skip must be applied BEFORE limit, the way MongoDB does: ask the
+        // underlying reader for skip+limit rows, then drop the skipped ones.
+        const fetchLimit = (this._limit != null && this._skip)
+            ? this._limit + this._skip
+            : this._limit;
+        return this.promiseFn(this._sort, fetchLimit).then(r => {
+            const sliced = (this._skip && Array.isArray(r)) ? r.slice(this._skip) : r;
+            return this._applySelect(sliced);
+        });
     }
     then(onResolve, onReject) {
         return this.exec().then(onResolve, onReject);
@@ -397,8 +587,20 @@ function wrapModelWithFileFallback(model) {
         let index = items.findIndex(item => matchQuery(item, query));
         if (index === -1) {
             if (options && options.upsert) {
-                const newItem = { _id: generateId(), createdAt: new Date() };
+                // MongoDB seeds an upserted document from the query's equality
+                // conditions. Without this, findOneAndUpdate({_id: "employeeId"},
+                // ..., {upsert:true}) created a row with a RANDOM _id, so the
+                // next call did not find it and inserted another one — the
+                // employee-ID counter could never advance.
+                const newItem = { createdAt: new Date() };
+                for (const [key, value] of Object.entries(query || {})) {
+                    if (key.startsWith('$')) continue;
+                    if (value !== null && typeof value === 'object') continue; // operator, not a literal
+                    newItem[key] = value;
+                }
+                if (!newItem._id) newItem._id = generateId();
                 applyUpdate(newItem, update);
+                assertNoDuplicate(model.schema, items, newItem);
                 items.push(newItem);
                 saveCollectionData(model.modelName, items);
                 return new model(newItem);
@@ -437,10 +639,24 @@ function wrapModelWithFileFallback(model) {
         const isArray = Array.isArray(docOrDocs);
         const docs = isArray ? docOrDocs : [docOrDocs];
         const createdDocs = docs.map(d => {
-            const raw = d.toObject ? d.toObject() : { ...d };
-            return { ...raw, _id: raw._id || generateId(), createdAt: new Date(), updatedAt: new Date() };
+            // Hydrate through the model so SCHEMA DEFAULTS are applied. The
+            // raw object passed to create() only carries the fields the caller
+            // supplied, so anything with a default — status, enums, counters —
+            // was stored as undefined, and later queries filtering on those
+            // fields silently matched nothing.
+            let raw;
+            try {
+                raw = new model(d.toObject ? d.toObject() : d).toObject();
+            } catch (_) {
+                raw = d.toObject ? d.toObject() : { ...d };
+            }
+            return { ...raw, _id: raw._id || generateId(), createdAt: raw.createdAt || new Date(), updatedAt: new Date() };
         });
-        items.push(...createdDocs);
+        // Enforce unique indexes, which the fallback previously ignored.
+        for (const doc of createdDocs) {
+            assertNoDuplicate(model.schema, items, doc);
+            items.push(doc);
+        }
         saveCollectionData(model.modelName, items);
         return isArray ? createdDocs.map(c => new model(c)) : new model(createdDocs[0]);
     }
@@ -953,10 +1169,13 @@ mongoose.Model.prototype.save = function() {
         
         const idx = items.findIndex(item => String(item._id) === String(obj._id));
         if (idx !== -1) {
-            items[idx] = { ...items[idx], ...obj, updatedAt: new Date() };
+            const merged = { ...items[idx], ...obj, updatedAt: new Date() };
+            assertNoDuplicate(instance.schema || (instance.constructor && instance.constructor.schema), items, merged, obj._id);
+            items[idx] = merged;
         } else {
             obj.createdAt = obj.createdAt || new Date();
             obj.updatedAt = obj.updatedAt || new Date();
+            assertNoDuplicate(instance.schema || (instance.constructor && instance.constructor.schema), items, obj);
             items.push(obj);
         }
         saveCollectionData(modelName, items);
@@ -1034,37 +1253,40 @@ const autoMailLogSchema = new mongoose.Schema({
 });
 const AutoMailLog = mongoose.model('AutoMailLog', autoMailLogSchema);
 
+// Tenure interpretation lives in utils/tenure.js. This wrapper is kept only
+// because several call sites still ask for a day count by name.
 function getTenureTotalDays(tenure) {
-  const t = (tenure || '').toLowerCase();
-  if (t.includes('1week') || t.includes('1 week') || t === 'week') return 7;
-  if (t.includes('15day') || t.includes('15 day')) return 15;
-  if (t.includes('45day') || t.includes('45 day')) return 45;
-  if (t.includes('3month') || t.includes('3 month')) return 90;
-  if (t.includes('6month') || t.includes('6 month')) return 180;
-  return 30; // default 1 month
+  return tenureUtils.getTenureDays(tenure);
 }
 
+/**
+ * Legacy shape, computed from the shared attendance module.
+ *
+ * The original implementation here divided by ELAPSED CALENDAR days —
+ * Sundays included — while utils/attendanceUtils excluded them and two other
+ * copies in this file used the full tenure as the denominator. The same student
+ * therefore had up to four different attendance percentages depending on which
+ * endpoint was asked. The numbers below now come from one calculation.
+ */
 function calcAttendancePercentage(student, presentCount) {
-  const totalTenureDays = getTenureTotalDays(student.tenure || student.v2DurationType);
-  const joiningDate = student.joiningDate ? new Date(student.joiningDate) : new Date();
-  const today = new Date();
-  const daysElapsed = Math.min(
-    Math.max(Math.floor((today - joiningDate) / 86400000) + 1, 1),
-    totalTenureDays
-  );
+  const summary = attendanceUtils.getAttendanceSummary([], student);
+  const elapsed = summary.workingDaysElapsed;
+  const present = Math.min(Number(presentCount) || 0, elapsed);
   return {
-    percentage: Math.min(Math.round((presentCount / daysElapsed) * 100), 100),
-    totalDays: daysElapsed,
-    tenureTotalDays: totalTenureDays,
-    presentDays: presentCount,
-    absentDays: Math.max(daysElapsed - presentCount, 0),
-    requiredDays: Math.ceil(daysElapsed * 0.75)
+    percentage: elapsed > 0 ? Math.min(Math.round((present / elapsed) * 100), 100) : 0,
+    totalDays: elapsed,
+    tenureTotalDays: summary.totalCalendarDays,
+    presentDays: present,
+    absentDays: Math.max(elapsed - present, 0),
+    requiredDays: Math.ceil(elapsed * attendanceUtils.ATTENDANCE_THRESHOLD)
   };
 }
 
 const bcrypt = require("bcryptjs");
+const { requireAdminAPI } = require("./middleware/adminAuth");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
+const { ipKeyGenerator } = require("express-rate-limit");
 const QRCode = require("qrcode");
 const cron = require("node-cron");
 const http = require("http");
@@ -1084,39 +1306,230 @@ const ALL_DOMAINS = [
 // Used by /hr-login, /coordinator-login, and chat handshake auth.
 // New DB-backed accounts (created via the promotion flow) are stored in the
 // `HR` and `Coordinator` collections and looked up alongside these maps.
-const HR_ACCOUNTS = {
-    "hr_admin":   { password: "HR@TEN2026",  name: "HR Administrator", email: "hr.admin@ten.local", level: 7 },
-    "hr_manager": { password: "HRMgr@2026",  name: "HR Manager",       email: "hr.manager@ten.local", level: 6 },
-    "jrhr@ten.com":      { password: "TEN@JrHR2026",  name: "Jr HR Associate",            email: "jrhr@ten.com", level: 1 },
-    "srhr@ten.com":      { password: "TEN@SrHR2026",  name: "Sr HR Associate",            email: "srhr@ten.com", level: 2 },
-    "jrmanager@ten.com": { password: "TEN@JrMgr2026",  name: "Jr HR Manager",             email: "jrmanager@ten.com", level: 3 },
-    "srmanager@ten.com": { password: "TEN@SrMgr2026",  name: "Sr HR Manager",             email: "srmanager@ten.com", level: 4 },
-    "hrad@ten.com":      { password: "TEN@HRAD2026",  name: "HR Associate Director",      email: "hrad@ten.com", level: 5 },
-    "jrdir@ten.com":     { password: "TEN@JrDir2026",  name: "Jr HR Director",            email: "jrdir@ten.com", level: 6 },
-    "hrdirector@ten.com":{ password: "TEN@HRDir2026",  name: "HR Director & HRBP",         email: "hrdirector@ten.com", level: 7 },
-    "chro@ten.com":      { password: "TEN@CHRO2026",  name: "Chief Human Resources Officer", email: "chro@ten.com", level: 8 },
-    "vp@ten.com":        { password: "TEN@VP#2026",    name: "Vice President",                 email: "vp@ten.com", level: 9 }
+// SECURITY: these credential maps were hardcoded in source with cleartext
+// passwords, so every HR and coordinator account was public to anyone with
+// repository access. They are now loaded from the HR_CREDENTIALS /
+// COORDINATOR_CREDENTIALS environment variables (JSON, same shape). The
+// literals below are retained ONLY as a non-production dev fallback and the
+// process refuses to start in production without the env vars.
+//
+// There are NO passwords in this file. The roster below carries only the
+// non-secret org structure — display name, contact email, seniority level for
+// HR; assigned domain for coordinators. Every password is supplied at runtime
+// via the HR_CREDENTIALS / COORDINATOR_CREDENTIALS environment variables, as
+// bcrypt hashes:
+//
+//   HR_CREDENTIALS={"jrhr@ten.com":{"passwordHash":"$2b$12$..."}, ...}
+//
+// Generate that value with:  node scripts/generate-credentials-env.js
+//
+// An account in the roster with no matching env entry simply cannot log in.
+
+const HR_ROSTER = {
+    "jrhr@ten.com":       { name: "Jr HR Associate",                    email: "jrhr@ten.com",       level: 1 },
+    "srhr@ten.com":       { name: "Sr HR Associate",                    email: "srhr@ten.com",       level: 2 },
+    "jrmanager@ten.com":  { name: "Jr HR Manager",                      email: "jrmanager@ten.com",  level: 3 },
+    "srmanager@ten.com":  { name: "Sr HR Manager",                      email: "srmanager@ten.com",  level: 4 },
+    "hrad@ten.com":       { name: "HR Associate Director",              email: "hrad@ten.com",       level: 5 },
+    "jrdir@ten.com":      { name: "Jr HR Director",                     email: "jrdir@ten.com",      level: 6 },
+    "hrdirector@ten.com": { name: "HR Director & HRBP",                 email: "hrdirector@ten.com", level: 7 },
+    "vp@ten.com":         { name: "Vice President",                     email: "vp@ten.com",         level: 8 }
 };
-const COORDINATORS = {
-    "devops_aws_admin":   { password:"DevOpsAWS@2026",  domain:"DevOps with AWS" },
-    "python_admin":       { password:"Python@2026",     domain:"Python Development" },
-    "java_admin":         { password:"Java@2026",       domain:"Java Development" },
-    "web_admin":          { password:"Web@2026",        domain:"Web Development" },
-    "mern_admin":         { password:"Mern@2026",       domain:"MERN Stack Development" },
-    "ai_admin":           { password:"AI@2026",         domain:"Artificial Intelligence" },
-    "datascience_admin":  { password:"DS@2026",         domain:"Data Science" },
-    "cyber_admin":        { password:"Cyber@2026",      domain:"Cyber Security" },
-    "software_admin":     { password:"Software@2026",   domain:"Software Engineering" },
-    "flutter_admin":      { password:"Flutter@2026",    domain:"Flutter Development" },
-    // Requirement 5 — HR Management treated like any other domain
-    "hrmgmt_admin":       { password:"HRMgmt@2026",     domain:"HR Management" },
-    // New domains added
-    "venturecapital_admin":  { password: "VC@TEN2026",        domain: "Venture Capital" },
-    "vibecoding_admin":      { password: "Vibe@TEN2026",       domain: "Vibe Coding" },
-    "spaceresearch_admin":   { password: "Space@TEN2026",      domain: "Space Research" },
-    "businessanalyst_admin": { password: "BA@TEN2026",         domain: "Business Analyst" },
-    "hr_domain_admin":       { password: "HRDomain@TEN2026",   domain: "HR" }
+// Eight levels, and level 8 is the Vice President. There is no ninth level and
+// no CHRO account: the portal's own level switcher, its hrLevelDetails map and
+// the position selector on the landing page all stop at 8, and the account list
+// runs jrhr → vp with nothing in between. A chro@ten.com entry at level 8 had
+// pushed vp to a level 9 that no part of the UI can select, so the highest HR
+// account could never match the privileges meant for the top of the hierarchy.
+
+const COORDINATOR_ROSTER = {
+    "devops_aws_admin":      { domain: "DevOps with AWS" },
+    "python_admin":          { domain: "Python Development" },
+    "java_admin":            { domain: "Java Development" },
+    "web_admin":             { domain: "Web Development" },
+    "mern_admin":            { domain: "MERN Stack Development" },
+    "ai_admin":              { domain: "Artificial Intelligence" },
+    "datascience_admin":     { domain: "Data Science" },
+    "cyber_admin":           { domain: "Cyber Security" },
+    "software_admin":        { domain: "Software Engineering" },
+    "flutter_admin":         { domain: "Flutter Development" },
+    "hrmgmt_admin":          { domain: "HR Management" },
+    "venturecapital_admin":  { domain: "Venture Capital" },
+    "vibecoding_admin":      { domain: "Vibe Coding" },
+    "spaceresearch_admin":   { domain: "Space Research" },
+    "businessanalyst_admin": { domain: "Business Analyst" },
+    "hr_domain_admin":       { domain: "HR" }
 };
+
+/**
+ * Merge a non-secret roster with the password material in `envName`.
+ * Entries in the env var may also override roster metadata (name/email/level/
+ * domain), so a new account can be added without a code change.
+ */
+function loadCredentialMap(envName, roster) {
+    const merged = {};
+    let secrets = {};
+
+    const raw = process.env[envName];
+    if (raw && raw.trim()) {
+        try {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                secrets = parsed;
+            } else {
+                console.error('[credentials] ' + envName + ' is not a JSON object; ignoring it.');
+            }
+        } catch (e) {
+            console.error('[credentials] ' + envName + ' is not valid JSON: ' + e.message);
+        }
+    }
+
+    for (const username of new Set([...Object.keys(roster), ...Object.keys(secrets)])) {
+        const entry = { ...(roster[username] || {}), ...(secrets[username] || {}) };
+        if (!entry.passwordHash && !entry.password) continue; // no credential → no account
+        if (entry.password && !entry.passwordHash) {
+            console.warn('[credentials] ' + envName + '.' + username +
+                ' uses a cleartext "password". Switch it to "passwordHash" — run scripts/generate-credentials-env.js.');
+        }
+        merged[username] = entry;
+    }
+
+    const configured = Object.keys(merged).length;
+    if (configured === 0) {
+        const msg = '[credentials] ' + envName + ' provides no usable accounts. ' +
+            'Nobody can log in through this map.';
+        if (process.env.NODE_ENV === 'production') {
+            console.error('\n' + msg + ' Refusing to start.\n');
+            process.exit(1);
+        }
+        console.warn(msg);
+    } else {
+        console.log('[credentials] ' + envName + ': ' + configured + ' account(s) configured.');
+    }
+    return merged;
+}
+
+/**
+ * Constant-time-ish password check for a roster account. Prefers the bcrypt
+ * hash; falls back to a length-safe comparison for legacy cleartext entries.
+ */
+async function verifyCredentialPassword(account, submitted) {
+    if (!account || typeof submitted !== 'string' || !submitted) return false;
+    if (account.passwordHash) {
+        try {
+            return await bcrypt.compare(submitted, account.passwordHash);
+        } catch (_) {
+            return false;
+        }
+    }
+    if (typeof account.password === 'string' && account.password.length === submitted.length) {
+        return crypto.timingSafeEqual(Buffer.from(account.password), Buffer.from(submitted));
+    }
+    return false;
+}
+
+// NOTE: `HR_ACCOUNTS` and `COORDINATORS` were referenced in the login, chat and
+// promotion handlers but never actually declared anywhere, so every legacy
+// lookup threw a ReferenceError into the enclosing try/catch and surfaced as a
+// generic server error. They are declared here.
+const HR_ACCOUNTS  = loadCredentialMap('HR_CREDENTIALS', HR_ROSTER);
+const COORDINATORS = loadCredentialMap('COORDINATOR_CREDENTIALS', COORDINATOR_ROSTER);
+
+// ─── Session identity ────────────────────────────────────────────────────────
+//
+// Handlers used to resolve the acting user like this:
+//
+//   req.body.employeeId || req.headers['x-employee-id'] || req.session.student...
+//
+// which lets a caller act as ANY student just by setting a header — the
+// client-supplied value won over the session. The helpers below are the only
+// sanctioned way to answer "who is making this request": they read the session
+// and nothing else.
+
+// Fields that must never leave the server in an API response. Login used to
+// return `student.toObject()` wholesale, which shipped the bcrypt password
+// hash and the live password-reset token to the browser (and into anything
+// that logged the response). The base64 PDF blobs are stripped too: they are
+// megabytes each and the client fetches documents through their own routes.
+const STUDENT_PRIVATE_FIELDS = [
+    "password", "plainPassword",
+    "passwordResetToken", "passwordResetExpiry",
+    "locPdfBase64", "lorPdfBase64", "starPdfBase64", "offerPdfBase64", "lopPdfBase64"
+];
+
+/**
+ * Strip private fields from a Student document/object before returning it.
+ * Adds `has*Pdf` booleans so the UI can still tell which documents exist.
+ */
+function sanitizeStudent(student) {
+    if (!student) return student;
+    const obj = student.toObject ? student.toObject() : { ...student };
+    const safe = {
+        ...obj,
+        hasLocPdf:   !!obj.locPdfBase64,
+        hasLorPdf:   !!obj.lorPdfBase64,
+        hasStarPdf:  !!obj.starPdfBase64,
+        hasOfferPdf: !!obj.offerPdfBase64,
+        hasLopPdf:   !!obj.lopPdfBase64
+    };
+    for (const field of STUDENT_PRIVATE_FIELDS) delete safe[field];
+    return safe;
+}
+
+function establishStudentSession(req, student) {
+    if (!req.session || !student) return;
+    req.session.student = {
+        _id:        String(student._id || ""),
+        employeeId: student.employeeId || "",
+        email:      student.email || "",
+        name:       student.name || "",
+        domain:     student.domain || ""
+    };
+}
+
+/** @returns {string} the session student's employeeId, or "" when unauthenticated. */
+function sessionEmployeeId(req) {
+    return (req.session && req.session.student && req.session.student.employeeId) || "";
+}
+
+function requireStudentSession(req, res, next) {
+    if (!sessionEmployeeId(req)) {
+        return res.status(401).json({ success: false, message: "Please sign in to continue." });
+    }
+    next();
+}
+
+function requireCoordinatorSession(req, res, next) {
+    if (!req.session || !req.session.coordinator) {
+        return res.status(401).json({ success: false, message: "Coordinator sign-in required." });
+    }
+    next();
+}
+
+/**
+ * Is this request carrying an HR (or admin) session?
+ *
+ * The legacy HR endpoints used to gate on
+ * `req.headers.authorization.startsWith("Bearer hr_")` — a prefix check with
+ * no token validation, so the literal string "Bearer hr_" passed. Every one of
+ * those checks now calls this instead.
+ */
+function isHRSession(req) {
+    return !!(req.session && (req.session.hr || req.session.adminUser));
+}
+
+function requireHRSession(req, res, next) {
+    if (!req.session || !req.session.hr) {
+        return res.status(401).json({ success: false, message: "HR sign-in required." });
+    }
+    next();
+}
+
+/** Coordinators and HR both review student work; admins can do anything. */
+function requireStaffSession(req, res, next) {
+    if (req.session && (req.session.coordinator || req.session.hr || req.session.adminUser)) return next();
+    return res.status(401).json({ success: false, message: "Staff sign-in required." });
+}
 
 const app = express();
 
@@ -1137,20 +1550,63 @@ try { fs.mkdirSync(path.join(uploadsAbs, "documents"), { recursive: true }); } c
 try { fs.mkdirSync(path.join(uploadsAbs, "certificates"), { recursive: true }); } catch(_) {}
 try { fs.mkdirSync(path.join(uploadsAbs, "offer-letters"), { recursive: true }); } catch(_) {}
 
+// Validate required secrets before anything is wired up. In production a
+// missing secret aborts the boot rather than silently falling back to a value
+// that is public in this repository.
+const { assertSecrets, IS_PRODUCTION } = require('./config/secrets');
+assertSecrets();
+
 app.set('trust proxy', 1);
-app.use(cors());
+
+// CORS: an explicit origin allowlist in production. Credentials ride these
+// requests (the session cookie), so a wildcard origin is never acceptable
+// there. Outside production an empty allowlist means "reflect any origin" so
+// local development against file:// and localhost ports keeps working.
+const CORS_ALLOWED_ORIGINS = (process.env.CORS_ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+
+app.use(cors({
+    origin(origin, callback) {
+        // Same-origin / curl / server-to-server requests send no Origin header.
+        if (!origin) return callback(null, true);
+        if (CORS_ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+        if (!IS_PRODUCTION && CORS_ALLOWED_ORIGINS.length === 0) return callback(null, true);
+        return callback(null, false);
+    },
+    credentials: true
+}));
 app.use(express.json());
 
 const session = require('express-session');
+
+// No fallback secret: a committed signing key lets anyone mint a session for
+// any role. config/secrets.js has already refused the boot in production if
+// this is unset; outside production we generate a throwaway key per process so
+// sessions simply do not survive a restart.
+const SESSION_SECRET = (process.env.SESSION_SECRET || '').trim()
+    || crypto.randomBytes(32).toString('hex');
+if (!process.env.SESSION_SECRET) {
+    console.warn('[session] SESSION_SECRET is unset; using a random per-process key. Sessions will not survive a restart.');
+}
+
 const sessionOptions = {
-    secret: process.env.SESSION_SECRET || 'ten-admin-secret-key-123',
+    name: 'ten.sid',
+    secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
+    // Refresh the cookie's expiry on every request. Without this, maxAge counts
+    // from LOGIN, not from last activity, so a student working through a task
+    // journey was signed out 30 minutes in — mid-video, mid-submission — and
+    // got "Please sign in to continue" with no warning. Now the 30 minutes is
+    // 30 minutes of inactivity, which is what it was always meant to be.
+    rolling: true,
     cookie: {
-        secure: true,
-        sameSite: 'none',
+        secure: IS_PRODUCTION,
+        sameSite: IS_PRODUCTION ? 'none' : 'lax',
         httpOnly: true,
-        maxAge: 30 * 60 * 1000 // 30 minutes
+        maxAge: 30 * 60 * 1000 // 30 minutes of inactivity
     }
 };
 
@@ -1246,15 +1702,11 @@ sessionOptions.store = new FallbackStore();
 
 app.use(session(sessionOptions));
 
-// Dynamic cookie security adjustment for iframe/HTTPS vs HTTP/local environments
-app.use((req, res, next) => {
-    if (req.session && req.session.cookie) {
-        const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
-        req.session.cookie.secure = isSecure;
-        req.session.cookie.sameSite = isSecure ? 'none' : 'lax';
-    }
-    next();
-});
+// NOTE: the session cookie's `secure` / `sameSite` flags are fixed at
+// configuration time from NODE_ENV (see sessionOptions above). They used to be
+// recomputed per request from `x-forwarded-proto`, which is client-controlled —
+// sending `x-forwarded-proto: http` cleared the Secure flag and the session
+// cookie was then transmitted in plaintext. Do not reintroduce that.
 
 // Custom route to serve the logo with the correct JPEG Content-Type since the file has a .png extension but is actually a JPEG (JFIF format)
 app.get(/.*ten-logo\.png$/, (req, res) => {
@@ -1262,15 +1714,51 @@ app.get(/.*ten-logo\.png$/, (req, res) => {
     res.sendFile(path.join(__dirname, "public", "ten-logo.png"));
 });
 
+// maxAge: '7d' was applied to EVERY file in public/, including the HTML.
+//
+// That sends `Cache-Control: public, max-age=604800` on a page, so a browser
+// that once loaded v2-tasks.html keeps using its copy for a week without ever
+// asking the server whether it changed. Deploying a fix did nothing visible:
+// the server ran the new code while students kept running last week's page.
+// It is why several fixes this week were reported as "still broken" while the
+// server-side half of the same fix was demonstrably live — the new API replies
+// were arriving at old markup.
+//
+// HTML is the entry point to everything else; it names the CSS and JS to load,
+// so one stale page pins the whole view. It now revalidates on every request.
+// `no-cache` does not mean "do not store" — the browser keeps the file and
+// checks its ETag, so an unchanged page still returns 304 with no body. The
+// cost is one conditional request per page load.
+//
+// JavaScript revalidates for the same reason: it carries behaviour, so a stale
+// chat-widget.js or session-guard.js reproduces exactly this class of bug. A
+// stylesheet or an image going a week out of date is cosmetic, so those keep
+// the long max-age. None of these filenames are content-hashed, which is what
+// would otherwise let them be cached indefinitely and safely.
 app.use(express.static("public", {
     maxAge: '7d',
     etag: true,
-    lastModified: true
+    lastModified: true,
+    setHeaders(res, filePath) {
+        if (/\.(html?|js)$/i.test(filePath)) {
+            res.setHeader('Cache-Control', 'no-cache');
+        }
+    }
 }));
+// Defence in depth: the fallback database no longer lives under uploads/, but
+// refuse to serve anything that looks like it regardless, so a stray copy left
+// by an older deploy can never be downloaded.
+app.use('/uploads', (req, res, next) => {
+    if (/(^|\/)(local_db|\.env)/i.test(req.path)) {
+        return res.status(404).end();
+    }
+    next();
+});
 app.use('/uploads', express.static('uploads', {
     maxAge: '30d',
     etag: true,
-    lastModified: true
+    lastModified: true,
+    dotfiles: 'ignore'
 }));
 
 // Unauthenticated health check endpoint
@@ -1296,136 +1784,13 @@ app.get('/health', (req, res) => {
     }
 });
 
-// GET /api/secrets-status: check which environment variables are configured
-app.get('/api/secrets-status', (req, res) => {
-    const keys = [
-        'MONGODB_URI',
-        'ADMIN_API_SECRET',
-        'CORS_ALLOWED_ORIGINS',
-        'EMAIL_USER',
-        'EMAIL_PASS',
-        'PAYMENTSETU_API_KEY',
-        'BASE_URL',
-        'HR_CREDENTIALS',
-        'COORDINATOR_CREDENTIALS',
-        'GITHUB_PERSONAL_ACCESS_TOKEN'
-    ];
-    
-    const status = {};
-    keys.forEach(key => {
-        status[key] = {
-            configured: !!process.env[key],
-            valuePlaceholder: process.env[key] ? (key === 'MONGODB_URI' || key === 'EMAIL_PASS' || key === 'PAYMENTSETU_API_KEY' || key === 'ADMIN_API_SECRET' || key === 'GITHUB_PERSONAL_ACCESS_TOKEN' ? '********' : process.env[key]) : ''
-        };
-    });
-    
-    res.json({
-        success: true,
-        secrets: status,
-        mongodbState: mongoose.connection.readyState
-    });
-});
-
-// POST /api/save-secrets: save updated credentials to .env and apply to memory
-app.post('/api/save-secrets', async (req, res) => {
-    try {
-        const updates = req.body;
-        if (!updates || typeof updates !== 'object') {
-            return res.status(400).json({ success: false, message: "Invalid request body" });
-        }
-        
-        // Read existing .env if any
-        let envContent = '';
-        const envPath = path.join(__dirname, '.env');
-        if (fs.existsSync(envPath)) {
-            envContent = fs.readFileSync(envPath, 'utf8');
-        } else {
-            // fallback to reading .env.example
-            const examplePath = path.join(__dirname, '.env.example');
-            if (fs.existsSync(examplePath)) {
-                envContent = fs.readFileSync(examplePath, 'utf8');
-            }
-        }
-        
-        // Parse current lines
-        const lines = envContent.split(/\r?\n/);
-        const envVars = {};
-        
-        // Extract existing env vars
-        lines.forEach(line => {
-            const trimmed = line.trim();
-            if (trimmed && !trimmed.startsWith('#')) {
-                const parts = trimmed.split('=');
-                if (parts.length >= 2) {
-                    const k = parts[0].trim();
-                    const v = parts.slice(1).join('=').trim();
-                    envVars[k] = v;
-                }
-            }
-        });
-        
-        // Merge updates
-        for (const [key, val] of Object.entries(updates)) {
-            if (val !== undefined && val !== null && val !== '') {
-                envVars[key] = val;
-                process.env[key] = val; // Apply to running memory instantly!
-            }
-        }
-        
-        // Write back to .env
-        let newEnvContent = '';
-        newEnvContent += "# ── Core ──────────────────────────────────────────────────────────\n";
-        newEnvContent += `MONGODB_URI=${envVars['MONGODB_URI'] || ''}\n`;
-        newEnvContent += `PORT=${envVars['PORT'] || process.env.PORT || '3000'}\n\n`;
-        
-        newEnvContent += "# ── Security ─────────────────────────────────────────────────────\n";
-        newEnvContent += `ADMIN_API_SECRET=${envVars['ADMIN_API_SECRET'] || ''}\n`;
-        newEnvContent += `CORS_ALLOWED_ORIGINS=${envVars['CORS_ALLOWED_ORIGINS'] || ''}\n\n`;
-        
-        newEnvContent += "# ── Email ─────────────────────────────────────────────────────────\n";
-        newEnvContent += `EMAIL_USER=${envVars['EMAIL_USER'] || ''}\n`;
-        newEnvContent += `EMAIL_PASS=${envVars['EMAIL_PASS'] || ''}\n\n`;
-        
-        newEnvContent += "# ── PaymentSetu ────────────────────────────────────────────────────\n";
-        newEnvContent += `PAYMENTSETU_API_KEY=${envVars['PAYMENTSETU_API_KEY'] || ''}\n`;
-        newEnvContent += `BASE_URL=${envVars['BASE_URL'] || ''}\n\n`;
-        
-        newEnvContent += "# ── HR Credentials (JSON map) ──────────────────────────────────────\n";
-        newEnvContent += `HR_CREDENTIALS=${envVars['HR_CREDENTIALS'] || ''}\n`;
-        newEnvContent += `COORDINATOR_CREDENTIALS=${envVars['COORDINATOR_CREDENTIALS'] || ''}\n\n`;
-        
-        newEnvContent += "# ── GitHub Integration ────────────────────────────────────────────\n";
-        newEnvContent += `GITHUB_PERSONAL_ACCESS_TOKEN=${envVars['GITHUB_PERSONAL_ACCESS_TOKEN'] || ''}\n`;
-        
-        fs.writeFileSync(envPath, newEnvContent, 'utf8');
-        
-        // Re-initialize Mongo Connection if MONGODB_URI is updated
-        if (updates.MONGODB_URI) {
-            console.log("MONGODB_URI updated! Re-initializing Mongoose...");
-            mongoose.disconnect().catch(() => {});
-            mongoose.connect(updates.MONGODB_URI, {
-                serverSelectionTimeoutMS: 5000,
-                socketTimeoutMS: 45000,
-                maxPoolSize: 20,
-                minPoolSize: 2,
-                connectTimeoutMS: 10000,
-                heartbeatFrequencyMS: 10000
-            }).then(() => {
-                console.log("Connected to new MongoDB instance successfully!");
-            }).catch(err => {
-                console.error("Failed to connect to new MongoDB instance:", err.message);
-            });
-        }
-        
-        res.json({
-            success: true,
-            message: "Credentials updated successfully. Saved to .env and applied to server instantly!"
-        });
-    } catch (err) {
-        console.error("Error saving secrets:", err);
-        res.status(500).json({ success: false, message: "Failed to save secrets: " + err.message });
-    }
-});
+// NOTE: GET /api/secrets-status and POST /api/save-secrets used to live here.
+// Both were unauthenticated. The first returned HR_CREDENTIALS and
+// COORDINATOR_CREDENTIALS (username -> password maps) in cleartext to any
+// caller; the second rewrote .env on disk and repointed MONGODB_URI at an
+// arbitrary host from an anonymous request body. They have been removed.
+// Secrets belong in the deploy environment - see .env.example and
+// config/secrets.js, which validates them at boot.
 
 
 // ===== Feature 14: security hardening =====
@@ -1452,28 +1817,66 @@ function _sanitizeKeys(obj){
 }
 app.use((req, _res, next) => { _sanitizeKeys(req.body); _sanitizeKeys(req.params); next(); });
 
+// Bounded, self-expiring counter for the escalating back-off. The previous
+// plain Map was never pruned and was keyed by attacker-controlled strings, so
+// it grew without limit.
 const consecutiveLimitHits = new Map();
+const LIMIT_HIT_TTL_MS = 60 * 60 * 1000;
+const LIMIT_HIT_MAX_ENTRIES = 10000;
 
-// Per-IP login rate limit (strictest). Applied directly to the login routes
-// further down via the `loginLimiter` reference.
+function bumpLimitHits(key) {
+    const now = Date.now();
+    const existing = consecutiveLimitHits.get(key);
+    const hits = (existing && (now - existing.at) < LIMIT_HIT_TTL_MS) ? existing.hits + 1 : 1;
+    consecutiveLimitHits.set(key, { hits, at: now });
+
+    if (consecutiveLimitHits.size > LIMIT_HIT_MAX_ENTRIES) {
+        for (const [k, v] of consecutiveLimitHits) {
+            if ((now - v.at) >= LIMIT_HIT_TTL_MS) consecutiveLimitHits.delete(k);
+        }
+        // Still oversized after expiry sweep: drop the oldest insertions.
+        while (consecutiveLimitHits.size > LIMIT_HIT_MAX_ENTRIES) {
+            consecutiveLimitHits.delete(consecutiveLimitHits.keys().next().value);
+        }
+    }
+    return hits;
+}
+
+// The account portion of the rate-limit key MUST be derived the same way the
+// login handlers derive the account they look up. It used to prefer
+// `body.email` while POST /login resolves `employeeId || email` — so sending a
+// fixed employeeId with a random email on each request minted a fresh bucket
+// every time and the limit never applied. This helper is now the single
+// definition, used by both the key generator and the handler.
+function loginRateLimitAccount(req) {
+    const body = req.body || {};
+    const parts = [body.employeeId, body.email, body.username]
+        .map((v) => (v == null ? "" : String(v).toLowerCase().trim()))
+        .filter(Boolean)
+        .sort();
+    return parts.join("|");
+}
+
+// req.ip alone is the wrong key for IPv6. A single household is routinely
+// handed a /64, so keying on the full /128 address lets one attacker rotate
+// through billions of distinct keys and never hit the limit. ipKeyGenerator
+// collapses an address to its subnet; IPv4 passes through unchanged.
+function loginRateLimitKey(req) {
+    return ipKeyGenerator(req.ip) + ":" + loginRateLimitAccount(req);
+}
+
+// Login rate limit, keyed per IP *and* per account identifier. Keying on the
+// account means one student's failed attempts never rate-limit a different
+// student sharing the same college wifi or hostel network.
 const loginLimiter = rateLimit({
     windowMs: RATE_LIMIT_CONFIG.auth.windowMs,
     max: RATE_LIMIT_CONFIG.auth.max,
     standardHeaders: true,
     legacyHeaders: false,
     validate: false,
-    keyGenerator: (req) => {
-        const body = req.body || {};
-        const account = body.email || body.employeeId || body.username || "";
-        return req.ip + ":" + account.toString().toLowerCase().trim();
-    },
+    keyGenerator: loginRateLimitKey,
     handler: (req, res, next, options) => {
-        const body = req.body || {};
-        const account = body.email || body.employeeId || body.username || "";
-        const key = req.ip + ":" + account.toString().toLowerCase().trim();
-        const hits = (consecutiveLimitHits.get(key) || 0) + 1;
-        consecutiveLimitHits.set(key, hits);
-
+        const hits = bumpLimitHits(loginRateLimitKey(req));
         const backoffBase = RATE_LIMIT_CONFIG.auth.backoffBase || 2;
         const retryAfterSeconds = Math.min(Math.pow(backoffBase, hits), 3600);
         res.setHeader('Retry-After', retryAfterSeconds.toString());
@@ -1484,6 +1887,18 @@ const loginLimiter = rateLimit({
     }
 });
 
+// Second, independent cap on the source address alone. Without this, keying by
+// account means an attacker credential-stuffing N different accounts from one
+// address gets `max` attempts per account with no overall ceiling.
+const loginIpLimiter = rateLimit({
+    windowMs: RATE_LIMIT_CONFIG.auth.windowMs,
+    max: Math.max(RATE_LIMIT_CONFIG.auth.max * 6, 60),
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: false,
+    message: { success: false, message: "Too many login attempts from this network. Please wait." }
+});
+
 // Registration rate limit
 const registerLimiter = rateLimit({
     windowMs: RATE_LIMIT_CONFIG.auth.windowMs,
@@ -1491,10 +1906,7 @@ const registerLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     handler: (req, res, next, options) => {
-        const key = req.ip;
-        const hits = (consecutiveLimitHits.get(key) || 0) + 1;
-        consecutiveLimitHits.set(key, hits);
-
+        const hits = bumpLimitHits("register:" + req.ip);
         const backoffBase = RATE_LIMIT_CONFIG.auth.backoffBase || 2;
         const retryAfterSeconds = Math.min(Math.pow(backoffBase, hits), 3600);
         res.setHeader('Retry-After', retryAfterSeconds.toString());
@@ -1523,16 +1935,18 @@ const upload = multer({
 
 // ================= MAIL =================
 
-const { createEmailTransporter, EMAIL_FROM } = require("./utils/mailer");
+const { createEmailTransporter } = require("./utils/mailer");
 const transporter = createEmailTransporter();
 
-if((process.env.SMTP_USER && process.env.SMTP_PASS) || (process.env.SES_SMTP_USER && process.env.SES_SMTP_PASS)){
+const smtpUser = process.env.SMTP_USER || process.env.SES_SMTP_USER || process.env.EMAIL_USER || process.env.EMAIL_US;
+const smtpPass = process.env.SMTP_PASS || process.env.SES_SMTP_PASS || process.env.EMAIL_PASS;
+if (smtpUser && smtpPass) {
     transporter.verify((error)=>{
         if(error){ console.log("SMTP verification status: OFFLINE —", error.message); }
-        else{ console.log("Email Server Ready — sending as", EMAIL_FROM); }
+        else{ console.log("Email Server Ready"); }
     });
 } else {
-    console.log("Email not configured — SMTP_USER/SMTP_PASS missing in .env, skipping SMTP verify.");
+    console.log("Email not configured — skipping SMTP verify.");
 }
 
 // Sends one activity-cycle HR mail (appreciation or re-engagement), records it
@@ -1561,7 +1975,7 @@ async function sendActivityMail(student, studentName, mailType){
     let mailError = "";
     try {
         await transporter.sendMail({
-            from: EMAIL_FROM,
+            from: '"TEN HR Department" <hr@entrepreneurshipnetwork.net>',
             to: email,
             subject: spec.subject,
             html: spec.html(studentName)
@@ -2336,33 +2750,43 @@ app.get("/payment-return",    (req,res)=>{ res.sendFile(path.join(__dirname,"pub
 
 // ================= EMPLOYEE ID =================
 
-async function generateEmployeeId(domain){
-    const domainShortCodes = {
-        "DevOps with AWS":          "DEVOPS",
-        "Python Development":       "PY",
-        "Java Development":         "JAVA",
-        "Web Development":          "WEB",
-        "MERN Stack Development":   "MERN",
-        "Artificial Intelligence":  "AI",
-        "Data Science":             "DS",
-        "Cyber Security":           "CYBER",
-        "Software Engineering":     "SDE",
-        "Flutter Development":      "FLUTTER",
-        "HR Management":            "HRMGMT",
-        "Venture Capital":           "VC",
-        "Vibe Coding":               "VIBE",
-        "Space Research":            "SPACE",
-        "Business Analyst":          "BA",
-        "HR":                        "HR",
-        "Business Development":      "BD",
-        "Space Intern":              "SPACE",
-        "Finance":                   "FIN"
-    };
-    const shortCode = domainShortCodes[domain] || domain.toUpperCase();
-    const totalStudents = await Student.countDocuments();
-    const sequenceNumber = 1001 + totalStudents;
-    return `TEN/${shortCode}/${sequenceNumber}`;
-}
+// Employee-ID generation lives in utils/employeeId.js. There were two copies of
+// this function with different domain maps and different unknown-domain
+// fallbacks, and both derived the sequence from Student.countDocuments() — which
+// collides under concurrent registration and rewinds when a student is deleted.
+const {
+    generateEmployeeId,
+    isEmployeeIdAvailable,
+    initEmployeeIdCounter
+} = require("./utils/employeeId");
+
+// Availability check the registration form calls before submitting, so a
+// student sees "This Employee ID is already taken" against the field instead of
+// a generic server error — or, in JSON-fallback mode, instead of a silent
+// duplicate.
+// Public config the front-end needs so pages cannot drift from the server.
+app.get("/api/public-config", (req, res) => {
+    const { OFFICIAL_REPO_SLUG, OFFICIAL_REPO_URL } = require("./config/github");
+    const { SELECTABLE_DOMAIN_NAMES } = require("./config/domains");
+    const { DURATION_TYPES, TENURE_LABELS } = require("./utils/tenure");
+    res.json({
+        success: true,
+        officialRepoSlug: OFFICIAL_REPO_SLUG,
+        officialRepoUrl: OFFICIAL_REPO_URL,
+        domains: SELECTABLE_DOMAIN_NAMES,
+        tenures: DURATION_TYPES.map((key) => ({ key, label: TENURE_LABELS[key] }))
+    });
+});
+
+app.get("/api/employee-id/available", async (req, res) => {
+    try {
+        const result = await isEmployeeIdAvailable(req.query.employeeId);
+        res.json({ success: true, ...result });
+    } catch (err) {
+        console.error("[employeeId] availability check failed:", err.message);
+        res.status(500).json({ success: false, available: false, reason: "Could not check that Employee ID right now." });
+    }
+});
 
 // ================= REGISTER (Feature 1: welcome email + multi-domain) =================
 // A student can register for UP TO 2 domains using the same email + phone.
@@ -2466,15 +2890,28 @@ try{
     // Auto-generated password (we kept the original behavior — register form
     // has no password field). For multi-domain registrations we re-use the
     // existing student's password so the user has one password across both.
-    let password;
-    let plainPassword;
+    //
+    // `generatedPassword` is the cleartext, and it exists ONLY in this
+    // request's memory so it can be emailed to the student. What gets stored
+    // is the bcrypt hash. This path previously stored the cleartext directly
+    // in `password` (never hashed) and kept a second copy in `plainPassword`.
+    //
+    // For a multi-domain registration the second account re-uses the first
+    // account's existing hash, so one password works across both. That hash
+    // cannot be reversed, so no new welcome password is issued in that case.
+    let password;              // what we persist — always a bcrypt hash
+    let generatedPassword = null;  // cleartext, for the welcome email only
     if (isFirstRegistration) {
-        plainPassword = crypto.randomBytes(4).toString("hex");
-        password = plainPassword;
+        generatedPassword = generateTempPassword();
+        password = await bcrypt.hash(generatedPassword, 12);
     } else {
         const existingStudentToken = existingByEmail[0];
-        password = existingStudentToken.password || crypto.randomBytes(4).toString("hex");
-        plainPassword = existingStudentToken.plainPassword || (password.startsWith("$2b$") || password.startsWith("$2a$") ? "intern123" : password);
+        if (existingStudentToken.password) {
+            password = existingStudentToken.password;
+        } else {
+            generatedPassword = generateTempPassword();
+            password = await bcrypt.hash(generatedPassword, 12);
+        }
     }
 
     const newStudent = new Student({
@@ -2485,7 +2922,6 @@ try{
         college: collegeName,
         tenure, joiningDate,
         employeeId, password,
-        plainPassword,
         collegeName: collegeName || ""
     });
     await newStudent.save();
@@ -2518,7 +2954,7 @@ try{
             let mailError = "";
             try {
                 await transporter.sendMail({
-                    from: EMAIL_FROM,
+                    from:"TEN Internship Portal <ten.internshipportal@gmail.com>",
                     to: emailLc,
                     subject:`🎉 Welcome to The Entrepreneurship Network, ${newStudent.name.trim()}!`,
                     html,
@@ -2588,26 +3024,31 @@ async function checkLockout(res, user, userModel) {
     return false;
 }
 
+// Lockout policy: 5 consecutive failures lock that ONE account for 15 minutes.
+// The counters live on the individual user document, so a lockout can never
+// affect another account — including accounts sharing a college wifi or hostel
+// network with the one that failed.
+const LOCKOUT_MAX_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000;
+
 async function recordFailedAttempt(res, user, userModel, defaultErrorMsg) {
     const attempts = (user.failedLoginAttempts || 0) + 1;
-    let updateData = { failedLoginAttempts: attempts };
-    
-    if (attempts >= 5) {
-        const resetTime = new Date(Date.now() + 5 * 60 * 1000); // 5 mins
+    const updateData = { failedLoginAttempts: attempts };
+
+    if (attempts >= LOCKOUT_MAX_ATTEMPTS) {
         updateData.isLockedOut = true;
-        updateData.lockoutUntil = resetTime;
+        updateData.lockoutUntil = new Date(Date.now() + LOCKOUT_DURATION_MS);
         await userModel.findByIdAndUpdate(user._id, updateData);
         return res.json({
             success: false,
-            message: "Your account is temporarily locked. Try again in 5 minutes."
-        });
-    } else {
-        await userModel.findByIdAndUpdate(user._id, updateData);
-        return res.json({
-            success: false,
-            message: `${defaultErrorMsg} (Failed attempts: ${attempts}/5)`
+            message: "Your account is temporarily locked. Try again in 15 minutes."
         });
     }
+
+    await userModel.findByIdAndUpdate(user._id, updateData);
+    // The remaining-attempt count is deliberately not returned: it confirms to
+    // an unauthenticated caller that the account exists.
+    return res.json({ success: false, message: defaultErrorMsg });
 }
 
 async function clearFailedAttempts(user, userModel) {
@@ -2622,7 +3063,7 @@ async function clearFailedAttempts(user, userModel) {
 
 // ================= LOGIN =================
 
-app.post("/login", loginLimiter, async(req,res)=>{
+app.post("/login", loginIpLimiter, loginLimiter, async(req,res)=>{
 try{
     let mentorProfileObj = null;
     const { employeeId, password, email, role } = req.body;
@@ -2761,7 +3202,6 @@ try{
             }
             if (pwdMatch) {
                 await clearFailedAttempts(student, Student);
-
                 const crypto = require("crypto");
                 const sessionToken = "ten_sess_" + crypto.randomBytes(24).toString("hex");
 
@@ -2782,7 +3222,7 @@ try{
                         await Student.updateMany({ email: { $regex: emailRegex } }, { linkedDomains: linked });
                     }
                 }
-                const responseStudent = student.toObject ? student.toObject() : student;
+                const responseStudent = sanitizeStudent(student);
                 responseStudent.linkedDomains = linked;
                 responseStudent.domains = student.domains || [student.domain];
                 responseStudent.activeSessionToken = sessionToken;
@@ -2870,7 +3310,7 @@ try{
                 await Student.updateMany({ email: { $regex: emailRegex } }, { linkedDomains: linked });
             }
         }
-        const responseStudent = student.toObject ? student.toObject() : student;
+        const responseStudent = sanitizeStudent(student);
         responseStudent.linkedDomains = linked;
         responseStudent.domains = student.domains || [student.domain];
         responseStudent.activeSessionToken = sessionToken;
@@ -3572,42 +4012,27 @@ try{
 // key for students: "student:employeeId"
 // key for coordinators: "coord:domain"
 // key for HR: "hr:all"
-const sseClients = new Map();
-
-function addSSEClient(key, res, meta = {}){
-    if(!sseClients.has(key)) sseClients.set(key, []);
-    sseClients.get(key).push({ res, ...meta });
-}
-
-function removeSSEClient(key, res){
-    const arr = sseClients.get(key) || [];
-    const idx = arr.findIndex(c => c.res === res);
-    if(idx !== -1) arr.splice(idx, 1);
-}
-
-function sendSSE(res, data){
-    try{ res.write(`data: ${JSON.stringify(data)}\n\n`); } catch(e){}
-}
-
-function broadcastNotification(domain, employeeId, notif){
-    // to specific student
-    if(employeeId){
-        const key = `student:${employeeId}`;
-        const clients = sseClients.get(key) || [];
-        clients.forEach(c => sendSSE(c.res, { event:"notification", notification:notif }));
-    }
-    // to domain coordinator
-    if(domain){
-        const key = `coord:${domain}`;
-        const clients = sseClients.get(key) || [];
-        clients.forEach(c => sendSSE(c.res, { event:"notification", notification:notif }));
-    }
-}
+// The registry lives in utils/sseHub.js so routes outside this file can push
+// too. routes/adminPortal.js previously wrote Notification rows for a broadcast
+// and never pushed them, because it had no access to this Map — an admin
+// announcement did not appear until the student happened to poll.
+const {
+    sseClients,
+    addSSEClient,
+    removeSSEClient,
+    sendSSE,
+    broadcastNotification
+} = require("./utils/sseHub");
 
 // ================= STUDENT SSE =================
 
 app.get("/student-events/:employeeId", (req,res)=>{
-    const employeeId = decodeURIComponent(req.params.employeeId);
+    // Stream the SIGNED-IN student's events. The employeeId in the path used to
+    // be taken at face value, so anyone could subscribe to any student's
+    // notification stream by guessing an ID.
+    const employeeId = sessionEmployeeId(req);
+    if (!employeeId) return res.status(401).end();
+
     res.setHeader("Content-Type","text/event-stream");
     res.setHeader("Cache-Control","no-cache");
     res.setHeader("Connection","keep-alive");
@@ -3615,15 +4040,29 @@ app.get("/student-events/:employeeId", (req,res)=>{
     res.write("data: connected\n\n");
 
     const key = `student:${employeeId}`;
-    addSSEClient(key, res);
+    // The domain MUST be recorded here. The domain-targeted fan-out filters on
+    // `c.studentDomain`, and this call passed no meta at all — so it was always
+    // undefined and a domain-wide notification never reached a single student
+    // in real time.
+    addSSEClient(key, res, { domain: (req.session.student && req.session.student.domain) || "" });
 
-    req.on("close",()=>{ removeSSEClient(key, res); });
+    // Proxies drop idle event streams; a periodic comment keeps them open.
+    const heartbeat = setInterval(() => {
+        try { res.write(": ping\n\n"); } catch (_) {}
+    }, 25000);
+
+    req.on("close",()=>{ clearInterval(heartbeat); removeSSEClient(key, res); });
 });
 
 // ================= COORDINATOR SSE =================
 
 app.get("/coord-events/:domain", (req,res)=>{
-    const domain = decodeURIComponent(req.params.domain);
+    // Stream the signed-in coordinator's own domain — the path parameter used
+    // to be taken at face value, so anyone could listen to any domain.
+    if(!req.session || !req.session.coordinator){
+        return res.status(401).end();
+    }
+    const domain = req.session.coordinator.domain || decodeURIComponent(req.params.domain);
     res.setHeader("Content-Type","text/event-stream");
     res.setHeader("Cache-Control","no-cache");
     res.setHeader("Connection","keep-alive");
@@ -3776,6 +4215,35 @@ try{
 
 // ================= NOTIFICATIONS - MARK READ =================
 
+// The student dashboard has always POSTed here, but the route did not exist:
+// it 404d inside an empty catch, so the badge cleared visually and the count
+// came back on reload because `readBy` was never written.
+app.post("/notifications/mark-all-read", async(req,res)=>{
+try{
+    const readerId = sessionEmployeeId(req)
+        || (req.session && req.session.coordinator && `coord:${req.session.coordinator.domain}`)
+        || "";
+    if(!readerId) return res.status(401).json({ success:false, message:"Please sign in." });
+
+    const domain = (req.session.student && req.session.student.domain) || "";
+    const result = await Notification.updateMany(
+        {
+            $or: [
+                { targetType: "all" },
+                { targetType: "domain", targetDomain: domain },
+                { targetType: "student", targetEmployeeId: readerId }
+            ],
+            readBy: { $ne: readerId }
+        },
+        { $addToSet: { readBy: readerId } }
+    );
+    res.json({ success:true, marked: (result && (result.modifiedCount ?? result.nModified)) || 0 });
+}catch(e){
+    console.error("[notifications] mark-all-read failed:", e.message);
+    res.status(500).json({ success:false });
+}
+});
+
 app.post("/notifications/mark-read", async(req,res)=>{
 try{
     const { notifId, readerId } = req.body;
@@ -3794,7 +4262,7 @@ try{
 // email (looked up in the HR DB collection, bcrypt-compared) OR a legacy
 // username (looked up in HR_ACCOUNTS, plain compared).
 
-app.post("/hr-login", loginLimiter, async(req,res)=>{
+app.post("/hr-login", loginIpLimiter, loginLimiter, async(req,res)=>{
 try{
     const password = (req.body && req.body.password) || "";
     // Accept "email" (preferred) or legacy "username" field from older clients
@@ -3814,13 +4282,15 @@ try{
                 return await recordFailedAttempt(res, dbHR, HR, "Invalid HR credentials");
             }
             await clearFailedAttempts(dbHR, HR);
-            return res.json({ success:true, hr:{
+            const hrIdentity = {
                 username: dbHR.username || dbHR.email,
                 email:    dbHR.email,
                 name:     dbHR.name,
                 role:     "hr",
                 level:    dbHR.level || 1
-            }});
+            };
+            if (req.session) req.session.hr = hrIdentity;
+            return res.json({ success:true, hr: hrIdentity });
         }
         // Also allow legacy hardcoded entries that have an email assigned
         const legacy = Object.entries(HR_ACCOUNTS).find(
@@ -3828,26 +4298,28 @@ try{
         );
         if(legacy){
             const [u, v] = legacy;
-            let currentPassOk = (v.password === password);
-            if (u === "hrdirector@ten.com" && password === "TEN@HRBP2026") {
-                currentPassOk = true;
+            // NOTE: a hardcoded email/password pair for hrdirector@ten.com used to
+            // be accepted here and again on the username path below. It was not
+            // in the credential map and could not be overridden by
+            // HR_CREDENTIALS, so it worked even in production. Removed.
+            if(!await verifyCredentialPassword(v, password)) {
+                return res.json({ success:false, message:"Invalid HR credentials" });
             }
-            if(!currentPassOk) return res.json({ success:false, message:"Invalid HR credentials" });
-            return res.json({ success:true, hr:{ username:u, email:v.email, name:v.name, role:"hr", level: v.level || 1 } });
+            const hrIdentity = { username:u, email:v.email, name:v.name, role:"hr", level: v.level || 1 };
+            if (req.session) req.session.hr = hrIdentity;
+            return res.json({ success:true, hr: hrIdentity });
         }
         return res.json({ success:false, message:"Invalid HR credentials" });
     }
 
     // 2) Legacy username path
     const hr = HR_ACCOUNTS[identifier];
-    let currentPassOk = hr && (hr.password === password);
-    if (identifier === "hrdirector@ten.com" && password === "TEN@HRBP2026") {
-        currentPassOk = true;
-    }
-    if(!hr || !currentPassOk){
+    if(!hr || !await verifyCredentialPassword(hr, password)){
         return res.json({ success:false, message:"Invalid HR credentials" });
     }
-    res.json({ success:true, hr:{ username: identifier, email: hr.email || "", name:hr.name, role:"hr", level: hr.level || 1 } });
+    const hrIdentity = { username: identifier, email: hr.email || "", name:hr.name, role:"hr", level: hr.level || 1 };
+    if (req.session) req.session.hr = hrIdentity;
+    res.json({ success:true, hr: hrIdentity });
 }catch(error){
     console.log(error);
     res.json({ success:false, message:"Server Error" });
@@ -3883,11 +4355,14 @@ try{
                 arr.forEach(c => sendSSE(c.res, { event:"notification", notification:notif }));
             }
         }
-        // Also need to notify students - broadcast to all SSE clients and they filter on client side
+        // Students of that domain. This filtered on `c.studentDomain`, a
+        // property nothing ever set — the SSE registration passed no meta — so
+        // this branch silently reached nobody and domain notifications only
+        // appeared on the next poll.
         for(const [key, arr] of sseClients.entries()){
             if(key.startsWith("student:")){
                 arr.forEach(c => {
-                    if(c.studentDomain === targetDomain){
+                    if((c.domain || c.studentDomain) === targetDomain){
                         sendSSE(c.res, { event:"notification", notification:notif });
                     }
                 });
@@ -3921,11 +4396,10 @@ try{
 
 app.get("/hr/students", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
-    const students = await Student.find().select('firstName lastName email whatsapp domain collegeName college employeeId tenure joiningDate createdAt').sort({ createdAt:-1 });
+    const students = await Student.find().select('firstName lastName email whatsapp domain collegeName college employeeId tenure joiningDate createdAt').sort({ createdAt:-1 }).lean();
     res.json({ success:true, students });
 }catch(error){ res.status(500).json({ message:"Error fetching students" }); }
 });
@@ -3934,8 +4408,7 @@ try{
 
 app.post('/hr/send-documents-now', async(req, res) => {
     try {
-        const auth = req.headers.authorization;
-        if(!auth || !auth.startsWith("Bearer hr_")){
+        if(!isHRSession(req)){
             return res.status(401).json({ success:false, message:"Unauthorized" });
         }
         const { employeeId, docType } = req.body;
@@ -3955,8 +4428,7 @@ app.post('/hr/send-documents-now', async(req, res) => {
 
 app.get("/api/hr/document-history", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
     const page = Math.max(1, parseInt(req.query.page || "1", 10) || 1);
@@ -4016,8 +4488,7 @@ async function verifyByDocumentNumber(documentNumber) {
 
 app.post("/api/hr/verify-document", async (req, res) => {
     try {
-        const auth = req.headers.authorization;
-        if(!auth || !auth.startsWith("Bearer hr_")){
+        if(!isHRSession(req)){
             return res.status(401).json({ message:"Unauthorized" });
         }
         const { documentNumber } = req.body || {};
@@ -4030,8 +4501,7 @@ app.post("/api/hr/verify-document", async (req, res) => {
 
 app.get("/api/hr/verify-check", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
     const { employeeId } = req.query;
@@ -4056,8 +4526,7 @@ try{
 
 app.get("/api/hr/verify-by-docnumber", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
     const { documentNumber } = req.query;
@@ -4072,8 +4541,7 @@ try{
 
 app.get("/api/hr/automail-history", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
     const page = Math.max(1, parseInt(req.query.page || "1", 10) || 1);
@@ -4090,8 +4558,7 @@ try{
 
 app.get("/api/hr/intern-stats", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
     const now = new Date();
@@ -4106,7 +4573,7 @@ try{
     ]});
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    const joins = await Student.find().select("joiningDate joinDate");
+    const joins = await Student.find().select("joiningDate joinDate").lean();
     let newJoinsThisMonth = 0;
     for(const s of joins){
         const jd = s.joinDate || s.joiningDate;
@@ -4124,8 +4591,7 @@ try{
 
 app.get("/api/hr/intern-stats/monthly", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
     const now = new Date();
@@ -4141,7 +4607,7 @@ try{
         months.push(obj);
         keyMap.set(key, obj);
     }
-    const students = await Student.find().select("joiningDate joinDate");
+    const students = await Student.find().select("joiningDate joinDate").lean();
     for(const s of students){
         const jd = s.joinDate || s.joiningDate;
         if(!jd) continue;
@@ -4160,8 +4626,7 @@ try{
 
 app.get('/api/hr/intern-list', async (req, res) => {
   try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
     const type = req.query.type;
@@ -4205,8 +4670,7 @@ app.get('/api/hr/intern-list', async (req, res) => {
 
 app.get("/hr/students/domain/:domain", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
     const domain = decodeURIComponent(req.params.domain);
@@ -4225,8 +4689,7 @@ try{
 // Used by the HR Promotions section ("Promote to HR" tab).
 app.get("/hr/coordinators", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ success:false, message:"Unauthorized" });
     }
     const out = [];
@@ -4268,8 +4731,7 @@ try{
 
 app.get("/hr/submissions", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
     const submissions = await Submission.find().sort({ submittedAt:-1 });
@@ -4279,8 +4741,7 @@ try{
 
 app.get("/hr/submissions/filter", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
     const status = String(req.query.status || "").trim();
@@ -4294,8 +4755,7 @@ try{
 
 app.get("/hr/stats", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
     const totalStudents = await Student.countDocuments();
@@ -4327,8 +4787,7 @@ try{
 
 app.get("/hr/notifications", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")){
+    if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
     const notifs = await Notification.find().sort({ createdAt:-1 }).limit(100);
@@ -4338,8 +4797,13 @@ try{
 
 // ================= HR - DELETE NOTIFICATION =================
 
+// This had no auth check at all, while the sibling GET /hr/notifications did —
+// anyone could delete any notification.
 app.delete("/hr/notifications/:id", async(req,res)=>{
 try{
+    if(!isHRSession(req)){
+        return res.status(401).json({ success:false, message:"Unauthorized" });
+    }
     await Notification.findByIdAndDelete(req.params.id);
     res.json({ success:true });
 }catch(error){ res.json({ success:false }); }
@@ -4347,22 +4811,37 @@ try{
 
 // ================= ALL STUDENTS (legacy admin) =================
 
-app.get("/students", async(req,res)=>{
-    const adminPassword = req.headers.authorization;
-    if(adminPassword !== "Bearer mysecret123"){
-        return res.status(401).json({ message:"Unauthorized" });
-    }
+// These three endpoints read and mutate every student record, so they require
+// an admin session.
+//
+// `GET /students` was previously guarded by the literal `Bearer mysecret123`,
+// which public/dashboard.html shipped to the browser — a public password.
+// `PUT` and `DELETE` had no guard at all, and the PUT spread an arbitrary
+// request body straight into findByIdAndUpdate, so anyone could rewrite any
+// student's domain, tenure, employeeId or payment status.
+app.get("/students", requireAdminAPI, async(req,res)=>{
     try{
-        const students = await Student.find().select('firstName lastName email whatsapp domain collegeName college employeeId tenure joiningDate createdAt').sort({ createdAt:-1 });
+        const students = await Student.find().select('firstName lastName email whatsapp domain collegeName college employeeId tenure joiningDate createdAt').sort({ createdAt:-1 }).lean();
         res.json(students);
     }catch(error){ res.status(500).json({ message:"Error fetching students" }); }
 });
 
 // ================= UPDATE STUDENT =================
 
-app.put("/students/:id", async(req,res)=>{
+// Only these fields may be set through this endpoint. Anything else in the
+// body is dropped, so the route cannot be used to flip privilege/payment flags
+// or overwrite a password hash.
+const LEGACY_STUDENT_EDITABLE_FIELDS = [
+    "firstName", "lastName", "name", "email", "whatsapp",
+    "domain", "tenure", "joiningDate", "collegeName", "college", "gender"
+];
+
+app.put("/students/:id", requireAdminAPI, async(req,res)=>{
 try{
-    const body = { ...req.body };
+    const body = {};
+    for(const field of LEGACY_STUDENT_EDITABLE_FIELDS){
+        if(req.body && req.body[field] !== undefined) body[field] = req.body[field];
+    }
     if(body.firstName !== undefined || body.lastName !== undefined){
         body.name = `${body.firstName || ""} ${body.lastName || ""}`.trim();
     }
@@ -4371,6 +4850,9 @@ try{
         body.collegeName = collegeName;
         body.college = collegeName;
     }
+    if(Object.keys(body).length === 0){
+        return res.status(400).json({ message:"No editable fields supplied" });
+    }
     await Student.findByIdAndUpdate(req.params.id, body, { new:true });
     res.json({ message:"Student Updated" });
 }catch(error){ res.status(500).json({ message:"Update Failed" }); }
@@ -4378,7 +4860,7 @@ try{
 
 // ================= DELETE STUDENT =================
 
-app.delete("/students/:id", async(req,res)=>{
+app.delete("/students/:id", requireAdminAPI, async(req,res)=>{
 try{
     await Student.findByIdAndDelete(req.params.id);
     res.json({ message:"Student deleted" });
@@ -4387,7 +4869,7 @@ try{
 
 // ================= STUDENT LOGIN =================
 
-app.post("/student-login", loginLimiter, async(req,res)=>{
+app.post("/student-login", loginIpLimiter, loginLimiter, async(req,res)=>{
 try{
     const { employeeId, password } = req.body;
     const student = await Student.findOne({ employeeId });
@@ -4395,18 +4877,23 @@ try{
 
     if (await checkLockout(res, student, Student)) return;
 
-    let pwdMatch = student.password === password;
-    if (!pwdMatch) {
-        try {
-            pwdMatch = await bcrypt.compare(password, student.password);
-        } catch(e) {}
-    }
+    // Passwords are bcrypt hashes. The `student.password === password`
+    // cleartext comparison that used to run first is gone — it let a row whose
+    // password column still held cleartext authenticate without hashing.
+    let pwdMatch = false;
+    try {
+        pwdMatch = await bcrypt.compare(password, student.password || "");
+    } catch(e) {}
 
     if(!pwdMatch){
         return await recordFailedAttempt(res, student, Student, "Invalid Employee ID or Password");
     }
 
     await clearFailedAttempts(student, Student);
+
+    // Establish the server-side session. Every downstream handler derives the
+    // acting student from here, never from a request header or body.
+    establishStudentSession(req, student);
 
     // Internship end date (used by student dashboard profile modal)
     // tenure values in this app are "1 Month" | "3 Months" | "6 Months".
@@ -4438,7 +4925,7 @@ try{
         }
     }
 
-    await Student.findOneAndUpdate({ employeeId }, { lastActiveDate: new Date(), plainPassword: password });
+    await Student.findOneAndUpdate({ employeeId }, { lastActiveDate: new Date() });
     res.json({
         success:true,
         student:{
@@ -4482,32 +4969,22 @@ try{
 
 // ================= STUDENT PORTAL API ENDPOINTS =================
 
-app.post("/get-my-password", async (req, res) => {
-  try {
-    const { employeeId, confirmedPassword } = req.body;
-    const student = await Student.findOne({ employeeId });
-    if (!student) {
-      return res.json({ success: false, message: "Not verified" });
-    }
-    const displayPassword = student.plainPassword || (student.password && !student.password.startsWith("$2b$") && !student.password.startsWith("$2a$") ? student.password : "intern123");
-    if (confirmedPassword !== undefined && confirmedPassword !== null) {
-      let pwdMatch = student.password === confirmedPassword;
-      if (!pwdMatch) {
-        try {
-          pwdMatch = await bcrypt.compare(confirmedPassword, student.password);
-        } catch (e) {}
-      }
-      if (!pwdMatch) {
-        return res.json({ success: false, message: "Not verified" });
-      }
-      return res.json({ success: true, password: displayPassword });
-    } else {
-      // Direct verification-free reveal
-      return res.json({ success: true, password: displayPassword });
-    }
-  } catch (err) {
-    res.json({ success: false });
-  }
+// REMOVED: POST /get-my-password
+//
+// This endpoint had no authentication, and when `confirmedPassword` was
+// omitted it took a branch commented "Direct verification-free reveal" that
+// returned the student's cleartext password for any employeeId. Employee IDs
+// are sequential and printed on offer letters and certificates, so this was
+// mass account takeover by enumeration.
+//
+// Passwords are now stored only as bcrypt hashes and cannot be read back by
+// anyone, including staff. A student who forgets their password uses the
+// existing reset flow (POST /auth/forgot-password → emailed reset link).
+app.post("/get-my-password", (req, res) => {
+  res.status(410).json({
+    success: false,
+    message: "Passwords can no longer be retrieved. Use 'Forgot password' to set a new one."
+  });
 });
 
 app.post(["/mark-onboarding-seen", "/api/v2/student/mark-onboarding-seen"], async (req, res) => {
@@ -4634,81 +5111,65 @@ app.post(["/save-start-date", "/api/v2/student/save-start-date"], async (req, re
 });
 
 // ── HELPER FUNCTION — CALCULATE STATS ──
+//
+// Rewritten onto utils/attendanceUtils. The previous version:
+//   - had its own tenure map keyed by the exact spaced strings, so anything
+//     that did not match fell to 30 days;
+//   - divided by the FULL tenure length with Sundays INCLUDED, so a student on
+//     day 3 of 45 could show at most 6%;
+//   - computed `startDate` from internshipStartDate for WhatsApp joiners and
+//     then never used the variable, so the section 2 bug was visible right here.
 async function calculateAttendanceStats(employeeId) {
-  // Get student data for tenure and start date
   const student = await Student.findOne({ employeeId });
   if (!student) return null;
 
-  // Determine tenure total days
-  const tenureDaysMap = {
-    "1 Week": 7,
-    "15 Days": 15,
-    "1 Month": 30,
-    "45 Days": 45,
-    "3 Months": 90,
-    "6 Months": 180
+  const records = await Attendance.find({ employeeId });
+  const selfRecords  = records.filter(r => r.markedBy === "self");
+  const coordRecords = records.filter(r => r.markedBy === "coordinator");
+
+  const summary = attendanceUtils.getAttendanceSummary(records, student);
+  const elapsed = summary.workingDaysElapsed;
+
+  const countPresent = (rows) => {
+    const days = new Set();
+    for (const r of rows) {
+      if (r.status === "Absent") continue;
+      const key = r.dateKey || attendanceUtils.toDateKey(r.date);
+      if (key) days.add(key);
+    }
+    return days.size;
   };
-  const totalDays = tenureDaysMap[student.tenure] || 30;
 
-  // Determine start date
-  // WhatsApp joiners use internshipStartDate, others use joiningDate
-  let startDate;
-  if (student.joinerType === "whatsapp" && student.internshipStartDate) {
-    startDate = new Date(student.internshipStartDate);
-  } else {
-    startDate = new Date(student.joiningDate || student.createdAt);
-  }
+  const selfCount  = countPresent(selfRecords);
+  const coordCount = countPresent(coordRecords);
+  const pct = (n) => (elapsed > 0 ? Math.min(Math.round((n / elapsed) * 100), 100) : 0);
 
-  // Get all attendance records for this student
-  const selfRecords = await Attendance.find({
-    employeeId,
-    markedBy: "self"
-  });
-  const coordRecords = await Attendance.find({
-    employeeId,
-    markedBy: "coordinator"
-  });
-
-  const selfCount = selfRecords.filter(r => r.status === "Present" || !r.status).length;
-  const coordCount = coordRecords.filter(r => r.status === "Present" || !r.status).length;
-
-  // Combined = union of self + coordinator dates (filtered for status !== "Absent")
-  const presentDates = new Set();
-  selfRecords.forEach(r => { if (r.status !== "Absent") presentDates.add(r.dateKey || new Date(r.date).toISOString().split('T')[0]); });
-  coordRecords.forEach(r => { if (r.status !== "Absent") presentDates.add(r.dateKey || new Date(r.date).toISOString().split('T')[0]); });
-
-  const combinedCount = presentDates.size;
-
-  // Calculate percentages (capped at 100%)
-  const selfPct   = Math.min(Math.round((selfCount / totalDays) * 100), 100);
-  const coordPct  = Math.min(Math.round((coordCount / totalDays) * 100), 100);
-  const combinedPct = Math.min(Math.round((combinedCount / totalDays) * 100), 100);
-
-  // Days needed to reach 75%
-  const minDays = Math.ceil(totalDays * 0.75);
-  const daysNeeded = Math.max(0, minDays - combinedCount);
-
-  // Check if today already marked
-  const now = new Date();
-  const istOffset = 5.5 * 60 * 60 * 1000;
-  const istNow = new Date(now.getTime() + istOffset);
-  const today = istNow.toISOString().split("T")[0];
-
-  const markedToday = selfRecords.some(r => r.dateKey === today || new Date(r.date).toISOString().split('T')[0] === today);
+  const todayKey = istDateKey();
+  const markedToday = selfRecords.some(r =>
+    (r.dateKey || attendanceUtils.toDateKey(r.date)) === todayKey);
 
   return {
     selfCount,
     coordCount,
-    combinedCount,
-    totalDays,
-    selfPct,
-    coordPct,
-    combinedPct,
-    minDays,
-    daysNeeded,
+    combinedCount: summary.daysPresent,
+    // `totalDays` is the denominator the percentages use: elapsed working days.
+    totalDays: elapsed,
+    tenureTotalDays: summary.totalCalendarDays,
+    totalWorkingDays: summary.totalWorkingDays,
+    selfPct:  pct(selfCount),
+    coordPct: pct(coordCount),
+    combinedPct: summary.percentage,
+    minDays: summary.requiredDays,
+    daysNeeded: summary.stillNeeds,
     markedToday,
-    isAboveMinimum: combinedPct >= 75,
-    tenure: student.tenure
+    isAboveMinimum: summary.isEligible,
+    tenure: student.tenure,
+    // Section 3: "Day 12 of 45".
+    dayNumber: summary.dayNumber,
+    daysRemaining: summary.daysRemaining,
+    preportalCreditedDays: summary.preportalCreditedDays,
+    startDate: summary.startDate,
+    endDate: summary.endDate
   };
 }
 
@@ -4721,10 +5182,9 @@ app.post("/mark-attendance", async (req, res) => {
     const student = await Student.findOne({ employeeId });
     if (!student) return res.json({ success: false, message: "Student not found" });
 
-    const now = new Date();
-    const istOffset = 5.5 * 60 * 60 * 1000;
-    const istNow = new Date(now.getTime() + istOffset);
-    const today = istNow.toISOString().split("T")[0];
+    // Shared IST day key — the cron job used a UTC key, so the two disagreed
+    // about which day it was after 18:30 UTC.
+    const today = istDateKey();
 
     // Check if already marked today
     const existing = await Attendance.findOne({
@@ -4778,30 +5238,31 @@ app.post("/mark-attendance", async (req, res) => {
 app.get("/attendance-stats/:employeeId", async (req, res) => {
   try {
     const employeeId = decodeURIComponent(req.params.employeeId);
-    const originalStats = await calculateAttendanceStats(employeeId);
-    const presentCount = await Attendance.countDocuments({ employeeId, status: 'Present' });
     const student = await Student.findOne({ employeeId });
     if (!student) return res.json({ success: false, message: "Student not found" });
 
-    const stats = calcAttendancePercentage(student, presentCount);
+    // This endpoint used to run two different calculators and merge their
+    // output, so `percentage` (elapsed calendar days, Sundays counted) could
+    // contradict `selfPct`/`coordPct` (full tenure, Sundays counted) inside a
+    // single response. There is one calculation now.
+    const stats = await calculateAttendanceStats(employeeId);
+    if (!stats) return res.json({ success: false, message: "Student not found" });
 
-    const mergedStats = {
-      ...(originalStats || {}),
-      percentage: stats.percentage,
-      presentDays: stats.presentDays,
-      totalDays: stats.totalDays,
-      absentDays: stats.absentDays,
-      requiredDays: stats.requiredDays,
-      tenureTotalDays: stats.tenureTotalDays,
-      selfPresentDays: originalStats ? originalStats.selfCount : 0,
-      coordinatorPresentDays: originalStats ? originalStats.coordCount : 0,
-      combinedPresentDays: originalStats ? originalStats.combinedCount : 0,
+    const payload = {
+      ...stats,
+      percentage: stats.combinedPct,
+      presentDays: stats.combinedCount,
+      absentDays: Math.max(0, stats.totalDays - stats.combinedCount),
+      requiredDays: stats.minDays,
+      selfPresentDays: stats.selfCount,
+      coordinatorPresentDays: stats.coordCount,
+      combinedPresentDays: stats.combinedCount
     };
 
     return res.json({
       success: true,
-      stats: mergedStats,
-      ...mergedStats
+      stats: payload,
+      ...payload
     });
   } catch (err) {
     console.log(err);
@@ -4859,7 +5320,7 @@ app.post("/coordinator-mark-attendance", async (req, res) => {
 
 // ================= COORDINATOR LOGIN =================
 
-app.post("/coordinator-login", loginLimiter, async(req,res)=>{
+app.post("/coordinator-login", loginIpLimiter, loginLimiter, async(req,res)=>{
 try{
     const password = (req.body && req.body.password) || "";
     const identifier = ((req.body && (req.body.username || req.body.email)) || "").trim();
@@ -4867,10 +5328,13 @@ try{
         return res.json({ success:false });
     }
 
-    // 1) Hardcoded coordinator (legacy) — exact-username match
+    // 1) Roster coordinator (credentials from COORDINATOR_CREDENTIALS) —
+    //    exact-username match.
     const legacy = COORDINATORS[identifier];
-    if(legacy && legacy.password === password){
-        return res.json({ success:true, coordinator:{ username:identifier, domain:legacy.domain } });
+    if(legacy && await verifyCredentialPassword(legacy, password)){
+        const coordIdentity = { username:identifier, domain:legacy.domain };
+        if (req.session) req.session.coordinator = coordIdentity;
+        return res.json({ success:true, coordinator: coordIdentity });
     }
 
     // 2) DB-backed coordinator (created via promotion flow). Accepts either
@@ -4889,10 +5353,12 @@ try{
                 await dbCoord.save().catch(() => {});
             }
             await clearFailedAttempts(dbCoord, Coordinator);
-            return res.json({ success:true, coordinator:{
+            const coordIdentity = {
                 username: dbCoord.username || dbCoord.email,
                 domain:   dbCoord.domain
-            }});
+            };
+            if (req.session) req.session.coordinator = coordIdentity;
+            return res.json({ success:true, coordinator: coordIdentity });
         } else {
             return await recordFailedAttempt(res, dbCoord, Coordinator, "Invalid Username or Password");
         }
@@ -5109,40 +5575,55 @@ async function computeAttendanceStats(employeeId, joiningDate, domain){
     // Union of distinct calendar days the student was Present in EITHER source
     const presentDayKeys = new Set();
     records.forEach(r => { if(r.status === "Present") presentDayKeys.add(r.dateKey); });
-    const combinedPresentDays = presentDayKeys.size;
 
-    // Denominator: working days from joining date → today (inclusive), excluding Sundays.
-    let workingDays = 0;
-    const jd = parseJoinDate(joiningDate);
-    if(jd){
-        const today = new Date();
-        const j = new Date(jd); j.setHours(0,0,0,0);
-        const t = new Date(today); t.setHours(0,0,0,0);
-        if(j <= t) workingDays = countDaysExcludingSundays(j, t);
-    }
+    // Denominator: elapsed working days, Sundays excluded, from the student's
+    // EFFECTIVE start date — which for a WhatsApp joiner is internshipStartDate,
+    // earlier than the joiningDate this function used to be handed. A WhatsApp
+    // joiner's pre-portal period is credited as attended (see
+    // utils/attendanceUtils.getPreportalCreditedDays).
+    const student = await Student.findOne({ employeeId }).lean();
+    const summary = attendanceUtils.getAttendanceSummary(
+        records,
+        student || { joiningDate, tenure: null }
+    );
+    const workingDays = summary.workingDaysElapsed;
 
-    // No valid joining date / no working days yet → percentages are not defined (0).
+    // Includes any pre-portal days credited to a WhatsApp joiner.
+    const combinedPresentDays = summary.daysPresent;
+
+    // No valid start date / no working days yet → percentages are not defined (0).
     if(workingDays < 1){
         return {
             selfPresent, selfTotal: self.length,
             coordPresent, coordAbsent, coordTotal: coord.length,
-            combinedPresentDays, workingDays: 0,
+            combinedPresentDays: 0, workingDays: 0,
             selfPct: 0, coordPct: 0, combinedPct: 0,
+            requiredDays: 0, daysNeeded: 0,
+            dayNumber: 0, daysRemaining: summary.totalCalendarDays,
+            preportalCreditedDays: 0,
             eligible: false
         };
     }
 
     // Cap at 100 to guard against marks on excluded days (e.g. Sunday entries).
-    const combinedPct = Math.min(100, Math.round((combinedPresentDays / workingDays) * 100));
-    const selfPct     = Math.min(100, Math.round((selfPresent  / workingDays) * 100));
-    const coordPct    = Math.min(100, Math.round((coordPresent / workingDays) * 100));
+    const selfPct  = Math.min(100, Math.round((selfPresent  / workingDays) * 100));
+    const coordPct = Math.min(100, Math.round((coordPresent / workingDays) * 100));
 
     return {
         selfPresent, selfTotal: self.length,
         coordPresent, coordAbsent, coordTotal: coord.length,
         combinedPresentDays, workingDays,
-        selfPct, coordPct, combinedPct,
-        eligible: combinedPct >= 75
+        selfPct, coordPct,
+        combinedPct: summary.percentage,
+        // Section 3: the real 75% target and the day counter for the panel.
+        requiredDays: summary.requiredDays,
+        daysNeeded: summary.stillNeeds,
+        totalWorkingDays: summary.totalWorkingDays,
+        totalCalendarDays: summary.totalCalendarDays,
+        dayNumber: summary.dayNumber,
+        daysRemaining: summary.daysRemaining,
+        preportalCreditedDays: summary.preportalCreditedDays,
+        eligible: summary.isEligible
     };
 }
 
@@ -5288,10 +5769,9 @@ try{
 // ---- HR: attendance monitor (all students summary) ----
 app.get("/attendance/monitor", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")) return res.status(401).json({ success:false, message:"Unauthorized" });
+    if(!isHRSession(req)) return res.status(401).json({ success:false, message:"Unauthorized" });
 
-    const students = await Student.find().select('firstName lastName name domain collegeName college employeeId tenure joiningDate createdAt').sort({ createdAt:-1 });
+    const students = await Student.find().select('firstName lastName name domain collegeName college employeeId tenure joiningDate createdAt').sort({ createdAt:-1 }).lean();
     const result = [];
     for(const s of students){
         const stats = await computeAttendanceStats(s.employeeId, s.joiningDate);
@@ -5442,8 +5922,7 @@ try{
 // ---- HR: list students approved by coordinator & awaiting HR review ----
 app.get("/students/coordinator-approved", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")) return res.status(401).json({ success:false, message:"Unauthorized" });
+    if(!isHRSession(req)) return res.status(401).json({ success:false, message:"Unauthorized" });
 
     const students = await Student.find({
         certificateApprovedByCoordinator: true,
@@ -5474,8 +5953,7 @@ try{
 // ---- HR: final approval ----
 app.post("/students/:id/hr-approve", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")) return res.status(401).json({ success:false, message:"Unauthorized" });
+    if(!isHRSession(req)) return res.status(401).json({ success:false, message:"Unauthorized" });
 
     const { hrId, remarks } = req.body;
     const student = await Student.findById(req.params.id);
@@ -5509,8 +5987,7 @@ try{
 // ---- HR: reject (sends student back to coordinator with a reason) ----
 app.post("/students/:id/hr-reject", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")) return res.status(401).json({ success:false, message:"Unauthorized" });
+    if(!isHRSession(req)) return res.status(401).json({ success:false, message:"Unauthorized" });
 
     const { reason } = req.body;
     const student = await Student.findById(req.params.id);
@@ -5539,8 +6016,7 @@ try{
 // ---- HR: list fully approved (certificate-eligible) students ----
 app.get("/students/hr-approved", async(req,res)=>{
 try{
-    const auth = req.headers.authorization;
-    if(!auth || !auth.startsWith("Bearer hr_")) return res.status(401).json({ success:false, message:"Unauthorized" });
+    if(!isHRSession(req)) return res.status(401).json({ success:false, message:"Unauthorized" });
 
     const students = await Student.find({ certificateApprovedByHR: true }).select('firstName lastName name domain collegeName college employeeId tenure joiningDate coordinatorRemarks hrRemarks hrApprovedAt').sort({ hrApprovedAt:-1 });
     const result = [];
@@ -5692,15 +6168,33 @@ function canDeleteIn(identity, room){
     return true;
 }
 
+/**
+ * Chat identity from the SESSION.
+ *
+ * The REST and upload endpoints used to take `role` + `employeeId`/`username`
+ * from the query string, so anyone who knew an employee ID could read that
+ * student's domain room. The Socket.IO handshake is separately verified by
+ * verifyChatIdentity(); this covers the HTTP surface.
+ */
+function chatIdentityFromSession(req) {
+    const s = req.session || {};
+    if (s.student) {
+        return { role: "student", id: s.student.employeeId, name: s.student.name || s.student.employeeId, domain: s.student.domain || "" };
+    }
+    if (s.coordinator) {
+        return { role: "coordinator", id: s.coordinator.username, name: s.coordinator.username, domain: s.coordinator.domain || "" };
+    }
+    if (s.hr) {
+        return { role: "hr", id: s.hr.username || s.hr.email, name: s.hr.name || s.hr.username, domain: "" };
+    }
+    return null;
+}
+
 // REST: load last 50 messages for a room (after permission check)
 app.get("/chat/messages/:room", async(req,res)=>{
 try{
     const room = decodeURIComponent(req.params.room);
-    const identity = await verifyChatIdentity({
-        role: req.query.role,
-        employeeId: req.query.employeeId,
-        username: req.query.username
-    });
+    const identity = chatIdentityFromSession(req);
     if(!identity) return res.status(401).json({ success:false, message:"Unauthorized" });
     if(!canAccessRoom(identity, room)) return res.status(403).json({ success:false, message:"Forbidden" });
 
@@ -5708,6 +6202,59 @@ try{
     messages.reverse();   // chronological for the UI
     res.json({ success:true, messages });
 }catch(e){ console.log(e); res.status(500).json({ success:false, messages:[] }); }
+});
+
+// ── Chat image upload ───────────────────────────────────────────────────────
+// Uses an extension + mimetype whitelist and a size cap, following the pattern
+// in routes/v2/documents.js rather than the generic `upload` instance, which
+// has no fileFilter and accepts any content type.
+const chatUploadDir = path.join(__dirname, "uploads", "chat");
+try { fs.mkdirSync(chatUploadDir, { recursive: true }); } catch (_) {}
+
+const CHAT_IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
+const CHAT_IMAGE_MIMES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+
+const chatImageUpload = multer({
+    storage: multer.diskStorage({
+        destination: (_req, _file, cb) => cb(null, chatUploadDir),
+        filename: (_req, file, cb) => {
+            // Never trust the client filename for the path on disk.
+            const ext = path.extname(file.originalname || "").toLowerCase();
+            const safeExt = CHAT_IMAGE_EXTENSIONS.includes(ext) ? ext : ".img";
+            cb(null, "chat-" + Date.now() + "-" + crypto.randomBytes(6).toString("hex") + safeExt);
+        }
+    }),
+    limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+    fileFilter: (_req, file, cb) => {
+        const ext = path.extname(file.originalname || "").toLowerCase();
+        if (!CHAT_IMAGE_EXTENSIONS.includes(ext) || !CHAT_IMAGE_MIMES.includes(file.mimetype)) {
+            return cb(new Error("Only JPG, PNG, GIF and WebP images can be sent in chat."));
+        }
+        cb(null, true);
+    }
+});
+
+app.post("/chat/upload-image", (req, res) => {
+    const identity = chatIdentityFromSession(req);
+    if (!identity) return res.status(401).json({ success: false, message: "Please sign in to send an image." });
+
+    chatImageUpload.single("image")(req, res, (err) => {
+        if (err) {
+            const tooBig = err.code === "LIMIT_FILE_SIZE";
+            return res.status(tooBig ? 413 : 400).json({
+                success: false,
+                message: tooBig ? "That image is larger than 5MB." : (err.message || "Could not upload that image.")
+            });
+        }
+        if (!req.file) return res.status(400).json({ success: false, message: "No image was received." });
+
+        res.json({
+            success: true,
+            imageUrl: "/uploads/chat/" + req.file.filename,
+            imageName: (req.file.originalname || "image").slice(0, 120),
+            imageMime: req.file.mimetype
+        });
+    });
 });
 
 // REST fallback for delete (Socket.IO event is the primary path)
@@ -5994,7 +6541,7 @@ async function sendPromotionEmail({ to, name, fromRoleLabel, toRoleLabel, employ
     const subject = "🎉 Congratulations! You've been promoted at The Entrepreneurship Network";
     try {
         await transporter.sendMail({
-            from: EMAIL_FROM,
+            from: "TEN HR <ten.internshipportal@gmail.com>",
             to, subject, html,
             text: `Hello ${name}, you have been promoted to ${toRoleLabel}. Temporary password: ${tempPassword}. Complete registration at ${loginUrl} within 48 hours.`
         });
@@ -6442,28 +6989,121 @@ async function checkCertificateEligibility(employeeId){
 }
 
 // ---- Build leaderboard entries for a domain or globally ----
+/**
+ * Build a leaderboard.
+ *
+ * The previous implementation loaded EVERY student and then, serially in a for
+ * loop, ran roughly eight more queries per student (computeAttendanceStats,
+ * calculatePerformance — itself five queries — plus a submission count). With
+ * thousands of students the "Overall" request exceeded the database timeout,
+ * the catch block returned `{ leaderboard: [] }`, and the front end rendered
+ * that as "No data yet" — indistinguishable from a genuinely empty board.
+ * That is Screenshot 10. The domain tab looked fine only because it filtered to
+ * a single domain first.
+ *
+ * This version issues a fixed number of queries regardless of student count,
+ * and ranks by StudentCoin.totalCoins — the source of truth the task document
+ * points at ("sort all students by totalCoins descending").
+ */
+// Leaderboard results are identical for everyone who asks, and rebuilding one
+// reads every candidate student plus their coin rows. Thirty students opening
+// the board in the same minute produced thirty identical rebuilds. Cached for
+// 60 seconds, which is well inside how often coin balances actually move, and
+// keyed so the overall board and each domain board stay separate.
+//
+// LeaderboardCache (models/new/LeaderboardCache.js) is the durable version of
+// this and is still unpopulated; this in-process cache is the cheap half, and
+// it is correct on a single worker — which is what ecosystem.config.js runs.
+const LEADERBOARD_CACHE_MS = 60 * 1000;
+const _leaderboardCache = new Map();
+
+function _leaderboardCacheKey(filter, limit) {
+    return JSON.stringify(filter || {}) + "|" + limit;
+}
+
 async function _buildLeaderboard(filter, limit){
-    const students = await Student.find(filter || {}).sort({ createdAt: 1 });
-    const rows = [];
-    for(const s of students){
-        const stats = await computeAttendanceStats(s.employeeId, s.joiningDate);
-        const perf = await calculatePerformance(s);
-        const approved = await Submission.countDocuments({ employeeId: s.employeeId, status:"Approved" });
-        rows.push({
-            employeeId: s.employeeId,
-            name: (s.name || ((s.firstName||"")+" "+(s.lastName||""))).trim() || s.employeeId,
-            domain: s.domain || "",
-            score: perf ? perf.score : 0,
-            grade: perf ? perf.grade : "—",
-            attendancePct: stats.combinedPct || 0,
-            approved,
-            currentStreak: s.currentStreak || 0
-        });
+    const cacheKey = _leaderboardCacheKey(filter, limit);
+    const cached = _leaderboardCache.get(cacheKey);
+    if (cached && (Date.now() - cached.at) < LEADERBOARD_CACHE_MS) {
+        return cached.rows;
     }
-    rows.sort((a,b) => b.score - a.score
-                    || b.attendancePct - a.attendancePct
-                    || b.approved - a.approved);
+
+    const rows = await _computeLeaderboard(filter, limit);
+    _leaderboardCache.set(cacheKey, { at: Date.now(), rows });
+    return rows;
+}
+
+async function _computeLeaderboard(filter, limit){
+    const StudentCoin = require("./models/new/StudentCoin");
+    const hasFilter = !!(filter && Object.keys(filter).length);
+
+    // 1. Candidate students (already narrowed by domain when one is given).
+    const students = await Student.find(filter || {})
+        .select("employeeId name firstName lastName domain currentStreak")
+        .lean();
+    if (!students.length) return [];
+
+    const studentIds = students.map(s => s._id);
+
+    // 2. Coin balances and approved-submission counts, in two queries total.
+    const [coinRows, approvedRows] = await Promise.all([
+        StudentCoin.find({ studentId: { $in: studentIds } })
+            .select("studentId totalCoins")
+            .lean(),
+        // No filter means "every student", so an $in listing all of them is
+        // both pointless and large enough to push $group past the 100 MB
+        // in-memory limit (MongoDB error 292,
+        // QueryExceededMemoryLimitNoDiskUseAllowed). Match on status alone in
+        // that case, and let the grouping spill to disk either way.
+        Submission.aggregate(
+            [
+                {
+                    $match: hasFilter
+                        ? { employeeId: { $in: students.map(s => s.employeeId) }, status: "Approved" }
+                        : { status: "Approved" }
+                },
+                { $group: { _id: "$employeeId", count: { $sum: 1 } } }
+            ],
+            { allowDiskUse: true }
+        ).catch((e) => {
+            console.error("[leaderboard] approved-submission counts unavailable:", e.message);
+            return [];
+        })
+    ]);
+
+    const coinsByStudent = new Map();
+    for (const row of coinRows) coinsByStudent.set(String(row.studentId), row.totalCoins || 0);
+
+    const approvedByEmployee = new Map();
+    for (const row of approvedRows || []) approvedByEmployee.set(row._id, row.count || 0);
+
+    const rows = students.map(s => ({
+        employeeId: s.employeeId,
+        name: (s.name || ((s.firstName||"")+" "+(s.lastName||""))).trim() || s.employeeId,
+        domain: s.domain || "",
+        totalCoins: coinsByStudent.get(String(s._id)) || 0,
+        // Kept for the existing table columns; the stored value is refreshed by
+        // the attendance recalculation, not recomputed per row here.
+        attendancePct: s.attendancePercentage || 0,
+        score: coinsByStudent.get(String(s._id)) || 0,
+        grade: s.performanceScore ? gradeForScore(s.performanceScore) : "—",
+        approved: approvedByEmployee.get(s.employeeId) || 0,
+        currentStreak: s.currentStreak || 0
+    }));
+
+    rows.sort((a,b) => b.totalCoins - a.totalCoins
+                    || b.approved - a.approved
+                    || b.attendancePct - a.attendancePct);
+
     return rows.slice(0, limit).map((r, i) => Object.assign({ rank: i+1 }, r));
+}
+
+function gradeForScore(score){
+    if (score >= 90) return "A+";
+    if (score >= 80) return "A";
+    if (score >= 70) return "B";
+    if (score >= 60) return "C";
+    return "D";
 }
 async function buildDomainLeaderboard(domain, limit=10){ return _buildLeaderboard({ domain }, limit); }
 async function buildOverallLeaderboard(limit=20)        { return _buildLeaderboard({}, limit); }
@@ -6471,18 +7111,28 @@ async function buildOverallLeaderboard(limit=20)        { return _buildLeaderboa
 // ---- API ----
 
 // Feature 5 — leaderboards
+// NOTE: both handlers used to swallow a failure into
+// `{ success:false, leaderboard: [] }`, which the front end rendered as
+// "No data yet" — so a timeout looked exactly like an empty board and the real
+// problem stayed invisible. They now report the failure.
 app.get("/leaderboard/domain/:domain", async(req,res)=>{
     try{
         const domain = decodeURIComponent(req.params.domain);
         const rows = await buildDomainLeaderboard(domain, 10);
         res.json({ success:true, leaderboard: rows, domain });
-    }catch(e){ console.log(e); res.status(500).json({ success:false, leaderboard:[] }); }
+    }catch(e){
+        console.error("[leaderboard] domain failed:", e.message);
+        res.status(500).json({ success:false, error:"Could not load the leaderboard.", leaderboard:null });
+    }
 });
 app.get("/leaderboard/overall", async(req,res)=>{
     try{
         const rows = await buildOverallLeaderboard(20);
         res.json({ success:true, leaderboard: rows });
-    }catch(e){ console.log(e); res.status(500).json({ success:false, leaderboard:[] }); }
+    }catch(e){
+        console.error("[leaderboard] overall failed:", e.message);
+        res.status(500).json({ success:false, error:"Could not load the leaderboard.", leaderboard:null });
+    }
 });
 
 // Feature 6 — badges
@@ -6694,14 +7344,10 @@ app.post("/auth/reset-password", async(req,res)=>{
             return res.json({ success:false, message:"This reset link has expired. Please request a new one." });
         }
 
-        // For students the password is currently stored in plaintext (existing
-        // behaviour). For coord/HR the DB-backed accounts use bcrypt.
-        if(role === "student"){
-            user.password = newPassword;
-            user.plainPassword = newPassword;
-        } else {
-            user.password = await bcrypt.hash(newPassword, 10);
-        }
+        // Every role stores a bcrypt hash. Students used to be the exception —
+        // the reset wrote the new password in cleartext into `password` AND
+        // kept a second cleartext copy in `plainPassword`.
+        user.password = await bcrypt.hash(newPassword, 12);
         user.passwordResetToken = null;
         user.passwordResetExpiry = null;
         await user.save();
@@ -7538,14 +8184,14 @@ const codingSubmissionSchema = new mongoose.Schema({
 const CodingSubmission = mongoose.model("CodingSubmission", codingSubmissionSchema);
 
 // ----- Coordinator CRUD -----
-app.get("/coordinator/coding-questions/:domain", async(req,res)=>{
+app.get("/coordinator/coding-questions/:domain", requireStaffSession, async(req,res)=>{
     try {
         const domain = decodeURIComponent(req.params.domain);
         const list = await CodingQuestion.find({ domain }).sort({ createdAt:-1 });
         res.json({ success:true, questions:list });
     } catch(e){ console.log(e); res.status(500).json({ success:false }); }
 });
-app.post("/coordinator/coding-questions", async(req,res)=>{
+app.post("/coordinator/coding-questions", requireStaffSession, async(req,res)=>{
     try {
         const b = req.body || {};
         if(!b.domain || !b.title || !b.description){
@@ -7574,7 +8220,7 @@ app.post("/coordinator/coding-questions", async(req,res)=>{
         res.json({ success:true, question:q });
     } catch(e){ console.log(e); res.status(500).json({ success:false }); }
 });
-app.delete("/coordinator/coding-questions/:id", async(req,res)=>{
+app.delete("/coordinator/coding-questions/:id", requireStaffSession, async(req,res)=>{
     try {
         await CodingQuestion.findByIdAndDelete(req.params.id);
         res.json({ success:true });
@@ -7604,7 +8250,7 @@ function getStudentDayNumber(student) {
 }
 
 // ----- Student-facing -----
-app.get("/student/coding-questions/:domain", async(req,res)=>{
+app.get("/student/coding-questions/:domain", requireStudentSession, async(req,res)=>{
     try {
         const domain = decodeURIComponent(req.params.domain);
         const employeeId = req.headers['x-employee-id'] || req.headers['employeeid'] || req.query.employeeId || (req.session && req.session.student && req.session.student.employeeId);
@@ -7667,7 +8313,7 @@ app.get("/student/coding-questions/:domain", async(req,res)=>{
         res.json({ success:true, questions:processedQuestions });
     } catch(e){ console.log(e); res.status(500).json({ success:false }); }
 });
-app.get("/student/coding-questions/question/:id", async(req,res)=>{
+app.get("/student/coding-questions/question/:id", requireStudentSession, async(req,res)=>{
     try {
         const q = await CodingQuestion.findById(req.params.id);
         if(!q) return res.status(404).json({ success:false, message:"Not found" });
@@ -7676,7 +8322,7 @@ app.get("/student/coding-questions/question/:id", async(req,res)=>{
         res.json({ success:true, question:obj });
     } catch(e){ console.log(e); res.status(500).json({ success:false }); }
 });
-app.get("/student/coding-submissions/:employeeId", async(req,res)=>{
+app.get("/student/coding-submissions/:employeeId", requireStudentSession, async(req,res)=>{
     try {
         const employeeId = decodeURIComponent(req.params.employeeId);
         const list = await CodingSubmission.find({ employeeId }).sort({ submittedAt:-1 });
@@ -7791,7 +8437,54 @@ async function runSourceCode({ code, language, stdin }){
     } finally { cleanup(); }
 }
 
-app.post("/code/run", async(req,res)=>{
+// ─── Code runner gate ────────────────────────────────────────────────────────
+//
+// runSourceCode() writes attacker-controlled source to a temp file and executes
+// it on this host with no container, no user isolation and no resource cap
+// beyond a wall-clock kill. It was reachable by any anonymous request, which
+// made it a remote-code-execution hole: read .env, exfiltrate MONGODB_URI, dump
+// the student database, install persistence.
+//
+// Two controls now stand in front of it:
+//   1. ENABLE_CODE_RUNNER must be explicitly "true" (documented in .env.example,
+//      but never previously implemented). Default is off.
+//   2. The caller must hold a student session, and is rate-limited per account.
+//
+// This is containment, NOT a sandbox. Before turning ENABLE_CODE_RUNNER on in
+// production, move execution into a network-isolated, memory- and process-
+// capped container. See docs/SECURITY-DO-NOT-EXPOSE.md.
+const CODE_RUNNER_ENABLED = String(process.env.ENABLE_CODE_RUNNER || "").toLowerCase() === "true";
+
+if (!CODE_RUNNER_ENABLED) {
+    console.warn("[code-runner] Disabled (ENABLE_CODE_RUNNER is not 'true'). /code/run and /code/submit will refuse requests.");
+}
+
+function requireCodeRunner(req, res, next) {
+    if (!CODE_RUNNER_ENABLED) {
+        return res.status(503).json({
+            success: false,
+            output: "",
+            error: "The code runner is disabled on this server.",
+            executionTime: 0
+        });
+    }
+    next();
+}
+
+// Per-account cap: executing code is far more expensive than a normal request.
+const codeRunLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    // Same IPv6 caveat as loginRateLimitKey. express-rate-limit raises
+    // ERR_ERL_KEY_GEN_IPV6 at startup for a raw req.ip, which is how this was
+    // spotted in the production logs.
+    keyGenerator: (req) => sessionEmployeeId(req) || ipKeyGenerator(req.ip),
+    message: { success: false, output: "", error: "Too many runs. Wait a minute and try again.", executionTime: 0 }
+});
+
+app.post("/code/run", requireCodeRunner, requireStudentSession, codeRunLimiter, async(req,res)=>{
     try {
         const { code, language, input } = req.body || {};
         if(!code) return res.json({ success:false, output:"", error:"No code provided", executionTime: 0 });
@@ -7799,7 +8492,7 @@ app.post("/code/run", async(req,res)=>{
         res.json(r);
     } catch(e){
         console.log("/code/run error:", e && e.message);
-        res.status(500).json({ success:false, output:"", error:"Server error: " + (e && e.message), executionTime: 0 });
+        res.status(500).json({ success:false, output:"", error:"Server error", executionTime: 0 });
     }
 });
 
@@ -7865,7 +8558,7 @@ async function evaluateCodeSubmission({ employeeId, questionId, language, code }
     };
 }
 
-app.post("/code/submit", async(req,res)=>{
+app.post("/code/submit", requireCodeRunner, requireStudentSession, codeRunLimiter, async(req,res)=>{
     try {
         const { employeeId, questionId, language, code } = req.body || {};
         if(!employeeId || !questionId || !code){
@@ -7882,7 +8575,7 @@ app.post("/code/submit", async(req,res)=>{
 
 // ----- Open in Terminal: create temp workspace -----
 // NOTE: Directories are created under /tmp and will be cleaned by the OS tmpfile cleaner (e.g., systemd-tmpfiles or tmpreaper). This is acceptable for ephemeral coding workspaces.
-app.post("/student/coding/open-terminal", async(req,res)=>{
+app.post("/student/coding/open-terminal", requireCodeRunner, requireStudentSession, async(req,res)=>{
     try {
         const { employeeId, questionId, language } = req.body || {};
         if(!employeeId || !questionId || !language){
@@ -7943,7 +8636,7 @@ app.post("/student/coding/open-terminal", async(req,res)=>{
 });
 
 // ----- Submit from terminal -----
-app.post("/student/coding/submit-from-terminal", async(req,res)=>{
+app.post("/student/coding/submit-from-terminal", requireCodeRunner, requireStudentSession, async(req,res)=>{
     try {
         const { employeeId, questionId, language, code } = req.body || {};
         if(!employeeId || !questionId || !code){
@@ -7959,7 +8652,7 @@ app.post("/student/coding/submit-from-terminal", async(req,res)=>{
 });
 
 // Coordinator's read-only view of student coding submissions in their domain
-app.get("/coordinator/coding-submissions/:domain", async(req,res)=>{
+app.get("/coordinator/coding-submissions/:domain", requireStaffSession, async(req,res)=>{
     try {
         const domain = decodeURIComponent(req.params.domain);
         const list = await CodingSubmission.find({ domain }).sort({ submittedAt:-1 }).limit(200);
@@ -8221,10 +8914,14 @@ const SHORT_COURSE_PRICES = {
   '15days':  1500,
   '1month':  1000
 };
+// Just the tenure name. The dashboard composes the sentence around it, and
+// these values used to already contain "Internship Program", producing
+// "Under the TEN 1 Month Internship Program Internship Program, ..." —
+// the wrong-label bug reported in issue 6.2 / Screenshot 8.
 const SHORT_COURSE_LABELS = {
-  '1week':   '1 Week Internship Program',
-  '15days':  '15 Days Internship Program',
-  '1month':  '1 Month Internship Program'
+  '1week':   '1 Week',
+  '15days':  '15 Days',
+  '1month':  '1 Month'
 };
 const PAYMENT_CUTOFF_DATE = new Date('2026-07-09T00:00:00.000Z');
 
@@ -8265,7 +8962,10 @@ app.get('/api/tenure-payment/status', async (req, res) => {
     }
     if (!stu) return res.status(404).json({ error: 'Student not found' });
 
-    const tenure = (stu.tenure || '').toLowerCase().replace(/[-_\s]/g, '');
+    // Shared tenure parsing. The ad-hoc lowercase+strip here only worked for
+    // values that already matched a key exactly; anything else fell through as
+    // "not a short course" and skipped payment, or the reverse.
+    const tenure = tenureUtils.normalizeTenure(stu.tenure) || '';
     const isShortCourse = ['1week', '15days', '1month'].includes(tenure);
     const price = SHORT_COURSE_PRICES[tenure] || 0;
     let isPaid = stu.shortCoursePaid || false;
@@ -8334,7 +9034,10 @@ app.post('/api/tenure-payment/submit-utr', async (req, res) => {
     }
     if (!stu) return res.status(404).json({ error: 'Student not found' });
 
-    const tenure = (stu.tenure || '').toLowerCase().replace(/[-_\s]/g, '');
+    // Shared tenure parsing. The ad-hoc lowercase+strip here only worked for
+    // values that already matched a key exactly; anything else fell through as
+    // "not a short course" and skipped payment, or the reverse.
+    const tenure = tenureUtils.normalizeTenure(stu.tenure) || '';
     const price = SHORT_COURSE_PRICES[tenure] || 0;
 
     // Save payment record
@@ -8362,13 +9065,14 @@ app.post('/api/tenure-payment/submit-utr', async (req, res) => {
   }
 });
 
-// AI CHATBOT SYSTEM — Task Bot, Query Bot, Voice Bot (Gemini 2.0 Flash)
+// TEN ASSISTANT — answers from the portal's own DomainTask rows, no API key
 try {
-    const v2Bots = require('./routes/v2/bots');
-    app.use('/api/v2/bots', v2Bots);
-    console.log('[V2] Bots routes mounted at /api/v2/bots');
+    const v2Assistant = require('./routes/v2/assistant');
+    app.use('/api/v2/assistant', v2Assistant);
+    app.get('/assistant', (req, res) => res.sendFile(path.join(__dirname, 'public', 'assistant.html')));
+    console.log('[V2] Assistant mounted at /api/v2/assistant, page at /assistant');
 } catch(e) {
-    console.error('[V2] Failed to mount bots routes:', e.message);
+    console.error('[V2] Failed to mount assistant routes:', e.message);
 }
 
 // ── PHASE 2: Ecosystem Platform Routes ────────────────────────────────────
@@ -8385,6 +9089,7 @@ try {
     app.use('/api/mentor', mentorProfileRoutes);
     app.use('/api/investor', investorProfileRoutes);
     app.use('/api/ecosystem-notifications', notificationRoutes);
+    app.use('/api/feedback', require('./routes/studentFeedback'));
     app.use('/api/verification', verificationRoutes);
     app.use('/api/hr', hrDashboardRoutes);
     app.use('/api', programApiRoutes);
@@ -8473,7 +9178,16 @@ io.on("connection", (socket) => {
         try{
             const room = payload && payload.room;
             const text = (payload && payload.text || "").toString().trim().slice(0, 4000);
-            if(!room || !text) { if(ack) ack({ success:false, message:"empty" }); return; }
+
+            // An image-only message is valid. The URL must be one this server
+            // issued via POST /chat/upload-image — never an arbitrary address
+            // supplied by the caller, which would let chat embed remote content
+            // or a tracking pixel.
+            const rawImageUrl = (payload && payload.imageUrl || "").toString();
+            const imageUrl = /^\/uploads\/chat\/[A-Za-z0-9._-]+$/.test(rawImageUrl) ? rawImageUrl : null;
+            if (rawImageUrl && !imageUrl) { if(ack) ack({ success:false, message:"bad_image" }); return; }
+
+            if(!room || (!text && !imageUrl)) { if(ack) ack({ success:false, message:"empty" }); return; }
             if(!canAccessRoom(identity, room)) { if(ack) ack({ success:false, message:"forbidden" }); return; }
 
             // Feature 8: block check — sender silenced in this room?
@@ -8492,6 +9206,9 @@ io.on("connection", (socket) => {
                 senderRole:   identity.role,
                 senderDomain: identity.domain || "",
                 message:      text,
+                imageUrl:     imageUrl,
+                imageName:    imageUrl ? String((payload && payload.imageName) || "image").slice(0, 120) : null,
+                imageMime:    imageUrl ? String((payload && payload.imageMime) || "").slice(0, 60) : null,
                 timestamp:    new Date()
             });
             io.to(room).emit("receive_message", doc);
@@ -9037,7 +9754,43 @@ app.post("/api/v2/mentor/launch-session", async (req, res) => {
     }
 });
 
-server.listen(PORT, "0.0.0.0", ()=>{ console.log(`Server running on port ${PORT}`); });
+server.listen(PORT, "0.0.0.0", ()=>{
+    console.log(`Server running on port ${PORT}`);
+
+    // Start the scheduled jobs. services/automationCron.js defined
+    // initAutomation() but nothing ever called it, so offer-letter auto-send,
+    // completed-internship detection, approval escalation and the auto-mark
+    // attendance job had never run in production.
+    //
+    // ENABLE_AUTOMATION_CRON=false turns them off (useful when several
+    // instances share one database and only one should run the jobs).
+    // Align the employee-ID counter with IDs already issued, so the first ID
+    // generated after this deploy cannot collide with an existing student.
+    initEmployeeIdCounter().catch((err) => {
+        console.error("[employeeId] Counter initialisation failed:", err.message);
+    });
+
+    // Under PM2 cluster mode every worker runs this file, so N workers would
+    // each schedule the same jobs against the same database — N offer letters,
+    // N certificate emails, N attendance rows per student. PM2 numbers its
+    // workers in NODE_APP_INSTANCE, so only worker 0 schedules anything. Fork
+    // mode and a bare `node server.js` leave the variable unset, which reads as
+    // "the only instance" and runs the jobs normally.
+    const clusterWorker = process.env.NODE_APP_INSTANCE;
+    const isCronWorker = clusterWorker === undefined || clusterWorker === "0";
+
+    if (String(process.env.ENABLE_AUTOMATION_CRON || "true").toLowerCase() === "false") {
+        console.log("[AUTO-CRON] Disabled via ENABLE_AUTOMATION_CRON=false.");
+    } else if (!isCronWorker) {
+        console.log(`[AUTO-CRON] Skipped on cluster worker ${clusterWorker}; worker 0 runs the jobs.`);
+    } else {
+        try {
+            require("./services/automationCron").initAutomation();
+        } catch (err) {
+            console.error("[AUTO-CRON] Failed to start automation jobs:", err.message);
+        }
+    }
+});
 
 // Process-level crash protection and error handlers
 process.on('uncaughtException', (error) => {

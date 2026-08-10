@@ -6,3 +6,22 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Written by scripts/setup-production-env.sh — the cleartext HR and coordinator
+# passwords, for distribution. Deleted once they have been handed out; ignored
+# so that a stray `git add .` in the meantime cannot commit them.
+credentials-to-distribute.txt
+
+# Local JSON fallback database — contains user records and password hashes.
+.data/
+uploads/local_db/
+
+# User-uploaded files: resumes, marksheets, generated certificates and letters.
+# These are personal data and must never be committed.
+uploads/documents/
+uploads/certificates/
+uploads/offer-letters/
+uploads/*.pdf
+uploads/*.jpg
+uploads/*.jpeg
+uploads/*.png

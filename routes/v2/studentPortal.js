@@ -223,19 +223,15 @@ const FALLBACK_VIDEOS = {
     }
 };
 
-// FEATURE 2 — Auth middleware using x-employee-id or token
-async function requireStudent(req, res, next) {
-    try {
-        const employeeId = req.headers["x-employee-id"] || req.body.employeeId || req.query.employeeId;
-        if (!employeeId) return res.status(401).json({ success: false, message: "Authentication required" });
-        const student = await Student.findOne({ employeeId: String(employeeId) });
-        if (!student) return res.status(401).json({ success: false, message: "Student not found" });
-        req.student = student;
-        next();
-    } catch (err) {
-        res.status(500).json({ success: false, message: "Auth error" });
-    }
-}
+// Auth middleware — session-derived.
+//
+// This used to read the employeeId from an `x-employee-id` header, the body or
+// the query string, so any caller could act as any student simply by naming
+// their employee ID. It also crashed on GET requests (`req.body.employeeId`
+// with no body parsed), which surfaced as a 500 "Auth error".
+const { requireStudent, requireStaff, sessionEmployeeId } = require("../../middleware/sessionAuth");
+const { normalizeTenure, getTenureLabel } = require("../../utils/tenure");
+const { requireTenurePaid } = require("../../middleware/tenurePaymentGate");
 
 // ────────────────────────────────────────────────
 // FEATURE 2 — GET /api/v2/student/me
@@ -434,8 +430,31 @@ router.post("/student/complete-onboarding", requireStudent, async (req, res) => 
             if (joiningDate) {
                 const startDate = new Date(joiningDate);
                 if (!isNaN(startDate.getTime())) {
-                    updates.joiningDate = joiningDate;
+                    // Only internshipStartDate moves. This used to overwrite
+                    // joiningDate with the same value, which silently defeated
+                    // the whole feature: the pre-portal credit is the gap
+                    // BETWEEN the real start and the portal registration date,
+                    // so making them equal left a gap of zero and the student
+                    // was still marked absent for the WhatsApp months.
                     updates.internshipStartDate = startDate;
+
+                    // Keep a portal-registration date to measure that gap from.
+                    if (!student.joiningDate) {
+                        updates.joiningDate = (student.createdAt || new Date()).toISOString().slice(0, 10);
+                    }
+
+                    // A start date in the future, or after the student already
+                    // registered, is not a WhatsApp back-date.
+                    const portalStart = new Date(updates.joiningDate || student.joiningDate || student.createdAt);
+                    if (startDate > new Date()) {
+                        return res.status(400).json({ success: false, message: "Your start date cannot be in the future." });
+                    }
+                    if (!isNaN(portalStart.getTime()) && startDate > portalStart) {
+                        return res.status(400).json({
+                            success: false,
+                            message: "Your WhatsApp start date should be on or before the day you registered on the portal."
+                        });
+                    }
                 }
             }
 
@@ -833,22 +852,49 @@ router.post("/student/generate-quiz", requireStudent, async (req, res) => {
 // ────────────────────────────────────────────────
 // POST /api/v2/student/onboard
 // ────────────────────────────────────────────────
-router.post("/student/onboard", requireStudent, async (req, res) => {
+router.post("/student/onboard", requireStudent, requireTenurePaid, async (req, res) => {
     try {
         const { durationType } = req.body;
         const student = req.student;
 
-        const validDurations = ["1week", "15days", "45days", "1month", "3months", "6months"];
-        if (!validDurations.includes(durationType)) {
-            return res.status(400).json({ success: false, message: "Invalid duration type" });
+        const requested = normalizeTenure(durationType);
+        if (!requested) {
+            return res.status(400).json({ success: false, message: "Please choose a valid internship length." });
+        }
+
+        // The popup must not be able to change what a student is enrolled on.
+        // It previously wrote v2DurationType with no cross-check, so a student
+        // on the paid 1-Month track could pick "6months" here and be assigned
+        // the full six-month task set. The registered tenure wins.
+        const registered = student.tenure ? normalizeTenure(student.tenure) : null;
+        if (registered && registered !== requested) {
+            return res.status(409).json({
+                success: false,
+                message: `Your internship is registered as ${getTenureLabel(registered)}. ` +
+                         `Ask your coordinator if this is wrong — it cannot be changed here.`,
+                registeredTenure: registered
+            });
+        }
+
+        const durationToStore = registered || requested;
+
+        // Idempotent: onboarding is a one-time event, so a repeated submit must
+        // not re-award the bonus or reassign tasks.
+        if (student.v2Onboarded) {
+            return res.json({
+                success: true,
+                message: "You have already set up your task journey.",
+                alreadyOnboarded: true,
+                durationType: student.v2DurationType || durationToStore
+            });
         }
 
         await Student.updateOne(
             { _id: student._id },
-            { $set: { v2Onboarded: true, v2DurationType: durationType } }
+            { $set: { v2Onboarded: true, v2DurationType: durationToStore } }
         );
         student.v2Onboarded    = true;
-        student.v2DurationType = durationType;
+        student.v2DurationType = durationToStore;
 
         const result = await taskEngine.assignTasksForStudent(student);
         const coinResult = await coinService.awardCoins(student._id, "ONBOARD_BONUS");
@@ -869,9 +915,102 @@ router.post("/student/onboard", requireStudent, async (req, res) => {
 // ────────────────────────────────────────────────
 // GET /api/v2/student/status
 // ────────────────────────────────────────────────
+/**
+ * Onboard a student who already has a tenure but has never pressed the setup
+ * button, and report whether this call did it.
+ *
+ * The setup popup asks for an internship length the student cannot choose:
+ * tenure is fixed at registration, the popup disables every other option, and
+ * POST /student/onboard rejects anything else with a 409. Its only real effect
+ * is writing v2Onboarded, and it wrote that only when the button was pressed —
+ * so a student who opened the page and navigated away met the same dialog on
+ * every visit, forever.
+ *
+ * This runs on the SERVER for a reason. The same fix on the page could not
+ * reach anyone: public/ was served with maxAge '7d', so browsers held week-old
+ * markup and kept rendering the popup no matter what shipped. Deciding it here
+ * means even a stale page is told v2Onboarded is true and never opens the
+ * dialog — the fix does not depend on a browser fetching new JavaScript.
+ *
+ * The popup still opens for a student with no tenure on file, which is the case
+ * it was actually built for: older records and WhatsApp joiners.
+ */
+async function ensureOnboarded(student) {
+    if (!student || student.v2Onboarded) return false;
+
+    // Resolve the duration exactly the way the rest of the portal does.
+    //
+    // The first version of this required student.tenure and gave up otherwise,
+    // and that is why the popup survived the fix. Some records have no tenure
+    // stored at all, and the two helpers disagree about them:
+    //
+    //   toDurationType(null)  -> "1month"   (a default)
+    //   normalizeTenure(null) -> null
+    //
+    // The page preselects "1 Month" from the first, so the popup looked like it
+    // knew the answer, while this function read the second, saw null, and left
+    // the dialog up. Every screenshot of the popup that survived is one of
+    // these students.
+    //
+    // resolveStudentDuration is what assigns the tasks and drives the
+    // attendance target, so onboarding on the same value cannot introduce a
+    // disagreement — it is already the duration this student is being taught
+    // and marked on.
+    const duration = taskEngine.resolveStudentDuration(student);
+    if (!duration) return false;
+
+    // A missing tenure is a data defect, not something to paper over. The
+    // record is left untouched so scripts/audit-domain-tenure.js can still find
+    // it, and it is logged once, at the moment it matters, with the ID needed
+    // to correct it in the admin panel.
+    if (!student.tenure) {
+        console.warn(
+            "[V2] " + student.employeeId + " has no tenure on record; " +
+            "onboarding on the resolved default (" + duration + "). " +
+            "Set the correct tenure in the admin panel."
+        );
+    }
+
+    // Claim the transition conditionally. Two page loads racing each other
+    // would otherwise both assign tasks and both award the welcome bonus.
+    const claim = await Student.updateOne(
+        { _id: student._id, v2Onboarded: { $ne: true } },
+        { $set: { v2Onboarded: true, v2DurationType: duration } }
+    );
+
+    student.v2Onboarded    = true;
+    student.v2DurationType = duration;
+
+    // modifiedCount is 0 when another request won the race; it is undefined on
+    // the JSON fallback engine, which has no such guarantee to offer.
+    if (claim && claim.modifiedCount === 0) return false;
+
+    // Tasks and coins are the reward half. If either fails the student is still
+    // onboarded — the popup must not come back — and the failure is logged
+    // rather than turned into an error on a page that only asked for status.
+    try {
+        await taskEngine.assignTasksForStudent(student);
+        await coinService.awardCoins(student._id, "ONBOARD_BONUS");
+    } catch (err) {
+        console.error("[V2] auto-onboard follow-up failed for " + student.employeeId + ":", err.message);
+    }
+    return true;
+}
+
 router.get("/student/status", requireStudent, async (req, res) => {
     try {
         const student = req.student;
+
+        // Before anything is measured, so the task counts below include what
+        // this just assigned.
+        try {
+            await ensureOnboarded(student);
+        } catch (err) {
+            // A failure here must not break the status call; the student simply
+            // sees the popup, which is the old behaviour.
+            console.error("[V2] ensureOnboarded failed:", err.message);
+        }
+
         let domain = student.domain;
         if (domain === "HR") domain = "HR Management";
         if (domain === "Business Development") domain = "Business Analyst";
@@ -891,17 +1030,37 @@ router.get("/student/status", requireStudent, async (req, res) => {
             coinService.getBalance(student._id)
         ]);
 
-        const v2Onboarded  = !!(student.v2Onboarded || sampleProgress);
-        const durationType = (sampleProgress?.taskId?.durationType) || student.v2DurationType || taskEngine.tenureToDurationType(student.tenure);
+        // v2Onboarded is a STORED flag, not something inferred from data.
+        //
+        // It used to be `student.v2Onboarded || sampleProgress`, and
+        // GET /tasks/my-tasks auto-assigns tasks when a student has none — so
+        // simply opening the task list created progress rows and the flag
+        // flipped true forever. The tenure popup then never appeared again for
+        // a student who had never actually chosen a tenure, while for anyone
+        // whose completion path did not set the flag it reappeared on every
+        // visit. Section 5 asks for exactly once, ever.
+        const v2Onboarded = !!student.v2Onboarded;
+
+        // The duration comes from the student's record, not from whichever task
+        // happened to be assigned first (that value is remapped to "1month" for
+        // short tenures, so it misreported 1-week and 15-day students).
+        const durationType = taskEngine.resolveStudentDuration(student);
 
         const stats = {};
         for (const s of progressStats) stats[s._id] = s.count;
+
+        // The tenure the student registered on. The setup popup cannot change
+        // it — every option except this one is disabled there — so when it is
+        // known the popup is a required dialog with exactly one possible
+        // answer, and the page completes onboarding without showing it.
+        const registeredTenure = student.tenure ? normalizeTenure(student.tenure) : null;
 
         res.json({
             success:       true,
             v2Onboarded,
             domain:        student.domain,
             durationType,
+            registeredTenure,
             totalCoins:    coinData.totalCoins,
             rupeeValue:    coinData.rupeeValue || (coinData.totalCoins * 0.5).toFixed(2),
             onboardingPopupSeen: student.onboardingPopupSeen || false,
@@ -923,9 +1082,19 @@ router.get("/student/status", requireStudent, async (req, res) => {
 // ────────────────────────────────────────────────
 // GET /api/v2/tasks/my-tasks
 // ────────────────────────────────────────────────
-router.get("/tasks/my-tasks", requireStudent, async (req, res) => {
+router.get("/tasks/my-tasks", requireStudent, requireTenurePaid, async (req, res) => {
     try {
         const student = req.student;
+
+        // Also here, not only in /student/status: a student who reaches the task
+        // list by any other route — a bookmark, a link from the dashboard —
+        // gets onboarded the same way rather than landing on an empty list.
+        try {
+            await ensureOnboarded(student);
+        } catch (err) {
+            console.error("[V2] ensureOnboarded failed:", err.message);
+        }
+
         let domain = student.domain;
         if (domain === "HR") domain = "HR Management";
         if (domain === "Business Development") domain = "Business Analyst";
@@ -937,7 +1106,12 @@ router.get("/tasks/my-tasks", requireStudent, async (req, res) => {
         const taskIds = domainTasks.map(t => t._id);
         const progressCount = await StudentTaskProgress.countDocuments({ studentId: student._id, taskId: { $in: taskIds } });
 
-        if (progressCount === 0) {
+        // Only auto-assign for a student who has actually completed onboarding.
+        // This used to run unconditionally, which — combined with v2Onboarded
+        // being inferred from the existence of progress rows — meant merely
+        // opening the task list marked a student as onboarded and the tenure
+        // popup never appeared for them again.
+        if (progressCount === 0 && student.v2Onboarded) {
             await taskEngine.assignTasksForStudent(student);
         } else {
             // Self-healing: Force Week 1 tasks to be available if they are currently locked
@@ -1087,12 +1261,8 @@ router.patch("/tasks/:taskId/video-progress", requireStudent, async (req, res) =
 // ────────────────────────────────────────────────
 // POST /api/v2/tasks/:progressId/approve  (coordinator)
 // ────────────────────────────────────────────────
-router.post("/tasks/:progressId/approve", validate(mongoIdParamSchema), async (req, res) => {
+router.post("/tasks/:progressId/approve", requireStaff, validate(mongoIdParamSchema), async (req, res) => {
     try {
-        const auth = req.headers.authorization || "";
-        if (!auth.startsWith("Bearer ")) {
-            return res.status(401).json({ success: false, message: "Coordinator auth required" });
-        }
 
         const { feedback, studentEmployeeId } = req.body;
         if (!studentEmployeeId) return res.status(400).json({ success: false, message: "studentEmployeeId required" });
@@ -1113,12 +1283,8 @@ router.post("/tasks/:progressId/approve", validate(mongoIdParamSchema), async (r
 // ────────────────────────────────────────────────
 // POST /api/v2/tasks/:progressId/reject  (coordinator)
 // ────────────────────────────────────────────────
-router.post("/tasks/:progressId/reject", validate(mongoIdParamSchema), async (req, res) => {
+router.post("/tasks/:progressId/reject", requireStaff, validate(mongoIdParamSchema), async (req, res) => {
     try {
-        const auth = req.headers.authorization || "";
-        if (!auth.startsWith("Bearer ")) {
-            return res.status(401).json({ success: false, message: "Coordinator auth required" });
-        }
 
         const { feedback, studentEmployeeId } = req.body;
         if (!studentEmployeeId) return res.status(400).json({ success: false, message: "studentEmployeeId required" });
@@ -1145,12 +1311,8 @@ router.post("/tasks/:progressId/reject", validate(mongoIdParamSchema), async (re
 // ────────────────────────────────────────────────
 // GET /api/v2/coordinator/submissions
 // ────────────────────────────────────────────────
-router.get("/coordinator/submissions", async (req, res) => {
+router.get("/coordinator/submissions", requireStaff, async (req, res) => {
     try {
-        const auth = req.headers.authorization || "";
-        if (!auth.startsWith("Bearer ")) {
-            return res.status(401).json({ success: false, message: "Coordinator auth required" });
-        }
         let domain = req.query.domain;
         if (!domain) return res.status(400).json({ success: false, message: "domain query param required" });
         if (domain === "Artificial Intelligence" || domain === "AI") domain = "Data Science";
@@ -1212,7 +1374,7 @@ router.get("/coins/history", requireStudent, async (req, res) => {
 // ────────────────────────────────────────────────
 // GET /api/v2/leaderboard
 // ────────────────────────────────────────────────
-router.get("/leaderboard", async (req, res) => {
+router.get("/leaderboard", requireStudent, async (req, res) => {
     try {
         const top = await require("../../models/new/StudentCoin").find()
             .sort({ totalCoins: -1 })

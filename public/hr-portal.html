@@ -373,6 +373,8 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
     <div class="nav-section-title">Certificates</div>
     <button class="nav-btn" onclick="showView('certificates')" data-view="certificates"><span class="icon">🎓</span> Certificate Approvals</button>
     <button class="nav-btn" onclick="showView('star-submissions')" data-view="star-submissions"><span class="icon">⭐</span> Star Submissions</button>
+    <!-- Section 9 — student feedback. Every HR account sees every submission. -->
+    <button class="nav-btn" onclick="showView('feedback')" data-view="feedback"><span class="icon">💌</span> Student Feedback <span id="feedbackUnreadBadge" style="display:none;background:#f43f5e;color:#fff;font-size:10px;font-weight:800;padding:1px 6px;border-radius:99px;margin-left:4px;">0</span></button>
     <div class="nav-divider"></div>
     <div class="nav-section-title">Promotions</div>
     <button class="nav-btn" onclick="showView('promotions')" data-view="promotions"><span class="icon">🚀</span> Promotions</button>
@@ -421,7 +423,7 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
           <option value="5">Level 5: HR Associate Director</option>
           <option value="6">Level 6: Jr HR Director</option>
           <option value="7">Level 7: HR Director &amp; HRBP</option>
-          <option value="8">Level 8: Chief Human Resources Officer (CHRO)</option>
+          <option value="8">Level 8: Vice President</option>
       </select>
 
       <button onclick="openHRProfileModal()" title="My Profile"
@@ -442,7 +444,7 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
            🔮
          </div>
          <div>
-           <div id="hrLevelWelcomeTitle" style="font-family: var(--ten-font-display); font-size: 17px; font-weight: 800; color: #fff;">Level 8: Global Managing Partner & Coach</div>
+           <div id="hrLevelWelcomeTitle" style="font-family: var(--ten-font-display); font-size: 17px; font-weight: 800; color: #fff;">Level 8: Vice President</div>
            <div id="hrLevelWelcomeDesc" style="font-size: 13px; color: #94a3b8; margin-top: 4px;">Authorization active. Full system orchestration, startup coaching, and venture team advisory is operational.</div>
          </div>
        </div>
@@ -1208,6 +1210,28 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
   </div>
 
   <!-- LEADERBOARD (Phase 1) -->
+  <!-- ══ Section 9 — Student Feedback ══════════════════════════════════════ -->
+  <div class="view" id="view-feedback">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+        <div>
+          <h2 style="margin:0;">💌 Student Feedback</h2>
+          <p style="color:#8aa4c8;font-size:13px;margin:4px 0 0;">Experience feedback from interns who have completed their internship. All HR staff see all feedback.</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <select id="feedbackStatusFilter" onchange="loadHRFeedback()" style="background:#101a2e;border:1px solid rgba(99,140,210,0.25);color:#e2eaf7;border-radius:8px;padding:7px 10px;font-size:13px;">
+            <option value="">All</option>
+            <option value="new">Unread</option>
+            <option value="read">Read</option>
+            <option value="actioned">Actioned</option>
+          </select>
+          <button onclick="loadHRFeedback()" style="background:rgba(245,197,66,0.15);color:#f5c542;border:1px solid rgba(245,197,66,0.3);border-radius:8px;padding:7px 14px;cursor:pointer;font-weight:600;">↻ Refresh</button>
+        </div>
+      </div>
+      <div id="hrFeedbackList"><p style="color:#8aa4c8;">Loading…</p></div>
+    </div>
+  </div>
+
   <div class="view" id="view-leaderboard">
     <div id="ten-extras-hr-mount"></div>
   </div>
@@ -1569,7 +1593,7 @@ const hrLevelDetails = {
     views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard', 'ecosystem', 'submissions', 'insights', 'domains', 'certificates', 'star-submissions', 'promotions', 'documents', 'send-notif', 'notif-history']
   },
   8: {
-    title: "Level 8: Chief Human Resources Officer (CHRO)",
+    title: "Level 8: Vice President",
     desc: "Active Focus: Supreme system orchestrations, venture coaching, startup diagnostics, and executive mentorship loops.",
     icon: "✨",
     views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard', 'ecosystem', 'submissions', 'insights', 'domains', 'certificates', 'star-submissions', 'promotions', 'documents', 'send-notif', 'notif-history']
@@ -1620,7 +1644,7 @@ function switchHRActiveLevel(lvl) {
             <ul style="margin-left: 20px; margin-bottom: 14px; list-style-type: disc; padding-left: 0;">
               <li style="margin-bottom: 6px;">Maintain full attendance compliance and hit 100% KPI score on your weekly task submissions.</li>
               <li style="margin-bottom: 6px;">Promotions are reviewed dynamically based on domain activity and coordinator referrals.</li>
-              <li style="margin-bottom: 6px;">For temporary delegation or audit permission, contact the <strong style="color:#d946ef;">Chief Human Resources Officer (CHRO)</strong> or the Executive Board.</li>
+              <li style="margin-bottom: 6px;">For temporary delegation or audit permission, contact the <strong style="color:#d946ef;">Vice President</strong> or the Executive Board.</li>
             </ul>
             <p style="margin-top: 10px; font-size: 12px; color: #8aa4c8; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 8px;">Your currently verified active session (Level ${activeHRLevel}) is safely preserved.</p>
           </div>
@@ -1835,12 +1859,91 @@ async function generateQRDataUrl(text) {
     });
 }
 
+// ══════════════════════════════════════════════════════════════
+//  Section 9 — Student feedback (HR side)
+//  Every HR account sees every submission; nothing is scoped to one account.
+// ══════════════════════════════════════════════════════════════
+function _hrEsc(s){
+  return String(s == null ? "" : s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+
+async function loadHRFeedback(){
+  const box = document.getElementById('hrFeedbackList');
+  if (!box) return;
+  box.innerHTML = '<p style="color:#8aa4c8;">Loading…</p>';
+
+  const status = (document.getElementById('feedbackStatusFilter') || {}).value || '';
+  try {
+    const res = await fetch('/api/feedback/hr/all' + (status ? '?status=' + encodeURIComponent(status) : ''), { credentials:'same-origin' });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message || 'Could not load feedback.');
+
+    const badge = document.getElementById('feedbackUnreadBadge');
+    if (badge) {
+      badge.textContent = data.unread || 0;
+      badge.style.display = data.unread ? 'inline-block' : 'none';
+    }
+
+    if (!data.data.length) {
+      box.innerHTML = '<p style="color:#8aa4c8;padding:16px 0;">No feedback yet.</p>';
+      return;
+    }
+
+    box.innerHTML = data.data.map(function(f){
+      const stars = f.rating ? '★'.repeat(f.rating) + '☆'.repeat(5 - f.rating) : '—';
+      const when  = f.submittedAt ? new Date(f.submittedAt).toLocaleString('en-IN') : '';
+      const isNew = f.status === 'new';
+      return '<div style="background:rgba(16,26,46,0.6);border:1px solid ' + (isNew ? 'rgba(245,197,66,0.35)' : 'rgba(99,140,210,0.15)') + ';border-radius:10px;padding:13px 15px;margin-bottom:10px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">' +
+          '<div>' +
+            '<strong style="color:#e2eaf7;">' + _hrEsc(f.studentName || f.employeeId) + '</strong>' +
+            '<span style="color:#5a7299;font-size:12px;margin-left:8px;">' + _hrEsc(f.employeeId) + '</span>' +
+            (f.domain ? '<span style="background:rgba(99,140,210,0.15);color:#8aa4c8;font-size:11px;padding:2px 8px;border-radius:99px;margin-left:8px;">' + _hrEsc(f.domain) + '</span>' : '') +
+            (f.tenure ? '<span style="color:#5a7299;font-size:11px;margin-left:8px;">' + _hrEsc(f.tenure) + '</span>' : '') +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:10px;">' +
+            '<span style="color:#f5c542;font-size:13px;">' + stars + '</span>' +
+            '<span style="color:#5a7299;font-size:11px;">' + _hrEsc(when) + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div style="color:#cdd9ec;font-size:13px;white-space:pre-wrap;line-height:1.55;">' + _hrEsc(f.message) + '</div>' +
+        '<div style="margin-top:10px;display:flex;gap:8px;align-items:center;">' +
+          (isNew
+            ? '<button onclick="markFeedback(\'' + _hrEsc(f._id) + '\',\'read\')" style="background:rgba(99,140,210,0.15);color:#8aa4c8;border:1px solid rgba(99,140,210,0.3);border-radius:7px;padding:5px 12px;cursor:pointer;font-size:12px;">Mark read</button>'
+            : '<span style="color:#5a7299;font-size:11px;">' + _hrEsc(f.status) + (f.readBy ? ' by ' + _hrEsc(f.readBy) : '') + '</span>') +
+          '<button onclick="markFeedback(\'' + _hrEsc(f._id) + '\',\'actioned\')" style="background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.3);border-radius:7px;padding:5px 12px;cursor:pointer;font-size:12px;">Mark actioned</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  } catch (err) {
+    box.innerHTML = '<p style="color:#f43f5e;">' + _hrEsc(err.message || 'Could not load feedback.') + '</p>';
+  }
+}
+
+async function markFeedback(id, status){
+  try {
+    const res = await fetch('/api/feedback/hr/' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ status: status })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message);
+    loadHRFeedback();
+  } catch (err) {
+    alert(err.message || 'Could not update that feedback.');
+  }
+}
+
 function showView(v){
   document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(el=>el.classList.remove('active'));
   document.getElementById('view-'+v).classList.add('active');
   document.querySelector(`[data-view="${v}"]`)?.classList.add('active');
-  const t={overview:'<span>Dashboard</span> Overview',ecosystem:'<span>TEN</span> Ecosystem Control Center',insights:'<span>Insights</span>',students:'<span>All</span> Students',tracker:'<span>Internship</span> Tracker',submissions:'<span>Task</span> Submissions',domains:'<span>Domain</span> Analytics',documents:'<span>Generate</span> Documents','send-notif':'<span>Send</span> Notification','notif-history':'<span>Notification</span> History','attendance-monitor':'<span>Attendance</span> Monitor',certificates:'<span>Certificate</span> Approvals','star-submissions':'<span>Star Performer</span> Submissions',promotions:'<span>Promotions</span>',leaderboard:'<span>Performance</span> Leaderboard'};
+  const t={overview:'<span>Dashboard</span> Overview',ecosystem:'<span>TEN</span> Ecosystem Control Center',insights:'<span>Insights</span>',students:'<span>All</span> Students',tracker:'<span>Internship</span> Tracker',submissions:'<span>Task</span> Submissions',domains:'<span>Domain</span> Analytics',documents:'<span>Generate</span> Documents','send-notif':'<span>Send</span> Notification','notif-history':'<span>Notification</span> History','attendance-monitor':'<span>Attendance</span> Monitor',certificates:'<span>Certificate</span> Approvals','star-submissions':'<span>Star Performer</span> Submissions',feedback:'<span>Student</span> Feedback',promotions:'<span>Promotions</span>',leaderboard:'<span>Performance</span> Leaderboard'};
   document.getElementById('pageTitle').innerHTML=t[v]||v;
   if(v==='ecosystem') loadEcosystem();
   if(v==='insights') initInsights();
@@ -1853,6 +1956,7 @@ function showView(v){
   if(v==='attendance-monitor') loadAttendanceMonitor();
   if(v==='certificates') loadCertPending();
   if(v==='star-submissions') loadStarSubmissions();
+  if(v==='feedback') loadHRFeedback();
   if(v==='promotions') loadPromoCandidatesStudents();
   if(v==='leaderboard'){
     if(window.TenExtras){
@@ -4375,174 +4479,7 @@ async function loadPendingDocsBadge() {
 // Load badge on page init
 setTimeout(loadPendingDocsBadge, 2000);
 </script>
-<!-- ══════════════ AI QUERIES SECTION ══════════════ -->
-<div id="ai-queries-section" style="display:none; padding:28px; animation: fadeIn .3s ease">
 
-  <div style="display:flex; align-items:center; gap:14px; margin-bottom:20px; flex-wrap:wrap">
-    <h2 style="font-size:20px; font-weight:800; color:#f1f5f9; margin:0">🤖 Student AI Queries</h2>
-    <span id="ai-open-badge" style="display:none; background:rgba(239,68,68,.15); border:1px solid rgba(239,68,68,.3); color:#ef4444; padding:3px 12px; border-radius:20px; font-size:12px; font-weight:700"></span>
-  </div>
-
-  <!-- Trending Issues -->
-  <div id="ai-trending-box" style="margin-bottom:16px"></div>
-
-  <!-- Filters -->
-  <div style="display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap">
-    <select id="ai-filter-domain" onchange="loadAIQueries()" style="padding:9px 14px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); border-radius:10px; color:#e2e8f0; outline:none; font-family:inherit">
-      <option value="">All Domains</option>
-      <option>Web Development</option>
-      <option>Python Development</option>
-      <option>Data Science</option>
-      <option>Artificial Intelligence</option>
-      <option>MERN Stack Development</option>
-      <option>HR Management</option>
-      <option>Cyber Security</option>
-      <option>DevOps with AWS</option>
-      <option>Flutter Development</option>
-      <option>Java Development</option>
-      <option>Software Engineering</option>
-    </select>
-    <select id="ai-filter-status" onchange="loadAIQueries()" style="padding:9px 14px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); border-radius:10px; color:#e2e8f0; outline:none; font-family:inherit">
-      <option value="">All Status</option>
-      <option value="open">⏳ Pending</option>
-      <option value="answered">✅ Answered</option>
-    </select>
-    <button onclick="loadAIQueries()" style="padding:9px 18px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.1); border-radius:10px; color:#e2e8f0; cursor:pointer; font-family:inherit; transition:.2s">🔄 Refresh</button>
-  </div>
-
-  <!-- Table -->
-  <div style="overflow-x:auto; border-radius:14px; border:1px solid rgba(255,255,255,.07)">
-    <table style="width:100%; border-collapse:collapse; font-size:13px">
-      <thead>
-        <tr style="background:rgba(255,255,255,.04); border-bottom:1px solid rgba(255,255,255,.07)">
-          <th style="padding:12px 14px; text-align:left; color:#94a3b8; font-weight:600">Student</th>
-          <th style="padding:12px 14px; text-align:left; color:#94a3b8; font-weight:600">Domain</th>
-          <th style="padding:12px 14px; text-align:left; color:#94a3b8; font-weight:600">Question</th>
-          <th style="padding:12px 14px; text-align:left; color:#94a3b8; font-weight:600">Asked</th>
-          <th style="padding:12px 14px; text-align:left; color:#94a3b8; font-weight:600">Status</th>
-          <th style="padding:12px 14px; text-align:left; color:#94a3b8; font-weight:600">Action</th>
-        </tr>
-      </thead>
-      <tbody id="ai-queries-tbody">
-        <tr><td colspan="6" style="padding:30px; text-align:center; color:#475569">Loading...</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<!-- Answer Modal -->
-<div id="ai-answer-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.8); backdrop-filter:blur(8px); z-index:99999; align-items:center; justify-content:center">
-  <div style="background:linear-gradient(160deg,#0d0f1e,#111528); border:1px solid rgba(255,255,255,.1); border-radius:20px; padding:28px; width:500px; max-width:92vw; animation:modalSlideIn .3s cubic-bezier(.34,1.2,.64,1)">
-    <h3 style="font-size:17px; font-weight:800; color:#f1f5f9; margin:0 0 14px">✍️ Answer Student Query</h3>
-    <div id="ai-modal-question" style="background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.07); padding:12px 14px; border-radius:10px; font-size:13px; color:#94a3b8; margin-bottom:14px; line-height:1.6"></div>
-    <textarea id="ai-modal-answer" placeholder="Type your answer here..." rows="4" style="width:100%; padding:12px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); border-radius:10px; color:#f1f5f9; font-size:13px; resize:none; font-family:inherit; outline:none; box-sizing:border-box; transition:.2s"></textarea>
-    <div style="display:flex; gap:10px; margin-top:14px; justify-content:flex-end">
-      <button onclick="document.getElementById('ai-answer-modal').style.display='none'" style="padding:10px 20px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); border-radius:10px; color:#94a3b8; cursor:pointer; font-family:inherit; transition:.2s">Cancel</button>
-      <button onclick="submitAIAnswer()" style="padding:10px 24px; background:linear-gradient(135deg,#4f46e5,#7c3aed); border:none; border-radius:10px; color:#fff; cursor:pointer; font-weight:700; font-family:inherit; transition:.2s">📨 Send Answer</button>
-    </div>
-  </div>
-</div>
-
-<style>
-@keyframes fadeIn       { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
-@keyframes modalSlideIn { from{opacity:0;transform:scale(.9) translateY(20px)} to{opacity:1;transform:scale(1) translateY(0)} }
-</style>
-
-<script>
-(function(){
-  var _activeQueryId = null;
-
-  window.showAIQueries = function() {
-    document.querySelectorAll('[id$="-section"], [id$="-tab"], [id$="-view"], .main-section').forEach(function(s){
-      if(s.id !== 'ai-queries-section') s.style.display = 'none';
-    });
-    document.getElementById('ai-queries-section').style.display = 'block';
-    loadAIQueries();
-  };
-
-  window.loadAIQueries = async function() {
-    var domain = document.getElementById('ai-filter-domain').value;
-    var status = document.getElementById('ai-filter-status').value;
-    var params = new URLSearchParams();
-    if(domain) params.set('domain', domain);
-    if(status) params.set('status', status);
-
-    var tbody = document.getElementById('ai-queries-tbody');
-    tbody.innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:#475569">Loading...</td></tr>';
-
-    try {
-      var res  = await fetch('/api/v2/bots/hr/queries?' + params);
-      var data = await res.json();
-
-      var badge = document.getElementById('ai-open-badge');
-      if(data.totalOpen > 0) {
-        badge.textContent = data.totalOpen + ' pending';
-        badge.style.display = 'inline-block';
-      } else {
-        badge.style.display = 'none';
-      }
-
-      var tbox = document.getElementById('ai-trending-box');
-      if(data.trending && data.trending.length) {
-        tbox.innerHTML = data.trending.map(function(t){
-          return '<div style="background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:10px 14px;margin-bottom:8px;font-size:13px;color:#fcd34d">\u26a0\ufe0f <strong>'+t.count+' students</strong> asked about <em>"'+t.sample.question.slice(0,60)+(t.sample.question.length>60?'...':'')+'"</em></div>';
-        }).join('');
-      } else {
-        tbox.innerHTML = '';
-      }
-
-      if(!data.queries || !data.queries.length) {
-        tbody.innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:#475569">No queries found</td></tr>';
-        return;
-      }
-
-      tbody.innerHTML = data.queries.map(function(q){
-        var date = new Date(q.createdAt).toLocaleDateString('en-IN', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
-        var statusBadge = q.status === 'open'
-          ? '<span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:rgba(239,68,68,.12);color:#f87171">\u23f3 Pending</span>'
-          : '<span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:rgba(16,185,129,.12);color:#34d399">\u2705 Answered</span>';
-        var action = q.status === 'open'
-          ? '<button onclick="openAnswerModal(\''+q._id+'\',\''+q.question.replace(/'/g,"\\'").replace(/"/g,'&quot;')+'\')" style="padding:6px 14px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border:none;border-radius:8px;color:#fff;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit">Answer</button>'
-          : '<span style="font-size:12px;color:#475569;max-width:140px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(q.hrAnswer||'')+'">'+(q.hrAnswer||'').slice(0,35)+((q.hrAnswer||'').length>35?'...':'')+'</span>';
-        return '<tr style="border-bottom:1px solid rgba(255,255,255,.05)" onmouseover="this.style.background=\'rgba(255,255,255,.02)\'" onmouseout="this.style.background=\'\'"><td style="padding:12px 14px;color:#e2e8f0">'+(q.userName||q.userId||'—')+'</td><td style="padding:12px 14px"><span style="background:rgba(99,102,241,.15);color:#a5b4fc;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600">'+(q.domain||'—')+'</span></td><td style="padding:12px 14px;color:#94a3b8;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+q.question+'">'+q.question+'</td><td style="padding:12px 14px;color:#64748b;font-size:12px">'+date+'</td><td style="padding:12px 14px">'+statusBadge+'</td><td style="padding:12px 14px">'+action+'</td></tr>';
-      }).join('');
-
-    } catch(e) {
-      tbody.innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:#ef4444">Error loading queries: '+e.message+'</td></tr>';
-    }
-  };
-
-  window.openAnswerModal = function(id, question) {
-    _activeQueryId = id;
-    document.getElementById('ai-modal-question').textContent = question;
-    document.getElementById('ai-modal-answer').value = '';
-    document.getElementById('ai-answer-modal').style.display = 'flex';
-    setTimeout(function(){ document.getElementById('ai-modal-answer').focus(); }, 100);
-  };
-
-  window.submitAIAnswer = async function() {
-    var ans = document.getElementById('ai-modal-answer').value.trim();
-    if(!ans) return;
-    var hrName = localStorage.getItem('hrName') || localStorage.getItem('hrUsername') || 'HR Team';
-    try {
-      var res = await fetch('/api/v2/bots/hr/answer', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ queryId: _activeQueryId, hrAnswer: ans, hrAnsweredBy: hrName })
-      });
-      var data = await res.json();
-      if(data.success) {
-        document.getElementById('ai-answer-modal').style.display = 'none';
-        loadAIQueries();
-      } else {
-        alert('Error: ' + (data.error || 'Unknown error'));
-      }
-    } catch(e) {
-      alert('Network error: ' + e.message);
-    }
-  };
-})();
-</script>
-<!-- ══════════════ END AI QUERIES SECTION ══════════════ -->
 
 <!-- ================= TEN ECOSYSTEM MASTER CONTROL CENTER CONTROLLER ================= -->
 <script>

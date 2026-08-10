@@ -6,6 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>My Documents — TEN Portal</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="/session-guard.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
@@ -409,7 +410,7 @@ function renderStarSubmitForm(data) {
         <div id="star-panel-tech">
           <p style="font-size:12px;color:#94a3b8;margin-bottom:12px;line-height:1.5">
             💡 <strong>Tech Domain requirements:</strong> You must upgrade/improve the portal or ecosystem codebase and create a Pull Request to our official repository.<br>
-            <strong style="color:#fcd34d">Official GitHub Repository:</strong> <a href="https://github.com/growth-eng/Ten-Ecosystem.git" target="_blank" style="color:#60a5fa;text-decoration:underline">https://github.com/growth-eng/Ten-Ecosystem.git</a>
+            <strong style="color:#fcd34d">Official GitHub Repository:</strong> <a id="star-official-repo-link" href="https://github.com/the-Entrepreneurship-Network/Ten-Ecosystem1/" target="_blank" rel="noopener noreferrer" style="color:#60a5fa;text-decoration:underline">https://github.com/the-Entrepreneurship-Network/Ten-Ecosystem1/</a>
           </p>
           <div style="display:flex;gap:12px;margin-bottom:12px">
             <div style="flex:1">
@@ -418,7 +419,7 @@ function renderStarSubmitForm(data) {
             </div>
             <div style="flex:2">
               <label style="display:block;font-size:11px;color:#9a9080;margin-bottom:4px;font-weight:600">PULL REQUEST URL</label>
-              <input type="text" id="star-tech-pr" placeholder="e.g. https://github.com/growth-eng/Ten-Ecosystem/pull/1" style="width:100%;padding:10px;background:rgba(0,0,0,.25);border:1px solid rgba(245,158,11,.15);border-radius:8px;color:#f1f5f9;font-size:13px;outline:none;box-sizing:border-box">
+              <input type="text" id="star-tech-pr" placeholder="e.g. https://github.com/the-Entrepreneurship-Network/Ten-Ecosystem1/pull/1" style="width:100%;padding:10px;background:rgba(0,0,0,.25);border:1px solid rgba(245,158,11,.15);border-radius:8px;color:#f1f5f9;font-size:13px;outline:none;box-sizing:border-box">
             </div>
           </div>
           <label style="display:block;font-size:11px;color:#9a9080;margin-bottom:4px;font-weight:600">DETAILS OF CODE CHANGES / FEATURE UPGRADE</label>
@@ -531,12 +532,40 @@ async function submitStarContribNew() {
     const githubPR = document.getElementById('star-tech-pr').value.trim();
     const detailedDescription = document.getElementById('star-tech-desc').value.trim();
     
+    // Keep the displayed repository and the client-side check in step with the
+    // server's config/github.js, rather than hardcoding the URL in three places.
+    (async function loadOfficialRepo() {
+      try {
+        const r = await fetch('/api/public-config');
+        const cfg = await r.json();
+        if (!cfg || !cfg.success) return;
+        window.TEN_OFFICIAL_REPO_SLUG = cfg.officialRepoSlug;
+        const link = document.getElementById('star-official-repo-link');
+        if (link && cfg.officialRepoUrl) {
+          link.href = cfg.officialRepoUrl;
+          link.textContent = cfg.officialRepoUrl;
+        }
+        const input = document.getElementById('star-tech-pr');
+        if (input && cfg.officialRepoUrl) {
+          input.placeholder = 'e.g. ' + cfg.officialRepoUrl + 'pull/1';
+        }
+      } catch (e) { /* keep the values already in the markup */ }
+    })();
+
     if (!githubUsername) {
       alert('Please enter your GitHub Username.');
       return;
     }
-    if (!githubPR || !githubPR.startsWith('https://github.com/')) {
-      alert('Please enter a valid GitHub Pull Request URL.');
+    // A friendly pre-check only. The server validates this properly
+    // (config/github.js) — a startsWith() check accepts javascript: URLs and
+    // look-alike hosts such as https://github.com.evil.tld/, and the value is
+    // rendered back into the HR review queue.
+    const officialRepo = (window.TEN_OFFICIAL_REPO_SLUG || 'the-Entrepreneurship-Network/Ten-Ecosystem1');
+    const prPattern = new RegExp('^https://github\\.com/' +
+      officialRepo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/pull/\\d+', 'i');
+    if (!githubPR || !prPattern.test(githubPR.trim())) {
+      alert('Please paste the link to your pull request against ' + officialRepo +
+            '\n\nExample: https://github.com/' + officialRepo + '/pull/1');
       return;
     }
     if (detailedDescription.length < 30) {

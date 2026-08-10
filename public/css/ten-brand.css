@@ -1,0 +1,218 @@
+/* ================================================================
+   TEN Brand Tokens + Polish Layer
+   ----------------------------------------------------------------
+   The canonical dark-navy-and-gold palette the portal actually uses.
+
+   WHY THIS FILE EXISTS
+   public/css/design-system.css declares a LIGHT indigo/purple theme
+   (--color-primary: #6366F1, --bg-page: #F9FAFB). No high-traffic page
+   looks like that — the student dashboard, login, task journey and
+   admin panel are all dark navy with a gold accent, written as inline
+   styles. The documented system and the shipped product had drifted
+   apart, so neither could be trusted as the reference.
+
+   This file is the reference. It is ADDITIVE: including it sets tokens
+   and applies accessibility/interaction polish, but does not restyle
+   existing markup, so it cannot break a page that already looks right.
+
+   See docs/design-system.md for the reasoning and the consolidation plan.
+   ================================================================ */
+
+:root {
+  /* ── Brand ─────────────────────────────────────────────────── */
+  --ten-gold:            #D4AF37;   /* primary accent, CTAs, active state */
+  --ten-gold-bright:     #F5C542;   /* hover, highlights */
+  --ten-gold-deep:       #C9A227;   /* gradient end, pressed */
+
+  /* ── Surfaces (dark navy) ──────────────────────────────────── */
+  --ten-bg:              #080F1C;   /* page */
+  --ten-surface:         #0C1220;   /* cards, panels */
+  --ten-surface-raised:  #101A2E;   /* inputs, nested panels */
+  --ten-surface-hover:   #16223A;
+
+  /* ── Text ──────────────────────────────────────────────────── */
+  --ten-text:            #F0EEE8;   /* primary */
+  --ten-text-secondary:  #CDD9EC;
+  --ten-text-muted:      #8AA4C8;
+  --ten-text-faint:      #5A7299;   /* timestamps, helper text */
+
+  /* ── Lines ─────────────────────────────────────────────────── */
+  --ten-border:          rgba(99, 140, 210, 0.18);
+  --ten-border-strong:   rgba(99, 140, 210, 0.32);
+  --ten-border-gold:     rgba(212, 175, 55, 0.35);
+
+  /* ── Status ────────────────────────────────────────────────── */
+  --ten-success:         #10B981;
+  --ten-warning:         #F59E0B;
+  --ten-danger:          #F43F5E;
+  --ten-info:            #3B82F6;
+
+  /* Tinted backgrounds for status pills — always paired with the
+     matching text colour above, never used as text on their own. */
+  --ten-success-bg:      rgba(16, 185, 129, 0.12);
+  --ten-warning-bg:      rgba(245, 158, 11, 0.12);
+  --ten-danger-bg:       rgba(244, 63, 94, 0.12);
+  --ten-info-bg:         rgba(59, 130, 246, 0.12);
+
+  /* ── Spacing — a 4px scale. Pick from these, do not invent. ── */
+  --ten-space-1:  4px;
+  --ten-space-2:  8px;
+  --ten-space-3:  12px;
+  --ten-space-4:  16px;
+  --ten-space-5:  20px;
+  --ten-space-6:  24px;
+  --ten-space-8:  32px;
+  --ten-space-10: 40px;
+  --ten-space-12: 48px;
+
+  /* ── Type ──────────────────────────────────────────────────── */
+  --ten-font: 'Plus Jakarta Sans', 'Outfit', 'Inter', -apple-system,
+              BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --ten-font-mono: 'JetBrains Mono', Consolas, Monaco, monospace;
+
+  --ten-text-xs:   11px;   /* labels, timestamps */
+  --ten-text-sm:   13px;   /* body default in dense UI */
+  --ten-text-base: 15px;   /* body */
+  --ten-text-lg:   18px;
+  --ten-text-xl:   22px;   /* section heading */
+  --ten-text-2xl:  28px;   /* page heading */
+
+  --ten-weight-normal:   500;
+  --ten-weight-semibold: 600;
+  --ten-weight-bold:     700;
+  --ten-weight-heavy:    800;
+
+  /* ── Radius ────────────────────────────────────────────────── */
+  --ten-radius-sm:  6px;
+  --ten-radius:     10px;   /* default: inputs, buttons */
+  --ten-radius-lg:  14px;   /* cards */
+  --ten-radius-pill: 999px;
+
+  /* ── Elevation ─────────────────────────────────────────────── */
+  --ten-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --ten-shadow:    0 4px 14px rgba(0, 0, 0, 0.35);
+  --ten-shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.45);
+
+  /* ── Motion ────────────────────────────────────────────────── */
+  --ten-transition: 160ms ease;
+}
+
+/* ================================================================
+   POLISH — applies to existing markup without restyling it
+   ================================================================ */
+
+/* Keyboard focus. Most pages set `outline: none` on inputs for looks,
+   which leaves keyboard users with no visible focus at all. :focus-visible
+   restores it for keyboard navigation only, so mouse users see no change. */
+*:focus-visible {
+  outline: 2px solid var(--ten-gold);
+  outline-offset: 2px;
+  border-radius: var(--ten-radius-sm);
+}
+
+/* Anything clickable should look clickable. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+label[for],
+summary {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* Touch targets. WCAG asks for 24×24 CSS px minimum; small icon buttons
+   on these pages are often smaller, which is hard to hit on a phone. */
+@media (pointer: coarse) {
+  button,
+  [role="button"],
+  input[type="checkbox"],
+  input[type="radio"] {
+    min-height: 24px;
+    min-width: 24px;
+  }
+}
+
+/* Respect a reduced-motion preference. The portal animates a fair amount
+   (ten-motion.js, qr-pulse, confetti); for a user who has asked the OS to
+   reduce motion, that is at best distracting and at worst nauseating. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Selection uses the brand colour rather than the browser default blue. */
+::selection {
+  background: var(--ten-gold);
+  color: #0C1220;
+}
+
+/* Scrollbars, so dark panels do not get a bright default scrollbar. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ten-border-strong) transparent;
+}
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--ten-border-strong);
+  border-radius: var(--ten-radius-pill);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background-color: var(--ten-text-faint); background-clip: content-box; }
+
+/* Skip link — keyboard users can jump past the sidebar to the content.
+   Add `<a href="#main" class="ten-skip-link">Skip to content</a>` as the
+   first element in <body>, and `id="main"` on the content region. */
+.ten-skip-link {
+  position: absolute;
+  left: -9999px;
+  top: var(--ten-space-2);
+  z-index: 100000;
+  background: var(--ten-gold);
+  color: #0C1220;
+  padding: var(--ten-space-2) var(--ten-space-4);
+  border-radius: var(--ten-radius);
+  font-weight: var(--ten-weight-bold);
+  text-decoration: none;
+}
+.ten-skip-link:focus {
+  left: var(--ten-space-2);
+}
+
+/* Screen-reader-only text, for labelling icon-only controls. */
+.ten-sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Consistent invalid-field treatment, matching the inline registration
+   errors added for section 4. */
+.field-error-outline,
+[aria-invalid="true"] {
+  border-color: var(--ten-danger) !important;
+}
+.field-error-msg {
+  color: var(--ten-danger);
+  font-size: var(--ten-text-xs);
+  font-weight: var(--ten-weight-semibold);
+  margin-top: var(--ten-space-1);
+}
+
+/* Images should never overflow their container on a narrow screen. */
+img { max-width: 100%; height: auto; }

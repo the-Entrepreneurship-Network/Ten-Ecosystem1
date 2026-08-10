@@ -15,7 +15,10 @@ jobs:
           username: ${{ secrets.EC2_SSH_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cd /home/ec2-user/ten-portal-staging
+            # Override with the STAGING_APP_DIR repository variable if staging
+            # lives elsewhere; the production workflow had the same hardcoded
+            # path problem and it silently skipped every deploy.
+            cd "${STAGING_APP_DIR:-/home/ec2-user/ten-portal-staging}"
             git fetch origin
             git reset --hard origin/develop
             npm ci --legacy-peer-deps

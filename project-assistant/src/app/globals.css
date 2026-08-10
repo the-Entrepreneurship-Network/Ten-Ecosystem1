@@ -1,0 +1,451 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   TEN PROJECT ASSISTANT - DESIGN TOKENS
+   ----------------------------------------------------------------------------
+   Visual world: black velvet + polished gold.
+   Locks (applied everywhere, no exceptions):
+     THEME LOCK   dark only. The brand insists on it. No light surface anywhere.
+     COLOR LOCK   one accent family (gold). No second hue is introduced.
+     SHAPE LOCK   pill = pressable, 16px = container, 12px = input, 8px = inline.
+   ========================================================================== */
+
+@theme {
+  /* Surfaces. Lifted verbatim from TEN's own ten-theme.css on the live intern
+     portal, not chosen. They are navy-black, not neutral black, and that blue
+     undertone is the single thing that makes the gold read as considered
+     rather than as gold-on-default-dark. */
+  --color-void: #05070e; /* page */
+  --color-ink: #090d1a; /* raised surface */
+  --color-slate: #0e1428; /* card */
+  --color-edge: #121933; /* card, one step up */
+
+  /* TEN's gold ramp. */
+  --color-gold: #d4af37; /* 8.9:1 on void - passes AAA as text */
+  --color-gold-deep: #b8960c; /* their gold-dim */
+  --color-gold-lift: #f0d060; /* their gold-light: highlight and gradient stop */
+  --color-gold-shade: #7a5c12;
+
+  /* Their cyan, reserved for live state exactly as the portal uses it. It is
+     the only non-gold hue in the system and it earns its place by meaning
+     something specific. */
+  --color-live: #06b6d4;
+
+  /* Text. TEN's --ten-text and --ten-text-sub carried over. Their third step,
+     --ten-text-muted #4E4840, is 2.4:1 on their own background and is used
+     here for decoration only, never for text. */
+  --color-bone: #f0eee8; /* 16.4:1 */
+  --color-muted: #9a9080; /* 7.0:1 - passes AA for body */
+  --color-faint: #6d685e; /* 3.6:1 - large text and decoration only */
+
+  /* Their borders, which are gold at low alpha rather than grey. */
+  --color-hairline: rgb(212 175 55 / 0.10);
+  --color-hairline-strong: rgb(212 175 55 / 0.22);
+
+  /* Semantic, from their tokens. */
+  --color-ok: #10b981;
+  --color-warn: #f59e0b;
+  --color-bad: #ef4444;
+
+  /* Their radius scale: 10 / 16 / 22 / 28. */
+  --radius-inline: 10px;
+  --radius-field: 16px;
+  --radius-shell: 22px;
+  --radius-panel: 28px;
+  --radius-pill: 999px;
+
+  /* Their elevation. */
+  --shadow-sm: 0 4px 16px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 8px 32px rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 16px 64px rgb(0 0 0 / 0.6);
+  --shadow-gold: 0 0 40px rgb(212 175 55 / 0.25);
+
+  /* Motion - strong curves. The CSS built-ins are too weak to read as intentional. */
+  --ease-out-luxe: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-silk: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out-deep: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-in-exit: cubic-bezier(0.7, 0, 0.84, 0);
+
+  /* Their pairing: Syne for display, DM Sans for body, JetBrains Mono for code. */
+  --font-display: var(--font-geist-sans-display), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+/* ============================================================================
+   BROWSER SURFACES
+   The parts we did not draw still carry the design. Selection, caret,
+   scrollbar, focus ring and numerals all ship with defaults belonging to no
+   design system. Theme them from the palette.
+   ========================================================================== */
+
+::selection {
+  background: rgb(212 175 55 / 0.26);
+  color: #fff6dc;
+}
+
+html {
+  color-scheme: dark;
+  scrollbar-color: rgb(212 175 55 / 0.28) transparent;
+  scrollbar-width: thin;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(212 175 55 / 0.2);
+  border: 3px solid transparent;
+  border-radius: var(--radius-pill);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(212 175 55 / 0.4);
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+/* Scoped to elements without their own focus treatment. The composer shows
+   focus on its container instead, and doubling the two reads as an error. */
+:is(a, button, summary, [role="button"], [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+:is(input, textarea, select):focus-visible {
+  outline: none;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+a {
+  text-underline-offset: 0.22em;
+  text-decoration-thickness: 1px;
+}
+
+body {
+  background: var(--color-void);
+  color: var(--color-bone);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01";
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  caret-color: var(--color-gold);
+  overscroll-behavior-y: none;
+}
+
+/* ============================================================================
+   MATERIALS
+   Depth comes from inner light and a hairline, not from an outer neon halo.
+   The one place a halo is earned is the intro ceremony, where the brief asks
+   for the mark to glow.
+   ========================================================================== */
+
+.surface {
+  background:
+    linear-gradient(to bottom, rgb(255 255 255 / 0.035), rgb(255 255 255 / 0)),
+    var(--color-ink);
+  border: 1px solid rgb(212 175 55 / 0.1);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.06),
+    0 1px 2px rgb(0 0 0 / 0.6),
+    0 12px 32px -12px rgb(0 0 0 / 0.8);
+}
+
+.hairline {
+  border: 1px solid rgb(212 175 55 / 0.14);
+}
+
+/* Gold foil edge used on the primary control. */
+.foil {
+  background: linear-gradient(
+    145deg,
+    #f5d76e 0%,
+    #d4af37 38%,
+    #b8912a 62%,
+    #e6c862 100%
+  );
+  color: #17130a;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.45),
+    inset 0 -1px 0 rgb(0 0 0 / 0.25),
+    0 2px 6px -1px rgb(0 0 0 / 0.7);
+}
+
+/* Velvet grain. Fixed layer only - a grain on a scrolling container repaints
+   every frame and destroys mobile framerate. */
+.grain::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.032;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ============================================================================
+   PRESS FEEDBACK
+   Every pressable element answers the pointer inside 160ms.
+   ========================================================================== */
+
+.pressable {
+  transition:
+    transform 160ms var(--ease-out-luxe),
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    opacity 160ms ease;
+}
+.pressable:active {
+  transform: scale(0.975);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .lift:hover {
+    transform: translateY(-1px);
+  }
+}
+
+/* Streaming caret on the assistant reply. */
+@keyframes ten-caret {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+.caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 2px;
+  translate: 0 0.16em;
+  background: var(--color-gold);
+  animation: ten-caret 1.06s steps(1) infinite;
+}
+
+/* Thinking dots on the pending reply. */
+@keyframes ten-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+.thinking-dot {
+  animation: ten-pulse 1.15s var(--ease-in-out-deep) infinite;
+}
+
+/* Opacity only. The reduced-motion fallback for the pending indicator. */
+@keyframes ten-fade {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ============================================================================
+   PROSE
+   The assistant answers in structured markdown. This is the reading surface,
+   so it gets a real type scale rather than browser defaults.
+   ========================================================================== */
+
+.prose-ten {
+  font-size: 0.9375rem;
+  line-height: 1.72;
+  color: var(--color-bone);
+  /* Students paste tracking URLs and the assistant cites long doc links. An
+     unbreakable token would otherwise force the whole transcript sideways. */
+  overflow-wrap: anywhere;
+}
+.prose-ten > * + * {
+  margin-top: 0.85em;
+}
+.prose-ten h1,
+.prose-ten h2,
+.prose-ten h3,
+.prose-ten h4 {
+  color: #fdf6e3;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+}
+.prose-ten h1 {
+  font-size: 1.3rem;
+}
+.prose-ten h2 {
+  font-size: 1.1rem;
+}
+.prose-ten h3 {
+  font-size: 1rem;
+}
+.prose-ten h4 {
+  font-size: 0.9375rem;
+  color: var(--color-gold);
+}
+/* More space above a heading than below it. */
+.prose-ten > * + :is(h1, h2, h3, h4) {
+  margin-top: 1.7em;
+}
+.prose-ten :is(h1, h2, h3, h4) + * {
+  margin-top: 0.55em;
+}
+.prose-ten strong {
+  color: #fdf6e3;
+  font-weight: 600;
+}
+.prose-ten em {
+  color: var(--color-gold-lift);
+  font-style: italic;
+}
+.prose-ten a {
+  color: var(--color-gold);
+  text-decoration: underline;
+  text-decoration-color: rgb(212 175 55 / 0.45);
+}
+.prose-ten a:hover {
+  text-decoration-color: var(--color-gold);
+}
+.prose-ten :is(ul, ol) {
+  padding-left: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+}
+.prose-ten ul {
+  list-style: none;
+  padding-left: 0.15rem;
+}
+.prose-ten ul > li {
+  position: relative;
+  padding-left: 1.15rem;
+}
+.prose-ten ul > li::before {
+  content: "";
+  position: absolute;
+  left: 0.15rem;
+  top: 0.72em;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--color-gold);
+  opacity: 0.75;
+}
+.prose-ten ol {
+  list-style: decimal;
+}
+.prose-ten ol > li::marker {
+  color: var(--color-gold);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.prose-ten li > :is(ul, ol) {
+  margin-top: 0.4em;
+}
+.prose-ten code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  padding: 0.14em 0.4em;
+  border-radius: var(--radius-inline);
+  background: rgb(212 175 55 / 0.09);
+  border: 1px solid rgb(212 175 55 / 0.14);
+  color: var(--color-gold-lift);
+}
+.prose-ten pre {
+  padding: 0.9rem 1rem;
+  border-radius: var(--radius-field);
+  background: #0c0b09;
+  border: 1px solid rgb(212 175 55 / 0.12);
+  overflow-x: auto;
+  font-size: 0.84rem;
+  line-height: 1.62;
+}
+.prose-ten pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #e7dfc8;
+  font-size: inherit;
+}
+.prose-ten blockquote {
+  padding-left: 0.95rem;
+  border-left: 1px solid rgb(212 175 55 / 0.4);
+  color: var(--color-muted);
+}
+.prose-ten hr {
+  border: none;
+  border-top: 1px solid var(--color-edge);
+  margin-block: 1.4em;
+}
+/* No `display: block` here. It removes the table box, which strips the implicit
+   row and column semantics a screen reader relies on. The scroll container is
+   the wrapper div in Markdown.tsx, which is where it belongs. */
+.prose-ten table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.prose-ten :is(th, td) {
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--color-edge);
+  text-align: left;
+  vertical-align: top;
+}
+.prose-ten th {
+  color: var(--color-gold);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ============================================================================
+   REDUCED MOTION
+   Fewer and gentler, not zero. Opacity and colour survive; travel does not.
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.12ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* The two indicators that carry meaning keep working. A frozen row of dots
+     is indistinguishable from decoration. */
+  .caret {
+    animation: none;
+    opacity: 1;
+  }
+  .thinking-dot {
+    animation-duration: 1.15s !important;
+    animation-iteration-count: infinite !important;
+    animation-name: ten-fade;
+  }
+  .pressable:active {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .surface {
+    background: var(--color-ink);
+  }
+}

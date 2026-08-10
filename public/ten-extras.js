@@ -474,6 +474,55 @@
         } catch(_) {}
     }
 
+    // ---------- Leaderboard ----------
+    async function fetchLb(scope, domain){
+        const url = scope === "domain"
+            ? ("/leaderboard/domain/" + encodeURIComponent(domain || ""))
+            : "/leaderboard/overall";
+        const r = await fetch(url);
+        const d = await r.json();
+        // `|| []` used to turn a server failure into an empty array, which
+        // rendered as "No data yet" — a timeout and a genuinely empty board
+        // looked identical, which is why the Overall tab appeared broken with
+        // no clue why. A failure now throws so the caller can say so.
+        if (!r.ok || !d || d.success === false || d.leaderboard == null) {
+            throw new Error((d && d.error) || "Could not load the leaderboard.");
+        }
+        return d.leaderboard;
+    }
+    function renderLbTable(rows, opts){
+        if(!rows.length) return '<div class="ten-x-empty">No data yet</div>';
+        const me = opts && opts.meEmployeeId;
+        const showDomain = !!opts.showDomain;
+        const max = Math.max(...rows.map(r => r.score || 0), 1);
+        return '<div style="overflow-x:auto;"><table class="ten-x-table"><thead><tr>'
+            + '<th>#</th><th>Name</th><th>ID</th>'
+            + (showDomain ? '<th>Domain</th>' : '')
+            + '<th>Score</th><th>Grade</th><th>Att%</th><th>Approved</th>'
+            + '</tr></thead><tbody>'
+            + rows.map(r => {
+                const cls = me && r.employeeId === me ? "me" : "";
+                const rcls = r.rank===1?"gold":r.rank===2?"silver":r.rank===3?"bronze":"";
+                const medal = r.rank===1?"🥇":r.rank===2?"🥈":r.rank===3?"🥉":r.rank;
+                const w = Math.min(100, Math.round((r.score / max) * 100));
+                return '<tr class="'+cls+'">'
+                    + '<td><span class="ten-x-rank '+rcls+'">'+medal+'</span></td>'
+                    + '<td style="font-weight:600;">'+esc(r.name)+'</td>'
+                    + '<td style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#f5c542;">'+esc(r.employeeId)+'</td>'
+                    + (showDomain ? '<td>'+esc(r.domain||"")+'</td>' : '')
+                    + '<td>'
+                    +   '<div style="display:flex;align-items:center;gap:8px;">'
+                    +     '<b>'+r.score.toFixed(1)+'</b>'
+                    +     '<div class="ten-x-bar-wrap" style="width:70px;"><div class="ten-x-bar" style="width:'+w+'%;"></div></div>'
+                    +   '</div>'
+                    + '</td>'
+                    + '<td style="font-size:12px;color:#cdd9ec;">'+esc(r.grade)+'</td>'
+                    + '<td>'+r.attendancePct+'%</td>'
+                    + '<td>'+r.approved+'</td>'
+                    + '</tr>';
+            }).join("")
+            + '</tbody></table></div>';
+    }
     async function loadLeaderboard(mount, opts){
         opts = opts || {};
         const el = document.getElementById("ten-x-lb") || (typeof mount === 'string' ? document.getElementById(mount) : mount);

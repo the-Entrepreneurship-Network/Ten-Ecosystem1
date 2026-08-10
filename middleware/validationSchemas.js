@@ -5,12 +5,13 @@
  * Consistent with patterns in middleware/validateTalentProfile.js
  */
 
-const DOMAINS_ENUM = [
-  "Python Development", "Web Development", "MERN Stack Development", "Java Development",
-  "DevOps with AWS", "Artificial Intelligence", "Data Science", "Cyber Security",
-  "Software Engineering", "Flutter Development", "HR Management", "Venture Capital",
-  "Vibe Coding", "Space Research", "Business Analyst", "HR"
-];
+// Domains come from config/domains.js — the single list shared with the
+// registration form and with employee-ID generation. This array used to be a
+// third, independent copy that was missing "Business Development", "Space
+// Intern" and "Finance" (all offered on the registration form), so switching
+// validation on would have rejected valid student choices.
+const { DOMAIN_NAMES } = require('../config/domains');
+const DOMAINS_ENUM = DOMAIN_NAMES;
 
 // Helper to check for valid Mongo ObjectId format
 const MONGO_ID_PATTERN = /^[0-9a-fA-F]{24}$/;

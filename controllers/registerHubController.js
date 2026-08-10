@@ -35,13 +35,33 @@ const ROLE_CONFIG = [
     fields: [
       { name: 'mobile', type: 'text', label: 'Mobile', placeholder: 'Your mobile number', required: true },
       { name: 'country', type: 'text', label: 'Country', placeholder: 'Your country', required: true },
-      { name: 'state', type: 'text', label: 'State', placeholder: 'Your state', required: true },
+      // NOT required: public/register.html has no State input at all, so this
+      // value is never sent. Enforcing it would reject every single student
+      // registration. Add the field to the form first if it is wanted.
+      { name: 'state', type: 'text', label: 'State', placeholder: 'Your state', required: false },
       { name: 'city', type: 'text', label: 'City', placeholder: 'Your city', required: true },
       { name: 'university', type: 'text', label: 'University / College', placeholder: 'Your university', required: true },
       { name: 'degree', type: 'text', label: 'Degree', placeholder: 'e.g. B.Tech Computer Science', required: true },
       { name: 'graduationYear', type: 'number', label: 'Graduation Year', placeholder: 'e.g. 2026', required: true },
-      { name: 'skills', type: 'text', label: 'Skills (comma-separated)', placeholder: 'e.g. HTML, CSS, React', required: true },
-      { name: 'resume', type: 'text', label: 'Resume Link', placeholder: 'Link to your resume', required: false },
+      // A résumé is uploaded, not typed, so the generic "Please enter your…"
+      // sentence would point at the wrong control.
+      { name: 'resume', type: 'text', label: 'Resume', placeholder: 'Link to your resume', required: true,
+        requiredMessage: 'Please upload your resume as a PDF.' },
+
+      // Skills, LinkedIn and portfolio are OPTIONAL, deliberately.
+      //
+      // A first-year student with no portfolio and no LinkedIn profile is
+      // exactly who this internship exists to train — refusing their
+      // registration over three blank boxes turns away the applicants the
+      // programme is for. Everything that identifies a student or places them
+      // in a cohort (name, email, mobile, location, college, degree, graduation
+      // year, résumé, domain, tenure) stays required, because the portal cannot
+      // run without it.
+      //
+      // The `skills` label carries no "(comma-separated)" suffix: a label is the
+      // field's name, and it ends up in error messages. The hint belongs in the
+      // placeholder, where it is.
+      { name: 'skills', type: 'text', label: 'Skills', placeholder: 'e.g. HTML, CSS, React', required: false },
       { name: 'linkedin', type: 'url', label: 'LinkedIn URL', placeholder: 'https://linkedin.com/in/...', required: false },
       { name: 'portfolio', type: 'url', label: 'Portfolio URL', placeholder: 'https://...', required: false },
     ],
@@ -127,38 +147,66 @@ function getRoleConfig(req, res) {
 }
 
 // Helper to generate legacy Employee ID
-async function generateEmployeeId(domain) {
-  const domainShortCodes = {
-    "DevOps with AWS":          "DEVOPS",
-    "Python Development":       "PY",
-    "Java Development":         "JAVA",
-    "Web Development":          "WEB",
-    "MERN Stack Development":   "MERN",
-    "MERN Stack Dev":           "MERN",
-    "Artificial Intelligence":  "AI",
-    "Data Science":             "DS",
-    "Cyber Security":           "CYBER",
-    "Software Engineering":     "SDE",
-    "Flutter Development":      "FLUTTER",
-    "HR Management":            "HRMGMT",
-    "Venture Capital":           "VC",
-    "Vibe Coding":               "VIBE",
-    "Space Research":            "SPACE",
-    "Business Analyst":          "BA",
-    "HR":                        "HR",
-    "Business Development":      "BD",
-    "Space Intern":              "SPACE",
-    "Finance":                   "FIN",
-    "Machine Learning":          "ML",
-    "Android":                   "AND",
-    "UI/UX":                     "UIUX",
-    "Digital Marketing":         "MKTG",
-    "General":                   "GEN"
-  };
-  const shortCode = domainShortCodes[domain] || "GEN";
-  const totalStudents = await Student.countDocuments();
-  const sequenceNumber = 1001 + totalStudents;
-  return `TEN/${shortCode}/${sequenceNumber}`;
+// Shared with server.js — see utils/employeeId.js.
+const { generateEmployeeId } = require('../utils/employeeId');
+const { normalizeDomain } = require('../config/domains');
+const { isValidTenure, getTenureLabel } = require('../utils/tenure');
+
+/**
+ * Parse the domain selection, which the form sends as a comma-joined string.
+ * Returns canonical names, or a list of the values it could not recognise.
+ */
+function parseDomainSelection(raw) {
+  let values = [];
+  if (typeof raw === 'string') {
+    values = raw.split(',').map((d) => d.trim()).filter(Boolean);
+  } else if (Array.isArray(raw)) {
+    // The old code only handled the string case, so an array body silently
+    // fell through to the "Web Development" default.
+    values = raw.map((d) => String(d).trim()).filter(Boolean);
+  }
+
+  const domains = [];
+  const unknown = [];
+  for (const value of values) {
+    const canonical = normalizeDomain(value);
+    if (canonical) {
+      if (!domains.includes(canonical)) domains.push(canonical);
+    } else {
+      unknown.push(value);
+    }
+  }
+  return { domains, unknown };
+}
+
+/**
+ * A message a student can act on, in the words the form uses.
+ *
+ * "Skills (comma-separated) is required." reads like a database complaint: it
+ * repeats a formatting hint the student cannot do anything about, and never
+ * says what to do. Parenthetical hints are dropped, and the sentence tells them
+ * the action — select for a dropdown, enter for anything they type.
+ */
+function requiredFieldMessage(field) {
+  if (field.requiredMessage) return field.requiredMessage;
+
+  const name = String(field.label || field.name)
+    .replace(/\s*\([^)]*\)\s*/g, ' ')
+    .trim()
+    .split(/\s+/)
+    // Mid-sentence, "Please enter your Graduation Year." reads like a form
+    // label pasted into a sentence. Lower-case each word unless it is an
+    // acronym (URL) or carries an internal capital (LinkedIn) — those are
+    // spelled that way on purpose.
+    .map((word) => {
+      const isAcronym = word.length > 1 && word === word.toUpperCase() && /[A-Z]/.test(word);
+      const hasInnerCapital = /[A-Z]/.test(word.slice(1));
+      return isAcronym || hasInnerCapital ? word : word.toLowerCase();
+    })
+    .join(' ');
+
+  const verb = field.type === 'select' ? 'select' : 'enter';
+  return `Please ${verb} your ${name}.`;
 }
 
 async function registerUser(req, res) {
@@ -166,20 +214,88 @@ async function registerUser(req, res) {
     const { fullName, email, password, role, roleSpecificData = {} } = req.body;
     const name = fullName || req.body.name;
 
+    // Collect EVERY failing field before answering, so the form can show a
+    // message under each one rather than a single generic alert. Registration
+    // previously returned on the first failure, and skipped `domain` entirely —
+    // an unset domain silently became "Web Development" and the account was
+    // created anyway.
+    const errors = {};
+
     if (!name || typeof name !== 'string' || name.trim().length < 2) {
-      return res.status(400).json({ success: false, error: 'Full name must be at least 2 characters.' });
+      errors.fullName = 'Please enter your full name (at least 2 characters).';
     }
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return res.status(400).json({ success: false, error: 'Valid email is required.' });
+    if (!email || typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.email = 'Please enter a valid email address.';
     }
-    if (!password || password.length < 8) {
-      return res.status(400).json({ success: false, error: 'Password must be at least 8 characters.' });
+    if (!password || typeof password !== 'string' || password.length < 8) {
+      errors.password = 'Password must be at least 8 characters.';
     }
     if (req.body.confirmPassword && req.body.confirmPassword !== password) {
       return res.status(400).json({ success: false, error: 'Password and Confirm Password do not match.' });
     }
     if (!role || !ALL_ROLES.includes(role)) {
-      return res.status(400).json({ success: false, error: `role must be one of: ${ALL_ROLES.join(', ')}` });
+      errors.role = 'Please choose what you are registering as.';
+    }
+
+    // Student-specific required fields.
+    let studentDomains = [];
+    if (role === ROLES.STUDENT) {
+      const { domains, unknown } = parseDomainSelection(roleSpecificData.domains);
+      studentDomains = domains;
+
+      if (unknown.length) {
+        errors.domains = `We do not recognise: ${unknown.join(', ')}. Please pick from the list.`;
+      } else if (domains.length === 0) {
+        errors.domains = 'Please select your internship domain.';
+      } else if (domains.length > 2) {
+        errors.domains = 'You can select at most 2 domains.';
+      }
+
+      if (!roleSpecificData.tenure) {
+        errors.tenure = 'Please select your internship tenure.';
+      } else if (!isValidTenure(roleSpecificData.tenure)) {
+        errors.tenure = 'Please select a valid internship tenure.';
+      }
+
+      // Every field the student form marks with an asterisk, enforced here too.
+      //
+      // The browser's `required` attribute is a convenience, not a control:
+      // this endpoint takes JSON, so a request built by hand — or by a script —
+      // never sees the form at all. Only country, city, university, degree,
+      // graduation year and skills carried `required`; résumé, LinkedIn and
+      // portfolio were optional on both sides, and the hidden résumé input
+      // could not carry `required` even in the browser, so its asterisk
+      // enforced nothing anywhere.
+      //
+      // Driven from the field spec above so the two cannot drift apart. Scoped
+      // to students on purpose: the founder, mentor, investor and contractor
+      // forms have not been checked field-by-field against their specs, and
+      // enforcing an unsent field would lock those roles out of registering —
+      // which is exactly what `state` would have done here.
+      const studentFields = (ROLE_CONFIG.find((r) => r.id === ROLES.STUDENT) || {}).fields || [];
+      for (const field of studentFields) {
+        if (!field.required || errors[field.name]) continue;
+
+        const value = roleSpecificData[field.name];
+        const missing =
+          value === undefined ||
+          value === null ||
+          (typeof value === 'string' && value.trim() === '') ||
+          // Number('') is 0 and Number.isFinite(0) is true, so an empty
+          // graduation year would otherwise pass as a valid number.
+          (field.type === 'number' && !(Number(value) > 0));
+
+        if (missing) errors[field.name] = requiredFieldMessage(field);
+      }
+    }
+
+    if (Object.keys(errors).length > 0) {
+      return res.status(400).json({
+        success: false,
+        errors,
+        // Kept so older clients that only read `error` still show something.
+        error: Object.values(errors)[0]
+      });
     }
 
     // Role specific mandatory field validations for Student
@@ -282,16 +398,15 @@ async function registerUser(req, res) {
       });
 
       // BACKWARD COMPATIBILITY: also create legacy Student document in students collection
-      let parsedDomains = [];
-      if (roleSpecificData.domains && typeof roleSpecificData.domains === 'string') {
-        parsedDomains = roleSpecificData.domains.split(',').map(d => d.trim()).filter(Boolean);
-      }
-      if (parsedDomains.length === 0) {
-        parsedDomains = ['Web Development'];
-      }
+      //
+      // Domains were validated above. There is deliberately no
+      // `parsedDomains = ['Web Development']` fallback any more: an unselected
+      // domain used to enrol the student in Web Development with a TEN/WEB/...
+      // employee ID and no error shown, which is exactly what section 4 reports.
+      const parsedDomains = studentDomains;
       const domain = parsedDomains[0];
       const employeeId = await generateEmployeeId(domain);
-      const tenureValue = roleSpecificData.tenure || "1 Month";
+      const tenureValue = getTenureLabel(roleSpecificData.tenure);
       await Student.create({
         firstName: name.trim().split(' ')[0] || name.trim(),
         lastName: name.trim().split(' ').slice(1).join(' ') || "",
@@ -299,7 +414,6 @@ async function registerUser(req, res) {
         email: trimmedEmail,
         whatsapp: roleSpecificData.mobile || "",
         password: hashedPassword,
-        plainPassword: password,
         employeeId: employeeId,
         domain: domain,
         domains: parsedDomains,

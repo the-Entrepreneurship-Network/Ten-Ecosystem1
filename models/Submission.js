@@ -34,4 +34,12 @@ const submissionSchema = new mongoose.Schema({
     feedbackGeneratedAt: { type: Date, default: null }
 });
 
+// The leaderboard aggregates `{ status: "Approved" }` across the whole
+// collection, and status was unindexed — a full scan on every request, which is
+// what pushed the grouping past MongoDB's 100 MB in-memory limit
+// (QueryExceededMemoryLimitNoDiskUseAllowed) on production data. The compound
+// index covers both the unfiltered aggregation and the per-student lookups.
+submissionSchema.index({ status: 1, employeeId: 1 });
+submissionSchema.index({ domain: 1 });
+
 module.exports = mongoose.models.Submission || mongoose.model("Submission", submissionSchema);

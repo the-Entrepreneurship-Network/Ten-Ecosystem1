@@ -4,6 +4,8 @@ const express      = require('express');
 const router       = express.Router();
 
 const { validate, paymentInitSchema } = require('../../middleware/validationSchemas');
+const { allPurposesFor, purposeFor } = require('../../config/tenurePayment');
+const { normalizeTenure } = require('../../utils/tenure');
 
 const rateLimit = require("express-rate-limit");
 const paymentLimiter = rateLimit({
@@ -662,7 +664,7 @@ router.post('/utr-confirm', async (req, res) => {
 
       // Send confirmation email
       try {
-        const { createEmailTransporter, EMAIL_FROM } = require('../../utils/mailer');
+        const { createEmailTransporter } = require('../../utils/mailer');
         const transporter = createEmailTransporter();
         const sName = studentName || student.name || `${student.firstName} ${student.lastName}`;
         const empId = employeeId || student.employeeId;
@@ -670,7 +672,7 @@ router.post('/utr-confirm', async (req, res) => {
         const sEmail = email || student.email;
 
         transporter.sendMail({
-          from: EMAIL_FROM,
+          from: process.env.EMAIL_USER || 'no-reply@entrepreneurshipnetwork.net',
           to: 'growth@entrepreneurshipnetwork.net',
           subject: `Manual Payment Verification Required - ${payment.orderId}`,
           html: `<p>A manual UPI payment has been initiated by <strong>${sName}</strong> (${empId}, ${sDomain}).</p>
@@ -873,7 +875,7 @@ router.get('/tenure-status', async (req, res) => {
     // Find any existing successful or pending verification tenure payment
     const payment = await Payment.findOne({
       studentId: student._id,
-      purpose: { $in: ['TEN Internship Payment', 'tenure_payment'] },
+      purpose: { $in: allPurposesFor(normalizeTenure(student.tenure)) },
       status: { $in: ['success', 'pending_verification'] }
     });
 
@@ -928,7 +930,7 @@ router.post('/tenure-submit', async (req, res) => {
     // Check if there is already a successful or pending verification payment
     const existing = await Payment.findOne({
       studentId: student._id,
-      purpose: { $in: ['TEN Internship Payment', 'tenure_payment'] },
+      purpose: { $in: allPurposesFor(normalizeTenure(student.tenure)) },
       status: { $in: ['success', 'pending_verification'] }
     });
 
@@ -946,7 +948,10 @@ router.post('/tenure-submit', async (req, res) => {
       employeeId: student.employeeId,
       amount: parseFloat(amount) || expectedAmount,
       provider: 'manual',
-      purpose: 'TEN Internship Payment',
+      // Canonical purpose. This used to write "TEN Internship Payment", which
+      // the admin approval queue (matching /^tenure_/) never saw — so a student
+      // who paid through this route could not be approved by anyone.
+      purpose: purposeFor(normalizeTenure(student.tenure)),
       amountRupees: parseFloat(amount) || expectedAmount,
       amountPaisa: Math.round((parseFloat(amount) || expectedAmount) * 100),
       status: 'pending_verification',

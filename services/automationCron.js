@@ -15,6 +15,9 @@ const Notification       = require("../models/Notification");
 const { generateDocumentNumber } = require("../utils/documentNumber");
 const Attendance          = require("../models/Attendance");
 const StudentTaskProgress = require("../models/new/StudentTaskProgress");
+const { istDateKey, istDayStart, istDayEnd } = require("../utils/dateKey");
+const { isSunday, getEffectiveStartDate }    = require("../utils/attendanceUtils");
+const { getInternshipEndDate }               = require("../utils/tenure");
 
 // ── Ensure output directories exist ──
 const offerLetterDir  = path.join(__dirname, "../uploads/offer-letters");
@@ -23,7 +26,7 @@ try { fs.mkdirSync(offerLetterDir,  { recursive: true }); } catch (_) {}
 try { fs.mkdirSync(certificatesDir, { recursive: true }); } catch (_) {}
 
 // ── Mail helper ──
-const { createEmailTransporter, EMAIL_FROM } = require("../utils/mailer");
+const { createEmailTransporter } = require("../utils/mailer");
 function createTransporter() {
     return createEmailTransporter();
 }
@@ -461,7 +464,7 @@ async function autoGenerateOfferLetter(doc) {
         try {
             const transporter = createTransporter();
             await transporter.sendMail({
-                from:    EMAIL_FROM,
+                from:    process.env.EMAIL_US,
                 to:      student.email,
                 subject: "Your Internship Offer Letter is Ready — TEN",
                 html:    `<p>Dear ${student.name || "Intern"},</p><p>Congratulations! Your offer letter for the <strong>${student.domain || ""}</strong> internship at The Entrepreneurship Network is ready. Please find it attached to this email.</p><p>Your Employee ID: <strong>${student.employeeId || "N/A"}</strong></p><p>You can also download it from the <a href="${process.env.BASE_URL || "https://virtualinternships.entrepreneurshipnetwork.net"}">TEN Student Portal</a>.</p><p>Best regards,<br/>HR Team, TEN</p>`,
@@ -537,7 +540,7 @@ async function initiateCertificateApproval(student) {
         try {
             const transporter = createTransporter();
             await transporter.sendMail({
-                from:    EMAIL_FROM,
+                from:    process.env.EMAIL_US,
                 to:      process.env.EMAIL_US,
                 subject: `[TEN] Certificate Approval Required — ${student.name} (${student.domain})`,
                 html:    `<p>The internship for <strong>${student.name}</strong> (Employee ID: ${student.employeeId}, Domain: ${student.domain}) has ended.</p><p>Please review and approve the certificate request via the TEN HR Portal or the coordinator portal.</p><p>Request ID: ${req._id}</p><p>Deadline: 24 hours from now.</p>`
@@ -665,7 +668,7 @@ async function autoGenerateCertificates(certReq) {
             const earnedHtml  = earnedList.map(e => `<li>✅ ${e}</li>`).join("");
             const missedHtml  = missedList.map(m => `<li>❌ ${m}</li>`).join("");
             await transporter.sendMail({
-                from:    EMAIL_FROM,
+                from:    process.env.EMAIL_US,
                 to:      student.email,
                 subject: "🏅 Your TEN Internship Certificates Are Ready!",
                 html:    `<p>Dear ${student.name || "Intern"},</p><p>Congratulations on completing your <strong>${student.domain || ""}</strong> internship at The Entrepreneurship Network!</p><h3>Certificates Earned:</h3><ul>${earnedHtml}</ul>${missedHtml ? `<h3>Not Earned:</h3><ul>${missedHtml}</ul>` : ""}<p>Please find your certificates attached. You can also view them in the <a href="${process.env.BASE_URL || "https://virtualinternships.entrepreneurshipnetwork.net"}/my-certificates.html">TEN Student Portal</a>.</p><p>Best regards,<br/>TEN Team</p>`,
@@ -739,22 +742,57 @@ async function checkOverdueHRApprovals() {
 // check if the student was active (submitted task or watched video today)
 // and auto-mark them present from coordinator side.
 // ════════════════════════════════════════════════════
+/**
+ * If a coordinator forgets to mark someone by end of day, mark an ACTIVE
+ * student present so the day is not lost (section 3).
+ *
+ * Two bugs made this a no-op even once it was scheduled:
+ *
+ *  1. It filtered on `internshipEnd` and `isBlocked`, neither of which exists
+ *     on models/Student.js, so the query matched zero documents. The real
+ *     fields are `internshipEndDate` and `isBlockedFromChat`; students with no
+ *     end date recorded are included and filtered in code below.
+ *  2. `dateKey` came from `toISOString()` (UTC) while POST /mark-attendance
+ *     used IST. The job runs at 23:55 IST = 18:25 UTC, so the two wrote
+ *     different keys for the same day — and Attendance has a unique index on
+ *     {employeeId, dateKey, markedBy}.
+ */
 async function autoMarkCoordinatorAttendance() {
     try {
         const today = new Date();
-        const dateKey = today.toISOString().slice(0, 10); // YYYY-MM-DD
-        const dayStart = new Date(dateKey + "T00:00:00.000Z");
-        const dayEnd   = new Date(dateKey + "T23:59:59.999Z");
+        const dateKey = istDateKey(today);
+        const dayStart = istDayStart(dateKey);
+        const dayEnd   = istDayEnd(dateKey);
 
-        // Get all active students
+        // Students whose internship has not ended. `internshipEndDate` is only
+        // populated going forward, so treat a missing value as "still active"
+        // and check the tenure window in code. (There is no "blocked" flag on
+        // the Student model — the original `isBlocked` clause matched nothing.)
         const students = await Student.find({
-            internshipEnd: { $gte: today },
-            isBlocked: { $ne: true }
+            $and: [
+                { $or: [
+                    { internshipEndDate: { $gte: today } },
+                    { internshipEndDate: null },
+                    { internshipEndDate: { $exists: false } }
+                ] },
+                { internshipCompleted: { $ne: true } }
+            ]
         }).lean();
 
+        let marked = 0;
         for (const student of students) {
             try {
-                // Skip if coordinator already marked this student today
+                // Derive the end of the tenure for students with no stored end
+                // date, so long-finished internships are not auto-marked.
+                const effectiveStart = getEffectiveStartDate(student);
+                if (!effectiveStart) continue;
+                const tenureEnd = getInternshipEndDate(effectiveStart, student.tenure || student.v2DurationType);
+                if (tenureEnd && tenureEnd < today) continue;
+
+                // Never auto-mark a Sunday — it is not a working day.
+                if (isSunday(dayStart)) continue;
+
+                // Skip if a coordinator (or a previous run) already marked today
                 const existing = await Attendance.findOne({
                     employeeId: student.employeeId,
                     dateKey:    dateKey,
@@ -762,14 +800,28 @@ async function autoMarkCoordinatorAttendance() {
                 });
                 if (existing) continue;
 
-                // Check if student was active today (task submitted or video watched)
-                const wasActive = await StudentTaskProgress.findOne({
-                    studentId: student._id,
-                    $or: [
-                        { submittedAt: { $gte: dayStart, $lte: dayEnd } },
-                        { updatedAt:   { $gte: dayStart, $lte: dayEnd }, videoWatchedPercent: { $gt: 0 } }
-                    ]
-                });
+                // Was the student active today? Logged in, self-marked, or made
+                // progress on a task.
+                const [taskActivity, selfMarked] = await Promise.all([
+                    StudentTaskProgress.findOne({
+                        studentId: student._id,
+                        $or: [
+                            { submittedAt: { $gte: dayStart, $lte: dayEnd } },
+                            { updatedAt:   { $gte: dayStart, $lte: dayEnd }, videoWatchedPercent: { $gt: 0 } }
+                        ]
+                    }),
+                    Attendance.findOne({
+                        employeeId: student.employeeId,
+                        dateKey:    dateKey,
+                        markedBy:   "self",
+                        status:     "Present"
+                    })
+                ]);
+
+                const loggedInToday = student.lastActiveDate &&
+                    istDateKey(student.lastActiveDate) === dateKey;
+
+                const wasActive = !!(taskActivity || selfMarked || loggedInToday);
 
                 if (wasActive) {
                     // Auto-mark coordinator attendance for active student
@@ -783,41 +835,74 @@ async function autoMarkCoordinatorAttendance() {
                         markedBy:      "coordinator",
                         coordinatorId: "AUTO_SYSTEM"
                     });
+                    marked++;
                     console.log(`[AUTO-ATTEND] Auto-marked coordinator attendance for ${student.employeeId} (${dateKey})`);
                 }
             } catch (studentErr) {
-                // Duplicate key = already marked, skip silently
+                // Duplicate key = already marked between the check and the
+                // insert. The unique index on {employeeId, dateKey, markedBy}
+                // is doing its job; no duplicate row is created.
                 if (studentErr.code !== 11000) {
                     console.error(`[AUTO-ATTEND] Error for ${student.employeeId}:`, studentErr.message);
                 }
             }
         }
+        console.log(`[AUTO-ATTEND] ${dateKey}: reviewed ${students.length} student(s), auto-marked ${marked}.`);
+        return { dateKey, reviewed: students.length, marked };
     } catch (err) {
         console.error("[AUTO-ATTEND] autoMarkCoordinatorAttendance error:", err.message);
+        return { error: err.message };
     }
 }
 
 // ════════════════════════════════════════════════════
 // INIT — Register all cron jobs
 // ════════════════════════════════════════════════════
-function initAutomation() {
-    // Offer Letter Auto-Send — every 30 min
-    cron.schedule("*/30 * * * *", checkOverdueOfferLetters);
+let automationStarted = false;
 
-    // Internship Completion Detection — daily 9 AM
-    cron.schedule("0 9 * * *", detectCompletedInternships);
+/**
+ * Register the scheduled jobs.
+ *
+ * This function existed but was NEVER CALLED — nothing required this module for
+ * its side effects, so all five jobs below were dead code. Offer letters were
+ * never auto-sent, completed internships were never detected, approvals never
+ * escalated, and attendance was never auto-marked. server.js now calls this on
+ * boot.
+ *
+ * All schedules run in Asia/Kolkata: the attendance job fires at 23:55 IST and
+ * must agree with the IST day key that POST /mark-attendance writes.
+ */
+function initAutomation() {
+    if (automationStarted) {
+        console.warn("[AUTO-CRON] initAutomation() called twice; ignoring the second call.");
+        return;
+    }
+    automationStarted = true;
+
+    const options = { timezone: "Asia/Kolkata" };
+
+    // Offer Letter Auto-Send — every 30 min
+    cron.schedule("*/30 * * * *", checkOverdueOfferLetters, options);
+
+    // Internship Completion Detection — daily 9 AM IST
+    cron.schedule("0 9 * * *", detectCompletedInternships, options);
 
     // Coordinator Auto-Approval — every 30 min
-    cron.schedule("*/30 * * * *", checkOverdueCoordinatorApprovals);
+    cron.schedule("*/30 * * * *", checkOverdueCoordinatorApprovals, options);
 
     // HR Certificate Auto-Generation — every 30 min
-    cron.schedule("*/30 * * * *", checkOverdueHRApprovals);
+    cron.schedule("*/30 * * * *", checkOverdueHRApprovals, options);
 
-    // Coordinator Auto-Attendance — runs at 11:55 PM daily
-    // Auto-marks students as present if they were active and coordinator didn't mark
-    cron.schedule("55 23 * * *", autoMarkCoordinatorAttendance);
+    // Coordinator Auto-Attendance — 11:55 PM IST daily. Marks an ACTIVE student
+    // present when their coordinator did not get to them (section 3).
+    cron.schedule("55 23 * * *", autoMarkCoordinatorAttendance, options);
 
-    console.log("[AUTO-CRON] Automation cron jobs initialized");
+    console.log("[AUTO-CRON] 5 automation cron jobs scheduled (Asia/Kolkata):");
+    console.log("  */30 * * * *  overdue offer letters");
+    console.log("  0 9 * * *     completed-internship detection");
+    console.log("  */30 * * * *  overdue coordinator approvals");
+    console.log("  */30 * * * *  overdue HR approvals");
+    console.log("  55 23 * * *   auto-mark coordinator attendance");
 }
 
 module.exports = {

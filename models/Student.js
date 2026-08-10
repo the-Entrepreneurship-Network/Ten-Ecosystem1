@@ -17,13 +17,17 @@ const studentsSchema = new mongoose.Schema({
     isLockedOut: { type: Boolean, default: false },
     joiningDate: String,
     employeeId: { type: String, unique: true, sparse: true },
+    // Always a bcrypt hash. There is deliberately no default: an account
+    // without a password must fail to authenticate, not fall back to a shared
+    // well-known one.
+    //
+    // NOTE: a `plainPassword` field used to sit here holding the cleartext
+    // password alongside this hash, refreshed on every successful login and
+    // readable through an unauthenticated endpoint. It has been removed. Do
+    // not reintroduce a reversible copy of a password in any form.
     password: {
         type: String,
-        default: "intern123"
-    },
-    plainPassword: {
-        type: String,
-        default: "intern123"
+        required: true
     },
 
     certificateApprovedByCoordinator: { type: Boolean, default: false },
@@ -88,7 +92,24 @@ const studentsSchema = new mongoose.Schema({
     joinerType:           { type: String, enum: ['new', 'whatsapp', null], default: null },
 
     employeeIdOverride:  { type: String, default: null },
+
+    // For a WhatsApp joiner this is deliberately EARLIER than joiningDate:
+    // they attended through WhatsApp before they had a portal account. The
+    // attendance calculation credits that pre-portal stretch as attended,
+    // because no daily records can exist for days before the student was in
+    // the system.
     internshipStartDate: { type: Date, default: null },
+
+    // Coordinator override for the pre-portal period above. If a WhatsApp
+    // joiner actually missed some of those days, set the count here and it is
+    // deducted from the credited total.
+    preportalAbsentDays: { type: Number, default: 0 },
+
+    // Last day of the internship, derived from internshipStartDate/joiningDate
+    // and tenure. Kept on the document so the admin panel can extend a tenure
+    // and so scheduled jobs can query it — the auto-mark cron queried an
+    // `internshipEnd` field that never existed, matching zero students.
+    internshipEndDate:   { type: Date, default: null },
     hasSeenWelcome:      { type: Boolean, default: false },
     hasSeenOnboarding:   { type: Boolean, default: false },
     calculatedAttendance: { type: Number, default: null },
@@ -153,5 +174,17 @@ const studentsSchema = new mongoose.Schema({
 }, {
     timestamps: true
 });
+
+// Indexes for the fields actually queried in bulk.
+//
+// Only employeeId was indexed, so `Student.findOne({ email })` — the login
+// path, and the second most common query in the codebase — did a full
+// collection scan of every student on every attempt. `find({ domain })` behind
+// the domain leaderboard and the coordinator views did the same.
+//
+// email is deliberately NOT unique: production may already hold duplicates,
+// and a unique index that cannot be built would fail at startup.
+studentsSchema.index({ email: 1 });
+studentsSchema.index({ domain: 1 });
 
 module.exports = mongoose.model("Student", studentsSchema);

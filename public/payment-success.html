@@ -65,6 +65,7 @@ body::before{content:'';position:fixed;top:50%;left:50%;transform:translate(-50%
   <div class="subtitle">Please wait while we verify your payment. This may take a moment.</div>
 </div>
 
+<script src="/session-guard.js"></script>
 <script>
 const params = new URLSearchParams(location.search);
 const certType = params.get('certType') || '';

@@ -5,16 +5,27 @@ const DomainTask           = require("../../models/new/DomainTask");
 const StudentTaskProgress  = require("../../models/new/StudentTaskProgress");
 const coinService          = require("./coinService");
 
-// NEW FEATURE: Map legacy tenure strings to durationType enum values
+// Tenure parsing is shared — see utils/tenure.js. This was one of six
+// independent copies of the mapping, and they disagreed with each other.
+const { toDurationType } = require("../../utils/tenure");
+
 function tenureToDurationType(tenure) {
-    if (!tenure) return "1month";
-    const t = tenure.toString().toLowerCase().replace(/\s+/g, "");
-    if (t.includes("1w") || t.includes("1week") || t.includes("7dy") || t.includes("7day")) return "1week";
-    if (t.includes("15d") || t.includes("15day")) return "15days";
-    if (t.includes("45")) return "45days";
-    if (t.includes("6m") || t.includes("6month")) return "6months";
-    if (t.includes("3m") || t.includes("3month")) return "3months";
-    return "1month";
+    return toDurationType(tenure);
+}
+
+/**
+ * The duration the STUDENT is enrolled on.
+ *
+ * `v2DurationType` is what they picked in the Task Journey popup, but it was
+ * previously written with no cross-check against Student.tenure — so a student
+ * on the paid 1-Month track could select "6months" in the popup and be assigned
+ * the full six-month task set. The registered tenure wins when the two disagree.
+ */
+function resolveStudentDuration(student) {
+    if (!student) return toDurationType(null);
+    const fromTenure = student.tenure ? toDurationType(student.tenure) : null;
+    if (fromTenure) return fromTenure;
+    return toDurationType(student.v2DurationType);
 }
 
 /**
@@ -30,7 +41,7 @@ async function assignTasksForStudent(student) {
     if (domain === "Artificial Intelligence" || domain === "AI") domain = "Data Science";
     if (domain === "Finance" || domain === "Finance and Accounts" || domain === "Finance & Accounts") domain = "Venture Capital";
 
-    const durationType = student.v2DurationType || tenureToDurationType(student.tenure);
+    const durationType = resolveStudentDuration(student);
 
     if (!domain || !durationType) return { assigned: 0 };
 
@@ -77,6 +88,14 @@ async function assignTasksForStudent(student) {
     return { assigned: result.upsertedCount, total: allTasks.length };
 }
 
+// How many weeks of tasks each duration is entitled to. Short durations borrow
+// the 1-month task set (see assignTasksForStudent), so without an explicit cap
+// they would keep unlocking weeks they never paid for.
+const WEEK_CAPS = {
+    "1week":  1,
+    "15days": 2
+};
+
 /**
  * Unlock the next week's tasks after all of the current week's tasks are approved.
  * Called after a task is marked approved.
@@ -88,20 +107,14 @@ async function tryUnlockNextWeek(student, approvedTaskId) {
 
     const { domain, durationType, weekNumber: currentWeek } = approvedTaskDoc;
 
-    // Check if user is on short duration (1week or 15days) which locks maximum week progression
-    const domainTasks = await DomainTask.find({ domain }).select("_id durationType").lean();
-    const taskIds = domainTasks.map(t => t._id);
-    const progressRecord = await StudentTaskProgress.findOne({ studentId: student._id, taskId: { $in: taskIds } }).lean();
-
-    let studentDuration = student.v2DurationType || tenureToDurationType(student.tenure);
-    if (progressRecord) {
-        const matchingTask = domainTasks.find(t => String(t._id) === String(progressRecord.taskId));
-        if (matchingTask) {
-            studentDuration = matchingTask.durationType;
-        }
-    }
-    if (studentDuration === "1week") return { unlocked: 0 };
-    if (studentDuration === "15days" && currentWeek >= 2) return { unlocked: 0 };
+    // The student's duration comes from the STUDENT. It used to be re-derived
+    // from the assigned task's durationType — which is "1month" for a 1week or
+    // 15days student, because those values are remapped at assignment time. The
+    // two guards below could therefore never fire for exactly the students they
+    // exist to cap, and week 3+ unlocked for a 15-days student.
+    const studentDuration = resolveStudentDuration(student);
+    const weekCap = WEEK_CAPS[studentDuration];
+    if (weekCap && currentWeek >= weekCap) return { unlocked: 0 };
 
     // All tasks in the current week for this student
     const currentWeekTasks = await DomainTask.find({ domain, durationType, weekNumber: currentWeek }).lean();
@@ -250,4 +263,4 @@ async function getStudentTasks(student) {
     return { weeks, domain, durationType };
 }
 
-module.exports = { assignTasksForStudent, tryUnlockNextWeek, approveTask, getStudentTasks, tenureToDurationType };
+module.exports = { assignTasksForStudent, tryUnlockNextWeek, approveTask, getStudentTasks, tenureToDurationType, resolveStudentDuration };

@@ -8,6 +8,7 @@
 <!-- NEW FEATURE: Quiz System -->
 <link rel="stylesheet" href="v2-quiz.css">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="/session-guard.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <style>
 /* NEW FEATURE: Task Portal V2 — full stylesheet matching TEN dark gold theme */
@@ -404,6 +405,7 @@ body::after {
   .week-progress { display:none; }
 }
 </style>
+  <link rel="stylesheet" href="/css/ten-brand.css">
 </head>
 <body>
 
@@ -430,7 +432,8 @@ body::after {
     <div class="onboard-header">
       <div class="icon">🚀</div>
       <h2>Set Up Your Task Journey</h2>
-      <p>Choose your internship duration to unlock your personalised task plan.<br>Your domain is already set to:</p>
+      <p id="onboard-subtitle">Choose your internship duration to unlock your personalised task plan.</p>
+      <p>Your domain is already set to:</p>
       <div class="onboard-domain-badge">🎯 <span id="onboard-domain">—</span></div>
     </div>
     <div class="duration-grid" id="durationGrid">
@@ -666,11 +669,31 @@ function authHeaders(extra = {}) {
   };
 }
 
+// A signed-out visit used to render the whole page from localStorage and then
+// pop "Error — Please sign in to continue" on the first API call, because the
+// cached studentData outlives the session cookie (rotating SESSION_SECRET, a
+// timeout, or signing out in another tab all end the session while
+// localStorage stays put). Treat 401 as what it is: send them to the login
+// page and clear the stale copy so the next visit starts clean.
 async function apiFetch(path, opts = {}) {
   const res = await fetch(API + path, {
     headers: authHeaders(),
+    credentials: 'same-origin',
     ...opts
   });
+
+  if (res.status === 401) {
+    try {
+      localStorage.removeItem('studentData');
+      localStorage.removeItem('v2StudentData');
+    } catch (_) { /* private mode — nothing to clear */ }
+    const back = encodeURIComponent(location.pathname + location.search);
+    location.replace('/student-login.html?next=' + back);
+    // Never resolves: the navigation is already underway, and resolving would
+    // let the caller render an error dialog over a page that is going away.
+    return new Promise(() => {});
+  }
+
   return res.json();
 }
 
@@ -719,20 +742,67 @@ async function init() {
     updateStats(status);
 
     if (!status.v2Onboarded) {
+      // Do not ask a question with one possible answer.
+      //
+      // The tenure is fixed at registration, and this popup cannot change it —
+      // every option except the registered one is disabled below. So for a
+      // student who registered normally, the dialog exists only to be
+      // dismissed, and it reappeared on every visit until they happened to
+      // press the button. Complete onboarding for them instead.
+      //
+      // The popup still opens when the tenure is genuinely unknown (older
+      // records, WhatsApp joiners), and as a fallback if this call fails — so
+      // a student is never left with no way through.
+      if (status.registeredTenure) {
+        const auto = await apiFetch('/student/onboard', {
+          method: 'POST',
+          body: JSON.stringify({ durationType: status.registeredTenure })
+        });
+        if (auto && (auto.success || auto.alreadyOnboarded)) {
+          loadTasks();
+          return;
+        }
+      }
+
       document.getElementById('onboard-domain').textContent = studentData.domain || 'Unknown';
       document.getElementById('onboard-overlay').style.display = 'flex';
 
-      // Pre-select based on tenure
-      const tenure = (studentData.tenure || '').replace(/\s+/g,'').toLowerCase();
-      let preSelect = '1month';
-      if (tenure.includes('1w') || tenure.includes('1week') || tenure.includes('7dy') || tenure.includes('7day')) preSelect = '1week';
-      else if (tenure.includes('15d') || tenure.includes('15day')) preSelect = '15days';
-      else if (tenure.includes('45')) preSelect = '45days';
-      else if (tenure.includes('6m')) preSelect = '6months';
-      else if (tenure.includes('3m')) preSelect = '3months';
+      // Show ONE option: the tenure this student registered on.
+      //
+      // The other five were displayed and dimmed, which invited a click that
+      // could only ever fail — POST /student/onboard rejects any tenure but the
+      // registered one with a 409, so a student who clicked "1 Month" while
+      // registered on 3 Months got a red Error box telling them off for using
+      // the interface as presented. Showing a choice the server will refuse is
+      // not a safeguard, it is a trap.
+      //
+      // registeredTenure comes from Student.tenure. durationType is the
+      // resolved value used to assign tasks, and is the fallback so a record
+      // with no tenure still shows the track it is actually being taught on.
+      const registered = status.registeredTenure || status.durationType || '1month';
 
-      const el = document.querySelector(`.duration-option[data-duration="${preSelect}"]`);
-      if (el) selectDuration(el);
+      let shown = 0;
+      document.querySelectorAll('.duration-option').forEach(function (opt) {
+        if (opt.dataset.duration === registered) {
+          opt.style.display = '';
+          selectDuration(opt);
+          shown++;
+        } else {
+          opt.style.display = 'none';
+        }
+      });
+
+      // Never leave the student with nothing to press. If the registered value
+      // matches no card — an unexpected tenure string — put them all back
+      // rather than showing an empty dialog with a dead button.
+      if (shown === 0) {
+        document.querySelectorAll('.duration-option').forEach(function (opt) {
+          opt.style.display = '';
+        });
+      }
+
+      var sub = document.getElementById('onboard-subtitle');
+      if (sub) sub.textContent = 'This is the internship length you registered for.';
       return;
     }
 
@@ -786,6 +856,10 @@ async function completeOnboarding() {
     if (res.success) {
       document.getElementById('onboard-overlay').style.display = 'none';
       Swal.fire({ icon:'success', title:`Welcome! 🎉`, text:`${res.tasksAssigned} tasks assigned. You earned ${res.coinsAwarded} welcome coins!`, background:'#0e1428', color:'#F0EEE8', confirmButtonColor:'#D4AF37', timer:3000, timerProgressBar:true });
+      loadTasks();
+    } else if (res.alreadyOnboarded) {
+      // Onboarding is a one-time event; a repeated submit is not an error.
+      document.getElementById('onboard-overlay').style.display = 'none';
       loadTasks();
     } else {
       Swal.fire({ icon:'error', title:'Error', text:res.message, background:'#0e1428', color:'#F0EEE8', confirmButtonColor:'#D4AF37' });

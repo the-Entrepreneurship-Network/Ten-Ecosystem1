@@ -158,6 +158,7 @@
       color: rgba(255, 255, 255, 0.25) !important;
     }
   </style>
+  <link rel="stylesheet" href="/css/ten-brand.css">
 </head>
 <body class="min-h-screen text-slate-100 flex items-center justify-center p-4 md:p-8 relative overflow-x-hidden">
 
@@ -1735,6 +1736,32 @@
       const formData = new FormData(e.target);
       const flatData = Object.fromEntries(formData);
 
+      // The résumé and domain inputs are hidden — they are filled by the upload
+      // handler and the domain picker — and a hidden field cannot carry
+      // `required`, because the browser refuses to submit while being unable to
+      // focus the element it wants to complain about. So both are excluded from
+      // the .stu-req loop and were, until now, checked nowhere: the red asterisk
+      // beside "Resume Upload" enforced nothing at all. Check them here.
+      if (activeRole === 'student') {
+        if (!String(flatData.resume || '').trim()) {
+          Swal.fire({
+            icon: 'warning', title: 'Resume required',
+            text: 'Please upload your resume as a PDF before submitting.',
+            background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#D4AF37'
+          });
+          document.getElementById('resumeUploadContainer')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          return;
+        }
+        if (!String(flatData.domains || '').trim()) {
+          Swal.fire({
+            icon: 'warning', title: 'Domain required',
+            text: 'Please select at least one internship domain.',
+            background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#D4AF37'
+          });
+          return;
+        }
+      }
+
       let payload = {};
 
       if (activeRole === 'mentor') {
@@ -1798,6 +1825,7 @@
           body: JSON.stringify(payload)
         });
         const json = await res.json();
+        clearFieldErrors();
 
         if (json.success) {
           Swal.fire({
@@ -1811,15 +1839,33 @@
           });
           
           setTimeout(() => {
-            const pwdQuery = flatData.password ? `&password=${encodeURIComponent(flatData.password)}` : '';
-            const statusVal = activeRole === 'mentor' ? 'Pending' : 'Approved';
-            window.location.href = `/registration-success?role=${activeRole}&email=${encodeURIComponent(json.email)}&memberId=${encodeURIComponent(json.memberId)}&status=${statusVal}${pwdQuery}`;
+            // The password is deliberately NOT put in the query string: a URL
+            // ends up in browser history, in the Referer header sent to other
+            // sites, and in every server access log.
+            const pwdQuery = '';
+            if (json.role === 'founder') {
+              window.location.href = `/founder-registration-success?role=${encodeURIComponent(json.role)}&email=${encodeURIComponent(json.email)}&memberId=${encodeURIComponent(json.memberId)}&startupName=${encodeURIComponent(json.startupName || 'Venture')}&status=Pending%20Approval${pwdQuery}`;
+            } else if (json.role === 'student') {
+              window.location.href = `/registration-success?role=${encodeURIComponent(json.role)}&email=${encodeURIComponent(json.email)}&memberId=${encodeURIComponent(json.memberId)}&status=Approved${pwdQuery}`;
+            } else if (json.role === 'mentor') {
+              window.location.href = `/registration-success?role=${encodeURIComponent(json.role)}&email=${encodeURIComponent(json.email)}&memberId=${encodeURIComponent(json.memberId)}&status=Pending${pwdQuery}`;
+            } else {
+              window.location.href = `/registration-success?role=${encodeURIComponent(json.role)}&email=${encodeURIComponent(json.email)}&memberId=${encodeURIComponent(json.memberId)}&status=Pending%20Approval${pwdQuery}`;
+            }
           }, 1500);
+        } else if (json.errors && typeof json.errors === 'object') {
+          // Show a message directly under each field that failed, the way a
+          // normal form does — this used to be one generic alert that did not
+          // say which field was wrong.
+          showFieldErrors(json.errors);
         } else {
+          // "Onboarding Denied" told a student their application had been
+          // rejected, when a field was simply blank. Nothing here is a denial —
+          // it is a form that needs one more thing.
           Swal.fire({
-            icon: 'error',
-            title: 'Registration Failed',
-            text: json.error || 'Please check input details or check existing email/mobile.',
+            icon: 'warning',
+            title: 'Almost there',
+            text: json.error || 'Please check your details and try again. If you already have an account, sign in instead.',
             background: '#0e1428',
             color: '#F0EEE8',
             confirmButtonColor: '#D4AF37'
@@ -1827,10 +1873,13 @@
         }
       } catch (err) {
         console.error(err);
+        // This branch is a network or server failure, not an authentication
+        // problem — "Authentication timeout" sent students hunting for a
+        // password mistake that did not exist.
         Swal.fire({
           icon: 'error',
-          title: 'Server Error',
-          text: 'Authentication timeout. Please retry.',
+          title: 'Could not reach the server',
+          text: 'Your details were not saved. Please check your internet connection and try again.',
           background: '#0e1428',
           color: '#F0EEE8',
           confirmButtonColor: '#D4AF37'
@@ -1841,6 +1890,81 @@
     document.addEventListener("DOMContentLoaded", function() {
       loadCountries();
     });
+
+    // ── Inline field validation messages ─────────────────────────────────
+    // Maps a server error key to the element the message should sit under.
+    // Server error key → the element the message belongs under.
+    //
+    // showFieldErrors falls back to `key` when there is no entry here, and the
+    // student inputs are all prefixed (`skills` → `stu_skills`), so every
+    // student-specific error missed its field, `firstEl` stayed null, and the
+    // page fell through to the summary popup. Inline messages had therefore
+    // never appeared for anything below the account section.
+    const FIELD_TARGETS = {
+      fullName:       'reg_fullName',
+      email:          'reg_email',
+      password:       'reg_password',
+      mobile:         'reg_mobile',
+      domains:        'techDomainsSelector',
+      tenure:         'stu_tenure',
+      country:        'stu_country',
+      city:           'stu_city',
+      university:     'stu_university',
+      degree:         'stu_degree',
+      graduationYear: 'stu_graduationYear',
+      skills:         'stu_skills',
+      linkedin:       'stu_linkedin',
+      portfolio:      'stu_portfolio',
+      // The résumé input is hidden, so a message beside it would be invisible.
+      // Point at the drop zone the student can actually see.
+      resume:         'resumeUploadContainer'
+    };
+
+    function clearFieldErrors() {
+      document.querySelectorAll('.field-error-msg').forEach(function (el) { el.remove(); });
+      document.querySelectorAll('.field-error-outline').forEach(function (el) {
+        el.classList.remove('field-error-outline');
+        el.style.borderColor = '';
+      });
+    }
+
+    function showFieldErrors(errors) {
+      clearFieldErrors();
+      let firstEl = null;
+
+      Object.keys(errors).forEach(function (key) {
+        const targetId = FIELD_TARGETS[key] || key;
+        const el = document.getElementById(targetId);
+        if (!el) return;
+
+        el.classList.add('field-error-outline');
+        el.style.borderColor = '#ef4444';
+
+        const msg = document.createElement('p');
+        msg.className = 'field-error-msg';
+        msg.setAttribute('role', 'alert');
+        msg.style.cssText = 'color:#ef4444;font-size:12px;margin-top:6px;font-weight:600;';
+        msg.textContent = errors[key];
+        (el.parentNode || el).insertBefore(msg, el.nextSibling);
+
+        if (!firstEl) firstEl = el;
+      });
+
+      if (firstEl) {
+        firstEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (typeof firstEl.focus === 'function') { try { firstEl.focus({ preventScroll: true }); } catch (e) {} }
+      } else {
+        // Nothing on this page matched — fall back to a readable summary.
+        Swal.fire({
+          icon: 'error',
+          title: 'Please check your details',
+          html: Object.values(errors).map(function (m) { return '• ' + m; }).join('<br>'),
+          background: '#0e1428',
+          color: '#F0EEE8',
+          confirmButtonColor: '#D4AF37'
+        });
+      }
+    }
   </script>
 </body>
 </html>
