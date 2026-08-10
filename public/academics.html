@@ -155,7 +155,11 @@ a{color:inherit}
 #cineTrack.over{cursor:pointer}
 /* Both layers live in .body so a click animation moves the black form and the
    revealed colour together. */
-.mark .body{position:absolute;inset:0;transform-style:preserve-3d}
+/* Its own compositor layer. Animating an element whose children carry both a
+   blend mode and a mask forces the whole stack to re-rasterise every frame;
+   promoting it means the layer is rasterised once and only transformed. */
+.mark .body{position:absolute;inset:0;transform-style:preserve-3d;
+  will-change:transform;backface-visibility:hidden}
 .mark .base,.mark .rev{position:absolute;inset:0;width:100%;height:100%;display:block;
   object-fit:contain;mix-blend-mode:screen;
   /* Screen blending alone leaves a visible rectangle, because the renders have
@@ -624,7 +628,12 @@ a{color:inherit}
       m.mask.width = REV; m.mask.height = REV;
       m.mctx = m.mask.getContext('2d');
       m.ready = true;
-      redrawReveal(m);
+      // A fast pointer fires many moves per frame; painting the mask is cheap
+      // but recompositing the logo is not, so that waits for the frame.
+      if (!m.queued) {
+        m.queued = true;
+        requestAnimationFrame(function () { m.queued = false; if (m.dirty) { m.dirty = false; redrawReveal(m); } });
+      }
     }
 
     function redrawReveal(m) {
@@ -660,6 +669,7 @@ a{color:inherit}
       });
       m.node.classList.add('lit');
       m.covered++;
+      m.dirty = true;
       /* Once the cursor has worked across it, fill the rest and stop redrawing.
          Colour stays - a logo that fades back to black loses the record of
          what the student has already looked at. */
@@ -667,6 +677,9 @@ a{color:inherit}
         mc.fillStyle = '#000';
         mc.fillRect(0, 0, REV, REV);
         m.done = true;
+        // The colour layer now covers the logo completely, so the dark one
+        // underneath is only costing a blend. Drop it.
+        m.base.style.visibility = 'hidden';
       }
       redrawReveal(m);
     }
@@ -686,7 +699,9 @@ a{color:inherit}
       var d = m.data;
       running.push({ m: m, kind: d.burst, tint: d.tint, t0: performance.now(),
                      dur: dur || 1800, seed: Math.random() * 6.283 });
-      if (running.length > 6) { running.shift(); }
+      // Three at once is plenty: past that the canvas work starts costing a
+      // frame, and nobody can follow four animations anyway.
+      if (running.length > 3) { running.shift(); }
     }
 
     var TAU = 6.28318;
@@ -727,7 +742,7 @@ a{color:inherit}
         g.addColorStop(0, 'rgba(255,150,60,' + (0.45 * Math.sin(e.t * Math.PI)).toFixed(3) + ')');
         g.addColorStop(1, 'rgba(255,120,40,0)');
         c.fillStyle = g; c.fillRect(e.x - e.r, e.y - e.r, e.r * 2, e.r * 2);
-        for (var i = 0; i < 34; i++) {
+        for (var i = 0; i < 22; i++) {
           var life = (e.t + i / 34) % 1;
           var rise = life * e.r * 2.2;
           var sway = Math.sin(life * 5 + i + e.seed) * e.r * 0.20 * life;
@@ -896,7 +911,7 @@ a{color:inherit}
       },
       /* Venture capital: thrust under the rocket, coins tumbling around it. */
       coins: function (c, e) {
-        for (var i = 0; i < 40; i++) {
+        for (var i = 0; i < 26; i++) {
           var life = (e.t * 1.4 + i / 40) % 1;
           c.globalAlpha = (1 - life) * 0.85 * Math.sin(Math.min(1, e.t * 1.4) * Math.PI);
           c.fillStyle = i % 4 ? '#F3C64A' : '#FFF0BF';
@@ -935,7 +950,7 @@ a{color:inherit}
       dust: function (c, e) {
         var land = Math.max(0, (e.t - 0.55) / 0.45);
         if (!land) { return; }
-        for (var i = 0; i < 46; i++) {
+        for (var i = 0; i < 30; i++) {
           var a = e.seed + i * 0.42;
           var d = EASE.out(land) * e.r * (0.9 + (i % 5) * 0.22);
           c.globalAlpha = (1 - land) * 0.75;
@@ -948,8 +963,16 @@ a{color:inherit}
       },
     };
 
+    var fxDirty = false;
     function drawBits() {
+      // Clearing a full-screen canvas every frame is not free, and most frames
+      // have no effect running at all.
+      if (!running.length) {
+        if (fxDirty) { fxc.clearRect(0, 0, vw, vh); fxDirty = false; }
+        return;
+      }
       fxc.clearRect(0, 0, vw, vh);
+      fxDirty = true;
       var now = performance.now();
       for (var i = running.length - 1; i >= 0; i--) {
         var r = running[i];
@@ -1000,7 +1023,9 @@ a{color:inherit}
     /* Beside the logo, never under it - and flipped to the left when the logo
        is far enough right that the panel would leave the screen. */
     function placeInfo() {
-      if (!infoFor) { return; }
+      // Reading a rect forces layout; doing it every frame with nothing open
+      // was pure cost.
+      if (!infoFor || !info.classList.contains('on')) { return; }
       var r = infoFor.node.getBoundingClientRect();
       var w = info.offsetWidth || 300, h = info.offsetHeight || 120;
       var left = r.right + 18;
@@ -1045,6 +1070,9 @@ a{color:inherit}
     var neb = $('cineNeb'), nctx = neb.getContext('2d');
     var starCv = $('cineStars'), sctx = starCv.getContext('2d');
     var stars = [], dpr = 1;
+    /* Declared here, above sizeCanvases(). Declared below it, the `= null`
+       ran after the plate had already been built and wiped it. */
+    var plate = null, pctx = null, twinklers = [];
 
     var GAS = [
       [70, 130, 235], [140, 90, 235], [225, 120, 60],
@@ -1128,6 +1156,7 @@ a{color:inherit}
       fxc.setTransform(dpr, 0, 0, dpr, 0, 0);
       paintNebula(vw, vh);
       seedStars(vw, vh);
+      paintPlate();
     }
     sizeCanvases();
     window.addEventListener('resize', sizeCanvases);
@@ -1141,27 +1170,52 @@ a{color:inherit}
 
     var ease = function (t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; };
 
+    /* The field is painted once into an offscreen plate and blitted each
+       frame. Drawing all of it live cost roughly seventeen hundred path
+       operations per frame - a thousand arcs plus four hundred spike strokes
+       - and that alone held the whole preview at about fifteen frames a
+       second. Only a small set actually twinkles, so only that set is drawn
+       live on top. */
+
+    function starColour(h) {
+      return h < 0.32 ? '160,190,255' : h < 0.62 ? '255,255,255'
+           : h < 0.84 ? '255,214,170' : '255,160,140';
+    }
+    function paintStar(c, st, bright, scale) {
+      var a = Math.min(1, (0.25 + st.r * 0.5) * bright);
+      var col = starColour(st.hue);
+      c.fillStyle = 'rgba(' + col + ',' + a.toFixed(3) + ')';
+      c.beginPath(); c.arc(st.x, st.y, st.r * scale, 0, 6.2832); c.fill();
+      if (st.r > 1.25) {
+        var len = st.r * 7 * bright;
+        c.strokeStyle = 'rgba(' + col + ',' + (a * 0.45).toFixed(3) + ')';
+        c.lineWidth = 0.7;
+        c.beginPath();
+        c.moveTo(st.x - len, st.y); c.lineTo(st.x + len, st.y);
+        c.moveTo(st.x, st.y - len); c.lineTo(st.x, st.y + len);
+        c.stroke();
+      }
+    }
+    function paintPlate() {
+      if (!plate) { plate = document.createElement('canvas'); pctx = plate.getContext('2d'); }
+      plate.width = Math.floor(vw * dpr); plate.height = Math.floor(vh * dpr);
+      pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      pctx.clearRect(0, 0, vw, vh);
+      // Every star at its average brightness; the ones that will twinkle are
+      // held back so the live pass is not drawing over a static copy.
+      twinklers = [];
+      for (var i = 0; i < stars.length; i++) {
+        if (i % 18 === 0 && twinklers.length < 48) { twinklers.push(stars[i]); continue; }
+        paintStar(pctx, stars[i], 0.8, 1);
+      }
+    }
+
     function drawStars(t, p) {
       sctx.clearRect(0, 0, vw, vh);
-      for (var i = 0; i < stars.length; i++) {
-        var st = stars[i];
-        // Brightness varies, and the brightest carry diffraction spikes -
-        // that is the detail that reads as a telescope rather than confetti.
-        var tw = 0.55 + 0.45 * Math.sin(t * st.sp + st.tw);
-        var a = Math.min(1, (0.25 + st.r * 0.5) * tw);
-        var col = st.hue < 0.32 ? '160,190,255' : st.hue < 0.62 ? '255,255,255'
-                : st.hue < 0.84 ? '255,214,170' : '255,160,140';
-        sctx.fillStyle = 'rgba(' + col + ',' + a.toFixed(3) + ')';
-        sctx.beginPath(); sctx.arc(st.x, st.y, st.r * (1 + p * 0.25), 0, 6.2832); sctx.fill();
-        if (st.r > 1.25) {
-          var len = st.r * 7 * tw;
-          sctx.strokeStyle = 'rgba(' + col + ',' + (a * 0.45).toFixed(3) + ')';
-          sctx.lineWidth = 0.7;
-          sctx.beginPath();
-          sctx.moveTo(st.x - len, st.y); sctx.lineTo(st.x + len, st.y);
-          sctx.moveTo(st.x, st.y - len); sctx.lineTo(st.x, st.y + len);
-          sctx.stroke();
-        }
+      sctx.drawImage(plate, 0, 0, vw, vh);
+      for (var i = 0; i < twinklers.length; i++) {
+        var st = twinklers[i];
+        paintStar(sctx, st, 0.55 + 0.45 * Math.sin(t * st.sp + st.tw), 1 + p * 0.25);
       }
     }
 
