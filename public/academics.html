@@ -125,9 +125,150 @@ a{color:inherit}
 .empty{color:var(--text-secondary);font-size:13.5px;padding:26px;text-align:center;
        border:1px dashed var(--border-strong);border-radius:var(--radius-md)}
 @media (prefers-reduced-motion:reduce){.sheet{animation:none}.card{transition:none}}
+
+/* ── cinematic entry ──────────────────────────────────────────────────
+   A scroll-driven sequence, not a timed one: the student controls the pace,
+   so nothing is ever waiting on an animation it cannot skip past.
+
+   Fourteen medallions in CSS 3D rather than a WebGL scene. The motion asked
+   for is float, slow rotate and radial spread — all of it transform-only, so
+   it runs on the compositor and costs nothing to download. Three.js would be
+   ~600KB before the first model, on a page opened from a phone. */
+#cine{position:fixed;inset:0;z-index:60;background:#02040a;overflow:hidden;
+      display:grid;place-items:center;perspective:1400px}
+#cine.gone{display:none}
+/* The scroller is last in the DOM so it catches the wheel everywhere; the
+   two things that take clicks have to be lifted back above it. */
+#cineTrack{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;z-index:1;
+           -webkit-overflow-scrolling:touch}
+#cineTrack .runway{height:420vh}          /* the scroll distance the sequence uses */
+#cineCanvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+
+/* Depth wash behind everything, so the black is not flat. */
+#cine .depth{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse 70% 50% at 50% 42%,rgba(59,130,246,.10) 0%,transparent 60%),
+             radial-gradient(ellipse 60% 45% at 50% 58%,rgba(212,175,55,.08) 0%,transparent 62%)}
+
+#cineStage{position:absolute;inset:0;pointer-events:none;transform-style:preserve-3d}
+.mark{position:absolute;left:50%;top:46%;width:86px;height:86px;margin:-43px 0 0 -43px;
+      transform-style:preserve-3d;will-change:transform;pointer-events:none}
+.mark .face{width:100%;height:100%;border-radius:22px;display:grid;place-items:center;
+  font-weight:800;font-size:13px;letter-spacing:.01em;color:#F6F2E6;text-align:center;line-height:1.15;
+  background:linear-gradient(150deg,var(--c1),var(--c2));
+  box-shadow:0 18px 44px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.32),
+             inset 0 -14px 26px rgba(0,0,0,.34);
+  border:1px solid rgba(255,255,255,.14);position:relative;overflow:hidden}
+/* The specular sweep is what sells these as objects rather than swatches. */
+.mark .face::after{content:'';position:absolute;inset:0;
+  background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.42) 47%,transparent 62%);
+  transform:translateX(-120%);animation:sheen 5.5s ease-in-out infinite}
+@keyframes sheen{0%,72%{transform:translateX(-120%)}88%,100%{transform:translateX(120%)}}
+.mark .tag{position:absolute;left:50%;top:112%;transform:translateX(-50%);white-space:nowrap;
+  font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(240,238,232,.5);
+  opacity:0;transition:opacity .4s ease}
+#cine.spread .mark .tag{opacity:1}
+/* Trails only exist while the cluster is opening out. */
+.mark .trail{position:absolute;left:50%;top:50%;width:180px;height:2px;margin-top:-1px;
+  transform-origin:0 50%;opacity:0;pointer-events:none;
+  background:linear-gradient(90deg,rgba(212,175,55,.55),transparent)}
+
+#cineCopy{position:absolute;left:0;right:0;top:11%;text-align:center;pointer-events:none;padding:0 22px}
+#cineCopy h2{font-size:clamp(26px,4.6vw,46px);font-weight:800;letter-spacing:-.025em;line-height:1.08}
+#cineCopy h2 span{background:linear-gradient(100deg,#F4E9C0,var(--accent-gold),#b8962c);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+#cineCopy p{margin-top:10px;color:var(--text-secondary);font-size:14px}
+/* Benefits sit in front of the cluster. Every line is something the student
+   gets inside each of the 14 domains, not a feature of the platform. */
+#cineBenefits{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2;
+  width:min(560px,90vw);pointer-events:none;text-align:center;
+  background:rgba(2,4,10,.52);backdrop-filter:blur(7px);
+  border:1px solid rgba(212,175,55,.16);border-radius:var(--radius-lg);padding:22px 24px;
+  box-shadow:0 20px 60px rgba(0,0,0,.5);transition:opacity .35s ease}
+#cineBenefits .kicker{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--accent-gold);font-weight:800;margin-bottom:13px}
+#cineBenefits ul{list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:9px 18px;text-align:left}
+#cineBenefits li{display:flex;gap:9px;font-size:13px;line-height:1.45;color:#DCD8CE}
+#cineBenefits li b{color:#fff;font-weight:700}
+#cineBenefits .tick{color:var(--accent-green);font-weight:800;flex:none}
+#cineBenefits .all{margin-top:14px;padding-top:12px;border-top:1px solid rgba(212,175,55,.14);
+  font-size:12px;color:var(--text-secondary)}
+#cineBenefits .all b{color:var(--accent-gold)}
+@media(max-width:640px){#cineBenefits ul{grid-template-columns:1fr}#cineBenefits li{font-size:12.5px}}
+
+#cineHint{position:absolute;left:0;right:0;bottom:30px;text-align:center;color:var(--text-muted);
+  font-size:12px;letter-spacing:.08em;text-transform:uppercase;pointer-events:none;
+  animation:bob 2.4s ease-in-out infinite}
+@keyframes bob{0%,100%{transform:translateY(0);opacity:.55}50%{transform:translateY(7px);opacity:1}}
+
+/* Payment rises once the cluster has opened. */
+#cinePay{position:absolute;left:50%;bottom:0;z-index:3;transform:translate(-50%,40px);width:min(460px,92vw);
+  background:rgba(14,20,40,.9);border:1px solid var(--border-strong);border-radius:var(--radius-lg) var(--radius-lg) 0 0;
+  padding:26px 26px 30px;backdrop-filter:blur(14px);box-shadow:0 -18px 60px rgba(0,0,0,.66);
+  opacity:0;pointer-events:none;transition:opacity .5s var(--ease-out),transform .6s var(--ease-out)}
+#cinePay.up{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+#cinePay h3{font-size:20px;font-weight:800;text-align:center}
+#cinePay .why{font-size:13px;color:var(--text-secondary);text-align:center;margin:8px 0 16px;line-height:1.55}
+/* The QR slot. Empty until a real code is supplied — a payment QR is not
+   something to invent, and a wrong one takes real money to the wrong place. */
+.qrslot{background:#fff;border-radius:14px;width:190px;height:190px;margin:0 auto 14px;
+  display:grid;place-items:center;box-shadow:0 4px 22px rgba(0,0,0,.4)}
+.qrslot.empty{background:rgba(255,255,255,.04);border:1px dashed var(--border-strong);
+  color:var(--text-muted);font-size:12px;text-align:center;padding:18px;line-height:1.5}
+.qrslot img{width:100%;height:100%;border-radius:14px;display:block}
+#cineSkip{position:absolute;right:20px;top:18px;z-index:3;background:rgba(255,255,255,.04);
+  border:1px solid var(--border);color:var(--text-muted);border-radius:999px;padding:7px 14px;
+  font:inherit;font-size:12px;cursor:pointer;opacity:0;transition:opacity .4s ease}
+#cineSkip.on{opacity:1}
+#cineSkip:hover{color:var(--text-primary)}
+
+@media (prefers-reduced-motion:reduce){
+  .mark{transition:none!important}
+  .mark .face::after{animation:none}
+  #cineHint{animation:none}
+  #cinePay{transition:none}
+}
 </style>
 </head>
 <body>
+
+<div id="cine" aria-label="Academics preview">
+  <canvas id="cineCanvas" aria-hidden="true"></canvas>
+  <div class="depth" aria-hidden="true"></div>
+  <div id="cineStage" aria-hidden="true"></div>
+  <div id="cineCopy">
+    <h2>Fourteen domains. <span>One way in.</span></h2>
+    <p>Modules, written assessments, a project you can show, and a certificate that means it.</p>
+  </div>
+  <div id="cineBenefits">
+    <div class="kicker">What every domain gives you</div>
+    <ul>
+      <li><span class="tick">&#10003;</span><span><b>Learning by building</b> — practice projects, not slides</span></li>
+      <li><span class="tick">&#10003;</span><span><b>Assignments</b> marked against what the question asks</span></li>
+      <li><span class="tick">&#10003;</span><span><b>Resume builder</b> that puts the work on the page</span></li>
+      <li><span class="tick">&#10003;</span><span><b>Full job readiness</b> — portfolio, resume, interview prep</span></li>
+      <li><span class="tick">&#10003;</span><span><b>Job findings</b> across every major hiring platform</span></li>
+      <li><span class="tick">&#10003;</span><span><b>Hackathons &amp; idea-thons</b> exposure and team building</span></li>
+    </ul>
+    <p class="all">All of it, in <b>every one of the 14 domains</b> &mdash; not just one track.</p>
+  </div>
+
+  <div id="cineHint">Scroll</div>
+  <button id="cineSkip" type="button">Skip preview</button>
+
+  <div id="cinePay">
+    <h3>Unlock Everything</h3>
+    <p class="why">Every module, every assessment, the project reviews and the certificate.
+      One payment per domain.</p>
+    <div class="qrslot empty" id="cineQr">QR goes here once you send it</div>
+    <div class="stack">
+      <button class="btn gold" id="cinePayNow">Unlock Everything — Pay Now</button>
+      <button class="btn ghost" id="cineLater">Pay after Completion</button>
+    </div>
+    <p class="meta" style="text-align:center">Start the modules now. Payment is only needed for the certificate.</p>
+  </div>
+
+  <div id="cineTrack"><div class="runway"></div></div>
+</div>
 
 <nav class="nav">
   <span class="logo">∞</span><b>TEN</b>
@@ -192,6 +333,156 @@ a{color:inherit}
       headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b || {}) })
       .then(function (r) { return r.json().then(function (j) { j._code = r.status; return j; }); });
   };
+
+  /* ── cinematic entry ────────────────────────────────────────────────
+     Scroll position drives everything. `p` runs 0 to 1 across the runway:
+     0 is the tight cluster, 1 is fully spread with payment up. Driven from
+     rAF rather than the scroll event so we paint once per frame however
+     fast the wheel fires. */
+  var DOMAINS14 = [
+    ['DevOps with AWS',        'AWS',  '#FF9900', '#8A4B00'],
+    ['Python Development',     'PY',   '#4B8BBE', '#1B3A54'],
+    ['Java Development',       'JAVA', '#E76F00', '#7A2E00'],
+    ['Web Development',        'WEB',  '#E34F26', '#6B1E0C'],
+    ['MERN Stack',             'MERN', '#00ED64', '#04512A'],
+    ['Artificial Intelligence','AI',   '#8B5CF6', '#3B1E70'],
+    ['Data Science',           'DATA', '#06B6D4', '#0A4A58'],
+    ['Cyber Security',         'SEC',  '#EF4444', '#6B1414'],
+    ['Software Engineering',   'SWE',  '#3B82F6', '#12356E'],
+    ['Flutter Development',    'FLTR', '#54C5F8', '#0E4C6B'],
+    ['Business Development',   'BIZ',  '#F59E0B', '#7A4A00'],
+    ['Human Resources',        'HR',   '#EC4899', '#6B1140'],
+    ['Venture Capital',        'VC',   '#10B981', '#064C36'],
+    ['Finance',                'FIN',  '#D4AF37', '#6B5410'],
+  ];
+
+  (function cinematic() {
+    var cine = $('cine'), stage = $('cineStage'), track = $('cineTrack');
+    if (!cine) { return; }
+    var reduced = false;
+    try { reduced = window.matchMedia('(prefers-reduced-motion:reduce)').matches; } catch (_e) {}
+
+    /* Each medallion gets a fixed seat on a circle and a fixed drift phase, so
+       the cluster looks arranged rather than scattered, and every reload is
+       the same arrangement. */
+    var marks = DOMAINS14.map(function (d, i) {
+      var el0 = el('div', 'mark');
+      var face = el('div', 'face', d[1]);
+      face.style.setProperty('--c1', d[2]);
+      face.style.setProperty('--c2', d[3]);
+      var trail = el('div', 'trail');
+      var tag = el('div', 'tag', d[0]);
+      el0.appendChild(trail); el0.appendChild(face); el0.appendChild(tag);
+      stage.appendChild(el0);
+      var a = (i / DOMAINS14.length) * Math.PI * 2 - Math.PI / 2;
+      return {
+        node: el0, trail: trail, angle: a,
+        ring: 1 + (i % 3) * 0.26,          // three depths, so it reads 3D
+        phase: i * 0.7, spin: (i % 2 ? 1 : -1) * (0.5 + (i % 4) * 0.11),
+      };
+    });
+
+    var vw = 0, vh = 0;
+    function measure() { vw = cine.clientWidth; vh = cine.clientHeight; }
+    measure();
+    window.addEventListener('resize', measure);
+
+    /* ── depth particles ── */
+    var cv = $('cineCanvas'), ctx = cv.getContext('2d'), dots = [], dpr = 1;
+    function sizeCanvas() {
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      cv.width = Math.floor(vw * dpr); cv.height = Math.floor(vh * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // Count scales with area so a phone does not paint a laptop's worth.
+      var n = Math.min(150, Math.round((vw * vh) / 14000));
+      dots = Array.from({ length: n }, function () {
+        return { x: Math.random() * vw, y: Math.random() * vh,
+                 z: Math.random(), r: Math.random() * 1.5 + 0.35 };
+      });
+    }
+    sizeCanvas();
+    window.addEventListener('resize', function () { measure(); sizeCanvas(); });
+
+    var prog = 0, target = 0, raf = 0;
+    function readScroll() {
+      var max = track.scrollHeight - track.clientHeight;
+      target = max > 0 ? Math.min(1, Math.max(0, track.scrollTop / max)) : 0;
+    }
+    track.addEventListener('scroll', readScroll, { passive: true });
+
+    var ease = function (t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; };
+
+    function frame(now) {
+      // Chase the scroll rather than snapping to it — this is what makes the
+      // spread feel weighted instead of pinned to the wheel.
+      prog += (target - prog) * 0.09;
+      var p = ease(Math.min(1, prog * 1.06));
+      var t = now / 1000;
+
+      // Keep the widest ring inside the viewport - at 0.42 the outer ring
+      // pushed the left-hand marks off the edge on a 16:9 screen.
+      var reach = Math.min(vw, vh) * 0.355;
+      marks.forEach(function (m, i) {
+        var spread = p * reach * m.ring;
+        // Wide enough that 14 tiles do not cover each other; the ring
+        // multiplier then pushes three depths apart.
+        var clusterR = 132 * m.ring * (1 - p * 0.42);
+        var r = clusterR + spread;
+        var drift = reduced ? 0 : Math.sin(t * 0.55 + m.phase) * (7 - p * 4);
+        var x = Math.cos(m.angle) * r;
+        var y = Math.sin(m.angle) * r * 0.82 + drift;
+        var z = (m.ring - 1.34) * 180 * (0.4 + p);
+        // Spin freely while clustered, then settle facing front. Left to run,
+        // the rotation carries past 90 degrees and half the cluster ends up
+        // edge-on or mirrored, with the domain names reading backwards.
+        var rot = reduced ? 0 : (t * 11 * m.spin) * (1 - p * 0.92) + p * 14 * m.spin;
+        var scale = (0.62 + m.ring * 0.22) * (1 + p * 0.14);
+        m.node.style.transform = 'translate3d(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px,'
+          + z.toFixed(1) + 'px) rotateY(' + rot.toFixed(1) + 'deg) rotateX('
+          + (Math.sin(t * 0.4 + m.phase) * 7 * (1 - p * 0.7)).toFixed(1) + 'deg) scale(' + scale.toFixed(3) + ')';
+        // Trails belong to the movement, so they live and die with it.
+        var moving = p > 0.06 && p < 0.94;
+        m.trail.style.opacity = moving && !reduced ? (0.5 * Math.sin(p * Math.PI)).toFixed(3) : 0;
+        m.trail.style.transform = 'rotate(' + ((m.angle * 180) / Math.PI + 180).toFixed(1)
+          + 'deg) scaleX(' + (0.25 + p * 1.1).toFixed(2) + ')';
+      });
+
+      // particles
+      ctx.clearRect(0, 0, vw, vh);
+      for (var i = 0; i < dots.length; i++) {
+        var d = dots[i];
+        d.y -= (0.06 + d.z * 0.28) * (1 + p * 2.2);
+        if (d.y < -4) { d.y = vh + 4; d.x = Math.random() * vw; }
+        ctx.globalAlpha = 0.10 + d.z * 0.34;
+        ctx.fillStyle = i % 7 === 0 ? '#D4AF37' : '#8FA6C8';
+        ctx.beginPath(); ctx.arc(d.x, d.y, d.r * (1 + p * 0.5), 0, 6.284); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      // Benefits hold through the float, then clear before payment rises.
+      $('cineBenefits').style.opacity = String(Math.max(0, Math.min(1, (0.62 - p) / 0.22)));
+      cine.classList.toggle('spread', p > 0.55);
+      $('cinePay').classList.toggle('up', p > 0.76);
+      $('cineHint').style.opacity = p > 0.08 ? 0 : '';
+      $('cineSkip').classList.toggle('on', p > 0.12);
+      $('cineCopy').style.opacity = String(Math.max(0, 1 - p * 1.9));
+
+      raf = requestAnimationFrame(frame);
+    }
+    raf = requestAnimationFrame(frame);
+
+    function leave() {
+      cancelAnimationFrame(raf);
+      cine.classList.add('gone');
+      document.body.style.overflow = '';
+    }
+    document.body.style.overflow = 'hidden';
+    $('cineSkip').addEventListener('click', leave);
+    $('cinePayNow').addEventListener('click', function () { window.location.href = '/payment.html'; });
+    $('cineLater').addEventListener('click', leave);
+
+    if (reduced) { target = 1; prog = 1; $('cineSkip').classList.add('on'); }
+  })();
 
   /* ── the four Academics cards ───────────────────────────────────────── */
   var ICONS = { student: '🎓', job: '💼', resume: '📄', hackathons: '🏆' };
