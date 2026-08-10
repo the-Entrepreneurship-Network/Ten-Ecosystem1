@@ -127,244 +127,160 @@ a{color:inherit}
 @media (prefers-reduced-motion:reduce){.sheet{animation:none}.card{transition:none}}
 
 /* ── cinematic entry ──────────────────────────────────────
-   Scrollytelling: one full-height beat per scroll, one logo and one benefit
-   each. The artwork is fixed and cross-fades between beats, so the logo is
-   what stays still while the words move past it. */
-/* The starfield and the Earth are the real pixels from the Space Intern
-   artwork, not a gradient imitating them - it is the look that was asked for,
-   and cutting the two clean regions out of that render is exact where a
-   hand-built approximation was only close. */
-#cine{position:fixed;inset:0;z-index:60;overflow:hidden;background:#02040a;--zoom:0}
-/* The starfield is its own layer rather than a background on #cine, so it can
-   drift on its own while the zoom scales it. Two layers at different speeds:
-   parallax is what stops a starfield reading as wallpaper. */
-#cineSky,#cineSky2{position:absolute;inset:-8%;pointer-events:none;
-  background:url('/img/domains/space-stars.webp') center/cover no-repeat;
-  will-change:transform}
-#cineSky{opacity:1;animation:sky 150s linear infinite}
-#cineSky2{opacity:.4;transform:scaleX(-1);animation:sky2 220s linear infinite;
-  mix-blend-mode:screen}
-@keyframes sky{0%{transform:translate3d(0,0,0) scale(1.06)}
-               50%{transform:translate3d(-2.5%,1.6%,0) scale(1.12)}
-               100%{transform:translate3d(0,0,0) scale(1.06)}}
-@keyframes sky2{0%{transform:scaleX(-1) translate3d(0,0,0) scale(1.1)}
-                50%{transform:scaleX(-1) translate3d(2%,-2.2%,0) scale(1.16)}
-                100%{transform:scaleX(-1) translate3d(0,0,0) scale(1.1)}}
-#cine.moonbeat #cineSky{transform:scale(calc(1.06 + var(--zoom) * .5));animation:none}
-#cine.moonbeat #cineSky2{opacity:calc(.4 - var(--zoom) * .4)}
+   Fourteen domains over a deep-space field. They hold a cluster at rest and
+   spread radially as the page is scrolled, ending on the payment panel. */
+#cine{position:fixed;inset:0;z-index:60;background:#010206;overflow:hidden;
+      display:grid;place-items:center;perspective:1300px}
 #cine.gone{display:none}
-#cineCanvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-#cine .depth{position:absolute;inset:0;pointer-events:none;
-  background:radial-gradient(ellipse 60% 55% at 68% 46%,rgba(59,130,246,.16) 0%,transparent 62%),
-             radial-gradient(ellipse 55% 45% at 30% 60%,rgba(212,175,55,.07) 0%,transparent 64%)}
+/* Two canvases: the nebula is painted once and only drifts, the stars are
+   redrawn each frame. Separating them keeps the expensive half off the
+   per-frame path. */
+#cineNeb,#cineStars{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#cineNeb,#cineStars{will-change:transform;transition:transform .5s var(--ease-out)}
+/* Keeps the plates readable over the brightest gas. */
+#cineVeil{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse 74% 64% at 50% 46%,rgba(1,2,6,.10) 0%,rgba(1,2,6,.40) 60%,rgba(1,2,6,.68) 100%)}
 
-/* The scene the logos stand in: Earth low in frame, lunar ground beneath,
-   dust above. Taken from the Space Intern artwork so the whole preview looks
-   like one place rather than eight separate renders. */
-#cineEarth{position:absolute;left:-6vw;bottom:-8vh;width:min(62vw,760px);aspect-ratio:780/700;
-  pointer-events:none;opacity:0;
-  background:url('/img/domains/space-earth.webp') left bottom/contain no-repeat;
-  /* The crop is a rectangle; without this its top and right edges read as a
-     pasted box instead of a planet sitting in space. */
-  -webkit-mask-image:radial-gradient(ellipse 104% 104% at 10% 92%,#000 52%,transparent 84%);
-  mask-image:radial-gradient(ellipse 104% 104% at 10% 92%,#000 52%,transparent 84%);
-  transform:translate3d(-8%,14%,0) scale(.82);
-  transition:opacity 1s var(--ease-out),transform 1.2s var(--ease-out)}
-/* Earth belongs to the Space Intern beat only. Everywhere else the frame is
-   deep space, so it rises into view with the descent rather than sitting
-   under every headline. */
-#cine.moonbeat #cineEarth{opacity:.95;animation:earthDrift 34s ease-in-out infinite}
-@keyframes earthDrift{0%,100%{transform:translate3d(0,0,0) scale(1)}
-                      50%{transform:translate3d(10px,-12px,0) scale(1.02)}}
+#cineStage{position:absolute;inset:0;pointer-events:none;transform-style:preserve-3d;
+  --px:0;--py:0}
+.mark{position:absolute;left:50%;top:47%;width:104px;height:104px;margin:-52px 0 0 -52px;
+      transform-style:preserve-3d;will-change:transform}
+.mark .face{width:100%;height:100%;border-radius:24px;display:grid;place-items:center;
+  font-weight:800;font-size:13px;letter-spacing:.02em;color:#F6F2E6;text-align:center;
+  background:linear-gradient(150deg,var(--c1),var(--c2));position:relative;overflow:hidden;
+  box-shadow:0 18px 44px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.32),
+             inset 0 -14px 26px rgba(0,0,0,.34);border:1px solid rgba(255,255,255,.14)}
+.mark img{width:100%;height:100%;object-fit:cover;border-radius:24px;display:block;
+  box-shadow:0 18px 44px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.2);
+  border:1px solid rgba(255,255,255,.13)}
+/* The generator's sparkle sits bottom-right on every render; object-fit:cover
+   already crops most of it, and this covers what is left. */
+.mark .corner{position:absolute;right:0;bottom:0;width:34%;height:32%;border-radius:0 0 24px 0;
+  background:radial-gradient(ellipse 70% 74% at 62% 58%,rgba(2,4,10,1) 0%,
+    rgba(2,4,10,.95) 42%,transparent 88%)}
+/* Specular sweep that follows the pointer, so a plate reads as an object. */
+.mark .sheen{position:absolute;inset:0;border-radius:24px;mix-blend-mode:screen;
+  opacity:calc(.18 + var(--near,0) * .45);
+  background:radial-gradient(circle 55% at calc(var(--mx,50) * 1%) calc(var(--my,50) * 1%),
+    rgba(255,255,255,.6) 0%,rgba(170,205,255,.22) 30%,transparent 62%)}
+.mark .tag{position:absolute;left:50%;top:112%;transform:translateX(-50%);white-space:nowrap;
+  font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:rgba(240,238,232,.55);
+  opacity:0;transition:opacity .5s ease}
+#cine.spread .mark .tag{opacity:1}
+.mark .trail{position:absolute;left:50%;top:50%;width:190px;height:2px;margin-top:-1px;
+  transform-origin:0 50%;opacity:0;pointer-events:none;
+  background:linear-gradient(90deg,rgba(190,215,255,.6),rgba(212,175,55,.25),transparent)}
 
-#cineScrim{position:absolute;inset:0;pointer-events:none;
-  background:linear-gradient(90deg,rgba(2,4,10,.9) 0%,rgba(2,4,10,.62) 34%,
-                                   rgba(2,4,10,.15) 56%,transparent 70%)}
-@media(max-width:900px){#cineScrim{background:linear-gradient(0deg,rgba(2,4,10,.92) 26%,transparent 72%)}}
+#cineCopy{position:absolute;left:0;right:0;top:10%;text-align:center;pointer-events:none;padding:0 22px}
+#cineCopy h2{font-size:clamp(26px,4.6vw,48px);font-weight:800;letter-spacing:-.03em;line-height:1.06}
+#cineCopy h2 span{background:linear-gradient(100deg,#F4E9C0,var(--accent-gold),#b8962c);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+#cineCopy p{margin-top:11px;color:var(--text-secondary);font-size:14px}
 
-/* The lunar surface belongs to one beat only. Everything else is open space,
-   so this is hidden by default and the camera brings it up. */
-#cineMoon{position:absolute;left:-14vw;right:-14vw;bottom:-10vh;height:46vh;pointer-events:none;
-  border-radius:50% 50% 0 0 / 30vh 30vh 0 0;opacity:0;
-  background:linear-gradient(180deg,#3A3F49 0%,#22262E 30%,#12151B 68%,#080A0E 100%);
-  box-shadow:inset 0 4px 0 rgba(226,232,240,.22),0 -40px 90px rgba(0,0,0,.7);
-  /* Far away and low at the start of the beat; the camera rises onto it. */
-  transform:translateY(46vh) scale(.55);
-  transition:opacity .6s var(--ease-out)}
-#cineMoon::before{content:'';position:absolute;inset:0;border-radius:inherit;opacity:.62;
-  background:
-    radial-gradient(ellipse 6% 20% at 14% 40%,rgba(0,0,0,.66) 0%,transparent 70%),
-    radial-gradient(ellipse 4% 14% at 27% 58%,rgba(0,0,0,.54) 0%,transparent 70%),
-    radial-gradient(ellipse 8% 24% at 44% 34%,rgba(0,0,0,.6) 0%,transparent 70%),
-    radial-gradient(ellipse 3% 12% at 58% 62%,rgba(0,0,0,.5) 0%,transparent 70%),
-    radial-gradient(ellipse 7% 21% at 71% 42%,rgba(0,0,0,.56) 0%,transparent 70%),
-    radial-gradient(ellipse 4% 13% at 86% 60%,rgba(0,0,0,.5) 0%,transparent 70%),
-    radial-gradient(ellipse 5% 16% at 34% 76%,rgba(0,0,0,.44) 0%,transparent 70%)}
-/* Grazing light along the limb, which is what sells it as a sphere. */
-#cineMoon::after{content:'';position:absolute;left:0;right:0;top:0;height:36%;
-  border-radius:inherit;
-  background:linear-gradient(180deg,rgba(226,232,240,.16) 0%,transparent 100%)}
-
-/* The camera move. --zoom runs 0 to 1 across the Space Intern beat: the
-   surface climbs into frame and fills it, the starfield pushes in behind, and
-   the badge comes from far away to standing on the ground. A drone descent,
-   driven by the scrollbar rather than a timeline. */
-#cine.moonbeat #cineMoon{opacity:1;
-  transform:translateY(calc((1 - var(--zoom)) * 46vh)) scale(calc(.55 + var(--zoom) * .75))}
-#cine.moonbeat #cineArt .art.on{
-  transform:scale(calc(.30 + var(--zoom) * .72)) translateY(calc((1 - var(--zoom)) * -12vh))}
-#cine.moonbeat #cineEarth{
-  transform:translate3d(0,0,0) scale(calc(.82 + var(--zoom) * .4));
-  opacity:calc(.30 + var(--zoom) * .65)}
-
-#cineArt{position:absolute;right:6vw;top:46%;transform:translateY(-50%);
-  width:min(38vw,430px);aspect-ratio:1;pointer-events:none;perspective:900px;
-  --px:0;--py:0;--mx:50;--my:50;--near:0}
-#cineArt .art{position:absolute;inset:0;display:grid;place-items:center;opacity:0;
-  transform:scale(.9) rotateY(-14deg);
-  transition:opacity .7s var(--ease-out),transform .9s var(--ease-out)}
-#cineArt .art.on{opacity:1;transform:scale(1) rotateY(0)}
-/* Every logo drifts, whether it is a real render or the stand-in. The pointer
-   offsets ride on the same element, so tilt and float compose instead of
-   fighting over the transform. */
-/* Cursor-reactive, not a pasted image: the plate leans toward the pointer,
-   drifts toward it, and carries a specular sweep that tracks where the
-   pointer actually is. Everything rides on CSS variables so the idle drift
-   keyframes keep running underneath instead of being overwritten. */
-/* Shrink-wraps the artwork instead of filling the square stage. The renders
-   are different shapes; a fixed square frame letterboxes the wide ones and
-   the overlays below then sit on empty black rather than on the image. */
-#cineArt .orb{width:auto;height:auto;max-width:100%;max-height:100%;
-  display:inline-grid;place-items:center;position:relative;
-  transform:translate3d(calc(var(--px) * 22px),calc(var(--py) * 18px),0)
-            rotateY(calc(var(--px) * 16deg)) rotateX(calc(var(--py) * -13deg))
-            scale(calc(1 + var(--near) * 0.05));
-  transition:transform .34s var(--ease-out);will-change:transform;
-  transform-style:preserve-3d}
-/* The moving highlight. Sits over the artwork and is masked to its shape by
-   being the same box, so it reads as light on the object. */
-#cineArt .sheen{position:absolute;inset:0;border-radius:20px;pointer-events:none;
-  opacity:calc(.20 + var(--near) * .5);mix-blend-mode:screen;
-  background:radial-gradient(circle 42% at calc(var(--mx) * 1%) calc(var(--my) * 1%),
-    rgba(255,255,255,.55) 0%,rgba(180,215,255,.20) 26%,transparent 58%);
-  transition:opacity .3s ease}
-/* A cold rim that swings to the far side of the light, the way a bevel does. */
-/* The generator's sparkle sits in the bottom-right of every render. delogo
-   removes it but drags streaks across any texture, which is worse than the
-   mark. A soft corner fall-off hides it without touching a pixel of the
-   artwork - and the corner is empty background on all of them anyway. */
-#cineArt .orb .corner{position:absolute;right:0;bottom:0;width:30%;height:28%;
-  pointer-events:none;border-radius:0 0 20px 0;
-  /* Centred on the mark itself (about 88% across, 88% down the plate), not on
-     the corner of this box - off-centre it only shades around the sparkle. */
-  background:radial-gradient(ellipse 62% 66% at 62% 57%,
-    rgba(4,7,15,1) 0%,rgba(4,7,15,.96) 40%,rgba(4,7,15,.7) 66%,transparent 88%)}
-
-#cineArt .rim{position:absolute;inset:0;border-radius:20px;pointer-events:none;
-  box-shadow:inset calc(var(--px) * -12px) calc(var(--py) * -10px) 34px rgba(120,170,235,.24),
-             inset calc(var(--px) * 8px) calc(var(--py) * 7px) 22px rgba(0,0,0,.5);
-  transition:box-shadow .34s var(--ease-out)}
-#cineArt .orb > *{animation:drift 7s ease-in-out infinite}
-@keyframes drift{0%,100%{transform:translateY(-10px) rotate(-1.2deg)}
-                 50%{transform:translateY(10px) rotate(1.2deg)}}
-#cineArt img{max-width:100%;max-height:100%;object-fit:contain;border-radius:20px;
-  filter:drop-shadow(0 26px 60px rgba(0,0,0,.7))}
-/* The renders carry their own backgrounds, so a frame makes them read as
-   plates on the scene rather than photos pasted over it. */
-#cineArt img.plate{border:1px solid rgba(255,255,255,.12);
-  box-shadow:0 30px 70px rgba(0,0,0,.66),inset 0 1px 0 rgba(255,255,255,.2)}
-/* Stand-in, shown only while the real artwork is missing, so the sequence
-   still reads and the swap is a file drop rather than a code change. */
-#cineArt .fallback{width:62%;aspect-ratio:1;border-radius:28%;display:grid;place-items:center;
-  font-weight:800;font-size:clamp(20px,3.6vw,38px);color:#F6F2E6;letter-spacing:.02em;
-  background:linear-gradient(150deg,var(--c1),var(--c2));
-  box-shadow:0 26px 60px rgba(0,0,0,.66),inset 0 2px 0 rgba(255,255,255,.3),
-             inset 0 -22px 40px rgba(0,0,0,.34);border:1px solid rgba(255,255,255,.14);
-}
-#cineArt .cap{position:absolute;left:0;right:0;bottom:-7%;text-align:center;font-size:11px;
-  letter-spacing:.16em;text-transform:uppercase;color:rgba(240,238,232,.45)}
-#cineArt .all14{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;width:100%}
-#cineArt .all14 span{aspect-ratio:1;border-radius:24%;display:grid;place-items:center;
-  font-size:10px;font-weight:800;color:#F6F2E6;
-  background:linear-gradient(150deg,var(--c1),var(--c2));
-  box-shadow:0 8px 20px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.26)}
+#cineBenefits{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2;
+  width:min(560px,90vw);pointer-events:none;text-align:center;
+  background:rgba(1,2,6,.34);backdrop-filter:blur(10px);
+  border:1px solid rgba(212,175,55,.16);border-radius:var(--radius-lg);padding:22px 24px;
+  box-shadow:0 20px 60px rgba(0,0,0,.6);transition:opacity .35s ease}
+#cineBenefits .kicker{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--accent-gold);font-weight:800;margin-bottom:13px}
+#cineBenefits ul{list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:9px 18px;text-align:left}
+#cineBenefits li{display:flex;gap:9px;font-size:13px;line-height:1.45;color:#DCD8CE}
+#cineBenefits li b{color:#fff;font-weight:700}
+#cineBenefits .tick{color:var(--accent-green);font-weight:800;flex:none}
+#cineBenefits .all{margin-top:14px;padding-top:12px;border-top:1px solid rgba(212,175,55,.14);
+  font-size:12px;color:var(--text-secondary)}
+#cineBenefits .all b{color:var(--accent-gold)}
+@media(max-width:640px){#cineBenefits ul{grid-template-columns:1fr}}
 
 #cineTrack{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;z-index:1;
   -webkit-overflow-scrolling:touch}
-.beat{min-height:100vh;display:grid;align-content:center;padding:0 6vw;
-  max-width:min(52vw,660px)}
-.beat .idx{font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--accent-gold);
-  font-weight:800;margin-bottom:14px;display:flex;align-items:center;gap:10px}
-.beat .idx::after{content:'';height:1px;flex:1;max-width:80px;background:rgba(212,175,55,.35)}
-.beat h2{font-size:clamp(28px,4.4vw,54px);font-weight:800;letter-spacing:-.03em;line-height:1.03}
-.beat h2 em{font-style:normal;display:block;
-  background:linear-gradient(100deg,#F4E9C0,var(--accent-gold),#b8962c);
-  -webkit-background-clip:text;background-clip:text;color:transparent}
-.beat p{margin-top:16px;color:var(--text-secondary);font-size:14.5px;line-height:1.7;max-width:46ch}
-.beat .in{opacity:0;transform:translateY(22px);
-  transition:opacity .6s var(--ease-out),transform .7s var(--ease-out)}
-.beat.live .in{opacity:1;transform:none}
-.beat.pay{max-width:min(58vw,520px)}
-@media(max-width:900px){
-  #cineArt{right:auto;left:50%;transform:translate(-50%,-50%);top:32%;width:min(62vw,290px);opacity:.4}
-  .beat,.beat.pay{max-width:100%;padding:0 26px;align-content:end;padding-bottom:14vh}
-}
+#cineTrack .runway{height:460vh}
 
-.paycard{background:rgba(14,20,40,.88);border:1px solid var(--border-strong);
-  border-radius:var(--radius-lg);padding:26px;backdrop-filter:blur(14px);
-  box-shadow:0 24px 70px rgba(0,0,0,.6);margin-top:22px}
-.paycard h3{font-size:22px;font-weight:800}
-.paycard .why{font-size:13px;color:var(--text-secondary);margin:8px 0 16px;line-height:1.6}
+/* Payment rises once the cluster has opened out. */
+#cinePay{position:absolute;left:50%;bottom:0;transform:translate(-50%,44px);width:min(440px,92vw);
+  z-index:3;background:rgba(6,10,22,.92);border:1px solid var(--border-strong);
+  border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding:24px 24px 28px;
+  backdrop-filter:blur(14px);box-shadow:0 -18px 60px rgba(0,0,0,.7);
+  opacity:0;pointer-events:none;
+  transition:opacity .5s var(--ease-out),transform .6s var(--ease-out)}
+#cinePay.up{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+/* .stack is scoped to .sheet, so this panel needs its own: the two options
+   must read as first choice then second, stacked, not as a pair side by side. */
+#cinePay .stack{display:flex;flex-direction:column;gap:10px}
+#cinePay .btn{width:100%;justify-content:center}
+#cinePay h3{font-size:20px;font-weight:800;text-align:center}
+#cinePay .why{font-size:12.5px;color:var(--text-secondary);text-align:center;margin:7px 0 15px;line-height:1.55}
 /* QR slot. Empty until a real code is supplied - a payment QR is not something
    to invent, and a wrong one takes real money to the wrong place. */
-.qrslot{background:#fff;border-radius:14px;width:186px;height:186px;margin:0 auto 16px;
-  display:grid;place-items:center;box-shadow:0 4px 22px rgba(0,0,0,.4)}
+.qrslot{background:#fff;border-radius:14px;width:190px;height:190px;margin:0 auto 15px;
+  display:grid;place-items:center;box-shadow:0 4px 22px rgba(0,0,0,.45)}
 .qrslot.empty{background:rgba(255,255,255,.04);border:1px dashed var(--border-strong);
   color:var(--text-muted);font-size:12px;text-align:center;padding:18px;line-height:1.5}
 .qrslot img{width:100%;height:100%;border-radius:14px;display:block}
 
-#cineHud{position:absolute;left:6vw;bottom:24px;z-index:2;display:flex;gap:16px;align-items:center;
-  font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);
-  pointer-events:none}
-#cineDots{position:absolute;right:22px;top:50%;transform:translateY(-50%);z-index:2;
-  display:flex;flex-direction:column;gap:9px;pointer-events:none}
-#cineDots i{width:6px;height:6px;border-radius:50%;background:rgba(240,238,232,.22);
-  transition:background .3s,transform .3s}
-#cineDots i.on{background:var(--accent-gold);transform:scale(1.5)}
-#cineHint{position:absolute;left:0;right:0;bottom:24px;text-align:center;color:var(--text-muted);
+#cineHint{position:absolute;left:0;right:0;bottom:26px;text-align:center;color:var(--text-muted);
   font-size:11px;letter-spacing:.18em;text-transform:uppercase;pointer-events:none;
   animation:bob 2.4s ease-in-out infinite;transition:opacity .4s}
 @keyframes bob{0%,100%{transform:translateY(0);opacity:.5}50%{transform:translateY(6px);opacity:1}}
-#cineSkip{position:absolute;right:20px;top:18px;z-index:3;background:rgba(255,255,255,.04);
+#cineSkip{position:absolute;right:20px;top:18px;z-index:4;background:rgba(255,255,255,.04);
   border:1px solid var(--border);color:var(--text-muted);border-radius:999px;padding:7px 14px;
-  font:inherit;font-size:12px;cursor:pointer}
+  font:inherit;font-size:12px;cursor:pointer;opacity:0;transition:opacity .4s}
+#cineSkip.on{opacity:1}
 #cineSkip:hover{color:var(--text-primary)}
+#cineCredit{position:absolute;left:16px;bottom:14px;z-index:2;font-size:9.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:rgba(240,238,232,.22);pointer-events:none}
 
 @media (prefers-reduced-motion:reduce){
-  #cineSky,#cineSky2,#cineEarth{animation:none}
-  #cineArt .art,.beat .in,#cineArt .orb,#cineArt .rim{transition:none}
-  #cineArt .orb > *{animation:none}
-  #cineArt .sheen{display:none}
+  #cineNeb{animation:none}
   #cineHint{animation:none}
+  .mark{transition:none!important}
 }
 </style>
 </head>
 <body>
 
 <div id="cine" aria-label="Academics preview">
-  <div id="cineSky" aria-hidden="true"></div>
-  <div id="cineSky2" aria-hidden="true"></div>
-  <canvas id="cineCanvas" aria-hidden="true"></canvas>
-  <div class="depth" aria-hidden="true"></div>
-  <div id="cineEarth" aria-hidden="true"></div>
-  <div id="cineMoon" aria-hidden="true"></div>
-  <div id="cineScrim" aria-hidden="true"></div>
-  <div id="cineArt" aria-hidden="true"></div>
-  <div id="cineDots" aria-hidden="true"></div>
-  <div id="cineHud"><span>TEN &middot; Academics</span><span id="cineCount">01 / 09</span></div>
+  <canvas id="cineNeb" aria-hidden="true"></canvas>
+  <canvas id="cineStars" aria-hidden="true"></canvas>
+  <div id="cineVeil" aria-hidden="true"></div>
+  <div id="cineStage" aria-hidden="true"></div>
+
+  <div id="cineCopy">
+    <h2>Fourteen domains. <span>One way in.</span></h2>
+    <p>Modules, written assessments, a project you can show, and a certificate that means it.</p>
+  </div>
+
+  <div id="cineBenefits">
+    <div class="kicker">What every domain gives you</div>
+    <ul>
+      <li><span class="tick">&#10003;</span><span><b>Learning by building</b> &mdash; practice projects, not slides</span></li>
+      <li><span class="tick">&#10003;</span><span><b>Assignments</b> marked against what the question asks</span></li>
+      <li><span class="tick">&#10003;</span><span><b>Resume builder</b> that puts the work on the page</span></li>
+      <li><span class="tick">&#10003;</span><span><b>Full job readiness</b> &mdash; portfolio, resume, interview prep</span></li>
+      <li><span class="tick">&#10003;</span><span><b>Job findings</b> across every major hiring platform</span></li>
+      <li><span class="tick">&#10003;</span><span><b>Hackathons &amp; idea-thons</b> exposure and team building</span></li>
+    </ul>
+    <p class="all">All of it, in <b>every one of the 14 domains</b> &mdash; not just one track.</p>
+  </div>
+
   <div id="cineHint">Scroll</div>
   <button id="cineSkip" type="button">Skip preview</button>
-  <div id="cineTrack"></div>
+  <div id="cineCredit">Deep field rendered in-browser</div>
+
+  <div id="cinePay">
+    <h3>Unlock Everything</h3>
+    <p class="why">Every module, every assessment, the project reviews and the certificate.
+      One payment per domain.</p>
+    <div class="qrslot empty" id="cineQr">QR goes here once you send it</div>
+    <div class="stack">
+      <button class="btn gold" id="cinePayNow">Pay Now</button>
+      <button class="btn ghost" id="cineLater">Pay after Completion</button>
+    </div>
+    <p class="meta" style="text-align:center">Start the modules now. Payment is only needed for the certificate.</p>
+  </div>
+
+  <div id="cineTrack"><div class="runway"></div></div>
 </div>
 
 <nav class="nav">
@@ -454,252 +370,275 @@ a{color:inherit}
   ];
 
   (function cinematic() {
-    var cine = $('cine'), art = $('cineArt'), track = $('cineTrack');
+    var cine = $('cine'), stage = $('cineStage'), track = $('cineTrack');
     if (!cine) { return; }
     var reduced = false;
     try { reduced = window.matchMedia('(prefers-reduced-motion:reduce)').matches; } catch (_e) {}
 
-    /* Artwork lives at /img/domains/<slug>.png. Until those files exist the
-       coloured medallion stands in, so the sequence is testable now and the
-       upgrade is a file drop rather than a code change. */
+    /* All fourteen. `img` is the artwork where we have it; the rest fall back
+       to the coloured plate, so the set is always complete. */
     var ART = '/img/domains/';
-    var EXT = '.webp';
-    var BEATS = [
-      { slug: 'ten', mark: '\u221E', c1: '#F4E9C0', c2: '#8A6E1F',
-        idx: 'Academics', h: 'Fourteen domains.', em: 'One way in.',
-        p: 'Modules you work through, assessments that are actually marked, a project you can show '
-         + 'someone, and a certificate that stands behind it.' },
-      { slug: 'flutter', mark: 'FLTR', c1: '#54C5F8', c2: '#0E4C6B', cap: 'Flutter Development',
-        idx: '01 \u2014 Learn by building', h: 'You do not watch.', em: 'You build.',
-        p: 'Every module ends in something that runs. Practice projects, not slides \u2014 the only '
-         + 'proof that survives an interview is work you can open and explain.' },
-      { slug: 'java', mark: 'JAVA', c1: '#E76F00', c2: '#7A2E00', cap: 'Java Development',
-        idx: '02 \u2014 Assignments, marked', h: 'Written answers.', em: 'Marked properly.',
-        p: 'No multiple choice. You write, and it is scored against the points the question asked '
-         + 'for, then told exactly which ones you missed. Pass mark 70%.' },
-      { slug: 'python', mark: 'PY', c1: '#4B8BBE', c2: '#1B3A54', cap: 'Python Development',
-        idx: '03 \u2014 Resume builder', h: 'A resume that', em: 'shows the work.',
-        p: 'ATS-clean, and it pulls in the projects and certificates you earned here rather than '
-         + 'asking you to describe them from memory.' },
-      { slug: 'mern', mark: 'MERN', c1: '#00ED64', c2: '#04512A', cap: 'MERN Stack',
-        idx: '04 \u2014 Job readiness', h: 'Ready end to end,', em: 'not just qualified.',
-        p: 'Portfolio, resume and interview preparation for the domain you actually studied, so the '
-         + 'thing you learned and the thing you are asked about are the same thing.' },
-      { slug: 'swe', mark: 'SWE', c1: '#3B82F6', c2: '#12356E', cap: 'Software Engineering',
-        idx: '05 \u2014 Job findings', h: 'The jobs,', em: 'brought to you.',
-        p: 'Openings across every major hiring platform, filtered to your domain and your level, '
-         + 'with the original apply link rather than a rewrite of it.' },
-      { slug: 'webdev', mark: 'WEB', c1: '#E34F26', c2: '#6B1E0C', cap: 'Web Development',
-        idx: '06 \u2014 Hackathons', h: 'Hackathons and', em: 'idea-thons.',
-        p: 'College, national and international. Start building before the event opens, form a team, '
-         + 'track milestones, and come out with something that was judged.' },
-      // The only beat with ground under it, and the one the camera descends onto.
-      { slug: 'space', mark: 'SPACE', c1: '#94A3B8', c2: '#1E293B', cap: 'Space Intern Program',
-        moon: true,
-        idx: '07 \u2014 Every track', h: 'All fourteen.', em: 'Same depth.',
-        p: 'Whichever domain you are on, the modules, the marking, the resume, the jobs and the '
-         + 'hackathons are the same. Nothing here is reserved for one track.' },
-      { pay: true, idx: '08 \u2014 Unlock', h: 'Unlock', em: 'Everything.' },
+    var DOMAINS14 = [
+      ['DevOps with AWS',         'AWS',  '#FF9900', '#8A4B00', null],
+      ['Python Development',      'PY',   '#4B8BBE', '#1B3A54', 'python'],
+      ['Java Development',        'JAVA', '#E76F00', '#7A2E00', 'java'],
+      ['Web Development',         'WEB',  '#E34F26', '#6B1E0C', 'webdev'],
+      ['MERN Stack',              'MERN', '#00ED64', '#04512A', 'mern'],
+      ['Artificial Intelligence', 'AI',   '#8B5CF6', '#3B1E70', null],
+      ['Data Science',            'DATA', '#06B6D4', '#0A4A58', null],
+      ['Cyber Security',          'SEC',  '#EF4444', '#6B1414', null],
+      ['Software Engineering',    'SWE',  '#3B82F6', '#12356E', 'swe'],
+      ['Flutter Development',     'FLTR', '#54C5F8', '#0E4C6B', 'flutter'],
+      ['Business Development',    'BIZ',  '#F59E0B', '#7A4A00', null],
+      ['Human Resources',         'HR',   '#EC4899', '#6B1140', null],
+      ['Venture Capital',         'VC',   '#10B981', '#064C36', null],
+      ['Finance',                 'FIN',  '#D4AF37', '#6B5410', null],
     ];
 
-    var DOM14 = [
-      ['AWS', '#FF9900', '#8A4B00'], ['PY', '#4B8BBE', '#1B3A54'], ['JAVA', '#E76F00', '#7A2E00'],
-      ['WEB', '#E34F26', '#6B1E0C'], ['MERN', '#00ED64', '#04512A'], ['AI', '#8B5CF6', '#3B1E70'],
-      ['DATA', '#06B6D4', '#0A4A58'], ['SEC', '#EF4444', '#6B1414'], ['SWE', '#3B82F6', '#12356E'],
-      ['FLTR', '#54C5F8', '#0E4C6B'], ['BIZ', '#F59E0B', '#7A4A00'], ['HR', '#EC4899', '#6B1140'],
-      ['VC', '#10B981', '#064C36'], ['FIN', '#D4AF37', '#6B5410'],
-    ];
-
-    var layers = BEATS.map(function (b) {
-      var wrap = el('div', 'art');
-      var orb = el('div', 'orb');
-      wrap.appendChild(orb);
-      if (b.all14) {
-        var g = el('div', 'all14');
-        DOM14.forEach(function (d) {
-          var sp = el('span', null, d[0]);
-          sp.style.setProperty('--c1', d[1]);
-          sp.style.setProperty('--c2', d[2]);
-          g.appendChild(sp);
-        });
-        orb.appendChild(g);
-      } else if (!b.pay) {
-        var fb = el('div', 'fallback', b.mark);
-        fb.style.setProperty('--c1', b.c1);
-        fb.style.setProperty('--c2', b.c2);
+    var marks = DOMAINS14.map(function (d, i) {
+      var node = el('div', 'mark');
+      var trail = el('div', 'trail');
+      var face = el('div', 'face', d[1]);
+      face.style.setProperty('--c1', d[2]);
+      face.style.setProperty('--c2', d[3]);
+      node.appendChild(trail);
+      node.appendChild(face);
+      var sheen = el('div', 'sheen');
+      face.appendChild(sheen);
+      if (d[4]) {
         var img = new Image();
-        img.alt = b.cap || 'TEN';
-        // Swap only once the real file has decoded, so a missing or broken
-        // image never leaves an empty frame mid-sequence.
-        img.onload = function () { orb.replaceChild(img, fb); };
-        img.className = 'plate';
-        img.src = ART + b.slug + EXT;
-        orb.appendChild(fb);
-        if (b.cap) { wrap.appendChild(el('div', 'cap', b.cap)); }
+        img.alt = d[0];
+        // Swap only once decoded, so a missing file never blanks a plate. The
+        // corner mask goes on here and nowhere else: only the renders carry
+        // the generator's sparkle, and on a plain plate it is just a smudge.
+        img.onload = function () {
+          face.textContent = '';
+          face.appendChild(img);
+          face.appendChild(el('div', 'corner'));
+          face.appendChild(sheen);
+        };
+        img.src = ART + d[4] + '.webp';
       }
-      /* After the artwork, never before: these three sit on top of it. Added
-         first they render behind the image and do nothing at all. */
-      if (!b.pay) {
-        orb.appendChild(el('div', 'corner'));
-        orb.appendChild(el('div', 'sheen'));
-        orb.appendChild(el('div', 'rim'));
-      }
-      art.appendChild(wrap);
-      return wrap;
+      node.appendChild(el('div', 'tag', d[0]));
+      stage.appendChild(node);
+      var a = (i / DOMAINS14.length) * Math.PI * 2 - Math.PI / 2;
+      return { node: node, face: face, trail: trail, angle: a,
+               ring: 1 + (i % 3) * 0.26, phase: i * 0.7,
+               spin: (i % 2 ? 1 : -1) * (0.5 + (i % 4) * 0.11) };
     });
 
-    var dotsBox = $('cineDots');
-    var beats = BEATS.map(function (b) {
-      var sec = el('section', 'beat' + (b.pay ? ' pay' : ''));
-      var inner = el('div', 'in');
-      inner.appendChild(el('div', 'idx', b.idx));
-      var h = el('h2', null, b.h);
-      h.appendChild(el('em', null, b.em));
-      inner.appendChild(h);
-      if (b.p) { inner.appendChild(el('p', null, b.p)); }
+    var vw = 0, vh = 0;
+    function measure() { vw = cine.clientWidth; vh = cine.clientHeight; }
 
-      if (b.pay) {
-        var card = el('div', 'paycard');
-        card.appendChild(el('h3', null, 'Unlock Everything'));
-        card.appendChild(el('p', 'why', 'Every module, every assessment, the project reviews and '
-          + 'the certificate. One payment per domain.'));
-        var qr = el('div', 'qrslot empty', 'QR goes here once you send it');
-        qr.id = 'cineQr';
-        card.appendChild(qr);
-        var stack = el('div', 'stack');
-        var now = el('button', 'btn gold', 'Unlock Everything \u2014 Pay Now');
-        now.id = 'cinePayNow';
-        var later = el('button', 'btn ghost', 'Pay after Completion');
-        later.id = 'cineLater';
-        stack.appendChild(now);
-        stack.appendChild(later);
-        card.appendChild(stack);
-        card.appendChild(el('p', 'meta',
-          'Start the modules now. Payment is only needed for the certificate.'));
-        inner.appendChild(card);
+    /* ── the deep field ──────────────────────────────────────────────────
+       Painted once into an offscreen canvas, because gas is expensive and
+       does not change; only the stars are redrawn per frame.
+
+       Gas is many soft radial blobs in a Hubble-ish palette laid down with
+       additive blending, then dust lanes punched out with destination-out -
+       the dark filaments are what make a nebula read as real depth rather
+       than coloured fog. */
+    var neb = $('cineNeb'), nctx = neb.getContext('2d');
+    var starCv = $('cineStars'), sctx = starCv.getContext('2d');
+    var stars = [], dpr = 1;
+
+    var GAS = [
+      [70, 130, 235], [140, 90, 235], [225, 120, 60],
+      [205, 60, 55], [60, 190, 200], [235, 180, 120],
+    ];
+    function paintNebula(w, h) {
+      nctx.setTransform(1, 0, 0, 1, 0, 0);
+      nctx.clearRect(0, 0, w, h);
+      nctx.globalCompositeOperation = 'lighter';
+      var blobs = Math.round((w * h) / 11000);
+      for (var i = 0; i < blobs; i++) {
+        // Weighted toward the left-of-centre, the way the reference cloud sits.
+        var cx = w * (0.08 + Math.pow(Math.random(), 1.5) * 0.72);
+        var cy = h * (0.12 + Math.random() * 0.78);
+        var r = (Math.min(w, h) * 0.05) + Math.random() * (Math.min(w, h) * 0.30);
+        var c = GAS[(Math.random() * GAS.length) | 0];
+        var a = 0.050 + Math.random() * 0.135;
+        var g = nctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+        g.addColorStop(0, 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a.toFixed(3) + ')');
+        g.addColorStop(0.35, 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + (a * 0.55).toFixed(3) + ')');
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        nctx.fillStyle = g;
+        nctx.beginPath(); nctx.arc(cx, cy, r, 0, 6.2832); nctx.fill();
       }
-      sec.appendChild(inner);
-      track.appendChild(sec);
-      dotsBox.appendChild(el('i'));
-      return sec;
-    });
-
-    var dots = dotsBox.querySelectorAll('i');
-    var pad = function (n) { return (n < 10 ? '0' : '') + n; };
-    function activate(n) {
-      beats.forEach(function (sec, i) { sec.classList.toggle('live', i === n); });
-      layers.forEach(function (l, i) { l.classList.toggle('on', i === n); });
-      for (var i = 0; i < dots.length; i++) { dots[i].classList.toggle('on', i === n); }
-      cine.classList.toggle('moonbeat', !!BEATS[n].moon);
-      $('cineCount').textContent = pad(n + 1) + ' / ' + pad(BEATS.length);
-      $('cineHint').style.opacity = n === 0 ? '' : '0';
+      // Dust lanes.
+      // Hot cores: a few small, bright centres so the cloud has interior
+      // structure rather than a uniform wash.
+      for (var q = 0; q < Math.round(blobs * 0.14); q++) {
+        var hx = w * (0.14 + Math.random() * 0.6), hy = h * (0.18 + Math.random() * 0.62);
+        var hr = Math.min(w, h) * (0.02 + Math.random() * 0.07);
+        var hc = GAS[(Math.random() * GAS.length) | 0];
+        var hg = nctx.createRadialGradient(hx, hy, 0, hx, hy, hr);
+        hg.addColorStop(0, 'rgba(' + hc[0] + ',' + hc[1] + ',' + hc[2] + ',.30)');
+        hg.addColorStop(1, 'rgba(0,0,0,0)');
+        nctx.fillStyle = hg;
+        nctx.beginPath(); nctx.arc(hx, hy, hr, 0, 6.2832); nctx.fill();
+      }
+      nctx.globalCompositeOperation = 'destination-out';
+      var lanes = Math.round(blobs * 0.45);
+      for (var k = 0; k < lanes; k++) {
+        var lx = w * Math.random(), ly = h * Math.random();
+        var lr = (Math.min(w, h) * 0.03) + Math.random() * (Math.min(w, h) * 0.16);
+        var dg = nctx.createRadialGradient(lx, ly, 0, lx, ly, lr);
+        dg.addColorStop(0, 'rgba(0,0,0,' + (0.25 + Math.random() * 0.45).toFixed(2) + ')');
+        dg.addColorStop(1, 'rgba(0,0,0,0)');
+        nctx.fillStyle = dg;
+        nctx.beginPath(); nctx.arc(lx, ly, lr, 0, 6.2832); nctx.fill();
+      }
+      nctx.globalCompositeOperation = 'source-over';
     }
 
-    /* The browser already knows which section is on screen; asking it beats
-       recomputing offsets on every scroll event. */
-    if ('IntersectionObserver' in window) {
-      var io = new IntersectionObserver(function (entries) {
-        entries.forEach(function (e) {
-          if (e.isIntersecting) { activate(beats.indexOf(e.target)); }
-        });
-      }, { root: track, threshold: 0.55 });
-      beats.forEach(function (sec) { io.observe(sec); });
-    } else {
-      track.addEventListener('scroll', function () {
-        activate(Math.round(track.scrollTop / track.clientHeight));
-      }, { passive: true });
-    }
-    activate(0);
-
-    /* --zoom is how far through the Space Intern beat the student has scrolled.
-       Measured against that one section rather than the whole track, so the
-       descent starts and ends exactly where the beat does however many beats
-       sit either side of it. */
-    var moonIndex = BEATS.map(function (b) { return !!b.moon; }).indexOf(true);
-    if (moonIndex > -1) {
-      var moonBeat = beats[moonIndex], ticking = false;
-      var setZoom = function () {
-        ticking = false;
-        var top = moonBeat.offsetTop - track.scrollTop;
-        var z = 1 - (top / Math.max(1, track.clientHeight));
-        cine.style.setProperty('--zoom', Math.max(0, Math.min(1, z)).toFixed(3));
-      };
-      track.addEventListener('scroll', function () {
-        if (ticking) { return; }
-        ticking = true;
-        requestAnimationFrame(setZoom);
-      }, { passive: true });
-      setZoom();
+    function seedStars(w, h) {
+      stars = [];
+      var field = Math.min(900, Math.round((w * h) / 2600));
+      for (var i = 0; i < field; i++) {
+        stars.push({ x: Math.random() * w, y: Math.random() * h,
+                     r: Math.pow(Math.random(), 2.4) * 1.7 + 0.25,
+                     hue: Math.random(), tw: Math.random() * 6.28, sp: 0.4 + Math.random() });
+      }
+      // The dense cluster the eye lands on.
+      var ccx = w * 0.56, ccy = h * 0.46, cr = Math.min(w, h) * 0.20;
+      var pop = Math.min(420, Math.round(cr * 1.9));
+      for (var j = 0; j < pop; j++) {
+        var ang = Math.random() * 6.2832;
+        var rad = Math.pow(Math.random(), 0.55) * cr;
+        stars.push({ x: ccx + Math.cos(ang) * rad, y: ccy + Math.sin(ang) * rad * 0.85,
+                     r: Math.pow(Math.random(), 2) * 1.5 + 0.3,
+                     hue: Math.random(), tw: Math.random() * 6.28, sp: 0.5 + Math.random(),
+                     cluster: true });
+      }
     }
 
-    /* Pointer tracking, written as CSS variables rather than a transform, so
-       the idle drift keyframes keep running underneath.
+    function sizeCanvases() {
+      measure();
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      [neb, starCv].forEach(function (c) {
+        c.width = Math.floor(vw * dpr); c.height = Math.floor(vh * dpr);
+      });
+      nctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintNebula(vw, vh);
+      seedStars(vw, vh);
+    }
+    sizeCanvases();
+    window.addEventListener('resize', sizeCanvases);
 
-       Three numbers: -1..1 across the viewport for the lean, 0..100 across
-       the plate itself for the highlight, and how close the pointer is to the
-       plate, which is what makes it come alive as you approach rather than
-       reacting the same from across the screen.
+    var prog = 0, target = 0, raf = 0, pointX = 0, pointY = 0;
+    function readScroll() {
+      var max = track.scrollHeight - track.clientHeight;
+      target = max > 0 ? Math.min(1, Math.max(0, track.scrollTop / max)) : 0;
+    }
+    track.addEventListener('scroll', readScroll, { passive: true });
 
-       Coalesced into one rAF - pointermove fires far more often than the
-       screen refreshes, and writing a variable per event is work thrown away. */
+    var ease = function (t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; };
+
+    function drawStars(t, p) {
+      sctx.clearRect(0, 0, vw, vh);
+      for (var i = 0; i < stars.length; i++) {
+        var st = stars[i];
+        // Brightness varies, and the brightest carry diffraction spikes -
+        // that is the detail that reads as a telescope rather than confetti.
+        var tw = 0.55 + 0.45 * Math.sin(t * st.sp + st.tw);
+        var a = Math.min(1, (0.25 + st.r * 0.5) * tw);
+        var col = st.hue < 0.32 ? '160,190,255' : st.hue < 0.62 ? '255,255,255'
+                : st.hue < 0.84 ? '255,214,170' : '255,160,140';
+        sctx.fillStyle = 'rgba(' + col + ',' + a.toFixed(3) + ')';
+        sctx.beginPath(); sctx.arc(st.x, st.y, st.r * (1 + p * 0.25), 0, 6.2832); sctx.fill();
+        if (st.r > 1.25) {
+          var len = st.r * 7 * tw;
+          sctx.strokeStyle = 'rgba(' + col + ',' + (a * 0.45).toFixed(3) + ')';
+          sctx.lineWidth = 0.7;
+          sctx.beginPath();
+          sctx.moveTo(st.x - len, st.y); sctx.lineTo(st.x + len, st.y);
+          sctx.moveTo(st.x, st.y - len); sctx.lineTo(st.x, st.y + len);
+          sctx.stroke();
+        }
+      }
+    }
+
+    function frame(now) {
+      prog += (target - prog) * 0.09;
+      var p = ease(Math.min(1, prog * 1.06));
+      var t = now / 1000;
+
+      var reach = Math.min(vw, vh) * 0.355;
+      marks.forEach(function (m) {
+        var clusterR = 132 * m.ring * (1 - p * 0.42);
+        var r = clusterR + p * reach * m.ring;
+        var drift = reduced ? 0 : Math.sin(t * 0.55 + m.phase) * (7 - p * 4);
+        var x = Math.cos(m.angle) * r;
+        var y = Math.sin(m.angle) * r * 0.82 + drift;
+        var z = (m.ring - 1.26) * 190 * (0.4 + p);
+        // Spins freely while clustered, settles facing front as it spreads.
+        var rot = reduced ? 0 : (t * 11 * m.spin) * (1 - p * 0.92) + p * 14 * m.spin;
+        var scale = (0.62 + m.ring * 0.22) * (1 + p * 0.14);
+        m.node.style.transform = 'translate3d(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px,'
+          + z.toFixed(1) + 'px) rotateY(' + rot.toFixed(1) + 'deg) rotateX('
+          + (Math.sin(t * 0.4 + m.phase) * 7 * (1 - p * 0.7)).toFixed(1)
+          + 'deg) scale(' + scale.toFixed(3) + ')';
+        var moving = p > 0.06 && p < 0.94;
+        m.trail.style.opacity = moving && !reduced ? (0.55 * Math.sin(p * Math.PI)).toFixed(3) : 0;
+        m.trail.style.transform = 'rotate(' + ((m.angle * 180) / Math.PI + 180).toFixed(1)
+          + 'deg) scaleX(' + (0.25 + p * 1.15).toFixed(2) + ')';
+      });
+
+      if (!reduced) {
+        drawStars(t, p);
+        // The gas drifts and pushes in very slightly; any more and it reads
+        // as a moving background rather than distance.
+        // Cursor moves the field: gas drifts with the pointer, the star plane
+        // lags behind it. Opposed offsets are what read as depth instead of
+        // the whole picture sliding.
+        neb.style.transform = 'translate3d('
+          + (Math.sin(t * 0.03) * 12 + pointX * 26).toFixed(1) + 'px,'
+          + (Math.cos(t * 0.024) * 9 + pointY * 18).toFixed(1) + 'px,0) scale('
+          + (1.06 + p * 0.10).toFixed(3) + ')';
+        starCv.style.transform = 'translate3d('
+          + (pointX * -12).toFixed(1) + 'px,' + (pointY * -9).toFixed(1) + 'px,0)';
+      }
+
+      // Clears before the logos reach the middle of the screen, or the panel
+      // and the spread collide.
+      $('cineBenefits').style.opacity = String(Math.max(0, Math.min(1, (0.40 - p) / 0.18)));
+      cine.classList.toggle('spread', p > 0.55);
+      $('cinePay').classList.toggle('up', p > 0.76);
+      $('cineHint').style.opacity = p > 0.08 ? 0 : '';
+      $('cineSkip').classList.toggle('on', p > 0.12);
+      $('cineCopy').style.opacity = String(Math.max(0, 1 - p * 1.9));
+
+      raf = requestAnimationFrame(frame);
+    }
+    raf = requestAnimationFrame(frame);
+
+    /* Pointer tracking for the plates: where the highlight sits, and how near
+       the pointer is, so a plate wakes up as you approach it. */
     if (!reduced && window.matchMedia('(hover:hover)').matches) {
       var mx = 0, my = 0, queued = false;
       cine.addEventListener('pointermove', function (e) {
         mx = e.clientX; my = e.clientY;
+        // -1..1 across the viewport, read by the background in the rAF loop.
+        pointX = (mx / cine.clientWidth) * 2 - 1;
+        pointY = (my / cine.clientHeight) * 2 - 1;
         if (queued) { return; }
         queued = true;
         requestAnimationFrame(function () {
           queued = false;
-          var w = cine.clientWidth, h = cine.clientHeight;
-          art.style.setProperty('--px', ((mx / w) * 2 - 1).toFixed(3));
-          art.style.setProperty('--py', ((my / h) * 2 - 1).toFixed(3));
-
-          var r = art.getBoundingClientRect();
-          if (!r.width) { return; }
-          art.style.setProperty('--mx', (((mx - r.left) / r.width) * 100).toFixed(1));
-          art.style.setProperty('--my', (((my - r.top) / r.height) * 100).toFixed(1));
-
-          // 1 over the plate, falling to 0 about a plate-width away.
-          var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-          var d = Math.hypot(mx - cx, my - cy) / (r.width * 1.15);
-          art.style.setProperty('--near', Math.max(0, 1 - d).toFixed(3));
+          marks.forEach(function (m) {
+            var r = m.node.getBoundingClientRect();
+            if (!r.width) { return; }
+            m.face.style.setProperty('--mx', (((mx - r.left) / r.width) * 100).toFixed(1));
+            m.face.style.setProperty('--my', (((my - r.top) / r.height) * 100).toFixed(1));
+            var d = Math.hypot(mx - (r.left + r.width / 2), my - (r.top + r.height / 2))
+                  / (r.width * 1.6);
+            m.face.style.setProperty('--near', Math.max(0, 1 - d).toFixed(3));
+          });
         });
       });
     }
-
-    var cv = $('cineCanvas'), ctx = cv.getContext('2d'), dust = [], vw = 0, vh = 0;
-    function sizeCanvas() {
-      vw = cine.clientWidth; vh = cine.clientHeight;
-      var dpr = Math.min(window.devicePixelRatio || 1, 2);
-      cv.width = Math.floor(vw * dpr);
-      cv.height = Math.floor(vh * dpr);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      var n = reduced ? 0 : Math.min(140, Math.round((vw * vh) / 15000));
-      dust = Array.from({ length: n }, function () {
-        return { x: Math.random() * vw, y: Math.random() * vh, z: Math.random(),
-                 r: Math.random() * 1.4 + 0.35 };
-      });
-    }
-    sizeCanvas();
-    window.addEventListener('resize', sizeCanvas);
-
-    var raf = 0;
-    function frame() {
-      ctx.clearRect(0, 0, vw, vh);
-      for (var i = 0; i < dust.length; i++) {
-        var d = dust[i];
-        d.y -= 0.08 + d.z * 0.3;
-        if (d.y < -4) { d.y = vh + 4; d.x = Math.random() * vw; }
-        ctx.globalAlpha = 0.1 + d.z * 0.32;
-        ctx.fillStyle = i % 7 === 0 ? '#D4AF37' : '#8FA6C8';
-        ctx.beginPath();
-        ctx.arc(d.x, d.y, d.r, 0, 6.284);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-      raf = requestAnimationFrame(frame);
-    }
-    if (!reduced) { raf = requestAnimationFrame(frame); }
 
     function leave() {
       cancelAnimationFrame(raf);
@@ -710,6 +649,8 @@ a{color:inherit}
     $('cineSkip').addEventListener('click', leave);
     $('cinePayNow').addEventListener('click', function () { window.location.href = '/payment.html'; });
     $('cineLater').addEventListener('click', leave);
+
+    if (reduced) { target = 1; prog = 1; $('cineSkip').classList.add('on'); }
   })();
 
   /* ── the four Academics cards ───────────────────────────────────────── */
