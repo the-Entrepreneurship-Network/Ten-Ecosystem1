@@ -5032,49 +5032,72 @@ app.post(["/save-joiner-type", "/api/v2/student/set-joiner-type"], async (req, r
 
 app.post(["/save-employee-id-override", "/api/v2/student/save-employee-id-override"], async (req, res) => {
   try {
-    const employeeId = req.body.employeeId || req.headers['x-employee-id'] || req.headers['employeeid'] || (req.session && req.session.student && req.session.student.employeeId);
-    const { employeeIdOverride } = req.body;
-    if (!employeeIdOverride || employeeIdOverride.trim() === "") {
-      return res.json({
-        success: false,
-        message: "Employee ID cannot be empty"
-      });
+    // Identity from the SESSION only.
+    //
+    // This read `req.body.employeeId || req.headers['x-employee-id'] || ... ||
+    // session`, so a client-supplied value won over the signed-in student. Any
+    // logged-in user could rename ANY student's employee ID by naming them in
+    // the body — and the rename cascades across five collections, so it took
+    // their attendance, submissions, tasks, badges and document history with it.
+    const currentEmployeeId = (req.session && req.session.student && req.session.student.employeeId) || null;
+    if (!currentEmployeeId) {
+      return res.status(401).json({ success: false, message: "Please sign in to continue." });
     }
 
-    const student = await Student.findOne({ employeeId });
+    const newEmployeeId = String(req.body.employeeIdOverride || "").trim();
+    if (!newEmployeeId) {
+      return res.json({ success: false, message: "Employee ID cannot be empty" });
+    }
+
+    const student = await Student.findOne({ employeeId: currentEmployeeId });
     if (!student) {
       return res.json({ success: false, message: "Student not found" });
     }
 
     const oldEmployeeId = student.employeeId;
-    const newEmployeeId = employeeIdOverride.trim();
+
+    if (newEmployeeId === oldEmployeeId) {
+      return res.json({ success: true, message: "That is already your Employee ID." });
+    }
+
+    // Refuse an ID that belongs to someone else.
+    //
+    // Nothing checked this. A WhatsApp joiner could claim an ID already in use
+    // and the server would take it: under MongoDB the unique index turned it
+    // into an opaque save error, and under the JSON fallback — which enforces
+    // no indexes — two students simply ended up sharing one login identity.
+    const availability = await isEmployeeIdAvailable(newEmployeeId, student._id);
+    if (!availability.available) {
+      return res.status(409).json({
+        success: false,
+        available: false,
+        message: availability.reason || "This Employee ID is already taken. Please choose a different one."
+      });
+    }
 
     student.employeeIdOverride = newEmployeeId;
     student.employeeId = newEmployeeId;
     await student.save();
 
-    // Cascade employee ID change to all related collections
-    if (oldEmployeeId && newEmployeeId && oldEmployeeId !== newEmployeeId) {
-      try {
-        await Promise.all([
-          Attendance.updateMany({ employeeId: oldEmployeeId }, { $set: { employeeId: newEmployeeId } }),
-          Submission.updateMany({ employeeId: oldEmployeeId }, { $set: { employeeId: newEmployeeId } }),
-          TaskAssignment.updateMany({ employeeId: oldEmployeeId }, { $set: { employeeId: newEmployeeId } }),
-          BadgeAward.updateMany({ employeeId: oldEmployeeId }, { $set: { employeeId: newEmployeeId } }),
-          DocumentHistory.updateMany({ employeeId: oldEmployeeId }, { $set: { employeeId: newEmployeeId } }),
-        ]);
-        // Update active session too
-        if (req.session && req.session.student) req.session.student.employeeId = newEmployeeId;
-      } catch(cascadeErr) {
-        console.error('Employee ID cascade error:', cascadeErr);
-        // Don't fail the main request — cascade is best-effort
-      }
+    // Cascade the change to everything keyed on the old ID.
+    try {
+      await Promise.all([
+        Attendance.updateMany({ employeeId: oldEmployeeId }, { $set: { employeeId: newEmployeeId } }),
+        Submission.updateMany({ employeeId: oldEmployeeId }, { $set: { employeeId: newEmployeeId } }),
+        TaskAssignment.updateMany({ employeeId: oldEmployeeId }, { $set: { employeeId: newEmployeeId } }),
+        BadgeAward.updateMany({ employeeId: oldEmployeeId }, { $set: { employeeId: newEmployeeId } }),
+        DocumentHistory.updateMany({ employeeId: oldEmployeeId }, { $set: { employeeId: newEmployeeId } }),
+      ]);
+      if (req.session && req.session.student) req.session.student.employeeId = newEmployeeId;
+    } catch (cascadeErr) {
+      console.error('Employee ID cascade error:', cascadeErr);
+      // Best-effort: the student document is already updated.
     }
 
-    res.json({ success: true });
+    res.json({ success: true, employeeId: newEmployeeId });
   } catch (err) {
-    console.error(err);
-    res.json({ success: false });
+    console.error("[save-employee-id-override]", err.message);
+    res.json({ success: false, message: "Could not update the Employee ID right now." });
   }
 });
 
