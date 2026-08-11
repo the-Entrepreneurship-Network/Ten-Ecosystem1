@@ -2245,13 +2245,27 @@ async function loadStudents(){
 function renderStudents(list){
   const tb=document.getElementById('studentsTable');
   if(!list.length){tb.innerHTML='<tr><td colspan="10"><div class="empty-state"><div class="es-icon">🎓</div><p>No students found</p></div></td></tr>';return;}
+  // Where the employee ID came from. A WhatsApp joiner types their own ID when
+  // they register, so HR could not tell a self-entered ID from a generated one
+  // — which matters, because a typo there is what puts a student outside the
+  // numbering sequence entirely.
+  function joinerBadge(s){
+    const selfEntered = s.joinerType === 'whatsapp' || !!s.employeeIdOverride;
+    if (!selfEntered) return '';
+    return ' <span title="Joined through WhatsApp — this ID was entered by the student, not generated"'
+         + ' style="font-family:inherit;font-size:9px;font-weight:800;letter-spacing:0.5px;'
+         + 'background:rgba(37,211,102,0.14);color:#25D366;border:1px solid rgba(37,211,102,0.3);'
+         + 'padding:1px 6px;border-radius:4px;margin-left:6px;vertical-align:middle;white-space:nowrap">'
+         + 'WHATSAPP</span>';
+  }
+
   tb.innerHTML=list.map((s,i)=>{
     const name=`${s.firstName||''} ${s.lastName||''}`.trim();
     const safeN=name.replace(/'/g,"\\'");
     return`<tr id="srow-${s._id}">
       <td style="color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:12px">${i+1}</td>
       <td style="font-weight:600;cursor:pointer" onclick="openSidePanel('${s._id}')">${name}</td>
-      <td style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--gold)">${s.employeeId||''}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--gold)">${s.employeeId||''}${joinerBadge(s)}</td>
       <td><span class="tag tag-pending">${s.domain||''}</span></td>
       <td style="color:var(--muted);font-size:13px">${collegeText(s)}</td>
       <td style="color:var(--muted);font-size:13px">${s.email||''}</td>
