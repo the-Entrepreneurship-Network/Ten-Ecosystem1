@@ -422,11 +422,11 @@ body {
 
       <div class="stats-row">
         <div class="stat-chip">
-          <div class="val">10+</div>
+          <div class="val">15</div>
           <div class="lbl">Domains</div>
         </div>
         <div class="stat-chip">
-          <div class="val">500+</div>
+          <div class="val">760+</div>
           <div class="lbl">Interns</div>
         </div>
         <div class="stat-chip">
@@ -473,6 +473,167 @@ body {
   </div>
 
 </div><!-- /portal-wrap -->
+<!-- ────────────────────────────────────────────────────────────────────
+     Below-the-fold content.
+     The page above is a portal chooser: it speaks to people who already
+     have an account. Everything here is for the visitor deciding whether
+     to join, and for the employer checking a certificate is real.
+     ──────────────────────────────────────────────────────────────────── -->
+<style>
+  .ten-sec{max-width:1100px;margin:0 auto;padding:56px 24px;border-top:1px solid rgba(212,175,55,0.10);}
+  .ten-sec h2{font-family:var(--ten-font-display);font-size:26px;font-weight:800;color:#F0EEE8;margin:0 0 8px;letter-spacing:-0.02em;}
+  .ten-sec .lead{color:#8AA4C8;font-size:14px;margin:0 0 28px;line-height:1.6;}
+  .ten-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:18px;}
+  .ten-step{background:rgba(14,20,40,0.55);border:1px solid rgba(212,175,55,0.14);border-radius:14px;padding:22px;}
+  .ten-step .n{font-family:var(--ten-font-display);font-size:12px;font-weight:800;color:#D4AF37;letter-spacing:1.5px;margin-bottom:10px;}
+  .ten-step .t{font-size:15px;font-weight:700;color:#F0EEE8;margin-bottom:6px;}
+  .ten-step .d{font-size:13px;color:#8AA4C8;line-height:1.55;}
+  .ten-chips{display:flex;flex-wrap:wrap;gap:10px;}
+  .ten-chip{background:rgba(212,175,55,0.07);border:1px solid rgba(212,175,55,0.22);color:#E8DCC0;
+            border-radius:99px;padding:8px 16px;font-size:13px;font-weight:600;white-space:nowrap;}
+  .ten-verify{background:linear-gradient(135deg,rgba(212,175,55,0.09),rgba(14,20,40,0.6));
+              border:1px solid rgba(212,175,55,0.26);border-radius:16px;padding:28px;}
+  .ten-verify form{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;}
+  .ten-verify input{flex:1;min-width:220px;background:rgba(5,7,14,0.7);border:1px solid rgba(212,175,55,0.22);
+                    border-radius:10px;padding:13px 16px;color:#F0EEE8;font-size:14px;font-family:monospace;}
+  .ten-verify input:focus{outline:none;border-color:#D4AF37;}
+  .ten-verify button{background:linear-gradient(135deg,#D4AF37,#B8960C);color:#05070e;border:none;
+                     border-radius:10px;padding:13px 26px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;}
+  .ten-faq details{background:rgba(14,20,40,0.5);border:1px solid rgba(212,175,55,0.12);
+                   border-radius:12px;padding:16px 20px;margin-bottom:12px;}
+  .ten-faq summary{cursor:pointer;font-size:15px;font-weight:700;color:#F0EEE8;list-style:none;}
+  .ten-faq summary::-webkit-details-marker{display:none;}
+  .ten-faq summary::after{content:'+';float:right;color:#D4AF37;font-weight:800;}
+  .ten-faq details[open] summary::after{content:'−';}
+  .ten-faq p{color:#8AA4C8;font-size:14px;line-height:1.65;margin:12px 0 0;}
+  @media (max-width:640px){ .ten-sec{padding:40px 18px;} .ten-sec h2{font-size:22px;} }
+</style>
+
+<section class="ten-sec">
+  <h2>How the internship works</h2>
+  <p class="lead">Four steps, from signing up to holding a certificate.</p>
+  <div class="ten-steps">
+    <div class="ten-step"><div class="n">STEP 1</div><div class="t">Register</div>
+      <div class="d">Choose your domain and how long you want to intern for.</div></div>
+    <div class="ten-step"><div class="n">STEP 2</div><div class="t">Get weekly tasks</div>
+      <div class="d">Real work in your domain, released week by week.</div></div>
+    <div class="ten-step"><div class="n">STEP 3</div><div class="t">Attend and submit</div>
+      <div class="d">Mark attendance daily and submit your work for review by a coordinator.</div></div>
+    <div class="ten-step"><div class="n">STEP 4</div><div class="t">Earn your certificate</div>
+      <div class="d">Meet 75% attendance and finish your tasks to receive verifiable documents.</div></div>
+  </div>
+</section>
+
+<section class="ten-sec">
+  <h2>Domains you can intern in</h2>
+  <p class="lead" id="domainLead">Every domain has its own coordinator and its own task track.</p>
+  <!-- Rendered here as well as fetched. If /api/public/stats is unreachable
+       the visitor still sees the list, rather than an empty row where the
+       answer to "is my field here?" should be. The fetch replaces these. -->
+  <div class="ten-chips" id="domainChips">
+    <span class="ten-chip">DevOps with AWS</span>
+    <span class="ten-chip">Python Development</span>
+    <span class="ten-chip">Java Development</span>
+    <span class="ten-chip">Web Development</span>
+    <span class="ten-chip">MERN Stack Development</span>
+    <span class="ten-chip">Artificial Intelligence</span>
+    <span class="ten-chip">Data Science</span>
+    <span class="ten-chip">Cyber Security</span>
+    <span class="ten-chip">Software Engineering</span>
+    <span class="ten-chip">Flutter Development</span>
+    <span class="ten-chip">Business Development</span>
+    <span class="ten-chip">HR</span>
+    <span class="ten-chip">Space Intern</span>
+    <span class="ten-chip">Venture Capital</span>
+    <span class="ten-chip">Finance</span>
+  </div>
+</section>
+
+<section class="ten-sec">
+  <div class="ten-verify">
+    <h2 style="margin-bottom:6px;">Verify a TEN certificate</h2>
+    <p class="lead" style="margin-bottom:0;">
+      Received a TEN offer letter, certificate or letter of recommendation? Enter its
+      document number to confirm it was genuinely issued by us. Employers welcome.
+    </p>
+    <form onsubmit="return goVerify(event)">
+      <input id="verifyDocInput" type="text" placeholder="e.g. TEN-OL-2026-4F2A9C"
+             aria-label="Certificate document number" autocomplete="off">
+      <button type="submit">Verify</button>
+    </form>
+  </div>
+</section>
+
+<section class="ten-sec ten-faq">
+  <h2>Common questions</h2>
+  <p class="lead">The things people ask us most.</p>
+
+  <details><summary>Is the internship free?</summary>
+    <p>45 Days, 3 Months and 6 Months are free. The shorter crash tracks — 1 Week, 15 Days
+       and 1 Month — carry a one-time fee, because they compress the same material into a
+       much shorter period with more coordinator time per intern.</p></details>
+
+  <details><summary>What attendance do I need?</summary>
+    <p>75%. Sundays are not counted, so they cannot hurt your percentage. You can see your
+       current figure and your target any day inside the portal.</p></details>
+
+  <details><summary>Is it remote?</summary>
+    <p>Yes, entirely. Everything — tasks, submissions, attendance, coordinator reviews and
+       chat — happens in the portal, so you can intern from anywhere.</p></details>
+
+  <details><summary>What do I receive at the end?</summary>
+    <p>A Letter of Completion and, if you meet the criteria, a Letter of Recommendation.
+       Outstanding contributors can also earn Star Performer recognition. Every document
+       carries a number anyone can check on this page.</p></details>
+
+  <details><summary>Can I change my domain or internship length later?</summary>
+    <p>Your domain and length are set when you register. If something was entered wrongly,
+       ask your coordinator — they can correct it.</p></details>
+</section>
+
+<script>
+  // Domains and counts come from the server so this page can never advertise a
+  // domain the registration form does not offer, or a number that has drifted.
+  (function () {
+    function setChip(label, value) {
+      var chips = document.querySelectorAll('.stats-row .stat-chip');
+      for (var i = 0; i < chips.length; i++) {
+        var l = chips[i].querySelector('.lbl'), v = chips[i].querySelector('.val');
+        if (l && v && l.textContent.trim().toLowerCase() === label) v.textContent = value;
+      }
+    }
+
+    fetch('/api/public/stats')
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d || !d.success) return;
+
+        if (d.interns) setChip('interns', d.interns);
+        if (d.domains) setChip('domains', d.domains);
+
+        var wrap = document.getElementById('domainChips');
+        if (wrap && d.domainNames && d.domainNames.length) {
+          wrap.innerHTML = '';
+          d.domainNames.forEach(function (name) {
+            var el = document.createElement('span');
+            el.className = 'ten-chip';
+            el.textContent = name;   // textContent, never innerHTML
+            wrap.appendChild(el);
+          });
+        }
+      })
+      .catch(function () { /* leave the rendered defaults in place */ });
+  })();
+
+  function goVerify(e) {
+    e.preventDefault();
+    var v = (document.getElementById('verifyDocInput').value || '').trim();
+    if (!v) return false;
+    window.location.href = '/verify-document?id=' + encodeURIComponent(v);
+    return false;
+  }
+</script>
+
 
   <!-- Glassmorphism popup for HR Position selection -->
   <div id="hrPositionModal" style="position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(6,10,24,0.85); backdrop-filter:blur(24px) saturate(130%); width:100%; height:100%; display:none; align-items:center; justify-content:center; padding:20px; z-index:1000000;">

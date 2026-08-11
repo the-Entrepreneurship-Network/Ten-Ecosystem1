@@ -8667,6 +8667,43 @@ app.get("/coordinator/coding-submissions/:domain", requireStaffSession, async(re
 
 // ================= PUBLIC DOCUMENT VERIFICATION =================
 
+// Public, unauthenticated: the numbers and the domain list the landing page
+// shows. Counts only — no student records, no names, nothing identifying.
+//
+// The home page previously hardcoded "10+ Domains" and "500+ Interns", which
+// were wrong in both directions and would drift further every week. Serving
+// them from the same config the registration form reads means the page can
+// never advertise a domain a student cannot pick.
+//
+// Cached, because this is the most-visited page on the site and a burst of
+// visitors should not become a burst of collection scans.
+let _publicStatsCache = { at: 0, body: null };
+const PUBLIC_STATS_TTL_MS = 5 * 60 * 1000;
+
+app.get('/api/public/stats', async (req, res) => {
+    try {
+        if (_publicStatsCache.body && (Date.now() - _publicStatsCache.at) < PUBLIC_STATS_TTL_MS) {
+            return res.json(_publicStatsCache.body);
+        }
+        const { SELECTABLE_DOMAIN_NAMES } = require("./config/domains");
+        const interns = await Student.estimatedDocumentCount();
+        const body = {
+            success: true,
+            interns,
+            domains: SELECTABLE_DOMAIN_NAMES.length,
+            domainNames: SELECTABLE_DOMAIN_NAMES,
+            tracks: 6
+        };
+        _publicStatsCache = { at: Date.now(), body };
+        res.json(body);
+    } catch (err) {
+        console.error('[public-stats]', err.message);
+        // The page falls back to whatever is already rendered, so a failure here
+        // shows stale-but-sane text rather than an empty row.
+        res.json({ success: false, domainNames: [], tracks: 6 });
+    }
+});
+
 app.get('/verify-document', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'verify.html'));
 });
