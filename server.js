@@ -9070,6 +9070,11 @@ try {
     const v2Assistant = require('./routes/v2/assistant');
     app.use('/api/v2/assistant', v2Assistant);
     app.get('/assistant', (req, res) => res.sendFile(path.join(__dirname, 'public', 'assistant.html')));
+
+    const v2Academics = require('./routes/v2/academics');
+    app.use('/api/v2/academics', v2Academics);
+    app.get('/academics', (req, res) => res.sendFile(path.join(__dirname, 'public', 'academics.html')));
+    console.log('[V2] Academics mounted at /api/v2/academics, page at /academics');
     console.log('[V2] Assistant mounted at /api/v2/assistant, page at /assistant');
 } catch(e) {
     console.error('[V2] Failed to mount assistant routes:', e.message);
