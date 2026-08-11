@@ -6043,39 +6043,80 @@ function wizardEnableEmpIdEdit() {
 }
 
 async function wizardUpdateEmpId() {
-  var input = document.getElementById('wizardEmpIdInput');
-  var newId = input.value.trim();
+  var input  = document.getElementById('wizardEmpIdInput');
+  var newId  = input.value.trim();
   var status = document.getElementById('wizardEmpIdStatus');
-  
+
   if (!newId) {
     status.style.color = '#f43f5e';
-    status.textContent = '❌ Employee ID cannot be empty.';
+    status.textContent = '\u274c Employee ID cannot be empty.';
     return;
   }
-  
+
+  // Actually ask the server whether this ID is free.
+  //
+  // This function used to print "Verifying and saving..." and then
+  // "\u2705 Employee ID verified & prepared!" without checking anything — the
+  // try/catch wrapped code that could not throw. A WhatsApp joiner could type
+  // an ID that already belonged to another student and be told it was
+  // verified; the collision only surfaced later, as a unique-index failure or,
+  // in the JSON fallback which enforces nothing, as two students sharing one
+  // login identity.
+  //
+  // Nothing is stored on _onboardingState until the server says the ID is
+  // free, so "Next Step" cannot carry a duplicate forward.
+  _onboardingState.updatedEmployeeId = null;
+  var updateBtn = document.getElementById('wizardEmpIdUpdateBtn');
+  if (updateBtn) updateBtn.disabled = true;
+
   try {
     status.style.color = '#3b82f6';
-    status.textContent = 'Verifying and saving...';
-    
+    status.textContent = 'Checking this Employee ID\u2026';
+
+    var res  = await fetch('/api/employee-id/available?employeeId=' + encodeURIComponent(newId),
+                           { credentials: 'same-origin' });
+    var data = await res.json();
+
+    if (!data || data.success === false) {
+      throw new Error(data && data.reason ? data.reason : 'Could not check that Employee ID.');
+    }
+
+    if (!data.available) {
+      status.style.color = '#f43f5e';
+      status.textContent = '\u274c ' + (data.reason || 'This Employee ID is already taken.');
+      input.disabled = false;
+      input.focus();
+      input.select();
+      Swal.fire({
+        icon: 'error',
+        title: 'Employee ID already in use',
+        text: (data.reason || 'This Employee ID is already taken.') +
+              ' Please enter the ID printed on your offer letter, or choose a different one.',
+        background: '#0d1124', color: '#f0eee8', confirmButtonColor: '#f43f5e'
+      });
+      return;
+    }
+
     _onboardingState.updatedEmployeeId = newId;
 
     status.style.color = '#10b981';
-    status.textContent = '✅ Employee ID verified & prepared!';
+    status.textContent = '\u2705 Employee ID is available and prepared!';
     input.disabled = true;
     document.getElementById('wizardEmpIdEditBtn').style.display = 'block';
     document.getElementById('wizardEmpIdUpdateBtn').style.display = 'none';
-    
+
     Swal.fire({
       icon: 'success',
       title: 'Employee ID Confirmed',
-      text: 'Employee ID is updated and will be saved permanently upon finalizing onboarding.',
-      background: '#0d1124',
-      color: '#f0eee8',
-      confirmButtonColor: '#10b981'
+      text: 'This Employee ID is free and will be saved when you finish onboarding.',
+      background: '#0d1124', color: '#f0eee8', confirmButtonColor: '#10b981'
     });
-  } catch(err) {
+  } catch (err) {
     status.style.color = '#f43f5e';
-    status.textContent = '❌ Verification failed. Please try again.';
+    status.textContent = '\u274c ' + (err.message || 'Could not check that Employee ID. Please try again.');
+    input.disabled = false;
+  } finally {
+    if (updateBtn) updateBtn.disabled = false;
   }
 }
 
