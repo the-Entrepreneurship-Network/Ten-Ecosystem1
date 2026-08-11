@@ -81,7 +81,27 @@ body{background:var(--dark);color:var(--text);font-family:'Outfit',sans-serif;mi
 .section-card h2, .section-card h3 { text-align: center; }
 #pageTitle { text-align: center; }
 .section-badge{padding:4px 12px;background:rgba(245,197,66,0.1);border:1px solid var(--border-glow);border-radius:99px;font-size:11px;font-weight:600;color:var(--gold);}
-.table-wrap{background:var(--card);border:1px solid var(--border);border-radius:20px;overflow:hidden;}
+/* overflow was `hidden`, which clipped every table wider than its container.
+   The table could not be scrolled, so the PAGE scrolled sideways instead —
+   dragging the sidebar and header out of view to read a column. Each table
+   now scrolls inside itself, with a scrollbar you can actually see and grab. */
+.table-wrap{background:var(--card);border:1px solid var(--border);border-radius:20px;
+  overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;
+  scrollbar-width:thin;scrollbar-color:rgba(245,197,66,0.45) transparent;}
+.table-wrap::-webkit-scrollbar{height:10px;}
+.table-wrap::-webkit-scrollbar-track{background:rgba(255,255,255,0.04);border-radius:99px;}
+.table-wrap::-webkit-scrollbar-thumb{background:rgba(245,197,66,0.35);border-radius:99px;}
+.table-wrap::-webkit-scrollbar-thumb:hover{background:rgba(245,197,66,0.6);}
+
+/* Column headings stay put while scrolling down a long list, so row 200 is
+   still readable without scrolling back up to remember the columns. */
+.table-wrap thead th{position:sticky;top:0;z-index:3;background:var(--card2);}
+
+/* Long college names and emails wrapped onto three lines, which made rows tall
+   enough that only two students fit on screen. One line each, with the full
+   text on hover and in the Details panel. */
+.tbl-clip{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+@media (max-width:900px){ .tbl-clip{max-width:150px;} }
 .table-top{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
 .search-input{padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'Outfit',sans-serif;font-size:14px;outline:none;width:280px;transition:all 0.2s;}
 .search-input:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(245,197,66,0.06);}.search-input::placeholder{color:var(--muted);}
@@ -2267,8 +2287,8 @@ function renderStudents(list){
       <td style="font-weight:600;cursor:pointer" onclick="openSidePanel('${s._id}')">${name}</td>
       <td style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--gold)">${s.employeeId||''}${joinerBadge(s)}</td>
       <td><span class="tag tag-pending">${s.domain||''}</span></td>
-      <td style="color:var(--muted);font-size:13px">${collegeText(s)}</td>
-      <td style="color:var(--muted);font-size:13px">${s.email||''}</td>
+      <td class="tbl-clip" title="${collegeText(s)}" style="color:var(--muted);font-size:13px">${collegeText(s)}</td>
+      <td class="tbl-clip" title="${s.email||''}" style="color:var(--muted);font-size:13px">${s.email||''}</td>
       <td style="color:var(--muted);font-size:13px">${s.whatsapp||''}</td>
       <td style="font-size:13px">${s.tenure||'—'}</td>
       <td style="color:var(--muted);font-size:12px">${s.joiningDate||'—'}</td>

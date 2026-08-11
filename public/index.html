@@ -599,6 +599,81 @@ body {
        ask your coordinator — they can correct it.</p></details>
 </section>
 
+<!-- Site footer. The page ended on a copyright line inside the panel, which
+     gave a visitor nowhere to go and no way to reach anyone — the two things a
+     stranger deciding whether to trust a programme looks for. -->
+<footer class="ten-footer">
+  <div class="ten-footer-inner">
+    <div class="ten-footer-brand">
+      <div class="ten-footer-name">TEN</div>
+      <p>The Entrepreneurship Network — virtual internships with real projects,
+         domain coordinators and verifiable certificates.</p>
+      <div class="ten-social">
+        <a href="https://www.linkedin.com/company/the-entrepreneurship-network/"
+           target="_blank" rel="noopener noreferrer" aria-label="TEN on LinkedIn" title="LinkedIn">in</a>
+        <a href="https://www.instagram.com/theentrepreneurshipnetwork"
+           target="_blank" rel="noopener noreferrer" aria-label="TEN on Instagram" title="Instagram">IG</a>
+        <a href="https://discord.gg/WCnHJnrWj"
+           target="_blank" rel="noopener noreferrer" aria-label="TEN Discord community" title="Discord">DC</a>
+      </div>
+    </div>
+
+    <div class="ten-footer-col">
+      <h4>For students</h4>
+      <a href="register.html">Join as an intern</a>
+      <a href="student-login.html">Student login</a>
+      <a href="#domainChips">Domains</a>
+    </div>
+
+    <div class="ten-footer-col">
+      <h4>For employers</h4>
+      <a href="/verify-document">Verify a certificate</a>
+      <a href="mailto:info@entrepreneurshipnetwork.net">Hire our interns</a>
+    </div>
+
+    <div class="ten-footer-col">
+      <h4>Contact</h4>
+      <a href="mailto:info@entrepreneurshipnetwork.net">info@entrepreneurshipnetwork.net</a>
+      <span>New Delhi, India</span>
+      <span>Operations global remote</span>
+    </div>
+  </div>
+
+  <div class="ten-footer-base">
+    &copy; 2026 TEN — The Entrepreneurship Network · Internship Management System
+  </div>
+</footer>
+
+<style>
+  .ten-footer{width:100%;border-top:1px solid rgba(212,175,55,0.12);margin-top:24px;
+              background:rgba(6,9,18,0.5);}
+  .ten-footer-inner{max-width:1100px;margin:0 auto;padding:48px 24px 32px;
+                    display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:36px;}
+  .ten-footer-name{font-family:var(--ten-font-display);font-size:22px;font-weight:800;
+                   color:#D4AF37;letter-spacing:3px;margin-bottom:10px;}
+  .ten-footer-brand p{color:#8AA4C8;font-size:13px;line-height:1.65;margin:0 0 16px;max-width:320px;}
+  .ten-social{display:flex;gap:10px;}
+  .ten-social a{width:38px;height:38px;border-radius:10px;display:inline-flex;
+                align-items:center;justify-content:center;font-size:12px;font-weight:800;
+                letter-spacing:0.5px;text-decoration:none;color:#D4AF37;
+                background:rgba(212,175,55,0.08);border:1px solid rgba(212,175,55,0.22);
+                transition:background .18s ease,transform .18s ease;}
+  .ten-social a:hover{background:rgba(212,175,55,0.18);transform:translateY(-2px);}
+  .ten-footer-col h4{font-size:11px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
+                     color:#F0EEE8;margin:0 0 14px;}
+  .ten-footer-col a,.ten-footer-col span{display:block;color:#8AA4C8;font-size:13px;
+                     text-decoration:none;margin-bottom:9px;line-height:1.5;}
+  .ten-footer-col a:hover{color:#D4AF37;}
+  .ten-footer-base{border-top:1px solid rgba(212,175,55,0.08);padding:18px 24px;
+                   text-align:center;font-size:11px;color:#5A7299;letter-spacing:0.5px;}
+  @media (max-width:860px){
+    .ten-footer-inner{grid-template-columns:1fr 1fr;gap:28px;padding:36px 20px 24px;}
+  }
+  @media (max-width:520px){
+    .ten-footer-inner{grid-template-columns:1fr;}
+  }
+</style>
+
 <script>
   // Domains and counts come from the server so this page can never advertise a
   // domain the registration form does not offer, or a number that has drifted.
