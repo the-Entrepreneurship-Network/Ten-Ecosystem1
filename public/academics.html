@@ -135,6 +135,11 @@ a{color:inherit}
 #cine.gone{display:none}
 #cineNeb,#cineStars,#cineFx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 #cineNeb,#cineStars{will-change:transform}
+/* The real nebula: an animated plate under everything, in ultra slow motion.
+   The painted canvas above only adds parallax depth and colour variation. */
+#cineVid{position:absolute;inset:-4%;width:108%;height:108%;object-fit:cover;
+  pointer-events:none;will-change:transform;filter:saturate(1.12) brightness(.95)}
+#cineNeb{opacity:.35;mix-blend-mode:screen}
 #cineVeil{position:absolute;inset:0;pointer-events:none;
   background:radial-gradient(ellipse 78% 66% at 50% 46%,rgba(1,2,7,.12) 0%,rgba(1,2,7,.5) 66%,rgba(1,2,7,.78) 100%)}
 
@@ -164,7 +169,7 @@ a{color:inherit}
   mask-image:radial-gradient(circle closest-side at 50% 50%,#000 52%,rgba(0,0,0,.4) 76%,transparent 96%);
   opacity:calc(var(--prox) * var(--prox));
   filter:blur(calc((1 - var(--prox)) * 16px)) saturate(calc(.6 + var(--prox) * .5))
-         drop-shadow(0 0 34px rgba(64,224,208,calc(var(--prox) * .3)));
+         drop-shadow(0 0 34px rgba(192,132,252,calc(var(--prox) * .3)));
   transition:opacity .55s ease,filter .65s ease;
   animation:formDrift 8s ease-in-out infinite}
 @keyframes formDrift{0%,100%{transform:translate3d(0,-9px,0) rotate(-1deg)}
@@ -177,18 +182,22 @@ a{color:inherit}
 @media(max-width:900px){#cineScene{top:auto;bottom:12vh;transform:none}}
 #cineScene .sc{position:absolute;inset:auto 0 auto 0;opacity:0;transform:translateY(26px);
   transition:opacity .8s cubic-bezier(.23,1,.32,1),transform .9s cubic-bezier(.23,1,.32,1)}
-#cineScene .sc.on{opacity:1;transform:none}
+/* Until the cursor finds the scene, there is only nebula. The words share the
+   art's proximity law — squared, so they condense out of the gas rather than
+   switch on. The intro is the one exception: it must teach the scroll. */
+#cineScene .sc.on{opacity:calc(var(--prox) * var(--prox));transform:none;transition:transform .9s cubic-bezier(.23,1,.32,1)}
+#cineScene .sc.on.intro{opacity:1;transition:opacity .8s cubic-bezier(.23,1,.32,1),transform .9s cubic-bezier(.23,1,.32,1)}
 .sc .idx{font-size:10px;letter-spacing:.34em;text-transform:uppercase;font-weight:700;
-  color:rgba(64,224,208,.85);margin-bottom:16px;display:flex;align-items:center;gap:12px}
-.sc .idx::after{content:'';height:1px;flex:1;max-width:70px;background:rgba(64,224,208,.4)}
+  color:rgba(192,132,252,.85);margin-bottom:16px;display:flex;align-items:center;gap:12px}
+.sc .idx::after{content:'';height:1px;flex:1;max-width:70px;background:rgba(192,132,252,.4)}
 .sc h2{font-size:clamp(30px,4.2vw,54px);font-weight:800;letter-spacing:-.035em;line-height:1.0;
   color:#EDF4F2;text-transform:uppercase}
 .sc h2 em{font-style:normal;display:block;color:rgba(237,244,242,.28);
-  -webkit-text-stroke:1px rgba(64,224,208,.5)}
+  -webkit-text-stroke:1px rgba(192,132,252,.5)}
 .sc ul{list-style:none;margin-top:20px;display:flex;flex-direction:column;gap:8px}
 .sc li{font-size:12.5px;letter-spacing:.04em;line-height:1.5;color:rgba(196,214,210,.78);
   display:flex;gap:10px}
-.sc li::before{content:'→';color:rgba(64,224,208,.8);flex:none}
+.sc li::before{content:'→';color:rgba(192,132,252,.8);flex:none}
 .sc .hint{margin-top:22px;font-size:10px;letter-spacing:.26em;text-transform:uppercase;
   color:rgba(196,214,210,.4)}
 
@@ -197,25 +206,33 @@ a{color:inherit}
 .sc .payacts{margin-top:24px;display:flex;flex-direction:column;gap:14px;pointer-events:auto}
 .sc .payacts button{background:none;border:0;text-align:left;font:inherit;cursor:pointer;
   font-size:14px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:#EDF4F2;
-  padding:0 0 8px;border-bottom:1px solid rgba(64,224,208,.35);width:max-content;
+  padding:0 0 8px;border-bottom:1px solid rgba(192,132,252,.35);width:max-content;
   transition:color .25s,border-color .25s,letter-spacing .35s}
-.sc .payacts button:hover{color:#40E0D0;border-color:#40E0D0;letter-spacing:.26em}
+.sc .payacts button:hover{color:#C084FC;border-color:#C084FC;letter-spacing:.26em}
 .sc .payacts .sub{font-size:10.5px;letter-spacing:.05em;text-transform:none;font-weight:500;
   color:rgba(196,214,210,.5);margin-top:2px}
 .sc .qrnote{margin-top:14px;font-size:10px;line-height:1.5;color:rgba(196,214,210,.42);max-width:34ch}
+/* The real code. White housing so any camera reads it; it condenses out of
+   the nebula on the same proximity law as everything else. */
+.sc .qrpanel{margin-top:20px;background:#fff;border-radius:14px;padding:11px;width:158px;
+  box-shadow:0 10px 40px rgba(0,0,0,.55),0 0 60px rgba(192,132,252,calc(var(--prox) * .35))}
+.sc .qrpanel img{display:block;width:100%;height:auto}
+/* Buttons only become clickable once the scene has actually condensed. */
+.sc .payacts{pointer-events:none}
+#cine.lit .sc.on .payacts{pointer-events:auto}
 
 /* HUD: progress line + counter, and the way out. */
 #cineHud{position:absolute;left:7vw;bottom:26px;right:7vw;z-index:3;display:flex;
   align-items:center;gap:18px;pointer-events:none;
   font-size:10px;letter-spacing:.3em;text-transform:uppercase;color:rgba(196,214,210,.45)}
 #cineHud .line{flex:1;height:1px;background:rgba(196,214,210,.15);position:relative}
-#cineHud .line i{position:absolute;left:0;top:0;bottom:0;width:0;background:#40E0D0;
-  box-shadow:0 0 12px rgba(64,224,208,.8);transition:width .3s ease}
+#cineHud .line i{position:absolute;left:0;top:0;bottom:0;width:0;background:#C084FC;
+  box-shadow:0 0 12px rgba(192,132,252,.8);transition:width .3s ease}
 #cineSkip{position:absolute;right:22px;top:20px;z-index:4;background:none;
   border:0;border-bottom:1px solid rgba(196,214,210,.25);color:rgba(196,214,210,.55);
   padding:2px 0 6px;font:inherit;font-size:10px;letter-spacing:.28em;text-transform:uppercase;
   cursor:pointer}
-#cineSkip:hover{color:#EDF4F2;border-color:#40E0D0}
+#cineSkip:hover{color:#EDF4F2;border-color:#C084FC}
 #cineTrack{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;z-index:1;
   -webkit-overflow-scrolling:touch}
 
@@ -225,7 +242,7 @@ a{color:inherit}
 #portals.on{display:grid}
 #portals .wrap{width:min(720px,90vw)}
 #portals .k{font-size:10px;letter-spacing:.34em;text-transform:uppercase;font-weight:700;
-  color:rgba(64,224,208,.85);margin-bottom:26px}
+  color:rgba(192,132,252,.85);margin-bottom:26px}
 #portals a{display:block;text-decoration:none;padding:26px 0;cursor:pointer;
   border-top:1px solid rgba(196,214,210,.14);
   transition:padding-left .35s cubic-bezier(.23,1,.32,1)}
@@ -233,7 +250,7 @@ a{color:inherit}
 #portals a:hover{padding-left:22px}
 #portals b{display:block;font-size:clamp(26px,4vw,44px);font-weight:800;letter-spacing:-.03em;
   text-transform:uppercase;color:#EDF4F2;line-height:1.05}
-#portals a:hover b{color:#40E0D0}
+#portals a:hover b{color:#C084FC}
 #portals span{display:block;margin-top:6px;font-size:12px;letter-spacing:.04em;
   color:rgba(196,214,210,.55)}
 
@@ -245,13 +262,14 @@ a{color:inherit}
 <body>
 
 <div id="cine" aria-label="Academics preview">
+  <video id="cineVid" src="/assets/nebula-motion.mp4" muted loop playsinline autoplay aria-hidden="true"></video>
   <canvas id="cineNeb" aria-hidden="true"></canvas>
   <canvas id="cineStars" aria-hidden="true"></canvas>
   <div id="cineVeil" aria-hidden="true"></div>
   <canvas id="cineFx" aria-hidden="true"></canvas>
   <div id="cineArt" aria-hidden="true"></div>
   <div id="cineScene"></div>
-  <div id="cineHud"><span id="cineCount">01</span><div class="line"><i id="cineBar"></i></div><span id="cineTotal">17</span></div>
+  <div id="cineHud"><span id="cineCount">01</span><div class="line"><i id="cineBar"></i></div><span id="cineTotal">17</span><span id="cineFps">FPS --</span><span id="cineUtc">--:--:-- UTC</span></div>
   <button id="cineSkip" type="button">Skip</button>
   <div id="cineTrack"><div id="cineRunway"></div></div>
 </div>
@@ -422,6 +440,7 @@ a{color:inherit}
     var scenes = SCENES.map(function (sc, i2) {
       var box = el('div', 'sc');
       if (sc.kind === 'intro') {
+        box.classList.add('intro');
         box.appendChild(el('div', 'idx', 'TEN \u00b7 Academics'));
         var h0 = el('h2', null, 'Fifteen'); h0.appendChild(el('em', null, 'Domains'));
         box.appendChild(h0);
@@ -452,12 +471,15 @@ a{color:inherit}
           up.appendChild(el('li', null, t));
         });
         box.appendChild(up);
+        var qp = el('div', 'qrpanel');
+        var qi = new Image(); qi.src = '/assets/portal-payment-qr.png'; qi.alt = 'Payment QR code';
+        qp.appendChild(qi); box.appendChild(qp);
         var acts = el('div', 'payacts');
-        var b1 = el('button', null, 'Pay before completion'); b1.id = 'cinePayNow';
-        var b2 = el('button', null, 'Pay after completion');  b2.id = 'cineLater';
+        var b1 = el('button', null, 'Pay Now'); b1.id = 'cinePayNow';
+        var b2 = el('button', null, 'Payment after Completion');  b2.id = 'cineLater';
         acts.appendChild(b1); acts.appendChild(b2);
         box.appendChild(acts);
-        var note = el('div', 'qrnote', 'The code on the form is artwork. Your real UPI code takes its place and becomes scannable.');
+        var note = el('div', 'qrnote', 'Scan with any UPI app, or choose an option — either way your portals open.');
         note.id = 'cineQr';
         box.appendChild(note);
       }
@@ -474,6 +496,7 @@ a{color:inherit}
       scenes.forEach(function (b, k) { b.classList.toggle('on', k === n); });
       $('cineCount').textContent = String(n + 1).padStart(2, '0');
       cine.style.setProperty('--prox', 0);
+      cine.classList.remove('lit');
       /* Touch has no hover: an arriving scene materialises on its own, slowly,
          so the reveal still happens without a cursor. */
       if (coarse) {
@@ -482,6 +505,7 @@ a{color:inherit}
           if (active !== n || steps >= 20) { clearInterval(iv); return; }
           steps++;
           cine.style.setProperty('--prox', Math.min(1, steps / 20).toFixed(2));
+          cine.classList.toggle('lit', steps / 20 > 0.35);
         }, 90);
       }
     }
@@ -508,6 +532,7 @@ a{color:inherit}
             / (r.width * 0.9);
       prox = Math.max(0, 1 - d);
       cine.style.setProperty('--prox', prox.toFixed(3));
+      cine.classList.toggle('lit', prox > 0.35);
     }, { passive: true });
 
     /* ── background ────────────────────────────────────────────────────── */
@@ -516,7 +541,8 @@ a{color:inherit}
     var stars = [], dpr = 1, vw = 0, vh = 0;
     var plate = null, pctx = null, twinklers = [];
 
-    var GAS = [[70,130,235],[140,90,235],[64,224,208],[205,60,55],[60,190,200],[235,180,120]];
+    /* Gas palette matched to the animated plate: magenta, violet, blue, pink. */
+    var GAS = [[236,72,153],[167,139,250],[59,130,246],[255,110,199],[99,102,241],[216,180,254]];
     function paintNebula(w, h) {
       nctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       nctx.clearRect(0, 0, w, h);
@@ -821,6 +847,12 @@ a{color:inherit}
       if (!reduced) {
         var jx = parseFloat(cine.style.getPropertyValue('--jx') || 0);
         var jy = parseFloat(cine.style.getPropertyValue('--jy') || 0);
+        // The animated plate drifts with the same lean, gentler — it is the
+        // deepest layer, so it moves the least.
+        vid.style.transform = 'translate3d('
+          + (jx * 10 - prog * 16).toFixed(1) + 'px,'
+          + (jy * 7 - prog * 24).toFixed(1) + 'px,0) scale('
+          + (1.04 + prog * 0.03).toFixed(3) + ')';
         // The nebula never stands still: a slow time-based drift underlies the
         // cursor lean and the scroll travel, so the field breathes even when
         // nobody is moving anything.
@@ -840,8 +872,27 @@ a{color:inherit}
         }
       }
       drawFx();
+      // Terminal One HUD: live FPS + UTC readout, once a second.
+      frames++;
+      if (now - hudT0 > 1000) {
+        $('cineFps').textContent = 'FPS ' + frames;
+        $('cineUtc').textContent = new Date().toISOString().slice(11, 19) + ' UTC';
+        frames = 0; hudT0 = now;
+      }
       raf = requestAnimationFrame(frame);
     }
+
+    /* Ultra slow motion for the animated nebula plate. */
+    var vid = $('cineVid');
+    vid.playbackRate = 0.45;
+    vid.play().catch(function () {});
+    // Autoplay can be refused until the page hears from the user; the first
+    // touch of any kind starts the nebula.
+    function wake() { if (vid.paused && !reduced) { vid.play().catch(function () {}); } }
+    ['pointermove', 'pointerdown', 'scroll', 'keydown'].forEach(function (evn) {
+      window.addEventListener(evn, wake, { passive: true, once: true });
+    });
+    var frames = 0, hudT0 = performance.now();
 
     sizeCanvases();
     window.addEventListener('resize', sizeCanvases);
@@ -851,6 +902,7 @@ a{color:inherit}
     /* ── exits ─────────────────────────────────────────────────────────── */
     function leave() {
       cancelAnimationFrame(raf);
+      vid.pause();
       cine.classList.add('gone');
       document.body.style.overflow = '';
     }
@@ -881,7 +933,7 @@ a{color:inherit}
       if (cards[idx]) { cards[idx].click(); }
     });
 
-    if (reduced) { target = 1; prog = 1; }
+    if (reduced) { target = 1; prog = 1; vid.pause(); }
   })();
 
   /* ── the four Academics cards ───────────────────────────────────────── */
