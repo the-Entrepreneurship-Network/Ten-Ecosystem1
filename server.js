@@ -4399,7 +4399,7 @@ try{
     if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
-    const students = await Student.find().select('firstName lastName email whatsapp domain collegeName college employeeId tenure joiningDate createdAt').sort({ createdAt:-1 }).lean();
+    const students = await Student.find().select('firstName lastName email whatsapp domain collegeName college employeeId tenure joiningDate createdAt joinerType employeeIdOverride').sort({ createdAt:-1 }).lean();
     res.json({ success:true, students });
 }catch(error){ res.status(500).json({ message:"Error fetching students" }); }
 });
@@ -4674,7 +4674,7 @@ try{
         return res.status(401).json({ message:"Unauthorized" });
     }
     const domain = decodeURIComponent(req.params.domain);
-    const students = await Student.find({ domain }).select('firstName lastName email whatsapp domain collegeName college employeeId tenure joiningDate createdAt').sort({ createdAt:-1 });
+    const students = await Student.find({ domain }).select('firstName lastName email whatsapp domain collegeName college employeeId tenure joiningDate createdAt joinerType employeeIdOverride').sort({ createdAt:-1 });
     res.json({ success:true, students });
 }catch(error){ 
     console.log(error);
@@ -4821,7 +4821,7 @@ try{
 // student's domain, tenure, employeeId or payment status.
 app.get("/students", requireAdminAPI, async(req,res)=>{
     try{
-        const students = await Student.find().select('firstName lastName email whatsapp domain collegeName college employeeId tenure joiningDate createdAt').sort({ createdAt:-1 }).lean();
+        const students = await Student.find().select('firstName lastName email whatsapp domain collegeName college employeeId tenure joiningDate createdAt joinerType employeeIdOverride').sort({ createdAt:-1 }).lean();
         res.json(students);
     }catch(error){ res.status(500).json({ message:"Error fetching students" }); }
 });
