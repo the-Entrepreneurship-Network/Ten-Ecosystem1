@@ -1496,7 +1496,7 @@
 
               <div style="margin-bottom:14px;text-align:left;">
                 <label style="font-size:10px;color:#9aa4bf;display:block;margin-bottom:3px;font-weight:700;">WALLET LINKED MOBILE</label>
-                <input type="text" id="mkt-wallet-phone" placeholder="e.g. 9876543210" maxlength="10" style="width:100%;padding:9px 10px;background:#080c16;border:1px solid rgba(99,140,210,0.3);border-radius:8px;color:#fff;font-size:13px;box-sizing:border-box;">
+                <input type="text" id="mkt-wallet-phone" placeholder="Your 10-digit mobile number" maxlength="10" style="width:100%;padding:9px 10px;background:#080c16;border:1px solid rgba(99,140,210,0.3);border-radius:8px;color:#fff;font-size:13px;box-sizing:border-box;">
               </div>
 
               <button onclick="const ph=(document.getElementById('mkt-wallet-phone').value||'').trim(); if(ph.length<10){alert('Please enter valid 10-digit wallet mobile number.');return;} TenExtras.processProviderPayment('${esc(itemKey)}', '${esc(employeeId)}', ${coinsToUse}, 'wallet', 'WALLET-AUTH-' + ph)" style="width:100%;padding:12px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:8px;font-weight:800;font-size:14px;cursor:pointer;">
