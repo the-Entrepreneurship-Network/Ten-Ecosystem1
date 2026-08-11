@@ -134,7 +134,7 @@ a{color:inherit}
       --jx:0;--jy:0;--prox:0}
 #cine.gone{display:none}
 #cineNeb,#cineStars,#cineFx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-#cineNeb,#cineStars{will-change:transform;transition:transform 1.1s cubic-bezier(.23,1,.32,1)}
+#cineNeb,#cineStars{will-change:transform}
 #cineVeil{position:absolute;inset:0;pointer-events:none;
   background:radial-gradient(ellipse 78% 66% at 50% 46%,rgba(1,2,7,.12) 0%,rgba(1,2,7,.5) 66%,rgba(1,2,7,.78) 100%)}
 
@@ -154,13 +154,22 @@ a{color:inherit}
    gas. Proximity (--prox 0..1) lifts it slightly; the colour comes from the
    reveal canvas, which the cursor paints. Everything screen-blended and
    feathered so there is never an edge. */
-#cineArt .form img,#cineArt .form canvas{position:absolute;inset:0;width:100%;height:100%;
+/* No silhouette, no dark version. The form is part of the nebula - fully
+   invisible at rest - and materialises in its real colours as the cursor
+   comes near, then dissolves back when it leaves. Opacity is squared so the
+   approach feels organic rather than linear, and the blur clears last. */
+#cineArt .form img{position:absolute;inset:0;width:100%;height:100%;
   object-fit:contain;mix-blend-mode:screen;
   -webkit-mask-image:radial-gradient(circle closest-side at 50% 50%,#000 52%,rgba(0,0,0,.4) 76%,transparent 96%);
-  mask-image:radial-gradient(circle closest-side at 50% 50%,#000 52%,rgba(0,0,0,.4) 76%,transparent 96%)}
-#cineArt .form img{filter:grayscale(1) brightness(calc(.12 + var(--prox) * .13)) contrast(1.3);
-  transition:filter .5s ease}
-#cineArt .form canvas{filter:drop-shadow(0 0 30px rgba(64,224,208,calc(var(--prox) * .35)))}
+  mask-image:radial-gradient(circle closest-side at 50% 50%,#000 52%,rgba(0,0,0,.4) 76%,transparent 96%);
+  opacity:calc(var(--prox) * var(--prox));
+  filter:blur(calc((1 - var(--prox)) * 16px)) saturate(calc(.6 + var(--prox) * .5))
+         drop-shadow(0 0 34px rgba(64,224,208,calc(var(--prox) * .3)));
+  transition:opacity .55s ease,filter .65s ease;
+  animation:formDrift 8s ease-in-out infinite}
+@keyframes formDrift{0%,100%{transform:translate3d(0,-9px,0) rotate(-1deg)}
+                     50%{transform:translate3d(0,9px,0) rotate(1deg)}}
+@media (prefers-reduced-motion:reduce){#cineArt .form img{animation:none}}
 
 /* The words of each scene: Terminal One typography, left side. */
 #cineScene{position:absolute;left:7vw;top:50%;transform:translateY(-50%);z-index:2;
@@ -363,7 +372,7 @@ a{color:inherit}
         feat: ['Design patterns, testing and code review', 'Version control and CI as habits', 'How software is built in a team'] },
       { slug: 'flutter', name: 'Flutter', em: 'Development', tint: '#54C5F8', burst: 'shards',
         feat: ['One codebase, Android and iOS', 'State management and platform channels', 'A store-ready app as the final project'] },
-      { slug: 'mern',    name: 'MERN',    em: 'Stack', tint: '#00ED64', burst: 'lift',
+      { slug: 'mern',    name: 'MERN',    em: 'Stack Dev', tint: '#00ED64', burst: 'lift',
         feat: ['Mongo, Express, React and Node end to end', 'Auth, payments and deployment', 'The full-stack track, and the busiest one'] },
       { slug: 'ai',      name: 'Artificial', em: 'Intelligence', tint: '#8B5CF6', burst: 'neural',
         feat: ['Neural networks from the maths up', 'Training, evaluation and honest metrics', 'Where models fail, and how you find out'] },
@@ -373,9 +382,9 @@ a{color:inherit}
         feat: ['Threat modelling and secure design', 'Web, network and application security', 'Findings written the way a client reads them'] },
       { slug: 'aws',     name: 'DevOps',  em: 'with AWS', tint: '#FF9900', burst: 'deploy',
         feat: ['Pipelines, containers, infrastructure as code', 'The AWS services you will be asked about', 'Shipping without breaking what runs'] },
-      { slug: 'biz',     name: 'Business', em: 'Development', tint: '#F5B301', burst: 'arrows',
+      { slug: 'biz',     name: 'Business', em: 'Dev', tint: '#F5B301', burst: 'arrows',
         feat: ['Pipeline, outreach and qualification', 'Pricing and proposals that close', 'Numbers you can stand behind'] },
-      { slug: 'hr',      name: 'Human',   em: 'Resources', tint: '#7EA6FF', burst: 'network',
+      { slug: 'hr',      name: 'HR',      em: '', tint: '#7EA6FF', burst: 'network',
         feat: ['Hiring, onboarding and retention', 'Policy that survives contact with people', 'Difficult conversations, handled properly'] },
       { slug: 'vc',      name: 'Venture', em: 'Capital', tint: '#F3C64A', burst: 'coins',
         feat: ['How rounds, terms and dilution work', 'Diligence and building a thesis', 'Reading a startup like an investor'] },
@@ -397,72 +406,28 @@ a{color:inherit}
        colour clipped to a mask the cursor paints. The difference is the idle
        state - brightness .12, sunk into the gas - and that only the active
        scene's form exists on screen. */
-    var REV = 220;
     var forms = SCENES.map(function (sc) {
       var wrap = el('div', 'form');
       if (sc.kind === 'intro') { art.appendChild(wrap); return { node: wrap }; }
-      var slug = sc.kind === 'pay' ? null : sc.d.slug;
-      var src = sc.kind === 'pay' ? '/img/domains/qr-housing.webp' : ART + slug + '.webp';
-      var base = new Image(); base.alt = sc.kind === 'pay' ? 'Payment' : sc.d.name;
-      var rev = document.createElement('canvas');
-      wrap.appendChild(base); wrap.appendChild(rev);
-      art.appendChild(wrap);
-      var f = { node: wrap, base: base, rev: rev, ready: false, covered: 0, done: false,
-                dirty: false, queued: false };
-      base.onload = function () {
-        f.rev.width = REV; f.rev.height = REV;
-        f.ctx = f.rev.getContext('2d');
-        f.mask = document.createElement('canvas');
-        f.mask.width = REV; f.mask.height = REV;
-        f.mctx = f.mask.getContext('2d');
-        f.ready = true;
-      };
+      var src = sc.kind === 'pay' ? '/img/domains/qr-housing.webp' : ART + sc.d.slug + '.webp';
+      var base = new Image();
+      base.alt = sc.kind === 'pay' ? 'Payment' : (sc.d.name + ' ' + sc.d.em).trim();
       base.src = src;
-      return f;
+      wrap.appendChild(base);
+      art.appendChild(wrap);
+      return { node: wrap, base: base };
     });
-
-    function redraw(f) {
-      var c = f.ctx;
-      c.clearRect(0, 0, REV, REV);
-      var iw = f.base.naturalWidth, ih = f.base.naturalHeight;
-      var sc2 = Math.min(REV / iw, REV / ih);
-      c.drawImage(f.base, (REV - iw * sc2) / 2, (REV - ih * sc2) / 2, iw * sc2, ih * sc2);
-      c.globalCompositeOperation = 'destination-in';
-      c.drawImage(f.mask, 0, 0);
-      c.globalCompositeOperation = 'source-over';
-    }
-    function bloom(f, nx, ny, strength) {
-      if (!f.ready || f.done) { return; }
-      var x = nx * REV, y = ny * REV, mc = f.mctx;
-      [[REV * 0.26, 0.5 * strength], [REV * 0.5, 0.13 * strength]].forEach(function (d) {
-        var g = mc.createRadialGradient(x, y, 0, x, y, d[0]);
-        g.addColorStop(0, 'rgba(0,0,0,' + d[1].toFixed(3) + ')');
-        g.addColorStop(0.6, 'rgba(0,0,0,' + (d[1] * 0.4).toFixed(3) + ')');
-        g.addColorStop(1, 'rgba(0,0,0,0)');
-        mc.fillStyle = g;
-        mc.beginPath(); mc.arc(x, y, d[0], 0, 6.2832); mc.fill();
-      });
-      f.covered++;
-      if (f.covered > 30) {
-        mc.fillStyle = '#000'; mc.fillRect(0, 0, REV, REV);
-        f.done = true; f.base.style.visibility = 'hidden';
-      }
-      if (!f.queued) {
-        f.queued = true;
-        requestAnimationFrame(function () { f.queued = false; redraw(f); });
-      }
-    }
 
     /* ── scene text ────────────────────────────────────────────────────── */
     var scenes = SCENES.map(function (sc, i2) {
       var box = el('div', 'sc');
       if (sc.kind === 'intro') {
         box.appendChild(el('div', 'idx', 'TEN \u00b7 Academics'));
-        var h0 = el('h2', null, 'Fourteen'); h0.appendChild(el('em', null, 'Domains'));
+        var h0 = el('h2', null, 'Fifteen'); h0.appendChild(el('em', null, 'Domains'));
         box.appendChild(h0);
         var u0 = el('ul');
         ['One continuous journey. Scroll to travel.',
-         'Move the cursor near a form to reveal it.',
+         'They are hidden in the nebula. The cursor finds them.',
          'Everything here is inside the portal you already use.'].forEach(function (t) {
           u0.appendChild(el('li', null, t));
         });
@@ -470,12 +435,13 @@ a{color:inherit}
         box.appendChild(el('div', 'hint', 'Scroll to begin'));
       } else if (sc.kind === 'domain') {
         box.appendChild(el('div', 'idx', String(i2).padStart(2, '0') + ' \u2014 Domain'));
-        var h = el('h2', null, sc.d.name); h.appendChild(el('em', null, sc.d.em));
+        var h = el('h2', null, sc.d.name);
+        if (sc.d.em) { h.appendChild(el('em', null, sc.d.em)); }
         box.appendChild(h);
         var u = el('ul');
         sc.d.feat.forEach(function (t) { u.appendChild(el('li', null, t)); });
         box.appendChild(u);
-        box.appendChild(el('div', 'hint', coarse ? 'Tap the form to reveal it' : 'Bring the cursor near'));
+        box.appendChild(el('div', 'hint', coarse ? 'It will find you' : 'Bring the cursor near'));
       } else {
         box.appendChild(el('div', 'idx', 'Unlock'));
         var hp = el('h2', null, 'One'); hp.appendChild(el('em', null, 'Payment'));
@@ -508,15 +474,15 @@ a{color:inherit}
       scenes.forEach(function (b, k) { b.classList.toggle('on', k === n); });
       $('cineCount').textContent = String(n + 1).padStart(2, '0');
       cine.style.setProperty('--prox', 0);
-      /* Touch has no hover: when a scene arrives on a coarse pointer, the form
-         blooms itself slowly from the centre, so the reveal still happens. */
-      var f = forms[n];
-      if (coarse && f && f.base && !f.done) {
-        var k2 = 0;
+      /* Touch has no hover: an arriving scene materialises on its own, slowly,
+         so the reveal still happens without a cursor. */
+      if (coarse) {
+        var steps = 0;
         var iv = setInterval(function () {
-          if (active !== n || f.done || k2++ > 26) { clearInterval(iv); return; }
-          bloom(f, 0.5 + (Math.random() - 0.5) * 0.5, 0.5 + (Math.random() - 0.5) * 0.5, 0.8);
-        }, 130);
+          if (active !== n || steps >= 20) { clearInterval(iv); return; }
+          steps++;
+          cine.style.setProperty('--prox', Math.min(1, steps / 20).toFixed(2));
+        }, 90);
       }
     }
 
@@ -529,7 +495,7 @@ a{color:inherit}
     /* Cursor: proximity to the active form lifts it out of camouflage and
        blooms colour where the pointer sits. No hitbox - strength falls off
        with distance, which is what makes the edge impossible to find. */
-    var px = 0, py = 0;
+    var px = 0, py = 0, prox = 0;
     track.addEventListener('pointermove', function (e) {
       px = e.clientX; py = e.clientY;
       cine.style.setProperty('--jx', ((e.clientX / cine.clientWidth) * 2 - 1).toFixed(3));
@@ -538,24 +504,11 @@ a{color:inherit}
       if (!f || !f.base) { return; }
       var r = f.node.getBoundingClientRect();
       if (!r.width) { return; }
-      var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-      var d = Math.hypot(e.clientX - cx, e.clientY - cy) / (r.width * 0.75);
-      var prox = Math.max(0, 1 - d);
+      var d = Math.hypot(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2))
+            / (r.width * 0.9);
+      prox = Math.max(0, 1 - d);
       cine.style.setProperty('--prox', prox.toFixed(3));
-      if (prox > 0.12) {
-        bloom(f, (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height, prox);
-      }
     }, { passive: true });
-    track.addEventListener('pointerdown', function (e) {
-      var f = forms[active];
-      if (!f || !f.base) { return; }
-      var r = f.node.getBoundingClientRect();
-      if (!r.width) { return; }
-      for (var k3 = 0; k3 < 6; k3++) {
-        bloom(f, (e.clientX - r.left) / r.width + (Math.random() - 0.5) * 0.2,
-                 (e.clientY - r.top) / r.height + (Math.random() - 0.5) * 0.2, 1);
-      }
-    });
 
     /* ── background ────────────────────────────────────────────────────── */
     var neb = $('cineNeb'), nctx = neb.getContext('2d');
@@ -854,8 +807,7 @@ a{color:inherit}
       fxc.globalAlpha = 1;
     }
     track.addEventListener('click', function () {
-      var f = forms[active];
-      if (f && f.covered > 4) { fire(SCENES[active]); }
+      if (prox > 0.3 || coarse) { fire(SCENES[active]); }
     });
 
     /* ── frame ─────────────────────────────────────────────────────────── */
@@ -869,10 +821,17 @@ a{color:inherit}
       if (!reduced) {
         var jx = parseFloat(cine.style.getPropertyValue('--jx') || 0);
         var jy = parseFloat(cine.style.getPropertyValue('--jy') || 0);
-        neb.style.transform = 'translate3d(' + (jx * 24 - prog * 40).toFixed(1) + 'px,'
-          + (jy * 16 - prog * 90).toFixed(1) + 'px,0) scale(' + (1.12 + prog * 0.06).toFixed(3) + ')';
-        starCv.style.transform = 'translate3d(' + (jx * -12 + prog * 18).toFixed(1) + 'px,'
-          + (jy * -8 - prog * 40).toFixed(1) + 'px,0) scale(1.06)';
+        // The nebula never stands still: a slow time-based drift underlies the
+        // cursor lean and the scroll travel, so the field breathes even when
+        // nobody is moving anything.
+        var t2 = now / 1000;
+        neb.style.transform = 'translate3d('
+          + (Math.sin(t2 * 0.05) * 14 + jx * 24 - prog * 40).toFixed(1) + 'px,'
+          + (Math.cos(t2 * 0.04) * 10 + jy * 16 - prog * 90).toFixed(1) + 'px,0) scale('
+          + (1.13 + Math.sin(t2 * 0.03) * 0.012 + prog * 0.06).toFixed(3) + ')';
+        starCv.style.transform = 'translate3d('
+          + (Math.sin(t2 * 0.04 + 2) * -8 + jx * -12 + prog * 18).toFixed(1) + 'px,'
+          + (Math.cos(t2 * 0.05 + 1) * -6 + jy * -8 - prog * 40).toFixed(1) + 'px,0) scale(1.08)';
         sctx.clearRect(0, 0, vw, vh);
         sctx.drawImage(plate, 0, 0, vw, vh);
         for (var k = 0; k < twinklers.length; k++) {
