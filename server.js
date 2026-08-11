@@ -9774,11 +9774,28 @@ server.listen(PORT, "0.0.0.0", ()=>{
     //
     // ENABLE_AUTOMATION_CRON=false turns them off (useful when several
     // instances share one database and only one should run the jobs).
-    // Align the employee-ID counter with IDs already issued, so the first ID
-    // generated after this deploy cannot collide with an existing student.
-    initEmployeeIdCounter().catch((err) => {
-        console.error("[employeeId] Counter initialisation failed:", err.message);
-    });
+    // Align the employee-ID counter with the IDs already issued.
+    //
+    // This used to run right here, in the listen callback — which fires as soon
+    // as the socket is bound, before mongoose.connect() has resolved. The scan
+    // for the highest existing ID could therefore come back empty and leave the
+    // counter at zero, and new students were issued 1004, 1005, 1006 while real
+    // students already held 1758 and 1759.
+    //
+    // Wait for the connection instead. `once` rather than `on`, so a later
+    // reconnect does not rescan; generateEmployeeId re-aligns by itself if it
+    // ever meets a taken ID, which covers everything this misses.
+    const alignEmployeeIdCounter = () => {
+        initEmployeeIdCounter().catch((err) => {
+            console.error("[employeeId] Counter initialisation failed:", err.message);
+        });
+    };
+
+    if (mongoose.connection.readyState === 1) {
+        alignEmployeeIdCounter();
+    } else {
+        mongoose.connection.once("connected", alignEmployeeIdCounter);
+    }
 
     // Under PM2 cluster mode every worker runs this file, so N workers would
     // each schedule the same jobs against the same database — N offer letters,
