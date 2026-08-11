@@ -473,11 +473,21 @@
             <div>
               <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Internship Duration / Tenure <span class="text-red-500">*</span></label>
               <select id="stu_tenure" name="tenure" class="stu-req w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]">
+                <!-- The six tenures the rest of the system knows about, in order.
+                     Three were missing here — 1 Week, 15 Days and 45 Days — and
+                     "2 Months" was offered although normalizeTenure() rejects it,
+                     so anyone who chose it had their registration refused with
+                     "Please select a valid internship tenure" and no way to see
+                     why. The fee is shown because it decides the choice, and
+                     students were previously asked to pay only after they had
+                     already registered and been given an employee ID. -->
                 <option value="">Select Tenure Duration</option>
-                <option value="1 Month" selected>1 Month</option>
-                <option value="2 Months">2 Months</option>
-                <option value="3 Months">3 Months</option>
-                <option value="6 Months">6 Months</option>
+                <option value="1 Week">1 Week — crash course (₹2000)</option>
+                <option value="15 Days">15 Days — crash course (₹1500)</option>
+                <option value="1 Month">1 Month — crash course (₹1000)</option>
+                <option value="45 Days">45 Days — free</option>
+                <option value="3 Months">3 Months — free</option>
+                <option value="6 Months">6 Months — free</option>
               </select>
               <p class="text-xs text-slate-500 mt-2">Selected tenure dictates certificate eligibility and milestone review schedule.</p>
             </div>
