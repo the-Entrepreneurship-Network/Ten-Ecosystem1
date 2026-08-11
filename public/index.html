@@ -18,9 +18,17 @@
 html, body { height: 100%; overflow: hidden; }
 
 body {
+  /* column, not the default row.
+     The portal panel used to be the only child, so a row that centred it was
+     fine. The sections added below it then became flex ITEMS beside it, and the
+     page rendered as narrow parallel columns — hero, steps, domains and FAQ all
+     squeezed side by side. They stack now.
+     justify-content is flex-start rather than center because centring a column
+     taller than the viewport clips the top, which cannot be scrolled back to. */
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   padding: 24px;
   position: relative;
   font-family: var(--ten-font-body);
@@ -509,7 +517,7 @@ body {
   @media (max-width:640px){ .ten-sec{padding:40px 18px;} .ten-sec h2{font-size:22px;} }
 </style>
 
-<section class="ten-sec">
+<section class="ten-sec" style="width:100%">
   <h2>How the internship works</h2>
   <p class="lead">Four steps, from signing up to holding a certificate.</p>
   <div class="ten-steps">
@@ -524,7 +532,7 @@ body {
   </div>
 </section>
 
-<section class="ten-sec">
+<section class="ten-sec" style="width:100%">
   <h2>Domains you can intern in</h2>
   <p class="lead" id="domainLead">Every domain has its own coordinator and its own task track.</p>
   <!-- Rendered here as well as fetched. If /api/public/stats is unreachable
@@ -549,7 +557,7 @@ body {
   </div>
 </section>
 
-<section class="ten-sec">
+<section class="ten-sec" style="width:100%">
   <div class="ten-verify">
     <h2 style="margin-bottom:6px;">Verify a TEN certificate</h2>
     <p class="lead" style="margin-bottom:0;">
@@ -564,7 +572,7 @@ body {
   </div>
 </section>
 
-<section class="ten-sec ten-faq">
+<section class="ten-sec ten-faq" style="width:100%">
   <h2>Common questions</h2>
   <p class="lead">The things people ask us most.</p>
 
