@@ -8461,10 +8461,15 @@ if (!CODE_RUNNER_ENABLED) {
 
 function requireCodeRunner(req, res, next) {
     if (!CODE_RUNNER_ENABLED) {
+        // `message` as well as `error`. The terminal button reads
+        // `d.message || "Could not create workspace"`, so a refusal that set
+        // only `error` reached the student as "Failed — Could not create
+        // workspace": a crash, for something that is switched off on purpose.
         return res.status(503).json({
             success: false,
             output: "",
             error: "The code runner is disabled on this server.",
+            message: "The coding terminal is turned off at the moment. Your code and submissions are unaffected — ask your coordinator when it will be available.",
             executionTime: 0
         });
     }

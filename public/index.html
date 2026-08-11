@@ -522,15 +522,14 @@ body {
 
 
   <script>
+    // Opens the eight-level position picker below.
+    //
+    // This used to answer with "HR Portal Under Construction", which was wrong:
+    // hr-portal.html is the largest page in the product, login.html sends HR
+    // staff straight to it, and eight accounts sign in through it every day. The
+    // notice turned a working portal into a dead end on the landing page.
     function openHrPositionModal() {
-      Swal.fire({
-        icon: 'info',
-        title: '🚧 HR Portal Under Construction',
-        text: 'The HR Management Portal is currently under development. Active portals include Student, Mentor, and Coordinator.',
-        background: '#0e1428',
-        color: '#F0EEE8',
-        confirmButtonColor: '#D4AF37'
-      });
+      document.getElementById('hrPositionModal').style.display = 'flex';
     }
     function closeHrPositionModal() {
       document.getElementById('hrPositionModal').style.display = 'none';
