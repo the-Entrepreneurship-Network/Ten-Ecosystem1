@@ -688,7 +688,7 @@ async function apiFetch(path, opts = {}) {
       localStorage.removeItem('v2StudentData');
     } catch (_) { /* private mode — nothing to clear */ }
     const back = encodeURIComponent(location.pathname + location.search);
-    location.replace('/student-login.html?next=' + back);
+    location.replace('/login.html?next=' + back);
     // Never resolves: the navigation is already underway, and resolving would
     // let the caller render an error dialog over a page that is going away.
     return new Promise(() => {});
