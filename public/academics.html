@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>TEN — Academics</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800;900&display=swap" rel="stylesheet">
 <style>
 /* Tokens are v2-tasks.html's, so Academics and My Task Journey are the same
    product to a student rather than two that happen to share a logo. */
@@ -126,169 +127,113 @@ a{color:inherit}
        border:1px dashed var(--border-strong);border-radius:var(--radius-md)}
 @media (prefers-reduced-motion:reduce){.sheet{animation:none}.card{transition:none}}
 
-/* ── cinematic entry — the journey ────────────────────────────
-   One continuous travel through the nebula. No cards, no cluster, no boxes:
-   each domain is a camouflaged form that comes into view as the viewport
-   passes it, and only gains its colour where the cursor comes near. */
-#cine{position:fixed;inset:0;z-index:60;background:#010207;overflow:hidden;
-      --jx:0;--jy:0;--prox:0}
-#cine.gone{display:none}
-#cineNeb,#cineStars,#cineFx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-#cineNeb,#cineStars{will-change:transform}
-/* The real nebula: an animated plate under everything, in ultra slow motion.
-   The painted canvas above only adds parallax depth and colour variation. */
-#cineVid{position:absolute;inset:-4%;width:108%;height:108%;object-fit:cover;
-  pointer-events:none;will-change:transform;filter:saturate(1.12) brightness(.95)}
-#cineNeb{opacity:.35;mix-blend-mode:screen}
-#cineVeil{position:absolute;inset:0;pointer-events:none;
-  background:radial-gradient(ellipse 78% 66% at 50% 46%,rgba(1,2,7,.12) 0%,rgba(1,2,7,.5) 66%,rgba(1,2,7,.78) 100%)}
+/* ── the preview: white studio page, noth.in structure ──────────────────
+   The nebula journey is gone. This is the Nothing-dashboard clone: white
+   page, one giant textured word, ink blobs, alternating work sections,
+   dark interludes, black footer whose word runs from the cursor. */
+#noth{position:fixed;inset:0;z-index:60;background:#fff;color:#0a0a0a;overflow-y:auto;overflow-x:hidden;
+  font-family:'Inter Tight','Inter',Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+#noth.gone{display:none}
+.nh-head{position:sticky;top:0;z-index:9;display:flex;justify-content:space-between;align-items:flex-start;
+  padding:26px 34px;mix-blend-mode:difference;color:#fff;pointer-events:none}
+.nh-head .mark{font-weight:900;font-size:22px;letter-spacing:-.02em}
+.nh-head .menu{pointer-events:auto;background:none;border:0;color:inherit;font:inherit;font-weight:800;
+  font-size:12px;letter-spacing:.14em;cursor:pointer}
+.nh-hero{min-height:100vh;display:flex;flex-direction:column;justify-content:space-between;padding:0 34px 16px;position:relative}
+.nh-tag{font-size:clamp(18px,2vw,26px);line-height:1.25;font-weight:600;max-width:460px;padding-top:8px}
+.nh-pill{display:inline-flex;align-items:center;gap:10px;margin-top:26px;padding:14px 26px;border:1.5px solid currentColor;
+  border-radius:999px;background:none;font:inherit;font-weight:800;font-size:12px;letter-spacing:.16em;cursor:pointer;
+  text-decoration:none;color:#0a0a0a;width:max-content;transition:background .25s,color .25s}
+.nh-pill:hover{background:#0a0a0a;color:#fff;border-color:#0a0a0a}
+.nh-word{position:relative;width:100%;margin-top:16px}
+.nh-word svg{display:block;width:100%;height:auto}
+.nh-word svg text{font-family:'Inter Tight',Arial,sans-serif;font-weight:900;letter-spacing:-.02em}
+#nhBlobs{position:absolute;left:0;right:0;top:-14%;height:128%;width:100%;pointer-events:none}
+.nh-strip{display:flex;justify-content:space-between;font-weight:700;font-size:13px;padding-top:14px}
+.nh-strip a{text-decoration:none;color:inherit;margin-left:18px}
+.nh-sec{padding:13vh 34px;display:grid;grid-template-columns:0.8fr 1fr 1.2fr;gap:38px;align-items:center;background:#fff}
+.nh-sec .lbl{font-size:15px;font-weight:600}
+.nh-sec p{font-size:clamp(17px,1.6vw,22px);line-height:1.45;font-weight:600;max-width:24em}
+.nh-tile{border-radius:14px;overflow:hidden;display:block;width:100%;box-shadow:0 30px 70px rgba(0,0,0,.18)}
+.nh-tile img,.nh-tile video{display:block;width:100%;height:auto}
+.nh-cap{font-size:14px;font-weight:600;margin-top:12px;color:#333}
+.nh-sec.flip .lbl{order:3;text-align:right}
+.nh-sec.flip .tilebox{order:-1}
+@media(max-width:900px){.nh-sec{grid-template-columns:1fr;gap:20px}
+  .nh-sec.flip .tilebox{order:0}.nh-sec.flip .lbl{order:0;text-align:left}}
+.nh-dark{background:#050505;color:#fff}
+.nh-big{padding:22vh 34px;font-size:clamp(40px,7vw,96px);font-weight:800;letter-spacing:-.03em;line-height:1.02}
+.nh-heart{height:230vh;position:relative}
+.nh-heart .stick{position:sticky;top:0;height:100vh;overflow:hidden}
+.nh-heart .tile{position:absolute;left:0;top:0;width:58px;height:58px;border-radius:13px;overflow:hidden;will-change:transform}
+.nh-heart .tile img{width:100%;height:100%;object-fit:cover}
+.nh-heart .cap{position:absolute;left:34px;bottom:30px;font-size:13px;font-weight:700;letter-spacing:.14em;opacity:.7}
+.nh-foot{background:#050505;color:#fff;padding:14vh 34px 10px;position:relative}
+.nh-foot h3{font-size:clamp(38px,5vw,72px);font-weight:800;letter-spacing:-.02em;line-height:1.05}
+.nh-foot .pills{display:flex;gap:14px;margin:34px 0 7vh;flex-wrap:wrap}
+.nh-foot .nh-pill{color:#fff}
+.nh-foot .nh-pill:hover{background:#fff;color:#0a0a0a;border-color:#fff}
+.nh-links{position:absolute;right:34px;top:14vh;font-size:clamp(18px,1.8vw,26px);font-weight:600;line-height:1.5}
+.nh-links a{display:block;color:#fff;text-decoration:none}
+.nh-links a:hover{opacity:.7}
+.nh-flee{font-weight:900;font-size:clamp(60px,12vw,185px);letter-spacing:-.02em;line-height:.95;
+  display:flex;justify-content:space-between;margin-top:5vh;user-select:none}
+.nh-flee span{display:inline-block;transition:transform .6s cubic-bezier(.16,1,.3,1)}
+.nh-credits{display:flex;justify-content:space-between;gap:12px;font-size:12px;font-weight:600;opacity:.75;padding:26px 0 18px;flex-wrap:wrap}
+@media (prefers-reduced-motion:reduce){.nh-flee span{transition:none}}
 
-/* The stage: one camouflaged form at a time, centre-right, cross-faded as
-   the journey passes it. */
-#cineArt{position:absolute;right:8vw;top:50%;transform:translateY(-50%);
-  width:min(40vw,470px);aspect-ratio:1;pointer-events:none}
-@media(max-width:900px){#cineArt{right:50%;transform:translate(50%,-50%);width:min(70vw,330px);opacity:.9}}
-/* Opacity only - no transform. A transform creates a stacking context, which
-   isolates the children's mix-blend-mode from the nebula behind, and the
-   render's black frame then paints literally as a dark box instead of
-   dissolving. The camouflage depends on the blend reaching the background. */
-#cineArt .form{position:absolute;inset:0;opacity:0;
-  transition:opacity 1.2s cubic-bezier(.23,1,.32,1)}
-#cineArt .form.on{opacity:1}
-/* Camouflage: the dark base is barely there — highlights only, sunk into the
-   gas. Proximity (--prox 0..1) lifts it slightly; the colour comes from the
-   reveal canvas, which the cursor paints. Everything screen-blended and
-   feathered so there is never an edge. */
-/* No silhouette, no dark version. The form is part of the nebula - fully
-   invisible at rest - and materialises in its real colours as the cursor
-   comes near, then dissolves back when it leaves. Opacity is squared so the
-   approach feels organic rather than linear, and the blur clears last. */
-/* Nothing-dashboard reveal: the material blooms where the cursor IS, not
-   everywhere at once. The mask follows the pointer (--mx/--my are % inside
-   the art box), so colour appears under the hand and trails it, and the
-   squared global proximity still governs how much can appear at all. */
-#cineArt .form img{position:absolute;inset:0;width:100%;height:100%;
-  object-fit:contain;mix-blend-mode:screen;
-  -webkit-mask-image:radial-gradient(ellipse 46% 46% at var(--mx,50%) var(--my,50%),#000 34%,rgba(0,0,0,.45) 66%,transparent 92%);
-  mask-image:radial-gradient(ellipse 46% 46% at var(--mx,50%) var(--my,50%),#000 34%,rgba(0,0,0,.45) 66%,transparent 92%);
-  opacity:calc(var(--prox) * var(--prox));
-  filter:blur(calc((1 - var(--prox)) * 16px)) saturate(calc(.6 + var(--prox) * .5))
-         drop-shadow(0 0 34px rgba(192,132,252,calc(var(--prox) * .3)));
-  transition:opacity .55s ease,filter .65s ease;
-  animation:formDrift 8s ease-in-out infinite}
-@keyframes formDrift{0%,100%{transform:translate3d(0,-9px,0) rotate(-1deg)}
-                     50%{transform:translate3d(0,9px,0) rotate(1deg)}}
-@media (prefers-reduced-motion:reduce){#cineArt .form img{animation:none}}
-
-/* The words of each scene: Terminal One typography, left side. */
-#cineScene{position:absolute;left:7vw;top:50%;transform:translateY(-50%);z-index:2;
-  width:min(430px,84vw);pointer-events:none}
-@media(max-width:900px){#cineScene{top:auto;bottom:12vh;transform:none}}
-/* Terminal One travel: the journey moves SIDEWAYS. A scene waits to the
-   right, slides to centre while active, and exits left as the next arrives.
-   Scroll is the engine; the motion reads as lateral navigation. */
-#cineScene .sc{position:absolute;inset:auto 0 auto 0;opacity:0;transform:translateX(90px);
-  transition:opacity .8s cubic-bezier(.23,1,.32,1),transform .9s cubic-bezier(.23,1,.32,1)}
-#cineScene .sc.past{transform:translateX(-90px)}
-/* Until the cursor finds the scene, there is only nebula. The words share the
-   art's proximity law — squared, so they condense out of the gas rather than
-   switch on. The intro is the one exception: it must teach the scroll. */
-#cineScene .sc.on{opacity:calc(var(--prox) * var(--prox));transform:none;transition:transform .9s cubic-bezier(.23,1,.32,1)}
-#cineScene .sc.on.intro{opacity:1;transition:opacity .8s cubic-bezier(.23,1,.32,1),transform .9s cubic-bezier(.23,1,.32,1)}
-.sc .idx{font-size:10px;letter-spacing:.34em;text-transform:uppercase;font-weight:700;
-  color:rgba(192,132,252,.85);margin-bottom:16px;display:flex;align-items:center;gap:12px}
-.sc .idx::after{content:'';height:1px;flex:1;max-width:70px;background:rgba(192,132,252,.4)}
-.sc h2{font-size:clamp(30px,4.2vw,54px);font-weight:800;letter-spacing:-.035em;line-height:1.0;
-  color:#EDF4F2;text-transform:uppercase}
-.sc h2 em{font-style:normal;display:block;color:rgba(237,244,242,.28);
-  -webkit-text-stroke:1px rgba(192,132,252,.5)}
-.sc ul{list-style:none;margin-top:20px;display:flex;flex-direction:column;gap:8px}
-.sc li{font-size:12.5px;letter-spacing:.04em;line-height:1.5;color:rgba(196,214,210,.78);
-  display:flex;gap:10px}
-.sc li::before{content:'→';color:rgba(192,132,252,.8);flex:none}
-.sc .hint{margin-top:22px;font-size:10px;letter-spacing:.26em;text-transform:uppercase;
-  color:rgba(196,214,210,.4)}
-
-/* Payment scene: no card. The QR housing is camouflaged like the domains,
-   and the actions are bare typographic controls. */
-.sc .payacts{margin-top:24px;display:flex;flex-direction:column;gap:14px;pointer-events:auto}
-.sc .payacts button{background:none;border:0;text-align:left;font:inherit;cursor:pointer;
-  font-size:14px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:#EDF4F2;
-  padding:0 0 8px;border-bottom:1px solid rgba(192,132,252,.35);width:max-content;
-  transition:color .25s,border-color .25s,letter-spacing .35s}
-.sc .payacts button:hover{color:#C084FC;border-color:#C084FC;letter-spacing:.26em}
-.sc .payacts .sub{font-size:10.5px;letter-spacing:.05em;text-transform:none;font-weight:500;
-  color:rgba(196,214,210,.5);margin-top:2px}
-.sc .qrnote{margin-top:14px;font-size:10px;line-height:1.5;color:rgba(196,214,210,.42);max-width:34ch}
-/* The real code. White housing so any camera reads it; it condenses out of
-   the nebula on the same proximity law as everything else. */
-.sc .qrpanel{margin-top:20px;background:#fff;border-radius:14px;padding:11px;width:158px;
-  box-shadow:0 10px 40px rgba(0,0,0,.55),0 0 60px rgba(192,132,252,calc(var(--prox) * .35))}
-.sc .qrpanel img{display:block;width:100%;height:auto}
-/* Buttons only become clickable once the scene has actually condensed. */
-.sc .payacts{pointer-events:none}
-#cine.lit .sc.on .payacts{pointer-events:auto}
-
-/* HUD: progress line + counter, and the way out. */
-#cineHud{position:absolute;left:7vw;bottom:26px;right:7vw;z-index:3;display:flex;
-  align-items:center;gap:18px;pointer-events:none;
-  font-size:10px;letter-spacing:.3em;text-transform:uppercase;color:rgba(196,214,210,.45)}
-#cineHud .line{flex:1;height:1px;background:rgba(196,214,210,.15);position:relative}
-#cineHud .line i{position:absolute;left:0;top:0;bottom:0;width:0;background:#C084FC;
-  box-shadow:0 0 12px rgba(192,132,252,.8);transition:width .3s ease}
-#cineSkip{position:absolute;right:22px;top:20px;z-index:4;background:none;
-  border:0;border-bottom:1px solid rgba(196,214,210,.25);color:rgba(196,214,210,.55);
-  padding:2px 0 6px;font:inherit;font-size:10px;letter-spacing:.28em;text-transform:uppercase;
-  cursor:pointer}
-#cineSkip:hover{color:#EDF4F2;border-color:#C084FC}
-#cineTrack{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;z-index:1;
-  -webkit-overflow-scrolling:touch}
-
-/* The three-portal landing after a payment action. Clean, dark, typographic. */
-#portals{position:fixed;inset:0;z-index:70;background:#02040A;display:none;
-  place-items:center;overflow:hidden}
-#portals.on{display:grid}
-#portals .wrap{width:min(720px,90vw)}
-#portals .k{font-size:10px;letter-spacing:.34em;text-transform:uppercase;font-weight:700;
-  color:rgba(192,132,252,.85);margin-bottom:26px}
-#portals a{display:block;text-decoration:none;padding:26px 0;cursor:pointer;
-  border-top:1px solid rgba(196,214,210,.14);
-  transition:padding-left .35s cubic-bezier(.23,1,.32,1)}
-#portals a:last-of-type{border-bottom:1px solid rgba(196,214,210,.14)}
-#portals a:hover{padding-left:22px}
-#portals b{display:block;font-size:clamp(26px,4vw,44px);font-weight:800;letter-spacing:-.03em;
-  text-transform:uppercase;color:#EDF4F2;line-height:1.05}
-#portals a:hover b{color:#C084FC}
-#portals span{display:block;margin-top:6px;font-size:12px;letter-spacing:.04em;
-  color:rgba(196,214,210,.55)}
-
-@media (prefers-reduced-motion:reduce){
-  #cineArt .form,#cineScene .sc,#cineNeb,#cineStars{transition:none}
-}
 </style>
 </head>
 <body>
 
-<div id="cine" aria-label="Academics preview">
-  <video id="cineVid" src="/assets/nebula-motion.mp4" muted loop playsinline autoplay aria-hidden="true"></video>
-  <canvas id="cineNeb" aria-hidden="true"></canvas>
-  <canvas id="cineStars" aria-hidden="true"></canvas>
-  <div id="cineVeil" aria-hidden="true"></div>
-  <canvas id="cineFx" aria-hidden="true"></canvas>
-  <div id="cineArt" aria-hidden="true"></div>
-  <div id="cineScene"></div>
-  <div id="cineHud"><span id="cineCount">01</span><div class="line"><i id="cineBar"></i></div><span id="cineTotal">17</span><span id="cineFps">FPS --</span><span id="cineUtc">--:--:-- UTC</span></div>
-  <button id="cineSkip" type="button">Skip</button>
-  <div id="cineTrack"><div id="cineRunway"></div></div>
-</div>
+<div id="noth" aria-label="Academics preview">
+  <div class="nh-head"><span class="mark">A'</span><button class="menu" id="nhEnter" type="button">ENTER PORTAL ::</button></div>
 
-<div id="portals" role="dialog" aria-label="Choose a portal">
-  <div class="wrap">
-    <div class="k">Where to next</div>
-    <a data-portal="student"><b>Student Portal</b><span>The fourteen domains — modules, assessments, certificates</span></a>
-    <a data-portal="job"><b>Job Portal</b><span>Openings matched to your domain, across every major platform</span></a>
-    <a data-portal="resume"><b>Resume Portal</b><span>Build it, check it, and put the work on the page</span></a>
-  </div>
+  <section class="nh-hero">
+    <div>
+      <div class="nh-tag">Not a course, a career.<br>Because Academics is Everythin'.</div>
+      <a class="nh-pill" href="student-journeys.html">START LEARNING <span>&rarr;</span></a>
+    </div>
+    <div class="nh-word" id="nhWord">
+      <svg viewBox="0 0 1600 300" aria-hidden="true">
+        <defs>
+          <clipPath id="nhClip"><text x="800" y="248" text-anchor="middle" font-size="300" textLength="1580" lengthAdjust="spacingAndGlyphs">ACADEMICS</text></clipPath>
+        </defs>
+        <g clip-path="url(#nhClip)">
+          <rect width="1600" height="300" fill="#0a0a0a"/>
+          <image id="nhTex0" href="img/textures/foil.webp" x="-200" y="-150" width="2000" height="600" preserveAspectRatio="xMidYMid slice" opacity="1"></image>
+          <image id="nhTex1" href="img/textures/balloon.webp" x="-200" y="-150" width="2000" height="600" preserveAspectRatio="xMidYMid slice" opacity="0"></image>
+          <image id="nhTex2" href="img/textures/wool.webp" x="-200" y="-150" width="2000" height="600" preserveAspectRatio="xMidYMid slice" opacity="0"></image>
+        </g>
+      </svg>
+      <canvas id="nhBlobs"></canvas>
+    </div>
+    <div class="nh-strip">
+      <span>The Academics arm of The Entrepreneurship Network</span>
+      <span><a href="student-portal.html">STUDENT</a> / <a href="talent-network.html">JOBS</a> / <a href="coming-soon.html">RESUME</a></span>
+    </div>
+  </section>
+
+  <div id="nhSections"></div>
+
+  <footer class="nh-foot">
+    <h3>Let's start<br>your journey</h3>
+    <div class="pills">
+      <a class="nh-pill" href="student-journeys.html">START LEARNING <span>&rarr;</span></a>
+      <a class="nh-pill" href="payment.html">PAY &amp; UNLOCK <span>@</span></a>
+    </div>
+    <div class="nh-links">
+      <a href="student-portal.html">Student Portal</a>
+      <a href="talent-network.html">Job Portal</a>
+      <a href="coming-soon.html">Resume Portal</a>
+    </div>
+    <div class="nh-flee" id="nhFlee" aria-label="ACADEMICS"></div>
+    <div class="nh-credits">
+      <span>&copy;2026 &mdash; The Entrepreneurship Network</span>
+      <span>Courses &middot; Quizzes &middot; Projects &middot; Certificates &middot; Resume Builder &middot; Resume Checker &middot; Jobs</span>
+      <span>EN</span>
+    </div>
+  </footer>
 </div>
 
 <nav class="nav">
@@ -355,604 +300,187 @@ a{color:inherit}
       .then(function (r) { return r.json().then(function (j) { j._code = r.status; return j; }); });
   };
 
-  /* ── cinematic entry ────────────────────────────────────────────────
-     Scroll position drives everything. `p` runs 0 to 1 across the runway:
-     0 is the tight cluster, 1 is fully spread with payment up. Driven from
-     rAF rather than the scroll event so we paint once per frame however
-     fast the wheel fires. */
-  var DOMAINS14 = [
-    ['DevOps with AWS',        'AWS',  '#FF9900', '#8A4B00'],
-    ['Python Development',     'PY',   '#4B8BBE', '#1B3A54'],
-    ['Java Development',       'JAVA', '#E76F00', '#7A2E00'],
-    ['Web Development',        'WEB',  '#E34F26', '#6B1E0C'],
-    ['MERN Stack',             'MERN', '#00ED64', '#04512A'],
-    ['Artificial Intelligence','AI',   '#8B5CF6', '#3B1E70'],
-    ['Data Science',           'DATA', '#06B6D4', '#0A4A58'],
-    ['Cyber Security',         'SEC',  '#EF4444', '#6B1414'],
-    ['Software Engineering',   'SWE',  '#3B82F6', '#12356E'],
-    ['Flutter Development',    'FLTR', '#54C5F8', '#0E4C6B'],
-    ['Business Development',   'BIZ',  '#F59E0B', '#7A4A00'],
-    ['Human Resources',        'HR',   '#EC4899', '#6B1140'],
-    ['Venture Capital',        'VC',   '#10B981', '#064C36'],
-    ['Finance',                'FIN',  '#D4AF37', '#6B5410'],
-  ];
+  /* ── the Nothing-clone preview ──────────────────────────────────────
+     White page, one giant textured word, ink blobs that avoid the hand,
+     fourteen work sections, a heart of logos, and a word that runs away. */
+  (function noth() {
+    var root = $('noth');
+    if (!root) { return; }
+    var reduced = false;
+    try { reduced = window.matchMedia('(prefers-reduced-motion:reduce)').matches; } catch (_e) {}
 
-  (function cinematic() {
-    var cine = $('cine'), art = $('cineArt'), sceneBox = $('cineScene'), track = $('cineTrack');
-    if (!cine) { return; }
-    var reduced = false, coarse = false;
-    try {
-      reduced = window.matchMedia('(prefers-reduced-motion:reduce)').matches;
-      coarse = window.matchMedia('(pointer:coarse)').matches;
-    } catch (_e) {}
+    function leave() { root.classList.add('gone'); document.body.style.overflow = ''; }
+    document.body.style.overflow = 'hidden';
+    $('nhEnter').addEventListener('click', leave);
 
-    var ART = '/img/domains/';
-    var DOMAINS = [
-      { slug: 'python',  name: 'Python',  em: 'Development', tint: '#F1C40F', burst: 'trail',
+    var DOMS = [
+      { slug: 'python',  name: 'Python Development',  cap: 'Django & FastAPI, marked on reasoning',
         feat: ['Data handling, automation and backend services', 'Django and FastAPI project work', 'Written assessments marked on your reasoning'] },
-      { slug: 'java',    name: 'Java',    em: 'Development', tint: '#FF8A3D', burst: 'vapour',
+      { slug: 'java',    name: 'Java Development',    cap: 'Spring Boot you actually deploy',
         feat: ['Core Java, OOP and collections in depth', 'Spring Boot services you actually deploy', 'The track most service firms hire against'] },
-      { slug: 'webdev',  name: 'Web',     em: 'Development', tint: '#4EA8FF', burst: 'ripple',
+      { slug: 'webdev',  name: 'Web Development',     cap: 'Responsive, accessible, fast',
         feat: ['Semantic HTML, modern CSS, real JavaScript', 'Responsive and accessible by default', 'Performance budgets, not just pretty pages'] },
-      { slug: 'swe',     name: 'Software', em: 'Engineering', tint: '#7DD3FC', burst: 'code',
+      { slug: 'swe',     name: 'Software Engineering', cap: 'How software is built in a team',
         feat: ['Design patterns, testing and code review', 'Version control and CI as habits', 'How software is built in a team'] },
-      { slug: 'flutter', name: 'Flutter', em: 'Development', tint: '#54C5F8', burst: 'shards',
+      { slug: 'flutter', name: 'Flutter Development', cap: 'One codebase, both stores',
         feat: ['One codebase, Android and iOS', 'State management and platform channels', 'A store-ready app as the final project'] },
-      { slug: 'mern',    name: 'MERN',    em: 'Stack Dev', tint: '#00ED64', burst: 'lift',
-        feat: ['Mongo, Express, React and Node end to end', 'Auth, payments and deployment', 'The full-stack track, and the busiest one'] },
-      { slug: 'ai',      name: 'Artificial', em: 'Intelligence', tint: '#8B5CF6', burst: 'neural',
+      { slug: 'mern',    name: 'MERN Stack',          cap: 'The full-stack track',
+        feat: ['Mongo, Express, React and Node end to end', 'Auth, payments and deployment', 'The busiest track on the portal'] },
+      { slug: 'ai',      name: 'Artificial Intelligence', cap: 'Models, honestly evaluated',
         feat: ['Neural networks from the maths up', 'Training, evaluation and honest metrics', 'Where models fail, and how you find out'] },
-      { slug: 'data',    name: 'Data',    em: 'Science', tint: '#22D3EE', burst: 'orbit',
+      { slug: 'data',    name: 'Data Science',        cap: 'Dashboards that answer questions',
         feat: ['Cleaning, exploring and modelling real data', 'Statistics you can defend in a review', 'Dashboards that answer a question'] },
-      { slug: 'cyber',   name: 'Cyber',   em: 'Security', tint: '#38BDF8', burst: 'shield',
+      { slug: 'cyber',   name: 'Cyber Security',      cap: 'OWASP to incident response',
         feat: ['Threat modelling and secure design', 'Web, network and application security', 'Findings written the way a client reads them'] },
-      { slug: 'aws',     name: 'DevOps',  em: 'with AWS', tint: '#FF9900', burst: 'deploy',
+      { slug: 'aws',     name: 'DevOps with AWS',     cap: 'Ship without breaking what runs',
         feat: ['Pipelines, containers, infrastructure as code', 'The AWS services you will be asked about', 'Shipping without breaking what runs'] },
-      { slug: 'biz',     name: 'Business', em: 'Dev', tint: '#F5B301', burst: 'arrows',
-        feat: ['Pipeline, outreach and qualification', 'Pricing and proposals that close', 'Numbers you can stand behind'] },
-      { slug: 'hr',      name: 'HR',      em: '', tint: '#7EA6FF', burst: 'network',
-        feat: ['Hiring, onboarding and retention', 'Policy that survives contact with people', 'Difficult conversations, handled properly'] },
-      { slug: 'vc',      name: 'Venture', em: 'Capital', tint: '#F3C64A', burst: 'coins',
-        feat: ['How rounds, terms and dilution work', 'Diligence and building a thesis', 'Reading a startup like an investor'] },
-      { slug: 'finance', name: 'Finance', em: 'Markets', tint: '#D4AF37', burst: 'candles',
-        feat: ['Statements, valuation and modelling', 'Markets and instruments, plainly', 'Models an analyst would sign'] },
-      { slug: 'space',   name: 'Space',   em: 'Intern Program', tint: '#CBD5E1', burst: 'dust',
-        feat: ['Orbital mechanics and mission design', 'Payload and telemetry data projects', 'The programme with the smallest intake'] },
+      { slug: 'biz',     name: 'Business Analyst',    cap: 'Numbers you can stand behind',
+        feat: ['Business models, stakeholders and market research', 'Dashboards, revenue and financial modelling', 'Strategy you can present and defend'] },
+      { slug: 'hr',      name: 'HR Management',       cap: 'People, handled properly',
+        feat: ['Hiring, onboarding and retention', 'Performance, analytics and labour law', 'Policy that survives contact with people'] },
+      { slug: 'vc',      name: 'Venture Capital',     cap: 'Read a startup like an investor',
+        feat: ['How rounds, terms and dilution work', 'Valuation, diligence and term sheets', 'Exit thinking and investment committees'] },
+      { slug: 'finance', name: 'Finance',             cap: 'Models an analyst would sign',
+        feat: ['Statements, valuation and modelling', 'Markets and instruments, plainly', 'Portfolio thinking from day one'] },
     ];
 
-    /* Scenes: intro, one per domain, payment. */
-    var SCENES = [{ kind: 'intro' }]
-      .concat(DOMAINS.map(function (d) { return { kind: 'domain', d: d }; }))
-      .concat([{ kind: 'pay' }]);
-    $('cineTotal').textContent = String(SCENES.length).padStart(2, '0');
-    $('cineRunway').style.height = (SCENES.length * 100) + 'vh';
+    /* fourteen sections, a dashboard film after seven, the finisher after all */
+    var host = $('nhSections');
+    function sec(d, i) {
+      var s = el('section', 'nh-sec' + (i % 2 ? ' flip' : ''));
+      s.innerHTML = '<div class="lbl">( ' + String(i + 1).padStart(2, '0') + ' — ' + d.name + ' )</div>'
+        + '<p>' + d.feat.join('. ') + '. Courses, modules, quizzes, assignments and a dedicated project — certificate on completion.</p>'
+        + '<div class="tilebox"><div class="nh-tile"><img loading="lazy" src="img/domains/' + d.slug + '.webp" alt="' + d.name + '"></div>'
+        + '<div class="nh-cap">' + d.cap + '</div></div>';
+      host.appendChild(s);
+    }
+    DOMS.slice(0, 7).forEach(sec);
+    host.insertAdjacentHTML('beforeend',
+      '<section class="nh-sec"><div class="lbl">( The portal itself )</div>'
+      + '<p>Coins, weekly tasks, video-unlocked quizzes, mandatory daily drives — the dashboard every journey runs on.</p>'
+      + '<div class="tilebox"><div class="nh-tile"><video src="assets/dashboard-demo.mp4" muted loop playsinline autoplay></video></div>'
+      + '<div class="nh-cap">My Task Journey — the live dashboard</div></div></section>');
+    DOMS.slice(7).forEach(function (d, k) { sec(d, k + 7); });
+    host.insertAdjacentHTML('beforeend',
+      '<section class="nh-sec flip"><div class="lbl">( The one who finished )</div>'
+      + '<p>Certificate first. Then the resume builder, the resume checker, and the job portal — job findings matched to your domain. Walk out shining.</p>'
+      + '<div class="tilebox"><div class="nh-tile"><img loading="lazy" src="img/glitter-man.webp" alt="Person in a glitter suit"></div>'
+      + '<div class="nh-cap">Completion looks like this</div></div></section>'
+      + '<div class="nh-dark nh-big">Skills follow<br>momentum.</div>'
+      + '<div class="nh-heart nh-dark" id="nhHeartSec"><div class="stick" id="nhStick">'
+      + '<div class="cap">FOURTEEN DOMAINS · ONE HEART</div></div></div>');
 
-    /* ── camouflaged forms ─────────────────────────────────────────────
-       Two layers per form, as before: the dark base, and a canvas holding the
-       colour clipped to a mask the cursor paints. The difference is the idle
-       state - brightness .12, sunk into the gas - and that only the active
-       scene's form exists on screen. */
-    var forms = SCENES.map(function (sc) {
-      var wrap = el('div', 'form');
-      if (sc.kind === 'intro') { art.appendChild(wrap); return { node: wrap }; }
-      var src = sc.kind === 'pay' ? '/img/domains/qr-housing.webp' : ART + sc.d.slug + '.webp';
-      var base = new Image();
-      base.alt = sc.kind === 'pay' ? 'Payment' : (sc.d.name + ' ' + sc.d.em).trim();
-      base.src = src;
-      wrap.appendChild(base);
-      art.appendChild(wrap);
-      return { node: wrap, base: base };
-    });
-
-    /* ── scene text ────────────────────────────────────────────────────── */
-    var scenes = SCENES.map(function (sc, i2) {
-      var box = el('div', 'sc');
-      if (sc.kind === 'intro') {
-        box.classList.add('intro');
-        box.appendChild(el('div', 'idx', 'TEN \u00b7 Academics'));
-        var h0 = el('h2', null, 'Fifteen'); h0.appendChild(el('em', null, 'Domains'));
-        box.appendChild(h0);
-        var u0 = el('ul');
-        ['One continuous journey. Scroll to travel.',
-         'They are hidden in the nebula. The cursor finds them.',
-         'Everything here is inside the portal you already use.'].forEach(function (t) {
-          u0.appendChild(el('li', null, t));
-        });
-        box.appendChild(u0);
-        box.appendChild(el('div', 'hint', 'Scroll to begin'));
-      } else if (sc.kind === 'domain') {
-        box.appendChild(el('div', 'idx', String(i2).padStart(2, '0') + ' \u2014 Domain'));
-        var h = el('h2', null, sc.d.name);
-        if (sc.d.em) { h.appendChild(el('em', null, sc.d.em)); }
-        box.appendChild(h);
-        var u = el('ul');
-        sc.d.feat.forEach(function (t) { u.appendChild(el('li', null, t)); });
-        box.appendChild(u);
-        box.appendChild(el('div', 'hint', coarse ? 'It will find you' : 'Bring the cursor near'));
-      } else {
-        box.appendChild(el('div', 'idx', 'Unlock'));
-        var hp = el('h2', null, 'One'); hp.appendChild(el('em', null, 'Payment'));
-        box.appendChild(hp);
-        var up = el('ul');
-        ['Every module, every assessment, the certificate',
-         'Study first if you want - the certificate is what payment releases'].forEach(function (t) {
-          up.appendChild(el('li', null, t));
-        });
-        box.appendChild(up);
-        var qp = el('div', 'qrpanel');
-        var qi = new Image(); qi.src = '/assets/portal-payment-qr.png'; qi.alt = 'Payment QR code';
-        qp.appendChild(qi); box.appendChild(qp);
-        var acts = el('div', 'payacts');
-        var b1 = el('button', null, 'Pay Now'); b1.id = 'cinePayNow';
-        var b2 = el('button', null, 'Payment after Completion');  b2.id = 'cineLater';
-        acts.appendChild(b1); acts.appendChild(b2);
-        box.appendChild(acts);
-        var note = el('div', 'qrnote', 'Scan with any UPI app, or choose an option — either way your portals open.');
-        note.id = 'cineQr';
-        box.appendChild(note);
-      }
-      sceneBox.appendChild(box);
-      return box;
-    });
-
-    /* ── the journey ───────────────────────────────────────────────────── */
-    var active = -1, prog = 0, target = 0;
-    function activate(n) {
-      if (n === active) { return; }
-      active = n;
-      forms.forEach(function (f, k) { f.node.classList.toggle('on', k === n); });
-      scenes.forEach(function (b, k) {
-        b.classList.toggle('on', k === n);
-        b.classList.toggle('past', k < n);
+    /* hero word: cursor parallax + material morph (foil / balloon / wool) */
+    var texes = [$('nhTex0'), $('nhTex1'), $('nhTex2')];
+    var texI = 0, acc = 0, lastX = 0, lastY = 0, mx = -9999, my = -9999;
+    root.addEventListener('pointermove', function (e) {
+      mx = e.clientX; my = e.clientY;
+      var dx = (e.clientX / root.clientWidth - 0.5) * 60;
+      var dy = (e.clientY / root.clientHeight - 0.5) * 40;
+      texes.forEach(function (t, k) {
+        t.setAttribute('x', (-200 + dx * (1 + k * 0.4)).toFixed(1));
+        t.setAttribute('y', (-150 + dy * (1 + k * 0.4)).toFixed(1));
       });
-      $('cineCount').textContent = String(n + 1).padStart(2, '0');
-      cine.style.setProperty('--prox', 0);
-      cine.classList.remove('lit');
-      /* Touch has no hover: an arriving scene materialises on its own, slowly,
-         so the reveal still happens without a cursor. */
-      if (coarse) {
-        var steps = 0;
-        var iv = setInterval(function () {
-          if (active !== n || steps >= 20) { clearInterval(iv); return; }
-          steps++;
-          cine.style.setProperty('--prox', Math.min(1, steps / 20).toFixed(2));
-          cine.classList.toggle('lit', steps / 20 > 0.35);
-        }, 90);
+      acc += Math.hypot(e.clientX - lastX, e.clientY - lastY);
+      lastX = e.clientX; lastY = e.clientY;
+      if (acc > 900) {
+        acc = 0; texI = (texI + 1) % texes.length;
+        texes.forEach(function (t, k) {
+          t.style.transition = 'opacity 1.1s ease';
+          t.setAttribute('opacity', k === texI ? '1' : '0');
+        });
       }
-    }
-
-    function readScroll() {
-      var max = track.scrollHeight - track.clientHeight;
-      target = max > 0 ? track.scrollTop / max : 0;
-    }
-    track.addEventListener('scroll', readScroll, { passive: true });
-
-    /* Cursor: proximity to the active form lifts it out of camouflage and
-       blooms colour where the pointer sits. No hitbox - strength falls off
-       with distance, which is what makes the edge impossible to find. */
-    var px = 0, py = 0, prox = 0;
-    track.addEventListener('pointermove', function (e) {
-      px = e.clientX; py = e.clientY;
-      cine.style.setProperty('--jx', ((e.clientX / cine.clientWidth) * 2 - 1).toFixed(3));
-      cine.style.setProperty('--jy', ((e.clientY / cine.clientHeight) * 2 - 1).toFixed(3));
-      var f = forms[active];
-      if (!f || !f.base) { return; }
-      var r = f.node.getBoundingClientRect();
-      if (!r.width) { return; }
-      var d = Math.hypot(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2))
-            / (r.width * 0.9);
-      prox = Math.max(0, 1 - d);
-      cine.style.setProperty('--prox', prox.toFixed(3));
-      // Nothing-style local bloom: the mask centre rides the cursor inside
-      // the art box, so the material appears under the hand and trails it.
-      var mx = Math.max(-25, Math.min(125, ((e.clientX - r.left) / r.width) * 100));
-      var my = Math.max(-25, Math.min(125, ((e.clientY - r.top) / r.height) * 100));
-      cine.style.setProperty('--mx', mx.toFixed(1) + '%');
-      cine.style.setProperty('--my', my.toFixed(1) + '%');
-      cine.classList.toggle('lit', prox > 0.35);
     }, { passive: true });
 
-    /* ── background ────────────────────────────────────────────────────── */
-    var neb = $('cineNeb'), nctx = neb.getContext('2d');
-    var starCv = $('cineStars'), sctx = starCv.getContext('2d');
-    var stars = [], dpr = 1, vw = 0, vh = 0;
-    var plate = null, pctx = null, twinklers = [];
+    /* ink blobs: drift over the word, run from the hand */
+    var bc = $('nhBlobs'), bx = bc.getContext('2d'), bw = 0, bh = 0;
+    var blobs = [];
+    for (var k = 0; k < 12; k++) {
+      blobs.push({ a: Math.random() * 6.28, r: 26 + Math.random() * 70,
+                   sp: 0.1 + Math.random() * 0.25, ox: Math.random(), oy: Math.random() });
+    }
+    function bsize() { var r = bc.getBoundingClientRect(); bw = bc.width = Math.max(2, r.width); bh = bc.height = Math.max(2, r.height); }
+    bsize(); window.addEventListener('resize', bsize);
+    (function bloop(t) {
+      if (!root.classList.contains('gone') && bw > 2) {
+        bx.clearRect(0, 0, bw, bh);
+        bx.fillStyle = '#0a0a0a';
+        var cr = bc.getBoundingClientRect();
+        var cx2 = mx - cr.left, cy2 = my - cr.top;
+        for (var q = 0; q < blobs.length; q++) {
+          var b = blobs[q];
+          var x = b.ox * bw + Math.sin(t / 1400 * b.sp * 6.28 + b.a) * 70;
+          var y = b.oy * bh + Math.cos(t / 1700 * b.sp * 6.28 + b.a) * 40;
+          var d = Math.hypot(x - cx2, y - cy2) || 1;
+          if (d < 190) { var f = (190 - d) / 190; x += (x - cx2) / d * f * 110; y += (y - cy2) / d * f * 90; }
+          bx.beginPath();
+          for (var i2 = 0; i2 <= 8; i2++) {
+            var an = i2 / 8 * 6.283;
+            var rr = b.r * (0.7 + 0.3 * Math.sin(t / 900 + b.a + i2 * 1.7));
+            var px2 = x + Math.cos(an) * rr, py2 = y + Math.sin(an) * rr * 0.72;
+            if (i2) { bx.lineTo(px2, py2); } else { bx.moveTo(px2, py2); }
+          }
+          bx.closePath(); bx.fill();
+        }
+      }
+      requestAnimationFrame(bloop);
+    })(0);
 
-    /* Gas palette matched to the animated plate: magenta, violet, blue, pink. */
-    var GAS = [[236,72,153],[167,139,250],[59,130,246],[255,110,199],[99,102,241],[216,180,254]];
-    function paintNebula(w, h) {
-      nctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      nctx.clearRect(0, 0, w, h);
-      nctx.globalCompositeOperation = 'lighter';
-      var blobs = Math.round((w * h) / 11000);
-      for (var k = 0; k < blobs; k++) {
-        var cx = w * (0.08 + Math.pow(Math.random(), 1.5) * 0.72);
-        var cy = h * (0.12 + Math.random() * 0.78);
-        var r = Math.min(w, h) * 0.05 + Math.random() * (Math.min(w, h) * 0.3);
-        var c = GAS[(Math.random() * GAS.length) | 0];
-        var a = 0.05 + Math.random() * 0.135;
-        var g = nctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-        g.addColorStop(0, 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a.toFixed(3) + ')');
-        g.addColorStop(0.35, 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + (a * 0.55).toFixed(3) + ')');
-        g.addColorStop(1, 'rgba(0,0,0,0)');
-        nctx.fillStyle = g;
-        nctx.beginPath(); nctx.arc(cx, cy, r, 0, 6.2832); nctx.fill();
-      }
-      nctx.globalCompositeOperation = 'destination-out';
-      for (var q = 0; q < Math.round(blobs * 0.45); q++) {
-        var lx = w * Math.random(), ly = h * Math.random();
-        var lr = Math.min(w, h) * 0.03 + Math.random() * (Math.min(w, h) * 0.16);
-        var dg = nctx.createRadialGradient(lx, ly, 0, lx, ly, lr);
-        dg.addColorStop(0, 'rgba(0,0,0,' + (0.25 + Math.random() * 0.45).toFixed(2) + ')');
-        dg.addColorStop(1, 'rgba(0,0,0,0)');
-        nctx.fillStyle = dg;
-        nctx.beginPath(); nctx.arc(lx, ly, lr, 0, 6.2832); nctx.fill();
-      }
-      nctx.globalCompositeOperation = 'source-over';
-    }
-    function starColour(h) {
-      return h < 0.32 ? '160,190,255' : h < 0.62 ? '255,255,255' : h < 0.84 ? '255,214,170' : '255,160,140';
-    }
-    function paintStar(c, st, bright, scale) {
-      var a = Math.min(1, (0.25 + st.r * 0.5) * bright);
-      var col = starColour(st.hue);
-      c.fillStyle = 'rgba(' + col + ',' + a.toFixed(3) + ')';
-      c.beginPath(); c.arc(st.x, st.y, st.r * scale, 0, 6.2832); c.fill();
-      if (st.r > 1.25) {
-        var len = st.r * 7 * bright;
-        c.strokeStyle = 'rgba(' + col + ',' + (a * 0.45).toFixed(3) + ')';
-        c.lineWidth = 0.7;
-        c.beginPath();
-        c.moveTo(st.x - len, st.y); c.lineTo(st.x + len, st.y);
-        c.moveTo(st.x, st.y - len); c.lineTo(st.x, st.y + len);
-        c.stroke();
-      }
-    }
-    function seedStars(w, h) {
-      stars = [];
-      var n = Math.min(900, Math.round((w * h) / 2600));
-      for (var k = 0; k < n; k++) {
-        stars.push({ x: Math.random() * w, y: Math.random() * h,
-                     r: Math.pow(Math.random(), 2.4) * 1.7 + 0.25,
-                     hue: Math.random(), tw: Math.random() * 6.28, sp: 0.4 + Math.random() });
-      }
-    }
-    function paintPlate() {
-      if (!plate) { plate = document.createElement('canvas'); pctx = plate.getContext('2d'); }
-      plate.width = Math.floor(vw * dpr); plate.height = Math.floor(vh * dpr);
-      pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      pctx.clearRect(0, 0, vw, vh);
-      twinklers = [];
-      for (var k = 0; k < stars.length; k++) {
-        if (k % 18 === 0 && twinklers.length < 48) { twinklers.push(stars[k]); continue; }
-        paintStar(pctx, stars[k], 0.8, 1);
-      }
-    }
-    function sizeCanvases() {
-      vw = cine.clientWidth; vh = cine.clientHeight;
-      dpr = Math.min(window.devicePixelRatio || 1, 2);
-      [neb, starCv, $('cineFx')].forEach(function (c) {
-        c.width = Math.floor(vw * dpr); c.height = Math.floor(vh * dpr);
-      });
-      sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      fxc.setTransform(dpr, 0, 0, dpr, 0, 0);
-      paintNebula(vw, vh);
-      seedStars(vw, vh);
-      paintPlate();
-    }
-
-    /* ── effects on click of a revealed form ───────────────────────────── */
-    var fx = $('cineFx'), fxc = fx.getContext('2d'), running = [];
-    var TAU = 6.28318;
-    function fire(sc) {
-      if (!sc || sc.kind !== 'domain') { return; }
-      running.push({ kind: sc.d.burst, tint: sc.d.tint, t0: performance.now(),
-                     dur: 1900, seed: Math.random() * TAU });
-      if (running.length > 3) { running.shift(); }
-    }
-    function glowLine(c, x1, y1, x2, y2, col, w2, a) {
-      c.strokeStyle = col; c.globalAlpha = a; c.lineWidth = w2;
-      c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke();
-    }
-    var EASE = { out: function (t) { return 1 - Math.pow(1 - t, 3); } };
-    var EFFECT = {
-      trail: function (c, e) {
-        for (var k = 0; k < 5; k++) {
-          var a = e.seed + e.t * TAU * 3 - k * 0.28;
-          c.globalAlpha = (1 - e.t) * (0.5 - k * 0.08);
-          c.strokeStyle = e.tint; c.lineWidth = 3 - k * 0.4;
-          c.beginPath(); c.arc(e.x, e.y, e.r * (0.92 + k * 0.04), a, a + 0.7); c.stroke();
-        }
-      },
-      vapour: function (c, e) {
-        for (var k = 0; k < 22; k++) {
-          var life = (e.t + k / 22) % 1;
-          c.globalAlpha = Math.sin(life * Math.PI) * 0.13 * Math.sin(e.t * Math.PI);
-          c.fillStyle = '#EEF3F8';
-          c.beginPath();
-          c.arc(e.x + Math.sin(life * 5 + k + e.seed) * e.r * 0.2 * life,
-                e.y - e.r * 0.35 - life * e.r * 2.2,
-                (2.5 + life * 12) * (0.5 + (k % 3) * 0.25), 0, TAU);
-          c.fill();
-        }
-      },
-      ripple: function (c, e) {
-        for (var k = 0; k < 3; k++) {
-          var w2 = (e.t + k / 3) % 1;
-          c.globalAlpha = (1 - w2) * 0.5 * (1 - e.t);
-          c.strokeStyle = e.tint; c.lineWidth = 2.5 - k * 0.5;
-          c.beginPath(); c.arc(e.x, e.y, e.r * (0.6 + w2 * 1.5), 0, TAU); c.stroke();
-        }
-      },
-      code: function (c, e) {
-        c.font = '10px ui-monospace,monospace';
-        for (var k = 0; k < 22; k++) {
-          var a = e.seed + k * 0.9;
-          var out = Math.sin(Math.min(1, e.t * 1.3) * Math.PI) * e.r * 1.5;
-          c.globalAlpha = Math.sin(Math.min(1, e.t * 1.3) * Math.PI) * 0.7;
-          c.fillStyle = e.tint;
-          c.fillText(k % 2 ? '1' : '0', e.x + Math.cos(a) * out, e.y + Math.sin(a) * out);
-        }
-      },
-      shards: function (c, e) {
-        var open = Math.sin(Math.min(1, e.t * 1.25) * Math.PI);
-        for (var k = -2; k <= 2; k++) {
-          if (!k) { continue; }
-          c.globalAlpha = open * 0.35;
-          c.strokeStyle = '#7CC7FF'; c.lineWidth = 2;
-          c.strokeRect(e.x - e.r * 0.45 + k * open * e.r * 0.2,
-                       e.y - e.r * 0.45 + k * open * e.r * 0.5, e.r * 0.9, e.r * 0.9);
-        }
-      },
-      lift: function (c, e) {
-        [[-0.3, -0.3], [0.3, -0.3], [-0.3, 0.3], [0.3, 0.3]].forEach(function (q, k) {
-          var lt = Math.max(0, Math.min(1, (e.t - k * 0.14) * 3));
-          if (!lt) { return; }
-          var up = Math.sin(lt * Math.PI) * e.r * 0.4;
-          c.globalAlpha = Math.sin(lt * Math.PI) * 0.75;
-          c.fillStyle = e.tint;
-          c.beginPath(); c.arc(e.x + q[0] * e.r, e.y + q[1] * e.r - up, 4.5, 0, TAU); c.fill();
-        });
-      },
-      neural: function (c, e) {
-        var N = 16, grow = Math.sin(Math.min(1, e.t) * Math.PI), pts = [];
-        for (var k = 0; k < N; k++) {
-          var a = e.seed + (k / N) * TAU;
-          var rr = e.r * (0.55 + (k % 3) * 0.22) * (0.7 + grow * 1.1);
-          pts.push([e.x + Math.cos(a) * rr, e.y + Math.sin(a) * rr * 0.9]);
-        }
-        for (var k2 = 0; k2 < N; k2++) {
-          glowLine(c, pts[k2][0], pts[k2][1], pts[(k2 + 1) % N][0], pts[(k2 + 1) % N][1], e.tint, 1, grow * 0.28);
-          glowLine(c, pts[k2][0], pts[k2][1], pts[(k2 + 2) % N][0], pts[(k2 + 2) % N][1], e.tint, 1, grow * 0.2);
-        }
-        for (var k3 = 0; k3 < N; k3++) {
-          var pulse = 0.5 + 0.5 * Math.sin(e.t * 14 + k3);
-          c.globalAlpha = grow * (0.4 + pulse * 0.6);
-          c.fillStyle = '#CFE6FF';
-          c.beginPath(); c.arc(pts[k3][0], pts[k3][1], 2 + pulse * 2.4, 0, TAU); c.fill();
-        }
-      },
-      orbit: function (c, e) {
-        var out = Math.sin(Math.min(1, e.t) * Math.PI);
-        for (var k = 0; k < 5; k++) {
-          var a = e.seed + e.t * TAU * 1.7 + (k / 5) * TAU;
-          var x = e.x + Math.cos(a) * e.r * (0.7 + out * 0.9);
-          var y = e.y + Math.sin(a) * e.r * (0.7 + out * 0.9) * 0.55;
-          c.globalAlpha = out * 0.85; c.fillStyle = e.tint;
-          for (var b = 0; b < 3; b++) { c.fillRect(x + b * 4 - 6, y - (5 + b * 4) / 2, 3, 5 + b * 4); }
-        }
-      },
-      shield: function (c, e) {
-        var g = EASE.out(Math.min(1, e.t * 1.5));
-        c.globalAlpha = (1 - e.t) * 0.85; c.strokeStyle = e.tint; c.lineWidth = 3;
-        c.beginPath();
-        for (var k = 0; k < 6; k++) {
-          var a = (k / 6) * TAU - Math.PI / 2;
-          var rr = e.r * (0.5 + g * 1.35);
-          var xx = e.x + Math.cos(a) * rr, yy = e.y + Math.sin(a) * rr;
-          k ? c.lineTo(xx, yy) : c.moveTo(xx, yy);
-        }
-        c.closePath(); c.stroke();
-      },
-      deploy: function (c, e) {
-        for (var k = 0; k < 26; k++) {
-          var u = (e.t * 1.6 + k / 26) % 1, a = u * TAU;
-          var d = 1 + Math.sin(a) * Math.sin(a);
-          c.globalAlpha = (1 - e.t * 0.5) * 0.9;
-          c.fillStyle = k % 3 ? '#FF9900' : '#D6DCE4';
-          c.beginPath();
-          c.arc(e.x + (Math.cos(a) * e.r * 0.95) / d,
-                e.y + (Math.cos(a) * Math.sin(a) * e.r * 0.95) / d, 2.6, 0, TAU);
-          c.fill();
-        }
-      },
-      arrows: function (c, e) {
-        for (var k = 0; k < 7; k++) {
-          var lt = Math.max(0, Math.min(1, (e.t - k * 0.06) * 1.7));
-          if (!lt) { continue; }
-          var x = e.x + (k - 3) * e.r * 0.22;
-          var y = e.y + e.r * 0.5 - EASE.out(lt) * e.r * 1.7;
-          c.globalAlpha = (1 - lt) * 0.95; c.strokeStyle = e.tint; c.lineWidth = 2.5;
-          c.beginPath(); c.moveTo(x, y + 20); c.lineTo(x, y); c.stroke();
-          c.beginPath(); c.moveTo(x - 5, y + 7); c.lineTo(x, y); c.lineTo(x + 5, y + 7); c.stroke();
-        }
-      },
-      network: function (c, e) {
-        var N = 9, joined = Math.min(1, e.t * 2.2), fade = e.t > 0.62 ? 1 - (e.t - 0.62) / 0.38 : 1;
-        for (var k = 0; k < N; k++) {
-          if (k / N > joined) { break; }
-          var a = e.seed + (k / N) * TAU;
-          var x = e.x + Math.cos(a) * e.r * 0.85, y = e.y + Math.sin(a) * e.r * 0.85;
-          glowLine(c, e.x, e.y, x, y, e.tint, 1.6, 0.6 * fade);
-          c.globalAlpha = 0.9 * fade; c.fillStyle = '#DCE9FF';
-          c.beginPath(); c.arc(x, y, 3, 0, TAU); c.fill();
-        }
-      },
-      coins: function (c, e) {
-        for (var k = 0; k < 26; k++) {
-          var life = (e.t * 1.4 + k / 26) % 1;
-          c.globalAlpha = (1 - life) * 0.85 * Math.sin(Math.min(1, e.t * 1.4) * Math.PI);
-          c.fillStyle = k % 4 ? '#F3C64A' : '#FFF0BF';
-          c.beginPath();
-          c.arc(e.x + (Math.random() - 0.5) * e.r * 0.35,
-                e.y + e.r * 0.35 + life * e.r * 1.5, 1.6 + (1 - life) * 2.6, 0, TAU);
-          c.fill();
-        }
-      },
-      candles: function (c, e) {
-        var n = 9, drawn = Math.min(1, e.t * 1.5) * n;
-        for (var k = 0; k < n; k++) {
-          if (k > drawn) { break; }
-          var x = e.x - e.r * 0.8 + (k / (n - 1)) * e.r * 1.6;
-          var h = e.r * (0.16 + ((k * 7) % 5) * 0.09);
-          var y = e.y + e.r * 0.35 - (k / n) * e.r * 0.7;
-          c.globalAlpha = (k === n - 1 && drawn >= n) ? 0.6 + 0.4 * Math.sin(e.t * 20) : 0.85;
-          c.fillStyle = k % 3 === 2 ? '#D4AF37' : '#2FAF6B';
-          c.fillRect(x - 3, y - h / 2, 6, h);
-        }
-      },
-      dust: function (c, e) {
-        var land = Math.max(0, (e.t - 0.55) / 0.45);
-        if (!land) { return; }
-        for (var k = 0; k < 30; k++) {
-          var a = e.seed + k * 0.42;
-          var d = EASE.out(land) * e.r * (0.9 + (k % 5) * 0.22);
-          c.globalAlpha = (1 - land) * 0.75;
-          c.fillStyle = '#C9CBCF';
-          c.beginPath();
-          c.arc(e.x + Math.cos(a) * d, e.y + e.r * 0.5 + Math.abs(Math.sin(a)) * d * 0.28,
-                1.5 + (1 - land) * 2, 0, TAU);
-          c.fill();
-        }
-      },
-    };
-    var fxDirty = false;
-    function drawFx() {
-      if (!running.length) {
-        if (fxDirty) { fxc.clearRect(0, 0, vw, vh); fxDirty = false; }
-        return;
-      }
-      fxc.clearRect(0, 0, vw, vh); fxDirty = true;
-      var now = performance.now();
-      var box = art.getBoundingClientRect();
-      for (var k = running.length - 1; k >= 0; k--) {
-        var r = running[k], t = (now - r.t0) / r.dur;
-        if (t >= 1) { running.splice(k, 1); continue; }
-        var fn = EFFECT[r.kind];
-        if (!fn) { continue; }
-        fxc.save();
-        fxc.globalCompositeOperation = 'lighter';
-        fxc.lineCap = 'round';
-        fn(fxc, { x: box.left + box.width / 2, y: box.top + box.height / 2,
-                  r: box.width * 0.42, t: t, tint: r.tint, seed: r.seed });
-        fxc.restore();
-      }
-      fxc.globalAlpha = 1;
-    }
-    track.addEventListener('click', function () {
-      if (prox > 0.3 || coarse) { fire(SCENES[active]); }
+    /* the heart: fourteen logo tiles scatter, then form a heart on scroll */
+    var stick = $('nhStick'), tiles = [];
+    DOMS.forEach(function (d) {
+      var t = el('div', 'tile');
+      t.innerHTML = '<img loading="lazy" src="img/domains/' + d.slug + '.webp" alt="">';
+      stick.appendChild(t); tiles.push(t);
     });
-
-    /* ── frame ─────────────────────────────────────────────────────────── */
-    var raf = 0;
-    function frame(now) {
-      prog += (target - prog) * 0.08;
-      activate(Math.max(0, Math.min(SCENES.length - 1, Math.round(prog * (SCENES.length - 1)))));
-      $('cineBar').style.width = (prog * 100).toFixed(1) + '%';
-
-      // The background travels with the journey and leans toward the cursor.
-      if (!reduced) {
-        var jx = parseFloat(cine.style.getPropertyValue('--jx') || 0);
-        var jy = parseFloat(cine.style.getPropertyValue('--jy') || 0);
-        // The animated plate drifts with the same lean, gentler — it is the
-        // deepest layer, so it moves the least.
-        // Travel is LATERAL, Terminal One style: scroll pushes the whole
-        // field sideways; vertical drift is a whisper by comparison.
-        vid.style.transform = 'translate3d('
-          + (jx * 10 - prog * 130).toFixed(1) + 'px,'
-          + (jy * 7 - prog * 12).toFixed(1) + 'px,0) scale('
-          + (1.16 + prog * 0.03).toFixed(3) + ')';
-        // The nebula never stands still: a slow time-based drift underlies the
-        // cursor lean and the scroll travel, so the field breathes even when
-        // nobody is moving anything.
-        var t2 = now / 1000;
-        neb.style.transform = 'translate3d('
-          + (Math.sin(t2 * 0.05) * 14 + jx * 24 - prog * 260).toFixed(1) + 'px,'
-          + (Math.cos(t2 * 0.04) * 10 + jy * 16 - prog * 24).toFixed(1) + 'px,0) scale('
-          + (1.3 + Math.sin(t2 * 0.03) * 0.012 + prog * 0.06).toFixed(3) + ')';
-        starCv.style.transform = 'translate3d('
-          + (Math.sin(t2 * 0.04 + 2) * -8 + jx * -12 + prog * 90).toFixed(1) + 'px,'
-          + (Math.cos(t2 * 0.05 + 1) * -6 + jy * -8 - prog * 16).toFixed(1) + 'px,0) scale(1.12)';
-        sctx.clearRect(0, 0, vw, vh);
-        sctx.drawImage(plate, 0, 0, vw, vh);
-        for (var k = 0; k < twinklers.length; k++) {
-          var st = twinklers[k];
-          paintStar(sctx, st, 0.55 + 0.45 * Math.sin(now / 1000 * st.sp + st.tw), 1);
-        }
+    var scatter = DOMS.map(function (_, k) {
+      return [0.06 + 0.86 * ((k * 0.61803) % 1), 0.08 + 0.8 * ((k * 0.37) % 1)];
+    });
+    function heartPt(k) {
+      var t2 = (k / DOMS.length) * 6.28318;
+      var hx = 16 * Math.pow(Math.sin(t2), 3);
+      var hy = 13 * Math.cos(t2) - 5 * Math.cos(2 * t2) - 2 * Math.cos(3 * t2) - Math.cos(4 * t2);
+      return [0.5 + hx / 40, 0.44 - hy / 36];
+    }
+    function heartTick() {
+      var secEl = $('nhHeartSec');
+      if (!secEl) { return; }
+      var r = secEl.getBoundingClientRect();
+      var span = r.height - window.innerHeight;
+      var p = Math.min(1, Math.max(0, span > 0 ? -r.top / span : 0));
+      var e2 = p * p * (3 - 2 * p); /* smoothstep */
+      for (var k2 = 0; k2 < tiles.length; k2++) {
+        var s = scatter[k2], h2 = heartPt(k2);
+        var x = (s[0] + (h2[0] - s[0]) * e2) * window.innerWidth - 29;
+        var y = (s[1] + (h2[1] - s[1]) * e2) * window.innerHeight - 29;
+        tiles[k2].style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px)'
+          + ' rotate(' + ((1 - e2) * 40 * (k2 % 2 ? 1 : -1)).toFixed(1) + 'deg)';
       }
-      drawFx();
-      // Terminal One HUD: live FPS + UTC readout, once a second.
-      frames++;
-      if (now - hudT0 > 1000) {
-        $('cineFps').textContent = 'FPS ' + frames;
-        $('cineUtc').textContent = new Date().toISOString().slice(11, 19) + ' UTC';
-        frames = 0; hudT0 = now;
+    }
+    root.addEventListener('scroll', heartTick, { passive: true });
+    window.addEventListener('resize', heartTick);
+    heartTick();
+
+    /* the bottom word runs from the cursor */
+    var flee = $('nhFlee');
+    'ACADEMICS'.split('').forEach(function (ch) {
+      var sp = document.createElement('span'); sp.textContent = ch; flee.appendChild(sp);
+    });
+    root.addEventListener('pointermove', function (e) {
+      for (var k3 = 0; k3 < flee.children.length; k3++) {
+        var sp = flee.children[k3];
+        var r = sp.getBoundingClientRect();
+        var dx = (r.left + r.width / 2) - e.clientX;
+        var dy = (r.top + r.height / 2) - e.clientY;
+        var d = Math.hypot(dx, dy);
+        if (d < 180 && d > 0.01) {
+          var f = (180 - d) / 180;
+          sp.style.transform = 'translate(' + (dx / d * f * 130).toFixed(1) + 'px,' + (dy / d * f * 100).toFixed(1) + 'px)';
+        } else { sp.style.transform = ''; }
       }
-      raf = requestAnimationFrame(frame);
-    }
+    }, { passive: true });
 
-    /* Ultra slow motion for the animated nebula plate. */
-    var vid = $('cineVid');
-    vid.playbackRate = 0.45;
-    vid.play().catch(function () {});
-    // Autoplay can be refused until the page hears from the user; the first
-    // touch of any kind starts the nebula.
-    function wake() { if (vid.paused && !reduced) { vid.play().catch(function () {}); } }
-    ['pointermove', 'pointerdown', 'scroll', 'keydown'].forEach(function (evn) {
-      window.addEventListener(evn, wake, { passive: true, once: true });
-    });
-    var frames = 0, hudT0 = performance.now();
-
-    sizeCanvases();
-    window.addEventListener('resize', sizeCanvases);
-    readScroll();
-    raf = requestAnimationFrame(frame);
-
-    /* ── exits ─────────────────────────────────────────────────────────── */
-    function leave() {
-      cancelAnimationFrame(raf);
-      vid.pause();
-      cine.classList.add('gone');
-      document.body.style.overflow = '';
-    }
-    document.body.style.overflow = 'hidden';
-    $('cineSkip').addEventListener('click', leave);
-
-    /* Payment actions open the three-portal landing. Pay-before also goes on
-       to the real payment page - money must reach the real flow. */
-    function portals(thenPay) {
-      $('portals').classList.add('on');
-      $('portals').dataset.pay = thenPay ? '1' : '';
-    }
-    document.addEventListener('click', function (e) {
-      if (e.target && e.target.id === 'cinePayNow') { portals(true); }
-      if (e.target && e.target.id === 'cineLater') { portals(false); }
-    });
-    $('portals').addEventListener('click', function (e) {
-      var a = e.target.closest ? e.target.closest('a[data-portal]') : null;
-      if (!a) { return; }
-      e.preventDefault();
-      var pay = $('portals').dataset.pay === '1';
-      $('portals').classList.remove('on');
-      leave();
-      if (pay) { window.location.href = '/payment.html'; return; }
-      var which = a.dataset.portal;
-      var cards = document.querySelectorAll('#cards .card');
-      var idx = which === 'student' ? 0 : which === 'job' ? 1 : 2;
-      if (cards[idx]) { cards[idx].click(); }
-    });
-
-    if (reduced) { target = 1; prog = 1; vid.pause(); }
+    if (reduced) { document.body.style.overflow = ''; }
   })();
 
   /* ── the four Academics cards ───────────────────────────────────────── */
