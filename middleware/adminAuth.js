@@ -24,6 +24,30 @@ function looksLikeBcryptHash(value) {
   return BCRYPT_PREFIXES.some((p) => value.startsWith(p));
 }
 
+// Say once, at boot, whether admin login can possibly work.
+//
+// The login endpoint answers every failure with the same "Access denied"
+// — correct, because it must not tell an attacker which factor was wrong, but
+// it also left the operator with no way to tell a wrong password from a hash
+// that was never loaded. This line appears in `pm2 logs` immediately and names
+// the problem. It never prints the hash.
+(function reportAdminAuthConfig() {
+  const label = '[AdminAuth]';
+  if (!ADMIN_PASSWORD_HASH) {
+    console.warn(`${label} ADMIN_PASSWORD_HASH is not set — admin login is DISABLED. Run: node scripts/check-admin-login.js`);
+    return;
+  }
+  if (!looksLikeBcryptHash(ADMIN_PASSWORD_HASH)) {
+    console.warn(`${label} ADMIN_PASSWORD_HASH is not a bcrypt hash (expected $2a$/$2b$/$2y$) — admin login is DISABLED. Run: node scripts/check-admin-login.js`);
+    return;
+  }
+  if (ADMIN_PASSWORD_HASH.length !== 60) {
+    console.warn(`${label} ADMIN_PASSWORD_HASH is ${ADMIN_PASSWORD_HASH.length} chars, expected 60 — it is truncated or was mangled by the shell. Run: node scripts/check-admin-login.js`);
+    return;
+  }
+  console.log(`${label} Admin login enabled for username "${ADMIN_USERNAME}".`);
+})();
+
 /**
  * Verify admin credentials against ADMIN_USERNAME + ADMIN_PASSWORD_HASH.
  * Returns true only on an exact username match and a successful bcrypt compare.
