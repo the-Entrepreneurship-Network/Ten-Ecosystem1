@@ -68,11 +68,32 @@ async function initEmployeeIdCounter() {
 async function generateEmployeeId(domain, { maxAttempts = 5 } = {}) {
     const shortCode = getDomainShortCode(domain);
 
+    let realigned = false;
+
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
         const sequence = await Counter.next(COUNTER_NAME, FIRST_SEQUENCE);
         const candidate = formatEmployeeId(shortCode, sequence);
         const clash = await Student.findOne({ employeeId: candidate }).select('_id').lean();
         if (!clash) return candidate;
+
+        // A clash means the counter is BEHIND the IDs actually in use.
+        //
+        // initEmployeeIdCounter() is supposed to prevent that at startup, but
+        // it ran inside the server.listen callback, which fires before the
+        // database connection is established — so the scan could come back
+        // empty and leave the counter at zero. New students were then issued
+        // 1004, 1005, 1006 while real students already held 1758 and 1759.
+        //
+        // Retrying +1 cannot recover from that: it crawls one number at a time
+        // through hundreds of taken IDs and gives up after maxAttempts. Re-align
+        // once from the real data instead, then carry on from the true top.
+        if (!realigned) {
+            realigned = true;
+            await initEmployeeIdCounter();
+            console.warn(`[employeeId] ${candidate} was taken — counter re-aligned from the IDs in the database.`);
+            continue;
+        }
+
         console.warn(`[employeeId] ${candidate} is already taken; taking the next number.`);
     }
     throw new Error('Could not allocate a unique employee ID. Please try again.');

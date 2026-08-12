@@ -4399,7 +4399,7 @@ try{
     if(!isHRSession(req)){
         return res.status(401).json({ message:"Unauthorized" });
     }
-    const students = await Student.find().select('firstName lastName email whatsapp domain collegeName college employeeId tenure joiningDate createdAt').sort({ createdAt:-1 }).lean();
+    const students = await Student.find().select('firstName lastName email whatsapp domain collegeName college employeeId tenure joiningDate createdAt joinerType employeeIdOverride').sort({ createdAt:-1 }).lean();
     res.json({ success:true, students });
 }catch(error){ res.status(500).json({ message:"Error fetching students" }); }
 });
@@ -4674,7 +4674,7 @@ try{
         return res.status(401).json({ message:"Unauthorized" });
     }
     const domain = decodeURIComponent(req.params.domain);
-    const students = await Student.find({ domain }).select('firstName lastName email whatsapp domain collegeName college employeeId tenure joiningDate createdAt').sort({ createdAt:-1 });
+    const students = await Student.find({ domain }).select('firstName lastName email whatsapp domain collegeName college employeeId tenure joiningDate createdAt joinerType employeeIdOverride').sort({ createdAt:-1 });
     res.json({ success:true, students });
 }catch(error){ 
     console.log(error);
@@ -4821,7 +4821,7 @@ try{
 // student's domain, tenure, employeeId or payment status.
 app.get("/students", requireAdminAPI, async(req,res)=>{
     try{
-        const students = await Student.find().select('firstName lastName email whatsapp domain collegeName college employeeId tenure joiningDate createdAt').sort({ createdAt:-1 }).lean();
+        const students = await Student.find().select('firstName lastName email whatsapp domain collegeName college employeeId tenure joiningDate createdAt joinerType employeeIdOverride').sort({ createdAt:-1 }).lean();
         res.json(students);
     }catch(error){ res.status(500).json({ message:"Error fetching students" }); }
 });
@@ -5032,49 +5032,72 @@ app.post(["/save-joiner-type", "/api/v2/student/set-joiner-type"], async (req, r
 
 app.post(["/save-employee-id-override", "/api/v2/student/save-employee-id-override"], async (req, res) => {
   try {
-    const employeeId = req.body.employeeId || req.headers['x-employee-id'] || req.headers['employeeid'] || (req.session && req.session.student && req.session.student.employeeId);
-    const { employeeIdOverride } = req.body;
-    if (!employeeIdOverride || employeeIdOverride.trim() === "") {
-      return res.json({
-        success: false,
-        message: "Employee ID cannot be empty"
-      });
+    // Identity from the SESSION only.
+    //
+    // This read `req.body.employeeId || req.headers['x-employee-id'] || ... ||
+    // session`, so a client-supplied value won over the signed-in student. Any
+    // logged-in user could rename ANY student's employee ID by naming them in
+    // the body — and the rename cascades across five collections, so it took
+    // their attendance, submissions, tasks, badges and document history with it.
+    const currentEmployeeId = (req.session && req.session.student && req.session.student.employeeId) || null;
+    if (!currentEmployeeId) {
+      return res.status(401).json({ success: false, message: "Please sign in to continue." });
     }
 
-    const student = await Student.findOne({ employeeId });
+    const newEmployeeId = String(req.body.employeeIdOverride || "").trim();
+    if (!newEmployeeId) {
+      return res.json({ success: false, message: "Employee ID cannot be empty" });
+    }
+
+    const student = await Student.findOne({ employeeId: currentEmployeeId });
     if (!student) {
       return res.json({ success: false, message: "Student not found" });
     }
 
     const oldEmployeeId = student.employeeId;
-    const newEmployeeId = employeeIdOverride.trim();
+
+    if (newEmployeeId === oldEmployeeId) {
+      return res.json({ success: true, message: "That is already your Employee ID." });
+    }
+
+    // Refuse an ID that belongs to someone else.
+    //
+    // Nothing checked this. A WhatsApp joiner could claim an ID already in use
+    // and the server would take it: under MongoDB the unique index turned it
+    // into an opaque save error, and under the JSON fallback — which enforces
+    // no indexes — two students simply ended up sharing one login identity.
+    const availability = await isEmployeeIdAvailable(newEmployeeId, student._id);
+    if (!availability.available) {
+      return res.status(409).json({
+        success: false,
+        available: false,
+        message: availability.reason || "This Employee ID is already taken. Please choose a different one."
+      });
+    }
 
     student.employeeIdOverride = newEmployeeId;
     student.employeeId = newEmployeeId;
     await student.save();
 
-    // Cascade employee ID change to all related collections
-    if (oldEmployeeId && newEmployeeId && oldEmployeeId !== newEmployeeId) {
-      try {
-        await Promise.all([
-          Attendance.updateMany({ employeeId: oldEmployeeId }, { $set: { employeeId: newEmployeeId } }),
-          Submission.updateMany({ employeeId: oldEmployeeId }, { $set: { employeeId: newEmployeeId } }),
-          TaskAssignment.updateMany({ employeeId: oldEmployeeId }, { $set: { employeeId: newEmployeeId } }),
-          BadgeAward.updateMany({ employeeId: oldEmployeeId }, { $set: { employeeId: newEmployeeId } }),
-          DocumentHistory.updateMany({ employeeId: oldEmployeeId }, { $set: { employeeId: newEmployeeId } }),
-        ]);
-        // Update active session too
-        if (req.session && req.session.student) req.session.student.employeeId = newEmployeeId;
-      } catch(cascadeErr) {
-        console.error('Employee ID cascade error:', cascadeErr);
-        // Don't fail the main request — cascade is best-effort
-      }
+    // Cascade the change to everything keyed on the old ID.
+    try {
+      await Promise.all([
+        Attendance.updateMany({ employeeId: oldEmployeeId }, { $set: { employeeId: newEmployeeId } }),
+        Submission.updateMany({ employeeId: oldEmployeeId }, { $set: { employeeId: newEmployeeId } }),
+        TaskAssignment.updateMany({ employeeId: oldEmployeeId }, { $set: { employeeId: newEmployeeId } }),
+        BadgeAward.updateMany({ employeeId: oldEmployeeId }, { $set: { employeeId: newEmployeeId } }),
+        DocumentHistory.updateMany({ employeeId: oldEmployeeId }, { $set: { employeeId: newEmployeeId } }),
+      ]);
+      if (req.session && req.session.student) req.session.student.employeeId = newEmployeeId;
+    } catch (cascadeErr) {
+      console.error('Employee ID cascade error:', cascadeErr);
+      // Best-effort: the student document is already updated.
     }
 
-    res.json({ success: true });
+    res.json({ success: true, employeeId: newEmployeeId });
   } catch (err) {
-    console.error(err);
-    res.json({ success: false });
+    console.error("[save-employee-id-override]", err.message);
+    res.json({ success: false, message: "Could not update the Employee ID right now." });
   }
 });
 
@@ -5348,10 +5371,45 @@ try{
 
         const ok = await bcrypt.compare(password, dbCoord.password);
         if(ok){
-            if (dbCoord.verificationStatus !== "approved") {
-                dbCoord.verificationStatus = "approved";
-                await dbCoord.save().catch(() => {});
+            // The password is right. Whether they may come in is a separate
+            // question, and it used to answer itself:
+            //
+            //     if (dbCoord.verificationStatus !== "approved") {
+            //         dbCoord.verificationStatus = "approved";
+            //
+            // Logging in APPROVED the applicant. Anyone who registered as a
+            // coordinator granted themselves the role by signing in once, and
+            // HR's review existed only on paper. Being right about the password
+            // is not the same as being authorised.
+            if (dbCoord.verificationStatus === "rejected") {
+                return res.status(403).json({
+                    success: false,
+                    approvalStatus: "rejected",
+                    message: dbCoord.reviewNote
+                        ? "Your coordinator application was not approved. " + dbCoord.reviewNote
+                        : "Your coordinator application was not approved. Please contact HR if you believe this is a mistake."
+                });
             }
+
+            if (dbCoord.verificationStatus !== "approved") {
+                return res.status(403).json({
+                    success: false,
+                    approvalStatus: "pending",
+                    message: "Your coordinator application is still awaiting HR approval. " +
+                             "You will be able to sign in once it has been reviewed."
+                });
+            }
+
+            // Approved once, then replaced by a sole coordinator for the domain.
+            if (dbCoord.supersededAt) {
+                return res.status(403).json({
+                    success: false,
+                    approvalStatus: "superseded",
+                    message: "Another coordinator now holds " + (dbCoord.domain || "this domain") +
+                             ". Please contact HR if you should still have access."
+                });
+            }
+
             await clearFailedAttempts(dbCoord, Coordinator);
             const coordIdentity = {
                 username: dbCoord.username || dbCoord.email,
@@ -5371,6 +5429,148 @@ try{
 });
 
 // ================= TEST: COORDINATOR SAVE QUESTIONS =================
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Coordinator applications — HR review
+//
+// A coordinator registration used to be approved by the applicant simply
+// logging in (see /coordinator-login). These endpoints are the review that was
+// supposed to happen, and HR Level 2 — "Sr HR Associate: assesses & verifies
+// incoming Coordinator applications, enforces one coordinator-per-domain" — is
+// the level the portal already documents for the job.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const COORDINATOR_REVIEW_MIN_LEVEL = 2;
+
+function requireCoordinatorReviewer(req, res, next) {
+    if (req.session && req.session.adminUser) return next();
+    const hr = req.session && req.session.hr;
+    if (!hr) {
+        return res.status(401).json({ success: false, message: "HR sign-in required." });
+    }
+    if ((hr.level || 1) < COORDINATOR_REVIEW_MIN_LEVEL) {
+        return res.status(403).json({
+            success: false,
+            message: "Coordinator applications are reviewed from HR Level " +
+                     COORDINATOR_REVIEW_MIN_LEVEL + " (Sr HR Associate) upward."
+        });
+    }
+    next();
+}
+
+// GET /api/hr/coordinator-applications
+// Pending applications, each with whoever already holds the domain, so the
+// reviewer can see the clash before deciding rather than after.
+app.get("/api/hr/coordinator-applications", requireCoordinatorReviewer, async (req, res) => {
+    try {
+        const pending = await Coordinator
+            .find({ verificationStatus: "pending" })
+            .select("username email name domain experience createdAt")
+            .sort({ createdAt: 1 })
+            .lean();
+
+        const domains = [...new Set(pending.map(p => p.domain).filter(Boolean))];
+        const holders = domains.length
+            ? await Coordinator.find({
+                  domain: { $in: domains },
+                  verificationStatus: "approved",
+                  supersededAt: null
+              }).select("username email name domain domainMode").lean()
+            : [];
+
+        const byDomain = {};
+        for (const h of holders) (byDomain[h.domain] = byDomain[h.domain] || []).push(h);
+
+        res.json({
+            success: true,
+            applications: pending.map(app => ({
+                ...app,
+                existingCoordinators: byDomain[app.domain] || []
+            }))
+        });
+    } catch (err) {
+        console.error("[coordinator-applications]", err.message);
+        res.status(500).json({ success: false, message: "Could not load applications." });
+    }
+});
+
+// POST /api/hr/coordinator-applications/:id/decide
+// body: { decision: "approve" | "reject", domainMode?: "sole" | "shared", note?: string }
+app.post("/api/hr/coordinator-applications/:id/decide", requireCoordinatorReviewer, async (req, res) => {
+    try {
+        const { decision, domainMode, note } = req.body || {};
+        if (decision !== "approve" && decision !== "reject") {
+            return res.status(400).json({ success: false, message: "Decision must be approve or reject." });
+        }
+
+        const applicant = await Coordinator.findById(req.params.id);
+        if (!applicant) {
+            return res.status(404).json({ success: false, message: "Application not found." });
+        }
+        if (applicant.verificationStatus !== "pending") {
+            return res.status(409).json({
+                success: false,
+                message: "This application was already " + applicant.verificationStatus + "."
+            });
+        }
+
+        const reviewer = (req.session.hr && (req.session.hr.username || req.session.hr.email))
+                      || (req.session.adminUser && "admin")
+                      || "unknown";
+
+        if (decision === "reject") {
+            applicant.verificationStatus = "rejected";
+            applicant.reviewedBy = reviewer;
+            applicant.reviewedAt = new Date();
+            applicant.reviewNote = String(note || "").slice(0, 500);
+            await applicant.save();
+            return res.json({ success: true, status: "rejected" });
+        }
+
+        // Approving. "sole" removes everyone else from the domain; "shared"
+        // leaves them in place. Anything else is a typo, and defaulting a typo
+        // to "sole" would silently cut off a working coordinator.
+        const mode = domainMode === "shared" ? "shared" : (domainMode === "sole" ? "sole" : null);
+        if (!mode) {
+            return res.status(400).json({
+                success: false,
+                message: "Choose whether this coordinator is the sole coordinator for the domain or shares it."
+            });
+        }
+
+        let superseded = [];
+        if (mode === "sole" && applicant.domain) {
+            const others = await Coordinator.find({
+                domain: applicant.domain,
+                verificationStatus: "approved",
+                supersededAt: null,
+                _id: { $ne: applicant._id }
+            }).select("_id username email");
+
+            if (others.length) {
+                await Coordinator.updateMany(
+                    { _id: { $in: others.map(o => o._id) } },
+                    { $set: { supersededAt: new Date(), supersededBy: reviewer } }
+                );
+                superseded = others.map(o => o.username || o.email);
+            }
+        }
+
+        applicant.verificationStatus = "approved";
+        applicant.domainMode = mode;
+        applicant.reviewedBy = reviewer;
+        applicant.reviewedAt = new Date();
+        applicant.reviewNote = String(note || "").slice(0, 500);
+        applicant.supersededAt = null;
+        applicant.supersededBy = "";
+        await applicant.save();
+
+        res.json({ success: true, status: "approved", domainMode: mode, superseded });
+    } catch (err) {
+        console.error("[coordinator-decide]", err.message);
+        res.status(500).json({ success: false, message: "Could not record that decision." });
+    }
+});
 
 app.post("/save-test-questions", async(req,res)=>{
 try{
@@ -8461,10 +8661,15 @@ if (!CODE_RUNNER_ENABLED) {
 
 function requireCodeRunner(req, res, next) {
     if (!CODE_RUNNER_ENABLED) {
+        // `message` as well as `error`. The terminal button reads
+        // `d.message || "Could not create workspace"`, so a refusal that set
+        // only `error` reached the student as "Failed — Could not create
+        // workspace": a crash, for something that is switched off on purpose.
         return res.status(503).json({
             success: false,
             output: "",
             error: "The code runner is disabled on this server.",
+            message: "The coding terminal is turned off at the moment. Your code and submissions are unaffected — ask your coordinator when it will be available.",
             executionTime: 0
         });
     }
@@ -8661,6 +8866,43 @@ app.get("/coordinator/coding-submissions/:domain", requireStaffSession, async(re
 });
 
 // ================= PUBLIC DOCUMENT VERIFICATION =================
+
+// Public, unauthenticated: the numbers and the domain list the landing page
+// shows. Counts only — no student records, no names, nothing identifying.
+//
+// The home page previously hardcoded "10+ Domains" and "500+ Interns", which
+// were wrong in both directions and would drift further every week. Serving
+// them from the same config the registration form reads means the page can
+// never advertise a domain a student cannot pick.
+//
+// Cached, because this is the most-visited page on the site and a burst of
+// visitors should not become a burst of collection scans.
+let _publicStatsCache = { at: 0, body: null };
+const PUBLIC_STATS_TTL_MS = 5 * 60 * 1000;
+
+app.get('/api/public/stats', async (req, res) => {
+    try {
+        if (_publicStatsCache.body && (Date.now() - _publicStatsCache.at) < PUBLIC_STATS_TTL_MS) {
+            return res.json(_publicStatsCache.body);
+        }
+        const { SELECTABLE_DOMAIN_NAMES } = require("./config/domains");
+        const interns = await Student.estimatedDocumentCount();
+        const body = {
+            success: true,
+            interns,
+            domains: SELECTABLE_DOMAIN_NAMES.length,
+            domainNames: SELECTABLE_DOMAIN_NAMES,
+            tracks: 6
+        };
+        _publicStatsCache = { at: Date.now(), body };
+        res.json(body);
+    } catch (err) {
+        console.error('[public-stats]', err.message);
+        // The page falls back to whatever is already rendered, so a failure here
+        // shows stale-but-sane text rather than an empty row.
+        res.json({ success: false, domainNames: [], tracks: 6 });
+    }
+});
 
 app.get('/verify-document', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'verify.html'));
@@ -9070,6 +9312,11 @@ try {
     const v2Assistant = require('./routes/v2/assistant');
     app.use('/api/v2/assistant', v2Assistant);
     app.get('/assistant', (req, res) => res.sendFile(path.join(__dirname, 'public', 'assistant.html')));
+
+    const v2Academics = require('./routes/v2/academics');
+    app.use('/api/v2/academics', v2Academics);
+    app.get('/academics', (req, res) => res.sendFile(path.join(__dirname, 'public', 'academics.html')));
+    console.log('[V2] Academics mounted at /api/v2/academics, page at /academics');
     console.log('[V2] Assistant mounted at /api/v2/assistant, page at /assistant');
 } catch(e) {
     console.error('[V2] Failed to mount assistant routes:', e.message);
@@ -9764,11 +10011,28 @@ server.listen(PORT, "0.0.0.0", ()=>{
     //
     // ENABLE_AUTOMATION_CRON=false turns them off (useful when several
     // instances share one database and only one should run the jobs).
-    // Align the employee-ID counter with IDs already issued, so the first ID
-    // generated after this deploy cannot collide with an existing student.
-    initEmployeeIdCounter().catch((err) => {
-        console.error("[employeeId] Counter initialisation failed:", err.message);
-    });
+    // Align the employee-ID counter with the IDs already issued.
+    //
+    // This used to run right here, in the listen callback — which fires as soon
+    // as the socket is bound, before mongoose.connect() has resolved. The scan
+    // for the highest existing ID could therefore come back empty and leave the
+    // counter at zero, and new students were issued 1004, 1005, 1006 while real
+    // students already held 1758 and 1759.
+    //
+    // Wait for the connection instead. `once` rather than `on`, so a later
+    // reconnect does not rescan; generateEmployeeId re-aligns by itself if it
+    // ever meets a taken ID, which covers everything this misses.
+    const alignEmployeeIdCounter = () => {
+        initEmployeeIdCounter().catch((err) => {
+            console.error("[employeeId] Counter initialisation failed:", err.message);
+        });
+    };
+
+    if (mongoose.connection.readyState === 1) {
+        alignEmployeeIdCounter();
+    } else {
+        mongoose.connection.once("connected", alignEmployeeIdCounter);
+    }
 
     // Under PM2 cluster mode every worker runs this file, so N workers would
     // each schedule the same jobs against the same database — N offer letters,

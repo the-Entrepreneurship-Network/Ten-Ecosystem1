@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TEN — Academics</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700;800;900&display=swap" rel="stylesheet">
+<style>
+/* Tokens are v2-tasks.html's, so Academics and My Task Journey are the same
+   product to a student rather than two that happen to share a logo. */
+:root{
+  --bg-base:#05070e; --bg-surface:#090d1a; --bg-card:#0e1428; --bg-card-hover:#121933;
+  --bg-input:#0b1222; --border:rgba(212,175,55,0.08); --border-strong:rgba(212,175,55,0.18);
+  --accent-green:#10b981; --accent-amber:#f59e0b; --accent-red:#ef4444; --accent-gold:#D4AF37;
+  --accent-blue:#3b82f6;
+  --text-primary:#F0EEE8; --text-secondary:#9a9080; --text-muted:#4E4840;
+  --radius-sm:10px; --radius-md:16px; --radius-lg:22px; --shadow-card:0 4px 24px rgba(0,0,0,0.35);
+  --ease-out:cubic-bezier(.23,1,.32,1);
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg-base);color:var(--text-primary);
+     font-family:'Plus Jakarta Sans',system-ui,-apple-system,'Segoe UI',sans-serif;min-height:100vh}
+a{color:inherit}
+
+.nav{display:flex;align-items:center;gap:14px;padding:14px 22px;border-bottom:1px solid var(--border);
+     background:rgba(9,13,26,.9);position:sticky;top:0;z-index:20;backdrop-filter:blur(8px)}
+.nav .logo{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;
+     background:linear-gradient(135deg,var(--accent-gold),#b8962c);color:#05070e;font-weight:800}
+.nav b{font-size:15px;color:var(--accent-gold);letter-spacing:.02em}
+.nav .sp{flex:1}
+.nav a.back{font-size:13px;color:var(--text-secondary);text-decoration:none;
+     border:1px solid var(--border-strong);border-radius:999px;padding:7px 14px}
+.nav a.back:hover{color:var(--text-primary)}
+
+.page{max-width:1080px;margin:0 auto;padding:30px 22px 80px}
+.page-header h1{font-size:30px;font-weight:800;letter-spacing:-.02em}
+.page-header h1 span{color:var(--accent-gold)}
+.page-header p{color:var(--text-secondary);font-size:14px;margin-top:6px}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;margin-top:26px}
+.card{background:var(--bg-card);border:1px solid var(--border-strong);border-radius:var(--radius-lg);
+      padding:22px;cursor:pointer;box-shadow:var(--shadow-card);
+      transition:transform .18s var(--ease-out),border-color .18s,background .18s}
+.card:hover{transform:translateY(-3px);background:var(--bg-card-hover);border-color:rgba(212,175,55,.4)}
+.card:active{transform:translateY(-1px)}
+.card .ico{font-size:22px;margin-bottom:12px;display:block}
+.card h3{font-size:16px;font-weight:700}
+.card p{font-size:12.5px;color:var(--text-secondary);margin-top:5px;line-height:1.5}
+.tag{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.05em;padding:2px 8px;
+     border-radius:5px;margin-left:6px;vertical-align:middle}
+.tag.prem{background:rgba(212,175,55,.2);color:var(--accent-gold)}
+.tag.soon{background:rgba(255,255,255,.07);color:var(--text-muted)}
+
+/* ── domains + modules, lifted from v2-tasks.html ─────────────────────── */
+.section-head{display:flex;align-items:center;gap:12px;margin:34px 0 14px}
+.section-head h2{font-size:19px;font-weight:700}
+.section-head .sp{flex:1}
+.linky{background:none;border:0;color:var(--text-secondary);font:inherit;font-size:13px;cursor:pointer;
+       text-decoration:underline;text-underline-offset:3px}
+.linky:hover{color:var(--text-primary)}
+
+.week-header{display:flex;align-items:center;gap:14px;background:var(--bg-surface);
+     border:1px solid var(--border);border-radius:var(--radius-md);padding:14px 18px;margin-bottom:10px}
+.week-badge{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none;
+     background:rgba(212,175,55,.12);color:var(--accent-gold);font-weight:800;font-size:12px}
+.week-title{flex:1}
+.week-title b{font-size:15px;display:block}
+.week-title small{font-size:12px;color:var(--text-secondary)}
+.week-locked-msg{font-size:12px;color:var(--text-muted);border:1px solid var(--border);
+     border-radius:999px;padding:6px 12px;white-space:nowrap}
+
+.task-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-md);
+     padding:18px 20px;margin-bottom:14px;display:flex;gap:14px;align-items:flex-start}
+.task-card.locked{opacity:.55}
+.task-card .state{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;flex:none;
+     font-size:13px;background:rgba(255,255,255,.05);color:var(--text-muted)}
+.task-card.done .state{background:var(--accent-green);color:#04170f}
+.task-card .body{flex:1;min-width:0}
+.task-card h4{font-size:15px;font-weight:700}
+.task-card p{font-size:13px;color:var(--text-secondary);margin-top:4px;line-height:1.5}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.chip{font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;letter-spacing:.02em}
+.chip.easy{background:rgba(16,185,129,.14);color:var(--accent-green)}
+.chip.hard{background:rgba(239,68,68,.14);color:#fca5a5}
+.chip.expert{background:rgba(139,92,246,.16);color:#c4b5fd}
+.chip.coins{background:rgba(212,175,55,.14);color:var(--accent-gold)}
+.chip.passed{background:rgba(16,185,129,.16);color:var(--accent-green)}
+.chip.locked{background:rgba(255,255,255,.05);color:var(--text-muted)}
+.chip.score{background:rgba(59,130,246,.14);color:#93c5fd}
+
+.btn{border:0;border-radius:var(--radius-sm);font:inherit;font-size:13px;font-weight:700;cursor:pointer;
+     padding:10px 16px;transition:opacity .2s,transform .16s var(--ease-out)}
+.btn:active{transform:scale(.98)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.gold{background:linear-gradient(135deg,var(--accent-gold),#b8962c);color:#05070e}
+.btn.ghost{background:transparent;border:1px solid var(--border-strong);color:var(--text-secondary)}
+.btn.green{background:var(--accent-green);color:#04170f}
+.row-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+
+/* ── modal ────────────────────────────────────────────────────────────── */
+.modal{position:fixed;inset:0;z-index:80;background:rgba(3,5,10,.82);display:none;
+       place-items:center;padding:22px;overflow-y:auto;backdrop-filter:blur(3px)}
+.modal.on{display:grid}
+.sheet{background:var(--bg-card);border:1px solid var(--border-strong);border-radius:var(--radius-lg);
+       padding:30px;max-width:520px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.6);
+       animation:rise .32s var(--ease-out)}
+/* Never from scale(0) — nothing appears out of nothing. */
+@keyframes rise{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
+.sheet h2{font-size:21px;font-weight:800;margin-bottom:6px}
+.sheet .lede{font-size:13.5px;color:var(--text-secondary);line-height:1.6;margin-bottom:18px}
+.perks{list-style:none;display:flex;flex-direction:column;gap:11px;margin-bottom:22px}
+.perks li{display:flex;gap:11px;font-size:13.5px;line-height:1.5}
+.perks .tick{color:var(--accent-green);flex:none;font-weight:800}
+.price{font-size:30px;font-weight:800;color:var(--accent-gold);margin-bottom:2px}
+.price small{display:block;font-size:12px;color:var(--text-secondary);font-weight:500;margin-top:3px}
+.sheet .stack{display:flex;flex-direction:column;gap:10px;margin-top:20px}
+.sheet textarea{width:100%;background:var(--bg-input);border:1px solid var(--border-strong);
+     border-radius:var(--radius-sm);color:var(--text-primary);font:inherit;font-size:14px;
+     padding:13px 15px;min-height:190px;resize:vertical;outline:none;line-height:1.6}
+.sheet textarea:focus{border-color:var(--accent-gold)}
+.meta{font-size:12px;color:var(--text-muted);margin-top:8px}
+.result{border-radius:var(--radius-sm);padding:14px 16px;margin-top:14px;font-size:13px;line-height:1.6}
+.result.pass{background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);color:#6EE7B7}
+.result.fail{background:rgba(245,158,11,.09);border:1px solid rgba(245,158,11,.3);color:#F5C87A}
+.result ul{margin:8px 0 0 18px}
+.empty{color:var(--text-secondary);font-size:13.5px;padding:26px;text-align:center;
+       border:1px dashed var(--border-strong);border-radius:var(--radius-md)}
+@media (prefers-reduced-motion:reduce){.sheet{animation:none}.card{transition:none}}
+
+/* ── the preview: white studio page, noth.in structure ──────────────────
+   The nebula journey is gone. This is the Nothing-dashboard clone: white
+   page, one giant textured word, ink blobs, alternating work sections,
+   dark interludes, black footer whose word runs from the cursor. */
+#noth{position:fixed;inset:0;z-index:60;background:#fff;color:#0a0a0a;overflow-y:auto;overflow-x:hidden;
+  font-family:'Inter Tight','Inter',Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+#noth.gone{display:none}
+.nh-head{position:sticky;top:0;z-index:9;display:flex;justify-content:space-between;align-items:flex-start;
+  padding:26px 34px;mix-blend-mode:difference;color:#fff;pointer-events:none}
+.nh-head .mark{font-weight:900;font-size:22px;letter-spacing:-.02em}
+.nh-head .menu{pointer-events:auto;background:none;border:0;color:inherit;font:inherit;font-weight:800;
+  font-size:12px;letter-spacing:.14em;cursor:pointer}
+.nh-hero{min-height:100vh;display:flex;flex-direction:column;justify-content:space-between;padding:0 34px 16px;position:relative}
+.nh-tag{font-size:clamp(18px,2vw,26px);line-height:1.25;font-weight:600;max-width:460px;padding-top:8px}
+.nh-pill{display:inline-flex;align-items:center;gap:10px;margin-top:26px;padding:14px 26px;border:1.5px solid currentColor;
+  border-radius:999px;background:none;font:inherit;font-weight:800;font-size:12px;letter-spacing:.16em;cursor:pointer;
+  text-decoration:none;color:#0a0a0a;width:max-content;transition:background .25s,color .25s}
+.nh-pill:hover{background:#0a0a0a;color:#fff;border-color:#0a0a0a}
+.nh-word{position:relative;width:100%;margin-top:16px}
+.nh-word svg{display:block;width:100%;height:auto}
+.nh-word svg text{font-family:'Inter Tight',Arial,sans-serif;font-weight:900;letter-spacing:-.02em}
+#nhBlobs{position:absolute;left:0;right:0;top:-14%;height:128%;width:100%;pointer-events:none}
+.nh-strip{display:flex;justify-content:space-between;font-weight:700;font-size:13px;padding-top:14px}
+.nh-strip a{text-decoration:none;color:inherit;margin-left:18px}
+.nh-sec{padding:13vh 34px;display:grid;grid-template-columns:0.8fr 1fr 1.2fr;gap:38px;align-items:center;background:#fff}
+.nh-sec .lbl{font-size:15px;font-weight:600}
+.nh-sec p{font-size:clamp(17px,1.6vw,22px);line-height:1.45;font-weight:600;max-width:24em}
+.nh-tile{border-radius:14px;overflow:hidden;display:block;width:100%;box-shadow:0 30px 70px rgba(0,0,0,.18)}
+.nh-tile img,.nh-tile video{display:block;width:100%;height:auto}
+.nh-cap{font-size:14px;font-weight:600;margin-top:12px;color:#333}
+.nh-sec.flip .lbl{order:3;text-align:right}
+.nh-sec.flip .tilebox{order:-1}
+@media(max-width:900px){.nh-sec{grid-template-columns:1fr;gap:20px}
+  .nh-sec.flip .tilebox{order:0}.nh-sec.flip .lbl{order:0;text-align:left}}
+.nh-dark{background:#050505;color:#fff}
+.nh-big{padding:22vh 34px;font-size:clamp(40px,7vw,96px);font-weight:800;letter-spacing:-.03em;line-height:1.02}
+/* The drop: like the reference credits scene — objects fall in from above,
+   tumble, collide with each other and pile up over the columns. */
+.nh-drop{position:relative;min-height:100vh;overflow:hidden;
+  display:grid;grid-template-columns:1fr 1fr 1fr;gap:34px;align-items:center;padding:0 34px}
+.nh-drop .col .k{font-family:'DM Mono',ui-monospace,monospace;font-size:12px;letter-spacing:.18em;
+  text-transform:uppercase;opacity:.65;margin-bottom:16px}
+.nh-drop .col div{font-size:clamp(15px,1.4vw,19px);font-weight:600;line-height:1.55}
+.nh-drop .lead{font-size:clamp(20px,2vw,28px);font-weight:600}
+.nh-drop .tile{position:absolute;left:0;top:0;width:64px;height:64px;border-radius:14px;overflow:hidden;
+  will-change:transform;box-shadow:0 12px 30px rgba(0,0,0,.5)}
+.nh-drop .tile img{width:100%;height:100%;object-fit:cover}
+.nh-foot{background:#050505;color:#fff;padding:14vh 34px 10px;position:relative}
+.nh-foot h3{font-size:clamp(38px,5vw,72px);font-weight:800;letter-spacing:-.02em;line-height:1.05}
+.nh-foot .pills{display:flex;gap:14px;margin:34px 0 7vh;flex-wrap:wrap}
+.nh-foot .nh-pill{color:#fff}
+.nh-foot .nh-pill:hover{background:#fff;color:#0a0a0a;border-color:#fff}
+.nh-links{position:absolute;right:34px;top:14vh;font-size:clamp(18px,1.8vw,26px);font-weight:600;line-height:1.5}
+.nh-links a{display:block;color:#fff;text-decoration:none}
+.nh-links a:hover{opacity:.7}
+.nh-flee{font-weight:900;font-size:clamp(60px,12vw,185px);letter-spacing:-.02em;line-height:.95;
+  display:flex;justify-content:space-between;margin-top:5vh;user-select:none}
+.nh-flee span{display:inline-block;transition:transform .6s cubic-bezier(.16,1,.3,1)}
+.nh-credits{display:flex;justify-content:space-between;gap:12px;font-size:12px;font-weight:600;opacity:.75;padding:26px 0 18px;flex-wrap:wrap}
+@media (prefers-reduced-motion:reduce){.nh-flee span{transition:none}}
+
+</style>
+</head>
+<body>
+
+<div id="noth" aria-label="Academics preview">
+  <div class="nh-head"><span class="mark">A'</span><button class="menu" id="nhEnter" type="button">ENTER PORTAL ::</button></div>
+
+  <section class="nh-hero">
+    <div>
+      <div class="nh-tag">Not a course, a career.<br>Because Academics is Everythin'.</div>
+      <a class="nh-pill" href="student-journeys.html">START LEARNING <span>&rarr;</span></a>
+    </div>
+    <div class="nh-word" id="nhWord">
+      <svg viewBox="0 0 1600 300" aria-hidden="true">
+        <defs>
+          <clipPath id="nhClip"><text x="800" y="248" text-anchor="middle" font-size="300" textLength="1580" lengthAdjust="spacingAndGlyphs">ACADEMICS</text></clipPath>
+        </defs>
+        <g clip-path="url(#nhClip)">
+          <rect width="1600" height="300" fill="#0a0a0a"/>
+          <image id="nhTex0" href="img/textures/foil.webp" x="-200" y="-150" width="2000" height="600" preserveAspectRatio="xMidYMid slice" opacity="1"></image>
+          <image id="nhTex1" href="img/textures/balloon.webp" x="-200" y="-150" width="2000" height="600" preserveAspectRatio="xMidYMid slice" opacity="0"></image>
+          <image id="nhTex2" href="img/textures/wool.webp" x="-200" y="-150" width="2000" height="600" preserveAspectRatio="xMidYMid slice" opacity="0"></image>
+        </g>
+      </svg>
+      <canvas id="nhBlobs"></canvas>
+    </div>
+    <div class="nh-strip">
+      <span>The Academics arm of The Entrepreneurship Network</span>
+      <span><a href="student-portal.html">STUDENT</a> / <a href="talent-network.html">JOBS</a> / <a href="coming-soon.html">RESUME</a></span>
+    </div>
+  </section>
+
+  <div id="nhSections"></div>
+
+  <footer class="nh-foot">
+    <h3>Let's start<br>your journey</h3>
+    <div class="pills">
+      <a class="nh-pill" href="student-journeys.html">START LEARNING <span>&rarr;</span></a>
+      <a class="nh-pill" href="payment.html">PAY &amp; UNLOCK <span>@</span></a>
+    </div>
+    <div class="nh-links">
+      <a href="student-portal.html">Student Portal</a>
+      <a href="talent-network.html">Job Portal</a>
+      <a href="coming-soon.html">Resume Portal</a>
+    </div>
+    <div class="nh-flee" id="nhFlee" aria-label="ACADEMICS"></div>
+    <div class="nh-credits">
+      <span>&copy;2026 &mdash; The Entrepreneurship Network</span>
+      <span>Courses &middot; Quizzes &middot; Projects &middot; Certificates &middot; Resume Builder &middot; Resume Checker &middot; Jobs</span>
+      <span>EN</span>
+    </div>
+  </footer>
+</div>
+
+<nav class="nav">
+  <span class="logo">∞</span><b>TEN</b>
+  <span class="sp"></span>
+  <a class="back" href="/student-dashboard.html">← Dashboard</a>
+</nav>
+
+<div class="page">
+  <div class="page-header">
+    <h1>Academics <span>&amp; Career</span></h1>
+    <p>Learn the domain properly, prove it with a certificate, then use it to get hired.</p>
+  </div>
+
+  <div class="grid" id="cards"></div>
+
+  <div id="domainWrap" hidden>
+    <div class="section-head">
+      <h2>Domains</h2><span class="sp"></span>
+      <button class="linky" id="backToCards">← All sections</button>
+    </div>
+    <div class="grid" id="domains"></div>
+  </div>
+
+  <div id="moduleWrap" hidden>
+    <div class="section-head">
+      <h2 id="domainName">Domain</h2><span class="sp"></span>
+      <button class="linky" id="backToDomains">← All domains</button>
+    </div>
+    <div id="modules"></div>
+  </div>
+</div>
+
+<div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var API = '/api/v2/academics';
+  var state = { premiumAmount: 999, passMark: 70, maxAttempts: 3, domain: null };
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) { e.className = cls; }
+    if (text !== undefined) { e.textContent = text; }
+    return e;
+  }
+  function show(id) { ['cards', 'domainWrap', 'moduleWrap'].forEach(function (k) {
+    var n = k === 'cards' ? $('cards') : $(k);
+    if (k === 'cards') { n.hidden = id !== 'cards'; } else { n.hidden = id !== k; }
+  }); }
+  function openModal(build) {
+    var s = $('sheet'); s.innerHTML = ''; build(s); $('modal').classList.add('on');
+  }
+  function closeModal() { $('modal').classList.remove('on'); }
+  $('modal').addEventListener('click', function (e) { if (e.target === $('modal')) { closeModal(); } });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeModal(); } });
+
+  var get = function (u) { return fetch(API + u, { credentials: 'same-origin' }).then(function (r) { return r.json(); }); };
+  var post = function (u, b) {
+    return fetch(API + u, { method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b || {}) })
+      .then(function (r) { return r.json().then(function (j) { j._code = r.status; return j; }); });
+  };
+
+  /* ── the Nothing-clone preview ──────────────────────────────────────
+     White page, one giant textured word, ink blobs that avoid the hand,
+     fourteen work sections, a heart of logos, and a word that runs away. */
+  (function noth() {
+    var root = $('noth');
+    if (!root) { return; }
+    var reduced = false;
+    try { reduced = window.matchMedia('(prefers-reduced-motion:reduce)').matches; } catch (_e) {}
+
+    function leave() { root.classList.add('gone'); document.body.style.overflow = ''; }
+    document.body.style.overflow = 'hidden';
+    $('nhEnter').addEventListener('click', leave);
+
+    var DOMS = [
+      { slug: 'python',  name: 'Python Development',  cap: 'Django & FastAPI, marked on reasoning',
+        feat: ['Data handling, automation and backend services', 'Django and FastAPI project work', 'Written assessments marked on your reasoning'] },
+      { slug: 'java',    name: 'Java Development',    cap: 'Spring Boot you actually deploy',
+        feat: ['Core Java, OOP and collections in depth', 'Spring Boot services you actually deploy', 'The track most service firms hire against'] },
+      { slug: 'webdev',  name: 'Web Development',     cap: 'Responsive, accessible, fast',
+        feat: ['Semantic HTML, modern CSS, real JavaScript', 'Responsive and accessible by default', 'Performance budgets, not just pretty pages'] },
+      { slug: 'swe',     name: 'Software Engineering', cap: 'How software is built in a team',
+        feat: ['Design patterns, testing and code review', 'Version control and CI as habits', 'How software is built in a team'] },
+      { slug: 'flutter', name: 'Flutter Development', cap: 'One codebase, both stores',
+        feat: ['One codebase, Android and iOS', 'State management and platform channels', 'A store-ready app as the final project'] },
+      { slug: 'mern',    name: 'MERN Stack',          cap: 'The full-stack track',
+        feat: ['Mongo, Express, React and Node end to end', 'Auth, payments and deployment', 'The busiest track on the portal'] },
+      { slug: 'ai',      name: 'Artificial Intelligence', cap: 'Models, honestly evaluated',
+        feat: ['Neural networks from the maths up', 'Training, evaluation and honest metrics', 'Where models fail, and how you find out'] },
+      { slug: 'data',    name: 'Data Science',        cap: 'Dashboards that answer questions',
+        feat: ['Cleaning, exploring and modelling real data', 'Statistics you can defend in a review', 'Dashboards that answer a question'] },
+      { slug: 'cyber',   name: 'Cyber Security',      cap: 'OWASP to incident response',
+        feat: ['Threat modelling and secure design', 'Web, network and application security', 'Findings written the way a client reads them'] },
+      { slug: 'aws',     name: 'DevOps with AWS',     cap: 'Ship without breaking what runs',
+        feat: ['Pipelines, containers, infrastructure as code', 'The AWS services you will be asked about', 'Shipping without breaking what runs'] },
+      { slug: 'biz',     name: 'Business Analyst',    cap: 'Numbers you can stand behind',
+        feat: ['Business models, stakeholders and market research', 'Dashboards, revenue and financial modelling', 'Strategy you can present and defend'] },
+      { slug: 'hr',      name: 'HR Management',       cap: 'People, handled properly',
+        feat: ['Hiring, onboarding and retention', 'Performance, analytics and labour law', 'Policy that survives contact with people'] },
+      { slug: 'vc',      name: 'Venture Capital',     cap: 'Read a startup like an investor',
+        feat: ['How rounds, terms and dilution work', 'Valuation, diligence and term sheets', 'Exit thinking and investment committees'] },
+      { slug: 'finance', name: 'Finance',             cap: 'Models an analyst would sign',
+        feat: ['Statements, valuation and modelling', 'Markets and instruments, plainly', 'Portfolio thinking from day one'] },
+    ];
+
+    /* fourteen sections, a dashboard film after seven, the finisher after all */
+    var host = $('nhSections');
+    function sec(d, i) {
+      var s = el('section', 'nh-sec' + (i % 2 ? ' flip' : ''));
+      s.innerHTML = '<div class="lbl">( ' + String(i + 1).padStart(2, '0') + ' — ' + d.name + ' )</div>'
+        + '<p>' + d.feat.join('. ') + '. Courses, modules, quizzes, assignments and a dedicated project — certificate on completion.</p>'
+        + '<div class="tilebox"><div class="nh-tile"><img loading="lazy" src="img/domains/' + d.slug + '.webp" alt="' + d.name + '"></div>'
+        + '<div class="nh-cap">' + d.cap + '</div></div>';
+      host.appendChild(s);
+    }
+    DOMS.slice(0, 7).forEach(sec);
+    host.insertAdjacentHTML('beforeend',
+      '<section class="nh-sec"><div class="lbl">( The portal itself )</div>'
+      + '<p>Coins, weekly tasks, video-unlocked quizzes, mandatory daily drives — the dashboard every journey runs on.</p>'
+      + '<div class="tilebox"><div class="nh-tile"><video src="assets/dashboard-demo.mp4" muted loop playsinline autoplay></video></div>'
+      + '<div class="nh-cap">My Task Journey — the live dashboard</div></div></section>');
+    DOMS.slice(7).forEach(function (d, k) { sec(d, k + 7); });
+    host.insertAdjacentHTML('beforeend',
+      '<section class="nh-sec flip"><div class="lbl">( The one who finished )</div>'
+      + '<p>Certificate first. Then the resume builder, the resume checker, and the job portal — job findings matched to your domain. Walk out shining.</p>'
+      + '<div class="tilebox"><div class="nh-tile"><img loading="lazy" src="img/glitter-man.webp" alt="Person in a glitter suit"></div>'
+      + '<div class="nh-cap">Completion looks like this</div></div></section>'
+      + '<div class="nh-dark nh-big">Skills follow<br>momentum.</div>'
+      + '<div class="nh-drop nh-dark" id="nhDrop">'
+      + '<div class="lead">One portal.<br>Three doors :</div>'
+      + '<div class="col"><div class="k">Student Portal</div><div>A task journey for every domain — courses, modules, assignments and quizzes dedicated to each of the fourteen domains, coins for everything you finish, certificate on completion.</div></div>'
+      + '<div class="col"><div class="k">Job Portal &amp; Resume Portal</div><div>Job findings matched to your domain and level. Resume builder and resume checker — friendly both ways: it builds what recruiters read, and reads what you built.</div></div>'
+      + '</div>');
+
+    /* hero word: cursor parallax + material morph (foil / balloon / wool) */
+    var texes = [$('nhTex0'), $('nhTex1'), $('nhTex2')];
+    var texI = 0, acc = 0, lastX = 0, lastY = 0, mx = -9999, my = -9999;
+    root.addEventListener('pointermove', function (e) {
+      mx = e.clientX; my = e.clientY;
+      var dx = (e.clientX / root.clientWidth - 0.5) * 60;
+      var dy = (e.clientY / root.clientHeight - 0.5) * 40;
+      texes.forEach(function (t, k) {
+        t.setAttribute('x', (-200 + dx * (1 + k * 0.4)).toFixed(1));
+        t.setAttribute('y', (-150 + dy * (1 + k * 0.4)).toFixed(1));
+      });
+      acc += Math.hypot(e.clientX - lastX, e.clientY - lastY);
+      lastX = e.clientX; lastY = e.clientY;
+      if (acc > 900) {
+        acc = 0; texI = (texI + 1) % texes.length;
+        texes.forEach(function (t, k) {
+          t.style.transition = 'opacity 1.1s ease';
+          t.setAttribute('opacity', k === texI ? '1' : '0');
+        });
+      }
+    }, { passive: true });
+
+    /* ink blobs: drift over the word, run from the hand */
+    var bc = $('nhBlobs'), bx = bc.getContext('2d'), bw = 0, bh = 0;
+    var blobs = [];
+    for (var k = 0; k < 12; k++) {
+      blobs.push({ a: Math.random() * 6.28, r: 26 + Math.random() * 70,
+                   sp: 0.1 + Math.random() * 0.25, ox: Math.random(), oy: Math.random() });
+    }
+    function bsize() { var r = bc.getBoundingClientRect(); bw = bc.width = Math.max(2, r.width); bh = bc.height = Math.max(2, r.height); }
+    bsize(); window.addEventListener('resize', bsize);
+    (function bloop(t) {
+      if (!root.classList.contains('gone') && bw > 2) {
+        bx.clearRect(0, 0, bw, bh);
+        bx.fillStyle = '#0a0a0a';
+        var cr = bc.getBoundingClientRect();
+        var cx2 = mx - cr.left, cy2 = my - cr.top;
+        for (var q = 0; q < blobs.length; q++) {
+          var b = blobs[q];
+          var x = b.ox * bw + Math.sin(t / 1400 * b.sp * 6.28 + b.a) * 70;
+          var y = b.oy * bh + Math.cos(t / 1700 * b.sp * 6.28 + b.a) * 40;
+          var d = Math.hypot(x - cx2, y - cy2) || 1;
+          if (d < 190) { var f = (190 - d) / 190; x += (x - cx2) / d * f * 110; y += (y - cy2) / d * f * 90; }
+          bx.beginPath();
+          for (var i2 = 0; i2 <= 8; i2++) {
+            var an = i2 / 8 * 6.283;
+            var rr = b.r * (0.7 + 0.3 * Math.sin(t / 900 + b.a + i2 * 1.7));
+            var px2 = x + Math.cos(an) * rr, py2 = y + Math.sin(an) * rr * 0.72;
+            if (i2) { bx.lineTo(px2, py2); } else { bx.moveTo(px2, py2); }
+          }
+          bx.closePath(); bx.fill();
+        }
+      }
+      requestAnimationFrame(bloop);
+    })(0);
+
+    /* the drop, then the heart: the fourteen logos fall in from above like
+       the reference credits scene - gravity, tumbling, colliding with each
+       other, piling over the copy - and as the scroll goes deeper a spring
+       pulls every one of them into a heart. */
+    var dropSec = $('nhDrop'), tiles = [], dropBodies = [], dropStarted = false, DR = 32;
+    DOMS.forEach(function (d) {
+      var t = el('div', 'tile');
+      t.innerHTML = '<img loading="lazy" src="img/domains/' + d.slug + '.webp" alt="">';
+      dropSec.appendChild(t); tiles.push(t);
+    });
+    function heartPt(k) {
+      var t2 = (k / DOMS.length) * 6.28318;
+      var hx = 16 * Math.pow(Math.sin(t2), 3);
+      var hy = 13 * Math.cos(t2) - 5 * Math.cos(2 * t2) - 2 * Math.cos(3 * t2) - Math.cos(4 * t2);
+      return [0.5 + hx / 42, 0.46 - hy / 40];
+    }
+    function dropSpawn() {
+      dropBodies = DOMS.map(function (_, k) {
+        return { x: (0.12 + 0.76 * ((k * 0.61803) % 1)) * dropSec.clientWidth,
+                 y: -90 - k * 80,
+                 vx: (Math.random() - 0.5) * 2.4, vy: 0,
+                 a: (Math.random() - 0.5) * 50, va: (Math.random() - 0.5) * 3.2 };
+      });
+    }
+    (function dropLoop() {
+      var r = dropSec.getBoundingClientRect();
+      if (!root.classList.contains('gone') && r.top < window.innerHeight && r.bottom > 0) {
+        if (!dropStarted) { dropStarted = true; dropSpawn(); }
+        var W = dropSec.clientWidth, H = dropSec.clientHeight;
+        var p = Math.min(1, Math.max(0, (window.innerHeight * 0.4 - r.top) / (window.innerHeight * 1.1)));
+        for (var i = 0; i < dropBodies.length; i++) {
+          var b = dropBodies[i];
+          if (p < 0.55) { b.vy += 0.5; }
+          else {
+            var h2 = heartPt(i);
+            b.vx += (h2[0] * W - b.x) * 0.014; b.vy += (h2[1] * H - b.y) * 0.014;
+            b.vx *= 0.88; b.vy *= 0.88; b.va *= 0.92;
+          }
+          b.x += b.vx; b.y += b.vy; b.a += b.va;
+          if (b.y > H - DR - 14) { b.y = H - DR - 14; b.vy *= -0.45; b.vx *= 0.92; b.va *= 0.88; }
+          if (b.x < DR) { b.x = DR; b.vx *= -0.6; }
+          if (b.x > W - DR) { b.x = W - DR; b.vx *= -0.6; }
+        }
+        for (var i2 = 0; i2 < dropBodies.length; i2++) {
+          for (var j = i2 + 1; j < dropBodies.length; j++) {
+            var A = dropBodies[i2], B = dropBodies[j];
+            var dx = B.x - A.x, dy = B.y - A.y, d = Math.hypot(dx, dy) || 1;
+            if (d < DR * 2) {
+              var ov = (DR * 2 - d) / 2, nx = dx / d, ny = dy / d;
+              A.x -= nx * ov; A.y -= ny * ov; B.x += nx * ov; B.y += ny * ov;
+              var vn = (B.vx - A.vx) * nx + (B.vy - A.vy) * ny;
+              if (vn < 0) {
+                var imp = -0.85 * vn / 2;
+                A.vx -= imp * nx; A.vy -= imp * ny; B.vx += imp * nx; B.vy += imp * ny;
+                A.va += vn * 0.4; B.va -= vn * 0.4;
+              }
+            }
+          }
+        }
+        for (var k2 = 0; k2 < tiles.length; k2++) {
+          var b2 = dropBodies[k2];
+          tiles[k2].style.transform = 'translate(' + (b2.x - DR).toFixed(1) + 'px,'
+            + (b2.y - DR).toFixed(1) + 'px) rotate(' + b2.a.toFixed(1) + 'deg)';
+        }
+      }
+      requestAnimationFrame(dropLoop);
+    })();
+
+    /* the bottom word runs from the cursor */
+    var flee = $('nhFlee');
+    'ACADEMICS'.split('').forEach(function (ch) {
+      var sp = document.createElement('span'); sp.textContent = ch; flee.appendChild(sp);
+    });
+    root.addEventListener('pointermove', function (e) {
+      for (var k3 = 0; k3 < flee.children.length; k3++) {
+        var sp = flee.children[k3];
+        var r = sp.getBoundingClientRect();
+        var dx = (r.left + r.width / 2) - e.clientX;
+        var dy = (r.top + r.height / 2) - e.clientY;
+        var d = Math.hypot(dx, dy);
+        if (d < 180 && d > 0.01) {
+          var f = (180 - d) / 180;
+          sp.style.transform = 'translate(' + (dx / d * f * 130).toFixed(1) + 'px,' + (dy / d * f * 100).toFixed(1) + 'px)';
+        } else { sp.style.transform = ''; }
+      }
+    }, { passive: true });
+
+    if (reduced) { document.body.style.overflow = ''; }
+  })();
+
+  /* ── the four Academics cards ───────────────────────────────────────── */
+  var ICONS = { student: '🎓', job: '💼', resume: '📄', hackathons: '🏆' };
+  get('/overview').then(function (d) {
+    state.premiumAmount = d.premiumAmount; state.passMark = d.passMark; state.maxAttempts = d.maxAttempts;
+    var box = $('cards'); box.innerHTML = '';
+    (d.sections || []).forEach(function (s) {
+      var c = el('div', 'card');
+      c.appendChild(el('span', 'ico', ICONS[s.key] || '•'));
+      var h = el('h3', null, s.label);
+      if (s.premium) { h.appendChild(el('span', 'tag prem', 'PREMIUM')); }
+      if (!s.ready) { h.appendChild(el('span', 'tag soon', 'SOON')); }
+      c.appendChild(h);
+      c.appendChild(el('p', null, s.sub));
+      c.addEventListener('click', function () { openSection(s); });
+      box.appendChild(c);
+    });
+  });
+
+  function openSection(s) {
+    if (!s.ready) {
+      return openModal(function (sh) {
+        sh.appendChild(el('h2', null, s.label));
+        sh.appendChild(el('p', 'lede', 'Not built yet. The plan for it is written up in '
+          + 'docs/academics-career-portal-spec.md, including what has to be decided first.'));
+        var st = el('div', 'stack');
+        var b = el('button', 'btn ghost', 'Close'); b.addEventListener('click', closeModal);
+        st.appendChild(b); sh.appendChild(st);
+      });
+    }
+    // Preview always comes before price.
+    openModal(function (sh) {
+      sh.appendChild(el('h2', null, 'Domains — 14 learning tracks'));
+      sh.appendChild(el('p', 'lede', 'What you get inside:'));
+      var ul = el('ul', 'perks');
+      [['Modules built from the same task library you are assigned from'],
+       ['A written assessment after every module — not multiple choice'],
+       ['Marked against the points the question asks for, and told exactly which you missed'],
+       ['Pass at ' + state.passMark + '% to unlock the next module. ' + state.maxAttempts + ' attempts, then a 24-hour wait'],
+       ['A project per module, which is what a recruiter can actually check'],
+       ['A Certificate of Completion, then the resume builder, then real jobs']
+      ].forEach(function (p) {
+        var li = el('li'); li.appendChild(el('span', 'tick', '✓'));
+        li.appendChild(el('span', null, p[0])); ul.appendChild(li);
+      });
+      sh.appendChild(ul);
+      var st = el('div', 'stack');
+      var go = el('button', 'btn gold', 'See the domains');
+      go.addEventListener('click', function () { closeModal(); loadDomains(); });
+      st.appendChild(go); sh.appendChild(st);
+    });
+  }
+
+  /* ── domains ────────────────────────────────────────────────────────── */
+  function loadDomains() {
+    show('domainWrap');
+    var box = $('domains'); box.innerHTML = '';
+    get('/domains').then(function (d) {
+      if (!d.domains || !d.domains.length) {
+        box.appendChild(el('div', 'empty', 'No domains yet — the task library has not been seeded.'));
+        return;
+      }
+      d.domains.forEach(function (row) {
+        var c = el('div', 'card');
+        var h = el('h3', null, row.domain);
+        if (row.progress && row.progress.certificate) { h.appendChild(el('span', 'tag prem', 'CERTIFIED')); }
+        c.appendChild(h);
+        c.appendChild(el('p', null, row.progress
+          ? row.progress.passed + ' modules passed' + (row.progress.paid ? ' · paid' : ' · unpaid')
+          : 'Not started'));
+        c.addEventListener('click', function () { openDomain(row.domain); });
+        box.appendChild(c);
+      });
+    });
+  }
+  $('backToCards').addEventListener('click', function () { show('cards'); });
+  $('backToDomains').addEventListener('click', loadDomains);
+
+  /* ── the paywall, moment one: has a way past it ─────────────────────── */
+  function payWall(domain, firstTime, onContinue) {
+    openModal(function (sh) {
+      sh.appendChild(el('h2', null, firstTime ? 'Premium — ' + domain : 'Your certificate is ready'));
+      sh.appendChild(el('p', 'lede', firstTime
+        ? 'Unlock the full track, the assessments and the certificate.'
+        : 'You have passed every module in ' + domain + '. Payment releases the certificate.'));
+      var p = el('div', 'price', '₹' + state.premiumAmount);
+      p.appendChild(el('small', null, 'one payment for this domain'));
+      sh.appendChild(p);
+      var st = el('div', 'stack');
+      var pay = el('button', 'btn gold', 'Pay ₹' + state.premiumAmount);
+      pay.addEventListener('click', function () { window.location.href = '/payment.html'; });
+      st.appendChild(pay);
+      // Only the first popup carries this. The one after completion does not.
+      if (firstTime) {
+        var later = el('button', 'btn ghost', 'Continue to modules');
+        later.addEventListener('click', function () {
+          post('/defer', { domain: domain }).then(function () { closeModal(); onContinue(); });
+        });
+        st.appendChild(later);
+        sh.appendChild(st);
+        sh.appendChild(el('p', 'meta', 'Study now, pay when you want the certificate.'));
+      } else {
+        sh.appendChild(st);
+      }
+    });
+  }
+
+  /* ── modules ────────────────────────────────────────────────────────── */
+  function openDomain(domain) {
+    state.domain = domain;
+    get('/domain/' + encodeURIComponent(domain)).then(function (d) {
+      if (d.error) { return openModal(function (sh) {
+        sh.appendChild(el('h2', null, 'Cannot open that'));
+        sh.appendChild(el('p', 'lede', d.error));
+      }); }
+      if (!d.paid && !d.deferred) { return payWall(domain, true, function () { renderModules(d); }); }
+      renderModules(d);
+      if (d.certificateBlocked) { payWall(domain, false, function () {}); }
+    });
+  }
+
+  function renderModules(d) {
+    show('moduleWrap');
+    $('domainName').textContent = d.domain;
+    var box = $('modules'); box.innerHTML = '';
+
+    d.modules.forEach(function (m) {
+      var head = el('div', 'week-header');
+      head.appendChild(el('span', 'week-badge', 'M' + m.index));
+      var t = el('div', 'week-title');
+      t.appendChild(el('b', null, m.title));
+      t.appendChild(el('small', null, m.passed ? 'Passed · ' + m.bestScore + '%'
+        : m.locked ? 'Locked' : 'Open'));
+      head.appendChild(t);
+      if (m.locked) { head.appendChild(el('span', 'week-locked-msg', '🔒 Pass module ' + (m.index - 1) + ' to unlock')); }
+      box.appendChild(head);
+
+      var card = el('div', 'task-card' + (m.locked ? ' locked' : '') + (m.passed ? ' done' : ''));
+      card.appendChild(el('span', 'state', m.passed ? '✓' : m.locked ? '🔒' : '▸'));
+      var body = el('div', 'body');
+      body.appendChild(el('h4', null, m.title));
+      body.appendChild(el('p', null, m.summary || 'No summary.'));
+      var chips = el('div', 'chips');
+      chips.appendChild(el('span', 'chip ' + (m.difficulty || 'easy'), m.difficulty || 'easy'));
+      if (m.coins) { chips.appendChild(el('span', 'chip coins', m.coins + ' coins')); }
+      if (m.passed) { chips.appendChild(el('span', 'chip passed', 'PASSED')); }
+      else if (m.locked) { chips.appendChild(el('span', 'chip locked', 'LOCKED')); }
+      if (m.bestScore) { chips.appendChild(el('span', 'chip score', 'best ' + m.bestScore + '%')); }
+      body.appendChild(chips);
+
+      if (!m.locked && !m.passed) {
+        var acts = el('div', 'row-actions');
+        var quiz = el('button', 'btn gold', 'Take assessment →');
+        quiz.disabled = !m.canAttempt;
+        quiz.addEventListener('click', function () { openAssessment(d.domain, m.key); });
+        acts.appendChild(quiz);
+        var proj = el('button', 'btn ghost', m.projectDone ? '✓ Project done' : 'Mark project done');
+        proj.addEventListener('click', function () {
+          post('/project', { domain: d.domain, moduleKey: m.key }).then(function () { openDomain(d.domain); });
+        });
+        acts.appendChild(proj);
+        body.appendChild(acts);
+        if (!m.canAttempt && m.unlocksAt) {
+          body.appendChild(el('p', 'meta', 'All ' + state.maxAttempts + ' attempts used. Next opens '
+            + new Date(m.unlocksAt).toLocaleString('en-IN') + '.'));
+        } else if (m.attemptsLeft < state.maxAttempts) {
+          body.appendChild(el('p', 'meta', m.attemptsLeft + ' of ' + state.maxAttempts + ' attempts left today.'));
+        }
+      }
+      card.appendChild(body);
+      box.appendChild(card);
+    });
+
+    if (d.complete && d.certificateBlocked) {
+      box.appendChild(el('div', 'empty', 'Every module passed. Payment releases your certificate.'));
+    }
+  }
+
+  /* ── one assessment ─────────────────────────────────────────────────── */
+  function openAssessment(domain, moduleKey) {
+    get('/assessment/' + encodeURIComponent(domain) + '/' + encodeURIComponent(moduleKey)).then(function (q) {
+      if (q.error) { return alert(q.error); }
+      openModal(function (sh) {
+        sh.appendChild(el('h2', null, q.title));
+        sh.appendChild(el('p', 'lede', q.question));
+        var ta = el('textarea');
+        ta.placeholder = 'Write your answer. At least ' + q.minWords + ' words.';
+        sh.appendChild(ta);
+        sh.appendChild(el('p', 'meta', 'Pass mark ' + q.passMark + '%. This question asks for '
+          + q.pointCount + ' things. ' + q.attemptsLeft + ' of ' + state.maxAttempts + ' attempts left.'));
+        var out = el('div');
+        var st = el('div', 'stack');
+        var send = el('button', 'btn gold', 'Submit answer');
+        send.addEventListener('click', function () {
+          send.disabled = true;
+          post('/assessment', { domain: domain, moduleKey: moduleKey, answer: ta.value })
+            .then(function (r) {
+              out.innerHTML = '';
+              if (r._code === 429) {
+                out.className = 'result fail'; out.textContent = r.message; return;
+              }
+              if (r.error) { out.className = 'result fail'; out.textContent = r.error; send.disabled = false; return; }
+              out.className = 'result ' + (r.passed ? 'pass' : 'fail');
+              out.appendChild(el('b', null, r.score + '% — ' + (r.passed ? 'passed' : 'not passed')));
+              if (r.tooShort) {
+                out.appendChild(el('p', null, 'Your answer is ' + r.words
+                  + ' words. Naming the right terms is not the same as explaining them.'));
+              }
+              if (r.missed && r.missed.length) {
+                out.appendChild(el('p', null, 'You did not cover:'));
+                var ul = el('ul');
+                r.missed.forEach(function (x) { ul.appendChild(el('li', null, x)); });
+                out.appendChild(ul);
+              }
+              if (!r.passed) {
+                out.appendChild(el('p', null, r.attemptsLeft > 0
+                  ? r.attemptsLeft + ' attempts left. If you disagree with the mark, ask your coordinator to review it.'
+                  : 'No attempts left. Next opens ' + new Date(r.unlocksAt).toLocaleString('en-IN') + '.'));
+                send.disabled = r.attemptsLeft <= 0;
+              } else {
+                send.textContent = 'Passed';
+              }
+            });
+        });
+        st.appendChild(send);
+        var cl = el('button', 'btn ghost', 'Close');
+        cl.addEventListener('click', function () { closeModal(); openDomain(domain); });
+        st.appendChild(cl);
+        sh.appendChild(st); sh.appendChild(out);
+        if (!q.canAttempt) {
+          send.disabled = true;
+          out.className = 'result fail';
+          out.textContent = 'All attempts used. Next opens ' + new Date(q.unlocksAt).toLocaleString('en-IN') + '.';
+        }
+        setTimeout(function () { ta.focus(); }, 60);
+      });
+    });
+  }
+})();
+</script>
+</body>
+</html>

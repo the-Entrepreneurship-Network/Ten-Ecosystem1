@@ -998,19 +998,54 @@ async function ensureOnboarded(student) {
 }
 
 router.get("/student/status", requireStudent, async (req, res) => {
+    const student = req.student;
+
+    // Onboard first, so the task counts below include anything just assigned.
     try {
-        const student = req.student;
+        await ensureOnboarded(student);
+    } catch (err) {
+        console.error("[V2] ensureOnboarded failed for " + student.employeeId + ":", err.message);
+    }
 
-        // Before anything is measured, so the task counts below include what
-        // this just assigned.
-        try {
-            await ensureOnboarded(student);
-        } catch (err) {
-            // A failure here must not break the status call; the student simply
-            // sees the popup, which is the old behaviour.
-            console.error("[V2] ensureOnboarded failed:", err.message);
-        }
+    // ── The fields the task-journey page cannot work without ────────────────
+    //
+    // Built from the student document and two pure helpers, so no database
+    // call can take them out. They come FIRST because of what happened when
+    // they did not:
+    //
+    // One throw anywhere in this handler produced a 500 whose body carried no
+    // v2Onboarded and no durationType. The page read `!status.v2Onboarded` as
+    // true and opened the setup dialog; durationType arrived undefined and fell
+    // through to the '1month' default, so a 45-day student was shown "1 Month"
+    // highlighted; pressing it POSTed 1month and the server answered 409,
+    // "Your internship is registered as 45 Days". The popup that would not go
+    // away, the wrong preselected tenure and the error on clicking it were all
+    // one 500 in this handler.
+    const durationType     = taskEngine.resolveStudentDuration(student);
+    const registeredTenure = student.tenure ? normalizeTenure(student.tenure) : null;
 
+    const payload = {
+        success:             true,
+        v2Onboarded:         !!student.v2Onboarded,
+        domain:              student.domain,
+        durationType,
+        registeredTenure,
+        onboardingPopupSeen: student.onboardingPopupSeen || false,
+        joinerTypeSelected:  student.joinerTypeSelected  || false,
+        joinerType:          student.joinerType          || null,
+        totalCoins:          0,
+        rupeeValue:          "0.00",
+        taskStats: { locked: 0, available: 0, in_progress: 0, submitted: 0, approved: 0 }
+    };
+
+    // ── Everything else is a bonus ──────────────────────────────────────────
+    //
+    // The coin balance and the task counts are worth showing but not worth
+    // failing over. If they throw, the student sees zeros and their task
+    // journey still opens. The previous catch turned any failure into a bare
+    // 500 and logged NOTHING, which is why `pm2 logs | grep` produced nothing
+    // to explain two days of reports.
+    try {
         let domain = student.domain;
         if (domain === "HR") domain = "HR Management";
         if (domain === "Business Development") domain = "Business Analyst";
@@ -1021,62 +1056,30 @@ router.get("/student/status", requireStudent, async (req, res) => {
         const domainTasks = await DomainTask.find({ domain }).select("_id").lean();
         const taskIds = domainTasks.map(t => t._id);
 
-        const [progressStats, sampleProgress, coinData] = await Promise.all([
+        const [progressStats, coinData] = await Promise.all([
             StudentTaskProgress.aggregate([
                 { $match: { studentId: student._id, taskId: { $in: taskIds } } },
                 { $group: { _id: "$status", count: { $sum: 1 } } }
             ]),
-            StudentTaskProgress.findOne({ studentId: student._id, taskId: { $in: taskIds } }).populate("taskId", "durationType").lean(),
             coinService.getBalance(student._id)
         ]);
 
-        // v2Onboarded is a STORED flag, not something inferred from data.
-        //
-        // It used to be `student.v2Onboarded || sampleProgress`, and
-        // GET /tasks/my-tasks auto-assigns tasks when a student has none — so
-        // simply opening the task list created progress rows and the flag
-        // flipped true forever. The tenure popup then never appeared again for
-        // a student who had never actually chosen a tenure, while for anyone
-        // whose completion path did not set the flag it reappeared on every
-        // visit. Section 5 asks for exactly once, ever.
-        const v2Onboarded = !!student.v2Onboarded;
-
-        // The duration comes from the student's record, not from whichever task
-        // happened to be assigned first (that value is remapped to "1month" for
-        // short tenures, so it misreported 1-week and 15-day students).
-        const durationType = taskEngine.resolveStudentDuration(student);
-
-        const stats = {};
-        for (const s of progressStats) stats[s._id] = s.count;
-
-        // The tenure the student registered on. The setup popup cannot change
-        // it — every option except this one is disabled there — so when it is
-        // known the popup is a required dialog with exactly one possible
-        // answer, and the page completes onboarding without showing it.
-        const registeredTenure = student.tenure ? normalizeTenure(student.tenure) : null;
-
-        res.json({
-            success:       true,
-            v2Onboarded,
-            domain:        student.domain,
-            durationType,
-            registeredTenure,
-            totalCoins:    coinData.totalCoins,
-            rupeeValue:    coinData.rupeeValue || (coinData.totalCoins * 0.5).toFixed(2),
-            onboardingPopupSeen: student.onboardingPopupSeen || false,
-            joinerTypeSelected:  student.joinerTypeSelected  || false,
-            joinerType:          student.joinerType           || null,
-            taskStats: {
-                locked:      stats.locked      || 0,
-                available:   stats.available   || 0,
-                in_progress: stats.in_progress || 0,
-                submitted:   stats.submitted   || 0,
-                approved:    stats.approved    || 0
+        for (const row of progressStats) {
+            if (Object.prototype.hasOwnProperty.call(payload.taskStats, row._id)) {
+                payload.taskStats[row._id] = row.count;
             }
-        });
+        }
+
+        if (coinData) {
+            payload.totalCoins = coinData.totalCoins || 0;
+            payload.rupeeValue = coinData.rupeeValue || ((coinData.totalCoins || 0) * 0.5).toFixed(2);
+        }
     } catch (err) {
-        res.status(500).json({ success: false, message: "Server error" });
+        console.error("[V2] /student/status extras failed for " + student.employeeId + ":", err.message);
+        console.error(err.stack);
     }
+
+    res.json(payload);
 });
 
 // ────────────────────────────────────────────────
