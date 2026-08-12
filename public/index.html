@@ -499,6 +499,14 @@ body {
   .ten-chips{display:flex;flex-wrap:wrap;gap:10px;}
   .ten-chip{background:rgba(212,175,55,0.07);border:1px solid rgba(212,175,55,0.22);color:#E8DCC0;
             border-radius:99px;padding:8px 16px;font-size:13px;font-weight:600;white-space:nowrap;}
+  .ten-quotes{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;}
+  .ten-quote{background:rgba(14,20,40,0.55);border:1px solid rgba(212,175,55,0.14);
+             border-radius:14px;padding:22px;display:flex;flex-direction:column;gap:12px;}
+  .ten-quote .stars{color:#D4AF37;font-size:13px;letter-spacing:2px;}
+  .ten-quote .msg{color:#CDD9EC;font-size:14px;line-height:1.65;flex:1;}
+  .ten-quote .who{display:flex;flex-direction:column;gap:2px;border-top:1px solid rgba(212,175,55,0.10);padding-top:12px;}
+  .ten-quote .who b{color:#F0EEE8;font-size:13px;font-weight:700;}
+  .ten-quote .who span{color:#8AA4C8;font-size:12px;}
   .ten-verify{background:linear-gradient(135deg,rgba(212,175,55,0.09),rgba(14,20,40,0.6));
               border:1px solid rgba(212,175,55,0.26);border-radius:16px;padding:28px;}
   .ten-verify form{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;}
@@ -530,6 +538,12 @@ body {
     <div class="ten-step"><div class="n">STEP 4</div><div class="t">Earn your certificate</div>
       <div class="d">Meet 75% attendance and finish your tasks to receive verifiable documents.</div></div>
   </div>
+</section>
+
+<section class="ten-sec" style="width:100%" id="testimonialSection" hidden>
+  <h2>What our interns say</h2>
+  <p class="lead">Published with each intern's permission, after they finished.</p>
+  <div class="ten-quotes" id="testimonialGrid"></div>
 </section>
 
 <section class="ten-sec" style="width:100%">
@@ -708,6 +722,58 @@ body {
       })
       .catch(function () { /* leave the rendered defaults in place */ });
   })();
+
+
+    // Testimonials. The section stays hidden unless HR has published at least
+    // one — an empty "What our interns say" heading is worse than no section,
+    // because it reads as a programme nobody would vouch for.
+    fetch('/api/feedback/public?limit=6')
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d || !d.success || !d.testimonials || !d.testimonials.length) return;
+
+        var grid = document.getElementById('testimonialGrid');
+        var sec  = document.getElementById('testimonialSection');
+        if (!grid || !sec) return;
+
+        d.testimonials.forEach(function (t) {
+          var card = document.createElement('div');
+          card.className = 'ten-quote';
+
+          if (t.rating) {
+            var stars = document.createElement('div');
+            stars.className = 'stars';
+            // Text, not markup — the rating is a number from the server but the
+            // same rule applies to everything rendered here.
+            stars.textContent = '\u2605'.repeat(Math.max(1, Math.min(5, t.rating)));
+            card.appendChild(stars);
+          }
+
+          var msg = document.createElement('p');
+          msg.className = 'msg';
+          // textContent, never innerHTML. This is student-written text on a
+          // public page; the one rule that cannot bend.
+          msg.textContent = '\u201c' + t.message + '\u201d';
+          card.appendChild(msg);
+
+          var who = document.createElement('div');
+          who.className = 'who';
+          var nm = document.createElement('b');
+          nm.textContent = t.name;
+          who.appendChild(nm);
+          if (t.domain) {
+            var dm = document.createElement('span');
+            dm.textContent = t.domain;
+            who.appendChild(dm);
+          }
+          card.appendChild(who);
+
+          grid.appendChild(card);
+        });
+
+        sec.hidden = false;
+      })
+      .catch(function () { /* section stays hidden */ });
 
   function goVerify(e) {
     e.preventDefault();

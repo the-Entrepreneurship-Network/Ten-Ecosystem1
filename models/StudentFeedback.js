@@ -30,7 +30,26 @@ const studentFeedbackSchema = new mongoose.Schema({
     readAt:     { type: Date, default: null },
     hrNote:     { type: String, default: "" },
 
-    submittedAt:{ type: Date, default: Date.now, index: true }
+    submittedAt:{ type: Date, default: Date.now, index: true },
+
+    // ── Public testimonial ──────────────────────────────────────────────────
+    //
+    // Feedback is private to HR until somebody deliberately publishes it.
+    //
+    // Nothing a student writes reaches the public site on its own. Someone will
+    // eventually write something angry, or defamatory, or simply wrong, and the
+    // registration page is the worst place to discover that. It is also the
+    // same shape as the stored-XSS hole already fixed in star-submit: text a
+    // student controls, rendered to somebody else — except here the audience is
+    // every visitor rather than one HR reviewer.
+    published:    { type: Boolean, default: false, index: true },
+    publishedAt:  { type: Date,    default: null },
+    publishedBy:  { type: String,  default: "" },
+
+    // What the visitor sees. A student may not want their surname on a public
+    // page, so HR sets this — "Rahul S." rather than the full name — and the
+    // public endpoint never returns studentName, employeeId or college.
+    displayName:  { type: String,  default: "" }
 }, { timestamps: true });
 
 // The HR list is "newest first", optionally filtered by status or domain.

@@ -160,6 +160,21 @@ router.patch('/hr/:id', requireHR, async (req, res) => {
         if (req.body && typeof req.body.hrNote === 'string') {
             update.hrNote = req.body.hrNote.slice(0, 2000);
         }
+
+        // Publishing is a separate, deliberate act — see the note on
+        // StudentFeedback.published. Nothing a student writes appears on the
+        // public site until an HR user turns this on for that specific entry.
+        if (req.body && typeof req.body.published === 'boolean') {
+            update.published   = req.body.published;
+            update.publishedAt = req.body.published ? new Date() : null;
+            update.publishedBy = req.body.published
+                ? ((req.hrUser && (req.hrUser.username || req.hrUser.email)) || 'hr')
+                : '';
+        }
+        if (req.body && typeof req.body.displayName === 'string') {
+            // "Rahul S." rather than a full name, at the student's preference.
+            update.displayName = req.body.displayName.trim().slice(0, 60);
+        }
         if (!Object.keys(update).length) {
             return res.status(400).json({ success: false, message: 'Nothing to update.' });
         }
@@ -171,6 +186,43 @@ router.patch('/hr/:id', requireHR, async (req, res) => {
     } catch (err) {
         console.error('[feedback] hr update failed:', err.message);
         res.status(500).json({ success: false, message: 'Could not update that feedback.' });
+    }
+});
+
+/**
+ * GET /api/feedback/public — published testimonials, for the landing page.
+ *
+ * Unauthenticated on purpose: this is the one part of the feedback system a
+ * visitor is meant to see. It returns ONLY entries an HR user has explicitly
+ * published, and only four fields — no employeeId, no email, no college, no
+ * studentName, nothing that identifies a student beyond the display name HR
+ * chose. `.lean()` with an explicit projection rather than a document, so a
+ * field added to the model later cannot start leaking by default.
+ */
+router.get('/public', async (req, res) => {
+    try {
+        const limit = Math.min(parseInt(req.query.limit, 10) || 6, 20);
+
+        const rows = await StudentFeedback
+            .find({ published: true })
+            .select('displayName studentName domain rating message publishedAt -_id')
+            .sort({ publishedAt: -1 })
+            .limit(limit)
+            .lean();
+
+        res.json({
+            success: true,
+            testimonials: rows.map(r => ({
+                name:    r.displayName || 'TEN Intern',
+                domain:  r.domain || '',
+                rating:  r.rating || null,
+                // Long enough to be worth reading, short enough to stay a card.
+                message: String(r.message || '').slice(0, 400)
+            }))
+        });
+    } catch (err) {
+        console.error('[feedback] public list failed:', err.message);
+        res.json({ success: false, testimonials: [] });
     }
 });
 
