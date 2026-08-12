@@ -49,7 +49,10 @@ body{background:var(--dark);color:var(--text);font-family:'Outfit',sans-serif;mi
 .logo-txt{font-size:18px;font-weight:800;letter-spacing:-0.5px;}
 .logo-txt span{background:linear-gradient(90deg,var(--gold),#fff176);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
 .logo-role{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-top:2px;}
-.sidebar-nav{padding:20px 12px;flex:1;overflow-y:auto;}
+/* min-height:0 for the same reason as .sp-body: a flex child will not shrink
+   below its content without it, so a long nav pushed the items beneath it out
+   of the sidebar instead of scrolling. */
+.sidebar-nav{padding:20px 12px;flex:1;min-height:0;overflow-y:auto;}
 .nav-section-title{font-size:10px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--muted);padding:8px 12px;margin-bottom:4px;}
 .nav-btn{display:flex;align-items:center;gap:12px;width:100%;padding:11px 14px;border-radius:10px;border:none;background:transparent;color:#8a8070;cursor:pointer;font-family:'Outfit',sans-serif;font-size:14px;font-weight:500;text-align:left;transition:all 0.2s;margin-bottom:2px;}
 .nav-btn:hover{background:rgba(245,197,66,0.06);color:var(--text);}
@@ -208,14 +211,28 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
 .domain-filter-select:focus{border-color:var(--gold);}
 .sub-count-badge{padding:5px 14px;background:rgba(245,197,66,0.1);border:1px solid rgba(245,197,66,0.2);border-radius:99px;font-size:12px;font-weight:600;color:var(--gold);}
 /* SLIDE PANEL */
-.slide-panel-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:150;display:none;}
+/* Above the chat widget, which sits at z-index 9998/9999 and was painting its
+   launcher on top of this panel's Delete Student button. */
+.slide-panel-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;display:none;}
 .slide-panel-overlay.open{display:block;}
-.slide-panel{position:fixed;top:0;right:-440px;width:420px;height:100vh;background:#0b1120;border-left:1px solid rgba(245,197,66,0.15);z-index:151;display:flex;flex-direction:column;transition:right 0.32s cubic-bezier(0.4,0,0.2,1);}
+.slide-panel{position:fixed;top:0;right:-440px;width:420px;height:100vh;height:100dvh;background:#0b1120;border-left:1px solid rgba(245,197,66,0.15);z-index:10001;display:flex;flex-direction:column;transition:right 0.32s cubic-bezier(0.4,0,0.2,1);}
 .slide-panel.open{right:0;}
 .sp-header{padding:22px 24px 18px;border-bottom:1px solid rgba(245,197,66,0.1);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
 .sp-title{font-size:16px;font-weight:700;color:white;}
 .sp-close{background:rgba(244,63,94,0.1);border:1px solid rgba(244,63,94,0.3);color:var(--red);border-radius:8px;padding:6px 14px;cursor:pointer;font-size:13px;font-weight:600;font-family:'Outfit',sans-serif;}
-.sp-body{padding:18px 24px;flex:1;overflow-y:auto;}
+/* min-height:0 is what makes this scroll.
+   A flex item defaults to min-height:auto, so `flex:1` alone refuses to shrink
+   below its content — the body grew past the panel, pushed .sp-actions off the
+   bottom of the viewport, and the last visible field was left clipped behind
+   the buttons. Email was cut in half; Delete Student sat under the chat
+   launcher. The panel is a fixed-height flex column, so the scrolling child
+   has to be told it may be smaller than what is inside it. */
+.sp-body{padding:18px 24px;flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  scrollbar-width:thin;scrollbar-color:rgba(245,197,66,0.4) transparent;}
+.sp-body::-webkit-scrollbar{width:8px;}
+.sp-body::-webkit-scrollbar-track{background:rgba(255,255,255,0.03);}
+.sp-body::-webkit-scrollbar-thumb{background:rgba(245,197,66,0.3);border-radius:99px;}
+.sp-body::-webkit-scrollbar-thumb:hover{background:rgba(245,197,66,0.55);}
 .sp-avatar-row{display:flex;align-items:center;gap:14px;margin-bottom:18px;padding:14px;background:rgba(245,197,66,0.05);border-radius:14px;border:1px solid rgba(245,197,66,0.1);}
 .sp-avatar{width:50px;height:50px;background:linear-gradient(135deg,var(--gold),var(--gold2));border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:#0a0600;flex-shrink:0;}
 .sp-emp-id{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--gold);margin-top:2px;}
@@ -244,7 +261,10 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
 .sp-sub-date{font-size:10px;color:var(--muted);}
 .sp-no-submissions{text-align:center;padding:30px 20px;color:var(--muted);font-size:12px;}
 .sp-no-submissions-icon{font-size:32px;margin-bottom:8px;opacity:0.5;}
-.sp-actions{padding:18px 24px;border-top:1px solid rgba(245,197,66,0.1);display:flex;flex-direction:column;gap:9px;flex-shrink:0;}
+.sp-actions{padding:18px 24px;border-top:1px solid rgba(245,197,66,0.1);display:flex;flex-direction:column;gap:9px;flex-shrink:0;background:#0b1120;
+  /* Clears the home-bar / browser chrome on a phone, where 100dvh still ends
+     under the OS gesture area. */
+  padding-bottom:calc(18px + env(safe-area-inset-bottom, 0px));}
 .sp-btn-primary{width:100%;padding:13px;background:linear-gradient(135deg,var(--gold),var(--gold2));border:none;border-radius:11px;color:#000;font-size:14px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;transition:all 0.2s;}
 .sp-btn-primary:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(245,197,66,0.25);}
 .sp-btn-blue{width:100%;padding:12px;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);border-radius:11px;color:var(--blue);font-size:13px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;}

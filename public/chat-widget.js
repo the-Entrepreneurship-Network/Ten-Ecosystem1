@@ -74,7 +74,7 @@
             ".tc-h .t{font-weight:700;font-size:14px;letter-spacing:.3px;color:#f5c542;}",
             ".tc-h .x{background:transparent;border:none;color:#9aa4bf;font-size:20px;cursor:pointer;padding:0 6px;line-height:1;}",
             ".tc-h .x:hover{color:#f43f5e;}",
-            ".tc-msgs{flex:1;overflow-y:auto;padding:14px 14px 6px;display:flex;flex-direction:column;gap:8px;background:#080d1a;}",
+            ".tc-msgs{flex:1;min-height:0;overflow-y:auto;padding:14px 14px 6px;display:flex;flex-direction:column;gap:8px;background:#080d1a;}",
             ".tc-row{display:flex;flex-direction:column;max-width:78%;}",
             ".tc-row.mine{align-self:flex-end;align-items:flex-end;}",
             ".tc-row.theirs{align-self:flex-start;align-items:flex-start;}",
