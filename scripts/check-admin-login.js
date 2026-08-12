@@ -24,10 +24,11 @@ const path = require("path");
 
 const APP_ROOT = path.resolve(__dirname, "..");
 
-// dotenv v17 reads .env.local BEFORE .env and does NOT overwrite a value it has
-// already set. A stale .env.local therefore silently wins over the .env someone
-// just edited — with no warning anywhere.
-const ENV_FILES = [".env.local", ".env"];
+// Checked empirically rather than assumed: dotenv v17 prints a startup tip
+// mentioning .env.local, but does NOT load it by default. Which file actually
+// supplied the value is therefore determined below by comparing the loaded
+// value against each file's contents, instead of guessing a precedence order.
+const ENV_FILES = [".env", ".env.local", ".env.production"];
 
 function ok(msg)   { console.log("  \x1b[32m✓\x1b[0m " + msg); }
 function bad(msg)  { console.log("  \x1b[31m✗\x1b[0m " + msg); }
@@ -68,22 +69,21 @@ if (!present.length) {
     bad("No .env file at all. The app has nothing to read.");
     problems.push("Create a .env in " + APP_ROOT);
 }
-if (present.includes(".env.local") && present.includes(".env")) {
-    warn(".env.local exists AND .env exists.");
-    warn("dotenv reads .env.local FIRST and will not overwrite what it sets.");
-    warn("If ADMIN_PASSWORD_HASH is in both, the .env.local one wins.");
+if (present.length > 1) {
+    warn(`More than one env file is present (${present.join(", ")}).`);
+    warn("Section 3 reports which one actually supplied the value.");
 }
 
 head("2. What each file actually contains");
-let winningFile = null;
+const rawHashes = {};
 for (const name of present) {
     const full = path.join(APP_ROOT, name);
     const user = rawValueFrom(full, "ADMIN_USERNAME");
     const hash = rawValueFrom(full, "ADMIN_PASSWORD_HASH");
+    rawHashes[name] = hash;
     console.log(`  ${name}:`);
     console.log(`    ADMIN_USERNAME      = ${user === null ? "(not set)" : JSON.stringify(user)}`);
     console.log(`    ADMIN_PASSWORD_HASH = ${hash === null ? "(not set)" : fingerprint(hash)}`);
-    if (hash !== null && !winningFile) winningFile = name;
 
     if (hash !== null) {
         if (/^["']|["']$/.test(hash)) {
@@ -101,10 +101,6 @@ for (const name of present) {
         }
     }
 }
-if (winningFile && present.length > 1) {
-    ok(`The value the app will use comes from: ${winningFile}`);
-}
-
 head("3. What the app sees after loading dotenv");
 require("dotenv").config();
 const ADMIN_USERNAME      = (process.env.ADMIN_USERNAME || "tenadmin").trim().toLowerCase();
@@ -112,6 +108,20 @@ const ADMIN_PASSWORD_HASH = (process.env.ADMIN_PASSWORD_HASH || "").trim();
 
 console.log(`  ADMIN_USERNAME      = ${JSON.stringify(ADMIN_USERNAME)}`);
 console.log(`  ADMIN_PASSWORD_HASH = ${fingerprint(ADMIN_PASSWORD_HASH)}`);
+
+// Which file really supplied it — measured, not assumed. A value that matches
+// no file is coming from the shell or from PM2's saved environment, which is
+// the case that looks most like "I edited .env and nothing changed".
+if (ADMIN_PASSWORD_HASH) {
+    const sources = present.filter((n) => (rawHashes[n] || "").trim() === ADMIN_PASSWORD_HASH);
+    if (sources.length) {
+        ok(`This value came from: ${sources.join(" and ")}`);
+    } else {
+        bad("The loaded hash matches NO env file — it is coming from the shell or PM2's saved environment.");
+        bad("Editing .env will not change it until PM2 is restarted with --update-env.");
+        problems.push("Restart PM2 with --update-env so it stops using its saved environment");
+    }
+}
 
 if (!ADMIN_PASSWORD_HASH) {
     bad("ADMIN_PASSWORD_HASH is empty — admin login is disabled by design.");
