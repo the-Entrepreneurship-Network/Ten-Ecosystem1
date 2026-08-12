@@ -163,10 +163,14 @@ a{color:inherit}
    invisible at rest - and materialises in its real colours as the cursor
    comes near, then dissolves back when it leaves. Opacity is squared so the
    approach feels organic rather than linear, and the blur clears last. */
+/* Nothing-dashboard reveal: the material blooms where the cursor IS, not
+   everywhere at once. The mask follows the pointer (--mx/--my are % inside
+   the art box), so colour appears under the hand and trails it, and the
+   squared global proximity still governs how much can appear at all. */
 #cineArt .form img{position:absolute;inset:0;width:100%;height:100%;
   object-fit:contain;mix-blend-mode:screen;
-  -webkit-mask-image:radial-gradient(circle closest-side at 50% 50%,#000 52%,rgba(0,0,0,.4) 76%,transparent 96%);
-  mask-image:radial-gradient(circle closest-side at 50% 50%,#000 52%,rgba(0,0,0,.4) 76%,transparent 96%);
+  -webkit-mask-image:radial-gradient(ellipse 46% 46% at var(--mx,50%) var(--my,50%),#000 34%,rgba(0,0,0,.45) 66%,transparent 92%);
+  mask-image:radial-gradient(ellipse 46% 46% at var(--mx,50%) var(--my,50%),#000 34%,rgba(0,0,0,.45) 66%,transparent 92%);
   opacity:calc(var(--prox) * var(--prox));
   filter:blur(calc((1 - var(--prox)) * 16px)) saturate(calc(.6 + var(--prox) * .5))
          drop-shadow(0 0 34px rgba(192,132,252,calc(var(--prox) * .3)));
@@ -180,8 +184,12 @@ a{color:inherit}
 #cineScene{position:absolute;left:7vw;top:50%;transform:translateY(-50%);z-index:2;
   width:min(430px,84vw);pointer-events:none}
 @media(max-width:900px){#cineScene{top:auto;bottom:12vh;transform:none}}
-#cineScene .sc{position:absolute;inset:auto 0 auto 0;opacity:0;transform:translateY(26px);
+/* Terminal One travel: the journey moves SIDEWAYS. A scene waits to the
+   right, slides to centre while active, and exits left as the next arrives.
+   Scroll is the engine; the motion reads as lateral navigation. */
+#cineScene .sc{position:absolute;inset:auto 0 auto 0;opacity:0;transform:translateX(90px);
   transition:opacity .8s cubic-bezier(.23,1,.32,1),transform .9s cubic-bezier(.23,1,.32,1)}
+#cineScene .sc.past{transform:translateX(-90px)}
 /* Until the cursor finds the scene, there is only nebula. The words share the
    art's proximity law — squared, so they condense out of the gas rather than
    switch on. The intro is the one exception: it must teach the scroll. */
@@ -493,7 +501,10 @@ a{color:inherit}
       if (n === active) { return; }
       active = n;
       forms.forEach(function (f, k) { f.node.classList.toggle('on', k === n); });
-      scenes.forEach(function (b, k) { b.classList.toggle('on', k === n); });
+      scenes.forEach(function (b, k) {
+        b.classList.toggle('on', k === n);
+        b.classList.toggle('past', k < n);
+      });
       $('cineCount').textContent = String(n + 1).padStart(2, '0');
       cine.style.setProperty('--prox', 0);
       cine.classList.remove('lit');
@@ -532,6 +543,12 @@ a{color:inherit}
             / (r.width * 0.9);
       prox = Math.max(0, 1 - d);
       cine.style.setProperty('--prox', prox.toFixed(3));
+      // Nothing-style local bloom: the mask centre rides the cursor inside
+      // the art box, so the material appears under the hand and trails it.
+      var mx = Math.max(-25, Math.min(125, ((e.clientX - r.left) / r.width) * 100));
+      var my = Math.max(-25, Math.min(125, ((e.clientY - r.top) / r.height) * 100));
+      cine.style.setProperty('--mx', mx.toFixed(1) + '%');
+      cine.style.setProperty('--my', my.toFixed(1) + '%');
       cine.classList.toggle('lit', prox > 0.35);
     }, { passive: true });
 
@@ -849,21 +866,23 @@ a{color:inherit}
         var jy = parseFloat(cine.style.getPropertyValue('--jy') || 0);
         // The animated plate drifts with the same lean, gentler — it is the
         // deepest layer, so it moves the least.
+        // Travel is LATERAL, Terminal One style: scroll pushes the whole
+        // field sideways; vertical drift is a whisper by comparison.
         vid.style.transform = 'translate3d('
-          + (jx * 10 - prog * 16).toFixed(1) + 'px,'
-          + (jy * 7 - prog * 24).toFixed(1) + 'px,0) scale('
-          + (1.04 + prog * 0.03).toFixed(3) + ')';
+          + (jx * 10 - prog * 130).toFixed(1) + 'px,'
+          + (jy * 7 - prog * 12).toFixed(1) + 'px,0) scale('
+          + (1.16 + prog * 0.03).toFixed(3) + ')';
         // The nebula never stands still: a slow time-based drift underlies the
         // cursor lean and the scroll travel, so the field breathes even when
         // nobody is moving anything.
         var t2 = now / 1000;
         neb.style.transform = 'translate3d('
-          + (Math.sin(t2 * 0.05) * 14 + jx * 24 - prog * 40).toFixed(1) + 'px,'
-          + (Math.cos(t2 * 0.04) * 10 + jy * 16 - prog * 90).toFixed(1) + 'px,0) scale('
-          + (1.13 + Math.sin(t2 * 0.03) * 0.012 + prog * 0.06).toFixed(3) + ')';
+          + (Math.sin(t2 * 0.05) * 14 + jx * 24 - prog * 260).toFixed(1) + 'px,'
+          + (Math.cos(t2 * 0.04) * 10 + jy * 16 - prog * 24).toFixed(1) + 'px,0) scale('
+          + (1.3 + Math.sin(t2 * 0.03) * 0.012 + prog * 0.06).toFixed(3) + ')';
         starCv.style.transform = 'translate3d('
-          + (Math.sin(t2 * 0.04 + 2) * -8 + jx * -12 + prog * 18).toFixed(1) + 'px,'
-          + (Math.cos(t2 * 0.05 + 1) * -6 + jy * -8 - prog * 40).toFixed(1) + 'px,0) scale(1.08)';
+          + (Math.sin(t2 * 0.04 + 2) * -8 + jx * -12 + prog * 90).toFixed(1) + 'px,'
+          + (Math.cos(t2 * 0.05 + 1) * -6 + jy * -8 - prog * 16).toFixed(1) + 'px,0) scale(1.12)';
         sctx.clearRect(0, 0, vw, vh);
         sctx.drawImage(plate, 0, 0, vw, vh);
         for (var k = 0; k < twinklers.length; k++) {
