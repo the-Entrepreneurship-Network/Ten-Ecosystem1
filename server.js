@@ -1604,7 +1604,7 @@ const sessionOptions = {
     rolling: true,
     cookie: {
         secure: IS_PRODUCTION,
-        sameSite: IS_PRODUCTION ? 'none' : 'lax',
+        sameSite: 'lax',
         httpOnly: true,
         maxAge: 30 * 60 * 1000 // 30 minutes of inactivity
     }
