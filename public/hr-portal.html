@@ -2405,15 +2405,30 @@ async function loadStudentSubmissionsInPanel(){
     listEl.innerHTML='<div class="sp-no-submissions"><div class="sp-no-submissions-icon">⚠️</div><p>Failed to load</p></div>';
   }
 }
+/**
+ * Report why a student write failed instead of a flat "Update failed."
+ *
+ * Both of these calls used to `throw new Error()` on any non-2xx and show one
+ * fixed message, so a 401 (signed-out HR session), a 409 (duplicate email) and
+ * a genuine 500 were indistinguishable. A signed-out session is the common
+ * case and it is the one the old message described worst.
+ */
+async function studentWriteError(res){
+  let msg='';
+  try{ const d=await res.json(); msg=d && (d.message||d.error) || ''; }catch(e){}
+  if(res.status===401) return msg||'Your HR session has expired. Please sign in again.';
+  return msg||('Request failed ('+res.status+').');
+}
+
 async function saveSidePanelStudent(){
   const id=document.getElementById('sp-id').value;
   const body={firstName:document.getElementById('sp-firstName').value.trim(),lastName:document.getElementById('sp-lastName').value.trim(),email:document.getElementById('sp-email').value.trim(),whatsapp:document.getElementById('sp-whatsapp').value.trim(),domain:document.getElementById('sp-domain').value.trim(),tenure:document.getElementById('sp-tenure').value.trim(),collegeName:document.getElementById('sp-college').value.trim(),college:document.getElementById('sp-college').value.trim()};
   try{
-    const res=await fetch('/students/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(!res.ok)throw new Error();
+    const res=await fetch('/students/'+id,{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!res.ok){ showHRToast('❌ '+await studentWriteError(res),'error'); return; }
     closeSidePanel();showHRToast('✅ Student updated!','success');
     allStudents=[];allTrackerStudents=[];loadStudents();
-  }catch(e){showHRToast('❌ Update failed.','error');}
+  }catch(e){showHRToast('❌ Update failed — could not reach the server.','error');}
 }
 function deleteSidePanelStudent(){
   const id=document.getElementById('sp-id').value;
@@ -2617,10 +2632,10 @@ async function saveStudentEdit(){
   const id=document.getElementById('es-id').value;
   const body={firstName:document.getElementById('es-firstName').value.trim(),lastName:document.getElementById('es-lastName').value.trim(),email:document.getElementById('es-email').value.trim(),whatsapp:document.getElementById('es-whatsapp').value.trim(),domain:document.getElementById('es-domain').value.trim(),collegeName:document.getElementById('es-college').value.trim(),college:document.getElementById('es-college').value.trim(),tenure:document.getElementById('es-tenure').value.trim()};
   try{
-    const res=await fetch('/students/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(!res.ok)throw new Error();
+    const res=await fetch('/students/'+id,{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!res.ok){ showHRToast('❌ '+await studentWriteError(res),'error'); return; }
     closeEditStudent();showHRToast('✅ Student updated!','success');allStudents=[];allTrackerStudents=[];loadStudents();
-  }catch(e){showHRToast('❌ Update failed.','error');}
+  }catch(e){showHRToast('❌ Update failed — could not reach the server.','error');}
 }
 async function generateLOR(studentId, studentName, force = false) {
   if (!force) {
@@ -2685,12 +2700,12 @@ function confirmDelStudent(id,name){
 async function executeDelStudent(){
   closeConfirmDel();
   try{
-    const res=await fetch('/students/'+pendingDelId,{method:'DELETE'});
-    if(!res.ok)throw new Error();
+    const res=await fetch('/students/'+pendingDelId,{method:'DELETE',credentials:'same-origin'});
+    if(!res.ok){ showHRToast('❌ '+await studentWriteError(res),'error'); return; }
     document.getElementById('srow-'+pendingDelId)?.remove();
     allStudents=allStudents.filter(s=>s._id!==pendingDelId);allTrackerStudents=allTrackerStudents.filter(s=>s._id!==pendingDelId);
     showHRToast('🗑 Student deleted.','success');
-  }catch(e){showHRToast('❌ Delete failed.','error');}
+  }catch(e){showHRToast('❌ Delete failed — could not reach the server.','error');}
 }
 function closeConfirmDel(){document.getElementById('confirmDelModal').classList.remove('open');}
 document.getElementById('editStudentModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeEditStudent();});

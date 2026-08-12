@@ -1525,6 +1525,25 @@ function requireHRSession(req, res, next) {
     next();
 }
 
+/**
+ * Editing and removing student records: HR staff or an admin.
+ *
+ * `PUT`/`DELETE /students/:id` were unauthenticated, and closing that hole by
+ * putting them behind `requireAdminAPI` overshot — that guard wants
+ * `req.session.adminUser`, which only a /ten-admin sign-in creates. HR signs in
+ * through /hr-login and gets `req.session.hr`, so every Save Changes and
+ * Delete Student in the HR portal's side panel came back 401 and the panel
+ * reported a flat "Update failed."
+ *
+ * Managing student records is the HR portal's core job, so HR belongs on this
+ * endpoint. The guard still requires a real server-side session — it is not a
+ * return to the anonymous access these routes had before.
+ */
+function requireHROrAdminAPI(req, res, next) {
+    if (isHRSession(req)) return next();
+    return res.status(401).json({ success: false, message: "HR or admin sign-in required." });
+}
+
 /** Coordinators and HR both review student work; admins can do anything. */
 function requireStaffSession(req, res, next) {
     if (req.session && (req.session.coordinator || req.session.hr || req.session.adminUser)) return next();
@@ -4836,7 +4855,7 @@ const LEGACY_STUDENT_EDITABLE_FIELDS = [
     "domain", "tenure", "joiningDate", "collegeName", "college", "gender"
 ];
 
-app.put("/students/:id", requireAdminAPI, async(req,res)=>{
+app.put("/students/:id", requireHROrAdminAPI, async(req,res)=>{
 try{
     const body = {};
     for(const field of LEGACY_STUDENT_EDITABLE_FIELDS){
@@ -4853,18 +4872,37 @@ try{
     if(Object.keys(body).length === 0){
         return res.status(400).json({ message:"No editable fields supplied" });
     }
-    await Student.findByIdAndUpdate(req.params.id, body, { new:true });
+    const updated = await Student.findByIdAndUpdate(req.params.id, body, { new:true });
+    if(!updated){ return res.status(404).json({ message:"Student not found" }); }
     res.json({ message:"Student Updated" });
-}catch(error){ res.status(500).json({ message:"Update Failed" }); }
+}catch(error){
+    // This used to return 500 with nothing logged, so a failing save left no
+    // trace anywhere — the same blind spot that made the task-journey 500 take
+    // days to find. Log the reason and hand the caller something actionable.
+    console.error("[students] update failed:", error && error.message);
+    const duplicate = error && error.code === 11000;
+    res.status(duplicate ? 409 : 500).json({
+        message: duplicate ? "That email or employee ID is already used by another student." : "Update Failed"
+    });
+}
 });
 
 // ================= DELETE STUDENT =================
 
-app.delete("/students/:id", requireAdminAPI, async(req,res)=>{
+app.delete("/students/:id", requireHROrAdminAPI, async(req,res)=>{
 try{
-    await Student.findByIdAndDelete(req.params.id);
+    // findById + deleteOne rather than findByIdAndDelete: the JSON fallback
+    // engine wraps both of those but not findByIdAndDelete, so the one-shot
+    // call threw outright whenever Mongo was unreachable while the sibling
+    // update degraded cleanly. Same result, same failure mode as the update.
+    const existing = await Student.findById(req.params.id);
+    if(!existing){ return res.status(404).json({ message:"Student not found" }); }
+    await Student.deleteOne({ _id: req.params.id });
     res.json({ message:"Student deleted" });
-}catch(error){ res.status(500).json({ message:"Error deleting student" }); }
+}catch(error){
+    console.error("[students] delete failed:", error && error.message);
+    res.status(500).json({ message:"Error deleting student" });
+}
 });
 
 // ================= STUDENT LOGIN =================
