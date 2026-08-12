@@ -1336,10 +1336,15 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
     </div>
     <span class="sp-field-label">Email</span><input class="sp-input" type="email" id="sp-email" placeholder="Email">
     <span class="sp-field-label">WhatsApp</span><input class="sp-input" type="text" id="sp-whatsapp" placeholder="WhatsApp">
-    <span class="sp-field-label">Domain</span><input class="sp-input" type="text" id="sp-domain" placeholder="Domain">
+    <!-- Domain and Tenure are pickers, not free text. Typed values like
+         "3 months" or "Web Dev" do not match the lookup tables the task engine
+         and attendance calculator use, so a typo here silently put the student
+         on the wrong plan. Options come from /api/public-config so this list
+         cannot drift from the server's. -->
+    <span class="sp-field-label">Domain</span><select class="sp-input" id="sp-domain" data-options="domains"></select>
     <div class="sp-two-col">
       <div><span class="sp-field-label">Employee ID</span><input class="sp-input" type="text" id="sp-employeeId" readonly></div>
-      <div><span class="sp-field-label">Tenure</span><input class="sp-input" type="text" id="sp-tenure" placeholder="e.g. 3 Months"></div>
+      <div><span class="sp-field-label">Tenure</span><select class="sp-input" id="sp-tenure" data-options="tenures"></select></div>
     </div>
     <span class="sp-field-label">College</span><input class="sp-input" type="text" id="sp-college" placeholder="Not Provided">
     <span class="sp-field-label">Joining Date</span><input class="sp-input" type="text" id="sp-joining" readonly>
@@ -1400,11 +1405,11 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
     </div>
     <div class="modal-label">Email</div><input class="modal-input-hr" type="email" id="es-email">
     <div class="modal-label">WhatsApp</div><input class="modal-input-hr" type="text" id="es-whatsapp">
-    <div class="modal-label">Domain</div><input class="modal-input-hr" type="text" id="es-domain">
+    <div class="modal-label">Domain</div><select class="modal-input-hr" id="es-domain" data-options="domains"></select>
     <div class="modal-label">College Name</div><input class="modal-input-hr" type="text" id="es-college" placeholder="Not Provided">
     <div class="two-col-hr">
       <div><div class="modal-label">Employee ID (read-only)</div><input class="modal-input-hr" type="text" id="es-employeeId" readonly></div>
-      <div><div class="modal-label">Tenure</div><input class="modal-input-hr" type="text" id="es-tenure"></div>
+      <div><div class="modal-label">Tenure</div><select class="modal-input-hr" id="es-tenure" data-options="tenures"></select></div>
     </div>
     <div class="modal-actions-hr">
       <button class="btn-save-hr" onclick="saveStudentEdit()">💾 Save</button>
@@ -2335,9 +2340,15 @@ function openSidePanel(id){
   document.getElementById('sp-lastName').value=s.lastName||'';
   document.getElementById('sp-email').value=s.email||'';
   document.getElementById('sp-whatsapp').value=s.whatsapp||'';
-  document.getElementById('sp-domain').value=s.domain||'';
   document.getElementById('sp-employeeId').value=s.employeeId||'';
-  document.getElementById('sp-tenure').value=s.tenure||'';
+  // Options load asynchronously; seed the current values immediately so the
+  // panel is never briefly blank, then reconcile once the list arrives.
+  setTenSelect(document.getElementById('sp-domain'), s.domain);
+  setTenSelect(document.getElementById('sp-tenure'), s.tenure);
+  loadTenOptions().then(()=>{
+    setTenSelect(document.getElementById('sp-domain'), s.domain);
+    setTenSelect(document.getElementById('sp-tenure'), s.tenure);
+  });
   document.getElementById('sp-college').value=s.collegeName||s.college||'';
   document.getElementById('sp-joining').value=s.joiningDate||'';
   const fn=((s.firstName||'')+' '+(s.lastName||'')).trim();
@@ -2405,6 +2416,57 @@ async function loadStudentSubmissionsInPanel(){
     listEl.innerHTML='<div class="sp-no-submissions"><div class="sp-no-submissions-icon">⚠️</div><p>Failed to load</p></div>';
   }
 }
+/* ── Canonical domain / tenure options ──────────────────────────────────────
+   Loaded once from /api/public-config, which is generated from the same
+   config/domains.js and utils/tenure.js the server validates against, so this
+   list cannot drift from what the server will accept. */
+let tenOptions = null;
+
+async function loadTenOptions(){
+  if(tenOptions) return tenOptions;
+  try{
+    const r = await fetch('/api/public-config', {credentials:'same-origin'});
+    const d = await r.json();
+    tenOptions = { domains: d.domains||[], tenures: (d.tenures||[]).map(t=>t.label) };
+  }catch(e){
+    tenOptions = { domains: [], tenures: [] };
+  }
+  document.querySelectorAll('select[data-options]').forEach(sel=>{
+    const list = tenOptions[sel.dataset.options] || [];
+    if(!list.length) return;
+    const current = sel.value;
+    sel.innerHTML = list.map(v=>`<option value="${v}">${v}</option>`).join('');
+    if(current) setTenSelect(sel, current);
+  });
+  return tenOptions;
+}
+
+/* A student whose stored value predates the canonical list must not have it
+   silently blanked by assigning an unknown value to a <select>. Keep it as an
+   extra option, marked, so HR can see it and choose a real one. */
+function setTenSelect(el, value){
+  if(!el) return;
+  const v = value || '';
+  if(v && !Array.from(el.options).some(o=>o.value===v)){
+    const opt=document.createElement('option');
+    opt.value=v; opt.textContent=v+' (not a standard option)';
+    el.insertBefore(opt, el.firstChild);
+  }
+  el.value=v;
+}
+
+/* Tell HR what the save actually did downstream, so a tenure change that
+   rebuilt the student's Task Journey is visible rather than silent. */
+function propagationSummary(report){
+  if(!report || !report.changed || !report.changed.length) return '';
+  const bits=[];
+  if(report.tasks && report.tasks.added)   bits.push(report.tasks.added+' task(s) added');
+  if(report.tasks && report.tasks.removed) bits.push(report.tasks.removed+' removed');
+  if(report.tasks && report.tasks.preserved) bits.push(report.tasks.preserved+' kept (work already done)');
+  if(report.offerLetterStale) bits.push('offer letter needs regenerating');
+  return bits.length ? ' — Task Journey updated: '+bits.join(', ') : '';
+}
+
 /**
  * Report why a student write failed instead of a flat "Update failed."
  *
@@ -2426,7 +2488,8 @@ async function saveSidePanelStudent(){
   try{
     const res=await fetch('/students/'+id,{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     if(!res.ok){ showHRToast('❌ '+await studentWriteError(res),'error'); return; }
-    closeSidePanel();showHRToast('✅ Student updated!','success');
+    const d=await res.json().catch(()=>({}));
+    closeSidePanel();showHRToast('✅ Student updated!'+propagationSummary(d.propagated),'success');
     allStudents=[];allTrackerStudents=[];loadStudents();
   }catch(e){showHRToast('❌ Update failed — could not reach the server.','error');}
 }
@@ -2623,7 +2686,10 @@ async function openEditStudent(id){
     document.getElementById('es-id').value=s._id;
     document.getElementById('es-firstName').value=s.firstName||'';document.getElementById('es-lastName').value=s.lastName||'';
     document.getElementById('es-email').value=s.email||'';document.getElementById('es-whatsapp').value=s.whatsapp||'';
-    document.getElementById('es-domain').value=s.domain||'';document.getElementById('es-college').value=collegeValue(s);document.getElementById('es-employeeId').value=s.employeeId||'';document.getElementById('es-tenure').value=s.tenure||'';
+    await loadTenOptions();
+    setTenSelect(document.getElementById('es-domain'), s.domain);
+    setTenSelect(document.getElementById('es-tenure'), s.tenure);
+    document.getElementById('es-college').value=collegeValue(s);document.getElementById('es-employeeId').value=s.employeeId||'';
     document.getElementById('editStudentModal').classList.add('open');
   }catch(e){showHRToast('Failed to load student.','error');}
 }
@@ -2634,7 +2700,8 @@ async function saveStudentEdit(){
   try{
     const res=await fetch('/students/'+id,{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     if(!res.ok){ showHRToast('❌ '+await studentWriteError(res),'error'); return; }
-    closeEditStudent();showHRToast('✅ Student updated!','success');allStudents=[];allTrackerStudents=[];loadStudents();
+    const d=await res.json().catch(()=>({}));
+    closeEditStudent();showHRToast('✅ Student updated!'+propagationSummary(d.propagated),'success');allStudents=[];allTrackerStudents=[];loadStudents();
   }catch(e){showHRToast('❌ Update failed — could not reach the server.','error');}
 }
 async function generateLOR(studentId, studentName, force = false) {
