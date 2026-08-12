@@ -5371,10 +5371,45 @@ try{
 
         const ok = await bcrypt.compare(password, dbCoord.password);
         if(ok){
-            if (dbCoord.verificationStatus !== "approved") {
-                dbCoord.verificationStatus = "approved";
-                await dbCoord.save().catch(() => {});
+            // The password is right. Whether they may come in is a separate
+            // question, and it used to answer itself:
+            //
+            //     if (dbCoord.verificationStatus !== "approved") {
+            //         dbCoord.verificationStatus = "approved";
+            //
+            // Logging in APPROVED the applicant. Anyone who registered as a
+            // coordinator granted themselves the role by signing in once, and
+            // HR's review existed only on paper. Being right about the password
+            // is not the same as being authorised.
+            if (dbCoord.verificationStatus === "rejected") {
+                return res.status(403).json({
+                    success: false,
+                    approvalStatus: "rejected",
+                    message: dbCoord.reviewNote
+                        ? "Your coordinator application was not approved. " + dbCoord.reviewNote
+                        : "Your coordinator application was not approved. Please contact HR if you believe this is a mistake."
+                });
             }
+
+            if (dbCoord.verificationStatus !== "approved") {
+                return res.status(403).json({
+                    success: false,
+                    approvalStatus: "pending",
+                    message: "Your coordinator application is still awaiting HR approval. " +
+                             "You will be able to sign in once it has been reviewed."
+                });
+            }
+
+            // Approved once, then replaced by a sole coordinator for the domain.
+            if (dbCoord.supersededAt) {
+                return res.status(403).json({
+                    success: false,
+                    approvalStatus: "superseded",
+                    message: "Another coordinator now holds " + (dbCoord.domain || "this domain") +
+                             ". Please contact HR if you should still have access."
+                });
+            }
+
             await clearFailedAttempts(dbCoord, Coordinator);
             const coordIdentity = {
                 username: dbCoord.username || dbCoord.email,
@@ -5394,6 +5429,148 @@ try{
 });
 
 // ================= TEST: COORDINATOR SAVE QUESTIONS =================
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Coordinator applications — HR review
+//
+// A coordinator registration used to be approved by the applicant simply
+// logging in (see /coordinator-login). These endpoints are the review that was
+// supposed to happen, and HR Level 2 — "Sr HR Associate: assesses & verifies
+// incoming Coordinator applications, enforces one coordinator-per-domain" — is
+// the level the portal already documents for the job.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const COORDINATOR_REVIEW_MIN_LEVEL = 2;
+
+function requireCoordinatorReviewer(req, res, next) {
+    if (req.session && req.session.adminUser) return next();
+    const hr = req.session && req.session.hr;
+    if (!hr) {
+        return res.status(401).json({ success: false, message: "HR sign-in required." });
+    }
+    if ((hr.level || 1) < COORDINATOR_REVIEW_MIN_LEVEL) {
+        return res.status(403).json({
+            success: false,
+            message: "Coordinator applications are reviewed from HR Level " +
+                     COORDINATOR_REVIEW_MIN_LEVEL + " (Sr HR Associate) upward."
+        });
+    }
+    next();
+}
+
+// GET /api/hr/coordinator-applications
+// Pending applications, each with whoever already holds the domain, so the
+// reviewer can see the clash before deciding rather than after.
+app.get("/api/hr/coordinator-applications", requireCoordinatorReviewer, async (req, res) => {
+    try {
+        const pending = await Coordinator
+            .find({ verificationStatus: "pending" })
+            .select("username email name domain experience createdAt")
+            .sort({ createdAt: 1 })
+            .lean();
+
+        const domains = [...new Set(pending.map(p => p.domain).filter(Boolean))];
+        const holders = domains.length
+            ? await Coordinator.find({
+                  domain: { $in: domains },
+                  verificationStatus: "approved",
+                  supersededAt: null
+              }).select("username email name domain domainMode").lean()
+            : [];
+
+        const byDomain = {};
+        for (const h of holders) (byDomain[h.domain] = byDomain[h.domain] || []).push(h);
+
+        res.json({
+            success: true,
+            applications: pending.map(app => ({
+                ...app,
+                existingCoordinators: byDomain[app.domain] || []
+            }))
+        });
+    } catch (err) {
+        console.error("[coordinator-applications]", err.message);
+        res.status(500).json({ success: false, message: "Could not load applications." });
+    }
+});
+
+// POST /api/hr/coordinator-applications/:id/decide
+// body: { decision: "approve" | "reject", domainMode?: "sole" | "shared", note?: string }
+app.post("/api/hr/coordinator-applications/:id/decide", requireCoordinatorReviewer, async (req, res) => {
+    try {
+        const { decision, domainMode, note } = req.body || {};
+        if (decision !== "approve" && decision !== "reject") {
+            return res.status(400).json({ success: false, message: "Decision must be approve or reject." });
+        }
+
+        const applicant = await Coordinator.findById(req.params.id);
+        if (!applicant) {
+            return res.status(404).json({ success: false, message: "Application not found." });
+        }
+        if (applicant.verificationStatus !== "pending") {
+            return res.status(409).json({
+                success: false,
+                message: "This application was already " + applicant.verificationStatus + "."
+            });
+        }
+
+        const reviewer = (req.session.hr && (req.session.hr.username || req.session.hr.email))
+                      || (req.session.adminUser && "admin")
+                      || "unknown";
+
+        if (decision === "reject") {
+            applicant.verificationStatus = "rejected";
+            applicant.reviewedBy = reviewer;
+            applicant.reviewedAt = new Date();
+            applicant.reviewNote = String(note || "").slice(0, 500);
+            await applicant.save();
+            return res.json({ success: true, status: "rejected" });
+        }
+
+        // Approving. "sole" removes everyone else from the domain; "shared"
+        // leaves them in place. Anything else is a typo, and defaulting a typo
+        // to "sole" would silently cut off a working coordinator.
+        const mode = domainMode === "shared" ? "shared" : (domainMode === "sole" ? "sole" : null);
+        if (!mode) {
+            return res.status(400).json({
+                success: false,
+                message: "Choose whether this coordinator is the sole coordinator for the domain or shares it."
+            });
+        }
+
+        let superseded = [];
+        if (mode === "sole" && applicant.domain) {
+            const others = await Coordinator.find({
+                domain: applicant.domain,
+                verificationStatus: "approved",
+                supersededAt: null,
+                _id: { $ne: applicant._id }
+            }).select("_id username email");
+
+            if (others.length) {
+                await Coordinator.updateMany(
+                    { _id: { $in: others.map(o => o._id) } },
+                    { $set: { supersededAt: new Date(), supersededBy: reviewer } }
+                );
+                superseded = others.map(o => o.username || o.email);
+            }
+        }
+
+        applicant.verificationStatus = "approved";
+        applicant.domainMode = mode;
+        applicant.reviewedBy = reviewer;
+        applicant.reviewedAt = new Date();
+        applicant.reviewNote = String(note || "").slice(0, 500);
+        applicant.supersededAt = null;
+        applicant.supersededBy = "";
+        await applicant.save();
+
+        res.json({ success: true, status: "approved", domainMode: mode, superseded });
+    } catch (err) {
+        console.error("[coordinator-decide]", err.message);
+        res.status(500).json({ success: false, message: "Could not record that decision." });
+    }
+});
 
 app.post("/save-test-questions", async(req,res)=>{
 try{
