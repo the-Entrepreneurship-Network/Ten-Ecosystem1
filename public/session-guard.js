@@ -27,6 +27,11 @@
   if (window.__tenSessionGuardInstalled) return;
   window.__tenSessionGuardInstalled = true;
 
+  // /login.html is the portal-wide sign-in page and the one the rest of the
+  // product already redirects to (student-dashboard, quiz-portal, payment,
+  // v2-tasks). It reads the ?next= below and returns the student to the page
+  // they were on; student-login.html does the same, but only /login.html is
+  // reachable from every entry point, so keep the whole product on one door.
   var LOGIN_PAGE = '/login.html';
   var CACHED_IDENTITY_KEYS = ['employeeId', 'studentData', 'v2StudentData', 'studentInfo'];
 

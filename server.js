@@ -62,6 +62,8 @@ const attendanceUtils = require("./utils/attendanceUtils");
 const tenureUtils = require("./utils/tenure");
 const { istNow, istDateKey } = require("./utils/dateKey");
 const tenurePaymentConfig = require("./config/tenurePayment");
+// Keeps the rest of the product in step when a student's core fields change.
+const studentPropagation = require("./services/studentPropagation");
 
 // ================= RATE LIMIT CONFIGURATION =================
 const RATE_LIMIT_CONFIG = {
@@ -1523,6 +1525,25 @@ function requireHRSession(req, res, next) {
         return res.status(401).json({ success: false, message: "HR sign-in required." });
     }
     next();
+}
+
+/**
+ * Editing and removing student records: HR staff or an admin.
+ *
+ * `PUT`/`DELETE /students/:id` were unauthenticated, and closing that hole by
+ * putting them behind `requireAdminAPI` overshot — that guard wants
+ * `req.session.adminUser`, which only a /ten-admin sign-in creates. HR signs in
+ * through /hr-login and gets `req.session.hr`, so every Save Changes and
+ * Delete Student in the HR portal's side panel came back 401 and the panel
+ * reported a flat "Update failed."
+ *
+ * Managing student records is the HR portal's core job, so HR belongs on this
+ * endpoint. The guard still requires a real server-side session — it is not a
+ * return to the anonymous access these routes had before.
+ */
+function requireHROrAdminAPI(req, res, next) {
+    if (isHRSession(req)) return next();
+    return res.status(401).json({ success: false, message: "HR or admin sign-in required." });
 }
 
 /** Coordinators and HR both review student work; admins can do anything. */
@@ -4836,7 +4857,7 @@ const LEGACY_STUDENT_EDITABLE_FIELDS = [
     "domain", "tenure", "joiningDate", "collegeName", "college", "gender"
 ];
 
-app.put("/students/:id", requireAdminAPI, async(req,res)=>{
+app.put("/students/:id", requireHROrAdminAPI, async(req,res)=>{
 try{
     const body = {};
     for(const field of LEGACY_STUDENT_EDITABLE_FIELDS){
@@ -4853,18 +4874,66 @@ try{
     if(Object.keys(body).length === 0){
         return res.status(400).json({ message:"No editable fields supplied" });
     }
-    await Student.findByIdAndUpdate(req.params.id, body, { new:true });
-    res.json({ message:"Student Updated" });
-}catch(error){ res.status(500).json({ message:"Update Failed" }); }
+
+    // Editing a student is never just a field write. tenure drives the Task
+    // Journey length, the attendance day target and the offer letter; domain
+    // drives which task set is assigned and which coordinator sees them. This
+    // route used to $set the raw body and stop, so HR extending a tenure
+    // changed the record while the student's Task Journey kept showing the old
+    // one. updateStudentAndPropagate normalises the values, derives
+    // v2DurationType and internshipEndDate, resyncs the task journey and tells
+    // the student. See services/studentPropagation.js.
+    const actor = (req.session && req.session.hr && (req.session.hr.name || req.session.hr.username))
+        || (req.session && req.session.adminUser && req.session.adminUser.username)
+        || "HR";
+    const { student: updated, report, error: invalid, notFound } =
+        await studentPropagation.updateStudentAndPropagate({ studentId: req.params.id, patch: body, actor });
+
+    if(invalid){ return res.status(400).json({ message: invalid }); }
+    if(notFound || !updated){ return res.status(404).json({ message:"Student not found" }); }
+
+    res.json({
+        message: "Student Updated",
+        student: updated,
+        propagated: report
+    });
+}catch(error){
+    // This used to return 500 with nothing logged, so a failing save left no
+    // trace anywhere — the same blind spot that made the task-journey 500 take
+    // days to find. Log the reason and hand the caller something actionable.
+    console.error("[students] update failed:", error && error.message);
+    const duplicate = error && error.code === 11000;
+    // Distinguish "the database is unreachable" from "your edit was rejected".
+    // The old code answered a dead connection with 404 "Student not found",
+    // which sent HR looking for a record that was there all along.
+    const unreachable = /buffering timed out|before initial connection|ECONNREFUSED|topology/i
+        .test((error && error.message) || "");
+    res.status(duplicate ? 409 : 500).json({
+        message: duplicate
+            ? "That email or employee ID is already used by another student."
+            : unreachable
+                ? "The database is not reachable right now. Nothing was changed — please try again in a moment."
+                : "Update Failed"
+    });
+}
 });
 
 // ================= DELETE STUDENT =================
 
-app.delete("/students/:id", requireAdminAPI, async(req,res)=>{
+app.delete("/students/:id", requireHROrAdminAPI, async(req,res)=>{
 try{
-    await Student.findByIdAndDelete(req.params.id);
+    // findById + deleteOne rather than findByIdAndDelete: the JSON fallback
+    // engine wraps both of those but not findByIdAndDelete, so the one-shot
+    // call threw outright whenever Mongo was unreachable while the sibling
+    // update degraded cleanly. Same result, same failure mode as the update.
+    const existing = await Student.findById(req.params.id);
+    if(!existing){ return res.status(404).json({ message:"Student not found" }); }
+    await Student.deleteOne({ _id: req.params.id });
     res.json({ message:"Student deleted" });
-}catch(error){ res.status(500).json({ message:"Error deleting student" }); }
+}catch(error){
+    console.error("[students] delete failed:", error && error.message);
+    res.status(500).json({ message:"Error deleting student" });
+}
 });
 
 // ================= STUDENT LOGIN =================
@@ -6106,6 +6175,8 @@ try{
     const student = await Student.findById(req.params.id);
     if(!student) return res.json({ success:false, message:"Student not found" });
 
+    const hadHRApproval = !!student.certificateApprovedByHR;
+
     student.certificateApprovedByCoordinator = false;
     student.coordinatorApprovedAt = null;
     student.coordinatorRemarks = "";
@@ -6114,6 +6185,34 @@ try{
     student.hrApprovedAt = null;
     student.hrRemarks = "";
     await student.save();
+
+    // This is the one approval transition that told nobody. It silently
+    // withdraws HR's approval as well as the coordinator's, so both the
+    // student and HR could be looking at a certificate status that no longer
+    // holds. Its sibling coordinator-approve has always notified.
+    try{
+        const notif = new Notification({
+            title: "Certificate approval revoked",
+            message: hadHRApproval
+                ? "Your coordinator withdrew their certificate approval, which also removed the HR approval. Please contact your coordinator."
+                : "Your coordinator withdrew their certificate approval. Please contact your coordinator.",
+            type: "warning", from: "Coordinator",
+            targetType: "student", targetEmployeeId: student.employeeId, targetDomain: student.domain
+        });
+        await notif.save();
+        broadcastNotification(student.domain, student.employeeId, notif);
+
+        if(hadHRApproval){
+            const hrNotif = new Notification({
+                title: "Certificate approval chain broken",
+                message: `Coordinator approval for ${student.name || student.employeeId} (${student.employeeId}) was revoked, so the HR approval was removed too.`,
+                type: "warning", from: "Coordinator",
+                targetType: "domain", targetDomain: student.domain
+            });
+            await hrNotif.save();
+            broadcastNotification(student.domain, null, hrNotif);
+        }
+    }catch(notifyErr){ console.error("[coordinator-revoke] notify failed:", notifyErr.message); }
 
     res.json({ success:true, message:"Approval revoked" });
 }catch(e){ console.log(e); res.json({ success:false, message:"Failed to revoke" }); }
@@ -6201,13 +6300,29 @@ try{
     student.certificateApprovedByCoordinator = false;
     await student.save();
 
-    const notif = new Notification({
-        title:"Certificate Review: Action Needed",
-        message:`HR returned your certificate review to the coordinator. Reason: ${student.hrRejectionReason}`,
-        type:"warning", from:"HR",
-        targetType:"coordinator-domain", targetDomain:student.domain
-    });
-    await notif.save();
+    // Two gaps here: this notification was saved but never broadcast, so the
+    // coordinator only saw it on a page reload; and it was addressed to "your
+    // certificate review" while being targeted at the coordinator. The student
+    // — whose approval was just withdrawn — was told nothing at all.
+    try{
+        const coordNotif = new Notification({
+            title:"Certificate review returned by HR",
+            message:`HR returned the certificate review for ${student.name || student.employeeId} (${student.employeeId}). Reason: ${student.hrRejectionReason}`,
+            type:"warning", from:"HR",
+            targetType:"coordinator-domain", targetDomain:student.domain
+        });
+        await coordNotif.save();
+        broadcastNotification(student.domain, null, coordNotif);
+
+        const studentNotif = new Notification({
+            title:"Certificate review needs another look",
+            message:`HR returned your certificate review to your coordinator. Reason: ${student.hrRejectionReason}`,
+            type:"warning", from:"HR",
+            targetType:"student", targetEmployeeId:student.employeeId, targetDomain:student.domain
+        });
+        await studentNotif.save();
+        broadcastNotification(student.domain, student.employeeId, studentNotif);
+    }catch(notifyErr){ console.error("[hr-reject] notify failed:", notifyErr.message); }
 
     res.json({ success:true, message:"Student rejected and returned to coordinator" });
 }catch(e){ console.log(e); res.json({ success:false, message:"Failed to reject" }); }

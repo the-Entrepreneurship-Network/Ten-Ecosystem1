@@ -1336,10 +1336,15 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
     </div>
     <span class="sp-field-label">Email</span><input class="sp-input" type="email" id="sp-email" placeholder="Email">
     <span class="sp-field-label">WhatsApp</span><input class="sp-input" type="text" id="sp-whatsapp" placeholder="WhatsApp">
-    <span class="sp-field-label">Domain</span><input class="sp-input" type="text" id="sp-domain" placeholder="Domain">
+    <!-- Domain and Tenure are pickers, not free text. Typed values like
+         "3 months" or "Web Dev" do not match the lookup tables the task engine
+         and attendance calculator use, so a typo here silently put the student
+         on the wrong plan. Options come from /api/public-config so this list
+         cannot drift from the server's. -->
+    <span class="sp-field-label">Domain</span><select class="sp-input" id="sp-domain" data-options="domains"></select>
     <div class="sp-two-col">
       <div><span class="sp-field-label">Employee ID</span><input class="sp-input" type="text" id="sp-employeeId" readonly></div>
-      <div><span class="sp-field-label">Tenure</span><input class="sp-input" type="text" id="sp-tenure" placeholder="e.g. 3 Months"></div>
+      <div><span class="sp-field-label">Tenure</span><select class="sp-input" id="sp-tenure" data-options="tenures"></select></div>
     </div>
     <span class="sp-field-label">College</span><input class="sp-input" type="text" id="sp-college" placeholder="Not Provided">
     <span class="sp-field-label">Joining Date</span><input class="sp-input" type="text" id="sp-joining" readonly>
@@ -1400,11 +1405,11 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
     </div>
     <div class="modal-label">Email</div><input class="modal-input-hr" type="email" id="es-email">
     <div class="modal-label">WhatsApp</div><input class="modal-input-hr" type="text" id="es-whatsapp">
-    <div class="modal-label">Domain</div><input class="modal-input-hr" type="text" id="es-domain">
+    <div class="modal-label">Domain</div><select class="modal-input-hr" id="es-domain" data-options="domains"></select>
     <div class="modal-label">College Name</div><input class="modal-input-hr" type="text" id="es-college" placeholder="Not Provided">
     <div class="two-col-hr">
       <div><div class="modal-label">Employee ID (read-only)</div><input class="modal-input-hr" type="text" id="es-employeeId" readonly></div>
-      <div><div class="modal-label">Tenure</div><input class="modal-input-hr" type="text" id="es-tenure"></div>
+      <div><div class="modal-label">Tenure</div><select class="modal-input-hr" id="es-tenure" data-options="tenures"></select></div>
     </div>
     <div class="modal-actions-hr">
       <button class="btn-save-hr" onclick="saveStudentEdit()">💾 Save</button>
@@ -1949,11 +1954,19 @@ async function loadHRFeedback(){
           '</div>' +
         '</div>' +
         '<div style="color:#cdd9ec;font-size:13px;white-space:pre-wrap;line-height:1.55;">' + _hrEsc(f.message) + '</div>' +
-        '<div style="margin-top:10px;display:flex;gap:8px;align-items:center;">' +
+        '<div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
           (isNew
             ? '<button onclick="markFeedback(\'' + _hrEsc(f._id) + '\',\'read\')" style="background:rgba(99,140,210,0.15);color:#8aa4c8;border:1px solid rgba(99,140,210,0.3);border-radius:7px;padding:5px 12px;cursor:pointer;font-size:12px;">Mark read</button>'
             : '<span style="color:#5a7299;font-size:11px;">' + _hrEsc(f.status) + (f.readBy ? ' by ' + _hrEsc(f.readBy) : '') + '</span>') +
           '<button onclick="markFeedback(\'' + _hrEsc(f._id) + '\',\'actioned\')" style="background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.3);border-radius:7px;padding:5px 12px;cursor:pointer;font-size:12px;">Mark actioned</button>' +
+          // Section 4 of the home page (testimonials) renders ONLY feedback HR
+          // has published — the backend has supported this since the
+          // StudentFeedback.published field landed, but no button ever called
+          // it, so the testimonial section could never appear.
+          (f.published
+            ? '<span style="background:rgba(212,175,55,0.12);color:#f5c542;border:1px solid rgba(212,175,55,0.3);border-radius:99px;padding:4px 11px;font-size:11px;font-weight:700;">🌐 On home page</span>' +
+              '<button onclick="publishFeedback(\'' + _hrEsc(f._id) + '\',false)" style="background:rgba(244,63,94,0.1);color:#f43f5e;border:1px solid rgba(244,63,94,0.3);border-radius:7px;padding:5px 12px;cursor:pointer;font-size:12px;">Unpublish</button>'
+            : '<button onclick="publishFeedback(\'' + _hrEsc(f._id) + '\',true)" style="background:rgba(212,175,55,0.1);color:#f5c542;border:1px solid rgba(212,175,55,0.3);border-radius:7px;padding:5px 12px;cursor:pointer;font-size:12px;">🌐 Publish as testimonial</button>') +
         '</div>' +
       '</div>';
     }).join('');
@@ -1972,6 +1985,31 @@ async function markFeedback(id, status){
     });
     const data = await res.json();
     if (!data.success) throw new Error(data.message);
+    loadHRFeedback();
+  } catch (err) {
+    alert(err.message || 'Could not update that feedback.');
+  }
+}
+
+/**
+ * Put a piece of intern feedback on the public home page — or take it down.
+ *
+ * Publishing shows the intern's name, domain, star rating and message to
+ * every visitor, so it asks before doing it. The home page shows only what
+ * this button has published; nothing a student writes goes public on its own.
+ */
+async function publishFeedback(id, publish){
+  if (publish && !confirm('Publish this feedback as a testimonial on the public home page?\n\nThe intern’s name, domain, star rating and message will be visible to every visitor.')) return;
+  try {
+    const res = await fetch('/api/feedback/hr/' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ published: publish })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message);
+    showHRToast(publish ? '🌐 Published to the home page.' : 'Removed from the home page.', 'success');
     loadHRFeedback();
   } catch (err) {
     alert(err.message || 'Could not update that feedback.');
@@ -2335,9 +2373,15 @@ function openSidePanel(id){
   document.getElementById('sp-lastName').value=s.lastName||'';
   document.getElementById('sp-email').value=s.email||'';
   document.getElementById('sp-whatsapp').value=s.whatsapp||'';
-  document.getElementById('sp-domain').value=s.domain||'';
   document.getElementById('sp-employeeId').value=s.employeeId||'';
-  document.getElementById('sp-tenure').value=s.tenure||'';
+  // Options load asynchronously; seed the current values immediately so the
+  // panel is never briefly blank, then reconcile once the list arrives.
+  setTenSelect(document.getElementById('sp-domain'), s.domain);
+  setTenSelect(document.getElementById('sp-tenure'), s.tenure);
+  loadTenOptions().then(()=>{
+    setTenSelect(document.getElementById('sp-domain'), s.domain);
+    setTenSelect(document.getElementById('sp-tenure'), s.tenure);
+  });
   document.getElementById('sp-college').value=s.collegeName||s.college||'';
   document.getElementById('sp-joining').value=s.joiningDate||'';
   const fn=((s.firstName||'')+' '+(s.lastName||'')).trim();
@@ -2405,15 +2449,82 @@ async function loadStudentSubmissionsInPanel(){
     listEl.innerHTML='<div class="sp-no-submissions"><div class="sp-no-submissions-icon">⚠️</div><p>Failed to load</p></div>';
   }
 }
+/* ── Canonical domain / tenure options ──────────────────────────────────────
+   Loaded once from /api/public-config, which is generated from the same
+   config/domains.js and utils/tenure.js the server validates against, so this
+   list cannot drift from what the server will accept. */
+let tenOptions = null;
+
+async function loadTenOptions(){
+  if(tenOptions) return tenOptions;
+  try{
+    const r = await fetch('/api/public-config', {credentials:'same-origin'});
+    const d = await r.json();
+    tenOptions = { domains: d.domains||[], tenures: (d.tenures||[]).map(t=>t.label) };
+  }catch(e){
+    tenOptions = { domains: [], tenures: [] };
+  }
+  document.querySelectorAll('select[data-options]').forEach(sel=>{
+    const list = tenOptions[sel.dataset.options] || [];
+    if(!list.length) return;
+    const current = sel.value;
+    sel.innerHTML = list.map(v=>`<option value="${v}">${v}</option>`).join('');
+    if(current) setTenSelect(sel, current);
+  });
+  return tenOptions;
+}
+
+/* A student whose stored value predates the canonical list must not have it
+   silently blanked by assigning an unknown value to a <select>. Keep it as an
+   extra option, marked, so HR can see it and choose a real one. */
+function setTenSelect(el, value){
+  if(!el) return;
+  const v = value || '';
+  if(v && !Array.from(el.options).some(o=>o.value===v)){
+    const opt=document.createElement('option');
+    opt.value=v; opt.textContent=v+' (not a standard option)';
+    el.insertBefore(opt, el.firstChild);
+  }
+  el.value=v;
+}
+
+/* Tell HR what the save actually did downstream, so a tenure change that
+   rebuilt the student's Task Journey is visible rather than silent. */
+function propagationSummary(report){
+  if(!report || !report.changed || !report.changed.length) return '';
+  const bits=[];
+  if(report.tasks && report.tasks.added)   bits.push(report.tasks.added+' task(s) added');
+  if(report.tasks && report.tasks.removed) bits.push(report.tasks.removed+' removed');
+  if(report.tasks && report.tasks.preserved) bits.push(report.tasks.preserved+' kept (work already done)');
+  if(report.offerLetterStale) bits.push('offer letter needs regenerating');
+  return bits.length ? ' — Task Journey updated: '+bits.join(', ') : '';
+}
+
+/**
+ * Report why a student write failed instead of a flat "Update failed."
+ *
+ * Both of these calls used to `throw new Error()` on any non-2xx and show one
+ * fixed message, so a 401 (signed-out HR session), a 409 (duplicate email) and
+ * a genuine 500 were indistinguishable. A signed-out session is the common
+ * case and it is the one the old message described worst.
+ */
+async function studentWriteError(res){
+  let msg='';
+  try{ const d=await res.json(); msg=d && (d.message||d.error) || ''; }catch(e){}
+  if(res.status===401) return msg||'Your HR session has expired. Please sign in again.';
+  return msg||('Request failed ('+res.status+').');
+}
+
 async function saveSidePanelStudent(){
   const id=document.getElementById('sp-id').value;
   const body={firstName:document.getElementById('sp-firstName').value.trim(),lastName:document.getElementById('sp-lastName').value.trim(),email:document.getElementById('sp-email').value.trim(),whatsapp:document.getElementById('sp-whatsapp').value.trim(),domain:document.getElementById('sp-domain').value.trim(),tenure:document.getElementById('sp-tenure').value.trim(),collegeName:document.getElementById('sp-college').value.trim(),college:document.getElementById('sp-college').value.trim()};
   try{
-    const res=await fetch('/students/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(!res.ok)throw new Error();
-    closeSidePanel();showHRToast('✅ Student updated!','success');
+    const res=await fetch('/students/'+id,{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!res.ok){ showHRToast('❌ '+await studentWriteError(res),'error'); return; }
+    const d=await res.json().catch(()=>({}));
+    closeSidePanel();showHRToast('✅ Student updated!'+propagationSummary(d.propagated),'success');
     allStudents=[];allTrackerStudents=[];loadStudents();
-  }catch(e){showHRToast('❌ Update failed.','error');}
+  }catch(e){showHRToast('❌ Update failed — could not reach the server.','error');}
 }
 function deleteSidePanelStudent(){
   const id=document.getElementById('sp-id').value;
@@ -2608,7 +2719,10 @@ async function openEditStudent(id){
     document.getElementById('es-id').value=s._id;
     document.getElementById('es-firstName').value=s.firstName||'';document.getElementById('es-lastName').value=s.lastName||'';
     document.getElementById('es-email').value=s.email||'';document.getElementById('es-whatsapp').value=s.whatsapp||'';
-    document.getElementById('es-domain').value=s.domain||'';document.getElementById('es-college').value=collegeValue(s);document.getElementById('es-employeeId').value=s.employeeId||'';document.getElementById('es-tenure').value=s.tenure||'';
+    await loadTenOptions();
+    setTenSelect(document.getElementById('es-domain'), s.domain);
+    setTenSelect(document.getElementById('es-tenure'), s.tenure);
+    document.getElementById('es-college').value=collegeValue(s);document.getElementById('es-employeeId').value=s.employeeId||'';
     document.getElementById('editStudentModal').classList.add('open');
   }catch(e){showHRToast('Failed to load student.','error');}
 }
@@ -2617,10 +2731,11 @@ async function saveStudentEdit(){
   const id=document.getElementById('es-id').value;
   const body={firstName:document.getElementById('es-firstName').value.trim(),lastName:document.getElementById('es-lastName').value.trim(),email:document.getElementById('es-email').value.trim(),whatsapp:document.getElementById('es-whatsapp').value.trim(),domain:document.getElementById('es-domain').value.trim(),collegeName:document.getElementById('es-college').value.trim(),college:document.getElementById('es-college').value.trim(),tenure:document.getElementById('es-tenure').value.trim()};
   try{
-    const res=await fetch('/students/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(!res.ok)throw new Error();
-    closeEditStudent();showHRToast('✅ Student updated!','success');allStudents=[];allTrackerStudents=[];loadStudents();
-  }catch(e){showHRToast('❌ Update failed.','error');}
+    const res=await fetch('/students/'+id,{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!res.ok){ showHRToast('❌ '+await studentWriteError(res),'error'); return; }
+    const d=await res.json().catch(()=>({}));
+    closeEditStudent();showHRToast('✅ Student updated!'+propagationSummary(d.propagated),'success');allStudents=[];allTrackerStudents=[];loadStudents();
+  }catch(e){showHRToast('❌ Update failed — could not reach the server.','error');}
 }
 async function generateLOR(studentId, studentName, force = false) {
   if (!force) {
@@ -2685,12 +2800,12 @@ function confirmDelStudent(id,name){
 async function executeDelStudent(){
   closeConfirmDel();
   try{
-    const res=await fetch('/students/'+pendingDelId,{method:'DELETE'});
-    if(!res.ok)throw new Error();
+    const res=await fetch('/students/'+pendingDelId,{method:'DELETE',credentials:'same-origin'});
+    if(!res.ok){ showHRToast('❌ '+await studentWriteError(res),'error'); return; }
     document.getElementById('srow-'+pendingDelId)?.remove();
     allStudents=allStudents.filter(s=>s._id!==pendingDelId);allTrackerStudents=allTrackerStudents.filter(s=>s._id!==pendingDelId);
     showHRToast('🗑 Student deleted.','success');
-  }catch(e){showHRToast('❌ Delete failed.','error');}
+  }catch(e){showHRToast('❌ Delete failed — could not reach the server.','error');}
 }
 function closeConfirmDel(){document.getElementById('confirmDelModal').classList.remove('open');}
 document.getElementById('editStudentModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeEditStudent();});

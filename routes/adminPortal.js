@@ -7,6 +7,7 @@ const { broadcastNotification } = require('../utils/sseHub');
 const { normalizeDomain } = require('../config/domains');
 const { normalizeTenure, getTenureLabel, getInternshipEndDate } = require('../utils/tenure');
 const { isEmployeeIdAvailable } = require('../utils/employeeId');
+const { propagateStudentChange } = require('../services/studentPropagation');
 
 // Brute-force guard on the admin login. Keyed by IP only — there is a single
 // admin account, so there is no per-account key to add and no other user to
@@ -581,6 +582,17 @@ router.put('/students/:id', requireAdminAPI, async (req, res) => {
 
     const student = await Student.findByIdAndUpdate(req.params.id, { $set: update }, { new: true });
 
+    // This route already derived v2DurationType and internshipEndDate, but the
+    // Task Journey was left untouched — task rows are assigned once at
+    // enrolment and never revisited, so a tenure or domain change here did not
+    // reach the student's actual task list.
+    const propagation = await propagateStudentChange({
+      student,
+      before: { tenure: existing.tenure, domain: existing.domain,
+                joiningDate: existing.joiningDate, internshipStartDate: existing.internshipStartDate },
+      actor: req.session.adminUser?.username || 'admin'
+    });
+
     await AuditLog.create({
       userId: student._id,
       actionType: 'student_updated',
@@ -600,6 +612,7 @@ router.put('/students/:id', requireAdminAPI, async (req, res) => {
     res.json({
       success: true,
       data: student,
+      propagated: propagation,
       offerLetterNeedsRegeneration: identityChanged && hasIssuedOffer,
       offerLetterMessage: (identityChanged && hasIssuedOffer)
         ? "This student's offer letter was issued with the previous domain/tenure and no longer matches their record. Regenerate it so the two agree."
@@ -651,6 +664,15 @@ router.post('/students/:id/extend-tenure', requireAdminAPI, async (req, res) => 
 
     const updated = await Student.findByIdAndUpdate(req.params.id, { $set: update }, { new: true });
 
+    // Extending a tenure without resyncing left the student on the old number
+    // of weeks — the record said 3 Months and the Task Journey still showed 4
+    // weeks of the 1-Month plan.
+    const propagation = await propagateStudentChange({
+      student: updated,
+      before: { tenure: oldState.tenure, internshipStartDate: oldState.internshipStartDate },
+      actor: req.session.adminUser?.username || 'admin'
+    });
+
     await AuditLog.create({
       userId: student._id,
       actionType: 'student_tenure_extended',
@@ -666,6 +688,7 @@ router.post('/students/:id/extend-tenure', requireAdminAPI, async (req, res) => 
     res.json({
       success: true,
       data: updated,
+      propagated: propagation,
       previousTenure: oldState.tenure,
       newTenure: update.tenure,
       internshipEndDate: endDate,
