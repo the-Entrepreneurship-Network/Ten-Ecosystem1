@@ -15,7 +15,16 @@
   --ten-font-body: 'Plus Jakarta Sans', sans-serif;
 }
 
-html, body { height: 100%; overflow: hidden; }
+/* The page must scroll. This used to be `height:100%; overflow:hidden` — a
+   leftover from when the portal panel was the only content — and it locked
+   desktop visitors to the first screen. Every section below the hero (domains,
+   verify, FAQ, testimonials, footer) was in the page but unreachable: the
+   sections existed for weeks while the live site appeared not to have them.
+   A ≤900px media query restored scrolling, which is why phones were fine and
+   the bug was only ever seen on desktop. */
+html { height: 100%; scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { min-height: 100%; overflow-x: hidden; overflow-y: auto; }
 
 body {
   /* column, not the default row.
@@ -44,7 +53,9 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   min-height: 600px;
-  max-height: 92vh;
+  /* No max-height: the page scrolls now, and capping the panel at 92vh
+     clipped whatever the right column could not fit — the verify/FAQ links
+     were half-drawn at the cut line. */
   background: rgba(10, 15, 30, 0.45);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
@@ -369,11 +380,41 @@ body {
 }
 
 @media (max-width: 900px) {
-  html, body { overflow: auto; height: auto; }
   .portal-wrap { grid-template-columns: 1fr; max-height: none; }
   .panel-left { display: none; }
   .panel-right { padding: 40px 28px; }
 }
+
+/* An employer holding a certificate is one of the two audiences of this page,
+   and the sections below the hero were invisible for weeks — so the way down
+   is signposted rather than assumed. */
+.scroll-cue {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 18px auto 6px;
+  color: var(--ten-text-muted);
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.scroll-cue:hover { color: var(--ten-gold); }
+.scroll-cue .chev { font-size: 16px; animation: cue-bob 2s ease-in-out infinite; }
+@keyframes cue-bob { 0%,100%{ transform: translateY(0);} 50%{ transform: translateY(5px);} }
+@media (prefers-reduced-motion: reduce) { .scroll-cue .chev { animation: none; } }
+
+.hero-links {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 14px;
+  font-size: 12.5px;
+}
+.hero-links a { color: var(--ten-text-muted); text-decoration: none; transition: color 0.2s; }
+.hero-links a:hover { color: var(--ten-gold); }
 
 </style>
 </head>
@@ -474,6 +515,16 @@ body {
       <span class="btn-left"><span class="btn-icon">👔</span> HR Portal</span>
     </button>
 
+    <!-- Requirement 1: an employer holding a TEN certificate must be able to
+         find verification from the first screen, not only after scrolling. -->
+    <div class="hero-links">
+      <a href="/verify-document">🔍 Verify a Certificate</a>
+      <span style="color:var(--ten-text-muted);opacity:0.4;">·</span>
+      <a href="#ten-domains">Explore domains</a>
+      <span style="color:var(--ten-text-muted);opacity:0.4;">·</span>
+      <a href="#ten-faq">FAQ</a>
+    </div>
+
     <div class="page-footer">
       &copy; 2026 TEN — The Entrepreneurship Network · Internship Management System
     </div>
@@ -481,6 +532,39 @@ body {
   </div>
 
 </div><!-- /portal-wrap -->
+
+<a class="scroll-cue" href="#ten-how">
+  Explore the programme
+  <span class="chev">⌄</span>
+</a>
+
+<!-- Requirement 3: the real numbers. The hero's stat chips live in the left
+     panel, which is hidden on phones — this strip is the version everyone
+     sees. Same data-stat hooks, so the one /api/public/stats fetch updates
+     both. The rendered defaults are the fallback when that fetch fails. -->
+<style>
+  .stats-strip{display:flex;justify-content:center;gap:clamp(28px,7vw,90px);flex-wrap:wrap;
+    max-width:1100px;margin:0 auto;padding:34px 24px 10px;width:100%;}
+  .stats-strip .stat-big{text-align:center;}
+  .stats-strip .val{font-family:var(--ten-font-display);font-size:clamp(30px,4.5vw,44px);
+    font-weight:800;color:#D4AF37;line-height:1;letter-spacing:-0.02em;}
+  .stats-strip .lbl{font-size:12px;color:#8AA4C8;text-transform:uppercase;
+    letter-spacing:1.8px;margin-top:8px;}
+</style>
+<div class="stats-strip stats-row">
+  <div class="stat-big stat-chip">
+    <div class="val" data-stat="interns">762</div>
+    <div class="lbl">Interns trained</div>
+  </div>
+  <div class="stat-big stat-chip">
+    <div class="val" data-stat="domains">15</div>
+    <div class="lbl">Domains</div>
+  </div>
+  <div class="stat-big stat-chip">
+    <div class="val" data-stat="tracks">6</div>
+    <div class="lbl">Internship tracks</div>
+  </div>
+</div>
 <!-- ────────────────────────────────────────────────────────────────────
      Below-the-fold content.
      The page above is a portal chooser: it speaks to people who already
@@ -525,7 +609,7 @@ body {
   @media (max-width:640px){ .ten-sec{padding:40px 18px;} .ten-sec h2{font-size:22px;} }
 </style>
 
-<section class="ten-sec" style="width:100%">
+<section class="ten-sec" style="width:100%" id="ten-how">
   <h2>How the internship works</h2>
   <p class="lead">Four steps, from signing up to holding a certificate.</p>
   <div class="ten-steps">
@@ -546,7 +630,7 @@ body {
   <div class="ten-quotes" id="testimonialGrid"></div>
 </section>
 
-<section class="ten-sec" style="width:100%">
+<section class="ten-sec" style="width:100%" id="ten-domains">
   <h2>Domains you can intern in</h2>
   <p class="lead" id="domainLead">Every domain has its own coordinator and its own task track.</p>
   <!-- Rendered here as well as fetched. If /api/public/stats is unreachable
@@ -586,7 +670,7 @@ body {
   </div>
 </section>
 
-<section class="ten-sec ten-faq" style="width:100%">
+<section class="ten-sec ten-faq" style="width:100%" id="ten-faq">
   <h2>Common questions</h2>
   <p class="lead">The things people ask us most.</p>
 
@@ -694,10 +778,19 @@ body {
   // domain the registration form does not offer, or a number that has drifted.
   (function () {
     function setChip(label, value) {
+      // Two stat surfaces share this: the hero chips (matched by their visible
+      // label) and the below-the-fold strip (matched by data-stat, so its
+      // labels can read "Interns trained" without breaking the match).
       var chips = document.querySelectorAll('.stats-row .stat-chip');
       for (var i = 0; i < chips.length; i++) {
-        var l = chips[i].querySelector('.lbl'), v = chips[i].querySelector('.val');
-        if (l && v && l.textContent.trim().toLowerCase() === label) v.textContent = value;
+        var v = chips[i].querySelector('.val');
+        if (!v) continue;
+        var key = (v.getAttribute('data-stat') || '').toLowerCase();
+        if (!key) {
+          var l = chips[i].querySelector('.lbl');
+          key = l ? l.textContent.trim().toLowerCase() : '';
+        }
+        if (key === label) v.textContent = value;
       }
     }
 
@@ -708,6 +801,7 @@ body {
 
         if (d.interns) setChip('interns', d.interns);
         if (d.domains) setChip('domains', d.domains);
+        if (d.tracks)  setChip('tracks',  d.tracks);
 
         var wrap = document.getElementById('domainChips');
         if (wrap && d.domainNames && d.domainNames.length) {

@@ -1954,11 +1954,19 @@ async function loadHRFeedback(){
           '</div>' +
         '</div>' +
         '<div style="color:#cdd9ec;font-size:13px;white-space:pre-wrap;line-height:1.55;">' + _hrEsc(f.message) + '</div>' +
-        '<div style="margin-top:10px;display:flex;gap:8px;align-items:center;">' +
+        '<div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
           (isNew
             ? '<button onclick="markFeedback(\'' + _hrEsc(f._id) + '\',\'read\')" style="background:rgba(99,140,210,0.15);color:#8aa4c8;border:1px solid rgba(99,140,210,0.3);border-radius:7px;padding:5px 12px;cursor:pointer;font-size:12px;">Mark read</button>'
             : '<span style="color:#5a7299;font-size:11px;">' + _hrEsc(f.status) + (f.readBy ? ' by ' + _hrEsc(f.readBy) : '') + '</span>') +
           '<button onclick="markFeedback(\'' + _hrEsc(f._id) + '\',\'actioned\')" style="background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.3);border-radius:7px;padding:5px 12px;cursor:pointer;font-size:12px;">Mark actioned</button>' +
+          // Section 4 of the home page (testimonials) renders ONLY feedback HR
+          // has published — the backend has supported this since the
+          // StudentFeedback.published field landed, but no button ever called
+          // it, so the testimonial section could never appear.
+          (f.published
+            ? '<span style="background:rgba(212,175,55,0.12);color:#f5c542;border:1px solid rgba(212,175,55,0.3);border-radius:99px;padding:4px 11px;font-size:11px;font-weight:700;">🌐 On home page</span>' +
+              '<button onclick="publishFeedback(\'' + _hrEsc(f._id) + '\',false)" style="background:rgba(244,63,94,0.1);color:#f43f5e;border:1px solid rgba(244,63,94,0.3);border-radius:7px;padding:5px 12px;cursor:pointer;font-size:12px;">Unpublish</button>'
+            : '<button onclick="publishFeedback(\'' + _hrEsc(f._id) + '\',true)" style="background:rgba(212,175,55,0.1);color:#f5c542;border:1px solid rgba(212,175,55,0.3);border-radius:7px;padding:5px 12px;cursor:pointer;font-size:12px;">🌐 Publish as testimonial</button>') +
         '</div>' +
       '</div>';
     }).join('');
@@ -1977,6 +1985,31 @@ async function markFeedback(id, status){
     });
     const data = await res.json();
     if (!data.success) throw new Error(data.message);
+    loadHRFeedback();
+  } catch (err) {
+    alert(err.message || 'Could not update that feedback.');
+  }
+}
+
+/**
+ * Put a piece of intern feedback on the public home page — or take it down.
+ *
+ * Publishing shows the intern's name, domain, star rating and message to
+ * every visitor, so it asks before doing it. The home page shows only what
+ * this button has published; nothing a student writes goes public on its own.
+ */
+async function publishFeedback(id, publish){
+  if (publish && !confirm('Publish this feedback as a testimonial on the public home page?\n\nThe intern’s name, domain, star rating and message will be visible to every visitor.')) return;
+  try {
+    const res = await fetch('/api/feedback/hr/' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ published: publish })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message);
+    showHRToast(publish ? '🌐 Published to the home page.' : 'Removed from the home page.', 'success');
     loadHRFeedback();
   } catch (err) {
     alert(err.message || 'Could not update that feedback.');
