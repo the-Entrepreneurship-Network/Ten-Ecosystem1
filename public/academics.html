@@ -163,11 +163,17 @@ a{color:inherit}
   .nh-sec.flip .tilebox{order:0}.nh-sec.flip .lbl{order:0;text-align:left}}
 .nh-dark{background:#050505;color:#fff}
 .nh-big{padding:22vh 34px;font-size:clamp(40px,7vw,96px);font-weight:800;letter-spacing:-.03em;line-height:1.02}
-.nh-heart{height:230vh;position:relative}
-.nh-heart .stick{position:sticky;top:0;height:100vh;overflow:hidden}
-.nh-heart .tile{position:absolute;left:0;top:0;width:58px;height:58px;border-radius:13px;overflow:hidden;will-change:transform}
-.nh-heart .tile img{width:100%;height:100%;object-fit:cover}
-.nh-heart .cap{position:absolute;left:34px;bottom:30px;font-size:13px;font-weight:700;letter-spacing:.14em;opacity:.7}
+/* The drop: like the reference credits scene — objects fall in from above,
+   tumble, collide with each other and pile up over the columns. */
+.nh-drop{position:relative;min-height:100vh;overflow:hidden;
+  display:grid;grid-template-columns:1fr 1fr 1fr;gap:34px;align-items:center;padding:0 34px}
+.nh-drop .col .k{font-family:'DM Mono',ui-monospace,monospace;font-size:12px;letter-spacing:.18em;
+  text-transform:uppercase;opacity:.65;margin-bottom:16px}
+.nh-drop .col div{font-size:clamp(15px,1.4vw,19px);font-weight:600;line-height:1.55}
+.nh-drop .lead{font-size:clamp(20px,2vw,28px);font-weight:600}
+.nh-drop .tile{position:absolute;left:0;top:0;width:64px;height:64px;border-radius:14px;overflow:hidden;
+  will-change:transform;box-shadow:0 12px 30px rgba(0,0,0,.5)}
+.nh-drop .tile img{width:100%;height:100%;object-fit:cover}
 .nh-foot{background:#050505;color:#fff;padding:14vh 34px 10px;position:relative}
 .nh-foot h3{font-size:clamp(38px,5vw,72px);font-weight:800;letter-spacing:-.02em;line-height:1.05}
 .nh-foot .pills{display:flex;gap:14px;margin:34px 0 7vh;flex-wrap:wrap}
@@ -367,8 +373,11 @@ a{color:inherit}
       + '<div class="tilebox"><div class="nh-tile"><img loading="lazy" src="img/glitter-man.webp" alt="Person in a glitter suit"></div>'
       + '<div class="nh-cap">Completion looks like this</div></div></section>'
       + '<div class="nh-dark nh-big">Skills follow<br>momentum.</div>'
-      + '<div class="nh-heart nh-dark" id="nhHeartSec"><div class="stick" id="nhStick">'
-      + '<div class="cap">FOURTEEN DOMAINS · ONE HEART</div></div></div>');
+      + '<div class="nh-drop nh-dark" id="nhDrop">'
+      + '<div class="lead">One portal.<br>Three doors :</div>'
+      + '<div class="col"><div class="k">Student Portal</div><div>A task journey for every domain — courses, modules, assignments and quizzes dedicated to each of the fourteen domains, coins for everything you finish, certificate on completion.</div></div>'
+      + '<div class="col"><div class="k">Job Portal &amp; Resume Portal</div><div>Job findings matched to your domain and level. Resume builder and resume checker — friendly both ways: it builds what recruiters read, and reads what you built.</div></div>'
+      + '</div>');
 
     /* hero word: cursor parallax + material morph (foil / balloon / wool) */
     var texes = [$('nhTex0'), $('nhTex1'), $('nhTex2')];
@@ -426,40 +435,73 @@ a{color:inherit}
       requestAnimationFrame(bloop);
     })(0);
 
-    /* the heart: fourteen logo tiles scatter, then form a heart on scroll */
-    var stick = $('nhStick'), tiles = [];
+    /* the drop, then the heart: the fourteen logos fall in from above like
+       the reference credits scene - gravity, tumbling, colliding with each
+       other, piling over the copy - and as the scroll goes deeper a spring
+       pulls every one of them into a heart. */
+    var dropSec = $('nhDrop'), tiles = [], dropBodies = [], dropStarted = false, DR = 32;
     DOMS.forEach(function (d) {
       var t = el('div', 'tile');
       t.innerHTML = '<img loading="lazy" src="img/domains/' + d.slug + '.webp" alt="">';
-      stick.appendChild(t); tiles.push(t);
-    });
-    var scatter = DOMS.map(function (_, k) {
-      return [0.06 + 0.86 * ((k * 0.61803) % 1), 0.08 + 0.8 * ((k * 0.37) % 1)];
+      dropSec.appendChild(t); tiles.push(t);
     });
     function heartPt(k) {
       var t2 = (k / DOMS.length) * 6.28318;
       var hx = 16 * Math.pow(Math.sin(t2), 3);
       var hy = 13 * Math.cos(t2) - 5 * Math.cos(2 * t2) - 2 * Math.cos(3 * t2) - Math.cos(4 * t2);
-      return [0.5 + hx / 40, 0.44 - hy / 36];
+      return [0.5 + hx / 42, 0.46 - hy / 40];
     }
-    function heartTick() {
-      var secEl = $('nhHeartSec');
-      if (!secEl) { return; }
-      var r = secEl.getBoundingClientRect();
-      var span = r.height - window.innerHeight;
-      var p = Math.min(1, Math.max(0, span > 0 ? -r.top / span : 0));
-      var e2 = p * p * (3 - 2 * p); /* smoothstep */
-      for (var k2 = 0; k2 < tiles.length; k2++) {
-        var s = scatter[k2], h2 = heartPt(k2);
-        var x = (s[0] + (h2[0] - s[0]) * e2) * window.innerWidth - 29;
-        var y = (s[1] + (h2[1] - s[1]) * e2) * window.innerHeight - 29;
-        tiles[k2].style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px)'
-          + ' rotate(' + ((1 - e2) * 40 * (k2 % 2 ? 1 : -1)).toFixed(1) + 'deg)';
+    function dropSpawn() {
+      dropBodies = DOMS.map(function (_, k) {
+        return { x: (0.12 + 0.76 * ((k * 0.61803) % 1)) * dropSec.clientWidth,
+                 y: -90 - k * 80,
+                 vx: (Math.random() - 0.5) * 2.4, vy: 0,
+                 a: (Math.random() - 0.5) * 50, va: (Math.random() - 0.5) * 3.2 };
+      });
+    }
+    (function dropLoop() {
+      var r = dropSec.getBoundingClientRect();
+      if (!root.classList.contains('gone') && r.top < window.innerHeight && r.bottom > 0) {
+        if (!dropStarted) { dropStarted = true; dropSpawn(); }
+        var W = dropSec.clientWidth, H = dropSec.clientHeight;
+        var p = Math.min(1, Math.max(0, (window.innerHeight * 0.4 - r.top) / (window.innerHeight * 1.1)));
+        for (var i = 0; i < dropBodies.length; i++) {
+          var b = dropBodies[i];
+          if (p < 0.55) { b.vy += 0.5; }
+          else {
+            var h2 = heartPt(i);
+            b.vx += (h2[0] * W - b.x) * 0.014; b.vy += (h2[1] * H - b.y) * 0.014;
+            b.vx *= 0.88; b.vy *= 0.88; b.va *= 0.92;
+          }
+          b.x += b.vx; b.y += b.vy; b.a += b.va;
+          if (b.y > H - DR - 14) { b.y = H - DR - 14; b.vy *= -0.45; b.vx *= 0.92; b.va *= 0.88; }
+          if (b.x < DR) { b.x = DR; b.vx *= -0.6; }
+          if (b.x > W - DR) { b.x = W - DR; b.vx *= -0.6; }
+        }
+        for (var i2 = 0; i2 < dropBodies.length; i2++) {
+          for (var j = i2 + 1; j < dropBodies.length; j++) {
+            var A = dropBodies[i2], B = dropBodies[j];
+            var dx = B.x - A.x, dy = B.y - A.y, d = Math.hypot(dx, dy) || 1;
+            if (d < DR * 2) {
+              var ov = (DR * 2 - d) / 2, nx = dx / d, ny = dy / d;
+              A.x -= nx * ov; A.y -= ny * ov; B.x += nx * ov; B.y += ny * ov;
+              var vn = (B.vx - A.vx) * nx + (B.vy - A.vy) * ny;
+              if (vn < 0) {
+                var imp = -0.85 * vn / 2;
+                A.vx -= imp * nx; A.vy -= imp * ny; B.vx += imp * nx; B.vy += imp * ny;
+                A.va += vn * 0.4; B.va -= vn * 0.4;
+              }
+            }
+          }
+        }
+        for (var k2 = 0; k2 < tiles.length; k2++) {
+          var b2 = dropBodies[k2];
+          tiles[k2].style.transform = 'translate(' + (b2.x - DR).toFixed(1) + 'px,'
+            + (b2.y - DR).toFixed(1) + 'px) rotate(' + b2.a.toFixed(1) + 'deg)';
+        }
       }
-    }
-    root.addEventListener('scroll', heartTick, { passive: true });
-    window.addEventListener('resize', heartTick);
-    heartTick();
+      requestAnimationFrame(dropLoop);
+    })();
 
     /* the bottom word runs from the cursor */
     var flee = $('nhFlee');
