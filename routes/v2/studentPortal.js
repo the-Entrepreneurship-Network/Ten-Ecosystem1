@@ -36,6 +36,78 @@ if (!Student.schema.path("joinerType"))            Student.schema.add({ joinerTy
 
 const StudentTaskProgress = require("../../models/new/StudentTaskProgress");
 const DomainTask   = require("../../models/new/DomainTask");
+const Notification = require("../../models/Notification");
+const { broadcastNotification } = require("../../utils/sseHub");
+
+/**
+ * Tell a student their submission was reviewed.
+ *
+ * Approve and reject both updated the row and returned, so the only way a
+ * student learned the outcome — including a rejection they need to act on —
+ * was to reopen the Task Journey and notice the badge had changed. The
+ * coordinator's decision is the one event in the loop the student most needs
+ * pushed to them.
+ *
+ * Never allowed to fail the review it is reporting on: a notification problem
+ * must not turn a successful approval into a 500.
+ */
+async function notifyTaskDecision(student, taskId, decision, feedback, coinsAwarded) {
+    try {
+        const task  = taskId ? await DomainTask.findById(taskId).lean() : null;
+        const title = (task && task.title) || "your task";
+        const approved = decision === "approved";
+
+        let message = approved
+            ? `Your submission for "${title}" was approved.`
+            : `Your submission for "${title}" needs another look.`;
+        if (approved && coinsAwarded) message += ` You earned ${coinsAwarded} coins.`;
+        if (feedback) message += ` Coordinator feedback: ${feedback}`;
+
+        const notif = new Notification({
+            title: approved ? "Task approved" : "Task sent back",
+            message,
+            type: approved ? "success" : "warning",
+            from: "Coordinator",
+            targetType: "student",
+            targetEmployeeId: student.employeeId,
+            targetDomain: student.domain
+        });
+        await notif.save();
+        broadcastNotification(student.domain, student.employeeId, notif);
+    } catch (err) {
+        console.error("[V2] task decision notify failed:", err.message);
+    }
+}
+
+/**
+ * Tell the domain's coordinator that work is waiting for them.
+ *
+ * The submit handler wrote the progress row and a legacy Submission row and
+ * stopped, so the only way a coordinator discovered a new submission was to
+ * open the review queue and look. That makes turnaround time a function of how
+ * often someone remembers to check.
+ */
+async function notifyCoordinatorOfSubmission(student, taskId) {
+    try {
+        const task  = taskId ? await DomainTask.findById(taskId).lean() : null;
+        const title = (task && (task.taskTitle || task.title)) || "a task";
+
+        const notif = new Notification({
+            title: "New submission to review",
+            message: `${student.name || student.employeeId} (${student.employeeId}) submitted "${title}" for review.`,
+            type: "info",
+            from: "Student",
+            targetType: "coordinator-domain",
+            targetDomain: student.domain
+        });
+        await notif.save();
+        // employeeId omitted on purpose: this goes to the coordinator channel
+        // for the domain, not back to the student who just submitted.
+        broadcastNotification(student.domain, null, notif);
+    } catch (err) {
+        console.error("[V2] submission notify failed:", err.message);
+    }
+}
 const taskEngine   = require("../../services/v2/taskEngine");
 const coinService  = require("../../services/v2/coinService");
 
@@ -1226,6 +1298,8 @@ router.post("/tasks/:taskId/submit", requireStudent, async (req, res) => {
             console.error("V2 Sync Submission Create error:", subErr.message);
         }
 
+        await notifyCoordinatorOfSubmission(student, taskId);
+
         res.json({ success: true, message: "Task submitted successfully", status: "submitted" });
     } catch (err) {
         console.error("[V2] submit error:", err.message);
@@ -1273,8 +1347,12 @@ router.post("/tasks/:progressId/approve", requireStaff, validate(mongoIdParamSch
         const student = await Student.findOne({ employeeId: studentEmployeeId });
         if (!student) return res.status(404).json({ success: false, message: "Student not found" });
 
+        const progressDoc = await StudentTaskProgress.findById(req.params.progressId).lean();
+
         const result = await taskEngine.approveTask(student, req.params.progressId, null, feedback);
         if (result.error) return res.status(400).json({ success: false, message: result.error });
+
+        await notifyTaskDecision(student, progressDoc && progressDoc.taskId, "approved", feedback, result.coinsAwarded);
 
         res.json({ success: true, ...result });
     } catch (err) {
@@ -1304,6 +1382,8 @@ router.post("/tasks/:progressId/reject", requireStaff, validate(mongoIdParamSche
         progress.status              = "rejected";
         progress.coordinatorFeedback = feedback || "";
         await progress.save();
+
+        await notifyTaskDecision(student, progress.taskId, "rejected", feedback, 0);
 
         res.json({ success: true, message: "Task rejected" });
     } catch (err) {
