@@ -27,7 +27,7 @@
   if (window.__tenSessionGuardInstalled) return;
   window.__tenSessionGuardInstalled = true;
 
-  var LOGIN_PAGE = '/student-login.html';
+  var LOGIN_PAGE = '/login.html';
   var CACHED_IDENTITY_KEYS = ['employeeId', 'studentData', 'v2StudentData', 'studentInfo'];
 
   var nativeFetch = window.fetch.bind(window);
