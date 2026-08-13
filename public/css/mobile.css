@@ -1,0 +1,249 @@
+/* ============================================================================
+   mobile.css — make the portal usable on a phone.
+
+   Included last on every page, so it wins on specificity ties without any page
+   having to be rewritten.
+
+   Three things break a desktop-built page on a 390px screen, and this file
+   fixes all three generically rather than page by page:
+
+     1. A fixed-width sidebar (240–280px) that still reserves its space, so the
+        content sits in the remaining ~110px.
+     2. Wide tables and pre blocks that force the whole document wider than the
+        viewport — the page then scrolls sideways and every fixed element
+        drifts off-centre.
+     3. Multi-column grids declared with fixed pixel tracks, which cannot
+        collapse.
+
+   Everything below is scoped to a max-width media query, so no desktop layout
+   changes. Rules are written against the class names the portal actually uses
+   (`.sidebar`, `.stu-sidebar`, `.main`, `.topbar`, `.stats-grid`, …) plus a
+   safety net for the generic patterns.
+   ========================================================================= */
+
+/* ── universal, all widths ─────────────────────────────────────────────── */
+
+/* A page must never scroll sideways. This is the single biggest cause of
+   "it looks broken on my phone": one wide element and the entire layout is
+   dragged out of alignment. */
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Media should shrink to fit rather than set the page width. */
+img, video, canvas, svg, iframe {
+  max-width: 100%;
+  height: auto;
+}
+
+/* A long employee ID, URL or email in a narrow cell would otherwise push the
+   table wider than the screen. */
+td, th, p, li, dd, dt, h1, h2, h3, h4 {
+  overflow-wrap: break-word;
+}
+
+/* ── phones and small tablets ──────────────────────────────────────────── */
+@media (max-width: 820px) {
+
+  /* Stop iOS zooming the whole page when a field is focused. Anything under
+     16px triggers it, and the zoom does not undo itself. */
+  input, select, textarea, button {
+    font-size: 16px;
+  }
+
+  /* --- Sidebars ------------------------------------------------------- */
+  /* The portal sidebars are already `position: fixed` with a toggle on small
+     screens in some pages and not in others. Normalise: off-canvas by default,
+     slide in when the page adds `.open` / `.active` (both conventions are in
+     use), and never reserve horizontal space. */
+  .sidebar,
+  .stu-sidebar,
+  .coord-sidebar,
+  .admin-sidebar,
+  .glass-sidebar,
+  .side-nav {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 1000;
+    width: min(82vw, 300px) !important;
+    max-width: 300px;
+    transform: translateX(-100%);
+    transition: transform .22s ease;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Three different classes are already in use for "the drawer is open"
+     (.open on the student, HR and coordinator dashboards; .active and .show
+     elsewhere), so all three are honoured rather than renaming any page's
+     existing handler. */
+  .sidebar.open,       .sidebar.active,       .sidebar.show,
+  .stu-sidebar.open,   .stu-sidebar.active,   .stu-sidebar.show,
+  .coord-sidebar.open, .coord-sidebar.active, .coord-sidebar.show,
+  .admin-sidebar.open, .admin-sidebar.active,
+  .glass-sidebar.open, .glass-sidebar.active,
+  .side-nav.open,      .side-nav.active {
+    transform: translateX(0) !important;
+  }
+
+  /* The content pane must reclaim the space the sidebar used to hold. */
+  .main,
+  .main-content,
+  .stu-main,
+  .coord-main,
+  .page-wrapper,
+  .content,
+  .admin-main {
+    margin-left: 0 !important;
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .sidebar-overlay.open,
+  .sidebar-overlay.active,
+  .sidebar-overlay.show {
+    position: fixed;
+    inset: 0;
+    background: rgba(4, 8, 18, 0.6);
+    z-index: 999;
+  }
+
+  /* --- Top bars ------------------------------------------------------- */
+  .topbar,
+  .stu-topbar,
+  .header,
+  .page-header {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 14px !important;
+  }
+  .topbar-title,
+  .stu-topbar-title {
+    font-size: 15px !important;
+  }
+  .topbar-right,
+  .topbar-actions,
+  .stu-topbar-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  /* --- Grids ---------------------------------------------------------- */
+  /* Every fixed-track grid becomes a single column. `auto-fit`/`auto-fill`
+     grids already collapse on their own and are left alone. */
+  .stats-grid,
+  .sp-stats-grid,
+  .cert-grid,
+  .card-grid,
+  .section-cards,
+  .dashboard-grid,
+  .two-col,
+  .three-col {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* --- Tables --------------------------------------------------------- */
+  /* Tables are the other big offender. Rather than restyling every table into
+     cards — which breaks alignment and hides column headers — each one gets
+     its own horizontal scroll area, so the row stays readable and the PAGE
+     stays put. */
+  .table-wrap,
+  .table-container,
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+  table th, table td {
+    padding: 8px 10px !important;
+    font-size: 13px !important;
+  }
+
+  /* --- Modals --------------------------------------------------------- */
+  .modal,
+  .modal-card,
+  .modal-content,
+  .sheet-card,
+  .popup-card {
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+    max-height: 88dvh !important;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* --- Breathing room ------------------------------------------------- */
+  .card, .panel, .section, .box, .stat-card {
+    padding: 14px !important;
+  }
+  h1 { font-size: 21px !important; }
+  h2 { font-size: 18px !important; }
+  h3 { font-size: 16px !important; }
+
+  /* A row of buttons wraps instead of overflowing. */
+  .btn-row, .actions, .button-group, .filters, .toolbar {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  /* Anything explicitly sized wider than a phone. */
+  .container, .wrapper, .page {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+
+  /* Code and preformatted output scroll rather than stretch the page. */
+  pre, code {
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* Floating widgets sit above the on-screen keyboard and clear the home bar. */
+  .chat-widget, .chat-launcher, .fab, .floating-btn {
+    bottom: calc(14px + env(safe-area-inset-bottom)) !important;
+    right: 14px !important;
+  }
+}
+
+/* ── very small phones ─────────────────────────────────────────────────── */
+@media (max-width: 400px) {
+  .main, .main-content, .stu-main, .coord-main, .page-wrapper, .content, .admin-main,
+  .container, .wrapper, .page {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+  .card, .panel, .section, .box, .stat-card { padding: 12px !important; }
+  h1 { font-size: 19px !important; }
+}
+
+/* ── landscape phones ──────────────────────────────────────────────────── */
+/* A short viewport must not lock a tall panel to the full height with no way
+   to scroll past it. */
+@media (max-height: 460px) and (orientation: landscape) {
+  .modal, .modal-card, .modal-content, .sheet-card {
+    max-height: 92dvh !important;
+  }
+}
+
+/* ── touch targets ─────────────────────────────────────────────────────── */
+/* A 24px control is a miss on a touchscreen. Applies to coarse pointers only,
+   so mouse layouts are untouched. */
+@media (pointer: coarse) {
+  button, .btn, .nav-item, a.btn, input[type="submit"], input[type="button"] {
+    min-height: 40px;
+  }
+}

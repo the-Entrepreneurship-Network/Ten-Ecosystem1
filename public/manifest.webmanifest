@@ -1,0 +1,28 @@
+{
+  "name": "TEN Internship Portal",
+  "short_name": "TEN",
+  "description": "Tasks, attendance, documents, certificates and messages for The Entrepreneurship Network internship programme.",
+  "id": "/",
+  "start_url": "/student-dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#080d1a",
+  "theme_color": "#0e1628",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["education", "productivity"],
+  "icons": [
+    { "src": "/icons/icon-192.png",     "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png",     "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Messages",      "short_name": "Messages", "url": "/messages",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Notifications", "short_name": "Alerts",   "url": "/notifications",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Mark attendance", "short_name": "Attendance", "url": "/student-dashboard#attendance",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

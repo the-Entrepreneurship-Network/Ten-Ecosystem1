@@ -1488,6 +1488,8 @@ function sanitizeStudent(student) {
 
 function establishStudentSession(req, student) {
     if (!req.session || !student) return;
+    // Student sessions get the longer window — see STUDENT_SESSION_MS.
+    if (req.session.cookie) req.session.cookie.maxAge = STUDENT_SESSION_MS;
     req.session.student = {
         _id:        String(student._id || ""),
         employeeId: student.employeeId || "",
@@ -1635,9 +1637,37 @@ const sessionOptions = {
         secure: IS_PRODUCTION,
         sameSite: IS_PRODUCTION ? 'none' : 'lax',
         httpOnly: true,
+        // The base lifetime. Staff sessions keep this; a student's is extended
+        // to STUDENT_SESSION_MS below, once they sign in.
         maxAge: 30 * 60 * 1000 // 30 minutes of inactivity
     }
 };
+
+/**
+ * How long a student stays signed in.
+ *
+ * A push notification is only useful if tapping it lands the student IN the
+ * portal. With a 30-minute window that essentially never happened: the
+ * notification arrived hours later, the session was long gone, and the tap
+ * dropped them on a login screen — which defeats the point of notifying them.
+ *
+ * So a student's cookie lives for 24 hours of inactivity. Tap a notification
+ * within a day of last using the portal and you are already signed in; leave it
+ * longer and the session has expired, the page 401s, and session-guard.js sends
+ * you to the login screen carrying ?next= so you land where you were going.
+ * That is precisely the behaviour asked for, and it needs no new mechanism.
+ *
+ * What it deliberately is NOT: a sign-in token embedded in the notification
+ * URL. A notification's URL is written to the operating system's notification
+ * log and to browser history, so a credential placed there is readable by
+ * anyone who picks up the phone — a worse trade than a longer cookie, which at
+ * least stays httpOnly and server-revocable.
+ *
+ * HR, coordinator and admin sessions keep the 30-minute window. They hold far
+ * more authority than a student account, they work from shared machines, and
+ * they are not the ones being notified about a chat message.
+ */
+const STUDENT_SESSION_MS = 24 * 60 * 60 * 1000;
 
 class FallbackStore extends session.Store {
     constructor() {
@@ -1764,6 +1794,31 @@ app.use((req, res, next) => {
         res.setHeader("Vary", "Cookie");
     }
     next();
+});
+
+// The service worker and the web app manifest.
+//
+// Registered BEFORE express.static, because whichever handler comes first wins
+// and the static mount would otherwise answer both with its own headers.
+//
+// Two headers matter here:
+//   - Service-Worker-Allowed lets the worker claim "/" as its scope.
+//   - no-store on the worker. A cached service worker is a worker that cannot
+//     be updated — it would keep serving the old push and notification-click
+//     logic after a deploy, with no way to tell.
+app.get("/sw.js", (req, res) => {
+    res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+    res.setHeader("Service-Worker-Allowed", "/");
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.sendFile(path.join(__dirname, "public", "sw.js"));
+});
+
+// The correct type is application/manifest+json. Served as anything else, some
+// browsers ignore the manifest and the app silently stops being installable.
+app.get("/manifest.webmanifest", (req, res) => {
+    res.setHeader("Content-Type", "application/manifest+json; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.sendFile(path.join(__dirname, "public", "manifest.webmanifest"));
 });
 
 // Custom route to serve the logo with the correct JPEG Content-Type since the file has a .png extension but is actually a JPEG (JFIF format)
@@ -2791,6 +2846,11 @@ app.get("/investor-login",    (req,res)=>{ res.sendFile(path.join(__dirname,"pub
 app.get("/contractor-login",  (req,res)=>{ res.sendFile(path.join(__dirname,"public","contractor-login.html")); });
 app.get("/login",             (req,res)=>{ res.sendFile(path.join(__dirname,"public","login.html")); });
 app.get("/student-dashboard", (req,res)=>{ res.sendFile(path.join(__dirname,"public","student-dashboard.html")); });
+// Direct messages, for every role. The page derives identity from the
+// session, so one URL serves students, coordinators, HR and admin.
+app.get("/messages",          (req,res)=>{ res.sendFile(path.join(__dirname,"public","messages.html")); });
+app.get("/notifications",     (req,res)=>{ res.sendFile(path.join(__dirname,"public","notifications.html")); });
+
 app.get("/mentor-dashboard",  (req,res)=>{ res.sendFile(path.join(__dirname,"public","mentor-dashboard.html")); });
 app.get("/investor-dashboard",(req,res)=>{ res.sendFile(path.join(__dirname,"public","investor-dashboard.html")); });
 app.get("/contractor-dashboard",(req,res)=>{ res.sendFile(path.join(__dirname,"public","contractor-dashboard.html")); });
@@ -9491,6 +9551,15 @@ try {
     console.error("[Chat] Failed to mount moderation routes:", e.message);
 }
 
+// Web push subscriptions, and the merged notification feed.
+try {
+    app.use("/api/push", require("./routes/push"));
+    app.use("/api/notifications", require("./routes/notificationFeed"));
+    console.log("[Push] Push + notification routes mounted at /api/push and /api/notifications");
+} catch(e) {
+    console.error("[Push] Failed to mount push routes:", e.message);
+}
+
 // Student-initiated certificate applications + the per-type HR queues.
 try {
     const v2CertApplications = require("./routes/v2/certificateApplications");
@@ -9883,6 +9952,34 @@ io.on("connection", (socket) => {
                     io.to("user::" + other).emit("dm_notice", {
                         room, from: identity.name, fromId: identity.id, preview: text.slice(0, 80)
                     });
+
+                    // ...and if their portal is CLOSED, a push notification, so
+                    // the message reaches them the way any other app would
+                    // reach them. Skipped when they already have the portal
+                    // open somewhere: they can see it, and a buzz for a message
+                    // that is already on screen is just noise.
+                    try {
+                        const openSockets = await io.in("user::" + other).fetchSockets();
+                        if (!openSockets.length) {
+                            const pushService = require("./services/pushService");
+                            await pushService.sendToUser(other, {
+                                title: identity.name || "New message",
+                                body: imageUrl && !text ? "Sent you a photo" : text.slice(0, 140),
+                                // Straight into the conversation. Whether they
+                                // land signed in is decided by their session
+                                // cookie — there is deliberately no credential
+                                // in this URL.
+                                url: "/messages?to=" + encodeURIComponent(String(identity.id)),
+                                // One notification per sender, replaced as more
+                                // arrive, rather than a stack of twenty.
+                                tag: "dm-" + String(identity.id)
+                            });
+                        }
+                    } catch (pushErr) {
+                        // A push that fails must never stop a message being
+                        // delivered. It is already saved and emitted.
+                        console.warn("[push] DM notification failed:", pushErr.message);
+                    }
                 }
             }
 

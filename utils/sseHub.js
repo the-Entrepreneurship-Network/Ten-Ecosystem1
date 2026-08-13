@@ -44,6 +44,33 @@ function broadcastNotification(domain, employeeId, notif) {
             sendSSE(c.res, { event: 'notification', notification: notif });
         }
     }
+    // SSE only reaches a portal that is open. Push reaches the phone in a
+    // pocket, which is where a notification about an approved document or a
+    // marked attendance is actually useful.
+    pushNotify(employeeId, notif);
+}
+
+/**
+ * Mirror a notification to the student's registered devices.
+ *
+ * Failure-safe by construction: a push that cannot be sent must never break the
+ * thing that raised the notification, and push may not be configured at all.
+ * Required lazily so this module has no hard dependency on the push service.
+ */
+function pushNotify(employeeId, notif) {
+    if (!employeeId || !notif) return;
+    try {
+        const push = require('../services/pushService');
+        if (!push.isEnabled()) return;
+        push.sendToUser(employeeId, {
+            title: notif.title || 'TEN Portal',
+            body: notif.message || '',
+            url: '/notifications',
+            // Portal notices share a tag so a run of them collapses to one
+            // line rather than burying the lock screen.
+            tag: 'ten-portal-notice'
+        }).catch(() => {});
+    } catch (err) { /* push is optional */ }
 }
 
 /** Push to every connected client — used for "all" broadcasts. */
