@@ -29,6 +29,7 @@
   #pre.done { transform:translateY(-101%); }
   .pre-word { display:flex; align-items:center; gap:2vw; font-size:clamp(90px,18vw,260px); font-weight:900; letter-spacing:-0.04em; }
   #preSlot { width:1.05em; height:1.05em; display:flex; align-items:center; justify-content:center; font-size:.62em; transition:opacity .18s, transform .18s; }
+  #preSlot img { width:100%; height:100%; object-fit:cover; border-radius:14px; mix-blend-mode:screen; }
   #preSlot.swap { opacity:0; transform:scale(.6) rotate(-20deg); }
   #preCount { position:absolute; bottom:26px; left:50%; transform:translateX(-50%); font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:13px; letter-spacing:.2em; color:#fff; font-variant-numeric:tabular-nums; }
 
@@ -110,25 +111,43 @@
   @keyframes spin { to { transform:rotate(360deg); } }
   @keyframes unspin { to { transform:rotate(-360deg); } }
 
-  /* ---------- interactive domain grid ---------- */
-  .dgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:14px; padding:0 22px 90px; }
-  .dtile { background:#121212; border:1px solid #222; border-radius:14px; padding:22px 14px; text-align:center; cursor:pointer; user-select:none; transition:border-color .2s, transform .2s; }
-  .dtile:hover { border-color:var(--dc,#555); transform:translateY(-4px); }
-  .dtile .gl { font-size:44px; display:inline-block; animation:glbob 4.5s ease-in-out infinite; }
-  .dtile:nth-child(2n) .gl { animation-delay:-1.5s; }
-  .dtile:nth-child(3n) .gl { animation-delay:-3s; }
-  .dtile p { margin-top:10px; font-size:12.5px; font-weight:700; }
-  .dtile small { color:#777; font-size:10.5px; letter-spacing:.08em; }
-  .anim-spin { animation:tspin .9s cubic-bezier(.3,1.4,.4,1); }
+  /* ---------- interactive domain rows: 3D logo + features beside ---------- */
+  .dlist { display:flex; flex-direction:column; gap:16px; padding:0 22px 90px; max-width:1000px; }
+  .drow { display:flex; gap:26px; align-items:center; background:#0d0d0d; border:1px solid #1e1e1e; border-radius:18px; padding:20px 26px; transition:border-color .3s; }
+  .drow:hover { border-color:var(--dc,#555); }
+  .drow .logo-box { position:relative; flex:none; width:170px; height:170px; display:flex; align-items:center; justify-content:center; cursor:pointer; perspective:700px; }
+  .drow .logo-box img { width:100%; height:100%; object-fit:cover; border-radius:12px; mix-blend-mode:screen; animation:idledrift 5.5s ease-in-out infinite; }
+  .drow:nth-child(2n) .logo-box img { animation-delay:-2.7s; }
+  .drow .logo-box .gl-fallback { font-size:84px; animation:idledrift 5.5s ease-in-out infinite; }
+  .drow.spin-idle .logo-box img, .drow.spin-idle .gl-fallback { animation:idlespin 13s linear infinite; }
+  .drow .info { min-width:0; }
+  .drow h3 { font-size:21px; font-weight:900; letter-spacing:-0.02em; margin-bottom:8px; }
+  .drow h3 small { font-family:'IBM Plex Mono',monospace; font-weight:400; font-size:10.5px; letter-spacing:.14em; color:#777; margin-left:10px; }
+  .drow ul { list-style:none; display:flex; flex-direction:column; gap:5px; }
+  .drow li { font-size:13.5px; color:#9a9a9a; line-height:1.5; padding-left:16px; position:relative; }
+  .drow li::before { content:''; position:absolute; left:0; top:.55em; width:6px; height:6px; border-radius:2px; background:var(--dc,#555); }
+  @media (max-width:640px) { .drow { flex-direction:column; text-align:center; } .drow li { padding-left:0; } .drow li::before { display:none; } }
+  @keyframes idledrift { 25% { transform:translateY(-8px) rotate(-4deg); } 75% { transform:translateY(5px) rotate(4deg); } }
+  @keyframes idlespin { to { transform:rotate(360deg); } }
+  /* click moves */
+  .anim-spin { animation:tspin .9s cubic-bezier(.3,1.4,.4,1) !important; }
   @keyframes tspin { to { transform:rotate(720deg); } }
-  .anim-bounce { animation:tbounce .7s; }
+  .anim-bounce { animation:tbounce .7s !important; }
   @keyframes tbounce { 30% { transform:translateY(-22px) scale(1.15);} 60% { transform:translateY(4px) scale(.95);} 100% { transform:none; } }
-  .anim-wobble { animation:twobble .8s; }
+  .anim-wobble { animation:twobble .8s !important; }
   @keyframes twobble { 25% { transform:rotate(18deg);} 50% { transform:rotate(-14deg);} 75% { transform:rotate(8deg);} }
-  .anim-flip { animation:tflip .8s; }
+  .anim-flip { animation:tflip .8s !important; }
   @keyframes tflip { to { transform:rotateY(360deg); } }
-  .anim-collide { animation:tcollide .8s cubic-bezier(.3,1.6,.4,1); }
+  .anim-collide { animation:tcollide .8s cubic-bezier(.3,1.6,.4,1) !important; }
   @keyframes tcollide { 30% { transform:scale(1.5); filter:brightness(1.6);} 45% { transform:scale(.7);} 65% { transform:scale(1.2);} }
+  .anim-launch { animation:tlaunch 1.4s cubic-bezier(.4,0,.2,1) !important; }
+  @keyframes tlaunch { 40% { transform:translate(30px,-240px) rotate(12deg); opacity:0; } 41% { transform:translate(-20px,140px); opacity:0; } 100% { transform:none; opacity:1; } }
+  .anim-glow { animation:tglow 1s !important; }
+  @keyframes tglow { 50% { filter:brightness(1.9) saturate(1.4); transform:scale(1.07); } }
+  /* java steam wisps rise on click */
+  .steam { position:absolute; bottom:70%; left:50%; width:10px; height:10px; border-radius:50%; background:rgba(255,255,255,.85); filter:blur(6px); opacity:0; pointer-events:none; }
+  .steam.go { animation:steamup 1.3s ease-out forwards; }
+  @keyframes steamup { 0% { opacity:.9; transform:translate(-50%,0) scale(1); } 100% { opacity:0; transform:translate(-50%,-120px) scale(2.6); } }
 
   /* ---------- people ---------- */
   .people { background:#000; padding:110px 22px; display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:30px; max-width:1100px; margin:0 auto; }
@@ -252,10 +271,10 @@
   </div>
 </section>
 
-<!-- interactive domain grid -->
+<!-- interactive domain rows: 3D logo + its features -->
 <section>
-  <div class="sec-head"><h2>Touch a domain</h2><span>( click the logos )</span></div>
-  <div class="dgrid" id="dgrid"></div>
+  <div class="sec-head"><h2>Touch a domain</h2><span>( every logo answers )</span></div>
+  <div class="dlist" id="dlist"></div>
 </section>
 
 <!-- people -->
@@ -334,19 +353,29 @@ const DOMAINS = [
   ["Venture Capital","💼","#D4AF37"],["HR Management","👥","#f472b6"],
 ];
 
-/* ---- preloader: countdown 100 -> 0, domain glyphs cycle inside T_N ---- */
+/* ---- preloader: countdown 100 -> 0, the 3D domain logos cycle inside T_N ---- */
+const DOMAIN_IMGS = ['python.jpg','java.jpg','web.jpg','mern.jpg','flutter.jpg','softeng.jpg','vibe.jpg','datasci.jpg','devops.jpg','cyber.jpg','space.jpg','business.jpg','venture.jpg','hr.jpg'];
 (() => {
   const count = document.getElementById('preCount');
   const slot = document.getElementById('preSlot');
-  let n = 100, gi = 0;
+  let n = 100, gi = 0, useImgs = true;
+  DOMAIN_IMGS.forEach(f => { const im = new Image(); im.src = 'assets/domains/' + f; }); /* pre-warm */
+  const probe = new Image();
+  probe.onerror = () => { useImgs = false; };
+  probe.src = 'assets/domains/' + DOMAIN_IMGS[0];
+  const setSlot = () => {
+    if (useImgs) slot.innerHTML = `<img src="assets/domains/${DOMAIN_IMGS[gi]}" alt="">`;
+    else slot.textContent = DOMAINS[gi][1];
+  };
+  setSlot();
   const tick = setInterval(() => {
     n--;
     count.textContent = n;
     if (n % 7 === 0) {
       slot.classList.add('swap');
       setTimeout(() => {
-        gi = (gi + 1) % DOMAINS.length;
-        slot.textContent = DOMAINS[gi][1];
+        gi = (gi + 1) % DOMAIN_IMGS.length;
+        setSlot();
         slot.classList.remove('swap');
       }, 160);
     }
@@ -397,27 +426,67 @@ const DOMAINS = [
   });
 })();
 
-/* ---- interactive grid: each logo answers a click with its own move ---- */
+/* ---- domain rows: 3D logo (idle-animating) + features; each logo answers
+       its click with its own move (java steams, space launches, python spins) ---- */
 (() => {
-  const grid = document.getElementById('dgrid');
-  const anims = ['anim-spin','anim-collide','anim-bounce','anim-wobble','anim-flip'];
-  DOMAINS.forEach(([n,g,c], i) => {
-    const t = document.createElement('div');
-    t.className = 'dtile';
-    t.style.setProperty('--dc', c);
-    t.innerHTML = `<span class="gl">${g}</span><p>${n}</p><small>CLICK ME</small>`;
-    const anim = n.startsWith('Python') ? 'anim-spin' : n.startsWith('Flutter') ? 'anim-collide' : anims[i % anims.length];
-    t.addEventListener('click', () => {
-      const gl = t.querySelector('.gl');
-      gl.classList.remove(anim); void gl.offsetWidth; gl.classList.add(anim);
+  const list = document.getElementById('dlist');
+  /* [name, glyph, color, imgFile, clickAnim, spinIdle, features x3] */
+  const ROWS = [
+    ['Python Development','🐍','#3776AB','python.jpg','anim-spin',true,['OOP, data structures and file handling from week one','APIs, databases and a Flask REST backend','Two projects — a mini build and a final shipped app']],
+    ['Java Development','☕','#f89820','java.jpg','steam',false,['Core Java, OOP and collections mastered in order','JDBC, Spring and CRUD apps with real auth','Two mini projects before the final one']],
+    ['Web Development','🌐','#e34f26','web.jpg','anim-spin',true,['HTML, CSS and JavaScript with the DOM for real','Responsive builds deployed live on the web','React with hooks, router and API wiring']],
+    ['MERN Stack','⚛️','#61DAFB','mern.jpg','anim-bounce',false,['MongoDB, Express, React, Node — the full stack','Auth, state, file upload and sockets','Tested mini project, then the final product']],
+    ['Flutter','💠','#45D1FD','flutter.jpg','anim-collide',false,['Widgets, layouts and navigation that feel native','API calls, Firebase and local storage','Animations and push notifications shipped']],
+    ['Software Engineering','⚙️','#8b5cf6','softeng.jpg','anim-spin',true,['System design, patterns and clean code habits','Testing, database design and version control','API design and DevOps to close the loop']],
+    ['Vibe Coding','✨','#f0abfc','vibe.jpg','anim-glow',false,['AI-first coding — build with prompts and taste','No-code, APIs and automation into an AI web app','MVP to deployment with analytics on top']],
+    ['Data Science','📊','#10b981','datasci.jpg','anim-flip',false,['Python for data — cleaning, EDA, visualisation','Statistics into machine learning, classification','Feature engineering and NLP for the final project']],
+    ['DevOps with AWS','☁️','#FF9900','devops.jpg','anim-wobble',false,['Linux, shell and Git as daily tools','CI/CD pipelines, Docker and Kubernetes','AWS and Terraform driving the final deploy']],
+    ['Cyber Security','🛡️','#22d3ee','cyber.jpg','anim-wobble',false,['Networking, Linux and the OWASP top ten','Web security, crypto and ethical hacking','Malware, incident response and a CTF finale']],
+    ['Space Research','🚀','#a78bfa','space.jpg','anim-launch',false,['Orbital mechanics, spacecraft and satellite data','Astrophysics, mission planning and robotics','A research proposal capstone of your own']],
+    ['Business Analyst','📈','#f59e0b','business.jpg','anim-bounce',false,['Business models, stakeholders and market research','Excel, dashboards and financial modelling','Strategy built and presented like the job']],
+    ['Venture Capital','💼','#D4AF37','venture.jpg','anim-flip',false,['The VC lifecycle — sourcing to exits','Valuation, due diligence and term sheets','A mock investment committee to finish']],
+    ['HR Management','👥','#f472b6','hr.jpg','anim-wobble',false,['Recruitment, JDs and interviewing done right','Onboarding, engagement and performance analytics','Labour law, training and a full HR manual']],
+  ];
+  ROWS.forEach(([n,g,c,img,anim,spinIdle,feats]) => {
+    const row = document.createElement('div');
+    row.className = 'drow' + (spinIdle ? ' spin-idle' : '');
+    row.style.setProperty('--dc', c);
+    row.innerHTML = `
+      <div class="logo-box">
+        <img src="assets/domains/${img}" alt="${n}" onerror="this.outerHTML='<span class=&quot;gl-fallback&quot;>${g}</span>'">
+      </div>
+      <div class="info">
+        <h3>${n}<small>CLICK THE LOGO</small></h3>
+        <ul>${feats.map(f => `<li>${f}</li>`).join('')}</ul>
+      </div>`;
+    const box = row.querySelector('.logo-box');
+    box.addEventListener('click', () => {
+      const el = box.querySelector('img, .gl-fallback');
+      if (!el) return;
+      if (anim === 'steam') {
+        for (let i = 0; i < 4; i++) {
+          const s = document.createElement('span');
+          s.className = 'steam';
+          s.style.left = (38 + i * 9) + '%';
+          s.style.animationDelay = (i * 0.14) + 's';
+          box.appendChild(s);
+          requestAnimationFrame(() => s.classList.add('go'));
+          setTimeout(() => s.remove(), 1600 + i * 140);
+        }
+        el.classList.remove('anim-bounce'); void el.offsetWidth; el.classList.add('anim-bounce');
+        setTimeout(() => el.classList.remove('anim-bounce'), 800);
+      } else {
+        el.classList.remove(anim); void el.offsetWidth; el.classList.add(anim);
+        setTimeout(() => el.classList.remove(anim), 1500);
+      }
     });
-    grid.appendChild(t);
+    list.appendChild(row);
   });
 })();
 
 /* ---- noth.in reveal: everything below the hero rises in on scroll ---- */
 (() => {
-  const targets = document.querySelectorAll('.sec-head, .wcard, .people > div, #faq details, .foot-cta, #join a[href]');
+  const targets = document.querySelectorAll('.sec-head, .wcard, .drow, .people > div, #faq details, .foot-cta, #join a[href]');
   targets.forEach(el => el.classList.add('reveal'));
   const io = new IntersectionObserver(entries => {
     entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); } });
