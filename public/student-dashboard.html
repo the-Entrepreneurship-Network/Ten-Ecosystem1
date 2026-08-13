@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#D4AF37">
-<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="TEN Portal">
 <link rel="apple-touch-icon" href="/icons/icon-192.png">
@@ -5720,13 +5721,14 @@ setupDomainSwitcher();
 
 <div class="sidebar-overlay" onclick="closeSidebar()"></div>
 <script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', function () {
-      navigator.serviceWorker.register('/sw.js')
-        .then(function (reg) { console.log('SW registered'); })
-        .catch(function (err) { console.log('SW error:', err); });
-    });
-  }
+  // No service worker is registered here.
+  //
+  // These pages used to register '/sw.js', a file that has never existed in
+  // this repository, so every load 404'd and logged a SecurityError. Beyond
+  // the noise, a service worker on a portal that serves per-student data is a
+  // caching hazard — this project already lost a week to stale HTML being
+  // served from a cache — so the correct fix is to stop asking for one rather
+  // than to add an empty file that starts caching.
 </script>
 
 <!-- ══════ PROFILE MODAL (Student) ══════ -->
