@@ -4685,8 +4685,11 @@ app.get('/api/hr/intern-list', async (req, res) => {
     let query = {};
     if (type === 'active')    query = { lastActiveDate: { $gte: d30 } };
     if (type === 'inactive')  query = { $or: [{ lastActiveDate: { $lt: d30 } }, { lastActiveDate: null }, { lastActiveDate: { $exists: false } }] };
+    // `name` matters: most records carry a single `name` and no first/last, so
+    // building the display name from firstName+lastName alone produced a row
+    // of blanks — the list looked empty even when it was full.
     let students = await Student.find(query)
-      .select('firstName lastName employeeId domain collegeName college lastActiveDate joiningDate joinDate')
+      .select('name firstName lastName employeeId domain collegeName college lastActiveDate joiningDate joinDate')
       .sort({ joiningDate: -1 }).limit(400);
     if (type === 'newJoins'){
       students = students.filter(s => {
@@ -4703,15 +4706,17 @@ app.get('/api/hr/intern-list', async (req, res) => {
     } else {
       students = students.slice(0,200);
     }
-    res.json({ students: students.map(s => ({
-      name: (s.firstName||'') + ' ' + (s.lastName||''),
-      employeeId: s.employeeId,
-      domain: s.domain,
-      college: s.collegeName || s.college
+    res.json({ success:true, total: students.length, students: students.map(s => ({
+      name: (s.name || `${s.firstName || ''} ${s.lastName || ''}`).trim() || '—',
+      employeeId: s.employeeId || '—',
+      domain: s.domain || '—',
+      college: s.collegeName || s.college || '—',
+      lastActive: s.lastActiveDate || null,
+      joined: s.joinDate || s.joiningDate || null
     }))});
   }catch(e){
-    console.log(e);
-    res.status(500).json({ students: [] });
+    console.error('[intern-list]', e.message);
+    res.status(500).json({ success:false, message:'Could not load the student list: ' + e.message, students: [] });
   }
 });
 
@@ -9249,6 +9254,15 @@ try {
     console.log("[V2] Document routes mounted at /api/v2");
 } catch(e) {
     console.error("[V2] Failed to mount document routes:", e.message);
+}
+
+// Student-initiated certificate applications + the per-type HR queues.
+try {
+    const v2CertApplications = require("./routes/v2/certificateApplications");
+    app.use("/api/v2/certificate-applications", v2CertApplications);
+    console.log("[V2] Certificate application routes mounted at /api/v2/certificate-applications");
+} catch(e) {
+    console.error("[V2] Failed to mount certificate application routes:", e.message);
 }
 
 // NEW FEATURE: Certificate + Psychology Trigger routes
