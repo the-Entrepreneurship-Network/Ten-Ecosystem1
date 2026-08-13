@@ -215,7 +215,7 @@ function getStarGrade(stats) {
 // ════════════════════════════════════════════════════
 // LOC PDF GENERATOR
 // ════════════════════════════════════════════════════
-async function generateLOCPDF(student, stats, outputPath) {
+async function generateLOCPDF(student, stats, outputPath, documentNumber) {
     return new Promise((resolve, reject) => {
         try {
             const doc    = new PDFDocument({ size: "A4", margin: 0 });
@@ -246,6 +246,10 @@ async function generateLOCPDF(student, stats, outputPath) {
                 60, 156, { width: W - 120, align: "justify", lineGap: 5 }
             );
             doc.moveDown(0.8);
+            if (documentNumber) {
+                doc.text(`Document No.: ${documentNumber}`, 60, doc.y, { width: W - 120 });
+                doc.moveDown(0.4);
+            }
             doc.text(`Duration: ${student.tenure || "As per enrollment"} (${fmt(joining)} to ${fmt(endDate)})`, 60, doc.y, { width: W - 120 });
             doc.moveDown(0.6);
             doc.text(`Attendance: ${stats.attendance}%`, 60, doc.y, { width: W - 120 });
@@ -277,7 +281,7 @@ async function generateLOCPDF(student, stats, outputPath) {
 // ════════════════════════════════════════════════════
 // LOR PDF GENERATOR
 // ════════════════════════════════════════════════════
-async function generateLORPDF(student, stats, outputPath) {
+async function generateLORPDF(student, stats, outputPath, documentNumber) {
     return new Promise((resolve, reject) => {
         try {
             const doc    = new PDFDocument({ size: "A4", margin: 0 });
@@ -300,7 +304,7 @@ async function generateLORPDF(student, stats, outputPath) {
             doc.moveTo(80, 138).lineTo(W - 80, 138).lineWidth(1).strokeColor(gold).stroke();
 
             const today = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
-            doc.fillColor("#555").font("Helvetica").fontSize(9).text(`Date: ${today}`, 60, 152);
+            doc.fillColor("#555").font("Helvetica").fontSize(9).text(`Date: ${today}${documentNumber ? `   ·   Document No.: ${documentNumber}` : ""}`, 60, 152);
 
             doc.fillColor(dark).font("Helvetica").fontSize(11).text(
                 `To Whom It May Concern,`,
@@ -404,7 +408,8 @@ async function generateStarPDF(student, stats, starInfo, outputPath) {
             doc.fillColor(white).font("Helvetica-Bold").fontSize(9).text("Kamlesh Gupta", 100, 406);
             doc.fillColor("#888").font("Helvetica").fontSize(8).text("Director, TEN", 100, 418);
 
-            doc.fillColor("#555").font("Helvetica").fontSize(8).text(`Issued: ${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" })}  ·  Employee ID: ${student.employeeId || "N/A"}`, 0, H - 36, { width: W, align: "center" });
+            const starDocNo = starInfo && starInfo.documentNumber ? `  ·  Document No.: ${starInfo.documentNumber}` : "";
+            doc.fillColor("#555").font("Helvetica").fontSize(8).text(`Issued: ${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" })}  ·  Employee ID: ${student.employeeId || "N/A"}${starDocNo}`, 0, H - 36, { width: W, align: "center" });
 
             doc.end();
             stream.on("finish", () => resolve(outputPath));
@@ -431,7 +436,9 @@ async function autoGenerateOfferLetter(doc) {
 
         let docNum = student.documentNumber;
         if (!docNum) {
-            docNum = await generateDocumentNumber("OL");
+            // "OL" is not a key in the prefix map, so this minted TEN-DOC-…
+            // numbers for offer letters instead of TEN-OL-….
+            docNum = generateDocumentNumber("offer_letter");
             await Student.findByIdAndUpdate(student._id, { documentNumber: docNum });
         }
 
@@ -632,34 +639,45 @@ async function autoGenerateCertificates(certReq) {
         const missedList  = [];
         const sentDocuments = [];
 
+        // The number each PDF prints and the number logged for verification
+        // must be the same value, generated before the PDF exists. This used
+        // to generate a FRESH number at logging time — after the PDF had
+        // already been rendered without one — so the paper and the
+        // DocumentHistory row never matched and none of these certificates
+        // could be verified.
+
         // Generate LOC
         if (eligibility.loc) {
-            const locPath = path.join(certificatesDir, `${student.employeeId || student._id}_loc.pdf`);
-            await generateLOCPDF(student, stats, locPath);
+            const locNumber = generateDocumentNumber("loc");
+            const locPath = path.join(certificatesDir, `${student.employeeId || student._id}_loc.pdf`.replace(/\//g, "-"));
+            await generateLOCPDF(student, stats, locPath, locNumber);
             attachments.push({ filename: "Letter_of_Completion.pdf", path: locPath });
             earnedList.push("Letter of Completion (LOC) — for maintaining 75%+ attendance");
-            sentDocuments.push({ documentType: "Letter of Completion", documentKey: "loc", documentNumber: generateDocumentNumber("loc") });
+            sentDocuments.push({ documentType: "Letter of Completion", documentKey: "loc", documentNumber: locNumber });
         } else {
             missedList.push(`Letter of Completion — requires 75% attendance (you have ${stats.attendance}%)`);
         }
 
         // Generate LOR
         if (eligibility.lor) {
-            const lorPath = path.join(certificatesDir, `${student.employeeId || student._id}_lor.pdf`);
-            await generateLORPDF(student, stats, lorPath);
+            const lorNumber = generateDocumentNumber("lor");
+            const lorPath = path.join(certificatesDir, `${student.employeeId || student._id}_lor.pdf`.replace(/\//g, "-"));
+            await generateLORPDF(student, stats, lorPath, lorNumber);
             attachments.push({ filename: "Letter_of_Recommendation.pdf", path: lorPath });
             earnedList.push("Letter of Recommendation (LOR) — for 75%+ attendance and 70%+ performance");
-            sentDocuments.push({ documentType: "Letter of Recommendation", documentKey: "lor", documentNumber: generateDocumentNumber("lor") });
+            sentDocuments.push({ documentType: "Letter of Recommendation", documentKey: "lor", documentNumber: lorNumber });
         } else {
             missedList.push(`Letter of Recommendation — requires 75% attendance and 70% performance`);
         }
 
         // Generate Star Performance
-        const starPath = path.join(certificatesDir, `${student.employeeId || student._id}_star.pdf`);
+        const starNumber = generateDocumentNumber("star");
+        starInfo.documentNumber = starNumber;
+        const starPath = path.join(certificatesDir, `${student.employeeId || student._id}_star.pdf`.replace(/\//g, "-"));
         await generateStarPDF(student, stats, starInfo, starPath);
         attachments.push({ filename: "Star_Performance_Certificate.pdf", path: starPath });
         earnedList.push(`Star Performance Certificate — ${starInfo.grade} ${starInfo.label}`);
-        sentDocuments.push({ documentType: "Star Performer Certificate", documentKey: "star", documentNumber: generateDocumentNumber("star") });
+        sentDocuments.push({ documentType: "Star Performer Certificate", documentKey: "star", documentNumber: starNumber });
 
         // Send consolidated email
         let certMailStatus = "sent";
