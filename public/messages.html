@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Messages — TEN</title>
+<link rel="stylesheet" href="/css/mobile.css">
+<style>
+/*
+  Three panes: conversations, the thread, and the profile of whoever you are
+  talking to.
+
+  On a phone only ONE pane is on screen at a time and the others slide in —
+  the same shape a messaging app uses, because a three-column layout squeezed
+  into 380px is unusable. `data-pane` on the shell drives which one shows.
+*/
+:root{
+  --bg:#080d1a; --panel:#0e1628; --panel-2:#111c33; --line:rgba(245,197,66,0.14);
+  --gold:#f5c542; --text:#e8edf7; --muted:#8aa4c8; --mine:#1c3a5e; --theirs:#16203a;
+  --radius:14px;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);
+  font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;overflow:hidden;}
+
+.shell{display:grid;grid-template-columns:320px 1fr 300px;height:100dvh;}
+
+/* ── panes ─────────────────────────────────────────────────────────────── */
+.pane{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--panel);}
+.pane + .pane{border-left:1px solid var(--line);}
+.pane-head{display:flex;align-items:center;gap:10px;padding:14px 16px;
+  border-bottom:1px solid var(--line);background:var(--panel-2);flex:0 0 auto;}
+.pane-head h2{margin:0;font-size:15px;font-weight:800;letter-spacing:.3px;}
+.pane-body{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+
+.icon-btn{background:transparent;border:1px solid var(--line);color:var(--text);
+  border-radius:10px;padding:7px 10px;font-size:14px;cursor:pointer;line-height:1;}
+.icon-btn:hover{background:rgba(245,197,66,0.08);}
+.back-btn{display:none;}
+
+.search{margin:12px 14px;position:relative;}
+.search input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);
+  background:#0a1striped;background:#0a1222;color:var(--text);font-size:14px;}
+.search input:focus{outline:none;border-color:rgba(245,197,66,0.4);}
+
+/* ── conversation list ─────────────────────────────────────────────────── */
+.thread{display:flex;gap:12px;align-items:center;padding:12px 14px;cursor:pointer;
+  border-bottom:1px solid rgba(255,255,255,0.04);}
+.thread:hover{background:rgba(245,197,66,0.05);}
+.thread.active{background:rgba(245,197,66,0.10);}
+.avatar{width:44px;height:44px;border-radius:50%;flex:0 0 auto;display:flex;
+  align-items:center;justify-content:center;font-weight:800;font-size:15px;color:#0a1222;}
+.thread-main{flex:1 1 auto;min-width:0;}
+.thread-top{display:flex;justify-content:space-between;gap:8px;align-items:baseline;}
+.thread-name{font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.thread-time{font-size:11px;color:var(--muted);flex:0 0 auto;}
+.thread-bottom{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-top:3px;}
+.thread-last{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.badge{background:var(--gold);color:#0a1222;border-radius:999px;min-width:20px;height:20px;
+  padding:0 6px;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
+.role-pill{font-size:10px;padding:1px 7px;border-radius:999px;text-transform:uppercase;
+  letter-spacing:.5px;font-weight:800;}
+.role-student{background:rgba(59,130,246,0.18);color:#93c5fd;}
+.role-coordinator{background:rgba(16,185,129,0.18);color:#6ee7b7;}
+.role-hr{background:rgba(245,197,66,0.18);color:var(--gold);}
+.role-admin{background:rgba(244,63,94,0.18);color:#fda4af;}
+
+/* ── conversation ──────────────────────────────────────────────────────── */
+.convo-head{display:flex;align-items:center;gap:12px;padding:12px 16px;
+  border-bottom:1px solid var(--line);background:var(--panel-2);flex:0 0 auto;cursor:pointer;}
+.msgs{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:18px 16px;
+  display:flex;flex-direction:column;gap:8px;background:
+    radial-gradient(1200px 400px at 50% -10%, rgba(245,197,66,0.05), transparent 70%), var(--bg);}
+.day{align-self:center;font-size:11px;color:var(--muted);background:rgba(255,255,255,0.05);
+  padding:4px 12px;border-radius:999px;margin:10px 0 4px;}
+.bubble{max-width:min(78%,560px);padding:9px 13px;border-radius:16px;font-size:14px;
+  line-height:1.5;word-wrap:break-word;overflow-wrap:anywhere;background:var(--theirs);align-self:flex-start;
+  border-bottom-left-radius:5px;}
+.bubble.mine{background:var(--mine);align-self:flex-end;border-bottom-left-radius:16px;border-bottom-right-radius:5px;}
+.bubble .who{font-size:11px;font-weight:800;color:var(--gold);margin-bottom:3px;}
+.bubble .at{font-size:10px;color:var(--muted);margin-top:4px;text-align:right;}
+.bubble img{max-width:100%;border-radius:10px;display:block;margin-top:4px;}
+
+.composer{flex:0 0 auto;display:flex;gap:8px;align-items:flex-end;padding:12px 14px;
+  border-top:1px solid var(--line);background:var(--panel-2);
+  padding-bottom:calc(12px + env(safe-area-inset-bottom));}
+.composer textarea{flex:1 1 auto;resize:none;max-height:120px;min-height:42px;padding:11px 13px;
+  border-radius:12px;border:1px solid var(--line);background:#0a1222;color:var(--text);
+  font-family:inherit;font-size:15px;line-height:1.4;}
+.composer textarea:focus{outline:none;border-color:rgba(245,197,66,0.4);}
+.send{background:var(--gold);color:#0a1222;border:none;border-radius:12px;padding:11px 18px;
+  font-weight:800;cursor:pointer;font-size:14px;flex:0 0 auto;}
+.send:disabled{opacity:.5;cursor:not-allowed;}
+
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:100%;color:var(--muted);gap:10px;text-align:center;padding:28px;}
+.empty .big{font-size:44px;}
+
+/* ── profile ───────────────────────────────────────────────────────────── */
+.profile-body{padding:22px 18px;text-align:center;}
+.profile-body .avatar{width:88px;height:88px;font-size:30px;margin:0 auto 14px;}
+.profile-name{font-size:18px;font-weight:800;margin-bottom:6px;}
+.field{text-align:left;border-top:1px solid rgba(255,255,255,0.06);padding:11px 2px;}
+.field .k{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;}
+.field .v{font-size:14px;margin-top:3px;word-break:break-word;}
+.profile-actions{display:flex;flex-direction:column;gap:8px;margin-top:18px;}
+.btn-danger{background:rgba(244,63,94,0.12);border:1px solid rgba(244,63,94,0.35);
+  color:#fda4af;border-radius:10px;padding:10px;font-weight:700;cursor:pointer;font-size:13px;}
+.btn-warn{background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.35);
+  color:#fcd34d;border-radius:10px;padding:10px;font-weight:700;cursor:pointer;font-size:13px;}
+
+.notice{font-size:11.5px;color:var(--muted);padding:9px 14px;background:rgba(245,197,66,0.06);
+  border-bottom:1px solid var(--line);text-align:center;}
+
+/* ── people picker ─────────────────────────────────────────────────────── */
+.sheet{position:fixed;inset:0;background:rgba(4,8,18,0.75);display:none;
+  align-items:center;justify-content:center;padding:20px;z-index:50;}
+.sheet.open{display:flex;}
+.sheet-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;
+  width:min(460px,100%);max-height:min(70dvh,560px);display:flex;flex-direction:column;overflow:hidden;}
+
+/* ══ PHONE ══════════════════════════════════════════════════════════════ */
+@media (max-width: 900px){
+  .shell{grid-template-columns:1fr;}
+  .pane{grid-column:1;grid-row:1;display:none;}
+  .pane + .pane{border-left:none;}
+  .shell[data-pane="list"]    #paneList,
+  .shell[data-pane="convo"]   #paneConvo,
+  .shell[data-pane="profile"] #paneProfile{display:flex;}
+  .back-btn{display:inline-flex;}
+  .bubble{max-width:88%;}
+}
+</style>
+</head>
+<body>
+
+<div class="shell" id="shell" data-pane="list">
+
+  <!-- CONVERSATIONS -->
+  <section class="pane" id="paneList">
+    <div class="pane-head">
+      <button class="icon-btn" onclick="window.location.href='/student-dashboard'" title="Back to the portal">←</button>
+      <h2 style="flex:1">Messages</h2>
+      <button class="icon-btn" onclick="openPicker()" title="Start a new conversation">✎</button>
+    </div>
+    <div class="search"><input id="threadSearch" placeholder="Search conversations" oninput="renderThreads()"></div>
+    <div class="pane-body" id="threadList"><p style="color:#8aa4c8;padding:16px;">Loading…</p></div>
+    <div class="notice" id="retentionNote"></div>
+  </section>
+
+  <!-- CONVERSATION -->
+  <section class="pane" id="paneConvo">
+    <div class="convo-head" id="convoHead" onclick="showProfile()">
+      <button class="icon-btn back-btn" onclick="event.stopPropagation();showList()">←</button>
+      <div class="avatar" id="convoAvatar" style="width:38px;height:38px;font-size:14px;">·</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:700;font-size:14px;" id="convoName">Select a conversation</div>
+        <div style="font-size:11px;color:#8aa4c8;" id="convoSub">Your messages are kept for 30 days</div>
+      </div>
+      <button class="icon-btn" onclick="event.stopPropagation();showProfile()" title="Profile">ⓘ</button>
+    </div>
+    <div class="msgs" id="msgs">
+      <div class="empty"><div class="big">💬</div>
+        <div>Pick someone on the left, or press ✎ to start a new conversation.</div></div>
+    </div>
+    <div class="composer" id="composer" style="display:none;">
+      <button class="icon-btn" onclick="document.getElementById('imgInput').click()" title="Send a photo">📎</button>
+      <input type="file" id="imgInput" accept="image/*" style="display:none" onchange="sendImage(this)">
+      <textarea id="input" rows="1" placeholder="Write a message…"
+                oninput="autoGrow(this)" onkeydown="maybeSend(event)"></textarea>
+      <button class="send" id="sendBtn" onclick="sendText()">Send</button>
+    </div>
+  </section>
+
+  <!-- PROFILE -->
+  <section class="pane" id="paneProfile">
+    <div class="pane-head">
+      <button class="icon-btn back-btn" onclick="showConvo()">←</button>
+      <h2 style="flex:1">Profile</h2>
+    </div>
+    <div class="pane-body" id="profileBody">
+      <div class="empty"><div class="big">👤</div><div>Open a conversation to see who you are talking to.</div></div>
+    </div>
+  </section>
+</div>
+
+<!-- NEW CONVERSATION -->
+<div class="sheet" id="picker" onclick="if(event.target===this)closePicker()">
+  <div class="sheet-card">
+    <div class="pane-head"><h2 style="flex:1">New conversation</h2>
+      <button class="icon-btn" onclick="closePicker()">✕</button></div>
+    <div class="search"><input id="peopleSearch" placeholder="Search by name or Employee ID" oninput="searchPeople()"></div>
+    <div class="pane-body" id="peopleList"><p style="color:#8aa4c8;padding:16px;">Loading…</p></div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/session-guard.js"></script>
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   Direct messages.
+
+   Everything about who you are comes from the session cookie — this page
+   never tells the server which account it is. The three panes are one
+   layout at every width; on a phone the shell just shows one at a time.
+   ═══════════════════════════════════════════════════════════════════════ */
+"use strict";
+
+var me = null;                 // { id, role }
+var threads = [];
+var current = null;            // { room, withId, withName, role }
+var socket = null;
+var retentionDays = 30;
+
+function esc(s){
+  return String(s == null ? "" : s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+
+/* A stable colour per person, so the same face keeps the same badge. */
+function tint(seed){
+  var h = 0, s = String(seed || "?");
+  for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
+  return "hsl(" + h + ",62%,64%)";
+}
+function initials(name){
+  var parts = String(name || "?").trim().split(/[\s\/]+/).filter(Boolean);
+  if (!parts.length) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+function avatarHtml(name, id, size){
+  var st = size ? "width:" + size + "px;height:" + size + "px;font-size:" + Math.round(size / 2.9) + "px;" : "";
+  return '<div class="avatar" style="background:' + tint(id || name) + ';' + st + '">' + esc(initials(name)) + '</div>';
+}
+
+function whenLabel(iso){
+  if (!iso) return "";
+  var d = new Date(iso), now = new Date();
+  var sameDay = d.toDateString() === now.toDateString();
+  if (sameDay) return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  var y = new Date(now); y.setDate(y.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return "Yesterday";
+  return d.toLocaleDateString([], { day: "numeric", month: "short" });
+}
+function dayLabel(d){
+  var now = new Date(), y = new Date(now); y.setDate(y.getDate() - 1);
+  if (d.toDateString() === now.toDateString()) return "Today";
+  if (d.toDateString() === y.toDateString())   return "Yesterday";
+  return d.toLocaleDateString([], { day: "numeric", month: "long", year: "numeric" });
+}
+
+async function json(url, opts){
+  var r = await fetch(url, Object.assign({ credentials: "same-origin" }, opts || {}));
+  var d = await r.json().catch(function(){ return {}; });
+  if (!r.ok || d.success === false) throw new Error(d.message || ("Request failed (" + r.status + ")"));
+  return d;
+}
+async function post(url, body){
+  return json(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+}
+
+/* ── pane switching (only visible on a phone) ────────────────────────── */
+function setPane(p){ document.getElementById("shell").setAttribute("data-pane", p); }
+function showList(){ setPane("list"); }
+function showConvo(){ setPane("convo"); }
+function showProfile(){ if (current) { setPane("profile"); loadProfile(current.withId); } }
+
+/* ── conversations ───────────────────────────────────────────────────── */
+async function loadThreads(){
+  try {
+    var d = await json("/api/chat/dm/threads");
+    threads = d.threads || [];
+    retentionDays = d.retentionDays || 30;
+    document.getElementById("retentionNote").textContent =
+      "Private messages are kept for " + retentionDays + " days, then deleted automatically.";
+    renderThreads();
+  } catch (e) {
+    document.getElementById("threadList").innerHTML =
+      '<p style="color:#f43f5e;padding:16px;">' + esc(e.message) + "</p>";
+  }
+}
+
+function renderThreads(){
+  var q = (document.getElementById("threadSearch").value || "").toLowerCase().trim();
+  var list = threads.filter(function(t){
+    return !q || (t.withName || "").toLowerCase().indexOf(q) !== -1
+              || (t.withId   || "").toLowerCase().indexOf(q) !== -1;
+  });
+  var box = document.getElementById("threadList");
+  if (!list.length){
+    box.innerHTML = '<div class="empty" style="height:auto;padding:40px 20px;"><div class="big">📭</div>' +
+      "<div>" + (q ? "Nothing matches that." : "No conversations yet. Press ✎ to start one.") + "</div></div>";
+    return;
+  }
+  box.innerHTML = list.map(function(t){
+    var active = current && current.room === t.room ? " active" : "";
+    return '<div class="thread' + active + '" onclick="openThread(' +
+        JSON.stringify(t.room).replace(/"/g,"&quot;") + "," +
+        JSON.stringify(t.withName || t.withId).replace(/"/g,"&quot;") + "," +
+        JSON.stringify(t.withId).replace(/"/g,"&quot;") + ')">' +
+      avatarHtml(t.withName || t.withId, t.withId) +
+      '<div class="thread-main">' +
+        '<div class="thread-top"><span class="thread-name">' + esc(t.withName || t.withId) + "</span>" +
+          '<span class="thread-time">' + esc(whenLabel(t.at)) + "</span></div>" +
+        '<div class="thread-bottom"><span class="thread-last">' +
+          (t.lastFromMe ? "You: " : "") + esc(t.lastMessage || "") + "</span>" +
+          (t.unread ? '<span class="badge">' + t.unread + "</span>" : "") +
+        "</div></div></div>";
+  }).join("");
+}
+
+async function openThread(room, name, withId){
+  current = { room: room, withName: name, withId: withId };
+  document.getElementById("convoName").textContent = name;
+  document.getElementById("convoAvatar").outerHTML =
+    avatarHtml(name, withId, 38).replace('class="avatar"', 'class="avatar" id="convoAvatar"');
+  document.getElementById("composer").style.display = "flex";
+  showConvo();
+  renderThreads();
+
+  if (socket) socket.emit("join_room", { room: room });
+  await loadMessages(room);
+
+  // Clear the unread badge as soon as the messages are on screen.
+  try {
+    await post("/api/chat/dm/read", { room: room });
+    var t = threads.filter(function(x){ return x.room === room; })[0];
+    if (t) { t.unread = 0; renderThreads(); }
+  } catch (e) { /* the badge simply stays until the next refresh */ }
+
+  loadProfile(withId);
+}
+
+async function loadMessages(room){
+  var box = document.getElementById("msgs");
+  box.innerHTML = '<p style="color:#8aa4c8;">Loading…</p>';
+  try {
+    var d = await json("/chat/messages/" + encodeURIComponent(room));
+    box.innerHTML = "";
+    var msgs = d.messages || [];
+    if (!msgs.length){
+      box.innerHTML = '<div class="empty"><div class="big">👋</div>' +
+        "<div>No messages yet — say hello.</div></div>";
+      return;
+    }
+    var lastDay = "";
+    msgs.forEach(function(m){
+      var d2 = new Date(m.timestamp), label = dayLabel(d2);
+      if (label !== lastDay){ lastDay = label; addDay(label); }
+      addBubble(m);
+    });
+    box.scrollTop = box.scrollHeight;
+  } catch (e) {
+    box.innerHTML = '<p style="color:#f43f5e;">' + esc(e.message) + "</p>";
+  }
+}
+
+function addDay(label){
+  var el = document.createElement("div");
+  el.className = "day";
+  el.textContent = label;
+  document.getElementById("msgs").appendChild(el);
+}
+
+function addBubble(m){
+  var box = document.getElementById("msgs");
+  var mine = me && String(m.senderId) === String(me.id);
+  var el = document.createElement("div");
+  el.className = "bubble" + (mine ? " mine" : "");
+  var html = mine ? "" : '<div class="who">' + esc(m.senderName || m.senderId) + "</div>";
+  if (m.message) html += esc(m.message).replace(/\n/g, "<br>");
+  if (m.imageUrl) html += '<img src="' + esc(m.imageUrl) + '" alt="' + esc(m.imageName || "photo") + '">';
+  html += '<div class="at">' + esc(new Date(m.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })) + "</div>";
+  el.innerHTML = html;
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+}
+
+/* ── sending ─────────────────────────────────────────────────────────── */
+function autoGrow(el){ el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 120) + "px"; }
+function maybeSend(e){
+  // Enter sends; Shift+Enter makes a new line. On a phone the on-screen
+  // keyboard's return key inserts a newline instead, which is what people
+  // expect there.
+  if (e.key === "Enter" && !e.shiftKey && window.matchMedia("(min-width: 901px)").matches){
+    e.preventDefault(); sendText();
+  }
+}
+
+function sendText(){
+  var input = document.getElementById("input");
+  var text = (input.value || "").trim();
+  if (!text || !current || !socket) return;
+  var btn = document.getElementById("sendBtn");
+  btn.disabled = true;
+  socket.emit("send_message", { room: current.room, text: text }, function(ack){
+    btn.disabled = false;
+    if (!ack || !ack.success){
+      alert(ack && ack.message === "forbidden"
+        ? "You cannot send messages in this conversation."
+        : "Your message did not send. Check your connection and try again.");
+      return;
+    }
+    input.value = ""; autoGrow(input);
+  });
+}
+
+async function sendImage(fileInput){
+  var file = fileInput.files && fileInput.files[0];
+  fileInput.value = "";
+  if (!file || !current || !socket) return;
+  try {
+    var fd = new FormData();
+    fd.append("image", file);
+    var r = await fetch("/chat/upload-image", { method: "POST", credentials: "same-origin", body: fd });
+    var d = await r.json();
+    if (!d.success) throw new Error(d.message || "Upload failed");
+    socket.emit("send_message", {
+      room: current.room, text: "",
+      imageUrl: d.imageUrl, imageName: d.imageName, imageMime: d.imageMime
+    });
+  } catch (e) { alert(e.message || "Could not send that image."); }
+}
+
+/* ── profile ─────────────────────────────────────────────────────────── */
+async function loadProfile(userId){
+  var box = document.getElementById("profileBody");
+  box.innerHTML = '<p style="color:#8aa4c8;padding:16px;">Loading…</p>';
+  try {
+    var d = await json("/api/chat/profile/" + encodeURIComponent(userId));
+    var p = d.profile;
+    if (current) current.role = p.role;
+
+    var fields = [];
+    var add = function(k, v){ if (v) fields.push('<div class="field"><div class="k">' + esc(k) + '</div><div class="v">' + esc(v) + "</div></div>"); };
+    if (p.role === "student"){
+      add("Employee ID", p.id);
+      add((p.domains && p.domains.length > 1) ? "Domains" : "Domain",
+          (p.domains && p.domains.length ? p.domains.join(" · ") : p.domain));
+      add("College", p.college);
+      add("Tenure", p.tenure);
+      add("Joined", p.joinedOn);
+    } else {
+      add("Domain", p.domain);
+    }
+    add("Email", p.email);
+    add("Phone", p.phone);
+
+    box.innerHTML =
+      '<div class="profile-body">' +
+        avatarHtml(p.name, p.id, 88) +
+        '<div class="profile-name">' + esc(p.name) + "</div>" +
+        '<span class="role-pill role-' + esc(p.role) + '">' + esc(p.role) + "</span>" +
+        '<div style="margin-top:18px;">' + fields.join("") + "</div>" +
+        '<div class="profile-actions">' +
+          '<button class="btn-warn" onclick="reportPerson()">⚑ Report this person</button>' +
+          '<button class="btn-danger" onclick="blockPerson()">⛔ Block</button>' +
+        "</div>" +
+      "</div>";
+  } catch (e) {
+    box.innerHTML = '<div class="empty" style="height:auto;padding:40px 20px;"><div class="big">👤</div><div>' +
+      esc(e.message) + "</div></div>";
+  }
+}
+
+async function blockPerson(){
+  if (!current) return;
+  if (!confirm("Block " + current.withName + "? They will no longer be able to message you, and this conversation disappears from both inboxes.")) return;
+  try {
+    await post("/api/chat/block", { userId: current.withId, userName: current.withName, userRole: current.role || "student" });
+    current = null;
+    document.getElementById("composer").style.display = "none";
+    document.getElementById("msgs").innerHTML = '<div class="empty"><div class="big">⛔</div><div>Blocked.</div></div>';
+    showList();
+    loadThreads();
+  } catch (e) { alert(e.message || "Could not block."); }
+}
+
+async function reportPerson(){
+  if (!current) return;
+  var reason = prompt("What is happening? An admin will read this.");
+  if (!reason) return;
+  try {
+    await post("/api/chat/report", {
+      userId: current.withId, userName: current.withName,
+      userRole: current.role || "student", room: current.room, reason: reason
+    });
+    alert("Reported. An admin will look at this conversation.");
+  } catch (e) { alert(e.message || "Could not send that report."); }
+}
+
+/* ── new conversation ────────────────────────────────────────────────── */
+function openPicker(){ document.getElementById("picker").classList.add("open"); searchPeople(); }
+function closePicker(){ document.getElementById("picker").classList.remove("open"); }
+
+var peopleTimer = null;
+function searchPeople(){
+  clearTimeout(peopleTimer);
+  peopleTimer = setTimeout(async function(){
+    var q = (document.getElementById("peopleSearch").value || "").trim();
+    var box = document.getElementById("peopleList");
+    try {
+      var d = await json("/api/chat/directory?q=" + encodeURIComponent(q));
+      me = d.me || me;
+      var people = d.people || [];
+      if (!people.length){ box.innerHTML = '<p style="color:#8aa4c8;padding:16px;">Nobody matches.</p>'; return; }
+      box.innerHTML = people.map(function(p){
+        return '<div class="thread" onclick="startWith(' +
+            JSON.stringify(p.id).replace(/"/g,"&quot;") + "," +
+            JSON.stringify(p.name).replace(/"/g,"&quot;") + ')">' +
+          avatarHtml(p.name, p.id) +
+          '<div class="thread-main"><div class="thread-top">' +
+            '<span class="thread-name">' + esc(p.name) + "</span>" +
+            '<span class="role-pill role-' + esc(p.role) + '">' + esc(p.role) + "</span></div>" +
+            '<div class="thread-last">' + esc(p.id) + (p.domain ? " · " + esc(p.domain) : "") + "</div>" +
+          "</div></div>";
+      }).join("");
+    } catch (e) {
+      box.innerHTML = '<p style="color:#f43f5e;padding:16px;">' + esc(e.message) + "</p>";
+    }
+  }, 220);
+}
+
+async function startWith(userId, name){
+  try {
+    var d = await post("/api/chat/dm/open", { userId: userId });
+    closePicker();
+    if (!threads.some(function(t){ return t.room === d.room; })){
+      threads.unshift({ room: d.room, withId: userId, withName: name, lastMessage: "", at: new Date().toISOString(), unread: 0 });
+    }
+    openThread(d.room, name, userId);
+  } catch (e) { alert(e.message || "Could not open that conversation."); }
+}
+
+/* ── live ────────────────────────────────────────────────────────────── */
+function connect(){
+  if (!window.io) return;
+  socket = io({ withCredentials: true });
+
+  socket.on("receive_message", function(m){
+    if (current && m.chatRoom === current.room){
+      addBubble(m);
+      post("/api/chat/dm/read", { room: current.room }).catch(function(){});
+    }
+    loadThreads();
+  });
+
+  // A message in a conversation that is not open. The inbox is what shows it.
+  socket.on("dm_notice", function(){ loadThreads(); });
+}
+
+(async function start(){
+  try {
+    var d = await json("/api/chat/directory");
+    me = d.me;
+  } catch (e) {
+    // The session guard sends an unauthenticated visitor to the login page;
+    // there is nothing useful to draw here in the meantime.
+    return;
+  }
+  connect();
+  await loadThreads();
+
+  // Deep link: /messages.html?to=TEN/WEB/1005 opens straight into a chat.
+  var to = new URLSearchParams(window.location.search).get("to");
+  if (to){
+    try {
+      var r = await post("/api/chat/dm/open", { userId: to });
+      var p = await json("/api/chat/profile/" + encodeURIComponent(to)).catch(function(){ return { profile: { name: to } }; });
+      openThread(r.room, (p.profile && p.profile.name) || to, to);
+    } catch (e) { /* fall back to the inbox */ }
+  }
+})();
+</script>
+</body>
+</html>

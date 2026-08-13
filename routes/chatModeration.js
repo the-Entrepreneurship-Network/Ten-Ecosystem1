@@ -20,6 +20,7 @@ const HR         = require("../models/HR");
 const Message    = require("../models/Message");
 const UserBlock  = require("../models/UserBlock");
 const ChatReport = require("../models/ChatReport");
+const ChatRead   = require("../models/ChatRead");
 
 /** Who is calling, from the session alone. */
 function identityOf(req) {
@@ -48,6 +49,11 @@ function requireAdminUser(req, res, next) {
 
 function dmRoomFor(a, b) {
     return "dm::" + [String(a), String(b)].sort().join("::");
+}
+
+/** A user id can contain /, . and @ — all meaningful inside a regex. */
+function escapeRegex(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // ════════════════════════════════════════════════════════════
@@ -128,33 +134,197 @@ router.post("/dm/open", requireChatUser, async (req, res) => {
     }
 });
 
-/** GET /api/chat/dm/threads — existing conversations, most recent first. */
+/**
+ * GET /api/chat/dm/threads — the conversation list, most recent first.
+ *
+ * This is the inbox: one row per conversation, with the last message, when it
+ * arrived, and how many messages in it this person has not read.
+ *
+ * It used to read the newest 400 DM messages across the WHOLE portal and then
+ * filter them down to the caller's own, which meant a busy day of other
+ * people's conversations could push a user's own threads out of the window and
+ * make them disappear from their inbox. The room list is now derived from rooms
+ * the caller is actually in.
+ */
 router.get("/dm/threads", requireChatUser, async (req, res) => {
     try {
         const me = req.me;
-        const rows = await Message.find({ chatRoom: new RegExp("^dm::") })
-            .sort({ timestamp: -1 }).limit(400)
-            .select("chatRoom senderId senderName message timestamp").lean();
-
         const hidden = await UserBlock.hiddenFor(me.id);
-        const seen = new Map();
-        for (const m of rows) {
-            const parts = m.chatRoom.slice(4).split("::");
+
+        // Rooms addressed to this person. The room name contains both ids, so
+        // membership is a property of the name and needs no separate index.
+        const idRx = escapeRegex(String(me.id));
+        const roomFilter = me.role === "admin"
+            ? { chatRoom: /^dm::/ }
+            : { chatRoom: new RegExp("^dm::(" + idRx + "::|.*::" + idRx + "$)") };
+
+        const rooms = await Message.distinct("chatRoom", roomFilter);
+        if (!rooms.length) return res.json({ success: true, threads: [] });
+
+        // Newest message per room, in one pass.
+        const latest = await Message.aggregate([
+            { $match: { chatRoom: { $in: rooms } } },
+            { $sort: { timestamp: -1 } },
+            { $group: {
+                _id: "$chatRoom",
+                senderId:   { $first: "$senderId" },
+                senderName: { $first: "$senderName" },
+                message:    { $first: "$message" },
+                imageUrl:   { $first: "$imageUrl" },
+                timestamp:  { $first: "$timestamp" },
+                expiresAt:  { $first: "$expiresAt" }
+            } },
+            { $sort: { timestamp: -1 } },
+            { $limit: 120 }
+        ]);
+
+        const readMap = await ChatRead.mapFor(me.id, latest.map(l => l._id));
+
+        const threads = [];
+        for (const row of latest) {
+            const parts = String(row._id).slice(4).split("::");
             if (parts.length !== 2) continue;
-            // Admins see every thread; everyone else only their own.
-            if (me.role !== "admin" && parts.indexOf(String(me.id)) === -1) continue;
-            if (seen.has(m.chatRoom)) continue;
             const other = parts.find(p => p !== String(me.id)) || parts[0];
             if (hidden.has(other)) continue;
-            seen.set(m.chatRoom, {
-                room: m.chatRoom,
+
+            const lastRead = readMap[row._id] || new Date(0);
+            const unread = await Message.countDocuments({
+                chatRoom: row._id,
+                senderId: { $ne: me.id },
+                timestamp: { $gt: lastRead }
+            });
+
+            threads.push({
+                room: row._id,
                 withId: other,
-                withName: m.senderId === me.id ? other : (m.senderName || other),
-                lastMessage: (m.message || "").slice(0, 90),
-                at: m.timestamp
+                // The name is only known from a message the OTHER person sent;
+                // when every message is ours, fall back to their id and let the
+                // profile lookup fill it in.
+                withName: row.senderId === me.id ? other : (row.senderName || other),
+                lastMessage: row.imageUrl && !row.message ? "\uD83D\uDCF7 Photo" : (row.message || "").slice(0, 90),
+                lastFromMe: row.senderId === me.id,
+                at: row.timestamp,
+                unread,
+                // So the UI can warn before a conversation ages out.
+                expiresAt: row.expiresAt || null
             });
         }
-        res.json({ success: true, threads: Array.from(seen.values()).slice(0, 60) });
+
+        res.json({
+            success: true,
+            threads: threads.slice(0, 60),
+            retentionDays: Message.DM_RETENTION_DAYS
+        });
+    } catch (err) {
+        console.error("[chat] threads failed:", err.message);
+        res.status(500).json({ success: false, message: err.message, threads: [] });
+    }
+});
+
+/**
+ * POST /api/chat/dm/read { room } — mark a conversation as read up to now.
+ */
+router.post("/dm/read", requireChatUser, async (req, res) => {
+    try {
+        const room = String(req.body && req.body.room || "").trim();
+        if (!room.startsWith("dm::")) return res.status(400).json({ success: false, message: "room is required." });
+        if (req.me.role !== "admin" && room.slice(4).split("::").indexOf(String(req.me.id)) === -1) {
+            return res.status(403).json({ success: false, message: "Not your conversation." });
+        }
+        await ChatRead.markRead(req.me.id, room, new Date());
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+/** GET /api/chat/unread — total unread across every conversation, for a badge. */
+router.get("/unread", requireChatUser, async (req, res) => {
+    try {
+        const me = req.me;
+        const idRx = escapeRegex(String(me.id));
+        const rooms = await Message.distinct("chatRoom", {
+            chatRoom: new RegExp("^dm::(" + idRx + "::|.*::" + idRx + "$)")
+        });
+        if (!rooms.length) return res.json({ success: true, unread: 0 });
+
+        const readMap = await ChatRead.mapFor(me.id, rooms);
+        let total = 0;
+        for (const room of rooms) {
+            total += await Message.countDocuments({
+                chatRoom: room,
+                senderId: { $ne: me.id },
+                timestamp: { $gt: readMap[room] || new Date(0) }
+            });
+        }
+        res.json({ success: true, unread: total });
+    } catch (err) {
+        res.json({ success: true, unread: 0 });
+    }
+});
+
+/**
+ * GET /api/chat/profile/:userId — the person on the other side of a thread.
+ *
+ * Deliberately narrow. A profile card exists so you know who you are talking
+ * to; it is not a route into someone's record, so it returns what a colleague
+ * would reasonably see and nothing else. No email or phone for a student unless
+ * the viewer is staff, and never a password, document or attendance figure.
+ */
+router.get("/profile/:userId", requireChatUser, async (req, res) => {
+    try {
+        const wanted = decodeURIComponent(req.params.userId || "").trim();
+        if (!wanted) return res.status(400).json({ success: false, message: "userId is required." });
+
+        const hidden = await UserBlock.hiddenFor(req.me.id);
+        if (hidden.has(wanted)) {
+            return res.status(403).json({ success: false, message: "This profile is unavailable." });
+        }
+
+        const isStaff = ["hr", "coordinator", "admin"].indexOf(req.me.role) !== -1;
+
+        const student = await Student.findOne({ employeeId: wanted })
+            .select("name firstName lastName employeeId domain domains collegeName college tenure joiningDate email whatsapp")
+            .lean();
+        if (student) {
+            return res.json({ success: true, profile: {
+                id: student.employeeId,
+                name: (student.name || `${student.firstName || ""} ${student.lastName || ""}`).trim() || student.employeeId,
+                role: "student",
+                domain: student.domain || "",
+                domains: Array.isArray(student.domains) && student.domains.length ? student.domains : [student.domain].filter(Boolean),
+                college: student.collegeName || student.college || "",
+                tenure: student.tenure || "",
+                joinedOn: student.joiningDate || "",
+                email: isStaff ? (student.email || "") : "",
+                phone: isStaff ? (student.whatsapp || "") : ""
+            } });
+        }
+
+        const coord = await Coordinator.findOne({ $or: [{ email: wanted }, { username: wanted }] })
+            .select("name email username domain").lean();
+        if (coord) {
+            return res.json({ success: true, profile: {
+                id: coord.email || coord.username,
+                name: coord.name || coord.username || coord.email,
+                role: "coordinator",
+                domain: coord.domain || "",
+                email: coord.email || ""
+            } });
+        }
+
+        const hr = await HR.findOne({ $or: [{ email: wanted }, { username: wanted }] })
+            .select("name email username").lean();
+        if (hr) {
+            return res.json({ success: true, profile: {
+                id: hr.email || hr.username,
+                name: hr.name || hr.username || hr.email,
+                role: "hr",
+                email: hr.email || ""
+            } });
+        }
+
+        res.status(404).json({ success: false, message: "No profile found for that person." });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }

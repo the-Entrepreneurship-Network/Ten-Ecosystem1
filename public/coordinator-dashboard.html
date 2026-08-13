@@ -765,6 +765,8 @@ body::before {
   .section-modal-title { font-size: 16px; }
 }
 </style>
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
 </head>
 <body>
 
@@ -780,6 +782,7 @@ body::before {
   </div>
   <div class="coord-nav">
     <button class="coord-nav-btn active" data-tab="submissions" onclick="openCoordModal('submissions')"><span class="nav-icon">📂</span> Submissions</button>
+    <button class="coord-nav-btn" onclick="window.location.href='/messages'"><span class="nav-icon">💬</span> Messages</button>
     <button class="coord-nav-btn" data-tab="attendance" onclick="openCoordModal('attendance')"><span class="nav-icon">🪪</span> Attendance</button>
     <button class="coord-nav-btn" data-tab="overview" onclick="openCoordModal('overview')"><span class="nav-icon">👥</span> Student Overview</button>
     <button class="coord-nav-btn" data-tab="notice" onclick="openCoordModal('notice')"><span class="nav-icon">📢</span> Notice Board</button>

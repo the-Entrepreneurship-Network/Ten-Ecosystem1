@@ -2791,6 +2791,9 @@ app.get("/investor-login",    (req,res)=>{ res.sendFile(path.join(__dirname,"pub
 app.get("/contractor-login",  (req,res)=>{ res.sendFile(path.join(__dirname,"public","contractor-login.html")); });
 app.get("/login",             (req,res)=>{ res.sendFile(path.join(__dirname,"public","login.html")); });
 app.get("/student-dashboard", (req,res)=>{ res.sendFile(path.join(__dirname,"public","student-dashboard.html")); });
+// Direct messages, for every role. The page derives identity from the
+// session, so one URL serves students, coordinators, HR and admin.
+app.get("/messages",          (req,res)=>{ res.sendFile(path.join(__dirname,"public","messages.html")); });
 app.get("/mentor-dashboard",  (req,res)=>{ res.sendFile(path.join(__dirname,"public","mentor-dashboard.html")); });
 app.get("/investor-dashboard",(req,res)=>{ res.sendFile(path.join(__dirname,"public","investor-dashboard.html")); });
 app.get("/contractor-dashboard",(req,res)=>{ res.sendFile(path.join(__dirname,"public","contractor-dashboard.html")); });

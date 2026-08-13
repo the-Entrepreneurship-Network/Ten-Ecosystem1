@@ -384,6 +384,8 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
 .chart-wrap-tall{height:260px;}
 @media (max-width: 768px){.charts-grid{grid-template-columns:1fr;}.chart-card-wide{grid-column:1;}}
 </style>
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
 </head>
 <body>
 <div class="bg-grid"></div>
@@ -401,6 +403,7 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
   <div class="sidebar-nav">
     <div class="nav-section-title">Overview</div>
     <button class="nav-btn active" onclick="showView('overview')" data-view="overview"><span class="icon">📊</span> Dashboard</button>
+    <button class="nav-btn" onclick="window.location.href='/messages'"><span class="icon">💬</span> Messages <span id="hrDmBadge" style="display:none;font-size:10px;background:#10b981;color:#04121f;padding:1px 6px;border-radius:999px;margin-left:auto;font-weight:800;">0</span></button>
     <button class="nav-btn" onclick="showView('ecosystem')" data-view="ecosystem"><span class="icon">🕸️</span> TEN Ecosystem</button>
     <button class="nav-btn" onclick="showView('insights')" data-view="insights"><span class="icon">📊</span> Insights</button>
     <div class="nav-divider"></div>

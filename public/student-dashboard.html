@@ -1510,6 +1510,8 @@ button:active { transform: translateY(0); }
 }
 </style>
   <link rel="stylesheet" href="/css/ten-brand.css">
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
 </head>
 
 <body>
@@ -1619,6 +1621,7 @@ button:active { transform: translateY(0); }
     <button class="stu-nav-btn" data-view="stu-view-guidelines" onclick="switchStudentView('stu-view-guidelines')"><span class="nav-icon">📋</span> Guidelines</button>
     <button class="stu-nav-btn" data-view="stu-view-leaderboard" onclick="switchStudentView('stu-view-leaderboard')"><span class="nav-icon">🏆</span> Leaderboard &amp; Badges</button>
     <!-- Section 9 — student feedback, shown once the internship is complete. -->
+    <button class="stu-nav-btn" onclick="window.location.href='/messages'" style="background:linear-gradient(135deg,rgba(16,185,129,0.1),rgba(16,185,129,0.03));border:1px solid rgba(16,185,129,0.2);"><span class="nav-icon">💬</span> Messages <span id="stuDmBadge" style="display:none;font-size:10px;background:#10b981;color:#04121f;padding:1px 6px;border-radius:999px;margin-left:4px;font-weight:800;">0</span></button>
     <button class="stu-nav-btn" id="stuNavFeedback" data-view="stu-view-feedback" onclick="switchStudentView('stu-view-feedback')" style="display:none;"><span class="nav-icon">💌</span> Share Feedback</button>
     <!-- NEW FEATURE: Document Upload + Certificates nav links -->
     <button class="stu-nav-btn" onclick="window.location.href='my-documents.html'" style="background:linear-gradient(135deg,rgba(245,158,11,0.08),rgba(245,158,11,0.02));border:1px solid rgba(245,158,11,0.18);"><span class="nav-icon">📋</span> My Documents <span style="font-size:10px;background:rgba(245,158,11,0.2);color:#f59e0b;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
@@ -4108,6 +4111,21 @@ function _fbEscape(s){
  * Show the Share Feedback nav item only once the internship is complete, and
  * render anything the student has already sent.
  */
+/** Unread direct messages, shown on the Messages nav item. */
+async function refreshDmBadge(){
+  try {
+    const r = await fetch("/api/chat/unread", { credentials: "same-origin" });
+    if (!r.ok) return;
+    const d = await r.json();
+    const el = document.getElementById("stuDmBadge");
+    if (!el) return;
+    if (d.unread > 0){ el.textContent = d.unread > 99 ? "99+" : d.unread; el.style.display = "inline-block"; }
+    else { el.style.display = "none"; }
+  } catch (e) { /* the badge just stays hidden */ }
+}
+setInterval(refreshDmBadge, 45000);
+document.addEventListener("DOMContentLoaded", refreshDmBadge);
+
 async function initStudentFeedback(){
   try {
     const res = await fetch("/api/feedback/my-status", { credentials: "same-origin" });
