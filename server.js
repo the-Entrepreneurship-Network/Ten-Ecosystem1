@@ -1244,6 +1244,11 @@ const Coordinator = require("./models/Coordinator");
 const Promotion = require("./models/Promotion");
 const BadgeAward = require("./models/BadgeAward");
 const BlockList = require("./models/BlockList");
+// Personal blocks (any role, everywhere) and abuse reports for the admin desk.
+// BlockList above is the older per-room staff mute; the two are different
+// tools and both are kept.
+const UserBlock = require("./models/UserBlock");
+const ChatReport = require("./models/ChatReport");
 const EcosystemUser = require("./models/EcosystemUser");
 
 const autoMailLogSchema = new mongoose.Schema({
@@ -1721,7 +1726,11 @@ class FallbackStore extends session.Store {
 
 sessionOptions.store = new FallbackStore();
 
-app.use(session(sessionOptions));
+// Kept in a named binding so the Socket.IO handshake can run the same session
+// parser: admin chat oversight is authorised by the /ten-admin session cookie,
+// never by what the socket claims about itself.
+const sessionMiddleware = session(sessionOptions);
+app.use(sessionMiddleware);
 
 // NOTE: the session cookie's `secure` / `sameSite` flags are fixed at
 // configuration time from NODE_ENV (see sessionOptions above). They used to be
@@ -4685,8 +4694,11 @@ app.get('/api/hr/intern-list', async (req, res) => {
     let query = {};
     if (type === 'active')    query = { lastActiveDate: { $gte: d30 } };
     if (type === 'inactive')  query = { $or: [{ lastActiveDate: { $lt: d30 } }, { lastActiveDate: null }, { lastActiveDate: { $exists: false } }] };
+    // `name` matters: most records carry a single `name` and no first/last, so
+    // building the display name from firstName+lastName alone produced a row
+    // of blanks — the list looked empty even when it was full.
     let students = await Student.find(query)
-      .select('firstName lastName employeeId domain collegeName college lastActiveDate joiningDate joinDate')
+      .select('name firstName lastName employeeId domain collegeName college lastActiveDate joiningDate joinDate')
       .sort({ joiningDate: -1 }).limit(400);
     if (type === 'newJoins'){
       students = students.filter(s => {
@@ -4703,15 +4715,17 @@ app.get('/api/hr/intern-list', async (req, res) => {
     } else {
       students = students.slice(0,200);
     }
-    res.json({ students: students.map(s => ({
-      name: (s.firstName||'') + ' ' + (s.lastName||''),
-      employeeId: s.employeeId,
-      domain: s.domain,
-      college: s.collegeName || s.college
+    res.json({ success:true, total: students.length, students: students.map(s => ({
+      name: (s.name || `${s.firstName || ''} ${s.lastName || ''}`).trim() || '—',
+      employeeId: s.employeeId || '—',
+      domain: s.domain || '—',
+      college: s.collegeName || s.college || '—',
+      lastActive: s.lastActiveDate || null,
+      joined: s.joinDate || s.joiningDate || null
     }))});
   }catch(e){
-    console.log(e);
-    res.status(500).json({ students: [] });
+    console.error('[intern-list]', e.message);
+    res.status(500).json({ success:false, message:'Could not load the student list: ' + e.message, students: [] });
   }
 });
 
@@ -6481,7 +6495,54 @@ async function verifyChatIdentity(claim){
         }
         return null;
     }
+    if(claim.role === "admin"){
+        // An admin identity is never taken from the handshake claim. It is
+        // proved by the /ten-admin session on the same browser, read from the
+        // socket's cookies below — otherwise anyone could open a socket
+        // claiming role:"admin" and read every private conversation.
+        return null;
+    }
     return null;
+}
+
+/**
+ * Resolve an admin from the session cookie carried on the socket handshake.
+ *
+ * Chat identity for students/coordinators/HR is verified against their own
+ * stores. Admin is different: there is no admin record to look up, only the
+ * signed session created by /ten-admin. Reading it here is what makes admin
+ * oversight safe — the claim in the handshake is ignored entirely.
+ */
+function adminIdentityFromSocket(socket){
+    return new Promise((resolve) => {
+        try{
+            const req = socket.request;
+            if(!req || !req.headers || !req.headers.cookie) return resolve(null);
+            sessionMiddleware(req, {}, () => {
+                const admin = req.session && req.session.adminUser;
+                if(!admin) return resolve(null);
+                resolve({ role: "admin", id: admin.username || "admin", name: admin.username || "Admin", domain: "" });
+            });
+        }catch(_){ resolve(null); }
+    });
+}
+
+/**
+ * The room name for a private conversation between two people.
+ *
+ * Sorted so both participants derive the same name from either direction —
+ * there is exactly one room per pair, not one per sender. The separator is a
+ * double colon because employee IDs contain slashes (TEN/WEB/1005) and
+ * usernames contain dots and @.
+ */
+function dmRoomFor(idA, idB){
+    return "dm::" + [String(idA), String(idB)].sort().join("::");
+}
+/** The two participant ids in a DM room, or null if it is not one. */
+function dmParticipants(room){
+    if(typeof room !== "string" || room.indexOf("dm::") !== 0) return null;
+    const parts = room.slice(4).split("::");
+    return parts.length === 2 && parts[0] && parts[1] ? parts : null;
 }
 
 function roomsAllowedFor(identity){
@@ -6494,19 +6555,39 @@ function roomsAllowedFor(identity){
     } else if(identity.role === "hr"){
         rooms.push("hr_coordinators");
         rooms.push("hr_internal");
+    } else if(identity.role === "admin"){
+        // Admin oversight: every shared room. DMs are handled in
+        // canAccessRoom — an admin can open any conversation, but is not
+        // auto-joined to all of them, which would be thousands of rooms.
+        rooms.push("hr_coordinators", "hr_internal");
     }
     return rooms;
 }
 function canAccessRoom(identity, room){
     if(!room) return false;
     if(roomsAllowedFor(identity).indexOf(room) !== -1) return true;
-    // domain_* rooms only allowed if the suffix matches the user's domain
-    if(room.indexOf("domain_") === 0 && identity.domain && room === "domain_" + identity.domain) return true;
+    // domain_* rooms only allowed if the suffix matches the user's domain —
+    // except for an admin, whose whole purpose here is oversight.
+    if(room.indexOf("domain_") === 0){
+        if(identity.role === "admin") return true;
+        return !!(identity.domain && room === "domain_" + identity.domain);
+    }
+    // A private conversation is readable by its two participants, and by an
+    // admin — which is the point of admin oversight, and is why the portals
+    // tell users that staff can review reported conversations.
+    const pair = dmParticipants(room);
+    if(pair){
+        if(identity.role === "admin") return true;
+        return pair.indexOf(String(identity.id)) !== -1;
+    }
     return false;
 }
 function canDeleteIn(identity, room){
     // Per spec: coordinator (in their domain chat); coordinator+HR (general/staff); HR (hr_internal).
     if(!canAccessRoom(identity, room)) return false;
+    if(identity.role === "admin") return true;
+    // Either participant may delete inside their own private conversation.
+    if(dmParticipants(room)) return true;
     if(identity.role === "student") return false;
     return true;
 }
@@ -9251,6 +9332,23 @@ try {
     console.error("[V2] Failed to mount document routes:", e.message);
 }
 
+// Direct messages, personal blocking, abuse reports, admin moderation desk.
+try {
+    app.use("/api/chat", require("./routes/chatModeration"));
+    console.log("[Chat] Moderation + DM routes mounted at /api/chat");
+} catch(e) {
+    console.error("[Chat] Failed to mount moderation routes:", e.message);
+}
+
+// Student-initiated certificate applications + the per-type HR queues.
+try {
+    const v2CertApplications = require("./routes/v2/certificateApplications");
+    app.use("/api/v2/certificate-applications", v2CertApplications);
+    console.log("[V2] Certificate application routes mounted at /api/v2/certificate-applications");
+} catch(e) {
+    console.error("[V2] Failed to mount certificate application routes:", e.message);
+}
+
 // NEW FEATURE: Certificate + Psychology Trigger routes
 try {
     const v2Certificates = require("./routes/v2/certificates");
@@ -9546,11 +9644,16 @@ const io = new SocketIOServer(server, {
 
 io.use(async (socket, next) => {
     try{
-        const identity = await verifyChatIdentity(socket.handshake.auth || {});
+        // Admin first, proved by the session cookie rather than the claim.
+        let identity = await adminIdentityFromSocket(socket);
+        if(!identity) identity = await verifyChatIdentity(socket.handshake.auth || {});
         if(!identity) return next(new Error("unauthorized"));
         socket.data.identity = identity;
         // Auto-join all rooms this user is allowed in
         roomsAllowedFor(identity).forEach(r => socket.join(r));
+        // Personal channel: how a DM reaches someone who has not opened that
+        // conversation yet, and how an admin's direct message finds them.
+        socket.join("user::" + identity.id);
         next();
     } catch(e){ next(new Error("auth_error")); }
 });
@@ -9601,7 +9704,37 @@ io.on("connection", (socket) => {
                 imageMime:    imageUrl ? String((payload && payload.imageMime) || "").slice(0, 60) : null,
                 timestamp:    new Date()
             });
-            io.to(room).emit("receive_message", doc);
+            // Deliver to everyone in the room EXCEPT people who have blocked
+            // the sender (or whom the sender has blocked). Emitting to the
+            // room and hiding it client-side would still put the text on the
+            // blocked person's machine, which is not a block.
+            let hidden = new Set();
+            try { hidden = await UserBlock.hiddenFor(identity.id); } catch(_) {}
+
+            if (hidden.size) {
+                const sockets = await io.in(room).fetchSockets();
+                for (const s of sockets) {
+                    const other = s.data && s.data.identity;
+                    if (other && hidden.has(String(other.id))) continue;
+                    s.emit("receive_message", doc);
+                }
+            } else {
+                io.to(room).emit("receive_message", doc);
+            }
+
+            // A private message must also reach a recipient who does not have
+            // that conversation open — otherwise the first DM from anyone is
+            // invisible until they happen to look.
+            const pair = dmParticipants(room);
+            if (pair) {
+                const other = pair.find(p => p !== String(identity.id));
+                if (other && !hidden.has(other)) {
+                    io.to("user::" + other).emit("dm_notice", {
+                        room, from: identity.name, fromId: identity.id, preview: text.slice(0, 80)
+                    });
+                }
+            }
+
             if(ack) ack({ success:true, messageId: String(doc._id) });
         } catch(e){
             console.log("send_message error:", e.message);

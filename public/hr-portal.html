@@ -415,6 +415,9 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
     <button class="nav-btn" onclick="showView('certificates')" data-view="certificates"><span class="icon">🎓</span> Certificate Approvals</button>
     <button class="nav-btn" onclick="showView('star-submissions')" data-view="star-submissions"><span class="icon">⭐</span> Star Submissions</button>
     <!-- Section 9 — student feedback. Every HR account sees every submission. -->
+    <!-- Per-certificate application queues, so HR works one kind at a time
+         and can issue a whole queue in a single action. -->
+    <button class="nav-btn" onclick="showView('cert-apps')" data-view="cert-apps"><span class="icon">🎓</span> Certificate Requests <span id="certAppBadge" style="display:none;background:#f5c542;color:#0a0600;font-size:10px;font-weight:800;padding:1px 6px;border-radius:99px;margin-left:4px;">0</span></button>
     <button class="nav-btn" onclick="showView('feedback')" data-view="feedback"><span class="icon">💌</span> Student Feedback <span id="feedbackUnreadBadge" style="display:none;background:#f43f5e;color:#fff;font-size:10px;font-weight:800;padding:1px 6px;border-radius:99px;margin-left:4px;">0</span></button>
     <div class="nav-divider"></div>
     <div class="nav-section-title">Promotions</div>
@@ -1252,6 +1255,27 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
 
   <!-- LEADERBOARD (Phase 1) -->
   <!-- ══ Section 9 — Student Feedback ══════════════════════════════════════ -->
+  <!-- ══════ CERTIFICATE APPLICATION QUEUES ══════ -->
+  <div class="view" id="view-cert-apps">
+    <div class="section-card">
+      <div class="section-header" style="margin-bottom:18px;">
+        <div>
+          <div class="section-title">🎓 Certificate Requests</div>
+          <p style="color:#8aa4c8;font-size:13px;margin:4px 0 0;">Students apply once they meet the bar. Each certificate has its own queue — select a whole queue and issue it in one action.</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <select id="certAppStatus" onchange="loadCertQueues()" style="background:#101a2e;border:1px solid rgba(99,140,210,0.25);color:#e2eaf7;border-radius:8px;padding:7px 10px;font-size:13px;">
+            <option value="pending">Pending review</option>
+            <option value="issued">Issued</option>
+            <option value="rejected">Rejected</option>
+          </select>
+          <button class="send-btn" style="padding:8px 16px;font-size:13px;" onclick="loadCertQueues()">🔄 Refresh</button>
+        </div>
+      </div>
+      <div id="certQueuesBox"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
+  </div>
+
   <div class="view" id="view-feedback">
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
@@ -1992,6 +2016,133 @@ async function markFeedback(id, status){
   }
 }
 
+/* ── Certificate application queues ───────────────────────────────────────
+   One queue per certificate type. Students apply only when the server says
+   they qualify; HR reviews the figures each application was made on, and can
+   select an entire queue and issue it in a single request. */
+let certQueueData = {};
+
+async function loadCertQueues(){
+  const box = document.getElementById('certQueuesBox');
+  if(!box) return;
+  box.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  const status = (document.getElementById('certAppStatus')||{}).value || 'pending';
+  try{
+    const r = await fetch('/api/v2/certificate-applications/hr/queues?status='+encodeURIComponent(status), { credentials:'same-origin' });
+    if(r.status===401){ handleHRSessionExpired(); return; }
+    const d = await r.json();
+    if(!r.ok || !d.success) throw new Error(d.message || ('Request failed ('+r.status+')'));
+
+    certQueueData = d.queues;
+    const badge = document.getElementById('certAppBadge');
+    if(badge){
+      const pending = status==='pending' ? d.total : 0;
+      badge.textContent = pending; badge.style.display = pending ? 'inline-block' : 'none';
+    }
+
+    const order = ['LOC','LOR','STAR'];
+    box.innerHTML = order.map(function(type){
+      const q = d.queues[type] || { label:type, applications:[] };
+      const apps = q.applications || [];
+      const head = '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:22px 0 10px;">'
+        + '<div style="font-weight:800;color:#f5c542;font-size:15px;">'+_hrEsc(q.label)+' <span style="color:#8aa4c8;font-weight:600;">('+apps.length+')</span></div>'
+        + (apps.length && status==='pending'
+            ? '<div style="display:flex;gap:8px;">'
+              + '<button onclick="selectWholeQueue(\''+type+'\')" style="padding:6px 12px;background:rgba(99,140,210,0.15);border:1px solid rgba(99,140,210,0.3);border-radius:7px;color:#8aa4c8;font-size:12px;cursor:pointer;">Select all</button>'
+              + '<button onclick="reviewCertQueue(\''+type+'\',\'approve\')" style="padding:6px 14px;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.35);border-radius:7px;color:#10b981;font-size:12px;font-weight:700;cursor:pointer;">✅ Generate &amp; send selected</button>'
+              + '<button onclick="reviewCertQueue(\''+type+'\',\'reject\')" style="padding:6px 14px;background:rgba(244,63,94,0.1);border:1px solid rgba(244,63,94,0.3);border-radius:7px;color:#f43f5e;font-size:12px;cursor:pointer;">Reject selected</button>'
+              + '</div>'
+            : '')
+        + '</div>';
+
+      if(!apps.length){
+        return head + '<p style="color:#5a7299;font-size:13px;padding:6px 0 14px;">No '+_hrEsc(q.label)+' requests '+_hrEsc(status)+'.</p>';
+      }
+
+      const rows = apps.map(function(a){
+        const snap = a.snapshot || {};
+        return '<tr>'
+          + (status==='pending' ? '<td><input type="checkbox" class="certChk-'+type+'" value="'+_hrEsc(a._id)+'"></td>' : '')
+          + '<td><strong>'+_hrEsc(a.studentName||a.employeeId)+'</strong><div style="color:#5a7299;font-size:11px;">'+_hrEsc(a.employeeId)+'</div></td>'
+          + '<td>'+_hrEsc(a.domain||'—')+'</td>'
+          + '<td style="font-size:12px;">Attendance <strong>'+(snap.attendancePercentage||0)+'%</strong><br>Performance <strong>'+(snap.performanceScore||0)+'%</strong><br>Tasks <strong>'+(snap.taskCompletionPercent||0)+'%</strong></td>'
+          + '<td style="font-size:12px;">'+(a.appliedAt ? new Date(a.appliedAt).toLocaleDateString('en-IN') : '—')+'</td>'
+          + '<td style="font-size:12px;">'+_hrEsc(a.documentNumber||a.status)+'</td>'
+          + '</tr>';
+      }).join('');
+
+      return head + '<div style="overflow:auto;max-height:46vh;border:1px solid rgba(245,197,66,0.12);border-radius:10px;"><table class="ins-table"><thead><tr>'
+        + (status==='pending' ? '<th style="width:34px;"></th>' : '')
+        + '<th>Student</th><th>Domain</th><th>Figures when applied</th><th>Applied</th><th>Status / Doc No.</th></tr></thead><tbody>'
+        + rows + '</tbody></table></div>';
+    }).join('');
+  }catch(e){
+    box.innerHTML = '<p style="color:#f43f5e;padding:14px 0;">'+_hrEsc(e.message||'Could not load the queues.')+'</p>';
+  }
+}
+
+function selectWholeQueue(type){
+  document.querySelectorAll('.certChk-'+type).forEach(function(c){ c.checked = true; });
+}
+
+async function reviewCertQueue(type, action){
+  const ids = Array.from(document.querySelectorAll('.certChk-'+type))
+    .filter(function(c){ return c.checked; }).map(function(c){ return c.value; });
+  if(!ids.length){ showHRToast('Select at least one request first.','error'); return; }
+
+  const verb = action==='approve' ? 'Generate and send' : 'Reject';
+  const confirmed = await Swal.fire({
+    title: verb+' '+ids.length+' certificate'+(ids.length===1?'':'s')+'?',
+    text: action==='approve'
+      ? 'Each student is re-checked against the rules, then the certificate is generated and emailed.'
+      : 'The students will be told their request was not approved.',
+    icon:'question', showCancelButton:true, confirmButtonText:verb,
+    background:'#0e1428', color:'#F0EEE8',
+    confirmButtonColor: action==='approve' ? '#10b981' : '#f43f5e'
+  });
+  if(!confirmed.isConfirmed) return;
+
+  let note = '';
+  if(action==='reject'){
+    const asked = await Swal.fire({
+      title:'Reason (optional)', input:'text',
+      inputPlaceholder:'Shown to the student',
+      background:'#0e1428', color:'#F0EEE8', confirmButtonColor:'#f43f5e'
+    });
+    note = asked.value || '';
+  }
+
+  showHRToast('Working through '+ids.length+' request'+(ids.length===1?'':'s')+'…','success');
+  try{
+    const r = await fetch('/api/v2/certificate-applications/hr/review', {
+      method:'POST', credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ applicationIds: ids, action: action, note: note })
+    });
+    if(r.status===401){ handleHRSessionExpired(); return; }
+    const d = await r.json();
+    if(!r.ok || !d.success) throw new Error(d.message || ('Request failed ('+r.status+')'));
+
+    // Report per-item outcomes: one student failing must not hide the rest.
+    const failures = (d.results||[]).filter(function(x){ return !x.ok; });
+    if(failures.length){
+      Swal.fire({
+        icon: d.succeeded ? 'warning' : 'error',
+        title: d.succeeded+' done, '+failures.length+' could not be processed',
+        html: '<div style="text-align:left;max-height:240px;overflow:auto;font-size:13px;">'
+          + failures.map(function(f){ return '<div><strong>'+_hrEsc(f.employeeId||f.id)+'</strong>: '+_hrEsc(f.message||'failed')+'</div>'; }).join('')
+          + '</div>',
+        background:'#0e1428', color:'#F0EEE8', confirmButtonColor:'#D4AF37'
+      });
+    } else {
+      showHRToast('✅ '+d.succeeded+' certificate'+(d.succeeded===1?'':'s')+' processed.','success');
+    }
+    loadCertQueues();
+  }catch(e){
+    showHRToast('❌ '+(e.message||'Request failed'),'error');
+  }
+}
+
 /**
  * Put a piece of intern feedback on the public home page — or take it down.
  *
@@ -2022,8 +2173,9 @@ function showView(v){
   document.querySelectorAll('.nav-btn').forEach(el=>el.classList.remove('active'));
   document.getElementById('view-'+v).classList.add('active');
   document.querySelector(`[data-view="${v}"]`)?.classList.add('active');
-  const t={overview:'<span>Dashboard</span> Overview',ecosystem:'<span>TEN</span> Ecosystem Control Center',insights:'<span>Insights</span>',students:'<span>All</span> Students',tracker:'<span>Internship</span> Tracker',submissions:'<span>Task</span> Submissions',domains:'<span>Domain</span> Analytics',documents:'<span>Generate</span> Documents','send-notif':'<span>Send</span> Notification','notif-history':'<span>Notification</span> History','attendance-monitor':'<span>Attendance</span> Monitor',certificates:'<span>Certificate</span> Approvals','star-submissions':'<span>Star Performer</span> Submissions',feedback:'<span>Student</span> Feedback',promotions:'<span>Promotions</span>',leaderboard:'<span>Performance</span> Leaderboard'};
+  const t={overview:'<span>Dashboard</span> Overview',ecosystem:'<span>TEN</span> Ecosystem Control Center',insights:'<span>Insights</span>',students:'<span>All</span> Students',tracker:'<span>Internship</span> Tracker',submissions:'<span>Task</span> Submissions',domains:'<span>Domain</span> Analytics',documents:'<span>Generate</span> Documents','send-notif':'<span>Send</span> Notification','notif-history':'<span>Notification</span> History','attendance-monitor':'<span>Attendance</span> Monitor',certificates:'<span>Certificate</span> Approvals','star-submissions':'<span>Star Performer</span> Submissions',feedback:'<span>Student</span> Feedback','cert-apps':'<span>Certificate</span> Requests',promotions:'<span>Promotions</span>',leaderboard:'<span>Performance</span> Leaderboard'};
   document.getElementById('pageTitle').innerHTML=t[v]||v;
+  if(v==='cert-apps') loadCertQueues();
   if(v==='ecosystem') loadEcosystem();
   if(v==='insights') initInsights();
   if(v==='students') loadStudents();
@@ -2066,24 +2218,34 @@ async function showStatDetail(type) {
   const panel = document.getElementById('statDetailPanel');
   panel.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
   panel.style.display = 'block';
+  const LABELS = { total:'All registered interns', active:'Active in the last 30 days', inactive:'No activity in 30 days', newJoins:'Joined this calendar month' };
   try{
-    const res = await fetch('/api/hr/intern-list?type=' + encodeURIComponent(type||'total'), { headers:{ Authorization: hrToken } });
+    const res = await fetch('/api/hr/intern-list?type=' + encodeURIComponent(type||'total'), { credentials:'same-origin', headers:{ Authorization: hrToken } });
+    if(res.status===401){ handleHRSessionExpired(); return; }
     const data = await res.json();
+    if(!res.ok || data.success===false) throw new Error(data.message || ('Request failed ('+res.status+')'));
     const students = (data && data.students) ? data.students : [];
     panel.innerHTML =
-      `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-         <div style="font-weight:800;">Student List</div>
+      `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+         <div>
+           <div style="font-weight:800;">Student List <span style="color:var(--gold);">(${students.length})</span></div>
+           <div style="font-size:12px;color:var(--muted);">${LABELS[type||'total']||''}</div>
+         </div>
          <button class="send-btn" style="padding:8px 14px;font-size:12px;" onclick="closeStatDetail()">✖ Close</button>
        </div>` +
-      `<div style="overflow-x:auto;"><table class="ins-table">
-         <thead><tr><th>Name</th><th>Employee ID</th><th>Domain</th></tr></thead>
+      // Capped height with its own scrollbar: the list can be 200 rows, and
+      // rendering them all inline pushed the page metres down so the data
+      // looked absent unless you scrolled a long way.
+      `<div style="overflow:auto;max-height:60vh;border:1px solid rgba(245,197,66,0.12);border-radius:10px;"><table class="ins-table">
+         <thead><tr><th>Name</th><th>Employee ID</th><th>Domain</th><th>College</th></tr></thead>
          <tbody>` +
            (students.length ? students.map(s =>
-             `<tr><td>${s.name||'—'}</td><td>${s.employeeId||'—'}</td><td>${s.domain||'—'}</td></tr>`
-           ).join('') : `<tr><td colspan="3"><div class="empty-state"><div class="es-icon">👥</div><p>No students</p></div></td></tr>`) +
+             `<tr><td>${_hrEsc(s.name)}</td><td>${_hrEsc(s.employeeId)}</td><td>${_hrEsc(s.domain)}</td><td>${_hrEsc(s.college)}</td></tr>`
+           ).join('') : `<tr><td colspan="4"><div class="empty-state"><div class="es-icon">👥</div><p>No students in this group</p></div></td></tr>`) +
          `</tbody></table></div>`;
+    panel.scrollIntoView({ behavior:'smooth', block:'nearest' });
   }catch(e){
-    panel.innerHTML = '<div class="empty-state"><div class="es-icon">👥</div><p>Failed to load</p></div>';
+    panel.innerHTML = '<div class="empty-state"><div class="es-icon">⚠️</div><p>'+_hrEsc(e.message||'Failed to load')+'</p></div>';
   }
 }
 
