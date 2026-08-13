@@ -289,7 +289,7 @@ function Finale() {
           <div className="mt-10 flex gap-6 text-[13px] text-white/60" style={inter}>
             <a href="/student-portal/" className="hover:text-white">Student Portal</a>
             <a href="/academics.html" className="hover:text-white">Academics</a>
-            <a href="/coming-soon.html" className="hover:text-white">Resume Portal</a>
+            <a href="/resume-portal/" className="hover:text-white">Resume Portal</a>
           </div>
         </FadeIn>
       </div>
