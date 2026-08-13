@@ -1512,6 +1512,7 @@ button:active { transform: translateY(0); }
   <link rel="stylesheet" href="/css/ten-brand.css">
   <link rel="stylesheet" href="/css/mobile.css">
   <script src="/mobile-nav.js" defer></script>
+  <script src="/push-client.js" defer></script>
 </head>
 
 <body>
@@ -1621,6 +1622,7 @@ button:active { transform: translateY(0); }
     <button class="stu-nav-btn" data-view="stu-view-guidelines" onclick="switchStudentView('stu-view-guidelines')"><span class="nav-icon">📋</span> Guidelines</button>
     <button class="stu-nav-btn" data-view="stu-view-leaderboard" onclick="switchStudentView('stu-view-leaderboard')"><span class="nav-icon">🏆</span> Leaderboard &amp; Badges</button>
     <!-- Section 9 — student feedback, shown once the internship is complete. -->
+    <button class="stu-nav-btn" onclick="window.location.href='/notifications'" style="background:linear-gradient(135deg,rgba(245,197,66,0.1),rgba(245,197,66,0.03));border:1px solid rgba(245,197,66,0.2);"><span class="nav-icon">🔔</span> Notifications <span id="stuNotifBadge" style="display:none;font-size:10px;background:#f5c542;color:#0a1222;padding:1px 6px;border-radius:999px;margin-left:4px;font-weight:800;">0</span></button>
     <button class="stu-nav-btn" onclick="window.location.href='/messages'" style="background:linear-gradient(135deg,rgba(16,185,129,0.1),rgba(16,185,129,0.03));border:1px solid rgba(16,185,129,0.2);"><span class="nav-icon">💬</span> Messages <span id="stuDmBadge" style="display:none;font-size:10px;background:#10b981;color:#04121f;padding:1px 6px;border-radius:999px;margin-left:4px;font-weight:800;">0</span></button>
     <button class="stu-nav-btn" id="stuNavFeedback" data-view="stu-view-feedback" onclick="switchStudentView('stu-view-feedback')" style="display:none;"><span class="nav-icon">💌</span> Share Feedback</button>
     <!-- NEW FEATURE: Document Upload + Certificates nav links -->
@@ -4111,6 +4113,21 @@ function _fbEscape(s){
  * Show the Share Feedback nav item only once the internship is complete, and
  * render anything the student has already sent.
  */
+/** Unread portal notifications, shown on the Notifications nav item. */
+async function refreshNotifBadge(){
+  try {
+    const r = await fetch("/api/notifications/unread-count", { credentials: "same-origin" });
+    if (!r.ok) return;
+    const d = await r.json();
+    const el = document.getElementById("stuNotifBadge");
+    if (!el) return;
+    if (d.unread > 0){ el.textContent = d.unread > 99 ? "99+" : d.unread; el.style.display = "inline-block"; }
+    else { el.style.display = "none"; }
+  } catch (e) { /* the badge just stays hidden */ }
+}
+setInterval(refreshNotifBadge, 45000);
+document.addEventListener("DOMContentLoaded", refreshNotifBadge);
+
 /** Unread direct messages, shown on the Messages nav item. */
 async function refreshDmBadge(){
   try {
