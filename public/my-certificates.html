@@ -218,7 +218,14 @@ async function loadCerts() {
     // the server's own message says more than "Could not load certificates."
     const r = await fetch('/api/v2/certificates/my-certs', { credentials: 'same-origin' });
     const d = await r.json();
-    if (!d.success) { renderError(d.message || 'Could not load certificates.'); return; }
+    if (!d.success) {
+      // `d.error` as well as `d.message`: some responses on this route carry
+      // only the former, and falling straight to the generic string threw away
+      // the server's actual reason — which is how a specific failure showed up
+      // as an unexplained "Could not load certificates."
+      renderError(d.message || d.error || ('Could not load certificates (HTTP ' + r.status + ').'));
+      return;
+    }
 
     certData = d;
     document.getElementById('completionValue').textContent = (d.expert?.completionPct || 0) + '%';
@@ -235,10 +242,19 @@ async function loadCerts() {
     }
 
     renderCerts(d);
-  } catch(e) { renderError('Network error. Please try again.'); }
+  } catch(e) {
+    console.error('[my-certificates] load failed:', e);
+    renderError('Could not reach the server. Check your connection and try again.');
+  }
 }
 
 function renderError(msg) {
+  // Leave no half-drawn state behind. The completion figure keeps its "—"
+  // placeholder on failure, which reads as "we are still working it out"
+  // rather than "this did not load".
+  const cv = document.getElementById('completionValue');
+  if (cv && cv.textContent.indexOf('%') === -1) cv.textContent = '—';
+
   // textContent, not innerHTML: msg can now carry a server-supplied string, and
   // interpolating that into markup would make any message an injection point.
   const grid = document.getElementById('certGrid');
