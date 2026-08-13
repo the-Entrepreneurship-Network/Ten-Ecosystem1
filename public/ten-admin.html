@@ -115,6 +115,7 @@
     <div class="nav-item" onclick="showSection('certificates')">🎓 Certificates</div>
     <div class="nav-item" onclick="showSection('notifications')">📢 Notifications</div>
     <div class="nav-item" onclick="showSection('system')">⚙️ System</div>
+    <div class="nav-item" onclick="showSection('chat')" id="nav-chat">💬 Chat &amp; Reports <span class="nav-badge" id="chatReportBadge" style="display:none">0</span></div>
     <div class="nav-item" onclick="showSection('auditlog')">📋 Audit Log</div>
   </nav>
 </div>
@@ -245,6 +246,19 @@
     </div>
 
     <!-- AUDIT LOG -->
+    <!-- Chat oversight: reported users, and every conversation including
+         private ones. Reports arrive here because a victim raised them; the
+         room list exists so an admin can read the context around one. -->
+    <div class="section" id="section-chat">
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+        <button class="btn" onclick="loadChatReports('open')" id="crTabOpen">🚩 Open reports</button>
+        <button class="btn btn-secondary" onclick="loadChatReports('actioned')">✅ Actioned</button>
+        <button class="btn btn-secondary" onclick="loadChatReports('dismissed')">Dismissed</button>
+        <button class="btn btn-secondary" onclick="loadChatRooms()">💬 All conversations</button>
+      </div>
+      <div id="chatAdminBox"><p style="color:#64748b">Loading…</p></div>
+    </div>
+
     <div class="section" id="section-auditlog">
       <div id="auditContent"></div>
     </div>
@@ -299,6 +313,7 @@ function showSection(name) {
   if (name === 'hr') loadHRs();
   if (name === 'certificates') loadPendingCerts();
   if (name === 'system') loadSystemInfo();
+  if (name === 'chat') loadChatReports('open');
   if (name === 'auditlog') loadAuditLog();
   if (name === 'overview') loadStats();
 }
@@ -886,6 +901,89 @@ async function loadSystemInfo() {
 }
 
 // ── AUDIT LOG ─────────────────────────────────────────────────────────────────
+/* ── Chat oversight ───────────────────────────────────────────────────────
+   Reports land here because someone on the receiving end raised them.
+   Blocking already protected them the moment they clicked; this is where a
+   person with authority decides what to do about it. */
+function _aEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];}); }
+
+async function loadChatReports(status) {
+  const box = document.getElementById('chatAdminBox');
+  box.innerHTML = '<p style="color:#64748b">Loading…</p>';
+  try {
+    const r = await fetch('/api/chat/admin/reports?status=' + encodeURIComponent(status||'open'), { credentials:'same-origin' });
+    const d = await r.json();
+    if (!r.ok || !d.success) throw new Error(d.message || ('Request failed (' + r.status + ')'));
+
+    const badge = document.getElementById('chatReportBadge');
+    if (badge) { badge.textContent = d.openCount || 0; badge.style.display = d.openCount ? 'inline-block' : 'none'; }
+
+    if (!d.reports.length) {
+      box.innerHTML = '<p style="color:#64748b">No ' + _aEsc(d.status) + ' reports.</p>';
+      return;
+    }
+    box.innerHTML = d.reports.map(function (x) {
+      return '<div style="background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:14px;margin-bottom:10px;">'
+        + '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">'
+          + '<div><strong style="color:#f1f5f9;">' + _aEsc(x.reportedName || x.reportedId) + '</strong>'
+            + ' <span style="color:#64748b;font-size:12px;">(' + _aEsc(x.reportedRole) + ')</span>'
+            + '<div style="color:#64748b;font-size:12px;">reported by ' + _aEsc(x.reporterName || x.reporterId) + ' · ' + _aEsc(x.reporterRole) + '</div></div>'
+          + '<div style="color:#64748b;font-size:12px;">' + (x.createdAt ? new Date(x.createdAt).toLocaleString('en-IN') : '') + '</div>'
+        + '</div>'
+        + (x.reason ? '<div style="color:#cbd5e1;font-size:13px;margin-bottom:6px;"><em>Reason:</em> ' + _aEsc(x.reason) + '</div>' : '')
+        + (x.messageSnapshot ? '<div style="background:#020617;border-left:3px solid #f43f5e;padding:8px 10px;border-radius:6px;color:#e2e8f0;font-size:13px;white-space:pre-wrap;">' + _aEsc(x.messageSnapshot) + '</div>' : '')
+        + '<div style="color:#475569;font-size:11px;margin-top:6px;">Room: ' + _aEsc(x.chatRoom || '—') + '</div>'
+        + (x.status === 'open'
+            ? '<div style="display:flex;gap:8px;margin-top:10px;">'
+              + '<button class="btn" onclick="reviewChatReport(&quot;' + _aEsc(x._id) + '&quot;,&quot;actioned&quot;)">✅ Actioned</button>'
+              + '<button class="btn btn-secondary" onclick="reviewChatReport(&quot;' + _aEsc(x._id) + '&quot;,&quot;dismissed&quot;)">Dismiss</button>'
+              + '</div>'
+            : '<div style="color:#64748b;font-size:12px;margin-top:8px;">' + _aEsc(x.status) + (x.reviewedBy ? ' by ' + _aEsc(x.reviewedBy) : '') + (x.reviewNote ? ' — ' + _aEsc(x.reviewNote) : '') + '</div>')
+        + '</div>';
+    }).join('');
+  } catch (e) {
+    box.innerHTML = '<p style="color:#f43f5e">' + _aEsc(e.message) + '</p>';
+  }
+}
+
+async function reviewChatReport(id, status) {
+  const note = status === 'dismissed' ? (prompt('Note (optional)') || '') : (prompt('What action was taken? (optional)') || '');
+  try {
+    const r = await fetch('/api/chat/admin/reports/' + encodeURIComponent(id), {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: status, note: note })
+    });
+    const d = await r.json();
+    if (!r.ok || !d.success) throw new Error(d.message || 'Failed');
+    loadChatReports('open');
+  } catch (e) { alert(e.message); }
+}
+
+async function loadChatRooms() {
+  const box = document.getElementById('chatAdminBox');
+  box.innerHTML = '<p style="color:#64748b">Loading…</p>';
+  try {
+    const r = await fetch('/api/chat/admin/rooms', { credentials:'same-origin' });
+    const d = await r.json();
+    if (!r.ok || !d.success) throw new Error(d.message || 'Failed');
+    if (!d.rooms.length) { box.innerHTML = '<p style="color:#64748b">No conversations yet.</p>'; return; }
+    box.innerHTML = '<table style="width:100%;border-collapse:collapse;">'
+      + '<thead><tr style="color:#64748b;font-size:12px;text-align:left;"><th style="padding:8px;">Conversation</th><th>Type</th><th>Messages</th><th>Last activity</th></tr></thead><tbody>'
+      + d.rooms.map(function (x) {
+          return '<tr style="border-top:1px solid #1e293b;color:#e2e8f0;font-size:13px;">'
+            + '<td style="padding:8px;font-family:monospace;font-size:12px;">' + _aEsc(x.room) + '</td>'
+            + '<td>' + (x.isPrivate ? '<span style="color:#f59e0b;">🔒 Private</span>' : 'Group') + '</td>'
+            + '<td>' + x.messages + '</td>'
+            + '<td>' + (x.last ? new Date(x.last).toLocaleString('en-IN') : '—') + '</td>'
+            + '</tr>';
+        }).join('')
+      + '</tbody></table>';
+  } catch (e) {
+    box.innerHTML = '<p style="color:#f43f5e">' + _aEsc(e.message) + '</p>';
+  }
+}
+
 async function loadAuditLog() {
   const data = await api('/audit-log');
   if (!data || !data.success) return;
