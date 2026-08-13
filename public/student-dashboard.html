@@ -6188,22 +6188,37 @@ function wizardGoToStep3() {
   document.getElementById('wizardStep2').style.display = 'none';
   var dateInput = document.getElementById('wizardJoiningDateInput');
   if (dateInput) {
-    const today = new Date();
-    const minDate = new Date(today);
-    minDate.setDate(today.getDate() - 90);
+    var today = new Date();
     dateInput.max = today.toISOString().split('T')[0];
-    dateInput.min = minDate.toISOString().split('T')[0];
+
+    // The floor used to be today minus 90 days, which quietly made this card
+    // impossible for the very students it exists for: someone who attended
+    // through WhatsApp for four months before the portal existed for them
+    // could not enter their real start date at all, and the picker gave no
+    // reason. Eighteen months covers every tenure the programme offers while
+    // still refusing an obviously wrong year.
+    var floor = new Date(today);
+    floor.setMonth(floor.getMonth() - 18);
+    dateInput.min = floor.toISOString().split('T')[0];
   }
   document.getElementById('wizardStep3').style.display = 'block';
 }
 
 async function wizardConfirmJoiningDate() {
-  var dateVal = document.getElementById('wizardJoiningDateInput').value;
+  var dateEl  = document.getElementById('wizardJoiningDateInput');
+  var dateVal = dateEl.value;
   if (!dateVal) {
+    // A date input reports an EMPTY value when what is typed is outside
+    // min/max or not a real date, so "nothing selected" and "that date is not
+    // allowed" arrive here identically. Saying which it is matters: the field
+    // visibly shows a date while the page insists none was chosen.
+    var outOfRange = dateEl.validity && (dateEl.validity.rangeUnderflow || dateEl.validity.rangeOverflow || dateEl.validity.badInput);
     Swal.fire({
       icon: 'warning',
-      title: 'Date Required',
-      text: 'Please select your internship joining date.',
+      title: outOfRange ? 'That Date Cannot Be Used' : 'Date Required',
+      text: outOfRange
+        ? 'Please pick a date between ' + dateEl.min + ' and ' + dateEl.max + '.'
+        : 'Please select your internship joining date.',
       background: '#0d1124',
       color: '#f0eee8',
       confirmButtonColor: '#D4AF37'

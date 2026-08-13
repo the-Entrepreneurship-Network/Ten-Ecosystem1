@@ -498,7 +498,14 @@ router.post("/student/complete-onboarding", requireStudent, async (req, res) => 
             updates.joinerTypeSelected = true;
         }
 
-        if (joinerType === "whatsapp") {
+        // The wizard holds joinerType in a page-level variable, so a reload
+        // between steps loses it and the body arrives with only a date. The
+        // stored value is the fallback: the student already answered that
+        // question on the previous card, and discarding the date they just
+        // picked would silently undo the whole step.
+        const effectiveJoinerType = joinerType || student.joinerType;
+
+        if (effectiveJoinerType === "whatsapp") {
             if (joiningDate) {
                 const startDate = new Date(joiningDate);
                 if (!isNaN(startDate.getTime())) {
@@ -515,18 +522,28 @@ router.post("/student/complete-onboarding", requireStudent, async (req, res) => 
                         updates.joiningDate = (student.createdAt || new Date()).toISOString().slice(0, 10);
                     }
 
-                    // A start date in the future, or after the student already
-                    // registered, is not a WhatsApp back-date.
-                    const portalStart = new Date(updates.joiningDate || student.joiningDate || student.createdAt);
+                    // A future start date is refused — that is the one rule the
+                    // card actually states, and it cannot be a real start.
                     if (startDate > new Date()) {
                         return res.status(400).json({ success: false, message: "Your start date cannot be in the future." });
                     }
-                    if (!isNaN(portalStart.getTime()) && startDate > portalStart) {
-                        return res.status(400).json({
-                            success: false,
-                            message: "Your WhatsApp start date should be on or before the day you registered on the portal."
-                        });
-                    }
+
+                    // A date AFTER the portal registration used to be refused
+                    // too, and that made this card a dead end.
+                    //
+                    // `joiningDate` on these records is very often the day an
+                    // admin created the row rather than the day the student
+                    // began, and it is never shown on this screen. So a student
+                    // picking an ordinary past date was turned away for
+                    // breaking a constraint they could not see and had no way
+                    // to satisfy — and this card is the last step of onboarding,
+                    // with nothing else to click. They were stuck for good.
+                    //
+                    // It is not an error in any case. A start date on or after
+                    // the portal registration simply means there is no
+                    // pre-portal gap to credit, which getPreportalCreditedDays
+                    // already returns zero for. Accept it and let the
+                    // calculation say so.
                 }
             }
 
@@ -543,21 +560,42 @@ router.post("/student/complete-onboarding", requireStudent, async (req, res) => 
             const actualJoiningDate = joiningDate || student.joiningDate || student.createdAt;
             if (actualJoiningDate) {
                 const Attendance = require("../../models/Attendance");
-                const { calculateAttendancePercentage, getTenureDays } = require("../../utils/attendanceUtils");
+                const { getAttendanceSummary, getTenureDays } = require("../../utils/attendanceUtils");
                 const emp = updates.employeeId || student.employeeId;
                 const attendanceRecords = await Attendance.find({ employeeId: emp });
-                
-                const attResult = calculateAttendancePercentage(attendanceRecords, actualJoiningDate, student.tenure || student.v2DurationType);
-                const calculatedPct = typeof attResult === 'object' ? attResult.percentage : attResult;
-                const daysPresent = typeof attResult === 'object' ? attResult.daysPresent : attendanceRecords.filter(r => r.status === 'Present').length;
 
-                updates.calculatedAttendance = daysPresent;
-                updates.calculatedAttendancePercentage = calculatedPct;
-                updates.attendancePercentage = calculatedPct;
+                // Pass the REAL student, with the new dates applied.
+                //
+                // This used to call calculateAttendancePercentage(records, date,
+                // tenure), whose legacy three-argument form builds a synthetic
+                // student carrying only { joiningDate, internshipStartDate,
+                // tenure }. That object has no `joinerType`, and
+                // getPreportalCreditedDays starts with
+                //
+                //     if (student.joinerType !== 'whatsapp') return 0;
+                //
+                // so the pre-portal credit — the entire point of this screen —
+                // was never applied. A student who attended for two months on
+                // WhatsApp before the portal existed for them has no Attendance
+                // rows for those days, so the count came back 0 and the card
+                // told them they had attended nothing.
+                //
+                // It also set internshipStartDate EQUAL to joiningDate, which
+                // collapses the gap to zero even for a correctly-typed student.
+                const forCalc = Object.assign({}, student.toObject ? student.toObject() : student, updates, {
+                    joinerType: "whatsapp"
+                });
+                const summary = getAttendanceSummary(attendanceRecords, forCalc);
+
+                presentCount = summary.daysPresent;
+                updates.calculatedAttendance = summary.daysPresent;
+                updates.calculatedAttendancePercentage = summary.percentage;
+                updates.attendancePercentage = summary.percentage;
+                updates.attendanceLastCalculated = new Date();
 
                 totalTenureDays = getTenureDays(student.tenure || student.v2DurationType);
                 const requiredDays = Math.ceil(totalTenureDays * 0.75);
-                daysNeededToAttendMore = Math.max(0, requiredDays - daysPresent);
+                daysNeededToAttendMore = Math.max(0, requiredDays - summary.daysPresent);
             }
         } else {
             updates.calculatedAttendance = 0;
@@ -567,6 +605,9 @@ router.post("/student/complete-onboarding", requireStudent, async (req, res) => 
         updates.onboardingPopupSeen = true;
         updates.hasSeenOnboarding = true;
         updates.hasSeenWelcome = true;
+        // The WhatsApp path never set this, while POST /student/onboard did, so
+        // a WhatsApp joiner who finished the wizard could be shown it again.
+        updates.v2Onboarded = true;
 
         const updatedStudent = await Student.findOneAndUpdate(
             { _id: student._id },
