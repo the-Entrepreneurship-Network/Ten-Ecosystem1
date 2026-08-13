@@ -53,12 +53,23 @@ async function requireStudent(req, res, next) {
   }
 }
 
+/**
+ * HR staff, or an admin.
+ *
+ * This used to require `session.hr` alone, while every other HR endpoint in
+ * server.js gates on isHRSession(), which accepts `session.hr` OR
+ * `session.adminUser`. The HR portal therefore answered inconsistently to the
+ * same signed-in person: the dashboard counts loaded, and the Pending
+ * Documents call beside them returned 401 with nothing shown to explain it.
+ * An admin can do anything HR can, so both guards now agree.
+ */
 function requireHR(req, res, next) {
   const session = sessionOf(req);
-  if (!session || !session.hr) {
+  const hrUser = session && (session.hr || session.adminUser);
+  if (!hrUser) {
     return res.status(401).json({ success: false, message: 'HR sign-in required.' });
   }
-  req.hrUser = session.hr;
+  req.hrUser = hrUser;
   next();
 }
 
