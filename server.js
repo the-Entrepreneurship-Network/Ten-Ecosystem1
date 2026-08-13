@@ -1729,6 +1729,31 @@ app.use(session(sessionOptions));
 // sending `x-forwarded-proto: http` cleared the Secure flag and the session
 // cookie was then transmitted in plaintext. Do not reintroduce that.
 
+/**
+ * Session-scoped API responses are never cacheable.
+ *
+ * Express attaches an ETag to every JSON response and nothing set a
+ * Cache-Control header, so browsers applied *heuristic* caching to API GETs.
+ * The visible symptom: the HR dashboard showed "Total Students: 774" from a
+ * cached /hr/stats while the session behind it had already expired and every
+ * live call was returning 401 — a page that looks signed in, reporting real
+ * numbers, backed by nothing. Any two people looking at that screen disagree
+ * about whether the portal works.
+ *
+ * These responses depend on who is asking, so they must not be stored by the
+ * browser or by any proxy in between. `Vary: Cookie` is belt-and-braces for
+ * caches that ignore no-store.
+ */
+app.use((req, res, next) => {
+    if (/^\/(api|hr|coordinator|students|attendance)\b/.test(req.path)) {
+        res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+        res.setHeader("Pragma", "no-cache");
+        res.setHeader("Expires", "0");
+        res.setHeader("Vary", "Cookie");
+    }
+    next();
+});
+
 // Custom route to serve the logo with the correct JPEG Content-Type since the file has a .png extension but is actually a JPEG (JFIF format)
 app.get(/.*ten-logo\.png$/, (req, res) => {
     res.setHeader("Content-Type", "image/jpeg");

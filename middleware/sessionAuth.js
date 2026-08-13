@@ -67,7 +67,25 @@ function requireHR(req, res, next) {
   const session = sessionOf(req);
   const hrUser = session && (session.hr || session.adminUser);
   if (!hrUser) {
-    return res.status(401).json({ success: false, message: 'HR sign-in required.' });
+    // Say WHY, in the log and in the response.
+    //
+    // A bare "HR sign-in required." is indistinguishable between "the cookie
+    // never arrived", "the session expired", and "you are signed in as a
+    // student" — three problems with three different fixes. Chasing one of
+    // these through the browser console cost real time, so the server now
+    // states which it is. No secrets are revealed: only which kind of session
+    // the request carried.
+    const reason = !session ? 'no session on request'
+      : !req.headers.cookie ? 'request carried no cookie header'
+      : session.student ? 'signed in as a student, not HR'
+      : session.coordinator ? 'signed in as a coordinator, not HR'
+      : 'session exists but holds no HR or admin identity (expired or signed out)';
+    console.warn(`[auth] requireHR rejected ${req.method} ${req.originalUrl}: ${reason}`);
+    return res.status(401).json({
+      success: false,
+      message: 'HR sign-in required.',
+      reason
+    });
   }
   req.hrUser = hrUser;
   next();
