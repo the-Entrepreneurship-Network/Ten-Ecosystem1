@@ -73,20 +73,40 @@ async function getCompletionPercent(studentId) {
 }
 
 // ── Compute leaderboard rank (top X% in cohort) ──
+//
+// One aggregation, not one query per classmate.
+//
+// This used to load every student in the domain and then fire a separate
+// countDocuments for each of them, all concurrently, on EVERY load of the My
+// Certificates page. In a domain with 200 students that is 200 simultaneous
+// queries to answer one number — slow at best, and a reliable way to exhaust
+// the connection pool under load, at which point the whole page fails.
 async function getCohortRankPercent(student) {
     try {
-        // All students in same domain, count those with more approvals
-        const allStudents = await Student.find({ domain: student.domain }).select("_id");
-        if (!allStudents.length) return 50;
-        const scores = await Promise.all(allStudents.map(async (s) => {
-            const cnt = await StudentTaskProgress.countDocuments({ studentId: s._id, status: "approved" });
-            return { id: s._id.toString(), cnt };
-        }));
-        scores.sort((a, b) => b.cnt - a.cnt);
-        const myIdx = scores.findIndex(s => s.id === student._id.toString());
+        const domainStudents = await Student.find({ domain: student.domain }).select("_id").lean();
+        if (!domainStudents.length) return 50;
+
+        const ids = domainStudents.map(s => s._id);
+        const counts = await StudentTaskProgress.aggregate([
+            { $match: { studentId: { $in: ids }, status: "approved" } },
+            { $group: { _id: "$studentId", cnt: { $sum: 1 } } }
+        ]);
+
+        // Students with no approvals are absent from the aggregation and must
+        // still be ranked — they are the bottom of the cohort, not missing
+        // from it.
+        const byId = new Map(counts.map(c => [String(c._id), c.cnt]));
+        const scores = domainStudents
+            .map(s => ({ id: String(s._id), cnt: byId.get(String(s._id)) || 0 }))
+            .sort((a, b) => b.cnt - a.cnt);
+
+        const myIdx = scores.findIndex(s => s.id === String(student._id));
         if (myIdx === -1) return 50;
-        return Math.round(((myIdx) / scores.length) * 100); // 0 = top
-    } catch (_) { return 50; }
+        return Math.round((myIdx / scores.length) * 100); // 0 = top
+    } catch (err) {
+        console.warn("[My-Certs] cohort rank unavailable:", err.message);
+        return 50;
+    }
 }
 
 // ── Determine unlock state for each cert type ──
@@ -153,9 +173,20 @@ async function handleMyCerts(req, res) {
       if (!student) return res.status(401).json({ success: false, message: "Student not found" });
       const status  = await getCertStatus(student);
 
-      const certs = await StudentCertificate.find({ studentId: student._id });
+      // Already-issued certificate records. These are decoration: whether a
+      // certificate is UNLOCKED comes from getCertStatus above, and this only
+      // adds the download link for one already issued. An error here used to
+      // take the whole page down to "Could not load certificates." — the
+      // student could not even see their progress, over a record that in most
+      // cases does not exist yet.
       const certMap = {};
-      certs.forEach(c => { certMap[c.certificateType] = c; });
+      try {
+          const certs = await StudentCertificate.find({ studentId: student._id }).lean();
+          certs.forEach(c => { certMap[c.certificateType] = c; });
+      } catch (certErr) {
+          console.error("[My-Certs] could not read issued certificates for " +
+              student.employeeId + ":", certErr.message);
+      }
 
       const result = {
           expert: {
@@ -191,7 +222,15 @@ async function handleMyCerts(req, res) {
 
     const targetId = employeeId || headerEmployeeId;
     if (!targetId) {
-      return res.status(400).json({ error: 'employeeId query parameter or header is required' });
+      // Reached when a STAFF session opens this page without naming a student.
+      // Staff have no certificates of their own, and the previous bare `error`
+      // key rendered as the generic "Could not load certificates." — which
+      // reads as a broken page rather than the wrong page.
+      return res.status(400).json({
+        success: false,
+        message: "This page shows a student's own certificates. Open it from a student account, or add ?employeeId=... to look one up.",
+        error: 'employeeId query parameter or header is required'
+      });
     }
 
     const student = await Student.findOne({ employeeId: targetId },
@@ -200,8 +239,10 @@ async function handleMyCerts(req, res) {
       'locPdfBase64 lorPdfBase64 starPdfBase64 offerPdfBase64 ' +
       'attendancePercentage performanceScore pendingFines starContribution'
     ).lean();
-    if (!student) return res.status(404).json({ error: 'Not found' });
-    
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'No student found with that Employee ID.', error: 'Not found' });
+    }
+
     const { locPdfBase64, lorPdfBase64, starPdfBase64, offerPdfBase64, ...safeStudent } = student;
     safeStudent.hasLocPdf   = !!locPdfBase64;
     safeStudent.hasLorPdf   = !!lorPdfBase64;
@@ -212,6 +253,11 @@ async function handleMyCerts(req, res) {
       const StudentDocument = require("../../models/new/StudentDocument");
       const docRec = await StudentDocument.findOne({ studentId: student._id }).lean();
       if (docRec) {
+        // The printed document numbers, so the portal can offer a "Verify"
+        // link — the same check an employer runs, from the student's own page.
+        safeStudent.offerDocumentNumber = docRec.offerLetterDocumentNumber || null;
+        safeStudent.locDocumentNumber   = docRec.locDocumentNumber || null;
+        safeStudent.lorDocumentNumber   = docRec.lorDocumentNumber || null;
         if (!safeStudent.offerLetterStatus || safeStudent.offerLetterStatus === 'not_uploaded' || safeStudent.offerLetterStatus === 'not_eligible') {
           safeStudent.offerLetterStatus = docRec.uploadStatus || 'not_uploaded';
         }
@@ -244,10 +290,21 @@ async function handleMyCerts(req, res) {
       console.error('[My-Certs] StudentDocument fallback error:', fallbackErr.message);
     }
 
-    res.json(safeStudent);
+    res.json({ success: true, ...safeStudent });
   } catch(e) {
-    console.error('[My-Certs] Error:', e.stack || e.message);
-    res.status(500).json({ error: e.message });
+    // `success` and `message`, not a bare `error`.
+    //
+    // my-certificates.html checks `d.success` and falls back to the string
+    // "Could not load certificates." when there is no `message` — so this
+    // handler's real reason never reached anyone, on screen or in a bug
+    // report. The page now shows what the server actually said.
+    const who = (req.session && req.session.student && req.session.student.employeeId) || 'unknown';
+    console.error('[My-Certs] failed for ' + who + ':', e.stack || e.message);
+    res.status(500).json({
+      success: false,
+      message: 'Could not load your certificates: ' + e.message,
+      error: e.message
+    });
   }
 }
 
@@ -425,7 +482,7 @@ router.post("/certificates/generate-pdf/:type", requireStudent, async (req, res)
             const college = (student.collegeName || student.college || "Not provided").trim();
             const docTypeMap = { expert: "Expert Certificate", nano_degree: "Nano Degree", fellowship: "Fellowship" };
             const docKeyMap = { expert: "expert_certificate", nano_degree: "nano_degree", fellowship: "fellowship" };
-            await DocumentHistory.create({
+            await DocumentHistory.logSend({
                 studentId: student._id,
                 studentName,
                 studentEmail: student.email || "",
@@ -436,7 +493,7 @@ router.post("/certificates/generate-pdf/:type", requireStudent, async (req, res)
                 documentKey: docKeyMap[type] || "certificate",
                 documentNumber: certRecord.certificateId,
                 sentAt: certRecord.issuedAt || new Date(),
-                sentBy: "System",
+                sentBy: "HR Portal",
                 sentToEmail: student.email || ""
             });
         } catch (_) {}
@@ -655,6 +712,17 @@ async function buildCertPDF(student, certType) {
     effectiveDate: fmtDate(student.lopEffectiveDate) || fmtDate(new Date())
   };
 
+  // The number printed on the PDF and the number stored for verification must
+  // be the same value, generated exactly once. mapData used to carry no
+  // documentNumber at all, so the PDF templates fell back to a random
+  // "TEN/CT/xxxxx" that was never stored anywhere — while generateAndSaveCert
+  // logged a different, derived number to DocumentHistory. An employer typing
+  // the number off the paper could never find it. This is the single origin.
+  const numberTypeMap = { OFFER: "offer_letter", LOC: "loc", LOR: "lor", STAR: "star", LOP: "lop" };
+  const { generateDocumentNumber, normalizeDocumentNumber } = require("../../utils/documentNumber");
+  const documentNumber = normalizeDocumentNumber(generateDocumentNumber(numberTypeMap[certType] || "doc"));
+  mapData.documentNumber = documentNumber;
+
   const tempFile = path.join(os.tmpdir(), `cert_${certType}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.pdf`);
 
   if (certType === 'OFFER') {
@@ -678,7 +746,7 @@ async function buildCertPDF(student, certType) {
     console.error(`[Cert] Temp file cleanup error:`, err.message);
   }
 
-  return pdfBuffer;
+  return { pdfBuffer, documentNumber };
 }
 
 async function generateAndSaveCert(studentId, certType, studentData = null, sentBy = "System") {
@@ -687,8 +755,8 @@ async function generateAndSaveCert(studentId, certType, studentData = null, sent
     console.error(`[Cert] Student not found: ${studentId}`);
     return { success: false, error: 'Student not found' };
   }
-  const pdfBuffer = await buildCertPDF(student, certType);
-  
+  const { pdfBuffer, documentNumber } = await buildCertPDF(student, certType);
+
   const fieldMap = {
     LOC:   { pdfField: 'locPdfBase64',   statusField: 'locStatus',   dateField: 'locIssuedAt' },
     LOR:   { pdfField: 'lorPdfBase64',   statusField: 'lorStatus',   dateField: 'lorIssuedAt' },
@@ -740,12 +808,15 @@ async function generateAndSaveCert(studentId, certType, studentData = null, sent
       docRec.uploadStatus = "approved";
       docRec.offerLetterUrl = `/uploads/offer-letters/${student.employeeId ? student.employeeId.replace(/\//g, "-") : studentId}_offer_letter.pdf`;
       docRec.offerLetterSentAt = new Date();
+      docRec.offerLetterDocumentNumber = documentNumber;
     } else if (certType === 'LOC') {
       docRec.locUrl = `/uploads/certificates/${student.employeeId ? student.employeeId.replace(/\//g, "-") : studentId}_loc.pdf`;
       docRec.locSentAt = new Date();
+      docRec.locDocumentNumber = documentNumber;
     } else if (certType === 'LOR') {
       docRec.lorUrl = `/uploads/certificates/${student.employeeId ? student.employeeId.replace(/\//g, "-") : studentId}_lor.pdf`;
       docRec.lorSentAt = new Date();
+      docRec.lorDocumentNumber = documentNumber;
     }
     await docRec.save();
     console.log(`[CertSync] ✓ Synced ${certType} to StudentDocument for student ${studentId}`);
@@ -756,7 +827,10 @@ async function generateAndSaveCert(studentId, certType, studentData = null, sent
   try {
     const studentName = (student.name || student.fullName || "").trim();
     const college = (student.collegeName || student.college || "Not provided").trim();
-    const docNumber = `TEN-${certType}-${student.employeeId ? student.employeeId.replace(/\//g, "-") : student._id.toString().slice(-6)}`.toUpperCase();
+    // The same number buildCertPDF printed on the PDF. This used to derive a
+    // different number from the employee ID, so the stored record and the
+    // paper could never agree and verification always came back "not found".
+    const docNumber = documentNumber;
 
     const labels = { 
       LOC: 'Letter of Completion', 
@@ -766,7 +840,13 @@ async function generateAndSaveCert(studentId, certType, studentData = null, sent
       LOP: 'Letter of Promotion'
     };
 
-    await DocumentHistory.create({
+    // Manual or automation is decided from who triggered this generate, which
+    // every caller already passes down as `sentBy`. Going through logSend
+    // instead of create() is what applies that rule — a direct create() left
+    // the model to guess from the string, and the placeholder "System" read as
+    // automation, so HR's own generates were labelled Automation in the
+    // history.
+    await DocumentHistory.logSend({
       studentId: student._id,
       studentName,
       studentEmail: student.email || "",

@@ -42,13 +42,19 @@ function buildSalutation(fullName) {
  */
 function resolvePronouns(gender) {
     const g = String(gender || "").toLowerCase().trim();
+    // `has`/`is` are the verb forms that agree with the subject pronoun.
+    // Templates used to hard-code "has"/"is" (written for he/she), which the
+    // neutral fallback turned into "they has excellent communication skills"
+    // and "they is extremely organized" on real, employer-facing PDFs.
     if (g === "male" || g === "m" || g === "he" || g === "him") {
         return {
             subject: "he",
             object: "him",
             possessive: "his",
             possessivePronoun: "his",
-            genderNoun: "male"
+            genderNoun: "male",
+            has: "has",
+            is: "is"
         };
     }
     if (g === "female" || g === "f" || g === "she" || g === "her") {
@@ -57,7 +63,9 @@ function resolvePronouns(gender) {
             object: "her",
             possessive: "her",
             possessivePronoun: "hers",
-            genderNoun: "female"
+            genderNoun: "female",
+            has: "has",
+            is: "is"
         };
     }
     return {
@@ -65,7 +73,9 @@ function resolvePronouns(gender) {
         object: "them",
         possessive: "their",
         possessivePronoun: "theirs",
-        genderNoun: "individual"
+        genderNoun: "individual",
+        has: "have",
+        is: "are"
     };
 }
 

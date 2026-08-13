@@ -65,6 +65,20 @@ async function requireStudent(req, res, next) {
 // literal string "Bearer hr_" satisfied.
 const { requireHR } = require("../../middleware/sessionAuth");
 
+/**
+ * Who is generating this document, for the Document History audit line.
+ *
+ * Falls back to "HR Portal" rather than "System": a person clicking Generate is
+ * a manual send, and calling it "System" is what made the history label every
+ * hand-made document "Automation".
+ */
+function hrActor(req) {
+    const hr = req && req.session && (req.session.hr || req.session.adminUser);
+    if (!hr) return "HR Portal";
+    const who = hr.name || hr.username || hr.email || hr.id;
+    return who ? `HR Portal (${who})` : "HR Portal";
+}
+
 // ── Mailer helper ──
 const { createEmailTransporter } = require("../../utils/mailer");
 function createTransporter() {
@@ -129,7 +143,11 @@ async function tryAutoGenerateLOC(student) {
         }
 
         const studentName = (student.name || student.email || "").trim();
-        await DocumentHistory.create({
+        // This runs off the back of the last task approval, with nobody at a
+        // keyboard — automation, and now it says so. It used to log
+        // `sentBy: "System"` and no method at all, which the history then
+        // classified by matching the word "system".
+        await DocumentHistory.logSend({
             studentId:      student._id,
             studentName,
             studentEmail:   student.email || "",
@@ -140,9 +158,9 @@ async function tryAutoGenerateLOC(student) {
             documentKey:    "loc",
             documentNumber: docNumber,
             sentAt:         new Date(),
-            sentBy:         "System",
+            sentBy:         "Auto System",
             sentToEmail:    student.email || ""
-        });
+        }, "automation");
 
         try {
             const transporter = createTransporter();
@@ -200,6 +218,81 @@ router.get("/documents/my-status", requireStudent, async (req, res) => {
     }
 });
 
+/**
+ * Enter the HR review queue as soon as both documents are present.
+ *
+ * Uploading a file only stored it; `uploadStatus` stayed "not_uploaded" until
+ * the student separately pressed Submit. The HR "Pending Documents" list
+ * queries `uploadStatus: "pending"`, so a student who uploaded both files and
+ * did not notice the extra button never appeared there — HR saw
+ * "0 submissions" while the files sat in the collection.
+ *
+ * my-documents.html already expects this: it checks `d.autoSubmitted ||
+ * d.uploadStatus === 'pending'` on the upload response and shows "Documents
+ * submitted — HR will review them shortly". Nothing ever sent those fields.
+ * The explicit Submit button still works and is now a no-op when this has
+ * already run.
+ *
+ * Returns the resulting status, and never throws — a failed notification must
+ * not fail the upload that succeeded.
+ */
+async function autoSubmitWhenComplete(doc, student) {
+    if (!doc.addressProofUrl || !doc.marksheetUrl) return { autoSubmitted: false, uploadStatus: doc.uploadStatus };
+    if (["pending", "under_review", "approved"].includes(doc.uploadStatus)) {
+        return { autoSubmitted: false, uploadStatus: doc.uploadStatus };
+    }
+
+    doc.uploadStatus    = "pending";
+    doc.uploadedAt      = new Date();
+    doc.rejectionReason = null;
+    await doc.save();
+
+    try {
+        await Student.findByIdAndUpdate(student._id, {
+            offerLetterStatus: "pending",
+            documentsSubmittedAt: new Date(),
+            documentRejectionReason: null
+        });
+    } catch (err) {
+        console.error("[DOCS] auto-submit student update failed:", err.message);
+    }
+
+    try {
+        await notifyHROfSubmission(student);
+    } catch (err) {
+        console.error("[DOCS] auto-submit HR notification failed:", err.message);
+    }
+
+    return { autoSubmitted: true, uploadStatus: "pending" };
+}
+
+/** Email + MailHistory for a new submission. Shared by auto-submit and Submit. */
+async function notifyHROfSubmission(student) {
+    const subject = `[TEN] New Document Submission — ${student.name} (${student.employeeId})`;
+    const base = {
+        recipientEmail: process.env.EMAIL_US || "",
+        recipientName: "HR",
+        studentId: student._id,
+        subject,
+        mailType: "document_submission",
+        sentAt: new Date()
+    };
+    try {
+        const transporter = createTransporter();
+        await transporter.sendMail({
+            from: process.env.EMAIL_US,
+            to: process.env.EMAIL_US,
+            subject,
+            html: `<p>Student <strong>${student.name}</strong> (${student.employeeId}) has submitted their documents for review.</p><p>Please log in to the HR portal → Generate Documents → Pending to review.</p>`
+        });
+        await MailHistory.create({ ...base, status: "sent" });
+    } catch (err) {
+        try {
+            await MailHistory.create({ ...base, status: "failed", errorMessage: err && err.message ? String(err.message) : "" });
+        } catch (_) {}
+    }
+}
+
 router.post("/documents/upload-address-proof", requireStudent, (req, res, next) => {
     req.docType = "address_proof";
     next();
@@ -224,10 +317,14 @@ router.post("/documents/upload-address-proof", requireStudent, (req, res, next) 
         doc.addressProofUrl = req.file.path;
         if (doc.uploadStatus === "rejected") doc.uploadStatus = "not_uploaded";
         await doc.save();
+        const submitted = await autoSubmitWhenComplete(doc, req.student);
         res.json({
             success: true,
-            message: "Address proof uploaded successfully",
-            fileUrl: `/uploads/documents/${req.file.filename}`
+            message: submitted.autoSubmitted
+                ? "Address proof uploaded — both documents sent to HR for review"
+                : "Address proof uploaded successfully",
+            fileUrl: `/uploads/documents/${req.file.filename}`,
+            ...submitted
         });
     } catch (err) {
         console.error("[DOCS] upload-address-proof error:", err);
@@ -259,10 +356,14 @@ router.post("/documents/upload-marksheet", requireStudent, (req, res, next) => {
         doc.marksheetUrl = req.file.path;
         if (doc.uploadStatus === "rejected") doc.uploadStatus = "not_uploaded";
         await doc.save();
+        const submitted = await autoSubmitWhenComplete(doc, req.student);
         res.json({
             success: true,
-            message: "Marksheet uploaded successfully",
-            fileUrl: `/uploads/documents/${req.file.filename}`
+            message: submitted.autoSubmitted
+                ? "Marksheet uploaded — both documents sent to HR for review"
+                : "Marksheet uploaded successfully",
+            fileUrl: `/uploads/documents/${req.file.filename}`,
+            ...submitted
         });
     } catch (err) {
         console.error("[DOCS] upload-marksheet error:", err);
@@ -279,48 +380,10 @@ router.post("/documents/submit", requireStudent, async (req, res) => {
         if (doc.uploadStatus === "pending" || doc.uploadStatus === "under_review" || doc.uploadStatus === "approved") {
             return res.json({ success: true, status: doc.uploadStatus, message: "Already submitted" });
         }
-        doc.uploadStatus = "pending";
-        doc.uploadedAt   = new Date();
-        doc.rejectionReason = null;
-        await doc.save();
 
-        await Student.findByIdAndUpdate(req.student._id, {
-            offerLetterStatus: "pending",
-            documentsSubmittedAt: new Date(),
-            documentRejectionReason: null
-        });
-
-        try {
-            const transporter = createTransporter();
-            await transporter.sendMail({
-                from:    process.env.EMAIL_US,
-                to:      process.env.EMAIL_US,
-                subject: `[TEN] New Document Submission — ${req.student.name} (${req.student.employeeId})`,
-                html:    `<p>Student <strong>${req.student.name}</strong> (${req.student.employeeId}) has submitted their documents for review.</p><p>Please log in to the HR portal → Generate Documents → Pending to review.</p>`
-            });
-            await MailHistory.create({
-                recipientEmail: process.env.EMAIL_US || "",
-                recipientName: "HR",
-                studentId: req.student._id,
-                subject: `[TEN] New Document Submission — ${req.student.name} (${req.student.employeeId})`,
-                mailType: "document_submission",
-                sentAt: new Date(),
-                status: "sent"
-            });
-        } catch (err) {
-            try {
-                await MailHistory.create({
-                    recipientEmail: process.env.EMAIL_US || "",
-                    recipientName: "HR",
-                    studentId: req.student._id,
-                    subject: `[TEN] New Document Submission — ${req.student.name} (${req.student.employeeId})`,
-                    mailType: "document_submission",
-                    sentAt: new Date(),
-                    status: "failed",
-                    errorMessage: err && err.message ? String(err.message) : ""
-                });
-            } catch (_) {}
-        }
+        // Same path the uploads take, so an explicit Submit and an automatic
+        // one cannot drift apart in what they set or who they notify.
+        await autoSubmitWhenComplete(doc, req.student);
 
         res.json({ success: true, status: "pending", message: "Documents submitted for HR review" });
     } catch (err) {
@@ -447,7 +510,9 @@ router.post("/admin/documents/generate-offer-letters", requireHR, async (req, re
                 const studentName = (student.name || `${student.firstName || ""} ${student.lastName || ""}`.trim() || student.email || "").trim();
                 const college = (student.collegeName || student.college || "Not provided").trim();
 
-                await DocumentHistory.create({
+                // An HR user pressed Generate — credit them by name so the
+                // history says who did it, not just "HR Portal".
+                await DocumentHistory.logSend({
                     studentId: student._id,
                     studentName,
                     studentEmail: student.email || "",
@@ -458,9 +523,10 @@ router.post("/admin/documents/generate-offer-letters", requireHR, async (req, re
                     documentKey: "offer_letter",
                     documentNumber: docNumber,
                     sentAt: new Date(),
-                    sentBy: "HR Portal",
-                    sentToEmail: student.email || ""
-                });
+                    sentBy: hrActor(req),
+                    sentToEmail: student.email || "",
+                    emailStatus: mailStatus === "failed" ? "failed" : "sent"
+                }, "manual");
 
                 try {
                     await MailHistory.create({

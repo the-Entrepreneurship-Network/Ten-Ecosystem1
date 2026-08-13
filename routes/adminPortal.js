@@ -7,6 +7,7 @@ const { broadcastNotification } = require('../utils/sseHub');
 const { normalizeDomain } = require('../config/domains');
 const { normalizeTenure, getTenureLabel, getInternshipEndDate } = require('../utils/tenure');
 const { isEmployeeIdAvailable } = require('../utils/employeeId');
+const { propagateStudentChange } = require('../services/studentPropagation');
 
 // Brute-force guard on the admin login. Keyed by IP only — there is a single
 // admin account, so there is no per-account key to add and no other user to
@@ -29,6 +30,8 @@ const DocumentHistory = require('../models/DocumentHistory');
 const AuditLog = require('../models/AuditLog');
 const Attendance = require('../models/Attendance');
 const CertificateRequest = require('../models/CertificateRequest');
+const attendanceUtils = require('../utils/attendanceUtils');
+const attendanceDomain = require('../utils/attendanceDomain');
 
 // ─── AUTH ────────────────────────────────────────────────────────────────────
 
@@ -581,6 +584,17 @@ router.put('/students/:id', requireAdminAPI, async (req, res) => {
 
     const student = await Student.findByIdAndUpdate(req.params.id, { $set: update }, { new: true });
 
+    // This route already derived v2DurationType and internshipEndDate, but the
+    // Task Journey was left untouched — task rows are assigned once at
+    // enrolment and never revisited, so a tenure or domain change here did not
+    // reach the student's actual task list.
+    const propagation = await propagateStudentChange({
+      student,
+      before: { tenure: existing.tenure, domain: existing.domain,
+                joiningDate: existing.joiningDate, internshipStartDate: existing.internshipStartDate },
+      actor: req.session.adminUser?.username || 'admin'
+    });
+
     await AuditLog.create({
       userId: student._id,
       actionType: 'student_updated',
@@ -600,6 +614,7 @@ router.put('/students/:id', requireAdminAPI, async (req, res) => {
     res.json({
       success: true,
       data: student,
+      propagated: propagation,
       offerLetterNeedsRegeneration: identityChanged && hasIssuedOffer,
       offerLetterMessage: (identityChanged && hasIssuedOffer)
         ? "This student's offer letter was issued with the previous domain/tenure and no longer matches their record. Regenerate it so the two agree."
@@ -651,6 +666,15 @@ router.post('/students/:id/extend-tenure', requireAdminAPI, async (req, res) => 
 
     const updated = await Student.findByIdAndUpdate(req.params.id, { $set: update }, { new: true });
 
+    // Extending a tenure without resyncing left the student on the old number
+    // of weeks — the record said 3 Months and the Task Journey still showed 4
+    // weeks of the 1-Month plan.
+    const propagation = await propagateStudentChange({
+      student: updated,
+      before: { tenure: oldState.tenure, internshipStartDate: oldState.internshipStartDate },
+      actor: req.session.adminUser?.username || 'admin'
+    });
+
     await AuditLog.create({
       userId: student._id,
       actionType: 'student_tenure_extended',
@@ -666,6 +690,7 @@ router.post('/students/:id/extend-tenure', requireAdminAPI, async (req, res) => 
     res.json({
       success: true,
       data: updated,
+      propagated: propagation,
       previousTenure: oldState.tenure,
       newTenure: update.tenure,
       internshipEndDate: endDate,
@@ -956,24 +981,20 @@ router.get('/audit-log', requireAdminAPI, async (req, res) => {
 
 router.post('/attendance/recalculate-all', requireAdminAPI, async (req, res) => {
   try {
-    const TENURE_DAYS = { '1week': 7, '15days': 15, '1month': 30, '45days': 45, '3months': 90, '6months': 180 };
-    const students = await Student.find({});
+    // This used to carry its own copy of the tenure table and its own formula:
+    // elapsed CALENDAR days as the denominator, Sundays counted, and
+    // `countDocuments({status:'Present'})` as the numerator — which counts a
+    // day twice when both the student and their coordinator marked it. So the
+    // one button whose whole job is to correct attendance wrote numbers that
+    // disagreed with every other screen in the portal. It now runs the shared
+    // calculator, the same one the dashboard and the certificate rules use.
+    const students = await Student.find({}).select('employeeId').lean();
     let updated = 0, errors = 0;
 
     for (const student of students) {
       try {
-        if (!student.joiningDate) continue;
-        const tenure = student.tenure || student.v2DurationType || '1month';
-        const totalTenureDays = TENURE_DAYS[tenure] || 30;
-        const joiningDate = new Date(student.joiningDate);
-        const today = new Date();
-        const daysElapsed = Math.min(Math.floor((today - joiningDate) / 86400000) + 1, totalTenureDays);
-        const expectedDays = Math.max(daysElapsed, 1);
-        const presentCount = await Attendance.countDocuments({ employeeId: student.employeeId, status: 'Present' });
-        const percentage = Math.min(Math.round((presentCount / expectedDays) * 100), 100);
-        student.calculatedAttendancePercentage = percentage;
-        student.attendanceLastCalculated = new Date();
-        await student.save();
+        if (!student.employeeId) continue;
+        await attendanceUtils.recomputeAndSaveAttendance(Student, Attendance, student.employeeId);
         updated++;
       } catch (e) { errors++; }
     }
@@ -988,6 +1009,207 @@ router.post('/attendance/recalculate-all', requireAdminAPI, async (req, res) => 
     res.json({ success: true, updated, errors });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── ATTENDANCE CONTROL ───────────────────────────────────────────────────────
+//
+// Full read/write on any student's attendance, scoped to a domain. A student
+// holding two domains has two independent records, so every route here takes a
+// domain and defaults to their primary one — see utils/attendanceDomain.js.
+
+/** Resolve a student by employee ID or Mongo id. */
+async function findStudentByRef(ref) {
+  if (!ref) return null;
+  const byEmployee = await Student.findOne({ employeeId: String(ref).trim() });
+  if (byEmployee) return byEmployee;
+  if (/^[0-9a-fA-F]{24}$/.test(String(ref))) return Student.findById(ref);
+  return null;
+}
+
+router.get('/attendance/:ref', requireAdminAPI, async (req, res) => {
+  try {
+    const student = await findStudentByRef(decodeURIComponent(req.params.ref));
+    if (!student) return res.status(404).json({ success: false, error: 'Student not found' });
+
+    const domains = attendanceDomain.studentDomains(student);
+    const domain = attendanceDomain.resolveActiveDomain(student, req.query.domain);
+
+    const all = await Attendance.find({ employeeId: student.employeeId }).sort({ date: -1 }).lean();
+    const records = attendanceDomain.filterByDomain(all, domain, student);
+    const summary = attendanceUtils.getAttendanceSummary(records, student);
+
+    res.json({
+      success: true,
+      student: {
+        _id: student._id, name: student.name, employeeId: student.employeeId,
+        domain: student.domain, tenure: student.tenure, joiningDate: student.joiningDate
+      },
+      domain,
+      domains,
+      summary,
+      // Every domain's figures at once, so the admin can see both sides of a
+      // dual-domain student without switching.
+      perDomain: domains.map((d) => ({
+        domain: d,
+        summary: attendanceUtils.getAttendanceSummary(
+          attendanceDomain.filterByDomain(all, d, student), student)
+      })),
+      records
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/attendance/mark', requireAdminAPI, async (req, res) => {
+  try {
+    const { ref, employeeId, date, status, domain, markedBy } = req.body || {};
+    const student = await findStudentByRef(ref || employeeId);
+    if (!student) return res.status(404).json({ success: false, error: 'Student not found' });
+
+    const when = new Date(date || Date.now());
+    if (isNaN(when.getTime())) return res.status(400).json({ success: false, error: 'Invalid date' });
+
+    const source = markedBy === 'self' ? 'self' : 'coordinator';
+    const st = status === 'Absent' ? 'Absent' : 'Present';
+    const markDomain = attendanceDomain.domainForWrite(student, domain);
+    const dateKey = attendanceUtils.toDateKey(when);
+
+    let record = await Attendance.findOne({
+      employeeId: student.employeeId, dateKey, markedBy: source, domain: markDomain
+    });
+
+    const before = record ? record.status : null;
+    if (record) {
+      record.status = st;
+      record.date = when;
+      record.coordinatorId = 'ADMIN';
+      await record.save();
+    } else {
+      record = await Attendance.create({
+        studentId: student._id, employeeId: student.employeeId, domain: markDomain,
+        date: when, dateKey, status: st, markedBy: source,
+        coordinatorId: source === 'coordinator' ? 'ADMIN' : '',
+        source: 'admin'
+      });
+    }
+
+    await attendanceUtils.recomputeAndSaveAttendance(Student, Attendance, student.employeeId);
+
+    await AuditLog.create({
+      userId: req.session.adminUser?.username || 'admin',
+      actionType: 'attendance_mark',
+      performedBy: 'admin',
+      description: `${before ? 'Changed' : 'Created'} ${source} attendance for ${student.employeeId} / ${markDomain || '(no domain)'} on ${dateKey}: ${before || '—'} → ${st}`,
+      oldState: before ? { status: before } : null,
+      newState: { status: st, dateKey, domain: markDomain, markedBy: source }
+    }).catch(() => {});
+
+    res.json({ success: true, record, domain: markDomain });
+  } catch (err) {
+    if (err.code === 11000) return res.status(409).json({ success: false, error: 'Already marked for that day and domain' });
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/attendance/record/:id', requireAdminAPI, async (req, res) => {
+  try {
+    const record = await Attendance.findById(req.params.id);
+    if (!record) return res.status(404).json({ success: false, error: 'Record not found' });
+
+    await Attendance.deleteOne({ _id: record._id });
+    await attendanceUtils.recomputeAndSaveAttendance(Student, Attendance, record.employeeId);
+
+    await AuditLog.create({
+      userId: req.session.adminUser?.username || 'admin',
+      actionType: 'attendance_delete',
+      performedBy: 'admin',
+      description: `Deleted ${record.markedBy} attendance for ${record.employeeId} / ${record.domain || '(no domain)'} on ${record.dateKey}`,
+      oldState: { status: record.status, dateKey: record.dateKey, domain: record.domain, markedBy: record.markedBy },
+      newState: null
+    }).catch(() => {});
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── DOCUMENT CONTROL ─────────────────────────────────────────────────────────
+
+router.get('/documents/history', requireAdminAPI, async (req, res) => {
+  try {
+    const page   = Math.max(1, parseInt(req.query.page || '1', 10) || 1);
+    const limit  = Math.min(200, Math.max(1, parseInt(req.query.limit || '100', 10) || 100));
+    const skip   = (page - 1) * limit;
+    const method = req.query.method;
+    const q      = String(req.query.q || '').trim();
+
+    // Same rule as the HR view: a row is a send only if it carries the
+    // document number that was printed on the paper.
+    const filter = {
+      documentNumber: { $exists: true, $nin: [null, '', '—'] },
+      documentType:   { $exists: true, $nin: [null, ''] }
+    };
+    if (method === 'manual' || method === 'automation') filter.method = method;
+    if (q) {
+      const rx = new RegExp(q.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'i');
+      filter.$or = [{ studentName: rx }, { employeeId: rx }, { documentNumber: rx }];
+    }
+
+    const [docs, total, manual, automation] = await Promise.all([
+      DocumentHistory.find(filter).sort({ sentAt: -1 }).skip(skip).limit(limit).lean(),
+      DocumentHistory.countDocuments(filter),
+      DocumentHistory.countDocuments({ ...filter, method: 'manual' }),
+      DocumentHistory.countDocuments({ ...filter, method: 'automation' })
+    ]);
+
+    res.json({
+      success: true,
+      total, page, counts: { manual, automation },
+      data: docs.map((d) => ({
+        ...d,
+        method: DocumentHistory.resolveMethod(d.method, d.sentBy)
+      }))
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+const ADMIN_DOC_TYPES = ['OFFER', 'LOC', 'LOR', 'STAR', 'LOP'];
+
+router.post('/documents/generate', requireAdminAPI, async (req, res) => {
+  try {
+    const { ref, employeeId, certType } = req.body || {};
+    const type = String(certType || '').toUpperCase();
+    if (!ADMIN_DOC_TYPES.includes(type)) {
+      return res.status(400).json({ success: false, error: `certType must be one of ${ADMIN_DOC_TYPES.join(', ')}` });
+    }
+
+    const student = await findStudentByRef(ref || employeeId);
+    if (!student) return res.status(404).json({ success: false, error: 'Student not found' });
+
+    const who = req.session.adminUser?.username || 'admin';
+    const { generateAndSaveCert } = require('./v2/certificates');
+    // The sentBy string is what decides Manual vs Automation in Document
+    // History, so it names the admin who pressed the button.
+    const result = await generateAndSaveCert(
+      student._id.toString(), type, student, `Admin Portal (${who})`
+    );
+
+    await AuditLog.create({
+      userId: who,
+      actionType: 'document_generate',
+      performedBy: 'admin',
+      description: `Generated ${type} for ${student.employeeId}`,
+      newState: { certType: type, employeeId: student.employeeId }
+    }).catch(() => {});
+
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

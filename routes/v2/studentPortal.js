@@ -36,6 +36,78 @@ if (!Student.schema.path("joinerType"))            Student.schema.add({ joinerTy
 
 const StudentTaskProgress = require("../../models/new/StudentTaskProgress");
 const DomainTask   = require("../../models/new/DomainTask");
+const Notification = require("../../models/Notification");
+const { broadcastNotification } = require("../../utils/sseHub");
+
+/**
+ * Tell a student their submission was reviewed.
+ *
+ * Approve and reject both updated the row and returned, so the only way a
+ * student learned the outcome — including a rejection they need to act on —
+ * was to reopen the Task Journey and notice the badge had changed. The
+ * coordinator's decision is the one event in the loop the student most needs
+ * pushed to them.
+ *
+ * Never allowed to fail the review it is reporting on: a notification problem
+ * must not turn a successful approval into a 500.
+ */
+async function notifyTaskDecision(student, taskId, decision, feedback, coinsAwarded) {
+    try {
+        const task  = taskId ? await DomainTask.findById(taskId).lean() : null;
+        const title = (task && task.title) || "your task";
+        const approved = decision === "approved";
+
+        let message = approved
+            ? `Your submission for "${title}" was approved.`
+            : `Your submission for "${title}" needs another look.`;
+        if (approved && coinsAwarded) message += ` You earned ${coinsAwarded} coins.`;
+        if (feedback) message += ` Coordinator feedback: ${feedback}`;
+
+        const notif = new Notification({
+            title: approved ? "Task approved" : "Task sent back",
+            message,
+            type: approved ? "success" : "warning",
+            from: "Coordinator",
+            targetType: "student",
+            targetEmployeeId: student.employeeId,
+            targetDomain: student.domain
+        });
+        await notif.save();
+        broadcastNotification(student.domain, student.employeeId, notif);
+    } catch (err) {
+        console.error("[V2] task decision notify failed:", err.message);
+    }
+}
+
+/**
+ * Tell the domain's coordinator that work is waiting for them.
+ *
+ * The submit handler wrote the progress row and a legacy Submission row and
+ * stopped, so the only way a coordinator discovered a new submission was to
+ * open the review queue and look. That makes turnaround time a function of how
+ * often someone remembers to check.
+ */
+async function notifyCoordinatorOfSubmission(student, taskId) {
+    try {
+        const task  = taskId ? await DomainTask.findById(taskId).lean() : null;
+        const title = (task && (task.taskTitle || task.title)) || "a task";
+
+        const notif = new Notification({
+            title: "New submission to review",
+            message: `${student.name || student.employeeId} (${student.employeeId}) submitted "${title}" for review.`,
+            type: "info",
+            from: "Student",
+            targetType: "coordinator-domain",
+            targetDomain: student.domain
+        });
+        await notif.save();
+        // employeeId omitted on purpose: this goes to the coordinator channel
+        // for the domain, not back to the student who just submitted.
+        broadcastNotification(student.domain, null, notif);
+    } catch (err) {
+        console.error("[V2] submission notify failed:", err.message);
+    }
+}
 const taskEngine   = require("../../services/v2/taskEngine");
 const coinService  = require("../../services/v2/coinService");
 
@@ -426,7 +498,14 @@ router.post("/student/complete-onboarding", requireStudent, async (req, res) => 
             updates.joinerTypeSelected = true;
         }
 
-        if (joinerType === "whatsapp") {
+        // The wizard holds joinerType in a page-level variable, so a reload
+        // between steps loses it and the body arrives with only a date. The
+        // stored value is the fallback: the student already answered that
+        // question on the previous card, and discarding the date they just
+        // picked would silently undo the whole step.
+        const effectiveJoinerType = joinerType || student.joinerType;
+
+        if (effectiveJoinerType === "whatsapp") {
             if (joiningDate) {
                 const startDate = new Date(joiningDate);
                 if (!isNaN(startDate.getTime())) {
@@ -443,18 +522,28 @@ router.post("/student/complete-onboarding", requireStudent, async (req, res) => 
                         updates.joiningDate = (student.createdAt || new Date()).toISOString().slice(0, 10);
                     }
 
-                    // A start date in the future, or after the student already
-                    // registered, is not a WhatsApp back-date.
-                    const portalStart = new Date(updates.joiningDate || student.joiningDate || student.createdAt);
+                    // A future start date is refused — that is the one rule the
+                    // card actually states, and it cannot be a real start.
                     if (startDate > new Date()) {
                         return res.status(400).json({ success: false, message: "Your start date cannot be in the future." });
                     }
-                    if (!isNaN(portalStart.getTime()) && startDate > portalStart) {
-                        return res.status(400).json({
-                            success: false,
-                            message: "Your WhatsApp start date should be on or before the day you registered on the portal."
-                        });
-                    }
+
+                    // A date AFTER the portal registration used to be refused
+                    // too, and that made this card a dead end.
+                    //
+                    // `joiningDate` on these records is very often the day an
+                    // admin created the row rather than the day the student
+                    // began, and it is never shown on this screen. So a student
+                    // picking an ordinary past date was turned away for
+                    // breaking a constraint they could not see and had no way
+                    // to satisfy — and this card is the last step of onboarding,
+                    // with nothing else to click. They were stuck for good.
+                    //
+                    // It is not an error in any case. A start date on or after
+                    // the portal registration simply means there is no
+                    // pre-portal gap to credit, which getPreportalCreditedDays
+                    // already returns zero for. Accept it and let the
+                    // calculation say so.
                 }
             }
 
@@ -471,21 +560,42 @@ router.post("/student/complete-onboarding", requireStudent, async (req, res) => 
             const actualJoiningDate = joiningDate || student.joiningDate || student.createdAt;
             if (actualJoiningDate) {
                 const Attendance = require("../../models/Attendance");
-                const { calculateAttendancePercentage, getTenureDays } = require("../../utils/attendanceUtils");
+                const { getAttendanceSummary, getTenureDays } = require("../../utils/attendanceUtils");
                 const emp = updates.employeeId || student.employeeId;
                 const attendanceRecords = await Attendance.find({ employeeId: emp });
-                
-                const attResult = calculateAttendancePercentage(attendanceRecords, actualJoiningDate, student.tenure || student.v2DurationType);
-                const calculatedPct = typeof attResult === 'object' ? attResult.percentage : attResult;
-                const daysPresent = typeof attResult === 'object' ? attResult.daysPresent : attendanceRecords.filter(r => r.status === 'Present').length;
 
-                updates.calculatedAttendance = daysPresent;
-                updates.calculatedAttendancePercentage = calculatedPct;
-                updates.attendancePercentage = calculatedPct;
+                // Pass the REAL student, with the new dates applied.
+                //
+                // This used to call calculateAttendancePercentage(records, date,
+                // tenure), whose legacy three-argument form builds a synthetic
+                // student carrying only { joiningDate, internshipStartDate,
+                // tenure }. That object has no `joinerType`, and
+                // getPreportalCreditedDays starts with
+                //
+                //     if (student.joinerType !== 'whatsapp') return 0;
+                //
+                // so the pre-portal credit — the entire point of this screen —
+                // was never applied. A student who attended for two months on
+                // WhatsApp before the portal existed for them has no Attendance
+                // rows for those days, so the count came back 0 and the card
+                // told them they had attended nothing.
+                //
+                // It also set internshipStartDate EQUAL to joiningDate, which
+                // collapses the gap to zero even for a correctly-typed student.
+                const forCalc = Object.assign({}, student.toObject ? student.toObject() : student, updates, {
+                    joinerType: "whatsapp"
+                });
+                const summary = getAttendanceSummary(attendanceRecords, forCalc);
+
+                presentCount = summary.daysPresent;
+                updates.calculatedAttendance = summary.daysPresent;
+                updates.calculatedAttendancePercentage = summary.percentage;
+                updates.attendancePercentage = summary.percentage;
+                updates.attendanceLastCalculated = new Date();
 
                 totalTenureDays = getTenureDays(student.tenure || student.v2DurationType);
                 const requiredDays = Math.ceil(totalTenureDays * 0.75);
-                daysNeededToAttendMore = Math.max(0, requiredDays - daysPresent);
+                daysNeededToAttendMore = Math.max(0, requiredDays - summary.daysPresent);
             }
         } else {
             updates.calculatedAttendance = 0;
@@ -495,6 +605,9 @@ router.post("/student/complete-onboarding", requireStudent, async (req, res) => 
         updates.onboardingPopupSeen = true;
         updates.hasSeenOnboarding = true;
         updates.hasSeenWelcome = true;
+        // The WhatsApp path never set this, while POST /student/onboard did, so
+        // a WhatsApp joiner who finished the wizard could be shown it again.
+        updates.v2Onboarded = true;
 
         const updatedStudent = await Student.findOneAndUpdate(
             { _id: student._id },
@@ -998,19 +1111,54 @@ async function ensureOnboarded(student) {
 }
 
 router.get("/student/status", requireStudent, async (req, res) => {
+    const student = req.student;
+
+    // Onboard first, so the task counts below include anything just assigned.
     try {
-        const student = req.student;
+        await ensureOnboarded(student);
+    } catch (err) {
+        console.error("[V2] ensureOnboarded failed for " + student.employeeId + ":", err.message);
+    }
 
-        // Before anything is measured, so the task counts below include what
-        // this just assigned.
-        try {
-            await ensureOnboarded(student);
-        } catch (err) {
-            // A failure here must not break the status call; the student simply
-            // sees the popup, which is the old behaviour.
-            console.error("[V2] ensureOnboarded failed:", err.message);
-        }
+    // ── The fields the task-journey page cannot work without ────────────────
+    //
+    // Built from the student document and two pure helpers, so no database
+    // call can take them out. They come FIRST because of what happened when
+    // they did not:
+    //
+    // One throw anywhere in this handler produced a 500 whose body carried no
+    // v2Onboarded and no durationType. The page read `!status.v2Onboarded` as
+    // true and opened the setup dialog; durationType arrived undefined and fell
+    // through to the '1month' default, so a 45-day student was shown "1 Month"
+    // highlighted; pressing it POSTed 1month and the server answered 409,
+    // "Your internship is registered as 45 Days". The popup that would not go
+    // away, the wrong preselected tenure and the error on clicking it were all
+    // one 500 in this handler.
+    const durationType     = taskEngine.resolveStudentDuration(student);
+    const registeredTenure = student.tenure ? normalizeTenure(student.tenure) : null;
 
+    const payload = {
+        success:             true,
+        v2Onboarded:         !!student.v2Onboarded,
+        domain:              student.domain,
+        durationType,
+        registeredTenure,
+        onboardingPopupSeen: student.onboardingPopupSeen || false,
+        joinerTypeSelected:  student.joinerTypeSelected  || false,
+        joinerType:          student.joinerType          || null,
+        totalCoins:          0,
+        rupeeValue:          "0.00",
+        taskStats: { locked: 0, available: 0, in_progress: 0, submitted: 0, approved: 0 }
+    };
+
+    // ── Everything else is a bonus ──────────────────────────────────────────
+    //
+    // The coin balance and the task counts are worth showing but not worth
+    // failing over. If they throw, the student sees zeros and their task
+    // journey still opens. The previous catch turned any failure into a bare
+    // 500 and logged NOTHING, which is why `pm2 logs | grep` produced nothing
+    // to explain two days of reports.
+    try {
         let domain = student.domain;
         if (domain === "HR") domain = "HR Management";
         if (domain === "Business Development") domain = "Business Analyst";
@@ -1021,62 +1169,30 @@ router.get("/student/status", requireStudent, async (req, res) => {
         const domainTasks = await DomainTask.find({ domain }).select("_id").lean();
         const taskIds = domainTasks.map(t => t._id);
 
-        const [progressStats, sampleProgress, coinData] = await Promise.all([
+        const [progressStats, coinData] = await Promise.all([
             StudentTaskProgress.aggregate([
                 { $match: { studentId: student._id, taskId: { $in: taskIds } } },
                 { $group: { _id: "$status", count: { $sum: 1 } } }
             ]),
-            StudentTaskProgress.findOne({ studentId: student._id, taskId: { $in: taskIds } }).populate("taskId", "durationType").lean(),
             coinService.getBalance(student._id)
         ]);
 
-        // v2Onboarded is a STORED flag, not something inferred from data.
-        //
-        // It used to be `student.v2Onboarded || sampleProgress`, and
-        // GET /tasks/my-tasks auto-assigns tasks when a student has none — so
-        // simply opening the task list created progress rows and the flag
-        // flipped true forever. The tenure popup then never appeared again for
-        // a student who had never actually chosen a tenure, while for anyone
-        // whose completion path did not set the flag it reappeared on every
-        // visit. Section 5 asks for exactly once, ever.
-        const v2Onboarded = !!student.v2Onboarded;
-
-        // The duration comes from the student's record, not from whichever task
-        // happened to be assigned first (that value is remapped to "1month" for
-        // short tenures, so it misreported 1-week and 15-day students).
-        const durationType = taskEngine.resolveStudentDuration(student);
-
-        const stats = {};
-        for (const s of progressStats) stats[s._id] = s.count;
-
-        // The tenure the student registered on. The setup popup cannot change
-        // it — every option except this one is disabled there — so when it is
-        // known the popup is a required dialog with exactly one possible
-        // answer, and the page completes onboarding without showing it.
-        const registeredTenure = student.tenure ? normalizeTenure(student.tenure) : null;
-
-        res.json({
-            success:       true,
-            v2Onboarded,
-            domain:        student.domain,
-            durationType,
-            registeredTenure,
-            totalCoins:    coinData.totalCoins,
-            rupeeValue:    coinData.rupeeValue || (coinData.totalCoins * 0.5).toFixed(2),
-            onboardingPopupSeen: student.onboardingPopupSeen || false,
-            joinerTypeSelected:  student.joinerTypeSelected  || false,
-            joinerType:          student.joinerType           || null,
-            taskStats: {
-                locked:      stats.locked      || 0,
-                available:   stats.available   || 0,
-                in_progress: stats.in_progress || 0,
-                submitted:   stats.submitted   || 0,
-                approved:    stats.approved    || 0
+        for (const row of progressStats) {
+            if (Object.prototype.hasOwnProperty.call(payload.taskStats, row._id)) {
+                payload.taskStats[row._id] = row.count;
             }
-        });
+        }
+
+        if (coinData) {
+            payload.totalCoins = coinData.totalCoins || 0;
+            payload.rupeeValue = coinData.rupeeValue || ((coinData.totalCoins || 0) * 0.5).toFixed(2);
+        }
     } catch (err) {
-        res.status(500).json({ success: false, message: "Server error" });
+        console.error("[V2] /student/status extras failed for " + student.employeeId + ":", err.message);
+        console.error(err.stack);
     }
+
+    res.json(payload);
 });
 
 // ────────────────────────────────────────────────
@@ -1223,6 +1339,8 @@ router.post("/tasks/:taskId/submit", requireStudent, async (req, res) => {
             console.error("V2 Sync Submission Create error:", subErr.message);
         }
 
+        await notifyCoordinatorOfSubmission(student, taskId);
+
         res.json({ success: true, message: "Task submitted successfully", status: "submitted" });
     } catch (err) {
         console.error("[V2] submit error:", err.message);
@@ -1270,8 +1388,12 @@ router.post("/tasks/:progressId/approve", requireStaff, validate(mongoIdParamSch
         const student = await Student.findOne({ employeeId: studentEmployeeId });
         if (!student) return res.status(404).json({ success: false, message: "Student not found" });
 
+        const progressDoc = await StudentTaskProgress.findById(req.params.progressId).lean();
+
         const result = await taskEngine.approveTask(student, req.params.progressId, null, feedback);
         if (result.error) return res.status(400).json({ success: false, message: result.error });
+
+        await notifyTaskDecision(student, progressDoc && progressDoc.taskId, "approved", feedback, result.coinsAwarded);
 
         res.json({ success: true, ...result });
     } catch (err) {
@@ -1301,6 +1423,8 @@ router.post("/tasks/:progressId/reject", requireStaff, validate(mongoIdParamSche
         progress.status              = "rejected";
         progress.coordinatorFeedback = feedback || "";
         await progress.save();
+
+        await notifyTaskDecision(student, progress.taskId, "rejected", feedback, 0);
 
         res.json({ success: true, message: "Task rejected" });
     } catch (err) {

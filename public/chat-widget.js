@@ -42,6 +42,38 @@
     }
     function ownId() { return cfg.role === "student" ? cfg.employeeId : cfg.username; }
 
+    /** Small JSON helper that surfaces the server's message rather than a status code. */
+    function postJSON(url, body) {
+        return fetch(url, {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body || {})
+        }).then(function (r) {
+            return r.json().catch(function () { return {}; }).then(function (d) {
+                if (!r.ok || d.success === false) throw new Error(d.message || ("Request failed (" + r.status + ")"));
+                return d;
+            });
+        });
+    }
+
+    /**
+     * Open a private one-to-one conversation.
+     *
+     * The room name is derived on the server from both ids, sorted, so both
+     * people land in the same room whichever of them starts it.
+     */
+    function openDirectMessage(userId, userName) {
+        postJSON("/api/chat/dm/open", { userId: userId })
+            .then(function (d) {
+                toggleChat(d.room, "🔒 " + (userName || userId));
+            })
+            .catch(function (e) { alert(e.message); });
+    }
+    // Portals expose this so a "Message privately" button can live outside the
+    // widget — e.g. beside a student row in the HR portal.
+    window.TenChatDM = openDirectMessage;
+
     function chatsForRole(role) {
         var out = [];
         if (role === "student") {
@@ -74,7 +106,7 @@
             ".tc-h .t{font-weight:700;font-size:14px;letter-spacing:.3px;color:#f5c542;}",
             ".tc-h .x{background:transparent;border:none;color:#9aa4bf;font-size:20px;cursor:pointer;padding:0 6px;line-height:1;}",
             ".tc-h .x:hover{color:#f43f5e;}",
-            ".tc-msgs{flex:1;overflow-y:auto;padding:14px 14px 6px;display:flex;flex-direction:column;gap:8px;background:#080d1a;}",
+            ".tc-msgs{flex:1;min-height:0;overflow-y:auto;padding:14px 14px 6px;display:flex;flex-direction:column;gap:8px;background:#080d1a;}",
             ".tc-row{display:flex;flex-direction:column;max-width:78%;}",
             ".tc-row.mine{align-self:flex-end;align-items:flex-end;}",
             ".tc-row.theirs{align-self:flex-start;align-items:flex-start;}",
@@ -88,6 +120,11 @@
             ".tc-time{color:#5a7299;font-size:10px;}",
             ".tc-del{margin-left:4px;border:none;background:transparent;color:#5a7299;cursor:pointer;font-size:12px;}",
             ".tc-del:hover{color:#f43f5e;}",
+            ".tc-dm,.tc-block,.tc-report{margin-left:2px;border:none;background:transparent;color:#5a7299;cursor:pointer;font-size:12px;padding:0 2px;}",
+            ".tc-dm:hover{color:#3b82f6;}",
+            ".tc-block:hover{color:#f59e0b;}",
+            ".tc-report:hover{color:#f43f5e;}",
+            ".tc-launcher{background:#101a2e;border:1px solid rgba(99,140,210,0.3);color:#cdd9ec;border-radius:20px;padding:8px 14px;font:600 12px \'Plus Jakarta Sans\',sans-serif;cursor:pointer;}",
             ".tc-form{display:flex;gap:8px;padding:10px 12px;border-top:1px solid rgba(245,197,66,0.12);background:#0c1220;}",
             ".tc-form input{flex:1;background:#101a2e;border:1px solid rgba(99,140,210,0.25);color:#e2eaf7;border-radius:10px;padding:9px 12px;outline:none;font:500 13px 'Plus Jakarta Sans','Outfit',sans-serif;}",
             ".tc-form input:focus{border-color:#f5c542;}",
@@ -341,6 +378,14 @@
             ? '<button class="tc-del" title="Delete" data-id="' + escapeHtml(m._id) + '">🗑</button>'
             : "";
 
+        // Anyone can protect themselves from anyone else — including a student
+        // from a member of staff. These appear on other people's messages only:
+        // there is nothing to block or report about your own.
+        var safetyBtns = mine ? "" :
+            '<button class="tc-dm" title="Message privately">✉</button>' +
+            '<button class="tc-block" title="Block this person">🚫</button>' +
+            '<button class="tc-report" title="Report this message">⚑</button>';
+
         var row = document.createElement("div");
         row.className = "tc-row " + (mine ? "mine" : "theirs");
         row.dataset.id = m._id;
@@ -349,6 +394,7 @@
                 '<b>' + escapeHtml(m.senderName) + '</b>' +
                 '<span class="tc-tag" style="color:' + roleColor + ';border-color:' + roleColor + ';">' + roleTag + '</span>' +
                 '<span class="tc-time">' + escapeHtml(fmtTime(m.timestamp)) + '</span>' +
+                safetyBtns +
                 delBtn +
             '</div>' +
             '<div class="' + bubbleClass + '">' + bubbleBody(m) + '</div>';
@@ -359,6 +405,38 @@
                 if (!ack || !ack.success) alert("Delete failed: " + (ack && ack.message || "forbidden"));
             });
         });
+
+        var dmEl = row.querySelector(".tc-dm");
+        if (dmEl) dmEl.addEventListener("click", function () { openDirectMessage(m.senderId, m.senderName); });
+
+        var blockEl = row.querySelector(".tc-block");
+        if (blockEl) blockEl.addEventListener("click", function () {
+            if (!confirm("Block " + m.senderName + "?\n\nYou will not see their messages and they will not see yours. You can undo this at any time.")) return;
+            postJSON("/api/chat/block", { userId: m.senderId, userName: m.senderName, userRole: m.senderRole })
+                .then(function (d) {
+                    alert(d.message || "Blocked.");
+                    // Their messages must disappear now, not on next reload.
+                    Array.prototype.forEach.call(
+                        w.msgsEl.querySelectorAll('.tc-row'),
+                        function (r) { if (r.dataset.senderId === m.senderId) r.remove(); }
+                    );
+                })
+                .catch(function (e) { alert(e.message); });
+        });
+
+        var reportEl = row.querySelector(".tc-report");
+        if (reportEl) reportEl.addEventListener("click", function () {
+            var reason = prompt("Report this message to an admin.\n\nWhat is wrong with it?");
+            if (reason === null) return;
+            postJSON("/api/chat/report", {
+                userId: m.senderId, userName: m.senderName, userRole: m.senderRole,
+                messageId: m._id, room: w.room || m.chatRoom, reason: reason
+            })
+                .then(function (d) { alert(d.message || "Reported."); })
+                .catch(function (e) { alert(e.message); });
+        });
+
+        row.dataset.senderId = m.senderId;
         w.msgsEl.appendChild(row);
         w.msgsEl.scrollTop = w.msgsEl.scrollHeight;
     }
@@ -445,6 +523,26 @@
                 bumpBadge(m.chatRoom);
             }
         });
+        // A private message from someone whose conversation is not open yet.
+        // Without this the first DM anyone receives is invisible until they
+        // happen to look for it.
+        socket.on("dm_notice", function (p) {
+            if (!p || !p.room) return;
+            if (winsByRoom[p.room]) { bumpBadge(p.room); return; }
+            bumpBadge(p.room);
+            try {
+                var host = document.querySelector(".tc-launchers") || document.body;
+                if (host && !host.querySelector('[data-dm-room="' + cssEsc(p.room) + '"]')) {
+                    var b = document.createElement("button");
+                    b.className = "tc-launcher";
+                    b.dataset.dmRoom = p.room;
+                    b.textContent = "🔒 " + (p.from || "Private");
+                    b.addEventListener("click", function () { toggleChat(p.room, "🔒 " + (p.from || "Private")); });
+                    host.appendChild(b);
+                }
+            } catch (e) { /* the badge alone is enough */ }
+        });
+
         socket.on("message_deleted", function (p) {
             if (cfg.role === "hr" && (p.room === "general" || p.room === "doubts" || p.room === "feedback_support")) {
                 var w = winsByRoom["general"];

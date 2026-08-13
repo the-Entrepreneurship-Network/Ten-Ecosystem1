@@ -85,35 +85,40 @@ async function generateLORPDF(data, outputPath) {
 
             // --- Paragraph 1 ---
             doc.text("", 50, 224); // position cursor
-            doc.font("Times-Bold").text(name, { continued: true });
-            doc.font("Times-Roman").text(" worked in The Entrepreneurship Network as a ", { continued: true });
-            doc.font("Times-Bold").text(role, { continued: true });
-            doc.font("Times-Roman").text(" from ", { continued: true });
-            doc.font("Times-Bold").text(start, { continued: true });
-            doc.font("Times-Roman").text(" to ", { continued: true });
+            doc.font("Times-Bold").text(name + " ", { continued: true });
+            doc.font("Times-Roman").text("worked in The Entrepreneurship Network as a ", { continued: true });
+            doc.font("Times-Bold").text(role + " ", { continued: true });
+            doc.font("Times-Roman").text("from ", { continued: true });
+            doc.font("Times-Bold").text(start + " ", { continued: true });
+            doc.font("Times-Roman").text("to ", { continued: true });
             doc.font("Times-Bold").text(end, { continued: true });
             doc.font("Times-Roman").text(`. During that time, I developed a very high regard for `, { continued: true });
-            doc.font("Times-Bold").text(p.object, { continued: true });
-            doc.font("Times-Roman").text(" based on the outstanding contributions that ", { continued: true });
-            doc.font("Times-Bold").text(p.subject, { continued: true });
-            doc.font("Times-Roman").text(" made to our company throughout the internship.", { continued: false });
+            doc.font("Times-Bold").text(p.object + " ", { continued: true });
+            doc.font("Times-Roman").text("based on the outstanding contributions that ", { continued: true });
+            doc.font("Times-Bold").text(p.subject + " ", { continued: true });
+            doc.font("Times-Roman").text("made to our company throughout the internship.", { continued: false });
 
             doc.moveDown(1);
 
             // --- Paragraph 2 ---
             doc.font("Times-Bold").text(name, { ...bodyOpts, continued: true });
+            // Spaces live at the END of each segment, never the start: PDFKit
+            // trims the leading space of a `continued` segment under
+            // align:"justify", which is how "they has" rendered as "theyhas"
+            // on issued letters. Verb forms come from resolvePronouns so the
+            // neutral "they" reads "they have / they are", not "they has".
             doc.font("Times-Roman").text(" worked within our ", { continued: true });
-            doc.font("Times-Bold").text(dept, { continued: true });
-            doc.font("Times-Roman").text(" department, ", { continued: true });
-            doc.font("Times-Bold").text(p.subject, { continued: true });
-            doc.font("Times-Roman").text(" has excellent communication skills. In addition, ", { continued: true });
-            doc.font("Times-Bold").text(p.subject, { continued: true });
-            doc.font("Times-Roman").text(" is extremely organized, reliable and computer literate, ", { continued: true });
-            doc.font("Times-Bold").text(p.subject, { continued: true });
-            doc.font("Times-Roman").text(" can work independently and is able to follow through to ensure that the job gets done, ", { continued: true });
-            doc.font("Times-Bold").text(p.subject, { continued: true });
-            doc.font("Times-Roman").text(" is flexible and willing to work on any project that is assigned to ", { continued: true });
-            doc.font("Times-Bold").text(p.object, { continued: false });
+            doc.font("Times-Bold").text(dept + " ", { continued: true });
+            doc.font("Times-Roman").text("department, ", { continued: true });
+            doc.font("Times-Bold").text(p.subject + " ", { continued: true });
+            doc.font("Times-Roman").text(`${p.has} excellent communication skills. In addition, `, { continued: true });
+            doc.font("Times-Bold").text(p.subject + " ", { continued: true });
+            doc.font("Times-Roman").text(`${p.is} extremely organized, reliable and computer literate, `, { continued: true });
+            doc.font("Times-Bold").text(p.subject + " ", { continued: true });
+            doc.font("Times-Roman").text(`can work independently and ${p.is} able to follow through to ensure that the job gets done, `, { continued: true });
+            doc.font("Times-Bold").text(p.subject + " ", { continued: true });
+            doc.font("Times-Roman").text(`${p.is} flexible and willing to work on any project that is assigned to `, { continued: true });
+            doc.font("Times-Bold").text(p.object, { continued: true });
             doc.font("Times-Roman").text(".", { continued: false });
 
             doc.moveDown(1);
@@ -122,11 +127,11 @@ async function generateLORPDF(data, outputPath) {
             doc.font("Times-Roman").text("As you can tell by now, I am quite impressed with this outstanding young ", doc.x, doc.y, { ...bodyOpts, continued: true });
             doc.font("Times-Bold").text(p.genderNoun, { continued: true });
             doc.font("Times-Roman").text(", and give ", { continued: true });
-            doc.font("Times-Bold").text(p.object, { continued: true });
-            doc.font("Times-Roman").text(" my strongest recommendation for roles that require intelligence, organization, communication skills, service and a positive attitude. ", { continued: true });
-            doc.font("Times-Bold").text(name, { continued: true });
-            doc.font("Times-Roman").text(" would be a tremendous asset to your Company and has my highest recommendation. Please feel free to contact us if you need additional information or perspective on ", { continued: true });
-            doc.font("Times-Bold").text("ten.hr.contact@gmail.com", { continued: false });
+            doc.font("Times-Bold").text(p.object + " ", { continued: true });
+            doc.font("Times-Roman").text("my strongest recommendation for roles that require intelligence, organization, communication skills, service and a positive attitude. ", { continued: true });
+            doc.font("Times-Bold").text(name + " ", { continued: true });
+            doc.font("Times-Roman").text("would be a tremendous asset to your Company and has my highest recommendation. Please feel free to contact us if you need additional information or perspective on ", { continued: true });
+            doc.font("Times-Bold").text("ten.hr.contact@gmail.com", { continued: true });
             doc.font("Times-Roman").text(".", { continued: false });
 
             doc.moveDown(1.5);

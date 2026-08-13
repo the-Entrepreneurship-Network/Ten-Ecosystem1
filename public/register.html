@@ -159,6 +159,15 @@
     }
   </style>
   <link rel="stylesheet" href="/css/ten-brand.css">
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <script src="/tailwind-guard.js" defer></script>
 </head>
 <body class="min-h-screen text-slate-100 flex items-center justify-center p-4 md:p-8 relative overflow-x-hidden">
 
@@ -473,11 +482,21 @@
             <div>
               <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Internship Duration / Tenure <span class="text-red-500">*</span></label>
               <select id="stu_tenure" name="tenure" class="stu-req w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]">
+                <!-- The six tenures the rest of the system knows about, in order.
+                     Three were missing here — 1 Week, 15 Days and 45 Days — and
+                     "2 Months" was offered although normalizeTenure() rejects it,
+                     so anyone who chose it had their registration refused with
+                     "Please select a valid internship tenure" and no way to see
+                     why. The fee is shown because it decides the choice, and
+                     students were previously asked to pay only after they had
+                     already registered and been given an employee ID. -->
                 <option value="">Select Tenure Duration</option>
-                <option value="1 Month" selected>1 Month</option>
-                <option value="2 Months">2 Months</option>
-                <option value="3 Months">3 Months</option>
-                <option value="6 Months">6 Months</option>
+                <option value="1 Week">1 Week — crash course (₹2000)</option>
+                <option value="15 Days">15 Days — crash course (₹1500)</option>
+                <option value="1 Month">1 Month — crash course (₹1000)</option>
+                <option value="45 Days">45 Days — free</option>
+                <option value="3 Months">3 Months — free</option>
+                <option value="6 Months">6 Months — free</option>
               </select>
               <p class="text-xs text-slate-500 mt-2">Selected tenure dictates certificate eligibility and milestone review schedule.</p>
             </div>
@@ -513,7 +532,7 @@
                 </label>
                 <label class="flex items-center gap-2 bg-slate-950/30 border border-slate-800 p-3 rounded-lg cursor-pointer hover:border-amber-500/40 transition">
                   <input type="checkbox" name="mentor_domains" value="Business Development" class="mentor-domain-check accent-amber-500">
-                  <span class="text-xs font-semibold text-slate-200">Business Dev</span>
+                  <span class="text-xs font-semibold text-slate-200">Business Development</span>
                 </label>
                 <label class="flex items-center gap-2 bg-slate-950/30 border border-slate-800 p-3 rounded-lg cursor-pointer hover:border-amber-500/40 transition">
                   <input type="checkbox" name="mentor_domains" value="UI/UX Design" class="mentor-domain-check accent-amber-500">
@@ -648,11 +667,11 @@
                   </div>
                   <div onclick="selectDomainCard('MERN Stack Development')" id="domain_card_MERN_Stack_Development" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
                     <i class="fa-solid fa-cubes text-amber-500/80 text-sm"></i>
-                    <span class="text-xs font-bold text-slate-200">MERN Stack Dev</span>
+                    <span class="text-xs font-bold text-slate-200">MERN Stack Development</span>
                   </div>
                   <div onclick="selectDomainCard('Artificial Intelligence')" id="domain_card_Artificial_Intelligence" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
                     <i class="fa-solid fa-brain text-amber-500/80 text-sm"></i>
-                    <span class="text-xs font-bold text-slate-200">Artificial Intell</span>
+                    <span class="text-xs font-bold text-slate-200">Artificial Intelligence</span>
                   </div>
                   <div onclick="selectDomainCard('Data Science')" id="domain_card_Data_Science" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
                     <i class="fa-solid fa-chart-line text-amber-500/80 text-sm"></i>
@@ -662,19 +681,39 @@
                     <i class="fa-solid fa-shield-halved text-amber-500/80 text-sm"></i>
                     <span class="text-xs font-bold text-slate-200">Cyber Security</span>
                   </div>
+                  <div onclick="selectDomainCard('Software Engineering')" id="domain_card_Software_Engineering" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-code text-amber-500/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Software Engineering</span>
+                  </div>
+                  <div onclick="selectDomainCard('Flutter Development')" id="domain_card_Flutter_Development" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-mobile-screen text-amber-500/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Flutter Development</span>
+                  </div>
                 </div>
               </div>
 
               <div class="mt-2">
-                <p class="text-[11px] text-slate-400 font-bold tracking-wider mb-2">BUSINESS DOMAINS:</p>
+                <p class="text-[11px] text-slate-400 font-bold tracking-wider mb-2">BUSINESS &amp; OTHER DOMAINS:</p>
                 <div class="grid grid-cols-2 gap-3" id="bizDomainsSelector">
                   <div onclick="selectDomainCard('Business Development')" id="domain_card_Business_Development" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
                     <i class="fa-solid fa-briefcase text-blue-400/80 text-sm"></i>
-                    <span class="text-xs font-bold text-slate-200">Business Dev</span>
+                    <span class="text-xs font-bold text-slate-200">Business Development</span>
                   </div>
                   <div onclick="selectDomainCard('HR')" id="domain_card_HR" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
                     <i class="fa-solid fa-users text-blue-400/80 text-sm"></i>
                     <span class="text-xs font-bold text-slate-200">HR</span>
+                  </div>
+                  <div onclick="selectDomainCard('Space Intern')" id="domain_card_Space_Intern" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-rocket text-blue-400/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Space Intern</span>
+                  </div>
+                  <div onclick="selectDomainCard('Venture Capital')" id="domain_card_Venture_Capital" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-hand-holding-dollar text-blue-400/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Venture Capital</span>
+                  </div>
+                  <div onclick="selectDomainCard('Finance')" id="domain_card_Finance" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-indian-rupee-sign text-blue-400/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Finance</span>
                   </div>
                 </div>
               </div>

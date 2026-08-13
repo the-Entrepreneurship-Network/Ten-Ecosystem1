@@ -4,8 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#D4AF37">
-<meta name="apple-mobile-web-app-capable" content="yes">
+<!-- The status bar is painted with this. It was the gold ACCENT, which
+     put a bright yellow band above a near-black page on every Android
+     phone. It must match the page background, not the highlight. -->
+<meta name="theme-color" content="#0c1220">
+<meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="TEN Portal">
 <link rel="apple-touch-icon" href="/icons/icon-192.png">
@@ -1509,6 +1513,9 @@ button:active { transform: translateY(0); }
 }
 </style>
   <link rel="stylesheet" href="/css/ten-brand.css">
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <script src="/push-client.js" defer></script>
 </head>
 
 <body>
@@ -1618,10 +1625,12 @@ button:active { transform: translateY(0); }
     <button class="stu-nav-btn" data-view="stu-view-guidelines" onclick="switchStudentView('stu-view-guidelines')"><span class="nav-icon">📋</span> Guidelines</button>
     <button class="stu-nav-btn" data-view="stu-view-leaderboard" onclick="switchStudentView('stu-view-leaderboard')"><span class="nav-icon">🏆</span> Leaderboard &amp; Badges</button>
     <!-- Section 9 — student feedback, shown once the internship is complete. -->
+    <button class="stu-nav-btn" onclick="window.location.href='/notifications'" style="background:linear-gradient(135deg,rgba(245,197,66,0.1),rgba(245,197,66,0.03));border:1px solid rgba(245,197,66,0.2);"><span class="nav-icon">🔔</span> Notifications <span id="stuNotifBadge" style="display:none;font-size:10px;background:#f5c542;color:#0a1222;padding:1px 6px;border-radius:999px;margin-left:4px;font-weight:800;">0</span></button>
+    <button class="stu-nav-btn" onclick="window.location.href='/messages'" style="background:linear-gradient(135deg,rgba(16,185,129,0.1),rgba(16,185,129,0.03));border:1px solid rgba(16,185,129,0.2);"><span class="nav-icon">💬</span> Messages <span id="stuDmBadge" style="display:none;font-size:10px;background:#10b981;color:#04121f;padding:1px 6px;border-radius:999px;margin-left:4px;font-weight:800;">0</span></button>
     <button class="stu-nav-btn" id="stuNavFeedback" data-view="stu-view-feedback" onclick="switchStudentView('stu-view-feedback')" style="display:none;"><span class="nav-icon">💌</span> Share Feedback</button>
     <!-- NEW FEATURE: Document Upload + Certificates nav links -->
     <button class="stu-nav-btn" onclick="window.location.href='my-documents.html'" style="background:linear-gradient(135deg,rgba(245,158,11,0.08),rgba(245,158,11,0.02));border:1px solid rgba(245,158,11,0.18);"><span class="nav-icon">📋</span> My Documents <span style="font-size:10px;background:rgba(245,158,11,0.2);color:#f59e0b;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
-    <a class="stu-nav-btn" href="https://discord.gg/GYnZFbDE7" target="_blank" rel="noopener" style="background:linear-gradient(135deg,rgba(88,101,242,0.12),rgba(88,101,242,0.04));border:1px solid rgba(88,101,242,0.25);text-decoration:none;display:flex;align-items:center;gap:8px;"><span class="nav-icon">💬</span> Discord Community</a>
+    <a class="stu-nav-btn" href="https://discord.gg/WCnHJnrWj" target="_blank" rel="noopener" style="background:linear-gradient(135deg,rgba(88,101,242,0.12),rgba(88,101,242,0.04));border:1px solid rgba(88,101,242,0.25);text-decoration:none;display:flex;align-items:center;gap:8px;"><span class="nav-icon">💬</span> Discord Community</a>
     <button class="stu-nav-btn" onclick="window.location.href='my-certificates.html'" style="background:linear-gradient(135deg,rgba(139,92,246,0.08),rgba(139,92,246,0.02));border:1px solid rgba(139,92,246,0.18);"><span class="nav-icon">🏅</span> My Certificates <span style="font-size:10px;background:rgba(139,92,246,0.2);color:#c4b5fd;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
     <button class="stu-nav-btn" onclick="showPaymentComingSoon()" style="background:linear-gradient(135deg,rgba(16,185,129,0.08),rgba(16,185,129,0.02));border:1px solid rgba(16,185,129,0.2);"><span class="nav-icon">💳</span> Make Payment <span style="font-size:10px;background:rgba(16,185,129,0.2);color:#10b981;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
     <button class="stu-nav-btn" onclick="window.location.href='ten-network.html'" style="background:linear-gradient(135deg,rgba(212,175,55,0.12),rgba(212,175,55,0.04));border:1px solid rgba(212,175,55,0.25);"><span class="nav-icon">🌐</span> TEN Network <span style="font-size:10px;background:rgba(212,175,55,0.25);color:#D4AF37;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
@@ -2303,6 +2312,9 @@ button:active { transform: translateY(0); }
         <!-- How far into the programme the student is: "Day 12 of 45". -->
         <p id="attendanceDayProgress" style="display:none;font-size:12px;color:#8aa4c8;margin-top:4px;"></p>
         <p id="attendanceThreshold" style="font-size:12px;color:#f59e0b;margin-top:4px;"></p>
+        <!-- Only shown to students holding two domains: says which internship
+             these figures belong to, since the two are counted separately. -->
+        <p id="attendanceDomainNote" style="display:none;font-size:12px;color:#93c5fd;margin-top:6px;padding:8px 10px;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:8px;"></p>
       </div>
       <button type="button" onclick="resetTodayAttendanceTest()" style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); color: #cbd5e1; font-size: 11px; font-weight: 700; padding: 6px 14px; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;">
         🔄 Reset Today (Re-test Lock Flow)
@@ -3907,6 +3919,7 @@ async function markSelfAttendance(){
   const todayKey = getTodayDateKey();
   const isCompleted = localStorage.getItem('gform_completed_' + todayKey) === 'true';
 
+
   if (!isCompleted) {
     return Swal.fire({
       icon: 'warning',
@@ -3924,7 +3937,11 @@ async function markSelfAttendance(){
     const r = await fetch("/attendance/self",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({ employeeId, gformVerified: true })
+      // The active domain travels with the mark. A student holding two
+      // domains is running two separate internships and marks each one
+      // independently; without this the server had to guess and every mark
+      // landed on the primary domain.
+      body:JSON.stringify({ employeeId, domain, gformVerified: true })
     });
     const d = await r.json();
     if(d.success){
@@ -4034,13 +4051,32 @@ async function loadAttendance(){
       }
     }
 
+    // Which domain these figures belong to. A student holding two domains has
+    // two independent attendance records and must mark each one, so the panel
+    // has to say which internship it is showing.
+    var domainNote = document.getElementById("attendanceDomainNote");
+    var multiDomain = Array.isArray(d.domains) && d.domains.length > 1;
+    if (domainNote) {
+      if (multiDomain) {
+        domainNote.innerHTML = "Showing <strong>" + _fbEscape(d.domain || domain) + "</strong>" +
+          " &nbsp;·&nbsp; attendance is counted separately for each domain — switch domains above to mark the other one.";
+        domainNote.style.display = "block";
+      } else {
+        domainNote.style.display = "none";
+      }
+    }
+
     const btn = document.getElementById("attendanceBtn");
     const statusEl = document.getElementById("attendanceStatus");
     if(d.markedToday){
       btn.setAttribute('data-already-marked', 'true');
-      btn.innerText = "Today's Attendance Marked ✅";
+      btn.innerText = multiDomain
+        ? "Marked for " + (d.domain || domain) + " ✅"
+        : "Today's Attendance Marked ✅";
       btn.disabled = true; btn.classList.add("attendance-disabled");
-      if(statusEl) statusEl.innerText = "You marked your attendance today. Come back tomorrow.";
+      if(statusEl) statusEl.innerText = multiDomain
+        ? "You marked " + (d.domain || domain) + " today. Switch to your other domain to mark that one."
+        : "You marked your attendance today. Come back tomorrow.";
       const step2Text = document.getElementById("step2StatusText");
       if(step2Text) {
         step2Text.textContent = "✅ Today's attendance is already recorded and saved in the system!";
@@ -4080,6 +4116,36 @@ function _fbEscape(s){
  * Show the Share Feedback nav item only once the internship is complete, and
  * render anything the student has already sent.
  */
+/** Unread portal notifications, shown on the Notifications nav item. */
+async function refreshNotifBadge(){
+  try {
+    const r = await fetch("/api/notifications/unread-count", { credentials: "same-origin" });
+    if (!r.ok) return;
+    const d = await r.json();
+    const el = document.getElementById("stuNotifBadge");
+    if (!el) return;
+    if (d.unread > 0){ el.textContent = d.unread > 99 ? "99+" : d.unread; el.style.display = "inline-block"; }
+    else { el.style.display = "none"; }
+  } catch (e) { /* the badge just stays hidden */ }
+}
+setInterval(refreshNotifBadge, 45000);
+document.addEventListener("DOMContentLoaded", refreshNotifBadge);
+
+/** Unread direct messages, shown on the Messages nav item. */
+async function refreshDmBadge(){
+  try {
+    const r = await fetch("/api/chat/unread", { credentials: "same-origin" });
+    if (!r.ok) return;
+    const d = await r.json();
+    const el = document.getElementById("stuDmBadge");
+    if (!el) return;
+    if (d.unread > 0){ el.textContent = d.unread > 99 ? "99+" : d.unread; el.style.display = "inline-block"; }
+    else { el.style.display = "none"; }
+  } catch (e) { /* the badge just stays hidden */ }
+}
+setInterval(refreshDmBadge, 45000);
+document.addEventListener("DOMContentLoaded", refreshDmBadge);
+
 async function initStudentFeedback(){
   try {
     const res = await fetch("/api/feedback/my-status", { credentials: "same-origin" });
@@ -5720,13 +5786,14 @@ setupDomainSwitcher();
 
 <div class="sidebar-overlay" onclick="closeSidebar()"></div>
 <script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', function () {
-      navigator.serviceWorker.register('/sw.js')
-        .then(function (reg) { console.log('SW registered'); })
-        .catch(function (err) { console.log('SW error:', err); });
-    });
-  }
+  // No service worker is registered here.
+  //
+  // These pages used to register '/sw.js', a file that has never existed in
+  // this repository, so every load 404'd and logged a SecurityError. Beyond
+  // the noise, a service worker on a portal that serves per-student data is a
+  // caching hazard — this project already lost a week to stale HTML being
+  // served from a cache — so the correct fix is to stop asking for one rather
+  // than to add an empty file that starts caching.
 </script>
 
 <!-- ══════ PROFILE MODAL (Student) ══════ -->
@@ -5775,7 +5842,7 @@ setupDomainSwitcher();
     <!-- Discord Community -->
     <div style="margin-top:16px;background:rgba(88,101,242,0.08);border:1px solid rgba(88,101,242,0.25);border-radius:12px;padding:14px;text-align:center;">
       <div style="font-size:12px;color:#8aa4c8;margin-bottom:8px;font-weight:600;">🎮 Join TEN Alumni Community</div>
-      <a href="https://discord.gg/GYnZFbDE7" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;background:linear-gradient(135deg,#5865F2,#4752C4);border-radius:10px;color:#fff;font-weight:700;font-size:13px;text-decoration:none;">💬 Join Discord Community</a>
+      <a href="https://discord.gg/WCnHJnrWj" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;background:linear-gradient(135deg,#5865F2,#4752C4);border-radius:10px;color:#fff;font-weight:700;font-size:13px;text-decoration:none;">💬 Join Discord Community</a>
       <p style="font-size:11px;color:#6a7a9a;margin-top:8px;">Connect with TEN alumni &amp; network</p>
     </div>
   </div>
@@ -6043,39 +6110,80 @@ function wizardEnableEmpIdEdit() {
 }
 
 async function wizardUpdateEmpId() {
-  var input = document.getElementById('wizardEmpIdInput');
-  var newId = input.value.trim();
+  var input  = document.getElementById('wizardEmpIdInput');
+  var newId  = input.value.trim();
   var status = document.getElementById('wizardEmpIdStatus');
-  
+
   if (!newId) {
     status.style.color = '#f43f5e';
-    status.textContent = '❌ Employee ID cannot be empty.';
+    status.textContent = '\u274c Employee ID cannot be empty.';
     return;
   }
-  
+
+  // Actually ask the server whether this ID is free.
+  //
+  // This function used to print "Verifying and saving..." and then
+  // "\u2705 Employee ID verified & prepared!" without checking anything — the
+  // try/catch wrapped code that could not throw. A WhatsApp joiner could type
+  // an ID that already belonged to another student and be told it was
+  // verified; the collision only surfaced later, as a unique-index failure or,
+  // in the JSON fallback which enforces nothing, as two students sharing one
+  // login identity.
+  //
+  // Nothing is stored on _onboardingState until the server says the ID is
+  // free, so "Next Step" cannot carry a duplicate forward.
+  _onboardingState.updatedEmployeeId = null;
+  var updateBtn = document.getElementById('wizardEmpIdUpdateBtn');
+  if (updateBtn) updateBtn.disabled = true;
+
   try {
     status.style.color = '#3b82f6';
-    status.textContent = 'Verifying and saving...';
-    
+    status.textContent = 'Checking this Employee ID\u2026';
+
+    var res  = await fetch('/api/employee-id/available?employeeId=' + encodeURIComponent(newId),
+                           { credentials: 'same-origin' });
+    var data = await res.json();
+
+    if (!data || data.success === false) {
+      throw new Error(data && data.reason ? data.reason : 'Could not check that Employee ID.');
+    }
+
+    if (!data.available) {
+      status.style.color = '#f43f5e';
+      status.textContent = '\u274c ' + (data.reason || 'This Employee ID is already taken.');
+      input.disabled = false;
+      input.focus();
+      input.select();
+      Swal.fire({
+        icon: 'error',
+        title: 'Employee ID already in use',
+        text: (data.reason || 'This Employee ID is already taken.') +
+              ' Please enter the ID printed on your offer letter, or choose a different one.',
+        background: '#0d1124', color: '#f0eee8', confirmButtonColor: '#f43f5e'
+      });
+      return;
+    }
+
     _onboardingState.updatedEmployeeId = newId;
 
     status.style.color = '#10b981';
-    status.textContent = '✅ Employee ID verified & prepared!';
+    status.textContent = '\u2705 Employee ID is available and prepared!';
     input.disabled = true;
     document.getElementById('wizardEmpIdEditBtn').style.display = 'block';
     document.getElementById('wizardEmpIdUpdateBtn').style.display = 'none';
-    
+
     Swal.fire({
       icon: 'success',
       title: 'Employee ID Confirmed',
-      text: 'Employee ID is updated and will be saved permanently upon finalizing onboarding.',
-      background: '#0d1124',
-      color: '#f0eee8',
-      confirmButtonColor: '#10b981'
+      text: 'This Employee ID is free and will be saved when you finish onboarding.',
+      background: '#0d1124', color: '#f0eee8', confirmButtonColor: '#10b981'
     });
-  } catch(err) {
+  } catch (err) {
     status.style.color = '#f43f5e';
-    status.textContent = '❌ Verification failed. Please try again.';
+    status.textContent = '\u274c ' + (err.message || 'Could not check that Employee ID. Please try again.');
+    input.disabled = false;
+  } finally {
+    if (updateBtn) updateBtn.disabled = false;
   }
 }
 
@@ -6083,22 +6191,37 @@ function wizardGoToStep3() {
   document.getElementById('wizardStep2').style.display = 'none';
   var dateInput = document.getElementById('wizardJoiningDateInput');
   if (dateInput) {
-    const today = new Date();
-    const minDate = new Date(today);
-    minDate.setDate(today.getDate() - 90);
+    var today = new Date();
     dateInput.max = today.toISOString().split('T')[0];
-    dateInput.min = minDate.toISOString().split('T')[0];
+
+    // The floor used to be today minus 90 days, which quietly made this card
+    // impossible for the very students it exists for: someone who attended
+    // through WhatsApp for four months before the portal existed for them
+    // could not enter their real start date at all, and the picker gave no
+    // reason. Eighteen months covers every tenure the programme offers while
+    // still refusing an obviously wrong year.
+    var floor = new Date(today);
+    floor.setMonth(floor.getMonth() - 18);
+    dateInput.min = floor.toISOString().split('T')[0];
   }
   document.getElementById('wizardStep3').style.display = 'block';
 }
 
 async function wizardConfirmJoiningDate() {
-  var dateVal = document.getElementById('wizardJoiningDateInput').value;
+  var dateEl  = document.getElementById('wizardJoiningDateInput');
+  var dateVal = dateEl.value;
   if (!dateVal) {
+    // A date input reports an EMPTY value when what is typed is outside
+    // min/max or not a real date, so "nothing selected" and "that date is not
+    // allowed" arrive here identically. Saying which it is matters: the field
+    // visibly shows a date while the page insists none was chosen.
+    var outOfRange = dateEl.validity && (dateEl.validity.rangeUnderflow || dateEl.validity.rangeOverflow || dateEl.validity.badInput);
     Swal.fire({
       icon: 'warning',
-      title: 'Date Required',
-      text: 'Please select your internship joining date.',
+      title: outOfRange ? 'That Date Cannot Be Used' : 'Date Required',
+      text: outOfRange
+        ? 'Please pick a date between ' + dateEl.min + ' and ' + dateEl.max + '.'
+        : 'Please select your internship joining date.',
       background: '#0d1124',
       color: '#f0eee8',
       confirmButtonColor: '#D4AF37'

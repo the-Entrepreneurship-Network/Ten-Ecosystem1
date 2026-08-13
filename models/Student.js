@@ -13,6 +13,10 @@ const studentsSchema = new mongoose.Schema({
     tenure: String,
     dualDomains: { type: Boolean, default: false },
     failedLoginAttempts: { type: Number, default: 0 },
+    // When the most recent failure was. Without it the attempt counter never
+    // decayed: five mistyped passwords spread over months added up to a
+    // lockout, and the student had no idea why. See recordFailedAttempt.
+    lastFailedLoginAt:   { type: Date, default: null },
     lockoutUntil: { type: Date, default: null },
     isLockedOut: { type: Boolean, default: false },
     joiningDate: String,
@@ -186,5 +190,23 @@ const studentsSchema = new mongoose.Schema({
 // and a unique index that cannot be built would fail at startup.
 studentsSchema.index({ email: 1 });
 studentsSchema.index({ domain: 1 });
+
+// Sort keys. These are not an optimisation — without them the HR lists BREAK.
+//
+// A Student document embeds up to five base64 PDFs (offer letter, LOC, LOR,
+// star, promotion), so a single record can be megabytes. An unindexed
+// `.sort()` makes MongoDB run a blocking SORT stage over the FETCHED
+// documents — PDFs included — and at ~778 students that exceeded the 100MB
+// in-memory sort limit and returned:
+//
+//   Executor error during find command :: caused by ::
+//   Sort exceeded memory limit of 104857600 bytes
+//
+// A projection does not help: the sort happens before it. An index does,
+// because the planner then walks the index in order (IXSCAN) and drops the
+// blocking sort entirely. This one line fixes every HR list that sorts.
+studentsSchema.index({ createdAt: -1 });
+studentsSchema.index({ joiningDate: -1 });
+studentsSchema.index({ lastActiveDate: -1 });
 
 module.exports = mongoose.model("Student", studentsSchema);

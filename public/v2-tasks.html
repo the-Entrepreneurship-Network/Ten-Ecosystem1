@@ -406,6 +406,15 @@ body::after {
 }
 </style>
   <link rel="stylesheet" href="/css/ten-brand.css">
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <script src="/push-client.js" defer></script>
 </head>
 <body>
 
@@ -688,7 +697,7 @@ async function apiFetch(path, opts = {}) {
       localStorage.removeItem('v2StudentData');
     } catch (_) { /* private mode — nothing to clear */ }
     const back = encodeURIComponent(location.pathname + location.search);
-    location.replace('/student-login.html?next=' + back);
+    location.replace('/login.html?next=' + back);
     // Never resolves: the navigation is already underway, and resolving would
     // let the caller render an error dialog over a page that is going away.
     return new Promise(() => {});
@@ -767,42 +776,69 @@ async function init() {
       document.getElementById('onboard-domain').textContent = studentData.domain || 'Unknown';
       document.getElementById('onboard-overlay').style.display = 'flex';
 
-      // Show ONE option: the tenure this student registered on.
+      // The student's own tenure is the only one they can start.
       //
-      // The other five were displayed and dimmed, which invited a click that
-      // could only ever fail — POST /student/onboard rejects any tenure but the
-      // registered one with a 409, so a student who clicked "1 Month" while
-      // registered on 3 Months got a red Error box telling them off for using
-      // the interface as presented. Showing a choice the server will refuse is
-      // not a safeguard, it is a trap.
+      // All six stay on screen so they can see the full ladder and where they
+      // sit on it, but the five they are not on are blurred and unselectable.
+      // Pressing one explains why instead of failing: POST /student/onboard
+      // rejects any tenure but the registered one with a 409, and a student who
+      // clicked "1 Month" while registered on 3 Months used to get a red Error
+      // box telling them off for using the interface as presented.
       //
       // registeredTenure comes from Student.tenure. durationType is the
       // resolved value used to assign tasks, and is the fallback so a record
       // with no tenure still shows the track it is actually being taught on.
       const registered = status.registeredTenure || status.durationType || '1month';
 
-      let shown = 0;
+      const TENURE_LABELS = {
+        '1week': '1 Week', '15days': '15 Days', '1month': '1 Month',
+        '45days': '45 Days', '3months': '3 Months', '6months': '6 Months'
+      };
+      const registeredLabel = TENURE_LABELS[registered] || registered;
+
+      let matched = 0;
       document.querySelectorAll('.duration-option').forEach(function (opt) {
         if (opt.dataset.duration === registered) {
-          opt.style.display = '';
+          opt.style.filter = '';
+          opt.style.opacity = '';
+          opt.style.cursor = 'pointer';
+          opt.removeAttribute('aria-disabled');
           selectDuration(opt);
-          shown++;
-        } else {
-          opt.style.display = 'none';
+          matched++;
+          return;
         }
+
+        opt.style.filter = 'blur(3px)';
+        opt.style.opacity = '0.45';
+        opt.style.cursor = 'not-allowed';
+        opt.setAttribute('aria-disabled', 'true');
+        opt.onclick = function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          Swal.fire({
+            icon: 'info',
+            title: 'Not your internship length',
+            text: 'You did not take this tenure. Your internship is ' + registeredLabel +
+                  ', and it was set when you registered. Ask your coordinator if that is wrong.',
+            background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#D4AF37'
+          });
+        };
       });
 
       // Never leave the student with nothing to press. If the registered value
-      // matches no card — an unexpected tenure string — put them all back
-      // rather than showing an empty dialog with a dead button.
-      if (shown === 0) {
+      // matches no card — an unexpected tenure string — unblur them all rather
+      // than showing six blurred cards and a dead button.
+      if (matched === 0) {
         document.querySelectorAll('.duration-option').forEach(function (opt) {
-          opt.style.display = '';
+          opt.style.filter = '';
+          opt.style.opacity = '';
+          opt.style.cursor = 'pointer';
+          opt.removeAttribute('aria-disabled');
         });
       }
 
       var sub = document.getElementById('onboard-subtitle');
-      if (sub) sub.textContent = 'This is the internship length you registered for.';
+      if (sub) sub.textContent = 'Your internship length is ' + registeredLabel + '. The others are not available to you.';
       return;
     }
 

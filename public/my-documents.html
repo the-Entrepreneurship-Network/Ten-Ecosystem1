@@ -102,6 +102,15 @@ body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans
 .cert-link-btn{display:inline-flex;align-items:center;gap:8px;padding:12px 24px;background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.25);border-radius:12px;color:#c4b5fd;font-size:14px;font-weight:700;text-decoration:none;transition:all 0.2s;margin-bottom:28px;}
 .cert-link-btn:hover{background:rgba(139,92,246,0.2);transform:translateX(4px);}
 </style>
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <script src="/push-client.js" defer></script>
 </head>
 <body>
 
@@ -292,7 +301,9 @@ async function loadMyCertificates() {
   if (!employeeId) return;
   
   try {
-    const res  = await fetch(`/api/v2/certificates/my-certs?employeeId=${encodeURIComponent(employeeId)}`);
+    // Eligibility first: renderDocumentTable draws the Apply cells from it.
+    if (!CERT_ELIGIBILITY) await loadCertEligibility();
+    const res  = await fetch(`/api/v2/certificates/my-certs?employeeId=${encodeURIComponent(employeeId)}`, { credentials:'same-origin' });
     const data = await res.json();
     renderDocumentTable(data);
     renderFineNotices(data.pendingFines || []);
@@ -306,16 +317,88 @@ function renderDocumentTable(data) {
   // Update each row in the OFFICIAL DOCUMENTS table:
   
   // Offer Letter row
-  updateDocRow('offer', data.offerLetterStatus, data.offerLetterGeneratedAt, data.hasOfferPdf, data.documentRejectionReason);
+  updateDocRow('offer', data.offerLetterStatus, data.offerLetterGeneratedAt, data.hasOfferPdf, data.documentRejectionReason, data.offerDocumentNumber);
   // LOR row
-  updateDocRow('lor', data.lorStatus, data.lorIssuedAt, data.hasLorPdf, null);
+  updateDocRow('lor', data.lorStatus, data.lorIssuedAt, data.hasLorPdf, null, data.lorDocumentNumber);
   // LOC row
-  updateDocRow('loc', data.locStatus, data.locIssuedAt, data.hasLocPdf, null);
+  updateDocRow('loc', data.locStatus, data.locIssuedAt, data.hasLocPdf, null, data.locDocumentNumber);
   // Star row
-  updateDocRow('star', data.starStatus, data.starIssuedAt, data.hasStarPdf, null);
+  updateDocRow('star', data.starStatus, data.starIssuedAt, data.hasStarPdf, null, null);
 }
 
-function updateDocRow(type, status, date, hasPdf, rejectionReason) {
+/* ── Certificate applications ─────────────────────────────────────────────
+   A student can now ask for a certificate once they meet its bar, instead of
+   waiting for someone to push it. The rules live on the server
+   (services/certificateEligibility.js); this only decides what to draw, and
+   the apply route re-checks before accepting. When a student is not eligible
+   the cell says WHY — "Requires above 75% attendance — yours is 68%" — rather
+   than showing a dead button with no explanation. */
+let CERT_ELIGIBILITY = null;
+
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+async function loadCertEligibility() {
+  try {
+    const r = await fetch('/api/v2/certificate-applications/eligibility', { credentials:'same-origin' });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d && d.success) CERT_ELIGIBILITY = d.certificates;
+  } catch (e) { /* leave buttons hidden rather than guess */ }
+}
+
+function renderApplyCell(TYPE) {
+  const c = CERT_ELIGIBILITY && CERT_ELIGIBILITY[TYPE];
+  if (!c) return '<span style="color:#475569;font-size:13px">Not yet issued</span>';
+
+  if (c.applied) {
+    const map = {
+      pending:  ['#f59e0b', '⏳ Applied — awaiting HR review'],
+      approved: ['#34d399', '✅ Approved — issuing shortly'],
+      issued:   ['#34d399', '✅ Issued']
+    };
+    const [color, label] = map[c.applicationStatus] || ['#8aa4c8', 'Applied'];
+    return `<span style="color:${color};font-weight:600;font-size:13px">${label}</span>`;
+  }
+
+  if (c.eligible) {
+    return `<button onclick="applyForCertificate('${TYPE}')" id="applyBtn-${TYPE}"
+      style="padding:8px 18px;background:linear-gradient(135deg,#D4AF37,#B8960C);border:none;border-radius:8px;color:#0c1220;font-weight:800;font-size:13px;cursor:pointer;">
+      📩 Apply Now</button>`;
+  }
+
+  const note = c.applicationStatus === 'rejected' && c.reviewNote
+    ? ` (${esc(c.reviewNote)})` : '';
+  return `<span style="color:#8aa4c8;font-size:12px;line-height:1.5;display:inline-block;max-width:280px;">🔒 ${esc(c.reason)}${note}</span>`;
+}
+
+async function applyForCertificate(TYPE) {
+  const btn = document.getElementById('applyBtn-' + TYPE);
+  if (btn) { btn.disabled = true; btn.textContent = 'Applying…'; }
+  try {
+    const r = await fetch('/api/v2/certificate-applications/apply', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ certificateType: TYPE })
+    });
+    const d = await r.json();
+    if (!r.ok || !d.success) throw new Error(d.message || `Request failed (${r.status})`);
+    await Swal.fire({
+      icon: 'success', title: 'Application submitted',
+      text: d.message, background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#D4AF37'
+    });
+    await loadCertEligibility();
+    loadMyCertificates();
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = '📩 Apply Now'; }
+    Swal.fire({
+      icon: 'error', title: 'Could not apply', text: e.message,
+      background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#ef4444'
+    });
+  }
+}
+
+function updateDocRow(type, status, date, hasPdf, rejectionReason, documentNumber) {
   const empId = localStorage.getItem('employeeId') || EMP_ID;
   const statusEl = document.getElementById(`status-${type}`);
   const dateEl   = document.getElementById(`date-${type}`);
@@ -341,9 +424,19 @@ function updateDocRow(type, status, date, hasPdf, rejectionReason) {
   
   let actionHTML = '';
   if (hasPdf && ['issued','approved'].includes(status)) {
-    actionHTML = `<a href="/api/v2/certificates/download/${type.toUpperCase()}?employeeId=${encodeURIComponent(empId)}" 
+    actionHTML = `<a href="/api/v2/certificates/download/${type.toUpperCase()}?employeeId=${encodeURIComponent(empId)}"
       download style="padding:8px 18px;background:linear-gradient(135deg,#059669,#10b981);border-radius:8px;color:#fff;text-decoration:none;font-weight:700;font-size:13px;display:inline-block">
       ⬇️ Download</a>`;
+    if (documentNumber) {
+      // The same public check an employer runs, one click from the student's
+      // own row — so "is my certificate genuine?" never needs an HR message.
+      actionHTML += ` <a href="/verify-document?id=${encodeURIComponent(documentNumber)}" target="_blank"
+        style="padding:8px 14px;background:rgba(212,175,55,0.12);border:1px solid rgba(212,175,55,0.35);border-radius:8px;color:#f5c542;text-decoration:none;font-weight:700;font-size:13px;display:inline-block">
+        🔍 Verify</a>`;
+    }
+  } else if (CERT_ELIGIBILITY && CERT_ELIGIBILITY[({loc:'LOC',lor:'LOR',star:'STAR'})[type]]) {
+    // Not issued yet — offer the Apply button, or say exactly what is missing.
+    actionHTML = renderApplyCell(({loc:'LOC',lor:'LOR',star:'STAR'})[type]);
   } else if (status === 'rejected' && rejectionReason) {
     actionHTML = `<span style="color:#f87171;font-size:12px">Reason: ${rejectionReason}</span>
       <button onclick="showReuploadSection()" style="margin-left:8px;padding:6px 14px;background:#7c3aed;border:none;border-radius:7px;color:#fff;cursor:pointer;font-size:12px;font-weight:700">Re-upload</button>`;

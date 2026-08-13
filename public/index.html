@@ -25,6 +25,13 @@
   #wipe { position:fixed; inset:0; background:#000; z-index:99; transform:scaleY(0); transform-origin:bottom; transition:transform .7s cubic-bezier(.76,0,.24,1); pointer-events:none; }
   #wipe.on { transform:scaleY(1); }
 
+  /* ---------- floating world: cursor dot + drift ---------- */
+  #dot { position:fixed; top:0; left:0; width:12px; height:12px; border-radius:50%; background:#fff; mix-blend-mode:difference; pointer-events:none; z-index:98; transform:translate(-50%,-50%); transition:width .25s,height .25s,opacity .3s; opacity:0; }
+  #dot.big { width:44px; height:44px; }
+  @media (hover:none) { #dot { display:none; } }
+  @keyframes floaty { 50% { transform:translateY(-10px); } }
+  @keyframes glbob { 50% { transform:translateY(-7px) rotate(3deg); } }
+
   /* ---------- fixed mark + menu ---------- */
   .mark { position:fixed; top:18px; left:22px; z-index:40; font-weight:900; font-size:20px; mix-blend-mode:difference; }
   .menu-btn { position:fixed; top:18px; right:22px; z-index:40; font-size:12px; letter-spacing:.15em; font-weight:700; mix-blend-mode:difference; background:none; border:0; color:#fff; cursor:pointer; }
@@ -51,9 +58,12 @@
   .works { background:#0a0a0a; }
   .cards { display:flex; gap:18px; overflow-x:auto; padding:0 22px 60px; scroll-snap-type:x mandatory; }
   .cards::-webkit-scrollbar { height:0; }
-  .wcard { min-width:min(420px,82vw); scroll-snap-align:start; border-radius:14px; overflow:hidden; background:#141414; text-decoration:none; color:#fff; transition:transform .3s; }
-  .wcard:hover { transform:translateY(-6px); }
-  .wcard .im { height:240px; background-size:cover; background-position:center; }
+  .wcard { min-width:min(420px,82vw); scroll-snap-align:start; border-radius:14px; overflow:hidden; background:#141414; text-decoration:none; color:#fff; animation:floaty 6s ease-in-out infinite; }
+  .wcard:nth-child(2n) { animation-delay:-2s; }
+  .wcard:nth-child(3n) { animation-delay:-4s; }
+  .wcard:hover { box-shadow:0 24px 50px rgba(0,0,0,.55); }
+  .wcard .im { height:240px; background-size:cover; background-position:center; transition:transform .5s; }
+  .wcard:hover .im { transform:scale(1.06); }
   .wcard .bd { padding:18px; }
   .wcard h3 { font-size:20px; font-weight:900; margin-bottom:6px; }
   .wcard p { font-size:13px; color:#aaa; line-height:1.5; }
@@ -92,7 +102,9 @@
   .dgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:14px; padding:0 22px 90px; }
   .dtile { background:#121212; border:1px solid #222; border-radius:14px; padding:22px 14px; text-align:center; cursor:pointer; user-select:none; transition:border-color .2s, transform .2s; }
   .dtile:hover { border-color:var(--dc,#555); transform:translateY(-4px); }
-  .dtile .gl { font-size:44px; display:inline-block; }
+  .dtile .gl { font-size:44px; display:inline-block; animation:glbob 4.5s ease-in-out infinite; }
+  .dtile:nth-child(2n) .gl { animation-delay:-1.5s; }
+  .dtile:nth-child(3n) .gl { animation-delay:-3s; }
   .dtile p { margin-top:10px; font-size:12.5px; font-weight:700; }
   .dtile small { color:#777; font-size:10.5px; letter-spacing:.08em; }
   .anim-spin { animation:tspin .9s cubic-bezier(.3,1.4,.4,1); }
@@ -124,6 +136,14 @@
   .foot-links a:hover { color:#fff; }
   .credits { font-size:11.5px; color:#555; }
 </style>
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
 </head>
 <body class="locked">
 
@@ -134,6 +154,7 @@
 </div>
 <div id="wipe"></div>
 
+<div id="dot"></div>
 <span class="mark">T'</span>
 <button class="menu-btn" onclick="document.getElementById('works').scrollIntoView({behavior:'smooth'})">MENU ::</button>
 
@@ -395,6 +416,29 @@ const DOMAINS = [
     });
     flee.appendChild(s);
   });
+})();
+
+/* ---- floating world: cursor dot follows, everything drifts with the mouse ---- */
+(() => {
+  const dot = document.getElementById('dot');
+  const hero = document.getElementById('heroWord');
+  const flee = document.getElementById('flee');
+  const orbit = document.querySelector('.orbit');
+  let tx = innerWidth/2, ty = innerHeight/2, x = tx, y = ty;
+  addEventListener('mousemove', (e) => {
+    tx = e.clientX; ty = e.clientY;
+    dot.style.opacity = 1;
+    const mx = (e.clientX / innerWidth - 0.5), my = (e.clientY / innerHeight - 0.5);
+    hero.style.transform = `translate(${mx*22}px, ${my*12}px)`;
+    if (orbit) orbit.style.transform = `translate(${mx*-16}px, ${my*-10}px)`;
+    if (flee) flee.style.transform = `translate(${mx*14}px, 0)`;
+    dot.classList.toggle('big', !!e.target.closest('a,button,.dtile,.hero-word'));
+  }, { passive:true });
+  (function follow() {
+    x += (tx - x) * 0.16; y += (ty - y) * 0.16;
+    dot.style.left = x + 'px'; dot.style.top = y + 'px';
+    requestAnimationFrame(follow);
+  })();
 })();
 
 /* ---- start my journey: scroll to the inline join section ---- */

@@ -29,6 +29,7 @@ screenshot, a support ticket, or a browser.
 | `GEMINI_API_KEY` | AI assistant | Billed usage on your account |
 | `GITHUB_TOKEN` / `GITHUB_PERSONAL_ACCESS_TOKEN` | Repo writes | Malicious code pushed to your repository |
 | `ASSISTANT_ADMIN_TOKEN` | Assistant tier grants | Free paid tiers |
+| `VAPID_PRIVATE_KEY` | Push notifications | Anyone can push notifications to your students' phones in your name |
 
 `config/secrets.js` checks these at boot. In production a missing or weak secret
 **aborts startup** rather than falling back to a default.
@@ -39,6 +40,13 @@ known forever — git history keeps it even after the file is deleted.
 
 > Note: rotating `SESSION_SECRET` signs everyone out. That is expected. Plan it
 > for a quiet hour and tell students they will need to log in again.
+
+> Note: `VAPID_PUBLIC_KEY` is the one exception in this table's neighbourhood —
+> it is *meant* to be handed to every browser and is not a secret. Its private
+> half is. Rotating the pair unsubscribes every device, because a browser binds
+> its subscription to the public key it was created with, so students would have
+> to turn notifications back on. Generate the pair once with
+> `node scripts/generate-vapid-keys.js` and keep it.
 
 ---
 

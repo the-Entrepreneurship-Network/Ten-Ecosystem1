@@ -218,6 +218,14 @@ body {
 }
 </style>
   <link rel="stylesheet" href="/css/ten-brand.css">
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
 </head>
 <body>
 
@@ -361,7 +369,37 @@ function setLoginRole(role) {
 </div>
 
 <script>
+const urlParams = new URLSearchParams(window.location.search);
+
+/**
+ * Where to land after a successful sign-in.
+ *
+ * session-guard.js sends a signed-out student here as `?next=<page they were
+ * on>` so they resume where they left off instead of always being dropped on
+ * the dashboard. Only same-origin paths are honoured — anything absolute, or
+ * protocol-relative ("//evil.com", which new URL() resolves to another host),
+ * is discarded so this can never become an open redirect.
+ */
+function safeNextTarget() {
+  const raw = urlParams.get("next");
+  if (!raw) return null;
+  if (raw.charAt(0) !== "/" || raw.charAt(1) === "/") return null;
+  try {
+    const resolved = new URL(raw, window.location.origin);
+    if (resolved.origin !== window.location.origin) return null;
+    return resolved.pathname + resolved.search + resolved.hash;
+  } catch (err) {
+    return null;
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  // Deep links (verify.html, emails) can open this page on the right tab.
+  const requestedRole = (urlParams.get("role") || "").toLowerCase();
+  if (requestedRole && document.getElementById("tab-" + requestedRole)) {
+    setLoginRole(requestedRole);
+  }
+
   // Clear any browser prefilled values on load for privacy/security
   setTimeout(() => {
     const loginInput = document.getElementById("loginId");
@@ -439,7 +477,9 @@ form.addEventListener("submit", async (e) => {
     setTimeout(() => {
       // Dynamic Role-Based Login Redirects
       if (targetRole === "student") {
-        window.location.href = "student-dashboard.html";
+        // Only students arrive with a ?next= — session-guard.js is installed on
+        // student pages only — so returning them there is always in-role.
+        window.location.href = safeNextTarget() || "student-dashboard.html";
       } else if (targetRole === "founder") {
         window.location.href = "founder-os.html";
       } else if (targetRole === "mentor") {
