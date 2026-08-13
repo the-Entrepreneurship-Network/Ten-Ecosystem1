@@ -430,7 +430,7 @@ router.post("/certificates/generate-pdf/:type", requireStudent, async (req, res)
             const college = (student.collegeName || student.college || "Not provided").trim();
             const docTypeMap = { expert: "Expert Certificate", nano_degree: "Nano Degree", fellowship: "Fellowship" };
             const docKeyMap = { expert: "expert_certificate", nano_degree: "nano_degree", fellowship: "fellowship" };
-            await DocumentHistory.create({
+            await DocumentHistory.logSend({
                 studentId: student._id,
                 studentName,
                 studentEmail: student.email || "",
@@ -441,7 +441,7 @@ router.post("/certificates/generate-pdf/:type", requireStudent, async (req, res)
                 documentKey: docKeyMap[type] || "certificate",
                 documentNumber: certRecord.certificateId,
                 sentAt: certRecord.issuedAt || new Date(),
-                sentBy: "System",
+                sentBy: "HR Portal",
                 sentToEmail: student.email || ""
             });
         } catch (_) {}
@@ -788,7 +788,13 @@ async function generateAndSaveCert(studentId, certType, studentData = null, sent
       LOP: 'Letter of Promotion'
     };
 
-    await DocumentHistory.create({
+    // Manual or automation is decided from who triggered this generate, which
+    // every caller already passes down as `sentBy`. Going through logSend
+    // instead of create() is what applies that rule — a direct create() left
+    // the model to guess from the string, and the placeholder "System" read as
+    // automation, so HR's own generates were labelled Automation in the
+    // history.
+    await DocumentHistory.logSend({
       studentId: student._id,
       studentName,
       studentEmail: student.email || "",

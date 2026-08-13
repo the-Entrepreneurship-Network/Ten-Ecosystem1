@@ -2304,6 +2304,9 @@ button:active { transform: translateY(0); }
         <!-- How far into the programme the student is: "Day 12 of 45". -->
         <p id="attendanceDayProgress" style="display:none;font-size:12px;color:#8aa4c8;margin-top:4px;"></p>
         <p id="attendanceThreshold" style="font-size:12px;color:#f59e0b;margin-top:4px;"></p>
+        <!-- Only shown to students holding two domains: says which internship
+             these figures belong to, since the two are counted separately. -->
+        <p id="attendanceDomainNote" style="display:none;font-size:12px;color:#93c5fd;margin-top:6px;padding:8px 10px;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:8px;"></p>
       </div>
       <button type="button" onclick="resetTodayAttendanceTest()" style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); color: #cbd5e1; font-size: 11px; font-weight: 700; padding: 6px 14px; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;">
         🔄 Reset Today (Re-test Lock Flow)
@@ -3908,6 +3911,7 @@ async function markSelfAttendance(){
   const todayKey = getTodayDateKey();
   const isCompleted = localStorage.getItem('gform_completed_' + todayKey) === 'true';
 
+
   if (!isCompleted) {
     return Swal.fire({
       icon: 'warning',
@@ -3925,7 +3929,11 @@ async function markSelfAttendance(){
     const r = await fetch("/attendance/self",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({ employeeId, gformVerified: true })
+      // The active domain travels with the mark. A student holding two
+      // domains is running two separate internships and marks each one
+      // independently; without this the server had to guess and every mark
+      // landed on the primary domain.
+      body:JSON.stringify({ employeeId, domain, gformVerified: true })
     });
     const d = await r.json();
     if(d.success){
@@ -4035,13 +4043,32 @@ async function loadAttendance(){
       }
     }
 
+    // Which domain these figures belong to. A student holding two domains has
+    // two independent attendance records and must mark each one, so the panel
+    // has to say which internship it is showing.
+    var domainNote = document.getElementById("attendanceDomainNote");
+    var multiDomain = Array.isArray(d.domains) && d.domains.length > 1;
+    if (domainNote) {
+      if (multiDomain) {
+        domainNote.innerHTML = "Showing <strong>" + _fbEscape(d.domain || domain) + "</strong>" +
+          " &nbsp;·&nbsp; attendance is counted separately for each domain — switch domains above to mark the other one.";
+        domainNote.style.display = "block";
+      } else {
+        domainNote.style.display = "none";
+      }
+    }
+
     const btn = document.getElementById("attendanceBtn");
     const statusEl = document.getElementById("attendanceStatus");
     if(d.markedToday){
       btn.setAttribute('data-already-marked', 'true');
-      btn.innerText = "Today's Attendance Marked ✅";
+      btn.innerText = multiDomain
+        ? "Marked for " + (d.domain || domain) + " ✅"
+        : "Today's Attendance Marked ✅";
       btn.disabled = true; btn.classList.add("attendance-disabled");
-      if(statusEl) statusEl.innerText = "You marked your attendance today. Come back tomorrow.";
+      if(statusEl) statusEl.innerText = multiDomain
+        ? "You marked " + (d.domain || domain) + " today. Switch to your other domain to mark that one."
+        : "You marked your attendance today. Come back tomorrow.";
       const step2Text = document.getElementById("step2StatusText");
       if(step2Text) {
         step2Text.textContent = "✅ Today's attendance is already recorded and saved in the system!";

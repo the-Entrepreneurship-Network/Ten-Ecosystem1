@@ -65,6 +65,20 @@ async function requireStudent(req, res, next) {
 // literal string "Bearer hr_" satisfied.
 const { requireHR } = require("../../middleware/sessionAuth");
 
+/**
+ * Who is generating this document, for the Document History audit line.
+ *
+ * Falls back to "HR Portal" rather than "System": a person clicking Generate is
+ * a manual send, and calling it "System" is what made the history label every
+ * hand-made document "Automation".
+ */
+function hrActor(req) {
+    const hr = req && req.session && (req.session.hr || req.session.adminUser);
+    if (!hr) return "HR Portal";
+    const who = hr.name || hr.username || hr.email || hr.id;
+    return who ? `HR Portal (${who})` : "HR Portal";
+}
+
 // ── Mailer helper ──
 const { createEmailTransporter } = require("../../utils/mailer");
 function createTransporter() {
@@ -129,7 +143,11 @@ async function tryAutoGenerateLOC(student) {
         }
 
         const studentName = (student.name || student.email || "").trim();
-        await DocumentHistory.create({
+        // This runs off the back of the last task approval, with nobody at a
+        // keyboard — automation, and now it says so. It used to log
+        // `sentBy: "System"` and no method at all, which the history then
+        // classified by matching the word "system".
+        await DocumentHistory.logSend({
             studentId:      student._id,
             studentName,
             studentEmail:   student.email || "",
@@ -140,9 +158,9 @@ async function tryAutoGenerateLOC(student) {
             documentKey:    "loc",
             documentNumber: docNumber,
             sentAt:         new Date(),
-            sentBy:         "System",
+            sentBy:         "Auto System",
             sentToEmail:    student.email || ""
-        });
+        }, "automation");
 
         try {
             const transporter = createTransporter();
@@ -492,7 +510,9 @@ router.post("/admin/documents/generate-offer-letters", requireHR, async (req, re
                 const studentName = (student.name || `${student.firstName || ""} ${student.lastName || ""}`.trim() || student.email || "").trim();
                 const college = (student.collegeName || student.college || "Not provided").trim();
 
-                await DocumentHistory.create({
+                // An HR user pressed Generate — credit them by name so the
+                // history says who did it, not just "HR Portal".
+                await DocumentHistory.logSend({
                     studentId: student._id,
                     studentName,
                     studentEmail: student.email || "",
@@ -503,9 +523,10 @@ router.post("/admin/documents/generate-offer-letters", requireHR, async (req, re
                     documentKey: "offer_letter",
                     documentNumber: docNumber,
                     sentAt: new Date(),
-                    sentBy: "HR Portal",
-                    sentToEmail: student.email || ""
-                });
+                    sentBy: hrActor(req),
+                    sentToEmail: student.email || "",
+                    emailStatus: mailStatus === "failed" ? "failed" : "sent"
+                }, "manual");
 
                 try {
                     await MailHistory.create({
