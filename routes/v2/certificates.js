@@ -212,6 +212,11 @@ async function handleMyCerts(req, res) {
       const StudentDocument = require("../../models/new/StudentDocument");
       const docRec = await StudentDocument.findOne({ studentId: student._id }).lean();
       if (docRec) {
+        // The printed document numbers, so the portal can offer a "Verify"
+        // link — the same check an employer runs, from the student's own page.
+        safeStudent.offerDocumentNumber = docRec.offerLetterDocumentNumber || null;
+        safeStudent.locDocumentNumber   = docRec.locDocumentNumber || null;
+        safeStudent.lorDocumentNumber   = docRec.lorDocumentNumber || null;
         if (!safeStudent.offerLetterStatus || safeStudent.offerLetterStatus === 'not_uploaded' || safeStudent.offerLetterStatus === 'not_eligible') {
           safeStudent.offerLetterStatus = docRec.uploadStatus || 'not_uploaded';
         }
@@ -655,6 +660,17 @@ async function buildCertPDF(student, certType) {
     effectiveDate: fmtDate(student.lopEffectiveDate) || fmtDate(new Date())
   };
 
+  // The number printed on the PDF and the number stored for verification must
+  // be the same value, generated exactly once. mapData used to carry no
+  // documentNumber at all, so the PDF templates fell back to a random
+  // "TEN/CT/xxxxx" that was never stored anywhere — while generateAndSaveCert
+  // logged a different, derived number to DocumentHistory. An employer typing
+  // the number off the paper could never find it. This is the single origin.
+  const numberTypeMap = { OFFER: "offer_letter", LOC: "loc", LOR: "lor", STAR: "star", LOP: "lop" };
+  const { generateDocumentNumber, normalizeDocumentNumber } = require("../../utils/documentNumber");
+  const documentNumber = normalizeDocumentNumber(generateDocumentNumber(numberTypeMap[certType] || "doc"));
+  mapData.documentNumber = documentNumber;
+
   const tempFile = path.join(os.tmpdir(), `cert_${certType}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.pdf`);
 
   if (certType === 'OFFER') {
@@ -678,7 +694,7 @@ async function buildCertPDF(student, certType) {
     console.error(`[Cert] Temp file cleanup error:`, err.message);
   }
 
-  return pdfBuffer;
+  return { pdfBuffer, documentNumber };
 }
 
 async function generateAndSaveCert(studentId, certType, studentData = null, sentBy = "System") {
@@ -687,8 +703,8 @@ async function generateAndSaveCert(studentId, certType, studentData = null, sent
     console.error(`[Cert] Student not found: ${studentId}`);
     return { success: false, error: 'Student not found' };
   }
-  const pdfBuffer = await buildCertPDF(student, certType);
-  
+  const { pdfBuffer, documentNumber } = await buildCertPDF(student, certType);
+
   const fieldMap = {
     LOC:   { pdfField: 'locPdfBase64',   statusField: 'locStatus',   dateField: 'locIssuedAt' },
     LOR:   { pdfField: 'lorPdfBase64',   statusField: 'lorStatus',   dateField: 'lorIssuedAt' },
@@ -740,12 +756,15 @@ async function generateAndSaveCert(studentId, certType, studentData = null, sent
       docRec.uploadStatus = "approved";
       docRec.offerLetterUrl = `/uploads/offer-letters/${student.employeeId ? student.employeeId.replace(/\//g, "-") : studentId}_offer_letter.pdf`;
       docRec.offerLetterSentAt = new Date();
+      docRec.offerLetterDocumentNumber = documentNumber;
     } else if (certType === 'LOC') {
       docRec.locUrl = `/uploads/certificates/${student.employeeId ? student.employeeId.replace(/\//g, "-") : studentId}_loc.pdf`;
       docRec.locSentAt = new Date();
+      docRec.locDocumentNumber = documentNumber;
     } else if (certType === 'LOR') {
       docRec.lorUrl = `/uploads/certificates/${student.employeeId ? student.employeeId.replace(/\//g, "-") : studentId}_lor.pdf`;
       docRec.lorSentAt = new Date();
+      docRec.lorDocumentNumber = documentNumber;
     }
     await docRec.save();
     console.log(`[CertSync] ✓ Synced ${certType} to StudentDocument for student ${studentId}`);
@@ -756,7 +775,10 @@ async function generateAndSaveCert(studentId, certType, studentData = null, sent
   try {
     const studentName = (student.name || student.fullName || "").trim();
     const college = (student.collegeName || student.college || "Not provided").trim();
-    const docNumber = `TEN-${certType}-${student.employeeId ? student.employeeId.replace(/\//g, "-") : student._id.toString().slice(-6)}`.toUpperCase();
+    // The same number buildCertPDF printed on the PDF. This used to derive a
+    // different number from the employee ID, so the stored record and the
+    // paper could never agree and verification always came back "not found".
+    const docNumber = documentNumber;
 
     const labels = { 
       LOC: 'Letter of Completion', 

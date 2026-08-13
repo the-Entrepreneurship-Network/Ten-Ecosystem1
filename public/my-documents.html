@@ -306,16 +306,16 @@ function renderDocumentTable(data) {
   // Update each row in the OFFICIAL DOCUMENTS table:
   
   // Offer Letter row
-  updateDocRow('offer', data.offerLetterStatus, data.offerLetterGeneratedAt, data.hasOfferPdf, data.documentRejectionReason);
+  updateDocRow('offer', data.offerLetterStatus, data.offerLetterGeneratedAt, data.hasOfferPdf, data.documentRejectionReason, data.offerDocumentNumber);
   // LOR row
-  updateDocRow('lor', data.lorStatus, data.lorIssuedAt, data.hasLorPdf, null);
+  updateDocRow('lor', data.lorStatus, data.lorIssuedAt, data.hasLorPdf, null, data.lorDocumentNumber);
   // LOC row
-  updateDocRow('loc', data.locStatus, data.locIssuedAt, data.hasLocPdf, null);
+  updateDocRow('loc', data.locStatus, data.locIssuedAt, data.hasLocPdf, null, data.locDocumentNumber);
   // Star row
-  updateDocRow('star', data.starStatus, data.starIssuedAt, data.hasStarPdf, null);
+  updateDocRow('star', data.starStatus, data.starIssuedAt, data.hasStarPdf, null, null);
 }
 
-function updateDocRow(type, status, date, hasPdf, rejectionReason) {
+function updateDocRow(type, status, date, hasPdf, rejectionReason, documentNumber) {
   const empId = localStorage.getItem('employeeId') || EMP_ID;
   const statusEl = document.getElementById(`status-${type}`);
   const dateEl   = document.getElementById(`date-${type}`);
@@ -341,9 +341,16 @@ function updateDocRow(type, status, date, hasPdf, rejectionReason) {
   
   let actionHTML = '';
   if (hasPdf && ['issued','approved'].includes(status)) {
-    actionHTML = `<a href="/api/v2/certificates/download/${type.toUpperCase()}?employeeId=${encodeURIComponent(empId)}" 
+    actionHTML = `<a href="/api/v2/certificates/download/${type.toUpperCase()}?employeeId=${encodeURIComponent(empId)}"
       download style="padding:8px 18px;background:linear-gradient(135deg,#059669,#10b981);border-radius:8px;color:#fff;text-decoration:none;font-weight:700;font-size:13px;display:inline-block">
       ⬇️ Download</a>`;
+    if (documentNumber) {
+      // The same public check an employer runs, one click from the student's
+      // own row — so "is my certificate genuine?" never needs an HR message.
+      actionHTML += ` <a href="/verify-document?id=${encodeURIComponent(documentNumber)}" target="_blank"
+        style="padding:8px 14px;background:rgba(212,175,55,0.12);border:1px solid rgba(212,175,55,0.35);border-radius:8px;color:#f5c542;text-decoration:none;font-weight:700;font-size:13px;display:inline-block">
+        🔍 Verify</a>`;
+    }
   } else if (status === 'rejected' && rejectionReason) {
     actionHTML = `<span style="color:#f87171;font-size:12px">Reason: ${rejectionReason}</span>
       <button onclick="showReuploadSection()" style="margin-left:8px;padding:6px 14px;background:#7c3aed;border:none;border-radius:7px;color:#fff;cursor:pointer;font-size:12px;font-weight:700">Re-upload</button>`;
