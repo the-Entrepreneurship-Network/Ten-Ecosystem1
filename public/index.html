@@ -5,11 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TEN TECH — Not a company, an ecosystem.</title>
 <meta name="description" content="The Entrepreneurship Network — TEN Tech ecosystem. Academics, Student Portal, Job Portal, Resume Portal, fourteen domains.">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
 <style>
+  /* noth.in's actual typefaces, extracted and served locally */
+  @font-face { font-family:'PP Neue Montreal'; src:url('assets/fonts/Ppneuemontreal-Regular.woff2') format('woff2'); font-weight:400; font-display:swap; }
+  @font-face { font-family:'PP Neue Montreal'; src:url('assets/fonts/Ppneuemontreal-500.woff2') format('woff2'); font-weight:500; font-display:swap; }
+  @font-face { font-family:'PP Neue Montreal'; src:url('assets/fonts/Ppneuemontreal-700.woff2') format('woff2'); font-weight:700 900; font-display:swap; }
+  @font-face { font-family:'IBM Plex Mono'; src:url('assets/fonts/IBMPlexMono-Regular.ttf') format('truetype'); font-weight:400; font-display:swap; }
+  @font-face { font-family:'IBM Plex Mono'; src:url('assets/fonts/IBMPlexMono-Bold.ttf') format('truetype'); font-weight:700; font-display:swap; }
+
   * { margin:0; box-sizing:border-box; }
   html { scroll-behavior:smooth; }
-  body { background:#0a0a0a; color:#fff; font-family:'Inter',sans-serif; overflow-x:hidden; }
+  body { background:#0a0a0a; color:#fff; font-family:'PP Neue Montreal','Inter',sans-serif; overflow-x:clip; }
+  @media (prefers-reduced-motion: reduce) { * { animation-duration:0.01ms !important; transition-duration:0.01ms !important; } }
+
+  /* noth.in reveal spec: 40px rise, .6s, cubic-bezier(.4,0,.2,1) */
+  .reveal { opacity:0; transform:translateY(40px); transition:opacity .6s cubic-bezier(.4,0,.2,1), transform .6s cubic-bezier(.4,0,.2,1); }
+  .reveal.visible { opacity:1; transform:translateY(0); }
   body.locked { overflow:hidden; }
   .black-heavy { font-weight:900; letter-spacing:-0.04em; }
 
@@ -19,7 +30,7 @@
   .pre-word { display:flex; align-items:center; gap:2vw; font-size:clamp(90px,18vw,260px); font-weight:900; letter-spacing:-0.04em; }
   #preSlot { width:1.05em; height:1.05em; display:flex; align-items:center; justify-content:center; font-size:.62em; transition:opacity .18s, transform .18s; }
   #preSlot.swap { opacity:0; transform:scale(.6) rotate(-20deg); }
-  #preCount { position:absolute; bottom:26px; left:50%; transform:translateX(-50%); font-size:13px; letter-spacing:.2em; color:#888; font-variant-numeric:tabular-nums; }
+  #preCount { position:absolute; bottom:26px; left:50%; transform:translateX(-50%); font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:13px; letter-spacing:.2em; color:#fff; font-variant-numeric:tabular-nums; }
 
   /* ---------- page wipe for START MY JOURNEY ---------- */
   #wipe { position:fixed; inset:0; background:#000; z-index:99; transform:scaleY(0); transform-origin:bottom; transition:transform .7s cubic-bezier(.76,0,.24,1); pointer-events:none; }
@@ -67,7 +78,8 @@
   .wcard .bd { padding:18px; }
   .wcard h3 { font-size:20px; font-weight:900; margin-bottom:6px; }
   .wcard p { font-size:13px; color:#aaa; line-height:1.5; }
-  .wcard .tag { display:inline-block; margin-top:12px; font-size:11px; letter-spacing:.14em; border:1px solid #333; border-radius:999px; padding:6px 12px; color:#ddd; }
+  .wcard .tag { display:inline-block; margin-top:12px; font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em; border:1px solid #333; border-radius:999px; padding:6px 12px; color:#ddd; transition:border-color .4s; }
+  .wcard:hover .tag { border-color:#888; }
   .im-resume { display:flex; align-items:center; justify-content:center; background:#1c1c1c; }
   .mini-resume { width:150px; background:#fff; color:#000; border-radius:6px; padding:12px; box-shadow:0 20px 40px rgba(0,0,0,.6); }
   .mini-resume b { font-size:11px; display:block; }
@@ -165,15 +177,14 @@
     <button class="hero-cta" onclick="journey()">START MY JOURNEY <span>&rarr;</span></button>
   </div>
   <div class="hero-word" id="heroWord" title="click me">
-    <svg viewBox="0 0 1600 460" aria-label="TEN TECH">
+    <svg viewBox="0 0 1600 340" aria-label="TEN TECH">
       <defs>
         <clipPath id="tclip">
-          <text x="800" y="200" text-anchor="middle" font-size="230" font-weight="900" font-family="Inter, sans-serif" letter-spacing="-8" textLength="1560" lengthAdjust="spacingAndGlyphs">TEN TECH</text>
-          <text x="800" y="430" text-anchor="middle" font-size="230" font-weight="900" font-family="Inter, sans-serif" letter-spacing="-8" textLength="1100" lengthAdjust="spacingAndGlyphs">ECOSYSTEM</text>
+          <text x="800" y="290" text-anchor="middle" font-size="330" font-weight="900" font-family="'PP Neue Montreal', Inter, sans-serif" letter-spacing="-10" textLength="1580" lengthAdjust="spacingAndGlyphs">TEN TECH</text>
         </clipPath>
       </defs>
       <g clip-path="url(#tclip)">
-        <rect width="1600" height="460" fill="#0a0a0a"/>
+        <rect width="1600" height="340" fill="#0a0a0a"/>
         <image id="tex0" href="img/textures/foil.webp"    x="-200" y="-200" width="2000" height="900" preserveAspectRatio="xMidYMid slice" opacity="1"/>
         <image id="tex1" href="img/textures/balloon.webp" x="-200" y="-200" width="2000" height="900" preserveAspectRatio="xMidYMid slice" opacity="0"/>
         <image id="tex2" href="img/textures/wool.webp"    x="-200" y="-200" width="2000" height="900" preserveAspectRatio="xMidYMid slice" opacity="0"/>
@@ -402,6 +413,16 @@ const DOMAINS = [
     });
     grid.appendChild(t);
   });
+})();
+
+/* ---- noth.in reveal: everything below the hero rises in on scroll ---- */
+(() => {
+  const targets = document.querySelectorAll('.sec-head, .wcard, .people > div, #faq details, .foot-cta, #join a[href]');
+  targets.forEach(el => el.classList.add('reveal'));
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); } });
+  }, { threshold: 0.12 });
+  targets.forEach(el => io.observe(el));
 })();
 
 /* ---- footer flee letters ---- */
