@@ -107,7 +107,8 @@
   .orbit-center b { font-size:clamp(30px,6vw,52px); font-weight:900; letter-spacing:-0.03em; }
   .orbit-center span { font-size:12px; color:#888; letter-spacing:.2em; margin-top:6px; }
   .ring { position:absolute; inset:0; animation:spin 36s linear infinite; }
-  .ring .chip { position:absolute; top:50%; left:50%; width:56px; height:56px; margin:-28px; border-radius:50%; background:#161616; border:1px solid #2a2a2a; display:flex; align-items:center; justify-content:center; font-size:26px; animation:unspin 36s linear infinite; }
+  .ring .chip { position:absolute; top:50%; left:50%; width:56px; height:56px; margin:-28px; border-radius:50%; background:#161616; border:1px solid #2a2a2a; display:flex; align-items:center; justify-content:center; font-size:26px; animation:unspin 36s linear infinite; overflow:hidden; }
+  .ring .chip img { width:100%; height:100%; object-fit:cover; mix-blend-mode:screen; }
   @keyframes spin { to { transform:rotate(360deg); } }
   @keyframes unspin { to { transform:rotate(-360deg); } }
 
@@ -354,7 +355,7 @@ const DOMAINS = [
 ];
 
 /* ---- preloader: countdown 100 -> 0, the 3D domain logos cycle inside T_N ---- */
-const DOMAIN_IMGS = ['python.jpg','java.jpg','web.jpg','mern.jpg','flutter.jpg','softeng.jpg','vibe.jpg','datasci.jpg','devops.jpg','cyber.jpg','space.jpg','business.jpg','venture.jpg','hr.jpg'];
+const DOMAIN_IMGS = ['python.jpg','java.jpg','web.jpg','mern.jpg','flutter.jpg','softeng.jpg','vibe.jpg','datasci.jpg','devops.jpg','cyber.jpg','space.jpg','business.jpg','venture.jpg','hr.jpg'].map(f => 'logo/' + f);
 (() => {
   const count = document.getElementById('preCount');
   const slot = document.getElementById('preSlot');
@@ -416,7 +417,7 @@ const DOMAIN_IMGS = ['python.jpg','java.jpg','web.jpg','mern.jpg','flutter.jpg',
     const a = (i / DOMAINS.length) * 2 * Math.PI;
     const chip = document.createElement('div');
     chip.className = 'chip';
-    chip.textContent = g;
+    chip.innerHTML = `<img src="assets/domains/${DOMAIN_IMGS[i]}" alt="" onerror="this.parentNode.textContent='${g}'">`;
     chip.title = n;
     const R = 46; /* % of half-size */
     chip.style.transform = '';
@@ -453,7 +454,7 @@ const DOMAIN_IMGS = ['python.jpg','java.jpg','web.jpg','mern.jpg','flutter.jpg',
     row.style.setProperty('--dc', c);
     row.innerHTML = `
       <div class="logo-box">
-        <img src="assets/domains/${img}" alt="${n}" onerror="this.outerHTML='<span class=&quot;gl-fallback&quot;>${g}</span>'">
+        <img src="assets/domains/char/${img}" alt="${n}" onerror="this.outerHTML='<span class=&quot;gl-fallback&quot;>${g}</span>'">
       </div>
       <div class="info">
         <h3>${n}<small>CLICK THE LOGO</small></h3>
