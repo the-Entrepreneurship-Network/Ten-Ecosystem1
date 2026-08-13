@@ -4603,10 +4603,13 @@ try{
         if(isNaN(dt.getTime())) continue;
         if(dt >= monthStart && dt < monthEnd) newJoinsThisMonth++;
     }
-    res.json({ totalInterns, activeThisMonth, inactiveInterns, newJoinsThisMonth });
+    res.json({ success:true, totalInterns, activeThisMonth, inactiveInterns, newJoinsThisMonth });
 }catch(error){
-    console.log(error);
-    res.status(500).json({ totalInterns:0, activeThisMonth:0, inactiveInterns:0, newJoinsThisMonth:0 });
+    // Returning zeros on failure made a broken query indistinguishable from an
+    // empty programme — HR saw "Total Interns: 0" over a live database of
+    // hundreds. Fail loudly; the client renders the reason.
+    console.error("[intern-stats]", error.message);
+    res.status(500).json({ success:false, message: "Could not load intern stats: " + error.message });
 }
 });
 

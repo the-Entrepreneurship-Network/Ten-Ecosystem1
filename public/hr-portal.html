@@ -2097,19 +2097,49 @@ setInterval(() => {
   if (p && p.classList.contains('active')) loadInsightsMailHistory();
 }, 30000);
 
+/**
+ * Report the truth on the stat cards.
+ *
+ * The cards used to render `d.totalInterns||0` inside an empty catch, so an
+ * expired session (401), a failed query (500) and a genuinely empty
+ * programme all displayed identically as "0" — HR read zeros over a live
+ * database of hundreds of students with no hint anything was wrong.
+ */
+function insightsFailure(msg){
+  ['insTotalInterns','insActiveThisMonth','insInactiveInterns','insNewJoinsThisMonth']
+    .forEach(id=>{ const el=document.getElementById(id); if(el) el.textContent='—'; });
+  showHRToast('❌ Insights: '+msg,'error');
+}
+
 async function loadInsightsMonthly(){
   try{
-    const r=await fetch('/api/hr/intern-stats',{headers:{Authorization:hrToken}});
+    const r=await fetch('/api/hr/intern-stats',{credentials:'same-origin',headers:{Authorization:hrToken}});
+    if(r.status===401){
+      insightsFailure('Your HR session has expired — please sign in again.');
+      setTimeout(()=>{ window.location.href='/hr-login'; }, 1800);
+      return;
+    }
     const d=await r.json();
-    document.getElementById('insTotalInterns').textContent=d.totalInterns||0;
-    document.getElementById('insActiveThisMonth').textContent=d.activeThisMonth||0;
-    document.getElementById('insInactiveInterns').textContent=d.inactiveInterns||0;
-    document.getElementById('insNewJoinsThisMonth').textContent=d.newJoinsThisMonth||0;
-  }catch(e){}
+    if(!r.ok || d.success===false) throw new Error(d.message||('Request failed ('+r.status+')'));
+    document.getElementById('insTotalInterns').textContent=d.totalInterns??0;
+    document.getElementById('insActiveThisMonth').textContent=d.activeThisMonth??0;
+    document.getElementById('insInactiveInterns').textContent=d.inactiveInterns??0;
+    document.getElementById('insNewJoinsThisMonth').textContent=d.newJoinsThisMonth??0;
+  }catch(e){ insightsFailure(e.message||'Could not reach the server.'); return; }
   try{
-    const r=await fetch('/api/hr/intern-stats/monthly',{headers:{Authorization:hrToken}});
+    const r=await fetch('/api/hr/intern-stats/monthly',{credentials:'same-origin',headers:{Authorization:hrToken}});
     const d=await r.json();
-    if(!window.Chart) return;
+    if(!window.Chart){
+      // Chart.js comes from a CDN; when it is blocked the join counts should
+      // still be readable rather than an empty box.
+      const box=document.getElementById('insightsJoinChart');
+      if(box && Array.isArray(d)){
+        const wrap=box.parentElement;
+        wrap.innerHTML='<div style="display:flex;gap:18px;flex-wrap:wrap;padding:14px 4px;">'+
+          d.map(x=>'<div style="text-align:center;"><div style="font-size:22px;font-weight:800;color:var(--gold);">'+(x.count||0)+'</div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;">'+x.month+'</div></div>').join('')+'</div>';
+      }
+      return;
+    }
     const gold=getComputedStyle(document.documentElement).getPropertyValue('--gold').trim();
     const existing=Chart.getChart('insightsJoinChart');
     if(existing) existing.destroy();
