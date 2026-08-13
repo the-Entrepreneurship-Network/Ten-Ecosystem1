@@ -15,6 +15,9 @@ const HRSchema = new mongoose.Schema({
     employeeId: { type: String, default: "" },
     promotedFrom: { type: String, default: "" },  // e.g. "coordinator"
     failedLoginAttempts: { type: Number, default: 0 },
+    // When the most recent failure was, so the attempt counter decays.
+    // Without it, failures accumulated forever between successful logins.
+    lastFailedLoginAt:   { type: Date, default: null },
     lockoutUntil: { type: Date, default: null },
     isLockedOut: { type: Boolean, default: false },
     // Forgot password (Feature 9)

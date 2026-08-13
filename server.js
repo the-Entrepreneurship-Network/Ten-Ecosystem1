@@ -3114,6 +3114,11 @@ try{
 }catch(error){ console.log(error); res.status(500).json({ success:false, message:"Server Error" }); }
 });
 
+// ================= LOGIN IDENTITY RESOLUTION =================
+// How an employee ID or email is matched to an account. Extracted because
+// getting it wrong tells an active student their account does not exist.
+const loginIdentity = require("./services/loginIdentity");
+
 // ================= ACCOUNT LOCKOUT SECURE SERVICE =================
 function getRemainingLockoutTime(user) {
     if (user.isLockedOut && user.lockoutUntil) {
@@ -3148,16 +3153,24 @@ async function checkLockout(res, user, userModel) {
     return false;
 }
 
-// Lockout policy: 5 consecutive failures lock that ONE account for 15 minutes.
-// The counters live on the individual user document, so a lockout can never
-// affect another account — including accounts sharing a college wifi or hostel
-// network with the one that failed.
+// Lockout policy: 5 failures WITHIN 30 MINUTES lock that ONE account for 15
+// minutes. The counters live on the individual user document, so a lockout can
+// never affect another account — including accounts sharing a college wifi or
+// hostel network with the one that failed.
+//
+// The window is the important part. `failedLoginAttempts` used to have no decay
+// at all: it reset only on a successful sign-in or when a lockout expired. So
+// five mistyped passwords spread over three months added up, and a student who
+// fumbled twice in June and three times in August was locked out with no idea
+// why. The counter is meant to catch a burst of guesses, not a year of ordinary
+// human error.
 const LOCKOUT_MAX_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000;
+const LOCKOUT_WINDOW_MS   = 30 * 60 * 1000;
 
 async function recordFailedAttempt(res, user, userModel, defaultErrorMsg) {
-    const attempts = (user.failedLoginAttempts || 0) + 1;
-    const updateData = { failedLoginAttempts: attempts };
+    const attempts = loginIdentity.nextFailedAttemptCount(user, LOCKOUT_WINDOW_MS);
+    const updateData = { failedLoginAttempts: attempts, lastFailedLoginAt: new Date() };
 
     if (attempts >= LOCKOUT_MAX_ATTEMPTS) {
         updateData.isLockedOut = true;
@@ -3180,7 +3193,8 @@ async function clearFailedAttempts(user, userModel) {
         await userModel.findByIdAndUpdate(user._id, {
             failedLoginAttempts: 0,
             isLockedOut: false,
-            lockoutUntil: null
+            lockoutUntil: null,
+            lastFailedLoginAt: null
         });
     }
 }
@@ -3342,8 +3356,14 @@ try{
             });
         }
 
-        // Check legacy Student model by email just in case
-        const student = await Student.findOne({ email: loginId.toLowerCase() });
+        // Check legacy Student model by email just in case.
+        //
+        // Case-insensitive: rows created before emails were stored lowercased
+        // hold "Name@Gmail.com", and the exact lowercase match this used to do
+        // never found them. The EcosystemUser branch above was already fixed
+        // for exactly this; a student with no EcosystemUser record hit this
+        // branch and simply could not sign in by email.
+        const student = await loginIdentity.findStudentByEmail(Student, loginId);
         if (student) {
             if (role && role !== 'student') {
                 return res.json({ success: false, message: `Access denied. No ${role} account found.` });
@@ -3362,7 +3382,16 @@ try{
                 const crypto = require("crypto");
                 const sessionToken = "ten_sess_" + crypto.randomBytes(24).toString("hex");
 
-                await Student.findOneAndUpdate({ email: loginId.toLowerCase() }, { lastActiveDate: new Date(), activeSessionToken: sessionToken });
+                // Write by _id, never by re-deriving the filter.
+                //
+                // This used to update `{ email: loginId.toLowerCase() }`, which
+                // matches NOTHING when the stored email is mixed-case — so the
+                // session carried a token the database did not have, and
+                // verifySingleSession answered every /api call with 401
+                // SESSION_SUPERSEDED. The student signed in successfully and
+                // was thrown straight back to the login page.
+                await Student.updateOne({ _id: student._id },
+                    { $set: { lastActiveDate: new Date(), activeSessionToken: sessionToken } });
 
                 // Fetch and auto-heal linked domains
                 const emailLc = String(student.email || "").trim().toLowerCase();
@@ -3431,7 +3460,14 @@ try{
         if (role && role !== 'student') {
             return res.json({ success: false, message: `Access denied. Employee ID is only valid for Student role.` });
         }
-        const student = await Student.findOne({ employeeId: loginId });
+        // Tolerant of how the ID was typed: case, padding and which separator.
+        //
+        // An exact case-sensitive match told students with perfectly good
+        // accounts that their Employee ID did not exist. IDs look like
+        // TEN/WEB/1005, are typed by hand on a phone whose keyboard lowercases
+        // or autocapitalises, and appear elsewhere as TEN-WEB-1005 — so
+        // "ten/web/1005" and "TEN-WEB-1005" both found nothing.
+        const student = await loginIdentity.findStudentByEmployeeId(Student, loginId);
         if (!student) {
             return res.json({ success: false, message: "Invalid Employee ID" });
         }
@@ -3450,7 +3486,11 @@ try{
         const sessionToken = "ten_sess_" + crypto.randomBytes(24).toString("hex");
 
         await clearFailedAttempts(student, Student);
-        await Student.findOneAndUpdate({ employeeId: loginId }, { lastActiveDate: new Date(), activeSessionToken: sessionToken });
+        // By _id, so the write cannot miss the record we just authenticated —
+        // `loginId` is whatever the student typed, which may differ in case or
+        // separator from the stored value.
+        await Student.updateOne({ _id: student._id },
+            { $set: { lastActiveDate: new Date(), activeSessionToken: sessionToken } });
 
         // Fetch and auto-heal linked domains
         const emailLc = String(student.email || "").trim().toLowerCase();
@@ -3479,6 +3519,28 @@ try{
     }
 }catch(error){
     console.error("Login route error:", error);
+
+    // Name a database outage as a database outage.
+    //
+    // A brief connection blip made every sign-in answer "Server Error", which
+    // a student reads as "my account is broken" — and reports as "I suddenly
+    // cannot log in". It is neither their account nor their password, and
+    // saying so stops a wave of support messages during a thirty-second
+    // reconnect. No internals are leaked: the message names the condition, not
+    // the host or the driver.
+    const msg = String(error && error.message || "");
+    const dbDown = error && (error.name === "MongooseError" || error.name === "MongoNetworkError" ||
+        error.name === "MongoServerSelectionError") ||
+        /buffering timed out|before initial connection|connection .* was disconnected|ECONNREFUSED/i.test(msg);
+
+    if (dbDown) {
+        return res.status(503).json({
+            success: false,
+            code: "DB_UNAVAILABLE",
+            message: "We cannot reach the database at the moment. This is not a problem with your account — please try again in a minute."
+        });
+    }
+
     res.status(500).json({ success:false, message:"Server Error" });
 }
 });

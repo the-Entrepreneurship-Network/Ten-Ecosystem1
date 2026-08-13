@@ -13,6 +13,10 @@ const studentsSchema = new mongoose.Schema({
     tenure: String,
     dualDomains: { type: Boolean, default: false },
     failedLoginAttempts: { type: Number, default: 0 },
+    // When the most recent failure was. Without it the attempt counter never
+    // decayed: five mistyped passwords spread over months added up to a
+    // lockout, and the student had no idea why. See recordFailedAttempt.
+    lastFailedLoginAt:   { type: Date, default: null },
     lockoutUntil: { type: Date, default: null },
     isLockedOut: { type: Boolean, default: false },
     joiningDate: String,

@@ -15,6 +15,9 @@ const EcosystemUserSchema = new mongoose.Schema({
   isVerified: { type: Boolean, default: false },
   isActive: { type: Boolean, default: true },
   failedLoginAttempts: { type: Number, default: 0 },
+  // When the most recent failure was, so the attempt counter decays.
+  // Without it, failures accumulated forever between successful logins.
+  lastFailedLoginAt:   { type: Date, default: null },
   lockoutUntil: { type: Date, default: null },
   isLockedOut: { type: Boolean, default: false },
   activeSessionToken: { type: String, default: null },
