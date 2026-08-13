@@ -113,24 +113,59 @@ td, th, p, li, dd, dt, h1, h2, h3, h4 {
   }
 
   /* --- Top bars ------------------------------------------------------- */
+  /* Two rows, never five.
+   *
+   * Letting the bar wrap freely put the hamburger, the title, the date, the
+   * level selector and the Profile button each on its own line — 186px of a
+   * 844px screen, 22% of the phone, before a single figure was visible.
+   *
+   * Row one is the hamburger and the page title, which fit side by side.
+   * Row two is the controls, on ONE line that scrolls sideways inside itself
+   * rather than stacking. Nothing is hidden; it just stops eating the screen. */
   .topbar,
   .stu-topbar,
   .header,
   .page-header {
+    /* `row`, explicitly. hr-portal.html's own media query sets
+     * `flex-direction: column` on .topbar, which puts EVERY child on its own
+     * line — the hamburger, the title, the date, the level selector and the
+     * Profile button, five rows deep. Overriding flex-wrap alone did nothing
+     * because column direction stacks regardless. */
+    flex-direction: row !important;
     flex-wrap: wrap;
+    align-items: center;
     gap: 8px;
     padding: 10px 14px !important;
+    margin-bottom: 16px !important;   /* was 32px — pure dead space on a phone */
   }
+  .page-title,
   .topbar-title,
   .stu-topbar-title {
-    font-size: 15px !important;
+    font-size: 16px !important;
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .topbar-right,
   .topbar-actions,
   .stu-topbar-actions {
-    flex-wrap: wrap;
-    gap: 6px;
+    flex: 1 0 100%;          /* its own row, below the title */
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 8px;
+    padding-bottom: 2px;
   }
+  .topbar-right::-webkit-scrollbar,
+  .topbar-actions::-webkit-scrollbar,
+  .stu-topbar-actions::-webkit-scrollbar { display: none; }
+  /* Controls in that strip keep their width instead of being squeezed. */
+  .topbar-right > *,
+  .topbar-actions > *,
+  .stu-topbar-actions > * { flex: 0 0 auto; }
 
   /* --- Grids ---------------------------------------------------------- */
   /* Every fixed-track grid becomes a single column. `auto-fit`/`auto-fill`
@@ -212,10 +247,38 @@ td, th, p, li, dd, dt, h1, h2, h3, h4 {
     word-break: break-word;
   }
 
-  /* Floating widgets sit above the on-screen keyboard and clear the home bar. */
-  .chat-widget, .chat-launcher, .fab, .floating-btn {
+  /* Floating widgets sit above the on-screen keyboard and clear the home bar.
+   *
+   * #tc-dock is the chat launcher's real id — the generic class names below
+   * never matched it, so it kept sitting flush against the bottom edge and
+   * covering the toast that appears there. */
+  .chat-widget, .chat-launcher, .fab, .floating-btn, #tc-dock {
     bottom: calc(14px + env(safe-area-inset-bottom)) !important;
     right: 14px !important;
+  }
+
+  /* A toast must not appear underneath the chat launcher.
+   *
+   * The launcher is 40px tall in the bottom-right corner at z-index 9998, and
+   * the toast rendered in the same place — so a message like "your session has
+   * expired" was half-covered by a chat button, which is exactly when it most
+   * needs reading. The toast now sits above it and spans the width. */
+  .hr-toast, .toast, .snackbar, #hrToast {
+    left: 12px !important;
+    right: 12px !important;
+    bottom: calc(68px + env(safe-area-inset-bottom)) !important;
+    width: auto !important;
+    max-width: none !important;
+    z-index: 10000 !important;
+    text-align: center;
+  }
+
+  /* Nothing smaller than 11px. Twenty-one elements on the HR dashboard were
+   * below that, which is unreadable at arm's length on a phone. */
+  body { -webkit-text-size-adjust: 100%; }
+  .stat-label, .card-label, .muted, small, .hint, .sub, .subtitle, .meta,
+  .nav-section-title, .logo-role, .sp-field-label, .field-label, .form-label {
+    font-size: 11.5px !important;
   }
 }
 
@@ -245,5 +308,24 @@ td, th, p, li, dd, dt, h1, h2, h3, h4 {
 @media (pointer: coarse) {
   button, .btn, .nav-item, a.btn, input[type="submit"], input[type="button"] {
     min-height: 40px;
+  }
+
+  /* A 25px-wide show/hide-password control is a miss on a touchscreen, and
+     failing to hit it on a login form is where people give up. */
+  .password-toggle-btn,
+  .toggle-password,
+  .pwd-toggle {
+    min-width: 44px !important;
+    min-height: 44px !important;
+  }
+
+  /* Standalone links used as controls — "Forgot password?", the footer links.
+     Padding rather than min-height, so a link inside a sentence is untouched. */
+  .tfp-link,
+  .footer-link,
+  .auth-links a,
+  .form-links a {
+    display: inline-block;
+    padding: 10px 4px;
   }
 }

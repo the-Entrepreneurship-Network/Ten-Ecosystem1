@@ -149,8 +149,44 @@ if (!fs.existsSync(DB_DIR)) {
 global.isMongoUnhealthy = false;
 global.lastMongoCheckTime = 0;
 
+/**
+ * How long a "Mongo looks unhealthy" observation is trusted before it is
+ * re-tested. Without an expiry the flag was a ONE-WAY DOOR: any query error
+ * whose message merely contained "connection" or "network" set it, and nothing
+ * cleared it except a mongoose 'connected'/'reconnected' event — which never
+ * fires when the socket did not actually drop. A single slow query therefore
+ * put the whole process into fallback mode until someone restarted it, which
+ * is what moved every session into memory and signed the portal out.
+ */
+const MONGO_UNHEALTHY_TTL_MS = 30 * 1000;
+
+/** Record that a query failed in a way that looks like a connection problem. */
+function markMongoUnhealthy() {
+    global.isMongoUnhealthy = true;
+    global.lastMongoCheckTime = Date.now();
+}
+
+/**
+ * Is the database usable right now?
+ *
+ * `mongoose.connection.readyState` is the authority — it reflects the live
+ * socket and recovers on its own. A recent unhealthy observation is honoured
+ * for MONGO_UNHEALTHY_TTL_MS so a burst of failures does not hammer a database
+ * that is genuinely down, and is then discarded so the process recovers
+ * without needing a restart.
+ */
+function isMongoHealthy() {
+    if (mongoose.connection.readyState !== 1) return false;
+    if (!global.isMongoUnhealthy) return true;
+    if (Date.now() - (global.lastMongoCheckTime || 0) > MONGO_UNHEALTHY_TTL_MS) {
+        global.isMongoUnhealthy = false;   // the observation has expired; re-test
+        return true;
+    }
+    return false;
+}
+
 function checkMongoStatus() {
-    return mongoose.connection.readyState === 1 && !global.isMongoUnhealthy;
+    return isMongoHealthy();
 }
 
 
@@ -540,8 +576,8 @@ function wrapModelWithFileFallback(model) {
                msg.toLowerCase().includes('retryable') ||
                msg.toLowerCase().includes('failed to connect');
         if (isNet) {
-            global.isMongoUnhealthy = true;
-            global.lastMongoCheckTime = Date.now();
+            // Advisory, and it expires — see markMongoUnhealthy / isMongoHealthy.
+            markMongoUnhealthy();
         }
         return isNet;
     }
@@ -1206,8 +1242,7 @@ mongoose.Model.prototype.save = function() {
                    msg.toLowerCase().includes('retryable') ||
                    msg.toLowerCase().includes('failed to connect');
             if (isNet) {
-                global.isMongoUnhealthy = true;
-                global.lastMongoCheckTime = Date.now();
+                markMongoUnhealthy();   // advisory, expires — see isMongoHealthy
             }
             return isNet;
         }
@@ -1669,24 +1704,69 @@ const sessionOptions = {
  */
 const STUDENT_SESSION_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Where sessions live.
+ *
+ * MongoDB when it is reachable, an in-process MemoryStore only when it is not.
+ * Which one is in use decides whether people stay signed in, so the rules are
+ * written out here rather than inferred.
+ *
+ * THREE THINGS THIS CLASS GOT WRONG, each of which signed everybody out:
+ *
+ * 1. It consulted `global.isMongoUnhealthy`, a flag that LATCHES. Any query
+ *    error whose message merely contains the word "connection" or "network"
+ *    sets it (see isNetworkError), and nothing clears it except a mongoose
+ *    'connected' or 'reconnected' event — which never fires if the socket
+ *    never actually dropped. One slow query that timed out therefore moved
+ *    every session in the portal to memory permanently: sessions already in
+ *    Mongo became unreadable, so everyone was signed out at once, and every
+ *    session created afterwards died at the next deploy. That is the "the HR
+ *    section is down again" report.
+ *
+ *    `mongoose.connection.readyState` is the authority and recovers on its
+ *    own. The flag is no longer consulted here.
+ *
+ * 2. `ttl: 1800` hard-capped EVERY session at 30 minutes in the store,
+ *    whatever its cookie said. The 24-hour student session added for
+ *    notification links was silently reduced to 30 minutes — the cookie
+ *    promised a day, the store deleted the document after half an hour. With
+ *    no `ttl`, connect-mongo takes each session's own `cookie.expires`, so HR
+ *    keeps 30 minutes and a student keeps 24 hours, per session, correctly.
+ *
+ * 3. `get()` treated a store ERROR as "no such session". A transient Mongo
+ *    error therefore looked exactly like a signed-out user, and the portal
+ *    reads that as a sign-out. An error is now propagated: the request fails
+ *    honestly and the session survives.
+ */
 class FallbackStore extends session.Store {
     constructor() {
         super();
         this.memoryStore = new session.MemoryStore();
         this.mongoStore = null;
+        this.warnedAboutMemory = false;
+    }
+
+    /** True when Mongo is genuinely available for session storage. */
+    _mongoReady() {
+        return !!process.env.MONGODB_URI && mongoose.connection.readyState === 1;
     }
 
     _getStore() {
-        const isMongoConnected = mongoose.connection.readyState === 1 && !global.isMongoUnhealthy;
-        if (isMongoConnected && process.env.MONGODB_URI) {
+        if (this._mongoReady()) {
             if (!this.mongoStore) {
                 try {
                     console.log("[FallbackStore] MongoDB is connected. Initializing MongoStore for session persistence...");
                     const MongoStore = require('connect-mongo').MongoStore;
                     this.mongoStore = MongoStore.create({
                         mongoUrl: process.env.MONGODB_URI,
-                        ttl: 1800, // 30 minutes in seconds
+                        // No `ttl`: each session document expires at its own
+                        // cookie.expires. See note 2 above.
                         collectionName: 'sessions',
+                        // Refresh the stored expiry at most once every 10
+                        // minutes for an unchanged session, instead of on every
+                        // single request. Rolling sessions still extend; this
+                        // only avoids a write per API call.
+                        touchAfter: 10 * 60,
                         mongoOptions: {
                             serverSelectionTimeoutMS: 5000,
                             connectTimeoutMS: 5000
@@ -1699,61 +1779,64 @@ class FallbackStore extends session.Store {
                     console.error("[FallbackStore] Failed to create MongoStore:", e.message);
                 }
             }
-            if (this.mongoStore) {
-                return this.mongoStore;
-            }
+            if (this.mongoStore) return this.mongoStore;
+        }
+
+        // Said once, loudly. Sessions in memory do not survive a restart and
+        // are not shared between PM2 workers, so if this is the steady state
+        // people will be signed out apparently at random.
+        if (!this.warnedAboutMemory) {
+            this.warnedAboutMemory = true;
+            console.warn("[FallbackStore] Sessions are in MEMORY — they will NOT survive a restart " +
+                "and are NOT shared between PM2 workers. Check the MongoDB connection.");
         }
         return this.memoryStore;
     }
 
     get(sid, callback) {
         const store = this._getStore();
-        if (store === this.mongoStore) {
-            // Try mongo first
-            this.mongoStore.get(sid, (err, session) => {
-                if (session) {
-                    return callback(null, session);
-                }
-                // Fallback to memory if not found in mongo (e.g., session was created during startup)
-                this.memoryStore.get(sid, callback);
-            });
-        } else {
-            this.memoryStore.get(sid, callback);
-        }
+        if (store !== this.mongoStore) return this.memoryStore.get(sid, callback);
+
+        this.mongoStore.get(sid, (err, sess) => {
+            // A store error is NOT a signed-out user. Reporting it as one is
+            // what turned a momentary database hiccup into "everyone please
+            // log in again".
+            if (err) return callback(err);
+            if (sess) return callback(null, sess);
+
+            // Genuinely absent from Mongo. It may still be a session created
+            // while Mongo was unavailable, so memory is worth one look — but
+            // only as a miss, never as an error handler.
+            this.memoryStore.get(sid, (memErr, memSess) => callback(null, memSess || null));
+        });
     }
 
-    set(sid, session, callback) {
-        // Always write to memoryStore first as local fallback cache
-        this.memoryStore.set(sid, session, (err) => {
-            const store = this._getStore();
-            if (store === this.mongoStore) {
-                this.mongoStore.set(sid, session, callback);
-            } else if (callback) {
-                callback(err);
-            }
-        });
+    set(sid, sess, callback) {
+        const store = this._getStore();
+        if (store === this.mongoStore) {
+            // Mongo only. The old code ALSO wrote every session to memory as a
+            // "cache", which never expired and grew for the lifetime of the
+            // process — MemoryStore is documented as leaking by design — while
+            // hiding whether Mongo was actually working.
+            return this.mongoStore.set(sid, sess, callback);
+        }
+        return this.memoryStore.set(sid, sess, callback);
     }
 
     destroy(sid, callback) {
-        this.memoryStore.destroy(sid, (err) => {
-            const store = this._getStore();
-            if (store === this.mongoStore) {
-                this.mongoStore.destroy(sid, callback);
-            } else if (callback) {
-                callback(err);
-            }
+        // Both, always: signing out must remove the session wherever it is.
+        this.memoryStore.destroy(sid, () => {
+            if (this.mongoStore) return this.mongoStore.destroy(sid, callback);
+            if (callback) callback(null);
         });
     }
 
-    touch(sid, session, callback) {
-        this.memoryStore.touch(sid, session, (err) => {
-            const store = this._getStore();
-            if (store === this.mongoStore && this.mongoStore.touch) {
-                this.mongoStore.touch(sid, session, callback);
-            } else if (callback) {
-                callback(err);
-            }
-        });
+    touch(sid, sess, callback) {
+        const store = this._getStore();
+        if (store === this.mongoStore && this.mongoStore.touch) {
+            return this.mongoStore.touch(sid, sess, callback);
+        }
+        return this.memoryStore.touch(sid, sess, callback);
     }
 }
 
