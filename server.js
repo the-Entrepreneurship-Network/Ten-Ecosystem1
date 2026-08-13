@@ -59,6 +59,9 @@ const {
 } = require("./middleware/validationSchemas");
 
 const attendanceUtils = require("./utils/attendanceUtils");
+// Scopes attendance to one domain. A student may hold two, and the two are
+// separate internships — see utils/attendanceDomain.js.
+const attendanceDomain = require("./utils/attendanceDomain");
 const tenureUtils = require("./utils/tenure");
 const { istNow, istDateKey } = require("./utils/dateKey");
 const tenurePaymentConfig = require("./config/tenurePayment");
@@ -3002,7 +3005,13 @@ try{
             const host = (req.headers["x-forwarded-proto"] || req.protocol) + "://" + req.get("host");
             const joinedOn = new Date().toLocaleDateString("en-IN", { day:"numeric", month:"long", year:"numeric" });
             const html = welcomeEmailHtml({
-                name: newStudent.name.trim(), employeeId, domain, email: emailLc, password,
+                // `password` here is the bcrypt hash. Sending that is what the
+                // welcome email did: the student received a 60-character
+                // "$2b$12$..." string as their password and could never sign
+                // in with it. The cleartext exists only in this request's
+                // memory, for this email.
+                name: newStudent.name.trim(), employeeId, domain, email: emailLc,
+                password: generatedPassword,
                 joinedOn, host
             });
             let mailStatus = "sent";
@@ -3199,23 +3208,61 @@ try{
             user.lastLoginAt = new Date();
             try { await user.save(); } catch(e) {}
 
-            // If student, get legacy student record or mock one
+            // If student, get the legacy Student record.
+            //
+            // The lookup is case-insensitive. EcosystemUser.email is stored
+            // lowercased; a Student row created before that convention can hold
+            // "Name@Gmail.com", and an exact match then missed it — the student
+            // signed in successfully but the dashboard rendered the fallback
+            // identity below and greeted them "Welcome, Student".
             let student = null;
             if (user.role === 'student') {
-                student = await Student.findOne({ email: user.email });
+                const emailRx = new RegExp("^\\s*" +
+                    String(user.email || "").replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + "\\s*$", "i");
+                student = await Student.findOne({ email: { $regex: emailRx } });
                 if (student) {
-                    await Student.findOneAndUpdate({ email: user.email }, { lastActiveDate: new Date(), plainPassword: password, activeSessionToken: sessionToken });
+                    // activeSessionToken goes on the Student too, not only on
+                    // the EcosystemUser.
+                    //
+                    // This is what locked students out. verifySingleSession
+                    // resolves the acting record from req.session.student._id —
+                    // a Student id — so EcosystemUser.findById misses and it
+                    // falls through to Student.findById. Writing the new token
+                    // only to the EcosystemUser left the Student holding a token
+                    // from some earlier sign-in, the guard compared that stale
+                    // value against the fresh one in the session, and answered
+                    // every /api request with 401 SESSION_SUPERSEDED. The page
+                    // treats a 401 as a sign-out, so the student bounced back to
+                    // the login screen — permanently, since each retry repeated
+                    // the same mismatch.
+                    student.lastActiveDate = new Date();
+                    student.activeSessionToken = sessionToken;
+                    try { await student.save(); } catch (e) {
+                        await Student.updateOne({ _id: student._id },
+                            { $set: { lastActiveDate: new Date(), activeSessionToken: sessionToken } });
+                    }
                 }
             }
 
+            // Identity for the browser, never the raw document: that shipped the
+            // bcrypt hash, the password-reset token and megabytes of base64 PDF
+            // to the client on every sign-in.
+            const studentPayload = student ? sanitizeStudent(student) : {
+                _id: user._id,
+                employeeId: user._id.toString(),
+                name: user.fullName || "",
+                email: user.email,
+                // Deliberately blank. This used to read 'Web Development',
+                // which silently put every ecosystem student with no legacy
+                // record into a domain they had never chosen.
+                domain: ""
+            };
+
             if (user.role === 'student') {
-                req.session.student = student || {
-                    _id: user._id,
-                    employeeId: user._id.toString(),
-                    name: user.fullName,
-                    email: user.email,
-                    domain: 'Web Development'
-                };
+                // Minimal identity only — see establishStudentSession. Assigning
+                // the whole Student document here put its base64 PDFs into the
+                // session store on every login.
+                establishStudentSession(req, studentPayload);
             }
             req.session.sessionToken = sessionToken;
 
@@ -3231,13 +3278,7 @@ try{
                     phone: user.phone,
                     expertise: mentorProfileObj ? mentorProfileObj.expertise : []
                 },
-                student: student || {
-                    _id: user._id,
-                    employeeId: user._id.toString(),
-                    name: user.fullName,
-                    email: user.email,
-                    domain: 'Web Development'
-                }
+                student: studentPayload
             });
         }
 
@@ -3249,19 +3290,20 @@ try{
             }
             if (await checkLockout(res, student, Student)) return;
 
-            let pwdMatch = student.password === password;
-            if (!pwdMatch) {
-                try {
-                    pwdMatch = await bcrypt.compare(password, student.password);
-                } catch(e) {}
-            }
+            // bcrypt only. The `student.password === password` cleartext
+            // comparison that used to run first would authenticate any row whose
+            // password column still held an unhashed value.
+            let pwdMatch = false;
+            try {
+                pwdMatch = await bcrypt.compare(password, student.password || "");
+            } catch(e) {}
             if (pwdMatch) {
                 await clearFailedAttempts(student, Student);
                 const crypto = require("crypto");
                 const sessionToken = "ten_sess_" + crypto.randomBytes(24).toString("hex");
 
-                await Student.findOneAndUpdate({ email: loginId.toLowerCase() }, { lastActiveDate: new Date(), plainPassword: password, activeSessionToken: sessionToken });
-                
+                await Student.findOneAndUpdate({ email: loginId.toLowerCase() }, { lastActiveDate: new Date(), activeSessionToken: sessionToken });
+
                 // Fetch and auto-heal linked domains
                 const emailLc = String(student.email || "").trim().toLowerCase();
                 let linked = student.linkedDomains || [];
@@ -3282,7 +3324,8 @@ try{
                 responseStudent.domains = student.domains || [student.domain];
                 responseStudent.activeSessionToken = sessionToken;
 
-                req.session.student = responseStudent;
+                // The session holds identity, not a copy of the record.
+                establishStudentSession(req, responseStudent);
                 req.session.sessionToken = sessionToken;
 
                 return res.json({
@@ -3335,12 +3378,11 @@ try{
 
         if (await checkLockout(res, student, Student)) return;
 
-        let pwdMatch = student.password === password;
-        if (!pwdMatch) {
-            try {
-                pwdMatch = await bcrypt.compare(password, student.password);
-            } catch(e) {}
-        }
+        // bcrypt only — see the note on the email branch above.
+        let pwdMatch = false;
+        try {
+            pwdMatch = await bcrypt.compare(password, student.password || "");
+        } catch(e) {}
         if (!pwdMatch) {
             return await recordFailedAttempt(res, student, Student, "Invalid Password");
         }
@@ -3348,8 +3390,8 @@ try{
         const sessionToken = "ten_sess_" + crypto.randomBytes(24).toString("hex");
 
         await clearFailedAttempts(student, Student);
-        await Student.findOneAndUpdate({ employeeId: loginId }, { lastActiveDate: new Date(), plainPassword: password, activeSessionToken: sessionToken });
-        
+        await Student.findOneAndUpdate({ employeeId: loginId }, { lastActiveDate: new Date(), activeSessionToken: sessionToken });
+
         // Fetch and auto-heal linked domains
         const emailLc = String(student.email || "").trim().toLowerCase();
         let linked = student.linkedDomains || [];
@@ -3370,7 +3412,7 @@ try{
         responseStudent.domains = student.domains || [student.domain];
         responseStudent.activeSessionToken = sessionToken;
 
-        req.session.student = responseStudent;
+        establishStudentSession(req, responseStudent);
         req.session.sessionToken = sessionToken;
 
         return res.json({ success: true, sessionToken: sessionToken, role: 'student', student: responseStudent });
@@ -3382,6 +3424,29 @@ try{
 });
 
 // ================= SINGLE SESSION GUARD MIDDLEWARE =================
+
+/**
+ * Should a request be rejected as a superseded session?
+ *
+ * Pulled out as a pure function because getting it wrong locks students out of
+ * the portal entirely, and this is the shape the test asserts against.
+ *
+ * @param {string} clientToken  the token this request is carrying
+ * @param {Array<string|null>} knownTokens  activeSessionToken from every record
+ *        that identifies this user (EcosystemUser and Student)
+ * @returns {boolean} true when the session has genuinely been replaced
+ */
+function sessionIsSuperseded(clientToken, knownTokens) {
+    const known = (knownTokens || []).filter(Boolean);
+    // No record carries a token: nothing has replaced this session. Rejecting
+    // here is what made a stale Student row lock a signed-in student out.
+    if (!known.length) return false;
+    if (!clientToken) return false;
+    // A match on ANY record is enough. A student signing in by email has both
+    // an EcosystemUser and a Student row, and login writes the token to both.
+    return !known.includes(clientToken);
+}
+
 async function verifySingleSession(req, res, next) {
     try {
         const clientToken = req.headers['x-session-token'] || (req.headers['authorization'] ? req.headers['authorization'].replace('Bearer ', '') : '') || req.session?.sessionToken;
@@ -3394,15 +3459,27 @@ async function verifySingleSession(req, res, next) {
         const EcosystemUser = require('./models/EcosystemUser');
         const Student = require('./models/Student');
 
-        let dbUser = await EcosystemUser.findById(userId);
-        let activeToken = dbUser ? dbUser.activeSessionToken : null;
+        // Both records are consulted, and a match on EITHER one is enough.
+        //
+        // This used to check EcosystemUser first and fall back to Student only
+        // when no EcosystemUser existed with that id. A student signing in by
+        // email has both records, and the session identifies them by their
+        // STUDENT id — so the EcosystemUser lookup missed, the Student lookup
+        // ran, and it compared the token minted for the EcosystemUser against
+        // whatever the Student row happened to hold. Every /api call answered
+        // 401, and the portal reads a 401 as a sign-out, so the student was
+        // returned to the login page on every attempt and could never get in.
+        //
+        // Login now writes the token to both records, and this accepts either,
+        // so the guard can only fire on a genuinely superseded session.
+        const [dbUser, dbStudent] = await Promise.all([
+            EcosystemUser.findById(userId).select('activeSessionToken').lean().catch(() => null),
+            Student.findById(userId).select('activeSessionToken').lean().catch(() => null)
+        ]);
 
-        if (!dbUser) {
-            let dbStudent = await Student.findById(userId);
-            activeToken = dbStudent ? dbStudent.activeSessionToken : null;
-        }
+        const knownTokens = [dbUser && dbUser.activeSessionToken, dbStudent && dbStudent.activeSessionToken];
 
-        if (activeToken && activeToken !== clientToken) {
+        if (sessionIsSuperseded(clientToken, knownTokens)) {
             return res.status(401).json({
                 success: false,
                 code: "SESSION_SUPERSEDED",
@@ -4697,9 +4774,21 @@ app.get('/api/hr/intern-list', async (req, res) => {
     // `name` matters: most records carry a single `name` and no first/last, so
     // building the display name from firstName+lastName alone produced a row
     // of blanks — the list looked empty even when it was full.
-    let students = await Student.find(query)
-      .select('name firstName lastName employeeId domain collegeName college lastActiveDate joiningDate joinDate')
-      .sort({ joiningDate: -1 }).limit(400);
+    // No database sort here, deliberately.
+    //
+    // `joiningDate` is a String, so a Mongo sort orders it lexicographically —
+    // "9 Aug" after "10 Aug" — which is wrong regardless of performance. And a
+    // blocking sort over Student documents drags their embedded base64 PDFs
+    // through memory (see the index comment in models/Student.js). Fetching a
+    // lean projection and ordering it in JS is both correct and cheap: the
+    // projected objects are a few hundred bytes each.
+    const projection = 'name firstName lastName employeeId domain collegeName college lastActiveDate joiningDate joinDate';
+    let students = await Student.find(query).select(projection).limit(1000).lean();
+    const asTime = (s) => {
+      const d = new Date(s.joinDate || s.joiningDate || 0);
+      return isNaN(d.getTime()) ? 0 : d.getTime();
+    };
+    students.sort((a, b) => asTime(b) - asTime(a));
     if (type === 'newJoins'){
       students = students.filter(s => {
         const jd = s.joinDate || s.joiningDate;
@@ -5006,6 +5095,13 @@ try{
     // acting student from here, never from a request header or body.
     establishStudentSession(req, student);
 
+    // Mint the single-session token here too, and store it on the record AND
+    // in the session. Both doors into the portal now behave identically: this
+    // one used to leave `Student.activeSessionToken` holding a token from some
+    // earlier /login, which verifySingleSession would then compare against.
+    const studentSessionToken = "ten_sess_" + require("crypto").randomBytes(24).toString("hex");
+    req.session.sessionToken = studentSessionToken;
+
     // Internship end date (used by student dashboard profile modal)
     // tenure values in this app are "1 Month" | "3 Months" | "6 Months".
     let computedEndDate = null;
@@ -5036,11 +5132,19 @@ try{
         }
     }
 
-    await Student.findOneAndUpdate({ employeeId }, { lastActiveDate: new Date() });
+    await Student.findOneAndUpdate({ employeeId }, {
+        lastActiveDate: new Date(),
+        activeSessionToken: studentSessionToken
+    });
     res.json({
         success:true,
+        sessionToken: studentSessionToken,
         student:{
-            name: student.firstName + " " + student.lastName,
+            // firstName/lastName can both be empty on records imported before
+            // the register form split the field, which produced the literal
+            // "undefined undefined" as a student's name. `name` is the column
+            // every other read path uses, so prefer it and fall back.
+            name: (student.name || [student.firstName, student.lastName].filter(Boolean).join(" ")).trim(),
             firstName: student.firstName, lastName: student.lastName,
             email: student.email || "",
             // Student schema in this project uses `whatsapp` for phone.
@@ -5336,11 +5440,15 @@ app.post("/mark-attendance", async (req, res) => {
     }
 
     // Save attendance
+    // `date: now` used to sit here and `now` was never declared in this
+    // handler, so every call threw a ReferenceError and answered
+    // {success:false, message:"Server error"} — this endpoint has never once
+    // recorded attendance.
     await Attendance.create({
       studentId: student._id,
       employeeId,
-      domain: student.domain,
-      date: now,
+      domain: attendanceDomain.domainForWrite(student, req.body.domain),
+      date: new Date(),
       dateKey: today,
       status: "Present",
       markedBy: "self"
@@ -5871,11 +5979,19 @@ function countDaysExcludingSundays(start, end){
 // We DO NOT use marked-day count as the denominator. If the joining date is unknown
 // or no working days exist yet (e.g. only-Sunday range), all percentages are 0.
 async function computeAttendanceStats(employeeId, joiningDate, domain){
-    const query = { employeeId };
-    if (domain) {
-        query.domain = { $regex: new RegExp("^" + domain.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + "$", "i") };
-    }
-    const records = await Attendance.find(query);
+    // The student is loaded first because the domain scoping needs their
+    // enrolment list, not just the requested string.
+    const student = await Student.findOne({ employeeId }).lean();
+
+    // Filtering happens in JS, not in the Mongo query. The query used an
+    // anchored regex on `domain`, and `Attendance.domain` defaults to "" —
+    // so every row written before that field was populated was silently
+    // dropped from the count. attendanceDomain.filterByDomain attributes a
+    // blank row to the student's primary domain instead of discarding it, and
+    // does nothing at all for a single-domain student.
+    const allRecords = await Attendance.find({ employeeId });
+    const records = attendanceDomain.filterByDomain(allRecords, domain, student);
+
     const self   = records.filter(r => r.markedBy === "self");
     const coord  = records.filter(r => r.markedBy === "coordinator");
 
@@ -5892,7 +6008,6 @@ async function computeAttendanceStats(employeeId, joiningDate, domain){
     // earlier than the joiningDate this function used to be handed. A WhatsApp
     // joiner's pre-portal period is credited as attended (see
     // utils/attendanceUtils.getPreportalCreditedDays).
-    const student = await Student.findOne({ employeeId }).lean();
     const summary = attendanceUtils.getAttendanceSummary(
         records,
         student || { joiningDate, tenure: null }
@@ -5950,11 +6065,21 @@ try{
     const now = new Date();
     const dateKey = toDateKey(now);
 
-    const existing = await Attendance.findOne({ employeeId, dateKey, markedBy:"self" });
-    if(existing) return res.json({ success:false, alreadyMarked:true, message:"Already marked for today" });
+    // Which domain this mark is for. A student holding two domains is doing two
+    // separate internships and has to mark each one — the duplicate check below
+    // is scoped to the domain for exactly that reason. An unrecognised domain
+    // (or none) falls back to their primary; a domain they are not enrolled in
+    // is never honoured. See utils/attendanceDomain.js.
+    const markDomain = attendanceDomain.domainForWrite(
+        student,
+        req.body.domain || req.headers['x-active-domain']
+    );
+
+    const existing = await Attendance.findOne({ employeeId, dateKey, markedBy:"self", domain: markDomain });
+    if(existing) return res.json({ success:false, alreadyMarked:true, domain: markDomain, message:"Already marked for today" });
 
     const att = new Attendance({
-        studentId: student._id, employeeId, domain: student.domain,
+        studentId: student._id, employeeId, domain: markDomain,
         date: now, dateKey, status:"Present", markedBy:"self"
     });
     await att.save();
@@ -5963,7 +6088,13 @@ try{
     await bumpStreakAndMilestones(student);
     await checkCertificateEligibility(employeeId);
     await recomputeBadgesFor(employeeId);
-    res.json({ success:true, message:"Attendance marked for today", attendance:att });
+
+    // Return the fresh figures so the page does not have to guess whether the
+    // count moved — "it does not count the attendance" was partly this: the
+    // dashboard re-fetched, the domain filter dropped every row, and the panel
+    // stayed at zero right after a successful mark.
+    const stats = await computeAttendanceStats(employeeId, student.joiningDate, markDomain);
+    res.json({ success:true, message:"Attendance marked for today", domain: markDomain, attendance:att, stats });
 }catch(e){
     if(e.code === 11000) return res.json({ success:false, alreadyMarked:true, message:"Already marked for today" });
     console.log(e); res.json({ success:false, message:"Failed to mark attendance" });
@@ -5998,8 +6129,12 @@ try{
     if(isNaN(d.getTime())) return res.json({ success:false, message:"Invalid date" });
     const dateKey = toDateKey(d);
 
+    // The coordinator marks one domain's class, so the record is scoped the
+    // same way a student's self-mark is.
+    const markDomain = attendanceDomain.domainForWrite(student, req.body.domain);
+
     // Idempotent: if already marked for that day, update it instead of erroring
-    let att = await Attendance.findOne({ employeeId, dateKey, markedBy:"coordinator" });
+    let att = await Attendance.findOne({ employeeId, dateKey, markedBy:"coordinator", domain: markDomain });
     if(att){
         att.status = st;
         att.coordinatorId = coordinatorId || att.coordinatorId;
@@ -6020,7 +6155,7 @@ try{
     }
 
     att = new Attendance({
-        studentId: student._id, employeeId, domain: student.domain,
+        studentId: student._id, employeeId, domain: markDomain,
         date: d, dateKey, status: st, markedBy:"coordinator", coordinatorId: coordinatorId || ""
     });
     await att.save();
@@ -6064,16 +6199,30 @@ app.get("/attendance/student/:employeeId", async(req,res)=>{
 try{
     const employeeId = decodeURIComponent(req.params.employeeId);
     const student = await Student.findOne({ employeeId });
-    const domain = req.query.domain || req.headers['x-active-domain'] || (student ? student.domain : '');
-    const query = { employeeId };
-    if (domain) {
-        query.domain = { $regex: new RegExp("^" + domain.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + "$", "i") };
-    }
-    const records = await Attendance.find(query).sort({ date:-1 });
+    const domain = attendanceDomain.resolveActiveDomain(
+        student,
+        req.query.domain || req.headers['x-active-domain']
+    );
+
+    // Every row is loaded and then filtered in JS. The anchored regex this used
+    // to run against `Attendance.domain` dropped every row written before that
+    // field was populated — it defaults to "" — so a student's own history
+    // silently stopped counting.
+    const allRecords = await Attendance.find({ employeeId }).sort({ date:-1 });
+    const records = attendanceDomain.filterByDomain(allRecords, domain, student);
+
     const stats = await computeAttendanceStats(employeeId, student ? student.joiningDate : null, domain);
     const today = toDateKey(new Date());
     const markedToday = records.some(r => r.markedBy === "self" && r.dateKey === today);
-    res.json({ success:true, attendance:records, stats, markedToday });
+    res.json({
+        success:true,
+        attendance:records,
+        stats,
+        markedToday,
+        domain,
+        // So the page can show a per-domain marker when the student holds two.
+        domains: attendanceDomain.studentDomains(student)
+    });
 }catch(e){ console.log(e); res.json({ success:false, attendance:[], stats:null }); }
 });
 
@@ -8102,7 +8251,8 @@ try{
     let updated = 0, created = 0, failed = 0;
     for(const s of students){
         try{
-            let att = await Attendance.findOne({ employeeId: s.employeeId, dateKey, markedBy:"coordinator" });
+            const markDomain = attendanceDomain.domainForWrite(s, domain);
+            let att = await Attendance.findOne({ employeeId: s.employeeId, dateKey, markedBy:"coordinator", domain: markDomain });
             if(att){
                 att.status = st;
                 att.coordinatorId = coordinatorId || att.coordinatorId;
@@ -8112,7 +8262,7 @@ try{
                 updated++;
             } else {
                 att = new Attendance({
-                    studentId: s._id, employeeId: s.employeeId, domain: s.domain,
+                    studentId: s._id, employeeId: s.employeeId, domain: markDomain,
                     date: d, dateKey, status: st, markedBy:"coordinator",
                     coordinatorId: coordinatorId || "",
                     source: source || "bulk"
@@ -8277,14 +8427,15 @@ try{
 
     const today = new Date();
     const dateKey = toDateKey(today);
-    const existing = await Attendance.findOne({ employeeId, dateKey, markedBy:"coordinator" });
+    const markDomain = attendanceDomain.domainForWrite(student, domain);
+    const existing = await Attendance.findOne({ employeeId, dateKey, markedBy:"coordinator", domain: markDomain });
     if(existing){
         return res.json({ success:false, alreadyMarked:true,
             message:"Attendance already marked for today ✅" });
     }
 
     const att = new Attendance({
-        studentId: student._id, employeeId, domain: student.domain,
+        studentId: student._id, employeeId, domain: markDomain,
         date: today, dateKey, status:"Present", markedBy:"coordinator",
         coordinatorId: coordinatorId || "qr",
         source: "qr"

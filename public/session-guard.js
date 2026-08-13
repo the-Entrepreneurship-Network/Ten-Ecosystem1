@@ -33,7 +33,16 @@
   // they were on; student-login.html does the same, but only /login.html is
   // reachable from every entry point, so keep the whole product on one door.
   var LOGIN_PAGE = '/login.html';
-  var CACHED_IDENTITY_KEYS = ['employeeId', 'studentData', 'v2StudentData', 'studentInfo'];
+
+  // `student` is the key the dashboard actually renders from
+  // (`JSON.parse(localStorage.getItem('student'))`). Leaving it behind meant a
+  // signed-out student was sent to the login page while a full, stale profile
+  // stayed in storage — so the next page load drew a signed-in dashboard from
+  // the cache before its first fetch failed and bounced them again.
+  var CACHED_IDENTITY_KEYS = [
+    'employeeId', 'student', 'studentData', 'v2StudentData', 'studentInfo',
+    'ten_employee_id', 'ten_token', 'sessionToken', 'user', 'userId', 'role'
+  ];
 
   var nativeFetch = window.fetch.bind(window);
   var redirecting = false;

@@ -379,9 +379,23 @@ router.get("/document-history", requireHR, async (req, res) => {
     const limit = Math.min(200, Math.max(1, parseInt(req.query.limit || "100", 10) || 100));
     const skip  = (page - 1) * limit;
 
-    const [total, rawRecords] = await Promise.all([
-      DocumentHistory.countDocuments(),
-      DocumentHistory.find({}).sort({ sentAt: -1, sentOn: -1, createdAt: -1 }).skip(skip).limit(limit).lean()
+    // Only rows that represent a document that was actually produced.
+    //
+    // A DocumentHistory row is written at the moment a PDF is generated and
+    // carries its document number — the same number printed on the paper and
+    // looked up by /verify. Rows without one are not sends: they are aborted
+    // or half-written attempts, and listing them made the section read as a
+    // log of things that did not happen. Nothing real is hidden by this — a
+    // generated document always has a number.
+    const realSends = {
+      documentNumber: { $exists: true, $nin: [null, "", "—"] },
+      documentType:   { $exists: true, $nin: [null, ""] }
+    };
+
+    const [total, rawRecords, skipped] = await Promise.all([
+      DocumentHistory.countDocuments(realSends),
+      DocumentHistory.find(realSends).sort({ sentAt: -1, sentOn: -1, createdAt: -1 }).skip(skip).limit(limit).lean(),
+      DocumentHistory.countDocuments({ $nor: [realSends] })
     ]);
 
     const records = (rawRecords || []).map((r) => {
@@ -398,12 +412,18 @@ router.get("/document-history", requireHR, async (req, res) => {
         documentType: r.documentType || r.documentKey || "—",
         sentAt:       r.sentAt || r.sentOn || r.createdAt,
         sentBy:       r.sentBy || "System",
-        method:       r.method || "manual",
+        // Manual unless the record says otherwise. The page used to re-derive
+        // this from sentBy with /auto|system|cron/, which turned the
+        // placeholder "System" — written by four different generate paths —
+        // into "Automation", so every hand-made document was mislabelled.
+        method:       DocumentHistory.resolveMethod(r.method, r.sentBy),
         emailStatus:  r.emailStatus || "sent"
       };
     });
 
-    res.json({ success: true, data: records, records, total, page });
+    // `skipped` is reported rather than silently dropped, so an unexpected
+    // number of incomplete rows is visible instead of looking like a gap.
+    res.json({ success: true, data: records, records, total, page, skippedIncomplete: skipped });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message, data: [], records: [], total: 0, page: 1 });
   }

@@ -2340,11 +2340,17 @@ function renderInsightsDocumentHistory(list){
       :type==='LOC'||type==='Letter of Completion'?'blue'
       :type==='Star Performer'?'amber'
       :'';
-    const typeHtml=type?`<span class="ins-badge ${bc}">${type}</span>`:'—';
+    const typeHtml=type?`<span class="ins-badge ${bc}">${_hrEsc(type)}</span>`:'—';
     const college=(r.college && String(r.college).trim() && r.college!=='—')?r.college:'Not provided';
-    const method=(r.method==='automation'||/auto|system|cron/i.test(r.sentBy||''))?'automation':'manual';
+    // The server decides this now. The page used to re-derive it with
+    // /auto|system|cron/, and "System" is the placeholder several generate
+    // paths write into sentBy — so a document an HR user made by hand was
+    // relabelled "Automation" on the way to the screen.
+    const method=r.method==='automation'?'automation':'manual';
     const methodHtml=method==='automation'?'<span class="ins-badge blue">Automation</span>':'<span class="ins-badge gold">Manual</span>';
-    return `<tr><td>${r.studentName||'—'}</td><td>${r.employeeId||'—'}</td><td>${college}</td><td>${typeHtml}</td><td>${r.documentNumber||'—'}</td><td>${sent}</td><td>${methodHtml}</td></tr>`;
+    const by=(r.sentBy||'').trim();
+    const byHtml=by&&by!=='System'?`<div style="font-size:10px;color:#8aa4c8;margin-top:2px;">${_hrEsc(by)}</div>`:'';
+    return `<tr><td>${_hrEsc(r.studentName)||'—'}</td><td>${_hrEsc(r.employeeId)||'—'}</td><td>${_hrEsc(college)}</td><td>${typeHtml}</td><td>${_hrEsc(r.documentNumber)||'—'}</td><td>${sent}</td><td>${methodHtml}${byHtml}</td></tr>`;
   }).join('');
 }
 

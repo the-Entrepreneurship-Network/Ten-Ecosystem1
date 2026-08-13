@@ -17,6 +17,7 @@ const Attendance          = require("../models/Attendance");
 const StudentTaskProgress = require("../models/new/StudentTaskProgress");
 const { istDateKey, istDayStart, istDayEnd } = require("../utils/dateKey");
 const { isSunday, getEffectiveStartDate }    = require("../utils/attendanceUtils");
+const { studentDomains, domainKey }          = require("../utils/attendanceDomain");
 const { getInternshipEndDate }               = require("../utils/tenure");
 
 // ── Ensure output directories exist ──
@@ -795,7 +796,14 @@ async function autoMarkCoordinatorAttendance() {
                 ] },
                 { internshipCompleted: { $ne: true } }
             ]
-        }).lean();
+        }).select(
+            // Projected deliberately. Without it this loads every active
+            // student in full, and a Student document embeds up to five base64
+            // PDFs — the nightly job was pulling hundreds of megabytes into
+            // memory to read a handful of scalar fields.
+            'employeeId domain domains linkedDomains tenure v2DurationType ' +
+            'joinerType joiningDate internshipStartDate internshipEndDate lastActiveDate createdAt'
+        ).lean();
 
         let marked = 0;
         for (const student of students) {
@@ -810,13 +818,22 @@ async function autoMarkCoordinatorAttendance() {
                 // Never auto-mark a Sunday — it is not a working day.
                 if (isSunday(dayStart)) continue;
 
-                // Skip if a coordinator (or a previous run) already marked today
-                const existing = await Attendance.findOne({
+                // Every domain this student holds. Two domains are two
+                // separate internships, each with its own attendance, so the
+                // auto-mark has to run once per domain rather than once per
+                // student.
+                const domains = studentDomains(student);
+                const targetDomains = domains.length ? domains : [student.domain || ""];
+
+                // Domains a coordinator (or a previous run) has not marked yet.
+                const alreadyMarked = await Attendance.find({
                     employeeId: student.employeeId,
                     dateKey:    dateKey,
                     markedBy:   "coordinator"
-                });
-                if (existing) continue;
+                }).select('domain').lean();
+                const markedKeys = new Set(alreadyMarked.map(r => domainKey(r.domain)));
+                const pending = targetDomains.filter(d => !markedKeys.has(domainKey(d)));
+                if (!pending.length) continue;
 
                 // Was the student active today? Logged in, self-marked, or made
                 // progress on a task.
@@ -842,24 +859,27 @@ async function autoMarkCoordinatorAttendance() {
                 const wasActive = !!(taskActivity || selfMarked || loggedInToday);
 
                 if (wasActive) {
-                    // Auto-mark coordinator attendance for active student
-                    await Attendance.create({
-                        studentId:     student._id,
-                        employeeId:    student.employeeId,
-                        domain:        student.domain || "",
-                        date:          today,
-                        dateKey:       dateKey,
-                        status:        "Present",
-                        markedBy:      "coordinator",
-                        coordinatorId: "AUTO_SYSTEM"
-                    });
-                    marked++;
-                    console.log(`[AUTO-ATTEND] Auto-marked coordinator attendance for ${student.employeeId} (${dateKey})`);
+                    for (const dom of pending) {
+                        await Attendance.create({
+                            studentId:     student._id,
+                            employeeId:    student.employeeId,
+                            domain:        dom || "",
+                            date:          today,
+                            dateKey:       dateKey,
+                            status:        "Present",
+                            markedBy:      "coordinator",
+                            coordinatorId: "AUTO_SYSTEM",
+                            source:        "auto"
+                        });
+                        marked++;
+                        console.log(`[AUTO-ATTEND] Auto-marked coordinator attendance for ${student.employeeId} / ${dom || "(no domain)"} (${dateKey})`);
+                    }
                 }
             } catch (studentErr) {
                 // Duplicate key = already marked between the check and the
-                // insert. The unique index on {employeeId, dateKey, markedBy}
-                // is doing its job; no duplicate row is created.
+                // insert. The unique index on
+                // {employeeId, dateKey, markedBy, domain} is doing its job; no
+                // duplicate row is created.
                 if (studentErr.code !== 11000) {
                     console.error(`[AUTO-ATTEND] Error for ${student.employeeId}:`, studentErr.message);
                 }
