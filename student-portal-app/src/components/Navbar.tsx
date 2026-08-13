@@ -27,6 +27,23 @@ export default function Navbar() {
             <GraduationCap className="h-6 w-6" aria-hidden />
             TEN Student Portal
           </a>
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-white px-4 py-1.5 text-xs font-bold text-black">
+              STUDENT
+            </span>
+            <a
+              href="/job-portal/"
+              className="rounded-full border border-white/50 px-4 py-1.5 text-xs font-medium text-white transition-all hover:border-white hover:bg-white/10"
+            >
+              JOB
+            </a>
+            <a
+              href="/coming-soon.html"
+              className="rounded-full border border-white/50 px-4 py-1.5 text-xs font-medium text-white transition-all hover:border-white hover:bg-white/10"
+            >
+              RESUME
+            </a>
+          </div>
           <div className="hidden items-center gap-8 md:flex">
             {NAV_ITEMS.map((link) => (
               <a
