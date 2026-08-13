@@ -38,7 +38,7 @@ export default function Navbar() {
               JOB
             </a>
             <a
-              href="/coming-soon.html"
+              href="/resume-portal/"
               className="rounded-full border border-white/50 px-4 py-1.5 text-xs font-medium text-white transition-all hover:border-white hover:bg-white/10"
             >
               RESUME

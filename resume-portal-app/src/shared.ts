@@ -1,10 +1,10 @@
 /* Single page: routes either scroll to a section or jump to a real portal page. */
 const ROUTE_TARGETS: Record<string, string> = {
   student: '/student-portal/',
-  job: '#home',
-  resume: '/resume-portal/',
-  dashboard: '/talent-network.html',
-  journey: '/talent-network.html',
+  job: '/job-portal/',
+  resume: '#home',
+  dashboard: '/resume-dashboard.html',
+  build: '/resume-dashboard.html',
 };
 
 export function routeHref(route: string): string {
