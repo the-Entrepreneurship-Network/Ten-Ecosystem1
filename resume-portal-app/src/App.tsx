@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+/* navigateToRoute still serves the portal pills; the agent is a hash view. */
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { FadeIn } from './components/FadeIn';
 import { AgentHero, AgentChat } from './components/ResumeAgent';
@@ -64,11 +65,11 @@ function Hero() {
         </div>
         <button
           type="button"
-          onClick={() => navigateToRoute('dashboard')}
+          onClick={() => { window.location.hash = 'agent'; }}
           className="whitespace-nowrap rounded-full border border-amber-200/70 px-3 py-2 text-xs text-amber-100 transition-all hover:bg-amber-200 hover:text-black sm:px-5"
           style={inter}
         >
-          Dashboard
+          Resume AI
         </button>
       </nav>
 
@@ -252,7 +253,7 @@ function Finale() {
       <FadeIn delay={0.15}>
         <button
           type="button"
-          onClick={() => navigateToRoute('build')}
+          onClick={() => { window.location.hash = 'agent'; }}
           className="rounded-full bg-amber-200 font-semibold text-black shadow-2xl transition-all hover:scale-[1.03] hover:bg-amber-100 active:scale-95"
           style={{ ...inter, fontSize: '17px', padding: '26px 70px' }}
         >
@@ -270,13 +271,49 @@ function Finale() {
   );
 }
 
+/* ---------- the agent, as its own destination ---------- */
+
+/*
+ * START BUILDING YOUR RESUME opens the agent rather than scrolling to it —
+ * once a student has decided to build, the cinematic landing is in the way.
+ * A hash keeps it linkable (/resume-portal/#agent) without pulling in a
+ * router for a two-view app.
+ */
+function AgentView() {
+  return (
+    <main className="min-h-screen bg-white">
+      <div className="flex items-center justify-between border-b border-black/10 px-5 py-3">
+        <a href="#" onClick={(e) => { e.preventDefault(); window.location.hash = ''; }}
+           className="text-[12px] font-semibold tracking-[0.14em] text-black/70 hover:text-black">
+          ← BACK TO THE PORTAL
+        </a>
+        <span className="text-[12px] font-semibold tracking-[0.14em] text-[#e0203a]">TEN RESUME AI</span>
+      </div>
+      <AgentHero />
+      <AgentChat />
+    </main>
+  );
+}
+
+function currentView() {
+  return typeof window !== 'undefined' && window.location.hash.replace(/^#/, '') === 'agent' ? 'agent' : 'landing';
+}
+
 export default function App() {
+  const [view, setView] = useState(currentView);
+
+  useEffect(() => {
+    const onHash = () => { setView(currentView()); window.scrollTo(0, 0); };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  if (view === 'agent') return <AgentView />;
+
   return (
     <main>
       <Hero />
       <CutTheStone />
-      <AgentHero />
-      <AgentChat />
       <Features />
       <Finale />
     </main>
