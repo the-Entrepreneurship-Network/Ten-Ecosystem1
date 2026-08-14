@@ -10186,9 +10186,15 @@ try {
     const v2ResumeAgent = require('./routes/v2/resumeAgent');
     app.use('/api/v2/resume', v2ResumeAgent);
 
+    // Job agent — reads a resume, fetches live openings from the boards with a
+    // public API and aims searches at the ones that require a login.
+    const v2JobAgent = require('./routes/v2/jobAgent');
+    app.use('/api/v2/jobs', v2JobAgent);
+
     console.log('[V2] Academics mounted at /api/v2/academics, page at /academics');
     console.log('[V2] Assistant mounted at /api/v2/assistant, page at /assistant');
     console.log('[V2] Resume agent mounted at /api/v2/resume');
+    console.log('[V2] Job agent mounted at /api/v2/jobs');
 } catch(e) {
     console.error('[V2] Failed to mount assistant routes:', e.message);
 }

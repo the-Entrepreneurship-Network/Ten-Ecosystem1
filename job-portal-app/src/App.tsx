@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { FadeIn } from './components/FadeIn';
+import JobAgent from './components/JobAgent';
 import { navigateToRoute } from './shared';
 
 const ASSETS = '/assets/job-portal';
@@ -122,7 +123,7 @@ function Hero() {
               </p>
               <button
                 type="button"
-                onClick={() => navigateToRoute('journey')}
+                onClick={() => { window.location.hash = 'agent'; }}
                 className="w-full rounded-full bg-white font-semibold text-black shadow-lg transition-all hover:bg-gray-100 active:scale-95 sm:w-auto"
                 style={{ ...inter, fontSize: '15px', whiteSpace: 'nowrap', padding: '24px 60px' }}
               >
@@ -279,7 +280,7 @@ function Finale() {
         <FadeIn delay={0.15}>
           <button
             type="button"
-            onClick={() => navigateToRoute('journey')}
+            onClick={() => { window.location.hash = 'agent'; }}
             className="rounded-full bg-white font-semibold text-black shadow-2xl transition-all hover:scale-[1.03] active:scale-95"
             style={{ ...inter, fontSize: '17px', padding: '26px 70px' }}
           >
@@ -298,7 +299,25 @@ function Finale() {
   );
 }
 
+/*
+ * START YOUR JOB JOURNEY opens the agent rather than another marketing page —
+ * that button is the moment a student stops reading and wants work. A hash
+ * keeps it linkable (/job-portal/#agent) without a router for two views.
+ */
+const currentView = () =>
+  typeof window !== 'undefined' && window.location.hash.replace(/^#/, '') === 'agent' ? 'agent' : 'landing';
+
 export default function App() {
+  const [view, setView] = useState(currentView);
+
+  useEffect(() => {
+    const onHash = () => { setView(currentView()); window.scrollTo(0, 0); };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  if (view === 'agent') return <JobAgent />;
+
   return (
     <main>
       <Hero />
