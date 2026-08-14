@@ -109,20 +109,25 @@ function SlashSplit() {
   const ref = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end end'] });
 
-  // 0 → .35: slash line draws across; .35 → 1: the two halves slide apart
-  const slashScale = useTransform(scrollYProgress, [0, 0.3], [0, 1]);
-  const slashOpacity = useTransform(scrollYProgress, [0, 0.05, 0.35, 0.5], [0, 1, 1, 0]);
-  const upperY = useTransform(scrollYProgress, [0.35, 1], ['0%', '-102%']);
-  const upperX = useTransform(scrollYProgress, [0.35, 1], ['0%', '-6%']);
-  const lowerY = useTransform(scrollYProgress, [0.35, 1], ['0%', '102%']);
-  const lowerX = useTransform(scrollYProgress, [0.35, 1], ['0%', '6%']);
+  // 0 → .3: blade draws; at the cut a white flash fires and the halves are
+  // BLOWN apart with rotation — not slid, thrown.
+  const slashScale = useTransform(scrollYProgress, [0, 0.28], [0, 1]);
+  const slashOpacity = useTransform(scrollYProgress, [0, 0.05, 0.3, 0.42], [0, 1, 1, 0]);
+  const flash = useTransform(scrollYProgress, [0.28, 0.32, 0.4], [0, 0.9, 0]);
+  const upperY = useTransform(scrollYProgress, [0.32, 0.8], ['0%', '-118%']);
+  const upperX = useTransform(scrollYProgress, [0.32, 0.8], ['0%', '-10%']);
+  const upperR = useTransform(scrollYProgress, [0.32, 0.8], [0, -5]);
+  const lowerY = useTransform(scrollYProgress, [0.32, 0.8], ['0%', '118%']);
+  const lowerX = useTransform(scrollYProgress, [0.32, 0.8], ['0%', '10%']);
+  const lowerR = useTransform(scrollYProgress, [0.32, 0.8], [0, 5]);
+  const shake = useTransform(scrollYProgress, [0.28, 0.3, 0.32, 0.34, 0.36, 0.4], [0, -9, 8, -6, 4, 0]);
 
   const halfBase = 'absolute inset-0 flex items-center justify-center bg-[#120a04]';
   const SLASH_ANGLE = -8; // degrees — matches the cut line's tilt
 
   return (
     <div ref={ref} className="relative" style={{ height: '250vh' }}>
-      <div className="sticky top-0 h-screen overflow-hidden bg-[#050505]">
+      <motion.div className="sticky top-0 h-screen overflow-hidden bg-[#050505]" style={{ x: shake }}>
         {/* what's revealed behind the cut */}
         <div className="absolute inset-0 flex items-center justify-center bg-[#050505]">
           <p className="px-6 text-center text-2xl text-amber-200/90 md:text-4xl" style={cinzel}>
@@ -130,42 +135,46 @@ function SlashSplit() {
           </p>
         </div>
 
-        {/* upper half of the "page" being cut */}
+        {/* upper half of the "page" being cut — thrown up and away */}
         <motion.div
           className={halfBase}
           style={{
             y: upperY,
             x: upperX,
+            rotate: upperR,
             clipPath: `polygon(0 0, 100% 0, 100% ${50 - 7}%, 0 ${50 + 7}%)`,
           }}
         >
           <SlashFace />
         </motion.div>
 
-        {/* lower half */}
+        {/* lower half — thrown down */}
         <motion.div
           className={halfBase}
           style={{
             y: lowerY,
             x: lowerX,
+            rotate: lowerR,
             clipPath: `polygon(0 ${50 + 7}%, 100% ${50 - 7}%, 100% 100%, 0 100%)`,
           }}
         >
           <SlashFace />
         </motion.div>
 
-        {/* the blade line */}
+        {/* the blade — hot core with a wide glow trail */}
         <motion.div
-          className="absolute left-[-10%] top-1/2 h-[3px] w-[120%] origin-left"
+          className="absolute left-[-10%] top-1/2 h-[5px] w-[120%] origin-left"
           style={{
             scaleX: slashScale,
             opacity: slashOpacity,
             rotate: SLASH_ANGLE,
-            background: 'linear-gradient(90deg, transparent, #ffe9b8 15%, #fff 50%, #ffe9b8 85%, transparent)',
-            boxShadow: '0 0 24px 4px rgba(255,220,150,0.8)',
+            background: 'linear-gradient(90deg, transparent, #ffe9b8 10%, #fff 50%, #ffe9b8 90%, transparent)',
+            boxShadow: '0 0 18px 6px rgba(255,220,150,0.95), 0 0 70px 24px rgba(255,180,80,0.45)',
           }}
         />
-      </div>
+        {/* impact flash when the blade lands */}
+        <motion.div className="pointer-events-none absolute inset-0 bg-white" style={{ opacity: flash }} />
+      </motion.div>
     </div>
   );
 }
@@ -187,74 +196,84 @@ function SlashFace() {
 
 /* ---------- the rocks break open and the resume rises ---------- */
 
-const SHARDS: { clip: string; x: number; y: number; r: number }[] = [
-  { clip: 'polygon(0 0, 22% 0, 12% 30%, 0 18%)', x: -260, y: -180, r: -38 },
-  { clip: 'polygon(22% 0, 48% 0, 40% 22%, 18% 26%)', x: -90, y: -260, r: 22 },
-  { clip: 'polygon(48% 0, 78% 0, 70% 18%, 45% 24%)', x: 120, y: -240, r: -18 },
-  { clip: 'polygon(78% 0, 100% 0, 100% 26%, 74% 20%)', x: 280, y: -160, r: 42 },
-  { clip: 'polygon(0 70%, 16% 62%, 10% 100%, 0 100%)', x: -300, y: 170, r: 30 },
-  { clip: 'polygon(84% 66%, 100% 72%, 100% 100%, 88% 100%)', x: 300, y: 190, r: -30 },
+/* twelve shards cut from the explosion plate, thrown to every screen edge */
+const SHARDS: { clip: string; x: string; y: string; r: number }[] = [
+  { clip: 'polygon(0 0, 20% 0, 12% 28%, 0 16%)', x: '-52vw', y: '-38vh', r: -160 },
+  { clip: 'polygon(20% 0, 45% 0, 38% 20%, 16% 24%)', x: '-20vw', y: '-52vh', r: 120 },
+  { clip: 'polygon(45% 0, 72% 0, 66% 18%, 42% 22%)', x: '18vw', y: '-55vh', r: -100 },
+  { clip: 'polygon(72% 0, 100% 0, 100% 24%, 70% 18%)', x: '50vw', y: '-40vh', r: 170 },
+  { clip: 'polygon(0 16%, 10% 26%, 6% 55%, 0 48%)', x: '-58vw', y: '-6vh', r: 90 },
+  { clip: 'polygon(90% 22%, 100% 24%, 100% 52%, 94% 50%)', x: '58vw', y: '4vh', r: -80 },
+  { clip: 'polygon(0 48%, 8% 52%, 12% 82%, 0 78%)', x: '-55vw', y: '30vh', r: -140 },
+  { clip: 'polygon(92% 50%, 100% 52%, 100% 80%, 88% 78%)', x: '54vw', y: '34vh', r: 130 },
+  { clip: 'polygon(0 78%, 18% 74%, 10% 100%, 0 100%)', x: '-42vw', y: '48vh', r: 100 },
+  { clip: 'polygon(18% 74%, 46% 80%, 40% 100%, 12% 100%)', x: '-12vw', y: '54vh', r: -70 },
+  { clip: 'polygon(46% 80%, 74% 76%, 68% 100%, 42% 100%)', x: '16vw', y: '55vh', r: 80 },
+  { clip: 'polygon(74% 76%, 100% 80%, 100% 100%, 68% 100%)', x: '46vw', y: '46vh', r: -120 },
 ];
 
 function RockBreak() {
   const ref = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end end'] });
 
-  const leftX = useTransform(scrollYProgress, [0.1, 0.6], ['0%', '-58%']);
-  const rightX = useTransform(scrollYProgress, [0.1, 0.6], ['0%', '58%']);
-  const halvesRot = useTransform(scrollYProgress, [0.1, 0.6], [0, 9]);
-  const glow = useTransform(scrollYProgress, [0.05, 0.4], [0, 1]);
-  const resumeY = useTransform(scrollYProgress, [0.35, 0.75], ['60vh', '0vh']);
-  const resumeScale = useTransform(scrollYProgress, [0.35, 0.75], [0.6, 1]);
+  const glow = useTransform(scrollYProgress, [0.05, 0.35], [0, 1]);
+  const burstFlash = useTransform(scrollYProgress, [0.14, 0.18, 0.26], [0, 0.7, 0]);
+  const shake = useTransform(scrollYProgress, [0.14, 0.17, 0.2, 0.23, 0.26, 0.3], [0, -10, 9, -7, 5, 0]);
+  const plateScale = useTransform(scrollYProgress, [0.05, 0.16], [0.55, 1]);
+  const plateOpacity = useTransform(scrollYProgress, [0.05, 0.12, 0.5, 0.7], [0, 1, 1, 0]);
+  const resumeY = useTransform(scrollYProgress, [0.3, 0.7], ['65vh', '0vh']);
+  const resumeScale = useTransform(scrollYProgress, [0.3, 0.7], [0.5, 1]);
+  const resumeRot = useTransform(scrollYProgress, [0.3, 0.7], [-9, 0]);
   const titleOpacity = useTransform(scrollYProgress, [0.65, 0.85], [0, 1]);
 
   return (
     <div ref={ref} className="relative" style={{ height: '300vh' }}>
-      <div className="sticky top-0 flex h-screen flex-col items-center justify-center overflow-hidden bg-[#050505]">
-        {/* boulder halves */}
+      <motion.div className="sticky top-0 flex h-screen flex-col items-center justify-center overflow-hidden bg-[#050505]" style={{ x: shake }}>
+        {/* the explosion plate blooms in, then its shards tear off to every edge */}
         <motion.img
-          src={`${ASSETS}/boulder.jpg`}
+          src={`${ASSETS}/rockburst.jpg`}
           alt=""
-          className="absolute w-[80vw] max-w-[900px]"
-          style={{ x: leftX, rotate: useTransform(halvesRot, (v) => -v), clipPath: 'inset(0 50% 0 0)', mixBlendMode: 'screen' }}
+          className="absolute w-[92vw] max-w-[1100px]"
+          style={{ scale: plateScale, opacity: plateOpacity, mixBlendMode: 'screen' }}
         />
-        <motion.img
-          src={`${ASSETS}/boulder.jpg`}
-          alt=""
-          className="absolute w-[80vw] max-w-[900px]"
-          style={{ x: rightX, rotate: halvesRot, clipPath: 'inset(0 0 0 50%)', mixBlendMode: 'screen' }}
-        />
-
-        {/* flying shards */}
         {SHARDS.map(({ clip, x, y, r }, i) => (
           <motion.img
             key={i}
-            src={`${ASSETS}/boulder.jpg`}
+            src={`${ASSETS}/rockburst.jpg`}
             alt=""
-            className="absolute w-[80vw] max-w-[900px]"
+            className="absolute w-[92vw] max-w-[1100px]"
             style={{
               clipPath: clip,
               mixBlendMode: 'screen',
-              x: useTransform(scrollYProgress, [0.1, 0.7], [0, x]),
-              y: useTransform(scrollYProgress, [0.1, 0.7], [0, y]),
-              rotate: useTransform(scrollYProgress, [0.1, 0.7], [0, r]),
-              opacity: useTransform(scrollYProgress, [0.6, 0.85], [1, 0]),
+              x: useTransform(scrollYProgress, [0.16, 0.75], ['0vw', x]),
+              y: useTransform(scrollYProgress, [0.16, 0.75], ['0vh', y]),
+              rotate: useTransform(scrollYProgress, [0.16, 0.75], [0, r]),
+              opacity: useTransform(scrollYProgress, [0.16, 0.2, 0.66, 0.85], [0, 1, 1, 0]),
             }}
           />
         ))}
 
-        {/* golden glow from the crack */}
+        {/* golden blast glow */}
         <motion.div
-          className="pointer-events-none absolute h-[70vh] w-[40vw] rounded-full"
+          className="pointer-events-none absolute h-[80vh] w-[50vw] rounded-full"
           style={{
             opacity: glow,
-            background: 'radial-gradient(ellipse, rgba(255,196,94,0.35) 0%, transparent 65%)',
+            background: 'radial-gradient(ellipse, rgba(255,196,94,0.4) 0%, transparent 65%)',
           }}
         />
+        <motion.div className="pointer-events-none absolute inset-0 bg-amber-100" style={{ opacity: burstFlash }} />
 
-        {/* the resume rises out of the rock */}
-        <motion.div style={{ y: resumeY, scale: resumeScale }} className="relative z-10">
-          <ResumeCard />
+        {/* the 3D resume rises out of the blast */}
+        <motion.div style={{ y: resumeY, scale: resumeScale, rotate: resumeRot }} className="relative z-10 flex flex-col items-center">
+          <img
+            src={`${ASSETS}/resume3d.png`}
+            alt="The unrejectable resume"
+            className="w-[240px] md:w-[300px]"
+            style={{ filter: 'drop-shadow(0 0 60px rgba(255,196,94,0.55)) drop-shadow(0 30px 50px rgba(0,0,0,0.8))' }}
+          />
+          <div className="mt-4 rounded-full bg-emerald-950/80 px-4 py-2 text-[12px] font-semibold text-emerald-300" style={inter}>
+            ✓ ATS 98/100 — unrejectable
+          </div>
         </motion.div>
 
         <motion.h2
@@ -263,35 +282,7 @@ function RockBreak() {
         >
           One to make an irreplaceable, unrejected resume.
         </motion.h2>
-      </div>
-    </div>
-  );
-}
-
-function ResumeCard() {
-  return (
-    <div
-      className="w-[300px] rounded-lg bg-white p-6 text-black shadow-2xl md:w-[340px]"
-      style={{ boxShadow: '0 0 80px rgba(255,196,94,0.45), 0 30px 60px rgba(0,0,0,0.8)' }}
-    >
-      <div className="mb-4 border-b border-black/10 pb-3">
-        <p className="text-lg font-bold" style={inter}>Your Name</p>
-        <p className="text-[12px] text-black/60" style={inter}>Full-Stack Developer · ATS score 98/100</p>
-      </div>
-      {['Experience', 'Projects', 'Skills'].map((section) => (
-        <div key={section} className="mb-3">
-          <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-black/70" style={inter}>
-            {section}
-          </p>
-          <div className="space-y-1.5">
-            <div className="h-2 w-full rounded bg-black/10" />
-            <div className="h-2 w-4/5 rounded bg-black/10" />
-          </div>
-        </div>
-      ))}
-      <div className="mt-4 rounded bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-700" style={inter}>
-        ✓ Passes every ATS filter — unrejectable
-      </div>
+      </motion.div>
     </div>
   );
 }
