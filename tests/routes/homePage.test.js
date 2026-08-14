@@ -170,3 +170,64 @@ describe('the small things that made it look unfinished', () => {
     expect(beforeFooter).toContain('talent-network.html');
   });
 });
+
+describe('the Domains link goes somewhere public, and the list is one list', () => {
+  const domainsPage = fs.readFileSync(path.join(root, 'public/domains.html'), 'utf8');
+  const journeys = fs.readFileSync(path.join(root, 'public/student-journeys.html'), 'utf8');
+  const { DOMAINS } = require('../../config/domains');
+
+  it('the home page points at /domains, not at a funnel step', () => {
+    // student-journeys.html is "Step 2 of 3" with a payment banner. Sending a
+    // visitor there from the front page drops them mid-signup.
+    expect(page).toContain('href="/domains"');
+    expect(page).not.toContain('href="student-journeys.html"');
+  });
+
+  it('the server serves the page and the list behind it', () => {
+    expect(source).toContain("app.get('/domains'");
+    expect(source).toContain("app.get('/api/public/domains'");
+  });
+
+  it('offers exactly the domains a student can register for', () => {
+    // The old page advertised Vibe Coding, Space Research, Business Analyst
+    // and HR Management — none registerable — and hid five that were.
+    const at = source.indexOf("app.get('/api/public/domains'");
+    const block = source.slice(at, at + 2600);
+    expect(block).toContain('DOMAINS.filter(d => d.selectable)');
+    expect(DOMAINS.filter((d) => d.selectable).length).toBeGreaterThan(0);
+  });
+
+  it('keeps no domain list of its own to drift', () => {
+    // Every retired domain named in the page body would be a copy creeping back.
+    DOMAINS.filter((d) => !d.selectable).forEach((d) => {
+      expect(domainsPage).not.toContain('>' + d.name + '<');
+    });
+    expect(domainsPage).toContain('/api/public/domains');
+  });
+
+  it('still draws something when the list cannot be fetched', () => {
+    expect(domainsPage).toContain('Could not load the domain list');
+    // ...and the server answers from config even with no database.
+    const at = source.indexOf("app.get('/api/public/domains'");
+    expect(source.slice(at, at + 2600)).toMatch(/catch[\s\S]{0,400}selectable/);
+  });
+
+  it('the funnel page reads the same list instead of its own', () => {
+    expect(journeys).toContain('/api/public/domains');
+    expect(journeys).toContain('drawJourney');
+  });
+
+  it('respects a reader who asked for less movement', () => {
+    expect(domainsPage).toContain('prefers-reduced-motion');
+  });
+
+  it('is reachable by keyboard, not just by pointer', () => {
+    expect(domainsPage).toContain('tabindex="0"');
+    expect(domainsPage).toContain('aria-expanded');
+  });
+
+  it('escapes the names and week titles it renders', () => {
+    expect(domainsPage).toContain('esc(d.name)');
+    expect(domainsPage).toContain('esc(w)');
+  });
+});

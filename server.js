@@ -9594,6 +9594,87 @@ app.get('/api/public/stats', async (req, res) => {
     }
 });
 
+/**
+ * GET /api/public/domains — every domain we actually offer, with its curriculum.
+ *
+ * public/student-journeys.html carried a hardcoded list of fourteen. It had
+ * drifted: it advertised Vibe Coding, Space Research, Business Analyst and HR
+ * Management — none of which a student can register for — and omitted
+ * Artificial Intelligence, Business Development, HR, Space Intern and Finance,
+ * which they can. Somebody reading that page chose a domain that does not
+ * exist on the form.
+ *
+ * config/domains.js was written to be the one list precisely so this could not
+ * happen, and a page that never read it drifted anyway. Serving it here means
+ * a domain appears on the marketing page if and only if it appears on the
+ * registration form.
+ *
+ * Week titles come from the seeded DomainTask rows, so the curriculum shown is
+ * the curriculum taught. A domain with nothing seeded yet simply shows no
+ * weeks rather than an invented syllabus.
+ */
+let _publicDomainsCache = { at: 0, body: null };
+
+app.get('/api/public/domains', async (req, res) => {
+    try {
+        if (_publicDomainsCache.body && (Date.now() - _publicDomainsCache.at) < PUBLIC_STATS_TTL_MS) {
+            return res.json(_publicDomainsCache.body);
+        }
+        const { DOMAINS } = require("./config/domains");
+        const DomainTask = require("./models/new/DomainTask");
+
+        // One pass over the library rather than a query per domain.
+        const rows = await DomainTask.find({ durationType: "1month" })
+            .select("domain weekNumber taskTitle -_id")
+            .sort({ domain: 1, weekNumber: 1 })
+            .lean();
+
+        const weeksByDomain = {};
+        for (const r of rows) {
+            (weeksByDomain[r.domain] = weeksByDomain[r.domain] || []).push(r.taskTitle);
+        }
+
+        // The task engine files some domains under another name; mirror it so
+        // the page shows a curriculum instead of an empty card.
+        const ALIAS = {
+            "Artificial Intelligence": "Data Science",
+            "HR": "HR Management",
+            "Space Intern": "Space Research",
+            "Business Development": "Business Analyst",
+            "Finance": "Venture Capital"
+        };
+
+        const body = {
+            success: true,
+            domains: DOMAINS.filter(d => d.selectable).map(d => ({
+                name: d.name,
+                code: d.shortCode,
+                weeks: weeksByDomain[d.name] || weeksByDomain[ALIAS[d.name]] || []
+            }))
+        };
+        _publicDomainsCache = { at: Date.now(), body };
+        res.json(body);
+    } catch (err) {
+        console.error('[public-domains]', err.message);
+        // Names still come from config even with no database, so the page can
+        // always draw the grid — it just shows no week list.
+        try {
+            const { DOMAINS } = require("./config/domains");
+            return res.json({
+                success: true,
+                domains: DOMAINS.filter(d => d.selectable)
+                    .map(d => ({ name: d.name, code: d.shortCode, weeks: [] }))
+            });
+        } catch (_) {
+            res.json({ success: false, domains: [] });
+        }
+    }
+});
+
+app.get('/domains', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'domains.html'));
+});
+
 app.get('/verify-document', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'verify.html'));
 });
