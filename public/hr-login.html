@@ -236,6 +236,46 @@ input::placeholder { color: #2a2018; }
 <script>if(window.TenForgotPassword) TenForgotPassword.init({ role: "hr" });</script>
 
 <script>
+/**
+ * Carry the position picked on the landing page through to the portal.
+ *
+ * The landing page's HR chooser sends people here as `/hr-login?level=3`, and
+ * hr-portal.html's initHRActiveLevel() reads the same `level` parameter to
+ * preselect that position. This page sat in the middle and dropped it, so
+ * whichever level was chosen, everyone arrived on Level 1 and had to switch by
+ * hand — which then re-asks for credentials. Read it, sanity-check it against
+ * the eight real positions, and pass it on.
+ */
+function chosenHrLevel() {
+  const raw = parseInt(new URLSearchParams(window.location.search).get('level'), 10);
+  return (raw >= 1 && raw <= 8) ? raw : null;
+}
+
+// Same eight titles as the portal's level switcher and the landing page's
+// chooser. Kept identical so the position named here is the position the
+// dropdown lands on.
+const HR_LEVEL_NAMES = {
+  1: 'Jr HR Associate',
+  2: 'Sr HR Associate',
+  3: 'Jr HR Manager',
+  4: 'Sr HR Manager',
+  5: 'HR Associate Director',
+  6: 'Jr HR Director',
+  7: 'HR Director & HRBP',
+  8: 'Vice President'
+};
+
+// Say which position is being signed into, so a wrong pick is caught here
+// rather than after the password has been typed.
+document.addEventListener('DOMContentLoaded', function () {
+  const level = chosenHrLevel();
+  if (!level) return;
+  const sub = document.querySelector('.card-sub');
+  if (sub) {
+    sub.textContent = 'Signing in as Level ' + level + ' — ' + (HR_LEVEL_NAMES[level] || 'HR');
+  }
+});
+
 async function doLogin() {
   const email = document.getElementById('email').value.trim();
   const password = document.getElementById('password').value.trim();
@@ -255,7 +295,8 @@ async function doLogin() {
     const d = await r.json();
     if (d.success) {
       sessionStorage.setItem('hrUser', JSON.stringify(d.hr));
-      window.location.href = '/hr-portal';
+      const level = chosenHrLevel();
+      window.location.href = level ? ('/hr-portal?level=' + level) : '/hr-portal';
     } else {
       const errEl = document.getElementById('errMsg');
       errEl.textContent = d.message || 'Invalid credentials. Please try again.';
