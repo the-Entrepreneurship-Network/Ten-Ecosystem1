@@ -105,137 +105,78 @@ function Hero() {
 
 /* ---------- the samurai cuts the page: slash draws, screen splits apart ---------- */
 
-function SlashSplit() {
+/* ---------- one frame: the blade meets the ROCK, it shatters, the 3D resume
+   appears — all in place, nobody has to keep scrolling to see it ---------- */
+
+function CutTheStone() {
   const ref = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end end'] });
-
-  // 0 → .3: blade draws; at the cut a white flash fires and the halves are
-  // BLOWN apart with rotation — not slid, thrown.
-  const slashScale = useTransform(scrollYProgress, [0, 0.28], [0, 1]);
-  const slashOpacity = useTransform(scrollYProgress, [0, 0.05, 0.3, 0.42], [0, 1, 1, 0]);
-  const flash = useTransform(scrollYProgress, [0.28, 0.32, 0.4], [0, 0.9, 0]);
-  const upperY = useTransform(scrollYProgress, [0.32, 0.8], ['0%', '-118%']);
-  const upperX = useTransform(scrollYProgress, [0.32, 0.8], ['0%', '-10%']);
-  const upperR = useTransform(scrollYProgress, [0.32, 0.8], [0, -5]);
-  const lowerY = useTransform(scrollYProgress, [0.32, 0.8], ['0%', '118%']);
-  const lowerX = useTransform(scrollYProgress, [0.32, 0.8], ['0%', '10%']);
-  const lowerR = useTransform(scrollYProgress, [0.32, 0.8], [0, 5]);
-  const shake = useTransform(scrollYProgress, [0.28, 0.3, 0.32, 0.34, 0.36, 0.4], [0, -9, 8, -6, 4, 0]);
-
-  const halfBase = 'absolute inset-0 flex items-center justify-center bg-[#120a04]';
-  const SLASH_ANGLE = -8; // degrees — matches the cut line's tilt
-
-  return (
-    <div ref={ref} className="relative" style={{ height: '250vh' }}>
-      <motion.div className="sticky top-0 h-screen overflow-hidden bg-[#050505]" style={{ x: shake }}>
-        {/* what's revealed behind the cut */}
-        <div className="absolute inset-0 flex items-center justify-center bg-[#050505]">
-          <p className="px-6 text-center text-2xl text-amber-200/90 md:text-4xl" style={cinzel}>
-            The stone breaks next.
-          </p>
-        </div>
-
-        {/* upper half of the "page" being cut — thrown up and away */}
-        <motion.div
-          className={halfBase}
-          style={{
-            y: upperY,
-            x: upperX,
-            rotate: upperR,
-            clipPath: `polygon(0 0, 100% 0, 100% ${50 - 7}%, 0 ${50 + 7}%)`,
-          }}
-        >
-          <SlashFace />
-        </motion.div>
-
-        {/* lower half — thrown down */}
-        <motion.div
-          className={halfBase}
-          style={{
-            y: lowerY,
-            x: lowerX,
-            rotate: lowerR,
-            clipPath: `polygon(0 ${50 + 7}%, 100% ${50 - 7}%, 100% 100%, 0 100%)`,
-          }}
-        >
-          <SlashFace />
-        </motion.div>
-
-        {/* the blade — hot core with a wide glow trail */}
-        <motion.div
-          className="absolute left-[-10%] top-1/2 h-[5px] w-[120%] origin-left"
-          style={{
-            scaleX: slashScale,
-            opacity: slashOpacity,
-            rotate: SLASH_ANGLE,
-            background: 'linear-gradient(90deg, transparent, #ffe9b8 10%, #fff 50%, #ffe9b8 90%, transparent)',
-            boxShadow: '0 0 18px 6px rgba(255,220,150,0.95), 0 0 70px 24px rgba(255,180,80,0.45)',
-          }}
-        />
-        {/* impact flash when the blade lands */}
-        <motion.div className="pointer-events-none absolute inset-0 bg-white" style={{ opacity: flash }} />
-      </motion.div>
-    </div>
-  );
-}
-
-function SlashFace() {
-  return (
-    <div className="px-6 text-center">
-      <p className="mb-3 text-[12px] uppercase tracking-[0.35em] text-amber-100/50" style={inter}>
-        One cut. One chance.
-      </p>
-      <p className="text-3xl leading-snug text-amber-100 md:text-6xl" style={cinzel}>
-        YOUR OLD RESUME
-        <br />
-        ENDS HERE
-      </p>
-    </div>
-  );
-}
-
-/* ---------- the rocks break open and the resume rises ---------- */
-
-function RockBreak() {
-  const ref = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end end'] });
-
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [fired, setFired] = useState(false);
+  const [showResume, setShowResume] = useState(false);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end end'] });
 
-  /* the stone breaks IN REAL: the generated explosion video is scrubbed by
-     the user's scroll — frame position follows finger exactly */
+  /* scroll only draws the blade toward the stone; crossing the cut point
+     fires the whole sequence in place — the explosion film plays itself and
+     the resume erupts right after, in the same frame */
   useEffect(() => {
     return scrollYProgress.on('change', (v) => {
-      const vid = videoRef.current;
-      if (!vid || !vid.duration) return;
-      const p = Math.min(1, Math.max(0, v / 0.7)); /* video spans first 70% of the section */
-      vid.currentTime = Math.min(vid.duration - 0.05, p * vid.duration);
+      if (v >= 0.3 && !fired) {
+        setFired(true);
+        const vid = videoRef.current;
+        if (vid) {
+          vid.playbackRate = 1.6;
+          vid.play().catch(() => {});
+        }
+        setTimeout(() => setShowResume(true), 1400);
+      }
     });
-  }, [scrollYProgress]);
+  }, [scrollYProgress, fired]);
 
-  const videoOpacity = useTransform(scrollYProgress, [0, 0.04, 0.8, 0.95], [0, 1, 1, 0.25]);
-  const shake = useTransform(scrollYProgress, [0.3, 0.34, 0.38, 0.42, 0.46, 0.5], [0, -10, 9, -7, 5, 0]);
-  const resumeY = useTransform(scrollYProgress, [0.55, 0.88], ['70vh', '0vh']);
-  const resumeScale = useTransform(scrollYProgress, [0.55, 0.88], [0.45, 1]);
-  const resumeRot = useTransform(scrollYProgress, [0.55, 0.88], [-9, 0]);
-  const titleOpacity = useTransform(scrollYProgress, [0.8, 0.95], [0, 1]);
+  const slashScale = useTransform(scrollYProgress, [0.02, 0.3], [0, 1]);
+  const slashOpacity = useTransform(scrollYProgress, [0, 0.05], [0, 1]);
 
   return (
-    <div ref={ref} className="relative" style={{ height: '300vh' }}>
-      <motion.div className="sticky top-0 flex h-screen flex-col items-center justify-center overflow-hidden bg-[#050505]" style={{ x: shake }}>
-        {/* generated rock-explosion film, scrubbed by scroll */}
-        <motion.video
+    <div ref={ref} className="relative" style={{ height: '220vh' }}>
+      <div className={`sticky top-0 h-screen overflow-hidden bg-[#050505] ${fired ? 'cut-shake' : ''}`}>
+        {/* the stone waits on its first frame; the cut detonates it */}
+        <video
           ref={videoRef}
           muted
           playsInline
           preload="auto"
           src={`${ASSETS}/rockbreak.mp4`}
           className="absolute inset-0 h-full w-full object-cover"
-          style={{ opacity: videoOpacity }}
         />
 
-        {/* the 3D resume rises out of the blast */}
-        <motion.div style={{ y: resumeY, scale: resumeScale, rotate: resumeRot }} className="relative z-10 flex flex-col items-center">
+        {/* the blade, drawn by scroll straight onto the stone */}
+        {!showResume && (
+          <motion.div
+            className="absolute left-[-10%] top-1/2 h-[5px] w-[120%] origin-left"
+            style={{
+              scaleX: slashScale,
+              opacity: fired ? 0 : slashOpacity,
+              rotate: -8,
+              transition: 'opacity .4s',
+              background: 'linear-gradient(90deg, transparent, #ffe9b8 10%, #fff 50%, #ffe9b8 90%, transparent)',
+              boxShadow: '0 0 18px 6px rgba(255,220,150,0.95), 0 0 70px 24px rgba(255,180,80,0.45)',
+            }}
+          />
+        )}
+        {fired && <div className="cut-flash pointer-events-none absolute inset-0 bg-white" />}
+
+        {!fired && (
+          <p className="absolute bottom-10 w-full text-center text-[12px] uppercase tracking-[0.3em] text-amber-100/60" style={inter}>
+            Scroll — the blade meets the stone
+          </p>
+        )}
+
+        {/* the 3D resume erupts from the broken stone — same frame, no scroll */}
+        <motion.div
+          initial={false}
+          animate={showResume ? { y: 0, scale: 1, rotate: 0, opacity: 1 } : { y: '68vh', scale: 0.45, rotate: -9, opacity: 0 }}
+          transition={{ type: 'spring', stiffness: 60, damping: 14 }}
+          className="relative z-10 flex h-full flex-col items-center justify-center"
+        >
           <img
             src={`${ASSETS}/resume3d.png`}
             alt="The unrejectable resume"
@@ -247,13 +188,12 @@ function RockBreak() {
           </div>
         </motion.div>
 
-        <motion.h2
-          className="absolute bottom-10 px-6 text-center text-xl text-amber-200 md:text-3xl"
-          style={{ ...cinzel, opacity: titleOpacity }}
-        >
-          One to make an irreplaceable, unrejected resume.
-        </motion.h2>
-      </motion.div>
+        {showResume && (
+          <h2 className="fade-in absolute bottom-10 w-full px-6 text-center text-xl text-amber-200 md:text-3xl" style={cinzel}>
+            One to make an irreplaceable, unrejected resume.
+          </h2>
+        )}
+      </div>
     </div>
   );
 }
@@ -333,8 +273,7 @@ export default function App() {
   return (
     <main>
       <Hero />
-      <SlashSplit />
-      <RockBreak />
+      <CutTheStone />
       <Features />
       <Finale />
     </main>
