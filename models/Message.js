@@ -11,7 +11,7 @@ const messageSchema = new mongoose.Schema({
     chatRoom:     { type: String, required: true, index: true },
     senderId:     { type: String, required: true },   // employeeId for students, username for coord/HR
     senderName:   { type: String, required: true },
-    senderRole:   { type: String, enum: ["student","coordinator","hr"], required: true },
+    senderRole:   { type: String, enum: ["student","coordinator","hr","admin"], required: true },
     senderDomain: { type: String, default: "" },
 
     // Text is optional when an image is attached — an image on its own is a

@@ -149,6 +149,35 @@ describe('the claim is no longer trusted anywhere', () => {
   });
 });
 
+describe('every role that can send is a role the schema accepts', () => {
+  // Admin sockets started connecting when identity moved to the session — and
+  // then every admin message died in schema validation, surfacing as a generic
+  // "The message could not be sent. Please try again." with the real reason
+  // only in the server log.
+  const Message = require('../../models/Message');
+
+  it.each(['student', 'coordinator', 'hr', 'admin'])('accepts a message from %s', (role) => {
+    const err = new Message({
+      chatRoom: 'dm::TEN/AI/1663::hr.director@ten.com',
+      senderId: 'someone', senderName: 'Someone', senderRole: role, message: 'hi'
+    }).validateSync();
+    expect(err).toBeUndefined();
+  });
+
+  it('still rejects a role nobody has', () => {
+    const err = new Message({
+      chatRoom: 'general', senderId: 'x', senderName: 'X', senderRole: 'wizard', message: 'hi'
+    }).validateSync();
+    expect(err).toBeDefined();
+  });
+
+  it('reports a validation failure as itself, not as a server error', () => {
+    // Otherwise the next schema mismatch is another silent week.
+    expect(source).toContain("e.name === \"ValidationError\"");
+    expect(source).toContain('code: "invalid"');
+  });
+});
+
 describe('sending survives a network that has no socket', () => {
   it('the server accepts a message over plain HTTP', () => {
     const at = source.indexOf('app.post("/chat/messages"');

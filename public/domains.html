@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Domains — TEN</title>
+<meta name="description" content="Every internship domain at The Entrepreneurship Network — six weeks of real work, quizzes, projects and a verifiable certificate in each.">
+
+<meta property="og:type"        content="website">
+<meta property="og:site_name"   content="TEN — The Entrepreneurship Network">
+<meta property="og:title"       content="Every TEN domain">
+<meta property="og:description" content="Pick a track. Six weeks of real work, quizzes, projects and a verifiable certificate.">
+<meta property="og:url"         content="https://virtualinternships.entrepreneurshipnetwork.net/domains">
+<meta property="og:image"       content="https://virtualinternships.entrepreneurshipnetwork.net/icons/icon-512.png">
+<meta name="twitter:card"       content="summary_large_image">
+<link rel="canonical" href="https://virtualinternships.entrepreneurshipnetwork.net/domains">
+
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/mobile.css">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#000000">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<style>
+/*
+  The landing page's language — black, one accent, mono labels — rather than
+  the portal's navy. Somebody arriving from the home page should not feel they
+  changed products.
+
+  Every animation is CSS and every one of them is switched off by
+  prefers-reduced-motion. Nothing here waits on JavaScript to become readable:
+  the cards animate in, they do not fade in FROM nothing.
+*/
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg:#000; --card:#0d0d0d; --card-2:#141414; --line:#1e1e1e; --line-2:#2a2a2a;
+  --ink:#fff; --muted:#8a8a8a; --gold:#f5c542;
+}
+html{scroll-behavior:smooth;}
+body{
+  background:var(--bg); color:var(--ink); min-height:100dvh; overflow-x:hidden;
+  font-family:'Plus Jakarta Sans',system-ui,-apple-system,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:inherit;}
+.mono{font-family:'IBM Plex Mono',monospace; letter-spacing:.2em; text-transform:uppercase;}
+
+/* ── top bar ─────────────────────────────────────────────────────────── */
+.bar{
+  position:sticky; top:0; z-index:40; display:flex; align-items:center; gap:14px;
+  padding:16px 22px; background:rgba(0,0,0,.82); backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--line);
+}
+.bar a.back{font-size:13px; font-weight:700; text-decoration:none; color:var(--muted);}
+.bar a.back:hover{color:var(--ink);}
+.bar .spacer{flex:1;}
+.bar .join{
+  background:var(--ink); color:#000; text-decoration:none; font-weight:900; font-size:13px;
+  border-radius:999px; padding:10px 22px; white-space:nowrap;
+}
+
+/* ── hero ────────────────────────────────────────────────────────────── */
+.hero{padding:72px 22px 40px; max-width:1120px; margin:0 auto;}
+.hero .eyebrow{font-size:11px; color:var(--muted); margin-bottom:16px;}
+.hero h1{
+  font-family:'Outfit',sans-serif; font-weight:900; line-height:.92;
+  font-size:clamp(38px,9vw,104px); letter-spacing:-.03em;
+}
+/* Each word rises on its own, so the headline reads as it arrives. */
+.hero h1 span{display:inline-block; animation:rise .7s cubic-bezier(.2,.8,.2,1) backwards;}
+.hero h1 span:nth-child(2){animation-delay:.08s;}
+.hero h1 span:nth-child(3){animation-delay:.16s; color:var(--gold);}
+@keyframes rise{from{opacity:0; transform:translateY(38px) rotate(2deg);} to{opacity:1; transform:none;}}
+.hero p{
+  max-width:620px; margin-top:22px; font-size:15.5px; line-height:1.7; color:#bdbdbd;
+  animation:rise .7s .3s cubic-bezier(.2,.8,.2,1) backwards;
+}
+.hero .count{
+  margin-top:26px; display:inline-flex; align-items:baseline; gap:10px;
+  animation:rise .7s .38s cubic-bezier(.2,.8,.2,1) backwards;
+}
+.hero .count b{font-family:'Outfit',sans-serif; font-size:46px; font-weight:900; color:var(--gold);}
+.hero .count span{font-size:11px; color:var(--muted);}
+
+/* ── the grid ────────────────────────────────────────────────────────── */
+.wrap{max-width:1120px; margin:0 auto; padding:0 22px 100px;}
+/* align-items:start, or opening one card stretches every card in its row to
+   match and the grid fills with dead space. */
+.grid{display:grid; gap:14px; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); align-items:start;}
+
+.card{
+  position:relative; overflow:hidden; cursor:pointer;
+  background:var(--card); border:1px solid var(--line); border-radius:18px; padding:24px;
+  transition:border-color .3s, transform .3s, background .3s;
+  /* Staggered entrance, index set inline so the sweep follows the grid. */
+  animation:pop .55s cubic-bezier(.2,.8,.2,1) backwards;
+  animation-delay:calc(var(--i,0) * 45ms);
+}
+@keyframes pop{from{opacity:0; transform:translateY(26px) scale(.97);} to{opacity:1; transform:none;}}
+.card:hover,.card:focus-visible{border-color:var(--line-2); background:var(--card-2); transform:translateY(-4px); outline:none;}
+.card.open{border-color:rgba(245,197,66,.45); background:var(--card-2);}
+
+/* A gold wash that follows the pointer — the only "clever" thing on the page. */
+.card::before{
+  content:''; position:absolute; inset:-1px; pointer-events:none; opacity:0;
+  transition:opacity .35s;
+  background:radial-gradient(340px circle at var(--mx,50%) var(--my,0%), rgba(245,197,66,.14), transparent 60%);
+}
+.card:hover::before{opacity:1;}
+
+.card .code{font-size:10px; color:var(--muted);}
+.card h2{font-family:'Outfit',sans-serif; font-size:21px; font-weight:900; margin:10px 0 8px; letter-spacing:-.01em;}
+.card .meta{font-size:12.5px; color:var(--muted); display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+.card .meta em{font-style:normal; color:var(--gold);}
+
+/* The curriculum, revealed in place. max-height rather than display, so it
+   can be animated at all. */
+.weeks{max-height:0; overflow:hidden; transition:max-height .45s cubic-bezier(.4,0,.2,1);}
+.card.open .weeks{max-height:520px;}
+.weeks ol{list-style:none; margin:18px 0 0; border-top:1px solid var(--line); padding-top:16px;}
+.weeks li{display:flex; gap:12px; padding:7px 0; font-size:13px; color:#cfcfcf; line-height:1.5;}
+.weeks li b{
+  flex:0 0 auto; font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--gold);
+  border:1px solid rgba(245,197,66,.3); border-radius:6px; padding:2px 7px; height:fit-content;
+}
+.weeks .go{
+  display:inline-block; margin-top:16px; background:var(--ink); color:#000; text-decoration:none;
+  font-weight:900; font-size:13px; border-radius:10px; padding:12px 22px;
+  border:0; cursor:pointer; font-family:inherit;
+}
+.weeks .go:hover{background:var(--gold);}
+.card .chev{position:absolute; top:24px; right:22px; color:var(--muted); transition:transform .35s; font-size:18px;}
+.card.open .chev{transform:rotate(90deg); color:var(--gold);}
+
+.empty{grid-column:1/-1; text-align:center; color:var(--muted); padding:60px 20px; font-size:14px;}
+
+/* ── the choice step ─────────────────────────────────────────────────────
+   Picking a domain is not the same decision as picking a route into it.
+   Some arrivals are ready to intern; some want the course first. Asking
+   costs one tap and saves the ones who would otherwise register for an
+   internship they are not ready for. */
+.sheet{
+  position:fixed; inset:0; z-index:80; display:none;
+  align-items:center; justify-content:center; padding:20px;
+}
+.sheet.on{display:flex;}
+.sheet .veil{position:absolute; inset:0; background:rgba(0,0,0,.8); backdrop-filter:blur(10px); animation:fade .25s;}
+@keyframes fade{from{opacity:0;} to{opacity:1;}}
+.sheet .panel{
+  position:relative; width:min(700px,100%); max-height:88dvh; overflow:auto;
+  background:var(--card); border:1px solid var(--line-2); border-radius:22px; padding:34px 30px 30px;
+  animation:lift .4s cubic-bezier(.2,.8,.2,1);
+}
+@keyframes lift{from{opacity:0; transform:translateY(30px) scale(.97);} to{opacity:1; transform:none;}}
+.sheet .x{
+  position:absolute; top:16px; right:18px; background:none; border:0; color:var(--muted);
+  font-size:26px; line-height:1; cursor:pointer; padding:4px 8px; font-family:inherit;
+}
+.sheet .x:hover{color:var(--ink);}
+.sheet .eyebrow{font-size:10.5px; color:var(--muted);}
+.sheet h3{
+  font-family:'Outfit',sans-serif; font-weight:900; font-size:clamp(22px,4.4vw,32px);
+  letter-spacing:-.02em; margin:10px 0 6px;
+}
+.sheet h3 em{font-style:normal; color:var(--gold);}
+.sheet .lead{color:#b4b4b4; font-size:14px; line-height:1.65; margin-bottom:24px;}
+.picks{display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(250px,1fr));}
+.pick{
+  display:block; text-align:left; text-decoration:none; cursor:pointer; font-family:inherit;
+  background:var(--card-2); border:1px solid var(--line-2); border-radius:16px; padding:22px 20px;
+  transition:border-color .25s, transform .25s, background .25s;
+}
+.pick:hover,.pick:focus-visible{border-color:var(--gold); transform:translateY(-3px); outline:none;}
+.pick .tag{font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.2em; text-transform:uppercase; color:var(--gold);}
+.pick h4{font-family:'Outfit',sans-serif; font-size:19px; font-weight:900; color:var(--ink); margin:9px 0 8px;}
+.pick p{font-size:13px; line-height:1.6; color:var(--muted); margin:0;}
+.pick ul{list-style:none; margin:13px 0 0; padding:0;}
+.pick li{font-size:12.5px; color:#c4c4c4; padding:3px 0 3px 17px; position:relative;}
+.pick li::before{content:'—'; position:absolute; left:0; color:var(--gold);}
+.pick .cta{display:inline-block; margin-top:16px; font-size:13px; font-weight:800; color:var(--ink);}
+.sheet .note{margin-top:20px; font-size:12px; color:var(--muted); line-height:1.6; text-align:center;}
+
+/* ── closing ─────────────────────────────────────────────────────────── */
+.tail{max-width:1120px; margin:0 auto; padding:0 22px 90px; text-align:center;}
+.tail h3{font-family:'Outfit',sans-serif; font-size:clamp(22px,4vw,34px); font-weight:900; margin-bottom:12px;}
+.tail p{color:var(--muted); font-size:14px; margin-bottom:26px;}
+.tail a{
+  display:inline-block; background:var(--ink); color:#000; text-decoration:none;
+  font-weight:900; font-size:15px; border-radius:999px; padding:18px 44px;
+}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation:none !important; transition:none !important;}
+  html{scroll-behavior:auto;}
+  .weeks{transition:none;}
+}
+</style>
+</head>
+<body>
+
+<nav class="bar">
+  <a class="back" href="/">&larr; TEN</a>
+  <span class="spacer"></span>
+  <a class="join" href="/register.html">Join as an intern</a>
+</nav>
+
+<header class="hero">
+  <p class="eyebrow mono">Every track we run</p>
+  <h1><span>Pick</span> <span>your</span> <span>domain.</span></h1>
+  <p>Each one is a complete journey — six weekly modules, a video that unlocks its quiz,
+     real assignments and a final project, coins for everything you finish, and a
+     certificate anyone can verify. Open a domain to see its weeks.</p>
+  <div class="count"><b id="count">—</b><span class="mono">Domains open now</span></div>
+</header>
+
+<div class="wrap">
+  <div class="grid" id="grid">
+    <div class="empty">Loading domains…</div>
+  </div>
+</div>
+
+<section class="tail">
+  <h3>One journey is yours.</h3>
+  <p>Registration takes two minutes. You pick the domain and how long you want to intern for.</p>
+  <a href="/register.html">Start my journey &rarr;</a>
+</section>
+
+<!-- The route chooser. Opened by a card's "Start this journey", never on load. -->
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <div class="veil" data-close></div>
+  <div class="panel">
+    <button class="x" type="button" data-close aria-label="Close">&times;</button>
+    <p class="eyebrow mono" id="sheetDomain">Your domain</p>
+    <h3 id="sheetTitle">How do you want to <em>start</em>?</h3>
+    <p class="lead">Two ways in. Take the internship now if you already have the fundamentals,
+       or build them in the course first and move across when you are ready.</p>
+
+    <div class="picks">
+      <a class="pick" id="pickIntern" href="/register.html">
+        <span class="tag">Straight to the internship</span>
+        <h4>I'm ready to intern</h4>
+        <p>Register as an intern and start the weekly journey in this domain.</p>
+        <ul>
+          <li>Six weekly modules, quizzes and a final project</li>
+          <li>Attendance, coins and a coordinator</li>
+          <li>Offer letter, and a certificate anyone can verify</li>
+        </ul>
+        <span class="cta">Register as an intern &rarr;</span>
+      </a>
+
+      <a class="pick" id="pickCourse" href="/student-portal/">
+        <span class="tag">Course first</span>
+        <h4>Teach me first</h4>
+        <p>Learn the domain in TEN Career Studio, then shift into the internship.</p>
+        <ul>
+          <li>Structured courses with AI-evaluated assignments</li>
+          <li>Job search and an ATS-proof resume builder</li>
+          <li>Move into the internship whenever you're ready</li>
+        </ul>
+        <span class="cta">Open TEN Career Studio &rarr;</span>
+      </a>
+    </div>
+
+    <p class="note">Not sure? Most people who have already built something in this domain
+       go straight to the internship. Everyone else does the course first.</p>
+  </div>
+</div>
+
+<script src="/notify-orb.js" defer></script>
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   The domain list comes from the server, never from this file.
+
+   public/student-journeys.html hardcoded fourteen domains and drifted: it
+   advertised four nobody could register for and hid five they could. A page
+   that keeps its own copy of the list will always drift eventually, so this
+   one has none to drift.
+   ═══════════════════════════════════════════════════════════════════════ */
+"use strict";
+
+function esc(v){
+  return String(v == null ? "" : v)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+
+/* A stable colour per domain, so a card looks deliberate without a colour
+   table nobody maintains. */
+function hueOf(name){
+  var h = 0;
+  for (var i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+  return h;
+}
+
+function render(domains){
+  var grid = document.getElementById("grid");
+  if (!domains.length){
+    grid.innerHTML = '<div class="empty">Domains are being updated. Please check back shortly.</div>';
+    return;
+  }
+  document.getElementById("count").textContent = domains.length;
+
+  grid.innerHTML = domains.map(function(d, i){
+    var weeks = d.weeks || [];
+    var body = weeks.length
+      ? '<ol>' + weeks.map(function(w, wi){
+          return '<li><b>W' + (wi + 1) + '</b><span>' + esc(w) + '</span></li>';
+        }).join('') + '</ol>'
+      : '<ol><li><span>The week-by-week plan for this domain is published when you start it.</span></li></ol>';
+
+    return '<article class="card" tabindex="0" role="button" aria-expanded="false" style="--i:' + i + ';">' +
+      '<span class="chev">&rsaquo;</span>' +
+      '<p class="code mono">' + esc(d.code || "TEN") + '</p>' +
+      '<h2 style="color:hsl(' + hueOf(d.name) + ',72%,72%)">' + esc(d.name) + '</h2>' +
+      '<p class="meta"><em>' + (weeks.length || 6) + ' modules</em> &middot; quizzes &middot; projects &middot; certificate</p>' +
+      '<div class="weeks">' + body +
+        '<button class="go" type="button" data-start="' + esc(d.name) + '">Start this journey &rarr;</button>' +
+      '</div>' +
+    '</article>';
+  }).join("");
+
+  Array.prototype.forEach.call(grid.querySelectorAll(".card"), function(card){
+    function toggle(){
+      var open = card.classList.toggle("open");
+      card.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+    card.addEventListener("click", function(e){
+      // Links and the start button are their own actions, not the toggle.
+      if (e.target.closest("a")) return;
+      var start = e.target.closest("[data-start]");
+      if (start){ e.preventDefault(); openChoice(start.getAttribute("data-start")); return; }
+      toggle();
+    });
+    card.addEventListener("keydown", function(e){
+      // The start button handles its own Enter/Space.
+      if (e.target.closest("[data-start]") || e.target.closest("a")) return;
+      if (e.key === "Enter" || e.key === " "){ e.preventDefault(); toggle(); }
+    });
+    // The pointer-following wash.
+    card.addEventListener("pointermove", function(e){
+      var r = card.getBoundingClientRect();
+      card.style.setProperty("--mx", ((e.clientX - r.left) / r.width * 100) + "%");
+      card.style.setProperty("--my", ((e.clientY - r.top) / r.height * 100) + "%");
+    });
+  });
+}
+
+/* ── the choice step ─────────────────────────────────────────────────────
+   Picking a domain used to go straight to the intern registration form.
+   That is one of two real routes: the internship, or the course in TEN
+   Career Studio first. The domain travels with the answer, so whichever
+   they pick opens already knowing what they chose here.
+   ────────────────────────────────────────────────────────────────────── */
+var SHEET   = document.getElementById("sheet");
+var LAST_AT = null;
+
+function openChoice(domain){
+  LAST_AT = document.activeElement;
+  document.getElementById("sheetDomain").textContent = domain || "Your domain";
+
+  var q = domain ? "?role=student&domain=" + encodeURIComponent(domain) : "";
+  document.getElementById("pickIntern").setAttribute("href", "/register.html" + q);
+  // The Career Studio is a separate application; it takes no domain param,
+  // so the link stays exactly the address it was given.
+  document.getElementById("pickCourse").setAttribute("href", "/student-portal/");
+
+  SHEET.classList.add("on");
+  document.body.style.overflow = "hidden";
+  var first = document.getElementById("pickIntern");
+  if (first) first.focus();
+}
+
+function closeChoice(){
+  SHEET.classList.remove("on");
+  document.body.style.overflow = "";
+  if (LAST_AT && LAST_AT.focus) LAST_AT.focus();
+}
+
+SHEET.addEventListener("click", function(e){
+  if (e.target.closest("[data-close]")) closeChoice();
+});
+document.addEventListener("keydown", function(e){
+  if (e.key === "Escape" && SHEET.classList.contains("on")) closeChoice();
+});
+
+fetch("/api/public/domains")
+  .then(function(r){ return r.json(); })
+  .then(function(d){ render((d && d.domains) || []); })
+  .catch(function(){
+    document.getElementById("grid").innerHTML =
+      '<div class="empty">Could not load the domain list. <a href="/register.html" style="color:#f5c542">Open the registration form</a> to see every option.</div>';
+  });
+</script>
+</body>
+</html>

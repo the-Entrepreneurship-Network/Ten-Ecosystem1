@@ -166,8 +166,16 @@ describe('the orb replaced the old bell, everywhere', () => {
 describe('the orb itself', () => {
   const orb = readPublic('notify-orb.js');
 
-  it('only appears when something is actually pending', () => {
-    expect(orb).toContain("if (total === 0) { hide(); return; }");
+  it('shows a badge only when something is actually pending', () => {
+    // The orb itself appears once at sign-in either way — it is the way into
+    // the notification centre — but it stays quiet with nothing to report.
+    expect(orb).toContain('if (total === 0)');
+    expect(orb).toContain("cause === 'first' && !dismissed) show(false)");
+  });
+
+  it('buzzes once per arriving item, not a fixed shake', () => {
+    expect(orb).toContain('buzz(Math.max(1, total - before))');
+    expect(orb).toContain('--ten-orb-shakes');
   });
 
   it('greets once per sign-in rather than on every page', () => {
@@ -190,6 +198,14 @@ describe('the orb itself', () => {
     expect(orb).toMatch(/bottom:calc\(128px \+ env\(safe-area-inset-bottom\)\)/);
   });
 
+  it('loads socket.io itself, so the buzz works on every page', () => {
+    // Only five of the eleven pages carrying the orb ship a socket.io tag. On
+    // the other six it fell back to a 45-second poll and never buzzed at all —
+    // "that popup is there but if anyone message it not get vibrate".
+    expect(orb).toContain('/socket.io/socket.io.js');
+    expect(orb).toContain('function withSocketIo(');
+  });
+
   it('honours a reader who asked the system for less movement', () => {
     expect(orb).toContain('prefers-reduced-motion');
   });
@@ -202,5 +218,90 @@ describe('the orb itself', () => {
       .join('\n');
     const bad = code.split('').filter((c) => c.charCodeAt(0) > 127);
     expect(bad).toEqual([]);
+  });
+});
+
+describe('the orb can be moved out of the way', () => {
+  const orb = readPublic('notify-orb.js');
+
+  /*
+   * A fixed circle covers something on somebody's screen. In the admin console
+   * it lands on the row-actions column of the student table — Edit, Tenure,
+   * Sign-in and Delete, all underneath it. Picking a different corner would
+   * move the problem rather than fix it, because the next portal has a
+   * different layout.
+   */
+
+  it('drags with a pointer, which covers mouse, touch and pen at once', () => {
+    expect(orb).toContain("el.addEventListener('pointerdown'");
+    expect(orb).toContain("el.addEventListener('pointermove'");
+    expect(orb).toContain("el.addEventListener('pointerup', endDrag)");
+    expect(orb).toContain("el.addEventListener('pointercancel', endDrag)");
+    // Without capture the drag dies the moment the pointer outruns the circle.
+    expect(orb).toContain('setPointerCapture');
+  });
+
+  it('does not turn a tap into a drag', () => {
+    // Treating every pixel of jitter as a drag is how a button stops opening
+    // on a touchscreen.
+    expect(orb).toContain('DRAG_SLOP');
+    expect(orb).toMatch(/Math\.abs\(e\.clientX - drag\.startX\) < DRAG_SLOP/);
+  });
+
+  it('does not navigate at the end of a drag', () => {
+    // A drag that ends over the orb also fires a click.
+    expect(orb).toContain('suppressClick');
+    expect(orb).toContain('if (suppressClick) { suppressClick = false;');
+  });
+
+  it('does not let go of it off-screen', () => {
+    expect(orb).toContain('function clamp(x, y)');
+    expect(orb).toContain('EDGE_GAP');
+    expect(orb).toContain("window.addEventListener('resize', clampIntoView)");
+  });
+
+  it('remembers where it was put, for every portal page', () => {
+    // localStorage rather than sessionStorage: moved once should mean moved
+    // everywhere, including tomorrow.
+    expect(orb).toContain("var POS_KEY = 'ten-orb-pos'");
+    expect(orb).toContain('localStorage.setItem(POS_KEY');
+    expect(orb).toContain('function applySavedPosition()');
+  });
+
+  it('can be put back', () => {
+    expect(orb).toContain('function resetPosition()');
+    expect(orb).toContain('localStorage.removeItem(POS_KEY)');
+    expect(orb).toContain("el.addEventListener('dblclick'");
+  });
+
+  it('moves by keyboard too', () => {
+    // A reader who cannot drag still has to be able to move it off whatever it
+    // is covering.
+    expect(orb).toContain("if (e.key === 'ArrowLeft')");
+    expect(orb).toContain("else if (e.key === 'Home')");
+    expect(orb).toContain('e.shiftKey ? 40 : 12');
+  });
+
+  it('stops the page scrolling underneath a finger dragging it', () => {
+    expect(orb).toContain('touch-action:none');
+  });
+
+  it('drops the docking rules once it has been moved', () => {
+    // #ten-orb.moved is one class more specific than every rule it overrides,
+    // including the ones inside the phone media query, so it wins without
+    // !important. The transform drops translateY(-50%) because the inline top
+    // is already the real top edge.
+    expect(orb).toContain("'#ten-orb.moved{right:auto;bottom:auto;transform:scale(0);}'");
+    expect(orb).toContain("'#ten-orb.moved.in{transform:scale(1);}'");
+    expect(orb).toContain('#ten-orb.moved.buzz');
+  });
+
+  it('still buzzes after it has been moved', () => {
+    // The desktop buzz keyframes bake in translateY(-50%); a moved orb needs
+    // the variant without it, and that variant only existed inside the phone
+    // media query.
+    const outsideMedia = orb.slice(0, orb.indexOf("'@media (max-width:820px){'"));
+    const movedRules = orb.slice(orb.indexOf('#ten-orb.moved.buzz'));
+    expect(outsideMedia + movedRules).toContain('@keyframes ten-orb-buzz-m{');
   });
 });

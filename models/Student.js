@@ -165,6 +165,18 @@ const studentsSchema = new mongoose.Schema({
     lopEffectiveDate:        { type: Date,   default: null },
     lopDepartment:           { type: String, default: null },
 
+    // Issued directly by HR rather than through the application → eligibility →
+    // approval path. Interns who did their whole internship over WhatsApp have
+    // no portal record to satisfy those checks, so HR issues the certificate
+    // itself; the flag is what makes that visible on the student's own page and
+    // in the admin portal's override list. The full record — who, when, what
+    // was missing — lives in models/CertificateOverride.js.
+    locIssuedByOverride:     { type: Boolean, default: false },
+    lorIssuedByOverride:     { type: Boolean, default: false },
+    starIssuedByOverride:    { type: Boolean, default: false },
+    offerIssuedByOverride:   { type: Boolean, default: false },
+    lopIssuedByOverride:     { type: Boolean, default: false },
+
     // Gender — drives correct pronouns in generated documents.
     // Empty / undefined values fall back to neutral "they/them/their".
     gender:                  { type: String, enum: ['male','female','',null], default: '' },

@@ -2182,7 +2182,7 @@ button:active { transform: translateY(0); }
           <div class="cm-actions">
             <button class="cm-btn cm-btn-run" onclick="runCode()">▶ Run Code</button>
             <button class="cm-btn cm-btn-submit" onclick="submitCode()">📤 Submit</button>
-            <button class="cm-btn" style="background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.3);" onclick="openInTerminal()">💻 Open in Terminal</button>
+            <button class="cm-btn" style="background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.3);" onclick="openInTerminal()">💻 Open console</button>
             <button class="cm-btn cm-btn-clear" onclick="document.getElementById('codeOutput').textContent='';">🧹 Clear Output</button>
             <span id="cmLangLabel" style="margin-left:auto;font-size:12px;color:#9aa4bf;">Mode: javascript</span>
           </div>
@@ -2196,7 +2196,7 @@ button:active { transform: translateY(0); }
           <!-- Terminal Pane -->
           <div id="cmTerminalPane">
             <div style="padding:8px 14px;font-size:12px;color:#9aa4bf;border-bottom:1px solid rgba(245,197,66,.10);background:#0a1020;">
-              💻 Interactive terminal · Edit <span id="termFileName">solution.js</span> · <span style="color:#f5c542;">bash submit.sh</span> to submit
+              💻 Run console · <span id="termFileName">solution.js</span> · output from <span style="color:#f5c542;">Run Code</span> appears here
             </div>
             <div id="xtermContainer"></div>
           </div>
@@ -4507,11 +4507,30 @@ async function loadCodingProblems(){
 // ─────────────────────────────────────────────
 //  PROCTORING — Camera & Anti-Cheat
 // ─────────────────────────────────────────────
+/*
+ * Why this was scoring a violation before the student had typed anything.
+ *
+ * It listened on window 'blur' AND on 'visibilitychange'. window 'blur' fires
+ * for *any* loss of window focus — and the very next line of startProctoring()
+ * called getUserMedia(), which opens the browser's camera-permission prompt,
+ * which blurs the window. So opening a problem reliably logged
+ * "Tab/Window switch detected · Violations: 1" against a student who had done
+ * nothing. Clicking a SweetAlert, a file dialog or the browser's own chrome did
+ * the same. And when someone did genuinely switch tabs, both listeners fired,
+ * so one switch counted as two.
+ *
+ * document.hidden is the accurate signal and the only one kept. On top of it:
+ * a short grace window after the modal opens (the permission prompt lives
+ * there), and a minimum gap between counts so one switch is one violation.
+ */
 let _procStream = null;
 let _procViolations = 0;
 let _procWarningTimer = null;
-let _procBlurHandler = null;
 let _procVisibilityHandler = null;
+let _procArmedAt = 0;
+let _procLastViolationAt = 0;
+const PROC_GRACE_MS = 3000;   // permission prompt + initial focus churn
+const PROC_DEBOUNCE_MS = 1200; // one tab switch is one violation
 
 async function startProctoring() {
   const video = document.getElementById('procVideo');
@@ -4523,10 +4542,11 @@ async function startProctoring() {
   const btnSubmit = document.querySelector("#codingModal .cm-btn-submit");
 
   _procViolations = 0;
+  _procLastViolationAt = 0;
+  _procArmedAt = Date.now();
   if (vcount) vcount.textContent = '0';
   if (warningBadge) warningBadge.style.display = 'none';
 
-  // Always enable buttons on start of proctoring, then disable if camera fails
   if (btnRun) btnRun.disabled = false;
   if (btnSubmit) btnSubmit.disabled = false;
   window._procCameraBlocked = false;
@@ -4543,18 +4563,25 @@ async function startProctoring() {
     statusDot.style.boxShadow = '0 0 6px #10b981';
     statusText.textContent = 'Camera: Active 🟢';
   } catch (err) {
-    statusDot.style.background = '#f43f5e';
-    statusText.textContent = 'Camera: Blocked ❌';
+    // No camera, or permission refused.
+    //
+    // This used to disable Run and Submit permanently, which made the whole
+    // coding section unusable on a desktop with no webcam or a college machine
+    // where the permission is blocked by policy — the student could read the
+    // problem and do nothing else. The attempt is recorded and travels with the
+    // submission as `proctored:false` instead, so a coordinator can see which
+    // submissions were unwatched without anyone being locked out of the work.
+    statusDot.style.background = '#f59e0b';
+    statusText.textContent = 'Camera: Off — submission will be flagged';
     window._procCameraBlocked = true;
-    if (btnRun) btnRun.disabled = true;
-    if (btnSubmit) btnSubmit.disabled = true;
-    
-    // Display a persistent warning requiring camera access
+    if (btnRun) btnRun.disabled = false;
+    if (btnSubmit) btnSubmit.disabled = false;
+
     if (warningBadge) {
       warningBadge.style.display = 'inline-flex';
       const warningText = document.getElementById('procWarningText');
       if (warningText) {
-        warningText.textContent = 'Camera access denied! Camera is strictly required to run or submit code.';
+        warningText.textContent = 'No camera. You can still solve and submit — this attempt is marked unproctored.';
       }
       if (_procWarningTimer) {
         clearTimeout(_procWarningTimer);
@@ -4563,12 +4590,10 @@ async function startProctoring() {
     }
   }
 
-  // Register tab/window switch listeners (always, even if camera denied)
-  _procBlurHandler = function() { _procRegisterViolation('Tab/Window switch detected'); };
+  // One listener, not two. See the note above _procStream.
   _procVisibilityHandler = function() {
-    if (document.hidden) _procRegisterViolation('Tab hidden / minimized');
+    if (document.hidden) _procRegisterViolation('Tab/Window switch detected');
   };
-  window.addEventListener('blur', _procBlurHandler);
   document.addEventListener('visibilitychange', _procVisibilityHandler);
 }
 
@@ -4586,12 +4611,20 @@ function stopProctoring() {
   if (statusDot) { statusDot.style.background = '#6b7280'; statusDot.style.boxShadow = 'none'; }
   if (statusText) statusText.textContent = 'Camera: Off';
 
-  if (_procBlurHandler) { window.removeEventListener('blur', _procBlurHandler); _procBlurHandler = null; }
   if (_procVisibilityHandler) { document.removeEventListener('visibilitychange', _procVisibilityHandler); _procVisibilityHandler = null; }
   if (_procWarningTimer) { clearTimeout(_procWarningTimer); _procWarningTimer = null; }
+  _procArmedAt = 0;
 }
 
 function _procRegisterViolation(reason) {
+  // Not armed (modal closed), still inside the grace window, or a repeat of the
+  // switch we just counted.
+  var now = Date.now();
+  if (!_procArmedAt) return;
+  if (now - _procArmedAt < PROC_GRACE_MS) return;
+  if (now - _procLastViolationAt < PROC_DEBOUNCE_MS) return;
+  _procLastViolationAt = now;
+
   _procViolations++;
   var vcount = document.getElementById('procVCount');
   if (vcount) vcount.textContent = String(_procViolations);
@@ -4612,13 +4645,12 @@ function _procShowWarning(text) {
   var warningText = document.getElementById('procWarningText');
   if (!badge || !warningText) return;
 
-  if (window._procCameraBlocked) {
-    warningText.textContent = 'Camera access denied! Camera is strictly required to run or submit code.';
-    badge.style.display = 'inline-flex';
-    return;
-  }
-
-  warningText.textContent = text;
+  // A real violation reports the violation. The camera state is already shown
+  // in the status line beside it; overwriting the reason with it meant a
+  // student who switched tabs was told about their camera instead.
+  warningText.textContent = window._procCameraBlocked
+    ? text + ' · attempt is unproctored'
+    : text;
   badge.style.display = 'inline-flex';
   if (_procWarningTimer) clearTimeout(_procWarningTimer);
   _procWarningTimer = setTimeout(function() {
@@ -4648,6 +4680,7 @@ async function openCodingProblem(qid){
 
     document.getElementById("codingModal").style.display = "flex";
     startProctoring();
+    checkRunnerAvailability();
 
     // Initialise CodeMirror lazily, the first time we open the modal.
     const langSel = document.getElementById("cmLang");
@@ -4715,6 +4748,31 @@ function setLanguage(lang){
 function _readCode(){
   if(_codingEditor) return _codingEditor.getValue();
   return document.getElementById("codeEditor").value;
+}
+
+/*
+ * The runner is switched off by default on the server (ENABLE_CODE_RUNNER),
+ * because it executes submitted source on the host. When it is off, Run and
+ * Submit both answer 503 — which the student only discovered after writing a
+ * whole solution. Ask once when the problem opens, and say so up front.
+ */
+async function checkRunnerAvailability(){
+  var out = document.getElementById("codeOutput");
+  var btnRun = document.querySelector("#codingModal .cm-btn-run");
+  var btnSubmit = document.querySelector("#codingModal .cm-btn-submit");
+  try{
+    var r = await fetch("/api/code-runner/status", { credentials:"same-origin" });
+    var d = await r.json();
+    if (d && d.enabled) return;
+    if (btnRun) btnRun.disabled = true;
+    if (btnSubmit) btnSubmit.disabled = true;
+    if (out){
+      out.classList.add("is-warn");
+      out.textContent = "The code runner is switched off on this server, so Run and Submit are "
+        + "unavailable right now. You can still read the problem and write your solution — "
+        + "nothing you have already submitted is affected.";
+    }
+  }catch(_){ /* leave the buttons alone; the run itself will report the error */ }
 }
 
 async function runCode(){
@@ -4786,8 +4844,31 @@ async function submitCode(){
   try{
     const r = await fetch("/code/submit",{
       method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ employeeId: empId, questionId: _currentCodingQuestion._id, language: lang, code: _readCode() })
+      // employeeId is no longer read from the body — the server takes it from
+      // the session — but it is still sent so older builds keep working.
+      body: JSON.stringify({
+        employeeId: empId,
+        questionId: _currentCodingQuestion._id,
+        language: lang,
+        code: _readCode(),
+        proctored: !window._procCameraBlocked,
+        violations: _procViolations
+      })
     });
+
+    if (r.status === 503) {
+      const d503 = await r.json().catch(function(){ return {}; });
+      out.classList.add("is-warn");
+      out.textContent = d503.message || "The code runner is turned off on this server.";
+      submitBtn.disabled = false;
+      return;
+    }
+    if (r.status === 401) {
+      out.classList.add("is-error");
+      out.textContent = "Your session has expired. Please sign in again.";
+      submitBtn.disabled = false;
+      return;
+    }
     const d = await r.json();
     const verdict = d.status || (d.success ? "Accepted" : "Failed");
     let lines = ["── Verdict: " + verdict + " ──",
@@ -4826,36 +4907,23 @@ async function submitCode(){
   }
 }
 
-async function openInTerminal(){
-  if(!_currentCodingQuestion) return;
-  const empId = (typeof employeeId !== "undefined" && employeeId) || (student && student.employeeId) || "";
-  if(!empId){ Swal.fire({icon:"error",title:"Not logged in",background:"#0c1220",color:"#f0eee8"}); return; }
-  const lang = document.getElementById("cmLang").value;
-  try {
-    const r = await fetch("/student/coding/open-terminal", {
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ employeeId: empId, questionId: _currentCodingQuestion._id, language: lang })
-    });
-    const d = await r.json();
-    if(d.success){
-      Swal.fire({
-        icon:"success", title:"Terminal Workspace Ready",
-        html: '<div style="text-align:left;font-size:14px;line-height:1.7;">' +
-          '<p style="margin-bottom:8px;"><b>Directory:</b></p>' +
-          '<code style="background:#0d1117;padding:6px 10px;border-radius:6px;display:block;margin-bottom:12px;word-break:break-all;">' + d.workDir + '</code>' +
-          '<p style="margin-bottom:8px;"><b>Instructions:</b></p>' +
-          '<ol style="padding-left:18px;"><li>Open a terminal</li><li>Run: <code>' + d.launchCmd + '</code></li><li>Edit the solution file</li><li>Run: <code>./submit.sh</code></li></ol>' +
-          '</div>' +
-          '<button onclick="navigator.clipboard.writeText(\'' + d.workDir + '\');this.textContent=\'Copied!\'" style="margin-top:12px;padding:8px 16px;background:rgba(59,130,246,0.15);color:#3b82f6;border:1px solid rgba(59,130,246,0.3);border-radius:8px;cursor:pointer;font-weight:600;">📋 Copy Path</button>',
-        showConfirmButton:true, confirmButtonText:"Got it",
-        background:"#0c1220", color:"#f0eee8", width:520
-      });
-    } else {
-      Swal.fire({icon:"error",title:"Failed",text:d.message||"Could not create workspace",background:"#0c1220",color:"#f0eee8"});
+/*
+ * "Open in Terminal" used to print a path on the SERVER's filesystem and tell
+ * the student to open a terminal, cd into it and run ./submit.sh. Nobody
+ * reading that page has a shell on the production host, so the instructions
+ * could not be followed by the person being given them — and printing an
+ * internal path to every student is a detail the outside does not need.
+ *
+ * The Terminal tab beside the editor already exists and already mirrors run
+ * output. The button now opens it, which is what a student wanted from it.
+ */
+function openInTerminal(){
+  switchCmTab('terminal');
+  setTimeout(function(){
+    if (_xtermInstance) {
+      _xtermInstance.writeln('\x1b[33mThis is the run console. Press "Run Code" in the Editor tab and the output appears here.\x1b[0m');
     }
-  } catch(e){
-    Swal.fire({icon:"error",title:"Network error",text:e.message||String(e),background:"#0c1220",color:"#f0eee8"});
-  }
+  }, 120);
 }
 
 // ════════════════════════════════════════════════

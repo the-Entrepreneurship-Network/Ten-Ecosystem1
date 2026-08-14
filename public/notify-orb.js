@@ -6,14 +6,16 @@
  *
  * How it behaves, and why:
  *
- *   - On sign-in it appears ONCE, and only if something is actually pending.
- *     An orb that greets everyone with "0" is furniture; one that only ever
- *     shows up when there is something to see is worth glancing at. It enters
- *     expanded — "2 new messages" — so the first look needs no click, then
- *     settles down to a plain circle a few seconds later.
+ *   - It appears once at sign-in. With something pending it enters EXPANDED —
+ *     "2 new messages · 1 update" — so the first look needs no click, then
+ *     settles to a plain circle a few seconds later. With nothing pending it
+ *     appears quietly, no badge and no greeting: it is the way into the
+ *     notification centre, and one that only ever materialises on a busy day
+ *     reads as a feature that was never built.
  *
- *   - While the portal is already open and something arrives, it BUZZES: a
- *     short physical shake, plus the phone's own vibration where the browser
+ *   - While the portal is already open and something arrives, it BUZZES —
+ *     once per item. Two messages shake it twice, three shake it three times,
+ *     and the phone's own vibration carries the same count where the browser
  *     allows it. A badge that silently ticks from 1 to 2 is not noticed by
  *     someone reading the middle of the page.
  *
@@ -24,6 +26,13 @@
  * launcher lives in the bottom-right corner at a similar z-index, and two
  * floating circles fighting over one corner is how the mobile layout broke last
  * time.
+ *
+ *   - And it can be MOVED. A fixed circle will always end up on top of
+ *     something on some screen — in the admin console it lands squarely on the
+ *     row-actions column — so it is draggable with a pointer or a finger, snaps
+ *     to the nearer side, and remembers where it was put. The position is kept
+ *     per browser and shared by every portal page, so moving it once moves it
+ *     everywhere. Double-click (or the Reset item on long-press) puts it back.
  *
  * Include on any signed-in portal page. It works for students, coordinators, HR
  * and admin — the feed behind it is scoped by session on the server.
@@ -38,11 +47,16 @@
   var POLL_MS = 45000;           // portal notifications have no live channel
   var SETTLE_MS = 4600;          // how long the expanded label stays up
   var STORAGE_KEY = 'ten-orb-greeted';
+  var POS_KEY = 'ten-orb-pos';   // where the reader dragged it to, per browser
+  var DRAG_SLOP = 6;             // px of movement before a tap becomes a drag
+  var EDGE_GAP = 12;             // keep it off the very edge of the viewport
 
   var state = { unread: 0, url: '/notifications', label: '', ready: false };
   var el = null, labelEl = null, countEl = null;
   var settleTimer = null, buzzTimer = null;
   var dismissed = false;
+  var drag = null;               // live drag, or null
+  var suppressClick = false;     // set by a drag so the release does not navigate
 
   /* ── styles ──────────────────────────────────────────────────────────── */
   function injectStyles() {
@@ -71,7 +85,7 @@
 
       '#ten-orb-label{max-width:0;overflow:hidden;white-space:nowrap;font-size:13px;font-weight:700;',
       'opacity:0;transition:max-width .38s ease,opacity .28s ease,padding .38s ease;padding:0;}',
-      '#ten-orb.open #ten-orb-label{max-width:min(52vw,230px);opacity:1;padding:0 18px 0 2px;}',
+      '#ten-orb.open #ten-orb-label{max-width:min(46vw,230px);opacity:1;padding:0 18px 0 2px;text-overflow:ellipsis;}',
 
       '#ten-orb-x{display:none;position:absolute;top:-7px;left:-7px;width:22px;height:22px;',
       'border-radius:50%;background:#111a2e;border:1px solid rgba(255,255,255,.18);color:#94a3b8;',
@@ -85,7 +99,7 @@
       '@keyframes ten-orb-pulse{0%{opacity:.65;transform:scale(1);}70%{opacity:0;transform:scale(1.35);}100%{opacity:0;transform:scale(1.35);}}',
 
       // The buzz: something arrived while you were looking elsewhere.
-      '#ten-orb.buzz{animation:ten-orb-buzz .82s cubic-bezier(.36,.07,.19,.97) 2;}',
+      '#ten-orb.buzz{animation:ten-orb-buzz .82s cubic-bezier(.36,.07,.19,.97) var(--ten-orb-shakes,2);}',
       '@keyframes ten-orb-buzz{',
       '10%,90%{transform:translateY(-50%) scale(1) translateX(-2px) rotate(-6deg);}',
       '20%,80%{transform:translateY(-50%) scale(1.06) translateX(4px) rotate(7deg);}',
@@ -97,13 +111,45 @@
       '@media (max-width:820px){',
       '#ten-orb{right:12px;top:auto;bottom:calc(128px + env(safe-area-inset-bottom));transform:translateY(0) scale(0);}',
       '#ten-orb.in{transform:translateY(0) scale(1);}',
-      '#ten-orb.buzz{animation:ten-orb-buzz-m .82s cubic-bezier(.36,.07,.19,.97) 2;}',
+      '#ten-orb.buzz{animation:ten-orb-buzz-m .82s cubic-bezier(.36,.07,.19,.97) var(--ten-orb-shakes,2);}',
       '@keyframes ten-orb-buzz-m{',
       '10%,90%{transform:translateX(-2px) rotate(-6deg);}',
       '20%,80%{transform:translateX(4px) rotate(7deg);}',
       '30%,50%,70%{transform:translateX(-6px) rotate(-9deg) scale(1.06);}',
       '40%,60%{transform:translateX(6px) rotate(9deg) scale(1.06);}',
       '100%{transform:translateX(0) scale(1);}}}',
+
+      /* ── moved ──────────────────────────────────────────────────────────
+         Once the reader has dragged it, `left`/`top` are set inline and the
+         docking rules above have to stop applying. `#ten-orb.moved` is one
+         class more specific than every rule it overrides -- including the ones
+         inside the phone media query -- so this wins without !important.
+
+         The transform drops translateY(-50%) here, because the inline `top` is
+         already the real top edge, and it borrows the phone's buzz keyframes
+         for the same reason: they are the ones with no vertical offset baked
+         into them. */
+      '#ten-orb.moved{right:auto;bottom:auto;transform:scale(0);}',
+      '#ten-orb.moved.in{transform:scale(1);}',
+      '#ten-orb.moved.buzz{animation:ten-orb-buzz-m .82s cubic-bezier(.36,.07,.19,.97) var(--ten-orb-shakes,2);}',
+      // Dragging: no easing, or the orb lags a finger by a third of a second.
+      '#ten-orb.dragging{transition:none !important;animation:none !important;cursor:grabbing;}',
+      '#ten-orb.dragging::after{display:none;}',
+      '#ten-orb.dragging #ten-orb-label{display:none;}',
+      // touch-action tells the browser this gesture is ours, so dragging the
+      // orb on a phone does not scroll the page underneath it.
+      '#ten-orb{touch-action:none;}',
+      // The grab handle reads as draggable before anyone tries.
+      '#ten-orb:hover{cursor:grab;}',
+
+      // Buzz keyframes for a moved orb are needed even on desktop, where the
+      // -m variant would otherwise only exist inside the phone media query.
+      '@keyframes ten-orb-buzz-m{',
+      '10%,90%{transform:translateX(-2px) rotate(-6deg);}',
+      '20%,80%{transform:translateX(4px) rotate(7deg);}',
+      '30%,50%,70%{transform:translateX(-6px) rotate(-9deg) scale(1.06);}',
+      '40%,60%{transform:translateX(6px) rotate(9deg) scale(1.06);}',
+      '100%{transform:translateX(0) scale(1);}}',
 
       // Respect a reader who has asked the system for less movement: they still
       // get the orb and the count, just no shaking.
@@ -136,10 +182,16 @@
 
     el.addEventListener('click', function (e) {
       if (e.target && e.target.id === 'ten-orb-x') return;
+      // A drag that ends over the orb also fires a click. Swallow that one.
+      if (suppressClick) { suppressClick = false; e.preventDefault(); e.stopPropagation(); return; }
       go();
     });
-    el.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+    el.addEventListener('keydown', onKeydown);
+    // Put it back where it started.
+    el.addEventListener('dblclick', function (e) {
+      if (e.target && e.target.id === 'ten-orb-x') return;
+      e.preventDefault();
+      resetPosition();
     });
     document.getElementById('ten-orb-x').addEventListener('click', function (e) {
       e.stopPropagation();
@@ -148,6 +200,159 @@
       // which is the whole point of the thing.
       dismissed = true;
     });
+
+    enableDrag();
+    applySavedPosition();
+    window.addEventListener('resize', clampIntoView);
+  }
+
+  /* ── moving it ───────────────────────────────────────────────────────────
+     A fixed circle covers something on somebody's screen. In the admin console
+     it sits on the row-actions column; on a short laptop it lands on the chat
+     launcher. Rather than pick a new corner and move the problem, let the
+     reader put it where it suits them and remember that.
+
+     The position is stored per browser and read by every portal page, so it is
+     moved once, not once per portal.
+     ---------------------------------------------------------------------- */
+
+  function savedPosition() {
+    try {
+      var raw = localStorage.getItem(POS_KEY);
+      if (!raw) return null;
+      var p = JSON.parse(raw);
+      if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') return null;
+      return p;
+    } catch (e) { return null; }
+  }
+
+  function savePosition(x, y) {
+    try { localStorage.setItem(POS_KEY, JSON.stringify({ x: x, y: y })); } catch (e) {}
+  }
+
+  /** Keep the orb fully on screen whatever the window has since done. */
+  function clamp(x, y) {
+    var w = el ? el.offsetWidth : 56;
+    var h = el ? el.offsetHeight : 56;
+    var maxX = Math.max(EDGE_GAP, window.innerWidth - w - EDGE_GAP);
+    var maxY = Math.max(EDGE_GAP, window.innerHeight - h - EDGE_GAP);
+    return {
+      x: Math.min(Math.max(EDGE_GAP, x), maxX),
+      y: Math.min(Math.max(EDGE_GAP, y), maxY)
+    };
+  }
+
+  function placeAt(x, y) {
+    if (!el) return;
+    var p = clamp(x, y);
+    el.classList.add('moved');
+    el.style.left = p.x + 'px';
+    el.style.top = p.y + 'px';
+    return p;
+  }
+
+  function applySavedPosition() {
+    var p = savedPosition();
+    if (p) placeAt(p.x, p.y);
+  }
+
+  function clampIntoView() {
+    if (!el || !el.classList.contains('moved')) return;
+    var p = clamp(parseFloat(el.style.left) || 0, parseFloat(el.style.top) || 0);
+    el.style.left = p.x + 'px';
+    el.style.top = p.y + 'px';
+    savePosition(p.x, p.y);
+  }
+
+  function resetPosition() {
+    if (!el) return;
+    el.classList.remove('moved');
+    el.style.left = '';
+    el.style.top = '';
+    try { localStorage.removeItem(POS_KEY); } catch (e) {}
+  }
+
+  function enableDrag() {
+    // Pointer events cover mouse, touch and pen with one path, and
+    // setPointerCapture keeps the drag alive when the pointer outruns the orb.
+    el.addEventListener('pointerdown', function (e) {
+      if (e.target && e.target.id === 'ten-orb-x') return;
+      if (e.button !== undefined && e.button !== 0) return;
+
+      var r = el.getBoundingClientRect();
+      drag = {
+        id: e.pointerId,
+        // Where in the orb the pointer grabbed it, so it does not jump.
+        dx: e.clientX - r.left,
+        dy: e.clientY - r.top,
+        startX: e.clientX,
+        startY: e.clientY,
+        moved: false
+      };
+      try { el.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+
+    el.addEventListener('pointermove', function (e) {
+      if (!drag || e.pointerId !== drag.id) return;
+
+      if (!drag.moved) {
+        // Below the slop this is still a tap. Treating every pixel of jitter as
+        // a drag is how a button stops opening on a touchscreen.
+        if (Math.abs(e.clientX - drag.startX) < DRAG_SLOP &&
+            Math.abs(e.clientY - drag.startY) < DRAG_SLOP) return;
+        drag.moved = true;
+        el.classList.add('dragging');
+        el.classList.remove('open');
+        clearTimeout(settleTimer);
+      }
+      e.preventDefault();
+      placeAt(e.clientX - drag.dx, e.clientY - drag.dy);
+    });
+
+    function endDrag(e) {
+      if (!drag || (e && e.pointerId !== drag.id)) return;
+      var wasMoved = drag.moved;
+      try { el.releasePointerCapture(drag.id); } catch (err) {}
+      drag = null;
+      if (!wasMoved) return;
+
+      el.classList.remove('dragging');
+      suppressClick = true;
+      // Cleared on the next tick as well as by the click handler, in case the
+      // browser decides this release produced no click at all.
+      setTimeout(function () { suppressClick = false; }, 350);
+
+      // Snap to the nearer side. A circle half-hanging in the middle of a table
+      // is worse than one against an edge, and the snap makes the drop feel
+      // decided rather than approximate.
+      var r = el.getBoundingClientRect();
+      var toLeft = r.left + r.width / 2 < window.innerWidth / 2;
+      var p = placeAt(toLeft ? EDGE_GAP : window.innerWidth - r.width - EDGE_GAP, r.top);
+      if (p) savePosition(p.x, p.y);
+    }
+
+    el.addEventListener('pointerup', endDrag);
+    el.addEventListener('pointercancel', endDrag);
+  }
+
+  function onKeydown(e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); return; }
+
+    // Arrow keys move it, for a reader who cannot drag. Shift for a bigger
+    // step; Home puts it back.
+    var step = e.shiftKey ? 40 : 12;
+    var dx = 0, dy = 0;
+    if (e.key === 'ArrowLeft') dx = -step;
+    else if (e.key === 'ArrowRight') dx = step;
+    else if (e.key === 'ArrowUp') dy = -step;
+    else if (e.key === 'ArrowDown') dy = step;
+    else if (e.key === 'Home') { e.preventDefault(); resetPosition(); return; }
+    else return;
+
+    e.preventDefault();
+    var r = el.getBoundingClientRect();
+    var p = placeAt(r.left + dx, r.top + dy);
+    if (p) savePosition(p.x, p.y);
   }
 
   function go() {
@@ -193,27 +398,49 @@
    * the page and silently ignores it otherwise, which is fine — the shake still
    * runs.
    */
-  function buzz() {
+  /**
+   * Buzz once for each thing that arrived.
+   *
+   * Two messages shake it twice, three shake it three times — the count is
+   * felt, not just read. Capped, because a burst of ten should get attention,
+   * not hold the screen hostage.
+   */
+  function buzz(times) {
     build();
     show(true);
+    var n = Math.max(1, Math.min(5, times || 1));
+
     clearTimeout(buzzTimer);
     el.classList.remove('buzz');
     // Reflow, or re-adding the class in the same frame does not restart it.
     void el.offsetWidth;
+    el.style.setProperty('--ten-orb-shakes', String(n));
     el.classList.add('buzz');
-    buzzTimer = setTimeout(function () { if (el) el.classList.remove('buzz'); }, 1800);
+    buzzTimer = setTimeout(function () {
+      if (el) { el.classList.remove('buzz'); el.style.removeProperty('--ten-orb-shakes'); }
+    }, 900 * n + 400);
 
     try {
-      if (navigator.vibrate) navigator.vibrate([90, 60, 90]);
+      // One pulse per item, so a phone in a pocket carries the same count.
+      var pattern = [];
+      for (var i = 0; i < n; i++) pattern.push(90, 110);
+      if (navigator.vibrate) navigator.vibrate(pattern);
     } catch (e) { /* not permitted here; the shake carries it */ }
   }
 
   /* ── data ────────────────────────────────────────────────────────────── */
   function phrase(d) {
     var m = d.messages || 0, n = d.notifications || 0;
-    if (m && n) return m + ' new message' + (m > 1 ? 's' : '') + ' \u00b7 ' + n + ' update' + (n > 1 ? 's' : '');
-    if (m) return m + ' new message' + (m > 1 ? 's' : '');
-    if (n) return n + ' new notification' + (n > 1 ? 's' : '');
+    // A phone has room for one clause, not two. Both halves would truncate
+    // mid-word, and half a sentence is worse than the shorter true one.
+    var tight = window.innerWidth < 520;
+    if (m && n) {
+      return tight
+        ? (m + n) + ' new'
+        : m + ' new message' + (m > 1 ? 's' : '') + ' \u00b7 ' + n + ' update' + (n > 1 ? 's' : '');
+    }
+    if (m) return m + (tight ? ' new message' + (m > 1 ? 's' : '') : ' new message' + (m > 1 ? 's' : ''));
+    if (n) return n + (tight ? ' new alert' + (n > 1 ? 's' : '') : ' new notification' + (n > 1 ? 's' : ''));
     return '';
   }
 
@@ -239,13 +466,21 @@
         // they are looking at.
         if (onOwnPage()) { hide(); return; }
 
-        if (total === 0) { hide(); return; }
+        // A quiet orb still appears once at sign-in: it is the way into the
+        // notification centre, and one that only ever materialises on a busy
+        // day reads as a feature that was never built. No badge, no greeting,
+        // no buzz — just a button that is there.
+        if (total === 0) {
+          if (cause === 'first' && !dismissed) show(false);
+          else if (!el || !el.classList.contains('in')) hide();
+          return;
+        }
 
         // Any increase after the first count is an arrival, including 0 -> 1 —
         // which is the case that most deserves a buzz, and the one an earlier
         // `before !== 0` guard was quietly swallowing.
         if (cause === 'live' || (wasReady && total > before)) {
-          buzz();
+          buzz(Math.max(1, total - before));
           return;
         }
         if (dismissed) return;
@@ -271,17 +506,47 @@
   }
 
   /* ── live ────────────────────────────────────────────────────────────── */
+
+  /**
+   * Make sure there is a socket.io client to listen on.
+   *
+   * Only five of the eleven pages carrying this orb load socket.io — the ones
+   * that happen to host a chat widget. On the other six the orb fell back to a
+   * 45-second poll and never buzzed at all, which is exactly the report: "that
+   * popup is there but if anyone message it not get vibrate."
+   *
+   * Loading it here rather than adding a tag to six pages keeps it working on
+   * the seventh nobody has written yet.
+   */
+  function withSocketIo(then) {
+    if (window.io) return then();
+    if (window.__tenOrbLoadingIo) { window.__tenOrbLoadingIo.push(then); return; }
+    window.__tenOrbLoadingIo = [then];
+
+    var s = document.createElement('script');
+    s.src = '/socket.io/socket.io.js';
+    s.async = true;
+    s.onload = function () {
+      var queued = window.__tenOrbLoadingIo || [];
+      window.__tenOrbLoadingIo = null;
+      queued.forEach(function (fn) { try { fn(); } catch (e) {} });
+    };
+    // No socket.io on this deployment: the poll still keeps the count honest.
+    s.onerror = function () { window.__tenOrbLoadingIo = null; };
+    document.head.appendChild(s);
+  }
+
   function connectLive() {
-    // A direct message already emits `dm_notice` on the socket the portal
-    // opens for chat. Portal notifications have no live channel, so those are
-    // caught by the poll below.
-    if (!window.io) return;
-    try {
-      var socket = window.__tenOrbSocket || window.io({ withCredentials: true });
-      window.__tenOrbSocket = socket;
-      socket.on('dm_notice', function () { dismissed = false; refresh('live'); });
-      socket.on('notification', function () { dismissed = false; refresh('live'); });
-    } catch (e) { /* chat is unavailable on this page; polling still works */ }
+    withSocketIo(function () {
+      try {
+        // Reuse the page's own connection where there is one, rather than
+        // opening a second socket for the same person.
+        var socket = window.__tenOrbSocket || window.io({ withCredentials: true });
+        window.__tenOrbSocket = socket;
+        socket.on('dm_notice', function () { dismissed = false; refresh('live'); });
+        socket.on('notification', function () { dismissed = false; refresh('live'); });
+      } catch (e) { /* chat is unavailable here; polling still works */ }
+    });
   }
 
   function start() {
@@ -312,6 +577,9 @@
   window.TenNotifyOrb = {
     refresh: function () { return refresh('poll'); },
     arrived: function () { dismissed = false; return refresh('live'); },
-    buzz: buzz
+    buzz: buzz,
+    /** Move it from code, and put it back. Both persist. */
+    moveTo: function (x, y) { build(); var p = placeAt(x, y); if (p) savePosition(p.x, p.y); },
+    resetPosition: resetPosition
   };
 })();
