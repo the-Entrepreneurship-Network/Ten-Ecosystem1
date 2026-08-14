@@ -212,21 +212,24 @@
     <p class="hero-tag">Not a company, an ecosystem.<br>Because TEN is Everythin'.</p>
     <button class="hero-cta" onclick="journey()">START MY JOURNEY <span>&rarr;</span></button>
   </div>
-  <div style="display:flex; justify-content:center; margin-top:6px;">
+  <div style="display:flex; justify-content:center; margin-top:-58px; margin-bottom:-6px;">
     <!-- alpha WebM: the gold hands float directly on the page, no box -->
     <video autoplay muted loop playsinline src="assets/home/ten-logo-anim.webm"
       style="width:min(200px,34vw);" aria-label="TEN logo"
       onerror="this.remove()"></video>
   </div>
   <div class="hero-word" id="heroWord" title="click me">
-    <svg viewBox="0 0 1600 340" aria-label="TEN TECH">
+    <!-- THE sits between the logo and the name, cut from the same texture so
+         the three read as one mark rather than a caption above a wordmark. -->
+    <svg viewBox="0 0 1600 430" aria-label="THE ENTREPRENEURSHIP NETWORK">
       <defs>
         <clipPath id="tclip">
-          <text x="800" y="290" text-anchor="middle" font-size="330" font-weight="900" font-family="'PP Neue Montreal', Inter, sans-serif" letter-spacing="-10" textLength="1580" lengthAdjust="spacingAndGlyphs">TEN TECH</text>
+          <text x="800" y="150" text-anchor="middle" font-size="165" font-weight="900" font-family="'PP Neue Montreal', Inter, sans-serif" letter-spacing="-4" textLength="300" lengthAdjust="spacingAndGlyphs">THE</text>
+          <text x="800" y="395" text-anchor="middle" font-size="215" font-weight="900" font-family="'PP Neue Montreal', Inter, sans-serif" letter-spacing="-6" textLength="1580" lengthAdjust="spacingAndGlyphs">ENTREPRENEURSHIP NETWORK</text>
         </clipPath>
       </defs>
       <g clip-path="url(#tclip)">
-        <rect width="1600" height="340" fill="#0a0a0a"/>
+        <rect width="1600" height="430" fill="#0a0a0a"/>
         <image id="tex0" href="img/textures/foil.webp"    x="-200" y="-200" width="2000" height="900" preserveAspectRatio="xMidYMid slice" opacity="1"/>
         <image id="tex1" href="img/textures/balloon.webp" x="-200" y="-200" width="2000" height="900" preserveAspectRatio="xMidYMid slice" opacity="0"/>
         <image id="tex2" href="img/textures/wool.webp"    x="-200" y="-200" width="2000" height="900" preserveAspectRatio="xMidYMid slice" opacity="0"/>
