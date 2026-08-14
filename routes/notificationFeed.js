@@ -22,13 +22,14 @@ const Message      = require('../models/Message');
 const ChatRead     = require('../models/ChatRead');
 const Student      = require('../models/Student');
 
+// The same identity the chat inbox uses, so a conversation that appears there
+// also appears here. This file had its own copy with its own id rules; when
+// they disagreed, an HR user's unread messages were counted by one and missed
+// by the other.
+const chatIdentity = require('../services/chatIdentity');
+
 function identityOf(req) {
-  const s = req.session || {};
-  if (s.adminUser)   return { role: 'admin',       id: s.adminUser.username || 'admin', domain: '' };
-  if (s.hr)          return { role: 'hr',          id: s.hr.email || s.hr.username, domain: '' };
-  if (s.coordinator) return { role: 'coordinator', id: s.coordinator.email || s.coordinator.username, domain: s.coordinator.domain || '' };
-  if (s.student)     return { role: 'student',     id: s.student.employeeId, domain: s.student.domain || '' };
-  return null;
+  return chatIdentity.identityFromSession(req.session);
 }
 
 function requireUser(req, res, next) {
@@ -38,10 +39,6 @@ function requireUser(req, res, next) {
   }
   req.me = me;
   next();
-}
-
-function escapeRegex(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
@@ -97,10 +94,8 @@ router.get('/feed', requireUser, async (req, res) => {
     // ── unread direct messages, one row per conversation ────────────────
     // Grouped by conversation rather than one row per message: forty messages
     // from one person is one thing to look at, not forty.
-    const idRx = escapeRegex(String(me.id));
-    const rooms = await Message.distinct('chatRoom', {
-      chatRoom: new RegExp('^dm::(' + idRx + '::|.*::' + idRx + '$)')
-    });
+    const myIds = chatIdentity.matchIds(me);
+    const rooms = await Message.distinct('chatRoom', chatIdentity.dmRoomFilterFor(me));
 
     if (rooms.length) {
       const readMap = await ChatRead.mapFor(me.id, rooms);
@@ -108,7 +103,7 @@ router.get('/feed', requireUser, async (req, res) => {
         const since = readMap[room] || new Date(0);
         const unread = await Message.find({
           chatRoom: room,
-          senderId: { $ne: me.id },
+          senderId: { $nin: myIds },
           timestamp: { $gt: since }
         }).sort({ timestamp: -1 }).limit(1).lean();
 
@@ -116,7 +111,7 @@ router.get('/feed', requireUser, async (req, res) => {
         const last = unread[0];
         const count = await Message.countDocuments({
           chatRoom: room,
-          senderId: { $ne: me.id },
+          senderId: { $nin: myIds },
           timestamp: { $gt: since }
         });
 
@@ -168,10 +163,7 @@ router.post('/read-all', requireUser, async (req, res) => {
       { $addToSet: { readBy: me.id } }
     );
 
-    const idRx = escapeRegex(String(me.id));
-    const rooms = await Message.distinct('chatRoom', {
-      chatRoom: new RegExp('^dm::(' + idRx + '::|.*::' + idRx + '$)')
-    });
+    const rooms = await Message.distinct('chatRoom', chatIdentity.dmRoomFilterFor(me));
     const now = new Date();
     for (const room of rooms) await ChatRead.markRead(me.id, room, now);
 
@@ -181,10 +173,19 @@ router.post('/read-all', requireUser, async (req, res) => {
   }
 });
 
-/** GET /api/notifications/unread-count — for the bell badge. */
+/**
+ * GET /api/notifications/unread-count
+ *
+ * The number behind the notification orb, split by kind, plus where the newest
+ * thing lives.
+ *
+ * The breakdown is what lets the orb say "2 new messages" rather than "2", and
+ * `latest.url` is what lets a click land in the actual conversation instead of
+ * a list the reader then has to search. Both come from the same pass, so one
+ * cheap call every 45 seconds covers the whole widget.
+ */
 router.get('/unread-count', requireUser, async (req, res) => {
   try {
-    // Reuses the feed so the badge and the list can never disagree.
     const me = req.me;
     const notes = await Notification.countDocuments({
       $and: [
@@ -195,24 +196,67 @@ router.get('/unread-count', requireUser, async (req, res) => {
       ]
     });
 
-    const idRx = escapeRegex(String(me.id));
-    const rooms = await Message.distinct('chatRoom', {
-      chatRoom: new RegExp('^dm::(' + idRx + '::|.*::' + idRx + '$)')
-    });
+    // Newest unread portal notification, so the orb can rank it against the
+    // newest message and send the reader to whichever actually came last.
+    const newestNote = await Notification.findOne({
+      $and: [
+        { readBy: { $ne: me.id } },
+        { $or: me.role === 'student'
+          ? [{ targetType: 'all' }, { targetType: 'student', targetEmployeeId: me.id }, { targetType: 'domain', targetDomain: me.domain }]
+          : [{ targetType: 'all' }] }
+      ]
+    }).sort({ createdAt: -1 }).select('title createdAt').lean();
+
+    // Every id this person is known by — see services/chatIdentity. Matching
+    // the canonical id alone hid conversations started under their other
+    // spelling, which is the same fault that made the inbox answer "Forbidden".
+    const myIds = chatIdentity.matchIds(me);
+    const rooms = await Message.distinct('chatRoom', chatIdentity.dmRoomFilterFor(me));
     const readMap = rooms.length ? await ChatRead.mapFor(me.id, rooms) : {};
+
     let dms = 0;
+    let newestMessage = null;
     for (const room of rooms) {
-      const n = await Message.countDocuments({
+      const since = readMap[room] || new Date(0);
+      const last = await Message.find({
         chatRoom: room,
-        senderId: { $ne: me.id },
-        timestamp: { $gt: readMap[room] || new Date(0) }
-      });
-      if (n) dms++;    // conversations with something unread, not messages
+        senderId: { $nin: myIds },
+        timestamp: { $gt: since }
+      }).sort({ timestamp: -1 }).limit(1).lean();
+
+      if (!last.length) continue;
+      dms++;    // conversations with something unread, not messages
+      if (!newestMessage || last[0].timestamp > newestMessage.timestamp) newestMessage = last[0];
     }
 
-    res.json({ success: true, unread: notes + dms });
+    // Where a click should go. A message wins when it is the more recent of
+    // the two, because that is what the reader is being told about.
+    let latest = { kind: 'none', url: '/notifications', title: '' };
+    const noteAt = newestNote && newestNote.createdAt ? new Date(newestNote.createdAt).getTime() : 0;
+    const msgAt = newestMessage && newestMessage.timestamp ? new Date(newestMessage.timestamp).getTime() : 0;
+    if (msgAt && msgAt >= noteAt) {
+      latest = {
+        kind: 'message',
+        url: '/messages?to=' + encodeURIComponent(String(newestMessage.senderId || '')),
+        title: newestMessage.senderName || newestMessage.senderId || 'New message'
+      };
+    } else if (noteAt) {
+      latest = { kind: 'portal', url: '/notifications', title: newestNote.title || 'Notification' };
+    }
+
+    res.json({
+      success: true,
+      me: { id: me.id, role: me.role },
+      unread: notes + dms,
+      notifications: notes,
+      messages: dms,
+      latest
+    });
   } catch (err) {
-    res.json({ success: true, unread: 0 });
+    console.error('[notifications] unread-count failed:', err.message);
+    // Never an error to the caller: a failed count must not put a broken badge
+    // on every page in the portal.
+    res.json({ success: true, unread: 0, notifications: 0, messages: 0, latest: { kind: 'none', url: '/notifications', title: '' } });
   }
 });
 

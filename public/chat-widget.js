@@ -40,7 +40,38 @@
             return d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
         } catch (e) { return ""; }
     }
+    /**
+     * Every id this reader's own messages may carry.
+     *
+     * Filled in from GET /api/chat/me at init. Staff appear in stored messages
+     * under both their username and their email depending on when and where a
+     * message was sent, so guessing one of them from sessionStorage put the
+     * reader's own messages on the left, as though somebody else had sent them.
+     * The local guess stays as a fallback for the moment before the fetch
+     * lands, and if the request fails.
+     */
+    var ownIds = [];
+
     function ownId() { return cfg.role === "student" ? cfg.employeeId : cfg.username; }
+
+    function isOwnMessage(m) {
+        if (!m || m.senderId == null) return false;
+        var candidates = ownIds.length ? ownIds : [ownId()];
+        var s = String(m.senderId).toLowerCase();
+        for (var i = 0; i < candidates.length; i++) {
+            if (String(candidates[i]).toLowerCase() === s) return true;
+        }
+        return false;
+    }
+
+    function loadOwnIds() {
+        return fetch("/api/chat/me", { credentials: "same-origin" })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) {
+                if (d && d.me && d.me.ids && d.me.ids.length) ownIds = d.me.ids;
+            })
+            .catch(function () { /* the local guess still works for most people */ });
+    }
 
     /** Small JSON helper that surfaces the server's message rather than a status code. */
     function postJSON(url, body) {
@@ -55,6 +86,24 @@
                 return d;
             });
         });
+    }
+
+    /**
+     * Send without a socket.
+     *
+     * The room is still notified server-side, so everyone else sees it live;
+     * only this window has to draw its own copy, which appendMessage does when
+     * the response comes back.
+     */
+    function sendOverHttp(payload) {
+        postJSON("/chat/messages", payload)
+            .then(function (d) {
+                var win = openWin;
+                if (d && d.doc && win && win.el && win.el.dataset.currentRoom === d.doc.chatRoom) {
+                    appendMessage(win, d.doc);
+                }
+            })
+            .catch(function (e) { alert(e.message || "The message could not be sent. Please try again."); });
     }
 
     /**
@@ -307,7 +356,16 @@
                 payload.imageName = pendingImage.imageName;
                 payload.imageMime = pendingImage.imageMime;
             }
-            socket.emit("send_message", payload);
+            // Socket first; HTTP when there is no socket, so a network that
+            // blocks WebSockets does not silently swallow the message.
+            if (socket && socket.connected) {
+                socket.emit("send_message", payload, function (ack) {
+                    if (ack && ack.success === false && ack.message) alert(ack.message);
+                    else if (!ack || !ack.success) sendOverHttp(payload);
+                });
+            } else {
+                sendOverHttp(payload);
+            }
             inputEl.value = "";
             clearPendingImage();
         });
@@ -356,7 +414,7 @@
 
     function appendMessage(w, m) {
         maybeAppendDateDivider(w, m.timestamp);
-        var mine = (m.senderId === ownId() && m.senderRole === cfg.role);
+        var mine = isOwnMessage(m);
         var roleTag =
             m.senderRole === "student" ? "INTERN" :
             m.senderRole === "coordinator" ? "COORDINATOR" : "HR";
@@ -565,7 +623,9 @@
             cfg = config;
             chats = chatsForRole(cfg.role);
             render();
-            connectSocket();
+            // Ask the server which ids are ours before drawing any history, so
+            // our own messages land on the right side of the conversation.
+            loadOwnIds().then(connectSocket, connectSocket);
         }
     };
 })(window);

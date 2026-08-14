@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Notifications — TEN</title>
-<link rel="manifest" href="/manifest.webmanifest">
+<link rel="manifest" href="/manifest-notifications.webmanifest">
 <meta name="theme-color" content="#0e1628">
-<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/notif-192.png">
 <link rel="stylesheet" href="/css/mobile.css">
 <style>
 :root{
@@ -68,8 +68,8 @@ html,body{margin:0;padding:0;min-height:100dvh;background:var(--bg);color:var(--
 </style>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="TEN">
-  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <meta name="apple-mobile-web-app-title" content="TEN Alerts">
+  <link rel="apple-touch-icon" href="/icons/notif-192.png">
 </head>
 <body>
 
@@ -99,6 +99,7 @@ html,body{margin:0;padding:0;min-height:100dvh;background:var(--bg);color:var(--
 </div>
 
 <script src="/session-guard.js"></script>
+<script src="/credential-reset.js"></script>
 <script src="/push-client.js"></script>
 <script>
 /* ═══════════════════════════════════════════════════════════════════════
@@ -188,12 +189,19 @@ function renderSetup(){
       bits.push('<button class="btn" onclick="turnOn()">Turn on notifications</button>');
     }
 
+    // This page carries its OWN manifest, so installing from here adds a
+    // separate "TEN Alerts" app that opens straight onto this list — alongside
+    // the portal app rather than replacing it. Say so, or it reads as a second
+    // copy of something already installed.
     if (deferredInstall && !isInstalled()){
-      bits.push('<button class="btn ghost" onclick="installApp()">Install the app</button>');
-    } else if (!isInstalled() && !deferredInstall && s.supported){
+      bits.push('<button class="btn ghost" onclick="installApp()">Install the Notifications app</button>');
+      bits.push('<span style="font-size:12px;color:#8aa4c8;">Adds “TEN Alerts” to your home screen — it opens straight here.</span>');
+    } else if (isInstalled()){
+      bits.push('<span class="state on">Installed</span>');
+    } else if (s.supported){
       // Safari and Firefox never fire beforeinstallprompt, so the only honest
       // thing is to say how it is actually done there.
-      bits.push('<span style="font-size:12px;color:#8aa4c8;">To install: use your browser menu → “Add to Home Screen” / “Install”.</span>');
+      bits.push('<span style="font-size:12px;color:#8aa4c8;">To install “TEN Alerts”: use your browser menu → “Add to Home Screen” / “Install”.</span>');
     }
 
     row.innerHTML = bits.join(" ");
@@ -278,12 +286,24 @@ async function markAllRead(){
     await fetch("/api/notifications/read-all", { method: "POST", credentials: "same-origin" });
     items.forEach(function (n) { n.read = true; });
     render();
+    if (window.TenNotifyOrb) window.TenNotifyOrb.refresh();
   } catch (e) { /* the next load will reflect the truth either way */ }
 }
+
+// The app shortcut "Unread only" lands on /notifications?filter=unread.
+(function applyUrlFilter(){
+  var want = new URLSearchParams(window.location.search).get("filter");
+  if (["all","unread","message"].indexOf(want) === -1) return;
+  filter = want;
+  Array.prototype.forEach.call(document.querySelectorAll(".chip"), function (c) {
+    c.classList.toggle("active", c.getAttribute("data-filter") === want);
+  });
+})();
 
 renderSetup();
 load();
 setInterval(load, 60000);
 </script>
+<script src="/notify-orb.js" defer></script>
 </body>
 </html>

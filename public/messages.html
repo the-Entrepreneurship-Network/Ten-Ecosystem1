@@ -203,6 +203,7 @@ html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="/session-guard.js"></script>
+<script src="/credential-reset.js"></script>
 <script>
 /* ═══════════════════════════════════════════════════════════════════════
    Direct messages.
@@ -213,8 +214,26 @@ html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);
    ═══════════════════════════════════════════════════════════════════════ */
 "use strict";
 
-var me = null;                 // { id, role }
+var me = null;                 // { id, role, ids: [...] }
 var threads = [];
+
+/**
+ * Is this message one of mine?
+ *
+ * Against every id the server says is mine, not just the canonical one. Staff
+ * have been written into conversations under both their username and their
+ * email over time, and comparing to one of them put a person's own older
+ * messages on the left, as though a stranger had sent them.
+ */
+function isMine(senderId){
+  if (!me || senderId == null) return false;
+  var mineIds = (me.ids && me.ids.length) ? me.ids : [me.id];
+  var s = String(senderId).toLowerCase();
+  for (var i = 0; i < mineIds.length; i++){
+    if (String(mineIds[i]).toLowerCase() === s) return true;
+  }
+  return false;
+}
 var current = null;            // { room, withId, withName, role }
 var socket = null;
 var retentionDays = 30;
@@ -373,9 +392,15 @@ function addDay(label){
 
 function addBubble(m){
   var box = document.getElementById("msgs");
-  var mine = me && String(m.senderId) === String(me.id);
+  // The same message can reach this twice: once because we sent it over REST
+  // and put it on screen ourselves, and again as the socket's echo. Stamping
+  // the id lets the second one be dropped instead of showing a double.
+  var id = m && (m._id || m.messageId);
+  if (id && box.querySelector('[data-mid="' + String(id).replace(/"/g, "") + '"]')) return;
+  var mine = isMine(m.senderId);
   var el = document.createElement("div");
   el.className = "bubble" + (mine ? " mine" : "");
+  if (id) el.setAttribute("data-mid", String(id));
   var html = mine ? "" : '<div class="who">' + esc(m.senderName || m.senderId) + "</div>";
   if (m.message) html += esc(m.message).replace(/\n/g, "<br>");
   if (m.imageUrl) html += '<img src="' + esc(m.imageUrl) + '" alt="' + esc(m.imageName || "photo") + '">';
@@ -396,38 +421,79 @@ function maybeSend(e){
   }
 }
 
+/**
+ * Send a message.
+ *
+ * The socket is the fast path — it is what makes the message appear instantly
+ * for the other person. But a socket is not always there: college and office
+ * networks block WebSockets, a proxy can time the connection out, and a
+ * handshake is refused outright once the session expires. When it is missing,
+ * this posts the message over ordinary HTTP instead of telling someone to
+ * "check your connection" about a message that would never send however many
+ * times they tried.
+ */
 function sendText(){
   var input = document.getElementById("input");
   var text = (input.value || "").trim();
-  if (!text || !current || !socket) return;
+  if (!text || !current) return;
+  deliver({ room: current.room, text: text }, input);
+}
+
+function deliver(payload, input){
   var btn = document.getElementById("sendBtn");
   btn.disabled = true;
-  socket.emit("send_message", { room: current.room, text: text }, function(ack){
+
+  var settled = false;
+  function done(ok, message, doc){
+    if (settled) return;
+    settled = true;
     btn.disabled = false;
-    if (!ack || !ack.success){
-      alert(ack && ack.message === "forbidden"
-        ? "You cannot send messages in this conversation."
-        : "Your message did not send. Check your connection and try again.");
+    if (ok){
+      if (input){ input.value = ""; autoGrow(input); }
+      // Only the REST path needs painting: a socket send comes back as
+      // `receive_message`, and addBubble drops the duplicate either way.
+      if (doc) addBubble(doc);
+      loadThreads();
       return;
     }
-    input.value = ""; autoGrow(input);
-  });
+    alert(message || "The message could not be sent. Please try again.");
+  }
+
+  function overHttp(){
+    post("/chat/messages", payload)
+      .then(function(d){ done(true, null, d.doc); })
+      .catch(function(e){ done(false, e.message); });
+  }
+
+  if (socket && socket.connected){
+    socket.emit("send_message", payload, function(ack){
+      if (ack && ack.success) return done(true, null, null);
+      // A refusal is an answer — do not retry it over HTTP, the answer is the
+      // same. Anything else is the socket failing, so fall back.
+      if (ack && ack.message) return done(false, ack.message);
+      overHttp();
+    });
+    // No ack inside a few seconds means the socket is up but not carrying.
+    setTimeout(function(){ if (!settled) overHttp(); }, 6000);
+  } else {
+    overHttp();
+  }
 }
 
 async function sendImage(fileInput){
   var file = fileInput.files && fileInput.files[0];
   fileInput.value = "";
-  if (!file || !current || !socket) return;
+  if (!file || !current) return;
   try {
     var fd = new FormData();
     fd.append("image", file);
     var r = await fetch("/chat/upload-image", { method: "POST", credentials: "same-origin", body: fd });
     var d = await r.json();
     if (!d.success) throw new Error(d.message || "Upload failed");
-    socket.emit("send_message", {
+    deliver({
       room: current.room, text: "",
       imageUrl: d.imageUrl, imageName: d.imageName, imageMime: d.imageMime
-    });
+    }, null);
   } catch (e) { alert(e.message || "Could not send that image."); }
 }
 
@@ -543,8 +609,20 @@ async function startWith(userId, name){
 
 /* ── live ────────────────────────────────────────────────────────────── */
 function connect(){
-  if (!window.io) return;
+  if (!window.io) {
+    // The socket.io client itself did not load — a blocked path, or an offline
+    // first paint. Sending still works over HTTP, but say that replies will not
+    // appear on their own.
+    liveNotice(true);
+    return;
+  }
+  // No `auth` payload: the server reads the session cookie, which is the only
+  // thing that actually proves who is connecting.
   socket = io({ withCredentials: true });
+
+  socket.on("connect", function(){ liveNotice(false); });
+  socket.on("disconnect", function(){ liveNotice(true); });
+  socket.on("connect_error", function(){ liveNotice(true); });
 
   socket.on("receive_message", function(m){
     if (current && m.chatRoom === current.room){
@@ -556,6 +634,31 @@ function connect(){
 
   // A message in a conversation that is not open. The inbox is what shows it.
   socket.on("dm_notice", function(){ loadThreads(); });
+}
+
+/**
+ * Tell the reader when live updates are off.
+ *
+ * Sending still works — it falls back to HTTP — but messages from the other
+ * person will not appear on their own, and silently not updating is worse than
+ * saying so.
+ */
+function liveNotice(off){
+  var id = "liveOff";
+  var existing = document.getElementById(id);
+  if (!off){
+    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+    if (current) loadMessages(current.room);
+    return;
+  }
+  if (existing) return;
+  var bar = document.createElement("div");
+  bar.id = id;
+  bar.className = "notice";
+  bar.style.color = "#fcd34d";
+  bar.textContent = "Live updates are unavailable on this network. You can still send \u2014 pull down or reopen a conversation to see new replies.";
+  var pane = document.getElementById("paneConvo") || document.body;
+  pane.insertBefore(bar, pane.firstChild);
 }
 
 (async function start(){
@@ -581,5 +684,6 @@ function connect(){
   }
 })();
 </script>
+<script src="/notify-orb.js" defer></script>
 </body>
 </html>

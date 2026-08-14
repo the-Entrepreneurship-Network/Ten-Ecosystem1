@@ -1898,10 +1898,25 @@ app.get("/sw.js", (req, res) => {
 
 // The correct type is application/manifest+json. Served as anything else, some
 // browsers ignore the manifest and the app silently stops being installable.
+//
+// There are three installable apps, and each needs its own manifest with its
+// own `id` — a browser decides "is this the same app I already installed?" from
+// the id, so two manifests sharing one would be a single install that simply
+// changed its start page.
+//
+//   manifest.json                    "TEN Portal"             starts at /
+//   manifest.webmanifest             "TEN Internship Portal"  starts at /student-dashboard
+//   manifest-notifications.webmanifest "TEN Notifications"    starts at /notifications
 app.get("/manifest.webmanifest", (req, res) => {
     res.setHeader("Content-Type", "application/manifest+json; charset=utf-8");
     res.setHeader("Cache-Control", "public, max-age=3600");
     res.sendFile(path.join(__dirname, "public", "manifest.webmanifest"));
+});
+
+app.get("/manifest-notifications.webmanifest", (req, res) => {
+    res.setHeader("Content-Type", "application/manifest+json; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.sendFile(path.join(__dirname, "public", "manifest-notifications.webmanifest"));
 });
 
 // Custom route to serve the logo with the correct JPEG Content-Type since the file has a .png extension but is actually a JPEG (JFIF format)
@@ -3283,6 +3298,27 @@ async function clearFailedAttempts(user, userModel) {
 }
 
 // ================= LOGIN =================
+
+/**
+ * Sign out, properly.
+ *
+ * Every "Logout" button in the portal clears sessionStorage and navigates to
+ * the login page, which looks like signing out and is not: the session cookie
+ * survives, so the API still recognises the browser and going back to any
+ * portal page signs straight back in. That matters on a shared or college
+ * machine, and it matters for the "do this later" link on the credential-reset
+ * panel, which has to actually end the session.
+ *
+ * Always answers success — a sign-out that reports failure leaves someone
+ * stuck on a page they are trying to leave.
+ */
+app.post("/logout", (req, res) => {
+    if (!req.session) return res.json({ success: true });
+    req.session.destroy(() => {
+        res.clearCookie("ten.sid");
+        res.json({ success: true });
+    });
+});
 
 app.post("/login", loginIpLimiter, loginLimiter, async(req,res)=>{
 try{
@@ -5779,7 +5815,9 @@ try{
     //    exact-username match.
     const legacy = COORDINATORS[identifier];
     if(legacy && await verifyCredentialPassword(legacy, password)){
-        const coordIdentity = { username:identifier, domain:legacy.domain };
+        // email and name are carried so chat can recognise this person under
+        // every id they may already appear as in a conversation's room name.
+        const coordIdentity = { username:identifier, email: legacy.email || "", name: legacy.name || identifier, domain:legacy.domain };
         if (req.session) req.session.coordinator = coordIdentity;
         return res.json({ success:true, coordinator: coordIdentity });
     }
@@ -5837,6 +5875,8 @@ try{
             await clearFailedAttempts(dbCoord, Coordinator);
             const coordIdentity = {
                 username: dbCoord.username || dbCoord.email,
+                email:    dbCoord.email || "",
+                name:     dbCoord.name || dbCoord.username || dbCoord.email,
                 domain:   dbCoord.domain
             };
             if (req.session) req.session.coordinator = coordIdentity;
@@ -6800,104 +6840,91 @@ try{
 // (employeeId for students, username for coord/HR) and verified against DB or
 // the HR_ACCOUNTS / COORDINATORS maps before any chat action is allowed.
 
-async function verifyChatIdentity(claim){
-    if(!claim || !claim.role) return null;
-    if(claim.role === "student"){
-        if(!claim.employeeId) return null;
-        const s = await Student.findOne({ employeeId: claim.employeeId });
-        if(!s) return null;
-        return {
-            role: "student",
-            id: s.employeeId,
-            name: (s.name || ((s.firstName||"")+" "+(s.lastName||""))).trim() || s.employeeId,
-            domain: s.domain || ""
-        };
-    }
-    if(claim.role === "coordinator"){
-        // The handshake field is named `username` for backward compatibility, but
-        // it can hold either a legacy username or an email (DB-backed coordinator).
-        const id = claim.username || claim.email;
-        if(!id) return null;
-        const legacy = COORDINATORS[id];
-        if(legacy) return { role: "coordinator", id, name: id, domain: legacy.domain };
-        // DB-backed: created via promotion flow
-        const q = id.indexOf("@") !== -1
-            ? { email: id.toLowerCase() }
-            : { $or: [{ username: id }, { email: id.toLowerCase() }] };
-        const dbC = await Coordinator.findOne(q);
-        if(dbC) return { role: "coordinator", id: dbC.email || dbC.username || id, name: dbC.name, domain: dbC.domain };
-        return null;
-    }
-    if(claim.role === "hr"){
-        const id = claim.username || claim.email;
-        if(!id) return null;
-        // Legacy hardcoded HR (by username key)
-        const legacy = HR_ACCOUNTS[id];
-        if(legacy) return { role: "hr", id, name: legacy.name, domain: "" };
-        // Legacy hardcoded HR (by their assigned email)
-        const legacyByEmail = Object.entries(HR_ACCOUNTS).find(
-            ([_, v]) => (v.email || "").toLowerCase() === String(id).toLowerCase()
-        );
-        if(legacyByEmail){
-            const [u, v] = legacyByEmail;
-            return { role: "hr", id: v.email || u, name: v.name, domain: "" };
-        }
-        // DB-backed HR (created via promotion flow)
-        if(id.indexOf("@") !== -1){
-            const dbH = await HR.findOne({ email: id.toLowerCase() });
-            if(dbH) return { role: "hr", id: dbH.email, name: dbH.name, domain: "" };
-        }
-        return null;
-    }
-    if(claim.role === "admin"){
-        // An admin identity is never taken from the handshake claim. It is
-        // proved by the /ten-admin session on the same browser, read from the
-        // socket's cookies below — otherwise anyone could open a socket
-        // claiming role:"admin" and read every private conversation.
-        return null;
-    }
-    return null;
-}
+/**
+ * Every id a socket identity may appear as inside an existing room name.
+ *
+ * The canonical id is first; the rest exist because the same person has been
+ * written into room names under more than one spelling over time. See
+ * services/chatIdentity.js — the alias list is what keeps those conversations
+ * reachable instead of silently orphaning them.
+ */
+/**
+ * NOTE: `verifyChatIdentity(claim)` used to live here.
+ *
+ * It took a role plus an employee ID or username from the client and looked
+ * them up — which is not authentication, it is a directory search. A socket or
+ * a request could name anybody and be treated as them. Every caller now reads
+ * the session instead: chatIdentityFromSocket() below for sockets, and
+ * chatIdentityFromSession(req) for the REST endpoints.
+ */
 
 /**
- * Resolve an admin from the session cookie carried on the socket handshake.
+ * Who is on the other end of this socket — from the session cookie.
  *
- * Chat identity for students/coordinators/HR is verified against their own
- * stores. Admin is different: there is no admin record to look up, only the
- * signed session created by /ten-admin. Reading it here is what makes admin
- * oversight safe — the claim in the handshake is ignored entirely.
+ * This replaced `verifyChatIdentity`, which read `socket.handshake.auth` and
+ * merely LOOKED UP whatever the caller claimed. Two things were wrong with it:
+ *
+ *   - It was not authentication. A socket opened with
+ *     `auth: {role:"student", employeeId:"TEN/AI/1663"}` was accepted as that
+ *     student, with no password and no session. Employee IDs are sequential
+ *     and printed on offer letters and certificates.
+ *
+ *   - It refused everyone who did NOT send a claim, and public/messages.html
+ *     connects with `io({ withCredentials: true })` and no claim at all. So the
+ *     socket never connected on that page: history loaded over REST and every
+ *     attempt to send died with "Your message did not send. Check your
+ *     connection and try again." — which was not a connection problem, and no
+ *     amount of retrying would ever have fixed it.
+ *
+ * The session cookie already rides the handshake, so it is both the honest
+ * answer and the one that works everywhere.
+ *
+ * The domain is refreshed from the record because it decides which domain room
+ * this person is auto-joined to: the session captured it at sign-in, and a
+ * student moved to a different domain since then would otherwise stay
+ * subscribed to the room they left.
  */
-function adminIdentityFromSocket(socket){
+function chatIdentityFromSocket(socket){
     return new Promise((resolve) => {
         try{
             const req = socket.request;
             if(!req || !req.headers || !req.headers.cookie) return resolve(null);
-            sessionMiddleware(req, {}, () => {
-                const admin = req.session && req.session.adminUser;
-                if(!admin) return resolve(null);
-                resolve({ role: "admin", id: admin.username || "admin", name: admin.username || "Admin", domain: "" });
+            sessionMiddleware(req, {}, async () => {
+                const identity = chatIdentity.identityFromSession(req.session);
+                if(!identity) return resolve(null);
+                try{
+                    if(identity.role === "student"){
+                        const s = await Student.findOne({ employeeId: identity.id })
+                            .select("domain name firstName lastName").lean();
+                        if(s){
+                            identity.domain = s.domain || identity.domain;
+                            identity.name = identity.name ||
+                                (s.name || ((s.firstName||"") + " " + (s.lastName||""))).trim() || identity.id;
+                        }
+                    } else if(identity.role === "coordinator"){
+                        const c = await Coordinator.findOne({
+                            $or: [{ email: identity.id }, { username: identity.id }]
+                        }).select("domain name").lean();
+                        if(c){
+                            identity.domain = c.domain || identity.domain;
+                            identity.name = identity.name || c.name || identity.id;
+                        }
+                    }
+                }catch(_){ /* the session's own copy is good enough */ }
+                resolve(identity);
             });
         }catch(_){ resolve(null); }
     });
 }
 
-/**
- * The room name for a private conversation between two people.
- *
- * Sorted so both participants derive the same name from either direction —
- * there is exactly one room per pair, not one per sender. The separator is a
- * double colon because employee IDs contain slashes (TEN/WEB/1005) and
- * usernames contain dots and @.
- */
-function dmRoomFor(idA, idB){
-    return "dm::" + [String(idA), String(idB)].sort().join("::");
-}
-/** The two participant ids in a DM room, or null if it is not one. */
-function dmParticipants(room){
-    if(typeof room !== "string" || room.indexOf("dm::") !== 0) return null;
-    const parts = room.slice(4).split("::");
-    return parts.length === 2 && parts[0] && parts[1] ? parts : null;
-}
+// Private-conversation naming and membership now live in one module shared
+// with routes/chatModeration.js and the socket layer. They used to be defined
+// separately in each, with different rules for what a staff member's id is,
+// which is what made an admin's click bounce to the login page and an HR user
+// see "Forbidden" on a conversation their own inbox had just listed.
+const chatIdentity = require("./services/chatIdentity");
+const dmRoomFor      = chatIdentity.dmRoomFor;
+const dmParticipants = chatIdentity.dmParticipants;
 
 function roomsAllowedFor(identity){
     const rooms = ["general", "doubts", "feedback_support"];
@@ -6929,10 +6956,16 @@ function canAccessRoom(identity, room){
     // A private conversation is readable by its two participants, and by an
     // admin — which is the point of admin oversight, and is why the portals
     // tell users that staff can review reported conversations.
+    //
+    // Membership is checked against every id this person is known by, not just
+    // the canonical one. A conversation an HR user started from the inbox is
+    // named with their email; one started from the chat widget carries their
+    // username. Matching only the canonical id locked people out of their own
+    // conversations — that is the "Forbidden" people were seeing.
     const pair = dmParticipants(room);
     if(pair){
         if(identity.role === "admin") return true;
-        return pair.indexOf(String(identity.id)) !== -1;
+        return chatIdentity.isParticipant(identity, room);
     }
     return false;
 }
@@ -6951,21 +6984,17 @@ function canDeleteIn(identity, room){
  *
  * The REST and upload endpoints used to take `role` + `employeeId`/`username`
  * from the query string, so anyone who knew an employee ID could read that
- * student's domain room. The Socket.IO handshake is separately verified by
- * verifyChatIdentity(); this covers the HTTP surface.
+ * student's domain room. Sockets read the same session via
+ * chatIdentityFromSocket(); this covers the HTTP surface.
+ *
+ * This delegates to services/chatIdentity so it cannot drift from the inbox
+ * again. Its own version had no admin branch, so every admin who clicked a
+ * conversation got a 401 and was thrown out to the login page, and it
+ * preferred an HR username where the inbox preferred their email, so the two
+ * built different room names for the same pair of people.
  */
 function chatIdentityFromSession(req) {
-    const s = req.session || {};
-    if (s.student) {
-        return { role: "student", id: s.student.employeeId, name: s.student.name || s.student.employeeId, domain: s.student.domain || "" };
-    }
-    if (s.coordinator) {
-        return { role: "coordinator", id: s.coordinator.username, name: s.coordinator.username, domain: s.coordinator.domain || "" };
-    }
-    if (s.hr) {
-        return { role: "hr", id: s.hr.username || s.hr.email, name: s.hr.name || s.hr.username, domain: "" };
-    }
-    return null;
+    return chatIdentity.identityFromSession(req.session);
 }
 
 // REST: load last 50 messages for a room (after permission check)
@@ -7035,14 +7064,51 @@ app.post("/chat/upload-image", (req, res) => {
     });
 });
 
+/**
+ * POST /chat/messages — send a message without a socket.
+ *
+ * The Socket.IO event is still the primary path, because it is what makes the
+ * message appear instantly for everyone in the room. This exists because a
+ * socket is not always available:
+ *
+ *   - college and office networks block WebSockets and long-polling upgrades;
+ *   - a proxy times the connection out and the client has not reconnected yet;
+ *   - the session expired, so the handshake is refused.
+ *
+ * Without it, every one of those looked identical to the person typing: "Your
+ * message did not send. Check your connection and try again." — advice that
+ * could not help, on a message that would never send however many times they
+ * tried.
+ *
+ * Identity comes from the session, exactly as it does on the socket, and the
+ * work is the same function, so a message sent this way is delivered to
+ * everyone in the room and raises the same notifications.
+ */
+app.post("/chat/messages", async (req, res) => {
+    try {
+        const identity = chatIdentityFromSession(req);
+        if (!identity) return res.status(401).json({ success: false, message: "Please sign in to continue." });
+
+        const result = await deliverChatMessage(identity, req.body || {});
+        if (!result.success) {
+            const status = result.code === "forbidden" ? 403
+                         : result.code === "blocked" ? 403
+                         : result.code === "server_error" ? 500 : 400;
+            return res.status(status).json(result);
+        }
+        res.json(result);
+    } catch (e) {
+        console.log("POST /chat/messages error:", e.message);
+        res.status(500).json({ success: false, message: "The message could not be sent. Please try again." });
+    }
+});
+
 // REST fallback for delete (Socket.IO event is the primary path)
 app.delete("/chat/messages/:messageId", async(req,res)=>{
 try{
-    const identity = await verifyChatIdentity({
-        role: (req.body && req.body.role) || req.query.role,
-        employeeId: (req.body && req.body.employeeId) || req.query.employeeId,
-        username: (req.body && req.body.username) || req.query.username
-    });
+    // From the session. Taking role/employeeId from the body or query meant
+    // anyone could delete anyone's message by naming a coordinator.
+    const identity = chatIdentityFromSession(req);
     if(!identity) return res.status(401).json({ success:false, message:"Unauthorized" });
     const msg = await Message.findById(req.params.messageId);
     if(!msg) return res.status(404).json({ success:false, message:"Message not found" });
@@ -8682,17 +8748,20 @@ function _blockerCanActIn(actor, targetRole, room){
     }
     return false;
 }
-async function _identityFromAuth(body){
-    return await verifyChatIdentity({
-        role: body && body.role,
-        employeeId: body && body.employeeId,
-        username: body && body.username
-    });
+/**
+ * The caller, from their session.
+ *
+ * This used to build an identity out of `role` + `employeeId`/`username` in the
+ * request body, so a request could simply declare itself a coordinator and
+ * silence anyone in a room.
+ */
+function _identityFromAuth(req){
+    return chatIdentityFromSession(req);
 }
 
 app.post("/chat/block", async(req,res)=>{
     try{
-        const actor = await _identityFromAuth(req.body);
+        const actor = _identityFromAuth(req);
         if(!actor) return res.status(401).json({ success:false, message:"Unauthorized" });
         const { chatRoom, blockedUser, blockedUserRole } = req.body || {};
         if(!chatRoom || !blockedUser || !blockedUserRole)
@@ -8710,7 +8779,7 @@ app.post("/chat/block", async(req,res)=>{
 
 app.post("/chat/unblock", async(req,res)=>{
     try{
-        const actor = await _identityFromAuth(req.body);
+        const actor = _identityFromAuth(req);
         if(!actor) return res.status(401).json({ success:false, message:"Unauthorized" });
         const { chatRoom, blockedUser } = req.body || {};
         const existing = await BlockList.findOne({ chatRoom, blockedUser });
@@ -8724,7 +8793,7 @@ app.post("/chat/unblock", async(req,res)=>{
 
 app.get("/chat/blocked-list", async(req,res)=>{
     try{
-        const actor = await _identityFromAuth(req.query);
+        const actor = _identityFromAuth(req);
         if(!actor) return res.status(401).json({ success:false, message:"Unauthorized" });
         const filter = actor.role === "hr" ? {} : { blockedBy: actor.id };
         const list = await BlockList.find(filter).sort({ blockedAt: -1 });
@@ -9696,6 +9765,15 @@ try {
     console.error("[Chat] Failed to mount moderation routes:", e.message);
 }
 
+// The student's half of an admin credential reset: set your own password, and
+// confirm or correct the email an admin changed for you.
+try {
+    app.use("/api/student/security", require("./routes/studentSecurity"));
+    console.log("[Security] Student credential routes mounted at /api/student/security");
+} catch(e) {
+    console.error("[Security] Failed to mount student credential routes:", e.message);
+}
+
 // Web push subscriptions, and the merged notification feed.
 try {
     app.use("/api/push", require("./routes/push"));
@@ -10009,19 +10087,152 @@ const io = new SocketIOServer(server, {
 
 io.use(async (socket, next) => {
     try{
-        // Admin first, proved by the session cookie rather than the claim.
-        let identity = await adminIdentityFromSocket(socket);
-        if(!identity) identity = await verifyChatIdentity(socket.handshake.auth || {});
+        // From the session cookie, for every role. The handshake's `auth`
+        // payload is ignored: it is supplied by the caller, so trusting it let
+        // anyone open a socket as anyone. Pages that still send one are
+        // unaffected — they are all signed in, and the cookie is what counts.
+        const identity = await chatIdentityFromSocket(socket);
         if(!identity) return next(new Error("unauthorized"));
         socket.data.identity = identity;
         // Auto-join all rooms this user is allowed in
         roomsAllowedFor(identity).forEach(r => socket.join(r));
         // Personal channel: how a DM reaches someone who has not opened that
         // conversation yet, and how an admin's direct message finds them.
+        //
+        // One channel per alias. A message addressed to an HR user's username
+        // was landing on a channel they had not joined — the notice never
+        // arrived, and because "is anybody listening?" then answered no, they
+        // got a push notification for a portal they had open in front of them.
+        Array.from(chatIdentity.aliasSet(identity)).forEach(a => socket.join("user::" + a));
         socket.join("user::" + identity.id);
         next();
     } catch(e){ next(new Error("auth_error")); }
 });
+
+/**
+ * Save a chat message and deliver it — the one implementation.
+ *
+ * Both the Socket.IO `send_message` event and POST /chat/messages call this, so
+ * the permission check, the block check, the fan-out and the push notification
+ * cannot drift apart between the two paths.
+ *
+ * `identity` always comes from the session. `payload` is only ever content.
+ */
+async function deliverChatMessage(identity, payload) {
+    try {
+        const room = payload && payload.room;
+        const text = (payload && payload.text || "").toString().trim().slice(0, 4000);
+
+        // An image-only message is valid. The URL must be one this server
+        // issued via POST /chat/upload-image — never an arbitrary address
+        // supplied by the caller, which would let chat embed remote content
+        // or a tracking pixel.
+        const rawImageUrl = (payload && payload.imageUrl || "").toString();
+        const imageUrl = /^\/uploads\/chat\/[A-Za-z0-9._-]+$/.test(rawImageUrl) ? rawImageUrl : null;
+        if (rawImageUrl && !imageUrl) { return { success:false, code:"bad_image", message:"That image could not be accepted." }; }
+
+        if(!room || (!text && !imageUrl)) { return { success:false, code:"empty", message:"There is nothing to send." }; }
+        if(!canAccessRoom(identity, room)) { return { success:false, code:"forbidden", message:"You cannot send messages in this conversation." }; }
+
+        // Feature 8: block check — sender silenced in this room?
+        try{
+            const blocked = await BlockList.findOne({ chatRoom: room, blockedUser: identity.id });
+            if(blocked){
+                return { success:false, code:"blocked", blocked:true,
+                    message:"You have been restricted from sending messages in this chat" };
+            }
+        }catch(_){}
+
+        const doc = await Message.create({
+            chatRoom:     room,
+            senderId:     identity.id,
+            senderName:   identity.name,
+            senderRole:   identity.role,
+            senderDomain: identity.domain || "",
+            message:      text,
+            imageUrl:     imageUrl,
+            imageName:    imageUrl ? String((payload && payload.imageName) || "image").slice(0, 120) : null,
+            imageMime:    imageUrl ? String((payload && payload.imageMime) || "").slice(0, 60) : null,
+            timestamp:    new Date()
+        });
+        // Deliver to everyone in the room EXCEPT people who have blocked
+        // the sender (or whom the sender has blocked). Emitting to the
+        // room and hiding it client-side would still put the text on the
+        // blocked person's machine, which is not a block.
+        let hidden = new Set();
+        try { hidden = await UserBlock.hiddenFor(identity.id); } catch(_) {}
+
+        if (hidden.size) {
+            const sockets = await io.in(room).fetchSockets();
+            for (const s of sockets) {
+                const other = s.data && s.data.identity;
+                if (other && hidden.has(String(other.id))) continue;
+                s.emit("receive_message", doc);
+            }
+        } else {
+            io.to(room).emit("receive_message", doc);
+        }
+
+        // A private message must also reach a recipient who does not have
+        // that conversation open — otherwise the first DM from anyone is
+        // invisible until they happen to look.
+        const pair = dmParticipants(room);
+        if (pair) {
+            // Against every id the sender is known by. Comparing only the
+            // canonical one made a person their own correspondent when the
+            // room had been named with their other id, so the notice went
+            // back to the sender and never reached the recipient.
+            // An admin writing into a conversation they are overseeing is
+            // not one of the two participants, so BOTH of them need
+            // telling. Anyone else has exactly one correspondent.
+            const mine = chatIdentity.otherParticipant(identity, room);
+            const recipients = mine !== null
+                ? [mine]
+                : (identity.role === "admin" ? pair.slice() : []);
+
+            for (const other of recipients) {
+                if (!other || hidden.has(other)) continue;
+                io.to("user::" + other).emit("dm_notice", {
+                    room, from: identity.name, fromId: identity.id, preview: text.slice(0, 80)
+                });
+
+                // ...and if their portal is CLOSED, a push notification, so
+                // the message reaches them the way any other app would
+                // reach them. Skipped when they already have the portal
+                // open somewhere: they can see it, and a buzz for a message
+                // that is already on screen is just noise.
+                try {
+                    const openSockets = await io.in("user::" + other).fetchSockets();
+                    if (!openSockets.length) {
+                        const pushService = require("./services/pushService");
+                        await pushService.sendToUser(other, {
+                            title: identity.name || "New message",
+                            body: imageUrl && !text ? "Sent you a photo" : text.slice(0, 140),
+                            // Straight into the conversation. Whether they
+                            // land signed in is decided by their session
+                            // cookie — there is deliberately no credential
+                            // in this URL.
+                            url: "/messages?to=" + encodeURIComponent(String(identity.id)),
+                            // One notification per sender, replaced as more
+                            // arrive, rather than a stack of twenty.
+                            tag: "dm-" + String(identity.id)
+                        });
+                    }
+                } catch (pushErr) {
+                    // A push that fails must never stop a message being
+                    // delivered. It is already saved and emitted.
+                    console.warn("[push] DM notification failed:", pushErr.message);
+                }
+            }
+        }
+
+
+        return { success: true, messageId: String(doc._id), doc: doc };
+    } catch (e) {
+        console.log("send_message error:", e.message);
+        return { success: false, code: "server_error", message: "The message could not be sent. Please try again." };
+    }
+}
 
 io.on("connection", (socket) => {
     const identity = socket.data.identity;
@@ -10033,106 +10244,8 @@ io.on("connection", (socket) => {
     });
 
     socket.on("send_message", async (payload, ack) => {
-        try{
-            const room = payload && payload.room;
-            const text = (payload && payload.text || "").toString().trim().slice(0, 4000);
-
-            // An image-only message is valid. The URL must be one this server
-            // issued via POST /chat/upload-image — never an arbitrary address
-            // supplied by the caller, which would let chat embed remote content
-            // or a tracking pixel.
-            const rawImageUrl = (payload && payload.imageUrl || "").toString();
-            const imageUrl = /^\/uploads\/chat\/[A-Za-z0-9._-]+$/.test(rawImageUrl) ? rawImageUrl : null;
-            if (rawImageUrl && !imageUrl) { if(ack) ack({ success:false, message:"bad_image" }); return; }
-
-            if(!room || (!text && !imageUrl)) { if(ack) ack({ success:false, message:"empty" }); return; }
-            if(!canAccessRoom(identity, room)) { if(ack) ack({ success:false, message:"forbidden" }); return; }
-
-            // Feature 8: block check — sender silenced in this room?
-            try{
-                const blocked = await BlockList.findOne({ chatRoom: room, blockedUser: identity.id });
-                if(blocked){
-                    if(ack) ack({ success:false, blocked:true, message:"You have been restricted from sending messages in this chat" });
-                    return;
-                }
-            }catch(_){}
-
-            const doc = await Message.create({
-                chatRoom:     room,
-                senderId:     identity.id,
-                senderName:   identity.name,
-                senderRole:   identity.role,
-                senderDomain: identity.domain || "",
-                message:      text,
-                imageUrl:     imageUrl,
-                imageName:    imageUrl ? String((payload && payload.imageName) || "image").slice(0, 120) : null,
-                imageMime:    imageUrl ? String((payload && payload.imageMime) || "").slice(0, 60) : null,
-                timestamp:    new Date()
-            });
-            // Deliver to everyone in the room EXCEPT people who have blocked
-            // the sender (or whom the sender has blocked). Emitting to the
-            // room and hiding it client-side would still put the text on the
-            // blocked person's machine, which is not a block.
-            let hidden = new Set();
-            try { hidden = await UserBlock.hiddenFor(identity.id); } catch(_) {}
-
-            if (hidden.size) {
-                const sockets = await io.in(room).fetchSockets();
-                for (const s of sockets) {
-                    const other = s.data && s.data.identity;
-                    if (other && hidden.has(String(other.id))) continue;
-                    s.emit("receive_message", doc);
-                }
-            } else {
-                io.to(room).emit("receive_message", doc);
-            }
-
-            // A private message must also reach a recipient who does not have
-            // that conversation open — otherwise the first DM from anyone is
-            // invisible until they happen to look.
-            const pair = dmParticipants(room);
-            if (pair) {
-                const other = pair.find(p => p !== String(identity.id));
-                if (other && !hidden.has(other)) {
-                    io.to("user::" + other).emit("dm_notice", {
-                        room, from: identity.name, fromId: identity.id, preview: text.slice(0, 80)
-                    });
-
-                    // ...and if their portal is CLOSED, a push notification, so
-                    // the message reaches them the way any other app would
-                    // reach them. Skipped when they already have the portal
-                    // open somewhere: they can see it, and a buzz for a message
-                    // that is already on screen is just noise.
-                    try {
-                        const openSockets = await io.in("user::" + other).fetchSockets();
-                        if (!openSockets.length) {
-                            const pushService = require("./services/pushService");
-                            await pushService.sendToUser(other, {
-                                title: identity.name || "New message",
-                                body: imageUrl && !text ? "Sent you a photo" : text.slice(0, 140),
-                                // Straight into the conversation. Whether they
-                                // land signed in is decided by their session
-                                // cookie — there is deliberately no credential
-                                // in this URL.
-                                url: "/messages?to=" + encodeURIComponent(String(identity.id)),
-                                // One notification per sender, replaced as more
-                                // arrive, rather than a stack of twenty.
-                                tag: "dm-" + String(identity.id)
-                            });
-                        }
-                    } catch (pushErr) {
-                        // A push that fails must never stop a message being
-                        // delivered. It is already saved and emitted.
-                        console.warn("[push] DM notification failed:", pushErr.message);
-                    }
-                }
-            }
-
-            if(ack) ack({ success:true, messageId: String(doc._id) });
-        } catch(e){
-            console.log("send_message error:", e.message);
-            if(ack) ack({ success:false, message:"server_error" });
-        }
+        const result = await deliverChatMessage(identity, payload || {});
+        if (ack) ack(result);
     });
 
     socket.on("delete_message", async (payload, ack) => {

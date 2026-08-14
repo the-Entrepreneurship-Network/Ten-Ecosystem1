@@ -1,7 +1,10 @@
 {
-  "name": "TEN Internship Portal",
+  "name": "TEN Portal",
   "short_name": "TEN Portal",
+  "description": "The Entrepreneurship Network portal — the whole ecosystem, from the front door.",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0b0d14",
   "theme_color": "#D4AF37",

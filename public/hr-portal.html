@@ -1708,7 +1708,9 @@ function switchHRActiveLevel(lvl) {
   }).then((result) => {
     if (result.isConfirmed) {
       // User says yes, redirect to HR login page so they can authenticate.
-      window.location.href = '/hr-login';
+      // Carry the level they asked for, or signing back in drops them on
+      // Level 1 and the switch they just confirmed is thrown away.
+      window.location.href = '/hr-login?level=' + encodeURIComponent(targetLvl);
     } else {
       // User says no, show insightful administrative message and revert selection.
       let roleTitle = hrLevelDetails[targetLvl].title.split(': ')[1];
@@ -5556,5 +5558,6 @@ setTimeout(loadPendingDocsBadge, 2000);
 </script>
 
 <script src="ten-motion.js"></script>
+<script src="/notify-orb.js" defer></script>
 </body>
 </html>
