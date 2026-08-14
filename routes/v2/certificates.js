@@ -217,7 +217,7 @@ async function handleMyCerts(req, res) {
           fellowship: getCertificatePrice("fellowship", student.tenure)
       };
 
-      return res.json({ success: true, ...result, paymentEnabled: paymentConfig.PAYMENT_ENABLED, prices: customPrices });
+      return res.json({ success: true, employeeId: student.employeeId, ...result, paymentEnabled: paymentConfig.PAYMENT_ENABLED, prices: customPrices });
     }
 
     const targetId = employeeId || headerEmployeeId;

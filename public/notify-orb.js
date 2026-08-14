@@ -6,14 +6,16 @@
  *
  * How it behaves, and why:
  *
- *   - On sign-in it appears ONCE, and only if something is actually pending.
- *     An orb that greets everyone with "0" is furniture; one that only ever
- *     shows up when there is something to see is worth glancing at. It enters
- *     expanded — "2 new messages" — so the first look needs no click, then
- *     settles down to a plain circle a few seconds later.
+ *   - It appears once at sign-in. With something pending it enters EXPANDED —
+ *     "2 new messages · 1 update" — so the first look needs no click, then
+ *     settles to a plain circle a few seconds later. With nothing pending it
+ *     appears quietly, no badge and no greeting: it is the way into the
+ *     notification centre, and one that only ever materialises on a busy day
+ *     reads as a feature that was never built.
  *
- *   - While the portal is already open and something arrives, it BUZZES: a
- *     short physical shake, plus the phone's own vibration where the browser
+ *   - While the portal is already open and something arrives, it BUZZES —
+ *     once per item. Two messages shake it twice, three shake it three times,
+ *     and the phone's own vibration carries the same count where the browser
  *     allows it. A badge that silently ticks from 1 to 2 is not noticed by
  *     someone reading the middle of the page.
  *
@@ -71,7 +73,7 @@
 
       '#ten-orb-label{max-width:0;overflow:hidden;white-space:nowrap;font-size:13px;font-weight:700;',
       'opacity:0;transition:max-width .38s ease,opacity .28s ease,padding .38s ease;padding:0;}',
-      '#ten-orb.open #ten-orb-label{max-width:min(52vw,230px);opacity:1;padding:0 18px 0 2px;}',
+      '#ten-orb.open #ten-orb-label{max-width:min(46vw,230px);opacity:1;padding:0 18px 0 2px;text-overflow:ellipsis;}',
 
       '#ten-orb-x{display:none;position:absolute;top:-7px;left:-7px;width:22px;height:22px;',
       'border-radius:50%;background:#111a2e;border:1px solid rgba(255,255,255,.18);color:#94a3b8;',
@@ -85,7 +87,7 @@
       '@keyframes ten-orb-pulse{0%{opacity:.65;transform:scale(1);}70%{opacity:0;transform:scale(1.35);}100%{opacity:0;transform:scale(1.35);}}',
 
       // The buzz: something arrived while you were looking elsewhere.
-      '#ten-orb.buzz{animation:ten-orb-buzz .82s cubic-bezier(.36,.07,.19,.97) 2;}',
+      '#ten-orb.buzz{animation:ten-orb-buzz .82s cubic-bezier(.36,.07,.19,.97) var(--ten-orb-shakes,2);}',
       '@keyframes ten-orb-buzz{',
       '10%,90%{transform:translateY(-50%) scale(1) translateX(-2px) rotate(-6deg);}',
       '20%,80%{transform:translateY(-50%) scale(1.06) translateX(4px) rotate(7deg);}',
@@ -97,7 +99,7 @@
       '@media (max-width:820px){',
       '#ten-orb{right:12px;top:auto;bottom:calc(128px + env(safe-area-inset-bottom));transform:translateY(0) scale(0);}',
       '#ten-orb.in{transform:translateY(0) scale(1);}',
-      '#ten-orb.buzz{animation:ten-orb-buzz-m .82s cubic-bezier(.36,.07,.19,.97) 2;}',
+      '#ten-orb.buzz{animation:ten-orb-buzz-m .82s cubic-bezier(.36,.07,.19,.97) var(--ten-orb-shakes,2);}',
       '@keyframes ten-orb-buzz-m{',
       '10%,90%{transform:translateX(-2px) rotate(-6deg);}',
       '20%,80%{transform:translateX(4px) rotate(7deg);}',
@@ -193,27 +195,49 @@
    * the page and silently ignores it otherwise, which is fine — the shake still
    * runs.
    */
-  function buzz() {
+  /**
+   * Buzz once for each thing that arrived.
+   *
+   * Two messages shake it twice, three shake it three times — the count is
+   * felt, not just read. Capped, because a burst of ten should get attention,
+   * not hold the screen hostage.
+   */
+  function buzz(times) {
     build();
     show(true);
+    var n = Math.max(1, Math.min(5, times || 1));
+
     clearTimeout(buzzTimer);
     el.classList.remove('buzz');
     // Reflow, or re-adding the class in the same frame does not restart it.
     void el.offsetWidth;
+    el.style.setProperty('--ten-orb-shakes', String(n));
     el.classList.add('buzz');
-    buzzTimer = setTimeout(function () { if (el) el.classList.remove('buzz'); }, 1800);
+    buzzTimer = setTimeout(function () {
+      if (el) { el.classList.remove('buzz'); el.style.removeProperty('--ten-orb-shakes'); }
+    }, 900 * n + 400);
 
     try {
-      if (navigator.vibrate) navigator.vibrate([90, 60, 90]);
+      // One pulse per item, so a phone in a pocket carries the same count.
+      var pattern = [];
+      for (var i = 0; i < n; i++) pattern.push(90, 110);
+      if (navigator.vibrate) navigator.vibrate(pattern);
     } catch (e) { /* not permitted here; the shake carries it */ }
   }
 
   /* ── data ────────────────────────────────────────────────────────────── */
   function phrase(d) {
     var m = d.messages || 0, n = d.notifications || 0;
-    if (m && n) return m + ' new message' + (m > 1 ? 's' : '') + ' \u00b7 ' + n + ' update' + (n > 1 ? 's' : '');
-    if (m) return m + ' new message' + (m > 1 ? 's' : '');
-    if (n) return n + ' new notification' + (n > 1 ? 's' : '');
+    // A phone has room for one clause, not two. Both halves would truncate
+    // mid-word, and half a sentence is worse than the shorter true one.
+    var tight = window.innerWidth < 520;
+    if (m && n) {
+      return tight
+        ? (m + n) + ' new'
+        : m + ' new message' + (m > 1 ? 's' : '') + ' \u00b7 ' + n + ' update' + (n > 1 ? 's' : '');
+    }
+    if (m) return m + (tight ? ' new message' + (m > 1 ? 's' : '') : ' new message' + (m > 1 ? 's' : ''));
+    if (n) return n + (tight ? ' new alert' + (n > 1 ? 's' : '') : ' new notification' + (n > 1 ? 's' : ''));
     return '';
   }
 
@@ -239,13 +263,21 @@
         // they are looking at.
         if (onOwnPage()) { hide(); return; }
 
-        if (total === 0) { hide(); return; }
+        // A quiet orb still appears once at sign-in: it is the way into the
+        // notification centre, and one that only ever materialises on a busy
+        // day reads as a feature that was never built. No badge, no greeting,
+        // no buzz — just a button that is there.
+        if (total === 0) {
+          if (cause === 'first' && !dismissed) show(false);
+          else if (!el || !el.classList.contains('in')) hide();
+          return;
+        }
 
         // Any increase after the first count is an arrival, including 0 -> 1 —
         // which is the case that most deserves a buzz, and the one an earlier
         // `before !== 0` guard was quietly swallowing.
         if (cause === 'live' || (wasReady && total > before)) {
-          buzz();
+          buzz(Math.max(1, total - before));
           return;
         }
         if (dismissed) return;

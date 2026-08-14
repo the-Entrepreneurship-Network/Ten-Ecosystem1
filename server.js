@@ -10229,7 +10229,19 @@ async function deliverChatMessage(identity, payload) {
 
         return { success: true, messageId: String(doc._id), doc: doc };
     } catch (e) {
-        console.log("send_message error:", e.message);
+        // Say WHAT went wrong. A bare "could not be sent" is unactionable for
+        // the person typing and undiagnosable from a screenshot — an admin's
+        // messages were failing schema validation for weeks behind that string.
+        console.error("[chat] send failed:", {
+            room: payload && payload.room,
+            senderId: identity && identity.id,
+            senderRole: identity && identity.role,
+            error: e && (e.stack || e.message)
+        });
+        if (e && e.name === "ValidationError") {
+            const why = Object.values(e.errors || {}).map(x => x.message).join("; ");
+            return { success: false, code: "invalid", message: why || "That message was rejected." };
+        }
         return { success: false, code: "server_error", message: "The message could not be sent. Please try again." };
     }
 }
