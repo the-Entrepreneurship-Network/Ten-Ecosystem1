@@ -430,6 +430,9 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
     <div class="nav-section-title">Promotions</div>
     <button class="nav-btn" onclick="showView('promotions')" data-view="promotions"><span class="icon">🚀</span> Promotions</button>
     <div class="nav-divider"></div>
+    <div class="nav-section-title">Home page</div>
+    <button class="nav-btn" onclick="showView('contributors')" data-view="contributors"><span class="icon">🙌</span> Contributors</button>
+    <div class="nav-divider"></div>
     <div class="nav-section-title">Leaderboard</div>
     <button class="nav-btn" onclick="showView('leaderboard')" data-view="leaderboard"><span class="icon">🏆</span> Performance Leaderboard</button>
     <div class="nav-divider"></div>
@@ -1350,6 +1353,49 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
   </div>
 
   <!-- PROMOTIONS -->
+  <!-- CONTRIBUTORS: the "Built with" strip on the public home page -->
+  <div class="view" id="view-contributors">
+    <div class="section-header" style="margin-bottom:8px;">
+      <div class="section-title">🙌 Contributors on the home page</div>
+      <button class="send-btn" style="padding:10px 20px;font-size:13px;" onclick="loadContributors()">↻ Refresh</button>
+    </div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.7;max-width:760px;">
+      Type an Employee ID and the student&rsquo;s name, domain and photo fill in from their own record &mdash;
+      you only add the line about what they contributed. Leave the ID blank to add someone who is not a
+      TEN student. Nothing appears on the site until <strong>Published</strong> is on.
+    </p>
+
+    <div style="background:rgba(255,255,255,.02);border:1px solid rgba(245,197,66,.14);border-radius:16px;padding:22px;margin-bottom:26px;">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px;">
+        <div class="form-group-hr" style="margin:0;">
+          <label class="form-label">Employee ID</label>
+          <input class="form-input" id="cbEmpId" placeholder="TEN/WEB/1630" style="min-width:200px;">
+        </div>
+        <button class="send-btn" style="padding:12px 22px;font-size:13px;" onclick="contribLookup()">Look up</button>
+        <span id="cbLookupMsg" style="font-size:12.5px;color:var(--muted);"></span>
+      </div>
+
+      <div class="grid2" style="display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));">
+        <div class="form-group-hr"><label class="form-label">Name *</label><input class="form-input" id="cbName" placeholder="Anmol Kumar"></div>
+        <div class="form-group-hr"><label class="form-label">Domain</label><input class="form-input" id="cbDomain" placeholder="Web Development"></div>
+        <div class="form-group-hr"><label class="form-label">Photo</label><input class="form-input" id="cbPhoto" type="file" accept="image/jpeg,image/png,image/webp"></div>
+        <div class="form-group-hr"><label class="form-label">Order (lower first)</label><input class="form-input" id="cbOrder" type="number" value="0"></div>
+      </div>
+      <div class="form-group-hr"><label class="form-label">What they contributed</label>
+        <input class="form-input" id="cbNote" maxlength="240" placeholder="Rebuilt the attendance calendar and found the Sunday bug.">
+      </div>
+      <label style="display:flex;align-items:center;gap:9px;font-size:13px;color:#cbd5e1;margin:12px 0 16px;cursor:pointer;">
+        <input type="checkbox" id="cbPublished" checked style="width:16px;height:16px;accent-color:#D4AF37;">
+        Publish to the home page now
+      </label>
+      <button class="send-btn" style="padding:12px 26px;font-size:13px;" onclick="contribSave()" id="cbSaveBtn">Post contributor</button>
+      <button class="send-btn" style="padding:12px 20px;font-size:13px;background:rgba(255,255,255,.06);color:#cbd5e1;display:none;" onclick="contribCancelEdit()" id="cbCancelBtn">Cancel edit</button>
+      <div id="cbFormMsg" style="margin-top:12px;font-size:13px;"></div>
+    </div>
+
+    <div id="contribList"><div class="loading"><div class="spinner"></div></div></div>
+  </div>
+
   <div class="view" id="view-promotions">
     <div class="doc-tabs">
       <button class="doc-tab active" onclick="switchPromoTab('coord',this)">⬆️ Promote to Coordinator</button>
@@ -1696,25 +1742,25 @@ const hrLevelDetails = {
     title: "Level 5: HR Associate Director",
     desc: "Active Focus: High-level recruitment strategies, coordinator approvals, promotions management, and certificate boards.",
     icon: "👑",
-    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard', 'ecosystem', 'submissions', 'certificates', 'star-submissions', 'promotions']
+    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard', 'ecosystem', 'submissions', 'certificates', 'star-submissions', 'promotions', 'contributors']
   },
   6: {
     title: "Level 6: Jr HR Director",
     desc: "Active Focus: Full operational oversight, official letter/LOR generation, global broadcast communications, and escalation desk.",
     icon: "💼",
-    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard', 'ecosystem', 'submissions', 'insights', 'domains', 'certificates', 'star-submissions', 'promotions', 'documents', 'send-notif', 'notif-history']
+    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard', 'ecosystem', 'submissions', 'insights', 'domains', 'certificates', 'star-submissions', 'promotions', 'documents', 'send-notif', 'notif-history', 'contributors']
   },
   7: {
     title: "Level 7: HR Director & HRBP",
     desc: "Active Focus: Executive leadership, policy engineering, brand promotions, and global ecosystem administration dashboard.",
     icon: "🏛️",
-    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard', 'ecosystem', 'submissions', 'insights', 'domains', 'certificates', 'star-submissions', 'promotions', 'documents', 'send-notif', 'notif-history']
+    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard', 'ecosystem', 'submissions', 'insights', 'domains', 'certificates', 'star-submissions', 'promotions', 'documents', 'send-notif', 'notif-history', 'contributors']
   },
   8: {
     title: "Level 8: Vice President",
     desc: "Active Focus: Supreme system orchestrations, venture coaching, startup diagnostics, and executive mentorship loops.",
     icon: "✨",
-    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard', 'ecosystem', 'submissions', 'insights', 'domains', 'certificates', 'star-submissions', 'promotions', 'documents', 'send-notif', 'notif-history']
+    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard', 'ecosystem', 'submissions', 'insights', 'domains', 'certificates', 'star-submissions', 'promotions', 'documents', 'send-notif', 'notif-history', 'contributors']
   }
 };
 
@@ -2223,7 +2269,7 @@ function showView(v){
   document.querySelectorAll('.nav-btn').forEach(el=>el.classList.remove('active'));
   document.getElementById('view-'+v).classList.add('active');
   document.querySelector(`[data-view="${v}"]`)?.classList.add('active');
-  const t={overview:'<span>Dashboard</span> Overview',ecosystem:'<span>TEN</span> Ecosystem Control Center',insights:'<span>Insights</span>',students:'<span>All</span> Students',tracker:'<span>Internship</span> Tracker',submissions:'<span>Task</span> Submissions',domains:'<span>Domain</span> Analytics',documents:'<span>Generate</span> Documents','send-notif':'<span>Send</span> Notification','notif-history':'<span>Notification</span> History','attendance-monitor':'<span>Attendance</span> Monitor',certificates:'<span>Certificate</span> Approvals','star-submissions':'<span>Star Performer</span> Submissions',feedback:'<span>Student</span> Feedback','cert-apps':'<span>Certificate</span> Requests',promotions:'<span>Promotions</span>',leaderboard:'<span>Performance</span> Leaderboard'};
+  const t={overview:'<span>Dashboard</span> Overview',ecosystem:'<span>TEN</span> Ecosystem Control Center',insights:'<span>Insights</span>',students:'<span>All</span> Students',tracker:'<span>Internship</span> Tracker',submissions:'<span>Task</span> Submissions',domains:'<span>Domain</span> Analytics',documents:'<span>Generate</span> Documents','send-notif':'<span>Send</span> Notification','notif-history':'<span>Notification</span> History','attendance-monitor':'<span>Attendance</span> Monitor',certificates:'<span>Certificate</span> Approvals','star-submissions':'<span>Star Performer</span> Submissions',feedback:'<span>Student</span> Feedback','cert-apps':'<span>Certificate</span> Requests',promotions:'<span>Promotions</span>',contributors:'<span>Home page</span> Contributors',leaderboard:'<span>Performance</span> Leaderboard'};
   document.getElementById('pageTitle').innerHTML=t[v]||v;
   if(v==='cert-apps') loadCertQueues();
   if(v==='ecosystem') loadEcosystem();
@@ -2239,6 +2285,7 @@ function showView(v){
   if(v==='star-submissions') loadStarSubmissions();
   if(v==='feedback') loadHRFeedback();
   if(v==='promotions') loadPromoCandidatesStudents();
+  if(v==='contributors') loadContributors();
   if(v==='leaderboard'){
     if(window.TenExtras){
       TenExtras.injectHR({ mountId: "ten-extras-hr-mount" });
@@ -3893,6 +3940,166 @@ ${qrDataUrl ? `<div style="text-align:center"><img src="${qrDataUrl}" width="80"
 }
 
 /* ============ CERTIFICATE APPROVALS ============ */
+/* ── Contributors: the "Built with" strip on the public home page ──────────
+   Level 5 and above. The Employee ID lookup fills the fields from the
+   student's own record so HR types one line, not four — and so the name on
+   the site cannot end up spelled two ways. The row is then a copy; see
+   models/Contributor.js. */
+let CONTRIB_EDIT_ID = null;
+
+function cbEsc(v){
+  return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+const cbEl = (id) => document.getElementById(id);
+
+async function contribLookup(){
+  const id = (cbEl('cbEmpId').value || '').trim();
+  const msg = cbEl('cbLookupMsg');
+  if(!id){ msg.textContent = 'Enter an Employee ID, or fill the fields by hand.'; return; }
+  msg.textContent = 'Looking up…';
+  try{
+    const r = await fetch('/api/v2/hr/contributors/lookup/' + encodeURIComponent(id), { credentials:'same-origin' });
+    const d = await r.json();
+    if(!d.success){ msg.style.color = '#f87171'; msg.textContent = d.message || 'Not found.'; return; }
+    cbEl('cbName').value = d.student.name || '';
+    cbEl('cbDomain').value = d.student.domain || '';
+    cbEl('cbName').dataset.studentId = d.student.studentId || '';
+    cbEl('cbName').dataset.photoUrl = d.student.photoUrl || '';
+    msg.style.color = '#34d399';
+    msg.textContent = 'Found ' + d.student.name + (d.student.photoUrl ? '' : ' — no photo on file, upload one below.');
+  }catch(e){ msg.style.color='#f87171'; msg.textContent = 'Could not reach the server.'; }
+}
+
+async function contribSave(){
+  const out = cbEl('cbFormMsg');
+  const name = (cbEl('cbName').value || '').trim();
+  if(!name){ out.style.color='#f87171'; out.textContent='A contributor needs a name.'; return; }
+
+  const fd = new FormData();
+  fd.append('employeeId', (cbEl('cbEmpId').value||'').trim());
+  fd.append('studentId', cbEl('cbName').dataset.studentId || '');
+  fd.append('name', name);
+  fd.append('domain', (cbEl('cbDomain').value||'').trim());
+  fd.append('contribution', (cbEl('cbNote').value||'').trim());
+  fd.append('order', cbEl('cbOrder').value || 0);
+  fd.append('published', cbEl('cbPublished').checked ? 'true' : 'false');
+  fd.append('photoUrl', cbEl('cbName').dataset.photoUrl || '');
+  const file = cbEl('cbPhoto').files[0];
+  if(file) fd.append('photo', file);
+
+  cbEl('cbSaveBtn').disabled = true;
+  out.style.color = 'var(--muted)'; out.textContent = 'Saving…';
+  try{
+    const url = CONTRIB_EDIT_ID ? '/api/v2/hr/contributors/' + CONTRIB_EDIT_ID : '/api/v2/hr/contributors';
+    const r = await fetch(url, { method: CONTRIB_EDIT_ID ? 'PUT' : 'POST', credentials:'same-origin', body: fd });
+    const d = await r.json();
+    if(!d.success) throw new Error(d.message || 'Could not save.');
+    out.style.color = '#34d399';
+    out.textContent = CONTRIB_EDIT_ID ? 'Updated.' : 'Posted. It is on the home page now.';
+    contribCancelEdit(true);
+    loadContributors();
+  }catch(e){ out.style.color='#f87171'; out.textContent = e.message; }
+  finally{ cbEl('cbSaveBtn').disabled = false; }
+}
+
+function contribCancelEdit(keepMsg){
+  CONTRIB_EDIT_ID = null;
+  ['cbEmpId','cbName','cbDomain','cbNote'].forEach(id => cbEl(id).value = '');
+  cbEl('cbOrder').value = 0;
+  cbEl('cbPhoto').value = '';
+  cbEl('cbPublished').checked = true;
+  cbEl('cbName').dataset.studentId = '';
+  cbEl('cbName').dataset.photoUrl = '';
+  cbEl('cbLookupMsg').textContent = '';
+  cbEl('cbSaveBtn').textContent = 'Post contributor';
+  cbEl('cbCancelBtn').style.display = 'none';
+  if(!keepMsg) cbEl('cbFormMsg').textContent = '';
+}
+
+let CONTRIB_ROWS = [];
+async function loadContributors(){
+  const box = cbEl('contribList');
+  if(!box) return;
+  try{
+    const r = await fetch('/api/v2/hr/contributors', { credentials:'same-origin' });
+    const d = await r.json();
+    CONTRIB_ROWS = d.contributors || [];
+    if(!CONTRIB_ROWS.length){
+      box.innerHTML = '<p style="color:var(--muted);font-size:13.5px;padding:24px 0;">' +
+        'Nobody yet. The strip stays hidden on the home page until you post someone.</p>';
+      return;
+    }
+    box.innerHTML = '<div class="table-wrap"><div style="overflow-x:auto;"><table><thead><tr>' +
+      '<th>Person</th><th>Domain</th><th>Contribution</th><th>Order</th><th>On the site</th><th></th>' +
+      '</tr></thead><tbody>' +
+      CONTRIB_ROWS.map(function(c, i){
+        return '<tr>' +
+          '<td><div style="display:flex;align-items:center;gap:10px;">' +
+            (c.photoUrl ? '<img src="' + cbEsc(c.photoUrl) + '" alt="" style="width:34px;height:34px;border-radius:50%;object-fit:cover;">' : '') +
+            '<div><div style="font-weight:700;">' + cbEsc(c.name) + '</div>' +
+            (c.employeeId ? '<div style="font-size:11px;color:var(--muted);">' + cbEsc(c.employeeId) + '</div>' : '') +
+            '</div></div></td>' +
+          '<td style="font-size:12.5px;">' + cbEsc(c.domain || '—') + '</td>' +
+          '<td style="font-size:12.5px;max-width:320px;">' + cbEsc(c.contribution || '—') + '</td>' +
+          '<td>' + (c.order || 0) + '</td>' +
+          '<td>' + (c.published
+            ? '<span style="color:#34d399;font-weight:700;font-size:12px;">Published</span>'
+            : '<span style="color:#9aa4bf;font-size:12px;">Hidden</span>') + '</td>' +
+          '<td style="white-space:nowrap;">' +
+            '<button class="send-btn" style="padding:6px 12px;font-size:11.5px;" onclick="contribEdit(' + i + ')">Edit</button> ' +
+            '<button class="send-btn" style="padding:6px 12px;font-size:11.5px;background:rgba(255,255,255,.06);color:#cbd5e1;" onclick="contribTogglePublish(' + i + ')">' +
+              (c.published ? 'Unpublish' : 'Publish') + '</button> ' +
+            '<button class="send-btn" style="padding:6px 12px;font-size:11.5px;background:rgba(244,63,94,.14);color:#f87171;" onclick="contribDelete(' + i + ')">Remove</button>' +
+          '</td></tr>';
+      }).join('') + '</tbody></table></div></div>';
+  }catch(e){
+    box.innerHTML = '<p style="color:#f87171;font-size:13px;">Could not load contributors: ' + cbEsc(e.message) + '</p>';
+  }
+}
+
+function contribEdit(i){
+  const c = CONTRIB_ROWS[i];
+  if(!c) return;
+  CONTRIB_EDIT_ID = c._id;
+  cbEl('cbEmpId').value = c.employeeId || '';
+  cbEl('cbName').value = c.name || '';
+  cbEl('cbDomain').value = c.domain || '';
+  cbEl('cbNote').value = c.contribution || '';
+  cbEl('cbOrder').value = c.order || 0;
+  cbEl('cbPublished').checked = !!c.published;
+  cbEl('cbName').dataset.photoUrl = c.photoUrl || '';
+  cbEl('cbName').dataset.studentId = c.studentId || '';
+  cbEl('cbSaveBtn').textContent = 'Save changes';
+  cbEl('cbCancelBtn').style.display = '';
+  cbEl('cbEmpId').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+async function contribTogglePublish(i){
+  const c = CONTRIB_ROWS[i];
+  if(!c) return;
+  const fd = new FormData();
+  fd.append('published', c.published ? 'false' : 'true');
+  const r = await fetch('/api/v2/hr/contributors/' + c._id, { method:'PUT', credentials:'same-origin', body: fd });
+  const d = await r.json();
+  if(d.success) loadContributors();
+}
+
+async function contribDelete(i){
+  const c = CONTRIB_ROWS[i];
+  if(!c) return;
+  const ok = await Swal.fire({
+    icon:'warning', title:'Remove ' + c.name + '?',
+    text:'They come off the home page. This does not touch their student record.',
+    showCancelButton:true, confirmButtonText:'Remove', confirmButtonColor:'#ef4444',
+    background:'#0c1220', color:'#f0eee8'
+  });
+  if(!ok.isConfirmed) return;
+  const r = await fetch('/api/v2/hr/contributors/' + c._id, { method:'DELETE', credentials:'same-origin' });
+  const d = await r.json();
+  if(d.success) loadContributors();
+}
+
 function switchCertTab(tab,btn){
   document.querySelectorAll('#view-certificates .doc-tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.cert-panel').forEach(p=>p.classList.remove('active'));

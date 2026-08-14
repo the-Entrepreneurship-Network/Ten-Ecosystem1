@@ -429,4 +429,141 @@ router.get("/document-history", requireHR, async (req, res) => {
   }
 });
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Contributors — the "Built with" strip on the home page
+
+   Level 5 (HR Associate Director) and above. HR types an Employee ID, the
+   student's own record fills in the name, domain and photo, HR adds one line
+   about what they did and presses Post.
+
+   The row is a COPY, not a join — see models/Contributor.js for why. HR may
+   edit any field before posting, which is also how somebody who is not a TEN
+   student gets on the strip: leave the ID blank and type the three fields.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const Contributor = require("../../models/Contributor");
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
+
+const contribDir = path.join(__dirname, "../../uploads/contributors");
+try { fs.mkdirSync(contribDir, { recursive: true }); } catch (_) {}
+
+/* Same shape as the document upload in routes/v2/documents.js, with an image
+   whitelist instead of a PDF one. Extension AND mimetype must both agree —
+   either alone is trivially lied about. */
+const photoUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_, __, cb) => cb(null, contribDir),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname || "").toLowerCase();
+      cb(null, "c_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8) + ext);
+    }
+  }),
+  limits: { fileSize: 4 * 1024 * 1024 },
+  fileFilter: (_, file, cb) => {
+    const ext = path.extname(file.originalname || "").toLowerCase();
+    const okExt = [".jpg", ".jpeg", ".png", ".webp"].includes(ext);
+    const okMime = /^image\/(jpeg|png|webp)$/.test(file.mimetype || "");
+    if (okExt && okMime) cb(null, true);
+    else cb(new Error("Only JPG, PNG or WEBP images are allowed."));
+  }
+});
+
+const clearCache = (req) => {
+  const fn = req.app && req.app.get("clearContributorCache");
+  if (typeof fn === "function") fn();
+};
+
+const trim = (v, max) => String(v == null ? "" : v).trim().slice(0, max);
+
+/** Look a student up so HR does not retype what the portal already knows. */
+router.get("/contributors/lookup/:employeeId", requireHR, async (req, res) => {
+  try {
+    const s = await Student.findOne({ employeeId: String(req.params.employeeId) },
+      "name fullName employeeId domain profilePhoto photoUrl").lean();
+    if (!s) return res.status(404).json({ success: false, message: "No student with that Employee ID." });
+    res.json({
+      success: true,
+      student: {
+        employeeId: s.employeeId,
+        studentId: s._id,
+        name: s.name || s.fullName || "",
+        domain: s.domain || "",
+        photoUrl: s.profilePhoto || s.photoUrl || ""
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+router.get("/contributors", requireHR, async (req, res) => {
+  try {
+    const rows = await Contributor.find({}).sort({ order: 1, createdAt: -1 }).limit(200).lean();
+    res.json({ success: true, contributors: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message, contributors: [] });
+  }
+});
+
+router.post("/contributors", requireHR, photoUpload.single("photo"), async (req, res) => {
+  try {
+    const b = req.body || {};
+    const name = trim(b.name, 120);
+    if (!name) return res.status(400).json({ success: false, message: "A contributor needs a name." });
+
+    const who = (req.hrUser && (req.hrUser.name || req.hrUser.username)) || "HR";
+    const row = await Contributor.create({
+      employeeId: trim(b.employeeId, 60),
+      studentId: b.studentId || null,
+      name,
+      domain: trim(b.domain, 120),
+      contribution: trim(b.contribution, 240),
+      // An uploaded file wins; otherwise whatever the lookup filled in.
+      photoUrl: req.file ? "/uploads/contributors/" + req.file.filename : trim(b.photoUrl, 400),
+      published: String(b.published) === "true",
+      order: Number(b.order) || 0,
+      postedBy: who
+    });
+    clearCache(req);
+    res.json({ success: true, contributor: row });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+router.put("/contributors/:id", requireHR, photoUpload.single("photo"), async (req, res) => {
+  try {
+    const b = req.body || {};
+    const set = {};
+    if (b.name !== undefined) set.name = trim(b.name, 120);
+    if (b.domain !== undefined) set.domain = trim(b.domain, 120);
+    if (b.contribution !== undefined) set.contribution = trim(b.contribution, 240);
+    if (b.order !== undefined) set.order = Number(b.order) || 0;
+    if (b.published !== undefined) set.published = String(b.published) === "true";
+    if (req.file) set.photoUrl = "/uploads/contributors/" + req.file.filename;
+    else if (b.photoUrl !== undefined) set.photoUrl = trim(b.photoUrl, 400);
+
+    if (set.name === "") return res.status(400).json({ success: false, message: "A contributor needs a name." });
+
+    const row = await Contributor.findByIdAndUpdate(req.params.id, { $set: set }, { new: true }).lean();
+    if (!row) return res.status(404).json({ success: false, message: "Not found." });
+    clearCache(req);
+    res.json({ success: true, contributor: row });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+router.delete("/contributors/:id", requireHR, async (req, res) => {
+  try {
+    const row = await Contributor.findByIdAndDelete(req.params.id);
+    if (!row) return res.status(404).json({ success: false, message: "Not found." });
+    clearCache(req);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 module.exports = router;
