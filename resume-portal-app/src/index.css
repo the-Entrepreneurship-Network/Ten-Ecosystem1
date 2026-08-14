@@ -27,6 +27,14 @@ body {
   letter-spacing: -0.04em;
 }
 
+/* one-shot impact effects for the cut-the-stone sequence */
+.cut-shake { animation: cutshake .5s; }
+@keyframes cutshake { 20% { transform: translateX(-10px); } 40% { transform: translateX(9px); } 60% { transform: translateX(-6px); } 80% { transform: translateX(4px); } }
+.cut-flash { animation: cutflash .5s forwards; }
+@keyframes cutflash { 0% { opacity: .9; } 100% { opacity: 0; } }
+.fade-in { animation: fadein .8s both; }
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+
 /* Credit-card-site style ghost trail on big dark headings */
 .ghost-heading {
   text-shadow:
