@@ -3284,6 +3284,27 @@ async function clearFailedAttempts(user, userModel) {
 
 // ================= LOGIN =================
 
+/**
+ * Sign out, properly.
+ *
+ * Every "Logout" button in the portal clears sessionStorage and navigates to
+ * the login page, which looks like signing out and is not: the session cookie
+ * survives, so the API still recognises the browser and going back to any
+ * portal page signs straight back in. That matters on a shared or college
+ * machine, and it matters for the "do this later" link on the credential-reset
+ * panel, which has to actually end the session.
+ *
+ * Always answers success — a sign-out that reports failure leaves someone
+ * stuck on a page they are trying to leave.
+ */
+app.post("/logout", (req, res) => {
+    if (!req.session) return res.json({ success: true });
+    req.session.destroy(() => {
+        res.clearCookie("ten.sid");
+        res.json({ success: true });
+    });
+});
+
 app.post("/login", loginIpLimiter, loginLimiter, async(req,res)=>{
 try{
     let mentorProfileObj = null;
@@ -5779,7 +5800,9 @@ try{
     //    exact-username match.
     const legacy = COORDINATORS[identifier];
     if(legacy && await verifyCredentialPassword(legacy, password)){
-        const coordIdentity = { username:identifier, domain:legacy.domain };
+        // email and name are carried so chat can recognise this person under
+        // every id they may already appear as in a conversation's room name.
+        const coordIdentity = { username:identifier, email: legacy.email || "", name: legacy.name || identifier, domain:legacy.domain };
         if (req.session) req.session.coordinator = coordIdentity;
         return res.json({ success:true, coordinator: coordIdentity });
     }
@@ -5837,6 +5860,8 @@ try{
             await clearFailedAttempts(dbCoord, Coordinator);
             const coordIdentity = {
                 username: dbCoord.username || dbCoord.email,
+                email:    dbCoord.email || "",
+                name:     dbCoord.name || dbCoord.username || dbCoord.email,
                 domain:   dbCoord.domain
             };
             if (req.session) req.session.coordinator = coordIdentity;
@@ -6800,18 +6825,42 @@ try{
 // (employeeId for students, username for coord/HR) and verified against DB or
 // the HR_ACCOUNTS / COORDINATORS maps before any chat action is allowed.
 
+/**
+ * Every id a socket identity may appear as inside an existing room name.
+ *
+ * The canonical id is first; the rest exist because the same person has been
+ * written into room names under more than one spelling over time. See
+ * services/chatIdentity.js — the alias list is what keeps those conversations
+ * reachable instead of silently orphaning them.
+ */
+function withAliases(identity, extra){
+    if(!identity) return null;
+    const list = [identity.id].concat(extra || []);
+    const seen = new Set();
+    identity.aliases = list
+        .map(v => (v === undefined || v === null) ? "" : String(v).trim())
+        .filter(v => {
+            if(!v) return false;
+            const k = v.toLowerCase();
+            if(seen.has(k)) return false;
+            seen.add(k);
+            return true;
+        });
+    return identity;
+}
+
 async function verifyChatIdentity(claim){
     if(!claim || !claim.role) return null;
     if(claim.role === "student"){
         if(!claim.employeeId) return null;
         const s = await Student.findOne({ employeeId: claim.employeeId });
         if(!s) return null;
-        return {
+        return withAliases({
             role: "student",
             id: s.employeeId,
             name: (s.name || ((s.firstName||"")+" "+(s.lastName||""))).trim() || s.employeeId,
             domain: s.domain || ""
-        };
+        }, [s.email]);
     }
     if(claim.role === "coordinator"){
         // The handshake field is named `username` for backward compatibility, but
@@ -6819,13 +6868,16 @@ async function verifyChatIdentity(claim){
         const id = claim.username || claim.email;
         if(!id) return null;
         const legacy = COORDINATORS[id];
-        if(legacy) return { role: "coordinator", id, name: id, domain: legacy.domain };
+        if(legacy) return withAliases({ role: "coordinator", id, name: id, domain: legacy.domain }, [legacy.email]);
         // DB-backed: created via promotion flow
         const q = id.indexOf("@") !== -1
             ? { email: id.toLowerCase() }
             : { $or: [{ username: id }, { email: id.toLowerCase() }] };
         const dbC = await Coordinator.findOne(q);
-        if(dbC) return { role: "coordinator", id: dbC.email || dbC.username || id, name: dbC.name, domain: dbC.domain };
+        if(dbC) return withAliases(
+            { role: "coordinator", id: dbC.email || dbC.username || id, name: dbC.name, domain: dbC.domain },
+            [dbC.email, dbC.username, id]
+        );
         return null;
     }
     if(claim.role === "hr"){
@@ -6833,20 +6885,26 @@ async function verifyChatIdentity(claim){
         if(!id) return null;
         // Legacy hardcoded HR (by username key)
         const legacy = HR_ACCOUNTS[id];
-        if(legacy) return { role: "hr", id, name: legacy.name, domain: "" };
+        if(legacy) return withAliases({ role: "hr", id: legacy.email || id, name: legacy.name, domain: "" }, [legacy.email, id]);
         // Legacy hardcoded HR (by their assigned email)
         const legacyByEmail = Object.entries(HR_ACCOUNTS).find(
             ([_, v]) => (v.email || "").toLowerCase() === String(id).toLowerCase()
         );
         if(legacyByEmail){
             const [u, v] = legacyByEmail;
-            return { role: "hr", id: v.email || u, name: v.name, domain: "" };
+            return withAliases({ role: "hr", id: v.email || u, name: v.name, domain: "" }, [v.email, u]);
         }
         // DB-backed HR (created via promotion flow)
         if(id.indexOf("@") !== -1){
             const dbH = await HR.findOne({ email: id.toLowerCase() });
-            if(dbH) return { role: "hr", id: dbH.email, name: dbH.name, domain: "" };
+            if(dbH) return withAliases({ role: "hr", id: dbH.email, name: dbH.name, domain: "" }, [dbH.email, dbH.username]);
         }
+        // A username that is not a legacy key can still be a DB-backed account.
+        const dbByUsername = await HR.findOne({ username: id });
+        if(dbByUsername) return withAliases(
+            { role: "hr", id: dbByUsername.email || dbByUsername.username, name: dbByUsername.name, domain: "" },
+            [dbByUsername.email, dbByUsername.username]
+        );
         return null;
     }
     if(claim.role === "admin"){
@@ -6875,29 +6933,20 @@ function adminIdentityFromSocket(socket){
             sessionMiddleware(req, {}, () => {
                 const admin = req.session && req.session.adminUser;
                 if(!admin) return resolve(null);
-                resolve({ role: "admin", id: admin.username || "admin", name: admin.username || "Admin", domain: "" });
+                resolve(chatIdentity.identityFromSession(req.session));
             });
         }catch(_){ resolve(null); }
     });
 }
 
-/**
- * The room name for a private conversation between two people.
- *
- * Sorted so both participants derive the same name from either direction —
- * there is exactly one room per pair, not one per sender. The separator is a
- * double colon because employee IDs contain slashes (TEN/WEB/1005) and
- * usernames contain dots and @.
- */
-function dmRoomFor(idA, idB){
-    return "dm::" + [String(idA), String(idB)].sort().join("::");
-}
-/** The two participant ids in a DM room, or null if it is not one. */
-function dmParticipants(room){
-    if(typeof room !== "string" || room.indexOf("dm::") !== 0) return null;
-    const parts = room.slice(4).split("::");
-    return parts.length === 2 && parts[0] && parts[1] ? parts : null;
-}
+// Private-conversation naming and membership now live in one module shared
+// with routes/chatModeration.js and the socket layer. They used to be defined
+// separately in each, with different rules for what a staff member's id is,
+// which is what made an admin's click bounce to the login page and an HR user
+// see "Forbidden" on a conversation their own inbox had just listed.
+const chatIdentity = require("./services/chatIdentity");
+const dmRoomFor      = chatIdentity.dmRoomFor;
+const dmParticipants = chatIdentity.dmParticipants;
 
 function roomsAllowedFor(identity){
     const rooms = ["general", "doubts", "feedback_support"];
@@ -6929,10 +6978,16 @@ function canAccessRoom(identity, room){
     // A private conversation is readable by its two participants, and by an
     // admin — which is the point of admin oversight, and is why the portals
     // tell users that staff can review reported conversations.
+    //
+    // Membership is checked against every id this person is known by, not just
+    // the canonical one. A conversation an HR user started from the inbox is
+    // named with their email; one started from the chat widget carries their
+    // username. Matching only the canonical id locked people out of their own
+    // conversations — that is the "Forbidden" people were seeing.
     const pair = dmParticipants(room);
     if(pair){
         if(identity.role === "admin") return true;
-        return pair.indexOf(String(identity.id)) !== -1;
+        return chatIdentity.isParticipant(identity, room);
     }
     return false;
 }
@@ -6953,19 +7008,15 @@ function canDeleteIn(identity, room){
  * from the query string, so anyone who knew an employee ID could read that
  * student's domain room. The Socket.IO handshake is separately verified by
  * verifyChatIdentity(); this covers the HTTP surface.
+ *
+ * This delegates to services/chatIdentity so it cannot drift from the inbox
+ * again. Its own version had no admin branch, so every admin who clicked a
+ * conversation got a 401 and was thrown out to the login page, and it
+ * preferred an HR username where the inbox preferred their email, so the two
+ * built different room names for the same pair of people.
  */
 function chatIdentityFromSession(req) {
-    const s = req.session || {};
-    if (s.student) {
-        return { role: "student", id: s.student.employeeId, name: s.student.name || s.student.employeeId, domain: s.student.domain || "" };
-    }
-    if (s.coordinator) {
-        return { role: "coordinator", id: s.coordinator.username, name: s.coordinator.username, domain: s.coordinator.domain || "" };
-    }
-    if (s.hr) {
-        return { role: "hr", id: s.hr.username || s.hr.email, name: s.hr.name || s.hr.username, domain: "" };
-    }
-    return null;
+    return chatIdentity.identityFromSession(req.session);
 }
 
 // REST: load last 50 messages for a room (after permission check)
@@ -9696,6 +9747,15 @@ try {
     console.error("[Chat] Failed to mount moderation routes:", e.message);
 }
 
+// The student's half of an admin credential reset: set your own password, and
+// confirm or correct the email an admin changed for you.
+try {
+    app.use("/api/student/security", require("./routes/studentSecurity"));
+    console.log("[Security] Student credential routes mounted at /api/student/security");
+} catch(e) {
+    console.error("[Security] Failed to mount student credential routes:", e.message);
+}
+
 // Web push subscriptions, and the merged notification feed.
 try {
     app.use("/api/push", require("./routes/push"));
@@ -10018,6 +10078,12 @@ io.use(async (socket, next) => {
         roomsAllowedFor(identity).forEach(r => socket.join(r));
         // Personal channel: how a DM reaches someone who has not opened that
         // conversation yet, and how an admin's direct message finds them.
+        //
+        // One channel per alias. A message addressed to an HR user's username
+        // was landing on a channel they had not joined — the notice never
+        // arrived, and because "is anybody listening?" then answered no, they
+        // got a push notification for a portal they had open in front of them.
+        Array.from(chatIdentity.aliasSet(identity)).forEach(a => socket.join("user::" + a));
         socket.join("user::" + identity.id);
         next();
     } catch(e){ next(new Error("auth_error")); }
@@ -10092,8 +10158,20 @@ io.on("connection", (socket) => {
             // invisible until they happen to look.
             const pair = dmParticipants(room);
             if (pair) {
-                const other = pair.find(p => p !== String(identity.id));
-                if (other && !hidden.has(other)) {
+                // Against every id the sender is known by. Comparing only the
+                // canonical one made a person their own correspondent when the
+                // room had been named with their other id, so the notice went
+                // back to the sender and never reached the recipient.
+                // An admin writing into a conversation they are overseeing is
+                // not one of the two participants, so BOTH of them need
+                // telling. Anyone else has exactly one correspondent.
+                const mine = chatIdentity.otherParticipant(identity, room);
+                const recipients = mine !== null
+                    ? [mine]
+                    : (identity.role === "admin" ? pair.slice() : []);
+
+                for (const other of recipients) {
+                    if (!other || hidden.has(other)) continue;
                     io.to("user::" + other).emit("dm_notice", {
                         room, from: identity.name, fromId: identity.id, preview: text.slice(0, 80)
                     });
