@@ -7,7 +7,7 @@ const blockListSchema = new mongoose.Schema({
     blockedBy:       { type: String, required: true },              // user id (employeeId / username / email)
     blockedByRole:   { type: String, enum: ["coordinator","hr"], required: true },
     blockedUser:     { type: String, required: true },              // user id of the blocked person
-    blockedUserRole: { type: String, enum: ["student","coordinator","hr"], required: true },
+    blockedUserRole: { type: String, enum: ["student","coordinator","hr","admin"], required: true },
     chatRoom:        { type: String, required: true, index: true },
     blockedAt:       { type: Date,   default: Date.now }
 });

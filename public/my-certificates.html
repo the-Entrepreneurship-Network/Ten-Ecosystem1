@@ -197,7 +197,10 @@ body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans
 </div>
 
 <script>
-const EMP_ID   = localStorage.getItem('employeeId') || sessionStorage.getItem('employeeId') || '';
+// A local hint only. Identity comes from the session on every request; this
+// is cleared by session-guard.js after any 401, so it must never gate the page.
+let EMP_ID = localStorage.getItem('employeeId') || sessionStorage.getItem('employeeId') ||
+             new URLSearchParams(location.search).get('employeeId') || '';
 let muted      = false;
 let certData   = {};
 let currentRevealType = null;
@@ -210,7 +213,6 @@ const CERT_LABELS = {
 };
 
 async function loadCerts() {
-  if (!EMP_ID) { renderError('Please log in to view your certificates.'); return; }
   try {
     // No x-employee-id: the server takes identity from the session and ignores
     // that header, so sending it only implies a trust model that no longer
@@ -229,6 +231,7 @@ async function loadCerts() {
     }
 
     certData = d;
+    if (d.employeeId) EMP_ID = d.employeeId;
     document.getElementById('completionValue').textContent = (d.expert?.completionPct || 0) + '%';
     const pct = Math.min(100, d.expert?.completionPct || 0);
     document.getElementById('mainProgressBar').style.width = pct + '%';
@@ -264,6 +267,26 @@ function renderError(msg) {
   box.style.cssText = 'grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);';
   box.textContent = msg;
   grid.appendChild(box);
+
+  // Staff open this page too, and for them there is no "own" certificate to
+  // show. The message already tells them to name a student — so give them the
+  // box to do it in, rather than a sentence and a dead end.
+  if (/employeeId/i.test(msg)) {
+    const form = document.createElement('form');
+    form.style.cssText = 'grid-column:1/-1;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:-18px;';
+    form.innerHTML =
+      '<input name="employeeId" placeholder="TEN/WEB/1005" required ' +
+      'style="min-height:44px;padding:10px 14px;border-radius:10px;border:1px solid #1e293b;' +
+      'background:#0a1222;color:#e2e8f0;font-size:16px;min-width:200px;">' +
+      '<button style="min-height:44px;padding:10px 20px;border-radius:10px;border:none;' +
+      'background:#D4AF37;color:#0a1222;font-weight:800;font-size:15px;cursor:pointer;">Look up</button>';
+    form.onsubmit = (e) => {
+      e.preventDefault();
+      const id = form.employeeId.value.trim();
+      if (id) location.search = '?employeeId=' + encodeURIComponent(id);
+    };
+    grid.appendChild(form);
+  }
 }
 
 function renderCerts(d) {

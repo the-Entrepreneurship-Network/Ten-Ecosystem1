@@ -166,8 +166,16 @@ describe('the orb replaced the old bell, everywhere', () => {
 describe('the orb itself', () => {
   const orb = readPublic('notify-orb.js');
 
-  it('only appears when something is actually pending', () => {
-    expect(orb).toContain("if (total === 0) { hide(); return; }");
+  it('shows a badge only when something is actually pending', () => {
+    // The orb itself appears once at sign-in either way — it is the way into
+    // the notification centre — but it stays quiet with nothing to report.
+    expect(orb).toContain('if (total === 0)');
+    expect(orb).toContain("cause === 'first' && !dismissed) show(false)");
+  });
+
+  it('buzzes once per arriving item, not a fixed shake', () => {
+    expect(orb).toContain('buzz(Math.max(1, total - before))');
+    expect(orb).toContain('--ten-orb-shakes');
   });
 
   it('greets once per sign-in rather than on every page', () => {

@@ -170,6 +170,11 @@ td, th, p, li, dd, dt, h1, h2, h3, h4 {
   /* --- Grids ---------------------------------------------------------- */
   /* Every fixed-track grid becomes a single column. `auto-fit`/`auto-fill`
      grids already collapse on their own and are left alone. */
+  /* `.stats` is the student dashboard's own grid, and it was missed: its page
+     forces `repeat(2, 1fr)` under 620px, which on a 390px screen leaves each
+     box about 127px of inner width — narrow enough that "TASKS COMPLETED"
+     runs out of the box, and `.stat-box` clips its overflow. */
+  .stats,
   .stats-grid,
   .sp-stats-grid,
   .cert-grid,
@@ -218,8 +223,14 @@ td, th, p, li, dd, dt, h1, h2, h3, h4 {
   }
 
   /* --- Breathing room ------------------------------------------------- */
-  .card, .panel, .section, .box, .stat-card {
+  .card, .panel, .section, .box, .stat-card, .stat-box {
     padding: 14px !important;
+  }
+
+  /* Cards built with inline padding rather than a class. 28px of side padding
+     costs 56px of a 390px screen before a word is drawn. */
+  #dailyJobPostCard, .week-card, .task-card {
+    padding: 16px !important;
   }
   h1 { font-size: 21px !important; }
   h2 { font-size: 18px !important; }
