@@ -65,7 +65,13 @@
   .menu-btn { position:fixed; top:18px; right:22px; z-index:40; font-size:12px; letter-spacing:.15em; font-weight:700; mix-blend-mode:difference; background:none; border:0; color:#fff; cursor:pointer; }
 
   /* ---------- hero (white, textured wordmark) ---------- */
-  .hero { background:#fff; color:#0a0a0a; min-height:100svh; display:flex; flex-direction:column; justify-content:space-between; padding:20px 22px; }
+  .hero { background:#fff; color:#0a0a0a; min-height:100svh; display:flex; flex-direction:column; justify-content:space-between; padding:20px 22px; position:relative; overflow:hidden; }
+  /* The kinetic grid lives behind everything in the hero and catches no clicks
+     of its own — the CTA, the wordmark and the strip links stay clickable. The
+     canvas is absolute (not fixed): the effect belongs to the hero, not to the
+     whole page, which scrolls on past it. */
+  #heroGrid { position:absolute; inset:0; width:100%; height:100%; z-index:0; pointer-events:none; }
+  .hero > *:not(#heroGrid) { position:relative; z-index:1; }
   .hero-top { display:flex; justify-content:space-between; align-items:flex-start; padding-top:44px; }
   .hero-tag { font-size:15px; line-height:1.35; font-weight:600; }
   .hero-cta { background:#0a0a0a; color:#fff; border:0; border-radius:999px; padding:14px 26px; font-size:12px; letter-spacing:.12em; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:10px; transition:transform .2s; }
@@ -208,6 +214,10 @@
 
 <!-- hero -->
 <header class="hero">
+  <!-- kinetic grid: warps toward the cursor, ripples on click. Decorative,
+       so it is hidden from screen readers and skipped entirely for anyone who
+       has asked their system for reduced motion. -->
+  <canvas id="heroGrid" aria-hidden="true"></canvas>
   <div class="hero-top">
     <p class="hero-tag">Not a company, an ecosystem.<br>Because TEN is Everythin'.</p>
     <button class="hero-cta" onclick="journey()">START MY JOURNEY <span>&rarr;</span></button>
@@ -600,6 +610,329 @@ const DOMAIN_IMGS = ['python.jpg','java.jpg','web.jpg','mern.jpg','flutter.jpg',
   }, 38);
 })();
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   KINETIC GRID — the hero background
+
+   A port of the React <KineticGrid> component to vanilla canvas, because this
+   page is plain HTML served by Express: there is no React, no Tailwind and no
+   /components/ui folder to drop a .tsx into. The maths is the component's,
+   constant for constant — the same influence radius, the same bell falloff,
+   the same edge pinning, the same ripple speed and decay — so it behaves
+   identically. What changed is only what had to:
+
+     · The palette is inverted. The component paints light lines on #161618;
+       this hero is white and stays white, so the grid is the page's own near
+       black at low alpha. No new colour is introduced anywhere.
+     · The canvas is absolute inside .hero, not fixed to the viewport. The
+       effect belongs to the first screen; the rest of the page scrolls past it.
+     · It is scaled for devicePixelRatio, so the hairlines are not blurry on a
+       retina screen.
+     · The loop stops when the hero scrolls out of view or the tab is hidden.
+       A full-grid redraw every frame forever, for something nobody is looking
+       at, is somebody's battery.
+
+   The TEN TECH wordmark reads the SAME field: it is pushed away from the
+   cursor with the same falloff the grid nodes use, and every ripple that
+   passes through it makes it pulse. One interaction, not two that happen to
+   share a screen.
+   ═══════════════════════════════════════════════════════════════════════════ */
+window.__heroField = { prox: 0, dx: 0, dy: 0, pulse: 0 };
+(() => {
+  const canvas = document.getElementById('heroGrid');
+  const hero = document.querySelector('.hero');
+  if (!canvas || !hero) return;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  /* Anyone who has asked their system for less movement gets the grid drawn
+     once, flat, with no cursor tracking and no ripples. */
+  const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ── the component's constants, unchanged ─────────────────────────────────
+  const CELL_SIZE = 55;
+  const INFLUENCE_RADIUS = 260;
+  const MAX_WARP = 24;
+  const DOT_SPACING = 28;
+  const LERP_SPEED = 0.08;
+  const NODE_BASE_RADIUS = 1.8;
+  const NODE_ACTIVE_RADIUS = 3.2;
+  const WAVE_WIDTH = 55;
+  const RIPPLE_SPEED = 400;   // px per second
+  const RIPPLE_FADE = 1.2;    // opacity per second
+
+  /* The palette, inverted for a white hero. The component's "monochrome" theme
+     is white-on-black; this is the same theme reflected — the page's own
+     #0a0a0a on the page's own #fff. */
+  const LINE_BASE   = { r: 10, g: 10, b: 10, a: 0.10 };
+  const LINE_ACTIVE = { r: 10, g: 10, b: 10, a: 0.85 };
+  const NODE_BASE   = { r: 10, g: 10, b: 10, a: 0.16 };
+  const NODE_ACTIVE = { r: 10, g: 10, b: 10, a: 1.00 };
+  const INK = '10,10,10';
+
+  const lerpN = (a, b, t) => a + (b - a) * t;
+  const lerpColor = (base, active, t) =>
+    'rgba(' + Math.round(lerpN(base.r, active.r, t)) + ',' +
+              Math.round(lerpN(base.g, active.g, t)) + ',' +
+              Math.round(lerpN(base.b, active.b, t)) + ',' +
+              lerpN(base.a, active.a, t).toFixed(3) + ')';
+
+  let W = 0, H = 0;
+  const mouse = { x: -9999, y: -9999 };
+  const target = { x: -9999, y: -9999 };
+  let ripples = [];
+  let raf = 0, running = false;
+
+  function setSize() {
+    const r = hero.getBoundingClientRect();
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    W = Math.max(1, Math.round(r.width));
+    H = Math.max(1, Math.round(r.height));
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  /* Where one grid point ends up, given the cursor and every live ripple.
+     Lifted from the component's getWarpedPoint, including the edge pin that
+     stops the boundary rows peeling away from the corners. */
+  function warp(gx, gy, col, row, cols, rows) {
+    const edgeMargin = 1.5;
+    const colPin = Math.min(col / edgeMargin, (cols - 1 - col) / edgeMargin, 1);
+    const rowPin = Math.min(row / edgeMargin, (rows - 1 - row) / edgeMargin, 1);
+    const pin = colPin * colPin * rowPin * rowPin;
+
+    const dx = gx - mouse.x;
+    const dy = gy - mouse.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const proximity = Math.max(0, 1 - dist / INFLUENCE_RADIUS) * pin;
+
+    let rx = 0, ry = 0;
+    for (let i = 0; i < ripples.length; i++) {
+      const rp = ripples[i];
+      const rdx = gx - rp.x, rdy = gy - rp.y;
+      const rdist = Math.sqrt(rdx * rdx + rdy * rdy);
+      const diff = rdist - rp.radius;
+      if (Math.abs(diff) < WAVE_WIDTH) {
+        const strength = (1 - Math.abs(diff) / WAVE_WIDTH) * rp.opacity * 18 * pin;
+        const angle = Math.atan2(rdy, rdx);
+        const sign = diff < 0 ? -1 : 1;
+        rx += Math.cos(angle) * strength * sign * -1;
+        ry += Math.sin(angle) * strength * sign * -1;
+      }
+    }
+
+    if (dist < INFLUENCE_RADIUS && dist > 0 && pin > 0) {
+      const t = dist / INFLUENCE_RADIUS;
+      const eased = t < 0.01 ? 0 : (1 - t) * (1 - t) * Math.min(1, dist / 60);
+      const amt = eased * MAX_WARP * pin;
+      const angle = Math.atan2(dy, dx);
+      return {
+        x: gx - Math.cos(angle) * amt + rx,
+        y: gy - Math.sin(angle) * amt + ry,
+        p: proximity
+      };
+    }
+    return { x: gx + rx, y: gy + ry, p: proximity };
+  }
+
+  function draw(now) {
+    ctx.clearRect(0, 0, W, H);
+
+    // No background fill. The hero's white is the background, and it stays.
+
+    // Static dot texture
+    ctx.fillStyle = 'rgba(' + INK + ',0.05)';
+    for (let x = DOT_SPACING / 2; x < W; x += DOT_SPACING) {
+      for (let y = DOT_SPACING / 2; y < H; y += DOT_SPACING) {
+        ctx.beginPath();
+        ctx.arc(x, y, 0.7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // Age the ripples
+    for (let i = ripples.length - 1; i >= 0; i--) {
+      const r = ripples[i];
+      const age = (now - r.born) / 1000;
+      r.radius = Math.max(0, age * RIPPLE_SPEED);
+      r.opacity = Math.max(0, 1 - age * RIPPLE_FADE);
+      if (r.opacity <= 0) ripples.splice(i, 1);
+    }
+
+    const cols = Math.max(2, Math.ceil(W / CELL_SIZE)) + 1;
+    const rows = Math.max(2, Math.ceil(H / CELL_SIZE)) + 1;
+    const cellW = W / (cols - 1);
+    const cellH = H / (rows - 1);
+
+    const pts = [];
+    for (let row = 0; row < rows; row++) {
+      pts[row] = [];
+      for (let col = 0; col < cols; col++) {
+        pts[row][col] = warp(col * cellW, row * cellH, col, row, cols, rows);
+      }
+    }
+
+    const seg = (a, b) => {
+      const avg = (a.p + b.p) / 2;
+      const t = avg * avg * (3 - 2 * avg);          // smoothstep
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.strokeStyle = lerpColor(LINE_BASE, LINE_ACTIVE, t);
+      ctx.lineWidth = lerpN(0.8, 1.5, t);
+      ctx.stroke();
+    };
+
+    ctx.lineCap = 'butt';
+    for (let row = 0; row < rows; row++)
+      for (let col = 0; col < cols - 1; col++) seg(pts[row][col], pts[row][col + 1]);
+    for (let col = 0; col < cols; col++)
+      for (let row = 0; row < rows - 1; row++) seg(pts[row][col], pts[row + 1][col]);
+
+    // Intersection nodes
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const p = pts[row][col];
+        const t = p.p * p.p * (3 - 2 * p.p);
+        const rad = lerpN(NODE_BASE_RADIUS, NODE_ACTIVE_RADIUS, t);
+
+        if (t > 0.3) {
+          const glowR = rad + lerpN(0, 6, (t - 0.3) / 0.7);
+          const grd = ctx.createRadialGradient(p.x, p.y, rad * 0.5, p.x, p.y, glowR);
+          grd.addColorStop(0, 'rgba(' + INK + ',' + (t * 0.3).toFixed(3) + ')');
+          grd.addColorStop(1, 'rgba(' + INK + ',0)');
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, glowR, 0, Math.PI * 2);
+          ctx.fillStyle = grd;
+          ctx.fill();
+        }
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, rad, 0, Math.PI * 2);
+        ctx.fillStyle = lerpColor(NODE_BASE, NODE_ACTIVE, t);
+        ctx.fill();
+      }
+    }
+
+    // Ripple rings
+    for (let i = 0; i < ripples.length; i++) {
+      const r = ripples[i];
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, Math.max(0, r.radius), 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(' + INK + ',' + (r.opacity * 0.28).toFixed(3) + ')';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
+    publishField(now);
+  }
+
+  /* What the wordmark reads.
+
+     The word is pushed by the same field the grid is: the same influence
+     radius, the same (1-t)^2 falloff, and a pulse whenever a ripple front
+     crosses it. Exported on window rather than transformed here, so the hero's
+     existing parallax code owns the transform and the two never fight over
+     the same style property. */
+  function publishField(now) {
+    const el = document.getElementById('heroWord');
+    const f = window.__heroField;
+    if (!el) return;
+
+    const hr = hero.getBoundingClientRect();
+    const wr = el.getBoundingClientRect();
+    const cx = wr.left - hr.left + wr.width / 2;
+    const cy = wr.top - hr.top + wr.height / 2;
+
+    const dx = cx - mouse.x, dy = cy - mouse.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    let prox = 0, ox = 0, oy = 0;
+    if (dist < INFLUENCE_RADIUS && dist > 0) {
+      const t = dist / INFLUENCE_RADIUS;
+      prox = (1 - t) * (1 - t);
+      const amt = prox * 14;                      // gentler than the grid's 24
+      const angle = Math.atan2(dy, dx);
+      ox = Math.cos(angle) * amt;
+      oy = Math.sin(angle) * amt;
+    }
+
+    let pulse = 0;
+    for (let i = 0; i < ripples.length; i++) {
+      const r = ripples[i];
+      const d = Math.sqrt((cx - r.x) * (cx - r.x) + (cy - r.y) * (cy - r.y));
+      const diff = Math.abs(d - r.radius);
+      if (diff < WAVE_WIDTH * 2) {
+        pulse = Math.max(pulse, (1 - diff / (WAVE_WIDTH * 2)) * r.opacity);
+      }
+    }
+
+    f.prox = prox; f.dx = ox; f.dy = oy; f.pulse = pulse;
+  }
+
+  function frame(now) {
+    mouse.x = lerpN(mouse.x, target.x, LERP_SPEED);
+    mouse.y = lerpN(mouse.y, target.y, LERP_SPEED);
+    draw(now);
+    raf = requestAnimationFrame(frame);
+  }
+
+  function start() {
+    if (running || calm) return;
+    running = true;
+    raf = requestAnimationFrame(frame);
+  }
+  function stop() {
+    running = false;
+    if (raf) cancelAnimationFrame(raf);
+    raf = 0;
+  }
+
+  setSize();
+  addEventListener('resize', () => { setSize(); if (calm) draw(performance.now()); }, { passive: true });
+
+  if (calm) {
+    // One flat pass, no loop, no tracking.
+    draw(performance.now());
+  } else {
+    /* Coordinates are relative to the hero, not the viewport: the canvas is
+       absolutely positioned inside it, so a page scrolled halfway down would
+       otherwise warp around a point that is no longer under the pointer. */
+    hero.addEventListener('mousemove', (e) => {
+      const r = hero.getBoundingClientRect();
+      target.x = e.clientX - r.left;
+      target.y = e.clientY - r.top;
+    }, { passive: true });
+
+    hero.addEventListener('mouseleave', () => { target.x = -9999; target.y = -9999; }, { passive: true });
+
+    const splash = (clientX, clientY) => {
+      const r = hero.getBoundingClientRect();
+      ripples.push({ x: clientX - r.left, y: clientY - r.top, radius: 0, opacity: 1, born: performance.now() });
+      if (ripples.length > 12) ripples.shift();   // a click-spammer should not stall the frame
+    };
+    hero.addEventListener('click', (e) => splash(e.clientX, e.clientY));
+    // Touch has no cursor to warp with, but a tap still ripples.
+    hero.addEventListener('touchstart', (e) => {
+      const t = e.touches && e.touches[0];
+      if (t) splash(t.clientX, t.clientY);
+    }, { passive: true });
+
+    // Only run while the hero is actually on screen and the tab is in front.
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver((entries) => {
+        entries[0].isIntersecting && !document.hidden ? start() : stop();
+      }, { threshold: 0 }).observe(hero);
+    } else {
+      start();
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) stop();
+      else if (hero.getBoundingClientRect().bottom > 0) start();
+    });
+  }
+})();
+
 /* ---- hero textures crossfade + click cycles ---- */
 (() => {
   const texs = [0,1,2].map(i => document.getElementById('tex' + i));
@@ -732,7 +1065,9 @@ const DOMAIN_IMGS = ['python.jpg','java.jpg','web.jpg','mern.jpg','flutter.jpg',
     tx = e.clientX; ty = e.clientY;
     dot.style.opacity = 1;
     const mx = (e.clientX / innerWidth - 0.5), my = (e.clientY / innerHeight - 0.5);
-    hero.style.transform = `translate(${mx*22}px, ${my*12}px)`;
+    // The wordmark's transform is no longer set here — the kinetic grid owns
+    // it now (see below), and two handlers writing the same style property
+    // means whichever ran last wins and the other looks broken.
     if (orbit) orbit.style.transform = `translate(${mx*-16}px, ${my*-10}px)`;
     if (flee) flee.style.transform = `translate(${mx*14}px, 0)`;
     dot.classList.toggle('big', !!e.target.closest('a,button,.dtile,.hero-word'));
@@ -740,6 +1075,32 @@ const DOMAIN_IMGS = ['python.jpg','java.jpg','web.jpg','mern.jpg','flutter.jpg',
   (function follow() {
     x += (tx - x) * 0.16; y += (ty - y) * 0.16;
     dot.style.left = x + 'px'; dot.style.top = y + 'px';
+
+    /*
+     * TEN TECH answers the same field the grid does.
+     *
+     * window.__heroField is written once per frame by the kinetic grid from
+     * the smoothed cursor position and the live ripples — the same influence
+     * radius and the same (1-t)^2 falloff the grid nodes use. So the word is
+     * pushed away by the cursor exactly as the lattice behind it is, and every
+     * ripple that crosses it makes it swell and brighten as the wave passes.
+     *
+     * Read here rather than written there because this loop already owns the
+     * element's transform. One writer, one property.
+     */
+    if (hero) {
+      const f = window.__heroField || { prox: 0, dx: 0, dy: 0, pulse: 0 };
+      const lift = 1 + f.prox * 0.028 + f.pulse * 0.035;
+      hero.style.transform =
+        'translate(' + f.dx.toFixed(2) + 'px,' + f.dy.toFixed(2) + 'px) scale(' + lift.toFixed(4) + ')';
+      // The wordmark is a texture-filled SVG; brightening it as the wave goes
+      // through is what makes the word feel struck by the ripple rather than
+      // merely nudged by it.
+      hero.style.filter = f.pulse > 0.01
+        ? 'contrast(' + (1 + f.pulse * 0.5).toFixed(3) + ') brightness(' + (1 + f.pulse * 0.12).toFixed(3) + ')'
+        : '';
+    }
+
     requestAnimationFrame(follow);
   })();
 })();
