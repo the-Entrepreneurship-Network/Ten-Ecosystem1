@@ -9529,19 +9529,60 @@ app.get("/coordinator/coding-submissions/:domain", requireStaffSession, async(re
 let _publicStatsCache = { at: 0, body: null };
 const PUBLIC_STATS_TTL_MS = 5 * 60 * 1000;
 
+/** "Anmol Kumar" -> "Anmol K." — a public page does not need a full name. */
+function shortenPublicName(full) {
+    const parts = String(full || "").trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return "A TEN intern";
+    if (parts.length === 1) return parts[0];
+    return parts[0] + " " + parts[parts.length - 1].charAt(0).toUpperCase() + ".";
+}
+
 app.get('/api/public/stats', async (req, res) => {
     try {
         if (_publicStatsCache.body && (Date.now() - _publicStatsCache.at) < PUBLIC_STATS_TTL_MS) {
             return res.json(_publicStatsCache.body);
         }
         const { SELECTABLE_DOMAIN_NAMES } = require("./config/domains");
-        const interns = await Student.estimatedDocumentCount();
+        const StudentCoin = require("./models/new/StudentCoin");
+
+        // Top interns by coins, for the landing page's proof strip.
+        //
+        // Deliberately NOT /leaderboard/overall: those rows carry `employeeId`,
+        // which is the login identifier and is printed on every certificate.
+        // Nothing here identifies an account — a shortened name, a domain and a
+        // total.
+        const [interns, certificates, topCoins] = await Promise.all([
+            Student.estimatedDocumentCount(),
+            DocumentHistory.estimatedDocumentCount().catch(() => 0),
+            StudentCoin.find({ totalCoins: { $gt: 0 } })
+                .sort({ totalCoins: -1 }).limit(8).select("studentId totalCoins").lean()
+        ]);
+
+        let top = [];
+        if (topCoins.length) {
+            const owners = await Student.find({ _id: { $in: topCoins.map(c => c.studentId) } })
+                .select("_id name firstName lastName domain").lean();
+            const byId = {};
+            owners.forEach(o => { byId[String(o._id)] = o; });
+            top = topCoins.map(c => {
+                const s = byId[String(c.studentId)];
+                if (!s) return null;
+                return {
+                    name: shortenPublicName(s.name || `${s.firstName || ""} ${s.lastName || ""}`),
+                    domain: s.domain || "",
+                    coins: c.totalCoins || 0
+                };
+            }).filter(Boolean);
+        }
+
         const body = {
             success: true,
             interns,
+            certificates,
             domains: SELECTABLE_DOMAIN_NAMES.length,
             domainNames: SELECTABLE_DOMAIN_NAMES,
-            tracks: 6
+            tracks: 6,
+            top
         };
         _publicStatsCache = { at: Date.now(), body };
         res.json(body);
@@ -9549,7 +9590,7 @@ app.get('/api/public/stats', async (req, res) => {
         console.error('[public-stats]', err.message);
         // The page falls back to whatever is already rendered, so a failure here
         // shows stale-but-sane text rather than an empty row.
-        res.json({ success: false, domainNames: [], tracks: 6 });
+        res.json({ success: false, domainNames: [], tracks: 6, top: [] });
     }
 });
 
