@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { FadeIn } from './components/FadeIn';
 import { navigateToRoute } from './shared';
@@ -196,72 +196,43 @@ function SlashFace() {
 
 /* ---------- the rocks break open and the resume rises ---------- */
 
-/* twelve shards cut from the explosion plate, thrown to every screen edge */
-const SHARDS: { clip: string; x: string; y: string; r: number }[] = [
-  { clip: 'polygon(0 0, 20% 0, 12% 28%, 0 16%)', x: '-52vw', y: '-38vh', r: -160 },
-  { clip: 'polygon(20% 0, 45% 0, 38% 20%, 16% 24%)', x: '-20vw', y: '-52vh', r: 120 },
-  { clip: 'polygon(45% 0, 72% 0, 66% 18%, 42% 22%)', x: '18vw', y: '-55vh', r: -100 },
-  { clip: 'polygon(72% 0, 100% 0, 100% 24%, 70% 18%)', x: '50vw', y: '-40vh', r: 170 },
-  { clip: 'polygon(0 16%, 10% 26%, 6% 55%, 0 48%)', x: '-58vw', y: '-6vh', r: 90 },
-  { clip: 'polygon(90% 22%, 100% 24%, 100% 52%, 94% 50%)', x: '58vw', y: '4vh', r: -80 },
-  { clip: 'polygon(0 48%, 8% 52%, 12% 82%, 0 78%)', x: '-55vw', y: '30vh', r: -140 },
-  { clip: 'polygon(92% 50%, 100% 52%, 100% 80%, 88% 78%)', x: '54vw', y: '34vh', r: 130 },
-  { clip: 'polygon(0 78%, 18% 74%, 10% 100%, 0 100%)', x: '-42vw', y: '48vh', r: 100 },
-  { clip: 'polygon(18% 74%, 46% 80%, 40% 100%, 12% 100%)', x: '-12vw', y: '54vh', r: -70 },
-  { clip: 'polygon(46% 80%, 74% 76%, 68% 100%, 42% 100%)', x: '16vw', y: '55vh', r: 80 },
-  { clip: 'polygon(74% 76%, 100% 80%, 100% 100%, 68% 100%)', x: '46vw', y: '46vh', r: -120 },
-];
-
 function RockBreak() {
   const ref = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end end'] });
 
-  const glow = useTransform(scrollYProgress, [0.05, 0.35], [0, 1]);
-  const burstFlash = useTransform(scrollYProgress, [0.14, 0.18, 0.26], [0, 0.7, 0]);
-  const shake = useTransform(scrollYProgress, [0.14, 0.17, 0.2, 0.23, 0.26, 0.3], [0, -10, 9, -7, 5, 0]);
-  const plateScale = useTransform(scrollYProgress, [0.05, 0.16], [0.55, 1]);
-  const plateOpacity = useTransform(scrollYProgress, [0.05, 0.12, 0.5, 0.7], [0, 1, 1, 0]);
-  const resumeY = useTransform(scrollYProgress, [0.3, 0.7], ['65vh', '0vh']);
-  const resumeScale = useTransform(scrollYProgress, [0.3, 0.7], [0.5, 1]);
-  const resumeRot = useTransform(scrollYProgress, [0.3, 0.7], [-9, 0]);
-  const titleOpacity = useTransform(scrollYProgress, [0.65, 0.85], [0, 1]);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  /* the stone breaks IN REAL: the generated explosion video is scrubbed by
+     the user's scroll — frame position follows finger exactly */
+  useEffect(() => {
+    return scrollYProgress.on('change', (v) => {
+      const vid = videoRef.current;
+      if (!vid || !vid.duration) return;
+      const p = Math.min(1, Math.max(0, v / 0.7)); /* video spans first 70% of the section */
+      vid.currentTime = Math.min(vid.duration - 0.05, p * vid.duration);
+    });
+  }, [scrollYProgress]);
+
+  const videoOpacity = useTransform(scrollYProgress, [0, 0.04, 0.8, 0.95], [0, 1, 1, 0.25]);
+  const shake = useTransform(scrollYProgress, [0.3, 0.34, 0.38, 0.42, 0.46, 0.5], [0, -10, 9, -7, 5, 0]);
+  const resumeY = useTransform(scrollYProgress, [0.55, 0.88], ['70vh', '0vh']);
+  const resumeScale = useTransform(scrollYProgress, [0.55, 0.88], [0.45, 1]);
+  const resumeRot = useTransform(scrollYProgress, [0.55, 0.88], [-9, 0]);
+  const titleOpacity = useTransform(scrollYProgress, [0.8, 0.95], [0, 1]);
 
   return (
     <div ref={ref} className="relative" style={{ height: '300vh' }}>
       <motion.div className="sticky top-0 flex h-screen flex-col items-center justify-center overflow-hidden bg-[#050505]" style={{ x: shake }}>
-        {/* the explosion plate blooms in, then its shards tear off to every edge */}
-        <motion.img
-          src={`${ASSETS}/rockburst.jpg`}
-          alt=""
-          className="absolute w-[92vw] max-w-[1100px]"
-          style={{ scale: plateScale, opacity: plateOpacity, mixBlendMode: 'screen' }}
+        {/* generated rock-explosion film, scrubbed by scroll */}
+        <motion.video
+          ref={videoRef}
+          muted
+          playsInline
+          preload="auto"
+          src={`${ASSETS}/rockbreak.mp4`}
+          className="absolute inset-0 h-full w-full object-cover"
+          style={{ opacity: videoOpacity }}
         />
-        {SHARDS.map(({ clip, x, y, r }, i) => (
-          <motion.img
-            key={i}
-            src={`${ASSETS}/rockburst.jpg`}
-            alt=""
-            className="absolute w-[92vw] max-w-[1100px]"
-            style={{
-              clipPath: clip,
-              mixBlendMode: 'screen',
-              x: useTransform(scrollYProgress, [0.16, 0.75], ['0vw', x]),
-              y: useTransform(scrollYProgress, [0.16, 0.75], ['0vh', y]),
-              rotate: useTransform(scrollYProgress, [0.16, 0.75], [0, r]),
-              opacity: useTransform(scrollYProgress, [0.16, 0.2, 0.66, 0.85], [0, 1, 1, 0]),
-            }}
-          />
-        ))}
-
-        {/* golden blast glow */}
-        <motion.div
-          className="pointer-events-none absolute h-[80vh] w-[50vw] rounded-full"
-          style={{
-            opacity: glow,
-            background: 'radial-gradient(ellipse, rgba(255,196,94,0.4) 0%, transparent 65%)',
-          }}
-        />
-        <motion.div className="pointer-events-none absolute inset-0 bg-amber-100" style={{ opacity: burstFlash }} />
 
         {/* the 3D resume rises out of the blast */}
         <motion.div style={{ y: resumeY, scale: resumeScale, rotate: resumeRot }} className="relative z-10 flex flex-col items-center">
