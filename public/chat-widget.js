@@ -89,6 +89,24 @@
     }
 
     /**
+     * Send without a socket.
+     *
+     * The room is still notified server-side, so everyone else sees it live;
+     * only this window has to draw its own copy, which appendMessage does when
+     * the response comes back.
+     */
+    function sendOverHttp(payload) {
+        postJSON("/chat/messages", payload)
+            .then(function (d) {
+                var win = openWin;
+                if (d && d.doc && win && win.el && win.el.dataset.currentRoom === d.doc.chatRoom) {
+                    appendMessage(win, d.doc);
+                }
+            })
+            .catch(function (e) { alert(e.message || "The message could not be sent. Please try again."); });
+    }
+
+    /**
      * Open a private one-to-one conversation.
      *
      * The room name is derived on the server from both ids, sorted, so both
@@ -338,7 +356,16 @@
                 payload.imageName = pendingImage.imageName;
                 payload.imageMime = pendingImage.imageMime;
             }
-            socket.emit("send_message", payload);
+            // Socket first; HTTP when there is no socket, so a network that
+            // blocks WebSockets does not silently swallow the message.
+            if (socket && socket.connected) {
+                socket.emit("send_message", payload, function (ack) {
+                    if (ack && ack.success === false && ack.message) alert(ack.message);
+                    else if (!ack || !ack.success) sendOverHttp(payload);
+                });
+            } else {
+                sendOverHttp(payload);
+            }
             inputEl.value = "";
             clearPendingImage();
         });
