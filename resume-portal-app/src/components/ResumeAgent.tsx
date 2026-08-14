@@ -1,0 +1,334 @@
+import { useRef, useState } from 'react';
+import type { FormEvent } from 'react';
+
+/*
+ * The agent, in two frames.
+ *
+ * Frame one is the statement — the reaching hands, human to machine, over
+ * "WE TURN RESUMES UNREJECTABLE AND ATS FRIENDLY".
+ *
+ * Frame two is the product: the chat the student actually uses. It talks to
+ * /api/v2/resume, which scores a resume against the nine checks an applicant
+ * tracking system really runs and rebuilds the ones that fail. Nothing here
+ * invents a verdict — every number comes back with the line that caused it.
+ */
+
+const ASSETS = '/assets/resume-portal';
+const API = '/api/v2/resume';
+
+type Check = { id: string; label: string; weight: number; earned: number; detail: string; fix: string | null };
+type Report = {
+  score: number;
+  verdict: string;
+  verdictText: string;
+  target: string;
+  stats: { words: number; bullets: number; sections: string[] };
+  checks: Check[];
+  failing: { label: string; fix: string; lost: number }[];
+  hazards: string[];
+  missingKeywords: string[];
+};
+type Msg = { role: 'user' | 'agent'; text?: string; report?: Report; resume?: string; file?: string };
+
+/* ---------- frame one: the statement ---------- */
+
+export function AgentHero() {
+  return (
+    <section id="agent" className="relative bg-white">
+      <div className="relative mx-auto max-w-[1500px] px-3 pb-3 pt-3">
+        <div className="relative overflow-hidden rounded-[6px]">
+          <img src={`${ASSETS}/agent-hands.jpg`} alt="" className="h-[74vh] w-full object-cover" />
+
+          {/* the thin top rule and nav, as on the reference */}
+          <div className="absolute left-0 top-0 flex w-full items-center gap-7 px-7 py-5 text-[11px] font-semibold tracking-[0.14em] text-black/80">
+            <span>/ SCAN</span><span>/ BUILD</span><span>/ SCORE</span><span>/ FIXES</span>
+          </div>
+
+          <h2
+            className="absolute bottom-[16%] left-[4%] max-w-[62%] text-black"
+            style={{ fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: 'clamp(22px, 3.4vw, 46px)', lineHeight: 1.12, letterSpacing: '-0.01em' }}
+          >
+            WE TURN RESUMES
+            <br />
+            UNREJECTABLE AND
+            <br />
+            ATS FRIENDLY
+          </h2>
+
+          {/* the red signature mark */}
+          <div
+            className="absolute bottom-[18%] right-[6%] select-none text-[#e0203a]"
+            style={{ fontFamily: "'Cinzel', serif", fontStyle: 'italic', fontSize: 'clamp(38px, 6vw, 92px)', transform: 'rotate(-4deg)' }}
+          >
+            TEN
+          </div>
+
+          <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-[10px] font-semibold tracking-[0.3em] text-black/60">
+            SCROLL
+          </p>
+        </div>
+      </div>
+      <div className="h-[3px] w-full bg-[#e0203a]" />
+    </section>
+  );
+}
+
+/* ---------- frame two: the chat ---------- */
+
+const QUICK = [
+  { icon: '🔍', label: 'ATS Deep Scan', send: 'scan my resume' },
+  { icon: '📄', label: 'Build Resume', send: 'build me a resume' },
+  { icon: '📊', label: 'Get My Score', send: 'score my resume' },
+  { icon: '⚡', label: 'Fix Rejections', send: 'why do I get rejected' },
+];
+
+const PROJECTS = [
+  ['Full-Stack CV', '03'],
+  ['Data Science CV', '02'],
+  ['Internship CV', '04'],
+  ['Cover Letters', '03'],
+];
+
+const HISTORY_TODAY = ['ATS score — first pass', 'Rewrite: project bullets'];
+const HISTORY_YESTERDAY = ['Keywords for MERN roles', 'Two-column layout fix', 'Certificate section'];
+
+function ScoreRing({ score }: { score: number }) {
+  const tone = score >= 80 ? '#16a34a' : score >= 60 ? '#d97706' : '#dc2626';
+  return (
+    <div className="flex items-center gap-4">
+      <div
+        className="grid h-[76px] w-[76px] shrink-0 place-items-center rounded-full"
+        style={{ background: `conic-gradient(${tone} ${score * 3.6}deg, #e9edf3 0deg)` }}
+      >
+        <div className="grid h-[62px] w-[62px] place-items-center rounded-full bg-white">
+          <span className="text-[20px] font-bold" style={{ color: tone }}>{score}</span>
+        </div>
+      </div>
+      <div>
+        <p className="text-[13px] font-bold text-[#1f2937]">ATS score {score}/100</p>
+        <p className="mt-0.5 text-[12px] leading-snug text-[#6b7280]">Nine checks, weighted the way a parser weighs them.</p>
+      </div>
+    </div>
+  );
+}
+
+function ReportCard({ report }: { report: Report }) {
+  return (
+    <div className="rounded-2xl border border-[#e5e9f0] bg-white p-5">
+      <ScoreRing score={report.score} />
+      <p className="mt-4 text-[13px] font-semibold text-[#1f2937]">{report.verdictText}</p>
+
+      <div className="mt-4 space-y-2">
+        {report.checks.map((c) => {
+          const pct = Math.round((c.earned / c.weight) * 100);
+          const tone = pct >= 85 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626';
+          return (
+            <div key={c.id} className="flex items-center gap-3">
+              <span className="w-[190px] shrink-0 text-[12px] text-[#374151]">{c.label}</span>
+              <span className="h-[6px] flex-1 overflow-hidden rounded-full bg-[#eef1f6]">
+                <span className="block h-full rounded-full" style={{ width: `${pct}%`, background: tone }} />
+              </span>
+              <span className="w-[86px] shrink-0 text-right text-[11px] text-[#6b7280]">{c.detail}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {report.failing.length > 0 && (
+        <div className="mt-5 rounded-xl bg-[#fff7f7] p-4">
+          <p className="mb-2 text-[12px] font-bold uppercase tracking-wider text-[#dc2626]">What is costing you shortlists</p>
+          <ul className="space-y-2">
+            {report.failing.slice(0, 5).map((f) => (
+              <li key={f.label} className="text-[12.5px] leading-relaxed text-[#374151]">
+                <b>{f.label}</b> — {f.fix}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {report.missingKeywords.length > 0 && (
+        <p className="mt-4 text-[12px] leading-relaxed text-[#6b7280]">
+          <b className="text-[#374151]">Missing {report.target} keywords:</b> {report.missingKeywords.slice(0, 8).join(', ')}
+        </p>
+      )}
+    </div>
+  );
+}
+
+export function AgentChat() {
+  const [msgs, setMsgs] = useState<Msg[]>([]);
+  const [input, setInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const started = msgs.length > 0;
+
+  async function send(text: string, file?: File) {
+    if (!text.trim() && !file) return;
+    setMsgs((m) => [...m, { role: 'user', text: text || 'Scan this resume', file: file?.name }]);
+    setInput('');
+    setBusy(true);
+    try {
+      const body = new FormData();
+      body.append('message', text || 'scan my resume');
+      if (file) body.append('file', file);
+      const res = await fetch(`${API}/chat`, { method: 'POST', body });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'failed');
+      if (data.kind === 'scan') setMsgs((m) => [...m, { role: 'agent', report: data.report }]);
+      else if (data.kind === 'build') setMsgs((m) => [...m, { role: 'agent', resume: data.text, report: data.report }]);
+      else setMsgs((m) => [...m, { role: 'agent', text: data.reply }]);
+    } catch {
+      setMsgs((m) => [...m, { role: 'agent', text: 'The agent could not be reached. Check that the portal server is running and try again.' }]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const onSubmit = (e: FormEvent) => { e.preventDefault(); send(input); };
+
+  return (
+    <section className="bg-[#f6f8fb] px-3 py-6 text-[#111827]" style={{ fontFamily: "'Inter', sans-serif" }}>
+      <div className="mx-auto flex max-w-[1400px] overflow-hidden rounded-2xl border border-[#e5e9f0] bg-white" style={{ height: 'min(760px, 88vh)' }}>
+
+        {/* ── sidebar ── */}
+        <aside className="hidden w-[248px] shrink-0 flex-col border-r border-[#eef1f6] bg-[#fbfcfe] p-4 md:flex">
+          <div className="mb-6 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="grid h-6 w-6 place-items-center rounded-md bg-[#2563eb] text-[13px] text-white">✦</span>
+              <b className="text-[14px]">TEN Resume AI</b>
+            </div>
+            <span className="text-[#9ca3af]">▤</span>
+          </div>
+
+          <button onClick={() => setMsgs([])} className="mb-1 flex items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] text-[#374151] hover:bg-[#eef2ff]">
+            <span>✎</span> New Chat
+          </button>
+          <button className="mb-5 flex items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] text-[#374151] hover:bg-[#eef2ff]">
+            <span>⌕</span> Search
+          </button>
+
+          <div className="mb-1 flex items-center justify-between px-2">
+            <span className="text-[11px] font-semibold text-[#9ca3af]">Projects</span>
+            <span className="text-[12px] text-[#9ca3af]">🗀</span>
+          </div>
+          {PROJECTS.map(([name, count]) => (
+            <div key={name} className="flex items-center justify-between rounded-lg px-2 py-1.5 text-[13px] text-[#374151] hover:bg-[#eef2ff]">
+              <span className="truncate">{name}</span><span className="text-[11px] text-[#9ca3af]">{count}</span>
+            </div>
+          ))}
+
+          <p className="mb-1 mt-5 px-2 text-[11px] font-semibold text-[#9ca3af]">TODAY</p>
+          {HISTORY_TODAY.map((h) => (
+            <div key={h} className="truncate rounded-lg px-2 py-1.5 text-[13px] text-[#374151] hover:bg-[#eef2ff]">{h}</div>
+          ))}
+          <p className="mb-1 mt-4 px-2 text-[11px] font-semibold text-[#9ca3af]">YESTERDAY</p>
+          {HISTORY_YESTERDAY.map((h) => (
+            <div key={h} className="truncate rounded-lg px-2 py-1.5 text-[13px] text-[#374151] hover:bg-[#eef2ff]">{h}</div>
+          ))}
+
+          <div className="mt-auto flex items-center gap-2 rounded-xl border border-[#eef1f6] bg-white p-2.5">
+            <span className="grid h-8 w-8 place-items-center rounded-full bg-[#e0e7ff] text-[12px] font-bold text-[#3730a3]">TE</span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[12.5px] font-semibold">TEN Student</p>
+              <p className="text-[11px] text-[#9ca3af]">Free</p>
+            </div>
+            <a href="/student-login.html" className="rounded-md bg-[#2563eb] px-2.5 py-1 text-[11px] font-semibold text-white">Upgrade</a>
+          </div>
+        </aside>
+
+        {/* ── main ── */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex-1 overflow-y-auto px-5 py-8">
+            {!started ? (
+              <div className="flex h-full flex-col items-center justify-center">
+                <h3 className="text-center text-[28px] font-semibold text-[#2563eb] md:text-[32px]">Hey, How Can I Assist?</h3>
+                <p className="mt-3 max-w-[430px] text-center text-[13px] leading-relaxed text-[#6b7280]">
+                  TEN Resume AI scans your resume against what an ATS really parses — and rebuilds it
+                  when it would be filtered out.
+                </p>
+                <Composer {...{ input, setInput, onSubmit, fileRef, send, busy }} />
+                <div className="mt-6 flex flex-wrap justify-center gap-2.5">
+                  {QUICK.map((q) => (
+                    <button key={q.label} onClick={() => send(q.send)}
+                      className="flex items-center gap-2 rounded-full border border-[#e5e9f0] bg-white px-4 py-2 text-[12.5px] text-[#374151] transition-colors hover:border-[#c7d2fe] hover:bg-[#f5f7ff]">
+                      <span>{q.icon}</span> {q.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="mx-auto max-w-[760px] space-y-5">
+                {msgs.map((m, i) => (
+                  <div key={i} className={m.role === 'user' ? 'flex justify-end' : ''}>
+                    {m.role === 'user' ? (
+                      <div className="max-w-[80%] rounded-2xl bg-[#2563eb] px-4 py-2.5 text-[13.5px] text-white">
+                        {m.text}
+                        {m.file && <span className="mt-1 block text-[11px] opacity-80">📎 {m.file}</span>}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {m.text && <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed text-[#374151]">{m.text}</p>}
+                        {m.resume && (
+                          <div className="rounded-2xl border border-[#e5e9f0] bg-[#fbfcfe] p-4">
+                            <div className="mb-2 flex items-center justify-between">
+                              <b className="text-[12px] uppercase tracking-wider text-[#6b7280]">Your ATS-ready resume</b>
+                              <button onClick={() => navigator.clipboard?.writeText(m.resume!)}
+                                className="rounded-md bg-[#2563eb] px-2.5 py-1 text-[11px] font-semibold text-white">Copy</button>
+                            </div>
+                            <pre className="max-h-[320px] overflow-auto whitespace-pre-wrap font-mono text-[11.5px] leading-relaxed text-[#374151]">{m.resume}</pre>
+                          </div>
+                        )}
+                        {m.report && <ReportCard report={m.report} />}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {busy && <p className="text-[13px] text-[#9ca3af]">Reading and scoring…</p>}
+              </div>
+            )}
+          </div>
+
+          {started && (
+            <div className="border-t border-[#eef1f6] px-5 py-4">
+              <div className="mx-auto max-w-[760px]">
+                <Composer {...{ input, setInput, onSubmit, fileRef, send, busy }} />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Composer({ input, setInput, onSubmit, fileRef, send, busy }: {
+  input: string; setInput: (v: string) => void; onSubmit: (e: FormEvent) => void;
+  fileRef: React.RefObject<HTMLInputElement>; send: (t: string, f?: File) => void; busy: boolean;
+}) {
+  return (
+    <form onSubmit={onSubmit} className="mt-7 w-full max-w-[560px] rounded-2xl border border-[#e5e9f0] bg-white p-3 shadow-[0_2px_10px_rgba(16,24,40,0.04)]">
+      <input
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        placeholder="Ask me anything…"
+        className="w-full bg-transparent px-2 py-1.5 text-[14px] text-[#111827] outline-none placeholder:text-[#9ca3af]"
+      />
+      <div className="mt-2 flex items-center gap-3">
+        <button type="button" onClick={() => fileRef.current?.click()} className="text-[#6b7280] hover:text-[#111827]" aria-label="Attach resume">📎</button>
+        <input ref={fileRef} type="file" accept=".pdf,.txt,.md" className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) send('Scan this resume', f); e.target.value = ''; }} />
+        <button type="button" onClick={() => fileRef.current?.click()}
+          className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12.5px] text-[#374151] hover:bg-[#f3f4f6]">
+          <span>⌸</span> Resume
+        </button>
+        <span className="ml-auto flex items-center gap-1.5 text-[12px] text-[#6b7280]">
+          <span className="h-2 w-2 rounded-full bg-[#f59e0b]" /> TEN-ATS-Engine ▾
+        </span>
+        <button type="submit" disabled={busy}
+          className="grid h-7 w-7 place-items-center rounded-full bg-[#e5e9f0] text-[13px] text-[#6b7280] disabled:opacity-50">↑</button>
+      </div>
+    </form>
+  );
+}

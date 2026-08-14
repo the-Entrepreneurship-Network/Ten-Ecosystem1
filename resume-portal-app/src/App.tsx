@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { FadeIn } from './components/FadeIn';
+import { AgentHero, AgentChat } from './components/ResumeAgent';
 import { navigateToRoute } from './shared';
 
 const ASSETS = '/assets/resume-portal';
@@ -274,6 +275,8 @@ export default function App() {
     <main>
       <Hero />
       <CutTheStone />
+      <AgentHero />
+      <AgentChat />
       <Features />
       <Finale />
     </main>

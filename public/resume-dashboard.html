@@ -58,16 +58,39 @@
       <div class="verdict wait" id="buildVerdict">Received. The AI builder agent is being connected — your forged resume will land here.</div>
     </section>
   </div>
-  <p class="note">The scoring and building agents plug in next — uploads are accepted now so the flow is ready.</p>
+  <p class="note">Both options run on the TEN ATS engine — <a href="/resume-portal/#agent" style="color:#fde68a;">open the full agent chat</a> to scan, score and rebuild in one place.</p>
 </main>
 <script>
-  for (const [input, verdict] of [['checkupFile','checkupVerdict'], ['buildFile','buildVerdict']]) {
-    document.getElementById(input).addEventListener('change', () => {
-      document.getElementById(verdict).classList.add('show');
-    });
+  /* Both cards call the same engine the portal's agent uses. */
+  async function scanFile(file, verdictEl) {
+    verdictEl.classList.add('show');
+    verdictEl.textContent = 'Reading and scoring…';
+    const body = new FormData();
+    body.append('file', file);
+    try {
+      const res = await fetch('/api/v2/resume/scan', { method: 'POST', body });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error);
+      const r = data.report;
+      verdictEl.innerHTML =
+        '<b>ATS score ' + r.score + '/100 — ' + r.verdictText + '</b>' +
+        (r.failing.length
+          ? '<br><br>' + r.failing.slice(0, 3).map(f => '• <b>' + f.label + '</b> — ' + f.fix).join('<br>')
+          : '') +
+        (data.rebuilt ? '<br><br>A rebuilt version scoring ' + data.rebuilt.report.score + '/100 is ready in the <a href="/resume-portal/#agent" style="color:#fde68a;">agent chat</a>.' : '');
+    } catch (err) {
+      verdictEl.textContent = 'Could not read that file. Try a text-based PDF (not a scan), or paste the text into the agent chat.';
+    }
   }
+
+  document.getElementById('checkupFile').addEventListener('change', (e) => {
+    if (e.target.files[0]) scanFile(e.target.files[0], document.getElementById('checkupVerdict'));
+  });
+  document.getElementById('buildFile').addEventListener('change', (e) => {
+    if (e.target.files[0]) scanFile(e.target.files[0], document.getElementById('buildVerdict'));
+  });
   document.getElementById('detailsBtn').addEventListener('click', () => {
-    document.getElementById('buildVerdict').classList.add('show');
+    window.location.href = '/resume-portal/#agent';
   });
 </script>
 </body>
