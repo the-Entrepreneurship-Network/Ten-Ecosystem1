@@ -2,7 +2,7 @@
   "name": "TEN Internship Portal",
   "short_name": "TEN",
   "description": "Tasks, attendance, documents, certificates and messages for The Entrepreneurship Network internship programme.",
-  "id": "/",
+  "id": "/student-dashboard",
   "start_url": "/student-dashboard",
   "scope": "/",
   "display": "standalone",

@@ -1898,10 +1898,25 @@ app.get("/sw.js", (req, res) => {
 
 // The correct type is application/manifest+json. Served as anything else, some
 // browsers ignore the manifest and the app silently stops being installable.
+//
+// There are three installable apps, and each needs its own manifest with its
+// own `id` — a browser decides "is this the same app I already installed?" from
+// the id, so two manifests sharing one would be a single install that simply
+// changed its start page.
+//
+//   manifest.json                    "TEN Portal"             starts at /
+//   manifest.webmanifest             "TEN Internship Portal"  starts at /student-dashboard
+//   manifest-notifications.webmanifest "TEN Notifications"    starts at /notifications
 app.get("/manifest.webmanifest", (req, res) => {
     res.setHeader("Content-Type", "application/manifest+json; charset=utf-8");
     res.setHeader("Cache-Control", "public, max-age=3600");
     res.sendFile(path.join(__dirname, "public", "manifest.webmanifest"));
+});
+
+app.get("/manifest-notifications.webmanifest", (req, res) => {
+    res.setHeader("Content-Type", "application/manifest+json; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.sendFile(path.join(__dirname, "public", "manifest-notifications.webmanifest"));
 });
 
 // Custom route to serve the logo with the correct JPEG Content-Type since the file has a .png extension but is actually a JPEG (JFIF format)

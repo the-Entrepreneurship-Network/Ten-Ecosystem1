@@ -18,13 +18,21 @@
 
 'use strict';
 
-const SHELL_CACHE = 'ten-shell-v3';
+// Bumped whenever SHELL_ASSETS changes: activate deletes every cache that is
+// not the current one, so an old worker's copy cannot outlive the list.
+const SHELL_CACHE = 'ten-shell-v4';
 const SHELL_ASSETS = [
   '/offline.html',
   '/manifest.webmanifest',
+  // The Notifications app is a third installable app with its own manifest and
+  // its own icons. Its manifest has to be reachable offline like the others, or
+  // the installed app cannot describe itself when the network is down.
+  '/manifest-notifications.webmanifest',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
-  '/icons/badge-72.png'
+  '/icons/badge-72.png',
+  '/icons/notif-192.png',
+  '/icons/notif-512.png'
 ];
 
 self.addEventListener('install', (event) => {
