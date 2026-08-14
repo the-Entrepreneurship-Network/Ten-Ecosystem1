@@ -125,11 +125,59 @@ a{color:inherit;}
 .weeks .go{
   display:inline-block; margin-top:16px; background:var(--ink); color:#000; text-decoration:none;
   font-weight:900; font-size:13px; border-radius:10px; padding:12px 22px;
+  border:0; cursor:pointer; font-family:inherit;
 }
+.weeks .go:hover{background:var(--gold);}
 .card .chev{position:absolute; top:24px; right:22px; color:var(--muted); transition:transform .35s; font-size:18px;}
 .card.open .chev{transform:rotate(90deg); color:var(--gold);}
 
 .empty{grid-column:1/-1; text-align:center; color:var(--muted); padding:60px 20px; font-size:14px;}
+
+/* ── the choice step ─────────────────────────────────────────────────────
+   Picking a domain is not the same decision as picking a route into it.
+   Some arrivals are ready to intern; some want the course first. Asking
+   costs one tap and saves the ones who would otherwise register for an
+   internship they are not ready for. */
+.sheet{
+  position:fixed; inset:0; z-index:80; display:none;
+  align-items:center; justify-content:center; padding:20px;
+}
+.sheet.on{display:flex;}
+.sheet .veil{position:absolute; inset:0; background:rgba(0,0,0,.8); backdrop-filter:blur(10px); animation:fade .25s;}
+@keyframes fade{from{opacity:0;} to{opacity:1;}}
+.sheet .panel{
+  position:relative; width:min(700px,100%); max-height:88dvh; overflow:auto;
+  background:var(--card); border:1px solid var(--line-2); border-radius:22px; padding:34px 30px 30px;
+  animation:lift .4s cubic-bezier(.2,.8,.2,1);
+}
+@keyframes lift{from{opacity:0; transform:translateY(30px) scale(.97);} to{opacity:1; transform:none;}}
+.sheet .x{
+  position:absolute; top:16px; right:18px; background:none; border:0; color:var(--muted);
+  font-size:26px; line-height:1; cursor:pointer; padding:4px 8px; font-family:inherit;
+}
+.sheet .x:hover{color:var(--ink);}
+.sheet .eyebrow{font-size:10.5px; color:var(--muted);}
+.sheet h3{
+  font-family:'Outfit',sans-serif; font-weight:900; font-size:clamp(22px,4.4vw,32px);
+  letter-spacing:-.02em; margin:10px 0 6px;
+}
+.sheet h3 em{font-style:normal; color:var(--gold);}
+.sheet .lead{color:#b4b4b4; font-size:14px; line-height:1.65; margin-bottom:24px;}
+.picks{display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(250px,1fr));}
+.pick{
+  display:block; text-align:left; text-decoration:none; cursor:pointer; font-family:inherit;
+  background:var(--card-2); border:1px solid var(--line-2); border-radius:16px; padding:22px 20px;
+  transition:border-color .25s, transform .25s, background .25s;
+}
+.pick:hover,.pick:focus-visible{border-color:var(--gold); transform:translateY(-3px); outline:none;}
+.pick .tag{font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.2em; text-transform:uppercase; color:var(--gold);}
+.pick h4{font-family:'Outfit',sans-serif; font-size:19px; font-weight:900; color:var(--ink); margin:9px 0 8px;}
+.pick p{font-size:13px; line-height:1.6; color:var(--muted); margin:0;}
+.pick ul{list-style:none; margin:13px 0 0; padding:0;}
+.pick li{font-size:12.5px; color:#c4c4c4; padding:3px 0 3px 17px; position:relative;}
+.pick li::before{content:'—'; position:absolute; left:0; color:var(--gold);}
+.pick .cta{display:inline-block; margin-top:16px; font-size:13px; font-weight:800; color:var(--ink);}
+.sheet .note{margin-top:20px; font-size:12px; color:var(--muted); line-height:1.6; text-align:center;}
 
 /* ── closing ─────────────────────────────────────────────────────────── */
 .tail{max-width:1120px; margin:0 auto; padding:0 22px 90px; text-align:center;}
@@ -175,6 +223,47 @@ a{color:inherit;}
   <p>Registration takes two minutes. You pick the domain and how long you want to intern for.</p>
   <a href="/register.html">Start my journey &rarr;</a>
 </section>
+
+<!-- The route chooser. Opened by a card's "Start this journey", never on load. -->
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <div class="veil" data-close></div>
+  <div class="panel">
+    <button class="x" type="button" data-close aria-label="Close">&times;</button>
+    <p class="eyebrow mono" id="sheetDomain">Your domain</p>
+    <h3 id="sheetTitle">How do you want to <em>start</em>?</h3>
+    <p class="lead">Two ways in. Take the internship now if you already have the fundamentals,
+       or build them in the course first and move across when you are ready.</p>
+
+    <div class="picks">
+      <a class="pick" id="pickIntern" href="/register.html">
+        <span class="tag">Straight to the internship</span>
+        <h4>I'm ready to intern</h4>
+        <p>Register as an intern and start the weekly journey in this domain.</p>
+        <ul>
+          <li>Six weekly modules, quizzes and a final project</li>
+          <li>Attendance, coins and a coordinator</li>
+          <li>Offer letter, and a certificate anyone can verify</li>
+        </ul>
+        <span class="cta">Register as an intern &rarr;</span>
+      </a>
+
+      <a class="pick" id="pickCourse" href="/student-portal/">
+        <span class="tag">Course first</span>
+        <h4>Teach me first</h4>
+        <p>Learn the domain in TEN Career Studio, then shift into the internship.</p>
+        <ul>
+          <li>Structured courses with AI-evaluated assignments</li>
+          <li>Job search and an ATS-proof resume builder</li>
+          <li>Move into the internship whenever you're ready</li>
+        </ul>
+        <span class="cta">Open TEN Career Studio &rarr;</span>
+      </a>
+    </div>
+
+    <p class="note">Not sure? Most people who have already built something in this domain
+       go straight to the internship. Everyone else does the course first.</p>
+  </div>
+</div>
 
 <script src="/notify-orb.js" defer></script>
 <script>
@@ -224,7 +313,7 @@ function render(domains){
       '<h2 style="color:hsl(' + hueOf(d.name) + ',72%,72%)">' + esc(d.name) + '</h2>' +
       '<p class="meta"><em>' + (weeks.length || 6) + ' modules</em> &middot; quizzes &middot; projects &middot; certificate</p>' +
       '<div class="weeks">' + body +
-        '<a class="go" href="/register.html">Start this journey &rarr;</a>' +
+        '<button class="go" type="button" data-start="' + esc(d.name) + '">Start this journey &rarr;</button>' +
       '</div>' +
     '</article>';
   }).join("");
@@ -235,11 +324,15 @@ function render(domains){
       card.setAttribute("aria-expanded", open ? "true" : "false");
     }
     card.addEventListener("click", function(e){
-      // The button inside is a link, not part of the toggle.
+      // Links and the start button are their own actions, not the toggle.
       if (e.target.closest("a")) return;
+      var start = e.target.closest("[data-start]");
+      if (start){ e.preventDefault(); openChoice(start.getAttribute("data-start")); return; }
       toggle();
     });
     card.addEventListener("keydown", function(e){
+      // The start button handles its own Enter/Space.
+      if (e.target.closest("[data-start]") || e.target.closest("a")) return;
       if (e.key === "Enter" || e.key === " "){ e.preventDefault(); toggle(); }
     });
     // The pointer-following wash.
@@ -250,6 +343,44 @@ function render(domains){
     });
   });
 }
+
+/* ── the choice step ─────────────────────────────────────────────────────
+   Picking a domain used to go straight to the intern registration form.
+   That is one of two real routes: the internship, or the course in TEN
+   Career Studio first. The domain travels with the answer, so whichever
+   they pick opens already knowing what they chose here.
+   ────────────────────────────────────────────────────────────────────── */
+var SHEET   = document.getElementById("sheet");
+var LAST_AT = null;
+
+function openChoice(domain){
+  LAST_AT = document.activeElement;
+  document.getElementById("sheetDomain").textContent = domain || "Your domain";
+
+  var q = domain ? "?role=student&domain=" + encodeURIComponent(domain) : "";
+  document.getElementById("pickIntern").setAttribute("href", "/register.html" + q);
+  // The Career Studio is a separate application; it takes no domain param,
+  // so the link stays exactly the address it was given.
+  document.getElementById("pickCourse").setAttribute("href", "/student-portal/");
+
+  SHEET.classList.add("on");
+  document.body.style.overflow = "hidden";
+  var first = document.getElementById("pickIntern");
+  if (first) first.focus();
+}
+
+function closeChoice(){
+  SHEET.classList.remove("on");
+  document.body.style.overflow = "";
+  if (LAST_AT && LAST_AT.focus) LAST_AT.focus();
+}
+
+SHEET.addEventListener("click", function(e){
+  if (e.target.closest("[data-close]")) closeChoice();
+});
+document.addEventListener("keydown", function(e){
+  if (e.key === "Escape" && SHEET.classList.contains("on")) closeChoice();
+});
 
 fetch("/api/public/domains")
   .then(function(r){ return r.json(); })
