@@ -181,15 +181,19 @@ router.get("/dm/threads", requireChatUser, async (req, res) => {
         const me = req.me;
         const hidden = await UserBlock.hiddenFor(me.id);
 
-        // Rooms addressed to this person. The room name contains both ids, so
-        // membership is a property of the name and needs no separate index.
+        // Rooms addressed to this person, and nobody else's.
+        //
+        // An admin used to get `/^dm::/` here — every private conversation in
+        // the portal, mixed into their own inbox. That is not an inbox, it is a
+        // surveillance feed, and it meant an admin opening Messages read other
+        // people's private conversations by default. Oversight still exists and
+        // still belongs to admins: it lives in the admin portal's moderation
+        // desk (GET /api/chat/admin/rooms), where it is a deliberate act rather
+        // than the first thing on screen.
+        //
         // Matched against every id they are known by — a conversation started
         // under their other spelling is still their conversation.
-        const roomFilter = me.role === "admin"
-            ? { chatRoom: /^dm::/ }
-            : chatIdentity.dmRoomFilterFor(me);
-
-        const rooms = await Message.distinct("chatRoom", roomFilter);
+        const rooms = await Message.distinct("chatRoom", chatIdentity.dmRoomFilterFor(me));
         if (!rooms.length) return res.json({ success: true, threads: [] });
 
         // Newest message per room, in one pass.
@@ -210,6 +214,15 @@ router.get("/dm/threads", requireChatUser, async (req, res) => {
         ]);
 
         const readMap = await ChatRead.mapFor(me.id, latest.map(l => l._id));
+        // What the OTHER side has read, so a sent message can show one tick or
+        // two rather than nothing at all.
+        const theirReadMap = {};
+        for (const row of latest) {
+            const them = chatIdentity.otherParticipant(me, row._id);
+            if (!them) continue;
+            const m = await ChatRead.mapFor(them, [row._id]);
+            if (m[row._id]) theirReadMap[row._id] = m[row._id];
+        }
 
         const myIds = chatIdentity.matchIds(me);
 
@@ -218,16 +231,12 @@ router.get("/dm/threads", requireChatUser, async (req, res) => {
             const parts = String(row._id).slice(4).split("::");
             if (parts.length !== 2) continue;
 
-            // Who this conversation is WITH. An admin is not a participant, so
-            // for them the "other" side is simply the first name in the room.
+            // Who this conversation is WITH.
             //
-            // This used to fall back to parts[0] whenever neither id matched,
-            // which is how a person's own profile ended up in the panel beside
-            // a conversation with somebody else: their canonical id had changed
-            // spelling, nothing matched, and the fallback picked themselves.
-            const other = me.role === "admin"
-                ? parts[0]
-                : chatIdentity.otherParticipant(me, row._id);
+            // Null when neither id belongs to the caller, rather than guessing:
+            // falling back to parts[0] is how a person's own profile ended up
+            // in the panel beside a conversation with somebody else.
+            const other = chatIdentity.otherParticipant(me, row._id);
             if (other === null || other === undefined) continue;
             if (hidden.has(other)) continue;
 
@@ -253,7 +262,9 @@ router.get("/dm/threads", requireChatUser, async (req, res) => {
                 at: row.timestamp,
                 unread,
                 // So the UI can warn before a conversation ages out.
-                expiresAt: row.expiresAt || null
+                expiresAt: row.expiresAt || null,
+                // When they last read this conversation — drives the ticks.
+                theirLastReadAt: theirReadMap[row._id] || null
             });
         }
 
@@ -278,7 +289,16 @@ router.post("/dm/read", requireChatUser, async (req, res) => {
         if (req.me.role !== "admin" && !chatIdentity.isParticipant(req.me, room)) {
             return res.status(403).json({ success: false, message: "Not your conversation." });
         }
-        await ChatRead.markRead(req.me.id, room, new Date());
+        const at = new Date();
+        await ChatRead.markRead(req.me.id, room, at);
+
+        // Tell the other person their message has been read, so their own
+        // ticks turn without waiting for a refresh. ChatRead already stored
+        // this; nothing was ever told about it.
+        const other = chatIdentity.otherParticipant(req.me, room);
+        const io = req.app.get("io");
+        if (io && other) io.to("user::" + other).emit("dm_read", { room, by: req.me.id, at });
+
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
@@ -328,6 +348,14 @@ router.get("/profile/:userId", requireChatUser, async (req, res) => {
 
         const isStaff = ["hr", "coordinator", "admin"].indexOf(req.me.role) !== -1;
 
+        // Online now? The personal channel a socket joins on connect is already
+        // the answer; no presence table needed.
+        let online = false;
+        try {
+            const io = req.app.get("io");
+            if (io) online = (await io.in("user::" + wanted).fetchSockets()).length > 0;
+        } catch (_) {}
+
         const student = await Student.findOne({ employeeId: wanted })
             .select("name firstName lastName employeeId domain domains collegeName college tenure joiningDate email whatsapp")
             .lean();
@@ -336,6 +364,7 @@ router.get("/profile/:userId", requireChatUser, async (req, res) => {
                 id: student.employeeId,
                 name: (student.name || `${student.firstName || ""} ${student.lastName || ""}`).trim() || student.employeeId,
                 role: "student",
+                online,
                 domain: student.domain || "",
                 domains: Array.isArray(student.domains) && student.domains.length ? student.domains : [student.domain].filter(Boolean),
                 college: student.collegeName || student.college || "",
@@ -353,6 +382,7 @@ router.get("/profile/:userId", requireChatUser, async (req, res) => {
                 id: coord.email || coord.username,
                 name: coord.name || coord.username || coord.email,
                 role: "coordinator",
+                online,
                 domain: coord.domain || "",
                 email: coord.email || ""
             } });
@@ -365,6 +395,7 @@ router.get("/profile/:userId", requireChatUser, async (req, res) => {
                 id: hr.email || hr.username,
                 name: hr.name || hr.username || hr.email,
                 role: "hr",
+                online,
                 email: hr.email || ""
             } });
         }

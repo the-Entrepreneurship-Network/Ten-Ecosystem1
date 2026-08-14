@@ -79,6 +79,10 @@ html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);
 .bubble.mine{background:var(--mine);align-self:flex-end;border-bottom-left-radius:16px;border-bottom-right-radius:5px;}
 .bubble .who{font-size:11px;font-weight:800;color:var(--gold);margin-bottom:3px;}
 .bubble .at{font-size:10px;color:var(--muted);margin-top:4px;text-align:right;}
+.tick{margin-left:3px;letter-spacing:-1px;}
+.tick.seen{color:#38bdf8;}
+.typing{font-size:11.5px;color:var(--gold);font-style:italic;}
+.dot-online{display:inline-block;width:8px;height:8px;border-radius:50%;background:#10b981;margin-right:5px;}
 .bubble img{max-width:100%;border-radius:10px;display:block;margin-top:4px;}
 
 .composer{flex:0 0 auto;display:flex;gap:8px;align-items:flex-end;padding:12px 14px;
@@ -174,7 +178,7 @@ html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);
       <button class="icon-btn" onclick="document.getElementById('imgInput').click()" title="Send a photo">📎</button>
       <input type="file" id="imgInput" accept="image/*" style="display:none" onchange="sendImage(this)">
       <textarea id="input" rows="1" placeholder="Write a message…"
-                oninput="autoGrow(this)" onkeydown="maybeSend(event)"></textarea>
+                oninput="autoGrow(this); noteTyping();" onkeydown="maybeSend(event)"></textarea>
       <button class="send" id="sendBtn" onclick="sendText()">Send</button>
     </div>
   </section>
@@ -338,7 +342,9 @@ function renderThreads(){
 }
 
 async function openThread(room, name, withId){
-  current = { room: room, withName: name, withId: withId };
+  var row = threads.filter(function(t){ return t.room === room; })[0];
+  current = { room: room, withName: name, withId: withId,
+              theirLastReadAt: row ? row.theirLastReadAt : null };
   document.getElementById("convoName").textContent = name;
   document.getElementById("convoAvatar").outerHTML =
     avatarHtml(name, withId, 38).replace('class="avatar"', 'class="avatar" id="convoAvatar"');
@@ -346,6 +352,7 @@ async function openThread(room, name, withId){
   showConvo();
   renderThreads();
 
+  showTyping(false);
   if (socket) socket.emit("join_room", { room: room });
   await loadMessages(room);
 
@@ -404,7 +411,15 @@ function addBubble(m){
   var html = mine ? "" : '<div class="who">' + esc(m.senderName || m.senderId) + "</div>";
   if (m.message) html += esc(m.message).replace(/\n/g, "<br>");
   if (m.imageUrl) html += '<img src="' + esc(m.imageUrl) + '" alt="' + esc(m.imageName || "photo") + '">';
-  html += '<div class="at">' + esc(new Date(m.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })) + "</div>";
+  var stamp = esc(new Date(m.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+  // One tick sent, two read. The read time comes from the same ChatRead row
+  // the unread badge already uses — nothing new is stored for this.
+  if (mine) {
+    var seen = current && current.theirLastReadAt &&
+               new Date(m.timestamp) <= new Date(current.theirLastReadAt);
+    stamp += ' <span class="tick' + (seen ? " seen" : "") + '">' + (seen ? "\u2713\u2713" : "\u2713") + "</span>";
+  }
+  html += '<div class="at">' + stamp + "</div>";
   el.innerHTML = html;
   box.appendChild(el);
   box.scrollTop = box.scrollHeight;
@@ -412,6 +427,37 @@ function addBubble(m){
 
 /* ── sending ─────────────────────────────────────────────────────────── */
 function autoGrow(el){ el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 120) + "px"; }
+
+/* ── typing ──────────────────────────────────────────────────────────── */
+var typingSentAt = 0, typingStopTimer = null, typingClearTimer = null;
+
+function noteTyping(){
+  if (!socket || !socket.connected || !current) return;
+  var now = Date.now();
+  // At most one "started" every two seconds; the other end times itself out.
+  if (now - typingSentAt > 2000) {
+    socket.emit("typing", { room: current.room });
+    typingSentAt = now;
+  }
+  clearTimeout(typingStopTimer);
+  typingStopTimer = setTimeout(function(){
+    if (socket && socket.connected && current) socket.emit("typing", { room: current.room, stopped: true });
+    typingSentAt = 0;
+  }, 2500);
+}
+
+function showTyping(on){
+  var el = document.getElementById("convoSub");
+  if (!el) return;
+  clearTimeout(typingClearTimer);
+  if (on) {
+    el.innerHTML = '<span class="typing">typing\u2026</span>';
+    // Never leave someone typing forever because their connection dropped.
+    typingClearTimer = setTimeout(function(){ showTyping(false); }, 6000);
+  } else {
+    el.textContent = "Your messages are kept for " + retentionDays + " days";
+  }
+}
 function maybeSend(e){
   // Enter sends; Shift+Enter makes a new line. On a phone the on-screen
   // keyboard's return key inserts a newline instead, which is what people
@@ -524,7 +570,8 @@ async function loadProfile(userId){
     box.innerHTML =
       '<div class="profile-body">' +
         avatarHtml(p.name, p.id, 88) +
-        '<div class="profile-name">' + esc(p.name) + "</div>" +
+        '<div class="profile-name">' + (p.online ? '<span class="dot-online" title="Online now"></span>' : "") +
+          esc(p.name) + "</div>" +
         '<span class="role-pill role-' + esc(p.role) + '">' + esc(p.role) + "</span>" +
         '<div style="margin-top:18px;">' + fields.join("") + "</div>" +
         '<div class="profile-actions">' +
@@ -634,6 +681,17 @@ function connect(){
 
   // A message in a conversation that is not open. The inbox is what shows it.
   socket.on("dm_notice", function(){ loadThreads(); });
+
+  socket.on("typing", function(d){
+    if (current && d && d.room === current.room) showTyping(!!d.typing);
+  });
+
+  // They read what we sent: turn the ticks without a refresh.
+  socket.on("dm_read", function(d){
+    if (!current || !d || d.room !== current.room) return;
+    current.theirLastReadAt = d.at;
+    loadMessages(current.room);
+  });
 }
 
 /**

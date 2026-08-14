@@ -10085,6 +10085,10 @@ const io = new SocketIOServer(server, {
     cors: { origin: "*", methods: ["GET","POST"] }
 });
 
+// Routers reach the socket server through the app, so read receipts and
+// presence do not need it passed around.
+app.set("io", io);
+
 io.use(async (socket, next) => {
     try{
         // From the session cookie, for every role. The handshake's `auth`
@@ -10253,6 +10257,25 @@ io.on("connection", (socket) => {
     socket.on("join_room", (payload) => {
         const room = payload && payload.room;
         if(canAccessRoom(identity, room)) socket.join(room);
+    });
+
+    /**
+     * "typing…" — relayed, never stored.
+     *
+     * Straight to the other participant's personal channel, so it reaches them
+     * whether or not they have the conversation open. The client stops showing
+     * it on a timeout, which means a dropped connection cannot leave somebody
+     * typing forever.
+     */
+    socket.on("typing", (payload) => {
+        const room = payload && payload.room;
+        if (!room || !canAccessRoom(identity, room)) return;
+        const other = chatIdentity.otherParticipant(identity, room);
+        if (!other) return;
+        io.to("user::" + other).emit("typing", {
+            room, fromId: identity.id, from: identity.name,
+            typing: !(payload && payload.stopped)
+        });
     });
 
     socket.on("send_message", async (payload, ack) => {

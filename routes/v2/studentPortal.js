@@ -1540,17 +1540,28 @@ router.post("/student/quiz-result", requireStudent, async (req, res) => {
         }
 
         // Mark task as approved if passed and taskId provided
+        let unlock = null;
         if (passed && taskId) {
             try {
                 await StudentTaskProgress.updateOne(
                     { studentId: student._id, taskId },
                     { $set: { status: "approved", quizPassed: true, approvedAt: new Date(), coinsAwarded: coins || 0 } }
                 );
-            } catch(e) { /* silent */ }
+
+                // ...and open the next week. This was the missing half: passing
+                // the quiz is the ONLY way most students finish a task, and this
+                // path approved it without ever asking whether the week was now
+                // complete. So Week 1 read "APPROVED" while Week 2 still said
+                // "Complete Week 1 to unlock", with nothing the student could do
+                // about it. The coordinator approval path has always called this.
+                unlock = await taskEngine.tryUnlockNextWeek(student, taskId);
+            } catch (e) {
+                console.error("[V2] quiz approval/unlock failed:", e.message);
+            }
         }
 
         const { totalCoins, rupeeValue } = await coinService.getBalance(student._id);
-        res.json({ success: true, awarded, totalCoins, rupeeValue });
+        res.json({ success: true, awarded, totalCoins, rupeeValue, unlock });
     } catch (err) {
         console.error("[V2] quiz-result error:", err.message);
         res.status(500).json({ success: false, message: "Server error" });

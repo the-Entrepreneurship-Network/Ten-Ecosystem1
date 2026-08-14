@@ -328,6 +328,39 @@ async function getStudentTasks(student) {
         return w;
     });
 
+    // Self-heal a stuck journey.
+    //
+    // Unlocking used to happen only at the moment a task was approved, and the
+    // quiz path — how most students actually finish — did not do it. Students
+    // were left looking at "Week 1: APPROVED" above "Complete Week 1 to
+    // unlock", with no action available to them and no way to report it except
+    // a screenshot.
+    //
+    // Repairing on read fixes everyone already stuck without a migration, and
+    // costs one write only in the rare case where a week is finished and the
+    // next is still shut.
+    weeks.sort((a, b) => a.week - b.week);
+    const stuck = [];
+    for (let i = 0; i < weeks.length - 1; i++) {
+        const next = weeks[i + 1];
+        if (weeks[i].allApproved && next.totalCount && !next.anyAvailable && !next.allApproved) {
+            stuck.push(next);
+        }
+    }
+    if (stuck.length) {
+        const ids = stuck.flatMap(w => w.tasks.filter(t => t.status === "locked").map(t => t._id));
+        if (ids.length) {
+            await StudentTaskProgress.updateMany(
+                { studentId: student._id, taskId: { $in: ids }, status: "locked" },
+                { $set: { status: "available" } }
+            );
+            for (const w of stuck) {
+                w.tasks.forEach(t => { if (t.status === "locked") t.status = "available"; });
+                w.anyAvailable = true;
+            }
+        }
+    }
+
     return { weeks, domain, durationType };
 }
 
