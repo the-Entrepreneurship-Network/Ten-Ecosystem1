@@ -56,6 +56,27 @@ const studentsSchema = new mongoose.Schema({
     passwordResetExpiry:  { type: Date,   default: null },
     activeSessionToken:   { type: String, default: null },
 
+    // ── Credentials an admin has changed on the student's behalf ────────────
+    //
+    // When a student cannot get in, an admin can set a working password (and
+    // correct a wrong email) so they can sign in again. That hands the admin a
+    // password the student did not choose, which is fine as a way back in and
+    // not fine as a permanent state — so the account is flagged, and the next
+    // sign-in asks the student to set their own before going any further.
+    //
+    // Two independent flags, because the two changes are independent: an admin
+    // may fix a typo in an email without touching the password, or the other
+    // way round.
+    mustChangePassword:   { type: Boolean, default: false },
+    mustChangeEmail:      { type: Boolean, default: false },
+    // Context for the student ("your access was reset by TEN Admin on …"), and
+    // an audit trail on the record itself. Never the password, in any form.
+    credentialResetAt:    { type: Date,   default: null },
+    credentialResetBy:    { type: String, default: null },
+    // What the email was before the admin corrected it, so a mistake can be
+    // traced and so the student can see what changed.
+    previousEmail:        { type: String, default: null },
+
     currentStreak:        { type: Number, default: 0 },
     bestStreak:           { type: Number, default: 0 },
     lastAttendanceDate:   { type: Date },

@@ -490,7 +490,10 @@ router.get('/students', requireAdminAPI, async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const [students, total] = await Promise.all([
       Student.find(filter)
-        .select('name employeeId email domain tenure joiningDate locStatus lorStatus starStatus isLockedOut failedLoginAttempts createdAt')
+        // mustChange* drive the "Reset pending" badge: without them there is no
+        // way to tell an account still sitting on an admin-set password from
+        // one the student has since taken back over.
+        .select('name employeeId email domain tenure joiningDate locStatus lorStatus starStatus isLockedOut failedLoginAttempts createdAt mustChangePassword mustChangeEmail')
         .skip(skip)
         .limit(parseInt(limit))
         .sort({ createdAt: -1 }),
@@ -732,29 +735,138 @@ router.post('/students/:id/unlock', requireAdminAPI, async (req, res) => {
   }
 });
 
-router.post('/students/:id/reset-password', requireAdminAPI, async (req, res) => {
+/**
+ * Give a student a way back into their account — password, email, or both.
+ *
+ * Students who are registered and working get locked out: a mistyped email at
+ * registration that no reset link can ever reach, a forgotten password on an
+ * account whose email is wrong, a lockout that outlasts anyone's patience. An
+ * admin needs to be able to hand them working credentials.
+ *
+ * What that must NOT do is leave the account sitting on a password somebody
+ * else chose and knows. So both changes raise a flag, and the student's next
+ * sign-in stops on a screen asking them to set their own password (and confirm
+ * their own email, if that was changed) before they can go anywhere. See
+ * POST /api/student/security/* in server.js for the other half.
+ *
+ * `requireChange: false` skips the prompt — for the case where an admin is
+ * correcting an obvious typo and there is nothing for the student to redo.
+ */
+async function resetStudentCredentials(req, res) {
   try {
-    const { newPassword } = req.body;
-    if (!newPassword || newPassword.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
-    const hashed = await bcrypt.hash(newPassword, 10);
+    const body = req.body || {};
+    const newPassword = typeof body.newPassword === 'string' ? body.newPassword : '';
+    const newEmail = typeof body.newEmail === 'string' ? body.newEmail.trim().toLowerCase() : '';
+    const requireChange = body.requireChange !== false;
+
+    if (!newPassword && !newEmail) {
+      return res.status(400).json({ error: 'Supply a new password, a new email, or both.' });
+    }
+    if (newPassword && newPassword.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+    // Deliberately permissive but real: something@something.tld. A stricter
+    // pattern rejects valid addresses, and this is the address a locked-out
+    // student's only way back in will be sent to.
+    if (newEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(newEmail)) {
+      return res.status(400).json({ error: 'That does not look like a valid email address.' });
+    }
+
     const student = await Student.findById(req.params.id);
     if (!student) return res.status(404).json({ error: 'Student not found' });
-    student.password = hashed;
+
+    // An email already on another account would give two students the same
+    // sign-in identifier, and the email branch of /login resolves exactly one.
+    if (newEmail && newEmail !== String(student.email || '').toLowerCase()) {
+      const clash = await Student.findOne({
+        email: new RegExp('^' + newEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i'),
+        _id: { $ne: student._id }
+      }).select('employeeId').lean();
+      if (clash) {
+        return res.status(409).json({ error: `That email is already used by ${clash.employeeId}.` });
+      }
+    }
+
+    const oldState = {
+      email: student.email,
+      mustChangePassword: student.mustChangePassword,
+      mustChangeEmail: student.mustChangeEmail
+    };
+    const changed = [];
+
+    if (newPassword) {
+      student.password = await bcrypt.hash(newPassword, 10);
+      student.mustChangePassword = requireChange;
+      changed.push('password');
+    }
+    if (newEmail && newEmail !== String(student.email || '').toLowerCase()) {
+      student.previousEmail = student.email || null;
+      student.email = newEmail;
+      student.mustChangeEmail = requireChange;
+      changed.push('email');
+    }
+
+    // A student who could not get in was very likely locked out as well.
+    // Leaving the lock on would make the new password look wrong too.
+    student.isLockedOut = false;
+    student.failedLoginAttempts = 0;
+    student.lockoutUntil = null;
+
+    // Any session opened with the old credentials ends here. If the reason for
+    // the reset was somebody else in the account, leaving their session alive
+    // would defeat the whole exercise.
+    student.activeSessionToken = null;
+    // A pending reset link issued under the old email must not still work.
+    student.passwordResetToken = null;
+    student.passwordResetExpiry = null;
+
+    student.credentialResetAt = new Date();
+    student.credentialResetBy = req.session.adminUser?.username || 'admin';
     await student.save();
+
     await AuditLog.create({
       userId: student._id,
-      actionType: 'student_password_reset',
-      performedBy: req.session.adminUser?.username || 'admin',
-      description: `Admin reset password for ${student.employeeId}`,
-      // Deliberately records only THAT the password changed. Never log a
-      // password, a hash, or its length.
-      oldState: { password: '[redacted]' },
-      newState: { password: '[redacted]' }
+      actionType: 'student_credentials_reset',
+      performedBy: student.credentialResetBy,
+      description: `Admin reset ${changed.join(' and ')} for ${student.employeeId}`,
+      // Records THAT the password changed and nothing about its value — never
+      // a password, a hash, or even its length.
+      oldState: Object.assign({}, oldState, newPassword ? { password: '[redacted]' } : {}),
+      newState: {
+        email: student.email,
+        mustChangePassword: student.mustChangePassword,
+        mustChangeEmail: student.mustChangeEmail,
+        ...(newPassword ? { password: '[redacted]' } : {})
+      }
     });
-    res.json({ success: true, message: 'Password reset successfully' });
+
+    res.json({
+      success: true,
+      changed,
+      email: student.email,
+      requireChange,
+      message: requireChange
+        ? `Updated ${changed.join(' and ')}. Give the student these details — they will be asked to set their own when they sign in.`
+        : `Updated ${changed.join(' and ')}.`
+    });
   } catch (err) {
+    console.error('[admin] credential reset failed:', err.message);
     res.status(500).json({ error: err.message });
   }
+}
+
+router.post('/students/:id/reset-credentials', requireAdminAPI, resetStudentCredentials);
+
+/**
+ * Password only — what the older admin screens call. Same handler, so there is
+ * one code path and one set of side effects; the email simply is not supplied.
+ */
+router.post('/students/:id/reset-password', requireAdminAPI, (req, res) => {
+  req.body = {
+    newPassword: (req.body || {}).newPassword,
+    requireChange: (req.body || {}).requireChange
+  };
+  return resetStudentCredentials(req, res);
 });
 
 router.delete('/students/:id', requireAdminAPI, async (req, res) => {
