@@ -49,6 +49,27 @@
   #preSlot.swap { opacity:0; transform:scale(.6) rotate(-20deg); }
   #preCount { position:absolute; bottom:26px; left:50%; transform:translateX(-50%); font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:13px; letter-spacing:.2em; color:#fff; font-variant-numeric:tabular-nums; }
 
+  /* ---------- the finale: E arrives spinning, breaks the screen, TEN holds ---------- */
+  #preSlot.eletter { width:auto; height:auto; font-size:1em; }
+  @keyframes eFly {
+    0%   { transform:scale(11) rotate(-960deg); opacity:0; filter:blur(7px); }
+    55%  { opacity:1; filter:blur(0); }
+    88%  { transform:scale(0.92) rotate(6deg); }
+    100% { transform:scale(1) rotate(0); opacity:1; }
+  }
+  #preSlot.e-fly { animation:eFly .8s cubic-bezier(.2,.85,.25,1) forwards; }
+  #preFlash { position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; }
+  #preFlash.on { animation:preFlash .55s forwards; }
+  @keyframes preFlash { 0% { opacity:.95; } 100% { opacity:0; } }
+  .pre-shake { animation:preShake .55s; }
+  @keyframes preShake { 20% { transform:translate(-13px,7px); } 40% { transform:translate(11px,-9px); } 60% { transform:translate(-8px,5px); } 80% { transform:translate(5px,-3px); } }
+  #preCrack { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; opacity:0; }
+  #preCrack.on { animation:crackHold 2.6s forwards; }
+  @keyframes crackHold { 0% { opacity:0; } 8% { opacity:1; } 72% { opacity:1; } 100% { opacity:0; } }
+  #preCrack polyline { stroke-dasharray:900; stroke-dashoffset:900; }
+  #preCrack.on polyline { animation:crackDraw .45s ease-out forwards; }
+  @keyframes crackDraw { to { stroke-dashoffset:0; } }
+
   /* ---------- page wipe for START MY JOURNEY ---------- */
   #wipe { position:fixed; inset:0; background:#000; z-index:99; transform:scaleY(0); transform-origin:bottom; transition:transform .7s cubic-bezier(.76,0,.24,1); pointer-events:none; }
   #wipe.on { transform:scaleY(1); }
@@ -197,8 +218,22 @@
 
 <!-- preloader -->
 <div id="pre">
-  <div class="pre-word">T<span id="preSlot">🐍</span>N</div>
-  <div id="preCount">100</div>
+  <div class="pre-word" id="preWord">T<span id="preSlot">🐍</span>N</div>
+  <div id="preCount">50</div>
+  <!-- the impact of the E landing: fracture lines, then a white flash -->
+  <svg id="preCrack" viewBox="0 0 1000 600" preserveAspectRatio="none" aria-hidden="true">
+    <g stroke="#fff" stroke-width="1.6" fill="none">
+      <polyline points="500,300 452,236 486,168 430,86 452,0"/>
+      <polyline points="500,300 566,244 546,166 612,92 596,0"/>
+      <polyline points="500,300 420,318 330,282 236,300 120,262 0,286"/>
+      <polyline points="500,300 592,330 690,300 800,332 912,300 1000,326"/>
+      <polyline points="500,300 470,372 508,446 452,530 478,600"/>
+      <polyline points="500,300 560,368 536,452 604,520 580,600"/>
+      <polyline points="500,300 386,206 300,150 190,96"/>
+      <polyline points="500,300 640,392 742,446 862,486"/>
+    </g>
+  </svg>
+  <div id="preFlash"></div>
 </div>
 <div id="wipe"></div>
 
@@ -574,33 +609,68 @@ const DOMAIN_IMGS = ['python.jpg','java.jpg','web.jpg','mern.jpg','flutter.jpg',
 (() => {
   const count = document.getElementById('preCount');
   const slot = document.getElementById('preSlot');
-  let n = 100, gi = 0, useImgs = true;
+  let n = 50, gi = 0, useImgs = true;
   DOMAIN_IMGS.forEach(f => { const im = new Image(); im.src = 'assets/domains/' + f; }); /* pre-warm */
   const probe = new Image();
   probe.onerror = () => { useImgs = false; };
   probe.src = 'assets/domains/' + DOMAIN_IMGS[0];
+  /* Once the E has landed the slot belongs to it — a swap still queued from
+     the final tick would otherwise drop a domain logo back on top of it. */
+  let finished = false;
   const setSlot = () => {
+    if (finished) return;
     if (useImgs) slot.innerHTML = `<img src="assets/domains/${DOMAIN_IMGS[gi]}" alt="">`;
     else slot.textContent = DOMAINS[gi][1];
   };
   setSlot();
+  /* 50 ticks at 58ms ≈ 3s of countdown, then the finale. */
   const tick = setInterval(() => {
     n--;
     count.textContent = n;
-    if (n % 7 === 0) {
+    if (n > 0 && n % 4 === 0) {
       slot.classList.add('swap');
       setTimeout(() => {
         gi = (gi + 1) % DOMAIN_IMGS.length;
         setSlot();
         slot.classList.remove('swap');
-      }, 160);
+      }, 120);
     }
     if (n <= 0) {
       clearInterval(tick);
-      document.getElementById('pre').classList.add('done');
-      document.body.classList.remove('locked');
+      finale();
     }
-  }, 38);
+  }, 58);
+
+  /*
+   * The last domain logo has had its turn; now the missing letter arrives.
+   * The E spins in from far away, lands hard enough to fracture the screen,
+   * and the finished word holds for three seconds before the wipe.
+   */
+  function finale() {
+    const pre = document.getElementById('pre');
+    const word = document.getElementById('preWord');
+    const crack = document.getElementById('preCrack');
+    const flash = document.getElementById('preFlash');
+
+    finished = true;
+    slot.classList.remove('swap');
+    slot.classList.add('eletter', 'e-fly');
+    slot.textContent = 'E';
+
+    /* impact lands as the fly-in settles */
+    setTimeout(() => {
+      flash.classList.add('on');
+      crack.classList.add('on');
+      word.classList.add('pre-shake');
+      pre.classList.add('pre-shake');
+    }, 700);
+
+    /* TEN, whole, for three seconds — then the site */
+    setTimeout(() => {
+      pre.classList.add('done');
+      document.body.classList.remove('locked');
+    }, 700 + 3000);
+  }
 })();
 
 /* ---- hero textures crossfade + click cycles ---- */
