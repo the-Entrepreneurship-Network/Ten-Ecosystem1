@@ -27,6 +27,13 @@
  * floating circles fighting over one corner is how the mobile layout broke last
  * time.
  *
+ *   - And it can be MOVED. A fixed circle will always end up on top of
+ *     something on some screen — in the admin console it lands squarely on the
+ *     row-actions column — so it is draggable with a pointer or a finger, snaps
+ *     to the nearer side, and remembers where it was put. The position is kept
+ *     per browser and shared by every portal page, so moving it once moves it
+ *     everywhere. Double-click (or the Reset item on long-press) puts it back.
+ *
  * Include on any signed-in portal page. It works for students, coordinators, HR
  * and admin — the feed behind it is scoped by session on the server.
  */
@@ -40,11 +47,16 @@
   var POLL_MS = 45000;           // portal notifications have no live channel
   var SETTLE_MS = 4600;          // how long the expanded label stays up
   var STORAGE_KEY = 'ten-orb-greeted';
+  var POS_KEY = 'ten-orb-pos';   // where the reader dragged it to, per browser
+  var DRAG_SLOP = 6;             // px of movement before a tap becomes a drag
+  var EDGE_GAP = 12;             // keep it off the very edge of the viewport
 
   var state = { unread: 0, url: '/notifications', label: '', ready: false };
   var el = null, labelEl = null, countEl = null;
   var settleTimer = null, buzzTimer = null;
   var dismissed = false;
+  var drag = null;               // live drag, or null
+  var suppressClick = false;     // set by a drag so the release does not navigate
 
   /* ── styles ──────────────────────────────────────────────────────────── */
   function injectStyles() {
@@ -107,6 +119,38 @@
       '40%,60%{transform:translateX(6px) rotate(9deg) scale(1.06);}',
       '100%{transform:translateX(0) scale(1);}}}',
 
+      /* ── moved ──────────────────────────────────────────────────────────
+         Once the reader has dragged it, `left`/`top` are set inline and the
+         docking rules above have to stop applying. `#ten-orb.moved` is one
+         class more specific than every rule it overrides -- including the ones
+         inside the phone media query -- so this wins without !important.
+
+         The transform drops translateY(-50%) here, because the inline `top` is
+         already the real top edge, and it borrows the phone's buzz keyframes
+         for the same reason: they are the ones with no vertical offset baked
+         into them. */
+      '#ten-orb.moved{right:auto;bottom:auto;transform:scale(0);}',
+      '#ten-orb.moved.in{transform:scale(1);}',
+      '#ten-orb.moved.buzz{animation:ten-orb-buzz-m .82s cubic-bezier(.36,.07,.19,.97) var(--ten-orb-shakes,2);}',
+      // Dragging: no easing, or the orb lags a finger by a third of a second.
+      '#ten-orb.dragging{transition:none !important;animation:none !important;cursor:grabbing;}',
+      '#ten-orb.dragging::after{display:none;}',
+      '#ten-orb.dragging #ten-orb-label{display:none;}',
+      // touch-action tells the browser this gesture is ours, so dragging the
+      // orb on a phone does not scroll the page underneath it.
+      '#ten-orb{touch-action:none;}',
+      // The grab handle reads as draggable before anyone tries.
+      '#ten-orb:hover{cursor:grab;}',
+
+      // Buzz keyframes for a moved orb are needed even on desktop, where the
+      // -m variant would otherwise only exist inside the phone media query.
+      '@keyframes ten-orb-buzz-m{',
+      '10%,90%{transform:translateX(-2px) rotate(-6deg);}',
+      '20%,80%{transform:translateX(4px) rotate(7deg);}',
+      '30%,50%,70%{transform:translateX(-6px) rotate(-9deg) scale(1.06);}',
+      '40%,60%{transform:translateX(6px) rotate(9deg) scale(1.06);}',
+      '100%{transform:translateX(0) scale(1);}}',
+
       // Respect a reader who has asked the system for less movement: they still
       // get the orb and the count, just no shaking.
       '@media (prefers-reduced-motion:reduce){',
@@ -138,10 +182,16 @@
 
     el.addEventListener('click', function (e) {
       if (e.target && e.target.id === 'ten-orb-x') return;
+      // A drag that ends over the orb also fires a click. Swallow that one.
+      if (suppressClick) { suppressClick = false; e.preventDefault(); e.stopPropagation(); return; }
       go();
     });
-    el.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+    el.addEventListener('keydown', onKeydown);
+    // Put it back where it started.
+    el.addEventListener('dblclick', function (e) {
+      if (e.target && e.target.id === 'ten-orb-x') return;
+      e.preventDefault();
+      resetPosition();
     });
     document.getElementById('ten-orb-x').addEventListener('click', function (e) {
       e.stopPropagation();
@@ -150,6 +200,159 @@
       // which is the whole point of the thing.
       dismissed = true;
     });
+
+    enableDrag();
+    applySavedPosition();
+    window.addEventListener('resize', clampIntoView);
+  }
+
+  /* ── moving it ───────────────────────────────────────────────────────────
+     A fixed circle covers something on somebody's screen. In the admin console
+     it sits on the row-actions column; on a short laptop it lands on the chat
+     launcher. Rather than pick a new corner and move the problem, let the
+     reader put it where it suits them and remember that.
+
+     The position is stored per browser and read by every portal page, so it is
+     moved once, not once per portal.
+     ---------------------------------------------------------------------- */
+
+  function savedPosition() {
+    try {
+      var raw = localStorage.getItem(POS_KEY);
+      if (!raw) return null;
+      var p = JSON.parse(raw);
+      if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') return null;
+      return p;
+    } catch (e) { return null; }
+  }
+
+  function savePosition(x, y) {
+    try { localStorage.setItem(POS_KEY, JSON.stringify({ x: x, y: y })); } catch (e) {}
+  }
+
+  /** Keep the orb fully on screen whatever the window has since done. */
+  function clamp(x, y) {
+    var w = el ? el.offsetWidth : 56;
+    var h = el ? el.offsetHeight : 56;
+    var maxX = Math.max(EDGE_GAP, window.innerWidth - w - EDGE_GAP);
+    var maxY = Math.max(EDGE_GAP, window.innerHeight - h - EDGE_GAP);
+    return {
+      x: Math.min(Math.max(EDGE_GAP, x), maxX),
+      y: Math.min(Math.max(EDGE_GAP, y), maxY)
+    };
+  }
+
+  function placeAt(x, y) {
+    if (!el) return;
+    var p = clamp(x, y);
+    el.classList.add('moved');
+    el.style.left = p.x + 'px';
+    el.style.top = p.y + 'px';
+    return p;
+  }
+
+  function applySavedPosition() {
+    var p = savedPosition();
+    if (p) placeAt(p.x, p.y);
+  }
+
+  function clampIntoView() {
+    if (!el || !el.classList.contains('moved')) return;
+    var p = clamp(parseFloat(el.style.left) || 0, parseFloat(el.style.top) || 0);
+    el.style.left = p.x + 'px';
+    el.style.top = p.y + 'px';
+    savePosition(p.x, p.y);
+  }
+
+  function resetPosition() {
+    if (!el) return;
+    el.classList.remove('moved');
+    el.style.left = '';
+    el.style.top = '';
+    try { localStorage.removeItem(POS_KEY); } catch (e) {}
+  }
+
+  function enableDrag() {
+    // Pointer events cover mouse, touch and pen with one path, and
+    // setPointerCapture keeps the drag alive when the pointer outruns the orb.
+    el.addEventListener('pointerdown', function (e) {
+      if (e.target && e.target.id === 'ten-orb-x') return;
+      if (e.button !== undefined && e.button !== 0) return;
+
+      var r = el.getBoundingClientRect();
+      drag = {
+        id: e.pointerId,
+        // Where in the orb the pointer grabbed it, so it does not jump.
+        dx: e.clientX - r.left,
+        dy: e.clientY - r.top,
+        startX: e.clientX,
+        startY: e.clientY,
+        moved: false
+      };
+      try { el.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+
+    el.addEventListener('pointermove', function (e) {
+      if (!drag || e.pointerId !== drag.id) return;
+
+      if (!drag.moved) {
+        // Below the slop this is still a tap. Treating every pixel of jitter as
+        // a drag is how a button stops opening on a touchscreen.
+        if (Math.abs(e.clientX - drag.startX) < DRAG_SLOP &&
+            Math.abs(e.clientY - drag.startY) < DRAG_SLOP) return;
+        drag.moved = true;
+        el.classList.add('dragging');
+        el.classList.remove('open');
+        clearTimeout(settleTimer);
+      }
+      e.preventDefault();
+      placeAt(e.clientX - drag.dx, e.clientY - drag.dy);
+    });
+
+    function endDrag(e) {
+      if (!drag || (e && e.pointerId !== drag.id)) return;
+      var wasMoved = drag.moved;
+      try { el.releasePointerCapture(drag.id); } catch (err) {}
+      drag = null;
+      if (!wasMoved) return;
+
+      el.classList.remove('dragging');
+      suppressClick = true;
+      // Cleared on the next tick as well as by the click handler, in case the
+      // browser decides this release produced no click at all.
+      setTimeout(function () { suppressClick = false; }, 350);
+
+      // Snap to the nearer side. A circle half-hanging in the middle of a table
+      // is worse than one against an edge, and the snap makes the drop feel
+      // decided rather than approximate.
+      var r = el.getBoundingClientRect();
+      var toLeft = r.left + r.width / 2 < window.innerWidth / 2;
+      var p = placeAt(toLeft ? EDGE_GAP : window.innerWidth - r.width - EDGE_GAP, r.top);
+      if (p) savePosition(p.x, p.y);
+    }
+
+    el.addEventListener('pointerup', endDrag);
+    el.addEventListener('pointercancel', endDrag);
+  }
+
+  function onKeydown(e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); return; }
+
+    // Arrow keys move it, for a reader who cannot drag. Shift for a bigger
+    // step; Home puts it back.
+    var step = e.shiftKey ? 40 : 12;
+    var dx = 0, dy = 0;
+    if (e.key === 'ArrowLeft') dx = -step;
+    else if (e.key === 'ArrowRight') dx = step;
+    else if (e.key === 'ArrowUp') dy = -step;
+    else if (e.key === 'ArrowDown') dy = step;
+    else if (e.key === 'Home') { e.preventDefault(); resetPosition(); return; }
+    else return;
+
+    e.preventDefault();
+    var r = el.getBoundingClientRect();
+    var p = placeAt(r.left + dx, r.top + dy);
+    if (p) savePosition(p.x, p.y);
   }
 
   function go() {
@@ -374,6 +577,9 @@
   window.TenNotifyOrb = {
     refresh: function () { return refresh('poll'); },
     arrived: function () { dismissed = false; return refresh('live'); },
-    buzz: buzz
+    buzz: buzz,
+    /** Move it from code, and put it back. Both persist. */
+    moveTo: function (x, y) { build(); var p = placeAt(x, y); if (p) savePosition(p.x, p.y); },
+    resetPosition: resetPosition
   };
 })();
