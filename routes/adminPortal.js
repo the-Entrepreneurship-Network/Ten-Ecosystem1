@@ -1325,4 +1325,111 @@ router.post('/documents/generate', requireAdminAPI, async (req, res) => {
   }
 });
 
+/* ════════════════════════════════════════════════════════════════════════
+   Certificate overrides — what HR issued without the checks passing
+   ════════════════════════════════════════════════════════════════════════
+
+   HR can now issue a certificate directly (POST /api/v2/certificates/hr-issue),
+   skipping the application, the attendance rule and the performance rule. That
+   is deliberate: interns who did the whole internship over WhatsApp have no
+   portal record to satisfy any of it. But an issuing power with no visibility
+   above it is how a certificate stops meaning anything, so every direct issue
+   writes a row and this is where an admin reads them.
+
+   The list defaults to the ones that matter — issues where the student did NOT
+   meet the requirements — with a filter for the rest.
+   ═══════════════════════════════════════════════════════════════════════ */
+const CertificateOverride = require('../models/CertificateOverride');
+
+router.get('/certificate-overrides', requireAdminAPI, async (req, res) => {
+  try {
+    const { filter = 'all', search = '', page = 1, limit = 50 } = req.query;
+    const q = {};
+    if (filter === 'unmet') q.metRequirements = false;
+    else if (filter === 'met') q.metRequirements = true;
+    else if (filter === 'revoked') q.revokedAt = { $ne: null };
+
+    if (search) {
+      const rx = new RegExp(String(search).replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'i');
+      q.$or = [{ employeeId: rx }, { studentName: rx }, { issuedBy: rx }, { domain: rx }];
+    }
+
+    const lim = Math.min(200, Math.max(1, parseInt(limit, 10) || 50));
+    const skip = (Math.max(1, parseInt(page, 10) || 1) - 1) * lim;
+
+    const [rows, total, unmetCount] = await Promise.all([
+      CertificateOverride.find(q).sort({ issuedAt: -1 }).skip(skip).limit(lim).lean(),
+      CertificateOverride.countDocuments(q),
+      CertificateOverride.countDocuments({ metRequirements: false, revokedAt: null })
+    ]);
+
+    res.json({ success: true, overrides: rows, total, unmetCount, page: Number(page), limit: lim });
+  } catch (err) {
+    console.error('[admin/certificate-overrides]', err.message);
+    res.status(500).json({ success: false, error: err.message, overrides: [], total: 0, unmetCount: 0 });
+  }
+});
+
+// The badge on the nav item — cheap enough to poll.
+router.get('/certificate-overrides/count', requireAdminAPI, async (req, res) => {
+  try {
+    const unmetCount = await CertificateOverride.countDocuments({ metRequirements: false, revokedAt: null });
+    res.json({ success: true, unmetCount });
+  } catch (err) {
+    res.json({ success: true, unmetCount: 0 });
+  }
+});
+
+/**
+ * Revoke one.
+ *
+ * This is the counterweight to the bypass: if HR issued a certificate that
+ * should not exist, an admin takes it back. Revoking clears the PDF and resets
+ * the status, so the student's My Documents stops offering the download — a
+ * revocation that left the file downloadable would be theatre.
+ */
+router.post('/certificate-overrides/:id/revoke', requireAdminAPI, async (req, res) => {
+  try {
+    const { reason } = req.body || {};
+    const who = (req.session && req.session.adminUser && req.session.adminUser.username) || 'admin';
+
+    const row = await CertificateOverride.findById(req.params.id);
+    if (!row) return res.status(404).json({ success: false, error: 'Override not found' });
+    if (row.revokedAt) return res.status(400).json({ success: false, error: 'Already revoked' });
+
+    const fieldMap = {
+      LOC:   { pdf: 'locPdfBase64',   status: 'locStatus',   date: 'locIssuedAt',   flag: 'locIssuedByOverride',   reset: 'not_eligible' },
+      LOR:   { pdf: 'lorPdfBase64',   status: 'lorStatus',   date: 'lorIssuedAt',   flag: 'lorIssuedByOverride',   reset: 'not_eligible' },
+      STAR:  { pdf: 'starPdfBase64',  status: 'starStatus',  date: 'starIssuedAt',  flag: 'starIssuedByOverride',  reset: 'not_submitted' },
+      OFFER: { pdf: 'offerPdfBase64', status: 'offerLetterStatus', date: 'offerLetterGeneratedAt', flag: 'offerIssuedByOverride', reset: 'not_uploaded' },
+      LOP:   { pdf: 'lopPdfBase64',   status: 'lopStatus',   date: 'lopIssuedAt',   flag: 'lopIssuedByOverride',   reset: 'not_eligible' }
+    };
+    const f = fieldMap[row.certificateType];
+    if (f && row.studentId) {
+      await Student.findByIdAndUpdate(row.studentId, {
+        [f.pdf]: null, [f.status]: f.reset, [f.date]: null, [f.flag]: false
+      }).catch((e) => console.error('[revoke] student update failed:', e.message));
+    }
+
+    row.revokedAt = new Date();
+    row.revokedBy = who;
+    row.revokeReason = String(reason || '').slice(0, 1000);
+    await row.save();
+
+    await AuditLog.create({
+      userId: who,
+      actionType: 'certificate_revoke',
+      performedBy: 'admin',
+      description: `Revoked ${row.certificateType} issued to ${row.employeeId} by ${row.issuedBy}`,
+      oldState: { certificateType: row.certificateType, employeeId: row.employeeId, issuedBy: row.issuedBy },
+      newState: { revoked: true, reason: row.revokeReason }
+    }).catch(() => {});
+
+    res.json({ success: true, message: `${row.certificateType} revoked for ${row.employeeId}.` });
+  } catch (err) {
+    console.error('[admin/certificate-overrides revoke]', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;

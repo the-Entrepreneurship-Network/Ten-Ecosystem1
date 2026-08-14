@@ -1208,6 +1208,47 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
     <div class="doc-tabs">
       <button class="doc-tab active" onclick="switchCertTab('pending',this)">🕓 Coordinator-Approved (Pending HR)</button>
       <button class="doc-tab" onclick="switchCertTab('approved',this)">✅ HR-Approved (Generate)</button>
+      <button class="doc-tab" onclick="switchCertTab('direct',this)">⚡ Issue Directly</button>
+    </div>
+
+    <!-- Direct issue: the WhatsApp-intern path.
+         Skips the application, the attendance rule and the performance rule.
+         Every issue is recorded and shown in the admin portal. -->
+    <div class="cert-panel" id="cert-direct">
+      <div class="section-header" style="margin-bottom:16px;">
+        <div class="section-title">⚡ Issue a certificate directly</div>
+      </div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:18px;line-height:1.7;">
+        For interns who completed their internship outside the portal — over WhatsApp, for
+        instance — and registered only to collect the certificate. This skips the application,
+        the 75% attendance rule, the performance rule and coordinator approval. The certificate
+        appears in the student's <strong>My Documents</strong> immediately and is emailed to them.
+        <br><br>
+        If the student has not met the requirements you will be shown exactly what is missing and
+        asked to confirm once. Either way, every direct issue is recorded and listed in the
+        admin portal.
+      </p>
+
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:20px;">
+        <div class="form-group-hr" style="margin:0;">
+          <label class="form-label">Employee ID</label>
+          <input class="form-input" id="directEmpId" placeholder="e.g. TEN/WEB/1630" style="min-width:220px;">
+        </div>
+        <div class="form-group-hr" style="margin:0;">
+          <label class="form-label">Certificate</label>
+          <select class="form-input" id="directCertType" style="min-width:230px;">
+            <option value="LOC">Letter of Completion (LOC)</option>
+            <option value="LOR">Letter of Recommendation (LOR)</option>
+            <option value="STAR">Star Performer Certificate</option>
+            <option value="OFFER">Offer Letter</option>
+          </select>
+        </div>
+        <button class="send-btn" style="padding:12px 24px;font-size:13px;" onclick="directIssueCheck()">
+          Check &amp; issue
+        </button>
+      </div>
+
+      <div id="directIssueResult"></div>
     </div>
 
     <!-- Pending HR review -->
@@ -3859,6 +3900,122 @@ function switchCertTab(tab,btn){
   document.getElementById('cert-'+tab).classList.add('active');
   if(tab==='pending') loadCertPending();
   if(tab==='approved') loadCertApproved();
+}
+
+/* ── Direct issue ─────────────────────────────────────────────────────────
+   Two steps on purpose. The precheck is read-only and produces the ONE
+   warning; the issue itself then carries `acknowledged`, so the warning
+   cannot be walked past by a request that never asked for it. The server
+   enforces the same rule — it answers 409 to an unacknowledged issue for a
+   student who falls short — so this is a prompt, not the gate. */
+function _diEsc(v){
+  return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+async function directIssueCheck(){
+  const empId = (document.getElementById('directEmpId').value || '').trim();
+  const type  = document.getElementById('directCertType').value;
+  const box   = document.getElementById('directIssueResult');
+  if(!empId){
+    box.innerHTML = '<p style="color:#f87171;font-size:13px">Enter an Employee ID first.</p>';
+    return;
+  }
+  box.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+  try{
+    const r = await fetch('/api/v2/certificates/hr-issue/precheck?employeeId=' +
+      encodeURIComponent(empId) + '&certType=' + encodeURIComponent(type),
+      { credentials:'same-origin' });
+    const d = await r.json();
+    if(!d.success){
+      box.innerHTML = '<p style="color:#f87171;font-size:13px">' + _diEsc(d.message || 'Lookup failed') + '</p>';
+      return;
+    }
+
+    const snap = d.snapshot || {};
+    const already = d.alreadyIssued
+      ? '<div style="margin-top:10px;padding:10px 12px;background:rgba(245,197,66,.08);border:1px solid rgba(245,197,66,.25);border-radius:8px;color:#f5c542;font-size:12.5px;">' +
+        'This student already has a ' + _diEsc(d.certificateType) + '. Issuing again replaces it.</div>'
+      : '';
+
+    box.innerHTML =
+      '<div style="padding:18px 20px;background:rgba(255,255,255,.02);border:1px solid rgba(245,197,66,.14);border-radius:14px;">' +
+        '<div style="font-size:16px;font-weight:800;color:var(--gold);margin-bottom:4px;">' +
+          _diEsc(d.studentName || d.employeeId) + '</div>' +
+        '<div style="font-size:12.5px;color:var(--muted);margin-bottom:14px;">' +
+          _diEsc(d.employeeId) + (d.domain ? ' &middot; ' + _diEsc(d.domain) : '') +
+          ' &middot; ' + _diEsc(d.certificateLabel) + '</div>' +
+        '<div style="display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px;color:#9aa4bf;margin-bottom:14px;">' +
+          '<span>Attendance <b style="color:#e8e6df">' + (snap.attendancePercentage||0) + '%</b></span>' +
+          '<span>Performance <b style="color:#e8e6df">' + (snap.performanceScore||0) + '%</b></span>' +
+          '<span>Tasks <b style="color:#e8e6df">' + (snap.taskCompletionPct||0) + '%</b></span>' +
+          '<span>' + (snap.hadApplication ? 'Applied through the portal' : 'Never applied') + '</span>' +
+        '</div>' +
+        (d.metRequirements
+          ? '<div style="padding:12px 14px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.25);border-radius:8px;color:#34d399;font-size:13px;">' +
+            '✅ This student meets the requirements.</div>'
+          : '<div style="padding:12px 14px;background:rgba(244,63,94,.08);border:1px solid rgba(244,63,94,.3);border-radius:8px;">' +
+            '<div style="color:#f87171;font-weight:700;font-size:13px;margin-bottom:8px;">⚠️ This student has not met the requirements</div>' +
+            '<ul style="margin:0 0 0 16px;padding:0;color:#cbd5e1;font-size:12.5px;line-height:1.7;">' +
+              (d.failedChecks||[]).map(c => '<li>' + _diEsc(c) + '</li>').join('') +
+            '</ul></div>') +
+        already +
+        '<textarea id="directReason" rows="2" placeholder="Reason (recorded in the admin portal)" ' +
+          'style="width:100%;margin-top:14px;padding:10px;border-radius:8px;border:1px solid rgba(245,197,66,.16);' +
+          'background:rgba(0,0,0,.3);color:#e8e6df;font-family:inherit;font-size:13px;"></textarea>' +
+        '<button class="send-btn" style="margin-top:12px;padding:12px 24px;font-size:13px;" ' +
+          'onclick="directIssueConfirm(\'' + _diEsc(d.employeeId) + '\',\'' + _diEsc(d.certificateType) + '\',' +
+          (d.metRequirements ? 'true' : 'false') + ')">' +
+          (d.metRequirements ? 'Issue certificate' : 'Issue anyway') + '</button>' +
+      '</div>';
+  }catch(e){
+    box.innerHTML = '<p style="color:#f87171;font-size:13px">Could not reach the server: ' + _diEsc(e.message) + '</p>';
+  }
+}
+
+async function directIssueConfirm(employeeId, certType, meets){
+  // The one warning. Shown only when the student falls short — a student who
+  // meets the bar does not need a scary dialog to receive what they earned.
+  if(!meets){
+    const ok = await Swal.fire({
+      icon: 'warning',
+      title: 'Issue anyway?',
+      html: '<div style="text-align:left;font-size:13.5px;line-height:1.7;">' +
+        '<b>' + _diEsc(employeeId) + '</b> has not completed the requirements for this ' +
+        'certificate.<br><br>Issuing it now bypasses every check. The certificate will appear in ' +
+        'the student\'s My Documents and be emailed to them, and this override will be listed in ' +
+        'the admin portal under your name.</div>',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, issue it',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#ef4444',
+      background: '#0c1220', color: '#f0eee8'
+    });
+    if(!ok.isConfirmed) return;
+  }
+
+  const reason = (document.getElementById('directReason') || {}).value || '';
+  const box = document.getElementById('directIssueResult');
+  box.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+  try{
+    const r = await fetch('/api/v2/certificates/hr-issue', {
+      method:'POST', credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ employeeId, certType, acknowledged: true, reason })
+    });
+    const d = await r.json();
+    if(!d.success){
+      box.innerHTML = '<p style="color:#f87171;font-size:13px">' + _diEsc(d.message || 'Could not issue') + '</p>';
+      return;
+    }
+    box.innerHTML = '<div style="padding:16px 18px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.25);' +
+      'border-radius:12px;color:#34d399;font-size:13.5px;line-height:1.7;">✅ ' + _diEsc(d.message) + '</div>';
+    Swal.fire({ icon:'success', title:'Issued', text:d.message, background:'#0c1220', color:'#f0eee8', confirmButtonColor:'#D4AF37' });
+  }catch(e){
+    box.innerHTML = '<p style="color:#f87171;font-size:13px">Could not reach the server: ' + _diEsc(e.message) + '</p>';
+  }
 }
 
 let starPendingSubmissions = [];

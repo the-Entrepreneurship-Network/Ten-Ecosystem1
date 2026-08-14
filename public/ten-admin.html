@@ -53,12 +53,16 @@
   .badge-grey{background:#1e293b;color:#94a3b8;border:1px solid #334155}
   .badge-blue{background:#172554;color:#60a5fa;border:1px solid #1d4ed8}
   /* BUTTONS */
-  .btn{padding:7px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:opacity 0.15s}
+  .btn{padding:7px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:opacity 0.15s;background:#1d4ed8;color:#bfdbfe}
   .btn:hover{opacity:0.85}
   .btn-green{background:#166534;color:#86efac}
   .btn-red{background:#991b1b;color:#fca5a5}
   .btn-blue{background:#1d4ed8;color:#bfdbfe}
   .btn-grey{background:#334155;color:#94a3b8}
+  /* Used by the chat and override tab strips, which had no rule at all — the
+     buttons rendered with the browser's default grey on a dark panel. */
+  .btn-secondary{background:#334155;color:#94a3b8}
+  .btn-danger{background:#991b1b;color:#fca5a5}
   /* FORM */
   .form-group{margin-bottom:16px}
   .form-group label{display:block;font-size:12px;color:#94a3b8;margin-bottom:6px;font-weight:500}
@@ -122,6 +126,7 @@
     <div class="nav-item" onclick="showSection('students')">👨‍🎓 Students</div>
     <div class="nav-item" onclick="showSection('hr')">👔 HR & Coordinators</div>
     <div class="nav-item" onclick="showSection('certificates')">🎓 Certificates</div>
+    <div class="nav-item" onclick="showSection('cert-overrides')" id="nav-cert-overrides">🛡️ Certificate Overrides <span class="nav-badge" id="overrideBadge" style="display:none">0</span></div>
     <div class="nav-item" onclick="showSection('attendance')">🗓️ Attendance</div>
     <div class="nav-item" onclick="showSection('documents')">📄 Documents</div>
     <div class="nav-item" onclick="showSection('notifications')">📢 Notifications</div>
@@ -312,6 +317,30 @@
       <div id="chatAdminBox"><p style="color:#64748b">Loading…</p></div>
     </div>
 
+    <!-- Certificates HR issued without the checks passing. See
+         routes/adminPortal.js → /certificate-overrides. -->
+    <div class="section" id="section-cert-overrides">
+      <div style="background:#0e1628;border:1px solid #2a3550;border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+        <div style="font-weight:700;color:#e2e8f0;margin-bottom:6px;">What this is</div>
+        <div style="color:#94a3b8;font-size:13px;line-height:1.6;">
+          HR can issue a certificate directly, skipping the application, the 75% attendance rule
+          and the performance rule — interns who finished over WhatsApp have no portal record to
+          satisfy any of them. Every direct issue is listed here. Rows marked
+          <span style="color:#f87171;font-weight:700;">Requirements not met</span> are the ones
+          where HR saw the warning and went ahead anyway.
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+        <button class="btn" onclick="loadOverrides('unmet')" id="ovTabUnmet">⚠️ Requirements not met</button>
+        <button class="btn btn-secondary" onclick="loadOverrides('all')" id="ovTabAll">All issues</button>
+        <button class="btn btn-secondary" onclick="loadOverrides('met')" id="ovTabMet">Met requirements</button>
+        <button class="btn btn-secondary" onclick="loadOverrides('revoked')" id="ovTabRevoked">Revoked</button>
+        <input class="search-input" id="overrideSearch" placeholder="Employee ID, name, domain or HR…"
+               style="max-width:280px" oninput="debounceOverrideSearch()">
+      </div>
+      <div id="overridesContent"><p style="color:#64748b;padding:16px">Loading…</p></div>
+    </div>
+
     <div class="section" id="section-auditlog">
       <div id="auditContent"></div>
     </div>
@@ -369,6 +398,7 @@ function showSection(name) {
   if (name === 'attendance') { /* waits for an Employee ID */ }
   if (name === 'documents') loadAdminDocuments();
   if (name === 'chat') loadChatReports('open');
+  if (name === 'cert-overrides') loadOverrides(overrideFilter);
   if (name === 'auditlog') loadAuditLog();
   if (name === 'overview') loadStats();
 }
@@ -1272,6 +1302,127 @@ async function loadAuditLog() {
     </table></div>`;
 }
 
+/* ── CERTIFICATE OVERRIDES ──────────────────────────────────────────────────
+   Everything HR issued without the eligibility checks passing. The bypass is
+   deliberate (WhatsApp interns have no portal record); this is the visibility
+   that keeps it honest. */
+let overrideFilter = 'unmet';
+let overrideSearchTimer;
+
+function ovEsc(v) {
+  return String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function debounceOverrideSearch() {
+  clearTimeout(overrideSearchTimer);
+  overrideSearchTimer = setTimeout(() => loadOverrides(overrideFilter), 350);
+}
+
+async function loadOverrides(filter) {
+  if (filter) overrideFilter = filter;
+  ['Unmet', 'All', 'Met', 'Revoked'].forEach(k => {
+    const btn = document.getElementById('ovTab' + k);
+    if (btn) btn.className = (k.toLowerCase() === overrideFilter) ? 'btn' : 'btn btn-secondary';
+  });
+
+  const box = document.getElementById('overridesContent');
+  box.innerHTML = '<p style="color:#64748b;padding:16px">Loading…</p>';
+
+  const search = (document.getElementById('overrideSearch') || {}).value || '';
+  const data = await api('/certificate-overrides?filter=' + encodeURIComponent(overrideFilter) +
+    '&search=' + encodeURIComponent(search));
+  if (!data) return;
+  if (!data.success) {
+    box.innerHTML = '<div class="empty"><div class="icon">⚠️</div><p>' + ovEsc(data.error || 'Could not load overrides') + '</p></div>';
+    return;
+  }
+
+  updateOverrideBadge(data.unmetCount);
+
+  if (!data.overrides.length) {
+    box.innerHTML = '<div class="empty"><div class="icon">🛡️</div><p>' +
+      (overrideFilter === 'unmet'
+        ? 'No certificate has been issued to a student who did not meet the requirements.'
+        : 'Nothing here yet.') + '</p></div>';
+    return;
+  }
+
+  box.innerHTML = '<div class="table-wrap"><table>' +
+    '<thead><tr><th>Issued</th><th>Student</th><th>Certificate</th><th>Issued by</th>' +
+    '<th>Requirements</th><th>At the time</th><th>Action</th></tr></thead><tbody>' +
+    data.overrides.map(o => {
+      const snap = o.snapshot || {};
+      const met = o.metRequirements
+        ? '<span class="badge badge-green">Met</span>'
+        : '<span class="badge badge-red">Not met</span>';
+      const revoked = o.revokedAt
+        ? '<div style="font-size:11px;color:#f87171;margin-top:4px">Revoked ' +
+          new Date(o.revokedAt).toLocaleDateString('en-IN') +
+          (o.revokedBy ? ' by ' + ovEsc(o.revokedBy) : '') + '</div>'
+        : '';
+      const checks = (o.failedChecks || []).length
+        ? '<ul style="margin:6px 0 0 14px;padding:0;color:#94a3b8;font-size:11.5px;line-height:1.5">' +
+          o.failedChecks.map(c => '<li>' + ovEsc(c) + '</li>').join('') + '</ul>'
+        : '';
+      return '<tr>' +
+        '<td style="white-space:nowrap">' + (o.issuedAt ? new Date(o.issuedAt).toLocaleString('en-IN') : '—') + '</td>' +
+        '<td><div style="font-weight:600">' + ovEsc(o.studentName || '—') + '</div>' +
+          '<code style="font-size:11px">' + ovEsc(o.employeeId) + '</code>' +
+          (o.domain ? '<div style="font-size:11px;color:#64748b">' + ovEsc(o.domain) + '</div>' : '') + '</td>' +
+        '<td><span class="badge badge-blue">' + ovEsc(o.certificateType) + '</span>' + revoked + '</td>' +
+        '<td><code>' + ovEsc(o.issuedBy || '—') + '</code>' +
+          '<div style="font-size:11px;color:#64748b">' + ovEsc(o.issuedByRole || '') + '</div></td>' +
+        '<td style="max-width:320px">' + met + checks +
+          (o.reason ? '<div style="margin-top:6px;font-size:11.5px;color:#cbd5e1"><b>Reason:</b> ' + ovEsc(o.reason) + '</div>' : '') + '</td>' +
+        '<td style="white-space:nowrap;font-size:12px;color:#94a3b8">' +
+          'Attendance ' + (snap.attendancePercentage || 0) + '%<br>' +
+          'Performance ' + (snap.performanceScore || 0) + '%<br>' +
+          'Tasks ' + (snap.taskCompletionPct || 0) + '%<br>' +
+          (snap.hadApplication ? 'Applied' : 'Never applied') + '</td>' +
+        '<td>' + (o.revokedAt
+          ? '<span style="color:#64748b;font-size:12px">Revoked</span>'
+          : '<button class="btn btn-secondary" style="font-size:12px;padding:6px 12px" onclick="revokeOverride(\'' +
+            o._id + '\',\'' + ovEsc(o.certificateType) + '\',\'' + ovEsc(o.employeeId) + '\')">Revoke</button>') +
+        '</td>' +
+      '</tr>';
+    }).join('') +
+    '</tbody></table></div>' +
+    '<p style="color:#64748b;font-size:12px;padding:12px 4px">Showing ' + data.overrides.length +
+      ' of ' + data.total + '.</p>';
+}
+
+function revokeOverride(id, type, employeeId) {
+  openModal('Revoke ' + type + ' for ' + employeeId,
+    '<p style="color:#94a3b8;font-size:13px;line-height:1.6;margin-bottom:12px">' +
+      'This deletes the generated PDF and resets the status, so the student\'s My Documents ' +
+      'stops offering the download. It does not un-send the email that was already delivered.</p>' +
+      '<textarea id="revokeReason" rows="3" placeholder="Why is this being revoked?" ' +
+      'style="width:100%;padding:10px;border-radius:8px;border:1px solid #2a3550;background:#0e1628;color:#e2e8f0;font-family:inherit"></textarea>',
+    [
+      { cls: 'secondary', label: 'Cancel', fn: 'closeModal()' },
+      { cls: 'danger', label: 'Revoke', fn: 'confirmRevokeOverride(\'' + id + '\')' }
+    ]);
+}
+
+async function confirmRevokeOverride(id) {
+  const reason = (document.getElementById('revokeReason') || {}).value || '';
+  const r = await api('/certificate-overrides/' + id + '/revoke', {
+    method: 'POST', body: JSON.stringify({ reason })
+  });
+  closeModal();
+  if (r && r.success) { toast(r.message || 'Revoked'); loadOverrides(overrideFilter); }
+  else { toast((r && r.error) || 'Could not revoke', 'error'); }
+}
+
+function updateOverrideBadge(n) {
+  const badge = document.getElementById('overrideBadge');
+  if (!badge) return;
+  if (n > 0) { badge.textContent = n; badge.style.display = ''; }
+  else { badge.style.display = 'none'; }
+}
+
 // ── INIT ──────────────────────────────────────────────────────────────────────
 (async () => {
   const session = await api('/session-check');
@@ -1281,6 +1432,7 @@ async function loadAuditLog() {
   loadStats();
   // Pre-load tenure payments silently so data is ready when admin opens that tab
   loadTenurePayments();
+  api('/certificate-overrides/count').then(d => { if (d && d.success) updateOverrideBadge(d.unmetCount); });
 })();
 </script>
 <script src="/notify-orb.js" defer></script>

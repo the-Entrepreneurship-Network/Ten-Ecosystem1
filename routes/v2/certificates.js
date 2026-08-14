@@ -160,67 +160,12 @@ async function handleMyCerts(req, res) {
 
     // Staff may target a specific student; everyone else only ever sees self.
     const requestedId = (req.query && req.query.employeeId) || (req.body && req.body.employeeId);
-    const employeeId = isStaff ? requestedId : null;
-    const headerEmployeeId = isStaff ? null : sessionEmployeeId;
+    const targetId = isStaff ? requestedId : sessionEmployeeId;
 
     if (!isStaff && !sessionEmployeeId) {
       return res.status(401).json({ success: false, message: "Please sign in to continue." });
     }
 
-    // Legacy portal shape (my-certificates.html) — full status payload.
-    if (!employeeId && headerEmployeeId) {
-      const student = await Student.findOne({ employeeId: String(headerEmployeeId) });
-      if (!student) return res.status(401).json({ success: false, message: "Student not found" });
-      const status  = await getCertStatus(student);
-
-      // Already-issued certificate records. These are decoration: whether a
-      // certificate is UNLOCKED comes from getCertStatus above, and this only
-      // adds the download link for one already issued. An error here used to
-      // take the whole page down to "Could not load certificates." — the
-      // student could not even see their progress, over a record that in most
-      // cases does not exist yet.
-      const certMap = {};
-      try {
-          const certs = await StudentCertificate.find({ studentId: student._id }).lean();
-          certs.forEach(c => { certMap[c.certificateType] = c; });
-      } catch (certErr) {
-          console.error("[My-Certs] could not read issued certificates for " +
-              student.employeeId + ":", certErr.message);
-      }
-
-      const result = {
-          expert: {
-              unlocked:      status.expertUnlocked,
-              completionPct: status.completionPct,
-              threshold:     30,
-              record:        certMap["expert"]     ? { certificateId: certMap["expert"].certificateId, pdfUrl: certMap["expert"].pdfUrl, issuedAt: certMap["expert"].issuedAt } : null
-          },
-          nano_degree: {
-              unlocked:      status.nanoDegreeUnlocked,
-              completionPct: status.completionPct,
-              threshold:     70,
-              record:        certMap["nano_degree"] ? { certificateId: certMap["nano_degree"].certificateId, pdfUrl: certMap["nano_degree"].pdfUrl, issuedAt: certMap["nano_degree"].issuedAt } : null
-          },
-          fellowship: {
-              visible:       status.fellowshipUnlocked,
-              unlocked:      status.fellowshipUnlocked,
-              cohortRankPct: status.cohortRankPct,
-              completionPct: status.completionPct,
-              threshold:     10,
-              record:        certMap["fellowship"]  ? { certificateId: certMap["fellowship"].certificateId, pdfUrl: certMap["fellowship"].pdfUrl, issuedAt: certMap["fellowship"].issuedAt } : null
-          }
-      };
-
-      const customPrices = {
-          expert: getCertificatePrice("expert", student.tenure),
-          nano_degree: getCertificatePrice("nano_degree", student.tenure),
-          fellowship: getCertificatePrice("fellowship", student.tenure)
-      };
-
-      return res.json({ success: true, employeeId: student.employeeId, ...result, paymentEnabled: paymentConfig.PAYMENT_ENABLED, prices: customPrices });
-    }
-
-    const targetId = employeeId || headerEmployeeId;
     if (!targetId) {
       // Reached when a STAFF session opens this page without naming a student.
       // Staff have no certificates of their own, and the previous bare `error`
@@ -233,21 +178,122 @@ async function handleMyCerts(req, res) {
       });
     }
 
-    const student = await Student.findOne({ employeeId: targetId },
-      'name fullName employeeId locStatus locIssuedAt lorStatus lorIssuedAt starStatus starIssuedAt ' +
-      'offerLetterStatus offerLetterGeneratedAt documentRejectionReason ' +
-      'locPdfBase64 lorPdfBase64 starPdfBase64 offerPdfBase64 ' +
-      'attendancePercentage performanceScore pendingFines starContribution'
-    ).lean();
+    const student = await Student.findOne({ employeeId: String(targetId) });
     if (!student) {
       return res.status(404).json({ success: false, message: 'No student found with that Employee ID.', error: 'Not found' });
     }
 
-    const { locPdfBase64, lorPdfBase64, starPdfBase64, offerPdfBase64, ...safeStudent } = student;
-    safeStudent.hasLocPdf   = !!locPdfBase64;
-    safeStudent.hasLorPdf   = !!lorPdfBase64;
-    safeStudent.hasStarPdf  = !!starPdfBase64;
-    safeStudent.hasOfferPdf = !!offerPdfBase64;
+    // ── Both shapes, one response ────────────────────────────────────────
+    //
+    // Two pages read this route and each needs a different half of it:
+    //
+    //   my-certificates.html  wants  expert / nano_degree / fellowship
+    //   my-documents.html     wants  offerLetterStatus / locStatus / lorStatus
+    //                                / starStatus + hasLocPdf + document numbers
+    //
+    // It used to return one or the other, chosen by a branch that turned on
+    // whether an employeeId had been passed in the query. After identity moved
+    // to the session, a student's own `?employeeId=` was (correctly) ignored —
+    // which meant a student ALWAYS took the first branch. So every request from
+    // my-documents.html came back holding expert/nano/fellowship, the document
+    // table read `data.locStatus` and friends off an object that had none of
+    // them, and every row in the OFFICIAL DOCUMENTS table rendered
+    // "Not Available / Not yet issued" — including certificates that had
+    // genuinely been issued and were sitting in the database.
+    //
+    // The two payloads share no key names, so there is nothing to choose
+    // between: build both and send both. Neither page has to change, and a
+    // certificate HR issues is visible the moment it exists.
+    const payload = { success: true, employeeId: student.employeeId };
+
+    // ── the course certificates (my-certificates.html) ───────────────────
+    try {
+      const status = await getCertStatus(student);
+
+      // Already-issued certificate records. These are decoration: whether a
+      // certificate is UNLOCKED comes from getCertStatus above, and this only
+      // adds the download link for one already issued. An error here used to
+      // take the whole page down to "Could not load certificates." — the
+      // student could not even see their progress, over a record that in most
+      // cases does not exist yet.
+      const certMap = {};
+      try {
+        const certs = await StudentCertificate.find({ studentId: student._id }).lean();
+        certs.forEach(c => { certMap[c.certificateType] = c; });
+      } catch (certErr) {
+        console.error("[My-Certs] could not read issued certificates for " +
+          student.employeeId + ":", certErr.message);
+      }
+      const rec = (k) => certMap[k]
+        ? { certificateId: certMap[k].certificateId, pdfUrl: certMap[k].pdfUrl, issuedAt: certMap[k].issuedAt }
+        : null;
+
+      payload.expert = {
+        unlocked:      status.expertUnlocked,
+        completionPct: status.completionPct,
+        threshold:     30,
+        record:        rec("expert")
+      };
+      payload.nano_degree = {
+        unlocked:      status.nanoDegreeUnlocked,
+        completionPct: status.completionPct,
+        threshold:     70,
+        record:        rec("nano_degree")
+      };
+      payload.fellowship = {
+        visible:       status.fellowshipUnlocked,
+        unlocked:      status.fellowshipUnlocked,
+        cohortRankPct: status.cohortRankPct,
+        completionPct: status.completionPct,
+        threshold:     10,
+        record:        rec("fellowship")
+      };
+      payload.paymentEnabled = paymentConfig.PAYMENT_ENABLED;
+      payload.prices = {
+        expert:      getCertificatePrice("expert", student.tenure),
+        nano_degree: getCertificatePrice("nano_degree", student.tenure),
+        fellowship:  getCertificatePrice("fellowship", student.tenure)
+      };
+    } catch (courseErr) {
+      // The document half is the half a student is usually here for. A failure
+      // computing course progress must not take it down with it.
+      console.error("[My-Certs] course certificate status failed for " +
+        student.employeeId + ":", courseErr.message);
+    }
+
+    // ── the official documents (my-documents.html) ───────────────────────
+    const doc = student.toObject ? student.toObject() : student;
+    payload.name              = doc.name || doc.fullName || "";
+    payload.locStatus         = doc.locStatus;
+    payload.locIssuedAt       = doc.locIssuedAt;
+    payload.lorStatus         = doc.lorStatus;
+    payload.lorIssuedAt       = doc.lorIssuedAt;
+    payload.starStatus        = doc.starStatus;
+    payload.starIssuedAt      = doc.starIssuedAt;
+    payload.starContribution  = doc.starContribution;
+    payload.starContributionFeedback = doc.starContributionFeedback;
+    payload.offerLetterStatus = doc.offerLetterStatus;
+    payload.offerLetterGeneratedAt = doc.offerLetterGeneratedAt;
+    payload.documentRejectionReason = doc.documentRejectionReason;
+    payload.attendancePercentage = doc.attendancePercentage;
+    payload.performanceScore  = doc.performanceScore;
+    payload.pendingFines      = doc.pendingFines || [];
+
+    // The base64 PDFs themselves never leave the server — only whether one
+    // exists, which is all the page needs to draw a Download button.
+    payload.hasLocPdf   = !!doc.locPdfBase64;
+    payload.hasLorPdf   = !!doc.lorPdfBase64;
+    payload.hasStarPdf  = !!doc.starPdfBase64;
+    payload.hasOfferPdf = !!doc.offerPdfBase64;
+
+    // Certificates issued by HR bypassing the normal checks. The student is
+    // told plainly that HR issued it — nothing about the override reason,
+    // which is between HR and the admin portal.
+    payload.hrIssued = {
+      LOC:  !!doc.locIssuedByOverride,
+      LOR:  !!doc.lorIssuedByOverride,
+      STAR: !!doc.starIssuedByOverride
+    };
 
     try {
       const StudentDocument = require("../../models/new/StudentDocument");
@@ -255,42 +301,38 @@ async function handleMyCerts(req, res) {
       if (docRec) {
         // The printed document numbers, so the portal can offer a "Verify"
         // link — the same check an employer runs, from the student's own page.
-        safeStudent.offerDocumentNumber = docRec.offerLetterDocumentNumber || null;
-        safeStudent.locDocumentNumber   = docRec.locDocumentNumber || null;
-        safeStudent.lorDocumentNumber   = docRec.lorDocumentNumber || null;
-        if (!safeStudent.offerLetterStatus || safeStudent.offerLetterStatus === 'not_uploaded' || safeStudent.offerLetterStatus === 'not_eligible') {
-          safeStudent.offerLetterStatus = docRec.uploadStatus || 'not_uploaded';
+        payload.offerDocumentNumber = docRec.offerLetterDocumentNumber || null;
+        payload.locDocumentNumber   = docRec.locDocumentNumber || null;
+        payload.lorDocumentNumber   = docRec.lorDocumentNumber || null;
+        if (!payload.offerLetterStatus || payload.offerLetterStatus === 'not_uploaded' || payload.offerLetterStatus === 'not_eligible') {
+          payload.offerLetterStatus = docRec.uploadStatus || 'not_uploaded';
         }
         if (docRec.offerLetterUrl) {
-          safeStudent.hasOfferPdf = true;
-          safeStudent.offerLetterStatus = 'issued';
-          if (docRec.offerLetterSentAt && !safeStudent.offerLetterGeneratedAt) {
-            safeStudent.offerLetterGeneratedAt = docRec.offerLetterSentAt;
+          payload.hasOfferPdf = true;
+          payload.offerLetterStatus = 'issued';
+          if (docRec.offerLetterSentAt && !payload.offerLetterGeneratedAt) {
+            payload.offerLetterGeneratedAt = docRec.offerLetterSentAt;
           }
         }
         if (docRec.locUrl) {
-          safeStudent.hasLocPdf = true;
-          safeStudent.locStatus = 'issued';
-          if (docRec.locSentAt && !safeStudent.locIssuedAt) {
-            safeStudent.locIssuedAt = docRec.locSentAt;
-          }
+          payload.hasLocPdf = true;
+          payload.locStatus = 'issued';
+          if (docRec.locSentAt && !payload.locIssuedAt) payload.locIssuedAt = docRec.locSentAt;
         }
         if (docRec.lorUrl) {
-          safeStudent.hasLorPdf = true;
-          safeStudent.lorStatus = 'issued';
-          if (docRec.lorSentAt && !safeStudent.lorIssuedAt) {
-            safeStudent.lorIssuedAt = docRec.lorSentAt;
-          }
+          payload.hasLorPdf = true;
+          payload.lorStatus = 'issued';
+          if (docRec.lorSentAt && !payload.lorIssuedAt) payload.lorIssuedAt = docRec.lorSentAt;
         }
-        if (docRec.rejectionReason && !safeStudent.documentRejectionReason) {
-          safeStudent.documentRejectionReason = docRec.rejectionReason;
+        if (docRec.rejectionReason && !payload.documentRejectionReason) {
+          payload.documentRejectionReason = docRec.rejectionReason;
         }
       }
     } catch (fallbackErr) {
       console.error('[My-Certs] StudentDocument fallback error:', fallbackErr.message);
     }
 
-    res.json({ success: true, ...safeStudent });
+    return res.json(payload);
   } catch(e) {
     // `success` and `message`, not a bare `error`.
     //
@@ -954,6 +996,203 @@ async function checkAndIssueCerts(studentId, sentBy = "System Automation") {
     await generateAndSaveCert(studentId, 'STAR', student, sentBy);
   }
 }
+
+/* ═════════════════════════════════════════════════════════════════════════
+   HR direct issue — the bypass, and the record it leaves behind
+   ═════════════════════════════════════════════════════════════════════════
+
+   A large number of interns did their whole internship over WhatsApp. They
+   registered on the portal only to collect the certificate they had already
+   earned, so:
+
+     · there is no certificate application, because there was no portal to
+       apply through while they were interning;
+     · attendance reads 0%, because nobody marked a register that did not
+       exist;
+     · the task journey is untouched, so completion is 0%.
+
+   Every check the portal runs therefore refuses them, and the refusals are
+   correct about the data and wrong about the student. HR needs to issue the
+   certificate directly, and this is that path: it skips the application, the
+   75% attendance rule, the performance rule and the coordinator approval, and
+   it does not look at any of them before generating.
+
+   What it does NOT skip is the record. `precheck` tells HR exactly what the
+   student fails so the portal can show one warning before the fact, and every
+   issue — warned or not — writes a CertificateOverride row that the admin
+   portal lists. A bypass nobody can audit is not a bypass, it is a hole.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const CertificateOverride = require("../../models/CertificateOverride");
+const certEligibility     = require("../../services/certificateEligibility");
+
+const OVERRIDE_FIELDS = {
+    LOC:   { flag: "locIssuedByOverride",   label: "Letter of Completion" },
+    LOR:   { flag: "lorIssuedByOverride",   label: "Letter of Recommendation" },
+    STAR:  { flag: "starIssuedByOverride",  label: "Star Performer Certificate" },
+    OFFER: { flag: "offerIssuedByOverride", label: "Offer Letter" },
+    LOP:   { flag: "lopIssuedByOverride",   label: "Letter of Promotion" }
+};
+
+/** Who is issuing, from the session. Never from the request body. */
+function issuerFrom(session) {
+    const s = session || {};
+    if (s.hr) return { name: s.hr.name || s.hr.username || s.hr.email || "HR", role: "hr" };
+    if (s.adminUser) return { name: s.adminUser.username || "Admin", role: "admin" };
+    if (s.coordinator) return { name: s.coordinator.username || "Coordinator", role: "coordinator" };
+    return { name: "Unknown", role: "unknown" };
+}
+
+/**
+ * What this student fails, in the words the warning will use.
+ * Read-only — it decides nothing, it only describes.
+ */
+async function describeShortfall(student, certType) {
+    const type = String(certType || "").toUpperCase();
+    const failed = [];
+
+    let measured = {};
+    try {
+        const verdict = await certEligibility.evaluate(student);
+        measured = verdict.measured || {};
+        const one = verdict[type];
+        if (one && !one.eligible && one.reason) failed.push(one.reason);
+    } catch (err) {
+        console.error("[HR-Issue] eligibility check failed:", err.message);
+        failed.push("Eligibility could not be evaluated: " + err.message);
+    }
+
+    let hadApplication = false;
+    try {
+        const CertificateApplication = require("../../models/new/CertificateApplication");
+        hadApplication = !!(await CertificateApplication.findOne({
+            studentId: student._id, certificateType: type
+        }).lean());
+    } catch (_) { /* the collection may not exist yet */ }
+    if (!hadApplication && ["LOC", "LOR", "STAR"].includes(type)) {
+        failed.push("The student never applied for this certificate through the portal.");
+    }
+
+    if (!student.internshipCompleted && !student.internshipCompletedAt) {
+        failed.push("The internship is not marked complete on the student's record.");
+    }
+
+    const snapshot = {
+        attendancePercentage: Number(measured.attendancePercentage) || 0,
+        performanceScore:     Number(measured.performanceScore) || 0,
+        taskCompletionPct:    Number(measured.taskCompletionPercent) || 0,
+        internshipCompleted:  !!measured.internshipCompleted,
+        hadApplication
+    };
+
+    return { failed, snapshot, metRequirements: failed.length === 0 };
+}
+
+// GET /api/v2/certificates/hr-issue/precheck?employeeId=…&certType=LOC
+//
+// The one warning. HR calls this before issuing; if `metRequirements` is false
+// the portal shows the popup listing `failedChecks` and asks for a reason.
+router.get("/hr-issue/precheck", requireStaff, async (req, res) => {
+    try {
+        const { employeeId, certType } = req.query || {};
+        const type = String(certType || "").toUpperCase();
+        if (!OVERRIDE_FIELDS[type]) {
+            return res.status(400).json({ success: false, message: "Unknown certificate type: " + certType });
+        }
+        const student = await Student.findOne({ employeeId: String(employeeId || "") }).lean();
+        if (!student) return res.status(404).json({ success: false, message: "No student with that Employee ID." });
+
+        const { failed, snapshot, metRequirements } = await describeShortfall(student, type);
+        res.json({
+            success: true,
+            employeeId: student.employeeId,
+            studentName: student.name || student.fullName || "",
+            domain: student.domain || "",
+            certificateType: type,
+            certificateLabel: OVERRIDE_FIELDS[type].label,
+            metRequirements,
+            failedChecks: failed,
+            snapshot,
+            alreadyIssued: !!student[{ LOC:"locPdfBase64", LOR:"lorPdfBase64", STAR:"starPdfBase64", OFFER:"offerPdfBase64", LOP:"lopPdfBase64" }[type]]
+        });
+    } catch (e) {
+        console.error("[HR-Issue precheck]", e.message);
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// POST /api/v2/certificates/hr-issue
+// { employeeId, certType, acknowledged, reason }
+//
+// Generates the certificate outright. No eligibility call gates this — that is
+// the point of it. `acknowledged` is required only when the student falls
+// short, so the warning cannot be skipped by a script that never asked for it.
+router.post("/hr-issue", requireStaff, async (req, res) => {
+    try {
+        const { employeeId, certType, acknowledged, reason } = req.body || {};
+        const type = String(certType || "").toUpperCase();
+        if (!OVERRIDE_FIELDS[type]) {
+            return res.status(400).json({ success: false, message: "Unknown certificate type: " + certType });
+        }
+
+        const student = await Student.findOne({ employeeId: String(employeeId || "") });
+        if (!student) return res.status(404).json({ success: false, message: "No student with that Employee ID." });
+
+        const { failed, snapshot, metRequirements } = await describeShortfall(student, type);
+
+        if (!metRequirements && !acknowledged) {
+            // 409, not 400: the request is well-formed, it just has not been
+            // confirmed yet. The portal turns this into the warning popup.
+            return res.status(409).json({
+                success: false,
+                requiresConfirmation: true,
+                message: "This student has not met the requirements for this certificate.",
+                failedChecks: failed,
+                snapshot
+            });
+        }
+
+        const issuer = issuerFrom(req.session);
+
+        // Generate. generateAndSaveCert writes the PDF, sets the status to
+        // 'issued', writes the file, emails it and updates StudentDocument —
+        // which is what puts it in the student's My Documents.
+        const result = await generateAndSaveCert(student._id, type, student, `${issuer.name} (Direct issue)`);
+        if (result && result.success === false) {
+            return res.status(500).json({ success: false, message: result.error || "Certificate generation failed." });
+        }
+
+        await Student.findByIdAndUpdate(student._id, { [OVERRIDE_FIELDS[type].flag]: true });
+
+        const record = await CertificateOverride.create({
+            studentId:   student._id,
+            employeeId:  student.employeeId,
+            studentName: student.name || student.fullName || "",
+            domain:      student.domain || "",
+            certificateType: type,
+            issuedBy:     issuer.name,
+            issuedByRole: issuer.role,
+            metRequirements,
+            failedChecks: failed,
+            snapshot,
+            reason: String(reason || "").slice(0, 1000)
+        });
+
+        console.log(`[HR-Issue] ${type} issued to ${student.employeeId} by ${issuer.name} ` +
+            `(met requirements: ${metRequirements})`);
+
+        res.json({
+            success: true,
+            message: `${OVERRIDE_FIELDS[type].label} issued to ${student.employeeId}. It is now in their My Documents.`,
+            overrideId: record._id,
+            metRequirements,
+            failedChecks: failed
+        });
+    } catch (e) {
+        console.error("[HR-Issue]", e.stack || e.message);
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
 
 // POST /api/v2/certificates/hr-approve — HR manually approves
 router.post('/hr-approve', async (req, res) => {
