@@ -28,15 +28,21 @@ function lift(name) {
   return source.slice(start, i + 1);
 }
 
+// Room NAMING and membership moved into services/chatIdentity so server.js,
+// routes/chatModeration.js and the socket layer could stop disagreeing about
+// who a person is. canAccessRoom and canDeleteIn are still server.js's, and
+// call into that module — so it is passed in rather than lifted.
+const chatIdentity = require('../../services/chatIdentity');
+
 // eslint-disable-next-line no-new-func
-const ctx = new Function(`
-  ${lift('dmRoomFor')}
-  ${lift('dmParticipants')}
+const ctx = new Function('chatIdentity', `
+  const dmRoomFor      = chatIdentity.dmRoomFor;
+  const dmParticipants = chatIdentity.dmParticipants;
   ${lift('roomsAllowedFor')}
   ${lift('canAccessRoom')}
   ${lift('canDeleteIn')}
   return { dmRoomFor, dmParticipants, roomsAllowedFor, canAccessRoom, canDeleteIn };
-`)();
+`)(chatIdentity);
 
 const { dmRoomFor, dmParticipants, roomsAllowedFor, canAccessRoom, canDeleteIn } = ctx;
 

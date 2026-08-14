@@ -22,14 +22,16 @@ const UserBlock  = require("../models/UserBlock");
 const ChatReport = require("../models/ChatReport");
 const ChatRead   = require("../models/ChatRead");
 
+// Identity, room naming and membership come from one shared module, so this
+// file and server.js cannot disagree about who a person is. They did: this
+// file called an HR user by their email and server.js called them by their
+// username, so a conversation listed in this inbox failed the membership check
+// on the endpoint that loads its messages — the red "Forbidden" people saw.
+const chatIdentity = require("../services/chatIdentity");
+
 /** Who is calling, from the session alone. */
 function identityOf(req) {
-    const s = req.session || {};
-    if (s.adminUser)   return { role: "admin",       id: s.adminUser.username || "admin", name: s.adminUser.username || "Admin", domain: "" };
-    if (s.hr)          return { role: "hr",          id: s.hr.email || s.hr.username,     name: s.hr.name || s.hr.username,      domain: "" };
-    if (s.coordinator) return { role: "coordinator", id: s.coordinator.email || s.coordinator.username, name: s.coordinator.name || s.coordinator.username, domain: s.coordinator.domain || "" };
-    if (s.student)     return { role: "student",     id: s.student.employeeId,            name: s.student.name || s.student.employeeId, domain: s.student.domain || "" };
-    return null;
+    return chatIdentity.identityFromSession(req.session);
 }
 
 function requireChatUser(req, res, next) {
@@ -47,14 +49,8 @@ function requireAdminUser(req, res, next) {
     next();
 }
 
-function dmRoomFor(a, b) {
-    return "dm::" + [String(a), String(b)].sort().join("::");
-}
-
-/** A user id can contain /, . and @ — all meaningful inside a regex. */
-function escapeRegex(value) {
-    return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
+const dmRoomFor   = chatIdentity.dmRoomFor;
+const escapeRegex = chatIdentity.escapeRegex;   // ids contain /, . and @
 
 // ════════════════════════════════════════════════════════════
 // DIRECT MESSAGES
@@ -81,11 +77,11 @@ router.get("/directory", requireChatUser, async (req, res) => {
         ]);
         for (const c of coordinators) {
             const id = c.email || c.username;
-            if (id && id !== me.id) people.push({ id, name: c.name || id, role: "coordinator", domain: c.domain || "" });
+            if (id && !chatIdentity.isSelf(me, id)) people.push({ id, name: c.name || id, role: "coordinator", domain: c.domain || "" });
         }
         for (const h of hrs) {
             const id = h.email || h.username;
-            if (id && id !== me.id) people.push({ id, name: h.name || id, role: "hr", domain: "" });
+            if (id && !chatIdentity.isSelf(me, id)) people.push({ id, name: h.name || id, role: "hr", domain: "" });
         }
 
         const studentFilter = {};
@@ -97,7 +93,7 @@ router.get("/directory", requireChatUser, async (req, res) => {
         const students = await Student.find(studentFilter)
             .select("name firstName lastName employeeId domain").limit(60).lean();
         for (const s of students) {
-            if (!s.employeeId || s.employeeId === me.id) continue;
+            if (!s.employeeId || chatIdentity.isSelf(me, s.employeeId)) continue;
             people.push({
                 id: s.employeeId,
                 name: (s.name || `${s.firstName || ""} ${s.lastName || ""}`).trim() || s.employeeId,
@@ -110,11 +106,45 @@ router.get("/directory", requireChatUser, async (req, res) => {
         const hidden = await UserBlock.hiddenFor(me.id);
         const visible = people.filter(p => !hidden.has(p.id));
 
-        res.json({ success: true, me: { id: me.id, role: me.role }, people: visible.slice(0, 100) });
+        res.json({
+            success: true,
+            // `ids` is every id this person's own messages may carry. The page
+            // decides which bubbles are theirs from it — comparing against the
+            // single canonical id put a user's own older messages on the wrong
+            // side of the conversation once their id changed spelling.
+            me: { id: me.id, role: me.role, ids: chatIdentity.matchIds(me) },
+            people: visible.slice(0, 100)
+        });
     } catch (err) {
         console.error("[chat] directory failed:", err.message);
         res.status(500).json({ success: false, message: "Could not load the directory: " + err.message });
     }
+});
+
+/**
+ * GET /api/chat/me — who the server thinks the caller is.
+ *
+ * A page cannot work this out for itself. The chat widget used to decide which
+ * bubbles were the reader's own by comparing against whatever identifier it
+ * happened to have in sessionStorage — an HR username, say — while the server
+ * stamps messages with the canonical id, which for staff is their email. The
+ * reader's own messages then rendered as though a stranger had sent them.
+ *
+ * Cheap by design: session only, no database work, so a page can call it on
+ * load.
+ */
+router.get("/me", requireChatUser, (req, res) => {
+    const me = req.me;
+    res.json({
+        success: true,
+        me: {
+            id: me.id,
+            ids: chatIdentity.matchIds(me),
+            role: me.role,
+            name: me.name,
+            domain: me.domain || ""
+        }
+    });
 });
 
 /** POST /api/chat/dm/open { userId } — the room name for a 1:1 conversation. */
@@ -122,7 +152,7 @@ router.post("/dm/open", requireChatUser, async (req, res) => {
     try {
         const other = String(req.body && req.body.userId || "").trim();
         if (!other) return res.status(400).json({ success: false, message: "userId is required." });
-        if (other === req.me.id) return res.status(400).json({ success: false, message: "You cannot message yourself." });
+        if (chatIdentity.isSelf(req.me, other)) return res.status(400).json({ success: false, message: "You cannot message yourself." });
 
         const hidden = await UserBlock.hiddenFor(req.me.id);
         if (hidden.has(other)) {
@@ -153,10 +183,11 @@ router.get("/dm/threads", requireChatUser, async (req, res) => {
 
         // Rooms addressed to this person. The room name contains both ids, so
         // membership is a property of the name and needs no separate index.
-        const idRx = escapeRegex(String(me.id));
+        // Matched against every id they are known by — a conversation started
+        // under their other spelling is still their conversation.
         const roomFilter = me.role === "admin"
             ? { chatRoom: /^dm::/ }
-            : { chatRoom: new RegExp("^dm::(" + idRx + "::|.*::" + idRx + "$)") };
+            : chatIdentity.dmRoomFilterFor(me);
 
         const rooms = await Message.distinct("chatRoom", roomFilter);
         if (!rooms.length) return res.json({ success: true, threads: [] });
@@ -180,29 +211,45 @@ router.get("/dm/threads", requireChatUser, async (req, res) => {
 
         const readMap = await ChatRead.mapFor(me.id, latest.map(l => l._id));
 
+        const myIds = chatIdentity.matchIds(me);
+
         const threads = [];
         for (const row of latest) {
             const parts = String(row._id).slice(4).split("::");
             if (parts.length !== 2) continue;
-            const other = parts.find(p => p !== String(me.id)) || parts[0];
+
+            // Who this conversation is WITH. An admin is not a participant, so
+            // for them the "other" side is simply the first name in the room.
+            //
+            // This used to fall back to parts[0] whenever neither id matched,
+            // which is how a person's own profile ended up in the panel beside
+            // a conversation with somebody else: their canonical id had changed
+            // spelling, nothing matched, and the fallback picked themselves.
+            const other = me.role === "admin"
+                ? parts[0]
+                : chatIdentity.otherParticipant(me, row._id);
+            if (other === null || other === undefined) continue;
             if (hidden.has(other)) continue;
 
             const lastRead = readMap[row._id] || new Date(0);
             const unread = await Message.countDocuments({
                 chatRoom: row._id,
-                senderId: { $ne: me.id },
+                // Not from any of my ids \u2014 messages I sent under a previous
+                // spelling of my id are still mine and must not count unread.
+                senderId: { $nin: myIds },
                 timestamp: { $gt: lastRead }
             });
 
+            const fromMe = chatIdentity.isSelf(me, row.senderId);
             threads.push({
                 room: row._id,
                 withId: other,
                 // The name is only known from a message the OTHER person sent;
                 // when every message is ours, fall back to their id and let the
                 // profile lookup fill it in.
-                withName: row.senderId === me.id ? other : (row.senderName || other),
+                withName: fromMe ? other : (row.senderName || other),
                 lastMessage: row.imageUrl && !row.message ? "\uD83D\uDCF7 Photo" : (row.message || "").slice(0, 90),
-                lastFromMe: row.senderId === me.id,
+                lastFromMe: fromMe,
                 at: row.timestamp,
                 unread,
                 // So the UI can warn before a conversation ages out.
@@ -228,7 +275,7 @@ router.post("/dm/read", requireChatUser, async (req, res) => {
     try {
         const room = String(req.body && req.body.room || "").trim();
         if (!room.startsWith("dm::")) return res.status(400).json({ success: false, message: "room is required." });
-        if (req.me.role !== "admin" && room.slice(4).split("::").indexOf(String(req.me.id)) === -1) {
+        if (req.me.role !== "admin" && !chatIdentity.isParticipant(req.me, room)) {
             return res.status(403).json({ success: false, message: "Not your conversation." });
         }
         await ChatRead.markRead(req.me.id, room, new Date());
@@ -242,18 +289,16 @@ router.post("/dm/read", requireChatUser, async (req, res) => {
 router.get("/unread", requireChatUser, async (req, res) => {
     try {
         const me = req.me;
-        const idRx = escapeRegex(String(me.id));
-        const rooms = await Message.distinct("chatRoom", {
-            chatRoom: new RegExp("^dm::(" + idRx + "::|.*::" + idRx + "$)")
-        });
+        const rooms = await Message.distinct("chatRoom", chatIdentity.dmRoomFilterFor(me));
         if (!rooms.length) return res.json({ success: true, unread: 0 });
 
+        const myIds = chatIdentity.matchIds(me);
         const readMap = await ChatRead.mapFor(me.id, rooms);
         let total = 0;
         for (const room of rooms) {
             total += await Message.countDocuments({
                 chatRoom: room,
-                senderId: { $ne: me.id },
+                senderId: { $nin: myIds },
                 timestamp: { $gt: readMap[room] || new Date(0) }
             });
         }
@@ -339,7 +384,7 @@ router.post("/block", requireChatUser, async (req, res) => {
     try {
         const target = String(req.body && req.body.userId || "").trim();
         if (!target) return res.status(400).json({ success: false, message: "userId is required." });
-        if (target === req.me.id) return res.status(400).json({ success: false, message: "You cannot block yourself." });
+        if (chatIdentity.isSelf(req.me, target)) return res.status(400).json({ success: false, message: "You cannot block yourself." });
 
         await UserBlock.updateOne(
             { blockerId: req.me.id, blockedId: target },

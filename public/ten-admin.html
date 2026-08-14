@@ -631,12 +631,17 @@ async function loadStudents() {
         <td>${s.tenure || '—'}</td>
         <td><span class="badge badge-grey">${s.locStatus || '—'}</span></td>
         <td><span class="badge badge-grey">${s.lorStatus || '—'}</span></td>
-        <td>${s.isLockedOut ? '<span class="badge badge-red">Locked 🔒</span>' : '<span class="badge badge-green">Active</span>'}</td>
+        <td>${s.isLockedOut ? '<span class="badge badge-red">Locked 🔒</span>' : '<span class="badge badge-green">Active</span>'}${
+          // Shows that a reset was done and the student has not yet chosen
+          // their own — otherwise there is no way to tell an account still
+          // sitting on an admin-set password from a settled one.
+          (s.mustChangePassword || s.mustChangeEmail)
+            ? ' <span class="badge badge-grey" title="Waiting for the student to set their own">Reset pending</span>' : ''}</td>
         <td style="display:flex;gap:6px;flex-wrap:wrap">
           ${s.isLockedOut ? `<button class="btn btn-green" onclick="unlockStudent('${s._id}')">🔓 Unlock</button>` : ''}
           <button class="btn btn-grey" onclick="editStudent('${s._id}','${s.name}','${s.email}','${s.domain||''}','${s.tenure||''}','${s.whatsapp||''}','${s.gender||''}','${s.college||s.collegeName||''}')">✏️ Edit</button>
           <button class="btn btn-grey" onclick="extendTenure('${s._id}','${s.employeeId}','${s.tenure||''}')">📅 Tenure</button>
-          <button class="btn btn-grey" onclick="resetStudentPw('${s._id}','${s.name}')">🔑 Reset PW</button>
+          <button class="btn btn-grey" onclick="resetStudentPw('${s._id}','${s.name}','${s.email||''}')" title="Set a working password or correct the email so they can sign in again">🔑 Sign-in</button>
           <button class="btn btn-red" onclick="deleteStudent('${s._id}','${s.employeeId}')">🗑</button>
         </td>
       </tr>`).join('')}</tbody>
@@ -769,17 +774,75 @@ async function doExtendTenure(id) {
   }
 }
 
-function resetStudentPw(id, name) {
-  openModal(`Reset Password — ${name}`, `<div class="form-group"><label>New Password (min 8 chars)</label><input id="newPw" type="password" placeholder="New password"></div>`,
-    [{ label: 'Cancel', cls: 'grey', fn: 'closeModal()' }, { label: '🔑 Reset', cls: 'red', fn: `doResetPw('${id}')` }]);
+/**
+ * Give a student a way back into their account.
+ *
+ * The common cases are a mistyped email at registration that no reset link can
+ * ever reach, and a forgotten password on an account whose email is wrong —
+ * neither of which the student can fix themselves. Both fields are here
+ * because they usually need fixing together.
+ *
+ * Whatever is changed here is temporary by design: the student is asked to set
+ * their own password (and confirm their own email) the next time they sign in,
+ * so the account does not stay on credentials somebody else picked.
+ */
+function resetStudentPw(id, name, email) {
+  openModal(`Reset sign-in details — ${name}`, `
+    <p style="font-size:12.5px;color:#64748b;line-height:1.55;margin:0 0 14px;">
+      Fill in whichever needs changing and leave the other blank. Give the student
+      what you set here — they will be asked to choose their own when they sign in.
+    </p>
+    <div class="form-group">
+      <label>New password <span style="color:#94a3b8;font-weight:400">(min 8 characters — leave blank to keep the current one)</span></label>
+      <input id="newPw" type="text" placeholder="e.g. Ten@Reset2026" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label>Email address <span style="color:#94a3b8;font-weight:400">(leave blank to keep it)</span></label>
+      <input id="newEmail" type="email" placeholder="${_aEsc(email || '')}" autocomplete="off">
+    </div>
+    <label style="display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:#475569;line-height:1.5;">
+      <input id="reqChange" type="checkbox" checked style="width:auto;margin-top:2px;">
+      <span>Ask the student to set their own on next sign-in <b>(recommended)</b>.
+      Untick only when correcting an obvious typo.</span>
+    </label>
+    <p id="resetMsg" style="font-size:12.5px;color:#ef4444;margin:12px 0 0;min-height:1px;"></p>`,
+    [{ label: 'Cancel', cls: 'grey', fn: 'closeModal()' }, { label: '🔑 Update', cls: 'red', fn: `doResetPw('${id}')` }]);
 }
 
 async function doResetPw(id) {
-  const pw = document.getElementById('newPw').value;
-  if (pw.length < 8) { toast('Min 8 characters', 'error'); return; }
-  const d = await api(`/students/${id}/reset-password`, { method: 'POST', body: JSON.stringify({ newPassword: pw }) });
-  if (d && d.success) { toast('Password reset ✓'); closeModal(); }
-  else toast(d?.error || 'Error', 'error');
+  const pw = document.getElementById('newPw').value.trim();
+  const em = document.getElementById('newEmail').value.trim();
+  const requireChange = document.getElementById('reqChange').checked;
+  const msg = document.getElementById('resetMsg');
+  msg.textContent = '';
+
+  if (!pw && !em) { msg.textContent = 'Enter a new password, a new email, or both.'; return; }
+  if (pw && pw.length < 8) { msg.textContent = 'The password needs to be at least 8 characters.'; return; }
+
+  const body = { requireChange };
+  if (pw) body.newPassword = pw;
+  if (em) body.newEmail = em;
+
+  const d = await api(`/students/${id}/reset-credentials`, { method: 'POST', body: JSON.stringify(body) });
+  if (d && d.success) {
+    closeModal();
+    toast(d.message || 'Updated ✓');
+    // Spell out what to pass on, since the password is not stored anywhere
+    // readable and this is the only time it is on screen.
+    if (pw) {
+      setTimeout(() => alert(
+        'Give the student these details:\n\n' +
+        (em ? 'Email: ' + em + '\n' : '') +
+        'Password: ' + pw + '\n\n' +
+        (requireChange
+          ? 'They will be asked to set their own password when they sign in.'
+          : 'They will not be prompted to change it.')
+      ), 250);
+    }
+    loadStudents();
+  } else {
+    msg.textContent = d?.error || 'Could not update. Please try again.';
+  }
 }
 
 async function deleteStudent(id, empId) {

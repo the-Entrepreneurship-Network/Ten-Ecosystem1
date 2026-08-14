@@ -203,6 +203,7 @@ html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="/session-guard.js"></script>
+<script src="/credential-reset.js"></script>
 <script>
 /* ═══════════════════════════════════════════════════════════════════════
    Direct messages.
@@ -213,8 +214,26 @@ html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);
    ═══════════════════════════════════════════════════════════════════════ */
 "use strict";
 
-var me = null;                 // { id, role }
+var me = null;                 // { id, role, ids: [...] }
 var threads = [];
+
+/**
+ * Is this message one of mine?
+ *
+ * Against every id the server says is mine, not just the canonical one. Staff
+ * have been written into conversations under both their username and their
+ * email over time, and comparing to one of them put a person's own older
+ * messages on the left, as though a stranger had sent them.
+ */
+function isMine(senderId){
+  if (!me || senderId == null) return false;
+  var mineIds = (me.ids && me.ids.length) ? me.ids : [me.id];
+  var s = String(senderId).toLowerCase();
+  for (var i = 0; i < mineIds.length; i++){
+    if (String(mineIds[i]).toLowerCase() === s) return true;
+  }
+  return false;
+}
 var current = null;            // { room, withId, withName, role }
 var socket = null;
 var retentionDays = 30;
@@ -373,7 +392,7 @@ function addDay(label){
 
 function addBubble(m){
   var box = document.getElementById("msgs");
-  var mine = me && String(m.senderId) === String(me.id);
+  var mine = isMine(m.senderId);
   var el = document.createElement("div");
   el.className = "bubble" + (mine ? " mine" : "");
   var html = mine ? "" : '<div class="who">' + esc(m.senderName || m.senderId) + "</div>";

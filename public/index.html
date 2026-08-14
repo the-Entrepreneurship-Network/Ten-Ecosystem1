@@ -325,7 +325,7 @@
     <a href="login.html" style="display:block; background:#121212; border:1px solid #2a2a2a; border-radius:14px; padding:18px 22px; color:#fff; text-decoration:none; font-weight:700; font-size:14px;" onmouseover="this.style.borderColor='#666'" onmouseout="this.style.borderColor='#2a2a2a'">🎓 Member Login</a>
     <a href="coordinator-login.html" style="display:block; background:#121212; border:1px solid #2a2a2a; border-radius:14px; padding:18px 22px; color:#fff; text-decoration:none; font-weight:700; font-size:14px;" onmouseover="this.style.borderColor='#666'" onmouseout="this.style.borderColor='#2a2a2a'">🛡 Coordinator Login Portal</a>
     <a href="coordinator-register.html" style="display:block; background:#121212; border:1px dashed #3a3a3a; border-radius:14px; padding:18px 22px; color:#fff; text-decoration:none; font-weight:700; font-size:14px;" onmouseover="this.style.borderColor='#666'" onmouseout="this.style.borderColor='#3a3a3a'">⚡ Coordinator Register</a>
-    <a href="hr-portal.html" style="display:block; background:#121212; border:1px solid #2a2a2a; border-radius:14px; padding:18px 22px; color:#fff; text-decoration:none; font-weight:700; font-size:14px;" onmouseover="this.style.borderColor='#666'" onmouseout="this.style.borderColor='#2a2a2a'">📊 HR Portal</a>
+    <a href="#" onclick="openHrLevelChooser(); return false;" style="display:block; background:#121212; border:1px solid #2a2a2a; border-radius:14px; padding:18px 22px; color:#fff; text-decoration:none; font-weight:700; font-size:14px;" onmouseover="this.style.borderColor='#666'" onmouseout="this.style.borderColor='#2a2a2a'">📊 HR Portal</a>
   </div>
 
   <!-- the numbers -->
@@ -661,5 +661,115 @@ function journey() {
   });
 })();
 </script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     HR LEVEL CHOOSER
+     ═══════════════════════════════════════════════════════════════════════
+     The HR button used to go straight to hr-portal.html, skipping the step
+     where a member of HR says which of the eight positions they are signing
+     in as. That step is not decoration: /hr-portal reads `?level=` on load
+     (initHRActiveLevel) and the level decides which sections of the portal
+     are available, so arriving without one silently lands everybody on
+     Level 1.
+
+     Rebuilt in this landing's palette rather than lifted from the old page,
+     and with no SweetAlert — this page does not load it, so the confirm step
+     is plain DOM. -->
+<div id="hrLevelChooser" role="dialog" aria-modal="true" aria-labelledby="hrChooserTitle"
+     style="position:fixed; inset:0; background:rgba(0,0,0,0.86); backdrop-filter:blur(10px);
+            display:none; align-items:center; justify-content:center; padding:20px; z-index:100000;">
+  <div style="background:#0d0d0d; border:1px solid #2a2a2a; border-radius:20px; padding:28px;
+              width:100%; max-width:760px; max-height:88dvh; overflow-y:auto;
+              box-shadow:0 30px 90px rgba(0,0,0,0.9);">
+
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:6px;">
+      <h3 id="hrChooserTitle" style="font-size:20px; font-weight:900; margin:0; color:#fff;">Which HR position?</h3>
+      <button onclick="closeHrLevelChooser()" aria-label="Close"
+              style="background:#161616; border:1px solid #2a2a2a; border-radius:10px; color:#fff;
+                     cursor:pointer; padding:8px 14px; font-size:13px; font-weight:700; flex:0 0 auto;">Close</button>
+    </div>
+    <p style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.18em;
+              color:#888; text-transform:uppercase; margin:0 0 22px;">Eight levels of access control</p>
+
+    <div id="hrLevelGrid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:12px;"></div>
+
+    <!-- The credentials question, previously a SweetAlert. -->
+    <div id="hrCredStep" style="display:none; margin-top:22px; border-top:1px solid #1e1e1e; padding-top:20px;">
+      <p style="font-size:15px; font-weight:800; color:#fff; margin:0 0 6px;">Do you have credentials from Admin?</p>
+      <p style="font-size:13px; color:#999; margin:0 0 16px; line-height:1.5;">
+        Signing in as <strong id="hrCredLevelName" style="color:#fff;"></strong>. Access to this
+        position is issued by TEN administration.
+      </p>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button onclick="hrCredYes()" style="background:#fff; color:#000; border:none; border-radius:12px;
+                padding:13px 22px; font-weight:800; font-size:14px; cursor:pointer;">Yes, sign me in</button>
+        <button onclick="hrCredNo()" style="background:#161616; color:#fff; border:1px solid #2a2a2a;
+                border-radius:12px; padding:13px 22px; font-weight:700; font-size:14px; cursor:pointer;">No, how do I get them?</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* The eight positions, in one list so the labels cannot drift from the
+   dropdown inside the portal. */
+var HR_LEVELS = [
+  [1, 'Jr HR Associate'], [2, 'Sr HR Associate'],
+  [3, 'Jr HR Manager'],   [4, 'Sr HR Manager'],
+  [5, 'HR Associate Director'], [6, 'Jr HR Director'],
+  [7, 'HR Director & HRBP'],    [8, 'Vice President']
+];
+var _hrChosenLevel = null;
+
+(function buildHrLevelGrid() {
+  var grid = document.getElementById('hrLevelGrid');
+  if (!grid) return;
+  grid.innerHTML = HR_LEVELS.map(function (l) {
+    return '<button type="button" onclick="chooseHrLevel(' + l[0] + ')" ' +
+      'style="text-align:left; background:#141414; border:1px solid #2a2a2a; border-radius:14px; ' +
+      'padding:16px 18px; cursor:pointer; color:#fff; font-family:inherit; transition:border-color .2s;" ' +
+      'onmouseover="this.style.borderColor=\'#666\'" onmouseout="this.style.borderColor=\'#2a2a2a\'">' +
+      '<b style="display:block; font-size:14px; font-weight:800;">Level ' + l[0] + '</b>' +
+      '<span style="display:block; font-size:12px; color:#999; margin-top:4px;">' + l[1] + '</span>' +
+      '</button>';
+  }).join('');
+})();
+
+function openHrLevelChooser() {
+  document.getElementById('hrCredStep').style.display = 'none';
+  _hrChosenLevel = null;
+  document.getElementById('hrLevelChooser').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+function closeHrLevelChooser() {
+  document.getElementById('hrLevelChooser').style.display = 'none';
+  document.body.style.overflow = '';
+}
+function chooseHrLevel(level) {
+  _hrChosenLevel = level;
+  var match = HR_LEVELS.filter(function (l) { return l[0] === level; })[0];
+  document.getElementById('hrCredLevelName').textContent = 'Level ' + level + ' — ' + (match ? match[1] : '');
+  var step = document.getElementById('hrCredStep');
+  step.style.display = 'block';
+  step.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function hrCredYes() {
+  // The level travels with them: hr-login forwards it and the portal reads
+  // `?level=` on load to pick the right position.
+  window.location.href = '/hr-login?level=' + encodeURIComponent(_hrChosenLevel || 1);
+}
+function hrCredNo() {
+  window.location.href = 'https://chat.whatsapp.com/FsMqgrEqZiDLL2qgHuEqwN?s=sh&p=a&mlu=2';
+}
+
+/* Escape closes it, and so does a click on the backdrop. */
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') closeHrLevelChooser();
+});
+document.getElementById('hrLevelChooser').addEventListener('click', function (e) {
+  if (e.target === this) closeHrLevelChooser();
+});
+</script>
+
 </body>
 </html>
