@@ -218,3 +218,26 @@ describe('a student is identified by employee ID', () => {
     expect(filter.chatRoom.test(ci.dmRoomFor('TEN/AI/1663', 'x@ten.com'))).toBe(true);
   });
 });
+
+describe('an inbox is your own conversations, not everyone\'s', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const source = fs.readFileSync(path.join(__dirname, '../../routes/chatModeration.js'), 'utf8');
+
+  it('does not hand an admin every private conversation in the portal', () => {
+    // `/^dm::/` for admins turned their inbox into a surveillance feed, and
+    // put other people's conversations on screen before their own. Oversight
+    // still exists — it lives on the admin moderation desk.
+    const at = source.indexOf('router.get("/dm/threads"');
+    expect(at).toBeGreaterThan(-1);
+    const block = source.slice(at, at + 1800);
+    // The CODE must not branch on role here — the comment recording why may.
+    expect(block).not.toMatch(/chatRoom:\s*\/\^dm::\//);
+    expect(block).not.toMatch(/me\.role === "admin"\s*\n?\s*\?/);
+    expect(block).toContain('dmRoomFilterFor(me)');
+  });
+
+  it('keeps the deliberate oversight route for admins', () => {
+    expect(source).toContain('router.get("/admin/rooms"');
+  });
+});

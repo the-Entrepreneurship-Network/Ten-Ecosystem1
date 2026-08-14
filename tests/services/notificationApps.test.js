@@ -198,6 +198,14 @@ describe('the orb itself', () => {
     expect(orb).toMatch(/bottom:calc\(128px \+ env\(safe-area-inset-bottom\)\)/);
   });
 
+  it('loads socket.io itself, so the buzz works on every page', () => {
+    // Only five of the eleven pages carrying the orb ship a socket.io tag. On
+    // the other six it fell back to a 45-second poll and never buzzed at all —
+    // "that popup is there but if anyone message it not get vibrate".
+    expect(orb).toContain('/socket.io/socket.io.js');
+    expect(orb).toContain('function withSocketIo(');
+  });
+
   it('honours a reader who asked the system for less movement', () => {
     expect(orb).toContain('prefers-reduced-motion');
   });

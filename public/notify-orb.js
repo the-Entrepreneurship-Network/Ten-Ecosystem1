@@ -303,17 +303,47 @@
   }
 
   /* ── live ────────────────────────────────────────────────────────────── */
+
+  /**
+   * Make sure there is a socket.io client to listen on.
+   *
+   * Only five of the eleven pages carrying this orb load socket.io — the ones
+   * that happen to host a chat widget. On the other six the orb fell back to a
+   * 45-second poll and never buzzed at all, which is exactly the report: "that
+   * popup is there but if anyone message it not get vibrate."
+   *
+   * Loading it here rather than adding a tag to six pages keeps it working on
+   * the seventh nobody has written yet.
+   */
+  function withSocketIo(then) {
+    if (window.io) return then();
+    if (window.__tenOrbLoadingIo) { window.__tenOrbLoadingIo.push(then); return; }
+    window.__tenOrbLoadingIo = [then];
+
+    var s = document.createElement('script');
+    s.src = '/socket.io/socket.io.js';
+    s.async = true;
+    s.onload = function () {
+      var queued = window.__tenOrbLoadingIo || [];
+      window.__tenOrbLoadingIo = null;
+      queued.forEach(function (fn) { try { fn(); } catch (e) {} });
+    };
+    // No socket.io on this deployment: the poll still keeps the count honest.
+    s.onerror = function () { window.__tenOrbLoadingIo = null; };
+    document.head.appendChild(s);
+  }
+
   function connectLive() {
-    // A direct message already emits `dm_notice` on the socket the portal
-    // opens for chat. Portal notifications have no live channel, so those are
-    // caught by the poll below.
-    if (!window.io) return;
-    try {
-      var socket = window.__tenOrbSocket || window.io({ withCredentials: true });
-      window.__tenOrbSocket = socket;
-      socket.on('dm_notice', function () { dismissed = false; refresh('live'); });
-      socket.on('notification', function () { dismissed = false; refresh('live'); });
-    } catch (e) { /* chat is unavailable on this page; polling still works */ }
+    withSocketIo(function () {
+      try {
+        // Reuse the page's own connection where there is one, rather than
+        // opening a second socket for the same person.
+        var socket = window.__tenOrbSocket || window.io({ withCredentials: true });
+        window.__tenOrbSocket = socket;
+        socket.on('dm_notice', function () { dismissed = false; refresh('live'); });
+        socket.on('notification', function () { dismissed = false; refresh('live'); });
+      } catch (e) { /* chat is unavailable here; polling still works */ }
+    });
   }
 
   function start() {
