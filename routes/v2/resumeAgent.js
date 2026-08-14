@@ -394,7 +394,9 @@ router.post('/scan', upload.single('file'), async (req, res) => {
     const report = scanResume(text, b.target || b.role);
     /* A failing resume is not left as a verdict — the rebuild is the point. */
     const rebuilt = report.verdict === 'ats_ready' ? null : buildResume({
-      name: (text.match(/^\s*([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){1,3})\s*$/m) || [])[1],
+      /* horizontal space only — \s would run past the line end and take the
+         title with the name */
+      name: (text.match(/^[ \t]*([A-Z][A-Za-z.'-]+(?:[ \t]+[A-Z][A-Za-z.'-]+){1,3})[ \t]*$/m) || [])[1],
       role: b.target || b.role,
       email: (text.match(RE_EMAIL) || [])[0],
       phone: (text.match(RE_PHONE) || [])[0],
