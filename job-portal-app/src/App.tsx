@@ -174,9 +174,10 @@ function SuitcaseFall() {
   const ref = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end end'] });
 
-  const y = useTransform(scrollYProgress, [0, 1], ['-60vh', '160vh']);
+  const y = useTransform(scrollYProgress, [0, 1], ['8vh', '160vh']);
   const rotate = useTransform(scrollYProgress, [0, 1], [-25, 380]);
   const x = useTransform(scrollYProgress, [0, 0.5, 1], ['18vw', '30vw', '10vw']);
+  const appear = useTransform(scrollYProgress, [0, 0.04], [0, 1]);
 
   return (
     <div ref={ref} className="relative bg-[#050505]" style={{ height: `${FALL_PANELS.length * 100}vh` }}>
@@ -185,8 +186,8 @@ function SuitcaseFall() {
         <motion.img
           src={`${ASSETS}/suitcase.png`}
           alt=""
-          className="absolute w-[38vw] max-w-[440px]"
-          style={{ y, rotate, x, mixBlendMode: 'screen' }}
+          className="absolute w-[38vw] max-w-[440px] drop-shadow-[0_30px_60px_rgba(0,0,0,0.7)]"
+          style={{ y, rotate, x, opacity: appear }}
         />
       </div>
 
