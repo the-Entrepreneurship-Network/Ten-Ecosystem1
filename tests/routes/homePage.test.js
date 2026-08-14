@@ -166,8 +166,13 @@ describe('the small things that made it look unfinished', () => {
   });
 
   it('surfaces the employer route above the footer', () => {
+    // Both employer links now land in the founder portal itself. They used to
+    // point at talent-network.html, a 2,000-line near-duplicate of
+    // founder-os.html rendering placeholder data — so "Hire our interns" took
+    // an employer to a dashboard with nothing behind it.
     const beforeFooter = page.slice(0, page.indexOf('<footer'));
-    expect(beforeFooter).toContain('talent-network.html');
+    expect(beforeFooter).toContain('href="/founder-os"');
+    expect(page).not.toContain('talent-network.html');
   });
 });
 
