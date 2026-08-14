@@ -1,2020 +1,1364 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full">
+<html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TEN Platform — Unified Operating System</title>
-  
-  <!-- Tailwind CSS Engine -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            tenGold: {
-              50: '#fdfbeb',
-              100: '#fbf5c7',
-              200: '#f7e78d',
-              300: '#f2cf4b',
-              400: '#eeb721',
-              500: '#d4af37', // Brand color
-              600: '#b48616',
-              700: '#906213',
-              800: '#754f15',
-              950: '#442a07',
-            },
-            obsidian: {
-              overlay: 'rgba(11, 15, 27, 0.85)',
-              border: 'rgba(255, 255, 255, 0.06)',
-            }
-          }
-        }
-      }
-    }
-  </script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Founder OS — TEN</title>
+<meta name="description" content="Hiring, fundraising, team and mentorship for TEN founders — one workspace.">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/mobile.css">
+<meta name="theme-color" content="#070a12">
+<style>
+/*
+  The Founder OS.
 
-  <!-- Google Fonts & Lucide Icons -->
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script src="https://unpkg.com/lucide@latest"></script>
-  
-  <!-- GSAP Core for Animations -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
-  
-  <!-- SweetAlert2 -->
-  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-  
-  <!-- Design System Ref overrides -->
-  <link rel="stylesheet" href="/css/design-system.css" />
-  <link rel="stylesheet" href="/css/components.css" />
+  Written as plain CSS rather than the Tailwind CDN the two pages this replaces
+  used: cdn.tailwindcss.com compiles the whole framework in the browser on every
+  load, and this page is behind a login where that cost buys nothing.
 
-  <style>
-    body {
-      font-family: 'Plus Jakarta Sans', sans-serif;
-      background: #060913;
-      color: #f3f4f6;
-      overflow-x: hidden;
-    }
-    .mono-font {
-      font-family: 'JetBrains Mono', monospace;
-    }
-    
-    /* Mesh Backgrounds */
-    .ocean-mesh {
-      background-image: 
-        radial-gradient(at 0% 0%, rgba(212, 175, 55, 0.08) 0px, transparent 50%),
-        radial-gradient(at 90% 10%, rgba(99, 102, 241, 0.08) 0px, transparent 40%),
-        radial-gradient(at 50% 90%, rgba(139, 92, 246, 0.07) 0px, transparent 50%);
-    }
+  One accent, one surface, one border. Everything else is spacing.
+*/
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg:#070a12; --panel:#0d1220; --panel-2:#121a2c; --line:#1c2437; --line-2:#2a3550;
+  --ink:#e9edf7; --muted:#8b98b4; --muted-2:#5f6b85;
+  --gold:#f5c542; --gold-dim:#c9a227;
+  --green:#34d399; --red:#f87171; --blue:#60a5fa; --violet:#a78bfa; --amber:#fbbf24;
+  --r:14px;
+}
+body{
+  background:var(--bg); color:var(--ink); min-height:100dvh;
+  font-family:'Plus Jakarta Sans',system-ui,-apple-system,sans-serif;
+  -webkit-font-smoothing:antialiased; display:flex;
+}
+a{color:inherit;text-decoration:none;}
+button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit;}
+.mono{font-family:'IBM Plex Mono',monospace;letter-spacing:.14em;text-transform:uppercase;}
 
-    /* Glass Card Styling */
-    .glass-panel {
-      background: rgba(16, 22, 40, 0.65);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-    }
-    
-    /* Interactive Card Glows & Tilts */
-    .tilt-card {
-      transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.2s ease;
-    }
-    .tilt-card:hover {
-      border-color: rgba(212, 175, 55, 0.3);
-      box-shadow: 0 10px 30px -10px rgba(212, 175, 55, 0.15);
-      transform: translateY(-2px);
-    }
+/* ── shell ─────────────────────────────────────────────────────────────── */
+.side{
+  width:250px; flex:0 0 250px; background:var(--panel); border-right:1px solid var(--line);
+  display:flex; flex-direction:column; height:100dvh; position:sticky; top:0; overflow-y:auto;
+}
+.brand{padding:22px 20px 16px; border-bottom:1px solid var(--line);}
+.brand b{font-family:'Outfit',sans-serif; font-size:19px; font-weight:900; letter-spacing:-.02em; display:block;}
+.brand span{font-size:10.5px; color:var(--muted-2); display:block; margin-top:3px;}
+.nav{padding:12px 10px; flex:1;}
+.nav .grp{font-size:9.5px; color:var(--muted-2); padding:14px 12px 7px; letter-spacing:.16em; text-transform:uppercase;}
+.nav button{
+  width:100%; display:flex; align-items:center; gap:11px; padding:11px 12px; border:0; background:none;
+  color:var(--muted); font-size:13px; font-weight:600; border-radius:10px; cursor:pointer; text-align:left;
+  transition:background .15s,color .15s;
+}
+.nav button:hover{background:var(--panel-2); color:var(--ink);}
+.nav button.on{background:rgba(245,197,66,.10); color:var(--gold);}
+.nav button .ic{width:18px; text-align:center; font-size:15px;}
+.nav button .cnt{margin-left:auto; font-size:10.5px; font-weight:800; background:var(--panel-2); color:var(--muted); padding:2px 7px; border-radius:99px;}
+.side .foot{padding:14px 16px; border-top:1px solid var(--line); font-size:11.5px; color:var(--muted-2);}
+.side .foot a{color:var(--muted); display:block; padding:4px 0;}
+.side .foot a:hover{color:var(--gold);}
 
-    /* Custom Scrollbar */
-    ::-webkit-scrollbar {
-      width: 6px;
-      height: 6px;
-    }
-    ::-webkit-scrollbar-track {
-      background: rgba(11, 15, 27, 0.5);
-    }
-    ::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 99px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-      background: rgba(212, 175, 55, 0.3);
-    }
+.main{flex:1; min-width:0; display:flex; flex-direction:column; height:100dvh; overflow-y:auto;}
+.top{
+  position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:14px;
+  padding:16px 26px; background:rgba(7,10,18,.9); backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line);
+}
+.top h1{font-family:'Outfit',sans-serif; font-size:20px; font-weight:900; letter-spacing:-.02em;}
+.top .sub{font-size:12px; color:var(--muted); margin-top:2px;}
+.top .sp{flex:1;}
+.who{text-align:right; font-size:12px; color:var(--muted);}
+.who b{display:block; color:var(--ink); font-size:13px;}
+.wrap{padding:26px; max-width:1400px; width:100%;}
 
-    /* Collapsible Sidebar Pattern overrides */
-    #sidebar {
-      position: fixed !important;
-      top: 0 !important;
-      bottom: 0 !important;
-      left: 0 !important;
-      z-index: 50 !important;
-      transform: translateX(-100%) !important;
-      transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 280ms ease !important;
-      box-shadow: none !important;
-      background: rgba(11, 15, 27, 0.85) !important;
-      backdrop-filter: blur(20px) !important;
-      -webkit-backdrop-filter: blur(20px) !important;
-      border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
-    }
-    #sidebar.expanded {
-      transform: translateX(0) !important;
-      box-shadow: 10px 0 35px -10px rgba(212, 175, 55, 0.15) !important;
-    }
-    
-    /* Responsive width overrides for sidebar */
-    @media (min-width: 1024px) {
-      #sidebar { width: 320px !important; }
-    }
-    @media (min-width: 640px) and (max-width: 1023px) {
-      #sidebar { width: 280px !important; }
-    }
-    @media (max-width: 639px) {
-      #sidebar { width: 100% !important; }
-    }
+/* ── the pieces ────────────────────────────────────────────────────────── */
+.view{display:none;}
+.view.on{display:block; animation:fade .3s ease;}
+@keyframes fade{from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:none;}}
 
-    /* Overlay backdrop */
-    .sidebar-overlay {
-      position: fixed !important;
-      inset: 0 !important;
-      background-color: rgba(6, 9, 19, 0.6) !important;
-      backdrop-filter: blur(4px) !important;
-      -webkit-backdrop-filter: blur(4px) !important;
-      z-index: 40 !important;
-      opacity: 0 !important;
-      pointer-events: none !important;
-      transition: opacity 280ms ease !important;
-    }
-    .sidebar-overlay.active {
-      opacity: 1 !important;
-      pointer-events: auto !important;
-    }
+.cards{display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); margin-bottom:22px;}
+.card{background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:18px 20px;}
+.card .k{font-size:10px; color:var(--muted-2); letter-spacing:.14em; text-transform:uppercase;}
+.card .v{font-family:'Outfit',sans-serif; font-size:30px; font-weight:900; margin-top:8px; letter-spacing:-.02em;}
+.card .n{font-size:11.5px; color:var(--muted); margin-top:5px; line-height:1.5;}
+.card.gold .v{color:var(--gold);}
+.card.green .v{color:var(--green);}
+.card.violet .v{color:var(--violet);}
+.card.blue .v{color:var(--blue);}
 
-    /* Shift content slightly or keep clean */
-    .topbar {
-      left: 0 !important; /* Topbar always full width */
-    }
+.panel{background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:22px; margin-bottom:20px;}
+.panel > h2{font-family:'Outfit',sans-serif; font-size:16px; font-weight:800; margin-bottom:4px;}
+.panel > .lead{font-size:12.5px; color:var(--muted); line-height:1.65; margin-bottom:18px;}
+.panel-head{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px;}
+.panel-head h2{font-family:'Outfit',sans-serif; font-size:16px; font-weight:800; flex:1;}
 
-    /* Modal standard animations mimicking Framer Motion */
-    @keyframes modalFadeIn {
-      0% { opacity: 0; transform: scale(0.95); }
-      100% { opacity: 1; transform: scale(1); }
-    }
-    .animate-modal-in {
-      animation: modalFadeIn 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    }
-  </style>
-  <link rel="stylesheet" href="/css/mobile.css">
-  <script src="/mobile-nav.js" defer></script>
-  <link rel="manifest" href="/manifest.webmanifest">
-  <meta name="theme-color" content="#0e1628">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="TEN">
-  <link rel="apple-touch-icon" href="/icons/icon-192.png">
-  <script src="/push-client.js" defer></script>
-  <script src="/tailwind-guard.js" defer></script>
+.btn{
+  padding:10px 18px; border:0; border-radius:10px; font-weight:800; font-size:12.5px; cursor:pointer;
+  background:linear-gradient(135deg,var(--gold),var(--gold-dim)); color:#0a0d16; transition:opacity .15s;
+}
+.btn:hover{opacity:.88;}
+.btn:disabled{opacity:.45; cursor:not-allowed;}
+.btn.ghost{background:var(--panel-2); color:var(--muted); border:1px solid var(--line-2);}
+.btn.ghost:hover{color:var(--ink);}
+.btn.sm{padding:6px 12px; font-size:11.5px; border-radius:8px;}
+.btn.danger{background:rgba(248,113,113,.12); color:var(--red); border:1px solid rgba(248,113,113,.3);}
+
+.field{margin-bottom:14px;}
+.field label{display:block; font-size:11px; color:var(--muted); margin-bottom:6px; font-weight:600;}
+.field input,.field select,.field textarea{
+  width:100%; background:var(--bg); border:1px solid var(--line-2); border-radius:10px;
+  padding:11px 13px; font-size:13.5px; color:var(--ink); outline:none; transition:border-color .15s;
+}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--gold);}
+.field textarea{resize:vertical; min-height:84px; line-height:1.6;}
+.grid2{display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(230px,1fr));}
+
+table{width:100%; border-collapse:collapse; font-size:13px;}
+th{
+  text-align:left; padding:10px 12px; font-size:10px; color:var(--muted-2);
+  letter-spacing:.12em; text-transform:uppercase; border-bottom:1px solid var(--line);
+}
+td{padding:13px 12px; border-bottom:1px solid var(--line); vertical-align:top;}
+tr:last-child td{border-bottom:0;}
+.tbl-wrap{overflow-x:auto;}
+
+.pill{display:inline-block; padding:3px 10px; border-radius:99px; font-size:10.5px; font-weight:800; letter-spacing:.04em;}
+.pill.gold{background:rgba(245,197,66,.12); color:var(--gold);}
+.pill.green{background:rgba(52,211,153,.12); color:var(--green);}
+.pill.red{background:rgba(248,113,113,.12); color:var(--red);}
+.pill.blue{background:rgba(96,165,250,.12); color:var(--blue);}
+.pill.violet{background:rgba(167,139,250,.12); color:var(--violet);}
+.pill.grey{background:var(--panel-2); color:var(--muted);}
+
+.empty{text-align:center; padding:54px 22px; color:var(--muted-2); font-size:13.5px; line-height:1.7;}
+.empty .ic{font-size:34px; display:block; margin-bottom:12px; opacity:.5;}
+
+.bar{height:7px; background:var(--panel-2); border-radius:99px; overflow:hidden; margin-top:9px;}
+.bar > i{display:block; height:100%; background:linear-gradient(90deg,var(--gold),var(--gold-dim)); border-radius:99px;}
+
+/* ── the hiring board ──────────────────────────────────────────────────── */
+/* Six columns, sized so they fit a 1440 screen beside the sidebar rather than
+   clipping the last one; narrower screens scroll the board horizontally. */
+.board{display:grid; gap:10px; grid-template-columns:repeat(6,minmax(172px,1fr)); overflow-x:auto; padding-bottom:8px;}
+.col{background:var(--panel); border:1px solid var(--line); border-radius:12px; min-height:220px; display:flex; flex-direction:column;}
+.col > header{
+  padding:12px 14px; border-bottom:1px solid var(--line); font-size:10.5px; font-weight:800;
+  letter-spacing:.12em; text-transform:uppercase; color:var(--muted); display:flex; gap:8px; align-items:center;
+}
+.col > header b{margin-left:auto; color:var(--ink); font-size:12px;}
+.col .body{padding:10px; display:flex; flex-direction:column; gap:9px; flex:1;}
+.cand{background:var(--panel-2); border:1px solid var(--line-2); border-radius:10px; padding:11px 12px; cursor:grab;}
+.cand:active{cursor:grabbing;}
+.cand.drag{opacity:.4;}
+.cand .nm{font-size:13px; font-weight:700;}
+.cand .mt{font-size:10.5px; color:var(--muted); margin-top:3px;}
+.col.over{border-color:var(--gold); background:rgba(245,197,66,.04);}
+
+/* ── modal ─────────────────────────────────────────────────────────────── */
+.sheet{position:fixed; inset:0; z-index:90; display:none; align-items:center; justify-content:center; padding:20px;}
+.sheet.on{display:flex;}
+.sheet .veil{position:absolute; inset:0; background:rgba(0,0,0,.78); backdrop-filter:blur(8px);}
+.sheet .box{
+  position:relative; width:min(660px,100%); max-height:88dvh; overflow-y:auto;
+  background:var(--panel); border:1px solid var(--line-2); border-radius:18px; padding:26px;
+  animation:lift .3s cubic-bezier(.2,.8,.2,1);
+}
+@keyframes lift{from{opacity:0; transform:translateY(20px) scale(.98);} to{opacity:1; transform:none;}}
+.sheet h3{font-family:'Outfit',sans-serif; font-size:18px; font-weight:900; margin-bottom:16px;}
+.sheet .acts{display:flex; gap:10px; justify-content:flex-end; margin-top:20px; flex-wrap:wrap;}
+
+.toast{
+  position:fixed; bottom:24px; left:50%; transform:translateX(-50%); z-index:120;
+  background:var(--panel-2); border:1px solid var(--line-2); border-radius:12px;
+  padding:13px 22px; font-size:13px; font-weight:600; box-shadow:0 18px 44px rgba(0,0,0,.6);
+  animation:toastin .25s ease;
+}
+.toast.ok{border-color:rgba(52,211,153,.4); color:var(--green);}
+.toast.err{border-color:rgba(248,113,113,.4); color:var(--red);}
+@keyframes toastin{from{opacity:0; transform:translate(-50%,14px);} to{opacity:1; transform:translate(-50%,0);}}
+
+/* ── phone ─────────────────────────────────────────────────────────────── */
+.burger{display:none; background:none; border:0; color:var(--ink); font-size:22px; cursor:pointer; padding:0 4px;}
+@media (max-width:900px){
+  body{display:block;}
+  .side{
+    position:fixed; left:0; top:0; bottom:0; z-index:60; transform:translateX(-100%);
+    transition:transform .28s ease; width:264px; flex-basis:264px;
+  }
+  .side.open{transform:none; box-shadow:0 0 60px rgba(0,0,0,.7);}
+  .main{height:auto;}
+  .burger{display:block;}
+  .wrap{padding:18px 16px 60px;}
+  .top{padding:14px 16px;}
+  .board{grid-template-columns:repeat(6,minmax(170px,1fr));}
+  .who{display:none;}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none !important; transition:none !important;}}
+</style>
 </head>
-<body class="ocean-mesh min-h-screen text-slate-100 flex overflow-hidden">
+<body>
 
-  <!-- Sidebar overlay backdrop -->
-  <div id="sidebar-overlay" class="sidebar-overlay" onclick="toggleSidebarMenu()"></div>
+<aside class="side" id="side">
+  <div class="brand">
+    <b>Founder OS</b>
+    <span class="mono">The Entrepreneurship Network</span>
+  </div>
+  <nav class="nav" id="nav">
+    <div class="grp">Company</div>
+    <button data-v="overview" class="on"><span class="ic">&#9673;</span> Overview</button>
+    <button data-v="profile"><span class="ic">&#9635;</span> Startup profile</button>
+    <button data-v="team"><span class="ic">&#9781;</span> Team <span class="cnt" id="cntTeam">0</span></button>
 
-  <!-- Unified Navigation Sidebar -->
-  <aside class="sidebar border-r border-white/5 !bg-[#0b0f1b]/95 z-40 shrink-0 flex flex-col justify-between" id="sidebar" style="width: 250px;">
+    <div class="grp">Hiring</div>
+    <button data-v="jobs"><span class="ic">&#9998;</span> Job posts <span class="cnt" id="cntJobs">0</span></button>
+    <button data-v="pipeline"><span class="ic">&#9776;</span> Pipeline <span class="cnt" id="cntApps">0</span></button>
+    <button data-v="talent"><span class="ic">&#9906;</span> Talent search</button>
+
+    <div class="grp">Capital</div>
+    <button data-v="fundraising"><span class="ic">&#9650;</span> Fundraising <span class="cnt" id="cntRounds">0</span></button>
+    <button data-v="dataroom"><span class="ic">&#9707;</span> Data room <span class="cnt" id="cntDocs">0</span></button>
+
+    <div class="grp">Support</div>
+    <button data-v="mentors"><span class="ic">&#9734;</span> Mentors <span class="cnt" id="cntBookings">0</span></button>
+  </nav>
+  <div class="foot">
+    <a href="/">&larr; TEN home</a>
+    <a href="/messages">Messages</a>
+    <a href="#" id="signOut">Sign out</a>
+  </div>
+</aside>
+
+<main class="main">
+  <header class="top">
+    <button class="burger" id="burger" aria-label="Menu">&#9776;</button>
     <div>
-      <a class="sidebar__logo text-tenGold-500 font-extrabold flex items-center gap-2 tracking-wider p-6 text-lg border-b border-white/5" href="/founder-os">
-        <span class="text-xl">⚡</span> TEN PLATFORM
-      </a>
-      <div class="px-3 py-2 text-[10px] text-slate-500 font-extrabold uppercase tracking-widest mono-font">Core Operations</div>
-      <nav class="sidebar__nav space-y-1 px-2">
-        <a onclick="navigateToTab('overview')" id="nav-overview" class="nav-item cursor-pointer flex items-center gap-3 px-4 py-3 rounded-lg text-xs font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-all">
-          <i data-lucide="layout-dashboard" class="w-4 h-4"></i> Dashboard
-        </a>
-        <a onclick="navigateToTab('pipeline')" id="nav-pipeline" class="nav-item cursor-pointer flex items-center gap-3 px-4 py-3 rounded-lg text-xs font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-all">
-          <i data-lucide="trello" class="w-4 h-4"></i> Startup Pipeline
-        </a>
-        <a onclick="navigateToTab('talent')" id="nav-talent" class="nav-item cursor-pointer flex items-center gap-3 px-4 py-3 rounded-lg text-xs font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-all">
-          <i data-lucide="users" class="w-4 h-4"></i> Talent Network
-        </a>
-        <a onclick="navigateToTab('programs')" id="nav-programs" class="nav-item cursor-pointer flex items-center gap-3 px-4 py-3 rounded-lg text-xs font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-all">
-          <i data-lucide="award" class="w-4 h-4"></i> Programs Cohort
-        </a>
-        <a onclick="navigateToTab('community')" id="nav-community" class="nav-item cursor-pointer flex items-center gap-3 px-4 py-3 rounded-lg text-xs font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-all">
-          <i data-lucide="globe" class="w-4 h-4"></i> Community Hub
-        </a>
-        <a onclick="navigateToTab('mentors')" id="nav-mentors" class="nav-item cursor-pointer flex items-center gap-3 px-4 py-3 rounded-lg text-xs font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-all">
-          <i data-lucide="star" class="w-4 h-4"></i> Elite Mentors
-        </a>
-        <a onclick="navigateToTab('investors')" id="nav-investors" class="nav-item cursor-pointer flex items-center gap-3 px-4 py-3 rounded-lg text-xs font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-all">
-          <i data-lucide="banknote" class="w-4 h-4"></i> Investors Pitch
-        </a>
-        <a onclick="navigateToTab('graph')" id="nav-graph" class="nav-item cursor-pointer flex items-center gap-3 px-4 py-3 rounded-lg text-xs font-semibold text-slate-400 hover:text-white hover:bg-white/5 transition-all">
-          <i data-lucide="share-2" class="w-4 h-4 text-indigo-400 animate-pulse"></i> Ecosystem Graph
-        </a>
-      </nav>
+      <h1 id="viewTitle">Overview</h1>
+      <div class="sub" id="viewSub">Your startup at a glance</div>
     </div>
-    
-    <div class="p-3 border-t border-white/5 space-y-2 bg-black/20">
-      <div class="text-[9px] mono-font text-slate-500">USER PROFILE</div>
-      <div class="flex items-center gap-2.5">
-        <div class="w-8 h-8 rounded-full bg-tenGold-500/20 border border-tenGold-500/40 flex items-center justify-center font-bold text-tenGold-400 text-xs text-center" id="userInitials">FO</div>
-        <div class="flex-1 min-w-0">
-          <div class="text-xs font-bold text-slate-200 truncate" id="userNameLabel">Founder Mode</div>
-          <div class="text-[9px] text-slate-500 mono-font truncate" id="userEmailLabel">founder@ten-platform.dev</div>
+    <span class="sp"></span>
+    <div class="who"><b id="whoName">&mdash;</b><span id="whoStartup"></span></div>
+  </header>
+
+  <div class="wrap">
+
+    <!-- ── OVERVIEW ─────────────────────────────────────────────────────── -->
+    <section class="view on" id="v-overview">
+      <div class="cards" id="ovCards"></div>
+      <div class="grid2">
+        <div class="panel">
+          <h2>Hiring funnel</h2>
+          <p class="lead">Where your candidates are right now.</p>
+          <div id="ovFunnel"></div>
+        </div>
+        <div class="panel">
+          <h2>Fundraising</h2>
+          <p class="lead">Committed against target, across every round.</p>
+          <div id="ovRaise"></div>
         </div>
       </div>
-      <a href="login.html" class="block text-center w-full mt-2 py-2 text-[10px] font-bold text-rose-400 bg-rose-500/5 hover:bg-rose-500/15 border border-rose-500/10 rounded-lg transition-all transform hover:scale-102">
-        Disconnect Workspace
-      </a>
-    </div>
-  </aside>
-
-  <!-- Master Layout container -->
-  <div class="flex-1 flex flex-col min-w-0" style="height: 100vh;">
-    
-    <!-- Unified Top Header Base -->
-    <header class="topbar border-b border-white/5 bg-[#0b0f1b]/60 backdrop-blur-md px-6 py-4 flex items-center justify-between z-10 shrink-0">
-      <div class="flex items-center gap-4">
-        <!-- Sidebar Toggle Icon -->
-        <button onclick="toggleSidebarMenu()" class="p-2 mr-1 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-tenGold-500 transition-all shadow-md active:scale-95 flex items-center justify-center cursor-pointer" title="Toggle Sidebar">
-          <i data-lucide="menu" class="w-4 h-4"></i>
-        </button>
-        <!-- Dashboard title indicators -->
-        <span class="text-xs font-extrabold tracking-widest text-tenGold-500 uppercase mono-font px-2 py-1 bg-tenGold-500/5 border border-tenGold-500/10 rounded">COSMIC NETWORK NODE</span>
-        
-        <!-- Quick search console shortcut -->
-        <button onclick="toggleCommandCenter()" class="glass-panel text-xs text-slate-400 px-3 py-1.5 rounded-lg flex items-center gap-2 hover:border-tenGold-500/40 transition-all duration-300">
-          <i data-lucide="search" class="w-3.5 h-3.5 text-tenGold-500"></i>
-          <span>Universal Search Console</span>
-          <kbd class="bg-white/10 px-1.5 py-0.5 rounded text-[10px] mono-font border border-white/10">Ctrl+K</kbd>
-        </button>
+      <div class="panel">
+        <h2>Where candidates come from</h2>
+        <p class="lead">Which TEN domains actually answer your posts.</p>
+        <div id="ovDomains"></div>
       </div>
+    </section>
 
-      <div class="flex items-center gap-5">
-        <!-- Real-time GMT clock -->
-        <div class="hidden md:flex items-center gap-2 text-xs text-slate-400 font-medium mono-font bg-white/5 px-2.5 py-1.5 border border-white/5 rounded-lg">
-          <i class="w-3 h-3 text-emerald-400 animate-pulse bg-emerald-400 rounded-full"></i>
-          <span id="headerClock">12:00:00 UTC</span>
-        </div>
-
-        <!-- Custom notifications center -->
-        <div class="relative cursor-pointer py-1 px-2 hover:bg-white/5 rounded-lg" id="notifyTrigger" onclick="toggleNotificationsDropdown()">
-          <i data-lucide="bell" class="w-5 h-5 text-slate-300 hover:text-tenGold-500 transition-colors"></i>
-          <span class="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-[#060913]" id="notifyNewDot"></span>
-          
-          <!-- Notifications dropdown panel -->
-          <div class="absolute right-0 mt-3 w-80 glass-panel !bg-[#0b0f1b]/95 border border-white/10 rounded-xl overflow-hidden shadow-2xl hidden z-50 text-left cursor-default" id="notifyDropdown" onclick="event.stopPropagation()">
-            <div class="p-4 border-b border-white/5 bg-white/5 flex justify-between items-center">
-              <span class="text-xs font-bold text-white mono-font uppercase tracking-wider">Ecosystem Signals</span>
-              <button onclick="clearNotifications()" class="text-[10px] text-slate-500 hover:text-rose-400">Clear all</button>
-            </div>
-            <div id="notifyList" class="divide-y divide-white/5 max-h-[300px] overflow-y-auto">
-              <!-- Dynamically hydrated -->
-            </div>
-            <div class="p-3 border-t border-white/5 text-center">
-              <span class="text-[9px] text-slate-500 mono-font uppercase">TEN Network Sync Active</span>
-            </div>
+    <!-- ── PROFILE ──────────────────────────────────────────────────────── -->
+    <section class="view" id="v-profile">
+      <div class="panel">
+        <h2>Startup profile</h2>
+        <p class="lead">
+          This is what an intern sees on your job posts and what an investor sees in your data room.
+          It writes both the founder record and the startup record, which used to hold different
+          answers to the same questions.
+        </p>
+        <form id="profileForm">
+          <div class="grid2">
+            <div class="field"><label>Startup name</label><input name="startupName" placeholder="Acme Labs"></div>
+            <div class="field"><label>Tagline</label><input name="tagline" placeholder="One line about what you build"></div>
           </div>
-        </div>
-      </div>
-    </header>
-
-    <!-- Main Dynamic Workspace container -->
-    <main class="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-      
-      <!-- HERO AREA -->
-      <section class="relative rounded-2xl overflow-hidden min-h-[140px] flex flex-col justify-center p-6 bg-gradient-to-r from-slate-950/70 to-slate-900/40 border border-white/5 shadow-xl glass-panel grow-0">
-        <div class="absolute inset-0 bg-gradient-to-r from-tenGold-500/10 to-transparent pointer-events-none"></div>
-        <div class="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div>
-            <h1 class="text-2xl md:text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
-              ⚡ TEN Ecosystem OS <span class="bg-tenGold-500/10 border border-tenGold-500/30 text-tenGold-500 text-[9px] uppercase font-bold tracking-widest px-2.5 py-1 rounded-full mono-font">Unified Core</span>
-            </h1>
-            <p class="text-slate-400 mt-1 max-w-xl text-xs leading-relaxed">
-              Every profile, talent matchmaking node, accelerator program, and market opportunity connected in real-time. Unifying Founders, Scholars, and Investors.
-            </p>
-          </div>
-          <div class="flex items-center gap-3">
-            <button onclick="toggleCommandCenter()" class="px-3.5 py-2 bg-tenGold-500 hover:bg-tenGold-600 active:transform active:scale-95 text-slate-950 font-bold text-xs rounded-xl shadow-lg shadow-tenGold-500/20 transition-all duration-300 flex items-center gap-2">
-              <i data-lucide="terminal" class="w-4 h-4"></i> Command OS
-            </button>
-            <button onclick="openProfileModal()" class="px-3.5 py-2 bg-white/5 hover:bg-white/10 text-white border border-white/10 font-bold text-xs rounded-xl transition-all duration-300 flex items-center gap-2">
-              <i data-lucide="edit-3" class="w-4 h-4"></i> Edit Profile
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <!-- TAB TARGET CONTAINERS -->
-      <div id="tab-content" class="min-h-[450px] relative">
-        
-        <!-- 1. TAB: OVERVIEW -->
-        <div id="view-overview" class="tab-pane space-y-6 hidden">
-          <!-- Live Metrics aggregates -->
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div class="tilt-card glass-panel rounded-xl p-4 border border-white/5 flex flex-col justify-between">
-              <div class="flex justify-between items-start">
-                <span class="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Active Talent Sourced</span>
-                <div class="p-1.5 bg-[#4f46e5]/10 rounded-lg text-[#6366f1]"><i data-lucide="users" class="w-4 h-4"></i></div>
-              </div>
-              <div class="mt-2">
-                <div class="text-xl font-extrabold text-white mono-font" id="stat-interns">1,420</div>
-                <p class="text-slate-500 text-[9px] mt-0.5">Approved student builders</p>
-              </div>
-            </div>
-            <div class="tilt-card glass-panel rounded-xl p-4 border border-white/5 flex flex-col justify-between">
-              <div class="flex justify-between items-start">
-                <span class="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Platform Investments</span>
-                <div class="p-1.5 bg-[#10b981]/10 rounded-lg text-[#10b981]"><i data-lucide="dollar-sign" class="w-4 h-4"></i></div>
-              </div>
-              <div class="mt-2">
-                <div class="text-xl font-extrabold text-[#10b981] mono-font" id="stat-revenue">₹450k</div>
-                <p class="text-slate-500 text-[9px] mt-0.5">Syndicated deal support</p>
-              </div>
-            </div>
-            <div class="tilt-card glass-panel rounded-xl p-4 border border-white/5 flex flex-col justify-between">
-              <div class="flex justify-between items-start">
-                <span class="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Verified Advisors</span>
-                <div class="p-1.5 bg-[#f59e0b]/10 rounded-lg text-[#f59e0b]"><i data-lucide="star" class="w-4 h-4"></i></div>
-              </div>
-              <div class="mt-2">
-                <div class="text-xl font-extrabold text-white mono-font" id="stat-mentors">8</div>
-                <p class="text-slate-500 text-[9px] mt-0.5">Industry leaders active</p>
-              </div>
-            </div>
-            <div class="tilt-card glass-panel rounded-xl p-4 border border-white/5 flex flex-col justify-between">
-              <div class="flex justify-between items-start">
-                <span class="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">Active Cohorts</span>
-                <div class="p-1.5 bg-[#ec4899]/10 rounded-lg text-[#ec4899]"><i data-lucide="award" class="w-4 h-4"></i></div>
-              </div>
-              <div class="mt-2">
-                <div class="text-xl font-extrabold text-white mono-font" id="stat-applications">3</div>
-                <p class="text-slate-500 text-[9px] mt-0.5">Live startup accelerators</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Live startup overview and quick status actions -->
-          <div class="glass-panel border border-white/5 rounded-2xl p-5 relative overflow-hidden flex flex-col gap-4">
-            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div class="flex items-center gap-4">
-                <div class="w-12 h-12 bg-[#0d1425] border border-white/10 rounded-xl flex items-center justify-center text-xl shadow-lg" id="profileCompanyLogo">🏢</div>
-                <div>
-                  <h2 class="text-base font-extrabold text-white flex items-center gap-2">
-                    <span id="headerStartupName">Acme Network Dynamics</span>
-                    <span id="statusBadgeContainer">
-                      <span class="px-2 py-0.5 text-[8px] uppercase font-bold bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/20 rounded-full mono-font">LIVE DIRECTORY ACTIVE</span>
-                    </span>
-                  </h2>
-                  <p id="profileBannerSub" class="text-slate-400 text-xs">Venture Stage: <strong class="text-tenGold-500 capitalize" id="currentProfileStageText">MVP Ready</strong> | Headquarters: <span id="currentProfileLocationText">Bengaluru, IN</span></p>
-                </div>
-              </div>
-              <div class="flex items-center gap-2">
-                <button onclick="switchTab('graph')" class="px-3.5 py-1.5 text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/20 rounded-lg transition-all flex items-center gap-1">
-                  <i data-lucide="share-2" class="w-3.5 h-3.5"></i> Inspect Ecosystem Map
-                </button>
-                <button onclick="openProfileModal()" class="px-3.5 py-1.5 text-xs font-semibold bg-white/5 hover:bg-white/10 text-slate-300 border border-white/5 rounded-lg transition-transform hover:scale-102">
-                  Edit Directory Spec
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Dynamic recommendation engine & circular indices -->
-          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            <div class="glass-panel border border-white/5 rounded-2xl p-5 flex flex-col justify-between items-center text-center">
-              <h3 class="text-xs font-bold uppercase tracking-widest text-slate-400">Venture Progress Matrix</h3>
-              <div class="relative w-32 h-32 flex items-center justify-center mt-3">
-                <svg class="absolute w-full h-full transform -rotate-90">
-                  <circle cx="64" cy="64" r="50" stroke="rgba(255,255,255,0.03)" stroke-width="6" fill="transparent" />
-                  <circle id="healthProgressCircle" cx="64" cy="64" r="50" stroke="#d4af37" stroke-width="6" fill="transparent" 
-                          stroke-dasharray="314.16" stroke-dashoffset="94" stroke-linecap="round" class="transition-all duration-1000" />
-                </svg>
-                <div class="text-center">
-                  <span class="text-2xl font-extrabold text-white block mono-font" id="healthProgressPercentage">70%</span>
-                  <span class="text-[9px] text-tenGold-500 font-bold uppercase tracking-widest block">Stable Node</span>
-                </div>
-              </div>
-              <div class="text-[10px] text-slate-500 mt-2">Aggregates tasks, active programs tracker &amp; profile matches density</div>
-            </div>
-
-            <!-- Personalized Recommendation Panel -->
-            <div class="glass-panel border border-white/5 rounded-2xl p-5 col-span-1 lg:col-span-2 flex flex-col justify-between">
-              <div>
-                <div class="flex justify-between items-center mb-3">
-                  <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1">
-                    <i data-lucide="sparkles" class="w-3.5 h-3.5 text-tenGold-500"></i> Smart Sourcing Engine Recommendations
-                  </h3>
-                  <span class="text-[9px] text-[#10b981] font-bold bg-[#10b981]/10 px-2 py-0.5 rounded-full mono-font">Stage Aware</span>
-                </div>
-                <div id="aiRecommendationContainer" class="space-y-2.5">
-                  <!-- recommendations list generated based on profile stage -->
-                </div>
-              </div>
-            </div>
-
-          </div>
-
-          <!-- Grid tool shortcuts -->
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <button onclick="navigateToTab('programs')" class="tilt-card bg-slate-900/40 hover:bg-[#101726] border border-white/5 hover:border-tenGold-500/30 p-4 rounded-xl text-center">
-              <span class="text-2xl block mb-1">📢</span>
-              <span class="text-xs font-bold text-white block">Launch Program</span>
-              <span class="text-[9px] text-slate-500 block mt-0.5">Accelerator &amp; Fellowships</span>
-            </button>
-            <button onclick="navigateToTab('talent')" class="tilt-card bg-slate-900/40 hover:bg-[#101726] border border-white/5 hover:border-tenGold-500/30 p-4 rounded-xl text-center">
-              <span class="text-2xl block mb-1">🌐</span>
-              <span class="text-xs font-bold text-white block">Sourced Talent</span>
-              <span class="text-[9px] text-slate-500 block mt-0.5">Filter vetted scholars</span>
-            </button>
-            <button onclick="navigateToTab('mentors')" class="tilt-card bg-slate-900/40 hover:bg-[#101726] border border-white/5 hover:border-tenGold-500/30 p-4 rounded-xl text-center">
-              <span class="text-2xl block mb-1">🧑‍🏫</span>
-              <span class="text-xs font-bold text-white block">Mentor Network</span>
-              <span class="text-[9px] text-slate-500 block mt-0.5">Advisory consultations</span>
-            </button>
-            <button onclick="navigateToTab('investors')" class="tilt-card bg-slate-900/40 hover:bg-[#101726] border border-white/5 hover:border-tenGold-500/30 p-4 rounded-xl text-center">
-              <span class="text-2xl block mb-1">💰</span>
-              <span class="text-xs font-bold text-white block">Pitch VCs</span>
-              <span class="text-[9px] text-slate-500 block mt-0.5">Syndicates &amp; Capital Pools</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- 2. TAB: PIPELINE (KANBAN & INTEGRATED JOURNEY) -->
-        <div id="view-pipeline" class="tab-pane space-y-6 hidden">
-          <div class="flex justify-between items-center">
-            <div>
-              <h2 class="text-lg font-bold text-white flex items-center gap-2">🗺️ Venture Roadmaps &amp; Journey</h2>
-              <p class="text-xs text-slate-400">Drag items to alter venture pipeline stages. Apply to accelerated cohorts to sync cards automatically.</p>
-            </div>
-            <button onclick="triggerAddKanban()" class="px-3 py-1.5 bg-tenGold-500/10 border border-tenGold-500/30 hover:bg-tenGold-500 hover:text-slate-950 text-tenGold-500 text-xs font-bold rounded-lg transition-colors flex items-center gap-1">
-              <i data-lucide="plus" class="w-3.5 h-3.5"></i> Spawn Task Node
-            </button>
-          </div>
-
-          <!-- Kanban Grid -->
-          <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <!-- Idea -->
-            <div class="bg-black/20 border border-white/5 rounded-xl p-3 flex flex-col gap-3 min-h-[300px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'idea')">
-              <span class="text-xs font-bold text-indigo-400 flex items-center justify-between border-b border-white/5 pb-2">💡 Ideation <span class="bg-indigo-500/10 px-1.5 py-0.2 rounded text-[9px] text-indigo-300 ml-1 mono-font" id="count-idea">0</span></span>
-              <div id="kanban-idea" class="space-y-2.5 flex-1 overflow-y-auto max-h-[400px]"></div>
-            </div>
-            <!-- Research -->
-            <div class="bg-black/20 border border-white/5 rounded-xl p-3 flex flex-col gap-3 min-h-[300px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'research')">
-              <span class="text-xs font-bold text-amber-500 flex items-center justify-between border-b border-white/5 pb-2">🔍 Research <span class="bg-amber-500/10 px-1.5 py-0.2 rounded text-[9px] text-amber-400 ml-1 mono-font" id="count-research">0</span></span>
-              <div id="kanban-research" class="space-y-2.5 flex-1 overflow-y-auto max-h-[400px]"></div>
-            </div>
-            <!-- Validation -->
-            <div class="bg-black/20 border border-white/5 rounded-xl p-3 flex flex-col gap-3 min-h-[300px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'validation')">
-              <span class="text-xs font-bold text-sky-400 flex items-center justify-between border-b border-white/5 pb-2">🧪 Validation <span class="bg-sky-500/10 px-1.5 py-0.2 rounded text-[9px] text-sky-300 ml-1 mono-font" id="count-validation">0</span></span>
-              <div id="kanban-validation" class="space-y-2.5 flex-1 overflow-y-auto max-h-[400px]"></div>
-            </div>
-            <!-- MVP -->
-            <div class="bg-black/20 border border-white/5 rounded-xl p-3 flex flex-col gap-3 min-h-[300px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'mvp')">
-              <span class="text-xs font-bold text-violet-400 flex items-center justify-between border-b border-white/5 pb-2">📦 MVP Stage <span class="bg-violet-500/10 px-1.5 py-0.2 rounded text-[9px] text-violet-300 ml-1 mono-font" id="count-mvp">0</span></span>
-              <div id="kanban-mvp" class="space-y-2.5 flex-1 overflow-y-auto max-h-[400px]"></div>
-            </div>
-            <!-- Launch/Scale -->
-            <div class="bg-black/20 border border-white/5 rounded-xl p-3 flex flex-col gap-3 min-h-[300px]" ondragover="allowDrop(event)" ondrop="handleDrop(event, 'launch')">
-              <span class="text-xs font-bold text-emerald-400 flex items-center justify-between border-b border-white/5 pb-2">🚀 Scale Up <span class="bg-emerald-500/10 px-1.5 py-0.2 rounded text-[9px] text-emerald-300 ml-1 mono-font" id="count-launch">0</span></span>
-              <div id="kanban-launch" class="space-y-2.5 flex-1 overflow-y-auto max-h-[400px]"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 3. TAB: TALENT NETWORK (DEEP VIEW INTEGRATION) -->
-        <div id="view-talent" class="tab-pane space-y-6 hidden">
-          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h2 class="text-lg font-bold text-white flex items-center gap-2">🌐 TEN Global Talent Network</h2>
-              <p class="text-xs text-slate-400">Filter, evaluate, and directly match vetted scholar portfolios connected to cohorts, events, and mentor linkages.</p>
-            </div>
-          </div>
-
-          <!-- Advanced integrated search filters -->
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white/5 p-4 border border-white/5 rounded-xl">
-            <div>
-              <label class="text-[10px] uppercase font-bold text-slate-400 mono-font mb-1 block">Filter Skills</label>
-              <input type="text" id="talentSearchSkills" oninput="performTalentFilter()" class="w-full bg-slate-950 border border-white/10 text-xs rounded-lg px-3 py-2 text-slate-200 outline-none focus:border-tenGold-500/50" placeholder="e.g. React, Python, Java" />
-            </div>
-            <div>
-              <label class="text-[10px] uppercase font-bold text-slate-400 mono-font mb-1 block">Availability</label>
-              <select id="talentSearchAvail" onchange="performTalentFilter()" class="w-full bg-slate-950 border border-white/10 text-xs rounded-lg px-3 py-2 text-slate-200 outline-none focus:border-tenGold-500/50">
-                <option value="">Any Availability</option>
-                <option value="immediately">Immediately Available</option>
-                <option value="2weeks">In 2 Weeks</option>
-                <option value="1month">In 1 Month</option>
+          <div class="field"><label>Description</label><textarea name="description" placeholder="What the company does, who it is for, and where it is going."></textarea></div>
+          <div class="grid2">
+            <div class="field"><label>Industry</label><input name="industry" placeholder="Fintech"></div>
+            <div class="field"><label>Stage</label>
+              <select name="stage">
+                <option value="">Select…</option>
+                <option>Idea</option><option>Prototype</option><option>Pre-revenue</option>
+                <option>Early revenue</option><option>Growth</option>
               </select>
             </div>
-            <div>
-              <label class="text-[10px] uppercase font-bold text-slate-400 mono-font mb-1 block">Sourcing Match Type</label>
-              <select id="talentSearchOpen" onchange="performTalentFilter()" class="w-full bg-slate-950 border border-white/10 text-xs rounded-lg px-3 py-2 text-slate-200 outline-none focus:border-tenGold-500/50">
-                <option value="">All Candidates</option>
-                <option value="internship">Internship seekers</option>
-                <option value="fulltime">Full-Time seekers</option>
-              </select>
-            </div>
-            <div class="flex items-end">
-              <button onclick="triggerQuickHire()" class="w-full py-2 bg-tenGold-500 text-slate-950 font-bold rounded-lg text-xs hover:bg-tenGold-600 transition-all flex items-center justify-center gap-1">
-                <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Request Automatic Match
-              </button>
-            </div>
+            <div class="field"><label>Team size</label><input name="teamSize" type="number" min="1" value="1"></div>
+            <div class="field"><label>Founded</label><input name="foundedYear" type="number" min="1990" max="2100" placeholder="2024"></div>
           </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-5" id="talentSourcedContainer">
-            <!-- Dynamically populated vetted profiles with integrated detail blocks -->
+          <div class="grid2">
+            <div class="field"><label>Website</label><input name="website" placeholder="https://"></div>
+            <div class="field"><label>Location</label><input name="location" placeholder="Bengaluru, India"></div>
+            <div class="field"><label>Pitch deck URL</label><input name="pitchDeckUrl" placeholder="https://"></div>
+            <div class="field"><label>Funding raised so far</label><input name="fundingAmount" type="number" min="0" placeholder="0"></div>
           </div>
-        </div>
-
-        <!-- 4. TAB: PROGRAMS COHORT -->
-        <div id="view-programs" class="tab-pane space-y-6 hidden">
-          <div class="flex justify-between items-center">
-            <div>
-              <h2 class="text-lg font-bold text-white flex items-center gap-2">📋 Accelerators &amp; Fellowships Cohorts</h2>
-              <p class="text-xs text-slate-400">Participate in strategic TEN acceleration modules. Approved programmatic applications update your Founder pipeline automatically.</p>
-            </div>
+          <div class="grid2">
+            <div class="field"><label>LinkedIn</label><input name="linkedin" placeholder="https://linkedin.com/company/…"></div>
+            <div class="field"><label>Twitter / X</label><input name="twitter" placeholder="https://x.com/…"></div>
+            <div class="field"><label>GitHub</label><input name="github" placeholder="https://github.com/…"></div>
           </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-5" id="cohortListings">
-            <!-- Hydro static listing with premium design -->
-          </div>
-        </div>
-
-        <!-- 5. TAB: COMMUNITY HUB -->
-        <div id="view-community" class="tab-pane space-y-6 hidden">
-          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- Sidebar Hub Channels -->
-            <div class="space-y-4">
-              <h3 class="text-xs font-bold tracking-widest text-slate-400 uppercase mono-font">Ecosystem Channels</h3>
-              <div class="space-y-2">
-                <div class="p-3 bg-white/5 border border-white/10 rounded-xl hover:border-tenGold-500/30 transition-all cursor-pointer flex items-center gap-3 group" onclick="switchChannel('founders')">
-                  <span class="text-2xl">🚀</span>
-                  <div class="flex-1 min-w-0">
-                    <strong class="text-xs text-slate-200 block group-hover:text-tenGold-500 transition-colors">#founders-hub</strong>
-                    <span class="text-[9px] text-slate-500 block">General workspace, collaborations, and announcements.</span>
-                  </div>
-                </div>
-                <div class="p-3 bg-white/5 border border-white/10 rounded-xl hover:border-tenGold-500/30 transition-all cursor-pointer flex items-center gap-3 group" onclick="switchChannel('talent')">
-                  <span class="text-2xl">🌐</span>
-                  <div class="flex-1 min-w-0">
-                    <strong class="text-xs text-slate-200 block group-hover:text-tenGold-500 transition-colors">#talent-pool-general</strong>
-                    <span class="text-[9px] text-slate-500 block">Interns networking, skills sharing, and projects.</span>
-                  </div>
-                </div>
-                <div class="p-3 bg-white/5 border border-white/10 rounded-xl hover:border-tenGold-500/30 transition-all cursor-pointer flex items-center gap-3 group" onclick="switchChannel('investor')">
-                  <span class="text-2xl">💼</span>
-                  <div class="flex-1 min-w-0">
-                    <strong class="text-xs text-slate-200 block group-hover:text-tenGold-500 transition-colors">#investors-circle</strong>
-                    <span class="text-[9px] text-slate-500 block">Deal flows, pre-seed check lists, syndication boards.</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Upcoming events widget -->
-              <h3 class="text-xs font-bold tracking-widest text-slate-400 uppercase mono-font pt-2">Upcoming Events Calendar</h3>
-              <div class="space-y-2" id="communityEventsContainer">
-                <!-- Loaded via JS with dynamic RSVPs -->
-              </div>
-            </div>
-
-            <!-- Thread Feed Area -->
-            <div class="lg:col-span-2 glass-panel border border-white/5 rounded-2xl flex flex-col justify-between" style="height: 500px;">
-              <div class="p-4 border-b border-white/5 bg-white/5 flex items-center justify-between">
-                <div>
-                  <strong class="text-sm font-extrabold text-white" id="activeChannelHeader">#founders-hub Channel</strong>
-                  <span class="text-[9px] text-slate-500 mono-font block">Active Workspace Discussion Room</span>
-                </div>
-                <div class="text-[10px] text-slate-400 bg-white/5 px-2.5 py-1 border border-white/5 rounded-md mono-font">LIVE CHAT ACTIVE</div>
-              </div>
-              
-              <!-- Feed chats contents frame -->
-              <div id="channelMessagesList" class="flex-1 overflow-y-auto p-4 space-y-4">
-                <!-- Message Hydrator -->
-              </div>
-
-              <!-- Input bar -->
-              <div class="p-3 border-t border-white/5 bg-black/10 flex gap-2">
-                <input type="text" id="communityMessageInput" placeholder="Join discussion..." onkeydown="handleMessageKey(event)" class="flex-1 bg-slate-950 border border-white/10 rounded-xl px-4 py-2 text-xs text-slate-200 outline-none focus:border-tenGold-500/50" />
-                <button onclick="postCommunityMessage()" class="px-4 py-2 bg-tenGold-500 text-slate-950 font-bold rounded-xl text-xs hover:bg-tenGold-600 active:scale-95 transition-all">Broadcast</button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 6. TAB: ELITE MENTORS -->
-        <div id="view-mentors" class="tab-pane space-y-6 hidden">
-          <div class="flex justify-between items-center">
-            <div>
-              <h2 class="text-lg font-bold text-white flex items-center gap-2">🧑‍🏫 Approved Advisory Ecosystem Mentors</h2>
-              <p class="text-xs text-slate-400">Request consultation with verified industry leaders. Scheduled strategic advisory automatically creates pipeline milestones.</p>
-            </div>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-5" id="mentorsGrid">
-            <!-- Hydrated dynamically -->
-          </div>
-        </div>
-
-        <!-- 7. TAB: INVESTORS PITCH -->
-        <div id="view-investors" class="tab-pane space-y-6 hidden">
-          <div class="flex justify-between items-center">
-            <div>
-              <h2 class="text-lg font-bold text-white flex items-center gap-2">💼 Venture Capital &amp; Syndicate Networks</h2>
-              <p class="text-xs text-slate-400">Sourced investors ready to inspect your venture pitch deck directly inside TEN Operating System.</p>
-            </div>
-            <button onclick="triggerSubmitPitch()" class="px-3 py-1.5 bg-tenGold-500 text-slate-950 font-bold rounded-lg text-xs hover:bg-tenGold-600 transition-colors">
-              🚀 Submit Venture Deck
-            </button>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-5" id="investorsGrid">
-            <!-- Hydrated dynamically with Pitch Deck link states -->
-          </div>
-        </div>
-
-        <!-- 8. TAB: ECOSYSTEM CONNECTIONS GRAPH -->
-        <div id="view-graph" class="tab-pane space-y-6 hidden">
-          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h2 class="text-lg font-bold text-white flex items-center gap-2">📈 Node Relationship Graph Visualization</h2>
-              <p class="text-xs text-slate-400">Interactive live mapping of nodes tying your startup ecosystem together. Hover nodes to illuminate relations.</p>
-            </div>
-          </div>
-
-          <div class="relative glass-panel border border-white/10 rounded-2xl p-4 flex items-center justify-center overflow-hidden" style="height: 420px; background: #070912 inline-block;">
-            <!-- Connection Map SVG area -->
-            <svg id="ecosystemGraphSvg" class="w-full h-full" style="min-height: 400px; cursor: crosshair;">
-              <!-- Graph links and nodes rendered via script -->
-            </svg>
-            
-            <!-- Side index detail panel -->
-            <div class="absolute bottom-4 left-4 p-4 glass-panel !bg-[#0b0f1b]/90 border border-white/5 rounded-xl text-left max-w-xs space-y-2 pointer-events-none">
-              <span class="text-[9px] font-bold text-tenGold-500 uppercase tracking-widest block mono-font">MAP KEY INDEX</span>
-              <div class="flex items-center gap-2 text-[10px] text-slate-300">
-                <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-                <span>My Startup</span>
-              </div>
-              <div class="flex items-center gap-2 text-[10px] text-slate-300">
-                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
-                <span>Intern Talent Sourced</span>
-              </div>
-              <div class="flex items-center gap-2 text-[10px] text-slate-300">
-                <span class="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
-                <span>Active Accelerator Programs</span>
-              </div>
-              <div class="flex items-center gap-2 text-[10px] text-slate-300">
-                <span class="w-2.5 h-2.5 rounded-full bg-[#ec4899]"></span>
-                <span>Investor Match Connected</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- SYSTEM GENERAL FEED LOGS -->
-      <section class="space-y-3">
-        <h3 class="text-sm font-bold text-white flex items-center justify-between">
-          <span>🔔 Platform-wide System Activity Feed</span>
-          <span class="text-[9px] text-slate-500 uppercase tracking-widest mono-font">Sync Status: Live</span>
-        </h3>
-        <div class="glass-panel border border-white/5 rounded-2xl p-4" id="globalFeed">
-          <div class="divide-y divide-white/5" id="feedLogsContainer">
-            <!-- Fluid scroll list -->
-          </div>
-        </div>
-      </section>
-
-    </main>
-  </div>
-
-  <!-- COMMAND CENTER SEARCH CONSOLE MODAL (Ctrl + K) -->
-  <div class="fixed inset-0 z-50 overflow-y-auto hidden" id="commandCenterModal" onclick="closeCommandCenterOnBackdrop(event)">
-    <div class="min-h-screen px-4 text-center flex items-center justify-center">
-      <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-md"></div>
-
-      <div class="inline-block w-full max-w-xl p-5 my-8 overflow-hidden text-left align-middle transition-all transform glass-panel border border-white/10 rounded-2xl shadow-3xl relative z-10 self-center animate-modal-in">
-        <!-- Close Button -->
-        <button onclick="toggleCommandCenter()" class="absolute top-4 right-4 p-2 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all shadow-md active:scale-95 flex items-center justify-center duration-200 cursor-pointer w-10 h-10" aria-label="Close Search Console" role="button" tabindex="0" title="Close Search">
-          <i data-lucide="x" class="w-4 h-4"></i>
-        </button>
-
-        <div class="relative flex items-center border-b border-white/10 pb-3 mb-4 pr-12">
-          <i data-lucide="search" class="w-4 h-4 text-tenGold-500 absolute left-3"></i>
-          <input type="text" id="cmdSearchInput" oninput="filterCommandShortcuts()" class="w-full bg-transparent pl-9 text-xs text-slate-100 placeholder-slate-500 outline-none focus:ring-0" placeholder="Universal Search: Sourced Talent, Mentors, Investors, Accelerated Programs, Community channels, Tasks..." autofocus />
-          <kbd class="bg-white/10 text-[9px] px-1.5 py-0.5 rounded text-slate-400 capitalize mono-font">esc</kbd>
-        </div>
-
-        <div id="cmdResults" class="space-y-1 max-h-[280px] overflow-y-auto pr-1">
-          <!-- Command lists or search results loaded dynamically -->
-        </div>
-
-        <div class="text-[10px] text-slate-500 pt-3 border-t border-white/5 mt-3 flex justify-between items-center mono-font uppercase">
-          <span>Navigate with quick mouse click selection</span>
-          <span>Unified TEN Gateway OS</span>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- STARTUP PROFILE SPEC COMPILER MODAL -->
-  <div class="fixed inset-0 z-50 overflow-y-auto hidden" id="profileModal" onclick="closeModalOnBackdrop(event)">
-    <div class="min-h-screen px-4 text-center flex items-center justify-center">
-      <div class="fixed inset-0 bg-slate-950/85 backdrop-blur-md"></div>
-      
-      <div class="inline-block w-full max-w-2xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform glass-panel border border-white/10 rounded-2xl shadow-2xl relative z-10 self-center animate-modal-in">
-        <!-- Close Button -->
-        <button onclick="closeProfileModal()" class="absolute top-4 right-4 p-2 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all shadow-md active:scale-95 flex items-center justify-center duration-200 cursor-pointer w-10 h-10" aria-label="Close Profile Spec" role="button" tabindex="0" title="Close Profile Specification">
-          <i data-lucide="x" class="w-4 h-4"></i>
-        </button>
-
-        <h3 class="text-base font-extrabold text-white mb-1 flex items-center gap-2">
-          <span>📝 Venture Directory Specification Profile</span>
-        </h3>
-        <p class="text-slate-400 text-xs mb-5 border-b border-white/5 pb-3">Specify company indicators to dynamically generate correct talent &amp; advisory matches across the platform.</p>
-        
-        <form id="profileForm" onsubmit="saveProfileForm(event)" class="space-y-4">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div class="flex flex-col gap-1.5">
-              <label for="startupName" class="text-xs font-bold text-slate-300">Company Name *</label>
-              <input type="text" id="startupName" name="startupName" required placeholder="e.g. Acme Network Dynamics" class="bg-[#0b0f1b] border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-tenGold-500/50" />
-            </div>
-            <div class="flex flex-col gap-1.5">
-              <label for="tagline" class="text-xs font-bold text-slate-300">Tagline Slogan *</label>
-              <input type="text" id="tagline" name="tagline" required placeholder="Decentralized network parameters" class="bg-[#0b0f1b] border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-tenGold-500/50" />
-            </div>
-          </div>
-
-          <div class="flex flex-col gap-1.5">
-            <label for="description" class="text-xs font-bold text-slate-300">Mission Description</label>
-            <textarea id="description" name="description" placeholder="Specify platform values and operations mechanics..." rows="3" class="bg-[#0b0f1b] border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-tenGold-500/50"></textarea>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div class="flex flex-col gap-1.5">
-              <label for="industry" class="text-xs font-bold text-slate-300">Ecosystem Segment *</label>
-              <select id="industry" name="industry" required class="bg-[#0b0f1b] border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-tenGold-500/50">
-                <option value="EdTech">EdTech Accelerator</option>
-                <option value="FinTech">FinTech Ventures</option>
-                <option value="HealthTech">HealthTech Solutions</option>
-                <option value="SaaS">SaaS Platform</option>
-                <option value="E-Commerce">E-Commerce Node</option>
-                <option value="AI / Web3">AI / Web3 Node</option>
-              </select>
-            </div>
-            <div class="flex flex-col gap-1.5">
-              <label for="stage" class="text-xs font-bold text-slate-300">Venture Development Stage *</label>
-              <select id="stage" name="stage" required class="bg-[#0b0f1b] border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-tenGold-500/50">
-                <option value="idea">Idea Stage (Zero-to-One)</option>
-                <option value="validation">Validation (TAM Discovery)</option>
-                <option value="mvp">MVP Ready (Active deployment)</option>
-                <option value="growth">Growth scaling</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div class="flex flex-col gap-1.5">
-              <label for="teamSize" class="text-xs font-bold text-slate-300">Ecosystem Team Size</label>
-              <input type="number" id="teamSize" name="teamSize" min="1" value="3" class="bg-[#0b0f1b] border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-tenGold-500/50" />
-            </div>
-            <div class="flex flex-col gap-1.5">
-              <label for="location" class="text-xs font-bold text-slate-300">Headquarters location</label>
-              <input type="text" id="location" name="location" placeholder="e.g. Bengaluru, IN" class="bg-[#0b0f1b] border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-tenGold-500/50" />
-            </div>
-          </div>
-
-          <div class="flex justify-end gap-3 pt-4 border-t border-white/5">
-            <button type="button" onclick="closeProfileModal()" class="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-bold font-semibold">Cancel</button>
-            <button type="submit" class="px-5 py-2 bg-tenGold-500 hover:bg-tenGold-600 text-slate-950 font-extrabold rounded-xl text-xs shadow-lg shadow-tenGold-500/20">Save Spec Profile</button>
-          </div>
+          <button class="btn" type="submit">Save profile</button>
         </form>
       </div>
-    </div>
+    </section>
+
+    <!-- ── JOBS ─────────────────────────────────────────────────────────── -->
+    <section class="view" id="v-jobs">
+      <div class="panel-head">
+        <h2>Job posts</h2>
+        <button class="btn" onclick="openJobForm()">+ New job post</button>
+      </div>
+      <div id="jobsList"></div>
+    </section>
+
+    <!-- ── PIPELINE ─────────────────────────────────────────────────────── -->
+    <section class="view" id="v-pipeline">
+      <div class="panel-head">
+        <h2>Hiring pipeline</h2>
+        <select id="pipeJobFilter" style="background:var(--panel);border:1px solid var(--line-2);border-radius:10px;padding:9px 12px;font-size:12.5px;">
+          <option value="">All job posts</option>
+        </select>
+        <button class="btn ghost" onclick="loadPipeline()">Refresh</button>
+      </div>
+      <p class="lead" style="color:var(--muted);font-size:12.5px;margin-bottom:16px;">
+        Drag a candidate between columns to move them. Moving someone to <b>Hired</b> adds them to your team.
+      </p>
+      <div class="board" id="board"></div>
+    </section>
+
+    <!-- ── TALENT ───────────────────────────────────────────────────────── -->
+    <section class="view" id="v-talent">
+      <div class="panel">
+        <h2>Talent search</h2>
+        <p class="lead">
+          Every intern on TEN, ranked by performance. You see the work record — domain, tenure,
+          attendance, performance — and not their contact details: sourcing someone into a job
+          post is how you reach them, and it keeps the conversation on the platform.
+        </p>
+        <div class="grid2" style="margin-bottom:6px;">
+          <div class="field"><label>Search</label><input id="tSearch" placeholder="Name, employee ID or domain"></div>
+          <div class="field"><label>Domain</label><select id="tDomain"><option value="">Any domain</option></select></div>
+          <div class="field"><label>Minimum performance</label>
+            <select id="tPerf">
+              <option value="">Any</option><option value="50">50% and up</option>
+              <option value="70">70% and up</option><option value="85">85% and up</option>
+            </select>
+          </div>
+          <div class="field"><label>Completion</label>
+            <select id="tDone"><option value="">Anyone</option><option value="true">Completed the internship</option></select>
+          </div>
+        </div>
+        <button class="btn" onclick="loadTalent(1)">Search</button>
+      </div>
+      <div id="talentList"></div>
+    </section>
+
+    <!-- ── FUNDRAISING ──────────────────────────────────────────────────── -->
+    <section class="view" id="v-fundraising">
+      <div class="panel-head">
+        <h2>Fundraising</h2>
+        <button class="btn" onclick="openRoundForm()">+ New round</button>
+      </div>
+      <div id="roundsList"></div>
+    </section>
+
+    <!-- ── DATA ROOM ────────────────────────────────────────────────────── -->
+    <section class="view" id="v-dataroom">
+      <div class="panel-head">
+        <h2>Data room</h2>
+        <button class="btn" onclick="openDocForm()">+ Add document</button>
+      </div>
+      <p class="lead" style="color:var(--muted);font-size:12.5px;margin-bottom:16px;">
+        <b>Private</b> is yours alone. <b>Shared</b> is what an investor in a round can be sent.
+        A cap table should not be shared by accident, so nothing here is shared unless you say so.
+      </p>
+      <div id="docsList"></div>
+    </section>
+
+    <!-- ── TEAM ─────────────────────────────────────────────────────────── -->
+    <section class="view" id="v-team">
+      <div class="panel-head">
+        <h2>Team</h2>
+        <button class="btn" onclick="openMemberForm()">+ Add member</button>
+      </div>
+      <div id="teamList"></div>
+    </section>
+
+    <!-- ── MENTORS ──────────────────────────────────────────────────────── -->
+    <section class="view" id="v-mentors">
+      <div class="panel">
+        <h2>Your sessions</h2>
+        <p class="lead">Requests and confirmed sessions with TEN's approved mentors.</p>
+        <div id="bookingsList"></div>
+      </div>
+      <div class="panel-head"><h2>Approved mentors</h2></div>
+      <div id="mentorsList"></div>
+    </section>
+
   </div>
+</main>
 
-  <script>
-    // System core environment variables
-    const token = localStorage.getItem('ten-token') || localStorage.getItem('authToken') || '';
-    
-    // Initial active section 
-    let currentTabId = 'overview';
+<div class="sheet" id="sheet" role="dialog" aria-modal="true">
+  <div class="veil" data-close></div>
+  <div class="box">
+    <h3 id="sheetTitle">&nbsp;</h3>
+    <div id="sheetBody"></div>
+    <div class="acts" id="sheetActs"></div>
+  </div>
+</div>
 
-    // Global persistence models (initialized in local storage or defaults)
-    let localKanbanTasks = [
-      { id: 'kan-1', title: 'Prepare seed pitch slide specs', stage: 'idea' },
-      { id: 'kan-2', title: 'Compile Web market research metrics', stage: 'research' },
-      { id: 'kan-3', title: 'Pre-requisites: Deploy prototype nodes', stage: 'validation' }
-    ];
+<script src="/notify-orb.js" defer></script>
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   Founder OS — the client.
 
-    let localTasks = [
-      { id: 't-1', text: 'Define ecosystem core metrics tracker', done: true },
-      { id: 't-2', text: 'Map out student scholars matching flow parameters', done: false }
-    ];
+   Every request goes to /api/founder-os/*, which resolves the founder from
+   the session. Nothing here sends a founderId, because nothing here should be
+   able to choose one.
+   ═══════════════════════════════════════════════════════════════════════ */
+"use strict";
 
-    let localNotificationsList = [
-      { id: 'not-1', text: 'Mentor Advisory session booked with AI Architect', type: 'match', time: '1s ago' },
-      { id: 'not-2', text: 'Apurva Jaiswal matched to SaaS Pitch Sifu', type: 'system', time: '5m ofs' }
-    ];
+var API = '/api/founder-os';
+var DATA = { jobs: [], apps: [], rounds: [], docs: [], team: [], mentors: [], bookings: [], stages: [] };
+var ME = null;
 
-    let localFeedLogs = [
-      { id: 'feed-1', title: 'Arjun Kumar (DevOps Scholar)', desc: 'joined DevOps with AWS program cohort', meta: 'VETTED TALENT', time: '10m ago' },
-      { id: 'feed-2', title: 'Radhika Sen (Product Sourced)', desc: 'cleared mentorship validation checkpoints', meta: 'SYSTEM SIGNAL', time: '20m ago' },
-      { id: 'feed-3', title: 'Suresh Iyer (VC Syndicate)', desc: 'listed new Pre-Seed Opportunity check sheets', meta: 'INVESTMENT ACTION', time: '1h ago' }
-    ];
+/* ── plumbing ──────────────────────────────────────────────────────────── */
 
-    let localTalents = [
-      { id: 'tal-1', name: 'Arjun Kumar', headline: 'Full-Stack Developer Specialization', skills: ['React', 'Node.js', 'MongoDB', 'AWS'], avail: 'immediately', role: 'internship', verified: true, cohort: 'TEN Summer Intern', community: '14 Posts', mentor: 'Rakesh S. (Senior Developer)', matchingVal: '96% Match' },
-      { id: 'tal-2', name: 'Nisha Sharma', headline: 'Data Engineering & Analytics Lead', skills: ['Python', 'SQL', 'TensorFlow', 'Java'], avail: '2weeks', role: 'fulltime', verified: true, cohort: 'Big Data bootcamp', community: '8 Posts', mentor: 'Dr. Vivek K. (Advisory Scientist)', matchingVal: '92% Match' },
-      { id: 'tal-3', name: 'Kabir Mehta', headline: 'Venture Architect & Product Manager', skills: ['Framer', 'Product Specs', 'Figma', 'Pitch Deck'], avail: 'immediately', role: 'internship', verified: false, cohort: 'Zero-to-One PM Track', community: '5 Posts', mentor: 'Aditi V. (Product Lead)', matchingVal: '89% Match' }
-    ];
+function esc(v){
+  return String(v == null ? '' : v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 
-    let localPrograms = [
-      { id: 'prog-1', title: 'TEN Summer Internship Program', desc: 'Accelerate skills through live venture development loops alongside senior engineers.', type: 'internship', dur: '3 Months', stip: '₹12,000 / mo', quota: '50 Seats', deadline: '2026-07-31', status: 'Active' },
-      { id: 'prog-2', title: 'Founder Accelerator Cohort', desc: 'Venture scale modules centering fundraising strategies, go-to-market plans, and pitch support.', type: 'fellowship', dur: '6 Weeks', stip: 'Equity-based support', quota: '12 Slots', deadline: '2026-08-15', status: 'Limited' },
-      { id: 'prog-3', title: 'High performance Devops Fellowship', desc: 'Secure enterprise cloud systems orchestration, automatic deployments, and scale checks.', type: 'bootcamp', dur: '2 Months', stip: '₹10,000 / mo', quota: '25 Seats', deadline: 'Rolling', status: 'Open' }
-    ];
+function money(n, cur){
+  var v = Number(n) || 0;
+  var sym = cur === 'USD' ? '$' : cur === 'EUR' ? '€' : '₹';
+  if (v >= 10000000) return sym + (v/10000000).toFixed(2).replace(/\.00$/,'') + ' Cr';
+  if (v >= 100000)   return sym + (v/100000).toFixed(2).replace(/\.00$/,'') + ' L';
+  if (v >= 1000)     return sym + (v/1000).toFixed(1).replace(/\.0$/,'') + 'k';
+  return sym + v;
+}
 
-    let localMentorsList = [
-      { id: 'ment-1', name: 'Rakesh Singhal', specialty: 'Distributed Cloud Operations', company: 'Google Cloud Principal Architect', avatar: '👨‍💻', verified: true, alignment: 'EdTech / SaaS' },
-      { id: 'ment-2', name: 'Dr. Vivek Khare', specialty: 'Venture Capital Valuation Metrics', company: 'Partner at Horizon Syndicate', avatar: '📈', verified: true, alignment: 'FinTech / SaaS' },
-      { id: 'ment-3', name: 'Aditi Verma', specialty: 'Growth Loop Optimization', company: 'VP Sourcing at Growth Labs', avatar: '🚀', verified: false, alignment: 'SaaS / E-Commerce' }
-    ];
+function when(d){
+  if (!d) return '—';
+  var t = new Date(d);
+  return isNaN(t.getTime()) ? '—' : t.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
+}
 
-    let localInvestorsList = [
-      { id: 'inv-1', name: 'Astra Syndicate Fund', stageFocus: 'Pre-Seed / Seed', averageTicket: '₹15L - ₹50L', geoFocus: 'India / SE Asia', logo: '🌌', status: 'Actively investing', connections: '4 Founders' },
-      { id: 'inv-2', name: 'Pinnacle Capital Partners', stageFocus: 'Seed Phase', averageTicket: '₹40L - ₹1.5Cr', geoFocus: 'Global Remote', logo: '🏔️', status: 'Reviewing decks', connections: '12 Founders' },
-      { id: 'inv-3', name: 'Beacon Angel Syndicate', stageFocus: 'Ideation / Validation', averageTicket: '₹5L - ₹20L', geoFocus: 'Bengaluru / Hybrid', logo: '🗼', status: 'Venture mentor ties', connections: '8 Founders' }
-    ];
+function toast(msg, kind){
+  var t = document.createElement('div');
+  t.className = 'toast ' + (kind || 'ok');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(function(){ t.remove(); }, 3200);
+}
 
-    let localCommunityChats = {
-      founders: [
-        { id: 'c-1', user: 'Kabir (Mehta Dynamics)', msg: 'Hey guys! Setting up the TAM pitch spec values. Has anyone verified SaaS customer segment retention index checks yet?', time: '3m ago' },
-        { id: 'c-2', user: 'Rakesh S. (Mentor)', msg: 'Typically healthy seed stages require a minimum 82% 3-month retention threshold. Keep parameters local first.', time: '2m ago' }
-      ],
-      talent: [
-        { id: 'c-3', user: 'Arjun Kumar', msg: 'Just completed AWS security credentialing metrics challenge. Excited to match to early-stage SaaS setups.', time: '10m ago' }
-      ],
-      investor: [
-        { id: 'inv-chat-1', user: 'Horizon Partners', msg: 'Actively searching for early validation segment systems in AgriTech and HealthTech sectors.', time: '1h ago' }
-      ]
-    };
+/**
+ * One fetch wrapper, so a signed-out session is handled once rather than in
+ * twenty places. A 401 or 403 here means the session went away or this account
+ * is not a founder — both send the reader to the login page rather than
+ * leaving a screen of empty panels with no explanation.
+ */
+async function api(path, opts){
+  var res = await fetch(API + path, Object.assign({
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' }
+  }, opts || {}));
 
-    let activeChannelId = 'founders';
+  if (res.status === 401) { window.location.href = '/founder-login'; return null; }
+  if (res.status === 403) {
+    toast('This account is not a founder account.', 'err');
+    return null;
+  }
+  var d = await res.json().catch(function(){ return { success:false, error:'The server sent something unreadable.' }; });
+  if (!d.success && d.error) toast(d.error, 'err');
+  return d;
+}
 
-    // -----------------------------------------------------------------
-    // ENVIRONMENT SETUP & ROUTING SYSTEM (PRESERVE CONTEXT ON CLICK)
-    // -----------------------------------------------------------------
-    function bootUnifiedEnvironment() {
-      // Hydrate custom state stores
-      if (localStorage.getItem('founder_kanban')) localKanbanTasks = JSON.parse(localStorage.getItem('founder_kanban'));
-      if (localStorage.getItem('founder_tasks')) localTasks = JSON.parse(localStorage.getItem('founder_tasks'));
-      if (localStorage.getItem('founder_notif')) localNotificationsList = JSON.parse(localStorage.getItem('founder_notif'));
-      if (localStorage.getItem('founder_feed_logs')) localFeedLogs = JSON.parse(localStorage.getItem('founder_feed_logs'));
-      if (localStorage.getItem('founder_talents')) localTalents = JSON.parse(localStorage.getItem('founder_talents'));
-      if (localStorage.getItem('founder_cohorts')) localPrograms = JSON.parse(localStorage.getItem('founder_cohorts'));
+/* ── navigation ────────────────────────────────────────────────────────── */
 
-      // Check current browser URL and dynamically set starting active tab
-      const path = window.location.pathname;
-      let startTab = 'overview';
-      if (path === '/talent-network') startTab = 'talent';
-      else if (path === '/programs') startTab = 'programs';
-      else if (path === '/community') startTab = 'community';
-      else {
-        // Fallback for query strings
-        const params = new URLSearchParams(window.location.search);
-        if (params.get('tab')) startTab = params.get('tab');
-      }
+var TITLES = {
+  overview:    ['Overview', 'Your startup at a glance'],
+  profile:     ['Startup profile', 'What interns and investors see'],
+  jobs:        ['Job posts', 'Roles you are hiring for'],
+  pipeline:    ['Hiring pipeline', 'Candidates, stage by stage'],
+  talent:      ['Talent search', "Every intern on TEN"],
+  fundraising: ['Fundraising', 'Rounds and the investors in them'],
+  dataroom:    ['Data room', 'Documents, private until you share them'],
+  team:        ['Team', 'Who is building this'],
+  mentors:     ['Mentors', 'Book time with an approved mentor']
+};
 
-      // Load Clock & stats
-      startDigitalClock();
-      loadOverviewStats();
-      loadStartupMetadataSpec();
+var LOADED = {};
 
-      // Switch to detected tab
-      switchTab(startTab);
+function go(v){
+  document.querySelectorAll('.view').forEach(function(s){ s.classList.remove('on'); });
+  document.querySelectorAll('#nav button').forEach(function(b){ b.classList.toggle('on', b.dataset.v === v); });
+  var sec = document.getElementById('v-' + v);
+  if (sec) sec.classList.add('on');
 
-      // Hydrate all layout grids
-      renderActivityFeed();
-      renderEcosystemNotifications();
-      renderRecommendationEngine();
-    }
+  var t = TITLES[v] || ['', ''];
+  document.getElementById('viewTitle').textContent = t[0];
+  document.getElementById('viewSub').textContent = t[1];
+  document.getElementById('side').classList.remove('open');
+  if (history.replaceState) history.replaceState(null, '', '#' + v);
 
-    // Zero-reload navigation interceptor for Linear/Arc experience
-    function navigateToTab(tabId) {
-      // Map tabs to corresponding browser URLs for seamless history integration
-      let tabPath = '/founder-os';
-      if (tabId === 'talent') tabPath = '/talent-network';
-      else if (tabId === 'programs') tabPath = '/programs';
-      else if (tabId === 'community') tabPath = '/community';
-      else tabPath = `/founder-os?tab=${tabId}`;
+  // Each section loads the first time it is opened, then on demand. Loading
+  // all nine up front would fire nine queries for a reader who wanted one.
+  var loaders = {
+    overview: loadOverview, profile: loadProfile, jobs: loadJobs,
+    pipeline: loadPipeline, talent: function(){ if(!LOADED.talent) loadTalent(1); },
+    fundraising: loadRounds, dataroom: loadDocs, team: loadTeam, mentors: loadMentors
+  };
+  if (loaders[v]) { loaders[v](); LOADED[v] = true; }
+}
 
-      // Update browser URL without reloading
-      window.history.pushState(null, '', tabPath);
+document.getElementById('nav').addEventListener('click', function(e){
+  var b = e.target.closest('button[data-v]');
+  if (b) go(b.dataset.v);
+});
+document.getElementById('burger').addEventListener('click', function(){
+  document.getElementById('side').classList.toggle('open');
+});
+document.getElementById('signOut').addEventListener('click', function(e){
+  e.preventDefault();
+  fetch('/logout', { method:'POST', credentials:'same-origin' })
+    .finally(function(){ window.location.href = '/founder-login'; });
+});
 
-      // Transition views smoothly
-      switchTab(tabId);
-    }
+/* ── the modal ─────────────────────────────────────────────────────────── */
 
-    // Switch tab visuals via dynamic class toggling
-    function switchTab(tabId) {
-      currentTabId = tabId;
-      
-      // Select nav structures
-      document.querySelectorAll('.sidebar__nav .nav-item').forEach(el => {
-        el.classList.remove('!text-white', '!bg-white/5', 'border', 'border-white/5', 'nav-item--active');
-      });
+var SHEET = document.getElementById('sheet');
 
-      const activeNav = document.getElementById(`nav-${tabId}`);
-      if (activeNav) {
-        activeNav.classList.add('!text-white', '!bg-white/5', 'border', 'border-white/5', 'nav-item--active');
-      }
+function sheet(title, bodyHtml, actions){
+  document.getElementById('sheetTitle').textContent = title;
+  document.getElementById('sheetBody').innerHTML = bodyHtml;
+  document.getElementById('sheetActs').innerHTML = '';
+  (actions || []).forEach(function(a){
+    var b = document.createElement('button');
+    b.className = 'btn' + (a.ghost ? ' ghost' : '') + (a.danger ? ' danger' : '');
+    b.textContent = a.label;
+    b.onclick = a.fn;
+    document.getElementById('sheetActs').appendChild(b);
+  });
+  SHEET.classList.add('on');
+}
+function closeSheet(){ SHEET.classList.remove('on'); }
+SHEET.addEventListener('click', function(e){ if (e.target.closest('[data-close]')) closeSheet(); });
+document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeSheet(); });
 
-      // Highlight corresponding tab element
-      document.querySelectorAll('#tab-content .tab-pane').forEach(el => {
-        el.classList.add('hidden');
-      });
+/** Read a form inside the modal into a plain object. */
+function sheetValues(){
+  var out = {};
+  document.querySelectorAll('#sheetBody [name]').forEach(function(el){
+    out[el.name] = el.type === 'checkbox' ? el.checked : el.value;
+  });
+  return out;
+}
 
-      const activePane = document.getElementById(`view-${tabId}`);
-      if (activePane) {
-        activePane.classList.remove('hidden');
-        gsap.fromTo(activePane, { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.3, ease: 'power2.out' });
-      }
+/* ── overview ──────────────────────────────────────────────────────────── */
 
-      // Hydrate tab specific data models on load
-      if (tabId === 'pipeline') renderKanbanGrid();
-      if (tabId === 'talent') renderTalentNetworkSourcing();
-      if (tabId === 'programs') renderAcceleratorsListings();
-      if (tabId === 'community') { renderCommunityActivityFeed(); renderCommunityUpcomingEventsCalendar(); }
-      if (tabId === 'mentors') renderEligibleMentorsWorkspace();
-      if (tabId === 'investors') renderApprovedInvestorsDeckPitch();
-      if (tabId === 'graph') renderInteractiveEcosystemRelationshipsGraph();
+async function loadOverview(){
+  var d = await api('/analytics');
+  if (!d || !d.success) return;
 
-      // Trigger standard Lucide updates
-      if (window.lucide) lucide.createIcons();
-    }
+  var h = d.hiring, f = d.fundraising, t = d.team, m = d.mentorship, dr = d.dataRoom;
 
-    // Handle standard browser back/forward buttons
-    window.addEventListener('popstate', () => {
-      const path = window.location.pathname;
-      let target = 'overview';
-      if (path === '/talent-network') target = 'talent';
-      else if (path === '/programs') target = 'programs';
-      else if (path === '/community') target = 'community';
-      else {
-        const params = new URLSearchParams(window.location.search);
-        if (params.get('tab')) target = params.get('tab');
-      }
-      switchTab(target);
+  document.getElementById('ovCards').innerHTML =
+    card('gold', 'Open roles', h.jobsOpen, h.jobsTotal + ' posted in total') +
+    card('blue', 'Candidates', h.applications, h.hired + ' hired · ' + h.conversionPct + '% conversion') +
+    card('green', 'Committed', money(f.totalRaised), 'of ' + money(f.totalTarget) + ' targeted') +
+    card('violet', 'Team', t.total, t.equityAllocated + '% equity allocated') +
+    card('', 'Mentor hours', m.hours, m.requested + ' request' + (m.requested === 1 ? '' : 's') + ' pending') +
+    card('', 'Data room', dr.documents, dr.shared + ' shared · ' + dr.views + ' views');
+
+  document.getElementById('cntJobs').textContent = h.jobsOpen;
+  document.getElementById('cntApps').textContent = h.applications;
+  document.getElementById('cntTeam').textContent = t.total;
+  document.getElementById('cntRounds').textContent = f.rounds;
+  document.getElementById('cntDocs').textContent = dr.documents;
+  document.getElementById('cntBookings').textContent = m.requested + m.confirmed;
+
+  var stageLabels = { applied:'Applied', shortlisted:'Shortlisted', interview:'Interview', offer:'Offer', hired:'Hired', rejected:'Not moving forward' };
+  var maxStage = Math.max(1, ...Object.values(h.byStage));
+  document.getElementById('ovFunnel').innerHTML = Object.keys(h.byStage).map(function(k){
+    var n = h.byStage[k] || 0;
+    return '<div style="margin-bottom:13px;">' +
+      '<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);">' +
+        '<span>' + esc(stageLabels[k] || k) + '</span><b style="color:var(--ink)">' + n + '</b></div>' +
+      '<div class="bar"><i style="width:' + Math.round((n / maxStage) * 100) + '%"></i></div></div>';
+  }).join('') || '<p class="empty">No candidates yet.</p>';
+
+  var raise = f.activeRound;
+  document.getElementById('ovRaise').innerHTML = raise
+    ? '<div style="font-family:Outfit,sans-serif;font-size:22px;font-weight:900;">' + esc(raise.name) + '</div>' +
+      '<div style="font-size:12px;color:var(--muted);margin-top:4px;">' + esc(raise.stage.replace(/_/g,' ')) + '</div>' +
+      '<div style="margin-top:16px;font-size:14px;">' +
+        '<b style="color:var(--green);font-size:20px;">' + money(raise.raisedAmount, raise.currency) + '</b>' +
+        '<span style="color:var(--muted);"> of ' + money(raise.targetAmount, raise.currency) + '</span></div>' +
+      '<div class="bar"><i style="width:' + Math.min(100, Math.round((raise.raisedAmount / (raise.targetAmount || 1)) * 100)) + '%"></i></div>' +
+      investorFunnelHtml(f.investorFunnel)
+    : '<p class="empty"><span class="ic">&#9650;</span>No round is open. Start one from Fundraising when you are ready to raise.</p>';
+
+  var doms = Object.keys(h.byDomain || {}).sort(function(a,b){ return h.byDomain[b] - h.byDomain[a]; });
+  document.getElementById('ovDomains').innerHTML = doms.length
+    ? '<div style="display:flex;gap:10px;flex-wrap:wrap;">' + doms.map(function(k){
+        return '<span class="pill grey">' + esc(k) + ' <b style="color:var(--gold)">' + h.byDomain[k] + '</b></span>';
+      }).join('') + '</div>'
+    : '<p class="empty">Nobody has applied yet.</p>';
+}
+
+function card(cls, k, v, n){
+  return '<div class="card ' + cls + '"><div class="k">' + esc(k) + '</div>' +
+    '<div class="v">' + esc(v) + '</div><div class="n">' + esc(n) + '</div></div>';
+}
+
+function investorFunnelHtml(fn){
+  var labels = { researching:'Researching', contacted:'Contacted', meeting:'Meeting', diligence:'Diligence', committed:'Committed', passed:'Passed' };
+  var keys = Object.keys(fn || {}).filter(function(k){ return fn[k] > 0; });
+  if (!keys.length) return '';
+  return '<div style="margin-top:18px;display:flex;gap:8px;flex-wrap:wrap;">' + keys.map(function(k){
+    return '<span class="pill ' + (k === 'committed' ? 'green' : k === 'passed' ? 'red' : 'grey') + '">' +
+      esc(labels[k] || k) + ' ' + fn[k] + '</span>';
+  }).join('') + '</div>';
+}
+
+/* ── profile ───────────────────────────────────────────────────────────── */
+
+async function loadProfile(){
+  var d = await api('/profile');
+  if (!d || !d.success) return;
+  var p = d.profile || {}, s = d.startup || {};
+  var f = document.getElementById('profileForm');
+  var socials = p.socials || {};
+  var set = function(n, v){ if (f[n]) f[n].value = v == null ? '' : v; };
+
+  set('startupName', p.startupName || s.startupName);
+  set('tagline', p.tagline);
+  set('description', p.description || s.description);
+  set('industry', s.industry);
+  set('stage', s.stage);
+  set('teamSize', p.teamSize || s.teamSize || 1);
+  set('foundedYear', p.foundedYear);
+  set('website', p.website || s.website);
+  set('location', p.location);
+  set('pitchDeckUrl', p.pitchDeckUrl);
+  set('fundingAmount', p.fundingAmount);
+  set('linkedin', socials.linkedin || s.linkedin);
+  set('twitter', socials.twitter);
+  set('github', socials.github);
+}
+
+document.getElementById('profileForm').addEventListener('submit', async function(e){
+  e.preventDefault();
+  var f = e.target;
+  var body = {
+    startupName: f.startupName.value, tagline: f.tagline.value, description: f.description.value,
+    industry: f.industry.value, stage: f.stage.value, teamSize: f.teamSize.value,
+    foundedYear: f.foundedYear.value, website: f.website.value, location: f.location.value,
+    pitchDeckUrl: f.pitchDeckUrl.value, fundingAmount: f.fundingAmount.value,
+    socials: { linkedin: f.linkedin.value, twitter: f.twitter.value, github: f.github.value }
+  };
+  var d = await api('/profile', { method:'PUT', body: JSON.stringify(body) });
+  if (d && d.success) {
+    toast('Profile saved.');
+    document.getElementById('whoStartup').textContent = body.startupName || '';
+  }
+});
+
+/* ── jobs ──────────────────────────────────────────────────────────────── */
+
+async function loadJobs(){
+  var d = await api('/jobs');
+  if (!d || !d.success) return;
+  DATA.jobs = d.jobs;
+  document.getElementById('cntJobs').textContent = d.jobs.filter(function(j){ return j.status === 'open'; }).length;
+
+  var sel = document.getElementById('pipeJobFilter');
+  sel.innerHTML = '<option value="">All job posts</option>' +
+    d.jobs.map(function(j){ return '<option value="' + j._id + '">' + esc(j.title) + '</option>'; }).join('');
+
+  document.getElementById('jobsList').innerHTML = d.jobs.length
+    ? d.jobs.map(jobCard).join('')
+    : '<div class="panel"><p class="empty"><span class="ic">&#9998;</span>' +
+      'No job posts yet. Post a role and TEN interns can apply to it.</p></div>';
+}
+
+function jobCard(j){
+  var sc = j.stageCounts || {};
+  var total = Object.keys(sc).reduce(function(s,k){ return s + sc[k]; }, 0);
+  var statusPill = { open:'green', draft:'grey', paused:'gold', closed:'red' }[j.status] || 'grey';
+  var comp = (j.compensationMin || j.compensationMax)
+    ? money(j.compensationMin) + ' – ' + money(j.compensationMax)
+    : (j.compensationNote || 'Not specified');
+
+  return '<div class="panel">' +
+    '<div class="panel-head">' +
+      '<h2>' + esc(j.title) + '</h2>' +
+      '<span class="pill ' + statusPill + '">' + esc(j.status) + '</span>' +
+    '</div>' +
+    '<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:14px;">' +
+      '<span>' + esc((j.employmentType || '').replace(/_/g,' ')) + '</span>' +
+      '<span>' + esc(j.workMode) + (j.location ? ' · ' + esc(j.location) : '') + '</span>' +
+      '<span>' + esc(comp) + '</span>' +
+      (j.equityOffered ? '<span>Equity ' + esc(j.equityOffered) + '</span>' : '') +
+      '<span>' + j.openings + ' opening' + (j.openings === 1 ? '' : 's') + '</span>' +
+      '<span>' + total + ' candidate' + (total === 1 ? '' : 's') + '</span>' +
+    '</div>' +
+    (j.description ? '<p style="font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:14px;white-space:pre-wrap;">' +
+      esc(j.description.slice(0, 400)) + (j.description.length > 400 ? '…' : '') + '</p>' : '') +
+    (j.skills && j.skills.length
+      ? '<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px;">' +
+        j.skills.map(function(s){ return '<span class="pill grey">' + esc(s) + '</span>'; }).join('') + '</div>'
+      : '') +
+    '<div style="display:flex;gap:9px;flex-wrap:wrap;">' +
+      '<button class="btn sm ghost" onclick="openJobForm(\'' + j._id + '\')">Edit</button>' +
+      (j.status === 'open'
+        ? '<button class="btn sm ghost" onclick="setJobStatus(\'' + j._id + '\',\'paused\')">Pause</button>'
+        : '<button class="btn sm ghost" onclick="setJobStatus(\'' + j._id + '\',\'open\')">Open</button>') +
+      '<button class="btn sm ghost" onclick="setJobStatus(\'' + j._id + '\',\'closed\')">Close</button>' +
+      '<button class="btn sm danger" onclick="deleteJob(\'' + j._id + '\')">Delete</button>' +
+    '</div>' +
+  '</div>';
+}
+
+function openJobForm(id){
+  var j = DATA.jobs.find(function(x){ return x._id === id; }) || {};
+  sheet(id ? 'Edit job post' : 'New job post',
+    '<div class="field"><label>Title *</label><input name="title" value="' + esc(j.title || '') + '" placeholder="Frontend Intern"></div>' +
+    '<div class="field"><label>Description</label><textarea name="description" placeholder="What they will work on, and what you are looking for.">' + esc(j.description || '') + '</textarea></div>' +
+    '<div class="grid2">' +
+      '<div class="field"><label>Domain</label><select name="domain">' + domainOptions(j.domain) + '</select></div>' +
+      '<div class="field"><label>Type</label><select name="employmentType">' +
+        opts(['internship','full_time','part_time','contract','co_founder'], j.employmentType) + '</select></div>' +
+      '<div class="field"><label>Work mode</label><select name="workMode">' +
+        opts(['remote','hybrid','onsite'], j.workMode) + '</select></div>' +
+      '<div class="field"><label>Location</label><input name="location" value="' + esc(j.location || '') + '"></div>' +
+      '<div class="field"><label>Stipend from</label><input name="compensationMin" type="number" min="0" value="' + (j.compensationMin || 0) + '"></div>' +
+      '<div class="field"><label>Stipend to</label><input name="compensationMax" type="number" min="0" value="' + (j.compensationMax || 0) + '"></div>' +
+      '<div class="field"><label>Equity offered</label><input name="equityOffered" value="' + esc(j.equityOffered || '') + '" placeholder="0.5%"></div>' +
+      '<div class="field"><label>Openings</label><input name="openings" type="number" min="1" value="' + (j.openings || 1) + '"></div>' +
+    '</div>' +
+    '<div class="field"><label>Skills (comma separated)</label><input name="skills" value="' + esc((j.skills || []).join(', ')) + '"></div>',
+    [
+      { label:'Cancel', ghost:true, fn: closeSheet },
+      { label: id ? 'Save changes' : 'Post job', fn: function(){ saveJob(id); } }
+    ]);
+}
+
+function opts(list, current){
+  return list.map(function(v){
+    return '<option value="' + v + '"' + (v === current ? ' selected' : '') + '>' +
+      esc(v.replace(/_/g,' ')) + '</option>';
+  }).join('');
+}
+
+var DOMAINS = [];
+function domainOptions(current){
+  return '<option value="">Any domain</option>' + DOMAINS.map(function(d){
+    return '<option' + (d === current ? ' selected' : '') + '>' + esc(d) + '</option>';
+  }).join('');
+}
+
+async function saveJob(id){
+  var v = sheetValues();
+  if (!v.title || !v.title.trim()) { toast('A job needs a title.', 'err'); return; }
+  v.skills = String(v.skills || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+  var d = id
+    ? await api('/jobs/' + id, { method:'PUT', body: JSON.stringify(v) })
+    : await api('/jobs', { method:'POST', body: JSON.stringify(v) });
+  if (d && d.success) { closeSheet(); toast(id ? 'Job updated.' : 'Job posted.'); loadJobs(); }
+}
+
+async function setJobStatus(id, status){
+  var d = await api('/jobs/' + id, { method:'PUT', body: JSON.stringify({ status: status }) });
+  if (d && d.success) { toast('Job ' + status + '.'); loadJobs(); }
+}
+
+function deleteJob(id){
+  var j = DATA.jobs.find(function(x){ return x._id === id; }) || {};
+  sheet('Delete this job post?',
+    '<p style="font-size:13.5px;color:var(--muted);line-height:1.7;">' +
+      'Deleting <b>' + esc(j.title || 'this job') + '</b> also removes every candidate in its pipeline. ' +
+      'If you only want to stop new applications, close it instead.</p>',
+    [
+      { label:'Cancel', ghost:true, fn: closeSheet },
+      { label:'Delete', danger:true, fn: async function(){
+        var d = await api('/jobs/' + id, { method:'DELETE' });
+        if (d && d.success) { closeSheet(); toast('Job deleted.'); loadJobs(); }
+      } }
+    ]);
+}
+
+/* ── pipeline ──────────────────────────────────────────────────────────── */
+
+var STAGE_LABEL = {
+  applied:'Applied', shortlisted:'Shortlisted', interview:'Interview',
+  offer:'Offer', hired:'Hired', rejected:'Not moving forward'
+};
+
+async function loadPipeline(){
+  if (!DATA.jobs.length) await loadJobs();
+  var jobId = document.getElementById('pipeJobFilter').value;
+  var d = await api('/applications' + (jobId ? '?jobId=' + jobId : ''));
+  if (!d || !d.success) return;
+  DATA.apps = d.applications;
+  DATA.stages = d.stages;
+  document.getElementById('cntApps').textContent = d.applications.length;
+  drawBoard();
+}
+
+document.getElementById('pipeJobFilter').addEventListener('change', loadPipeline);
+
+function drawBoard(){
+  var board = document.getElementById('board');
+  board.innerHTML = DATA.stages.map(function(st){
+    var inStage = DATA.apps.filter(function(a){ return a.stage === st; });
+    return '<div class="col" data-stage="' + st + '">' +
+      '<header>' + esc(STAGE_LABEL[st] || st) + '<b>' + inStage.length + '</b></header>' +
+      '<div class="body">' + (inStage.map(function(a){
+        var job = DATA.jobs.find(function(j){ return String(j._id) === String(a.jobId); });
+        return '<div class="cand" draggable="true" data-id="' + a._id + '" onclick="openCandidate(\'' + a._id + '\')">' +
+          '<div class="nm">' + esc(a.name || a.employeeId || 'Candidate') + '</div>' +
+          '<div class="mt">' + esc(a.domain || '') + (job ? ' · ' + esc(job.title) : '') + '</div>' +
+          (a.rating ? '<div class="mt" style="color:var(--gold)">' + '★'.repeat(a.rating) + '</div>' : '') +
+          (a.sourcedByFounder ? '<div class="mt" style="color:var(--violet)">Sourced by you</div>' : '') +
+        '</div>';
+      }).join('') || '<p style="font-size:11.5px;color:var(--muted-2);padding:8px 4px;">Nobody here.</p>') +
+      '</div></div>';
+  }).join('');
+
+  wireDragAndDrop();
+}
+
+/**
+ * Drag a candidate between columns.
+ *
+ * HTML5 drag-and-drop rather than pointer maths: the browser handles the ghost
+ * image, the drop targets and the keyboard-accessible fallback, and a hiring
+ * board is exactly the case it was designed for. Clicking a card still opens
+ * it, because a click is not a drag.
+ */
+function wireDragAndDrop(){
+  var dragging = null;
+
+  document.querySelectorAll('#board .cand').forEach(function(c){
+    c.addEventListener('dragstart', function(e){
+      dragging = c;
+      c.classList.add('drag');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', c.dataset.id);
     });
+    c.addEventListener('dragend', function(){
+      if (dragging) dragging.classList.remove('drag');
+      dragging = null;
+      document.querySelectorAll('#board .col').forEach(function(col){ col.classList.remove('over'); });
+    });
+  });
 
-    // -----------------------------------------------------------------
-    // REAL-TIME GMT CLOCK
-    // -----------------------------------------------------------------
-    function startDigitalClock() {
-      setInterval(() => {
-        const d = new Date();
-        document.getElementById('headerClock').textContent = d.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
-      }, 1000);
-    }
-
-    // -----------------------------------------------------------------
-    // LOAD STATS & METRICS AGGREGATION VIA EXPRESS APIs
-    // -----------------------------------------------------------------
-    function loadOverviewStats() {
-      fetch('/api/founder-os/stats', {
-        headers: token ? { 'Authorization': 'Bearer ' + token } : {}
-      })
-      .then(r => r.json())
-      .then(data => {
-        if (data.success) {
-          document.getElementById('stat-interns').textContent = data.internships || 1420;
-          document.getElementById('stat-revenue').textContent = '₹' + (data.revenue ? Math.round(data.revenue/1000) + 'k' : '450k');
-          document.getElementById('stat-mentors').textContent = data.mentors || 8;
-          document.getElementById('stat-applications').textContent = data.applications || 3;
-        }
-      })
-      .catch(() => {
-        // Keep beautiful loaded default placeholders when unauthorized/offline
-      });
-    }
-
-    // -----------------------------------------------------------------
-    // DIRECTORY SPEC FORM METADATA SYNCRONIZATION
-    // -----------------------------------------------------------------
-    let activeStartupProfile = {
-      startupName: 'Acme Network Dynamics',
-      tagline: 'Decentralized networking parameters',
-      description: 'Platform orchestration logic securing vetted talent matching index loops.',
-      industry: 'AI / Web3',
-      stage: 'mvp',
-      teamSize: 3,
-      location: 'Bengaluru, IN'
-    };
-
-    function loadStartupMetadataSpec() {
-      if (localStorage.getItem('founder_startup_spec')) {
-        activeStartupProfile = JSON.parse(localStorage.getItem('founder_startup_spec'));
-      }
-
-      // Hydrate forms
-      document.getElementById('startupName').value = activeStartupProfile.startupName;
-      document.getElementById('tagline').value = activeStartupProfile.tagline;
-      document.getElementById('description').value = activeStartupProfile.description || '';
-      document.getElementById('industry').value = activeStartupProfile.industry;
-      document.getElementById('stage').value = activeStartupProfile.stage;
-      document.getElementById('teamSize').value = activeStartupProfile.teamSize;
-      document.getElementById('location').value = activeStartupProfile.location || 'Bengaluru, IN';
-
-      // Synced text elements
-      document.getElementById('headerStartupName').textContent = activeStartupProfile.startupName;
-      document.getElementById('currentProfileStageText').textContent = activeStartupProfile.stage;
-      document.getElementById('currentProfileLocationText').textContent = activeStartupProfile.location;
-
-      // Update letters logo
-      const initials = activeStartupProfile.startupName.split(' ').map(x => x[0]).join('').substring(0,2).toUpperCase();
-      document.getElementById('profileCompanyLogo').textContent = initials || '🏢';
-
-      renderRecommendationEngine();
-    }
-
-    function saveProfileForm(e) {
+  document.querySelectorAll('#board .col').forEach(function(col){
+    col.addEventListener('dragover', function(e){ e.preventDefault(); col.classList.add('over'); });
+    col.addEventListener('dragleave', function(){ col.classList.remove('over'); });
+    col.addEventListener('drop', async function(e){
       e.preventDefault();
-      activeStartupProfile = {
-        startupName: document.getElementById('startupName').value.trim(),
-        tagline: document.getElementById('tagline').value.trim(),
-        description: document.getElementById('description').value.trim(),
-        industry: document.getElementById('industry').value,
-        stage: document.getElementById('stage').value,
-        teamSize: parseInt(document.getElementById('teamSize').value) || 3,
-        location: document.getElementById('location').value.trim() || 'Bengaluru, IN'
-      };
+      col.classList.remove('over');
+      var id = e.dataTransfer.getData('text/plain');
+      var stage = col.dataset.stage;
+      var app = DATA.apps.find(function(a){ return a._id === id; });
+      if (!app || app.stage === stage) return;
 
-      localStorage.setItem('founder_startup_spec', JSON.stringify(activeStartupProfile));
-      loadStartupMetadataSpec();
-      closeProfileModal();
-
-      // Trigger update logs & notifications
-      pushNotification('Ecosystem spec updated', 'match', 'Startup OS directory parameters recompiled.');
-      triggerActivityFeedStream('Spec Core Updated', `Founder specified parameters for ${activeStartupProfile.startupName} (GTM focus: ${activeStartupProfile.industry})`, 'VIRTUAL UPDATE');
-
-      Swal.fire({
-        title: 'Spec Recompiled!',
-        text: 'Integrated recommendations & matching algorithms updated to fit your current development stage.',
-        icon: 'success',
-        background: '#0e1428',
-        color: '#F0EEE8',
-        confirmButtonColor: '#D4AF37'
+      var d = await api('/applications/' + id + '/stage', {
+        method:'POST', body: JSON.stringify({ stage: stage })
       });
-    }
-
-    function openProfileModal() { document.getElementById('profileModal').classList.remove('hidden'); }
-    function closeProfileModal() { document.getElementById('profileModal').classList.add('hidden'); }
-    function closeModalOnBackdrop(e) { if (e.target.id === 'profileModal') closeProfileModal(); }
-
-    // -----------------------------------------------------------------
-    // AI RECOMMENDER COUPLING
-    // -----------------------------------------------------------------
-    function renderRecommendationEngine() {
-      const parent = document.getElementById('aiRecommendationContainer');
-      const stage = activeStartupProfile.stage;
-
-      let items = [];
-      if (stage === 'idea') {
-        items = [
-          { badge: 'PROGRAMS MATCH', title: 'Apply to Founder Accelerator Cohort', desc: 'Six-week cohort specialized in mapping zero-to-one architecture models.', action: `navigateToTab('programs')` },
-          { badge: 'TALENT MATCH', title: 'Vetted Project Manager Kabir Mehta (Framer, PM Specs)', desc: '91% Sourcing alignment to structuralize your idea slide decks.', action: `navigateToTab('talent')` },
-          { badge: 'MENTOR SUGGESTION', title: 'Schedule 1-on-1 strategy with Aditi Verma', desc: 'VP at Growth Labs: Expert in product specs & early loops prioritization.', action: `navigateToTab('mentors')` }
-        ];
-      } else if (stage === 'validation') {
-        items = [
-          { badge: 'MARKET DISCOVERY', title: 'Conduct TAM Customer surveys', desc: 'Use Community hub to poll vetted scholar pools on feature requirements.', action: `navigateToTab('community')` },
-          { badge: 'MENTOR MATCH', title: 'Book VC rehearsal session with Dr. Vivek Khare', desc: 'Synthesize seed round valuations and financial deal models.', action: `navigateToTab('mentors')` },
-          { badge: 'ACCELERATOR RECOM', title: 'Enroll in TEN Tech Venture fellowship', desc: 'Approved entries map journey validation requirements instantly.', action: `navigateToTab('programs')` }
-        ];
-      } else if (stage === 'mvp') {
-        items = [
-          { badge: 'SCHOLAR MATCH', title: 'Sourcing Full-Stack Developer Arjun Kumar (Node, AWS, React)', desc: '96% Match level: Ready to deploy and maintain alpha testing servers.', action: `navigateToTab('talent')` },
-          { badge: 'INVESTOR MATCH', title: 'Submit pitch parameters to Astra Syndicate Fund', desc: 'Actively investing ticket sizes from ₹15L - ₹50L for regional SaaS setups.', action: `navigateToTab('investors')` },
-          { badge: 'COHORT TARGET', title: 'TEN Demo Day pitching cohort Summer Cohort', desc: 'Pitch direct to investor syndicates on August Demo Day.', action: `navigateToTab('programs')` }
-        ];
-      } else {
-        items = [
-          { badge: 'SCALING TARGET', title: 'Launch Sourcing Matching triggers with Dr. Vivek Khare', desc: 'Accelerate team structures for growth scaling requirements.', action: `navigateToTab('mentors')` },
-          { badge: 'TALENT PIPELINE', title: 'Sourced Big Data Scholar Nisha Sharma (Tensorflow, Java)', desc: '92% Sourcing index: Ready to connect scale logs pipelines.', action: `navigateToTab('talent')` },
-          { badge: 'HIGH VENTURES', title: 'Syndicated funding check via Pinnacle Capital', desc: 'Average ticket size ₹40L - ₹1.5Cr for verified MVP systems growth.', action: `navigateToTab('investors')` }
-        ];
+      if (d && d.success) {
+        app.stage = stage;
+        drawBoard();
+        toast((app.name || 'Candidate') + ' → ' + (STAGE_LABEL[stage] || stage));
+        if (stage === 'hired') loadTeam();
       }
+    });
+  });
+}
 
-      parent.innerHTML = items.map(x => `
-        <div class="p-3 bg-white/5 border border-white/5 hover:border-tenGold-500/20 rounded-xl transition-all flex items-center justify-between gap-4">
-          <div class="space-y-1">
-            <span class="text-[8px] tracking-widest bg-tenGold-500/10 text-tenGold-500 px-2 py-0.5 rounded font-extrabold mono-font block w-max">${x.badge}</span>
-            <strong class="text-xs text-white block">${x.title}</strong>
-            <p class="text-[10px] text-slate-400 block">${x.desc}</p>
-          </div>
-          <button onclick="${x.action}" class="px-2.5 py-1.5 bg-white/5 hover:bg-tenGold-500 hover:text-slate-950 font-bold text-[10px] rounded-lg transition-all shrink-0">Explore Match</button>
-        </div>
-      `).join('');
-    }
+function openCandidate(id){
+  var a = DATA.apps.find(function(x){ return x._id === id; });
+  if (!a) return;
+  var job = DATA.jobs.find(function(j){ return String(j._id) === String(a.jobId); });
 
-    // -----------------------------------------------------------------
-    // NOTIFICATIONS ENGINE
-    // -----------------------------------------------------------------
-    function renderEcosystemNotifications() {
-      const container = document.getElementById('notifyList');
-      if (localNotificationsList.length === 0) {
-        container.innerHTML = '<div class="text-center p-6 text-slate-500 text-xs">No notifications loaded.</div>';
-        document.getElementById('notifyNewDot').classList.add('hidden');
-        return;
-      }
-      document.getElementById('notifyNewDot').classList.remove('hidden');
-
-      container.innerHTML = localNotificationsList.map(item => `
-        <div class="p-3 hover:bg-white/5 transition-colors text-xs space-y-1">
-          <div class="flex justify-between items-center text-[9px] text-slate-500 mono-font">
-            <span class="uppercase tracking-widest text-tenGold-500">${item.type} signal</span>
-            <span>${item.time}</span>
-          </div>
-          <p class="text-slate-300 font-medium leading-normal">${item.text}</p>
-        </div>
-      `).join('');
-    }
-
-    function toggleNotificationsDropdown() {
-      const dropdown = document.getElementById('notifyDropdown');
-      dropdown.classList.toggle('hidden');
-    }
-
-    function pushNotification(txt, type, feedDesc) {
-      localNotificationsList.unshift({ id: 'not-' + Date.now(), text: txt, type: type || 'system', time: '1s ago' });
-      localStorage.setItem('founder_notif', JSON.stringify(localNotificationsList));
-      renderEcosystemNotifications();
-
-      if (feedDesc) {
-        triggerActivityFeedStream(txt, feedDesc, type === 'match' ? 'MATCH ALIGN' : 'SYSTEM ACTION');
-      }
-    }
-
-    function clearNotifications() {
-      localNotificationsList = [];
-      localStorage.setItem('founder_notif', JSON.stringify(localNotificationsList));
-      renderEcosystemNotifications();
-    }
-
-    // -----------------------------------------------------------------
-    // ACTIVITY STREAM LOGGER
-    // -----------------------------------------------------------------
-    function renderActivityFeed() {
-      const container = document.getElementById('feedLogsContainer');
-      container.innerHTML = localFeedLogs.map(log => `
-        <div class="p-3 hover:bg-white/5 transition-colors rounded-lg flex items-start gap-3 text-xs justify-between group">
-          <div class="space-y-0.5">
-            <strong class="text-slate-200 group-hover:text-tenGold-500 transition-colors block">${log.title}</strong>
-            <p class="text-slate-400 block">${log.desc}</p>
-          </div>
-          <div class="text-right flex flex-col items-end gap-1 font-semibold">
-            <span class="text-[8px] mono-font rounded px-1.5 py-0.5 bg-white/5 border border-white/5 text-slate-400 block">${log.meta}</span>
-            <span class="text-[9px] text-slate-500 block font-normal">${log.time}</span>
-          </div>
-        </div>
-      `).join('');
-    }
-
-    function triggerActivityFeedStream(title, desc, meta) {
-      localFeedLogs.unshift({ id: 'feed-' + Date.now(), title, desc, meta: meta || 'ECOSYSTEM UPDATE', time: '1s ago' });
-      localStorage.setItem('founder_feed_logs', JSON.stringify(localFeedLogs));
-      renderActivityFeed();
-    }
-
-    // -----------------------------------------------------------------
-    // KANBAN SYSTEM (DRAG/DROP INTEGRATION)
-    // -----------------------------------------------------------------
-    function renderKanbanGrid() {
-      const stages = ['idea', 'research', 'validation', 'mvp', 'launch'];
-      stages.forEach(s => {
-        const pane = document.getElementById(`kanban-${s}`);
-        const countBadge = document.getElementById(`count-${s}`);
-        const list = localKanbanTasks.filter(x => x.stage === s);
-        
-        countBadge.textContent = list.length;
-        pane.innerHTML = list.map(item => `
-          <div class="p-3 bg-[#0f1528] hover:border-tenGold-500/30 border border-white/5 rounded-xl cursor-grab active:cursor-grabbing transition-all space-y-2 group" 
-               draggable="true" ondragstart="handleDragStart(event, '${item.id}')" id="task-card-${item.id}">
-            <p class="text-xs text-slate-200 font-semibold leading-normal break-words">${item.title}</p>
-            <div class="flex justify-between items-center pt-2 border-t border-white/5 text-[9px] text-slate-500">
-              <span class="uppercase font-bold tracking-widest text-[8px] mono-font">${s} target</span>
-              <button onclick="removeKanbanItem('${item.id}')" class="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-rose-400 text-xs transition-opacity">&times;</button>
-            </div>
-          </div>
-        `).join('');
-      });
-    }
-
-    function handleDragStart(ev, id) {
-      ev.dataTransfer.setData("text/plain", id);
-    }
-    function allowDrop(ev) { ev.preventDefault(); }
-    
-    function handleDrop(ev, targetStage) {
-      ev.preventDefault();
-      const draggedId = ev.dataTransfer.getData("text/plain");
-      const item = localKanbanTasks.find(x => x.id === draggedId);
-      if (item) {
-        item.stage = targetStage;
-        localStorage.setItem('founder_kanban', JSON.stringify(localKanbanTasks));
-        renderKanbanGrid();
-
-        // Increment health circle calculation
-        recalculateCircularProgress();
-        pushNotification(`Journey step updated`, 'system', `Milestone card "${item.title}" moved to ${targetStage.toUpperCase()}`);
-      }
-    }
-
-    function removeKanbanItem(id) {
-      localKanbanTasks = localKanbanTasks.filter(x => x.id !== id);
-      localStorage.setItem('founder_kanban', JSON.stringify(localKanbanTasks));
-      renderKanbanGrid();
-      recalculateCircularProgress();
-    }
-
-    function triggerAddKanban() {
-      Swal.fire({
-        title: 'Spawn Venture Roadmap Node',
-        html: `
-          <input id="swalKanbanTitle" class="swal2-input !bg-[#0b0f1b] !text-white !text-xs !border-white/10" placeholder="e.g. Conduct pilot pitch program alpha tests">
-          <select id="swalKanbanStage" class="swal2-input !bg-[#0b0f1b] !text-white !text-xs !border-white/10">
-            <option value="idea">Idea Stage</option>
-            <option value="research">Research Stage</option>
-            <option value="validation">Validation Stage</option>
-            <option value="mvp">MVP Ready</option>
-            <option value="launch">Scale Up</option>
-          </select>
-        `,
-        showCancelButton: true,
-        background: '#0e1428',
-        color: '#F0EEE8',
-        confirmButtonColor: '#D4AF37',
-        confirmButtonText: 'Seed Task Node'
-      }).then(res => {
-        if (res.isConfirmed) {
-          const t = document.getElementById('swalKanbanTitle').value.trim();
-          const s = document.getElementById('swalKanbanStage').value;
-          if (t) {
-            localKanbanTasks.push({ id: 'kan-' + Date.now(), title: t, stage: s });
-            localStorage.setItem('founder_kanban', JSON.stringify(localKanbanTasks));
-            renderKanbanGrid();
-            recalculateCircularProgress();
-            pushNotification('New roadmap task seeded', 'system', `Pushed "${t}" to the ${s.toUpperCase()} workspace.`);
-          }
+  sheet(a.name || a.employeeId || 'Candidate',
+    '<div style="font-size:12.5px;color:var(--muted);margin-bottom:16px;line-height:1.7;">' +
+      esc(a.employeeId || '') + (a.domain ? ' · ' + esc(a.domain) : '') +
+      (job ? '<br>Applied for <b style="color:var(--ink)">' + esc(job.title) + '</b>' : '') +
+      '<br>Applied ' + when(a.appliedAt || a.createdAt) +
+    '</div>' +
+    (a.coverNote ? '<div class="field"><label>Their note</label>' +
+      '<p style="font-size:13px;line-height:1.7;white-space:pre-wrap;">' + esc(a.coverNote) + '</p></div>' : '') +
+    '<div class="field"><label>Your rating</label><select name="rating">' +
+      [0,1,2,3,4,5].map(function(n){
+        return '<option value="' + n + '"' + (n === (a.rating||0) ? ' selected' : '') + '>' +
+          (n ? '★'.repeat(n) : 'Not rated') + '</option>';
+      }).join('') + '</select></div>' +
+    '<div class="field"><label>Private notes</label><textarea name="notes">' + esc(a.notes || '') + '</textarea></div>' +
+    '<div class="field"><label>Stage</label><select name="stage">' +
+      DATA.stages.map(function(s){
+        return '<option value="' + s + '"' + (s === a.stage ? ' selected' : '') + '>' + esc(STAGE_LABEL[s] || s) + '</option>';
+      }).join('') + '</select></div>' +
+    (a.history && a.history.length
+      ? '<div class="field"><label>History</label><div style="font-size:11.5px;color:var(--muted);line-height:1.8;">' +
+        a.history.slice(-8).map(function(hh){
+          return when(hh.at) + ' — ' + esc(STAGE_LABEL[hh.from] || hh.from || 'new') +
+            ' → ' + esc(STAGE_LABEL[hh.to] || hh.to);
+        }).join('<br>') + '</div></div>'
+      : ''),
+    [
+      { label:'Close', ghost:true, fn: closeSheet },
+      { label:'Save', fn: async function(){
+        var v = sheetValues();
+        await api('/applications/' + id, { method:'PUT', body: JSON.stringify({ rating: v.rating, notes: v.notes }) });
+        if (v.stage !== a.stage) {
+          await api('/applications/' + id + '/stage', { method:'POST', body: JSON.stringify({ stage: v.stage }) });
         }
-      });
-    }
+        closeSheet(); toast('Saved.'); loadPipeline();
+      } }
+    ]);
+}
 
-    function recalculateCircularProgress() {
-      const total = localKanbanTasks.length;
-      if (total === 0) return;
-      const progressCount = localKanbanTasks.filter(x => x.stage === 'mvp' || x.stage === 'launch').length;
-      const percentage = Math.round((progressCount / total) * 100);
+/* ── talent ────────────────────────────────────────────────────────────── */
 
-      const circle = document.getElementById('healthProgressCircle');
-      if (circle) {
-        // SVG circle perimeter is 314.16
-        const strokeDash = 314.16;
-        const offset = strokeDash - (percentage / 100) * strokeDash;
-        circle.style.strokeDashoffset = offset;
-      }
-      document.getElementById('healthProgressPercentage').textContent = percentage + '%';
-    }
+async function loadTalent(page){
+  var q = new URLSearchParams();
+  var s = document.getElementById('tSearch').value.trim();
+  if (s) q.set('search', s);
+  if (document.getElementById('tDomain').value) q.set('domain', document.getElementById('tDomain').value);
+  if (document.getElementById('tPerf').value) q.set('minPerformance', document.getElementById('tPerf').value);
+  if (document.getElementById('tDone').value) q.set('completedOnly', 'true');
+  q.set('page', page || 1);
 
-    // -----------------------------------------------------------------
-    // TALENT NETWORK DIRECTORY SOURCING FLOW
-    // -----------------------------------------------------------------
-    function renderTalentNetworkSourcing() {
-      const grid = document.getElementById('talentSourcedContainer');
-      grid.innerHTML = localTalents.map(profile => `
-        <div class="tilt-card glass-panel rounded-2xl p-5 border border-white/5 flex flex-col gap-3 relative overflow-hidden group">
-          <div class="flex items-start justify-between">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-full bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] text-white flex items-center justify-center font-bold text-sm shadow-md">
-                ${profile.name.split(' ').map(x=>x[0]).join('')}
-              </div>
-              <div>
-                <h4 class="text-xs font-extrabold text-white flex items-center gap-1.5">
-                  ${profile.name}
-                  ${profile.verified ? '<i data-lucide="check-circle" class="w-3.5 h-3.5 text-emerald-400 fill-emerald-400/20"></i>' : ''}
-                </h4>
-                <span class="text-[10px] text-slate-400 block">${profile.headline}</span>
-              </div>
-            </div>
-            <span class="text-[9px] font-bold px-2 py-0.5 bg-tenGold-500/10 text-tenGold-500 border border-tenGold-500/20 rounded-full mono-font">${profile.matchingVal}</span>
-          </div>
+  var d = await api('/talent?' + q.toString());
+  if (!d || !d.success) return;
 
-          <div class="flex flex-wrap gap-1">
-            ${profile.skills.map(skill => `<span class="bg-white/5 border border-white/5 text-slate-300 text-[8px] px-2 py-0.5 rounded">${skill}</span>`).join('')}
-          </div>
+  document.getElementById('talentList').innerHTML = d.talent.length
+    ? '<div class="cards">' + d.talent.map(talentCard).join('') + '</div>' +
+      '<p style="font-size:12px;color:var(--muted-2);text-align:center;padding:14px;">' +
+        'Showing ' + d.talent.length + ' of ' + d.total + '.</p>'
+    : '<div class="panel"><p class="empty"><span class="ic">&#9906;</span>No intern matches that search.</p></div>';
+}
 
-          <!-- Interconnected Details -->
-          <div class="pt-3 border-t border-white/5 space-y-1.5 text-[10px]">
-            <div class="flex justify-between">
-              <span class="text-slate-500">Cohort Joined:</span>
-              <span class="text-slate-300 font-semibold">${profile.cohort}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-slate-500">Community Activities:</span>
-              <span class="text-indigo-400 font-semibold">${profile.community}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-slate-500">Availability:</span>
-              <span class="text-emerald-400 font-bold capitalize">${profile.avail}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-slate-500">Assigned Mentor:</span>
-              <span class="text-slate-300 font-semibold">${profile.mentor}</span>
-            </div>
-          </div>
+function talentCard(t){
+  var name = t.name || t.fullName || 'TEN intern';
+  var perf = t.performanceScore || 0;
+  var att = t.attendancePercentage || 0;
+  return '<div class="card">' +
+    '<div style="font-size:15px;font-weight:800;">' + esc(name) + '</div>' +
+    '<div style="font-size:11.5px;color:var(--muted);margin-top:4px;">' +
+      esc(t.employeeId || '') + '</div>' +
+    '<div style="margin-top:11px;display:flex;gap:7px;flex-wrap:wrap;">' +
+      (t.domain ? '<span class="pill gold">' + esc(t.domain) + '</span>' : '') +
+      (t.tenure ? '<span class="pill grey">' + esc(t.tenure) + '</span>' : '') +
+      (t.internshipCompleted ? '<span class="pill green">Completed</span>' : '') +
+    '</div>' +
+    '<div style="margin-top:13px;font-size:11.5px;color:var(--muted);">Performance ' + perf + '% · Attendance ' + att + '%</div>' +
+    '<div class="bar"><i style="width:' + Math.min(100, perf) + '%"></i></div>' +
+    '<button class="btn sm" style="margin-top:14px;" onclick="openSource(\'' + esc(t.employeeId) + '\',\'' + esc(name) + '\')">' +
+      'Add to a pipeline</button>' +
+  '</div>';
+}
 
-          <button onclick="requestTalentSourcing('${profile.name}')" class="w-full mt-2 py-2 bg-white/5 hover:bg-tenGold-500 hover:text-slate-950 font-bold text-xs rounded-xl transition-all">Match Candidate</button>
-        </div>
-      `).join('');
-    }
-
-    function performTalentFilter() {
-      const skillsTerm = document.getElementById('talentSearchSkills').value.toLowerCase().trim();
-      const availFilter = document.getElementById('talentSearchAvail').value;
-      const openFilter = document.getElementById('talentSearchOpen').value;
-
-      let filtered = localTalents;
-      if (skillsTerm) {
-        filtered = filtered.filter(p => p.skills.some(s => s.toLowerCase().includes(skillsTerm)));
-      }
-      if (availFilter) {
-        filtered = filtered.filter(p => p.avail === availFilter);
-      }
-      if (openFilter) {
-        filtered = filtered.filter(p => p.role === openFilter);
-      }
-
-      const grid = document.getElementById('talentSourcedContainer');
-      if (filtered.length === 0) {
-        grid.innerHTML = '<div class="col-span-full py-12 text-center text-slate-500 text-xs">No vetted scholars aligned with those active filter scopes.</div>';
-        return;
-      }
-
-      grid.innerHTML = filtered.map(profile => `
-        <div class="tilt-card glass-panel rounded-2xl p-5 border border-white/5 flex flex-col gap-3 relative overflow-hidden group">
-          <div class="flex items-start justify-between">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-full bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] text-white flex items-center justify-center font-bold text-sm shadow-md">
-                ${profile.name.split(' ').map(x=>x[0]).join('')}
-              </div>
-              <div>
-                <h4 class="text-xs font-extrabold text-white flex items-center gap-1.5">
-                  ${profile.name}
-                  ${profile.verified ? '<i data-lucide="check-circle" class="w-3.5 h-3.5 text-emerald-400 fill-emerald-400/20"></i>' : ''}
-                </h4>
-                <span class="text-[10px] text-slate-400 block">${profile.headline}</span>
-              </div>
-            </div>
-            <span class="text-[9px] font-bold px-2 py-0.5 bg-tenGold-500/10 text-tenGold-500 border border-tenGold-500/20 rounded-full mono-font">${profile.matchingVal}</span>
-          </div>
-
-          <div class="flex flex-wrap gap-1">
-            ${profile.skills.map(skill => `<span class="bg-white/5 border border-white/5 text-slate-300 text-[8px] px-2 py-0.5 rounded">${skill}</span>`).join('')}
-          </div>
-
-          <div class="pt-3 border-t border-white/5 space-y-1.5 text-[10px]">
-            <div class="flex justify-between">
-              <span class="text-slate-500">Cohort Joined:</span>
-              <span class="text-slate-300 font-semibold">${profile.cohort}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-slate-500">Availability:</span>
-              <span class="text-emerald-400 font-bold capitalize">${profile.avail}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-slate-500">Assigned Mentor:</span>
-              <span class="text-slate-300 font-semibold">${profile.mentor}</span>
-            </div>
-          </div>
-
-          <button onclick="requestTalentSourcing('${profile.name}')" class="w-full mt-2 py-2 bg-white/5 hover:bg-tenGold-500 hover:text-slate-950 font-bold text-xs rounded-xl transition-all">Match Candidate</button>
-        </div>
-      `).join('');
-      if (window.lucide) lucide.createIcons();
-    }
-
-    function requestTalentSourcing(name) {
-      Swal.fire({
-        title: 'Submit matching request?',
-        text: `Do you want to request automated screening with scholar ${name}? Our coordinators will handle the scheduling directly on your roadmap.`,
-        icon: 'question',
-        showCancelButton: true,
-        background: '#0e1428',
-        color: '#F0EEE8',
-        confirmButtonColor: '#D4AF37',
-        confirmButtonText: 'Submit Inquiry'
-      }).then(res => {
-        if (res.isConfirmed) {
-          pushNotification(`Introductory screening requested`, 'match', `Requested alignment verification checks for scholar ${name}.`);
-          Swal.fire({
-            title: 'Sourcing Inquired!',
-            text: `Vetted node created. Tracking links are updated on Dashboard activities.`,
-            icon: 'success',
-            background: '#0e1428',
-            color: '#F0EEE8',
-            confirmButtonColor: '#D4AF37'
-          });
-        }
-      });
-    }
-
-    function triggerQuickHire() {
-      Swal.fire({
-        title: 'Specify Hiring Match Target',
-        input: 'text',
-        inputPlaceholder: 'e.g. React Front-End Node Architect',
-        showCancelButton: true,
-        background: '#0e1428',
-        color: '#F0EEE8',
-        confirmButtonColor: '#D4AF37',
-        confirmButtonText: 'Initialize Automatic Matching Search'
-      }).then(res => {
-        if (res.isConfirmed && res.value) {
-          pushNotification('Automatic Match Initialized', 'match', `Created matching trigger for roles fitting: ${res.value}`);
-          Swal.fire({
-            title: 'Search initialized',
-            text: 'TEN engine is parsing regional database. Alerts will stream dynamically in your logs.',
-            icon: 'info',
-            background: '#0e1428',
-            color: '#F0EEE8',
-            confirmButtonColor: '#D4AF37'
-          });
-        }
-      });
-    }
-
-    // -----------------------------------------------------------------
-    // ACCELERATORS & COHORTS LISTINGS
-    // -----------------------------------------------------------------
-    function renderAcceleratorsListings() {
-      const container = document.getElementById('cohortListings');
-      container.innerHTML = localPrograms.map(prog => `
-        <div class="tilt-card glass-panel rounded-2xl p-5 border border-white/5 flex flex-col justify-between min-h-[280px]">
-          <div>
-            <div class="flex justify-between items-start mb-2">
-              <span class="text-[8px] font-extrabold uppercase tracking-widest bg-indigo-500/10 text-[#6366f1] border border-indigo-500/20 px-2 py-0.5 rounded-full mono-font">${prog.type}</span>
-              <span class="text-[9px] font-extrabold bg-[#10b981]/15 text-[#10b981] px-2 py-0.5 rounded">${prog.status}</span>
-            </div>
-            <h3 class="text-sm font-bold text-white mb-2 leading-snug">${prog.title}</h3>
-            <p class="text-[11px] text-slate-400 leading-relaxed mb-4">${prog.desc}</p>
-          </div>
-
-          <div class="space-y-2 border-t border-white/5 pt-3 mb-4">
-            <div class="grid grid-cols-2 gap-2 text-[10px]">
-              <div>
-                <span class="text-slate-500 block">Duration:</span>
-                <span class="text-slate-300 font-semibold block">${prog.dur}</span>
-              </div>
-              <div>
-                <span class="text-slate-500 block">Stipend:</span>
-                <span class="text-slate-300 font-semibold block">${prog.stip}</span>
-              </div>
-            </div>
-            <div class="grid grid-cols-2 gap-2 text-[10px]">
-              <div>
-                <span class="text-slate-500 block">Seats left:</span>
-                <span class="text-slate-300 font-semibold block">${prog.quota}</span>
-              </div>
-              <div>
-                <span class="text-slate-500 block">Deadline:</span>
-                <span class="text-rose-400 block">${prog.deadline}</span>
-              </div>
-            </div>
-          </div>
-
-          <button onclick="applyToAcceleratorCohort('${prog.id}', '${prog.title}')" class="w-full py-2 bg-[#4f46e5] text-white hover:bg-[#6366f1] active:scale-95 text-xs font-bold rounded-xl transition-all">Submit Application</button>
-        </div>
-      `).join('');
-    }
-
-    function applyToAcceleratorCohort(id, title) {
-      Swal.fire({
-        title: `Apply to ${title}`,
-        html: `
-          <p class="text-slate-400 text-xs mb-3">Submit your active specified venture directory data directly to the cohort selection panel.</p>
-          <input id="swalAppReason" class="swal2-input !bg-[#0b0f1b] !text-white !text-xs !border-white/10" placeholder="Why are you applying? (Core milestone)">
-        `,
-        showCancelButton: true,
-        background: '#0e1428',
-        color: '#F0EEE8',
-        confirmButtonColor: '#D4AF37',
-        confirmButtonText: 'Authorize &amp; Submit'
-      }).then(res => {
-        if (res.isConfirmed) {
-          const reason = document.getElementById('swalAppReason').value.trim();
-
-          // Push new task item automatically inside Founder OS Pipeline
-          localKanbanTasks.push({
-            id: 'kan-' + Date.now(),
-            title: `APPLIED COHORT: ${title} (${reason || 'Standard Sourcing Review'})`,
-            stage: 'research'
-          });
-          localStorage.setItem('founder_kanban', JSON.stringify(localKanbanTasks));
-
-          pushNotification('Program Cohort applied', 'system', `Authorized directory credentials for "${title}". Track status inside pipeline.`);
-          Swal.fire({
-            title: 'Application Received!',
-            text: 'Your current startup metadata spec has been packaged and submitted. Cards added directly inside your Pipeline roadmap.',
-            icon: 'success',
-            background: '#0e1428',
-            color: '#F0EEE8',
-            confirmButtonColor: '#D4AF37'
-          });
-        }
-      });
-    }
-
-    // -----------------------------------------------------------------
-    // COMMUNITY INTEGRATED FEED
-    // -----------------------------------------------------------------
-    function renderCommunityActivityFeed() {
-      const container = document.getElementById('channelMessagesList');
-      const messages = localCommunityChats[activeChannelId] || [];
-
-      if (messages.length === 0) {
-        container.innerHTML = '<div class="text-center py-12 text-slate-500 text-xs">No announcements in this room yet.</div>';
-        return;
-      }
-
-      container.innerHTML = messages.map(msg => `
-        <div class="space-y-1 p-2 bg-white/5 border border-white/5 rounded-xl text-xs max-w-lg">
-          <div class="flex items-center justify-between text-[10px] text-slate-500 mono-font">
-            <strong class="text-tenGold-500 block font-bold">${msg.user}</strong>
-            <span class="block">${msg.time}</span>
-          </div>
-          <p class="text-slate-200 leading-relaxed block">${msg.msg}</p>
-        </div>
-      `).join('');
-      container.scrollTop = container.scrollHeight;
-    }
-
-    function renderCommunityUpcomingEventsCalendar() {
-      const parent = document.getElementById('communityEventsContainer');
-      const events = [
-        { day: '15', month: 'JUL', title: 'Founder Demo Day — Q3 2026', desc: 'Live pitch session from top early Ventures to vetted investor circle.', format: 'Virtual Room', rsvps: 42 },
-        { day: '22', month: 'JUL', title: 'Intern skills validation checks', desc: 'Accelerated web frameworks validation workshops for talent pools.', format: 'Interactive', rsvps: 118 },
-        { day: '05', month: 'AUG', title: 'Mentor networking speed matching', desc: 'Match founders with elite advisors in 10-minutes quick loops.', format: 'Network Room', rsvps: 26 }
-      ];
-
-      parent.innerHTML = events.map((ev, i) => `
-        <div class="p-3 bg-white/5 border border-white/5 rounded-xl hover:border-tenGold-500/20 transition-all flex items-center gap-3">
-          <div class="bg-indigo-500/10 text-indigo-400 font-extrabold text-center px-2.5 py-1.5 rounded-lg shrink-0">
-            <span class="text-base block tracking-tight leading-none">${ev.day}</span>
-            <span class="text-[8px] block uppercase leading-none mt-1">${ev.month}</span>
-          </div>
-          <div class="flex-1 min-w-0 text-left">
-            <strong class="text-xs text-white block truncate font-semibold">${ev.title}</strong>
-            <p class="text-[9px] text-slate-400 truncate">${ev.desc}</p>
-            <div class="flex items-center justify-between mt-1 text-[9px] text-slate-500">
-              <span class="mono-font">${ev.format}</span>
-              <button onclick="rsvpEvent(${i})" class="text-tenGold-500 hover:underline">RSVP (${ev.rsvps} attending)</button>
-            </div>
-          </div>
-        </div>
-      `).join('');
-    }
-
-    function switchChannel(channelId) {
-      activeChannelId = channelId;
-      document.getElementById('activeChannelHeader').textContent = `#${channelId}-discussion`;
-      renderCommunityActivityFeed();
-    }
-
-    function handleMessageKey(e) {
-      if (e.key === 'Enter') postCommunityMessage();
-    }
-
-    function postCommunityMessage() {
-      const input = document.getElementById('communityMessageInput');
-      const val = input.value.trim();
-      if (!val) return;
-
-      if (!localCommunityChats[activeChannelId]) localCommunityChats[activeChannelId] = [];
-      localCommunityChats[activeChannelId].push({
-        id: 'msg-' + Date.now(),
-        user: `${activeStartupProfile.startupName} (You)`,
-        msg: val,
-        time: '1s ago'
-      });
-
-      input.value = '';
-      renderCommunityActivityFeed();
-
-      // Trigger alerts update
-      triggerActivityFeedStream(`Post Sourced: #${activeChannelId}`, `Broadcast message from ${activeStartupProfile.startupName}: "${val.substring(0,35)}..."`, 'COMMUNITY CHAT');
-    }
-
-    function rsvpEvent(index) {
-      pushNotification('RSVP Submitted', 'system', `Booked attendance check parameters for upcoming ecosystem group event.`);
-      Swal.fire({
-        title: 'RSVP Confirmed!',
-        text: 'Access URLs and syndicate calendar nodes automatically synchronized. Clear instructions dispatched to founders mail history.',
-        icon: 'success',
-        background: '#0e1428',
-        color: '#F0EEE8',
-        confirmButtonColor: '#D4AF37'
-      });
-    }
-
-    // -----------------------------------------------------------------
-    // ADVISORY ELITE MENTORS PANE
-    // -----------------------------------------------------------------
-    function renderEligibleMentorsWorkspace() {
-      const container = document.getElementById('mentorsGrid');
-      container.innerHTML = localMentorsList.map(ment => `
-        <div class="tilt-card glass-panel rounded-2xl p-5 border border-white/5 flex flex-col justify-between min-h-[220px]">
-          <div class="flex items-start justify-between mb-3">
-            <div class="flex items-center gap-3">
-              <span class="text-3xl">${ment.avatar}</span>
-              <div>
-                <h4 class="text-xs font-bold text-white flex items-center gap-1">
-                  ${ment.name}
-                  ${ment.verified ? '<i data-lucide="check-circle" class="w-3.5 h-3.5 text-emerald-400 fill-emerald-400/20"></i>' : ''}
-                </h4>
-                <p class="text-[10px] text-slate-400">${ment.company}</p>
-              </div>
-            </div>
-            <span class="text-[8px] mono-font uppercase bg-white/5 border border-white/5 text-slate-400 px-1.5 py-0.5 rounded">${ment.alignment}</span>
-          </div>
-
-          <div class="text-[11px] text-slate-300 font-medium">
-            <span class="text-slate-500 block uppercase text-[8px] tracking-wider mb-0.5">Focus strategy</span>
-            ${ment.specialty}
-          </div>
-
-          <button onclick="bookAdvisorSession('${ment.name}')" class="w-full mt-4 py-2 bg-white/5 hover:bg-tenGold-500 hover:text-slate-950 font-bold text-xs rounded-xl transition-all">Book advisory strategy session</button>
-        </div>
-      `).join('');
-      if (window.lucide) lucide.createIcons();
-    }
-
-    function bookAdvisorSession(mentorName) {
-      Swal.fire({
-        title: 'Schedule Strategy Session',
-        html: `
-          <label class="text-slate-400 text-xs block mb-1">Select strategic focus node topic:</label>
-          <select id="swalSessionType" class="swal2-input !bg-[#0b0f1b] !text-white !text-xs !border-white/10">
-            <option value="pitch">Pitch slide Deck Audit</option>
-            <option value="architecture">AWS Cloud Infrastructure Check</option>
-            <option value="sourcing">Scholar MATCHING validation</option>
-          </select>
-          <input id="swalSessionTime" type="time" class="swal2-input !bg-[#0b0f1b] !text-white !text-xs !border-white/10" value="14:00">
-        `,
-        showCancelButton: true,
-        background: '#0e1428',
-        color: '#F0EEE8',
-        confirmButtonColor: '#D4AF37',
-        confirmButtonText: 'Confirm Consultation Session'
-      }).then(res => {
-        if (res.isConfirmed) {
-          const type = document.getElementById('swalSessionType').value;
-          const time = document.getElementById('swalSessionTime').value;
-
-          // Add to founder pipeline tasks
-          localKanbanTasks.push({
-            id: 'kan-' + Date.now(),
-            title: `BOOKED: Consultation with Advisor ${mentorName} (${type} at ${time})`,
-            stage: 'research'
-          });
-          localStorage.setItem('founder_kanban', JSON.stringify(localKanbanTasks));
-
-          pushNotification('Advisory consultation scheduled', 'match', `Scheduled active roadmap consultation with ${mentorName} regarding ${type}.`);
-          Swal.fire({
-            title: 'Consultation Confirmed!',
-            text: 'Strategic advisory node linked. Automatic updates spawned inside your active Startup Pipeline.',
-            icon: 'success',
-            background: '#0e1428',
-            color: '#F0EEE8',
-            confirmButtonColor: '#D4AF37'
-          });
-        }
-      });
-    }
-
-    // -----------------------------------------------------------------
-    // APPROVED INVESTORS DECK PITCH PANE
-    // -----------------------------------------------------------------
-    function renderApprovedInvestorsDeckPitch() {
-      const container = document.getElementById('investorsGrid');
-      container.innerHTML = localInvestorsList.map(inv => `
-        <div class="tilt-card glass-panel rounded-2xl p-5 border border-white/5 flex flex-col justify-between min-h-[220px]">
-          <div class="flex items-start justify-between mb-3">
-            <div class="flex items-center gap-2.5">
-              <span class="text-3xl">${inv.logo}</span>
-              <div>
-                <h4 class="text-xs font-bold text-white">${inv.name}</h4>
-                <p class="text-[9px] text-[#10b981] font-semibold">${inv.status}</p>
-              </div>
-            </div>
-            <span class="text-[8px] bg-tenGold-500/10 text-tenGold-500 px-2 py-0.5 rounded font-extrabold pb-1">${inv.connections} Connected</span>
-          </div>
-
-          <div class="space-y-1.5 border-t border-white/5 pt-3 text-[10px]">
-            <div class="flex justify-between">
-              <span class="text-slate-500">Stage target:</span>
-              <span class="text-slate-300 font-semibold">${inv.stageFocus}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-slate-500">Average ticket size:</span>
-              <span class="text-emerald-400 font-semibold">${inv.averageTicket}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-slate-500">Regional scope:</span>
-              <span class="text-slate-300 font-semibold">${inv.geoFocus}</span>
-            </div>
-          </div>
-
-          <button onclick="pitchVentureLink('${inv.name}')" class="w-full mt-4 py-2 bg-indigo-500 hover:bg-indigo-600 font-bold text-xs rounded-xl text-white transition-all">Submit company credentials</button>
-        </div>
-      `).join('');
-    }
-
-    function triggerSubmitPitch() {
-      pitchVentureLink('All syndicates');
-    }
-
-    function pitchVentureLink(targetName) {
-      Swal.fire({
-        title: `Pitch slides dispatch index`,
-        html: `
-          <p class="text-slate-400 text-xs mb-3">Forward active spec deck from Acme Network Dynamics to approved investors panel.</p>
-          <input id="swalDeckUrl" class="swal2-input !bg-[#0b0f1b] !text-white !text-xs !border-white/10" value="https://pitchdecks.ten-platform.dev/acme-seed-latest" placeholder="Deck PDF/Doc shareable URL">
-        `,
-        showCancelButton: true,
-        background: '#0e1428',
-        color: '#F0EEE8',
-        confirmButtonColor: '#D4AF37',
-        confirmButtonText: 'Disseminate Deck Key'
-      }).then(res => {
-        if (res.isConfirmed) {
-          const url = document.getElementById('swalDeckUrl').value.trim();
-
-          // Spawn tracking node to launch stage
-          localKanbanTasks.push({
-            id: 'kan-' + Date.now(),
-            title: `PITCH DEALS: Deck submitted to ${targetName} (${url})`,
-            stage: 'launch'
-          });
-          localStorage.setItem('founder_kanban', JSON.stringify(localKanbanTasks));
-
-          pushNotification('Investor Pitch deck transmitted', 'system', `Dispatched share parameters for "${url}" to active VCs. Tracking inside Roadmap scaling pipeline.`);
-          Swal.fire({
-            title: 'Credentialing Dispatched!',
-            text: 'Your specified metadata and investor decks are forwarded cleanly. Clear status metrics will update inside system logs.',
-            icon: 'success',
-            background: '#0e1428',
-            color: '#F0EEE8',
-            confirmButtonColor: '#D4AF37'
-          });
-        }
-      });
-    }
-
-    // -----------------------------------------------------------------
-    // ECOSYSTEM RELATIONSHIP GRAPH PLOTTER
-    // -----------------------------------------------------------------
-    function renderInteractiveEcosystemRelationshipsGraph() {
-      const svg = document.getElementById('ecosystemGraphSvg');
-      svg.innerHTML = '';
-
-      // Central core coordinates
-      const cx = svg.clientWidth ? svg.clientWidth / 2 : 250;
-      const cy = svg.clientHeight ? svg.clientHeight / 2 : 200;
-
-      // Outer rings nodes
-      const nodes = [
-        { id: 'start', label: 'Acme Dynamics (Me)', r: 18, color: '#f59e0b', x: cx, y: cy, info: 'Your active registered enterprise.' },
-        { id: 'tal1', label: 'Arjun K. (Talent)', r: 13, color: '#10b981', x: cx - 110, y: cy - 70, info: 'Matched developers with DevOps and AWS certifications.' },
-        { id: 'tal2', label: 'Nisha S. (Talent)', r: 13, color: '#10b981', x: cx - 130, y: cy + 50, info: 'Big data scholar matched for scaling stages.' },
-        { id: 'accl', label: 'Summer Accelerator Program', r: 15, color: '#6366f1', x: cx + 120, y: cy - 70, info: 'Venture scale fellowships targeting pre-seed support.' },
-        { id: 'ment', label: 'Rakesh S. (Advisor)', r: 14, color: '#ec4899', x: cx + 110, y: cy + 80, info: 'Principal Cloud mentor guide.' },
-        { id: 'inv', label: 'Astra Syndicate (VC)', r: 15, color: '#a855f7', x: cx, y: cy - 130, info: 'Active capital check partners.' }
-      ];
-
-      // Outer connections
-      const links = [
-        { s: 'start', t: 'tal1' },
-         { s: 'start', t: 'tal2' },
-        { s: 'start', t: 'accl' },
-        { s: 'start', t: 'ment' },
-        { s: 'start', t: 'inv' },
-        { s: 'tal1', t: 'ment' } // Scholars connected to standard advisors!
-      ];
-
-      // Draw linkage lines
-      links.forEach(l => {
-        const sourceNode = nodes.find(n => n.id === l.s);
-        const targetNode = nodes.find(n => n.id === l.t);
-
-        if (sourceNode && targetNode) {
-          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-          line.setAttribute('x1', sourceNode.x);
-          line.setAttribute('y1', sourceNode.y);
-          line.setAttribute('x2', targetNode.x);
-          line.setAttribute('y2', targetNode.y);
-          line.setAttribute('stroke', 'rgba(255,255,255,0.08)');
-          line.setAttribute('stroke-width', '1.5');
-          line.setAttribute('id', `link-${l.s}-${l.t}`);
-          svg.appendChild(line);
-        }
-      });
-
-      // Draw circles
-      nodes.forEach(n => {
-        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        g.setAttribute('class', 'g-node cursor-pointer group');
-        g.setAttribute('onclick', `showGraphNodeInfo('${n.label}', '${n.info}')`);
-
-        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        circle.setAttribute('cx', n.x);
-        circle.setAttribute('cy', n.y);
-        circle.setAttribute('r', n.r);
-        circle.setAttribute('fill', n.color);
-        circle.setAttribute('stroke', '#060913');
-        circle.setAttribute('stroke-width', '3');
-        circle.setAttribute('id', `circle-${n.id}`);
-
-        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        text.setAttribute('x', n.x);
-        text.setAttribute('y', n.y + n.r + 14);
-        text.setAttribute('fill', '#94a3b8');
-        text.setAttribute('font-size', '10px');
-        text.setAttribute('font-weight', 'bold');
-        text.setAttribute('text-anchor', 'middle');
-        text.textContent = n.label;
-
-        // Hover linkages glows
-        g.addEventListener('mouseenter', () => {
-          gsap.to(circle, { r: n.r + 4, duration: 0.2, ease: 'back.out' });
-          text.setAttribute('fill', '#ffffff');
-          circle.setAttribute('stroke', '#d4af37');
+function openSource(employeeId, name){
+  var open = DATA.jobs.filter(function(j){ return j.status === 'open'; });
+  if (!open.length) {
+    sheet('No open job post',
+      '<p style="font-size:13.5px;color:var(--muted);line-height:1.7;">' +
+        'Sourcing someone puts them into a job post’s pipeline, so there has to be one open first. ' +
+        'Post a role and come back.</p>',
+      [{ label:'Close', ghost:true, fn: closeSheet }]);
+    return;
+  }
+  sheet('Source ' + name,
+    '<div class="field"><label>Into which job post?</label><select name="jobId">' +
+      open.map(function(j){ return '<option value="' + j._id + '">' + esc(j.title) + '</option>'; }).join('') +
+    '</select></div>' +
+    '<div class="field"><label>Note to yourself</label><textarea name="note" placeholder="Why this person?"></textarea></div>',
+    [
+      { label:'Cancel', ghost:true, fn: closeSheet },
+      { label:'Add to pipeline', fn: async function(){
+        var v = sheetValues();
+        var d = await api('/talent/' + encodeURIComponent(employeeId) + '/source', {
+          method:'POST', body: JSON.stringify(v)
         });
+        if (d && d.success) { closeSheet(); toast(name + ' added to the pipeline.'); loadPipeline(); }
+      } }
+    ]);
+}
 
-        g.addEventListener('mouseleave', () => {
-          gsap.to(circle, { r: n.r, duration: 0.2 });
-          text.setAttribute('fill', '#94a3b8');
-          circle.setAttribute('stroke', '#060913');
-        });
+/* ── fundraising ───────────────────────────────────────────────────────── */
 
-        g.appendChild(circle);
-        g.appendChild(text);
-        svg.appendChild(g);
-      });
-    }
+var INV_LABEL = { researching:'Researching', contacted:'Contacted', meeting:'Meeting', diligence:'Diligence', committed:'Committed', passed:'Passed' };
+var INV_STAGES = ['researching','contacted','meeting','diligence','committed','passed'];
 
-    function showGraphNodeInfo(label, info) {
-      Swal.fire({
-        title: label,
-        text: info,
-        icon: 'info',
-        background: '#0e1428',
-        color: '#F0EEE8',
-        confirmButtonColor: '#D4AF37'
-      });
-    }
+async function loadRounds(){
+  var d = await api('/rounds');
+  if (!d || !d.success) return;
+  DATA.rounds = d.rounds;
+  document.getElementById('cntRounds').textContent = d.rounds.length;
 
-    // -----------------------------------------------------------------
-    // COMMAND SHORTCUTS SEARCH CENTER (CTRL + K)
-    // -----------------------------------------------------------------
-    const commandShortcutsList = [
-      { name: '🔧 Manage Startup Spec Info', desc: 'Opens specified directory parameters compiler.', action: () => openProfileModal() },
-      { name: '🌱 Switch Dashboard Overview', desc: 'Active platform aggregates and GTM Aware matching recommended nodes.', action: () => navigateToTab('overview') },
-      { name: '🗺️ Venture Pipelines Roadmap', desc: 'Drag-and-drop integrated journey validation tracking.', action: () => navigateToTab('pipeline') },
-      { name: '🎓 Curate Candidate Match Network', desc: 'Discover certified student developers, PMs and engineers.', action: () => navigateToTab('talent') },
-      { name: '📋 Accelerators Co-op Registry', desc: 'Accelerator programs cohort list and immediate sync applications.', action: () => navigateToTab('programs') },
-      { name: '👥 Connected Community Hub discussions', desc: 'Bettors pool general discussions channels andupcoming events RSVPs.', action: () => navigateToTab('community') },
-      { name: '🧑‍🏫 Elite Mentors Council', desc: 'Vetted principal guides directory and direct 1-to-1 session scheduling.', action: () => navigateToTab('mentors') },
-      { name: '💼 VC Syndications deck pitcher', desc: 'Pitch decks links dispatch and diligence milestones tracking.', action: () => navigateToTab('investors') },
-      { name: '📊 Interactive Connections Map Graph', desc: 'Ecosystem node ties visualization area.', action: () => navigateToTab('graph') },
-      { name: '🔔 Refresh Ecosystem Traction aggregates', desc: 'Re-queries real-time servers databases parameters.', action: () => { loadOverviewStats(); Swal.fire({ title: 'Traction synced!', timer: 800, showConfirmButton: false, background: '#0e1428', color: '#F0EEE8'}); } }
-    ];
+  document.getElementById('roundsList').innerHTML = d.rounds.length
+    ? d.rounds.map(roundCard).join('')
+    : '<div class="panel"><p class="empty"><span class="ic">&#9650;</span>' +
+      'No rounds yet. Create one to track a target, the investors in it, and what has been committed.</p></div>';
+}
 
-    function toggleCommandCenter() {
-      const modal = document.getElementById('commandCenterModal');
-      const input = document.getElementById('cmdSearchInput');
-      if (modal.classList.contains('hidden')) {
-        modal.classList.remove('hidden');
-        input.value = '';
-        input.focus();
-        filterCommandShortcuts();
-      } else {
-        modal.classList.add('hidden');
-      }
-    }
+function roundCard(r){
+  var pct = r.targetAmount ? Math.min(100, Math.round((r.raisedAmount / r.targetAmount) * 100)) : 0;
+  var statusPill = { planning:'grey', raising:'gold', closed:'green', abandoned:'red' }[r.status] || 'grey';
+  return '<div class="panel">' +
+    '<div class="panel-head">' +
+      '<h2>' + esc(r.name) + '</h2>' +
+      '<span class="pill grey">' + esc((r.stage||'').replace(/_/g,' ')) + '</span>' +
+      '<span class="pill ' + statusPill + '">' + esc(r.status) + '</span>' +
+    '</div>' +
+    '<div style="font-size:15px;margin-bottom:4px;">' +
+      '<b style="color:var(--green);font-size:22px;font-family:Outfit,sans-serif;">' + money(r.raisedAmount, r.currency) + '</b>' +
+      '<span style="color:var(--muted);"> committed of ' + money(r.targetAmount, r.currency) + '</span>' +
+      (r.valuation ? '<span style="color:var(--muted-2);font-size:12px;"> · at ' + money(r.valuation, r.currency) + ' valuation</span>' : '') +
+    '</div>' +
+    '<div class="bar"><i style="width:' + pct + '%"></i></div>' +
+    '<div class="tbl-wrap" style="margin-top:18px;">' + investorTable(r) + '</div>' +
+    '<div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:16px;">' +
+      '<button class="btn sm" onclick="openInvestorForm(\'' + r._id + '\')">+ Add investor</button>' +
+      '<button class="btn sm ghost" onclick="openRoundForm(\'' + r._id + '\')">Edit round</button>' +
+      '<button class="btn sm danger" onclick="deleteRound(\'' + r._id + '\')">Delete</button>' +
+    '</div>' +
+  '</div>';
+}
 
-    function closeCommandCenterOnBackdrop(e) {
-      if (e.target.id === 'commandCenterModal') toggleCommandCenter();
-    }
+function investorTable(r){
+  if (!r.investors || !r.investors.length) {
+    return '<p style="font-size:12.5px;color:var(--muted-2);padding:10px 0;">No investor conversations in this round yet.</p>';
+  }
+  return '<table><thead><tr><th>Investor</th><th>Stage</th><th>Check</th><th>Next step</th><th>Last contact</th><th></th></tr></thead><tbody>' +
+    r.investors.map(function(i){
+      return '<tr>' +
+        '<td><b>' + esc(i.name || i.firm || 'Unnamed') + '</b>' +
+          (i.firm && i.name ? '<div style="font-size:11px;color:var(--muted)">' + esc(i.firm) + '</div>' : '') + '</td>' +
+        '<td><span class="pill ' + (i.stage === 'committed' ? 'green' : i.stage === 'passed' ? 'red' : 'grey') + '">' +
+          esc(INV_LABEL[i.stage] || i.stage) + '</span></td>' +
+        '<td>' + (i.checkSize ? money(i.checkSize, r.currency) : '—') + '</td>' +
+        '<td style="font-size:12px;color:var(--muted);">' + esc(i.nextStep || '—') + '</td>' +
+        '<td style="font-size:12px;color:var(--muted);">' + when(i.lastContactAt) + '</td>' +
+        '<td><button class="btn sm ghost" onclick="openInvestorForm(\'' + r._id + '\',\'' + i._id + '\')">Edit</button></td>' +
+      '</tr>';
+    }).join('') + '</tbody></table>';
+}
 
-    function filterCommandShortcuts() {
-      const term = document.getElementById('cmdSearchInput').value.toLowerCase().trim();
-      const container = document.getElementById('cmdResults');
-      
-      const filtered = commandShortcutsList.filter(item => 
-        item.name.toLowerCase().includes(term) || item.desc.toLowerCase().includes(term)
-      );
+function openRoundForm(id){
+  var r = DATA.rounds.find(function(x){ return x._id === id; }) || {};
+  sheet(id ? 'Edit round' : 'New round',
+    '<div class="field"><label>Name *</label><input name="name" value="' + esc(r.name || '') + '" placeholder="Seed 2026"></div>' +
+    '<div class="grid2">' +
+      '<div class="field"><label>Stage</label><select name="stage">' +
+        opts(['pre_seed','seed','series_a','series_b','bridge','grant','other'], r.stage) + '</select></div>' +
+      '<div class="field"><label>Status</label><select name="status">' +
+        opts(['planning','raising','closed','abandoned'], r.status) + '</select></div>' +
+      '<div class="field"><label>Target</label><input name="targetAmount" type="number" min="0" value="' + (r.targetAmount || 0) + '"></div>' +
+      '<div class="field"><label>Valuation</label><input name="valuation" type="number" min="0" value="' + (r.valuation || 0) + '"></div>' +
+      '<div class="field"><label>Currency</label><select name="currency">' + opts(['INR','USD','EUR'], r.currency || 'INR') + '</select></div>' +
+    '</div>' +
+    '<div class="field"><label>Notes</label><textarea name="notes">' + esc(r.notes || '') + '</textarea></div>' +
+    '<p style="font-size:11.5px;color:var(--muted-2);line-height:1.6;">' +
+      'Committed capital is the sum of the commitments you record against investors, not a number typed here — ' +
+      'so the two can never disagree.</p>',
+    [
+      { label:'Cancel', ghost:true, fn: closeSheet },
+      { label: id ? 'Save' : 'Create round', fn: async function(){
+        var v = sheetValues();
+        if (!v.name || !v.name.trim()) { toast('A round needs a name.', 'err'); return; }
+        var d = id
+          ? await api('/rounds/' + id, { method:'PUT', body: JSON.stringify(v) })
+          : await api('/rounds', { method:'POST', body: JSON.stringify(v) });
+        if (d && d.success) { closeSheet(); toast('Saved.'); loadRounds(); }
+      } }
+    ]);
+}
 
-      if (filtered.length === 0) {
-        container.innerHTML = `<div class="text-center py-4 text-slate-500 text-xs">No matching ecosystem modules found.</div>`;
-        return;
-      }
+function deleteRound(id){
+  sheet('Delete this round?',
+    '<p style="font-size:13.5px;color:var(--muted);line-height:1.7;">' +
+      'The investor conversations in it go too. Documents stay in the data room, unlinked.</p>',
+    [
+      { label:'Cancel', ghost:true, fn: closeSheet },
+      { label:'Delete', danger:true, fn: async function(){
+        var d = await api('/rounds/' + id, { method:'DELETE' });
+        if (d && d.success) { closeSheet(); toast('Round deleted.'); loadRounds(); }
+      } }
+    ]);
+}
 
-      container.innerHTML = filtered.map((item, idx) => `
-        <button onclick="runCommandAction('${item.name}')" class="w-full text-left p-2 rounded-lg text-xs hover:bg-white/5 flex flex-col gap-1 transition-colors group">
-          <span class="font-extrabold text-[#f3f4f6] group-hover:text-tenGold-500">${item.name}</span>
-          <span class="text-[10px] text-slate-500">${item.desc}</span>
-        </button>
-      `).join('');
-    }
+function openInvestorForm(roundId, investorId){
+  var r = DATA.rounds.find(function(x){ return x._id === roundId; }) || {};
+  var i = (r.investors || []).find(function(x){ return x._id === investorId; }) || {};
+  sheet(investorId ? 'Edit investor' : 'Add investor',
+    '<div class="grid2">' +
+      '<div class="field"><label>Name</label><input name="name" value="' + esc(i.name || '') + '"></div>' +
+      '<div class="field"><label>Firm</label><input name="firm" value="' + esc(i.firm || '') + '"></div>' +
+      '<div class="field"><label>Email</label><input name="email" value="' + esc(i.email || '') + '"></div>' +
+      '<div class="field"><label>Stage</label><select name="stage">' + opts(INV_STAGES, i.stage) + '</select></div>' +
+      '<div class="field"><label>Check size</label><input name="checkSize" type="number" min="0" value="' + (i.checkSize || 0) + '"></div>' +
+      '<div class="field"><label>Next step</label><input name="nextStep" value="' + esc(i.nextStep || '') + '"></div>' +
+    '</div>' +
+    '<div class="field"><label>Notes</label><textarea name="notes">' + esc(i.notes || '') + '</textarea></div>' +
+    '<p style="font-size:11.5px;color:var(--muted-2);line-height:1.6;">' +
+      'Setting the stage to <b>Committed</b> counts this check towards the round total.</p>',
+    [
+      { label:'Cancel', ghost:true, fn: closeSheet },
+      investorId
+        ? { label:'Remove', danger:true, fn: async function(){
+            var d = await api('/rounds/' + roundId + '/investors/' + investorId, { method:'DELETE' });
+            if (d && d.success) { closeSheet(); toast('Removed.'); loadRounds(); }
+          } }
+        : { label:'', ghost:true, fn: function(){} },
+      { label:'Save', fn: async function(){
+        var v = sheetValues();
+        if (investorId) v.investorId = investorId;
+        var d = await api('/rounds/' + roundId + '/investors', { method:'POST', body: JSON.stringify(v) });
+        if (d && d.success) { closeSheet(); toast('Saved.'); loadRounds(); }
+      } }
+    ].filter(function(a){ return a.label; }));
+}
 
-    function runCommandAction(name) {
-      toggleCommandCenter();
-      const actionItem = commandShortcutsList.find(x => x.name === name);
-      if (actionItem && actionItem.action) actionItem.action();
-    }
+/* ── data room ─────────────────────────────────────────────────────────── */
 
-    // Collapsible Sidebar Toggling
-    function toggleSidebarMenu() {
-      const sidebar = document.getElementById('sidebar');
-      const overlay = document.getElementById('sidebar-overlay');
-      if (sidebar && overlay) {
-        sidebar.classList.toggle('expanded');
-        overlay.classList.toggle('active');
-      }
-    }
-    // Close sidebar on ESC key and other modal handles
-    document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') {
-        const sidebar = document.getElementById('sidebar');
-        const overlay = document.getElementById('sidebar-overlay');
-        if (sidebar && sidebar.classList.contains('expanded')) {
-          sidebar.classList.remove('expanded');
-          if (overlay) overlay.classList.remove('active');
-        }
-        
-        // Custom interactive modals close action
-        const cmdModal = document.getElementById('commandCenterModal');
-        if (cmdModal && !cmdModal.classList.contains('hidden')) {
-          cmdModal.classList.add('hidden');
-        }
-        const profModal = document.getElementById('profileModal');
-        if (profModal && !profModal.classList.contains('hidden')) {
-          profModal.classList.add('hidden');
-        }
-        const notifyDropdown = document.getElementById('notifyDropdown');
-        if (notifyDropdown && !notifyDropdown.classList.contains('hidden')) {
-          notifyDropdown.classList.add('hidden');
-        }
-      }
-    });
+var DOC_LABEL = { pitch_deck:'Pitch deck', financials:'Financials', cap_table:'Cap table', legal:'Legal', product:'Product', metrics:'Metrics', other:'Other' };
 
-    // Keyboard shortcut watcher
-    window.addEventListener('keydown', (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-        e.preventDefault();
-        toggleCommandCenter();
-      }
-    });
+async function loadDocs(){
+  if (!DATA.rounds.length) { var rr = await api('/rounds'); if (rr && rr.success) DATA.rounds = rr.rounds; }
+  var d = await api('/dataroom');
+  if (!d || !d.success) return;
+  DATA.docs = d.documents;
+  document.getElementById('cntDocs').textContent = d.documents.length;
 
-    // Handle accessibility Enter key press for custom roles
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        if (document.activeElement && document.activeElement.getAttribute('role') === 'button') {
-          document.activeElement.click();
-        }
-      }
-    });
+  document.getElementById('docsList').innerHTML = d.documents.length
+    ? '<div class="panel"><div class="tbl-wrap"><table>' +
+      '<thead><tr><th>Document</th><th>Category</th><th>Round</th><th>Visibility</th><th>Views</th><th></th></tr></thead><tbody>' +
+      d.documents.map(function(x){
+        var round = DATA.rounds.find(function(r){ return String(r._id) === String(x.roundId); });
+        return '<tr>' +
+          '<td><b>' + esc(x.title) + '</b>' +
+            (x.url ? '<div style="font-size:11px;"><a href="' + esc(x.url) + '" target="_blank" rel="noopener" style="color:var(--gold)">Open</a></div>' : '') +
+            (x.note ? '<div style="font-size:11px;color:var(--muted);margin-top:3px;">' + esc(x.note) + '</div>' : '') + '</td>' +
+          '<td><span class="pill grey">' + esc(DOC_LABEL[x.category] || x.category) + '</span></td>' +
+          '<td style="font-size:12px;color:var(--muted);">' + esc(round ? round.name : '—') + '</td>' +
+          '<td><span class="pill ' + (x.visibility === 'shared' ? 'green' : 'grey') + '">' + esc(x.visibility) + '</span></td>' +
+          '<td style="font-size:12px;color:var(--muted);">' + (x.viewCount || 0) + '</td>' +
+          '<td><button class="btn sm ghost" onclick="openDocForm(\'' + x._id + '\')">Edit</button></td>' +
+        '</tr>';
+      }).join('') + '</tbody></table></div></div>'
+    : '<div class="panel"><p class="empty"><span class="ic">&#9707;</span>' +
+      'Nothing in the data room yet. Add your deck, your metrics and your cap table — and keep the cap table private.</p></div>';
+}
 
-    // Close notifications panel on outer click
-    document.addEventListener('click', (e) => {
-      const dropdown = document.getElementById('notifyDropdown');
-      const trigger = document.getElementById('notifyTrigger');
-      if (dropdown && !dropdown.classList.contains('hidden')) {
-        if (!dropdown.contains(e.target) && !trigger.contains(e.target)) {
-          dropdown.classList.add('hidden');
-        }
-      }
-    });
+function openDocForm(id){
+  var x = DATA.docs.find(function(d){ return d._id === id; }) || {};
+  sheet(id ? 'Edit document' : 'Add document',
+    '<div class="field"><label>Title *</label><input name="title" value="' + esc(x.title || '') + '"></div>' +
+    '<div class="field"><label>Link</label><input name="url" value="' + esc(x.url || '') + '" placeholder="https://"></div>' +
+    '<div class="grid2">' +
+      '<div class="field"><label>Category</label><select name="category">' +
+        opts(['pitch_deck','financials','cap_table','legal','product','metrics','other'], x.category) + '</select></div>' +
+      '<div class="field"><label>Visibility</label><select name="visibility">' +
+        '<option value="private"' + (x.visibility !== 'shared' ? ' selected' : '') + '>Private — only you</option>' +
+        '<option value="shared"' + (x.visibility === 'shared' ? ' selected' : '') + '>Shared — investors in a round</option>' +
+      '</select></div>' +
+      '<div class="field"><label>Round</label><select name="roundId"><option value="">Not tied to a round</option>' +
+        DATA.rounds.map(function(r){
+          return '<option value="' + r._id + '"' + (String(r._id) === String(x.roundId) ? ' selected' : '') + '>' + esc(r.name) + '</option>';
+        }).join('') + '</select></div>' +
+    '</div>' +
+    '<div class="field"><label>Note</label><textarea name="note">' + esc(x.note || '') + '</textarea></div>',
+    [
+      { label:'Cancel', ghost:true, fn: closeSheet },
+      { label: id ? 'Save' : 'Add', fn: async function(){
+        var v = sheetValues();
+        if (!v.title || !v.title.trim()) { toast('A document needs a title.', 'err'); return; }
+        var d = id
+          ? await api('/dataroom/' + id, { method:'PUT', body: JSON.stringify(v) })
+          : await api('/dataroom', { method:'POST', body: JSON.stringify(v) });
+        if (d && d.success) { closeSheet(); toast('Saved.'); loadDocs(); }
+      } }
+    ].concat(id ? [{ label:'Delete', danger:true, fn: async function(){
+      var d = await api('/dataroom/' + id, { method:'DELETE' });
+      if (d && d.success) { closeSheet(); toast('Deleted.'); loadDocs(); }
+    } }] : []));
+}
 
-    // ----------------------------------------------------
-    // INITS & ROOT RUNNERS
-    // ----------------------------------------------------
-    (function runners() {
-      bootUnifiedEnvironment();
-    }());
-  </script>
+/* ── team ──────────────────────────────────────────────────────────────── */
+
+var MEMBER_TYPE = { cofounder:'Co-founder', employee:'Employee', intern:'Intern', advisor:'Advisor', contractor:'Contractor' };
+
+async function loadTeam(){
+  var d = await api('/team');
+  if (!d || !d.success) return;
+  DATA.team = d.team;
+  document.getElementById('cntTeam').textContent = d.team.filter(function(m){ return m.status === 'active'; }).length;
+
+  document.getElementById('teamList').innerHTML = d.team.length
+    ? '<div class="panel">' +
+      '<p class="lead">' + d.equityAllocated + '% of equity allocated across the team.</p>' +
+      '<div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Role</th><th>Type</th><th>Equity</th><th>Status</th><th>Joined</th><th></th></tr></thead><tbody>' +
+      d.team.map(function(m){
+        return '<tr>' +
+          '<td><b>' + esc(m.name) + '</b>' + (m.email ? '<div style="font-size:11px;color:var(--muted)">' + esc(m.email) + '</div>' : '') + '</td>' +
+          '<td style="font-size:12.5px;">' + esc(m.role || '—') + '</td>' +
+          '<td><span class="pill grey">' + esc(MEMBER_TYPE[m.type] || m.type) + '</span></td>' +
+          '<td>' + (m.equity ? m.equity + '%' : '—') + '</td>' +
+          '<td><span class="pill ' + (m.status === 'active' ? 'green' : m.status === 'invited' ? 'gold' : 'grey') + '">' + esc(m.status) + '</span></td>' +
+          '<td style="font-size:12px;color:var(--muted);">' + when(m.joinedAt) + '</td>' +
+          '<td><button class="btn sm ghost" onclick="openMemberForm(\'' + m._id + '\')">Edit</button></td>' +
+        '</tr>';
+      }).join('') + '</tbody></table></div></div>'
+    : '<div class="panel"><p class="empty"><span class="ic">&#9781;</span>' +
+      'No team members yet. Anyone you move to <b>Hired</b> in the pipeline lands here automatically.</p></div>';
+}
+
+function openMemberForm(id){
+  var m = DATA.team.find(function(x){ return x._id === id; }) || {};
+  sheet(id ? 'Edit team member' : 'Add team member',
+    '<div class="grid2">' +
+      '<div class="field"><label>Name *</label><input name="name" value="' + esc(m.name || '') + '"></div>' +
+      '<div class="field"><label>Email</label><input name="email" value="' + esc(m.email || '') + '"></div>' +
+      '<div class="field"><label>Role</label><input name="role" value="' + esc(m.role || '') + '" placeholder="Head of Product"></div>' +
+      '<div class="field"><label>Type</label><select name="type">' +
+        opts(['cofounder','employee','intern','advisor','contractor'], m.type) + '</select></div>' +
+      '<div class="field"><label>Equity %</label><input name="equity" type="number" min="0" max="100" step="0.01" value="' + (m.equity || 0) + '"></div>' +
+      '<div class="field"><label>Status</label><select name="status">' + opts(['active','invited','alumni'], m.status) + '</select></div>' +
+    '</div>' +
+    '<div class="field"><label>Notes</label><textarea name="notes">' + esc(m.notes || '') + '</textarea></div>',
+    [
+      { label:'Cancel', ghost:true, fn: closeSheet },
+      { label: id ? 'Save' : 'Add', fn: async function(){
+        var v = sheetValues();
+        if (!v.name || !v.name.trim()) { toast('A team member needs a name.', 'err'); return; }
+        var d = id
+          ? await api('/team/' + id, { method:'PUT', body: JSON.stringify(v) })
+          : await api('/team', { method:'POST', body: JSON.stringify(v) });
+        if (d && d.success) { closeSheet(); toast('Saved.'); loadTeam(); }
+      } }
+    ].concat(id ? [{ label:'Remove', danger:true, fn: async function(){
+      var d = await api('/team/' + id, { method:'DELETE' });
+      if (d && d.success) { closeSheet(); toast('Removed.'); loadTeam(); }
+    } }] : []));
+}
+
+/* ── mentors ───────────────────────────────────────────────────────────── */
+
+async function loadMentors(){
+  var [mm, bb] = await Promise.all([api('/mentors'), api('/bookings')]);
+  if (mm && mm.success) DATA.mentors = mm.mentors;
+  if (bb && bb.success) DATA.bookings = bb.bookings;
+
+  var pending = DATA.bookings.filter(function(b){ return b.status === 'requested' || b.status === 'confirmed'; });
+  document.getElementById('cntBookings').textContent = pending.length;
+
+  document.getElementById('bookingsList').innerHTML = DATA.bookings.length
+    ? '<div class="tbl-wrap"><table><thead><tr><th>Topic</th><th>Mentor</th><th>When</th><th>Status</th><th></th></tr></thead><tbody>' +
+      DATA.bookings.map(function(b){
+        var pill = { requested:'gold', confirmed:'green', declined:'red', completed:'blue', cancelled:'grey' }[b.status] || 'grey';
+        return '<tr>' +
+          '<td><b>' + esc(b.topic) + '</b>' +
+            (b.agenda ? '<div style="font-size:11px;color:var(--muted);margin-top:3px;">' + esc(b.agenda.slice(0,120)) + '</div>' : '') + '</td>' +
+          '<td style="font-size:12.5px;">' + esc(b.mentorName || 'TEN Mentor') + '</td>' +
+          '<td style="font-size:12px;color:var(--muted);">' + when(b.requestedFor) + ' · ' + b.durationMins + ' min</td>' +
+          '<td><span class="pill ' + pill + '">' + esc(b.status) + '</span>' +
+            (b.meetingLink ? '<div style="font-size:11px;margin-top:4px;"><a href="' + esc(b.meetingLink) + '" target="_blank" rel="noopener" style="color:var(--gold)">Join</a></div>' : '') + '</td>' +
+          '<td>' + (['requested','confirmed'].indexOf(b.status) !== -1
+            ? '<button class="btn sm ghost" onclick="cancelBooking(\'' + b._id + '\')">Cancel</button>' : '') + '</td>' +
+        '</tr>';
+      }).join('') + '</tbody></table></div>'
+    : '<p class="empty">No sessions yet. Pick a mentor below and ask for time.</p>';
+
+  document.getElementById('mentorsList').innerHTML = DATA.mentors.length
+    ? '<div class="cards">' + DATA.mentors.map(function(m){
+        return '<div class="card">' +
+          '<div style="font-size:15px;font-weight:800;">' + esc(m.name) + '</div>' +
+          (m.headline ? '<div style="font-size:12px;color:var(--muted);margin-top:4px;">' + esc(m.headline) + '</div>' : '') +
+          (m.expertise.length
+            ? '<div style="margin-top:11px;display:flex;gap:6px;flex-wrap:wrap;">' +
+              m.expertise.slice(0,4).map(function(e){ return '<span class="pill grey">' + esc(e) + '</span>'; }).join('') + '</div>'
+            : '') +
+          '<div style="margin-top:12px;font-size:11.5px;color:var(--muted);">' +
+            (m.sessionRate ? money(m.sessionRate) + ' a session' : 'Free') +
+            ' · ' + Math.round(m.totalMentoringHours) + ' hours mentored</div>' +
+          '<button class="btn sm" style="margin-top:14px;" onclick="openBooking(\'' + m.userId + '\',\'' + esc(m.name) + '\')">Request a session</button>' +
+        '</div>';
+      }).join('') + '</div>'
+    : '<div class="panel"><p class="empty"><span class="ic">&#9734;</span>No approved mentors are available right now.</p></div>';
+}
+
+function openBooking(mentorId, mentorName){
+  // A datetime-local wants "YYYY-MM-DDTHH:mm" in LOCAL time. Building it from
+  // toISOString() would silently shift the default by the UTC offset.
+  var t = new Date(Date.now() + 24 * 3600 * 1000);
+  var pad = function(n){ return String(n).padStart(2, '0'); };
+  var local = t.getFullYear() + '-' + pad(t.getMonth()+1) + '-' + pad(t.getDate()) +
+              'T' + pad(t.getHours()) + ':' + pad(t.getMinutes());
+
+  sheet('Request a session with ' + mentorName,
+    '<div class="field"><label>Topic *</label><input name="topic" placeholder="Pricing our first enterprise deal"></div>' +
+    '<div class="field"><label>Agenda</label><textarea name="agenda" placeholder="What you want out of the session, and what you have tried."></textarea></div>' +
+    '<div class="grid2">' +
+      '<div class="field"><label>When *</label><input name="requestedFor" type="datetime-local" value="' + local + '"></div>' +
+      '<div class="field"><label>Length</label><select name="durationMins">' +
+        '<option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60">60 minutes</option></select></div>' +
+    '</div>',
+    [
+      { label:'Cancel', ghost:true, fn: closeSheet },
+      { label:'Send request', fn: async function(){
+        var v = sheetValues();
+        v.mentorId = mentorId;
+        v.mentorName = mentorName;
+        var d = await api('/bookings', { method:'POST', body: JSON.stringify(v) });
+        if (d && d.success) { closeSheet(); toast('Request sent to ' + mentorName + '.'); loadMentors(); }
+      } }
+    ]);
+}
+
+async function cancelBooking(id){
+  var d = await api('/bookings/' + id + '/cancel', { method:'POST' });
+  if (d && d.success) { toast('Session cancelled.'); loadMentors(); }
+}
+
+/* ── boot ──────────────────────────────────────────────────────────────── */
+
+(async function start(){
+  var me = await api('/me');
+  if (!me) return;
+  ME = me;
+  document.getElementById('whoName').textContent = (me.founder && me.founder.fullName) || 'Founder';
+  document.getElementById('whoStartup').textContent =
+    (me.startup && me.startup.startupName) || (me.profile && me.profile.startupName) || '';
+
+  // The domain list comes from the server, so a job post and a student
+  // registration can never offer two different sets of domains.
+  try {
+    var r = await fetch('/api/public/domains', { credentials:'same-origin' });
+    var dd = await r.json();
+    DOMAINS = ((dd && dd.domains) || []).map(function(d){ return d.name; });
+  } catch (e) { DOMAINS = []; }
+  document.getElementById('tDomain').innerHTML =
+    '<option value="">Any domain</option>' + DOMAINS.map(function(d){
+      return '<option>' + esc(d) + '</option>';
+    }).join('');
+
+  // Sections load lazily, but jobs are needed by three of them.
+  await loadJobs();
+
+  var initial = (location.hash || '#overview').slice(1);
+  go(TITLES[initial] ? initial : 'overview');
+})();
+</script>
 </body>
 </html>

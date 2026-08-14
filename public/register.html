@@ -1765,6 +1765,44 @@
       activeRole = '';
     }
 
+    /*
+     * Arriving from /domains with a domain already chosen.
+     *
+     * The domains page asks "internship, or the course first?" — answering
+     * "internship" is a choice of domain as well as of route, and making
+     * someone scroll back through fourteen cards to say it again is how a
+     * two-minute registration turns into an abandoned one. `?role=student`
+     * opens the student form; `?domain=` ticks the card, if it exists on
+     * this page. An unknown value is ignored rather than guessed at.
+     */
+    function prefillFromQuery() {
+      var q = new URLSearchParams(window.location.search);
+      var role = q.get('role');
+      var domain = q.get('domain');
+      if (role !== 'student' && !domain) return;
+
+      function applyDomain() {
+        if (!domain) return;
+        var card = document.getElementById('domain_card_' + domain.replace(/\s+/g, '_'));
+        if (card) selectDomainCard(domain);
+      }
+
+      if (role === 'student') {
+        selectRole('student');
+        // renderWizardStep() has just drawn step 1; the domain cards live on a
+        // later step but are present in the DOM throughout, so this is safe.
+        applyDomain();
+      } else {
+        applyDomain();
+      }
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', prefillFromQuery);
+    } else {
+      prefillFromQuery();
+    }
+
     // Submit Dynamic Onboarding Profile
     document.getElementById("unifiedRegForm").addEventListener("submit", async (e) => {
       e.preventDefault();

@@ -123,6 +123,57 @@ response because they were convenient for some other page.
 
 ---
 
+## 4b. What a founder may see about a student
+
+Founders are outside parties with a signed-in account. `GET /api/founder-os/talent`
+returns an **allowlist**, defined once as `TALENT_FIELDS` in `routes/founderOS.js`:
+
+- name, employee ID
+- domain, tenure
+- attendance percentage, performance score
+- whether the internship is complete
+- joining date, skills
+
+It deliberately does **not** return the email address, phone number, WhatsApp
+number, college, address, or anything else that would let a founder reach a
+student off-platform. A founder reaches a candidate by sourcing them into a job
+post; the conversation stays on TEN.
+
+Two rules follow, and both matter more than they look:
+
+1. **Never widen this with `.select('-password')`.** That returns every other
+   field on the schema, which on `Student` is the entire contact record. Add a
+   field to the allowlist deliberately or not at all.
+2. **`FallbackQuery.select()` is a no-op** when the JSON fallback database is
+   active (`server.js`). A projection is not a security boundary while the
+   fallback is in use — if that path is ever reachable in production, this
+   endpoint hands over full documents.
+
+## 4c. Certificates issued by HR outside the normal checks
+
+`POST /api/v2/certificates/hr-issue` deliberately bypasses the application
+queue, the 75% attendance rule, the performance rule and coordinator approval.
+It exists because interns who completed their internship over WhatsApp have no
+portal record for any of those checks to pass.
+
+The controls around it are the point, and none of them is optional:
+
+- The issuer is taken from the **session**, never from the request body, so the
+  audit trail cannot name someone else.
+- Every issue writes a `CertificateOverride` row — whether or not the student
+  met the requirements — with the attendance, performance and task-completion
+  figures **as they were at the time**.
+- The admin portal lists them at `/api/admin-internal/certificate-overrides`,
+  defaulting to the ones where the requirements were not met, and can revoke
+  one. Revoking clears the stored PDF and resets the status, so the student's
+  My Documents stops offering the download.
+
+Do not add a second path that issues a certificate without writing that row. An
+issuing power nobody can audit is how a TEN certificate stops meaning anything —
+which is the same reason section 4 above exists.
+
+---
+
 ## 5. Rules that keep it this way
 
 1. **Secrets come from `process.env`, with no fallback literal.**

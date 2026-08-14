@@ -316,7 +316,8 @@ async function loadMyCertificates() {
 
 function renderDocumentTable(data) {
   // Update each row in the OFFICIAL DOCUMENTS table:
-  
+  HR_ISSUED = data.hrIssued || {};
+
   // Offer Letter row
   updateDocRow('offer', data.offerLetterStatus, data.offerLetterGeneratedAt, data.hasOfferPdf, data.documentRejectionReason, data.offerDocumentNumber);
   // LOR row
@@ -326,6 +327,12 @@ function renderDocumentTable(data) {
   // Star row
   updateDocRow('star', data.starStatus, data.starIssuedAt, data.hasStarPdf, null, null);
 }
+
+/* Which documents HR issued directly rather than through the normal path.
+   Students who finished their internship over WhatsApp never applied for
+   anything, so without this the row would say "Issued" with no explanation of
+   where it came from. */
+let HR_ISSUED = {};
 
 /* ── Certificate applications ─────────────────────────────────────────────
    A student can now ask for a certificate once they meet its bar, instead of
@@ -418,13 +425,22 @@ function updateDocRow(type, status, date, hasPdf, rejectionReason, documentNumbe
     'not_submitted':   { badge:'🔒 Not Submitted',color:'#475569' },
     'not_eligible':    { badge:'🔒 Not Available',color:'#475569' },
   };
-  const cfg = statusConfig[status] || { badge: status || 'Not Available', color:'#475569' };
-  
-  statusEl.innerHTML = `<span style="color:${cfg.color};font-weight:600">${cfg.badge}</span>`;
+  // A document with a PDF behind it is issued, whatever the status field says.
+  const cfg = hasPdf
+    ? (statusConfig[status] && ['issued','approved'].includes(status) ? statusConfig[status] : statusConfig['issued'])
+    : (statusConfig[status] || { badge: status || 'Not Available', color:'#475569' });
+
+  const hrNote = HR_ISSUED[type.toUpperCase()]
+    ? '<div style="font-size:11px;color:#a78bfa;margin-top:3px;">Issued directly by HR</div>' : '';
+  statusEl.innerHTML = `<span style="color:${cfg.color};font-weight:600">${cfg.badge}</span>${hrNote}`;
   dateEl.textContent  = date ? new Date(date).toLocaleDateString('en-IN') : '—';
   
   let actionHTML = '';
-  if (hasPdf && ['issued','approved'].includes(status)) {
+  // A PDF that exists is a PDF the student may download, whatever the status
+  // string says. Requiring status to ALSO be 'issued'/'approved' meant a
+  // certificate HR had generated could sit in the database with the row still
+  // reading "Not yet issued".
+  if (hasPdf) {
     actionHTML = `<a href="/api/v2/certificates/download/${type.toUpperCase()}?employeeId=${encodeURIComponent(empId)}"
       download style="padding:8px 18px;background:linear-gradient(135deg,#059669,#10b981);border-radius:8px;color:#fff;text-decoration:none;font-weight:700;font-size:13px;display:inline-block">
       ⬇️ Download</a>`;

@@ -1848,6 +1848,24 @@ sessionOptions.store = new FallbackStore();
 const sessionMiddleware = session(sessionOptions);
 app.use(sessionMiddleware);
 
+// Put the signed-in ecosystem user on req.user, for every request.
+//
+// This is why the founder, mentor, investor and contractor portals did nothing.
+// requireRole() reads req.user and answers 401 "Authentication required" when
+// it is absent — and attachEcosystemUser, the only thing that sets it, was
+// written, exported, unit-tested, and then never mounted. Every route behind a
+// requireRole guard in the whole application therefore returned 401 to a
+// correctly signed-in founder, which is exactly what "the founder portal
+// doesn't work" looked like from the outside.
+//
+// It reads the session and nothing else, so mounting it grants no access on its
+// own: a request with no session still arrives at requireRole with no req.user
+// and is still refused.
+{
+    const { attachEcosystemUser } = require("./middleware/roleGuard");
+    app.use(attachEcosystemUser);
+}
+
 // NOTE: the session cookie's `secure` / `sameSite` flags are fixed at
 // configuration time from NODE_ENV (see sessionOptions above). They used to be
 // recomputed per request from `x-forwarded-proto`, which is client-controlled —
@@ -9028,9 +9046,59 @@ const codingSubmissionSchema = new mongoose.Schema({
     status:        { type: String, enum: ["Accepted","Wrong Answer","Runtime Error","Pending"], default: "Pending" },
     passedCases:   { type: Number, default: 0 },
     totalCases:    { type: Number, default: 0 },
+    // Proctoring state at the moment of submission. The modal has always shown
+    // a camera panel and a violation counter; neither was recorded anywhere, so
+    // "Violations: 3" meant nothing to anyone but the student looking at it.
+    proctored:     { type: Boolean, default: false },
+    violations:    { type: Number, default: 0 },
     submittedAt:   { type: Date, default: Date.now }
 });
 const CodingSubmission = mongoose.model("CodingSubmission", codingSubmissionSchema);
+
+// Individual proctoring events, so a coordinator can see when a violation
+// happened rather than only how many there were.
+const proctoringEventSchema = new mongoose.Schema({
+    employeeId: { type: String, required: true, index: true },
+    questionId: { type: mongoose.Schema.Types.ObjectId, ref: "CodingQuestion" },
+    reason:     { type: String, default: "" },
+    violationNumber: { type: Number, default: 1 },
+    at:         { type: Date, default: Date.now }
+});
+const ProctoringEvent = mongoose.model("ProctoringEvent", proctoringEventSchema);
+
+// The modal has always POSTed here. The route did not exist, the fetch 404d,
+// and the client swallowed it in an empty .catch() — so every violation the
+// portal claimed to be watching for was thrown away.
+app.post("/student/proctoring/violation", requireStudentSession, async (req, res) => {
+    try {
+        // Identity from the session. A body-supplied employeeId would let a
+        // student log violations against somebody else.
+        const employeeId = (req.session && req.session.student && req.session.student.employeeId) || "";
+        if (!employeeId) return res.status(401).json({ success: false });
+        const b = req.body || {};
+        await ProctoringEvent.create({
+            employeeId,
+            questionId: mongoose.Types.ObjectId.isValid(b.questionId) ? b.questionId : undefined,
+            reason: String(b.reason || "").slice(0, 200),
+            violationNumber: Number(b.violationNumber) || 1
+        });
+        res.json({ success: true });
+    } catch (e) {
+        console.log("/student/proctoring/violation error:", e && e.message);
+        res.status(500).json({ success: false });
+    }
+});
+
+// What a coordinator sees: the violations logged against one student.
+app.get("/coordinator/proctoring/:employeeId", requireStaffSession, async (req, res) => {
+    try {
+        const events = await ProctoringEvent.find({ employeeId: req.params.employeeId })
+            .sort({ at: -1 }).limit(200).lean();
+        res.json({ success: true, events });
+    } catch (e) {
+        res.status(500).json({ success: false, events: [] });
+    }
+});
 
 // ----- Coordinator CRUD -----
 app.get("/coordinator/coding-questions/:domain", requireStaffSession, async(req,res)=>{
@@ -9200,6 +9268,37 @@ function _hasCmd(cmd){
     } catch(_) { return false; }
 }
 
+/**
+ * The environment a student's program is allowed to see.
+ *
+ * spawn() inherits process.env by default, and this server's process.env holds
+ * MONGODB_URI, SESSION_SECRET, ADMIN_PASSWORD_HASH, the SMTP password and the
+ * payment keys. A three-line program printed every one of them:
+ *
+ *     console.log(process.env)          // JavaScript
+ *     import os; print(os.environ)      // Python
+ *
+ * That is not a hypothetical — it is the whole reason ENABLE_CODE_RUNNER has
+ * to default to off. The child now gets an explicit, minimal environment
+ * instead of inheriting one, so the worst a submitted program can read is the
+ * PATH. HOME points into the throwaway working directory so a runtime that
+ * wants to write a cache does it there and it is deleted with everything else.
+ *
+ * This is still containment, not a sandbox — see the gate below.
+ */
+function _sandboxEnv(cwd){
+    return {
+        PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin",
+        HOME: cwd || os.tmpdir(),
+        TMPDIR: cwd || os.tmpdir(),
+        LANG: "C.UTF-8",
+        LC_ALL: "C.UTF-8",
+        // Java writes preferences and temp files relative to these.
+        USER: "ten-runner",
+        NODE_OPTIONS: ""
+    };
+}
+
 function _runWithTimeout(cmd, args, opts){
     return new Promise((resolve) => {
         const startedAt = Date.now();
@@ -9208,13 +9307,26 @@ function _runWithTimeout(cmd, args, opts){
         let killed = false;
         let child;
         try {
-            child = spawn(cmd, args, { ...opts, shell: false });
+            child = spawn(cmd, args, {
+                ...opts,
+                shell: false,
+                env: _sandboxEnv(opts && opts.cwd),
+                // Own process group, so a program that forks is killed with its
+                // children rather than leaving them running on the host.
+                detached: process.platform !== "win32"
+            });
         } catch(e){
             return resolve({ ok:false, error: String(e.message || e), code: -1, executionTime: 0 });
         }
+        const hardKill = () => {
+            try {
+                if (process.platform !== "win32" && child.pid) process.kill(-child.pid, "SIGKILL");
+                else child.kill("SIGKILL");
+            } catch(_){ try { child.kill("SIGKILL"); } catch(__){} }
+        };
         const timer = setTimeout(() => {
             killed = true;
-            try { child.kill("SIGKILL"); } catch(_){}
+            hardKill();
         }, (opts && opts.timeoutMs) || 5000);
 
         child.stdout.on("data", d => { stdout += d.toString(); if(stdout.length > 200000) stdout = stdout.slice(0, 200000) + "\n…[truncated]"; });
@@ -9299,13 +9411,17 @@ async function runSourceCode({ code, language, stdin }){
 //      but never previously implemented). Default is off.
 //   2. The caller must hold a student session, and is rate-limited per account.
 //
+//   3. The child process gets a scrubbed environment (_sandboxEnv above) and
+//      its own process group, so a submitted program can neither read this
+//      server's secrets out of process.env nor leave forked children behind.
+//
 // This is containment, NOT a sandbox. Before turning ENABLE_CODE_RUNNER on in
 // production, move execution into a network-isolated, memory- and process-
 // capped container. See docs/SECURITY-DO-NOT-EXPOSE.md.
 const CODE_RUNNER_ENABLED = String(process.env.ENABLE_CODE_RUNNER || "").toLowerCase() === "true";
 
 if (!CODE_RUNNER_ENABLED) {
-    console.warn("[code-runner] Disabled (ENABLE_CODE_RUNNER is not 'true'). /code/run and /code/submit will refuse requests.");
+    console.warn("[code-runner] Disabled (ENABLE_CODE_RUNNER is not 'true'). Coding challenges cannot be run or graded. Set ENABLE_CODE_RUNNER=true in .env to switch the section on.");
 }
 
 function requireCodeRunner(req, res, next) {
@@ -9324,6 +9440,12 @@ function requireCodeRunner(req, res, next) {
     }
     next();
 }
+
+// So the modal can say "the runner is off" before a student writes a solution
+// and presses Run, rather than after. Booleans only — no configuration values.
+app.get("/api/code-runner/status", (req, res) => {
+    res.json({ success: true, enabled: CODE_RUNNER_ENABLED });
+});
 
 // Per-account cap: executing code is far more expensive than a normal request.
 const codeRunLimiter = rateLimit({
@@ -9353,7 +9475,7 @@ app.post("/code/run", requireCodeRunner, requireStudentSession, codeRunLimiter, 
 // ==================================================================
 // ============ SHARED CODE EVALUATION FUNCTION ====================
 // ==================================================================
-async function evaluateCodeSubmission({ employeeId, questionId, language, code }) {
+async function evaluateCodeSubmission({ employeeId, questionId, language, code, proctored, violations }) {
     const q = await CodingQuestion.findById(questionId);
     if(!q) return { success:false, message:"Question not found", notFound:true };
     const cases = q.testCases || [];
@@ -9394,7 +9516,9 @@ async function evaluateCodeSubmission({ employeeId, questionId, language, code }
         code,
         status,
         passedCases: passed,
-        totalCases: cases.length
+        totalCases: cases.length,
+        proctored: !!proctored,
+        violations: Number(violations) || 0
     });
 
     // Fire-and-forget GitHub push on Accepted
@@ -9414,11 +9538,16 @@ async function evaluateCodeSubmission({ employeeId, questionId, language, code }
 
 app.post("/code/submit", requireCodeRunner, requireStudentSession, codeRunLimiter, async(req,res)=>{
     try {
-        const { employeeId, questionId, language, code } = req.body || {};
-        if(!employeeId || !questionId || !code){
-            return res.json({ success:false, message:"employeeId, questionId and code are required" });
+        const { questionId, language, code, proctored, violations } = req.body || {};
+        // Identity from the session, never from the body. The body-supplied
+        // employeeId meant a student could file an accepted solution under
+        // another student's ID and take their score.
+        const employeeId = (req.session && req.session.student && req.session.student.employeeId) || "";
+        if(!employeeId) return res.status(401).json({ success:false, message:"Please sign in again." });
+        if(!questionId || !code){
+            return res.json({ success:false, message:"questionId and code are required" });
         }
-        const result = await evaluateCodeSubmission({ employeeId, questionId, language, code });
+        const result = await evaluateCodeSubmission({ employeeId, questionId, language, code, proctored, violations });
         if(result.notFound) return res.status(404).json({ success:false, message:result.message });
         res.json(result);
     } catch(e){
@@ -9427,83 +9556,13 @@ app.post("/code/submit", requireCodeRunner, requireStudentSession, codeRunLimite
     }
 });
 
-// ----- Open in Terminal: create temp workspace -----
-// NOTE: Directories are created under /tmp and will be cleaned by the OS tmpfile cleaner (e.g., systemd-tmpfiles or tmpreaper). This is acceptable for ephemeral coding workspaces.
-app.post("/student/coding/open-terminal", requireCodeRunner, requireStudentSession, async(req,res)=>{
-    try {
-        const { employeeId, questionId, language } = req.body || {};
-        if(!employeeId || !questionId || !language){
-            return res.json({ success:false, message:"employeeId, questionId, and language are required" });
-        }
-        // Sanitize employeeId and questionId to prevent path traversal and shell injection
-        const safeId = String(employeeId).replace(/[^a-zA-Z0-9_-]/g, '');
-        const safeQid = String(questionId).replace(/[^a-zA-Z0-9_-]/g, '');
-        if(!safeId || !safeQid){
-            return res.json({ success:false, message:"Invalid employeeId or questionId" });
-        }
-        const q = await CodingQuestion.findById(safeQid);
-        if(!q) return res.status(404).json({ success:false, message:"Question not found" });
-
-        const dirPath = `/tmp/coding_${safeId}_${safeQid}/`;
-        fs.mkdirSync(dirPath, { recursive: true });
-
-        // Write starter code file
-        const lang = String(language).toLowerCase();
-        let filename, starterCode;
-        if(lang === "javascript" || lang === "js"){
-            filename = "solution.js";
-            starterCode = "// Problem: " + q.title + "\n// Read input from stdin\nconst readline = require('readline');\nconst rl = readline.createInterface({ input: process.stdin });\nlet lines = [];\nrl.on('line', l => lines.push(l));\nrl.on('close', () => {\n  // Your solution here\n});\n";
-        } else if(lang === "python" || lang === "py"){
-            filename = "solution.py";
-            starterCode = "# Problem: " + q.title + "\nimport sys\n\ndef solve():\n    # Your solution here\n    pass\n\nif __name__ == \"__main__\":\n    solve()\n";
-        } else if(lang === "java"){
-            filename = "Solution.java";
-            starterCode = "// Problem: " + q.title + "\nimport java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        // Your solution here\n    }\n}\n";
-        } else if(lang === "cpp" || lang === "c++"){
-            filename = "solution.cpp";
-            starterCode = "#include <iostream>\nusing namespace std;\n// Problem: " + q.title + "\nint main() {\n    // Your solution here\n    return 0;\n}\n";
-        } else {
-            filename = "solution.txt";
-            starterCode = "// Problem: " + q.title + "\n// Unsupported language: " + lang + "\n";
-        }
-        fs.writeFileSync(path.join(dirPath, filename), starterCode, "utf8");
-
-        // Write README.txt
-        let readme = "=== " + q.title + " ===\n\n";
-        readme += "Description:\n" + (q.description || "N/A") + "\n\n";
-        readme += "Input Format:\n" + (q.inputFormat || "N/A") + "\n\n";
-        readme += "Output Format:\n" + (q.outputFormat || "N/A") + "\n\n";
-        readme += "Sample Input:\n" + (q.sampleInput || "N/A") + "\n\n";
-        readme += "Sample Output:\n" + (q.sampleOutput || "N/A") + "\n";
-        fs.writeFileSync(path.join(dirPath, "README.txt"), readme, "utf8");
-
-        // Write submit.sh
-        const port = process.env.PORT || 5000;
-        const submitScript = '#!/bin/bash\n# Submit your solution\n# Usage: ./submit.sh\nFILE="' + filename + '"\nCODE=$(cat "$FILE")\ncurl -s -X POST http://localhost:' + port + '/student/coding/submit-from-terminal \\\n  -H "Content-Type: application/json" \\\n  -d "{\\"employeeId\\":\\"' + safeId + '\\",\\"questionId\\":\\"' + safeQid + '\\",\\"language\\":\\"' + lang + '\\",\\"code\\":$(echo \\"$CODE\\" | jq -Rs .)}"\n';
-        fs.writeFileSync(path.join(dirPath, "submit.sh"), submitScript, { mode: 0o755 });
-
-        res.json({ success:true, workDir:dirPath, launchCmd:"cd " + dirPath + " && cat README.txt" });
-    } catch(e){
-        console.log("/student/coding/open-terminal error:", e && e.message);
-        res.status(500).json({ success:false, message:"Server error: " + (e && e.message) });
-    }
-});
-
-// ----- Submit from terminal -----
-app.post("/student/coding/submit-from-terminal", requireCodeRunner, requireStudentSession, async(req,res)=>{
-    try {
-        const { employeeId, questionId, language, code } = req.body || {};
-        if(!employeeId || !questionId || !code){
-            return res.json({ success:false, message:"employeeId, questionId and code are required" });
-        }
-        const result = await evaluateCodeSubmission({ employeeId, questionId, language, code });
-        if(result.notFound) return res.status(404).json({ success:false, message:result.message });
-        res.json(result);
-    } catch(e){
-        console.log("/student/coding/submit-from-terminal error:", e && e.message);
-        res.status(500).json({ success:false, message:"Server error: " + (e && e.message) });
-    }
-});
+// The "Open in Terminal" workspace used to be created here: a directory under
+// /tmp on the SERVER holding starter code, a README and a submit.sh that
+// curled localhost. The dialog printed that server path to the student and
+// told them to cd into it — instructions no student could follow, because
+// nobody reading the dashboard has a shell on the production host. The button
+// now opens the run console beside the editor, and these two endpoints (which
+// nothing calls) are gone with it.
 
 // Coordinator's read-only view of student coding submissions in their domain
 app.get("/coordinator/coding-submissions/:domain", requireStaffSession, async(req,res)=>{
@@ -9592,6 +9651,87 @@ app.get('/api/public/stats', async (req, res) => {
         // shows stale-but-sane text rather than an empty row.
         res.json({ success: false, domainNames: [], tracks: 6, top: [] });
     }
+});
+
+/**
+ * GET /api/public/domains — every domain we actually offer, with its curriculum.
+ *
+ * public/student-journeys.html carried a hardcoded list of fourteen. It had
+ * drifted: it advertised Vibe Coding, Space Research, Business Analyst and HR
+ * Management — none of which a student can register for — and omitted
+ * Artificial Intelligence, Business Development, HR, Space Intern and Finance,
+ * which they can. Somebody reading that page chose a domain that does not
+ * exist on the form.
+ *
+ * config/domains.js was written to be the one list precisely so this could not
+ * happen, and a page that never read it drifted anyway. Serving it here means
+ * a domain appears on the marketing page if and only if it appears on the
+ * registration form.
+ *
+ * Week titles come from the seeded DomainTask rows, so the curriculum shown is
+ * the curriculum taught. A domain with nothing seeded yet simply shows no
+ * weeks rather than an invented syllabus.
+ */
+let _publicDomainsCache = { at: 0, body: null };
+
+app.get('/api/public/domains', async (req, res) => {
+    try {
+        if (_publicDomainsCache.body && (Date.now() - _publicDomainsCache.at) < PUBLIC_STATS_TTL_MS) {
+            return res.json(_publicDomainsCache.body);
+        }
+        const { DOMAINS } = require("./config/domains");
+        const DomainTask = require("./models/new/DomainTask");
+
+        // One pass over the library rather than a query per domain.
+        const rows = await DomainTask.find({ durationType: "1month" })
+            .select("domain weekNumber taskTitle -_id")
+            .sort({ domain: 1, weekNumber: 1 })
+            .lean();
+
+        const weeksByDomain = {};
+        for (const r of rows) {
+            (weeksByDomain[r.domain] = weeksByDomain[r.domain] || []).push(r.taskTitle);
+        }
+
+        // The task engine files some domains under another name; mirror it so
+        // the page shows a curriculum instead of an empty card.
+        const ALIAS = {
+            "Artificial Intelligence": "Data Science",
+            "HR": "HR Management",
+            "Space Intern": "Space Research",
+            "Business Development": "Business Analyst",
+            "Finance": "Venture Capital"
+        };
+
+        const body = {
+            success: true,
+            domains: DOMAINS.filter(d => d.selectable).map(d => ({
+                name: d.name,
+                code: d.shortCode,
+                weeks: weeksByDomain[d.name] || weeksByDomain[ALIAS[d.name]] || []
+            }))
+        };
+        _publicDomainsCache = { at: Date.now(), body };
+        res.json(body);
+    } catch (err) {
+        console.error('[public-domains]', err.message);
+        // Names still come from config even with no database, so the page can
+        // always draw the grid — it just shows no week list.
+        try {
+            const { DOMAINS } = require("./config/domains");
+            return res.json({
+                success: true,
+                domains: DOMAINS.filter(d => d.selectable)
+                    .map(d => ({ name: d.name, code: d.shortCode, weeks: [] }))
+            });
+        } catch (_) {
+            res.json({ success: false, domains: [] });
+        }
+    }
+});
+
+app.get('/domains', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'domains.html'));
 });
 
 app.get('/verify-document', (req, res) => {
