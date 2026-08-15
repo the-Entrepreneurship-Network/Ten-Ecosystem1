@@ -786,3 +786,61 @@ describe('the hero mark', () => {
     expect(rm).toMatch(/\.wipe \{ transform:scaleX\(1\); animation:none/);
   });
 });
+
+describe('the printed intern count', () => {
+  // eslint-disable-next-line no-new-func
+  const publicInternCount = new Function(
+    'PUBLIC_INTERNS_FLOOR', 'PUBLIC_INTERNS_FLOOR_AT',
+    `${lift('publicInternCount')}; return publicInternCount;`
+  );
+
+  it('starts at the floor and then moves one for one with real signups', () => {
+    const f = publicInternCount(5000, 783);
+    expect(f(783)).toBe(5000);
+    expect(f(784)).toBe(5001);
+    expect(f(785)).toBe(5002);
+    expect(f(1783)).toBe(6000);
+  });
+
+  it('is an offset, not a multiplier — every real signup counts exactly once', () => {
+    const f = publicInternCount(5000, 783);
+    expect(f(900) - f(899)).toBe(1);
+    expect(f(5000) - f(783)).toBe(5000 - 783);
+  });
+
+  it('never prints less than the raw count', () => {
+    // A floor below the real count must not shrink the number.
+    const f = publicInternCount(100, 783);
+    expect(f(783)).toBe(783);
+    expect(f(900)).toBe(900);
+  });
+
+  it('prints the raw count when the floor is switched off', () => {
+    const f = publicInternCount(0, 783);
+    expect(f(783)).toBe(783);
+  });
+
+  it('survives a missing or junk count', () => {
+    const f = publicInternCount(5000, 783);
+    [undefined, null, NaN, 'abc'].forEach(v => expect(f(v)).toBe(4217));
+  });
+
+  it('is the only number the endpoint dresses up', () => {
+    const at = source.indexOf("app.get('/api/public/stats'");
+    const body = source.slice(source.indexOf('const body = {', at), source.indexOf('_publicStatsCache = {', at));
+    expect(body).toContain('interns: publicInternCount(interns)');
+    // domains and tracks are real and checkable; they stay raw.
+    expect(body).toMatch(/domains: SELECTABLE_DOMAIN_NAMES\.length/);
+    expect(body).toMatch(/tracks: 6/);
+    expect(body).not.toMatch(/certificates: publicInternCount/);
+  });
+
+  it('the page falls back to the floor, not to a stale raw figure', () => {
+    expect(page).toMatch(/id="statInterns">5000</);
+  });
+
+  it('both knobs are env-overridable', () => {
+    expect(source).toContain('process.env.PUBLIC_INTERNS_FLOOR');
+    expect(source).toContain('process.env.PUBLIC_INTERNS_FLOOR_AT');
+  });
+});
