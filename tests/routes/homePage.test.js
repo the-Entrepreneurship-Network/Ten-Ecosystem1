@@ -379,8 +379,8 @@ describe('the playful bits are gone', () => {
 
 describe('what TEN gives', () => {
   it('slides on its own and stops under the cursor', () => {
-    expect(page).toContain('animation:slide 48s linear infinite');
-    expect(page).toContain('.cards-vp:hover .cards, .cards-vp:focus-within .cards { animation-play-state:paused; }');
+    expect(page).toMatch(/marquee\(track\.parentElement, track, \d+\)/);
+    expect(page).toContain("viewport.addEventListener('pointerenter', () => { hovering = true; })");
   });
 
   it('doubles the track in code, so a new card is written once', () => {
@@ -401,7 +401,10 @@ describe('what TEN gives', () => {
   });
 
   it('stops moving for a reader who asked for less movement', () => {
-    expect(page).toMatch(/@media \(prefers-reduced-motion:reduce\)\s*\{\s*\.cards \{ animation:none;/);
+    // The drift is skipped, but the strip stays scrollable by hand — which is
+    // better than the old rule, which unwrapped it into a static block.
+    expect(page).toContain("const quiet = matchMedia('(prefers-reduced-motion: reduce)')");
+    expect(page).toContain('if (!hovering && !quiet.matches && Date.now() >= idleUntil)');
   });
 });
 
@@ -490,11 +493,12 @@ describe('the fourteen domain cards', () => {
 describe('top interns and the four steps', () => {
   it('the interns strip slides and pauses', () => {
     expect(page).toContain('<div class="strip-vp"><div class="strip" id="topList">');
-    expect(page).toContain('.strip-vp:hover .strip, .strip-vp:focus-within .strip { animation-play-state:paused; }');
+    expect(page).toMatch(/marquee\(document\.querySelector\("\.strip-vp"\), document\.getElementById\("topList"\), \d+\)/);
   });
 
-  it('the rows are written twice so the loop meets itself', () => {
-    expect(page).toContain('top.map(row).join("") + top.map(row).join("")');
+  it('the rows are written once — the marquee clones only if they overflow', () => {
+    expect(page).toContain('document.getElementById("topList").innerHTML = top.map(row).join("");');
+    expect(page).not.toContain('top.map(row).join("") + top.map(row).join("")');
   });
 
   it('the four steps arrive one after another', () => {
@@ -855,5 +859,78 @@ describe('the printed intern count', () => {
   it('both knobs are env-overridable', () => {
     expect(source).toContain('process.env.PUBLIC_INTERNS_FLOOR');
     expect(source).toContain('process.env.PUBLIC_INTERNS_FLOOR_AT');
+  });
+});
+
+describe('the sideways strips', () => {
+  it('all three go through one helper, none through a CSS animation', () => {
+    expect(page).toContain('function marquee(viewport, track, pxPerSec)');
+    // The old mechanism could not be scrolled by hand — nothing to grab.
+    expect(page).not.toContain('animation:slide');
+    expect(page).not.toContain('@keyframes slide');
+    ['track.parentElement, track', '".strip-vp"', '".contrib-vp"'].forEach((s) => {
+      expect(page).toContain(s);
+    });
+  });
+
+  it('shows a short list once instead of repeating it', () => {
+    // One contributor posted by HR filled the rail four times over.
+    expect(page).not.toMatch(/var reps = list\.length < 5 \? 4 : 2/);
+    expect(page).toContain('document.getElementById("contribList").innerHTML = list.map(card).join("");');
+    expect(page).toMatch(/if \(track\.scrollWidth <= viewport\.clientWidth \+ 2\) \{[\s\S]{0,120}mq-fits/);
+  });
+
+  it('only clones when the content actually overflows', () => {
+    const fn = page.slice(page.indexOf('function marquee('), page.indexOf('/* ---- what TEN gives ---- */'));
+    // The fits-check returns before any clone is made.
+    expect(fn.indexOf('mq-fits')).toBeLessThan(fn.indexOf('cloneNode(true)'));
+    expect(fn).toContain("c.setAttribute('data-mq-clone', '')");
+    // And a rebuild clears the previous run's clones rather than stacking them.
+    expect(fn).toContain("track.querySelectorAll('[data-mq-clone]').forEach(n => n.remove())");
+  });
+
+  it('is a real scroll container, so wheel and touch work', () => {
+    expect(page).toContain('.mq { overflow-x:auto;');
+    expect(page).toMatch(/\.mq\.mq-live \{ cursor:grab; touch-action:pan-x; [^}]*user-select:none/);
+    expect(page).toContain('.mq::-webkit-scrollbar { display:none; }');
+  });
+
+  it('can be dragged, and the drag does not open the card underneath', () => {
+    const fn = page.slice(page.indexOf('function marquee('), page.indexOf('/* ---- what TEN gives ---- */'));
+    expect(fn).toContain('setScroll(startScroll - dx)');
+    expect(fn).toMatch(/if \(moved > DRAG_SLOP\) \{ e\.preventDefault\(\); e\.stopPropagation\(\)/);
+  });
+
+  it('pauses while the reader is scrolling and picks up again after', () => {
+    const fn = page.slice(page.indexOf('function marquee('), page.indexOf('/* ---- what TEN gives ---- */'));
+    expect(fn).toMatch(/const RESUME_AFTER = \d+/);
+    expect(fn).toContain('const still = () => { idleUntil = Date.now() + RESUME_AFTER; };');
+    ['scroll', 'wheel', 'pointerdown'].forEach((ev) => {
+      expect(fn).toContain("viewport.addEventListener('" + ev + "'");
+    });
+  });
+
+  it('wraps in both directions so scrolling back does not hit a wall', () => {
+    const fn = page.slice(page.indexOf('function marquee('), page.indexOf('/* ---- what TEN gives ---- */'));
+    expect(fn).toContain('if (viewport.scrollLeft >= h) setScroll(viewport.scrollLeft - h);');
+    expect(fn).toContain('else if (viewport.scrollLeft <= 0) setScroll(h);');
+  });
+
+  it('keeps pace fixed in pixels per second, not per lap', () => {
+    // A fixed duration made a longer strip scroll faster, so adding one card
+    // silently sped the whole rail up.
+    const fn = page.slice(page.indexOf('function marquee('), page.indexOf('/* ---- what TEN gives ---- */'));
+    expect(fn).toContain('carry += (pxPerSec * dt) / 1000;');
+    // Sub-pixel steps are carried, not rounded away to a standstill.
+    expect(fn).toContain('const step = Math.floor(carry);');
+    // And a backgrounded tab must not lurch forward on return.
+    expect(fn).toContain('Math.min(now - last, 100)');
+  });
+
+  it('gives contributors the quicker pace that was asked for', () => {
+    const speed = (id) => Number(page.match(
+      new RegExp('marquee\\(document\\.querySelector\\("\\.[a-z-]+"\\), document\\.getElementById\\("'
+        + id + '"\\), (\\d+)\\)'))[1]);
+    expect(speed('contribList')).toBeGreaterThan(speed('topList'));
   });
 });
