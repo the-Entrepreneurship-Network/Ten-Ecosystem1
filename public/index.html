@@ -40,7 +40,7 @@
   body.locked { overflow:hidden; }
   .black-heavy { font-weight:900; letter-spacing:-0.04em; }
 
-  /* ---------- preloader: T [domain logo] N + countdown 100 -> 0 ---------- */
+  /* ---------- preloader: T [domain logo] N + countdown 50 -> 0 ---------- */
   #pre { position:fixed; inset:0; background:#000; z-index:100; display:flex; align-items:center; justify-content:center; transition:transform .9s cubic-bezier(.76,0,.24,1); }
   #pre.done { transform:translateY(-101%); }
   .pre-word { display:flex; align-items:center; gap:2vw; font-size:clamp(90px,18vw,260px); font-weight:900; letter-spacing:-0.04em; }
@@ -74,15 +74,10 @@
   #wipe { position:fixed; inset:0; background:#000; z-index:99; transform:scaleY(0); transform-origin:bottom; transition:transform .7s cubic-bezier(.76,0,.24,1); pointer-events:none; }
   #wipe.on { transform:scaleY(1); }
 
-  /* ---------- floating world: cursor dot + drift ---------- */
-  #dot { position:fixed; top:0; left:0; width:12px; height:12px; border-radius:50%; background:#fff; mix-blend-mode:difference; pointer-events:none; z-index:98; transform:translate(-50%,-50%); transition:width .25s,height .25s,opacity .3s; opacity:0; }
-  #dot.big { width:44px; height:44px; }
-  @media (hover:none) { #dot { display:none; } }
   @keyframes floaty { 50% { transform:translateY(-10px); } }
   @keyframes glbob { 50% { transform:translateY(-7px) rotate(3deg); } }
 
-  /* ---------- fixed mark + menu ---------- */
-  .mark { position:fixed; top:18px; left:22px; z-index:40; font-weight:900; font-size:20px; mix-blend-mode:difference; }
+  /* ---------- menu ---------- */
   .menu-btn { position:fixed; top:18px; right:22px; z-index:40; font-size:12px; letter-spacing:.15em; font-weight:700; mix-blend-mode:difference; background:none; border:0; color:#fff; cursor:pointer; }
 
   /* ---------- hero (white, textured wordmark) ---------- */
@@ -97,7 +92,11 @@
   .hero-tag { font-size:15px; line-height:1.35; font-weight:600; }
   .hero-cta { background:#0a0a0a; color:#fff; border:0; border-radius:999px; padding:14px 26px; font-size:12px; letter-spacing:.12em; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:10px; transition:transform .2s; }
   .hero-cta:hover { transform:scale(1.05); }
-  .hero-word { width:100%; margin:24px 0; cursor:pointer; }
+
+  /* ---------- the wordmark ----------
+     "THE ENTREPRENEURSHIP NETWORK" as SVG text clipping a texture image, so
+     the three textures can cross-fade behind the letters. */
+  .hero-word { position:relative; width:100%; margin:24px 0; cursor:pointer; }
   .hero-word svg { width:100%; height:auto; display:block; }
   .hero-strip { display:flex; justify-content:space-between; font-size:12px; font-weight:600; color:#333; padding-bottom:6px; flex-wrap:wrap; gap:8px; }
   .hero-strip a { color:#0a0a0a; text-decoration:none; }
@@ -111,19 +110,32 @@
 
   /* ---------- works cards ---------- */
   .works { background:#0a0a0a; }
-  .cards { display:flex; gap:18px; overflow-x:auto; padding:0 22px 60px; scroll-snap-type:x mandatory; }
-  .cards::-webkit-scrollbar { height:0; }
-  .wcard { min-width:min(420px,82vw); scroll-snap-align:start; border-radius:14px; overflow:hidden; background:#141414; text-decoration:none; color:#fff; animation:floaty 6s ease-in-out infinite; }
-  .wcard:nth-child(2n) { animation-delay:-2s; }
-  .wcard:nth-child(3n) { animation-delay:-4s; }
-  .wcard:hover { box-shadow:0 24px 50px rgba(0,0,0,.55); }
-  .wcard .im { height:240px; background-size:cover; background-position:center; transition:transform .5s; }
+  /* ---------- what TEN gives: a marquee, not a scrollbar ----------
+     Two copies of the same track slide left forever; when the first has moved
+     its full width the pair is back where it started, so it loops seamlessly.
+     Hovering pauses it — a card that slides out from under the cursor as you
+     reach for it is the worst thing a carousel can do. */
+  .cards-vp { overflow:hidden; padding:0 0 60px; -webkit-mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent); mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent); }
+  .cards { display:flex; gap:14px; width:max-content; animation:slide 64s linear infinite; }
+  .cards-vp:hover .cards, .cards-vp:focus-within .cards { animation-play-state:paused; }
+  @keyframes slide { to { transform:translateX(-50%); } }
+  @media (prefers-reduced-motion:reduce) {
+    .cards { animation:none; width:auto; overflow-x:auto; padding:0 22px; }
+    .cards-vp { -webkit-mask-image:none; mask-image:none; }
+  }
+  .wcard { flex:0 0 auto; width:min(300px,74vw); border-radius:14px; overflow:hidden; background:#141414; text-decoration:none; color:#fff; border:1px solid #1c1c1c; transition:border-color .3s, transform .3s; }
+  .wcard:hover { border-color:#3a3a3a; transform:translateY(-4px); }
+  .wcard .im { height:150px; background-size:cover; background-position:center; transition:transform .5s; }
   .wcard:hover .im { transform:scale(1.06); }
-  .wcard .bd { padding:18px; }
-  .wcard h3 { font-size:20px; font-weight:900; margin-bottom:6px; }
-  .wcard p { font-size:13px; color:#aaa; line-height:1.5; }
-  .wcard .tag { display:inline-block; margin-top:12px; font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em; border:1px solid #333; border-radius:999px; padding:6px 12px; color:#ddd; transition:border-color .4s; }
+  .wcard .bd { padding:15px 16px 17px; }
+  .wcard h3 { font-size:16px; font-weight:900; margin-bottom:5px; letter-spacing:-.01em; }
+  .wcard p { font-size:12px; color:#9a9a9a; line-height:1.5; }
+  .wcard .tag { display:inline-block; margin-top:11px; font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.14em; border:1px solid #333; border-radius:999px; padding:5px 11px; color:#ddd; transition:border-color .4s; }
   .wcard:hover .tag { border-color:#888; }
+  /* The closing card: no image, just the invitation. */
+  .wcard.more { background:linear-gradient(150deg,#1a1a1a,#0d0d0d); display:flex; align-items:center; }
+  .wcard.more .bd { padding:26px 22px; }
+  .wcard.more h3 { font-size:19px; }
   .im-resume { display:flex; align-items:center; justify-content:center; background:#1c1c1c; }
   .mini-resume { width:150px; background:#fff; color:#000; border-radius:6px; padding:12px; box-shadow:0 20px 40px rgba(0,0,0,.6); }
   .mini-resume b { font-size:11px; display:block; }
@@ -150,48 +162,144 @@
   .orbit-center b { font-size:clamp(30px,6vw,52px); font-weight:900; letter-spacing:-0.03em; }
   .orbit-center span { font-size:12px; color:#888; letter-spacing:.2em; margin-top:6px; }
   .ring { position:absolute; inset:0; animation:spin 36s linear infinite; }
-  .ring .chip { position:absolute; top:50%; left:50%; width:56px; height:56px; margin:-28px; border-radius:50%; background:#161616; border:1px solid #2a2a2a; display:flex; align-items:center; justify-content:center; font-size:26px; animation:unspin 36s linear infinite; overflow:hidden; }
+  /* Pause while a domain is being looked at, or it slides out from under the
+     cursor mid-hover. */
+  .orbit:hover .ring, .orbit:focus-within .ring { animation-play-state:paused; }
+  .orbit:hover .ring .chip, .orbit:focus-within .ring .chip { animation-play-state:paused; }
+  .ring .chip { position:absolute; top:50%; left:50%; width:56px; height:56px; margin:-28px; border-radius:50%; background:#161616; border:1px solid #2a2a2a; display:flex; align-items:center; justify-content:center; font-size:26px; animation:unspin 36s linear infinite; overflow:hidden; cursor:pointer; transition:border-color .3s; }
   .ring .chip img { width:100%; height:100%; object-fit:cover; mix-blend-mode:screen; }
   @keyframes spin { to { transform:rotate(360deg); } }
   @keyframes unspin { to { transform:rotate(-360deg); } }
 
-  /* ---------- interactive domain rows: 3D logo + features beside ---------- */
-  .dlist { display:flex; flex-direction:column; gap:16px; padding:0 22px 90px; max-width:1000px; }
-  .drow { display:flex; gap:26px; align-items:center; background:#0d0d0d; border:1px solid #1e1e1e; border-radius:18px; padding:20px 26px; transition:border-color .3s; }
-  .drow:hover { border-color:var(--dc,#555); }
-  .drow .logo-box { position:relative; flex:none; width:170px; height:170px; display:flex; align-items:center; justify-content:center; cursor:pointer; perspective:700px; }
-  .drow .logo-box img { width:100%; height:100%; object-fit:cover; border-radius:12px; mix-blend-mode:screen; animation:idledrift 5.5s ease-in-out infinite; }
-  .drow:nth-child(2n) .logo-box img { animation-delay:-2.7s; }
-  .drow .logo-box .gl-fallback { font-size:84px; animation:idledrift 5.5s ease-in-out infinite; }
-  .drow.spin-idle .logo-box img, .drow.spin-idle .gl-fallback { animation:idlespin 13s linear infinite; }
+  /* The hovered domain flies out of the ring into the middle and grows.
+     A separate element rather than transforming the chip in place: the chip
+     lives inside two counter-rotating parents, so anything scaled there
+     inherits the spin. This one sits still in the centre. */
+  .orbit-zoom {
+    position:absolute; left:50%; top:50%; z-index:3; pointer-events:none;
+    display:flex; flex-direction:column; align-items:center; gap:12px;
+    opacity:0; transform:translate(-50%,-50%) scale(.35);
+    transition:opacity .34s cubic-bezier(.2,.9,.3,1), transform .44s cubic-bezier(.2,.9,.3,1);
+  }
+  .orbit-zoom.on { opacity:1; transform:translate(-50%,-50%) scale(1); }
+  .orbit-zoom img { width:132px; height:132px; border-radius:24px; object-fit:cover; mix-blend-mode:screen; box-shadow:0 30px 70px rgba(0,0,0,.7); }
+  .orbit-zoom .gl { font-size:104px; line-height:1; }
+  .orbit-zoom b { font-size:17px; font-weight:900; letter-spacing:-.01em; }
+  /* The "14 DOMAINS" label steps aside while a domain is forward. */
+  .orbit-center { transition:opacity .3s, transform .3s; }
+  .orbit.zoomed .orbit-center { opacity:0; transform:scale(.92); }
+  @media (prefers-reduced-motion:reduce) { .orbit-zoom { transition:opacity .2s; } }
+
+  /* ---------- the fourteen domains ----------
+     Alternating: odd rows lead with the logo, even rows mirror it, and each
+     slides in from the side it leads from. The accent is per-domain, set
+     inline as --dc. */
+  .dlist { display:flex; flex-direction:column; gap:18px; padding:0 22px 90px; max-width:1080px; margin:0 auto; }
+  .drow {
+    display:grid; grid-template-columns:190px 1fr; gap:32px; align-items:center;
+    background:linear-gradient(135deg,#101010,#0b0b0b);
+    border:1px solid #1c1c1c; border-radius:22px; padding:26px 30px;
+    transition:border-color .4s, box-shadow .4s, transform .4s;
+    position:relative; overflow:hidden;
+  }
+  /* A wash of the domain's own colour, off until hover. */
+  .drow::before {
+    content:''; position:absolute; inset:0; pointer-events:none; opacity:0;
+    transition:opacity .45s;
+    background:radial-gradient(520px circle at 12% 50%, color-mix(in srgb, var(--dc) 16%, transparent), transparent 62%);
+  }
+  .drow:hover::before { opacity:1; }
+  .drow:hover { border-color:color-mix(in srgb, var(--dc) 55%, #1c1c1c); box-shadow:0 26px 60px rgba(0,0,0,.5); transform:translateY(-3px); }
+  .drow:nth-child(2n) { grid-template-columns:1fr 190px; }
+  .drow:nth-child(2n) .logo-box { order:2; }
+  .drow:nth-child(2n) .info { order:1; text-align:right; }
+  .drow:nth-child(2n) li { padding-left:0; padding-right:16px; }
+  .drow:nth-child(2n) li::before { left:auto; right:0; }
+  /* The week badge keeps its LEFT margin on mirrored rows too. Flipping it to
+     margin-right put the gap on the far side of the badge and the title ran
+     into it — "Software Engineering" printed over "6 WEEKS". Right-aligning
+     the line does not reverse inline order, so the badge still follows the
+     name and still needs the space before it. */
+
+  /* Slide in from the side the row leads from. */
+  .drow { opacity:0; transform:translateX(-46px); transition:opacity .7s cubic-bezier(.2,.8,.2,1), transform .7s cubic-bezier(.2,.8,.2,1), border-color .4s, box-shadow .4s; }
+  .drow:nth-child(2n) { transform:translateX(46px); }
+  .drow.visible { opacity:1; transform:translateX(0); }
+
+  .drow .logo-box { position:relative; width:190px; height:190px; display:flex; align-items:center; justify-content:center; }
+  /* The "3D": a lit tile with real depth, a soft floor shadow and a slow
+     drift. The source images are photographs, not models — this is what
+     reads as dimensional without one. */
+  .drow .logo-box img {
+    width:100%; height:100%; object-fit:cover; border-radius:20px;
+    mix-blend-mode:screen; animation:idledrift 7s ease-in-out infinite;
+    box-shadow:0 20px 44px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.18);
+    transition:transform .45s cubic-bezier(.2,.9,.3,1), filter .45s;
+  }
+  .drow:hover .logo-box img { transform:scale(1.07) rotate(-1.5deg); filter:brightness(1.12) saturate(1.1); }
+  .drow .logo-box .gl-fallback { font-size:96px; animation:idledrift 7s ease-in-out infinite; }
+  .drow:nth-child(2n) .logo-box img { animation-delay:-3.5s; }
+  /* A ring of the domain's colour behind the tile. */
+  .drow .logo-box::after {
+    content:''; position:absolute; inset:-10px; border-radius:28px; z-index:-1;
+    background:radial-gradient(circle, color-mix(in srgb, var(--dc) 30%, transparent), transparent 68%);
+    opacity:0; transition:opacity .45s;
+  }
+  .drow:hover .logo-box::after { opacity:1; }
+
   .drow .info { min-width:0; }
-  .drow h3 { font-size:21px; font-weight:900; letter-spacing:-0.02em; margin-bottom:8px; }
-  .drow h3 small { font-family:'IBM Plex Mono',monospace; font-weight:400; font-size:10.5px; letter-spacing:.14em; color:#777; margin-left:10px; }
-  .drow ul { list-style:none; display:flex; flex-direction:column; gap:5px; }
-  .drow li { font-size:13.5px; color:#9a9a9a; line-height:1.5; padding-left:16px; position:relative; }
-  .drow li::before { content:''; position:absolute; left:0; top:.55em; width:6px; height:6px; border-radius:2px; background:var(--dc,#555); }
-  @media (max-width:640px) { .drow { flex-direction:column; text-align:center; } .drow li { padding-left:0; } .drow li::before { display:none; } }
-  @keyframes idledrift { 25% { transform:translateY(-8px) rotate(-4deg); } 75% { transform:translateY(5px) rotate(4deg); } }
-  @keyframes idlespin { to { transform:rotate(360deg); } }
-  /* click moves */
-  .anim-spin { animation:tspin .9s cubic-bezier(.3,1.4,.4,1) !important; }
-  @keyframes tspin { to { transform:rotate(720deg); } }
-  .anim-bounce { animation:tbounce .7s !important; }
-  @keyframes tbounce { 30% { transform:translateY(-22px) scale(1.15);} 60% { transform:translateY(4px) scale(.95);} 100% { transform:none; } }
-  .anim-wobble { animation:twobble .8s !important; }
-  @keyframes twobble { 25% { transform:rotate(18deg);} 50% { transform:rotate(-14deg);} 75% { transform:rotate(8deg);} }
-  .anim-flip { animation:tflip .8s !important; }
-  @keyframes tflip { to { transform:rotateY(360deg); } }
-  .anim-collide { animation:tcollide .8s cubic-bezier(.3,1.6,.4,1) !important; }
-  @keyframes tcollide { 30% { transform:scale(1.5); filter:brightness(1.6);} 45% { transform:scale(.7);} 65% { transform:scale(1.2);} }
-  .anim-launch { animation:tlaunch 1.4s cubic-bezier(.4,0,.2,1) !important; }
-  @keyframes tlaunch { 40% { transform:translate(30px,-240px) rotate(12deg); opacity:0; } 41% { transform:translate(-20px,140px); opacity:0; } 100% { transform:none; opacity:1; } }
-  .anim-glow { animation:tglow 1s !important; }
-  @keyframes tglow { 50% { filter:brightness(1.9) saturate(1.4); transform:scale(1.07); } }
-  /* java steam wisps rise on click */
-  .steam { position:absolute; bottom:70%; left:50%; width:10px; height:10px; border-radius:50%; background:rgba(255,255,255,.85); filter:blur(6px); opacity:0; pointer-events:none; }
-  .steam.go { animation:steamup 1.3s ease-out forwards; }
-  @keyframes steamup { 0% { opacity:.9; transform:translate(-50%,0) scale(1); } 100% { opacity:0; transform:translate(-50%,-120px) scale(2.6); } }
+  .drow h3 { font-size:25px; font-weight:900; letter-spacing:-0.025em; margin-bottom:4px; }
+  .drow h3 small { font-family:'IBM Plex Mono',monospace; font-weight:400; font-size:10px; letter-spacing:.18em; color:var(--dc,#777); margin-left:12px; vertical-align:middle; text-transform:uppercase; }
+  .drow .wk { font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.16em; color:#6d6d6d; margin-bottom:14px; text-transform:uppercase; }
+  .drow ul { list-style:none; display:flex; flex-direction:column; gap:8px; }
+  .drow li { font-size:14px; color:#a8a8a8; line-height:1.55; padding-left:16px; position:relative; }
+  .drow li::before { content:''; position:absolute; left:0; top:.58em; width:6px; height:6px; border-radius:2px; background:var(--dc,#555); }
+  .drow .go { display:inline-block; margin-top:18px; font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.16em; color:#ddd; text-decoration:none; border:1px solid #2c2c2c; border-radius:999px; padding:8px 16px; transition:border-color .35s, color .35s; }
+  .drow .go:hover { border-color:var(--dc,#888); color:#fff; }
+
+  @media (max-width:760px) {
+    .drow, .drow:nth-child(2n) { grid-template-columns:1fr; text-align:left; gap:20px; padding:22px; }
+    .drow:nth-child(2n) .logo-box { order:0; }
+    .drow:nth-child(2n) .info { order:1; text-align:left; }
+    .drow:nth-child(2n) li { padding-left:16px; padding-right:0; }
+    .drow:nth-child(2n) li::before { left:0; right:auto; }
+    .drow:nth-child(2n) h3 small { margin-left:12px; margin-right:0; }
+    .drow .logo-box { width:120px; height:120px; }
+  }
+  @keyframes idledrift { 25% { transform:translateY(-7px) rotate(-2deg); } 75% { transform:translateY(5px) rotate(2deg); } }
+
+  /* ---------- top interns: an auto-sliding strip ---------- */
+  .strip-vp { overflow:hidden; -webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent); mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent); }
+  .strip { display:flex; gap:10px; width:max-content; animation:slide 38s linear infinite; }
+  .strip-vp:hover .strip, .strip-vp:focus-within .strip { animation-play-state:paused; }
+  .strip .row { flex:0 0 auto; width:min(320px,80vw); display:flex; align-items:center; gap:14px; background:#0d0d0d; border:1px solid #1e1e1e; border-radius:14px; padding:14px 18px; }
+  @media (prefers-reduced-motion:reduce) { .strip { animation:none; width:auto; flex-wrap:wrap; } .strip-vp { -webkit-mask-image:none; mask-image:none; } }
+
+  /* ---------- how it works: four steps on one line ---------- */
+  .steps { display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); margin-bottom:60px; position:relative; }
+  /* The line that joins them. Drawn behind, and only where four fit in a row. */
+  .steps::before {
+    content:''; position:absolute; left:8%; right:8%; top:42px; height:1px; z-index:0;
+    background:linear-gradient(90deg,transparent,#2a2a2a 12%,#2a2a2a 88%,transparent);
+  }
+  @media (max-width:860px) { .steps::before { display:none; } }
+  .step { position:relative; z-index:1; background:#0d0d0d; border:1px solid #1e1e1e; border-radius:16px; padding:22px; }
+  .step .n { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:50%; background:#141414; border:1px solid #2a2a2a; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#aaa; margin-bottom:12px; }
+  .step b { display:block; font-weight:900; font-size:16px; margin-bottom:6px; }
+  .step p { font-size:13px; color:#999; line-height:1.5; }
+  /* One after another, not all at once. */
+  .step.reveal { transition-delay:calc(var(--i,0) * 130ms); }
+
+  /* ---------- contributors ---------- */
+  .contrib-vp { overflow:hidden; -webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent); mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent); }
+  .contrib { display:flex; gap:12px; width:max-content; animation:slide 46s linear infinite; }
+  .contrib-vp:hover .contrib { animation-play-state:paused; }
+  .ccard { flex:0 0 auto; width:min(260px,74vw); display:flex; align-items:center; gap:13px; background:#0c0c0c; border:1px solid #1a1a1a; border-radius:14px; padding:13px 15px; }
+  .ccard img { width:44px; height:44px; border-radius:50%; object-fit:cover; flex:none; background:#1a1a1a; }
+  .ccard .nm { font-size:13.5px; font-weight:800; }
+  .ccard .dm { font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.14em; color:#f5c542; text-transform:uppercase; margin-top:2px; }
+  .ccard .ct { font-size:11.5px; color:#8a8a8a; line-height:1.45; margin-top:4px; }
+  @media (prefers-reduced-motion:reduce) { .contrib { animation:none; width:auto; flex-wrap:wrap; } .contrib-vp { -webkit-mask-image:none; mask-image:none; } }
 
   /* ---------- people ---------- */
   .people { background:#000; padding:110px 22px; display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:30px; max-width:1100px; margin:0 auto; }
@@ -219,6 +327,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="TEN">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <!-- Without this the browser asks for /favicon.ico, which does not exist,
+       and every visit logs a 404. -->
+  <link rel="icon" href="/icons/icon-192.png" type="image/png">
 </head>
 <body class="locked">
 
@@ -243,8 +354,6 @@
 </div>
 <div id="wipe"></div>
 
-<div id="dot"></div>
-<span class="mark">T'</span>
 <button class="menu-btn" onclick="document.getElementById('works').scrollIntoView({behavior:'smooth'})">MENU ::</button>
 
 <!-- hero -->
@@ -289,45 +398,70 @@
 
 <!-- works: what TEN gives -->
 <section class="works" id="works">
-  <div class="sec-head"><h2>What TEN gives</h2><span>( 07 )</span></div>
-  <div class="cards">
-    <a class="wcard" href="academics.html">
-      <div class="im" style="background-image:url('img/textures/foil.webp')"></div>
-      <div class="bd"><h3>Academics Portal</h3><p>The front door. Cinematic journeys into everything TEN teaches — not a course, a career.</p><span class="tag">ENTER →</span></div>
-    </a>
-    <a class="wcard" href="student-portal/">
-      <div class="im" style="background-image:url('assets/home/student-desk.jpg')"></div>
-      <div class="bd"><h3>TEN Career Studio</h3><p>Courses, weekly modules, AI-evaluated assignments, quizzes, coins and a certificate at the end.</p><span class="tag">BUILT FOR THE CURIOUS →</span></div>
-    </a>
-    <a class="wcard" href="job-portal/">
-      <div class="im" style="background-image:url('assets/home/job-catch.jpg')"></div>
-      <div class="bd"><h3>Job Portal</h3><p>Upload a resume and an AI agent hunts live openings from LinkedIn, Google, Upwork, Fiverr and more.</p><span class="tag">CATCH YOURS →</span></div>
-    </a>
-    <a class="wcard" href="resume-portal/">
-      <div class="im im-resume"><img src="assets/resume-portal/resume3d.png" alt="3D resume" style="height:200px; filter:drop-shadow(0 0 30px rgba(255,196,94,.5));"></div>
-      <div class="bd"><h3>Resume Portal</h3><p>The forge. AI checks, tailors or builds an ATS-proof resume no filter can reject.</p><span class="tag">FORGE IT →</span></div>
-    </a>
-    <a class="wcard" href="/domains">
-      <div class="im im-domains" style="gap:8px; padding:16px;">
-        <img src="assets/domains/logo/python.jpg" alt="" style="width:52px;height:52px;border-radius:12px;object-fit:cover;"><img src="assets/domains/logo/java.jpg" alt="" style="width:52px;height:52px;border-radius:12px;object-fit:cover;"><img src="assets/domains/logo/web.jpg" alt="" style="width:52px;height:52px;border-radius:12px;object-fit:cover;"><img src="assets/domains/logo/mern.jpg" alt="" style="width:52px;height:52px;border-radius:12px;object-fit:cover;"><img src="assets/domains/logo/flutter.jpg" alt="" style="width:52px;height:52px;border-radius:12px;object-fit:cover;"><img src="assets/domains/logo/softeng.jpg" alt="" style="width:52px;height:52px;border-radius:12px;object-fit:cover;"><img src="assets/domains/logo/vibe.jpg" alt="" style="width:52px;height:52px;border-radius:12px;object-fit:cover;"><img src="assets/domains/logo/datasci.jpg" alt="" style="width:52px;height:52px;border-radius:12px;object-fit:cover;"><img src="assets/domains/logo/devops.jpg" alt="" style="width:52px;height:52px;border-radius:12px;object-fit:cover;"><img src="assets/domains/logo/cyber.jpg" alt="" style="width:52px;height:52px;border-radius:12px;object-fit:cover;"><img src="assets/domains/logo/space.jpg" alt="" style="width:52px;height:52px;border-radius:12px;object-fit:cover;"><img src="assets/domains/logo/business.jpg" alt="" style="width:52px;height:52px;border-radius:12px;object-fit:cover;"><img src="assets/domains/logo/venture.jpg" alt="" style="width:52px;height:52px;border-radius:12px;object-fit:cover;"><img src="assets/domains/logo/hr.jpg" alt="" style="width:52px;height:52px;border-radius:12px;object-fit:cover;">
-      </div>
-      <div class="bd"><h3>Fourteen Domains</h3><p>Python to Space Research, Cyber Security to Venture Capital — every journey has its own track.</p><span class="tag">CHOOSE YOURS →</span></div>
-    </a>
-    <a class="wcard" href="/domains">
-      <div class="im" style="background-image:url('assets/student-portal/laptop-screen.jpg')"></div>
-      <div class="bd"><h3>Courses &amp; Modules</h3><p>Dedicated courses and modules for all fourteen domains — 45-day curricula, videos unlock quizzes, tasks earn coins.</p><span class="tag">SIX WEEKS →</span></div>
-    </a>
-    <a class="wcard" href="student-portal/">
-      <div class="im" style="background-image:url('assets/student-portal/cyber-man.jpg')"></div>
-      <div class="bd"><h3>Hackathons &amp; Ideathons</h3><p>Build under pressure — TEN conducts hackathons and ideathons where your projects meet real judges.</p><span class="tag">COMPETE →</span></div>
-    </a>
+  <div class="sec-head"><h2>What TEN gives</h2><span>( twelve ways in )</span></div>
+  <!-- The track is written once and duplicated by JS, so a new card is added
+       in one place and the loop still meets itself. -->
+  <div class="cards-vp">
+    <div class="cards" id="giveTrack">
+      <a class="wcard" href="academics.html">
+        <div class="im" style="background-image:url('img/textures/foil.webp')"></div>
+        <div class="bd"><h3>Academics Portal</h3><p>The front door. Cinematic journeys into everything TEN teaches.</p><span class="tag">ENTER &rarr;</span></div>
+      </a>
+      <a class="wcard" href="student-portal/">
+        <div class="im" style="background-image:url('assets/home/student-desk.jpg')"></div>
+        <div class="bd"><h3>TEN Career Studio</h3><p>Courses, modules, AI-evaluated assignments, coins and a certificate.</p><span class="tag">BUILT FOR THE CURIOUS &rarr;</span></div>
+      </a>
+      <a class="wcard" href="job-portal/">
+        <div class="im" style="background-image:url('assets/home/job-catch.jpg')"></div>
+        <div class="bd"><h3>Job Portal</h3><p>Upload a resume; an AI agent hunts live openings across the web.</p><span class="tag">CATCH YOURS &rarr;</span></div>
+      </a>
+      <a class="wcard" href="resume-portal/">
+        <div class="im im-resume"><img src="assets/resume-portal/resume3d.png" alt="" style="height:118px; filter:drop-shadow(0 0 24px rgba(255,196,94,.5));"></div>
+        <div class="bd"><h3>Resume Portal</h3><p>The forge. AI builds an ATS-proof resume no filter can reject.</p><span class="tag">FORGE IT &rarr;</span></div>
+      </a>
+      <a class="wcard" href="/domains">
+        <div class="im im-domains"></div>
+        <div class="bd"><h3>Fourteen Domains</h3><p>Python to Space Research, Cyber Security to Venture Capital.</p><span class="tag">CHOOSE YOURS &rarr;</span></div>
+      </a>
+      <a class="wcard" href="/domains">
+        <div class="im" style="background-image:url('assets/student-portal/laptop-screen.jpg')"></div>
+        <div class="bd"><h3>Courses &amp; Modules</h3><p>Six-week curricula per domain. Videos unlock quizzes; tasks earn coins.</p><span class="tag">SIX WEEKS &rarr;</span></div>
+      </a>
+      <a class="wcard" href="register.html">
+        <div class="im" style="background-image:url('assets/student-portal/cyber-man.jpg')"></div>
+        <div class="bd"><h3>Hackathons &amp; Ideathons</h3><p>Build under pressure, in front of real judges.</p><span class="tag">COMPETE &rarr;</span></div>
+      </a>
+      <a class="wcard" href="/founder-os">
+        <div class="im" style="background-image:url('assets/home/job-catch.jpg')"></div>
+        <div class="bd"><h3>Hire from TEN</h3><p>Founders: post a role, search interns by their actual work record, run a pipeline.</p><span class="tag">FOUNDER OS &rarr;</span></div>
+      </a>
+      <a class="wcard" href="register.html?role=mentor">
+        <div class="im" style="background-image:url('assets/home/student-desk.jpg')"></div>
+        <div class="bd"><h3>Become a Mentor</h3><p>Give an hour. Guide a founder or an intern through the thing you already solved.</p><span class="tag">APPLY &rarr;</span></div>
+      </a>
+      <a class="wcard" href="register.html">
+        <div class="im" style="background-image:url('img/textures/wool.webp')"></div>
+        <div class="bd"><h3>Become a Contractor</h3><p>Take paid project work from startups inside the ecosystem.</p><span class="tag">COMING SOON &rarr;</span></div>
+      </a>
+      <a class="wcard" href="verify.html">
+        <div class="im" style="background-image:url('img/textures/balloon.webp')"></div>
+        <div class="bd"><h3>Verify a Certificate</h3><p>Employers: check any TEN document by its number, in one field.</p><span class="tag">CHECK IT &rarr;</span></div>
+      </a>
+      <a class="wcard more" href="register.html">
+        <div class="bd">
+          <h3>And TEN gives more</h3>
+          <p>Attendance that counts, a coordinator who answers, coins you can spend, an offer letter, a letter of recommendation, and a certificate anyone can verify.</p>
+          <span class="tag">START HERE &rarr;</span>
+        </div>
+      </a>
+    </div>
   </div>
 </section>
 
 <!-- film -->
 <section class="film">
   <video id="film" autoplay muted loop playsinline src="assets/student-portal/hero-walk.mp4"></video>
-  <button class="sound" onclick="const v=document.getElementById('film'); v.muted=!v.muted; this.textContent=v.muted?'SOUND ◦':'SOUND ●'">SOUND ◦</button>
+  <button class="sound" id="soundBtn" aria-pressed="false">SOUND &#9702;</button>
   <p class="cap">a student, working — the ecosystem orbiting around her</p>
 </section>
 
@@ -340,14 +474,21 @@
 <section class="orbit-wrap">
   <div class="orbit">
     <div class="orbit-center"><b>14 DOMAINS</b><span>ONE ECOSYSTEM</span></div>
+    <div class="orbit-zoom" id="orbitZoom" aria-hidden="true"></div>
     <div class="ring" id="ring"></div>
   </div>
 </section>
 
 <!-- interactive domain rows: 3D logo + its features -->
 <section>
-  <div class="sec-head"><h2>Touch a domain</h2><span>( every logo answers )</span></div>
+  <div class="sec-head"><h2>Fourteen domains</h2><span>( pick the one you want to be good at )</span></div>
   <div class="dlist" id="dlist"></div>
+</section>
+
+<!-- contributors: HR fills this from the portal; hidden while empty -->
+<section id="contribWrap" style="display:none; background:#050505; padding:70px 0 80px;">
+  <div class="sec-head" style="padding:0 22px 22px"><h2 style="font-size:clamp(20px,3.2vw,30px)">Built with</h2><span>( the people who shaped it )</span></div>
+  <div class="contrib-vp"><div class="contrib" id="contribList"></div></div>
 </section>
 
 <!-- people -->
@@ -418,7 +559,7 @@
   <!-- top interns this season -->
   <div id="topWrap" style="display:none; margin-bottom:60px;">
     <div class="sec-head" style="padding:0 0 20px"><h2 style="font-size:clamp(22px,3.6vw,34px)">Top interns right now</h2><span>( by coins earned )</span></div>
-    <div id="topList" style="display:grid; gap:10px;"></div>
+    <div class="strip-vp"><div class="strip" id="topList"></div></div>
   </div>
 
   <!-- employers: they were only ever findable in the footer -->
@@ -436,27 +577,11 @@
 
   <!-- how the internship works -->
   <div class="sec-head" style="padding:0 0 20px"><h2 style="font-size:clamp(22px,3.6vw,34px)">How the internship works</h2><span>( four steps )</span></div>
-  <div style="display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); margin-bottom:60px;">
-    <div class="reveal" style="background:#0d0d0d; border:1px solid #1e1e1e; border-radius:16px; padding:22px;">
-      <p style="font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.2em; color:#888;">STEP 1</p>
-      <p style="font-weight:900; font-size:16px; margin:8px 0 6px;">Register</p>
-      <p style="font-size:13px; color:#999; line-height:1.5;">Choose your domain and how long you want to intern for.</p>
-    </div>
-    <div class="reveal" style="background:#0d0d0d; border:1px solid #1e1e1e; border-radius:16px; padding:22px;">
-      <p style="font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.2em; color:#888;">STEP 2</p>
-      <p style="font-weight:900; font-size:16px; margin:8px 0 6px;">Get weekly tasks</p>
-      <p style="font-size:13px; color:#999; line-height:1.5;">Real work in your domain, released week by week.</p>
-    </div>
-    <div class="reveal" style="background:#0d0d0d; border:1px solid #1e1e1e; border-radius:16px; padding:22px;">
-      <p style="font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.2em; color:#888;">STEP 3</p>
-      <p style="font-weight:900; font-size:16px; margin:8px 0 6px;">Attend and submit</p>
-      <p style="font-size:13px; color:#999; line-height:1.5;">Mark attendance daily and submit your work for review by a coordinator.</p>
-    </div>
-    <div class="reveal" style="background:#0d0d0d; border:1px solid #1e1e1e; border-radius:16px; padding:22px;">
-      <p style="font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.2em; color:#888;">STEP 4</p>
-      <p style="font-weight:900; font-size:16px; margin:8px 0 6px;">Earn your certificate</p>
-      <p style="font-size:13px; color:#999; line-height:1.5;">Meet 75% attendance and finish your tasks to receive verifiable documents.</p>
-    </div>
+  <div class="steps">
+    <div class="step reveal" style="--i:0"><span class="n">1</span><b>Register</b><p>Choose your domain and how long you want to intern for.</p></div>
+    <div class="step reveal" style="--i:1"><span class="n">2</span><b>Get weekly tasks</b><p>Real work in your domain, released week by week.</p></div>
+    <div class="step reveal" style="--i:2"><span class="n">3</span><b>Attend and submit</b><p>Mark attendance daily and submit your work for a coordinator to review.</p></div>
+    <div class="step reveal" style="--i:3"><span class="n">4</span><b>Earn your certificate</b><p>Meet 75% attendance and finish your tasks to receive verifiable documents.</p></div>
   </div>
 
   <!-- verify a TEN certificate -->
@@ -614,8 +739,11 @@ const DOMAINS = [
   ["Venture Capital","💼","#D4AF37"],["HR Management","👥","#f472b6"],
 ];
 
-/* ---- preloader: countdown 100 -> 0, the 3D domain logos cycle inside T_N ---- */
 const DOMAIN_IMGS = ['python.jpg','java.jpg','web.jpg','mern.jpg','flutter.jpg','softeng.jpg','vibe.jpg','datasci.jpg','devops.jpg','cyber.jpg','space.jpg','business.jpg','venture.jpg','hr.jpg'].map(f => 'logo/' + f);
+
+/* ---- opening curtain ----
+   A 3-second countdown from 50 with a domain logo cycling inside "T_N",
+   then the E lands and completes the word. */
 (() => {
   const count = document.getElementById('preCount');
   const slot = document.getElementById('preSlot');
@@ -1006,9 +1134,34 @@ window.__heroField = { prox: 0, dx: 0, dy: 0, pulse: 0 };
   }
 })();
 
+/* ---- what TEN gives: fill the domain tile, then double the track ----
+   The marquee loops by translating -50%, which only meets itself if the track
+   holds the cards twice. Cloning here rather than in the markup means a new
+   card is written once. */
+(() => {
+  const track = document.getElementById('giveTrack');
+  if (!track) return;
+
+  const tile = track.querySelector('.im-domains');
+  if (tile) {
+    tile.innerHTML = DOMAIN_IMGS.slice(0, 9).map(f =>
+      '<img src="assets/domains/' + f + '" alt="" onerror="this.remove()" ' +
+      'style="width:38px;height:38px;border-radius:9px;object-fit:cover;">').join('');
+  }
+
+  // The clones are decoration; a screen reader should read the list once.
+  Array.from(track.children).forEach(card => {
+    const c = card.cloneNode(true);
+    c.setAttribute('aria-hidden', 'true');
+    c.setAttribute('tabindex', '-1');
+    track.appendChild(c);
+  });
+})();
+
 /* ---- hero textures crossfade + click cycles ---- */
 (() => {
   const texs = [0,1,2].map(i => document.getElementById('tex' + i));
+  if (texs.some(t => !t)) return;
   let cur = 0;
   const show = (i) => { texs.forEach((t,j) => t.setAttribute('opacity', j === i ? '1' : '0')); cur = i; };
   setInterval(() => show((cur + 1) % 3), 4200);
@@ -1028,152 +1181,274 @@ window.__heroField = { prox: 0, dx: 0, dy: 0, pulse: 0 };
   }, { passive:true });
 })();
 
-/* ---- orbit ring ---- */
+/* ---- orbit ring: hover a domain and it comes to the middle ---- */
 (() => {
   const ring = document.getElementById('ring');
-  DOMAINS.forEach(([n,g], i) => {
+  const zoom = document.getElementById('orbitZoom');
+  const orbit = document.querySelector('.orbit');
+  if (!ring) return;
+
+  const show = (i) => {
+    const [name, glyph] = DOMAINS[i];
+    zoom.innerHTML =
+      '<img src="assets/domains/' + DOMAIN_IMGS[i] + '" alt="" ' +
+      'onerror="this.outerHTML=\'<span class=&quot;gl&quot;>' + glyph + '</span>\'">' +
+      '<b>' + name + '</b>';
+    zoom.classList.add('on');
+    orbit.classList.add('zoomed');
+  };
+  const hide = () => { zoom.classList.remove('on'); orbit.classList.remove('zoomed'); };
+
+  DOMAINS.forEach(([n, g], i) => {
     const a = (i / DOMAINS.length) * 2 * Math.PI;
-    const chip = document.createElement('div');
+    const chip = document.createElement('a');
     chip.className = 'chip';
+    chip.href = '/domains';
+    chip.setAttribute('aria-label', n);
     chip.innerHTML = `<img src="assets/domains/${DOMAIN_IMGS[i]}" alt="" onerror="this.parentNode.textContent='${g}'">`;
     chip.title = n;
     const R = 46; /* % of half-size */
-    chip.style.transform = '';
     chip.style.top = (50 + R * Math.sin(a)) + '%';
     chip.style.left = (50 + R * Math.cos(a)) + '%';
+    // Keyboard gets the same behaviour as the pointer, since it is a link now.
+    chip.addEventListener('mouseenter', () => show(i));
+    chip.addEventListener('focus', () => show(i));
+    chip.addEventListener('mouseleave', hide);
+    chip.addEventListener('blur', hide);
     ring.appendChild(chip);
   });
+  orbit.addEventListener('mouseleave', hide);
 })();
 
-/* ---- domain rows: 3D logo (idle-animating) + features; each logo answers
-       its click with its own move (java steams, space launches, python spins) ---- */
+/* ---- the film's SOUND button ----
+   The video has no audio track, so unmuting it did nothing. Rather than ship
+   a music file — a licence to get wrong and 3MB to download — the ambience is
+   synthesised: two detuned sine drones a fifth apart under a lowpass, with a
+   slow tremolo. It fades in, fades out, and costs nothing to serve.
+
+   To use a real track instead: put the file in public/assets/home/ and set
+   AMBIENT_URL to its path. Left empty on purpose — probing for an optional
+   file logs a 404 in every visitor's console on every click, and a constant
+   the owner edits once costs nobody anything. */
+const AMBIENT_URL = '';
+(() => {
+  const btn = document.getElementById('soundBtn');
+  if (!btn) return;
+  const ON = 'SOUND ●', OFF = 'SOUND ◦';
+
+  let audio = null, ctx = null, gain = null, nodes = [];
+
+  const buildTones = () => {
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    gain = ctx.createGain();
+    gain.gain.value = 0;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 620;      // takes the edge off; leaves warmth
+    filter.Q.value = 0.6;
+
+    // A perfect fifth, slightly detuned, is consonant enough to ignore and
+    // rich enough not to sound like a test tone.
+    [110, 164.81, 220].forEach((f, i) => {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = f;
+      o.detune.value = (i - 1) * 4;
+      const g = ctx.createGain();
+      g.gain.value = [0.5, 0.34, 0.16][i];
+      o.connect(g).connect(filter);
+      o.start();
+      nodes.push(o);
+    });
+
+    // Slow breathing, so it is not a flat pad.
+    const lfo = ctx.createOscillator();
+    const lfoGain = ctx.createGain();
+    lfo.frequency.value = 0.07;
+    lfoGain.gain.value = 0.035;
+    lfo.connect(lfoGain).connect(gain.gain);
+    lfo.start();
+    nodes.push(lfo);
+
+    filter.connect(gain).connect(ctx.destination);
+  };
+
+  const fade = (to, secs) => {
+    const t = ctx.currentTime;
+    gain.gain.cancelScheduledValues(t);
+    gain.gain.setValueAtTime(gain.gain.value, t);
+    gain.gain.linearRampToValueAtTime(to, t + secs);
+  };
+
+  let on = false;
+  const setLabel = () => { btn.textContent = on ? ON : OFF; btn.setAttribute('aria-pressed', String(on)); };
+
+  btn.addEventListener('click', async () => {
+    on = !on;
+    setLabel();
+
+    // A real track, if the owner has set one.
+    if (audio === null && AMBIENT_URL) {
+      audio = new Audio(AMBIENT_URL);
+      audio.loop = true;
+      audio.volume = 0;
+      audio.addEventListener('error', () => { audio = false; }, { once: true });
+    }
+    if (audio) {
+      try {
+        if (on) { await audio.play(); rampEl(audio, 0.35, 1400); }
+        else { rampEl(audio, 0, 900, () => audio.pause()); }
+        return;
+      } catch (e) { audio = false; }   // no file, or blocked — fall through
+    }
+
+    if (!ctx) buildTones();
+    if (ctx.state === 'suspended') await ctx.resume();
+    fade(on ? 0.09 : 0, on ? 2.2 : 1.2);
+  });
+
+  /** Fade an <audio> element, since it has no gain node. */
+  function rampEl(el, to, ms, done) {
+    const from = el.volume, t0 = performance.now();
+    (function step(t) {
+      const k = Math.min(1, (t - t0) / ms);
+      el.volume = from + (to - from) * k;
+      if (k < 1) requestAnimationFrame(step); else if (done) done();
+    })(t0);
+  }
+
+  setLabel();
+})();
+
+/* ---- the fourteen domains ----
+   Was: a row per domain whose logo you had to CLICK to make it spin, steam or
+   launch. "CLICK THE LOGO" was printed beside every heading. It is a company
+   page, not a showreel of what the developer can make a div do.
+
+   Now the rows carry the work — what you learn, in order — and each slides in
+   from the side it leads from as you reach it. */
 (() => {
   const list = document.getElementById('dlist');
-  /* [name, glyph, color, imgFile, clickAnim, spinIdle, features x3] */
+  /* [name, glyph, colour, image, weeks, features x3] */
   const ROWS = [
-    ['Python Development','🐍','#3776AB','python.jpg','anim-spin',true,['OOP, data structures and file handling from week one','APIs, databases and a Flask REST backend','Two projects — a mini build and a final shipped app']],
-    ['Java Development','☕','#f89820','java.jpg','steam',false,['Core Java, OOP and collections mastered in order','JDBC, Spring and CRUD apps with real auth','Two mini projects before the final one']],
-    ['Web Development','🌐','#e34f26','web.jpg','anim-spin',true,['HTML, CSS and JavaScript with the DOM for real','Responsive builds deployed live on the web','React with hooks, router and API wiring']],
-    ['MERN Stack','⚛️','#61DAFB','mern.jpg','anim-bounce',false,['MongoDB, Express, React, Node — the full stack','Auth, state, file upload and sockets','Tested mini project, then the final product']],
-    ['Flutter','💠','#45D1FD','flutter.jpg','anim-collide',false,['Widgets, layouts and navigation that feel native','API calls, Firebase and local storage','Animations and push notifications shipped']],
-    ['Software Engineering','⚙️','#8b5cf6','softeng.jpg','anim-spin',true,['System design, patterns and clean code habits','Testing, database design and version control','API design and DevOps to close the loop']],
-    ['Vibe Coding','✨','#f0abfc','vibe.jpg','anim-glow',false,['AI-first coding — build with prompts and taste','No-code, APIs and automation into an AI web app','MVP to deployment with analytics on top']],
-    ['Data Science','📊','#10b981','datasci.jpg','anim-flip',false,['Python for data — cleaning, EDA, visualisation','Statistics into machine learning, classification','Feature engineering and NLP for the final project']],
-    ['DevOps with AWS','☁️','#FF9900','devops.jpg','anim-wobble',false,['Linux, shell and Git as daily tools','CI/CD pipelines, Docker and Kubernetes','AWS and Terraform driving the final deploy']],
-    ['Cyber Security','🛡️','#22d3ee','cyber.jpg','anim-wobble',false,['Networking, Linux and the OWASP top ten','Web security, crypto and ethical hacking','Malware, incident response and a CTF finale']],
-    ['Space Research','🚀','#a78bfa','space.jpg','anim-launch',false,['Orbital mechanics, spacecraft and satellite data','Astrophysics, mission planning and robotics','A research proposal capstone of your own']],
-    ['Business Analyst','📈','#f59e0b','business.jpg','anim-bounce',false,['Business models, stakeholders and market research','Excel, dashboards and financial modelling','Strategy built and presented like the job']],
-    ['Venture Capital','💼','#D4AF37','venture.jpg','anim-flip',false,['The VC lifecycle — sourcing to exits','Valuation, due diligence and term sheets','A mock investment committee to finish']],
-    ['HR Management','👥','#f472b6','hr.jpg','anim-wobble',false,['Recruitment, JDs and interviewing done right','Onboarding, engagement and performance analytics','Labour law, training and a full HR manual']],
+    ['Python Development','🐍','#3776AB','python.jpg','6 weeks',['OOP, data structures and file handling from week one','APIs, databases and a Flask REST backend','Two projects — a mini build and a final shipped app']],
+    ['Java Development','☕','#f89820','java.jpg','6 weeks',['Core Java, OOP and collections mastered in order','JDBC, Spring and CRUD apps with real auth','Two mini projects before the final one']],
+    ['Web Development','🌐','#e34f26','web.jpg','6 weeks',['HTML, CSS and JavaScript with the DOM for real','Responsive builds deployed live on the web','React with hooks, router and API wiring']],
+    ['MERN Stack','⚛️','#61DAFB','mern.jpg','6 weeks',['MongoDB, Express, React, Node — the full stack','Auth, state, file upload and sockets','Tested mini project, then the final product']],
+    ['Flutter','💠','#45D1FD','flutter.jpg','6 weeks',['Widgets, layouts and navigation that feel native','API calls, Firebase and local storage','Animations and push notifications shipped']],
+    ['Software Engineering','⚙️','#8b5cf6','softeng.jpg','6 weeks',['System design, patterns and clean code habits','Testing, database design and version control','API design and DevOps to close the loop']],
+    ['Vibe Coding','✨','#f0abfc','vibe.jpg','6 weeks',['AI-first coding — build with prompts and taste','No-code, APIs and automation into an AI web app','MVP to deployment with analytics on top']],
+    ['Data Science','📊','#10b981','datasci.jpg','6 weeks',['Python for data — cleaning, EDA, visualisation','Statistics into machine learning, classification','Feature engineering and NLP for the final project']],
+    ['DevOps with AWS','☁️','#FF9900','devops.jpg','6 weeks',['Linux, shell and Git as daily tools','CI/CD pipelines, Docker and Kubernetes','AWS and Terraform driving the final deploy']],
+    ['Cyber Security','🛡️','#22d3ee','cyber.jpg','6 weeks',['Networking, Linux and the OWASP top ten','Web security, crypto and ethical hacking','Malware, incident response and a CTF finale']],
+    ['Space Research','🚀','#a78bfa','space.jpg','6 weeks',['Orbital mechanics, spacecraft and satellite data','Astrophysics, mission planning and robotics','A research proposal capstone of your own']],
+    ['Business Analyst','📈','#f59e0b','business.jpg','6 weeks',['Business models, stakeholders and market research','Excel, dashboards and financial modelling','Strategy built and presented like the job']],
+    ['Venture Capital','💼','#D4AF37','venture.jpg','6 weeks',['The VC lifecycle — sourcing to exits','Valuation, due diligence and term sheets','A mock investment committee to finish']],
+    ['HR Management','👥','#f472b6','hr.jpg','6 weeks',['Recruitment, JDs and interviewing done right','Onboarding, engagement and performance analytics','Labour law, training and a full HR manual']],
   ];
-  ROWS.forEach(([n,g,c,img,anim,spinIdle,feats]) => {
-    const row = document.createElement('div');
-    row.className = 'drow' + (spinIdle ? ' spin-idle' : '');
+  const esc = (v) => String(v == null ? '' : v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+  ROWS.forEach(([n,g,c,img,weeks,feats]) => {
+    const row = document.createElement('article');
+    row.className = 'drow';
     row.style.setProperty('--dc', c);
-    row.innerHTML = `
-      <div class="logo-box">
-        <img src="assets/domains/char/${img}" alt="${n}" onerror="this.outerHTML='<span class=&quot;gl-fallback&quot;>${g}</span>'">
-      </div>
-      <div class="info">
-        <h3>${n}<small>CLICK THE LOGO</small></h3>
-        <ul>${feats.map(f => `<li>${f}</li>`).join('')}</ul>
-      </div>`;
-    const box = row.querySelector('.logo-box');
-    box.addEventListener('click', () => {
-      const el = box.querySelector('img, .gl-fallback');
-      if (!el) return;
-      if (anim === 'steam') {
-        for (let i = 0; i < 4; i++) {
-          const s = document.createElement('span');
-          s.className = 'steam';
-          s.style.left = (38 + i * 9) + '%';
-          s.style.animationDelay = (i * 0.14) + 's';
-          box.appendChild(s);
-          requestAnimationFrame(() => s.classList.add('go'));
-          setTimeout(() => s.remove(), 1600 + i * 140);
-        }
-        el.classList.remove('anim-bounce'); void el.offsetWidth; el.classList.add('anim-bounce');
-        setTimeout(() => el.classList.remove('anim-bounce'), 800);
-      } else {
-        el.classList.remove(anim); void el.offsetWidth; el.classList.add(anim);
-        setTimeout(() => el.classList.remove(anim), 1500);
-      }
-    });
+    row.innerHTML =
+      '<div class="logo-box">' +
+        '<img src="assets/domains/char/' + img + '" alt="" loading="lazy" ' +
+        'onerror="this.outerHTML=\'<span class=&quot;gl-fallback&quot;>' + g + '</span>\'">' +
+      '</div>' +
+      '<div class="info">' +
+        '<h3>' + esc(n) + '<small>' + esc(weeks) + '</small></h3>' +
+        '<p class="wk">Week by week, ending in a project you can show</p>' +
+        '<ul>' + feats.map(f => '<li>' + esc(f) + '</li>').join('') + '</ul>' +
+        '<a class="go" href="/domains">See the weeks &rarr;</a>' +
+      '</div>';
     list.appendChild(row);
   });
 })();
 
-/* ---- noth.in reveal: everything below the hero rises in on scroll ---- */
+/* ---- reveal on scroll ---------------------------------------------------
+   This is why "How the internship works" and "Top interns right now" showed a
+   heading and nothing else.
+
+   The observer used to collect ONE fixed list of selectors, once, at load, and
+   watch only those. But the four step cards, the employer band and the verify
+   panel carry class="reveal" in the markup and were not in that list — so
+   nothing ever observed them and they sat at opacity:0 permanently. Worse, the
+   top-intern rows and the testimonials are BUILT LATER from fetch responses
+   with class="reveal" on them; by then the list had long since been taken.
+
+   So: observe every .reveal there is, and keep watching for new ones. Exposed
+   as window.revealScan() as well, so code that injects markup can say so
+   without waiting for the mutation to be noticed.
+   ----------------------------------------------------------------------- */
 (() => {
-  const targets = document.querySelectorAll('.sec-head, .wcard, .drow, .people > div, #faq details, .foot-cta, #join a[href]');
-  targets.forEach(el => el.classList.add('reveal'));
   const io = new IntersectionObserver(entries => {
     entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); } });
   }, { threshold: 0.12 });
-  targets.forEach(el => io.observe(el));
+
+  const seen = new WeakSet();
+  const watch = (el) => {
+    if (seen.has(el)) return;
+    seen.add(el);
+    // Already on screen when it appeared (injected below the fold is the
+    // common case, but injected INTO view happens too) — show it now rather
+    // than wait for a scroll that may never come.
+    const r = el.getBoundingClientRect();
+    if (r.top < innerHeight && r.bottom > 0) el.classList.add('visible');
+    else io.observe(el);
+  };
+
+  /* .wcard is deliberately NOT in this list any more.
+     The cards live in a marquee that is wider than the window and translates
+     sideways forever, so the ones past the right edge never intersect — give
+     them .reveal and half the loop stays at opacity:0 permanently. Anything
+     that moves horizontally reveals itself; this system is for vertical
+     arrival. The section heading fading in covers the entrance. */
+  const scan = () => {
+    document.querySelectorAll('.sec-head, .drow, .people > div, #faq details, .foot-cta, #join a[href]')
+      .forEach(el => el.classList.add('reveal'));
+    document.querySelectorAll('.reveal:not(.visible)').forEach(watch);
+  };
+  window.revealScan = scan;
+
+  scan();
+  new MutationObserver(scan).observe(document.body, { childList: true, subtree: true });
 })();
 
-/* ---- footer flee letters ---- */
+/* ---- footer wordmark ----
+   The letters used to scatter away from the cursor on hover. Cute once, and it
+   made the company name unreadable at exactly the moment somebody was reading
+   it. It is a name now, not a toy. */
 (() => {
   const flee = document.getElementById('flee');
-  'TEN TECH'.split('').forEach(ch => {
-    const s = document.createElement('span');
-    s.textContent = ch === ' ' ? ' ' : ch;
-    s.addEventListener('mouseenter', () => {
-      s.style.transform = `translate(${(Math.random()-0.5)*60}px, ${(Math.random()-0.5)*40}px) rotate(${(Math.random()-0.5)*30}deg)`;
-      setTimeout(() => s.style.transform = '', 600);
-    });
-    flee.appendChild(s);
-  });
+  if (flee) flee.textContent = 'TEN';
 })();
 
-/* ---- floating world: cursor dot follows, everything drifts with the mouse ---- */
+/* ---- the wordmark answers the kinetic grid ----
+   The cursor dot that used to follow the pointer across the whole page is
+   gone; so is the parallax drift on the orbit and the footer. What is left is
+   the one piece that earns itself: the hero wordmark reading the same field
+   the grid behind it is drawn from.
+
+   window.__heroField is written once per frame by the kinetic grid from the
+   smoothed cursor position and the live ripples — the same influence radius
+   and the same (1-t)^2 falloff the grid nodes use. So the name is pushed away
+   by the cursor exactly as the lattice behind it is, and every ripple that
+   crosses it makes it swell and brighten as the wave passes through. */
 (() => {
-  const dot = document.getElementById('dot');
-  const hero = document.getElementById('heroWord');
-  const flee = document.getElementById('flee');
-  const orbit = document.querySelector('.orbit');
-  let tx = innerWidth/2, ty = innerHeight/2, x = tx, y = ty;
-  addEventListener('mousemove', (e) => {
-    tx = e.clientX; ty = e.clientY;
-    dot.style.opacity = 1;
-    const mx = (e.clientX / innerWidth - 0.5), my = (e.clientY / innerHeight - 0.5);
-    // The wordmark's transform is no longer set here — the kinetic grid owns
-    // it now (see below), and two handlers writing the same style property
-    // means whichever ran last wins and the other looks broken.
-    if (orbit) orbit.style.transform = `translate(${mx*-16}px, ${my*-10}px)`;
-    if (flee) flee.style.transform = `translate(${mx*14}px, 0)`;
-    dot.classList.toggle('big', !!e.target.closest('a,button,.dtile,.hero-word'));
-  }, { passive:true });
+  const word = document.getElementById('heroWord');
+  if (!word || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   (function follow() {
-    x += (tx - x) * 0.16; y += (ty - y) * 0.16;
-    dot.style.left = x + 'px'; dot.style.top = y + 'px';
-
-    /*
-     * TEN TECH answers the same field the grid does.
-     *
-     * window.__heroField is written once per frame by the kinetic grid from
-     * the smoothed cursor position and the live ripples — the same influence
-     * radius and the same (1-t)^2 falloff the grid nodes use. So the word is
-     * pushed away by the cursor exactly as the lattice behind it is, and every
-     * ripple that crosses it makes it swell and brighten as the wave passes.
-     *
-     * Read here rather than written there because this loop already owns the
-     * element's transform. One writer, one property.
-     */
-    if (hero) {
-      const f = window.__heroField || { prox: 0, dx: 0, dy: 0, pulse: 0 };
-      const lift = 1 + f.prox * 0.028 + f.pulse * 0.035;
-      hero.style.transform =
-        'translate(' + f.dx.toFixed(2) + 'px,' + f.dy.toFixed(2) + 'px) scale(' + lift.toFixed(4) + ')';
-      // The wordmark is a texture-filled SVG; brightening it as the wave goes
-      // through is what makes the word feel struck by the ripple rather than
-      // merely nudged by it.
-      hero.style.filter = f.pulse > 0.01
-        ? 'contrast(' + (1 + f.pulse * 0.5).toFixed(3) + ') brightness(' + (1 + f.pulse * 0.12).toFixed(3) + ')'
-        : '';
-    }
-
+    const f = window.__heroField || { prox: 0, dx: 0, dy: 0, pulse: 0 };
+    const lift = 1 + f.prox * 0.028 + f.pulse * 0.035;
+    word.style.transform =
+      'translate(' + f.dx.toFixed(2) + 'px,' + f.dy.toFixed(2) + 'px) scale(' + lift.toFixed(4) + ')';
+    word.style.filter = f.pulse > 0.01
+      ? 'contrast(' + (1 + f.pulse * 0.5).toFixed(3) + ') brightness(' + (1 + f.pulse * 0.12).toFixed(3) + ')'
+      : '';
     requestAnimationFrame(follow);
   })();
 })();
@@ -1272,16 +1547,21 @@ function journey() {
 
     var top = d.top || [];
     if (!top.length) return;
-    document.getElementById("topList").innerHTML = top.map(function (t, i) {
-      return '<div class="reveal" style="display:flex; align-items:center; gap:14px; background:#0d0d0d;' +
-        ' border:1px solid #1e1e1e; border-radius:14px; padding:14px 18px;">' +
+    // No class="reveal" on these rows any more. They are injected after load,
+    // and the marquee needs them at full opacity from the first frame — the
+    // wrapper's own heading does the fading in.
+    var row = function (t, i) {
+      return '<div class="row">' +
         '<span style="font-family:\'IBM Plex Mono\',monospace; font-size:12px; color:' +
           (i === 0 ? "#f5c542" : "#666") + '; min-width:26px;">' + String(i + 1).padStart(2, "0") + '</span>' +
-        '<span style="font-weight:800; font-size:14.5px; flex:1; min-width:0;">' + esc(t.name) + '</span>' +
-        '<span style="font-size:12px; color:#888;">' + esc(t.domain) + '</span>' +
-        '<span style="font-family:\'IBM Plex Mono\',monospace; font-size:12.5px; color:#f5c542;">' +
+        '<span style="font-weight:800; font-size:14px; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + esc(t.name) + '</span>' +
+        '<span style="font-size:11.5px; color:#888; white-space:nowrap;">' + esc(t.domain) + '</span>' +
+        '<span style="font-family:\'IBM Plex Mono\',monospace; font-size:12px; color:#f5c542;">' +
           esc(t.coins) + '</span></div>';
-    }).join("");
+    };
+    // Written twice so the -50% loop meets itself, exactly like the card
+    // marquee above. A single short list would jump at the seam.
+    document.getElementById("topList").innerHTML = top.map(row).join("") + top.map(row).join("");
     document.getElementById("topWrap").style.display = "block";
   }).catch(function () { /* the page keeps its defaults */ });
 
@@ -1303,6 +1583,31 @@ function journey() {
     }).join("");
     document.getElementById("voicesWrap").style.display = "block";
   }).catch(function () { /* no testimonials section, rather than an empty one */ });
+
+  /* ---- contributors ----
+     HR posts these from the portal. The strip stays hidden until there is at
+     least one — an empty "Built with" rail says nobody built it. */
+  fetch("/api/public/contributors").then(function (r) { return r.json(); }).then(function (d) {
+    var list = (d && d.contributors) || [];
+    if (!Array.isArray(list) || !list.length) return;
+    var card = function (c) {
+      return '<div class="ccard">' +
+        (c.photoUrl
+          ? '<img src="' + esc(c.photoUrl) + '" alt="" loading="lazy" onerror="this.remove()">'
+          : '<img src="/icons/icon-192.png" alt="" loading="lazy">') +
+        '<div style="min-width:0;">' +
+          '<div class="nm">' + esc(c.name) + '</div>' +
+          (c.domain ? '<div class="dm">' + esc(c.domain) + '</div>' : '') +
+          (c.contribution ? '<div class="ct">' + esc(c.contribution) + '</div>' : '') +
+        '</div></div>';
+    };
+    // Doubled for the seamless loop, and again if the list is short enough
+    // that one pass would leave a visible gap mid-track.
+    var html = list.map(card).join("");
+    var reps = list.length < 5 ? 4 : 2;
+    document.getElementById("contribList").innerHTML = new Array(reps).fill(html).join("");
+    document.getElementById("contribWrap").style.display = "block";
+  }).catch(function () { /* the strip simply does not appear */ });
 })();
 </script>
 </body>

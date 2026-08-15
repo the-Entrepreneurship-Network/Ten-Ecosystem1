@@ -9730,6 +9730,49 @@ app.get('/api/public/domains', async (req, res) => {
     }
 });
 
+/**
+ * GET /api/public/contributors — the "Built with" strip on the home page.
+ *
+ * Published rows only, and only the four fields the strip draws. The rows are
+ * already a copy HR made deliberately (see models/Contributor.js), but the
+ * projection is stated here too: this is an unauthenticated endpoint, and a
+ * field added to the model must not appear on the public page by default.
+ */
+let _contribCache = { at: 0, body: null };
+const CONTRIB_TTL_MS = 5 * 60 * 1000;
+
+app.get('/api/public/contributors', async (req, res) => {
+    try {
+        if (_contribCache.body && Date.now() - _contribCache.at < CONTRIB_TTL_MS) {
+            return res.json(_contribCache.body);
+        }
+        const Contributor = require('./models/Contributor');
+        const rows = await Contributor.find({ published: true },
+            'name domain contribution photoUrl order')
+            .sort({ order: 1, createdAt: -1 }).limit(60).lean();
+
+        const body = {
+            success: true,
+            contributors: rows.map(r => ({
+                name: r.name,
+                domain: r.domain || '',
+                contribution: r.contribution || '',
+                photoUrl: r.photoUrl || ''
+            }))
+        };
+        _contribCache = { at: Date.now(), body };
+        res.json(body);
+    } catch (err) {
+        console.error('[public-contributors]', err.message);
+        // An empty list, not a 500: the page hides the strip and nothing else
+        // on the home page is affected.
+        res.json({ success: true, contributors: [] });
+    }
+});
+
+/** HR posting a contributor must clear the cache, or it takes 5 minutes to show. */
+app.set('clearContributorCache', () => { _contribCache = { at: 0, body: null }; });
+
 app.get('/domains', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'domains.html'));
 });
