@@ -453,7 +453,14 @@ function buildResume(detailsInput) {
  */
 function renderResumePdf(text, opts = {}) {
   const PDFDocument = require('pdfkit');
-  const doc = new PDFDocument({ size: 'A4', margins: { top: 54, bottom: 54, left: 54, right: 54 } });
+  const doc = new PDFDocument({
+    size: 'A4',
+    margins: { top: 54, bottom: 54, left: 54, right: 54 },
+    /* Compression off makes the text greppable in the raw bytes, which is how
+       the tests prove the page is real text rather than a picture of one
+       without depending on a PDF parser. Students get the compressed file. */
+    compress: opts.compress !== false,
+  });
 
   const lines = String(text || '').split(/\r?\n/);
   const HEADINGS = new Set(['SUMMARY', 'SKILLS', 'EXPERIENCE', 'PROJECTS', 'EDUCATION', 'CERTIFICATIONS']);
@@ -509,9 +516,9 @@ function renderResumePdf(text, opts = {}) {
 }
 
 /** The finished PDF as a Buffer, so it can be scored before it is sent. */
-function resumePdfBuffer(text) {
+function resumePdfBuffer(text, opts = {}) {
   return new Promise((resolve, reject) => {
-    const doc = renderResumePdf(text);
+    const doc = renderResumePdf(text, opts);
     const chunks = [];
     doc.on('data', (c) => chunks.push(c));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
