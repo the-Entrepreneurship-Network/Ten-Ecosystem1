@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { id: 'student', label: 'STUDENT' },
   { id: 'job', label: 'JOB' },
   { id: 'resume', label: 'RESUME' },
+  { id: 'hack', label: 'HACK' },
 ];
 
 /* ---------- samurai legacy hero ---------- */

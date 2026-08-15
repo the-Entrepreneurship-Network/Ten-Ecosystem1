@@ -43,6 +43,12 @@ export default function Navbar() {
             >
               RESUME
             </a>
+            <a
+              href="/hackathon-portal/"
+              className="rounded-full border border-white/50 px-4 py-1.5 text-xs font-medium text-white transition-all hover:border-white hover:bg-white/10"
+            >
+              HACK
+            </a>
           </div>
           <div className="hidden items-center gap-8 md:flex">
             {NAV_ITEMS.map((link) => (
