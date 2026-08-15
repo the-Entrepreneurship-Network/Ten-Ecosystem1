@@ -22,10 +22,10 @@ export default function Navbar() {
             href={routeHref('')}
             onClick={navClick('')}
             className="flex items-center gap-2 text-lg font-semibold text-white"
-            aria-label="TEN Student Portal home"
+            aria-label="TEN Career Studio home"
           >
             <GraduationCap className="h-6 w-6" aria-hidden />
-            TEN Student Portal
+            TEN Career Studio
           </a>
           <div className="flex items-center gap-2">
             <span className="rounded-full bg-white px-4 py-1.5 text-xs font-bold text-black">

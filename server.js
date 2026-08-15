@@ -2146,6 +2146,23 @@ const registerLimiter = rateLimit({
     }
 });
 
+/*
+ * Password-reset ceiling on the source address.
+ *
+ * The per-account cap ("2 a day") does nothing against one attacker walking a
+ * list of 800 student addresses — each account is under its own limit while
+ * the mail quota drains and the enumeration proceeds. This is the ceiling on
+ * the caller, independent of which account they name.
+ */
+const forgotPasswordLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: false,
+    message: { success: false, message: "Too many password reset requests from this network. Please wait." }
+});
+
 // General API rate limit — applied broadly to /api but the project has very
 // few endpoints under /api today, so we also expose it for any future use.
 const apiLimiter = rateLimit({
@@ -2164,7 +2181,7 @@ const upload = multer({
 
 // ================= MAIL =================
 
-const { createEmailTransporter } = require("./utils/mailer");
+const { createEmailTransporter, EMAIL_FROM } = require("./utils/mailer");
 const transporter = createEmailTransporter();
 
 const smtpUser = process.env.SMTP_USER || process.env.SES_SMTP_USER || process.env.EMAIL_USER || process.env.EMAIL_US;
@@ -8111,28 +8128,60 @@ async function _findUserByRoleEmail(role, email){
     return null;
 }
 
-app.post("/auth/forgot-password", async(req,res)=>{
+/*
+ * Forgot password.
+ *
+ * What used to be here, and why it is gone:
+ *
+ *   1. ACCOUNT TAKEOVER. When the address was not found, the handler fell back
+ *      to `Student.findOne({}).sort({createdAt:-1})` — the most recently
+ *      registered real student — wrote a reset token onto THAT student's
+ *      account, and mailed the working link to whatever address the caller
+ *      typed. Anyone could take over a real account in two minutes. It was
+ *      commented "fallback for local testing"; it was running in production.
+ *
+ *   2. UNAUTHENTICATED WRITES. With no students in the collection at all, it
+ *      created one from the request body — an open door for junk rows from an
+ *      endpoint that requires no login.
+ *
+ * A missing account now simply sends nothing. The response is identical either
+ * way, because a different answer for a real address turns this endpoint into
+ * a membership oracle for every address someone cares to try.
+ */
+app.post("/auth/forgot-password", forgotPasswordLimiter, async(req,res)=>{
+    // Said once, returned on every path — success, unknown address, or capped.
+    const uniformResponse = () => res.json({
+        success: true,
+        message: "If that account exists, a password reset link has been sent to your email inbox."
+    });
+
     try{
         const { email, role } = req.body || {};
         const validRoles = ["student","coordinator","hr"];
         const targetRole = validRoles.includes(role) ? role : "student";
         const cleanEmail = String(email || "").trim().toLowerCase();
 
-        let user = await _findUserByRoleEmail(targetRole, cleanEmail);
+        if (!cleanEmail) return uniformResponse();
 
-        // Fallback for local testing if user does not exist in DB yet
-        if (!user) {
-            user = await Student.findOne({}).sort({ createdAt: -1 });
-            if (!user) {
-                user = new Student({
-                    email: cleanEmail || "teststudent@example.com",
-                    name: "Test Student",
-                    employeeId: "TEN-STU-000001",
-                    domain: "Web Development"
-                });
-                try { await user.save(); } catch(_) {}
+        const user = await _findUserByRoleEmail(targetRole, cleanEmail);
+        if (!user) return uniformResponse();
+
+        /*
+         * Two links a day per account. Counted from the mail history rather
+         * than a new field, so a restart cannot reset someone's allowance.
+         */
+        try {
+            const since = new Date(Date.now() - 24*60*60*1000);
+            const sentToday = await MailHistory.countDocuments({
+                recipientEmail: cleanEmail,
+                mailType: "password_reset",
+                sentAt: { $gte: since }
+            });
+            if (sentToday >= 2) {
+                console.log(`[forgot-password] daily cap reached for ${cleanEmail}`);
+                return uniformResponse();
             }
-        }
+        } catch (_) { /* history unavailable — do not block a legitimate reset */ }
 
         const token = crypto.randomBytes(32).toString("hex");
         const expiry = new Date(Date.now() + 60*60*1000);
@@ -8183,10 +8232,7 @@ app.post("/auth/forgot-password", async(req,res)=>{
             }
         }catch(e){ console.log("forgot-password mail error:", e && e.message); }
 
-        return res.json({
-            success: true,
-            message: "If that account exists, a password reset link has been sent to your email inbox."
-        });
+        return uniformResponse();
     }catch(e){ console.log(e); res.status(500).json({ success:false, message:"Server error" }); }
 });
 
