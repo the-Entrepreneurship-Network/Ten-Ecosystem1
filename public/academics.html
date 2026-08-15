@@ -137,8 +137,6 @@ a{color:inherit}
 .nh-head{position:sticky;top:0;z-index:9;display:flex;justify-content:space-between;align-items:flex-start;
   padding:26px 34px;mix-blend-mode:difference;color:#fff;pointer-events:none}
 .nh-head .mark{font-weight:900;font-size:22px;letter-spacing:-.02em}
-.nh-head .menu{pointer-events:auto;background:none;border:0;color:inherit;font:inherit;font-weight:800;
-  font-size:12px;letter-spacing:.14em;cursor:pointer}
 .nh-hero{min-height:100vh;display:flex;flex-direction:column;justify-content:space-between;padding:0 34px 16px;position:relative}
 .nh-tag{font-size:clamp(18px,2vw,26px);line-height:1.25;font-weight:600;max-width:460px;padding-top:8px}
 .nh-pill{display:inline-flex;align-items:center;gap:10px;margin-top:26px;padding:14px 26px;border:1.5px solid currentColor;
@@ -179,9 +177,6 @@ a{color:inherit}
 .nh-foot .pills{display:flex;gap:14px;margin:34px 0 7vh;flex-wrap:wrap}
 .nh-foot .nh-pill{color:#fff}
 .nh-foot .nh-pill:hover{background:#fff;color:#0a0a0a;border-color:#fff}
-.nh-links{position:absolute;right:34px;top:14vh;font-size:clamp(18px,1.8vw,26px);font-weight:600;line-height:1.5}
-.nh-links a{display:block;color:#fff;text-decoration:none}
-.nh-links a:hover{opacity:.7}
 .nh-flee{font-weight:900;font-size:clamp(60px,12vw,185px);letter-spacing:-.02em;line-height:.95;
   display:flex;justify-content:space-between;margin-top:5vh;user-select:none}
 .nh-flee span{display:inline-block;transition:transform .6s cubic-bezier(.16,1,.3,1)}
@@ -202,7 +197,7 @@ a{color:inherit}
 <body>
 
 <div id="noth" aria-label="Academics preview">
-  <div class="nh-head"><span class="mark">A'</span><button class="menu" id="nhEnter" type="button">ENTER PORTAL ::</button></div>
+  <div class="nh-head"><span class="mark">A'</span></div>
 
   <section class="nh-hero">
     <div>
@@ -225,7 +220,11 @@ a{color:inherit}
     </div>
     <div class="nh-strip">
       <span>The Academics arm of The Entrepreneurship Network</span>
-      <span><a href="student-portal/">STUDENT</a> / <a href="job-portal/">JOBS</a> / <a href="resume-portal/">RESUME</a> / <a href="hackathon-portal/">HACK</a></span>
+      <!-- Only the Career Studio. The Job, Resume and Hackathon portals are
+           reached from the home page, which is where a visitor chooses between
+           products; repeating them here made Academics look like a second
+           front door to the same four things. -->
+      <span><a href="student-portal/">TEN CAREER STUDIO</a></span>
     </div>
   </section>
 
@@ -236,12 +235,6 @@ a{color:inherit}
     <div class="pills">
       <a class="nh-pill" href="student-portal/">START LEARNING <span>&rarr;</span></a>
       <a class="nh-pill" href="payment.html">PAY &amp; UNLOCK <span>@</span></a>
-    </div>
-    <div class="nh-links">
-      <a href="student-portal/">TEN Career Studio</a>
-      <a href="job-portal/">Job Portal</a>
-      <a href="resume-portal/">Resume Portal</a>
-      <a href="hackathon-portal/">Hackathon Portal</a>
     </div>
     <div class="nh-flee" id="nhFlee" aria-label="ACADEMICS"></div>
     <div class="nh-credits">
@@ -325,9 +318,10 @@ a{color:inherit}
     var reduced = false;
     try { reduced = window.matchMedia('(prefers-reduced-motion:reduce)').matches; } catch (_e) {}
 
-    function leave() { root.classList.add('gone'); document.body.style.overflow = ''; }
+    /* #noth is position:fixed with its own overflow-y, so the preview scrolls
+       itself and the body behind it stays locked. There is no dismiss control
+       — the ENTER PORTAL button was removed. */
     document.body.style.overflow = 'hidden';
-    $('nhEnter').addEventListener('click', leave);
 
     var DOMS = [
       { slug: 'python',  name: 'Python Development',  cap: 'Django & FastAPI, marked on reasoning',
