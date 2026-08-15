@@ -1,3 +1,10 @@
+/**
+ * SUPERSEDED — DO NOT WIRE UP. Safe to delete.
+ *
+ * The only thing that referenced this was routes/paymentRoutes.js, which is
+ * itself unmounted and unsafe to mount (no auth on initiate). See the note at
+ * the top of that file for the two live payment paths.
+ */
 const PaymentService = require("../services/payment/PaymentService");
 const PaymentSetuProvider = require("../services/payment/PaymentSetuProvider");
 const PaymentWebhookService = require("../services/payment/PaymentWebhookService");

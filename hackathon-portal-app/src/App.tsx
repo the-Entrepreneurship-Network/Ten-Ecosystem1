@@ -3,6 +3,7 @@ import { motion, useScroll, useTransform } from 'framer-motion';
 import { FadeIn } from './components/FadeIn';
 import MatrixRain from './components/MatrixRain';
 import GlitterStream from './components/GlitterStream';
+import EventBoard from './components/EventBoard';
 
 const ASSETS = '/assets/hackathon';
 const inter = { fontFamily: "'Inter', sans-serif" };
@@ -80,7 +81,7 @@ function RainHero() {
 
         <div className="mt-9 flex flex-wrap gap-3">
           <a
-            href="#arena"
+            href="#events"
             className="rounded-full bg-emerald-400 px-8 py-4 text-[14px] font-bold text-black transition-transform hover:scale-[1.04]"
             style={inter}
           >
@@ -213,7 +214,9 @@ function Arena() {
         </FadeIn>
         <FadeIn delay={0.24}>
           <div className="mt-10 flex flex-wrap justify-center gap-3">
-            <a href="/register.html" className="rounded-full bg-emerald-400 px-10 py-5 text-[15px] font-bold text-black transition-transform hover:scale-[1.04]" style={inter}>
+            {/* Was /register.html — the generic internship signup. Somebody
+                clicking REGISTER MY TEAM got an internship application. */}
+            <a href="#events" className="rounded-full bg-emerald-400 px-10 py-5 text-[15px] font-bold text-black transition-transform hover:scale-[1.04]" style={inter}>
               REGISTER MY TEAM →
             </a>
             <a href="/student-login.html" className="rounded-full border border-emerald-300/50 px-10 py-5 text-[15px] font-semibold text-emerald-100 transition-colors hover:bg-emerald-400/10" style={inter}>
@@ -240,6 +243,7 @@ export default function App() {
       <RainHero />
       <GlitterSection />
       <Tracks />
+      <EventBoard />
       <Arena />
     </main>
   );

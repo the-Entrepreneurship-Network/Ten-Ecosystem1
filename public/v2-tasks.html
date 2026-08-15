@@ -1612,28 +1612,58 @@ async function submitDailyJobPosting() {
   try {
     var stu = JSON.parse(localStorage.getItem('student') || sessionStorage.getItem('student') || '{}');
     var empId = stu.employeeId || stu.employee_id || localStorage.getItem('employeeId') || '';
+    /*
+     * This endpoint did not exist until now. The fetch rejected, the catch
+     * below turned the failure into `{ success: true }`, and the task was
+     * marked done in localStorage with coins the server never credited.
+     * The award is decided server-side from the platform count, so `coins`
+     * is sent for the record only and `d.coinsAwarded` is what actually landed.
+     */
     var r = await fetch('/api/v2/student/daily-job-post', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-employee-id': empId },
+      credentials: 'same-origin',
       body: JSON.stringify({ platforms, coins, date: todayKey() })
     });
-    var d = await r.json().catch(() => ({ success: true }));
-    saveDjpDone(coins);
-    showDjpDoneState(coins);
+    var d = await r.json().catch(() => ({ success: false, message: 'The server did not answer.' }));
+
+    if (!r.ok || !d.success) {
+      if (d.alreadyDone) {
+        saveDjpDone(d.coinsAwarded || 0);
+        showDjpDoneState(d.coinsAwarded || 0);
+        Swal.fire({ icon: 'info', title: 'Already logged today', text: d.message });
+        return;
+      }
+      btn.disabled = false;
+      btn.textContent = 'Submit';
+      Swal.fire({ icon: 'error', title: 'Not recorded', text: d.message || 'Could not record today\'s job post.' });
+      return;
+    }
+
+    var awarded = d.coinsAwarded || 0;
+    saveDjpDone(awarded);
+    showDjpDoneState(awarded);
     Swal.fire({
       icon: 'success',
-      title: '🎉 +' + coins + ' Coins Earned!',
+      title: '🎉 +' + awarded + ' Coins Earned!',
       html: '<p>Great job! Posted on ' + platforms.length + ' platform(s).</p>' +
-            (coins >= 10 ? '<p style="color:#D4AF37;font-weight:700;">🔥 Max 10 coins reached!</p>' : ''),
+            '<p style="opacity:.75;font-size:13px;">New balance: ' + (d.totalCoins || 0) + ' coins.</p>',
       background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#D4AF37'
     });
     // Refresh coin badge
     if (typeof loadCoins === 'function') loadCoins();
     if (typeof refreshCoinBadge === 'function') refreshCoinBadge();
   } catch(e) {
-    saveDjpDone(coins);
-    showDjpDoneState(coins);
-    Swal.fire({ icon:'success', title:'🎉 +' + coins + ' Coins Earned!', text:'Daily posting recorded!', background:'#0e1428', color:'#F0EEE8', confirmButtonColor:'#D4AF37' });
+    // A network failure is a failure. Reporting it as coins earned is how this
+    // task came to be "completed" thousands of times without a single record.
+    btn.disabled = false;
+    btn.textContent = 'Submit';
+    Swal.fire({
+      icon: 'error',
+      title: 'Could not reach the server',
+      text: 'Nothing was recorded. Check your connection and try again.',
+      background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#D4AF37'
+    });
   }
 }
 

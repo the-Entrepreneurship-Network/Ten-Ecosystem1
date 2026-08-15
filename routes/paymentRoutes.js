@@ -1,3 +1,18 @@
+/**
+ * SUPERSEDED — DO NOT MOUNT. Safe to delete.
+ *
+ * This router is not mounted anywhere in server.js and must stay that way:
+ * POST /initiate has no auth guard and takes `studentId` straight from the
+ * request body, so mounting it would hand anyone on the internet the ability
+ * to create payment orders against any student.
+ *
+ * The two live payment paths are:
+ *   - /api/v2/payment      (routes/v2/payment.js) — the UTR flow the UI uses
+ *   - /api/payment/setu    (routes/paymentSetuRoutes.js) — gateway + webhook,
+ *     every route behind requireRole and the webhook behind an HMAC check
+ *
+ * Kept only because deleting it needs a permission this session did not have.
+ */
 const express = require("express");
 const router = express.Router();
 

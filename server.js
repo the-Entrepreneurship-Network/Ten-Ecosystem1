@@ -10344,6 +10344,32 @@ try { app.use("/api/founder-os", require("./routes/founderOS"));           } cat
 try { app.use("/api/community",  require("./routes/community"));           } catch(e) { console.error("[Routes] community:", e.message); }
 try { app.use("/api/notifications", require("./routes/notificationRoutes"));} catch(e) { console.error("[Routes] notificationRoutes:", e.message); }
 
+/*
+ * Storage behind the pages that used to fake it.
+ *
+ * The contractor and investor dashboards, the hackathon portal, the groups page
+ * and the daily job-post task all shipped as interfaces with nothing behind
+ * them — success dialogs over dropped writes, hardcoded arrays of invented
+ * people, and one endpoint (daily-job-post) the browser called for months
+ * without it ever existing. These are the routes that back them.
+ */
+/*
+ * The Setu gateway router, at the prefix docs/payment-current-flow.md has
+ * always claimed it was mounted at. It never was — the file sat unreachable
+ * while the documentation described it as live. Every route is behind
+ * requireRole and the webhook verifies an HMAC signature, refusing everything
+ * when PAYMENT_WEBHOOK_SECRET is unset, so mounting it adds no open surface.
+ */
+try { app.use("/api/payment/setu", require("./routes/paymentSetuRoutes")); } catch(e) { console.error("[Routes] paymentSetuRoutes:", e.message); }
+
+try {
+    app.use("/api/v2/contractor",     require("./routes/v2/contractorDesk"));
+    app.use("/api/v2/investor-desk",  require("./routes/v2/investorDesk"));
+    app.use("/api/v2/hackathons",     require("./routes/v2/hackathons"));
+    app.use("/api/v2/groups",         require("./routes/v2/domainGroups"));
+    console.log("[V2] Contractor, investor, hackathon and group routes mounted");
+} catch(e) { console.error("[V2] ecosystem desk routes:", e.message); }
+
 // NEW FEATURE: Serve uploaded certificates, documents, and offer letters
 const expressModule = require("express");
 app.use("/uploads/certificates", expressModule.static("uploads/certificates"));
