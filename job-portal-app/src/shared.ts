@@ -3,6 +3,7 @@ const ROUTE_TARGETS: Record<string, string> = {
   student: '/student-portal/',
   job: '#home',
   resume: '/resume-portal/',
+  hack: '/hackathon-portal/',
   dashboard: '/talent-network.html',
   journey: '/talent-network.html',
 };
