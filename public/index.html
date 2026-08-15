@@ -172,12 +172,31 @@
      its full width the pair is back where it started, so it loops seamlessly.
      Hovering pauses it — a card that slides out from under the cursor as you
      reach for it is the worst thing a carousel can do. */
-  .cards-vp { overflow:hidden; padding:0 0 60px; -webkit-mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent); mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent); }
-  .cards { display:flex; gap:14px; width:max-content; animation:slide 48s linear infinite; }
-  .cards-vp:hover .cards, .cards-vp:focus-within .cards { animation-play-state:paused; }
-  @keyframes slide { to { transform:translateX(-50%); } }
+  /* ---------- the shared marquee ----------
+     Every sideways strip on this page is a real scroll container that also
+     drifts on its own. It used to be a CSS animation translating the track
+     -50%, which cannot be scrolled by hand: the pointer had nothing to grab
+     and a wheel did nothing. Native overflow-x gives touch, trackpad and
+     scrollbar for free; the drift is a script nudging scrollLeft, so the two
+     share one position instead of fighting over it.
+
+     A CSS animation also tied speed to content: a fixed duration over a longer
+     track means a faster strip. These run at a fixed pixels-per-second, so
+     adding a card changes the length and never the pace. */
+  .mq { overflow-x:auto; overflow-y:hidden; scrollbar-width:none; -ms-overflow-style:none; }
+  .mq::-webkit-scrollbar { display:none; }
+  /* Only the strips that actually overflow invite a drag. */
+  /* No text selection on a strip you drag — otherwise dragging it paints the
+     card text blue and looks broken. Only the strips that actually move. */
+  .mq.mq-live { cursor:grab; touch-action:pan-x; -webkit-user-select:none; user-select:none; }
+  .mq.mq-live.mq-drag { cursor:grabbing; }
+  /* Short lists sit still, centred, and are never cloned — one contributor
+     should appear once, not four times. */
+  .mq.mq-fits > * { margin:0 auto; }
+
+  .cards-vp { padding:0 0 60px; -webkit-mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent); mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent); }
+  .cards { display:flex; gap:14px; width:max-content; }
   @media (prefers-reduced-motion:reduce) {
-    .cards { animation:none; width:auto; overflow-x:auto; padding:0 22px; }
     .cards-vp { -webkit-mask-image:none; mask-image:none; }
   }
   .wcard { flex:0 0 auto; width:min(300px,74vw); border-radius:14px; overflow:hidden; background:#141414; text-decoration:none; color:#fff; border:1px solid #1c1c1c; transition:border-color .3s, transform .3s; }
@@ -326,11 +345,10 @@
   @keyframes idledrift { 25% { transform:translateY(-7px) rotate(-2deg); } 75% { transform:translateY(5px) rotate(2deg); } }
 
   /* ---------- top interns: an auto-sliding strip ---------- */
-  .strip-vp { overflow:hidden; -webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent); mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent); }
-  .strip { display:flex; gap:10px; width:max-content; animation:slide 38s linear infinite; }
-  .strip-vp:hover .strip, .strip-vp:focus-within .strip { animation-play-state:paused; }
+  .strip-vp { -webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent); mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent); }
+  .strip { display:flex; gap:10px; width:max-content; }
   .strip .row { flex:0 0 auto; width:min(320px,80vw); display:flex; align-items:center; gap:14px; background:#0d0d0d; border:1px solid #1e1e1e; border-radius:14px; padding:14px 18px; }
-  @media (prefers-reduced-motion:reduce) { .strip { animation:none; width:auto; flex-wrap:wrap; } .strip-vp { -webkit-mask-image:none; mask-image:none; } }
+  @media (prefers-reduced-motion:reduce) { .strip-vp { -webkit-mask-image:none; mask-image:none; } }
 
   /* ---------- how it works: four steps on one line ---------- */
   .steps { display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); margin-bottom:60px; position:relative; }
@@ -348,15 +366,14 @@
   .step.reveal { transition-delay:calc(var(--i,0) * 130ms); }
 
   /* ---------- contributors ---------- */
-  .contrib-vp { overflow:hidden; -webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent); mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent); }
-  .contrib { display:flex; gap:12px; width:max-content; animation:slide 46s linear infinite; }
-  .contrib-vp:hover .contrib { animation-play-state:paused; }
+  .contrib-vp { -webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent); mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent); }
+  .contrib { display:flex; gap:12px; width:max-content; }
   .ccard { flex:0 0 auto; width:min(260px,74vw); display:flex; align-items:center; gap:13px; background:#0c0c0c; border:1px solid #1a1a1a; border-radius:14px; padding:13px 15px; }
   .ccard img { width:44px; height:44px; border-radius:50%; object-fit:cover; flex:none; background:#1a1a1a; }
   .ccard .nm { font-size:13.5px; font-weight:800; }
   .ccard .dm { font-family:'IBM Plex Mono',monospace; font-size:9.5px; letter-spacing:.14em; color:#f5c542; text-transform:uppercase; margin-top:2px; }
   .ccard .ct { font-size:11.5px; color:#8a8a8a; line-height:1.45; margin-top:4px; }
-  @media (prefers-reduced-motion:reduce) { .contrib { animation:none; width:auto; flex-wrap:wrap; } .contrib-vp { -webkit-mask-image:none; mask-image:none; } }
+  @media (prefers-reduced-motion:reduce) { .contrib-vp { -webkit-mask-image:none; mask-image:none; } }
 
   /* ---------- people ---------- */
   /* ---------- the one line ----------
@@ -1242,10 +1259,135 @@ window.__heroField = { prox: 0, dx: 0, dy: 0, pulse: 0 };
   }
 })();
 
-/* ---- what TEN gives: fill the domain tile, then double the track ----
-   The marquee loops by translating -50%, which only meets itself if the track
-   holds the cards twice. Cloning here rather than in the markup means a new
-   card is written once. */
+/* ═══════════════════════════════════════════════════════════════════════════
+   MARQUEE — one helper for every sideways strip on the page
+
+   Three rules, and they are the whole thing:
+
+     1. If the content already fits, nothing scrolls and nothing is cloned.
+        A single contributor appears once. The old code cloned the list four
+        times to hide the seam, so one person filled the rail four times over.
+
+     2. The reader can scroll it themselves — wheel, trackpad, touch, or by
+        dragging it. That works because the viewport is a real scroll
+        container, not a CSS transform. The drift and the reader write the
+        same scrollLeft, so they can never disagree about where the strip is.
+
+     3. Touch it and the drift stops; let go and it picks up again at its
+        original pace after a breath. Hovering pauses it too — a card that
+        slides out from under the cursor as you reach for it is the worst
+        thing a carousel can do.
+
+   Speed is pixels per second, not a fixed duration. A fixed duration means a
+   longer strip scrolls faster, so adding one card silently sped up the rail.
+   ═══════════════════════════════════════════════════════════════════════════ */
+function marquee(viewport, track, pxPerSec) {
+  if (!viewport || !track) return;
+
+  const RESUME_AFTER = 1100;   // ms of stillness before the drift returns
+  const DRAG_SLOP    = 6;      // px before a press counts as a drag, not a click
+
+  viewport.classList.add('mq');
+  // Clear anything a previous build left behind (these strips are rebuilt when
+  // their fetch lands).
+  track.querySelectorAll('[data-mq-clone]').forEach(n => n.remove());
+  viewport.classList.remove('mq-fits', 'mq-live');
+
+  // Rule 1. Two pixels of slack, so a strip that only just fits does not
+  // twitch into a scroller because of a rounding difference.
+  if (track.scrollWidth <= viewport.clientWidth + 2) {
+    viewport.classList.add('mq-fits');
+    return;
+  }
+  viewport.classList.add('mq-live');
+
+  // Cloned once so the far edge meets the near one. The copy is decoration —
+  // a screen reader should read the list a single time.
+  const originals = Array.from(track.children);
+  originals.forEach(node => {
+    const c = node.cloneNode(true);
+    c.setAttribute('aria-hidden', 'true');
+    c.setAttribute('tabindex', '-1');
+    c.setAttribute('data-mq-clone', '');
+    track.appendChild(c);
+  });
+
+  const half = () => track.scrollWidth / 2;
+
+  // Every write to scrollLeft fires a scroll event, and the handler below reads
+  // a scroll event as "the reader is doing this". Without remembering what we
+  // wrote ourselves, the drift pauses itself one pixel in and never recovers.
+  let owned = -1;
+  const setScroll = (v) => { viewport.scrollLeft = v; owned = viewport.scrollLeft; };
+  const byReader = () => Math.abs(viewport.scrollLeft - owned) > 1;
+
+  // Wrapping at a point where both copies show the same thing makes the jump
+  // invisible, and it works in both directions: scroll to the very start and
+  // you land at the top of the second copy instead of hitting a wall.
+  const wrap = () => {
+    const h = half();
+    if (h <= 0) return;
+    if (viewport.scrollLeft >= h) setScroll(viewport.scrollLeft - h);
+    else if (viewport.scrollLeft <= 0) setScroll(h);
+  };
+
+  let hovering = false, idleUntil = 0, last = 0, carry = 0;
+  const still = () => { idleUntil = Date.now() + RESUME_AFTER; };
+
+  const quiet = matchMedia('(prefers-reduced-motion: reduce)');
+  function frame(now) {
+    const dt = last ? Math.min(now - last, 100) : 0;   // a backgrounded tab
+    last = now;                                        // must not lurch on return
+    if (!hovering && !quiet.matches && Date.now() >= idleUntil) {
+      // Fractional pixels are carried rather than dropped: scrollLeft rounds,
+      // and rounding a sub-pixel step to zero every frame stalls the strip.
+      carry += (pxPerSec * dt) / 1000;
+      const step = Math.floor(carry);
+      if (step > 0) { carry -= step; setScroll(viewport.scrollLeft + step); wrap(); }
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  viewport.addEventListener('pointerenter', () => { hovering = true; });
+  viewport.addEventListener('pointerleave', () => { hovering = false; });
+  viewport.addEventListener('focusin', () => { hovering = true; });
+  viewport.addEventListener('focusout', () => { hovering = false; });
+  viewport.addEventListener('scroll', () => { if (byReader()) still(); wrap(); }, { passive: true });
+  viewport.addEventListener('wheel', still, { passive: true });
+
+  // Drag to scroll. A trackpad and a touchscreen can already push this
+  // sideways; a mouse wheel cannot, so a plain mouse needs something to grab.
+  let down = false, startX = 0, startScroll = 0, moved = 0;
+  viewport.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    down = true; moved = 0;
+    startX = e.clientX;
+    startScroll = viewport.scrollLeft;
+    still();
+  });
+  viewport.addEventListener('pointermove', (e) => {
+    if (!down) return;
+    const dx = e.clientX - startX;
+    if (Math.abs(dx) > moved) moved = Math.abs(dx);
+    if (moved > DRAG_SLOP) {
+      viewport.classList.add('mq-drag');
+      viewport.setPointerCapture(e.pointerId);
+      setScroll(startScroll - dx);
+      wrap();
+    }
+    still();
+  });
+  const release = () => { down = false; viewport.classList.remove('mq-drag'); still(); };
+  viewport.addEventListener('pointerup', release);
+  viewport.addEventListener('pointercancel', release);
+  // A drag that ends on top of a card must not also open that card.
+  viewport.addEventListener('click', (e) => {
+    if (moved > DRAG_SLOP) { e.preventDefault(); e.stopPropagation(); moved = 0; }
+  }, true);
+}
+
+/* ---- what TEN gives ---- */
 (() => {
   const track = document.getElementById('giveTrack');
   if (!track) return;
@@ -1256,14 +1398,7 @@ window.__heroField = { prox: 0, dx: 0, dy: 0, pulse: 0 };
       '<img src="assets/domains/' + f + '" alt="" onerror="this.remove()" ' +
       'style="width:38px;height:38px;border-radius:9px;object-fit:cover;">').join('');
   }
-
-  // The clones are decoration; a screen reader should read the list once.
-  Array.from(track.children).forEach(card => {
-    const c = card.cloneNode(true);
-    c.setAttribute('aria-hidden', 'true');
-    c.setAttribute('tabindex', '-1');
-    track.appendChild(c);
-  });
+  marquee(track.parentElement, track, 62);
 })();
 
 /* ---- hero textures crossfade + click cycles ---- */
@@ -1686,10 +1821,11 @@ function journey() {
         '<span style="font-family:\'IBM Plex Mono\',monospace; font-size:12px; color:#f5c542;">' +
           esc(t.coins) + '</span></div>';
     };
-    // Written twice so the -50% loop meets itself, exactly like the card
-    // marquee above. A single short list would jump at the seam.
-    document.getElementById("topList").innerHTML = top.map(row).join("") + top.map(row).join("");
+    // Written once. marquee() clones it only if it is too wide to fit, so a
+    // short list is shown a single time instead of doubled.
+    document.getElementById("topList").innerHTML = top.map(row).join("");
     document.getElementById("topWrap").style.display = "block";
+    marquee(document.querySelector(".strip-vp"), document.getElementById("topList"), 58);
   }).catch(function () { /* the page keeps its defaults */ });
 
   fetch("/api/feedback/public").then(function (r) { return r.json(); }).then(function (d) {
@@ -1728,12 +1864,12 @@ function journey() {
           (c.contribution ? '<div class="ct">' + esc(c.contribution) + '</div>' : '') +
         '</div></div>';
     };
-    // Doubled for the seamless loop, and again if the list is short enough
-    // that one pass would leave a visible gap mid-track.
-    var html = list.map(card).join("");
-    var reps = list.length < 5 ? 4 : 2;
-    document.getElementById("contribList").innerHTML = new Array(reps).fill(html).join("");
+    // Written once, whatever the length. HR posting one person must show one
+    // person — this used to repeat a short list four times to fill the rail.
+    document.getElementById("contribList").innerHTML = list.map(card).join("");
     document.getElementById("contribWrap").style.display = "block";
+    // A little quicker than the other two, as asked.
+    marquee(document.querySelector(".contrib-vp"), document.getElementById("contribList"), 78);
   }).catch(function () { /* the strip simply does not appear */ });
 })();
 </script>
