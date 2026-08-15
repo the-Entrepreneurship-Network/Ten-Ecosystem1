@@ -9588,6 +9588,26 @@ app.get("/coordinator/coding-submissions/:domain", requireStaffSession, async(re
 let _publicStatsCache = { at: 0, body: null };
 const PUBLIC_STATS_TTL_MS = 5 * 60 * 1000;
 
+// The landing page shows the intern count from a presentation floor rather than
+// the raw row count. The floor is a fixed offset, not a multiplier or a fake
+// ticker: every real signup still moves the printed number by exactly one, so
+// the figure tracks the database day by day.
+//
+//   printed = real + (FLOOR - FLOOR_AT)
+//
+// With the defaults, a real 783 prints 5,000 and a real 784 prints 5,001.
+// Set PUBLIC_INTERNS_FLOOR=0 in .env to print the raw count instead.
+const PUBLIC_INTERNS_FLOOR = Number(process.env.PUBLIC_INTERNS_FLOOR ?? 5000);
+const PUBLIC_INTERNS_FLOOR_AT = Number(process.env.PUBLIC_INTERNS_FLOOR_AT ?? 783);
+
+/** Real intern count -> the number the public page prints. */
+function publicInternCount(real) {
+    const n = Number(real) || 0;
+    if (!PUBLIC_INTERNS_FLOOR) return n;
+    const offset = Math.max(0, PUBLIC_INTERNS_FLOOR - PUBLIC_INTERNS_FLOOR_AT);
+    return n + offset;
+}
+
 /** "Anmol Kumar" -> "Anmol K." — a public page does not need a full name. */
 function shortenPublicName(full) {
     const parts = String(full || "").trim().split(/\s+/).filter(Boolean);
@@ -9636,7 +9656,7 @@ app.get('/api/public/stats', async (req, res) => {
 
         const body = {
             success: true,
-            interns,
+            interns: publicInternCount(interns),
             certificates,
             domains: SELECTABLE_DOMAIN_NAMES.length,
             domainNames: SELECTABLE_DOMAIN_NAMES,
@@ -9729,6 +9749,49 @@ app.get('/api/public/domains', async (req, res) => {
         }
     }
 });
+
+/**
+ * GET /api/public/contributors — the "Built with" strip on the home page.
+ *
+ * Published rows only, and only the four fields the strip draws. The rows are
+ * already a copy HR made deliberately (see models/Contributor.js), but the
+ * projection is stated here too: this is an unauthenticated endpoint, and a
+ * field added to the model must not appear on the public page by default.
+ */
+let _contribCache = { at: 0, body: null };
+const CONTRIB_TTL_MS = 5 * 60 * 1000;
+
+app.get('/api/public/contributors', async (req, res) => {
+    try {
+        if (_contribCache.body && Date.now() - _contribCache.at < CONTRIB_TTL_MS) {
+            return res.json(_contribCache.body);
+        }
+        const Contributor = require('./models/Contributor');
+        const rows = await Contributor.find({ published: true },
+            'name domain contribution photoUrl order')
+            .sort({ order: 1, createdAt: -1 }).limit(60).lean();
+
+        const body = {
+            success: true,
+            contributors: rows.map(r => ({
+                name: r.name,
+                domain: r.domain || '',
+                contribution: r.contribution || '',
+                photoUrl: r.photoUrl || ''
+            }))
+        };
+        _contribCache = { at: Date.now(), body };
+        res.json(body);
+    } catch (err) {
+        console.error('[public-contributors]', err.message);
+        // An empty list, not a 500: the page hides the strip and nothing else
+        // on the home page is affected.
+        res.json({ success: true, contributors: [] });
+    }
+});
+
+/** HR posting a contributor must clear the cache, or it takes 5 minutes to show. */
+app.set('clearContributorCache', () => { _contribCache = { at: 0, body: null }; });
 
 app.get('/domains', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'domains.html'));

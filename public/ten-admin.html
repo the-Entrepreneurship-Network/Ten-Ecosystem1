@@ -653,10 +653,10 @@ async function loadStudents() {
   document.getElementById('studentsContent').innerHTML = `
     <div class="table-wrap"><table>
       <thead><tr><th>Employee ID</th><th>Name</th><th>Email</th><th>Domain</th><th>Tenure</th><th>LOC</th><th>LOR</th><th>Status</th><th>Actions</th></tr></thead>
-      <tbody>${data.data.map(s => `<tr>
+      <tbody>${data.data.map(s => { const nm = _studentName(s); return `<tr>
         <td><code>${s.employeeId || '—'}</code></td>
-        <td>${s.name}</td>
-        <td>${s.email}</td>
+        <td>${nm ? _aEsc(nm) : '<span style="color:#f87171" title="No name on this record — press Edit to set it">— missing —</span>'}</td>
+        <td>${_aEsc(s.email || '—')}</td>
         <td>${s.domain || '—'}</td>
         <td>${s.tenure || '—'}</td>
         <td><span class="badge badge-grey">${s.locStatus || '—'}</span></td>
@@ -669,12 +669,12 @@ async function loadStudents() {
             ? ' <span class="badge badge-grey" title="Waiting for the student to set their own">Reset pending</span>' : ''}</td>
         <td style="display:flex;gap:6px;flex-wrap:wrap">
           ${s.isLockedOut ? `<button class="btn btn-green" onclick="unlockStudent('${s._id}')">🔓 Unlock</button>` : ''}
-          <button class="btn btn-grey" onclick="editStudent('${s._id}','${s.name}','${s.email}','${s.domain||''}','${s.tenure||''}','${s.whatsapp||''}','${s.gender||''}','${s.college||s.collegeName||''}')">✏️ Edit</button>
-          <button class="btn btn-grey" onclick="extendTenure('${s._id}','${s.employeeId}','${s.tenure||''}')">📅 Tenure</button>
-          <button class="btn btn-grey" onclick="resetStudentPw('${s._id}','${s.name}','${s.email||''}')" title="Set a working password or correct the email so they can sign in again">🔑 Sign-in</button>
-          <button class="btn btn-red" onclick="deleteStudent('${s._id}','${s.employeeId}')">🗑</button>
+          <button class="btn btn-grey" onclick="editStudent('${s._id}',${_arg(nm)},${_arg(s.email)},${_arg(s.domain)},${_arg(s.tenure)},${_arg(s.whatsapp)},${_arg(s.gender)},${_arg(s.college||s.collegeName)})">✏️ Edit</button>
+          <button class="btn btn-grey" onclick="extendTenure('${s._id}',${_arg(s.employeeId)},${_arg(s.tenure)})">📅 Tenure</button>
+          <button class="btn btn-grey" onclick="resetStudentPw('${s._id}',${_arg(nm)},${_arg(s.email)})" title="Set a working password or correct the email so they can sign in again">🔑 Sign-in</button>
+          <button class="btn btn-red" onclick="deleteStudent('${s._id}',${_arg(s.employeeId)})">🗑</button>
         </td>
-      </tr>`).join('')}</tbody>
+      </tr>`; }).join('')}</tbody>
     </table></div>
     <div class="pagination">
       <button onclick="currentStudentPage--;loadStudents()" ${currentStudentPage<=1?'disabled':''}>← Prev</button>
@@ -1054,6 +1054,26 @@ async function loadSystemInfo() {
    Blocking already protected them the moment they clicked; this is where a
    person with authority decides what to do about it. */
 function _aEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];}); }
+
+// A value going into an inline onclick="fn('...')" argument. JSON.stringify
+// quotes and escapes it as a JS string literal, then _aEsc makes it safe inside
+// the HTML attribute. The old code interpolated raw: a name with an apostrophe
+// ("O'Brien") broke the handler outright, and a missing one passed the literal
+// text "undefined" straight into the Edit form — where pressing Save wrote it
+// into the database as the student's real name.
+function _arg(v){ return _aEsc(JSON.stringify(v == null ? '' : String(v))); }
+
+// The name to show for a student. `name` is authoritative; firstName/lastName
+// are the fallback for older records. Anything that only looks like a name —
+// "undefined", "null" — counts as missing, because that is what the Edit form
+// used to write back.
+function _studentName(s){
+  var junk = ['undefined','null','nan','-','—'];
+  var ok = function(v){ return typeof v === 'string' && v.trim() && junk.indexOf(v.trim().toLowerCase()) === -1; };
+  if (ok(s.name)) return s.name.trim();
+  var parts = [s.firstName, s.lastName].filter(ok).map(function(x){ return x.trim(); });
+  return parts.length ? parts.join(' ') : '';
+}
 
 // ══════════════════════════════════════════════════════════════════════
 //  Attendance control
