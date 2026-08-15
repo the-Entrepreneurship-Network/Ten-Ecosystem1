@@ -42,7 +42,10 @@
 
   /* ---------- preloader: T [domain logo] N + countdown 50 -> 0 ---------- */
   #pre { position:fixed; inset:0; background:#000; z-index:100; display:flex; align-items:center; justify-content:center; transition:transform .9s cubic-bezier(.76,0,.24,1); }
-  #pre.done { transform:translateY(-101%); }
+  /* pointer-events off the moment it is done: the curtain takes .9s to slide
+     away, and until it has it still sits over the hero and eats every click —
+     START MY JOURNEY did nothing for anyone who reached for it early. */
+  #pre.done { transform:translateY(-101%); pointer-events:none; }
   .pre-word { display:flex; align-items:center; gap:2vw; font-size:clamp(90px,18vw,260px); font-weight:900; letter-spacing:-0.04em; }
   #preSlot { width:1.05em; height:1.05em; display:flex; align-items:center; justify-content:center; font-size:.62em; transition:opacity .18s, transform .18s; }
   #preSlot img { width:100%; height:100%; object-fit:cover; border-radius:14px; mix-blend-mode:screen; }
@@ -93,11 +96,58 @@
   .hero-cta { background:#0a0a0a; color:#fff; border:0; border-radius:999px; padding:14px 26px; font-size:12px; letter-spacing:.12em; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:10px; transition:transform .2s; }
   .hero-cta:hover { transform:scale(1.05); }
 
+  /* ---------- the gold hands ----------
+     They open the lockup: they fall in from above, settle, and then breathe.
+     The glow is a drop-shadow on the alpha, so it follows the hands' own
+     silhouette rather than boxing them. */
+  .hero-hands {
+    width:min(300px,42vw); display:block;
+    filter:drop-shadow(0 20px 44px rgba(198,150,44,.30)) drop-shadow(0 2px 6px rgba(0,0,0,.12));
+    animation:handsIn 1.15s cubic-bezier(.16,.9,.28,1) both, handsFloat 6.5s ease-in-out 1.15s infinite;
+  }
+  @keyframes handsIn {
+    from { opacity:0; transform:translateY(-56px) scale(.86); }
+    to   { opacity:1; transform:none; }
+  }
+  @keyframes handsFloat { 50% { transform:translateY(-13px); } }
+
   /* ---------- the wordmark ----------
      "THE ENTREPRENEURSHIP NETWORK" as SVG text clipping a texture image, so
-     the three textures can cross-fade behind the letters. */
+     the three textures can cross-fade behind the letters.
+
+     Three things move. The word wipes in left to right behind a mask as the
+     page opens. A gold glint runs through the letters on a loop — the same
+     specular a real foil press throws. And the whole mark lifts once as it
+     lands. The kinetic grid owns #heroWord's own transform, so every entrance
+     animation here is on the <svg> inside it; putting one on the div would be
+     overwritten sixty times a second. */
   .hero-word { position:relative; width:100%; margin:24px 0; cursor:pointer; }
-  .hero-word svg { width:100%; height:auto; display:block; }
+  .hero-word svg {
+    width:100%; height:auto; display:block;
+    animation:wordIn 1.1s cubic-bezier(.16,.9,.28,1) .12s both;
+  }
+  @keyframes wordIn {
+    from { opacity:0; transform:translateY(26px) scale(.985); }
+    to   { opacity:1; transform:none; }
+  }
+  /* The mask rectangle that uncovers the letters. scaleX rather than the width
+     attribute, because transforms are the one thing every engine animates the
+     same way on an SVG child. */
+  .wipe { transform-origin:0 0; transform:scaleX(0); animation:wipeIn 1.25s cubic-bezier(.16,.84,.3,1) .3s forwards; }
+  @keyframes wipeIn { to { transform:scaleX(1); } }
+  /* The travelling glint. Long pause, quick pass — a glint you see constantly
+     stops reading as a glint and starts reading as a loading bar. */
+  .glint { animation:glintRun 7s cubic-bezier(.5,0,.4,1) 1.5s infinite; }
+  @keyframes glintRun {
+    0%, 62% { transform:translateX(0); }
+    100%    { transform:translateX(2400px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hero-hands { animation:none; }
+    .hero-word svg { animation:none; }
+    .wipe { transform:scaleX(1); animation:none; }
+    .glint { animation:none; opacity:0; }
+  }
   .hero-strip { display:flex; justify-content:space-between; font-size:12px; font-weight:600; color:#333; padding-bottom:6px; flex-wrap:wrap; gap:8px; }
   .hero-strip a { color:#0a0a0a; text-decoration:none; }
   .hero-strip a:hover { text-decoration:underline; }
@@ -302,10 +352,40 @@
   @media (prefers-reduced-motion:reduce) { .contrib { animation:none; width:auto; flex-wrap:wrap; } .contrib-vp { -webkit-mask-image:none; mask-image:none; } }
 
   /* ---------- people ---------- */
-  .people { background:#000; padding:110px 22px; display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:30px; max-width:1100px; margin:0 auto; }
-  .people h4 { font-size:11px; letter-spacing:.2em; color:#777; margin-bottom:14px; }
-  .people li { list-style:none; font-size:14px; line-height:1.9; color:#ddd; }
-  .people .lead { font-size:15px; color:#fff; font-weight:700; }
+  /* ---------- the one line ----------
+     A statement, given a whole band and centred, instead of a heading squeezed
+     into the first of four link columns. */
+  .people { background:#000; padding:130px 22px 140px; }
+  .people-inner { max-width:1000px; margin:0 auto; text-align:center; }
+  .people-eyebrow {
+    font-family:'IBM Plex Mono',monospace; font-size:11.5px; letter-spacing:.34em;
+    color:#7a7a7a; text-transform:uppercase; margin-bottom:26px;
+  }
+  .people-line {
+    font-size:clamp(46px,9.5vw,132px); font-weight:900; letter-spacing:-0.045em;
+    line-height:.94; color:#fff;
+  }
+  /* Each word rises on its own beat as the band scrolls in. */
+  .people-line span {
+    display:inline-block; opacity:0; transform:translateY(.42em);
+    transition:opacity .8s cubic-bezier(.16,.9,.28,1), transform .8s cubic-bezier(.16,.9,.28,1);
+  }
+  .people-inner.visible .people-line span { opacity:1; transform:none; }
+  .people-inner.visible .people-line span:nth-child(2) { transition-delay:.13s; }
+  /* "nothing." carries the gold — the whole sentence turns on that word. */
+  .people-line span:last-child { color:#f5c542; }
+  /* A rule that draws itself under the line once the words have landed. */
+  .people-rule {
+    display:block; height:1px; width:min(420px,62vw); margin:44px auto 0;
+    background:linear-gradient(90deg,transparent,#f5c542 22%,#f5c542 78%,transparent);
+    transform:scaleX(0); transform-origin:50% 50%;
+    transition:transform 1.05s cubic-bezier(.16,.84,.3,1) .34s;
+  }
+  .people-inner.visible .people-rule { transform:scaleX(1); }
+  @media (prefers-reduced-motion: reduce) {
+    .people-line span { opacity:1; transform:none; transition:none; }
+    .people-rule { transform:scaleX(1); transition:none; }
+  }
 
   /* ---------- footer ---------- */
   footer { background:#000; padding:90px 22px 40px; text-align:center; }
@@ -366,10 +446,10 @@
     <p class="hero-tag">Not a company, an ecosystem.<br>Because TEN is Everythin'.</p>
     <button class="hero-cta" onclick="journey()">START MY JOURNEY <span>&rarr;</span></button>
   </div>
-  <div style="display:flex; justify-content:center; margin-top:-58px; margin-bottom:-6px;">
+  <div style="display:flex; justify-content:center; margin-top:-46px; margin-bottom:-14px;">
     <!-- alpha WebM: the gold hands float directly on the page, no box -->
-    <video autoplay muted loop playsinline src="assets/home/ten-logo-anim.webm"
-      style="width:min(200px,34vw);" aria-label="TEN logo"
+    <video class="hero-hands" autoplay muted loop playsinline
+      src="assets/home/ten-logo-anim.webm" aria-label="TEN logo"
       onerror="this.remove()"></video>
   </div>
   <div class="hero-word" id="heroWord" title="click me">
@@ -381,12 +461,46 @@
           <text x="800" y="150" text-anchor="middle" font-size="165" font-weight="900" font-family="'PP Neue Montreal', Inter, sans-serif" letter-spacing="-4" textLength="300" lengthAdjust="spacingAndGlyphs">THE</text>
           <text x="800" y="395" text-anchor="middle" font-size="215" font-weight="900" font-family="'PP Neue Montreal', Inter, sans-serif" letter-spacing="-6" textLength="1580" lengthAdjust="spacingAndGlyphs">ENTREPRENEURSHIP NETWORK</text>
         </clipPath>
+        <!-- The letters sit on dark ink, with the texture laid over it rather
+             than replacing it. A light texture used to fill the glyphs edge to
+             edge and the name went near-white on a white page — unreadable at
+             the exact moment somebody is reading it. -->
+        <linearGradient id="inkGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0"    stop-color="#3c3c46"/>
+          <stop offset="0.34" stop-color="#0c0c10"/>
+          <stop offset="0.72" stop-color="#050507"/>
+          <stop offset="1"    stop-color="#191920"/>
+        </linearGradient>
+        <!-- Gold pooling along the baseline, so the name is lit by the same
+             metal as the hands above it instead of floating free of them. -->
+        <linearGradient id="rimGrad" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0"    stop-color="#f5c542" stop-opacity=".62"/>
+          <stop offset="0.20" stop-color="#c8912b" stop-opacity=".26"/>
+          <stop offset="0.46" stop-color="#c8912b" stop-opacity="0"/>
+        </linearGradient>
+        <linearGradient id="glintGrad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0"    stop-color="#f5c542" stop-opacity="0"/>
+          <stop offset="0.40" stop-color="#e8c579" stop-opacity=".85"/>
+          <stop offset="0.50" stop-color="#fff6e0" stop-opacity="1"/>
+          <stop offset="0.60" stop-color="#f5c542" stop-opacity=".85"/>
+          <stop offset="1"    stop-color="#f5c542" stop-opacity="0"/>
+        </linearGradient>
+        <mask id="wipeMask">
+          <rect class="wipe" x="0" y="0" width="1600" height="430" fill="#fff"/>
+        </mask>
       </defs>
-      <g clip-path="url(#tclip)">
-        <rect width="1600" height="430" fill="#0a0a0a"/>
-        <image id="tex0" href="img/textures/foil.webp"    x="-200" y="-200" width="2000" height="900" preserveAspectRatio="xMidYMid slice" opacity="1"/>
+      <g clip-path="url(#tclip)" mask="url(#wipeMask)">
+        <rect width="1600" height="430" fill="url(#inkGrad)"/>
+        <image id="tex0" href="img/textures/foil.webp"    x="-200" y="-200" width="2000" height="900" preserveAspectRatio="xMidYMid slice" opacity="0.26"/>
         <image id="tex1" href="img/textures/balloon.webp" x="-200" y="-200" width="2000" height="900" preserveAspectRatio="xMidYMid slice" opacity="0"/>
         <image id="tex2" href="img/textures/wool.webp"    x="-200" y="-200" width="2000" height="900" preserveAspectRatio="xMidYMid slice" opacity="0"/>
+        <rect y="150" width="1600" height="280" fill="url(#rimGrad)"/>
+        <!-- The skew lives on the group, because a CSS transform on the rect
+             replaces its transform attribute outright rather than composing
+             with it, and the glint would run square instead of raked. -->
+        <g transform="skewX(-12)">
+          <rect class="glint" x="-620" y="-40" width="620" height="510" fill="url(#glintGrad)"/>
+        </g>
       </g>
     </svg>
   </div>
@@ -491,26 +605,13 @@
   <div class="contrib-vp"><div class="contrib" id="contribList"></div></div>
 </section>
 
-<!-- people -->
+<!-- people: one line, and nothing else. The three link columns that used to sit
+     beside it repeated the footer word for word, twenty pixels further up. -->
 <section class="people">
-  <div>
-    <h4>TEN' WITHOUT PEOPLE :</h4>
-    <li class="lead">is nothing.</li>
-  </div>
-  <div>
-    <h4>FOUNDERS &amp; MANAGEMENT</h4>
-    <li>The Entrepreneurship Network</li>
-    <li>Team TEN</li>
-  </div>
-  <div>
-    <h4>FOR STUDENTS</h4>
-    <li><a href="student-portal/" style="color:#ddd">TEN Career Studio</a></li>
-    <li><a href="/domains" style="color:#ddd">Domain Journeys</a></li>
-    <li><a href="verify.html" style="color:#ddd">Verify a certificate</a></li>
-  </div>
-  <div>
-    <h4>CONTACT</h4>
-    <li>info@entrepreneurshipnetwork.net</li>
+  <div class="people-inner reveal">
+    <p class="people-eyebrow">TEN' WITHOUT PEOPLE</p>
+    <p class="people-line"><span>is</span> <span>nothing.</span></p>
+    <span class="people-rule" aria-hidden="true"></span>
   </div>
 </section>
 
@@ -1163,7 +1264,8 @@ window.__heroField = { prox: 0, dx: 0, dy: 0, pulse: 0 };
   const texs = [0,1,2].map(i => document.getElementById('tex' + i));
   if (texs.some(t => !t)) return;
   let cur = 0;
-  const show = (i) => { texs.forEach((t,j) => t.setAttribute('opacity', j === i ? '1' : '0')); cur = i; };
+  // 0.26, not 1 — the texture is laid over the dark ink, not instead of it.
+  const show = (i) => { texs.forEach((t,j) => t.setAttribute('opacity', j === i ? '0.26' : '0')); cur = i; };
   setInterval(() => show((cur + 1) % 3), 4200);
   document.getElementById('heroWord').addEventListener('click', () => show((cur + 1) % 3));
 })();
@@ -1418,13 +1520,23 @@ const AMBIENT_URL = '';
   new MutationObserver(scan).observe(document.body, { childList: true, subtree: true });
 })();
 
-/* ---- footer wordmark ----
-   The letters used to scatter away from the cursor on hover. Cute once, and it
-   made the company name unreadable at exactly the moment somebody was reading
-   it. It is a name now, not a toy. */
+/* ---- footer flee letters ----
+   Restored on request: TEN TECH, each letter darting away when the cursor
+   reaches it and drifting back after 600ms. */
 (() => {
   const flee = document.getElementById('flee');
-  if (flee) flee.textContent = 'TEN';
+  if (!flee) return;
+  'TEN TECH'.split('').forEach(ch => {
+    const s = document.createElement('span');
+    // Non-breaking space: a plain one collapses inside an inline-block span and
+    // the mark read "TENTECH".
+    s.textContent = ch === ' ' ? ' ' : ch;
+    s.addEventListener('mouseenter', () => {
+      s.style.transform = `translate(${(Math.random()-0.5)*60}px, ${(Math.random()-0.5)*40}px) rotate(${(Math.random()-0.5)*30}deg)`;
+      setTimeout(() => s.style.transform = '', 600);
+    });
+    flee.appendChild(s);
+  });
 })();
 
 /* ---- the wordmark answers the kinetic grid ----
@@ -1455,7 +1567,15 @@ const AMBIENT_URL = '';
 
 /* ---- start my journey: scroll to the inline join section ---- */
 function journey() {
-  document.getElementById('join').scrollIntoView({ behavior: 'smooth' });
+  const join = document.getElementById('join');
+  if (!join) { location.href = 'register.html'; return; }
+  // The curtain is still lifting for the first second and body is overflow:hidden
+  // until it starts; scrollIntoView into a locked body goes nowhere, so unlock
+  // first and let this run even if someone reaches the button that early.
+  document.body.classList.remove('locked');
+  const pre = document.getElementById('pre');
+  if (pre) pre.classList.add('done');
+  join.scrollIntoView({ behavior: 'smooth' });
 }
 
 /* ---- certificate verification: same API as verify.html ---- */

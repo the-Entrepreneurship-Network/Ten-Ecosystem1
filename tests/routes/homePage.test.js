@@ -321,7 +321,7 @@ describe('the hero', () => {
     // SVG text with an explicit textLength shrinks to the viewBox on a phone.
     expect(page).toMatch(/<svg viewBox="0 0 1600 430"/);
     expect(page).toMatch(/textLength="1580" lengthAdjust="spacingAndGlyphs">ENTREPRENEURSHIP NETWORK/);
-    expect(page).toContain('.hero-word svg { width:100%; height:auto; display:block; }');
+    expect(page).toMatch(/\.hero-word svg \{\s*width:100%; height:auto; display:block;/);
   });
 
   it('cross-fades the three textures behind the letters', () => {
@@ -349,9 +349,9 @@ describe('the playful bits are gone', () => {
     expect(page).not.toContain(needle);
   });
 
-  it('the footer letters no longer run from the cursor', () => {
-    expect(page).not.toContain("'TEN TECH'.split('')");
-    expect(page).toContain("flee.textContent = 'TEN'");
+  it('the footer letters run from the cursor again (restored on request)', () => {
+    expect(page).toContain("'TEN TECH'.split('')");
+    expect(page).toContain('.flee span { display:inline-block;');
   });
 
   it('the opening counts down once and then gets out of the way', () => {
@@ -690,5 +690,99 @@ describe('the Domains link goes somewhere public, and the list is one list', () 
   it('escapes the names and week titles it renders', () => {
     expect(domainsPage).toContain('esc(d.name)');
     expect(domainsPage).toContain('esc(w)');
+  });
+});
+
+describe('START MY JOURNEY actually goes somewhere', () => {
+  it('the curtain stops eating clicks the moment it is done', () => {
+    // It slides away over .9s. Until pointer-events went off, it sat over the
+    // hero for that whole second and swallowed the button.
+    expect(page).toMatch(/#pre\.done \{[^}]*pointer-events:none/);
+  });
+
+  it('the handler unlocks the body before it scrolls', () => {
+    const fn = page.slice(page.indexOf('function journey()'), page.indexOf('function journey()') + 600);
+    expect(fn).toContain("document.body.classList.remove('locked')");
+    expect(fn).toContain("join.scrollIntoView({ behavior: 'smooth' })");
+  });
+
+  it('falls back to registration if the target section is missing', () => {
+    const fn = page.slice(page.indexOf('function journey()'), page.indexOf('function journey()') + 600);
+    expect(fn).toMatch(/if \(!join\).*register\.html/s);
+  });
+
+  it('the section it scrolls to exists exactly once', () => {
+    expect(page.match(/id="join"/g)).toHaveLength(1);
+  });
+});
+
+describe('the one-line people band', () => {
+  it('no longer repeats the footer beside it', () => {
+    const band = page.slice(page.indexOf('<section class="people">'), page.indexOf('<!-- join:'));
+    expect(band).not.toContain('FOUNDERS &amp; MANAGEMENT');
+    expect(band).not.toContain('FOR STUDENTS');
+    expect(band).not.toContain('CONTACT');
+    expect(band).not.toContain('info@entrepreneurshipnetwork.net');
+  });
+
+  it('keeps the line, and only the line', () => {
+    const band = page.slice(page.indexOf('<section class="people">'), page.indexOf('<!-- join:'));
+    expect(band).toContain("TEN' WITHOUT PEOPLE");
+    expect(band).toContain('<span>is</span> <span>nothing.</span>');
+  });
+
+  it('the words rise one after the other, and the rule draws itself', () => {
+    expect(page).toContain('.people-inner.visible .people-line span { opacity:1; transform:none; }');
+    expect(page).toMatch(/\.people-inner\.visible \.people-line span:nth-child\(2\) \{ transition-delay/);
+    expect(page).toContain('.people-inner.visible .people-rule { transform:scaleX(1); }');
+  });
+
+  it('sits still for a reader who asked for less movement', () => {
+    const rm = page.slice(page.indexOf('.people-inner.visible .people-rule'));
+    expect(rm).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]{0,240}\.people-line span \{ opacity:1/);
+  });
+});
+
+describe('the hero mark', () => {
+  it('stays dark enough to read on a white page', () => {
+    // A light texture used to fill the glyphs outright and the name vanished.
+    expect(page).toContain('<linearGradient id="inkGrad"');
+    expect(page).toMatch(/id="tex0"[^>]*opacity="0\.26"/);
+    expect(page).toMatch(/j === i \? '0\.26' : '0'/);
+    expect(page).toContain('<linearGradient id="rimGrad"');
+  });
+
+  it('wipes in behind a mask instead of just appearing', () => {
+    expect(page).toContain('<mask id="wipeMask">');
+    expect(page).toContain('<rect class="wipe"');
+    expect(page).toMatch(/\.wipe \{[^}]*transform:scaleX\(0\)/);
+    expect(page).toContain('@keyframes wipeIn');
+  });
+
+  it('runs a raked gold glint through the letters on a loop', () => {
+    expect(page).toContain('<linearGradient id="glintGrad"');
+    // The skew must be on the wrapping group: a CSS transform on the rect
+    // replaces its transform attribute rather than composing with it.
+    expect(page).toMatch(/<g transform="skewX\(-12\)">\s*<rect class="glint"/);
+    expect(page).toContain('@keyframes glintRun');
+  });
+
+  it('drops the hands in and then lets them breathe', () => {
+    expect(page).toContain('class="hero-hands"');
+    expect(page).toContain('@keyframes handsIn');
+    expect(page).toContain('@keyframes handsFloat');
+  });
+
+  it('keeps its entrance off the div the kinetic grid drives', () => {
+    // #heroWord's transform is rewritten every frame; an entrance animation
+    // there would be overwritten, so it belongs on the <svg> inside it.
+    expect(page).toMatch(/\.hero-word svg \{[^}]*animation:wordIn/);
+    expect(page).not.toMatch(/\.hero-word \{[^}]*animation:/);
+  });
+
+  it('holds still for a reader who asked for less movement', () => {
+    const rm = page.slice(page.indexOf('@keyframes glintRun'));
+    expect(rm).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]{0,300}\.hero-hands \{ animation:none/);
+    expect(rm).toMatch(/\.wipe \{ transform:scaleX\(1\); animation:none/);
   });
 });
