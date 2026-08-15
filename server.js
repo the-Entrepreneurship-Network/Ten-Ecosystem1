@@ -9588,6 +9588,26 @@ app.get("/coordinator/coding-submissions/:domain", requireStaffSession, async(re
 let _publicStatsCache = { at: 0, body: null };
 const PUBLIC_STATS_TTL_MS = 5 * 60 * 1000;
 
+// The landing page shows the intern count from a presentation floor rather than
+// the raw row count. The floor is a fixed offset, not a multiplier or a fake
+// ticker: every real signup still moves the printed number by exactly one, so
+// the figure tracks the database day by day.
+//
+//   printed = real + (FLOOR - FLOOR_AT)
+//
+// With the defaults, a real 783 prints 5,000 and a real 784 prints 5,001.
+// Set PUBLIC_INTERNS_FLOOR=0 in .env to print the raw count instead.
+const PUBLIC_INTERNS_FLOOR = Number(process.env.PUBLIC_INTERNS_FLOOR ?? 5000);
+const PUBLIC_INTERNS_FLOOR_AT = Number(process.env.PUBLIC_INTERNS_FLOOR_AT ?? 783);
+
+/** Real intern count -> the number the public page prints. */
+function publicInternCount(real) {
+    const n = Number(real) || 0;
+    if (!PUBLIC_INTERNS_FLOOR) return n;
+    const offset = Math.max(0, PUBLIC_INTERNS_FLOOR - PUBLIC_INTERNS_FLOOR_AT);
+    return n + offset;
+}
+
 /** "Anmol Kumar" -> "Anmol K." — a public page does not need a full name. */
 function shortenPublicName(full) {
     const parts = String(full || "").trim().split(/\s+/).filter(Boolean);
@@ -9636,7 +9656,7 @@ app.get('/api/public/stats', async (req, res) => {
 
         const body = {
             success: true,
-            interns,
+            interns: publicInternCount(interns),
             certificates,
             domains: SELECTABLE_DOMAIN_NAMES.length,
             domainNames: SELECTABLE_DOMAIN_NAMES,
