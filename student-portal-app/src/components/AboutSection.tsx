@@ -23,7 +23,7 @@ export default function AboutSection() {
           transition={{ duration: 0.6 }}
           className="text-sm uppercase tracking-widest text-white/40"
         >
-          The Student Portal
+          TEN Career Studio
         </motion.p>
         <motion.h2
           initial={{ opacity: 0, y: 40 }}

@@ -321,7 +321,20 @@ describe('the hero', () => {
     // SVG text with an explicit textLength shrinks to the viewBox on a phone.
     expect(page).toMatch(/<svg viewBox="0 0 1600 430"/);
     expect(page).toMatch(/textLength="1580" lengthAdjust="spacingAndGlyphs">ENTREPRENEURSHIP NETWORK/);
-    expect(page).toMatch(/\.hero-word svg \{\s*width:100%; height:auto; display:block;/);
+    expect(page).toMatch(/\.hero-word svg \{\s*width:100%; height:auto;/);
+  });
+
+  it('fits the mark in the viewport, not just across it', () => {
+    /*
+     * Width alone was not enough. Sized only from its own width, the two-line
+     * mark grew tall enough on a wide screen to push ENTREPRENEURSHIP NETWORK
+     * below the fold, so the page opened looking broken rather than looking
+     * scrollable. The word now shrinks into the height that is left, and the
+     * hands give up their room before the name does.
+     */
+    expect(page).toMatch(/\.hero-word \{[^}]*flex:0 1 auto/);
+    expect(page).toMatch(/\.hero-word svg \{[^}]*max-height:min\(46vh, 520px\)/);
+    expect(page).toMatch(/\.hero-hands \{[^}]*max-height:22vh/);
   });
 
   it('cross-fades the three textures behind the letters', () => {

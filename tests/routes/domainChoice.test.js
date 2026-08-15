@@ -89,7 +89,15 @@ describe('the dialog is usable without a mouse', () => {
 
 describe('the paid course area has a name of its own', () => {
   const studio = fs.readFileSync(path.join(root, 'public/student-portal/index.html'), 'utf8');
-  const bundle = fs.readFileSync(path.join(root, 'public/student-portal/assets/index-BaFk79Hn.js'), 'utf8');
+  /*
+   * Vite renames the bundle on every build, so naming the hash here meant the
+   * suite failed the next time anyone rebuilt the portal — a red test that
+   * says nothing about the thing it is guarding. Resolve it the way a browser
+   * does instead, from the script tag.
+   */
+  const bundleName = (studio.match(/src="[^"]*assets\/(index-[^"]+\.js)"/) || [])[1];
+  if (!bundleName) throw new Error('student-portal/index.html has no bundle script tag');
+  const bundle = fs.readFileSync(path.join(root, 'public/student-portal/assets', bundleName), 'utf8');
   const funnel = fs.readFileSync(path.join(root, 'public/student-portal.html'), 'utf8');
   const dashboard = fs.readFileSync(path.join(root, 'public/student-dashboard.html'), 'utf8');
 

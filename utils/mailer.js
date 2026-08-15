@@ -28,6 +28,23 @@ function createEmailTransporter() {
     return nodemailer.createTransport(config);
 }
 
+/*
+ * The From address, in one place.
+ *
+ * Seven call sites already destructured `EMAIL_FROM` from this file —
+ * server.js's password reset, the mentor-booking mails, the coin receipts —
+ * and this module never exported it. Every one of them passed `undefined` as
+ * `from`, nodemailer refused the message, and the throw was swallowed into a
+ * "failed" row in MailHistory that nobody reads. Those emails have never been
+ * delivered. Exporting it is the whole fix.
+ */
+const EMAIL_FROM =
+    process.env.EMAIL_FROM ||
+    (process.env.SMTP_USER || process.env.EMAIL_USER
+        ? `TEN <${process.env.SMTP_USER || process.env.EMAIL_USER}>`
+        : 'TEN <no-reply@entrepreneurshipnetwork.net>');
+
 module.exports = {
-    createEmailTransporter
+    createEmailTransporter,
+    EMAIL_FROM
 };
