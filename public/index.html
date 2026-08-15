@@ -166,7 +166,7 @@
      Hovering pauses it — a card that slides out from under the cursor as you
      reach for it is the worst thing a carousel can do. */
   .cards-vp { overflow:hidden; padding:0 0 60px; -webkit-mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent); mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent); }
-  .cards { display:flex; gap:14px; width:max-content; animation:slide 64s linear infinite; }
+  .cards { display:flex; gap:14px; width:max-content; animation:slide 48s linear infinite; }
   .cards-vp:hover .cards, .cards-vp:focus-within .cards { animation-play-state:paused; }
   @keyframes slide { to { transform:translateX(-50%); } }
   @media (prefers-reduced-motion:reduce) {
@@ -272,8 +272,8 @@
      name and still needs the space before it. */
 
   /* Slide in from the side the row leads from. */
-  .drow { opacity:0; transform:translateX(-46px); transition:opacity .7s cubic-bezier(.2,.8,.2,1), transform .7s cubic-bezier(.2,.8,.2,1), border-color .4s, box-shadow .4s; }
-  .drow:nth-child(2n) { transform:translateX(46px); }
+  .drow { opacity:0; transform:translateX(-64px); transition:opacity 1.25s cubic-bezier(.22,.75,.25,1), transform 1.25s cubic-bezier(.22,.75,.25,1), border-color .4s, box-shadow .4s; }
+  .drow:nth-child(2n) { transform:translateX(64px); }
   .drow.visible { opacity:1; transform:translateX(0); }
 
   .drow .logo-box { position:relative; width:190px; height:190px; display:flex; align-items:center; justify-content:center; }

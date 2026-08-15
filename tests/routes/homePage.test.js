@@ -366,7 +366,7 @@ describe('the playful bits are gone', () => {
 
 describe('what TEN gives', () => {
   it('slides on its own and stops under the cursor', () => {
-    expect(page).toContain('animation:slide 64s linear infinite');
+    expect(page).toContain('animation:slide 48s linear infinite');
     expect(page).toContain('.cards-vp:hover .cards, .cards-vp:focus-within .cards { animation-play-state:paused; }');
   });
 
@@ -452,8 +452,8 @@ describe('the fourteen domain cards', () => {
   });
 
   it('slide in from that side', () => {
-    expect(page).toContain('.drow { opacity:0; transform:translateX(-46px);');
-    expect(page).toContain('.drow:nth-child(2n) { transform:translateX(46px); }');
+    expect(page).toContain('.drow { opacity:0; transform:translateX(-64px);');
+    expect(page).toContain('.drow:nth-child(2n) { transform:translateX(64px); }');
     expect(page).toContain('.drow.visible { opacity:1; transform:translateX(0); }');
   });
 
