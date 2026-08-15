@@ -153,38 +153,20 @@ button:hover{
 
 <script>
 
-const loginTime = sessionStorage.getItem("dashboardLogin");
-
-if(loginTime){
-
-    const currentTime = new Date().getTime();
-
-    if(currentTime - loginTime >= 10 * 60 * 1000){
-
-        sessionStorage.removeItem("dashboardLogin");
-
-        askPassword();
-    }
-
-}else{
-    askPassword();
-}
-
-function askPassword(){
-
-    const password = prompt("Enter Dashboard Password");
-
-    if(password === "SecurePortal@786"){
-
-        sessionStorage.setItem("dashboardLogin", new Date().getTime());
-
-    }else{
-
-        alert("Wrong Password");
-
-        window.location.href = "index.html";
-    }
-}
+/*
+ * The prompt("Enter Dashboard Password") that used to run here is gone.
+ *
+ * It compared what you typed against a literal string written into this file,
+ * so the password was readable by anyone who opened view-source or the network
+ * tab, and typing it only set a sessionStorage flag any console could set
+ * directly. It stopped nobody and told everybody the password. (The literal is
+ * deliberately not repeated here — this file is served to the public.)
+ *
+ * What actually protects this page is the server: GET /students is behind
+ * requireAdminAPI, and PUT/DELETE /students/:id behind requireHROrAdminAPI.
+ * Without an admin session the table below simply loads nothing, which is the
+ * same outcome the prompt was pretending to produce.
+ */
 
 </script>
 
