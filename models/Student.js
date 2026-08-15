@@ -242,4 +242,95 @@ studentsSchema.index({ createdAt: -1 });
 studentsSchema.index({ joiningDate: -1 });
 studentsSchema.index({ lastActiveDate: -1 });
 
+/* ---------------------------------------------------------------------------
+ * The name must never be missing, blank, or the string "undefined".
+ *
+ * The admin console printed `undefined` in the Name column for a number of
+ * students. Two separate things produced that, and both are guarded here
+ * rather than at the call sites, because there are three places that create a
+ * Student and more than twenty that update one:
+ *
+ *   1. A document whose `name` was never set. `name: String` has no default,
+ *      so the field is simply absent, the API omits it, and the page prints
+ *      the JavaScript `undefined`.
+ *   2. A document whose `name` was set to the literal text "undefined". The
+ *      admin Edit form was pre-filled from the value the table had just
+ *      rendered, so opening a broken row and pressing Save wrote the word
+ *      into the database permanently. That is why this spread.
+ *
+ * `firstName` and `lastName` are set by every registration path, so they are
+ * the first fallback; the email local part is the last resort and is still
+ * better than a row nobody can identify.
+ * ------------------------------------------------------------------------- */
+
+/** Values that look like a name but are not one. */
+const NOT_A_NAME = new Set(["undefined", "null", "nan", "-", "—"]);
+
+function isUsableName(value) {
+    if (typeof value !== "string") return false;
+    const t = value.trim();
+    return t.length > 0 && !NOT_A_NAME.has(t.toLowerCase());
+}
+
+/** Best available human name for a student, or "" when there is nothing. */
+function deriveStudentName({ name, firstName, lastName, email } = {}) {
+    if (isUsableName(name)) return name.trim();
+
+    const parts = [firstName, lastName].filter(isUsableName).map(s => s.trim());
+    if (parts.length) return parts.join(" ");
+
+    // Last resort: the email local part, tidied. "kanishka.sharma05" reads as
+    // "Kanishka Sharma05" — imperfect, but identifiable, which is the point.
+    if (typeof email === "string" && email.includes("@")) {
+        const local = email.split("@")[0].replace(/[._\-+]+/g, " ").trim();
+        if (local) return local.replace(/\b\w/g, c => c.toUpperCase());
+    }
+    return "";
+}
+
+/** Give a document being saved the best name available. */
+function applyNameToDoc(doc) {
+    const resolved = deriveStudentName(doc);
+    if (resolved && resolved !== doc.name) doc.name = resolved;
+    return doc;
+}
+
+/**
+ * Sanitise an update before it is written. Two jobs: never let "undefined" be
+ * written as a name, and keep `name` in step when a caller updates only
+ * firstName/lastName.
+ */
+function applyNameToUpdate(update) {
+    if (!update || Array.isArray(update)) return update;
+
+    const set = update.$set || update;
+    const touches = ["name", "firstName", "lastName"].some(k => set[k] !== undefined);
+    if (!touches) return update;
+
+    if (set.name !== undefined && !isUsableName(set.name)) {
+        // A caller explicitly tried to write a junk name. Drop the write rather
+        // than persist it; the existing value is better than "undefined".
+        delete set.name;
+    }
+    if (set.name === undefined && (set.firstName !== undefined || set.lastName !== undefined)) {
+        const resolved = deriveStudentName({ firstName: set.firstName, lastName: set.lastName });
+        if (resolved) set.name = resolved;
+    }
+    return update;
+}
+
+studentsSchema.pre("save", function (next) {
+    applyNameToDoc(this);
+    next();
+});
+
+studentsSchema.pre(["findOneAndUpdate", "updateOne", "updateMany"], function (next) {
+    applyNameToUpdate(this.getUpdate());
+    next();
+});
+
 module.exports = mongoose.model("Student", studentsSchema);
+module.exports.deriveStudentName = deriveStudentName;
+module.exports.isUsableName = isUsableName;
+module.exports.applyNameToDoc = applyNameToDoc;
+module.exports.applyNameToUpdate = applyNameToUpdate;

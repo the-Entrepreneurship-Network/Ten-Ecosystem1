@@ -481,8 +481,13 @@ router.get('/students', requireAdminAPI, async (req, res) => {
     const filter = {};
     if (domain) filter.domain = domain;
     if (search) {
+      // firstName/lastName are searched too: a record whose `name` never got
+      // set is exactly the one an admin is hunting for, and searching only
+      // `name` could not find it by name at all.
       filter.$or = [
         { name: { $regex: search, $options: 'i' } },
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } },
         { employeeId: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } }
       ];
@@ -493,7 +498,9 @@ router.get('/students', requireAdminAPI, async (req, res) => {
         // mustChange* drive the "Reset pending" badge: without them there is no
         // way to tell an account still sitting on an admin-set password from
         // one the student has since taken back over.
-        .select('name employeeId email domain tenure joiningDate locStatus lorStatus starStatus isLockedOut failedLoginAttempts createdAt mustChangePassword mustChangeEmail')
+        // firstName/lastName ride along so the console can fall back to them
+        // for a record whose `name` was never written.
+        .select('name firstName lastName employeeId email domain tenure joiningDate locStatus lorStatus starStatus isLockedOut failedLoginAttempts createdAt mustChangePassword mustChangeEmail')
         .skip(skip)
         .limit(parseInt(limit))
         .sort({ createdAt: -1 }),
