@@ -28,7 +28,8 @@ type Report = {
   hazards: string[];
   missingKeywords: string[];
 };
-type Msg = { role: 'user' | 'agent'; text?: string; report?: Report; resume?: string; file?: string };
+type Missing = { field: string; worth: number; why: string };
+type Msg = { role: 'user' | 'agent'; text?: string; report?: Report; resume?: string; file?: string; missing?: Missing[]; potentialScore?: number; details?: Record<string, string> };
 
 /* ---------- frame one: the statement ---------- */
 
@@ -156,6 +157,28 @@ function ReportCard({ report }: { report: Report }) {
   );
 }
 
+/*
+ * Fetches the rendered PDF and hands it to the browser. Posting rather than
+ * linking keeps the details out of the URL bar and out of server logs.
+ */
+async function downloadPdf(details: Record<string, string>) {
+  const res = await fetch(`${API}/build.pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ details }),
+  });
+  if (!res.ok) return;
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${(details.name || 'resume').replace(/[^A-Za-z0-9]+/g, '-')}-TEN.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function AgentChat() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
@@ -177,7 +200,7 @@ export function AgentChat() {
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'failed');
       if (data.kind === 'scan') setMsgs((m) => [...m, { role: 'agent', report: data.report }]);
-      else if (data.kind === 'build') setMsgs((m) => [...m, { role: 'agent', resume: data.text, report: data.report }]);
+      else if (data.kind === 'build') setMsgs((m) => [...m, { role: 'agent', resume: data.text, report: data.report, missing: data.missing, potentialScore: data.potentialScore, details: data.details }]);
       else setMsgs((m) => [...m, { role: 'agent', text: data.reply }]);
     } catch {
       setMsgs((m) => [...m, { role: 'agent', text: 'The agent could not be reached. Check that the portal server is running and try again.' }]);
@@ -272,12 +295,30 @@ export function AgentChat() {
                         {m.text && <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed text-[#374151]">{m.text}</p>}
                         {m.resume && (
                           <div className="rounded-2xl border border-[#e5e9f0] bg-[#fbfcfe] p-4">
-                            <div className="mb-2 flex items-center justify-between">
+                            <div className="mb-2 flex items-center justify-between gap-2">
                               <b className="text-[12px] uppercase tracking-wider text-[#6b7280]">Your ATS-ready resume</b>
-                              <button onClick={() => navigator.clipboard?.writeText(m.resume!)}
-                                className="rounded-md bg-[#2563eb] px-2.5 py-1 text-[11px] font-semibold text-white">Copy</button>
+                              <div className="flex gap-2">
+                                <button onClick={() => navigator.clipboard?.writeText(m.resume!)}
+                                  className="rounded-md border border-[#d1d5db] px-2.5 py-1 text-[11px] font-semibold text-[#374151]">Copy</button>
+                                <button onClick={() => downloadPdf(m.details || {})}
+                                  className="rounded-md bg-[#2563eb] px-2.5 py-1 text-[11px] font-semibold text-white">Download PDF</button>
+                              </div>
                             </div>
                             <pre className="max-h-[320px] overflow-auto whitespace-pre-wrap font-mono text-[11.5px] leading-relaxed text-[#374151]">{m.resume}</pre>
+                          </div>
+                        )}
+                        {m.missing && m.missing.length > 0 && (
+                          <div className="rounded-2xl border border-[#ffe0b2] bg-[#fffaf3] p-4">
+                            <p className="mb-1 text-[12px] font-bold uppercase tracking-wider text-[#b45309]">
+                              Give me these and it reaches {m.potentialScore}/100
+                            </p>
+                            <ul className="mt-2 space-y-1.5">
+                              {m.missing.map((f) => (
+                                <li key={f.field} className="text-[12.5px] leading-relaxed text-[#374151]">
+                                  <b>{f.field}</b> <span className="text-[#b45309]">+{f.worth}</span> — {f.why}
+                                </li>
+                              ))}
+                            </ul>
                           </div>
                         )}
                         {m.report && <ReportCard report={m.report} />}

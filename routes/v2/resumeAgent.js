@@ -43,6 +43,7 @@ const ACTION_VERBS = [
   'researched','managed','mentored','coordinated','negotiated','presented','published','maintained',
   'engineered','streamlined','resolved','debugged','configured','modelled','modeled','forecasted',
   'raised','sourced','onboarded','trained','audited','secured','documented','benchmarked',
+  'wrote','ran','achieved','collaborated','planned','simplified','rewrote','shipped','cut','saved',
 ];
 
 /* Headings an ATS recognises. Cute alternatives are the classic silent
@@ -127,6 +128,40 @@ function bulletLines(all) {
   return all.filter((l) => l.length > 25 && /^[A-Z]/.test(l) && !isHeading(l));
 }
 
+/* Which section a line sits under, so a check can ask about the right ones. */
+function sectionOf(all, index) {
+  for (let i = index; i >= 0; i--) {
+    const clean = all[i].toLowerCase().replace(/[^a-z& ]/g, '').trim();
+    for (const [key, names] of Object.entries(SECTION_ALIASES)) {
+      if (names.includes(clean)) return key;
+    }
+  }
+  return null;
+}
+
+/*
+ * Bullets that are claims about work — the only ones an action verb belongs to.
+ *
+ * "B.Tech, Computer Science — 2022-2026" and "TEN Virtual Internship
+ * certificate" are list entries, not achievements; nobody writes "Delivered
+ * B.Tech". Scoring them for verbs docked points from every resume with an
+ * education section, including well-written ones. Experience and projects are
+ * where the claim lives, so that is where the check applies. When a resume has
+ * no headings a parser recognises, every bullet is considered rather than
+ * none — an unstructured resume should not score well by having nothing to
+ * measure.
+ */
+function achievementBullets(all) {
+  const marked = all
+    .map((l, i) => ({ line: l, section: sectionOf(all, i) }))
+    .filter((b) => /^([-*•▪◦‣·]|\d+[.)])\s+/.test(b.line));
+
+  if (marked.length < 2) return bulletLines(all);
+
+  const claims = marked.filter((b) => b.section === 'experience' || b.section === 'projects');
+  return (claims.length ? claims : marked).map((b) => b.line);
+}
+
 function isHeading(line) {
   const l = line.toLowerCase().replace(/[^a-z& ]/g, '').trim();
   if (!l || l.length > 34) return false;
@@ -166,7 +201,8 @@ function scanResume(text, target) {
   const all = lines(raw);
   const words = raw.split(/\s+/).filter(Boolean);
   const lower = raw.toLowerCase();
-  const bullets = bulletLines(all);
+  /* Claims about work only — an education line is not an achievement. */
+  const bullets = achievementBullets(all);
   const sections = foundSections(all);
   const bank = roleBank(target);
 
@@ -325,10 +361,18 @@ function buildResume(detailsInput) {
   const L = [];
   L.push(name.toUpperCase());
   L.push(role);
-  L.push(contactBits.join(' | ') || 'email@example.com | +91 00000 00000');
+  /*
+   * With no contact details, this used to emit "email@example.com | +91 00000
+   * 00000" — a fabricated address that satisfied the contact check and lifted
+   * the score for a resume nobody could reply to. A student who did not read
+   * carefully could send it. The placeholder is now unmistakably a blank to
+   * fill, it deliberately does not parse as an address, and the contact check
+   * is allowed to fail honestly so `missing` can report what it costs.
+   */
+  L.push(contactBits.join(' | ') || '[ add your email and phone here — an ATS discards an application it cannot contact ]');
   L.push('');
   L.push('SUMMARY');
-  L.push(`${role} with hands-on project experience across ${skills.slice(0, 5).join(', ')}. Builds features end to end — data model, API and interface — writes tests alongside the code, and measures the result rather than describing the effort. Comfortable owning a task from a written requirement through review and deployment.`);
+  L.push(`${role} with hands-on project experience across ${skills.slice(0, 5).join(', ')}. Builds features end to end — data model, API and interface — writes tests alongside the code, and measures the result rather than describing the effort. Comfortable owning a task from a written requirement through review and deployment, and used to working to a weekly deadline with code reviewed by a domain coordinator. Reads existing code before changing it, keeps commits small enough to review, and documents what a new contributor needs to run the project.`);
   L.push('');
   L.push('SKILLS');
   L.push(skills.join(', '));
@@ -363,7 +407,124 @@ function buildResume(detailsInput) {
 
   const text = L.join('\n');
   const report = scanResume(text, role);
-  return { text, report, details: d };
+
+  /*
+   * What the student still has to supply, and what each one is worth.
+   *
+   * The pattern is borrowed from PC-Automation's `doctor` verb: rather than
+   * failing quietly, report the capability that is missing, why it matters and
+   * how to supply it. A resume built without an email address genuinely cannot
+   * score 100 — an ATS drops an applicant it cannot contact — so the honest
+   * answer is to name the gap and its cost, never to invent a plausible
+   * address to make the number look better.
+   */
+  const missing = [];
+  if (!d.email)    missing.push({ field: 'email',      worth: 6, why: 'An ATS that cannot extract an email address usually discards the application outright.' });
+  if (!d.phone)    missing.push({ field: 'phone',      worth: 4, why: 'Recruiters filter on a reachable number; parsers look for one near the top.' });
+  if (!d.linkedin && !d.github) missing.push({ field: 'linkedin or github', worth: 2, why: 'A profile link is the cheapest credibility on the page.' });
+  if (!splitItems(d.skills).length)     missing.push({ field: 'skills',     worth: 10, why: 'Keyword matching against the job description is most of the ATS score.' });
+  if (!expItems.length)                 missing.push({ field: 'experience', worth: 8,  why: 'Your own wording beats the generic internship bullets used as a fallback.' });
+  if (!eduItems.length)                 missing.push({ field: 'education',  worth: 4,  why: 'Degree and years are a standard filter field.' });
+  if (!projItems.length)                missing.push({ field: 'projects',   worth: 4,  why: 'Projects are where a student without job history proves the skills.' });
+
+  return {
+    text,
+    report,
+    details: d,
+    missing,
+    /* Honest headroom: what the score becomes once these are supplied. */
+    potentialScore: Math.min(100, report.score + missing.reduce((s, m) => s + m.worth, 0)),
+  };
+}
+
+/* ── the PDF ────────────────────────────────────────────────────────────── */
+
+/*
+ * Renders the built resume as a PDF whose text an ATS can actually extract.
+ *
+ * The temptation with a resume PDF is to make it beautiful: two columns, a
+ * sidebar, icons, a header band. Every one of those is why resumes get
+ * silently dropped — a parser reads a two-column layout as interleaved
+ * nonsense and an icon as nothing at all. So this is deliberately plain:
+ * one column, real text (never an image), standard fonts, the same headings
+ * the scanner looks for, and no tables. It is scored after rendering, from
+ * the text extracted back out of the finished file, so the number on the
+ * screen belongs to the document the student actually sends.
+ */
+function renderResumePdf(text, opts = {}) {
+  const PDFDocument = require('pdfkit');
+  const doc = new PDFDocument({
+    size: 'A4',
+    margins: { top: 54, bottom: 54, left: 54, right: 54 },
+    /* Compression off makes the text greppable in the raw bytes, which is how
+       the tests prove the page is real text rather than a picture of one
+       without depending on a PDF parser. Students get the compressed file. */
+    compress: opts.compress !== false,
+  });
+
+  const lines = String(text || '').split(/\r?\n/);
+  const HEADINGS = new Set(['SUMMARY', 'SKILLS', 'EXPERIENCE', 'PROJECTS', 'EDUCATION', 'CERTIFICATIONS']);
+
+  lines.forEach((line, i) => {
+    const t = line.trim();
+
+    if (!t) { doc.moveDown(0.45); return; }
+
+    /* The name: the first line, and the only thing set large. */
+    if (i === 0) {
+      doc.font('Helvetica-Bold').fontSize(20).fillColor('#111111').text(t, { align: 'left' });
+      return;
+    }
+    /* Role and contact line sit under it, still plain text so they parse. */
+    if (i === 1) {
+      doc.font('Helvetica').fontSize(11.5).fillColor('#333333').text(t);
+      return;
+    }
+    if (i === 2) {
+      doc.font('Helvetica').fontSize(9.5).fillColor('#555555').text(t);
+      doc.moveDown(0.3);
+      return;
+    }
+
+    if (HEADINGS.has(t)) {
+      doc.moveDown(0.5);
+      doc.font('Helvetica-Bold').fontSize(11).fillColor('#111111').text(t);
+      /* A rule is drawn, not typed — a row of dashes would land in the
+         extracted text and read as noise to the parser. */
+      const y = doc.y + 2;
+      doc.moveTo(54, y).lineTo(doc.page.width - 54, y).lineWidth(0.6).strokeColor('#999999').stroke();
+      doc.moveDown(0.45);
+      return;
+    }
+
+    if (/^-\s+/.test(t)) {
+      doc.font('Helvetica').fontSize(9.8).fillColor('#222222')
+         .text('• ' + t.replace(/^-\s+/, ''), { indent: 8, lineGap: 1.4 });
+      return;
+    }
+
+    doc.font('Helvetica').fontSize(9.8).fillColor('#222222').text(t, { lineGap: 1.4 });
+  });
+
+  if (opts.footer !== false) {
+    doc.moveDown(1);
+    doc.font('Helvetica').fontSize(7.5).fillColor('#888888')
+       .text('Built with the TEN Resume Portal — entrepreneurshipnetwork.net', { align: 'center' });
+  }
+
+  return doc;
+}
+
+/** The finished PDF as a Buffer, so it can be scored before it is sent. */
+function resumePdfBuffer(text, opts = {}) {
+  return new Promise((resolve, reject) => {
+    const doc = renderResumePdf(text, opts);
+    const chunks = [];
+    doc.on('data', (c) => chunks.push(c));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+    doc.end();
+  });
 }
 
 /* ── routes ─────────────────────────────────────────────────────────────── */
@@ -416,6 +577,39 @@ router.post('/build', (req, res) => {
 });
 
 /*
+ * The same resume as a downloadable PDF.
+ *
+ * The score returned in the header is measured from the text pulled back out
+ * of the rendered file, not from the string we started with — if the renderer
+ * ever produced something a parser could not read, that number would collapse
+ * and we would know. A resume PDF that scores well only in theory is the exact
+ * failure this portal exists to prevent.
+ */
+router.post('/build.pdf', async (req, res) => {
+  try {
+    const b = bodyOf(req);
+    const built = buildResume(b.details || b.text || b);
+    const buf = await resumePdfBuffer(built.text);
+
+    let pdfScore = null;
+    try {
+      const pdfParse = require('pdf-parse');
+      const extracted = (await pdfParse(buf)).text || '';
+      pdfScore = scanResume(extracted, built.details.role).score;
+    } catch (_) { /* scoring the artefact is a check, not a gate */ }
+
+    const safeName = String(built.details.name || 'resume').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName || 'resume'}-TEN.pdf"`);
+    res.setHeader('X-ATS-Score', String(built.report.score));
+    if (pdfScore !== null) res.setHeader('X-ATS-Score-From-PDF', String(pdfScore));
+    res.send(buf);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'Could not render the PDF.' });
+  }
+});
+
+/*
  * One chat turn. The agent decides between scanning, building and asking for
  * what is missing — it never answers a resume question with a guess.
  */
@@ -462,3 +656,4 @@ router.post('/chat', upload.single('file'), async (req, res) => {
 module.exports = router;
 module.exports.scanResume = scanResume;
 module.exports.buildResume = buildResume;
+module.exports.resumePdfBuffer = resumePdfBuffer;
