@@ -725,13 +725,14 @@
     <!-- filled by JS -->
   </div>
 
+  <!-- The "GET TO THE TEN TECH DASHBOARD" button stood here.
+       It sent a visitor to dashboard.html, the internal student-records admin
+       screen, which answers 401 and bounces to the staff Internal Portal
+       sign-in at /ten-admin/login. Nothing a member of the public can do with
+       it but be asked for credentials they do not have. Staff reach that
+       portal directly; it does not belong on the landing page. -->
   <div style="text-align:center;">
-    <button onclick="document.getElementById('wipe').classList.add('on'); setTimeout(()=>location.href='dashboard.html',650)"
-      style="background:#fff; color:#000; border:0; border-radius:999px; padding:26px 64px; font-size:16px; font-weight:900; letter-spacing:.04em; cursor:pointer; transition:transform .2s"
-      onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform=''">
-      GET TO THE TEN TECH DASHBOARD →
-    </button>
-    <div style="display:flex; justify-content:center; gap:20px; margin-top:34px; font-size:12.5px;">
+    <div style="display:flex; justify-content:center; gap:20px; font-size:12.5px;">
       <a href="https://www.linkedin.com/company/the-entrepreneurship-network" style="color:#aaa; text-decoration:none;">LINKEDIN</a>
       <a href="https://www.instagram.com/theentrepreneurshipnetwork" style="color:#aaa; text-decoration:none;">INSTAGRAM</a>
       <a href="mailto:info@entrepreneurshipnetwork.net" style="color:#aaa; text-decoration:none;">EMAIL US</a>
