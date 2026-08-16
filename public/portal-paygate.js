@@ -51,11 +51,53 @@
   var UPI_ID = 'paytmqr5k0ods@ptys';
   var PAYEE = 'Limitless Technologies';
 
-  /* Set data-amount to prefill the sum. Left off, the UPI app asks for it,
-     which is still a real payment — just one the payer types the figure into. */
-  var amount = script.dataset.amount || '';
+  /* Every portal costs the same today. Kept in step with PORTAL_ACCESS_PRICE in
+     config/payment.js, which is what the shared QR is generated from — change
+     one without the other and the scanner asks for a different sum than the
+     page quotes. data-amount overrides it per portal, but a portal on its own
+     price needs its own QR too. */
+  var amount = script.dataset.amount || '200';
+  var priceLabel = '₹' + amount;
 
   var STORE_KEY = 'ten_pay_choice_' + portal;
+  var USES_KEY = 'ten_portal_uses_' + portal;   // free runs already taken
+  var PAID_KEY = 'ten_portal_paid_' + portal;   // pressed Pay Now on the repeat gate
+
+  /* One run is free so the portal can prove itself; after that it is paid.
+     Raise this if a portal should give away more than a single look. */
+  var FREE_USES = 1;
+
+  function readInt(key) {
+    try { return parseInt(localStorage.getItem(key), 10) || 0; } catch (e) { return 0; }
+  }
+  function write(key, value) {
+    try { localStorage.setItem(key, value); } catch (e) { /* private mode */ }
+  }
+
+  /* Set once the server confirms a PAID transaction for this portal. That is
+     the real entitlement; the localStorage flag below is only the fallback for
+     a server with no payment credentials configured. */
+  var serverGranted = false;
+
+  function hasPaid() {
+    if (serverGranted) return true;
+    try { return localStorage.getItem(PAID_KEY) === '1'; } catch (e) { return false; }
+  }
+
+  /** Ask the server whether this portal is already owned. */
+  function checkAccess() {
+    return fetch('/api/v2/portal-access/' + encodeURIComponent(portal), {
+      credentials: 'include'
+    }).then(function (r) {
+      /* 401 just means nobody is signed in yet — not an error worth showing. */
+      if (!r.ok) return null;
+      return r.json();
+    }).catch(function () { return null; });
+  }
+  /** True once the free look is spent and nothing has been paid since. */
+  function mustPay() {
+    return !hasPaid() && readInt(USES_KEY) >= FREE_USES;
+  }
 
   /** The intent a UPI app opens. Same payee the QR encodes. */
   function upiIntent() {
@@ -81,6 +123,232 @@
     }));
   }
 
+  /**
+   * The scanner, on white. Scanners need the light quiet zone, and a
+   * dark-tinted code is the classic reason a camera will not lock on.
+   */
+  function qrPanel(size) {
+    var box = el('div',
+      'background:#fff;border-radius:16px;padding:14px;display:inline-block;' +
+      'box-shadow:0 12px 40px rgba(0,0,0,.5);');
+    var img = el('img', 'width:' + size + 'px;height:' + size + 'px;display:block;border-radius:6px;');
+    img.src = qr;
+    img.alt = 'UPI payment QR code for ' + PAYEE;
+    box.appendChild(img);
+    box.img = img;   // the verified flow swaps this for an order-specific code
+    return box;
+  }
+
+  /**
+   * Going in. The free run is spent here rather than on arrival, so someone
+   * who only reads the landing page keeps their look.
+   *
+   * Once it is spent the paywall opens instead, and — as asked — it offers
+   * only Pay Now. "Payment after Completion" is a first-run courtesy; a second
+   * run is not a completion, it is more usage.
+   */
+  function enterPortal() {
+    if (mustPay()) { openPaywall(); return; }
+
+    write(USES_KEY, readInt(USES_KEY) + 1);
+    document.dispatchEvent(new CustomEvent('ten:portal-start', {
+      detail: { portal: portal, uses: readInt(USES_KEY), paid: hasPaid() }
+    }));
+
+    if (next) { window.location.href = next; return; }
+    /* A single-page portal is already on screen above this card, so entering
+       it means going back to it rather than navigating anywhere. */
+    var app = document.getElementById('root') || document.body;
+    app.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  /**
+   * Create a real order and wait for the provider to confirm it.
+   *
+   * This is what makes the QR mean something. The code on screen is swapped
+   * for one that pays a specific order, and the unlock comes from the server
+   * saying that order is PAID — not from the visitor pressing a button.
+   *
+   * Returns false when real payment is unavailable (nobody signed in, or the
+   * server has no provider credentials), so the caller can fall back.
+   */
+  function startVerifiedPayment(ui) {
+    return fetch('/api/v2/portal-access/order', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ portal: portal })
+    }).then(function (r) {
+      return r.json().then(function (data) { return { status: r.status, data: data }; });
+    }).then(function (res) {
+      if (res.status === 401 || res.status === 403) { ui.needLogin(); return true; }
+      if (!res.data || res.data.success !== true) return false;   // 503 / not configured
+      if (res.data.alreadyPaid) { serverGranted = true; ui.unlock(); return true; }
+
+      ui.showOrder(res.data);
+      pollOrder(res.data.orderId, ui);
+      return true;
+    }).catch(function () { return false; });
+  }
+
+  /**
+   * Poll until the provider reports the order settled. The webhook is what
+   * normally marks it PAID; polling is what tells this page it happened, and
+   * it also covers a webhook that is late or misrouted.
+   */
+  function pollOrder(orderId, ui) {
+    var deadline = Date.now() + 10 * 60 * 1000;   // UPI approvals are not instant
+
+    (function tick() {
+      if (Date.now() > deadline) { ui.expired(); return; }
+
+      fetch('/api/v2/portal-access/order/' + encodeURIComponent(orderId) + '/status', {
+        credentials: 'include'
+      }).then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          if (data && data.granted) {
+            serverGranted = true;
+            write(PAID_KEY, '1');   // spares the next page load a round trip
+            ui.unlock();
+            return;
+          }
+          setTimeout(tick, 3000);
+        })
+        .catch(function () { setTimeout(tick, 5000); });
+    })();
+  }
+
+  /**
+   * The blocking scanner. It has no close button on purpose: the free run is
+   * over and paying is the way through.
+   *
+   * When the server can take a real payment this shows an order-specific QR
+   * and unlocks on confirmation. When it cannot — no credentials configured —
+   * it falls back to the static merchant QR and an "I've paid" button, which
+   * is a claim rather than a receipt and is marked as such in the UI.
+   */
+  function openPaywall() {
+    if (document.getElementById('ten-paywall')) return;
+
+    var overlay = el('div',
+      'position:fixed;inset:0;z-index:99999;background:rgba(4,7,16,.92);' +
+      'backdrop-filter:blur(6px);display:flex;align-items:center;' +
+      'justify-content:center;padding:24px;overflow:auto;' +
+      'font-family:Inter,system-ui,sans-serif;');
+    overlay.id = 'ten-paywall';
+
+    var box = el('div',
+      'background:#0c1220;border:1px solid rgba(212,175,55,.28);border-radius:20px;' +
+      'padding:34px 30px;max-width:420px;width:100%;text-align:center;' +
+      'box-shadow:0 30px 90px rgba(0,0,0,.7);');
+
+    box.appendChild(el('div',
+      'font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;color:#D4AF37;' +
+      'font-weight:800;margin-bottom:10px;', 'Free run used'));
+    box.appendChild(el('h3',
+      'color:#fff;font-size:23px;font-weight:800;margin:0 0 10px;letter-spacing:-.01em;',
+      'Pay to continue using ' + title.replace(/ Access$/, '') + '.'));
+    box.appendChild(el('p',
+      'color:#94a3b8;font-size:14px;line-height:1.6;margin:0 0 18px;',
+      'You have had your free run of this portal. Scan to pay ' + priceLabel +
+      ' for continued access.'));
+
+    var panel = qrPanel(196);
+    var qrImg = panel.img;
+    box.appendChild(panel);
+    box.appendChild(el('div',
+      'color:#64748b;font-size:12px;margin:12px 0 2px;', 'Scan with any UPI app'));
+    var upiLine = el('div',
+      'color:#94a3b8;font-size:12.5px;margin-bottom:24px;',
+      'UPI ID: <span style="color:#D4AF37;font-weight:700;font-family:ui-monospace,monospace;">' +
+      UPI_ID + '</span>');
+    box.appendChild(upiLine);
+
+    /* Pay Now only. No pay-after on a repeat run. */
+    var pay = el('a',
+      'display:block;padding:15px 24px;border-radius:11px;text-decoration:none;' +
+      'background:linear-gradient(135deg,#f5c542,#c9a227);color:#0c1220;' +
+      'font-weight:800;font-size:15px;cursor:pointer;', 'Pay ' + priceLabel + ' Now');
+    pay.href = upiIntent();
+
+    var done = el('button',
+      'display:none;margin-top:14px;width:100%;padding:13px 20px;border:0;border-radius:11px;' +
+      'background:#fff;color:#0c1220;font-weight:800;font-size:14px;cursor:pointer;' +
+      'font-family:inherit;', "I've paid — continue");
+    done.type = 'button';
+
+    var status = el('div',
+      'color:#64748b;font-size:12.5px;margin-top:14px;line-height:1.6;', '');
+
+    /* Fallback path: no receipt exists, so this only records a claim. */
+    pay.addEventListener('click', function () {
+      remember('now');
+      done.style.display = '';
+    });
+    done.addEventListener('click', function () {
+      write(PAID_KEY, '1');
+      closePaywall();
+      enterPortal();
+    });
+
+    box.appendChild(pay);
+    box.appendChild(done);
+    box.appendChild(status);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    /* Hand the verified flow the few nodes it needs to drive. */
+    var ui = {
+      showOrder: function (data) {
+        /* Swap in the QR that pays this order, and drop the manual
+           confirmation: nothing here needs the visitor's word any more. */
+        qrImg.src = data.qr;
+        pay.href = data.paymentUrl;
+        pay.target = '_blank';
+        pay.rel = 'noopener';
+        done.style.display = 'none';
+        done.disabled = true;
+        upiLine.innerHTML = 'Order <span style="color:#D4AF37;font-family:ui-monospace,monospace;">' +
+          String(data.orderId).slice(-8) + '</span> · ' + priceLabel;
+        status.textContent = 'Waiting for payment confirmation…';
+      },
+      unlock: function () {
+        status.textContent = 'Payment confirmed. Opening the portal…';
+        setTimeout(function () { closePaywall(); enterPortal(); }, 700);
+      },
+      needLogin: function () {
+        status.innerHTML = 'Sign in first so the payment can be linked to your account. ' +
+          '<a href="/student-login.html" style="color:#D4AF37;font-weight:700;">Sign in →</a>';
+        pay.style.display = 'none';
+        done.style.display = 'none';
+      },
+      expired: function () {
+        status.textContent = 'This order expired. Reload the page to start a new one.';
+      }
+    };
+
+    /* Try the real thing; leave the fallback in place if it is unavailable. */
+    startVerifiedPayment(ui).then(function (handled) {
+      if (!handled) {
+        status.textContent = 'Online confirmation is unavailable — pay by scanning, ' +
+          'then press the button above.';
+      }
+    });
+
+    /* The overlay covers the portal but does not stop it scrolling underneath,
+       which makes a blocking dialog feel like a dismissible banner. */
+    priorOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+  }
+
+  var priorOverflow = '';
+
+  function closePaywall() {
+    var overlay = document.getElementById('ten-paywall');
+    if (overlay) overlay.remove();
+    document.body.style.overflow = priorOverflow;
+  }
+
   function build() {
     var section = el('section',
       'background:#080c16;padding:72px 20px 84px;font-family:Inter,system-ui,sans-serif;' +
@@ -102,18 +370,7 @@
       'color:#94a3b8;font-size:15px;line-height:1.6;margin:0 0 32px;',
       'Scan to pay, or start now and pay after completion.'));
 
-    /* The QR sits on white deliberately: scanners need the light quiet zone,
-       and a dark-tinted code is the classic reason a camera will not lock on. */
-    var qrBox = el('div',
-      'background:#fff;border-radius:16px;padding:16px;display:inline-block;' +
-      'box-shadow:0 12px 40px rgba(0,0,0,.5);');
-    var img = el('img',
-      'width:212px;height:212px;display:block;border-radius:6px;');
-    img.src = qr;
-    img.alt = 'UPI payment QR code for ' + PAYEE;
-    img.loading = 'lazy';
-    qrBox.appendChild(img);
-    card.appendChild(qrBox);
+    card.appendChild(qrPanel(212));
 
     card.appendChild(el('div',
       'color:#64748b;font-size:12px;margin:14px 0 4px;', 'Scan with any UPI app'));
@@ -134,6 +391,10 @@
     idRow.appendChild(copy);
     card.appendChild(idRow);
 
+    card.appendChild(el('div',
+      'color:#fff;font-size:34px;font-weight:800;letter-spacing:-.02em;margin-bottom:2px;',
+      priceLabel + '<span style="font-size:14px;color:#94a3b8;font-weight:600;">' +
+      ' / run</span>'));
     card.appendChild(el('div',
       'color:#fff;font-size:17px;font-weight:800;margin-bottom:6px;', title));
     card.appendChild(el('div',
@@ -188,13 +449,64 @@
       'Payment done — continue to the portal →');
     card.appendChild(proceed);
 
+    /* Get Started sits below the payment, not above it. Reaching it means
+       scrolling past the QR, which is the point: the price is the first thing
+       seen, so the portal reads as paid rather than free with a donation box
+       attached. */
+    var start = el('button',
+      'margin-top:30px;width:100%;max-width:340px;padding:16px 24px;border:0;' +
+      'border-radius:12px;background:#fff;color:#0c1220;font-weight:800;' +
+      'font-size:15.5px;cursor:pointer;font-family:inherit;', 'Get Started');
+    start.type = 'button';
+    start.addEventListener('click', function () { enterPortal(); });
+    card.appendChild(start);
+
+    card.appendChild(el('div',
+      'color:#64748b;font-size:11.5px;margin-top:12px;line-height:1.6;',
+      readInt(USES_KEY) >= FREE_USES && !hasPaid()
+        ? 'Your free run is used. Payment is required to continue.'
+        : 'Premium portal · one free run included'));
+
     section.appendChild(card);
     document.body.appendChild(section);
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', build);
-  } else {
+  function init() {
     build();
+
+    /* Ask the server before deciding anything. A paid user must not be shown
+       the scanner because their browser storage was cleared, and a user who
+       cleared storage to dodge the gate must not be let through by it. */
+    checkAccess().then(function (access) {
+      if (access && access.granted) {
+        serverGranted = true;
+        write(PAID_KEY, '1');
+        return;
+      }
+      /* Someone coming back for another run meets the scanner straight away,
+         rather than getting through the portal and being stopped later. */
+      if (mustPay()) openPaywall();
+    });
+  }
+
+  /* Exposed so a portal can gate its own actions on the same rule instead of
+     reimplementing it: PortalPaygate.requireAccess() returns false and opens
+     the scanner when the free run is spent. */
+  window.PortalPaygate = {
+    portal: portal,
+    mustPay: mustPay,
+    hasPaid: hasPaid,
+    openPaywall: openPaywall,
+    requireAccess: function () {
+      if (!mustPay()) return true;
+      openPaywall();
+      return false;
+    }
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
   }
 })();
