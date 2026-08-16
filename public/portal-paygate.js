@@ -51,9 +51,13 @@
   var UPI_ID = 'paytmqr5k0ods@ptys';
   var PAYEE = 'Limitless Technologies';
 
-  /* Set data-amount to prefill the sum. Left off, the UPI app asks for it,
-     which is still a real payment — just one the payer types the figure into. */
-  var amount = script.dataset.amount || '';
+  /* Every portal costs the same today. Kept in step with PORTAL_ACCESS_PRICE in
+     config/payment.js, which is what the shared QR is generated from — change
+     one without the other and the scanner asks for a different sum than the
+     page quotes. data-amount overrides it per portal, but a portal on its own
+     price needs its own QR too. */
+  var amount = script.dataset.amount || '200';
+  var priceLabel = '₹' + amount;
 
   var STORE_KEY = 'ten_pay_choice_' + portal;
   var USES_KEY = 'ten_portal_uses_' + portal;   // free runs already taken
@@ -172,8 +176,9 @@
       'color:#fff;font-size:23px;font-weight:800;margin:0 0 10px;letter-spacing:-.01em;',
       'Pay to continue using ' + title.replace(/ Access$/, '') + '.'));
     box.appendChild(el('p',
-      'color:#94a3b8;font-size:14px;line-height:1.6;margin:0 0 24px;',
-      'You have had your free run of this portal. Scan to pay for continued access.'));
+      'color:#94a3b8;font-size:14px;line-height:1.6;margin:0 0 18px;',
+      'You have had your free run of this portal. Scan to pay ' + priceLabel +
+      ' for continued access.'));
 
     box.appendChild(qrPanel(196));
     box.appendChild(el('div',
@@ -187,7 +192,7 @@
     var pay = el('a',
       'display:block;padding:15px 24px;border-radius:11px;text-decoration:none;' +
       'background:linear-gradient(135deg,#f5c542,#c9a227);color:#0c1220;' +
-      'font-weight:800;font-size:15px;cursor:pointer;', 'Pay Now');
+      'font-weight:800;font-size:15px;cursor:pointer;', 'Pay ' + priceLabel + ' Now');
     pay.href = upiIntent();
 
     var done = el('button',
@@ -267,6 +272,10 @@
     idRow.appendChild(copy);
     card.appendChild(idRow);
 
+    card.appendChild(el('div',
+      'color:#fff;font-size:34px;font-weight:800;letter-spacing:-.02em;margin-bottom:2px;',
+      priceLabel + '<span style="font-size:14px;color:#94a3b8;font-weight:600;">' +
+      ' / run</span>'));
     card.appendChild(el('div',
       'color:#fff;font-size:17px;font-weight:800;margin-bottom:6px;', title));
     card.appendChild(el('div',
