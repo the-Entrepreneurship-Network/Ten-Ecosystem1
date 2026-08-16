@@ -1281,6 +1281,27 @@ button:active { transform: translateY(0); }
   display: block;
 }
 
+/* ── portal backdrops ──────────────────────────────────────────────────────
+   public/portal-backdrops.js paints a shader behind the open section and
+   alternates two looks across the sixteen portals. Only the background
+   changes: the section's own markup, data and controls are untouched, they
+   just sit on a layer above it. */
+.section-modal-body { position: relative; }
+.section-modal-body .portal-backdrop { position: fixed; inset: 0; z-index: 0; }
+/* Everything that is not the backdrop goes above it, and keeps its own
+   background so long-form content never has to be read through the shader. */
+.section-modal-body .stu-view.active { position: relative; z-index: 1; }
+/* A scrim between the shader and the content. Without it the brightest frames
+   of the crystal shader put white-on-light-blue text on the screen. */
+.section-modal-body .portal-backdrop::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(6,10,22,.72), rgba(6,10,22,.86));
+}
+[data-theme="light"] .section-modal-body .portal-backdrop { opacity: .5; }
+[data-theme="light"] .section-modal-body .portal-backdrop::after {
+  background: linear-gradient(180deg, rgba(248,250,255,.86), rgba(248,250,255,.93));
+}
+
 /* Light mode overrides for section cards/modal */
 [data-theme="light"] .sec-card { background: #ffffff; border-color: rgba(212,175,55,0.15); box-shadow: 0 2px 16px rgba(0,0,0,0.06); }
 [data-theme="light"] .sec-card:hover { border-color: rgba(212,175,55,0.3); box-shadow: 0 8px 32px rgba(0,0,0,0.1); }
@@ -1452,6 +1473,9 @@ button:active { transform: translateY(0); }
   <link rel="stylesheet" href="/css/mobile.css">
   <script src="/mobile-nav.js" defer></script>
   <script src="/push-client.js" defer></script>
+  <!-- Shader backdrops for the portal sections. Cosmetic only, and it fails
+       soft: no WebGL2 or a shader that will not compile leaves a gradient. -->
+  <script src="/portal-backdrops.js" defer></script>
 </head>
 
 <body>
@@ -2465,7 +2489,14 @@ function toggleTheme(){var c=localStorage.getItem('ten-theme')||'dark';var n=c==
 let student = JSON.parse(localStorage.getItem("student"));
 
 if(!student){
-  window.location.href="/login.html";
+  /* Carry where they were going through the sign-in.
+     The portals ring on the landing page deep-links into sections here
+     (#stu-view-attendance and friends). Bouncing to a bare /login.html threw
+     that away, so somebody who clicked "Daily Attendance" signed in and landed
+     on the dashboard's front page to start hunting again. login.html already
+     honours ?next= and validates it as same-origin, so the fix is to send it. */
+  window.location.href = "/login.html?role=student&next=" +
+    encodeURIComponent(window.location.pathname + window.location.search + window.location.hash);
 }
 
 // Silently refresh phone/college/dates from server so profile modal always shows correct data
@@ -5315,6 +5346,16 @@ var sectionTitles = {
   'stu-view-leaderboard': 'Extras & Badges'
 };
 
+/* The sixteen portals in the order they appear on the grid. Only used to
+   decide which of the two backdrops a section gets, so neighbouring sections
+   never share one. Nothing else reads it. */
+var SECTION_ORDER = [
+  'stu-view-overview', 'stu-view-notice', 'stu-view-coordinator-tasks',
+  'stu-view-domain-tasks', 'stu-view-submissions', 'stu-view-attendance',
+  'stu-view-test', 'stu-view-coding', 'stu-view-guidelines',
+  'stu-view-leaderboard'
+];
+
 function openSectionModal(sectionId) {
   var modal = document.getElementById('sectionModal');
   var titleEl = document.getElementById('sectionModalTitle');
@@ -5332,6 +5373,17 @@ function openSectionModal(sectionId) {
   // Open modal
   modal.classList.add('open');
   document.body.style.overflow = 'hidden';
+
+  /* Paint this section's backdrop. Purely cosmetic: it mounts behind the
+     content and every feature above it behaves exactly as before. One canvas
+     is alive at a time, and it is torn down in closeSectionModal(). */
+  if (window.PortalBackdrop) {
+    try {
+      var body = modal.querySelector('.section-modal-body');
+      var order = SECTION_ORDER.indexOf(sectionId);
+      window.PortalBackdrop.show(body, window.PortalBackdrop.variantFor(order < 0 ? 0 : order));
+    } catch (e) { /* a backdrop must never stop a section opening */ }
+  }
   // Hide sidebar when modal opens
   var sidebar = document.querySelector('.stu-sidebar');
   var overlay = document.querySelector('.sidebar-overlay');
@@ -5364,6 +5416,9 @@ function closeSectionModal() {
   var modal = document.getElementById('sectionModal');
   if (modal) modal.classList.remove('open');
   document.body.style.overflow = '';
+  // Stop the shader with the section. A render loop behind a closed modal is
+  // pure battery drain.
+  if (window.PortalBackdrop) { try { window.PortalBackdrop.clear(); } catch (e) {} }
 }
 
 document.addEventListener('keydown', function(e) {
@@ -5376,6 +5431,23 @@ document.addEventListener('keydown', function(e) {
     closeSectionModal();
   }
 });
+
+/* Open a section straight from the URL.
+   The portals ring on the landing page links here with the section in the
+   hash — student-dashboard.html#stu-view-attendance — so somebody who clicks
+   "Daily Attendance" out there arrives at Daily Attendance rather than the
+   dashboard's front page and a second hunt through the grid. Only ids that
+   exist as a .stu-view are honoured, so a stale or invented hash does nothing. */
+(function openSectionFromHash() {
+  function fromHash() {
+    var id = String(window.location.hash || '').replace(/^#/, '');
+    if (!/^stu-view-[a-z-]+$/.test(id)) return;
+    var target = document.getElementById(id);
+    if (target && target.classList.contains('stu-view')) openSectionModal(id);
+  }
+  fromHash();
+  window.addEventListener('hashchange', fromHash);
+})();
 
 // Populate welcome name
 (function() {
