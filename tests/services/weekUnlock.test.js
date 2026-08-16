@@ -145,17 +145,23 @@ describe('the quiz path unlocks too', () => {
   const path = require('path');
   const source = fs.readFileSync(path.join(__dirname, '../../routes/v2/studentPortal.js'), 'utf8');
 
+  /*
+   * Anchored on the route registration rather than the first mention of the
+   * path: the path now also appears in the comments above generate-quiz. The
+   * window grew with the handler, which gained server-side grading — the
+   * client used to report its own pass and this route believed it.
+   */
+  const routeAt = source.indexOf('router.post("/student/quiz-result"');
+
   it('calls the unlock after approving on a pass', () => {
-    const at = source.indexOf('/student/quiz-result');
-    expect(at).toBeGreaterThan(-1);
-    const block = source.slice(at, at + 2200);
+    expect(routeAt).toBeGreaterThan(-1);
+    const block = source.slice(routeAt, routeAt + 4200);
     expect(block).toContain('quizPassed: true');
     expect(block).toContain('taskEngine.tryUnlockNextWeek(student, taskId)');
   });
 
   it('no longer swallows the failure silently', () => {
     // `catch(e) { /* silent */ }` is how this went unnoticed.
-    const at = source.indexOf('/student/quiz-result');
-    expect(source.slice(at, at + 2200)).not.toContain('/* silent */');
+    expect(source.slice(routeAt, routeAt + 4200)).not.toContain('/* silent */');
   });
 });

@@ -381,24 +381,23 @@ async function loadQuestions() {
       document.getElementById('quizLoadingInfo').style.color = '#10b981';
       return true;
     }
-  } catch(e) {
-    document.getElementById('quizLoadingInfo').textContent = '⚠️ Could not load questions from server — using offline bank.';
-    document.getElementById('quizLoadingInfo').style.color = '#f59e0b';
-  }
-  // Offline fallback
-  questions = getOfflineFallback(domain);
-  return true;
-}
+  } catch(e) { /* fall through to the message below */ }
 
-function getOfflineFallback(d) {
-  const generic = [
-    { question: `What is the primary objective of ${d || 'this domain'}?`, options: ['Memorization', 'Problem solving with technology', 'Hardware design', 'None of the above'], answer: 1 },
-    { question: 'What does debugging mean?', options: ['Adding features', 'Finding and fixing errors', 'Writing documentation', 'Deploying the app'], answer: 1 },
-    { question: 'What is version control used for?', options: ['Controlling user access', 'Tracking code changes', 'Server management', 'UI design'], answer: 1 },
-    { question: 'What is an API?', options: ['A database', 'Application Programming Interface', 'A frontend framework', 'A server'], answer: 1 },
-    { question: 'What does "open source" mean?', options: ['Paid software', 'Software with publicly available source code', 'Closed network', 'Encrypted code'], answer: 1 }
-  ];
-  return generic;
+  /*
+   * No offline question bank any more.
+   *
+   * There used to be five generic questions here ("What is an API?") carrying
+   * their own answer keys, served whenever the request failed. They were the
+   * client's copy of the truth — the same copy that let the page mark its own
+   * quiz. A quiz the server cannot mark is a quiz that cannot count, so the
+   * attempt is refused rather than faked. The server has its own fallback bank
+   * for domains nobody has written questions for.
+   */
+  questions = [];
+  const info = document.getElementById('quizLoadingInfo');
+  info.textContent = '⚠️ Could not load questions from the server. Please check your connection and reload — no attempt has been recorded.';
+  info.style.color = '#f59e0b';
+  return false;
 }
 
 // ── Initialize on page load ───────────────────────
@@ -558,26 +557,46 @@ async function submitQuiz(autoSubmit = false) {
   // Stop camera
   if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
 
-  // Calculate score
-  let correct = 0;
-  questions.forEach((q, i) => {
-    if (answers[i] === q.answer) correct++;
-  });
-  const total   = questions.length;
-  const passed  = correct >= 3;
-  const coins   = isFirstAttempt ? (passed ? 50 : 0) : (passed ? 25 : 0);
+  /*
+   * The server marks the quiz.
+   *
+   * This function used to compare `answers[i]` against `q.answer` — the
+   * correct answer, which the server helpfully shipped with the questions —
+   * then post its own verdict to /student/quiz-result, which believed it.
+   * Anyone with a console could approve their own task and mint 50 coins.
+   * Now the page sends what was picked and renders what comes back.
+   */
+  const submitted = questions.map((q, i) => ({
+    id: q.id,
+    selected: typeof answers[i] === 'number' ? answers[i] : -1
+  }));
 
-  // Show result screen
-  showResult(correct, total, passed, coins, autoSubmit);
+  document.getElementById('quizScreen').style.display = 'none';
 
-  // Report to server
   try {
-    await fetch(`${API}/student/quiz-result`, {
+    const res = await fetch(`${API}/student/quiz-result`, {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ taskId, score: correct, total, passed, coins, violations, autoSubmit })
+      credentials: 'same-origin',
+      body: JSON.stringify({ taskId, domain, weekNumber: weekNum, answers: submitted, violations, autoSubmit })
     });
-  } catch(e) { /* silent — result already shown */ }
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message || 'The quiz could not be marked.');
+
+    showResult(data.score, data.total, data.passed, data.awarded || 0, autoSubmit);
+  } catch (e) {
+    // No local fallback verdict: a result this page invented is exactly the
+    // problem being fixed. Say the submission did not land.
+    document.getElementById('quizScreen').style.display = 'none';
+    const rs = document.getElementById('resultScreen');
+    rs.style.display = 'flex';
+    document.getElementById('resultEmoji').textContent = '⚠️';
+    document.getElementById('resultTitle').textContent = 'Not submitted';
+    document.getElementById('resultTitle').className = 'result-title fail';
+    document.getElementById('resultScore').textContent = '—';
+    document.getElementById('resultDesc').textContent =
+      'Your answers could not reach the server, so this attempt was not recorded. Please try the quiz again.';
+  }
 }
 
 function showResult(correct, total, passed, coins, autoSubmit) {

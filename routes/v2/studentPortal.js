@@ -36,6 +36,11 @@ if (!Student.schema.path("joinerType"))            Student.schema.add({ joinerTy
 
 const StudentTaskProgress = require("../../models/new/StudentTaskProgress");
 const DomainTask   = require("../../models/new/DomainTask");
+// The editable bank already existed — models/new/QuizQuestion, the collection
+// services/v2/quizEngine reads for /api/v2/quiz/*. This route had its own
+// hardcoded literal instead of using it.
+const QuizQuestion = require("../../models/new/QuizQuestion");
+const DailyJobPost = require("../../models/DailyJobPost");
 const Notification = require("../../models/Notification");
 const { broadcastNotification } = require("../../utils/sseHub");
 
@@ -688,6 +693,96 @@ router.post("/student/report-broken-video", requireStudent, async (req, res) => 
 });
 
 // ────────────────────────────────────────────────
+// POST /api/v2/student/daily-job-post
+// ────────────────────────────────────────────────
+/*
+ * public/v2-tasks.html has been posting here since the daily job-post task
+ * shipped. The endpoint did not exist. The fetch rejected, the page's
+ * `.catch(() => ({ success: true }))` turned the failure into a success, and
+ * `saveDjpDone()` wrote the result to localStorage under `djp_<employeeId>`
+ * before congratulating the student on coins that were never credited.
+ * Clearing site data reset the task; the server was never involved either way.
+ *
+ * The coins are computed here from the number of platforms, using the
+ * DJP_* actions that have been sitting unused in coinService since it was
+ * written. The client's `coins` field is read but not trusted.
+ */
+router.post("/student/daily-job-post", requireStudent, async (req, res) => {
+    try {
+        const student = req.student;
+        const body = req.body || {};
+
+        const platforms = Array.isArray(body.platforms)
+            ? [...new Set(body.platforms.map((p) => String(p).trim()).filter(Boolean))].slice(0, 20)
+            : [];
+        if (!platforms.length) {
+            return res.status(400).json({ success: false, message: "Tick the platforms you posted on." });
+        }
+
+        // The portal's own day key, so "today" means the same thing on both
+        // sides of the request.
+        const date = /^\d{4}-\d{2}-\d{2}$/.test(String(body.date || ""))
+            ? String(body.date)
+            : new Date().toISOString().slice(0, 10);
+
+        const action = platforms.length >= 6 ? "DJP_6_PLUS_PLATFORMS"
+            : platforms.length >= 3 ? "DJP_3_5_PLATFORMS"
+            : "DJP_1_2_PLATFORMS";
+
+        let entry;
+        try {
+            entry = await DailyJobPost.create({
+                studentId: student._id,
+                employeeId: student.employeeId || "",
+                date,
+                platforms,
+                coins: Number(body.coins) || 0
+            });
+        } catch (err) {
+            if (err && err.code === 11000) {
+                // The unique index is the real once-a-day rule; localStorage was
+                // only ever a suggestion.
+                const existing = await DailyJobPost.findOne({ studentId: student._id, date }).lean();
+                return res.status(409).json({
+                    success: false,
+                    alreadyDone: true,
+                    message: "You have already logged today's job post.",
+                    coinsAwarded: (existing && existing.coinsAwarded) || 0
+                });
+            }
+            throw err;
+        }
+
+        const { awarded } = await coinService.awardCoins(student._id, action);
+        entry.coinsAwarded = awarded;
+        await entry.save();
+
+        const { totalCoins, rupeeValue } = await coinService.getBalance(student._id);
+        res.json({ success: true, coinsAwarded: awarded, totalCoins, rupeeValue, platforms: platforms.length });
+    } catch (err) {
+        console.error("[V2] daily-job-post error:", err.message);
+        res.status(500).json({ success: false, message: "Could not record today's job post." });
+    }
+});
+
+/** GET /api/v2/student/daily-job-post/today — has today already been logged? */
+router.get("/student/daily-job-post/today", requireStudent, async (req, res) => {
+    try {
+        const date = new Date().toISOString().slice(0, 10);
+        const entry = await DailyJobPost.findOne({ studentId: req.student._id, date }).lean();
+        res.json({
+            success: true,
+            done: !!entry,
+            coinsAwarded: (entry && entry.coinsAwarded) || 0,
+            platforms: (entry && entry.platforms) || []
+        });
+    } catch (err) {
+        console.error("[V2] daily-job-post status error:", err.message);
+        res.status(500).json({ success: false, message: "Server error" });
+    }
+});
+
+// ────────────────────────────────────────────────
 // FEATURE 6 — POST /api/v2/student/generate-quiz
 // Returns 5 MCQ questions for domain+week (with fallback bank)
 // ────────────────────────────────────────────────
@@ -935,23 +1030,127 @@ function getGenericQuestions(domain, week) {
     ];
 }
 
+/**
+ * Mark a submitted quiz on the server.
+ *
+ * `answers` is what the browser picked: [{ id, selected }]. Ids from the
+ * editable bank are looked up; ids of the form "builtin:N" index the literal
+ * above for the same domain and week the questions came from. Anything that
+ * cannot be resolved is counted wrong rather than skipped, so padding the
+ * array with invented ids cannot raise a score.
+ *
+ * @returns {Promise<{score:number,total:number,passed:boolean}|{error:string}>}
+ */
+async function gradeQuiz(answers, domain, weekNumber) {
+    if (!Array.isArray(answers) || !answers.length) {
+        return { error: "No answers were submitted." };
+    }
+    if (answers.length > 20) {
+        return { error: "Too many answers submitted." };
+    }
+
+    const week = parseInt(weekNumber) || 1;
+
+    // Resolve every bank-backed question in one query. The bank stores its
+    // answer as a letter ("A".."D"); the portal works in indices.
+    const LETTERS = ["A", "B", "C", "D"];
+    const bankIds = answers
+        .map((a) => String((a && a.id) || ""))
+        .filter((id) => id && !id.startsWith("builtin:") && mongoose.Types.ObjectId.isValid(id));
+
+    let correctById = new Map();
+    if (bankIds.length) {
+        try {
+            const rows = await QuizQuestion.find({ _id: { $in: bankIds } })
+                .select("_id correct_answer")
+                .lean();
+            correctById = new Map(rows.map((r) => [String(r._id), LETTERS.indexOf(r.correct_answer)]));
+        } catch (err) {
+            console.error("[V2] quiz grading lookup failed:", err.message);
+            return { error: "Could not mark this quiz. Please try again." };
+        }
+    }
+
+    const domainBank = QUIZ_FALLBACK_BANK[domain] || {};
+    const builtin = domainBank[week] || domainBank[1] || getGenericQuestions(domain, week);
+
+    let score = 0;
+    answers.forEach((a) => {
+        const id = String((a && a.id) || "");
+        const selected = Number(a && a.selected);
+        if (!Number.isInteger(selected)) return;
+
+        if (id.startsWith("builtin:")) {
+            const index = parseInt(id.slice(8), 10);
+            const question = builtin[index];
+            if (question && question.answer === selected) score += 1;
+            return;
+        }
+        if (correctById.has(id) && correctById.get(id) === selected) score += 1;
+    });
+
+    const total = answers.length;
+    // Three of five, the pass mark generate-quiz advertises.
+    return { score, total, passed: score >= 3 };
+}
+
+/**
+ * Serve five questions for a domain and week — WITHOUT their answers.
+ *
+ * Two things changed here. The bank is now a collection a coordinator can add
+ * to (QuizQuestion), with the literal above kept only as the fallback for a
+ * domain nobody has written questions for yet; and the correct answer no longer
+ * leaves the server. It used to ship in the payload as `answer`, so the quiz
+ * was open-book to anyone who opened the network tab, and the client then
+ * reported its own result to /student/quiz-result, which believed it.
+ */
 router.post("/student/generate-quiz", requireStudent, async (req, res) => {
     try {
-        const { taskId, domain, weekNumber } = req.body;
+        const { domain, weekNumber } = req.body;
         const week = parseInt(weekNumber) || 1;
 
-        // Try to get domain-specific questions
-        const domainBank = QUIZ_FALLBACK_BANK[domain] || {};
-        const weekQuestions = domainBank[week] || domainBank[1] || getGenericQuestions(domain, week);
+        let questions = [];
 
-        // Pick 5 questions
-        const questions = weekQuestions.slice(0, 5);
+        // Editable bank first.
+        try {
+            const rows = await QuizQuestion.aggregate([
+                { $match: { domain: String(domain || ""), week_number: week } },
+                { $sample: { size: 5 } }
+            ]);
+            // The bank keys options as { A, B, C, D }; the portal renders an
+            // array and answers by index.
+            questions = rows
+                .map((q) => ({
+                    id: String(q._id),
+                    question: q.question_text,
+                    options: ["A", "B", "C", "D"].map((k) => (q.options || {})[k]).filter(Boolean)
+                }))
+                .filter((q) => q.question && q.options.length >= 2);
+        } catch (err) {
+            console.error("[V2] quiz bank read failed:", err.message);
+        }
+
+        // Nothing written for this domain and week yet: fall back to the
+        // in-file bank so a student is never blocked, and mark the source so
+        // the submit handler knows how to grade it.
+        let source = "bank";
+        if (questions.length < 5) {
+            source = "builtin";
+            const domainBank = QUIZ_FALLBACK_BANK[domain] || {};
+            const weekQuestions = domainBank[week] || domainBank[1] || getGenericQuestions(domain, week);
+            questions = weekQuestions.slice(0, 5).map((q, i) => ({
+                id: `builtin:${i}`,
+                question: q.question,
+                options: q.options
+            }));
+        }
 
         res.json({
             success: true,
+            source,
             questions,
             quizSettings: {
-                questionCount: 5,
+                questionCount: questions.length,
                 durationMinutes: 10,
                 passScore: 3
             }
@@ -1526,26 +1725,73 @@ router.get("/leaderboard", requireStudent, async (req, res) => {
 // ────────────────────────────────────────────────
 router.post("/student/quiz-result", requireStudent, async (req, res) => {
     try {
-        const { taskId, score, total, passed, coins, violations, autoSubmit } = req.body;
+        const { taskId, domain, weekNumber, answers, attempt } = req.body;
         const student = req.student;
 
-        // Award coins if passed
+        /*
+         * The score is computed here, from answers the browser never had.
+         *
+         * This handler used to read `passed` and `coins` straight off the
+         * request body and award on that — the client both took the quiz and
+         * decided whether it had passed. Anyone who could open a console could
+         * approve their own task and mint 50 coins. Now the browser sends what
+         * it picked and the server marks it.
+         */
+        const marked = await gradeQuiz(answers, domain, weekNumber);
+        if (marked.error) {
+            return res.status(400).json({ success: false, message: marked.error });
+        }
+
+        const { score, total, passed } = marked;
+
+        // First attempt is worth more than a retry, and "first" is a question
+        // for the progress record, not for the client to assert.
+        let previousAttempts = 0;
+        if (taskId) {
+            try {
+                const progress = await StudentTaskProgress.findOne({ studentId: student._id, taskId }).lean();
+                // The schema spells these quiz_attempts / quiz_best_score.
+                previousAttempts = (progress && progress.quiz_attempts) || 0;
+            } catch (_e) { previousAttempts = Number(attempt) > 1 ? 1 : 0; }
+        }
+
         let awarded = 0;
-        if (passed && coins > 0) {
+        if (passed) {
             const result = await coinService.awardCoins(
                 student._id,
-                coins === 50 ? "QUIZ_PASSED_FIRST" : "QUIZ_PASSED_RETRY"
+                previousAttempts === 0 ? "QUIZ_PASSED_FIRST" : "QUIZ_PASSED_RETRY"
             );
             awarded = result.awarded;
+        }
+
+        // Every attempt is counted, passed or not — that is what decides
+        // whether the next pass is a first-attempt award.
+        if (taskId) {
+            try {
+                await StudentTaskProgress.updateOne(
+                    { studentId: student._id, taskId },
+                    {
+                        $inc: { quiz_attempts: 1 },
+                        $max: { quiz_best_score: score },
+                        $set: { quiz_last_attempt_at: new Date() }
+                    }
+                );
+            } catch (e) {
+                console.error("[V2] quiz attempt count failed:", e.message);
+            }
         }
 
         // Mark task as approved if passed and taskId provided
         let unlock = null;
         if (passed && taskId) {
             try {
+                // quizPassed is kept for the field name this route has always
+                // written; quiz_passed is the one the schema actually declares,
+                // so the camelCase key was being dropped by strict mode and the
+                // pass was never recorded on the progress row.
                 await StudentTaskProgress.updateOne(
                     { studentId: student._id, taskId },
-                    { $set: { status: "approved", quizPassed: true, approvedAt: new Date(), coinsAwarded: coins || 0 } }
+                    { $set: { status: "approved", quizPassed: true, quiz_passed: true, approvedAt: new Date(), coinsAwarded: awarded } }
                 );
 
                 // ...and open the next week. This was the missing half: passing
@@ -1561,7 +1807,9 @@ router.post("/student/quiz-result", requireStudent, async (req, res) => {
         }
 
         const { totalCoins, rupeeValue } = await coinService.getBalance(student._id);
-        res.json({ success: true, awarded, totalCoins, rupeeValue, unlock });
+        // score/total/passed are returned so the page can render the result it
+        // is no longer allowed to decide.
+        res.json({ success: true, score, total, passed, awarded, totalCoins, rupeeValue, unlock });
     } catch (err) {
         console.error("[V2] quiz-result error:", err.message);
         res.status(500).json({ success: false, message: "Server error" });

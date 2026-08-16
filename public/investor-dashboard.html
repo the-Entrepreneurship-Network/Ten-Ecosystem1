@@ -227,43 +227,7 @@
 
         <!-- Pipelines grid -->
         <div id="startupList" class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          
-          <div class="glass-card rounded-2xl p-6 space-y-4 hover:border-yellow-400/25 transition duration-300 relative overflow-hidden group">
-            <div class="absolute top-0 right-0 w-24 h-24 bg-yellow-400/5 blur-2xl rounded-full opacity-60 group-hover:opacity-100 transition"></div>
-            <div class="flex justify-between items-start">
-              <div>
-                <h4 class="font-extrabold text-lg text-slate-200">Krypton Solar</h4>
-                <p class="text-xs text-slate-500">Sector: CleanTech & Solar Efficiency</p>
-              </div>
-              <span class="px-2.5 py-1 rounded-lg bg-yellow-400/10 border border-yellow-400/20 text-[10px] text-yellow-400 font-extrabold tracking-wider uppercase">Pre-Seed</span>
-            </div>
-            <p class="text-xs text-slate-400 leading-relaxed">Nanotech surface coatings designed to increase photovoltaic cell capture yields by 24% under cloudy ambient situations.</p>
-            <div class="pt-4 border-t border-white/[0.04] flex justify-between items-center text-[10px] text-slate-500">
-              <span class="font-semibold block">Team size: <b class="text-slate-300">4 members</b></span>
-              <button onclick="startDiscussion('Krypton Solar')" class="text-xs text-yellow-400 hover:text-yellow-500 font-bold tracking-wide active:scale-95 transition">
-                Express Interest &rarr;
-              </button>
-            </div>
-          </div>
-
-          <div class="glass-card rounded-2xl p-6 space-y-4 hover:border-blue-400/25 transition duration-300 relative overflow-hidden group">
-            <div class="absolute top-0 right-0 w-24 h-24 bg-blue-400/5 blur-2xl rounded-full opacity-60 group-hover:opacity-100 transition"></div>
-            <div class="flex justify-between items-start">
-              <div>
-                <h4 class="font-extrabold text-lg text-slate-200">Cerebro AI</h4>
-                <p class="text-xs text-slate-500">Sector: AI & Edge Micro-computing</p>
-              </div>
-              <span class="px-2.5 py-1 rounded-lg bg-blue-400/10 border border-blue-400/20 text-[10px] text-blue-400 font-extrabold tracking-wider uppercase">MVP Stage</span>
-            </div>
-            <p class="text-xs text-slate-400 leading-relaxed">Generative neural network compilations built from scratch to run on edge mobile devices & microcontrollers.</p>
-            <div class="pt-4 border-t border-white/[0.04] flex justify-between items-center text-[10px] text-slate-500">
-              <span class="font-semibold block">Team size: <b class="text-slate-300">5 members</b></span>
-              <button onclick="startDiscussion('Cerebro AI')" class="text-xs text-yellow-400 hover:text-yellow-500 font-bold tracking-wide active:scale-95 transition">
-                Express Interest &rarr;
-              </button>
-            </div>
-          </div>
-
+          <p class="text-xs text-slate-500 col-span-full">Loading startups&hellip;</p>
         </div>
       </div>
 
@@ -274,19 +238,11 @@
           <p class="text-xs text-slate-400">Track matched founder responses & schedules</p>
         </div>
 
+        <!-- Filled from /api/v2/investor-desk/overview. The row that used to
+             sit here — "Krypton Solar Pitch Due Diligence, Wed Jun 24th" — was
+             markup, shown identically to every investor who signed in. -->
         <div class="space-y-4" id="discussionsList">
-          <div class="glass-card rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border border-white/[0.03] hover:border-white/[0.08] transition">
-            <div class="space-y-1.5">
-              <span class="inline-flex items-center gap-1.5 text-[9px] px-2 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/20 font-black uppercase tracking-widest">
-                <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span> IN PROGRESS
-              </span>
-              <h4 class="font-black text-slate-250 text-sm">Krypton Solar Pitch Due Diligence</h4>
-              <p class="text-xs text-slate-400">Scheduled: Wed Jun 24th, 11:30 AM · Agenda: Projections & cap table</p>
-            </div>
-            <a href="https://meet.google.com" target="_blank" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-white/10 hover:border-yellow-400/40 rounded-xl text-xs text-center transition font-bold active:translate-y-0.5">
-              Launch Call
-            </a>
-          </div>
+          <p class="text-xs text-slate-500">Loading&hellip;</p>
         </div>
       </div>
 
@@ -373,6 +329,176 @@
       document.getElementById('sidebarEcos').classList.add('-translate-x-full');
     }
 
+    /* ── Real data ────────────────────────────────────────────────────────
+       "Express Venture Interest" used to tell the investor that the interest
+       was "logged in central databases" and then prepend a div; the portfolio
+       dialog added a row that vanished on refresh. Both now write to
+       /api/v2/investor-desk, and interest actually reaches the founder. */
+
+    const API = '/api/v2/investor-desk';
+    let desk = { interests: [], holdings: [], totals: {} };
+
+    function money(n) { return '₹' + Number(n || 0).toLocaleString('en-IN'); }
+
+    function el(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined && text !== null) node.textContent = String(text);
+      return node;
+    }
+
+    function renderInterests() {
+      const list = document.getElementById('discussionsList');
+      if (!list) return;
+      list.innerHTML = '';
+
+      if (!desk.interests.length) {
+        list.appendChild(el('p', 'text-xs text-slate-500', 'No venture discussions yet.'));
+        return;
+      }
+
+      desk.interests.forEach((i) => {
+        const row = el('div', 'glass-card rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border border-white/[0.03]');
+        const left = el('div', 'space-y-1');
+        left.appendChild(el('h4', 'font-black text-slate-250 text-sm', i.startupName + ' Discovery Track'));
+        left.appendChild(el(
+          'p',
+          'text-xs text-slate-400',
+          i.status === 'pending'
+            ? 'Waiting on the founder to respond.'
+            : 'Founder response: ' + String(i.status).replace('_', ' ')
+        ));
+        row.appendChild(left);
+        row.appendChild(el(
+          'span',
+          'px-2.5 py-0.5 rounded-full bg-yellow-400/10 border border-yellow-400/20 text-[10px] text-yellow-400 font-extrabold uppercase tracking-wide shrink-0',
+          String(i.status).replace('_', ' ')
+        ));
+        list.appendChild(row);
+      });
+    }
+
+    function renderStartups(startups) {
+      const grid = document.getElementById('startupList');
+      if (!grid) return;
+      grid.innerHTML = '';
+
+      if (!startups.length) {
+        grid.appendChild(el(
+          'p',
+          'text-xs text-slate-500 col-span-full',
+          'No startups on the network yet. Founders appear here once they publish a startup profile.'
+        ));
+        return;
+      }
+
+      startups.forEach((s) => {
+        const card = el('div', 'glass-card rounded-2xl p-6 space-y-4 hover:border-yellow-400/25 transition duration-300');
+
+        const head = el('div', 'flex justify-between items-start gap-3');
+        const left = el('div');
+        left.appendChild(el('h4', 'font-extrabold text-lg text-slate-200', s.name));
+        if (s.industry) left.appendChild(el('p', 'text-xs text-slate-500', s.industry));
+        head.appendChild(left);
+        if (s.stage) {
+          head.appendChild(el(
+            'span',
+            'px-2.5 py-1 rounded-lg bg-yellow-400/10 border border-yellow-400/20 text-[10px] text-yellow-400 font-extrabold tracking-wider uppercase shrink-0',
+            s.stage
+          ));
+        }
+        card.appendChild(head);
+
+        if (s.description) {
+          card.appendChild(el('p', 'text-xs text-slate-400 leading-relaxed', s.description));
+        }
+
+        const foot = el('div', 'pt-4 border-t border-white/[0.04] flex justify-between items-center gap-3 text-[10px] text-slate-500');
+        foot.appendChild(el('span', 'font-semibold', s.teamSize ? 'Team size: ' + s.teamSize : ''));
+
+        const btn = el(
+          'button',
+          'text-xs font-bold tracking-wide transition shrink-0 ' +
+            (s.contacted ? 'text-slate-500 cursor-default' : 'text-yellow-400 hover:text-yellow-500 active:scale-95'),
+          s.contacted ? 'Interest registered' : 'Express interest →'
+        );
+        btn.type = 'button';
+        btn.disabled = !!s.contacted;
+        if (!s.contacted) btn.addEventListener('click', () => startDiscussion(s.name));
+        foot.appendChild(btn);
+
+        card.appendChild(foot);
+        grid.appendChild(card);
+      });
+    }
+
+    function renderHoldings() {
+      const container = document.getElementById('portfolioList');
+      if (!container) return;
+      container.innerHTML = '';
+
+      if (!desk.holdings.length) {
+        container.appendChild(el('p', 'text-xs text-slate-500', 'No positions recorded yet.'));
+        return;
+      }
+
+      desk.holdings.forEach((h) => {
+        const card = el('div', 'glass-card rounded-2xl p-5 flex justify-between items-center gap-4 border border-white/[0.03]');
+        const left = el('div', 'space-y-1');
+        left.appendChild(el('h4', 'font-black text-slate-200 text-sm', h.startupName));
+        left.appendChild(el(
+          'p',
+          'text-xs text-slate-400',
+          'Capital: ' + money(h.amount) + (h.equityPct ? ' · Ownership: ' + h.equityPct + '%' : '')
+        ));
+        card.appendChild(left);
+        card.appendChild(el(
+          'span',
+          'inline-flex items-center gap-1.5 text-[9px] px-2.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-black uppercase tracking-wide shrink-0',
+          h.status === 'active' ? 'Active asset' : h.status
+        ));
+        container.appendChild(card);
+      });
+    }
+
+    async function loadDesk() {
+      try {
+        const res = await fetch(API + '/overview', { credentials: 'same-origin' });
+        if (res.status === 401 || res.status === 403) {
+          window.location.href = 'login.html';
+          return;
+        }
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || 'Could not load your desk.');
+        desk = data;
+        renderInterests();
+        renderHoldings();
+
+        const startups = await fetch(API + '/startups', { credentials: 'same-origin' })
+          .then((r) => r.json())
+          .catch(() => ({ startups: [] }));
+        renderStartups(startups.startups || []);
+      } catch (err) {
+        const list = document.getElementById('discussionsList');
+        if (list) {
+          list.innerHTML = '';
+          list.appendChild(el('p', 'text-xs text-rose-400', err.message));
+        }
+      }
+    }
+
+    async function postJson(path, payload) {
+      const res = await fetch(API + path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json().catch(() => ({ success: false, message: 'The server did not answer.' }));
+      if (!res.ok || !data.success) throw new Error(data.message || 'That did not go through.');
+      return data;
+    }
+
     function startDiscussion(startupName) {
       Swal.fire({
         title: `Express Venture Interest`,
@@ -383,27 +509,24 @@
         cancelButtonColor: '#1e293b',
         background: '#0a0f1f',
         color: '#F0EEE8',
-      }).then((result) => {
-        if (result.isConfirmed) {
-          const dList = document.getElementById('discussionsList');
-          const row = document.createElement('div');
-          row.className = "glass-card rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border border-white/[0.03] hover:border-white/[0.08] transition";
-          row.innerHTML = `
-            <div class="space-y-1">
-              <h4 class="font-black text-slate-250 text-sm">${startupName} Discovery Track</h4>
-              <p class="text-xs text-slate-400">Scheduled: Matching pending founder confirmation.</p>
-            </div>
-            <div class="flex items-center gap-3">
-              <span class="px-2.5 py-0.5 rounded-full bg-yellow-400/10 border border-yellow-400/20 text-[10px] text-yellow-400 font-extrabold uppercase tracking-wide">Pending Response</span>
-              <button disabled class="opacity-40 px-3.5 py-1.5 bg-slate-900 text-slate-400 border border-white/5 rounded-xl text-xs font-bold">Launch Meet</button>
-            </div>
-          `;
-          dList.prepend(row);
-
+      }).then(async (result) => {
+        if (!result.isConfirmed) return;
+        try {
+          const data = await postJson('/interests', { startupName: startupName });
+          await loadDesk();
           Swal.fire({
             icon: 'success',
-            title: 'Interest Dispatched',
-            text: `Matched interest ledger for ${startupName} logged in central databases.`,
+            title: 'Interest registered',
+            text: data.message,
+            background: '#0a0f1f',
+            color: '#F0EEE8',
+            confirmButtonColor: '#FFD700'
+          });
+        } catch (err) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Not registered',
+            text: err.message,
             background: '#0a0f1f',
             color: '#F0EEE8',
             confirmButtonColor: '#FFD700'
@@ -438,28 +561,29 @@
             document.getElementById('swal-srate').value.trim()
           ]
         }
-      }).then((result) => {
-        if (result.isConfirmed) {
-          const [name, amt, rate] = result.value;
-          if (!name || !amt || !rate) {
-            Swal.fire('Validation Failure', 'Please fill all requested investment fields.', 'error');
-            return;
-          }
-          const container = document.getElementById('portfolioList');
-          const card = document.createElement('div');
-          card.className = "glass-card rounded-2xl p-5 flex justify-between items-center border border-white/[0.03] hover:border-white/10 transition";
-          card.innerHTML = `
-            <div class="space-y-1">
-              <h4 class="font-black text-slate-200 text-sm">${name}</h4>
-              <p class="text-xs text-slate-400">Capital Seed: ₹${Number(amt).toLocaleString()} · Ownership: <span class="text-yellow-400 font-bold">${rate}</span></p>
-            </div>
-            <span class="inline-flex items-center gap-1.5 text-[9px] px-2.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-black uppercase tracking-wide">ACTIVE ASSET</span>
-          `;
-          container.prepend(card);
+      }).then(async (result) => {
+        if (!result.isConfirmed) return;
+        const [name, amt, rate] = result.value;
+        if (!name || !amt) {
+          Swal.fire('Validation Failure', 'A startup name and an amount are required.', 'error');
+          return;
+        }
+        try {
+          await postJson('/holdings', { startupName: name, amount: Number(amt), equityPct: rate });
+          await loadDesk();
           Swal.fire({
             icon: 'success',
-            title: 'Position Logged Complete',
-            text: 'Your strategic asset tracking record has been updated.',
+            title: 'Position recorded',
+            text: 'Saved to your portfolio — it will still be here after a refresh.',
+            background: '#0a0f1f',
+            color: '#F0EEE8',
+            confirmButtonColor: '#FFD700'
+          });
+        } catch (err) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Not recorded',
+            text: err.message,
             background: '#0a0f1f',
             color: '#F0EEE8',
             confirmButtonColor: '#FFD700'
@@ -467,6 +591,8 @@
         }
       });
     }
+
+    loadDesk();
 
     // Toggle Mobile Sidebar
     const mobileMenuBtn = document.getElementById('mobileMenuBtn');
