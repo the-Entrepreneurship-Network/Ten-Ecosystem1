@@ -112,6 +112,8 @@ body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans
   <meta name="apple-mobile-web-app-title" content="TEN">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <script src="/push-client.js" defer></script>
+  <!-- Content merges with the portal backdrop rather than sitting in cards. -->
+  <link rel="stylesheet" href="/portal-dissolve.css">
 </head>
 <body>
 
@@ -965,7 +967,8 @@ document.addEventListener('DOMContentLoaded', loadMyCertificates);
   (function () {
     function paint() {
       if (!window.PortalBackdrop) return;
-      try { window.PortalBackdrop.showFor(document.body, 'my-documents'); } catch (e) {}
+      try { window.PortalBackdrop.showFor(document.body, 'my-documents');
+        document.body.classList.add('portal-surface'); } catch (e) {}
     }
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', paint);
