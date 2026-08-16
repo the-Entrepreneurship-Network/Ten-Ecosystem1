@@ -275,7 +275,16 @@
      The same orbit, carrying what is behind the sign-in rather than the
      fourteen domains. Portal chips are labelled glyphs, not photographs, so
      they need a slightly bigger face and their own type. */
-  .ring.portals .chip { width:62px; height:62px; margin:-31px; font-size:25px; background:#131313; }
+  /* The ring sits on a live backdrop, so its chips need to read against
+     moving colour rather than flat black: a darker, more opaque face and a
+     little blur behind them. */
+  .ring.portals .chip { width:62px; height:62px; margin:-31px; font-size:25px;
+    background:rgba(9,12,22,.82); backdrop-filter:blur(6px); border-color:rgba(255,255,255,.14); }
+  #portalsSection .portal-backdrop { position:absolute; inset:0; z-index:0; }
+  #portalsSection .portal-backdrop::after {
+    content:''; position:absolute; inset:0;
+    background:radial-gradient(80% 70% at 50% 50%, rgba(4,6,15,.72), rgba(4,6,15,.34) 70%, rgba(4,6,15,.62));
+  }
   .ring.portals .chip:hover, .ring.portals .chip:focus-visible { border-color:#d4af37; }
   .orbit-zoom .pg { font-size:96px; line-height:1; }
   .orbit-zoom small { font-size:12.5px; color:#9a9a9a; font-weight:600; letter-spacing:.01em; max-width:230px; text-align:center; line-height:1.5; }
@@ -448,6 +457,9 @@
   <!-- Without this the browser asks for /favicon.ico, which does not exist,
        and every visit logs a 404. -->
   <link rel="icon" href="/icons/icon-192.png" type="image/png">
+  <!-- Backdrop engine for the portals ring. Not deferred: the ring's own
+       script runs inline at the end of the body and asks for it by name. -->
+  <script src="/portal-backdrops.js"></script>
 </head>
 <body class="locked">
 
@@ -659,8 +671,8 @@
      only honest thing a visitor could learn about the product was that it
      asked them to log in. Hovering a chip stops the ring and brings that
      portal to the middle, same as the domains ring above. -->
-<section class="orbit-wrap" style="padding-top:20px">
-  <div style="width:100%">
+<section class="orbit-wrap" id="portalsSection" style="padding:70px 0 110px; position:relative; isolation:isolate">
+  <div style="width:100%; position:relative; z-index:1">
     <div class="sec-head"><h2>Inside the portal</h2><span>( seventeen of them, one sign-in )</span></div>
     <div class="orbit" style="margin:34px auto 0">
       <div class="orbit-center"><b>17 PORTALS</b><span>ONE SIGN-IN</span></div>
@@ -1525,6 +1537,18 @@ const PORTALS = [
   ['∞',  'TEN Assistant',    'Your plan, coins and deadlines — ask it anything', '/assistant'],
   ['🌐', 'TEN Network',      'The global community and its programmes',  'ten-network.html']
 ];
+
+/* The ring's own backdrop. Previously this section sat on flat black, which
+   is the "old school" background it is replacing. */
+(() => {
+  const section = document.getElementById('portalsSection');
+  if (!section || !window.PortalBackdrop) return;
+  window.PortalBackdrop.mount(
+    section,
+    window.PortalBackdrop.themeFor('landing-portals').engine,
+    window.PortalBackdrop.themeFor('landing-portals')
+  );
+})();
 
 (() => {
   const ring  = document.getElementById('portalRing');

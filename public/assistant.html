@@ -998,5 +998,29 @@
   setTimeout(function () { box.focus(); }, 3000);
 })();
 </script>
+
+<!-- Portal backdrop. Cosmetic only: it mounts behind everything on the page
+     and nothing above it changes. The theme for "assistant" is registered in
+     portal-backdrops.js, so this portal's background is its own. -->
+<script src="/portal-backdrops.js"></script>
+<style>
+  body { position: relative; }
+  body > .portal-backdrop { position: fixed; inset: 0; z-index: -1; }
+  body > .portal-backdrop::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(4,7,16,.30), rgba(4,7,16,.48));
+  }
+</style>
+<script>
+  (function () {
+    function paint() {
+      if (!window.PortalBackdrop) return;
+      try { window.PortalBackdrop.showFor(document.body, 'assistant'); } catch (e) {}
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', paint);
+    } else { paint(); }
+  })();
+</script>
 </body>
 </html>
