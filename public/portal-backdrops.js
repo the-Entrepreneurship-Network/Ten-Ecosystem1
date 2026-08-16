@@ -255,7 +255,113 @@
     '  fragColor = vec4(u_tint * (0.70 + v_fade * 0.95), a);\n' +
     '}';
 
-  var SHADERS = { crystal: FRAG_CRYSTAL, beam: FRAG_BEAM, scan: FRAG_SCAN };
+  /* ── gradient ──────────────────────────────────────────────────────────
+     The animated-gradient reference, carried over essentially as written.
+     It was already one fullscreen-quad fragment shader with uniforms, which
+     is exactly the shape this file's quad path expects, so the port is the
+     GLSL plus a parameter block — no React, no error boundary component, and
+     the WebGL failure it guarded is already handled here by falling back to a
+     gradient.
+
+     Its five presets are the reason it is worth having: they are five more
+     distinct looks, which is what "every portal its own background" needs. */
+  var FRAG_GRADIENT = '#version 300 es\n' +
+    'precision highp float;\n' +
+    'uniform float u_time; uniform float u_pixelRatio; uniform vec2 u_res;\n' +
+    'uniform float u_scale; uniform float u_rotation;\n' +
+    'uniform vec4 u_color1; uniform vec4 u_color2; uniform vec4 u_color3;\n' +
+    'uniform float u_proportion; uniform float u_softness;\n' +
+    'uniform float u_shape; uniform float u_shapeScale;\n' +
+    'uniform float u_distortion; uniform float u_swirl; uniform float u_swirlIterations;\n' +
+    'out vec4 fragColor;\n' +
+    '#define TWO_PI 6.28318530718\n' +
+    '#define PI 3.14159265358979323846\n' +
+    'vec2 rotate(vec2 uv, float th){ return mat2(cos(th), sin(th), -sin(th), cos(th)) * uv; }\n' +
+    'float random(vec2 st){ return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123); }\n' +
+    'float noise(vec2 st){\n' +
+    '  vec2 i = floor(st); vec2 f = fract(st);\n' +
+    '  float a = random(i), b = random(i + vec2(1.0,0.0));\n' +
+    '  float c = random(i + vec2(0.0,1.0)), d = random(i + vec2(1.0,1.0));\n' +
+    '  vec2 u = f*f*(3.0-2.0*f);\n' +
+    '  return mix(mix(a,b,u.x), mix(c,d,u.x), u.y);\n' +
+    '}\n' +
+    'vec4 blend_colors(vec4 c1, vec4 c2, vec4 c3, float mixer, float edgesWidth, float edge_blur){\n' +
+    '  vec3 color1 = c1.rgb * c1.a, color2 = c2.rgb * c2.a, color3 = c3.rgb * c3.a;\n' +
+    '  float r1 = smoothstep(.0 + .35*edgesWidth, .7 - .35*edgesWidth + .5*edge_blur, mixer);\n' +
+    '  float r2 = smoothstep(.3 + .35*edgesWidth, 1. - .35*edgesWidth + edge_blur, mixer);\n' +
+    '  vec3 b2 = mix(color1, color2, r1);\n' +
+    '  float o2 = mix(c1.a, c2.a, r1);\n' +
+    '  return vec4(mix(b2, color3, r2), mix(o2, c3.a, r2));\n' +
+    '}\n' +
+    'void main(){\n' +
+    '  vec2 uv = gl_FragCoord.xy / u_res.xy;\n' +
+    '  float t = .5 * u_time;\n' +
+    '  float noise_scale = .0005 + .006 * u_scale;\n' +
+    '  uv -= .5; uv *= (noise_scale * u_res); uv = rotate(uv, u_rotation * .5 * PI);\n' +
+    '  uv /= u_pixelRatio; uv += .5;\n' +
+    '  float n1 = noise(uv * 1. + t), n2 = noise(uv * 2. - t);\n' +
+    '  float angle = n1 * TWO_PI;\n' +
+    '  uv.x += 4. * u_distortion * n2 * cos(angle);\n' +
+    '  uv.y += 4. * u_distortion * n2 * sin(angle);\n' +
+    '  float it = ceil(clamp(u_swirlIterations, 1., 30.));\n' +
+    '  for (float i = 1.; i <= 30.; i++) {\n' +
+    '    if (i > it) break;\n' +
+    '    uv.x += clamp(u_swirl, 0., 2.) / i * cos(t + i * 1.5 * uv.y);\n' +
+    '    uv.y += clamp(u_swirl, 0., 2.) / i * cos(t + i * 1.0 * uv.x);\n' +
+    '  }\n' +
+    '  float proportion = clamp(u_proportion, 0., 1.);\n' +
+    '  float shape = 0., mixer = 0.;\n' +
+    '  if (u_shape < .5) {\n' +
+    '    vec2 s = uv * (.5 + 3.5 * u_shapeScale);\n' +
+    '    shape = .5 + .5 * sin(s.x) * cos(s.y);\n' +
+    '    mixer = shape + .48 * sign(proportion - .5) * pow(abs(proportion - .5), .5);\n' +
+    '  } else if (u_shape < 1.5) {\n' +
+    '    vec2 s = uv * (.25 + 3. * u_shapeScale);\n' +
+    '    float f = fract(s.y);\n' +
+    '    shape = smoothstep(.0,.55,f) * smoothstep(1.,.45,f);\n' +
+    '    mixer = shape + .48 * sign(proportion - .5) * pow(abs(proportion - .5), .5);\n' +
+    '  } else {\n' +
+    '    float sh = 1. - uv.y; sh -= .5; sh /= (noise_scale * u_res.y); sh += .5;\n' +
+    '    float ss = .2 * (1. - u_shapeScale);\n' +
+    '    shape = smoothstep(.45 - ss, .55 + ss, sh + .3 * (proportion - .5));\n' +
+    '    mixer = shape;\n' +
+    '  }\n' +
+    '  vec4 c = blend_colors(u_color1, u_color2, u_color3, mixer, 1. - clamp(u_softness,0.,1.), .01 + .01 * u_scale);\n' +
+    /* The presets were authored as a hero background, where being the
+       brightest thing on screen is the point. Measured here, Oceanic came out
+       at a mean of 117/255 against 16-50 for the other engines — far too hot
+       to sit under body text. Halved, they land in the same band. */
+    '  fragColor = vec4(c.rgb * 0.5, 1.0);\n' +
+    '}';
+
+  /* The reference's presets, unchanged apart from being data here rather than
+     a TypeScript record. `shape` is the enum it used: 0 checks, 1 stripes,
+     2 edge. */
+  var GRADIENT_PRESETS = {
+    Aurora:  { c1:'#0a001a', c2:'#1a0b2e', c3:'#f20089', rotation:-45, proportion:60, scale:0.6, speed:15, distortion:40, swirl:80,  swirlIterations:10, softness:100, offset:200,  shape:2, shapeSize:50 },
+    Oceanic: { c1:'#000814', c2:'#001d3d', c3:'#00b4d8', rotation:0,   proportion:70, scale:0.4, speed:10, distortion:15, swirl:50,  swirlIterations:12, softness:80,  offset:150,  shape:0, shapeSize:30 },
+    Amber:   { c1:'#140c00', c2:'#4a2500', c3:'#f57c00', rotation:120, proportion:80, scale:0.8, speed:20, distortion:25, swirl:60,  swirlIterations:8,  softness:90,  offset:500,  shape:1, shapeSize:40 },
+    Toxic:   { c1:'#050d05', c2:'#0a240a', c3:'#39ff14', rotation:-90, proportion:55, scale:0.5, speed:25, distortion:60, swirl:100, swirlIterations:15, softness:70,  offset:-100, shape:2, shapeSize:20 },
+    Ghost:   { c1:'#0a0a0a', c2:'#1c1c1c', c3:'#a3a3a3', rotation:45,  proportion:50, scale:0.3, speed:8,  distortion:10, swirl:30,  swirlIterations:5,  softness:100, offset:0,    shape:0, shapeSize:60 }
+  };
+
+  /** #rgb / #rrggbb / #rrggbbaa to [r,g,b,a] in 0..1. */
+  function hexToRgba(hex) {
+    var c = String(hex || '').replace('#', '');
+    if (c.length === 3) c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2];
+    var r = parseInt(c.slice(0, 2), 16) / 255;
+    var g = parseInt(c.slice(2, 4), 16) / 255;
+    var b = parseInt(c.slice(4, 6), 16) / 255;
+    var a = c.length === 8 ? parseInt(c.slice(6, 8), 16) / 255 : 1;
+    return [r || 0, g || 0, b || 0, a];
+  }
+
+  var SHADERS = {
+    crystal: FRAG_CRYSTAL,
+    beam: FRAG_BEAM,
+    scan: FRAG_SCAN,
+    gradient: FRAG_GRADIENT
+  };
 
   /* The look each variant falls back to, and the scrim painted over the live
      canvas. Same colours either way, so a fallback is a quieter version of the
@@ -266,7 +372,8 @@
     scan:    'radial-gradient(120% 100% at 50% 100%, #241016 0%, #0b1024 48%, #04060f 100%)',
     voxel:   'radial-gradient(120% 100% at 50% 30%, #191a2c 0%, #090d1c 52%, #04060f 100%)',
     paths:   'radial-gradient(110% 90% at 20% 20%, #101a2e 0%, #070b18 55%, #04060f 100%)',
-    wave:    'radial-gradient(120% 90% at 50% 80%, #0d1730 0%, #070c1c 50%, #04060f 100%)'
+    wave:    'radial-gradient(120% 90% at 50% 80%, #0d1730 0%, #070c1c 50%, #04060f 100%)',
+    gradient:'radial-gradient(120% 100% at 30% 20%, #1a0b2e 0%, #0a0518 55%, #04060f 100%)'
   };
 
   function prefersReducedMotion() {
@@ -714,6 +821,31 @@
     var uTint  = gl.getUniformLocation(prog, 'u_tint');
     var uSeed  = gl.getUniformLocation(prog, 'u_seed');
 
+    /* The gradient shader takes its own parameter block. Every lookup below
+       returns null for the other three shaders, and each write is guarded, so
+       one quad path serves all four. */
+    var P = (variant === 'gradient')
+      ? (GRADIENT_PRESETS[opts.preset] || GRADIENT_PRESETS.Aurora)
+      : null;
+    var g = P ? {
+      pixelRatio: gl.getUniformLocation(prog, 'u_pixelRatio'),
+      scale:      gl.getUniformLocation(prog, 'u_scale'),
+      rotation:   gl.getUniformLocation(prog, 'u_rotation'),
+      color1:     gl.getUniformLocation(prog, 'u_color1'),
+      color2:     gl.getUniformLocation(prog, 'u_color2'),
+      color3:     gl.getUniformLocation(prog, 'u_color3'),
+      proportion: gl.getUniformLocation(prog, 'u_proportion'),
+      softness:   gl.getUniformLocation(prog, 'u_softness'),
+      shape:      gl.getUniformLocation(prog, 'u_shape'),
+      shapeScale: gl.getUniformLocation(prog, 'u_shapeScale'),
+      distortion: gl.getUniformLocation(prog, 'u_distortion'),
+      swirl:      gl.getUniformLocation(prog, 'u_swirl'),
+      swirlIter:  gl.getUniformLocation(prog, 'u_swirlIterations')
+    } : null;
+    var gc1 = P ? hexToRgba(P.c1) : null;
+    var gc2 = P ? hexToRgba(P.c2) : null;
+    var gc3 = P ? hexToRgba(P.c3) : null;
+
     var mouse = { x: 0.5, y: 0.5 };
     var started = Date.now();
     var raf = null;
@@ -740,6 +872,26 @@
       gl.uniform2f(uMouse, mouse.x, mouse.y);
       if (uTint) gl.uniform3f(uTint, tint[0], tint[1], tint[2]);
       if (uSeed) gl.uniform1f(uSeed, seed);
+
+      if (P) {
+        // The reference drove time as elapsed * speed/100 * 5 + offset/100.
+        var el = (Date.now() - started) * 0.001;
+        gl.uniform1f(uTime, el * (P.speed / 100) * 5 + P.offset * 0.01);
+        gl.uniform1f(g.pixelRatio, 1);
+        gl.uniform1f(g.scale, P.scale);
+        gl.uniform1f(g.rotation, (P.rotation * Math.PI) / 180);
+        gl.uniform4f(g.color1, gc1[0], gc1[1], gc1[2], gc1[3]);
+        gl.uniform4f(g.color2, gc2[0], gc2[1], gc2[2], gc2[3]);
+        gl.uniform4f(g.color3, gc3[0], gc3[1], gc3[2], gc3[3]);
+        gl.uniform1f(g.proportion, P.proportion / 100);
+        gl.uniform1f(g.softness, P.softness / 100);
+        gl.uniform1f(g.shape, P.shape);
+        gl.uniform1f(g.shapeScale, P.shapeSize / 100);
+        gl.uniform1f(g.distortion, P.distortion / 50);
+        gl.uniform1f(g.swirl, P.swirl / 100);
+        gl.uniform1f(g.swirlIter, P.swirl === 0 ? 0 : P.swirlIterations);
+      }
+
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
 
@@ -835,7 +987,7 @@
   /** Mount the background that belongs to a given portal, by its key. */
   function showFor(host, key, index) {
     var theme = themeFor(key, index);
-    return show(host, theme.engine, { tint: theme.tint, seed: theme.seed });
+    return show(host, theme.engine, { tint: theme.tint, seed: theme.seed, preset: theme.preset });
   }
 
   function clear() {
@@ -857,26 +1009,26 @@
        two expensive ones, voxel and wave, go to the short, glanceable
        screens where nobody sits for ten minutes. */
     'stu-view-overview':          { engine: 'wave',    tint: [0.55, 0.78, 1.00], seed: 0.00 },
-    'stu-view-notice':            { engine: 'beam',    tint: [1.00, 0.62, 0.28], seed: 0.13 },
+    'stu-view-notice':            { engine: 'gradient', preset: 'Amber',   tint: [1.00, 0.62, 0.28], seed: 0.13 },
     'stu-view-coordinator-tasks': { engine: 'paths',   tint: [0.42, 0.85, 0.95], seed: 0.27 },
-    'stu-view-domain-tasks':      { engine: 'crystal', tint: [0.42, 0.62, 1.00], seed: 0.41 },
+    'stu-view-domain-tasks':      { engine: 'gradient', preset: 'Oceanic', tint: [0.42, 0.62, 1.00], seed: 0.41 },
     'stu-view-submissions':       { engine: 'paths',   tint: [0.58, 1.00, 0.72], seed: 0.55 },
     'stu-view-attendance':        { engine: 'beam',    tint: [0.35, 0.95, 0.85], seed: 0.68 },
-    'stu-view-test':              { engine: 'scan',    tint: [0.68, 0.60, 1.00], seed: 0.81 },
+    'stu-view-test':              { engine: 'gradient', preset: 'Ghost',   tint: [0.68, 0.60, 1.00], seed: 0.81 },
     'stu-view-coding':            { engine: 'voxel',   tint: [0.30, 0.85, 0.95], seed: 0.94 },
     'stu-view-guidelines':        { engine: 'paths',   tint: [0.95, 0.85, 0.50], seed: 0.07 },
     'stu-view-leaderboard':       { engine: 'voxel',   tint: [1.00, 0.80, 0.25], seed: 0.21 },
     'v2-tasks':                   { engine: 'scan',    tint: [1.00, 0.72, 0.30], seed: 0.34 },
     'my-documents':               { engine: 'paths',   tint: [0.95, 0.70, 0.35], seed: 0.47 },
-    'my-certificates':            { engine: 'crystal', tint: [0.78, 0.60, 1.00], seed: 0.61 },
-    'payment':                    { engine: 'beam',    tint: [0.40, 1.00, 0.62], seed: 0.74 },
+    'my-certificates':            { engine: 'gradient', preset: 'Aurora',  tint: [0.78, 0.60, 1.00], seed: 0.61 },
+    'payment':                    { engine: 'gradient', preset: 'Toxic',   tint: [0.40, 1.00, 0.62], seed: 0.74 },
     'assistant':                  { engine: 'wave',    tint: [1.00, 0.84, 0.36], seed: 0.88 },
     'ten-network':                { engine: 'voxel',   tint: [0.62, 0.55, 1.00], seed: 0.02 },
     /* The landing page's portals ring gets its own, distinct from all of them. */
     'landing-portals':            { engine: 'scan',    tint: [0.92, 0.78, 0.32], seed: 0.50 }
   };
 
-  var ORDER = ['crystal', 'beam', 'scan', 'voxel', 'paths', 'wave'];
+  var ORDER = ['crystal', 'beam', 'scan', 'voxel', 'paths', 'wave', 'gradient'];
 
   /**
    * The theme for a portal. Accepts the section id (or page key) it belongs
