@@ -56,6 +56,27 @@
   var amount = script.dataset.amount || '';
 
   var STORE_KEY = 'ten_pay_choice_' + portal;
+  var USES_KEY = 'ten_portal_uses_' + portal;   // free runs already taken
+  var PAID_KEY = 'ten_portal_paid_' + portal;   // pressed Pay Now on the repeat gate
+
+  /* One run is free so the portal can prove itself; after that it is paid.
+     Raise this if a portal should give away more than a single look. */
+  var FREE_USES = 1;
+
+  function readInt(key) {
+    try { return parseInt(localStorage.getItem(key), 10) || 0; } catch (e) { return 0; }
+  }
+  function write(key, value) {
+    try { localStorage.setItem(key, value); } catch (e) { /* private mode */ }
+  }
+
+  function hasPaid() {
+    try { return localStorage.getItem(PAID_KEY) === '1'; } catch (e) { return false; }
+  }
+  /** True once the free look is spent and nothing has been paid since. */
+  function mustPay() {
+    return !hasPaid() && readInt(USES_KEY) >= FREE_USES;
+  }
 
   /** The intent a UPI app opens. Same payee the QR encodes. */
   function upiIntent() {
@@ -81,6 +102,129 @@
     }));
   }
 
+  /**
+   * The scanner, on white. Scanners need the light quiet zone, and a
+   * dark-tinted code is the classic reason a camera will not lock on.
+   */
+  function qrPanel(size) {
+    var box = el('div',
+      'background:#fff;border-radius:16px;padding:14px;display:inline-block;' +
+      'box-shadow:0 12px 40px rgba(0,0,0,.5);');
+    var img = el('img', 'width:' + size + 'px;height:' + size + 'px;display:block;border-radius:6px;');
+    img.src = qr;
+    img.alt = 'UPI payment QR code for ' + PAYEE;
+    box.appendChild(img);
+    return box;
+  }
+
+  /**
+   * Going in. The free run is spent here rather than on arrival, so someone
+   * who only reads the landing page keeps their look.
+   *
+   * Once it is spent the paywall opens instead, and — as asked — it offers
+   * only Pay Now. "Payment after Completion" is a first-run courtesy; a second
+   * run is not a completion, it is more usage.
+   */
+  function enterPortal() {
+    if (mustPay()) { openPaywall(); return; }
+
+    write(USES_KEY, readInt(USES_KEY) + 1);
+    document.dispatchEvent(new CustomEvent('ten:portal-start', {
+      detail: { portal: portal, uses: readInt(USES_KEY), paid: hasPaid() }
+    }));
+
+    if (next) { window.location.href = next; return; }
+    /* A single-page portal is already on screen above this card, so entering
+       it means going back to it rather than navigating anywhere. */
+    var app = document.getElementById('root') || document.body;
+    app.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  /**
+   * The blocking scanner. It has no close button on purpose: the free run is
+   * over and paying is the way through.
+   *
+   * Pay Now is trusted here for the same reason it is trusted on the card
+   * below — a UPI intent reports nothing back, so pressing it is a claim, not
+   * a receipt. Anyone willing to open devtools can clear the key and get
+   * another free run. Making this hold properly needs the entitlement checked
+   * server-side against a verified payment, not localStorage.
+   */
+  function openPaywall() {
+    if (document.getElementById('ten-paywall')) return;
+
+    var overlay = el('div',
+      'position:fixed;inset:0;z-index:99999;background:rgba(4,7,16,.92);' +
+      'backdrop-filter:blur(6px);display:flex;align-items:center;' +
+      'justify-content:center;padding:24px;overflow:auto;' +
+      'font-family:Inter,system-ui,sans-serif;');
+    overlay.id = 'ten-paywall';
+
+    var box = el('div',
+      'background:#0c1220;border:1px solid rgba(212,175,55,.28);border-radius:20px;' +
+      'padding:34px 30px;max-width:420px;width:100%;text-align:center;' +
+      'box-shadow:0 30px 90px rgba(0,0,0,.7);');
+
+    box.appendChild(el('div',
+      'font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;color:#D4AF37;' +
+      'font-weight:800;margin-bottom:10px;', 'Free run used'));
+    box.appendChild(el('h3',
+      'color:#fff;font-size:23px;font-weight:800;margin:0 0 10px;letter-spacing:-.01em;',
+      'Pay to continue using ' + title.replace(/ Access$/, '') + '.'));
+    box.appendChild(el('p',
+      'color:#94a3b8;font-size:14px;line-height:1.6;margin:0 0 24px;',
+      'You have had your free run of this portal. Scan to pay for continued access.'));
+
+    box.appendChild(qrPanel(196));
+    box.appendChild(el('div',
+      'color:#64748b;font-size:12px;margin:12px 0 2px;', 'Scan with any UPI app'));
+    box.appendChild(el('div',
+      'color:#94a3b8;font-size:12.5px;margin-bottom:24px;',
+      'UPI ID: <span style="color:#D4AF37;font-weight:700;font-family:ui-monospace,monospace;">' +
+      UPI_ID + '</span>'));
+
+    /* Pay Now only. No pay-after on a repeat run. */
+    var pay = el('a',
+      'display:block;padding:15px 24px;border-radius:11px;text-decoration:none;' +
+      'background:linear-gradient(135deg,#f5c542,#c9a227);color:#0c1220;' +
+      'font-weight:800;font-size:15px;cursor:pointer;', 'Pay Now');
+    pay.href = upiIntent();
+
+    var done = el('button',
+      'display:none;margin-top:14px;width:100%;padding:13px 20px;border:0;border-radius:11px;' +
+      'background:#fff;color:#0c1220;font-weight:800;font-size:14px;cursor:pointer;' +
+      'font-family:inherit;', "I've paid — continue");
+    done.type = 'button';
+
+    pay.addEventListener('click', function () {
+      remember('now');
+      done.style.display = '';
+    });
+    done.addEventListener('click', function () {
+      write(PAID_KEY, '1');
+      closePaywall();
+      enterPortal();
+    });
+
+    box.appendChild(pay);
+    box.appendChild(done);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    /* The overlay covers the portal but does not stop it scrolling underneath,
+       which makes a blocking dialog feel like a dismissible banner. */
+    priorOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+  }
+
+  var priorOverflow = '';
+
+  function closePaywall() {
+    var overlay = document.getElementById('ten-paywall');
+    if (overlay) overlay.remove();
+    document.body.style.overflow = priorOverflow;
+  }
+
   function build() {
     var section = el('section',
       'background:#080c16;padding:72px 20px 84px;font-family:Inter,system-ui,sans-serif;' +
@@ -102,18 +246,7 @@
       'color:#94a3b8;font-size:15px;line-height:1.6;margin:0 0 32px;',
       'Scan to pay, or start now and pay after completion.'));
 
-    /* The QR sits on white deliberately: scanners need the light quiet zone,
-       and a dark-tinted code is the classic reason a camera will not lock on. */
-    var qrBox = el('div',
-      'background:#fff;border-radius:16px;padding:16px;display:inline-block;' +
-      'box-shadow:0 12px 40px rgba(0,0,0,.5);');
-    var img = el('img',
-      'width:212px;height:212px;display:block;border-radius:6px;');
-    img.src = qr;
-    img.alt = 'UPI payment QR code for ' + PAYEE;
-    img.loading = 'lazy';
-    qrBox.appendChild(img);
-    card.appendChild(qrBox);
+    card.appendChild(qrPanel(212));
 
     card.appendChild(el('div',
       'color:#64748b;font-size:12px;margin:14px 0 4px;', 'Scan with any UPI app'));
@@ -188,13 +321,53 @@
       'Payment done — continue to the portal →');
     card.appendChild(proceed);
 
+    /* Get Started sits below the payment, not above it. Reaching it means
+       scrolling past the QR, which is the point: the price is the first thing
+       seen, so the portal reads as paid rather than free with a donation box
+       attached. */
+    var start = el('button',
+      'margin-top:30px;width:100%;max-width:340px;padding:16px 24px;border:0;' +
+      'border-radius:12px;background:#fff;color:#0c1220;font-weight:800;' +
+      'font-size:15.5px;cursor:pointer;font-family:inherit;', 'Get Started');
+    start.type = 'button';
+    start.addEventListener('click', function () { enterPortal(); });
+    card.appendChild(start);
+
+    card.appendChild(el('div',
+      'color:#64748b;font-size:11.5px;margin-top:12px;line-height:1.6;',
+      readInt(USES_KEY) >= FREE_USES && !hasPaid()
+        ? 'Your free run is used. Payment is required to continue.'
+        : 'Premium portal · one free run included'));
+
     section.appendChild(card);
     document.body.appendChild(section);
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', build);
-  } else {
+  function init() {
     build();
+    /* Someone coming back for another run meets the scanner straight away,
+       rather than getting through the portal and being stopped later. */
+    if (mustPay()) openPaywall();
+  }
+
+  /* Exposed so a portal can gate its own actions on the same rule instead of
+     reimplementing it: PortalPaygate.requireAccess() returns false and opens
+     the scanner when the free run is spent. */
+  window.PortalPaygate = {
+    portal: portal,
+    mustPay: mustPay,
+    hasPaid: hasPaid,
+    openPaywall: openPaywall,
+    requireAccess: function () {
+      if (!mustPay()) return true;
+      openPaywall();
+      return false;
+    }
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
   }
 })();
