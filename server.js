@@ -10362,6 +10362,12 @@ try { app.use("/api/notifications", require("./routes/notificationRoutes"));} ca
  */
 try { app.use("/api/payment/setu", require("./routes/paymentSetuRoutes")); } catch(e) { console.error("[Routes] paymentSetuRoutes:", e.message); }
 
+/*
+ * Verified portal access. Fixes the price server-side and grants only against
+ * a PAID transaction, so the paygate no longer takes the browser's word for it.
+ */
+try { app.use("/api/v2/portal-access", require("./routes/v2/portalAccess")); } catch(e) { console.error("[Routes] portalAccess:", e.message); }
+
 try {
     app.use("/api/v2/contractor",     require("./routes/v2/contractorDesk"));
     app.use("/api/v2/investor-desk",  require("./routes/v2/investorDesk"));

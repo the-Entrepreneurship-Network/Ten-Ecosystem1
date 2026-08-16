@@ -74,8 +74,25 @@
     try { localStorage.setItem(key, value); } catch (e) { /* private mode */ }
   }
 
+  /* Set once the server confirms a PAID transaction for this portal. That is
+     the real entitlement; the localStorage flag below is only the fallback for
+     a server with no payment credentials configured. */
+  var serverGranted = false;
+
   function hasPaid() {
+    if (serverGranted) return true;
     try { return localStorage.getItem(PAID_KEY) === '1'; } catch (e) { return false; }
+  }
+
+  /** Ask the server whether this portal is already owned. */
+  function checkAccess() {
+    return fetch('/api/v2/portal-access/' + encodeURIComponent(portal), {
+      credentials: 'include'
+    }).then(function (r) {
+      /* 401 just means nobody is signed in yet — not an error worth showing. */
+      if (!r.ok) return null;
+      return r.json();
+    }).catch(function () { return null; });
   }
   /** True once the free look is spent and nothing has been paid since. */
   function mustPay() {
@@ -118,6 +135,7 @@
     img.src = qr;
     img.alt = 'UPI payment QR code for ' + PAYEE;
     box.appendChild(img);
+    box.img = img;   // the verified flow swaps this for an order-specific code
     return box;
   }
 
@@ -145,14 +163,69 @@
   }
 
   /**
+   * Create a real order and wait for the provider to confirm it.
+   *
+   * This is what makes the QR mean something. The code on screen is swapped
+   * for one that pays a specific order, and the unlock comes from the server
+   * saying that order is PAID — not from the visitor pressing a button.
+   *
+   * Returns false when real payment is unavailable (nobody signed in, or the
+   * server has no provider credentials), so the caller can fall back.
+   */
+  function startVerifiedPayment(ui) {
+    return fetch('/api/v2/portal-access/order', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ portal: portal })
+    }).then(function (r) {
+      return r.json().then(function (data) { return { status: r.status, data: data }; });
+    }).then(function (res) {
+      if (res.status === 401 || res.status === 403) { ui.needLogin(); return true; }
+      if (!res.data || res.data.success !== true) return false;   // 503 / not configured
+      if (res.data.alreadyPaid) { serverGranted = true; ui.unlock(); return true; }
+
+      ui.showOrder(res.data);
+      pollOrder(res.data.orderId, ui);
+      return true;
+    }).catch(function () { return false; });
+  }
+
+  /**
+   * Poll until the provider reports the order settled. The webhook is what
+   * normally marks it PAID; polling is what tells this page it happened, and
+   * it also covers a webhook that is late or misrouted.
+   */
+  function pollOrder(orderId, ui) {
+    var deadline = Date.now() + 10 * 60 * 1000;   // UPI approvals are not instant
+
+    (function tick() {
+      if (Date.now() > deadline) { ui.expired(); return; }
+
+      fetch('/api/v2/portal-access/order/' + encodeURIComponent(orderId) + '/status', {
+        credentials: 'include'
+      }).then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          if (data && data.granted) {
+            serverGranted = true;
+            write(PAID_KEY, '1');   // spares the next page load a round trip
+            ui.unlock();
+            return;
+          }
+          setTimeout(tick, 3000);
+        })
+        .catch(function () { setTimeout(tick, 5000); });
+    })();
+  }
+
+  /**
    * The blocking scanner. It has no close button on purpose: the free run is
    * over and paying is the way through.
    *
-   * Pay Now is trusted here for the same reason it is trusted on the card
-   * below — a UPI intent reports nothing back, so pressing it is a claim, not
-   * a receipt. Anyone willing to open devtools can clear the key and get
-   * another free run. Making this hold properly needs the entitlement checked
-   * server-side against a verified payment, not localStorage.
+   * When the server can take a real payment this shows an order-specific QR
+   * and unlocks on confirmation. When it cannot — no credentials configured —
+   * it falls back to the static merchant QR and an "I've paid" button, which
+   * is a claim rather than a receipt and is marked as such in the UI.
    */
   function openPaywall() {
     if (document.getElementById('ten-paywall')) return;
@@ -180,13 +253,16 @@
       'You have had your free run of this portal. Scan to pay ' + priceLabel +
       ' for continued access.'));
 
-    box.appendChild(qrPanel(196));
+    var panel = qrPanel(196);
+    var qrImg = panel.img;
+    box.appendChild(panel);
     box.appendChild(el('div',
       'color:#64748b;font-size:12px;margin:12px 0 2px;', 'Scan with any UPI app'));
-    box.appendChild(el('div',
+    var upiLine = el('div',
       'color:#94a3b8;font-size:12.5px;margin-bottom:24px;',
       'UPI ID: <span style="color:#D4AF37;font-weight:700;font-family:ui-monospace,monospace;">' +
-      UPI_ID + '</span>'));
+      UPI_ID + '</span>');
+    box.appendChild(upiLine);
 
     /* Pay Now only. No pay-after on a repeat run. */
     var pay = el('a',
@@ -201,6 +277,10 @@
       'font-family:inherit;', "I've paid — continue");
     done.type = 'button';
 
+    var status = el('div',
+      'color:#64748b;font-size:12.5px;margin-top:14px;line-height:1.6;', '');
+
+    /* Fallback path: no receipt exists, so this only records a claim. */
     pay.addEventListener('click', function () {
       remember('now');
       done.style.display = '';
@@ -213,8 +293,47 @@
 
     box.appendChild(pay);
     box.appendChild(done);
+    box.appendChild(status);
     overlay.appendChild(box);
     document.body.appendChild(overlay);
+
+    /* Hand the verified flow the few nodes it needs to drive. */
+    var ui = {
+      showOrder: function (data) {
+        /* Swap in the QR that pays this order, and drop the manual
+           confirmation: nothing here needs the visitor's word any more. */
+        qrImg.src = data.qr;
+        pay.href = data.paymentUrl;
+        pay.target = '_blank';
+        pay.rel = 'noopener';
+        done.style.display = 'none';
+        done.disabled = true;
+        upiLine.innerHTML = 'Order <span style="color:#D4AF37;font-family:ui-monospace,monospace;">' +
+          String(data.orderId).slice(-8) + '</span> · ' + priceLabel;
+        status.textContent = 'Waiting for payment confirmation…';
+      },
+      unlock: function () {
+        status.textContent = 'Payment confirmed. Opening the portal…';
+        setTimeout(function () { closePaywall(); enterPortal(); }, 700);
+      },
+      needLogin: function () {
+        status.innerHTML = 'Sign in first so the payment can be linked to your account. ' +
+          '<a href="/student-login.html" style="color:#D4AF37;font-weight:700;">Sign in →</a>';
+        pay.style.display = 'none';
+        done.style.display = 'none';
+      },
+      expired: function () {
+        status.textContent = 'This order expired. Reload the page to start a new one.';
+      }
+    };
+
+    /* Try the real thing; leave the fallback in place if it is unavailable. */
+    startVerifiedPayment(ui).then(function (handled) {
+      if (!handled) {
+        status.textContent = 'Online confirmation is unavailable — pay by scanning, ' +
+          'then press the button above.';
+      }
+    });
 
     /* The overlay covers the portal but does not stop it scrolling underneath,
        which makes a blocking dialog feel like a dismissible banner. */
@@ -354,9 +473,20 @@
 
   function init() {
     build();
-    /* Someone coming back for another run meets the scanner straight away,
-       rather than getting through the portal and being stopped later. */
-    if (mustPay()) openPaywall();
+
+    /* Ask the server before deciding anything. A paid user must not be shown
+       the scanner because their browser storage was cleared, and a user who
+       cleared storage to dodge the gate must not be let through by it. */
+    checkAccess().then(function (access) {
+      if (access && access.granted) {
+        serverGranted = true;
+        write(PAID_KEY, '1');
+        return;
+      }
+      /* Someone coming back for another run meets the scanner straight away,
+         rather than getting through the portal and being stopped later. */
+      if (mustPay()) openPaywall();
+    });
   }
 
   /* Exposed so a portal can gate its own actions on the same rule instead of
