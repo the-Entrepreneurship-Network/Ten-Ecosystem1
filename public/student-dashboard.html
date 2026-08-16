@@ -1291,15 +1291,36 @@ button:active { transform: translateY(0); }
 /* Everything that is not the backdrop goes above it, and keeps its own
    background so long-form content never has to be read through the shader. */
 .section-modal-body .stu-view.active { position: relative; z-index: 1; }
-/* A scrim between the shader and the content. Without it the brightest frames
-   of the crystal shader put white-on-light-blue text on the screen. */
+/* A light scrim only — enough to stop the crystal shader's brightest glow
+   lines fighting text, not enough to erase it. The first version used
+   .72-.86 over a 42%-opacity canvas, which left about nine percent of the
+   shader visible and read as no change at all. Readability is the job of the
+   panels below, which are opaque. */
 .section-modal-body .portal-backdrop::after {
   content: ''; position: absolute; inset: 0;
-  background: linear-gradient(180deg, rgba(6,10,22,.72), rgba(6,10,22,.86));
+  background: linear-gradient(180deg, rgba(4,7,16,.26), rgba(4,7,16,.42));
 }
-[data-theme="light"] .section-modal-body .portal-backdrop { opacity: .5; }
+/* Content sits in its own solid panels, so long text is never read through a
+   moving shader no matter how bright a frame gets. */
+.section-modal-body .stu-view.active > * {
+  position: relative;
+}
+.section-modal-body .top-card,
+.section-modal-body .stu-card,
+.section-modal-body .card,
+.section-modal-body .panel {
+  backdrop-filter: blur(9px);
+  background-color: rgba(9, 14, 30, .88);
+}
+[data-theme="light"] .section-modal-body .portal-backdrop { opacity: .38; }
 [data-theme="light"] .section-modal-body .portal-backdrop::after {
-  background: linear-gradient(180deg, rgba(248,250,255,.86), rgba(248,250,255,.93));
+  background: linear-gradient(180deg, rgba(248,250,255,.62), rgba(248,250,255,.74));
+}
+[data-theme="light"] .section-modal-body .top-card,
+[data-theme="light"] .section-modal-body .stu-card,
+[data-theme="light"] .section-modal-body .card,
+[data-theme="light"] .section-modal-body .panel {
+  background-color: rgba(255,255,255,.92);
 }
 
 /* Light mode overrides for section cards/modal */
@@ -5380,8 +5401,8 @@ function openSectionModal(sectionId) {
   if (window.PortalBackdrop) {
     try {
       var body = modal.querySelector('.section-modal-body');
-      var order = SECTION_ORDER.indexOf(sectionId);
-      window.PortalBackdrop.show(body, window.PortalBackdrop.variantFor(order < 0 ? 0 : order));
+      // Each section has its own background, keyed by its id — not a rotation.
+      window.PortalBackdrop.showFor(body, sectionId, SECTION_ORDER.indexOf(sectionId));
     } catch (e) { /* a backdrop must never stop a section opening */ }
   }
   // Hide sidebar when modal opens
