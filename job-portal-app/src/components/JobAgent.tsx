@@ -325,6 +325,59 @@ function FitBadge({ fit }: { fit: Fit }) {
 function MaterialsPanel({ data, onClose }: { data: Materials; onClose: () => void }) {
   const copy = (text: string) => navigator.clipboard?.writeText(text);
 
+  /* Sending is two deliberate steps: prepare puts the letter in Instantly as a
+     draft, send is the one that reaches a person. They are never combined. */
+  const [to, setTo] = useState('');
+  const [outreach, setOutreach] = useState<{ campaignId: string; to: string } | null>(null);
+  const [sendState, setSendState] = useState<'idle' | 'preparing' | 'ready' | 'sending' | 'sent'>('idle');
+  const [sendError, setSendError] = useState('');
+
+  async function prepare() {
+    setSendState('preparing');
+    setSendError('');
+    try {
+      const res = await fetch('/api/v2/job-outreach/prepare', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to,
+          subject: data.coldEmail.subject,
+          body: data.coldEmail.body,
+          company: data.job.company,
+          jobTitle: data.job.title,
+          jobUrl: data.job.url
+        })
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error);
+      setOutreach({ campaignId: json.campaignId, to: json.to });
+      setSendState('ready');
+    } catch (e: any) {
+      setSendError(e.message || 'Could not prepare the email.');
+      setSendState('idle');
+    }
+  }
+
+  async function send() {
+    if (!outreach) return;
+    setSendState('sending');
+    try {
+      const res = await fetch('/api/v2/job-outreach/send', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaignId: outreach.campaignId, confirm: true })
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error);
+      setSendState('sent');
+    } catch (e: any) {
+      setSendError(e.message || 'Could not send.');
+      setSendState('ready');
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 overflow-auto bg-black/80 p-4 backdrop-blur-sm md:p-8" style={inter}>
       <div className="mx-auto max-w-[900px] rounded-3xl border border-white/12 bg-[#0b1020] p-6 md:p-8">
@@ -347,7 +400,60 @@ function MaterialsPanel({ data, onClose }: { data: Materials; onClose: () => voi
           text={data.coldEmail.body}
           onCopy={copy}
         />
-        <p className="-mt-2 mb-5 text-[11.5px] leading-relaxed text-white/40">{data.coldEmail.note}</p>
+        <p className="-mt-2 mb-4 text-[11.5px] leading-relaxed text-white/40">{data.coldEmail.note}</p>
+
+        {/* Sending. Two steps, because the second one cannot be taken back. */}
+        <div className="mb-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <p className="mb-2 text-[12px] font-semibold text-white/80">Send it</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="email"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              placeholder="hiring@company.com"
+              disabled={sendState === 'sent'}
+              className="min-w-[220px] flex-1 rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-[13px] text-white placeholder:text-white/30"
+            />
+            {sendState !== 'ready' && sendState !== 'sending' && sendState !== 'sent' && (
+              <button
+                type="button"
+                onClick={prepare}
+                disabled={!to || sendState === 'preparing'}
+                className="rounded-lg bg-white px-3.5 py-2 text-[12.5px] font-bold text-[#0b1020] disabled:opacity-40"
+              >
+                {sendState === 'preparing' ? 'Preparing…' : 'Prepare'}
+              </button>
+            )}
+            {(sendState === 'ready' || sendState === 'sending') && (
+              <button
+                type="button"
+                onClick={send}
+                disabled={sendState === 'sending'}
+                className="rounded-lg bg-emerald-400 px-3.5 py-2 text-[12.5px] font-bold text-[#06210f] disabled:opacity-50"
+              >
+                {sendState === 'sending' ? 'Sending…' : `Send to ${outreach?.to}`}
+              </button>
+            )}
+          </div>
+
+          {sendState === 'ready' && (
+            <p className="mt-2 text-[11.5px] leading-relaxed text-amber-200/85">
+              Drafted in Instantly — nothing has been delivered yet. Pressing send emails a real
+              person and cannot be undone.
+            </p>
+          )}
+          {sendState === 'sent' && (
+            <p className="mt-2 text-[11.5px] font-semibold text-emerald-300">
+              Sent. Replies land in the mailbox connected to Instantly.
+            </p>
+          )}
+          {sendError && <p className="mt-2 text-[11.5px] text-rose-300/90">{sendError}</p>}
+          {!sendError && sendState === 'idle' && (
+            <p className="mt-2 text-[11.5px] leading-relaxed text-white/40">
+              Applies to one company at a time, from the mailbox connected to Instantly.
+            </p>
+          )}
+        </div>
 
         <div className="mb-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
           <p className="mb-2 text-[12px] font-semibold text-white/80">Follow-ups if nobody replies</p>

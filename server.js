@@ -10368,6 +10368,13 @@ try { app.use("/api/payment/setu", require("./routes/paymentSetuRoutes")); } cat
  */
 try { app.use("/api/v2/portal-access", require("./routes/v2/portalAccess")); } catch(e) { console.error("[Routes] portalAccess:", e.message); }
 
+/*
+ * Job application outreach through Instantly. Preparing and sending are
+ * separate routes: the second one puts mail in a stranger's inbox and cannot
+ * be undone, so it is never reachable by accident from the first.
+ */
+try { app.use("/api/v2/job-outreach", require("./routes/v2/jobOutreach")); } catch(e) { console.error("[Routes] jobOutreach:", e.message); }
+
 try {
     app.use("/api/v2/contractor",     require("./routes/v2/contractorDesk"));
     app.use("/api/v2/investor-desk",  require("./routes/v2/investorDesk"));
