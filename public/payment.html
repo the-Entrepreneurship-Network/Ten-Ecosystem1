@@ -147,6 +147,8 @@ textarea{resize:none;height:70px;}
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="TEN">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <!-- Content merges with the portal backdrop rather than sitting in cards. -->
+  <link rel="stylesheet" href="/portal-dissolve.css">
 </head>
 <body>
 <div class="card">
@@ -440,7 +442,8 @@ async function submitUtr() {
   (function () {
     function paint() {
       if (!window.PortalBackdrop) return;
-      try { window.PortalBackdrop.showFor(document.body, 'payment'); } catch (e) {}
+      try { window.PortalBackdrop.showFor(document.body, 'payment');
+        document.body.classList.add('portal-surface'); } catch (e) {}
     }
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', paint);

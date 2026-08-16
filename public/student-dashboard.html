@@ -1497,6 +1497,9 @@ button:active { transform: translateY(0); }
   <!-- Shader backdrops for the portal sections. Cosmetic only, and it fails
        soft: no WebGL2 or a shader that will not compile leaves a gradient. -->
   <script src="/portal-backdrops.js" defer></script>
+  <!-- Dissolves the card chrome so content sits in the backdrop rather than on
+       top of it. Scoped to .portal-surface, which openSectionModal adds. -->
+  <link rel="stylesheet" href="/portal-dissolve.css">
 </head>
 
 <body>
@@ -5403,6 +5406,8 @@ function openSectionModal(sectionId) {
       var body = modal.querySelector('.section-modal-body');
       // Each section has its own background, keyed by its id — not a rotation.
       window.PortalBackdrop.showFor(body, sectionId, SECTION_ORDER.indexOf(sectionId));
+      // Dissolve the card chrome so the content merges with that backdrop.
+      body.classList.add('portal-surface');
     } catch (e) { /* a backdrop must never stop a section opening */ }
   }
   // Hide sidebar when modal opens

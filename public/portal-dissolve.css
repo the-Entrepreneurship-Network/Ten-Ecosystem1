@@ -1,0 +1,126 @@
+/**
+ * Dissolve the boxes, keep the words.
+ *
+ * Every portal has a live backdrop behind it, and the content was still
+ * sitting in opaque cards — each one cutting a rectangle out of the shader, so
+ * a portal read as panels floating on a picture instead of one surface. This
+ * strips the container chrome: no card fills, no borders, no drop shadows, no
+ * decorative rings. Content sits IN the background.
+ *
+ * The text stays readable, which is the whole difficulty. With no panel behind
+ * it, legibility has to come from the type itself, so every text node gets a
+ * shadow heavy enough to hold against the brightest frame a shader can produce
+ * — measured at up to 255 on the crystal engine's glow lines.
+ *
+ * WHAT DELIBERATELY KEEPS ITS EDGES
+ *
+ * Buttons, inputs, badges, chips and code blocks. You press them, type into
+ * them, or read them as literal values, and they need a boundary to be usable.
+ * Dissolving those would not be "merged with the background", it would be a
+ * screen nobody can operate.
+ *
+ * `!important` is load-bearing rather than lazy: hundreds of container divs on
+ * these pages carry inline `style="background:rgba(...)"`, and an inline
+ * declaration outranks a normal stylesheet rule. An important declaration in a
+ * stylesheet outranks a non-important inline one — the only way to reach them
+ * without hand-editing several hundred attributes.
+ */
+
+/* ── containers dissolve ─────────────────────────────────────────────────── */
+.portal-surface .top-card,
+.portal-surface .stat-box,
+.portal-surface .task-card,
+.portal-surface .section-card,
+.portal-surface .stu-card,
+.portal-surface .glass-card,
+.portal-surface .panel,
+.portal-surface .card {
+  background: none !important;
+  background-color: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+/* The rings inside the welcome panel were part of the box. */
+.portal-surface .top-card::before,
+.portal-surface .top-card::after { display: none !important; }
+
+/*
+ * Inline-styled wrappers. Restricted to block containers that are not
+ * something you click, type into, or read as a literal.
+ */
+.portal-surface div[style*="background"]:not([class*="btn"]):not([class*="chip"]):not([class*="badge"]):not([class*="pill"]):not([class*="tag"]):not([class*="cm-"]):not([class*="modal"]):not([id*="Btn"]):not([id*="btn"]) {
+  background: none !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  border-color: rgba(255, 255, 255, .10) !important;
+}
+
+/* ── structure without boxes ─────────────────────────────────────────────── */
+/* A hairline and space say "new section" as clearly as a border did, without
+   interrupting the background. */
+.portal-surface .top-card {
+  padding: 32px 4px 24px !important;
+  margin-bottom: 6px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, .09) !important;
+  border-radius: 0 !important;
+}
+.portal-surface .stat-box { padding: 18px 4px !important; border-radius: 0 !important; }
+
+/* ── the words stay visible ──────────────────────────────────────────────── */
+/* Sized against the worst case: a shader frame at full white behind the text. */
+.portal-surface h1, .portal-surface h2, .portal-surface h3,
+.portal-surface h4, .portal-surface h5 {
+  text-shadow: 0 2px 20px rgba(0,0,0,.92), 0 1px 3px rgba(0,0,0,.95) !important;
+}
+.portal-surface p, .portal-surface span, .portal-surface li,
+.portal-surface td, .portal-surface th, .portal-surface label,
+.portal-surface dt, .portal-surface dd, .portal-surface small, .portal-surface b {
+  text-shadow: 0 1px 12px rgba(0,0,0,.88), 0 1px 2px rgba(0,0,0,.9) !important;
+}
+
+/* ── things that must keep their edges ───────────────────────────────────── */
+/*
+ * These are NOT re-declared back to a colour here, deliberately.
+ *
+ * The first version wrote `background-color: revert !important` on them,
+ * reasoning that it would restore what the element originally had. It does
+ * not: `revert` rolls the property back to the user-agent stylesheet, so a
+ * badge carrying an inline green went fully transparent and a button carrying
+ * an inline green came back as the browser's default grey. Both looked like
+ * they had "kept their fill" while having lost their actual colour.
+ *
+ * The dissolve selectors above never match these elements in the first place —
+ * the inline-wrapper rule is scoped to `div`, and none of them carry the card
+ * classes — so the correct fix is no counter-rule at all. Their own styling
+ * simply applies. The only thing worth overriding is the inherited text
+ * shadow, which would smear a label inside a solid button.
+ */
+.portal-surface button,
+.portal-surface .btn,
+.portal-surface a.btn,
+.portal-surface input,
+.portal-surface select,
+.portal-surface textarea,
+.portal-surface .badge,
+.portal-surface .chip,
+.portal-surface .pill,
+.portal-surface .tag,
+.portal-surface pre,
+.portal-surface code {
+  text-shadow: none !important;
+}
+
+.portal-surface table th, .portal-surface table td {
+  border-color: rgba(255, 255, 255, .10) !important;
+}
+
+/* A modal that opens on top of a portal is its own surface: reading a coding
+   problem through a moving shader is not the goal. */
+.portal-surface .coding-modal .cm-shell,
+.portal-surface .coding-modal .cm-right,
+.portal-surface #cmTerminalPane {
+  background: #0c1220 !important;
+  border-color: rgba(245, 197, 66, .22) !important;
+}
