@@ -15,9 +15,24 @@ const API = '/api/v2/jobs';
 const inter = { fontFamily: "'Inter', sans-serif" };
 
 type Profile = { name: string | null; role: string; seniority: string; location: string; skills: string[] };
-type Job = { source: string; title: string; company: string; location: string; type: string; tags: string[]; url: string; posted: string | null; matched: string[]; score: number };
+type Fit = { percent: number; band: string; advice: string; confidence: number; reasons: string[] };
+type Job = {
+  source: string; title: string; company: string; location: string; type: string;
+  tags: string[]; url: string; posted: string | null; matched: string[]; score: number;
+  fit?: Fit; jobId?: string; stale?: boolean;
+};
 type Search = { platform: string; why: string; url: string };
 type SourceStat = { name: string; ok: boolean; count: number; error: string | null };
+type Materials = {
+  job: { title: string; company: string; url: string };
+  fit: Fit;
+  resume: { filename: string; text: string; ats: { before: number; after: number; passes: boolean }; gaps: string[] };
+  coverLetter: { filename: string; text: string; words: number };
+  coldEmail: {
+    subject: string; body: string; words: number; note: string;
+    followUps: { afterDays: number; subject: string; body: string }[];
+  };
+};
 
 export default function JobAgent() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -29,6 +44,33 @@ export default function JobAgent() {
   const [pasted, setPasted] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
+  /* The resume text is kept so materials can be written for any job in the
+     list without asking for the file a second time. */
+  const [resumeText, setResumeText] = useState('');
+  const [materials, setMaterials] = useState<Materials | null>(null);
+  const [making, setMaking] = useState('');
+  const [manager, setManager] = useState('');
+
+  async function buildMaterials(job: Job) {
+    setMaking(job.url);
+    setError('');
+    try {
+      const body = new FormData();
+      body.append('text', resumeText);
+      body.append('job', JSON.stringify(job));
+      if (profile) body.append('profile', JSON.stringify(profile));
+      if (manager) body.append('hiringManager', manager);
+      const res = await fetch(`${API}/materials`, { method: 'POST', body });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error);
+      setMaterials(data);
+    } catch (e) {
+      setError('Could not write the documents. Paste your resume text and try again.');
+    } finally {
+      setMaking('');
+    }
+  }
+
   async function hunt(file?: File, text?: string) {
     setBusy(true);
     setError('');
@@ -39,6 +81,9 @@ export default function JobAgent() {
       const res = await fetch(`${API}/search`, { method: 'POST', body });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'search failed');
+      /* Held for the materials step. A PDF is parsed on the server, so its
+         text comes back in the response rather than existing here. */
+      setResumeText(data.resumeText || text || '');
       setProfile(data.profile);
       setJobs(data.jobs);
       setSearches(data.searches);
@@ -166,24 +211,53 @@ export default function JobAgent() {
                       </p>
                     )}
                     {jobs.map((j, i) => (
-                      <a
+                      <div
                         key={j.url + i}
-                        href={j.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block rounded-2xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur-sm transition-colors hover:border-white/25 hover:bg-white/[0.07]"
+                        className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur-sm transition-colors hover:border-white/25 hover:bg-white/[0.07]"
                       >
                         <div className="flex items-start justify-between gap-3">
-                          <p className="text-[14.5px] font-semibold leading-snug text-white">{j.title}</p>
-                          <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] tracking-wide text-white/60">{j.source}</span>
+                          <a href={j.url} target="_blank" rel="noopener noreferrer"
+                             className="text-[14.5px] font-semibold leading-snug text-white hover:underline">
+                            {j.title}
+                          </a>
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            {j.fit && <FitBadge fit={j.fit} />}
+                            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] tracking-wide text-white/60">{j.source}</span>
+                          </div>
                         </div>
                         <p className="mt-1 text-[12.5px] text-white/55">
                           {[j.company, j.location, j.type].filter(Boolean).join(' · ')}
                         </p>
-                        {j.matched.length > 0 && (
-                          <p className="mt-2 text-[11.5px] text-sky-300/85">matches your {j.matched.join(', ')}</p>
+
+                        {/* Why it scored what it scored, in the agent's own arithmetic. */}
+                        {j.fit?.reasons?.length > 0 && (
+                          <p className="mt-2 text-[11.5px] leading-relaxed text-white/50">{j.fit.reasons[0]}</p>
                         )}
-                      </a>
+                        {j.matched?.length > 0 && (
+                          <p className="mt-1 text-[11.5px] text-sky-300/85">matches your {j.matched.join(', ')}</p>
+                        )}
+                        {j.stale && (
+                          <p className="mt-1 text-[11px] text-amber-300/80">
+                            posted over 30 days ago — may be filled
+                          </p>
+                        )}
+
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => buildMaterials(j)}
+                            disabled={making === j.url}
+                            className="rounded-lg bg-white px-3 py-1.5 text-[12px] font-bold text-[#0b1020] disabled:opacity-50"
+                          >
+                            {making === j.url ? 'Writing…' : 'Write my application'}
+                          </button>
+                          <a href={j.url} target="_blank" rel="noopener noreferrer"
+                             className="rounded-lg border border-white/15 px-3 py-1.5 text-[12px] text-white/70 hover:border-white/35">
+                            Open posting
+                          </a>
+                          {j.jobId && <span className="text-[10.5px] text-white/30">{j.jobId}</span>}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -220,7 +294,119 @@ export default function JobAgent() {
           )}
         </div>
       </div>
+
+      {materials && <MaterialsPanel data={materials} onClose={() => setMaterials(null)} />}
     </KineticGrid>
+  );
+}
+
+/** The fitness verdict, coloured by band and honest about thin evidence. */
+function FitBadge({ fit }: { fit: Fit }) {
+  const tone =
+    fit.band === 'strong' ? 'bg-emerald-400/15 text-emerald-300 border-emerald-400/30'
+      : fit.band === 'moderate' ? 'bg-sky-400/15 text-sky-300 border-sky-400/30'
+        : fit.band === 'unknown' ? 'bg-white/10 text-white/50 border-white/20'
+          : 'bg-amber-400/12 text-amber-300/90 border-amber-400/25';
+  return (
+    <span
+      className={`rounded-full border px-2 py-0.5 text-[10.5px] font-bold ${tone}`}
+      title={`${fit.advice} (confidence ${fit.confidence}%)`}
+    >
+      {fit.band === 'unknown' ? '— fit' : `${fit.percent}% fit`}
+    </span>
+  );
+}
+
+/**
+ * The three documents, side by side with what they are worth. The gaps list
+ * is shown as prominently as the resume itself: it is the part that decides
+ * whether the application is worth sending.
+ */
+function MaterialsPanel({ data, onClose }: { data: Materials; onClose: () => void }) {
+  const copy = (text: string) => navigator.clipboard?.writeText(text);
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-auto bg-black/80 p-4 backdrop-blur-sm md:p-8" style={inter}>
+      <div className="mx-auto max-w-[900px] rounded-3xl border border-white/12 bg-[#0b1020] p-6 md:p-8">
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.16em] text-sky-300/80">Your application</p>
+            <h2 className="mt-1 text-2xl font-semibold text-white">{data.job.title}</h2>
+            <p className="text-[13px] text-white/50">{data.job.company}</p>
+          </div>
+          <button type="button" onClick={onClose}
+                  className="rounded-lg border border-white/15 px-3 py-1.5 text-[12px] text-white/70">
+            Close
+          </button>
+        </div>
+
+        {/* Cold email first: it is the thing that actually gets a reply. */}
+        <Doc
+          title="Cold email to the hiring manager"
+          meta={`${data.coldEmail.words} words · subject: ${data.coldEmail.subject}`}
+          text={data.coldEmail.body}
+          onCopy={copy}
+        />
+        <p className="-mt-2 mb-5 text-[11.5px] leading-relaxed text-white/40">{data.coldEmail.note}</p>
+
+        <div className="mb-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <p className="mb-2 text-[12px] font-semibold text-white/80">Follow-ups if nobody replies</p>
+          {data.coldEmail.followUps.map((f) => (
+            <div key={f.afterDays} className="mb-2 last:mb-0">
+              <p className="text-[11.5px] text-sky-300/80">day {f.afterDays}</p>
+              <pre className="whitespace-pre-wrap text-[12px] leading-relaxed text-white/60">{f.body}</pre>
+            </div>
+          ))}
+        </div>
+
+        <Doc
+          title="Tailored resume"
+          meta={`keyword match ${data.resume.ats.before}% → ${data.resume.ats.after}%${data.resume.ats.passes ? ' · passes' : ''}`}
+          text={data.resume.text}
+          onCopy={copy}
+        />
+
+        {data.resume.gaps.length > 0 && (
+          <div className="mb-5 rounded-2xl border border-amber-400/25 bg-amber-400/[0.06] p-4">
+            <p className="text-[12px] font-semibold text-amber-200">
+              Asked for, but not in your resume
+            </p>
+            <p className="mt-1 text-[11.5px] leading-relaxed text-white/55">
+              These were not added for you. Add them only if you have actually done them —
+              a resume that claims what you cannot defend fails at the interview instead of the filter.
+            </p>
+            <p className="mt-2 text-[12px] text-amber-100/80">{data.resume.gaps.join(' · ')}</p>
+          </div>
+        )}
+
+        <Doc
+          title="Cover letter"
+          meta={`${data.coverLetter.words} words`}
+          text={data.coverLetter.text}
+          onCopy={copy}
+        />
+      </div>
+    </div>
+  );
+}
+
+function Doc({ title, meta, text, onCopy }: { title: string; meta: string; text: string; onCopy: (t: string) => void }) {
+  return (
+    <div className="mb-5">
+      <div className="mb-2 flex items-baseline justify-between gap-3">
+        <h3 className="text-[15px] font-semibold text-white">{title}</h3>
+        <div className="flex items-center gap-3">
+          <span className="text-[11px] text-white/40">{meta}</span>
+          <button type="button" onClick={() => onCopy(text)}
+                  className="rounded-lg bg-white px-2.5 py-1 text-[11.5px] font-bold text-[#0b1020]">
+            Copy
+          </button>
+        </div>
+      </div>
+      <pre className="max-h-[280px] overflow-auto whitespace-pre-wrap rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-[12.5px] leading-relaxed text-white/75">
+        {text}
+      </pre>
+    </div>
   );
 }
 

@@ -7,15 +7,44 @@
     <meta name="description" content="The TEN Job Portal — upload your resume and an AI agent finds real, live jobs for you from LinkedIn, Google, Upwork, Fiverr and more." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
-    <script type="module" crossorigin src="./assets/index-DoQxj3mZ.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-B2yi2BH1.css">
+
+    <!-- Content merges with the portal backdrop rather than sitting in cards. -->
+    <link rel="stylesheet" href="/portal-dissolve.css" />
+    <script src="/portal-legibility.js" defer></script>
+    <script type="module" crossorigin src="./assets/index-Bu_xgppR.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-yrI3cxKd.css">
   </head>
   <body>
     <div id="root"></div>
-    <script src="/portal-paygate.js"
-            data-portal="job"
-            data-title="Job Portal Access"
-            data-blurb="Resume parsing, live job matching and referral routing."
-            data-continue="/talent-network.html"></script>
+
+    <!--
+      The paygate and backdrop live in the source page, not in the built one.
+      A `vite build --emptyOutDir` rewrites public/job-portal/index.html from
+      this file, so anything added to the output by hand is deleted on the
+      next build — which is exactly how the payment card vanished once.
+    -->
+    <script src="/portal-backdrops.js"></script>
+    <script>
+      (function () {
+        function paint() {
+          if (!window.PortalBackdrop) return;
+          try {
+            window.PortalBackdrop.showFor(document.body, 'job');
+            document.body.classList.add('portal-surface');
+            if (window.PortalLegibility) window.PortalLegibility.watch(document.body, 7000);
+          } catch (e) { /* a backdrop must never stop the portal loading */ }
+        }
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', paint);
+        } else { paint(); }
+      })();
+    </script>
+    <script
+      src="/portal-paygate.js"
+      data-portal="job"
+      data-title="Job Portal Access"
+      data-blurb="Resume parsing, live job matching and referral routing."
+      data-continue="/talent-network.html"
+    ></script>
   </body>
 </html>

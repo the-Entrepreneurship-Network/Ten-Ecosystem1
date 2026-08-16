@@ -24,6 +24,9 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 
+const { fitness, atsMatch, requiredYears } = require('../../services/v2/jobFitness');
+const { tailorResume, coverLetter, coldEmail } = require('../../services/v2/jobMaterials');
+
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 router.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
@@ -31,18 +34,9 @@ const bodyOf = (req) => (req.body && typeof req.body === 'object' ? req.body : {
 
 /* ── reading the resume into a search profile ───────────────────────────── */
 
-const SKILL_VOCAB = [
-  'javascript','typescript','react','next.js','node','express','mongodb','mongoose','redux','graphql',
-  'python','django','flask','fastapi','pandas','numpy','scikit-learn','tensorflow','pytorch','nlp',
-  'java','spring','spring boot','hibernate','kotlin','android','swift','ios','flutter','dart',
-  'html','css','tailwind','sass','figma','ui/ux','accessibility',
-  'sql','postgresql','mysql','redis','elasticsearch','kafka',
-  'aws','azure','gcp','docker','kubernetes','terraform','jenkins','ci/cd','linux','bash','git',
-  'cyber security','penetration testing','owasp','siem','soc','networking','cryptography',
-  'excel','power bi','tableau','financial modelling','valuation','market research','stakeholder management',
-  'recruitment','onboarding','payroll','hris','content writing','seo','social media',
-  'machine learning','deep learning','data analysis','data visualization','rest api','microservices','testing','jest',
-];
+/* One vocabulary, shared with the scorer. Kept in jobFitness so the resume
+   reader and the fitness scorer cannot disagree about what a skill is. */
+const { SKILL_VOCAB } = require('../../services/v2/jobFitness');
 
 const TITLE_HINTS = [
   ['full stack developer', ['full stack','fullstack','mern','mean stack']],
@@ -97,7 +91,53 @@ function profileFromResume(text) {
      and captured the job title with the name. Horizontal space only. */
   const name = (raw.match(/^[ \t]*([A-Z][A-Za-z.'-]+(?:[ \t]+[A-Z][A-Za-z.'-]+){1,3})[ \t]*$/m) || [])[1] || null;
 
-  return { name, role, seniority, location, skills: skills.slice(0, 18), keywordCount: skills.length };
+  /* Fitness scoring needs more than skills: years, what was built, and
+     whether there is a degree. All read from the same text, all optional —
+     a resume that omits them simply scores on the dimensions it does show. */
+  const years = yearsOfExperience(raw);
+  const projects = projectLines(raw);
+  const education = /\b(b\.?tech|b\.?e\.?|bachelor|master|m\.?tech|mba|b\.?sc|m\.?sc|diploma)\b/i.test(low)
+    ? (raw.match(/^.*\b(?:b\.?tech|b\.?e\.?|bachelor|master|m\.?tech|mba|b\.?sc|m\.?sc)\b.*$/im) || [])[0] || true
+    : null;
+
+  return {
+    name, role, seniority, location,
+    skills: skills.slice(0, 18),
+    keywordCount: skills.length,
+    years, projects, education,
+    domains: [],
+    summary: raw.slice(0, 400)
+  };
+}
+
+/**
+ * Years of experience the resume claims. Prefers an explicit statement, and
+ * otherwise infers from the earliest work year mentioned — a resume listing
+ * 2021–present is making a claim even without writing the number.
+ */
+function yearsOfExperience(text) {
+  const low = String(text || '').toLowerCase();
+
+  const stated = low.match(/(\d+(?:\.\d+)?)\s*\+?\s*(?:years|yrs)\s*(?:of\s*)?(?:experience|exp)/);
+  if (stated) return Math.round(parseFloat(stated[1]));
+
+  const years = (low.match(/\b(19[89]\d|20[0-4]\d)\b/g) || []).map(Number)
+    .filter((y) => y >= 1990 && y <= new Date().getFullYear());
+  if (years.length) {
+    const span = new Date().getFullYear() - Math.min(...years);
+    /* Graduation years would otherwise read as decades of work. */
+    return span > 0 && span < 40 ? span : null;
+  }
+  return null;
+}
+
+/** Lines that describe something built, used to judge project relevance. */
+function projectLines(text) {
+  const lines = String(text || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const start = lines.findIndex((l) => /^projects?\b/i.test(l));
+  const picked = start >= 0 ? lines.slice(start + 1, start + 12) : [];
+  const built = lines.filter((l) => /\b(built|created|developed|designed|implemented|shipped)\b/i.test(l));
+  return [...new Set([...picked, ...built])].filter((l) => l.length > 20).slice(0, 12);
 }
 
 /* ── matching ──────────────────────────────────────────────────────────── */
@@ -179,7 +219,51 @@ async function fromRemotive(profile) {
     tags: (j.tags || []).slice(0, 8),
     url: j.url,
     posted: j.publication_date,
+    /* Kept for scoring: fitness and ATS matching both read the posting's own
+       words, and a title alone is not enough to judge either. */
+    description: clean(j.description).slice(0, 4000),
   }));
+}
+
+/* Jobicy — remote board with an open API, heavier on non-engineering roles
+   than the others, which widens what a business or design student sees. */
+async function fromJobicy(profile) {
+  const data = await getJSON('https://jobicy.com/api/v2/remote-jobs?count=50');
+  const terms = matchTerms(profile);
+  return (data.jobs || [])
+    .filter((j) => relevance(`${j.jobTitle || ''} ${(j.jobIndustry || []).join(' ')}`.toLowerCase(), terms).relevant)
+    .slice(0, 30)
+    .map((j) => ({
+      source: 'Jobicy',
+      title: clean(j.jobTitle),
+      company: clean(j.companyName),
+      location: clean(j.jobGeo) || 'Remote',
+      type: (j.jobType || []).join(', ') || 'Remote',
+      tags: (j.jobIndustry || []).slice(0, 8),
+      url: j.url,
+      posted: j.pubDate,
+      description: clean(j.jobExcerpt).slice(0, 4000),
+    }));
+}
+
+/* Himalayas — remote-first companies, published openly as JSON. */
+async function fromHimalayas(profile) {
+  const data = await getJSON('https://himalayas.app/jobs/api?limit=50');
+  const terms = matchTerms(profile);
+  return (data.jobs || [])
+    .filter((j) => relevance(`${j.title || ''} ${(j.categories || []).join(' ')}`.toLowerCase(), terms).relevant)
+    .slice(0, 30)
+    .map((j) => ({
+      source: 'Himalayas',
+      title: clean(j.title),
+      company: clean(j.companyName),
+      location: (j.locationRestrictions || []).join(', ') || 'Remote',
+      type: 'Remote',
+      tags: (j.categories || []).slice(0, 8),
+      url: j.applicationLink || j.url,
+      posted: j.pubDate ? new Date(j.pubDate * 1000).toISOString() : null,
+      description: clean(j.description).slice(0, 4000),
+    }));
 }
 
 async function fromRemoteOK(profile) {
@@ -198,6 +282,7 @@ async function fromRemoteOK(profile) {
       tags: (j.tags || []).slice(0, 8),
       url: j.url || j.apply_url,
       posted: j.date,
+      description: clean(j.description).slice(0, 4000),
     }));
 }
 
@@ -216,31 +301,103 @@ async function fromArbeitnow(profile) {
       tags: (j.tags || []).slice(0, 8),
       url: j.url,
       posted: j.created_at ? new Date(j.created_at * 1000).toISOString() : null,
+      description: clean(j.description).slice(0, 4000),
     }));
 }
 
 /* Hacker News "Who is hiring" — the monthly thread is where a lot of small
    companies post first, and Algolia indexes every comment publicly. */
 async function fromHackerNews(profile) {
+  /*
+   * Searching all HN comments returned people describing their own side
+   * projects and their PhDs — anything containing the word "engineer" — and
+   * presented them as job openings. The monthly thread is the only part of HN
+   * where a comment is reliably a real vacancy, so the search is scoped to it:
+   * find the latest thread by the whoishiring account, then search inside it.
+   */
+  const threads = await getJSON(
+    'https://hn.algolia.com/api/v1/search?tags=story,author_whoishiring&hitsPerPage=5'
+  );
+  const hiring = (threads.hits || []).find((h) => /who is hiring/i.test(h.title || ''));
+  if (!hiring) return [];   /* no thread found: better nothing than noise */
+
   const q = encodeURIComponent([profile.role.split(' ')[0], profile.skills[0] || ''].join(' ').trim());
-  const data = await getJSON(`https://hn.algolia.com/api/v1/search?query=${q}&tags=comment&hitsPerPage=25`);
+  const data = await getJSON(
+    `https://hn.algolia.com/api/v1/search?query=${q}&tags=comment,story_${hiring.objectID}&hitsPerPage=25`
+  );
+
   return (data.hits || [])
-    .filter((h) => h.comment_text && /hiring|remote|apply|role|engineer|developer/i.test(h.comment_text))
+    /* Top-level comments only. Replies are questions and salary arguments,
+       not postings. */
+    .filter((h) => h.comment_text && String(h.parent_id) === String(hiring.objectID))
     .slice(0, 15)
     .map((h) => {
       const body = clean(h.comment_text);
+      const head = parseHiringPost(body);
       return {
         source: 'HN Who is Hiring',
         preMatched: true, /* Algolia searched the role for us */
-        title: body.slice(0, 90) + (body.length > 90 ? '…' : ''),
-        company: clean(h.author),
-        location: /remote/i.test(body) ? 'Remote' : '',
+        title: head.title,
+        company: head.company || clean(h.author),
+        location: head.location || (/remote/i.test(body) ? 'Remote' : ''),
         type: 'Direct post',
         tags: [],
         url: `https://news.ycombinator.com/item?id=${h.objectID}`,
         posted: h.created_at,
+        description: body.slice(0, 4000),
       };
     });
+}
+
+/*
+ * Pull a company and a role out of a "Who is hiring" comment.
+ *
+ * These are free text, but the thread has a strong convention: the first line
+ * reads "Company | Role | Location | Salary". Taking the first ninety
+ * characters instead produced titles like "Location: Speyer, Germany (CET)
+ * Remote: Yes, preferred Willing to relocate: No" — which then became the
+ * subject line of a cold email, which is how a good tool starts looking
+ * careless.
+ */
+const ROLE_WORDS = /(engineer|developer|designer|scientist|analyst|manager|architect|lead|intern|devops|sre|full[- ]stack|frontend|backend|data|security|product|qa|research)/i;
+
+function parseHiringPost(body) {
+  const firstLine = String(body || '').split(/\s{2,}|\n/)[0] || '';
+
+  /* The pipe convention, when it is there. */
+  if (firstLine.includes('|')) {
+    const parts = firstLine.split('|').map((s) => s.trim()).filter(Boolean);
+    const roleIdx = parts.findIndex((p) => ROLE_WORDS.test(p));
+    if (roleIdx > 0) {
+      return {
+        company: parts[0].slice(0, 60),
+        title: parts[roleIdx].slice(0, 80),
+        location: (parts.find((p) => /remote|onsite|hybrid/i.test(p)) || '').slice(0, 40)
+      };
+    }
+    if (parts.length >= 2) {
+      return { company: parts[0].slice(0, 60), title: parts[1].slice(0, 80), location: '' };
+    }
+  }
+
+  /*
+   * Otherwise take the shortest fragment that names a role. Shortest matters:
+   * a job title is two or three words, so picking the first match returned
+   * whole sentences like "Pittsburgh, PA The Simon-Initiative at CMU is
+   * building a learning engineering ecosystem" as the title.
+   */
+  const fragments = String(body || '')
+    .split(/[.|·•\n,;]|\s{2,}|\s+[-–—]\s+/)
+    .map((s) => s.trim())
+    .filter((f) => f.length > 6 && f.length < 70 && ROLE_WORDS.test(f));
+
+  if (fragments.length) {
+    fragments.sort((a, b) => a.length - b.length);
+    return { company: '', title: fragments[0].slice(0, 70), location: '' };
+  }
+
+  /* Nothing recognisable — say so rather than showing a wall of text. */
+  return { company: '', title: 'Hiring post (see thread)', location: '' };
 }
 
 /* ── ranking against the resume ────────────────────────────────────────── */
@@ -330,7 +487,68 @@ function platformSearches(profile) {
       why: 'Internships — the fastest first rung if you are still studying.',
       url: `https://internshala.com/internships/${role.replace(/\s+/g, '-').toLowerCase()}-internship`,
     },
+
+    /*
+     * The Indian boards below are reached the same way: a Google site: query
+     * rather than a scrape. Each one hides its listings behind a login or a
+     * paywall, so an x-ray search is what actually lands a student on real
+     * results — and it stays inside what the platform publishes to Google.
+     */
+    {
+      platform: 'Instahyre',
+      why: 'Curated product-company roles — usually the strongest India listings.',
+      url: xray('instahyre.com', role, skills, loc),
+    },
+    {
+      platform: 'Cutshort',
+      why: 'Startups hiring on skill tests rather than CVs.',
+      url: xray('cutshort.io', role, skills, loc),
+    },
+    {
+      platform: 'Hirist',
+      why: 'Tech-only board — less noise than the general ones.',
+      url: xray('hirist.tech', role, skills, loc),
+    },
+    {
+      platform: 'Foundit (Monster)',
+      why: 'Legacy MNC listings that never reach the newer boards.',
+      url: xray('foundit.in', role, skills, loc),
+    },
+    {
+      platform: 'Shine',
+      why: 'HT-owned portal, strong on non-metro postings.',
+      url: xray('shine.com', role, skills, loc),
+    },
+    {
+      platform: 'TimesJobs',
+      why: 'Times group board — heavy on service companies hiring in bulk.',
+      url: xray('timesjobs.com', role, skills, loc),
+    },
+    {
+      platform: 'Glassdoor',
+      why: 'Postings alongside salary data and company reviews.',
+      url: xray('glassdoor.co.in/job', role, skills, loc),
+    },
+    {
+      platform: 'WeWorkRemotely',
+      why: 'Remote roles paid in USD or EUR.',
+      url: xray('weworkremotely.com', role, skills, ''),
+    },
   ];
+}
+
+/**
+ * A Google site: search against one board.
+ *
+ * Quoted phrases matter: unquoted, Google widens the terms until a "react
+ * developer" search returns anything mentioning either word.
+ */
+function xray(site, role, skills, loc) {
+  const quoted = (s) => `"${String(s).replace(/"/g, '')}"`;
+  const parts = [`site:${site}`, quoted(role)];
+  if (skills && skills.length) parts.push(`(${skills.slice(0, 3).map(quoted).join(' OR ')})`);
+  if (loc && String(loc).toLowerCase() !== 'remote') parts.push(quoted(loc));
+  return `https://www.google.com/search?q=${encodeURIComponent(parts.join(' '))}`;
 }
 
 /* ── routes ────────────────────────────────────────────────────────────── */
@@ -364,11 +582,13 @@ router.post('/search', upload.single('file'), async (req, res) => {
   try {
     const b = bodyOf(req);
     let profile;
+    let resumeSource = b.resumeText || b.text || '';
     if (b.profile) {
       profile = typeof b.profile === 'string' ? JSON.parse(b.profile) : b.profile;
     } else {
       const text = (await textFromUpload(req.file)) || b.text || '';
       if (!text.trim()) return res.status(400).json({ ok: false, error: 'Attach your resume or paste its text.' });
+      resumeSource = text;
       profile = profileFromResume(text);
     }
     if (b.role) profile.role = b.role;
@@ -379,9 +599,11 @@ router.post('/search', upload.single('file'), async (req, res) => {
       fromRemoteOK(profile),
       fromArbeitnow(profile),
       fromHackerNews(profile),
+      fromJobicy(profile),
+      fromHimalayas(profile),
     ]);
 
-    const names = ['Remotive', 'RemoteOK', 'Arbeitnow', 'HN Who is Hiring'];
+    const names = ['Remotive', 'RemoteOK', 'Arbeitnow', 'HN Who is Hiring', 'Jobicy', 'Himalayas'];
     const sources = settled.map((s, i) => ({
       name: names[i],
       ok: s.status === 'fulfilled',
@@ -399,10 +621,57 @@ router.post('/search', upload.single('file'), async (req, res) => {
       return true;
     });
 
+    /*
+     * Scored, not just sorted. Relevance decides whether a listing belongs in
+     * the list at all; fitness answers the question the student is actually
+     * asking, which is whether it is worth their evening to apply.
+     */
+    const resumeText = resumeSource;
+    const scored = rank(deduped, profile).slice(0, 40).map((job) => ({
+      ...job,
+      jobId: jobIdOf(job),
+      stale: isStale(job.posted),
+      fit: fitness(profile, job),
+      ats: resumeText
+        ? atsMatch(resumeText, `${job.title} ${job.description || ''}`, profile.skills, job.title)
+        : null,
+    }));
+
+    /* Best fit first. Two postings with the same fit fall back to freshness
+       and keyword strength, which is what `score` already carries. */
+    /*
+     * Ordered by fit discounted for how much evidence it rests on.
+     *
+     * Confidence as a pure tiebreak was not enough: a posting scoring 71% on
+     * two weak signals still outranked a Senior Frontend Developer role
+     * scoring 58% on nearly every dimension — and the second is plainly the
+     * better lead. Folding confidence into the sort keeps fit dominant while
+     * stopping a vague posting from buying the top slot cheaply.
+     */
+    const ordering = (j) => j.fit.percent * (0.6 + 0.4 * ((j.fit.confidence || 0) / 100));
+    scored.sort((a, b2) => (ordering(b2) - ordering(a)) || (b2.score - a.score));
+
+    /* Dead links removed before the student sees them. Opt out with
+       verify=0 when speed matters more than accuracy. */
+    const live = b.verify === '0' || b.verify === false
+      ? scored
+      : await verifyLinks(scored);
+
     res.json({
       ok: true,
       profile,
-      jobs: rank(deduped, profile).slice(0, 40),
+      /* Returned so the client can write materials for any listing without
+         asking for the file again — a PDF was parsed here, not in the
+         browser, so this is the only copy of the text it has. */
+      resumeText: resumeText.slice(0, 30000),
+      jobs: live,
+      counts: {
+        total: live.length,
+        strong: live.filter((j) => j.fit.band === 'strong').length,
+        moderate: live.filter((j) => j.fit.band === 'moderate').length,
+        stretch: live.filter((j) => j.fit.band === 'stretch').length,
+        deadLinksDropped: scored.length - live.length,
+      },
       sources,
       searches: platformSearches(profile),
     });
@@ -411,7 +680,108 @@ router.post('/search', upload.single('file'), async (req, res) => {
   }
 });
 
+/**
+ * A stable id for a listing, so the same job found twice is the same row.
+ * Boards that publish their own id keep it; the rest get one derived from the
+ * company and title, which is what the student would otherwise write down.
+ */
+function jobIdOf(job) {
+  const fromUrl = String(job.url || '').match(/(?:jobs?|view|posting)[/-](\d{6,})/i);
+  if (fromUrl) return `${job.source.replace(/\s+/g, '')}-${fromUrl[1]}`;
+  const short = (s) => String(s || '').replace(/[^A-Za-z0-9]+/g, '').slice(0, 14);
+  return [job.source.replace(/\s+/g, ''), short(job.company), short(job.title)].filter(Boolean).join('-');
+}
+
+/**
+ * Confirm the links actually go somewhere.
+ *
+ * Boards keep serving listings after the role is filled, so a search that
+ * looks full can be half dead ends. Each URL is checked once, and only a
+ * definite refusal — 404 or 410 — removes a listing. A timeout or a 403 does
+ * not: plenty of sites block automated HEAD requests while serving the page
+ * perfectly well to a browser, and dropping those would throw away good jobs.
+ *
+ * Checks run in small batches so a slow board cannot hold up the response.
+ */
+async function verifyLinks(jobs, budgetMs = 6000) {
+  const deadline = Date.now() + budgetMs;
+  const BATCH = 8;
+
+  for (let i = 0; i < jobs.length; i += BATCH) {
+    if (Date.now() > deadline) break;   // whatever is unchecked stays in, unmarked
+
+    await Promise.all(jobs.slice(i, i + BATCH).map(async (job) => {
+      if (!job.url) { job.linkChecked = false; return; }
+      try {
+        const res = await fetch(job.url, {
+          method: 'HEAD', headers: UA, redirect: 'follow',
+          signal: AbortSignal.timeout(3000)
+        });
+        job.linkChecked = true;
+        job.linkStatus = res.status;
+        job.linkDead = res.status === 404 || res.status === 410;
+      } catch (e) {
+        /* Unreachable from here is not proof the posting is gone. */
+        job.linkChecked = false;
+      }
+    }));
+  }
+
+  return jobs.filter((j) => !j.linkDead);
+}
+
+/** Postings over 30 days old are usually filled; worth a warning, not a hide. */
+function isStale(posted) {
+  if (!posted) return false;
+  const when = new Date(posted).getTime();
+  if (!when || Number.isNaN(when)) return false;
+  return (Date.now() - when) / 86400000 > 30;
+}
+
+/*
+ * Materials for one posting. Given the resume and the job, returns a tailored
+ * resume and a cover letter aimed at it — plus, honestly, the gap list of
+ * things the posting wanted that the resume cannot support.
+ */
+router.post('/materials', upload.single('file'), async (req, res) => {
+  try {
+    const b = bodyOf(req);
+    const resumeText = (await textFromUpload(req.file)) || b.resumeText || b.text || '';
+    if (!resumeText.trim()) {
+      return res.status(400).json({ ok: false, error: 'Attach your resume or paste its text.' });
+    }
+
+    let job = b.job;
+    if (typeof job === 'string') job = JSON.parse(job);
+    if (!job || !job.title) {
+      return res.status(400).json({ ok: false, error: 'Pick a job first.' });
+    }
+
+    let profile = b.profile;
+    if (typeof profile === 'string') profile = JSON.parse(profile);
+    if (!profile) profile = profileFromResume(resumeText);
+
+    res.json({
+      ok: true,
+      job: { title: job.title, company: job.company, url: job.url },
+      fit: fitness(profile, job),
+      resume: tailorResume(profile, job, resumeText),
+      coverLetter: coverLetter(profile, job, resumeText),
+      coldEmail: coldEmail(profile, job, resumeText, {
+        hiringManager: b.hiringManager || '',
+        phone: b.phone || '',
+        ask: b.ask || ''
+      }),
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'Could not build the documents. Try pasting the resume text.' });
+  }
+});
+
 module.exports = router;
 module.exports.profileFromResume = profileFromResume;
+module.exports.jobIdOf = jobIdOf;
+module.exports.isStale = isStale;
+module.exports.xray = xray;
 module.exports.platformSearches = platformSearches;
 module.exports.rank = rank;
