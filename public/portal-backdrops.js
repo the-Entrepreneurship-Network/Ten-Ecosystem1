@@ -192,6 +192,69 @@
     '  fragColor = vec4(col, 1.0);\n' +
     '}';
 
+  /* ── wave ──────────────────────────────────────────────────────────────
+     The particle wave: a ground plane of points rippling on a sine field,
+     seen from a low camera. The reference built it on three.js; the whole of
+     what three.js was doing here is one view-projection matrix and a points
+     draw, and the camera never moves, so the matrix is folded into the vertex
+     shader as constants and the dependency disappears.
+
+     The grid is 120x120 (14,400 points) rather than the reference's 200x200
+     (40,000). Behind content at backdrop scale the extra 25,000 points are
+     not visible, and they are a third of the vertex work. */
+  var VERT_WAVE = '#version 300 es\n' +
+    'in vec2 a_grid;\n' +          /* grid index, 0..1 in each axis */
+    'uniform float u_time; uniform float u_aspect; uniform vec2 u_mouse;\n' +
+    'uniform float u_seed;\n' +
+    'out float v_fade;\n' +
+    /* Camera fixed at (0,6,5) looking at the origin, so the view basis is
+       constant: right (1,0,0), up (0,0.6402,-0.7682), forward (0,-0.7682,-0.6402). */
+    'const vec3 EYE = vec3(0.0, 6.0, 5.0);\n' +
+    'const vec3 R = vec3(1.0, 0.0, 0.0);\n' +
+    'const vec3 U = vec3(0.0, 0.6402, -0.7682);\n' +
+    'const vec3 F = vec3(0.0, -0.7682, -0.6402);\n' +
+    'const float FOCAL = 1.3032;\n' +   /* 1/tan(75deg/2) */
+    'void main(){\n' +
+    '  float span = 36.0;\n' +
+    '  vec3 p = vec3((a_grid.x - 0.5) * span, 0.0, (a_grid.y - 0.5) * span);\n' +
+    '  float t = u_time + u_seed * 12.0;\n' +
+    /* The reference's displacement, kept as written. */
+    '  p.y += (sin(p.x + t) * 0.5) + (cos(p.z + t) * 0.1) * 2.0;\n' +
+    '  p.x += (sin(p.z + t) * 0.5);\n' +
+    /* A gentle swell under the pointer, so the field answers the cursor. */
+    '  vec2 mw = (u_mouse - 0.5) * vec2(span, span) * vec2(1.0, -1.0);\n' +
+    '  float md = length(p.xz - mw);\n' +
+    '  p.y += exp(-md * md * 0.012) * 1.9;\n' +
+    '  float s = 1.0 + (sin(p.x + t) * 0.5) + (cos(p.z + t) * 0.1) * 2.0;\n' +
+    '  vec3 rel = p - EYE;\n' +
+    /* Third row is -F, not F. View space looks down -Z: with dot(F, rel) the
+       centre of the grid came out at v.z = +7.81, so w = -v.z was negative,
+       every point failed the -w <= z <= w clip test, and the field drew
+       nothing at all — a frame measuring exactly its own clear colour. */
+    '  vec3 v = vec3(dot(R, rel), dot(U, rel), dot(-F, rel));\n' +
+    '  float w = -v.z;\n' +
+    '  gl_Position = vec4(v.x * FOCAL / u_aspect, v.y * FOCAL, -v.z * 0.998 - 0.02, w);\n' +
+    /* Bigger than the reference's sprite. Measured, the field came out at a
+       mean of 8/255 — barely above the clear colour, because at backdrop
+       scale the points were sub-pixel for most of the grid. */
+    '  gl_PointSize = clamp(s * 26.0 / max(w, 0.35), 1.2, 13.0);\n' +
+    /* Points fade out with distance so the far edge dissolves rather than
+       ending in a hard line. */
+    '  v_fade = clamp(1.0 - w / 46.0, 0.0, 1.0);\n' +
+    '}';
+
+  var FRAG_WAVE = '#version 300 es\n' +
+    'precision highp float;\n' +
+    'in float v_fade; uniform vec3 u_tint;\n' +
+    'out vec4 fragColor;\n' +
+    'void main(){\n' +
+    /* Round the square point sprite off, or the field reads as confetti. */
+    '  float d = length(gl_PointCoord - 0.5);\n' +
+    '  float a = smoothstep(0.5, 0.10, d) * v_fade * 0.95;\n' +
+    '  if (a < 0.01) discard;\n' +
+    '  fragColor = vec4(u_tint * (0.70 + v_fade * 0.95), a);\n' +
+    '}';
+
   var SHADERS = { crystal: FRAG_CRYSTAL, beam: FRAG_BEAM, scan: FRAG_SCAN };
 
   /* The look each variant falls back to, and the scrim painted over the live
@@ -201,7 +264,9 @@
     crystal: 'radial-gradient(120% 90% at 50% 0%, #10193a 0%, #060913 55%, #04060f 100%)',
     beam:    'radial-gradient(100% 80% at 50% 110%, #2a2413 0%, #0a1024 45%, #04060f 100%)',
     scan:    'radial-gradient(120% 100% at 50% 100%, #241016 0%, #0b1024 48%, #04060f 100%)',
-    voxel:   'radial-gradient(120% 100% at 50% 30%, #191a2c 0%, #090d1c 52%, #04060f 100%)'
+    voxel:   'radial-gradient(120% 100% at 50% 30%, #191a2c 0%, #090d1c 52%, #04060f 100%)',
+    paths:   'radial-gradient(110% 90% at 20% 20%, #101a2e 0%, #070b18 55%, #04060f 100%)',
+    wave:    'radial-gradient(120% 90% at 50% 80%, #0d1730 0%, #070c1c 50%, #04060f 100%)'
   };
 
   function prefersReducedMotion() {
@@ -260,10 +325,13 @@
     var LUT = new Array(101);
     for (var i = 0; i <= 100; i++) {
       var ratio = i / 100;
+      /* Scaled down again after the per-portal tints landed: a bright tint
+         such as the coding section's cyan pushed the whole field back up to a
+         mean of 86/255. */
       LUT[i] = 'rgb(' +
-        ((base.r * (0.13 + ratio * 0.52)) | 0) + ',' +
-        ((base.g * (0.15 + ratio * 0.48)) | 0) + ',' +
-        ((base.b * (0.42 + ratio * 0.40)) | 0) + ')';
+        ((base.r * (0.07 + ratio * 0.30)) | 0) + ',' +
+        ((base.g * (0.08 + ratio * 0.28)) | 0) + ',' +
+        ((base.b * (0.22 + ratio * 0.24)) | 0) + ')';
     }
 
     var w = 0, h = 0, t = 0, dpr = 1;
@@ -386,6 +454,191 @@
     };
   }
 
+  /* The particle wave draws a grid of points rather than one quad, so it gets
+     its own mount rather than sharing the fullscreen-quad path. */
+  function mountWave(layer, tint, seed) {
+    var canvas = document.createElement('canvas');
+    canvas.style.cssText = 'display:block; width:100%; height:100%;';
+    var gl = null;
+    try { gl = canvas.getContext('webgl2', { antialias: true, alpha: false, powerPreference: 'low-power' }); }
+    catch (e) { gl = null; }
+    if (!gl) {
+      return { variant: 'wave', element: layer, degraded: true,
+        destroy: function () { if (layer.parentNode) layer.parentNode.removeChild(layer); } };
+    }
+
+    var vs = compile(gl, gl.VERTEX_SHADER, VERT_WAVE);
+    var fs = compile(gl, gl.FRAGMENT_SHADER, FRAG_WAVE);
+    if (!vs || !fs) {
+      return { variant: 'wave', element: layer, degraded: true,
+        destroy: function () { if (layer.parentNode) layer.parentNode.removeChild(layer); } };
+    }
+    var prog = gl.createProgram();
+    gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      console.warn('[backdrop] wave link failed:', gl.getProgramInfoLog(prog));
+      return { variant: 'wave', element: layer, degraded: true,
+        destroy: function () { if (layer.parentNode) layer.parentNode.removeChild(layer); } };
+    }
+    layer.appendChild(canvas);
+
+    var N = 120;                                   // 14,400 points
+    var grid = new Float32Array(N * N * 2);
+    var k = 0;
+    for (var ix = 0; ix < N; ix++) {
+      for (var iy = 0; iy < N; iy++) {
+        grid[k++] = ix / (N - 1);
+        grid[k++] = iy / (N - 1);
+      }
+    }
+    var buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, grid, gl.STATIC_DRAW);
+    var aGrid = gl.getAttribLocation(prog, 'a_grid');
+    gl.enableVertexAttribArray(aGrid);
+    gl.vertexAttribPointer(aGrid, 2, gl.FLOAT, false, 0, 0);
+
+    var uTime = gl.getUniformLocation(prog, 'u_time');
+    var uAspect = gl.getUniformLocation(prog, 'u_aspect');
+    var uMouse = gl.getUniformLocation(prog, 'u_mouse');
+    var uTint = gl.getUniformLocation(prog, 'u_tint');
+    var uSeed = gl.getUniformLocation(prog, 'u_seed');
+
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    var mouse = { x: 0.5, y: 0.5 }, started = Date.now();
+    var raf = null, dead = false, onScreen = true;
+    var SCALE = 0.7;
+
+    function resize() {
+      var w = Math.max(1, Math.round(layer.clientWidth * SCALE));
+      var h = Math.max(1, Math.round(layer.clientHeight * SCALE));
+      if (canvas.width === w && canvas.height === h) return;
+      canvas.width = w; canvas.height = h;
+      gl.viewport(0, 0, w, h);
+    }
+    function draw() {
+      if (dead) return;
+      resize();
+      gl.clearColor(0.016, 0.024, 0.059, 1.0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.useProgram(prog);
+      gl.uniform1f(uTime, (Date.now() - started) * 0.001 * 1.0);
+      gl.uniform1f(uAspect, canvas.width / Math.max(canvas.height, 1));
+      gl.uniform2f(uMouse, mouse.x, mouse.y);
+      gl.uniform3f(uTint, tint[0], tint[1], tint[2]);
+      gl.uniform1f(uSeed, seed);
+      gl.drawArrays(gl.POINTS, 0, N * N);
+    }
+    function loop() { if (dead) return; draw(); raf = global.requestAnimationFrame(loop); }
+    function play() { if (dead || raf !== null || !onScreen || document.hidden) return; raf = global.requestAnimationFrame(loop); }
+    function pause() { if (raf !== null) { global.cancelAnimationFrame(raf); raf = null; } }
+    function onMove(e) {
+      var r = layer.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      mouse.x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+      mouse.y = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+    }
+    function onVisibility() { document.hidden ? pause() : play(); }
+
+    var io = null;
+    if (global.IntersectionObserver) {
+      io = new global.IntersectionObserver(function (en) { onScreen = en[0].isIntersecting; onScreen ? play() : pause(); }, { threshold: 0 });
+      io.observe(layer);
+    }
+    var ro = null;
+    if (global.ResizeObserver) { ro = new global.ResizeObserver(function () { if (!raf) draw(); }); ro.observe(layer); }
+
+    draw();
+    if (!prefersReducedMotion()) {
+      global.addEventListener('pointermove', onMove, { passive: true });
+      document.addEventListener('visibilitychange', onVisibility);
+      play();
+    }
+
+    return {
+      variant: 'wave',
+      element: layer,
+      redraw: draw,
+      destroy: function () {
+        dead = true; pause();
+        if (io) io.disconnect();
+        if (ro) ro.disconnect();
+        global.removeEventListener('pointermove', onMove);
+        document.removeEventListener('visibilitychange', onVisibility);
+        try { var l = gl.getExtension('WEBGL_lose_context'); if (l) l.loseContext(); } catch (e) {}
+        if (layer.parentNode) layer.parentNode.removeChild(layer);
+      }
+    };
+  }
+
+  /* ── paths ─────────────────────────────────────────────────────────────
+     The floating paths: thirty-six long curves drifting across the frame.
+     The reference animated each one with motion/react; the animation is a
+     stroke travelling along a path, which is what stroke-dasharray and
+     stroke-dashoffset do natively. So this is SVG and CSS with no script in
+     the frame at all — no canvas, no render loop, and nothing for the GPU to
+     do between repaints. It is by far the cheapest of the six, which is why
+     it goes to the sections with the longest reading. */
+  function mountPaths(layer, tint, seed) {
+    var NS = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 696 316');
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+    svg.setAttribute('fill', 'none');
+    svg.style.cssText = 'position:absolute; inset:0; width:100%; height:100%;';
+
+    var rgb = 'rgb(' + ((tint[0] * 255) | 0) + ',' + ((tint[1] * 255) | 0) + ',' + ((tint[2] * 255) | 0) + ')';
+    // A seed of 0..1 becomes a direction and a spread, so two portals using
+    // this engine do not draw the same curves.
+    var position = seed < 0.5 ? 1 : -1;
+    var still = prefersReducedMotion();
+
+    for (var i = 0; i < 36; i++) {
+      var x0 = 380 - i * 5 * position;
+      var y0 = 189 + i * 6;
+      var d = 'M-' + x0 + ' -' + y0 +
+        'C-' + x0 + ' -' + y0 +
+        ' -' + (312 - i * 5 * position) + ' ' + (216 - i * 6) +
+        ' ' + (152 - i * 5 * position) + ' ' + (343 - i * 6) +
+        'C' + (616 - i * 5 * position) + ' ' + (470 - i * 6) +
+        ' ' + (684 - i * 5 * position) + ' ' + (875 - i * 6) +
+        ' ' + (684 - i * 5 * position) + ' ' + (875 - i * 6);
+
+      var p = document.createElementNS(NS, 'path');
+      p.setAttribute('d', d);
+      p.setAttribute('stroke', rgb);
+      p.setAttribute('stroke-width', String(0.5 + i * 0.06));
+      p.setAttribute('stroke-opacity', String(Math.min(0.55, 0.08 + i * 0.022)));
+      if (!still) {
+        p.style.strokeDasharray = '820 820';
+        p.style.animation = 'tenPathDrift ' + (20 + (i * 7 + seed * 130) % 11) + 's linear infinite';
+        p.style.animationDelay = '-' + ((i * 1.7 + seed * 20) % 22).toFixed(2) + 's';
+      }
+      svg.appendChild(p);
+    }
+
+    if (!document.getElementById('tenPathDriftKeyframes')) {
+      var st = document.createElement('style');
+      st.id = 'tenPathDriftKeyframes';
+      st.textContent =
+        '@keyframes tenPathDrift{' +
+        '0%{stroke-dashoffset:820;opacity:.25}' +
+        '50%{opacity:.65}' +
+        '100%{stroke-dashoffset:-820;opacity:.25}}';
+      document.head.appendChild(st);
+    }
+
+    layer.appendChild(svg);
+    return {
+      variant: 'paths',
+      element: layer,
+      redraw: function () {},
+      destroy: function () { if (layer.parentNode) layer.parentNode.removeChild(layer); }
+    };
+  }
+
   /**
    * Mount a backdrop into `host`. Returns a handle with .destroy().
    * Never throws: a failure paints the gradient and reports success anyway,
@@ -396,7 +649,9 @@
     opts = opts || {};
     var tint = opts.tint || [0.83, 0.69, 0.22];
     var seed = typeof opts.seed === 'number' ? opts.seed : 0;
-    if (!SHADERS[variant] && variant !== 'voxel') variant = 'crystal';
+    if (!SHADERS[variant] && variant !== 'voxel' && variant !== 'paths' && variant !== 'wave') {
+      variant = 'crystal';
+    }
 
     var layer = document.createElement('div');
     layer.className = 'portal-backdrop';
@@ -410,8 +665,10 @@
     if (hostPos === 'static') host.style.position = 'relative';
     host.insertBefore(layer, host.firstChild);
 
-    // The voxel field is Canvas 2D, not a shader, so it takes its own path.
+    // Three of the six are not fullscreen-quad shaders and mount differently.
     if (variant === 'voxel') return mountVoxel(layer, tint, seed);
+    if (variant === 'paths') return mountPaths(layer, tint, seed);
+    if (variant === 'wave')  return mountWave(layer, tint, seed);
 
     /* Full strength.
        The first version of this shipped the canvas at 42% opacity under a
@@ -595,27 +852,31 @@
      Money is green, documents and certificates are gold and violet, tests and
      coding are cool blues, the social ones are warm. */
   var THEMES = {
-    'stu-view-overview':          { engine: 'crystal', tint: [0.55, 0.78, 1.00], seed: 0.00 },
+    /* Reading-heavy sections get the two cheapest engines — paths costs no
+       render loop at all, and the fullscreen shaders are a single quad. The
+       two expensive ones, voxel and wave, go to the short, glanceable
+       screens where nobody sits for ten minutes. */
+    'stu-view-overview':          { engine: 'wave',    tint: [0.55, 0.78, 1.00], seed: 0.00 },
     'stu-view-notice':            { engine: 'beam',    tint: [1.00, 0.62, 0.28], seed: 0.13 },
-    'stu-view-coordinator-tasks': { engine: 'scan',    tint: [0.42, 0.85, 0.95], seed: 0.27 },
-    'stu-view-domain-tasks':      { engine: 'voxel',   tint: [0.42, 0.62, 1.00], seed: 0.41 },
-    'stu-view-submissions':       { engine: 'crystal', tint: [0.58, 1.00, 0.72], seed: 0.55 },
+    'stu-view-coordinator-tasks': { engine: 'paths',   tint: [0.42, 0.85, 0.95], seed: 0.27 },
+    'stu-view-domain-tasks':      { engine: 'crystal', tint: [0.42, 0.62, 1.00], seed: 0.41 },
+    'stu-view-submissions':       { engine: 'paths',   tint: [0.58, 1.00, 0.72], seed: 0.55 },
     'stu-view-attendance':        { engine: 'beam',    tint: [0.35, 0.95, 0.85], seed: 0.68 },
     'stu-view-test':              { engine: 'scan',    tint: [0.68, 0.60, 1.00], seed: 0.81 },
     'stu-view-coding':            { engine: 'voxel',   tint: [0.30, 0.85, 0.95], seed: 0.94 },
-    'stu-view-guidelines':        { engine: 'crystal', tint: [0.95, 0.85, 0.50], seed: 0.07 },
-    'stu-view-leaderboard':       { engine: 'beam',    tint: [1.00, 0.80, 0.25], seed: 0.21 },
+    'stu-view-guidelines':        { engine: 'paths',   tint: [0.95, 0.85, 0.50], seed: 0.07 },
+    'stu-view-leaderboard':       { engine: 'voxel',   tint: [1.00, 0.80, 0.25], seed: 0.21 },
     'v2-tasks':                   { engine: 'scan',    tint: [1.00, 0.72, 0.30], seed: 0.34 },
-    'my-documents':               { engine: 'voxel',   tint: [0.95, 0.70, 0.35], seed: 0.47 },
+    'my-documents':               { engine: 'paths',   tint: [0.95, 0.70, 0.35], seed: 0.47 },
     'my-certificates':            { engine: 'crystal', tint: [0.78, 0.60, 1.00], seed: 0.61 },
     'payment':                    { engine: 'beam',    tint: [0.40, 1.00, 0.62], seed: 0.74 },
-    'assistant':                  { engine: 'scan',    tint: [1.00, 0.84, 0.36], seed: 0.88 },
+    'assistant':                  { engine: 'wave',    tint: [1.00, 0.84, 0.36], seed: 0.88 },
     'ten-network':                { engine: 'voxel',   tint: [0.62, 0.55, 1.00], seed: 0.02 },
     /* The landing page's portals ring gets its own, distinct from all of them. */
     'landing-portals':            { engine: 'scan',    tint: [0.92, 0.78, 0.32], seed: 0.50 }
   };
 
-  var ORDER = ['crystal', 'beam', 'scan', 'voxel'];
+  var ORDER = ['crystal', 'beam', 'scan', 'voxel', 'paths', 'wave'];
 
   /**
    * The theme for a portal. Accepts the section id (or page key) it belongs
