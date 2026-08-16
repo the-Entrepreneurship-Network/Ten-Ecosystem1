@@ -1500,6 +1500,8 @@ button:active { transform: translateY(0); }
   <!-- Dissolves the card chrome so content sits in the backdrop rather than on
        top of it. Scoped to .portal-surface, which openSectionModal adds. -->
   <link rel="stylesheet" href="/portal-dissolve.css">
+  <!-- Recolours only the text that the dissolve left without enough contrast. -->
+  <script src="/portal-legibility.js" defer></script>
 </head>
 
 <body>
@@ -5408,6 +5410,9 @@ function openSectionModal(sectionId) {
       window.PortalBackdrop.showFor(body, sectionId, SECTION_ORDER.indexOf(sectionId));
       // Dissolve the card chrome so the content merges with that backdrop.
       body.classList.add('portal-surface');
+      // Then rescue any text the dissolve left unreadable. Watches rather than
+      // runs once: most sections are filled by fetch after this point.
+      if (window.PortalLegibility) window.PortalLegibility.watch(body, 7000);
     } catch (e) { /* a backdrop must never stop a section opening */ }
   }
   // Hide sidebar when modal opens

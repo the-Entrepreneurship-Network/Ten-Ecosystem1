@@ -149,6 +149,7 @@ textarea{resize:none;height:70px;}
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <!-- Content merges with the portal backdrop rather than sitting in cards. -->
   <link rel="stylesheet" href="/portal-dissolve.css">
+  <script src="/portal-legibility.js" defer></script>
 </head>
 <body>
 <div class="card">
@@ -443,7 +444,8 @@ async function submitUtr() {
     function paint() {
       if (!window.PortalBackdrop) return;
       try { window.PortalBackdrop.showFor(document.body, 'payment');
-        document.body.classList.add('portal-surface'); } catch (e) {}
+        document.body.classList.add('portal-surface');
+        if (window.PortalLegibility) window.PortalLegibility.watch(document.body, 7000); } catch (e) {}
     }
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', paint);

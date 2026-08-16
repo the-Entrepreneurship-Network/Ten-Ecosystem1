@@ -418,6 +418,7 @@ body::after {
   <script src="/push-client.js" defer></script>
   <!-- Content merges with the portal backdrop rather than sitting in cards. -->
   <link rel="stylesheet" href="/portal-dissolve.css">
+  <script src="/portal-legibility.js" defer></script>
 </head>
 <body>
 
@@ -1733,7 +1734,8 @@ document.addEventListener('DOMContentLoaded', function() {
     function paint() {
       if (!window.PortalBackdrop) return;
       try { window.PortalBackdrop.showFor(document.body, 'v2-tasks');
-        document.body.classList.add('portal-surface'); } catch (e) {}
+        document.body.classList.add('portal-surface');
+        if (window.PortalLegibility) window.PortalLegibility.watch(document.body, 7000); } catch (e) {}
     }
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', paint);
