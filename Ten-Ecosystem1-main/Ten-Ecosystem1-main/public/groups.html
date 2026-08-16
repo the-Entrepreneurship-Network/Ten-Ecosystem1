@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TEN — Internship Domain Groups</title>
+<link rel="stylesheet" href="ten-theme.css">
+<link rel="stylesheet" href="ten-motion.css">
+<style>
+
+body {
+  min-height: 100vh;
+  padding: 40px 20px;
+  overflow-x: hidden;
+}
+
+.page-wrap {
+  position: relative;
+  z-index: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+/* ── Page Header ── */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 48px;
+  flex-wrap: wrap;
+  gap: 16px;
+  animation: ten-fadeUp 0.5s ease both;
+}
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.header-logo {
+  width: 50px; height: 50px;
+  background: rgba(212,175,55,0.08);
+  backdrop-filter: blur(10px);
+  border: 1.5px solid rgba(212,175,55,0.35);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: ten-pulse-gold 3s ease infinite;
+  box-shadow: 0 0 40px rgba(212,175,55,0.25), inset 0 1px 1px rgba(255,255,255,0.1);
+  transition: all 0.3s ease;
+}
+.header-logo:hover {
+  background: rgba(212,175,55,0.12);
+  border-color: rgba(212,175,55,0.5);
+  box-shadow: 0 0 60px rgba(212,175,55,0.35), inset 0 1px 1px rgba(255,255,255,0.15);
+  transform: scale(1.05);
+}
+.header-brand-text .brand-name {
+  font-family: var(--ten-font-display);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 4px;
+  color: var(--ten-gold);
+}
+.header-brand-text .brand-sub {
+  font-size: 10px;
+  color: var(--ten-text-muted);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+.header-back-btn {
+  padding: 10px 20px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--ten-border);
+  border-radius: var(--ten-r-sm);
+  color: var(--ten-text-sub);
+  font-family: var(--ten-font-body);
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+.header-back-btn:hover {
+  border-color: var(--ten-border-strong);
+  color: var(--ten-gold);
+}
+
+/* ── Hero section ── */
+.hero-section {
+  text-align: center;
+  margin-bottom: 52px;
+  animation: ten-fadeUp 0.5s 0.1s ease both;
+}
+.hero-badge {
+  display: inline-block;
+  padding: 6px 18px;
+  background: var(--ten-gold-bg);
+  border: 1px solid var(--ten-border);
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--ten-gold);
+  margin-bottom: 20px;
+}
+.hero-section h1 {
+  font-family: var(--ten-font-display);
+  font-size: clamp(30px, 5vw, 52px);
+  font-weight: 800;
+  letter-spacing: -1.5px;
+  line-height: 1.1;
+  margin-bottom: 18px;
+}
+.hero-section h1 span {
+  background: linear-gradient(90deg, var(--ten-gold), var(--ten-gold-light));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.hero-section p {
+  font-size: 16px;
+  color: var(--ten-text-sub);
+  line-height: 1.8;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+/* ── Groups grid ── */
+.groups-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 20px;
+  margin-bottom: 40px;
+  animation: ten-fadeUp 0.5s 0.2s ease both;
+}
+
+.group-card {
+  background: var(--ten-card);
+  border: 1px solid var(--ten-border);
+  border-radius: var(--ten-r-lg);
+  padding: 26px 26px 24px;
+  transition: all 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+.group-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--ten-gold), transparent);
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+.group-card:hover {
+  transform: translateY(-5px);
+  border-color: var(--ten-border-strong);
+  box-shadow: var(--ten-shadow), var(--ten-glow-gold);
+}
+.group-card:hover::before { opacity: 1; }
+
+.card-icon {
+  font-size: 30px;
+  margin-bottom: 14px;
+  display: block;
+  line-height: 1;
+}
+.card-title {
+  font-family: var(--ten-font-display);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  margin-bottom: 8px;
+  color: var(--ten-text);
+}
+.card-desc {
+  font-size: 13px;
+  color: var(--ten-text-sub);
+  line-height: 1.65;
+  margin-bottom: 20px;
+}
+
+.join-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #25D366, #1ebe5d);
+  color: white;
+  text-decoration: none;
+  border-radius: var(--ten-r-sm);
+  font-family: var(--ten-font-display);
+  font-size: 13px;
+  font-weight: 700;
+  transition: all 0.2s;
+  box-shadow: 0 4px 14px rgba(37,211,102,0.25);
+}
+.join-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(37,211,102,0.4);
+}
+.join-btn svg {
+  width: 14px; height: 14px;
+  fill: white;
+}
+
+/* ── Notice card ── */
+.notice-card {
+  background: var(--ten-card);
+  border: 1px solid var(--ten-border);
+  border-radius: var(--ten-r-xl);
+  padding: 36px 40px;
+  margin-bottom: 32px;
+  position: relative;
+  overflow: hidden;
+  animation: ten-fadeUp 0.5s 0.3s ease both;
+}
+.notice-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--ten-gold), transparent);
+}
+.notice-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.notice-header h2 {
+  font-family: var(--ten-font-display);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+}
+.notice-badge {
+  background: rgba(245,158,11,0.12);
+  border: 1px solid rgba(245,158,11,0.25);
+  color: #fbbf24;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.notice-card p {
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--ten-text-sub);
+}
+.notice-contact {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+  padding: 12px 20px;
+  background: rgba(37,211,102,0.06);
+  border: 1px solid rgba(37,211,102,0.2);
+  border-radius: var(--ten-r-sm);
+  font-family: var(--ten-font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: #25D366;
+}
+
+/* ── Page footer ── */
+.page-footer {
+  text-align: center;
+  padding: 20px 0 10px;
+  font-size: 12px;
+  color: var(--ten-text-muted);
+  letter-spacing: 0.5px;
+}
+.page-footer .brand { color: var(--ten-gold); font-weight: 700; }
+
+@media (max-width: 620px) {
+  .groups-grid { grid-template-columns: 1fr; }
+  .notice-card { padding: 24px 20px; }
+}
+
+</style>
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <script src="/push-client.js" defer></script>
+</head>
+<body>
+
+<div class="ten-grid-bg"></div>
+<div class="ten-orb ten-orb-1"></div>
+<div class="ten-orb ten-orb-2"></div>
+
+<div class="page-wrap">
+
+  <!-- ── Header ── -->
+  <div class="page-header">
+    <div class="header-brand">
+      <div class="header-logo">
+        <svg width="28" height="24" viewBox="0 0 28 24" fill="none">
+          <path d="M3 9C3 6.79 4.79 5 7 5C9.21 5 11 6.79 11 9C11 11.21 9.21 13 7 13C4.79 13 3 11.21 3 9Z" stroke="#D4AF37" stroke-width="2" fill="none"/>
+          <path d="M11 9C11 6.79 12.79 5 15 5C17.21 5 19 6.79 19 9C19 11.21 17.21 13 15 13C12.79 13 11 11.21 11 9Z" stroke="#D4AF37" stroke-width="2" fill="none"/>
+          <path d="M5 23C5 19 7 16 9 16L10 19L8 23Z" fill="#D4AF37" opacity="0.75"/>
+          <path d="M23 23C23 19 21 16 19 16L18 19L20 23Z" fill="#D4AF37" opacity="0.75"/>
+        </svg>
+      </div>
+      <div class="header-brand-text">
+        <div class="brand-name">TEN</div>
+        <div class="brand-sub">The Entrepreneurship Network</div>
+      </div>
+    </div>
+    <a href="login.html" class="header-back-btn">← Back to Login</a>
+  </div>
+
+  <!-- ── Hero ── -->
+  <div class="hero-section">
+    <div class="hero-badge">✦ Join Your Domain Group</div>
+    <h1>Welcome to<br><span>TEN Internship Portal</span></h1>
+    <p>
+      Join your respective domain's WhatsApp group to receive internship updates, 
+      daily tasks, meeting links, project assignments, and mentorship guidance.
+    </p>
+  </div>
+
+  <!-- ── Groups Grid ── -->
+  <div class="groups-grid">
+
+    <div class="group-card ten-card-hover ten-fade-up ten-d1">
+      <span class="card-icon">⚙️</span>
+      <div class="card-title">DevOps with AWS</div>
+      <p class="card-desc">CI/CD pipelines, Docker, Kubernetes, Jenkins, AWS Cloud & Automation workflows</p>
+      <a class="join-btn" href="https://chat.whatsapp.com/LStta1GmBoVFNuLRNgqZzm?mode=gi_t" target="_blank">
+        <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        Join Group
+      </a>
+    </div>
+
+    <div class="group-card ten-card-hover ten-fade-up ten-d2">
+      <span class="card-icon">☁️</span>
+      <div class="card-title">Cloud Computing</div>
+      <p class="card-desc">Cloud infrastructure, virtualization, cloud deployment strategies & architecture</p>
+      <a class="join-btn" href="https://chat.whatsapp.com/IN8HO2ZfA23I1iXavgHXw2" target="_blank">
+        <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" fill="white"/></svg>
+        Join Group
+      </a>
+    </div>
+
+    <div class="group-card ten-card-hover ten-fade-up ten-d3">
+      <span class="card-icon">🐍</span>
+      <div class="card-title">Python Development</div>
+      <p class="card-desc">Python projects, REST APIs, automation scripts & backend development</p>
+      <a class="join-btn" href="https://chat.whatsapp.com/C1JSKfIJgLlHAn8D5kZF6o?mode=gi_t" target="_blank">
+        <svg viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        Join Group
+      </a>
+    </div>
+
+    <div class="group-card ten-card-hover ten-fade-up ten-d4">
+      <span class="card-icon">☕</span>
+      <div class="card-title">Java Development</div>
+      <p class="card-desc">Java OOP, Spring Boot, enterprise development & JDBC database projects</p>
+      <a class="join-btn" href="https://chat.whatsapp.com/FolvjabGnc0FHtokOtNOW0?mode=gi_t" target="_blank">
+        <svg viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        Join Group
+      </a>
+    </div>
+
+    <div class="group-card ten-card-hover ten-fade-up ten-d5">
+      <span class="card-icon">🌐</span>
+      <div class="card-title">Web Development</div>
+      <p class="card-desc">HTML, CSS, JavaScript, frontend frameworks & responsive web projects</p>
+      <a class="join-btn" href="https://chat.whatsapp.com/F2aHmMsa2LF3wbPGKz6tK6?mode=gi_t" target="_blank">
+        <svg viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        Join Group
+      </a>
+    </div>
+
+    <div class="group-card ten-card-hover ten-fade-up ten-d6">
+      <span class="card-icon">💻</span>
+      <div class="card-title">MERN Stack</div>
+      <p class="card-desc">MongoDB, Express.js, React, Node.js — full-stack development from scratch</p>
+      <a class="join-btn" href="https://chat.whatsapp.com/GCycOHFjjho3Z4SkCWSG4T?mode=gi_t" target="_blank">
+        <svg viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        Join Group
+      </a>
+    </div>
+
+    <div class="group-card ten-card-hover ten-fade-up ten-d1">
+      <span class="card-icon">🤖</span>
+      <div class="card-title">Artificial Intelligence</div>
+      <p class="card-desc">AI tools, machine learning models, intelligent systems & AI chatbot development</p>
+      <a class="join-btn" href="https://chat.whatsapp.com/HczXKUAqhKPIW6b6PNm9te" target="_blank">
+        <svg viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        Join Group
+      </a>
+    </div>
+
+    <div class="group-card ten-card-hover ten-fade-up ten-d2">
+      <span class="card-icon">📊</span>
+      <div class="card-title">Data Science</div>
+      <p class="card-desc">Data analysis, visualization, Pandas, ML models & exploratory data analysis</p>
+      <a class="join-btn" href="https://chat.whatsapp.com/BoKiGA9hUH28Y0bdE1UGBO" target="_blank">
+        <svg viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        Join Group
+      </a>
+    </div>
+
+    <div class="group-card ten-card-hover ten-fade-up ten-d3">
+      <span class="card-icon">🔐</span>
+      <div class="card-title">Cyber Security</div>
+      <p class="card-desc">Security fundamentals, ethical hacking, network analysis & penetration testing</p>
+      <a class="join-btn" href="https://chat.whatsapp.com/IN8HO2ZfA23I1iXavgHXw2" target="_blank">
+        <svg viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        Join Group
+      </a>
+    </div>
+
+    <div class="group-card ten-card-hover ten-fade-up ten-d4">
+      <span class="card-icon">🖥️</span>
+      <div class="card-title">Software Engineering</div>
+      <p class="card-desc">Software lifecycle, system architecture, UML, Agile sprints & test design</p>
+      <a class="join-btn" href="https://chat.whatsapp.com/D5pz7BRbMC2Flwte5jzibw?mode=gi_t" target="_blank">
+        <svg viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        Join Group
+      </a>
+    </div>
+
+    <div class="group-card ten-card-hover ten-fade-up ten-d5">
+      <span class="card-icon">📱</span>
+      <div class="card-title">Flutter Development</div>
+      <p class="card-desc">Cross-platform mobile apps, Firebase, state management & Dart programming</p>
+      <a class="join-btn" href="https://chat.whatsapp.com/BoKiGA9hUH28Y0bdE1UGBO" target="_blank">
+        <svg viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        Join Group
+      </a>
+    </div>
+
+    <div class="group-card ten-card-hover ten-fade-up ten-d6">
+      <span class="card-icon">📢</span>
+      <div class="card-title">General Internship Group</div>
+      <p class="card-desc">If your domain is not listed above, join this common group for general updates</p>
+      <a class="join-btn" href="https://chat.whatsapp.com/IN8HO2ZfA23I1iXavgHXw2" target="_blank">
+        <svg viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        Join Group
+      </a>
+    </div>
+
+  </div><!-- /groups-grid -->
+
+  <!-- ── Important Notice ── -->
+  <div class="notice-card">
+    <div class="notice-header">
+      <h2>📢 Important Notice</h2>
+      <span class="notice-badge">Must Read</span>
+    </div>
+    <p>
+      Please join <strong>only your respective domain group</strong> to receive the correct 
+      internship updates, meeting links, tasks, projects, certificates, and mentorship guidance. 
+      Joining multiple groups may cause confusion in task tracking.
+    </p>
+    <div class="notice-contact">
+      📧 For any queries, contact: &nbsp;<a href="mailto:hr@entrepreneurshipnetwork.net" style="color:inherit;font-weight:700;">hr@entrepreneurshipnetwork.net</a>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span class="brand">TEN</span> — The Entrepreneurship Network &nbsp;·&nbsp; Internship Portal &nbsp;·&nbsp; © 2026
+  </div>
+
+</div><!-- /page-wrap -->
+
+<script src="ten-motion.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  function getDomainWhatsAppLink(domain) {
+    const d = (domain || "").trim().toLowerCase();
+    if (d === "web development" || d.includes("web dev") || d.includes("frontend")) return "https://chat.whatsapp.com/web-dev-ten";
+    if (d === "mern stack" || d === "mern stack development" || d.includes("mern")) return "https://chat.whatsapp.com/mern-ten";
+    if (d === "python development" || d.includes("python")) return "https://chat.whatsapp.com/python-ten";
+    if (d === "data science" || d === "artificial intelligence" || d.includes("data science") || d.includes("artificial intelligence") || d === "ai") return "https://chat.whatsapp.com/data-ai-ten";
+    if (d === "cyber security" || d.includes("cyber") || d.includes("security")) return "https://chat.whatsapp.com/cyber-ten";
+    if (d === "business development" || d === "business analyst" || d.includes("business") || d.includes("analyst")) return "https://chat.whatsapp.com/biz-bd-ten";
+    if (d === "human resources" || d === "hr management" || d === "hr" || d.includes("human resource") || d.includes("hr ")) return "https://chat.whatsapp.com/hr-ten";
+    if (d === "space intern" || d === "space research" || d.includes("space")) return "https://chat.whatsapp.com/space-ten";
+    if (d === "digital marketing" || d.includes("marketing") || d.includes("digital")) return "https://chat.whatsapp.com/digital-mkt-ten";
+    return "https://chat.whatsapp.com/ten-internship-general";
+  }
+
+  // Get logged-in student info
+  let student = null;
+  try {
+    student = JSON.parse(localStorage.getItem('student') || '{}');
+  } catch(e) {}
+  
+  if (student && student.domain) {
+    const link = getDomainWhatsAppLink(student.domain);
+    const groupsGrid = document.querySelector(".groups-grid");
+    
+    if (groupsGrid) {
+      const banner = document.createElement("div");
+      banner.style.cssText = "grid-column: 1 / -1; background: rgba(212,175,55,0.08); border: 1px solid rgba(212,175,55,0.3); border-radius: 18px; padding: 26px; text-align: center; margin-bottom: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);";
+      
+      const title = document.createElement("h3");
+      title.style.cssText = "color: #D4AF37; font-size: 19px; margin-bottom: 8px; font-weight:800;";
+      title.textContent = "🎯 Your Dedicated WhatsApp Group";
+      
+      const p = document.createElement("p");
+      p.style.cssText = "font-size: 14px; color: #f0eee8; margin-bottom: 18px; line-height: 1.6;";
+      p.textContent = "Hi " + (student.firstName || "Intern") + ", based on your registered domain (" + student.domain + "), you belong to this specific working group. Please join to prevent domain confusion.";
+      
+      const btn = document.createElement("a");
+      btn.className = "join-btn";
+      btn.href = link;
+      btn.target = "_blank";
+      btn.style.cssText = "display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 32px; background: linear-gradient(135deg, #D4AF37, #b8952e); color: #0a0700; border-radius: 10px; font-weight: 800; text-decoration: none; box-shadow: 0 6px 20px rgba(212,175,55,0.25);";
+      btn.innerHTML = `
+        <svg viewBox="0 0 24 24" style="width:20px;height:20px;fill:currentColor;"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        Join Your Group
+      `;
+      
+      banner.appendChild(title);
+      banner.appendChild(p);
+      banner.appendChild(btn);
+      
+      groupsGrid.insertBefore(banner, groupsGrid.firstChild);
+    }
+  }
+  
+  // Update static cards
+  const cards = document.querySelectorAll(".group-card");
+  cards.forEach(card => {
+    const titleEl = card.querySelector(".card-title");
+    const linkEl = card.querySelector(".join-btn");
+    if (titleEl && linkEl) {
+      const titleText = titleEl.textContent.trim();
+      linkEl.href = getDomainWhatsAppLink(titleText);
+    }
+  });
+});
+</script>
+</body>
+</html>

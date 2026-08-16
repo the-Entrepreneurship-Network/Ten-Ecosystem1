@@ -1,0 +1,463 @@
+Content is user-generated and unverified.
+HR PORTAL — COMPLETE FULL FIX PROMPT
+Platform: The Entrepreneurship Network (TEN)
+Scope: Fix EVERY broken feature in the HR portal
+Version: 2.0 — Complete Overhaul Fix
+HOW TO USE THIS PROMPT: Give this entire document to Replit AI and say: "Fix every single issue described in this document. Read ALL sections before writing a single line of code. Do not break anything that is currently working."
+
+⚠️ CRITICAL DEFENCE RULES — NON-NEGOTIABLE
+NEVER delete any existing file
+NEVER overwrite any existing working feature
+NEVER change existing authentication or login system
+NEVER break existing student portal features
+NEVER break existing coordinator portal features
+Only FIX broken features and ADD missing ones
+All fixes must be backward compatible
+Every navigation link must be tested before marking done
+If in doubt → ASK, do not assume
+New features go in new files — do not stuff into existing files
+📋 SECTION 1: HR PORTAL NAVIGATION — FULLY BROKEN
+Problem:
+After recent updates, clicking on ANY section in the HR portal
+either does nothing, shows a blank page, or redirects incorrectly.
+ALL navigation in the HR portal must be fixed and tested.
+
+Fix:
+Audit every single navigation link, sidebar item, and tab in the
+HR portal and ensure each one loads its correct page/section.
+
+Complete list of HR portal sections that MUST work:
+
+Section	What it Should Do
+Dashboard / Overview	Show summary stats: total students, pending docs, recent activity
+Student Management	List of all registered students with search and filter
+Internship Tracker	Track each student's internship progress, domain, week number
+Document History	Show all generated documents (offer letters, LOR, certificates)
+Mail History	Show all emails sent via the platform
+Verify Student	Input a document number → show verification result
+Generate Documents → Pending	Students who uploaded docs, awaiting offer letter
+Generate Documents → Approved	Students whose docs are approved
+Coordinator Management	List of coordinators, their assigned students, performance
+Settings	Platform settings accessible to HR/Admin
+For every section above:
+
+Check if the route exists in server.js or relevant route file
+Check if the HTML page exists in the public folder
+Check if the sidebar/nav link points to the correct URL
+Fix any broken links, missing routes, or missing pages
+If a page exists but loads blank → fix the data fetch call
+📋 SECTION 2: STUDENT INTERNSHIP TRACKER — FIX
+Problem:
+The internship tracker section in HR portal is not working.
+HR cannot see student progress, domain, week completion, or status.
+
+Fix:
+The internship tracker must show a table with:
+
+Column	Data Source
+Student Name	User model — name field
+Employee ID	e.g. TEN/PY/1244
+Domain	Student's selected domain
+Duration	45days / 1month / 3months / 6months
+Current Week	Which week they are on right now
+Tasks Completed	X of Y tasks approved
+Progress %	(tasks completed / total tasks) × 100
+Coins	Total coins earned
+Join Date	Registration date
+Status	Active / Completed / At Risk
+Status logic:
+
+Active = enrolled and completed at least 1 task in last 7 days
+Completed = all tasks for their duration approved
+At Risk = no task completed in last 14 days
+Additional features on this page:
+
+Search by student name or employee ID
+Filter by domain (dropdown)
+Filter by status (Active / Completed / At Risk)
+Export to CSV button
+Click on a student row → opens their detailed profile
+📋 SECTION 3: DOCUMENT HISTORY — FIX ALL BLANK FIELDS
+Problems:
+Student Name showing as "—"
+College showing as "—"
+Document Number showing as "—"
+Certificates not appearing in history
+LOR records have no student data
+Fix Student Name (—):
+javascript
+// When saving ANY document history record:
+const student = await User.findById(studentId)
+const record = {
+  student_id: student._id,
+  student_name: student.name || student.fullName || student.email,
+  college: student.college || 'Not provided',
+  employee_id: student.employeeId || student.employee_id || '',
+  // ... rest of fields
+}
+Fix Document Number (—):
+Generate a unique number for EVERY document at creation time:
+
+javascript
+function generateDocumentNumber(type) {
+  const prefixes = {
+    'offer_letter': 'TEN-OL',
+    'lor': 'TEN-LOR',
+    'expert': 'TEN-EXP',
+    'nano_degree': 'TEN-ND',
+    'fellowship': 'TEN-FEL'
+  }
+  const year = new Date().getFullYear()
+  const random = Math.random().toString(36).substring(2,8).toUpperCase()
+  return `${prefixes[type] || 'TEN-DOC'}-${year}-${random}`
+}
+Fix Certificates Not Appearing:
+When any certificate is issued to a student, immediately create
+a document history record:
+
+javascript
+await DocumentHistory.create({
+  student_id: student._id,
+  student_name: student.name,
+  college: student.college || 'Not provided',
+  employee_id: student.employeeId,
+  document_type: 'expert_certificate', // or nano_degree / fellowship
+  document_number: generateDocumentNumber('expert'),
+  domain: student.domain,
+  sent_to_email: student.email,
+  sent_on: new Date()
+})
+Backfill Existing Broken Records:
+Run this script ONCE to fix all existing blank records:
+
+javascript
+// scripts/backfillDocumentHistory.js
+async function backfill() {
+  const records = await DocumentHistory.find({
+    $or: [
+      { student_name: { $in: [null, '', undefined, '—'] } },
+      { document_number: { $in: [null, '', undefined] } }
+    ]
+  })
+  for (const record of records) {
+    const student = await User.findById(record.student_id)
+    if (student) {
+      record.student_name = student.name || student.email
+      record.college = student.college || 'Not provided'
+    }
+    if (!record.document_number) {
+      record.document_number = generateDocumentNumber(
+        record.document_type || 'offer_letter'
+      )
+    }
+    await record.save()
+  }
+  console.log(`Fixed ${records.length} records`)
+}
+Search Bar Fix:
+The search bar must search across ALL fields:
+
+javascript
+// Search query must cover:
+const query = {
+  $or: [
+    { student_name: { $regex: searchTerm, $options: 'i' } },
+    { employee_id: { $regex: searchTerm, $options: 'i' } },
+    { document_number: { $regex: searchTerm, $options: 'i' } },
+    { college: { $regex: searchTerm, $options: 'i' } }
+  ]
+}
+📋 SECTION 4: VERIFY STUDENT TAB — FIX
+Problem:
+Entering a document number returns "not verified" even for
+documents that exist in history. Root cause: document numbers
+were never saved, so lookup finds nothing.
+
+Fix:
+javascript
+// Route: POST /api/hr/verify-document
+// or GET /api/v2/verify/:documentNumber (public)
+
+async function verifyDocument(documentNumber) {
+  if (!documentNumber) {
+    return { verified: false, message: 'Please enter a document number' }
+  }
+
+  const cleaned = documentNumber.trim().toUpperCase()
+
+  const record = await DocumentHistory.findOne({
+    document_number: cleaned
+  })
+
+  if (!record) {
+    return {
+      verified: false,
+      message: 'Document not found. Check the number and try again.'
+    }
+  }
+
+  return {
+    verified: true,
+    document_number: record.document_number,
+    student_name: record.student_name,
+    employee_id: record.employee_id,
+    document_type: record.document_type,
+    domain: record.domain || 'N/A',
+    college: record.college || 'N/A',
+    issued_date: record.sent_on || record.createdAt,
+    issued_by: 'The Entrepreneurship Network (TEN)'
+  }
+}
+Verify UI must show:
+
+VERIFIED ✅:
+
+✅ Document Verified
+──────────────────────────────
+Document Number: TEN-OL-2026-K4M7R2
+Student Name:    Priya Sharma
+Employee ID:     TEN/PY/1244
+Document Type:   Offer Letter
+Domain:          Python Developer
+College:         ABC College
+Issued On:       07 June 2026
+Issued By:       The Entrepreneurship Network (TEN)
+NOT VERIFIED ❌:
+
+❌ Document Not Found
+This document number does not exist in our records.
+Please check the number and try again.
+If you believe this is an error, contact support.
+📋 SECTION 5: GENERATE DOCUMENTS SECTION — FIX
+Problems:
+Pending tab not loading correctly
+Student data not showing in the pending list
+Bulk offer letter generation may be failing silently
+Fix the Pending Tab:
+javascript
+// Route: GET /api/v2/admin/documents/pending
+// Returns all students where:
+// upload_status = 'pending' AND both files are uploaded
+
+const pendingStudents = await StudentDocument.find({
+  upload_status: 'pending',
+  address_proof_url: { $ne: null },
+  marksheet_url: { $ne: null }
+}).populate('student_id', 'name email domain duration employeeId college')
+
+// Return structured data:
+return pendingStudents.map(doc => ({
+  student_id: doc.student_id._id,
+  student_name: doc.student_id.name,
+  employee_id: doc.student_id.employeeId,
+  domain: doc.student_id.domain,
+  duration: doc.student_id.duration,
+  college: doc.student_id.college || 'Not provided',
+  uploaded_at: doc.uploaded_at,
+  address_proof_url: doc.address_proof_url,
+  marksheet_url: doc.marksheet_url
+}))
+Fix Bulk Offer Letter Generation:
+When HR clicks "Generate Offer Letters":
+
+Loop through selected student IDs
+For each student: generate PDF offer letter
+Save PDF to uploads folder
+Update StudentDocument.upload_status to 'approved'
+Update StudentDocument.offer_letter_url
+Update StudentDocument.offer_letter_sent_at
+Save document number to StudentDocument
+Create DocumentHistory record
+Send email to student (if email service working)
+If email fails → still complete the generation, log the failure
+Return success count to HR: "12 offer letters generated"
+Never fail silently — always return success/failure status.
+
+📋 SECTION 6: MAIL HISTORY — FIX
+Problem:
+Mail History tab either blank or not loading.
+
+Fix:
+Every time an email is sent anywhere on the platform, save a record:
+
+javascript
+// NEW: MailHistory model (if not exists)
+{
+  recipient_email: String,
+  recipient_name: String,
+  student_id: ObjectId (ref User),
+  subject: String,
+  mail_type: String, // offer_letter | lor | certificate | general
+  sent_at: Date,
+  status: String    // sent | failed
+}
+Mail History table columns:
+Student Name | Email | Subject | Mail Type | Sent On | Status
+
+📋 SECTION 7: COORDINATOR MANAGEMENT — FIX
+Problem:
+Coordinator section in HR portal not showing coordinator data
+or showing incomplete information.
+
+Fix:
+Coordinator management page must show:
+
+Column	Data
+Coordinator Name	From User model
+Email	From User model
+Assigned Students	Count of students assigned to them
+Pending Reviews	Count of tasks awaiting their review
+Performance Score	From CoordinatorCoin model
+Avg Review Time	Average hours to review a task
+Status	Active / Inactive
+Actions available:
+
+View coordinator's student list
+Reassign students to another coordinator
+Send a reminder (button)
+📋 SECTION 8: CERTIFICATION SECTION IN HR — ADD
+Problem:
+The three certification tiers (Expert, Nano Degree, Fellowship)
+that were recently implemented do not appear anywhere in the HR portal.
+HR needs to see which students have which certificates.
+
+Fix:
+Add a new tab in the HR portal called "Certificates" showing:
+
+Column	Data
+Student Name	From StudentCertificate model
+Employee ID	Student's employee ID
+Certificate Type	Expert / Nano Degree / Fellowship badge
+Domain	Student's domain
+Document Number	e.g. TEN-EXP-2026-K4M7R2
+Issue Date	When certificate was generated
+Payment Status	Pending / Paid (active when payment enabled)
+Actions	View PDF / Download / Verify
+Also add certificate stats to the HR dashboard overview:
+
+Total Expert Certificates issued: X
+Total Nano Degrees issued: X
+Total Fellowships issued: X
+📋 SECTION 9: DOCUMENT UPLOAD SECTION IN STUDENT PORTAL — VERIFY
+Problem:
+The document upload section for students (address proof + marksheet)
+may not be functioning after recent updates.
+
+Verify and fix:
+After student registers → "My Documents" section visible ✓
+Persistent banner on dashboard until docs approved ✓
+Both upload zones work (drag-drop + click) ✓
+File size limit (5MB) enforced with clear error message ✓
+Status badge updates correctly through all stages ✓
+After HR approves → student sees "Offer Letter Sent" status ✓
+After HR rejects → student sees rejection reason ✓
+If any of the above is broken → fix it.
+
+📋 SECTION 10: HR DASHBOARD OVERVIEW — FIX
+Problem:
+The main HR dashboard overview may show incorrect stats
+or blank cards after recent updates.
+
+Fix:
+Dashboard must show these live stats (fetched fresh on page load):
+
+javascript
+// GET /api/v2/hr/dashboard-stats
+{
+  total_students: await User.countDocuments({ role: 'student' }),
+  active_students: await User.countDocuments({ role: 'student', isActive: true }),
+  pending_documents: await StudentDocument.countDocuments({ upload_status: 'pending' }),
+  offer_letters_sent: await DocumentHistory.countDocuments({ document_type: 'offer_letter' }),
+  certificates_issued: await StudentCertificate.countDocuments({ issued_at: { $ne: null } }),
+  total_coordinators: await User.countDocuments({ role: 'coordinator' }),
+  documents_today: await DocumentHistory.countDocuments({
+    sent_on: { $gte: startOfToday() }
+  })
+}
+📋 SECTION 11: GENERAL HR PORTAL FIXES
+Fix 1 — All tables must handle empty state gracefully:
+If a table has no data → show:
+"No records found" message in the center of the table
+Never show a blank white/dark area with no message.
+
+Fix 2 — All API errors must show user-friendly messages:
+If any API call fails → show a toast/alert:
+"Something went wrong. Please refresh and try again."
+Never let the page silently fail or show raw error text.
+
+Fix 3 — Loading states:
+Every table/section must show a loading spinner while data fetches.
+Never show blank content before data arrives.
+
+Fix 4 — All date formats consistent:
+All dates across HR portal must show in: DD MMM YYYY format
+Example: 07 Jun 2026 — not 2026-06-07 or 6/7/2026
+
+Fix 5 — Mobile responsiveness:
+HR portal tables must be scrollable horizontally on smaller screens.
+Do not break the layout on screens under 1200px wide.
+
+✅ FINAL CHECKLIST — EVERY ITEM MUST BE VERIFIED
+Navigation
+ All sidebar/nav links work and go to correct pages
+ No broken links anywhere in HR portal
+ Back button works on all pages
+ Active nav item highlighted when on that page
+Student Internship Tracker
+ Shows all students with correct data
+ Search works
+ Filter by domain works
+ Filter by status works
+ Progress % calculated correctly
+ Click on student opens their profile
+Document History
+ Student Name shows for ALL rows (no dashes)
+ College shows for ALL rows (or "Not provided")
+ Document Number shows for ALL rows (no dashes)
+ All document types show (OL, LOR, Expert, Nano, Fellowship)
+ Search searches Name + Employee ID + Document Number
+ Backfill script fixes all existing blank records
+Verify Student
+ Valid document number returns full details
+ Invalid document number shows clear "not found" message
+ Case-insensitive search works
+ Whitespace trimmed before search
+Generate Documents
+ Pending tab loads and shows correct students
+ Student data (name, domain, college) shows in pending list
+ Address proof and marksheet preview links work
+ Bulk selection works
+ Bulk offer letter generation completes without error
+ Student status updates after generation
+ Document History record created for each generated letter
+Mail History
+ All sent emails appear in history
+ Student name, email, subject, type, date all show correctly
+Coordinator Management
+ All coordinators listed
+ Assigned student count correct
+ Performance score showing
+ Pending review count correct
+Certificates Section
+ New Certificates tab exists in HR portal
+ All issued certificates listed with correct data
+ Certificate stats on dashboard overview
+Document Upload (Student Side)
+ Upload section visible after registration
+ Both upload zones work
+ Status updates correctly
+ HR approval reflects in student portal
+Dashboard Overview
+ All stat cards show correct live data
+ No blank cards
+ Loads without errors
+General
+ Empty tables show "No records found" message
+ API errors show friendly toast messages
+ Loading spinners show while data fetches
+ All dates in DD MMM YYYY format
+ Tables scrollable on smaller screens
+ Zero existing student portal features broken
+ Zero existing coordinator portal features broken
+End of HR Portal Complete Fix Prompt — Version 2.0 Platform: The Entrepreneurship Network (TEN) Scope: Fix every broken feature in the HR portal. Rule: Do not break anything that currently works. Rule: Test every checklist item before marking complete.
+

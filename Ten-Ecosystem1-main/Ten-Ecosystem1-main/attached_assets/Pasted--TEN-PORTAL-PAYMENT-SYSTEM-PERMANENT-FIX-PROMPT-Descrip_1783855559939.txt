@@ -1,0 +1,186 @@
+# TEN PORTAL — PAYMENT SYSTEM PERMANENT FIX PROMPT
+## Description-Only Instructions — No Code Snippets
+
+> IMPORTANT: This prompt contains NO code to copy-paste.
+> Instead it describes EXACTLY what the problems are, WHERE they are, and WHAT the correct behavior must be.
+> You must READ the current state of each file and make the changes yourself based on these descriptions.
+> DO NOT guess. DO NOT assume. READ the file first, then fix only what is described.
+> DO NOT destroy any existing feature. Only fix the specific problems listed.
+
+---
+
+## PROBLEM OVERVIEW — 4 CONFIRMED BUGS
+
+These 4 bugs were confirmed by reading the actual source files. All root causes are known.
+
+---
+
+## BUG 1 — UTR Validation Rejects Valid Transaction IDs (Submit Button "Not Working")
+
+### Where it is:
+In `public/student-dashboard.html`, find the function called `submitTenureUtr`. Near the top of this function, there is a validation check that tests the UTR input against a regular expression requiring EXACTLY 12 digits and nothing else.
+
+### Why it is wrong:
+UPI transaction IDs (UTRs) in India are NOT always 12 digits. They can be 10 to 16 characters long. Some contain letters. When a student enters a valid UTR that is 10 digits, 14 digits, or contains letters, this strict validation rejects it and shows an error. The student thinks something is broken. They try again. Sometimes they get lucky if their UTR happens to be exactly 12 digits, which is why it "works on second click" for some students — they tried a different UTR.
+
+### What you must fix:
+Find the regular expression validation inside `submitTenureUtr` that checks for exactly 12 digits. Change it so it accepts any UTR that is between 6 and 25 characters long and contains only letters and numbers (no spaces, no special characters, no hyphens). A UTR of 10 digits must pass. A UTR of 14 digits must pass. A UTR of 8 alphanumeric characters must pass. A UTR that is empty must fail. A UTR that has spaces must fail.
+
+Also find the input field with id `tenureUtrInput` in the HTML. Its placeholder currently says "Enter 12-digit Transaction ID". Change the placeholder to say "Enter Transaction ID / UTR". Also find the label above it that says "Submit 12-digit UPI / UTR Transaction Ref ID" and change it to "Enter Your UPI Transaction ID / UTR".
+
+Also find the same 12-digit validation on the SERVER SIDE in `server.js` inside the route `POST /api/tenure-payment/submit-utr`. It also checks for exactly 12 digits. Apply the same change there — accept 6 to 25 alphanumeric characters, reject everything else. Update the error message returned to the student to say something like "Please enter a valid Transaction ID (6 to 25 characters, letters and numbers only)".
+
+---
+
+## BUG 2 — Submit Button Sends Multiple Requests / Re-Shows Payment Form After Submit
+
+### Where it is:
+In `public/student-dashboard.html`, find the `submitTenureUtr` function. After the fetch call succeeds and `data.success` is true, the function currently shows a success popup (SweetAlert). When the student closes this popup by clicking OK or the confirm button, the popup's `.then()` callback calls `checkTenurePayment(false)`. This re-checks payment status from the server.
+
+### Why it is wrong:
+At this point, the student's `shortCoursePaid` field in the database is still `false` because the admin has not approved yet. So `checkTenurePayment` gets back a response saying payment is still required. This causes the payment overlay to show the QR code and UTR input form AGAIN. The student sees the form again and thinks their first submission did not work. They enter the UTR again and click submit again. This creates a second request to the server. The server may reject it (since a pending payment already exists) but the student gets confused.
+
+### What you must fix:
+The core problem is calling `checkTenurePayment` after a successful UTR submission. Remove that call entirely from the success path.
+
+Instead, after a successful submission, do two things:
+First — switch the payment overlay from showing the QR/form view to showing the "pending verification" view. The overlay already has two states: one div called `tenurePaymentMainState` (the QR/form view) and one div called `tenurePaymentPendingState` (the waiting view). After successful submit, hide `tenurePaymentMainState` and show `tenurePaymentPendingState`. The pending state already has a spot showing the UTR — update it to show the UTR the student just submitted.
+
+Second — set a module-level boolean variable (declared outside the function, at the top of the script block where `submitTenureUtr` lives) that acts as a "already submitted" guard. Before the fetch call happens, check this variable. If it is already true, show an informational popup telling the student their transaction ID was already submitted and they should wait for admin verification — then return immediately without making another fetch call. Set this variable to true right before the fetch call begins (not after — so even if the student rapidly double-clicks, only one request goes out).
+
+Reset this variable to false ONLY in two cases: (1) when the server returns an error (so the student can try again after a real failure), and (2) when the student logs out (find the logout function that clears sessionStorage and clear this variable there too).
+
+Do NOT reset it to false on success. Once submitted successfully, it stays true for the entire session.
+
+Also — do NOT re-enable the submit button after a successful submission. Disable it permanently after success so clicking it does nothing. The button text should change to "Submitted ✓" and it should not respond to clicks.
+
+---
+
+## BUG 3 — After Admin Approves, Student Still Redirected to Payment on Next Login
+
+### Where it is:
+In `routes/adminPortal.js`, find the route that handles `POST` requests to a path ending in `/payments/verify/:paymentId`. This is the route called when the admin clicks "Approve" from the **Payments tab** in the admin panel. Read through the entire approve block carefully.
+
+### Why it is wrong:
+This route handles approval for certificate payments and fine payments. It checks if the payment purpose is `cert_expert`, `cert_nano_degree`, `cert_fellowship`, or `fine_low_attendance` and does the right thing for each. However, it does NOT handle the case where the payment purpose starts with `tenure_`. For tenure payments, after setting `payment.status` to `success` and saving, the route sends a notification and returns. It NEVER sets `student.shortCoursePaid` to `true`.
+
+Because `shortCoursePaid` stays `false` on the student's database record, the next time the student logs in and the frontend calls `GET /api/tenure-payment/status`, the server reads `shortCoursePaid` as false and returns `requiresPayment: true`. The payment wall appears again even though the admin already approved.
+
+There is a SEPARATE route in the same file for approving tenure payments via the Tenure Payments tab (it has a path like `/tenure-payment/approve/:orderId`). That route DOES correctly set `shortCoursePaid = true`. But admins often use the main Payments tab where the tenure payment also appears — and that route is broken for tenure purposes.
+
+### What you must fix:
+Inside the approve block of `POST /payments/verify/:paymentId`, after all the existing handling for certificates and fines, add a new check. Check if the payment's `purpose` field starts with the string `tenure_`. If it does, fetch the student document using the `studentId` stored on the payment. Set `shortCoursePaid` to `true` on that student. Also set `shortCoursePaymentVerified` to `true`. Save the student. Log a message to console confirming the student was unlocked. Wrap this in a try-catch so that if anything goes wrong here, it logs the error but does NOT prevent the rest of the approval (notification, audit log) from completing.
+
+Also in the REJECT block of the same route, add a similar check. If the payment purpose starts with `tenure_`, fetch the student and set `shortCoursePaymentId` to `null`. This allows the student to submit a new UTR after rejection. Save the student. Wrap in try-catch.
+
+### Also fix the status route:
+In `server.js`, find the route `GET /api/tenure-payment/status`. In the JSON response this route sends back, find the line that sets `isExistingStudent: false` — it is hardcoded as `false` regardless of what the actual student record says. This is wrong. The route correctly calculates whether the student is an existing student into a variable earlier in the function. Replace the hardcoded `false` with that calculated variable value. This ensures that students who registered before the policy cutoff date are correctly identified as exempt and never see the payment wall.
+
+---
+
+## BUG 4 — Attendance Shows Percentage, Must Show Days
+
+### Where it is — Part A (main attendance section):
+In `public/student-dashboard.html`, find the JavaScript code that runs after the attendance data comes back from the server. This code sets the text of several elements. Look for where it sets:
+- The element with id `attendanceText` — currently set to a percentage number followed by `%`
+- The element with id `selfAttPct` — currently set to a percentage followed by `%`
+- The element with id `classAttPct` — currently set to a percentage followed by `%`
+- The element with id `combinedAttPct` — currently set to a percentage followed by `%`
+- The function `updateAttRing` — currently receives a percentage and shows it inside the ring with a `%` sign
+
+Also find the HTML stat box that contains the heading "Attendance" and the element `attendanceText`. The heading should say "Days Present" instead of "Attendance".
+
+The attendance API already returns the number of present days in several fields. Look for `combinedPresentDays`, `selfCount`, `coordPresent`, and `presentDays` in the response object. These contain the actual DAY COUNTS, not percentages.
+
+### What you must fix in the main attendance section:
+Change every element that currently shows a percentage to show days instead:
+- `attendanceText` must show the combined present day count as a plain number (like `5`) followed by the word "days" — not a percentage
+- `selfAttPct` must show the self-marked present days as a number followed by "days" — not a percentage  
+- `classAttPct` must show the coordinator-marked present days as a number followed by "days" — not a percentage
+- `combinedAttPct` must show the total combined present days as a number followed by "days" — not a percentage
+- The ring label inside `updateAttRing` (element with id `attRingPct`) must show the combined present day count followed by "days" — not a percentage. The ring animation itself (the arc filling up) can still use the percentage for the visual fill amount — only the TEXT LABEL inside the ring changes to days
+- The `selfAttCount` label below selfAttPct — keep it showing "days marked" as it already does
+- The `classAttCount` label below classAttPct — keep it showing present/total count as it already does
+- The threshold warning text (which already says something like "X/Y days present — need Z more to reach 75%") — DO NOT change this, it is already in days format
+
+The combined badge that shows "Eligible ✅" or "Below 75% ❌" — DO NOT change this. It must stay exactly as is.
+
+Also update the HTML default values for `selfAttPct`, `classAttPct`, `combinedAttPct`, and `attendanceText` in the HTML from `0%` to `0 days`.
+
+### Where it is — Part B (WhatsApp joiner wizard result):
+In `public/student-dashboard.html`, find the JavaScript that runs after a WhatsApp joiner confirms their joining date. It receives data back from the server and sets the result display. Look for where it sets the element with id `wizardStep3ResultPct` — currently it sets this to the calculated attendance percentage followed by `%`.
+
+The server already returns `presentCount` (how many days the student was present) and `daysNeededToAttendMore` (how many more days they need to hit 75%). These fields are in the response object.
+
+### What you must fix in the wizard result:
+- Change `wizardStep3ResultPct` to show the `presentCount` value (a day count) with the label "Days Present" — NOT a percentage
+- Change `wizardStep3ResultDays` to show the `daysNeededToAttendMore` value with the label "More Days Needed" — this may already be correct, just verify
+- Change `wizardStep3ResultDaysDetail` to show a plain English sentence like: "You have attended X days. You need to attend Y total days (75% of your Z-day tenure). Attend N more days to meet the requirement." — where all values come from the server response fields
+- If `daysNeededToAttendMore` is 0 or less, the detail message must say "You have already met the 75% attendance requirement!"
+- In the HTML for this section, find the label that says "Calculated Attendance Percentage:" and change it to "Days Attended So Far:"
+- Do NOT change the element IDs (`wizardStep3ResultPct`, `wizardStep3ResultDays`, `wizardStep3ResultDaysDetail`) — only change their content and the surrounding labels
+
+---
+
+## BUG 5 — Email Address Wrong on Registration Success Page
+
+### Where it is:
+In `public/registration-success.html`, find the text that says "Need assistance? Please contact support@tenecosystem.com" near the bottom of the page.
+
+### What you must fix:
+Replace `support@tenecosystem.com` with `hr@entrepreneurshipnetwork.net`. Make it a clickable mailto link. Do not change anything else on this page.
+
+---
+
+## VERIFICATION — HOW TO CONFIRM EACH FIX WORKS
+
+After making all changes, verify each one:
+
+**Bug 1 (UTR Validation):**
+Enter a 10-digit UTR like `1234567890` → must be accepted, fetch must fire
+Enter a 14-digit UTR like `12345678901234` → must be accepted
+Enter a 3-character UTR → must be rejected with validation error
+Enter a UTR with spaces → must be rejected
+Enter a UTR with a hyphen → must be rejected
+Confirm the server ALSO accepts the same range (test via network tab in DevTools)
+
+**Bug 2 (Double Submit):**
+Enter a valid UTR and click Submit once → request fires once, button becomes disabled permanently, overlay switches to "Pending" view, QR form is hidden
+Click the disabled Submit button again → nothing happens (or shows "already submitted" message)
+Reload the page while pending → overlay shows the "pending" state (not the QR form) because server returns `pendingVerification: true`
+
+**Bug 3 (Post-Approval Redirect):**
+Admin approves from the PAYMENTS tab (not the Tenure Payments tab) → in the database, check that `student.shortCoursePaid` is now `true`
+Student logs out and logs back in → payment wall does NOT appear
+Student sees their dashboard directly after login
+
+**Bug 4 (Days Not Percentage):**
+Open student dashboard → "Attendance" stat box shows a number like "5 days" not "83%"
+The attendance ring label shows "5 days" not "83%"
+Self Attendance card shows "3 days" not "60%"
+Class card shows "2 days" not "40%"
+The threshold text at the bottom still says "5/18 days present — need 9 more to reach 75%"
+The "Eligible ✅" or "Below 75%" badge still appears correctly
+WhatsApp joiner confirms joining date → result shows "Days Attended So Far: 5" not "55%"
+
+**Bug 5 (Email):**
+Registration success page footer shows `hr@entrepreneurshipnetwork.net`
+Clicking it opens the mail client addressed to that email
+
+---
+
+## ABSOLUTE DO NOT LIST
+
+- DO NOT change the attendance ring animation arc — only the text label inside it
+- DO NOT remove the "Eligible ✅" or "Below 75%" badge
+- DO NOT change the threshold warning text that already shows days
+- DO NOT touch the task submission flow
+- DO NOT touch the certificate generation routes
+- DO NOT touch the coordinator or HR portal
+- DO NOT touch the admin portal except the one route in `routes/adminPortal.js` described in Bug 3
+- DO NOT change sessionStorage or localStorage keys used anywhere
+- DO NOT change the logout behavior except adding the variable reset described in Bug 2
+- DO NOT change the payment overlay HTML structure — only the JavaScript behavior
+- DO NOT change the `tenure-payment/approve` route in adminPortal.js — it already works correctly
+- DO NOT modify any CSS
+- DO NOT install any new packages

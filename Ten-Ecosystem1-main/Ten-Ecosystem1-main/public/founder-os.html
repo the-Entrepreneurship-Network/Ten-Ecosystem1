@@ -1,0 +1,1364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Founder OS — TEN</title>
+<meta name="description" content="Hiring, fundraising, team and mentorship for TEN founders — one workspace.">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/mobile.css">
+<meta name="theme-color" content="#070a12">
+<style>
+/*
+  The Founder OS.
+
+  Written as plain CSS rather than the Tailwind CDN the two pages this replaces
+  used: cdn.tailwindcss.com compiles the whole framework in the browser on every
+  load, and this page is behind a login where that cost buys nothing.
+
+  One accent, one surface, one border. Everything else is spacing.
+*/
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg:#070a12; --panel:#0d1220; --panel-2:#121a2c; --line:#1c2437; --line-2:#2a3550;
+  --ink:#e9edf7; --muted:#8b98b4; --muted-2:#5f6b85;
+  --gold:#f5c542; --gold-dim:#c9a227;
+  --green:#34d399; --red:#f87171; --blue:#60a5fa; --violet:#a78bfa; --amber:#fbbf24;
+  --r:14px;
+}
+body{
+  background:var(--bg); color:var(--ink); min-height:100dvh;
+  font-family:'Plus Jakarta Sans',system-ui,-apple-system,sans-serif;
+  -webkit-font-smoothing:antialiased; display:flex;
+}
+a{color:inherit;text-decoration:none;}
+button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit;}
+.mono{font-family:'IBM Plex Mono',monospace;letter-spacing:.14em;text-transform:uppercase;}
+
+/* ── shell ─────────────────────────────────────────────────────────────── */
+.side{
+  width:250px; flex:0 0 250px; background:var(--panel); border-right:1px solid var(--line);
+  display:flex; flex-direction:column; height:100dvh; position:sticky; top:0; overflow-y:auto;
+}
+.brand{padding:22px 20px 16px; border-bottom:1px solid var(--line);}
+.brand b{font-family:'Outfit',sans-serif; font-size:19px; font-weight:900; letter-spacing:-.02em; display:block;}
+.brand span{font-size:10.5px; color:var(--muted-2); display:block; margin-top:3px;}
+.nav{padding:12px 10px; flex:1;}
+.nav .grp{font-size:9.5px; color:var(--muted-2); padding:14px 12px 7px; letter-spacing:.16em; text-transform:uppercase;}
+.nav button{
+  width:100%; display:flex; align-items:center; gap:11px; padding:11px 12px; border:0; background:none;
+  color:var(--muted); font-size:13px; font-weight:600; border-radius:10px; cursor:pointer; text-align:left;
+  transition:background .15s,color .15s;
+}
+.nav button:hover{background:var(--panel-2); color:var(--ink);}
+.nav button.on{background:rgba(245,197,66,.10); color:var(--gold);}
+.nav button .ic{width:18px; text-align:center; font-size:15px;}
+.nav button .cnt{margin-left:auto; font-size:10.5px; font-weight:800; background:var(--panel-2); color:var(--muted); padding:2px 7px; border-radius:99px;}
+.side .foot{padding:14px 16px; border-top:1px solid var(--line); font-size:11.5px; color:var(--muted-2);}
+.side .foot a{color:var(--muted); display:block; padding:4px 0;}
+.side .foot a:hover{color:var(--gold);}
+
+.main{flex:1; min-width:0; display:flex; flex-direction:column; height:100dvh; overflow-y:auto;}
+.top{
+  position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:14px;
+  padding:16px 26px; background:rgba(7,10,18,.9); backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line);
+}
+.top h1{font-family:'Outfit',sans-serif; font-size:20px; font-weight:900; letter-spacing:-.02em;}
+.top .sub{font-size:12px; color:var(--muted); margin-top:2px;}
+.top .sp{flex:1;}
+.who{text-align:right; font-size:12px; color:var(--muted);}
+.who b{display:block; color:var(--ink); font-size:13px;}
+.wrap{padding:26px; max-width:1400px; width:100%;}
+
+/* ── the pieces ────────────────────────────────────────────────────────── */
+.view{display:none;}
+.view.on{display:block; animation:fade .3s ease;}
+@keyframes fade{from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:none;}}
+
+.cards{display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); margin-bottom:22px;}
+.card{background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:18px 20px;}
+.card .k{font-size:10px; color:var(--muted-2); letter-spacing:.14em; text-transform:uppercase;}
+.card .v{font-family:'Outfit',sans-serif; font-size:30px; font-weight:900; margin-top:8px; letter-spacing:-.02em;}
+.card .n{font-size:11.5px; color:var(--muted); margin-top:5px; line-height:1.5;}
+.card.gold .v{color:var(--gold);}
+.card.green .v{color:var(--green);}
+.card.violet .v{color:var(--violet);}
+.card.blue .v{color:var(--blue);}
+
+.panel{background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:22px; margin-bottom:20px;}
+.panel > h2{font-family:'Outfit',sans-serif; font-size:16px; font-weight:800; margin-bottom:4px;}
+.panel > .lead{font-size:12.5px; color:var(--muted); line-height:1.65; margin-bottom:18px;}
+.panel-head{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px;}
+.panel-head h2{font-family:'Outfit',sans-serif; font-size:16px; font-weight:800; flex:1;}
+
+.btn{
+  padding:10px 18px; border:0; border-radius:10px; font-weight:800; font-size:12.5px; cursor:pointer;
+  background:linear-gradient(135deg,var(--gold),var(--gold-dim)); color:#0a0d16; transition:opacity .15s;
+}
+.btn:hover{opacity:.88;}
+.btn:disabled{opacity:.45; cursor:not-allowed;}
+.btn.ghost{background:var(--panel-2); color:var(--muted); border:1px solid var(--line-2);}
+.btn.ghost:hover{color:var(--ink);}
+.btn.sm{padding:6px 12px; font-size:11.5px; border-radius:8px;}
+.btn.danger{background:rgba(248,113,113,.12); color:var(--red); border:1px solid rgba(248,113,113,.3);}
+
+.field{margin-bottom:14px;}
+.field label{display:block; font-size:11px; color:var(--muted); margin-bottom:6px; font-weight:600;}
+.field input,.field select,.field textarea{
+  width:100%; background:var(--bg); border:1px solid var(--line-2); border-radius:10px;
+  padding:11px 13px; font-size:13.5px; color:var(--ink); outline:none; transition:border-color .15s;
+}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--gold);}
+.field textarea{resize:vertical; min-height:84px; line-height:1.6;}
+.grid2{display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(230px,1fr));}
+
+table{width:100%; border-collapse:collapse; font-size:13px;}
+th{
+  text-align:left; padding:10px 12px; font-size:10px; color:var(--muted-2);
+  letter-spacing:.12em; text-transform:uppercase; border-bottom:1px solid var(--line);
+}
+td{padding:13px 12px; border-bottom:1px solid var(--line); vertical-align:top;}
+tr:last-child td{border-bottom:0;}
+.tbl-wrap{overflow-x:auto;}
+
+.pill{display:inline-block; padding:3px 10px; border-radius:99px; font-size:10.5px; font-weight:800; letter-spacing:.04em;}
+.pill.gold{background:rgba(245,197,66,.12); color:var(--gold);}
+.pill.green{background:rgba(52,211,153,.12); color:var(--green);}
+.pill.red{background:rgba(248,113,113,.12); color:var(--red);}
+.pill.blue{background:rgba(96,165,250,.12); color:var(--blue);}
+.pill.violet{background:rgba(167,139,250,.12); color:var(--violet);}
+.pill.grey{background:var(--panel-2); color:var(--muted);}
+
+.empty{text-align:center; padding:54px 22px; color:var(--muted-2); font-size:13.5px; line-height:1.7;}
+.empty .ic{font-size:34px; display:block; margin-bottom:12px; opacity:.5;}
+
+.bar{height:7px; background:var(--panel-2); border-radius:99px; overflow:hidden; margin-top:9px;}
+.bar > i{display:block; height:100%; background:linear-gradient(90deg,var(--gold),var(--gold-dim)); border-radius:99px;}
+
+/* ── the hiring board ──────────────────────────────────────────────────── */
+/* Six columns, sized so they fit a 1440 screen beside the sidebar rather than
+   clipping the last one; narrower screens scroll the board horizontally. */
+.board{display:grid; gap:10px; grid-template-columns:repeat(6,minmax(172px,1fr)); overflow-x:auto; padding-bottom:8px;}
+.col{background:var(--panel); border:1px solid var(--line); border-radius:12px; min-height:220px; display:flex; flex-direction:column;}
+.col > header{
+  padding:12px 14px; border-bottom:1px solid var(--line); font-size:10.5px; font-weight:800;
+  letter-spacing:.12em; text-transform:uppercase; color:var(--muted); display:flex; gap:8px; align-items:center;
+}
+.col > header b{margin-left:auto; color:var(--ink); font-size:12px;}
+.col .body{padding:10px; display:flex; flex-direction:column; gap:9px; flex:1;}
+.cand{background:var(--panel-2); border:1px solid var(--line-2); border-radius:10px; padding:11px 12px; cursor:grab;}
+.cand:active{cursor:grabbing;}
+.cand.drag{opacity:.4;}
+.cand .nm{font-size:13px; font-weight:700;}
+.cand .mt{font-size:10.5px; color:var(--muted); margin-top:3px;}
+.col.over{border-color:var(--gold); background:rgba(245,197,66,.04);}
+
+/* ── modal ─────────────────────────────────────────────────────────────── */
+.sheet{position:fixed; inset:0; z-index:90; display:none; align-items:center; justify-content:center; padding:20px;}
+.sheet.on{display:flex;}
+.sheet .veil{position:absolute; inset:0; background:rgba(0,0,0,.78); backdrop-filter:blur(8px);}
+.sheet .box{
+  position:relative; width:min(660px,100%); max-height:88dvh; overflow-y:auto;
+  background:var(--panel); border:1px solid var(--line-2); border-radius:18px; padding:26px;
+  animation:lift .3s cubic-bezier(.2,.8,.2,1);
+}
+@keyframes lift{from{opacity:0; transform:translateY(20px) scale(.98);} to{opacity:1; transform:none;}}
+.sheet h3{font-family:'Outfit',sans-serif; font-size:18px; font-weight:900; margin-bottom:16px;}
+.sheet .acts{display:flex; gap:10px; justify-content:flex-end; margin-top:20px; flex-wrap:wrap;}
+
+.toast{
+  position:fixed; bottom:24px; left:50%; transform:translateX(-50%); z-index:120;
+  background:var(--panel-2); border:1px solid var(--line-2); border-radius:12px;
+  padding:13px 22px; font-size:13px; font-weight:600; box-shadow:0 18px 44px rgba(0,0,0,.6);
+  animation:toastin .25s ease;
+}
+.toast.ok{border-color:rgba(52,211,153,.4); color:var(--green);}
+.toast.err{border-color:rgba(248,113,113,.4); color:var(--red);}
+@keyframes toastin{from{opacity:0; transform:translate(-50%,14px);} to{opacity:1; transform:translate(-50%,0);}}
+
+/* ── phone ─────────────────────────────────────────────────────────────── */
+.burger{display:none; background:none; border:0; color:var(--ink); font-size:22px; cursor:pointer; padding:0 4px;}
+@media (max-width:900px){
+  body{display:block;}
+  .side{
+    position:fixed; left:0; top:0; bottom:0; z-index:60; transform:translateX(-100%);
+    transition:transform .28s ease; width:264px; flex-basis:264px;
+  }
+  .side.open{transform:none; box-shadow:0 0 60px rgba(0,0,0,.7);}
+  .main{height:auto;}
+  .burger{display:block;}
+  .wrap{padding:18px 16px 60px;}
+  .top{padding:14px 16px;}
+  .board{grid-template-columns:repeat(6,minmax(170px,1fr));}
+  .who{display:none;}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none !important; transition:none !important;}}
+</style>
+</head>
+<body>
+
+<aside class="side" id="side">
+  <div class="brand">
+    <b>Founder OS</b>
+    <span class="mono">The Entrepreneurship Network</span>
+  </div>
+  <nav class="nav" id="nav">
+    <div class="grp">Company</div>
+    <button data-v="overview" class="on"><span class="ic">&#9673;</span> Overview</button>
+    <button data-v="profile"><span class="ic">&#9635;</span> Startup profile</button>
+    <button data-v="team"><span class="ic">&#9781;</span> Team <span class="cnt" id="cntTeam">0</span></button>
+
+    <div class="grp">Hiring</div>
+    <button data-v="jobs"><span class="ic">&#9998;</span> Job posts <span class="cnt" id="cntJobs">0</span></button>
+    <button data-v="pipeline"><span class="ic">&#9776;</span> Pipeline <span class="cnt" id="cntApps">0</span></button>
+    <button data-v="talent"><span class="ic">&#9906;</span> Talent search</button>
+
+    <div class="grp">Capital</div>
+    <button data-v="fundraising"><span class="ic">&#9650;</span> Fundraising <span class="cnt" id="cntRounds">0</span></button>
+    <button data-v="dataroom"><span class="ic">&#9707;</span> Data room <span class="cnt" id="cntDocs">0</span></button>
+
+    <div class="grp">Support</div>
+    <button data-v="mentors"><span class="ic">&#9734;</span> Mentors <span class="cnt" id="cntBookings">0</span></button>
+  </nav>
+  <div class="foot">
+    <a href="/">&larr; TEN home</a>
+    <a href="/messages">Messages</a>
+    <a href="#" id="signOut">Sign out</a>
+  </div>
+</aside>
+
+<main class="main">
+  <header class="top">
+    <button class="burger" id="burger" aria-label="Menu">&#9776;</button>
+    <div>
+      <h1 id="viewTitle">Overview</h1>
+      <div class="sub" id="viewSub">Your startup at a glance</div>
+    </div>
+    <span class="sp"></span>
+    <div class="who"><b id="whoName">&mdash;</b><span id="whoStartup"></span></div>
+  </header>
+
+  <div class="wrap">
+
+    <!-- ── OVERVIEW ─────────────────────────────────────────────────────── -->
+    <section class="view on" id="v-overview">
+      <div class="cards" id="ovCards"></div>
+      <div class="grid2">
+        <div class="panel">
+          <h2>Hiring funnel</h2>
+          <p class="lead">Where your candidates are right now.</p>
+          <div id="ovFunnel"></div>
+        </div>
+        <div class="panel">
+          <h2>Fundraising</h2>
+          <p class="lead">Committed against target, across every round.</p>
+          <div id="ovRaise"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Where candidates come from</h2>
+        <p class="lead">Which TEN domains actually answer your posts.</p>
+        <div id="ovDomains"></div>
+      </div>
+    </section>
+
+    <!-- ── PROFILE ──────────────────────────────────────────────────────── -->
+    <section class="view" id="v-profile">
+      <div class="panel">
+        <h2>Startup profile</h2>
+        <p class="lead">
+          This is what an intern sees on your job posts and what an investor sees in your data room.
+          It writes both the founder record and the startup record, which used to hold different
+          answers to the same questions.
+        </p>
+        <form id="profileForm">
+          <div class="grid2">
+            <div class="field"><label>Startup name</label><input name="startupName" placeholder="Acme Labs"></div>
+            <div class="field"><label>Tagline</label><input name="tagline" placeholder="One line about what you build"></div>
+          </div>
+          <div class="field"><label>Description</label><textarea name="description" placeholder="What the company does, who it is for, and where it is going."></textarea></div>
+          <div class="grid2">
+            <div class="field"><label>Industry</label><input name="industry" placeholder="Fintech"></div>
+            <div class="field"><label>Stage</label>
+              <select name="stage">
+                <option value="">Select…</option>
+                <option>Idea</option><option>Prototype</option><option>Pre-revenue</option>
+                <option>Early revenue</option><option>Growth</option>
+              </select>
+            </div>
+            <div class="field"><label>Team size</label><input name="teamSize" type="number" min="1" value="1"></div>
+            <div class="field"><label>Founded</label><input name="foundedYear" type="number" min="1990" max="2100" placeholder="2024"></div>
+          </div>
+          <div class="grid2">
+            <div class="field"><label>Website</label><input name="website" placeholder="https://"></div>
+            <div class="field"><label>Location</label><input name="location" placeholder="Bengaluru, India"></div>
+            <div class="field"><label>Pitch deck URL</label><input name="pitchDeckUrl" placeholder="https://"></div>
+            <div class="field"><label>Funding raised so far</label><input name="fundingAmount" type="number" min="0" placeholder="0"></div>
+          </div>
+          <div class="grid2">
+            <div class="field"><label>LinkedIn</label><input name="linkedin" placeholder="https://linkedin.com/company/…"></div>
+            <div class="field"><label>Twitter / X</label><input name="twitter" placeholder="https://x.com/…"></div>
+            <div class="field"><label>GitHub</label><input name="github" placeholder="https://github.com/…"></div>
+          </div>
+          <button class="btn" type="submit">Save profile</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- ── JOBS ─────────────────────────────────────────────────────────── -->
+    <section class="view" id="v-jobs">
+      <div class="panel-head">
+        <h2>Job posts</h2>
+        <button class="btn" onclick="openJobForm()">+ New job post</button>
+      </div>
+      <div id="jobsList"></div>
+    </section>
+
+    <!-- ── PIPELINE ─────────────────────────────────────────────────────── -->
+    <section class="view" id="v-pipeline">
+      <div class="panel-head">
+        <h2>Hiring pipeline</h2>
+        <select id="pipeJobFilter" style="background:var(--panel);border:1px solid var(--line-2);border-radius:10px;padding:9px 12px;font-size:12.5px;">
+          <option value="">All job posts</option>
+        </select>
+        <button class="btn ghost" onclick="loadPipeline()">Refresh</button>
+      </div>
+      <p class="lead" style="color:var(--muted);font-size:12.5px;margin-bottom:16px;">
+        Drag a candidate between columns to move them. Moving someone to <b>Hired</b> adds them to your team.
+      </p>
+      <div class="board" id="board"></div>
+    </section>
+
+    <!-- ── TALENT ───────────────────────────────────────────────────────── -->
+    <section class="view" id="v-talent">
+      <div class="panel">
+        <h2>Talent search</h2>
+        <p class="lead">
+          Every intern on TEN, ranked by performance. You see the work record — domain, tenure,
+          attendance, performance — and not their contact details: sourcing someone into a job
+          post is how you reach them, and it keeps the conversation on the platform.
+        </p>
+        <div class="grid2" style="margin-bottom:6px;">
+          <div class="field"><label>Search</label><input id="tSearch" placeholder="Name, employee ID or domain"></div>
+          <div class="field"><label>Domain</label><select id="tDomain"><option value="">Any domain</option></select></div>
+          <div class="field"><label>Minimum performance</label>
+            <select id="tPerf">
+              <option value="">Any</option><option value="50">50% and up</option>
+              <option value="70">70% and up</option><option value="85">85% and up</option>
+            </select>
+          </div>
+          <div class="field"><label>Completion</label>
+            <select id="tDone"><option value="">Anyone</option><option value="true">Completed the internship</option></select>
+          </div>
+        </div>
+        <button class="btn" onclick="loadTalent(1)">Search</button>
+      </div>
+      <div id="talentList"></div>
+    </section>
+
+    <!-- ── FUNDRAISING ──────────────────────────────────────────────────── -->
+    <section class="view" id="v-fundraising">
+      <div class="panel-head">
+        <h2>Fundraising</h2>
+        <button class="btn" onclick="openRoundForm()">+ New round</button>
+      </div>
+      <div id="roundsList"></div>
+    </section>
+
+    <!-- ── DATA ROOM ────────────────────────────────────────────────────── -->
+    <section class="view" id="v-dataroom">
+      <div class="panel-head">
+        <h2>Data room</h2>
+        <button class="btn" onclick="openDocForm()">+ Add document</button>
+      </div>
+      <p class="lead" style="color:var(--muted);font-size:12.5px;margin-bottom:16px;">
+        <b>Private</b> is yours alone. <b>Shared</b> is what an investor in a round can be sent.
+        A cap table should not be shared by accident, so nothing here is shared unless you say so.
+      </p>
+      <div id="docsList"></div>
+    </section>
+
+    <!-- ── TEAM ─────────────────────────────────────────────────────────── -->
+    <section class="view" id="v-team">
+      <div class="panel-head">
+        <h2>Team</h2>
+        <button class="btn" onclick="openMemberForm()">+ Add member</button>
+      </div>
+      <div id="teamList"></div>
+    </section>
+
+    <!-- ── MENTORS ──────────────────────────────────────────────────────── -->
+    <section class="view" id="v-mentors">
+      <div class="panel">
+        <h2>Your sessions</h2>
+        <p class="lead">Requests and confirmed sessions with TEN's approved mentors.</p>
+        <div id="bookingsList"></div>
+      </div>
+      <div class="panel-head"><h2>Approved mentors</h2></div>
+      <div id="mentorsList"></div>
+    </section>
+
+  </div>
+</main>
+
+<div class="sheet" id="sheet" role="dialog" aria-modal="true">
+  <div class="veil" data-close></div>
+  <div class="box">
+    <h3 id="sheetTitle">&nbsp;</h3>
+    <div id="sheetBody"></div>
+    <div class="acts" id="sheetActs"></div>
+  </div>
+</div>
+
+<script src="/notify-orb.js" defer></script>
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   Founder OS — the client.
+
+   Every request goes to /api/founder-os/*, which resolves the founder from
+   the session. Nothing here sends a founderId, because nothing here should be
+   able to choose one.
+   ═══════════════════════════════════════════════════════════════════════ */
+"use strict";
+
+var API = '/api/founder-os';
+var DATA = { jobs: [], apps: [], rounds: [], docs: [], team: [], mentors: [], bookings: [], stages: [] };
+var ME = null;
+
+/* ── plumbing ──────────────────────────────────────────────────────────── */
+
+function esc(v){
+  return String(v == null ? '' : v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function money(n, cur){
+  var v = Number(n) || 0;
+  var sym = cur === 'USD' ? '$' : cur === 'EUR' ? '€' : '₹';
+  if (v >= 10000000) return sym + (v/10000000).toFixed(2).replace(/\.00$/,'') + ' Cr';
+  if (v >= 100000)   return sym + (v/100000).toFixed(2).replace(/\.00$/,'') + ' L';
+  if (v >= 1000)     return sym + (v/1000).toFixed(1).replace(/\.0$/,'') + 'k';
+  return sym + v;
+}
+
+function when(d){
+  if (!d) return '—';
+  var t = new Date(d);
+  return isNaN(t.getTime()) ? '—' : t.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
+}
+
+function toast(msg, kind){
+  var t = document.createElement('div');
+  t.className = 'toast ' + (kind || 'ok');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(function(){ t.remove(); }, 3200);
+}
+
+/**
+ * One fetch wrapper, so a signed-out session is handled once rather than in
+ * twenty places. A 401 or 403 here means the session went away or this account
+ * is not a founder — both send the reader to the login page rather than
+ * leaving a screen of empty panels with no explanation.
+ */
+async function api(path, opts){
+  var res = await fetch(API + path, Object.assign({
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' }
+  }, opts || {}));
+
+  if (res.status === 401) { window.location.href = '/founder-login'; return null; }
+  if (res.status === 403) {
+    toast('This account is not a founder account.', 'err');
+    return null;
+  }
+  var d = await res.json().catch(function(){ return { success:false, error:'The server sent something unreadable.' }; });
+  if (!d.success && d.error) toast(d.error, 'err');
+  return d;
+}
+
+/* ── navigation ────────────────────────────────────────────────────────── */
+
+var TITLES = {
+  overview:    ['Overview', 'Your startup at a glance'],
+  profile:     ['Startup profile', 'What interns and investors see'],
+  jobs:        ['Job posts', 'Roles you are hiring for'],
+  pipeline:    ['Hiring pipeline', 'Candidates, stage by stage'],
+  talent:      ['Talent search', "Every intern on TEN"],
+  fundraising: ['Fundraising', 'Rounds and the investors in them'],
+  dataroom:    ['Data room', 'Documents, private until you share them'],
+  team:        ['Team', 'Who is building this'],
+  mentors:     ['Mentors', 'Book time with an approved mentor']
+};
+
+var LOADED = {};
+
+function go(v){
+  document.querySelectorAll('.view').forEach(function(s){ s.classList.remove('on'); });
+  document.querySelectorAll('#nav button').forEach(function(b){ b.classList.toggle('on', b.dataset.v === v); });
+  var sec = document.getElementById('v-' + v);
+  if (sec) sec.classList.add('on');
+
+  var t = TITLES[v] || ['', ''];
+  document.getElementById('viewTitle').textContent = t[0];
+  document.getElementById('viewSub').textContent = t[1];
+  document.getElementById('side').classList.remove('open');
+  if (history.replaceState) history.replaceState(null, '', '#' + v);
+
+  // Each section loads the first time it is opened, then on demand. Loading
+  // all nine up front would fire nine queries for a reader who wanted one.
+  var loaders = {
+    overview: loadOverview, profile: loadProfile, jobs: loadJobs,
+    pipeline: loadPipeline, talent: function(){ if(!LOADED.talent) loadTalent(1); },
+    fundraising: loadRounds, dataroom: loadDocs, team: loadTeam, mentors: loadMentors
+  };
+  if (loaders[v]) { loaders[v](); LOADED[v] = true; }
+}
+
+document.getElementById('nav').addEventListener('click', function(e){
+  var b = e.target.closest('button[data-v]');
+  if (b) go(b.dataset.v);
+});
+document.getElementById('burger').addEventListener('click', function(){
+  document.getElementById('side').classList.toggle('open');
+});
+document.getElementById('signOut').addEventListener('click', function(e){
+  e.preventDefault();
+  fetch('/logout', { method:'POST', credentials:'same-origin' })
+    .finally(function(){ window.location.href = '/founder-login'; });
+});
+
+/* ── the modal ─────────────────────────────────────────────────────────── */
+
+var SHEET = document.getElementById('sheet');
+
+function sheet(title, bodyHtml, actions){
+  document.getElementById('sheetTitle').textContent = title;
+  document.getElementById('sheetBody').innerHTML = bodyHtml;
+  document.getElementById('sheetActs').innerHTML = '';
+  (actions || []).forEach(function(a){
+    var b = document.createElement('button');
+    b.className = 'btn' + (a.ghost ? ' ghost' : '') + (a.danger ? ' danger' : '');
+    b.textContent = a.label;
+    b.onclick = a.fn;
+    document.getElementById('sheetActs').appendChild(b);
+  });
+  SHEET.classList.add('on');
+}
+function closeSheet(){ SHEET.classList.remove('on'); }
+SHEET.addEventListener('click', function(e){ if (e.target.closest('[data-close]')) closeSheet(); });
+document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeSheet(); });
+
+/** Read a form inside the modal into a plain object. */
+function sheetValues(){
+  var out = {};
+  document.querySelectorAll('#sheetBody [name]').forEach(function(el){
+    out[el.name] = el.type === 'checkbox' ? el.checked : el.value;
+  });
+  return out;
+}
+
+/* ── overview ──────────────────────────────────────────────────────────── */
+
+async function loadOverview(){
+  var d = await api('/analytics');
+  if (!d || !d.success) return;
+
+  var h = d.hiring, f = d.fundraising, t = d.team, m = d.mentorship, dr = d.dataRoom;
+
+  document.getElementById('ovCards').innerHTML =
+    card('gold', 'Open roles', h.jobsOpen, h.jobsTotal + ' posted in total') +
+    card('blue', 'Candidates', h.applications, h.hired + ' hired · ' + h.conversionPct + '% conversion') +
+    card('green', 'Committed', money(f.totalRaised), 'of ' + money(f.totalTarget) + ' targeted') +
+    card('violet', 'Team', t.total, t.equityAllocated + '% equity allocated') +
+    card('', 'Mentor hours', m.hours, m.requested + ' request' + (m.requested === 1 ? '' : 's') + ' pending') +
+    card('', 'Data room', dr.documents, dr.shared + ' shared · ' + dr.views + ' views');
+
+  document.getElementById('cntJobs').textContent = h.jobsOpen;
+  document.getElementById('cntApps').textContent = h.applications;
+  document.getElementById('cntTeam').textContent = t.total;
+  document.getElementById('cntRounds').textContent = f.rounds;
+  document.getElementById('cntDocs').textContent = dr.documents;
+  document.getElementById('cntBookings').textContent = m.requested + m.confirmed;
+
+  var stageLabels = { applied:'Applied', shortlisted:'Shortlisted', interview:'Interview', offer:'Offer', hired:'Hired', rejected:'Not moving forward' };
+  var maxStage = Math.max(1, ...Object.values(h.byStage));
+  document.getElementById('ovFunnel').innerHTML = Object.keys(h.byStage).map(function(k){
+    var n = h.byStage[k] || 0;
+    return '<div style="margin-bottom:13px;">' +
+      '<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);">' +
+        '<span>' + esc(stageLabels[k] || k) + '</span><b style="color:var(--ink)">' + n + '</b></div>' +
+      '<div class="bar"><i style="width:' + Math.round((n / maxStage) * 100) + '%"></i></div></div>';
+  }).join('') || '<p class="empty">No candidates yet.</p>';
+
+  var raise = f.activeRound;
+  document.getElementById('ovRaise').innerHTML = raise
+    ? '<div style="font-family:Outfit,sans-serif;font-size:22px;font-weight:900;">' + esc(raise.name) + '</div>' +
+      '<div style="font-size:12px;color:var(--muted);margin-top:4px;">' + esc(raise.stage.replace(/_/g,' ')) + '</div>' +
+      '<div style="margin-top:16px;font-size:14px;">' +
+        '<b style="color:var(--green);font-size:20px;">' + money(raise.raisedAmount, raise.currency) + '</b>' +
+        '<span style="color:var(--muted);"> of ' + money(raise.targetAmount, raise.currency) + '</span></div>' +
+      '<div class="bar"><i style="width:' + Math.min(100, Math.round((raise.raisedAmount / (raise.targetAmount || 1)) * 100)) + '%"></i></div>' +
+      investorFunnelHtml(f.investorFunnel)
+    : '<p class="empty"><span class="ic">&#9650;</span>No round is open. Start one from Fundraising when you are ready to raise.</p>';
+
+  var doms = Object.keys(h.byDomain || {}).sort(function(a,b){ return h.byDomain[b] - h.byDomain[a]; });
+  document.getElementById('ovDomains').innerHTML = doms.length
+    ? '<div style="display:flex;gap:10px;flex-wrap:wrap;">' + doms.map(function(k){
+        return '<span class="pill grey">' + esc(k) + ' <b style="color:var(--gold)">' + h.byDomain[k] + '</b></span>';
+      }).join('') + '</div>'
+    : '<p class="empty">Nobody has applied yet.</p>';
+}
+
+function card(cls, k, v, n){
+  return '<div class="card ' + cls + '"><div class="k">' + esc(k) + '</div>' +
+    '<div class="v">' + esc(v) + '</div><div class="n">' + esc(n) + '</div></div>';
+}
+
+function investorFunnelHtml(fn){
+  var labels = { researching:'Researching', contacted:'Contacted', meeting:'Meeting', diligence:'Diligence', committed:'Committed', passed:'Passed' };
+  var keys = Object.keys(fn || {}).filter(function(k){ return fn[k] > 0; });
+  if (!keys.length) return '';
+  return '<div style="margin-top:18px;display:flex;gap:8px;flex-wrap:wrap;">' + keys.map(function(k){
+    return '<span class="pill ' + (k === 'committed' ? 'green' : k === 'passed' ? 'red' : 'grey') + '">' +
+      esc(labels[k] || k) + ' ' + fn[k] + '</span>';
+  }).join('') + '</div>';
+}
+
+/* ── profile ───────────────────────────────────────────────────────────── */
+
+async function loadProfile(){
+  var d = await api('/profile');
+  if (!d || !d.success) return;
+  var p = d.profile || {}, s = d.startup || {};
+  var f = document.getElementById('profileForm');
+  var socials = p.socials || {};
+  var set = function(n, v){ if (f[n]) f[n].value = v == null ? '' : v; };
+
+  set('startupName', p.startupName || s.startupName);
+  set('tagline', p.tagline);
+  set('description', p.description || s.description);
+  set('industry', s.industry);
+  set('stage', s.stage);
+  set('teamSize', p.teamSize || s.teamSize || 1);
+  set('foundedYear', p.foundedYear);
+  set('website', p.website || s.website);
+  set('location', p.location);
+  set('pitchDeckUrl', p.pitchDeckUrl);
+  set('fundingAmount', p.fundingAmount);
+  set('linkedin', socials.linkedin || s.linkedin);
+  set('twitter', socials.twitter);
+  set('github', socials.github);
+}
+
+document.getElementById('profileForm').addEventListener('submit', async function(e){
+  e.preventDefault();
+  var f = e.target;
+  var body = {
+    startupName: f.startupName.value, tagline: f.tagline.value, description: f.description.value,
+    industry: f.industry.value, stage: f.stage.value, teamSize: f.teamSize.value,
+    foundedYear: f.foundedYear.value, website: f.website.value, location: f.location.value,
+    pitchDeckUrl: f.pitchDeckUrl.value, fundingAmount: f.fundingAmount.value,
+    socials: { linkedin: f.linkedin.value, twitter: f.twitter.value, github: f.github.value }
+  };
+  var d = await api('/profile', { method:'PUT', body: JSON.stringify(body) });
+  if (d && d.success) {
+    toast('Profile saved.');
+    document.getElementById('whoStartup').textContent = body.startupName || '';
+  }
+});
+
+/* ── jobs ──────────────────────────────────────────────────────────────── */
+
+async function loadJobs(){
+  var d = await api('/jobs');
+  if (!d || !d.success) return;
+  DATA.jobs = d.jobs;
+  document.getElementById('cntJobs').textContent = d.jobs.filter(function(j){ return j.status === 'open'; }).length;
+
+  var sel = document.getElementById('pipeJobFilter');
+  sel.innerHTML = '<option value="">All job posts</option>' +
+    d.jobs.map(function(j){ return '<option value="' + j._id + '">' + esc(j.title) + '</option>'; }).join('');
+
+  document.getElementById('jobsList').innerHTML = d.jobs.length
+    ? d.jobs.map(jobCard).join('')
+    : '<div class="panel"><p class="empty"><span class="ic">&#9998;</span>' +
+      'No job posts yet. Post a role and TEN interns can apply to it.</p></div>';
+}
+
+function jobCard(j){
+  var sc = j.stageCounts || {};
+  var total = Object.keys(sc).reduce(function(s,k){ return s + sc[k]; }, 0);
+  var statusPill = { open:'green', draft:'grey', paused:'gold', closed:'red' }[j.status] || 'grey';
+  var comp = (j.compensationMin || j.compensationMax)
+    ? money(j.compensationMin) + ' – ' + money(j.compensationMax)
+    : (j.compensationNote || 'Not specified');
+
+  return '<div class="panel">' +
+    '<div class="panel-head">' +
+      '<h2>' + esc(j.title) + '</h2>' +
+      '<span class="pill ' + statusPill + '">' + esc(j.status) + '</span>' +
+    '</div>' +
+    '<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:14px;">' +
+      '<span>' + esc((j.employmentType || '').replace(/_/g,' ')) + '</span>' +
+      '<span>' + esc(j.workMode) + (j.location ? ' · ' + esc(j.location) : '') + '</span>' +
+      '<span>' + esc(comp) + '</span>' +
+      (j.equityOffered ? '<span>Equity ' + esc(j.equityOffered) + '</span>' : '') +
+      '<span>' + j.openings + ' opening' + (j.openings === 1 ? '' : 's') + '</span>' +
+      '<span>' + total + ' candidate' + (total === 1 ? '' : 's') + '</span>' +
+    '</div>' +
+    (j.description ? '<p style="font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:14px;white-space:pre-wrap;">' +
+      esc(j.description.slice(0, 400)) + (j.description.length > 400 ? '…' : '') + '</p>' : '') +
+    (j.skills && j.skills.length
+      ? '<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px;">' +
+        j.skills.map(function(s){ return '<span class="pill grey">' + esc(s) + '</span>'; }).join('') + '</div>'
+      : '') +
+    '<div style="display:flex;gap:9px;flex-wrap:wrap;">' +
+      '<button class="btn sm ghost" onclick="openJobForm(\'' + j._id + '\')">Edit</button>' +
+      (j.status === 'open'
+        ? '<button class="btn sm ghost" onclick="setJobStatus(\'' + j._id + '\',\'paused\')">Pause</button>'
+        : '<button class="btn sm ghost" onclick="setJobStatus(\'' + j._id + '\',\'open\')">Open</button>') +
+      '<button class="btn sm ghost" onclick="setJobStatus(\'' + j._id + '\',\'closed\')">Close</button>' +
+      '<button class="btn sm danger" onclick="deleteJob(\'' + j._id + '\')">Delete</button>' +
+    '</div>' +
+  '</div>';
+}
+
+function openJobForm(id){
+  var j = DATA.jobs.find(function(x){ return x._id === id; }) || {};
+  sheet(id ? 'Edit job post' : 'New job post',
+    '<div class="field"><label>Title *</label><input name="title" value="' + esc(j.title || '') + '" placeholder="Frontend Intern"></div>' +
+    '<div class="field"><label>Description</label><textarea name="description" placeholder="What they will work on, and what you are looking for.">' + esc(j.description || '') + '</textarea></div>' +
+    '<div class="grid2">' +
+      '<div class="field"><label>Domain</label><select name="domain">' + domainOptions(j.domain) + '</select></div>' +
+      '<div class="field"><label>Type</label><select name="employmentType">' +
+        opts(['internship','full_time','part_time','contract','co_founder'], j.employmentType) + '</select></div>' +
+      '<div class="field"><label>Work mode</label><select name="workMode">' +
+        opts(['remote','hybrid','onsite'], j.workMode) + '</select></div>' +
+      '<div class="field"><label>Location</label><input name="location" value="' + esc(j.location || '') + '"></div>' +
+      '<div class="field"><label>Stipend from</label><input name="compensationMin" type="number" min="0" value="' + (j.compensationMin || 0) + '"></div>' +
+      '<div class="field"><label>Stipend to</label><input name="compensationMax" type="number" min="0" value="' + (j.compensationMax || 0) + '"></div>' +
+      '<div class="field"><label>Equity offered</label><input name="equityOffered" value="' + esc(j.equityOffered || '') + '" placeholder="0.5%"></div>' +
+      '<div class="field"><label>Openings</label><input name="openings" type="number" min="1" value="' + (j.openings || 1) + '"></div>' +
+    '</div>' +
+    '<div class="field"><label>Skills (comma separated)</label><input name="skills" value="' + esc((j.skills || []).join(', ')) + '"></div>',
+    [
+      { label:'Cancel', ghost:true, fn: closeSheet },
+      { label: id ? 'Save changes' : 'Post job', fn: function(){ saveJob(id); } }
+    ]);
+}
+
+function opts(list, current){
+  return list.map(function(v){
+    return '<option value="' + v + '"' + (v === current ? ' selected' : '') + '>' +
+      esc(v.replace(/_/g,' ')) + '</option>';
+  }).join('');
+}
+
+var DOMAINS = [];
+function domainOptions(current){
+  return '<option value="">Any domain</option>' + DOMAINS.map(function(d){
+    return '<option' + (d === current ? ' selected' : '') + '>' + esc(d) + '</option>';
+  }).join('');
+}
+
+async function saveJob(id){
+  var v = sheetValues();
+  if (!v.title || !v.title.trim()) { toast('A job needs a title.', 'err'); return; }
+  v.skills = String(v.skills || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+  var d = id
+    ? await api('/jobs/' + id, { method:'PUT', body: JSON.stringify(v) })
+    : await api('/jobs', { method:'POST', body: JSON.stringify(v) });
+  if (d && d.success) { closeSheet(); toast(id ? 'Job updated.' : 'Job posted.'); loadJobs(); }
+}
+
+async function setJobStatus(id, status){
+  var d = await api('/jobs/' + id, { method:'PUT', body: JSON.stringify({ status: status }) });
+  if (d && d.success) { toast('Job ' + status + '.'); loadJobs(); }
+}
+
+function deleteJob(id){
+  var j = DATA.jobs.find(function(x){ return x._id === id; }) || {};
+  sheet('Delete this job post?',
+    '<p style="font-size:13.5px;color:var(--muted);line-height:1.7;">' +
+      'Deleting <b>' + esc(j.title || 'this job') + '</b> also removes every candidate in its pipeline. ' +
+      'If you only want to stop new applications, close it instead.</p>',
+    [
+      { label:'Cancel', ghost:true, fn: closeSheet },
+      { label:'Delete', danger:true, fn: async function(){
+        var d = await api('/jobs/' + id, { method:'DELETE' });
+        if (d && d.success) { closeSheet(); toast('Job deleted.'); loadJobs(); }
+      } }
+    ]);
+}
+
+/* ── pipeline ──────────────────────────────────────────────────────────── */
+
+var STAGE_LABEL = {
+  applied:'Applied', shortlisted:'Shortlisted', interview:'Interview',
+  offer:'Offer', hired:'Hired', rejected:'Not moving forward'
+};
+
+async function loadPipeline(){
+  if (!DATA.jobs.length) await loadJobs();
+  var jobId = document.getElementById('pipeJobFilter').value;
+  var d = await api('/applications' + (jobId ? '?jobId=' + jobId : ''));
+  if (!d || !d.success) return;
+  DATA.apps = d.applications;
+  DATA.stages = d.stages;
+  document.getElementById('cntApps').textContent = d.applications.length;
+  drawBoard();
+}
+
+document.getElementById('pipeJobFilter').addEventListener('change', loadPipeline);
+
+function drawBoard(){
+  var board = document.getElementById('board');
+  board.innerHTML = DATA.stages.map(function(st){
+    var inStage = DATA.apps.filter(function(a){ return a.stage === st; });
+    return '<div class="col" data-stage="' + st + '">' +
+      '<header>' + esc(STAGE_LABEL[st] || st) + '<b>' + inStage.length + '</b></header>' +
+      '<div class="body">' + (inStage.map(function(a){
+        var job = DATA.jobs.find(function(j){ return String(j._id) === String(a.jobId); });
+        return '<div class="cand" draggable="true" data-id="' + a._id + '" onclick="openCandidate(\'' + a._id + '\')">' +
+          '<div class="nm">' + esc(a.name || a.employeeId || 'Candidate') + '</div>' +
+          '<div class="mt">' + esc(a.domain || '') + (job ? ' · ' + esc(job.title) : '') + '</div>' +
+          (a.rating ? '<div class="mt" style="color:var(--gold)">' + '★'.repeat(a.rating) + '</div>' : '') +
+          (a.sourcedByFounder ? '<div class="mt" style="color:var(--violet)">Sourced by you</div>' : '') +
+        '</div>';
+      }).join('') || '<p style="font-size:11.5px;color:var(--muted-2);padding:8px 4px;">Nobody here.</p>') +
+      '</div></div>';
+  }).join('');
+
+  wireDragAndDrop();
+}
+
+/**
+ * Drag a candidate between columns.
+ *
+ * HTML5 drag-and-drop rather than pointer maths: the browser handles the ghost
+ * image, the drop targets and the keyboard-accessible fallback, and a hiring
+ * board is exactly the case it was designed for. Clicking a card still opens
+ * it, because a click is not a drag.
+ */
+function wireDragAndDrop(){
+  var dragging = null;
+
+  document.querySelectorAll('#board .cand').forEach(function(c){
+    c.addEventListener('dragstart', function(e){
+      dragging = c;
+      c.classList.add('drag');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', c.dataset.id);
+    });
+    c.addEventListener('dragend', function(){
+      if (dragging) dragging.classList.remove('drag');
+      dragging = null;
+      document.querySelectorAll('#board .col').forEach(function(col){ col.classList.remove('over'); });
+    });
+  });
+
+  document.querySelectorAll('#board .col').forEach(function(col){
+    col.addEventListener('dragover', function(e){ e.preventDefault(); col.classList.add('over'); });
+    col.addEventListener('dragleave', function(){ col.classList.remove('over'); });
+    col.addEventListener('drop', async function(e){
+      e.preventDefault();
+      col.classList.remove('over');
+      var id = e.dataTransfer.getData('text/plain');
+      var stage = col.dataset.stage;
+      var app = DATA.apps.find(function(a){ return a._id === id; });
+      if (!app || app.stage === stage) return;
+
+      var d = await api('/applications/' + id + '/stage', {
+        method:'POST', body: JSON.stringify({ stage: stage })
+      });
+      if (d && d.success) {
+        app.stage = stage;
+        drawBoard();
+        toast((app.name || 'Candidate') + ' → ' + (STAGE_LABEL[stage] || stage));
+        if (stage === 'hired') loadTeam();
+      }
+    });
+  });
+}
+
+function openCandidate(id){
+  var a = DATA.apps.find(function(x){ return x._id === id; });
+  if (!a) return;
+  var job = DATA.jobs.find(function(j){ return String(j._id) === String(a.jobId); });
+
+  sheet(a.name || a.employeeId || 'Candidate',
+    '<div style="font-size:12.5px;color:var(--muted);margin-bottom:16px;line-height:1.7;">' +
+      esc(a.employeeId || '') + (a.domain ? ' · ' + esc(a.domain) : '') +
+      (job ? '<br>Applied for <b style="color:var(--ink)">' + esc(job.title) + '</b>' : '') +
+      '<br>Applied ' + when(a.appliedAt || a.createdAt) +
+    '</div>' +
+    (a.coverNote ? '<div class="field"><label>Their note</label>' +
+      '<p style="font-size:13px;line-height:1.7;white-space:pre-wrap;">' + esc(a.coverNote) + '</p></div>' : '') +
+    '<div class="field"><label>Your rating</label><select name="rating">' +
+      [0,1,2,3,4,5].map(function(n){
+        return '<option value="' + n + '"' + (n === (a.rating||0) ? ' selected' : '') + '>' +
+          (n ? '★'.repeat(n) : 'Not rated') + '</option>';
+      }).join('') + '</select></div>' +
+    '<div class="field"><label>Private notes</label><textarea name="notes">' + esc(a.notes || '') + '</textarea></div>' +
+    '<div class="field"><label>Stage</label><select name="stage">' +
+      DATA.stages.map(function(s){
+        return '<option value="' + s + '"' + (s === a.stage ? ' selected' : '') + '>' + esc(STAGE_LABEL[s] || s) + '</option>';
+      }).join('') + '</select></div>' +
+    (a.history && a.history.length
+      ? '<div class="field"><label>History</label><div style="font-size:11.5px;color:var(--muted);line-height:1.8;">' +
+        a.history.slice(-8).map(function(hh){
+          return when(hh.at) + ' — ' + esc(STAGE_LABEL[hh.from] || hh.from || 'new') +
+            ' → ' + esc(STAGE_LABEL[hh.to] || hh.to);
+        }).join('<br>') + '</div></div>'
+      : ''),
+    [
+      { label:'Close', ghost:true, fn: closeSheet },
+      { label:'Save', fn: async function(){
+        var v = sheetValues();
+        await api('/applications/' + id, { method:'PUT', body: JSON.stringify({ rating: v.rating, notes: v.notes }) });
+        if (v.stage !== a.stage) {
+          await api('/applications/' + id + '/stage', { method:'POST', body: JSON.stringify({ stage: v.stage }) });
+        }
+        closeSheet(); toast('Saved.'); loadPipeline();
+      } }
+    ]);
+}
+
+/* ── talent ────────────────────────────────────────────────────────────── */
+
+async function loadTalent(page){
+  var q = new URLSearchParams();
+  var s = document.getElementById('tSearch').value.trim();
+  if (s) q.set('search', s);
+  if (document.getElementById('tDomain').value) q.set('domain', document.getElementById('tDomain').value);
+  if (document.getElementById('tPerf').value) q.set('minPerformance', document.getElementById('tPerf').value);
+  if (document.getElementById('tDone').value) q.set('completedOnly', 'true');
+  q.set('page', page || 1);
+
+  var d = await api('/talent?' + q.toString());
+  if (!d || !d.success) return;
+
+  document.getElementById('talentList').innerHTML = d.talent.length
+    ? '<div class="cards">' + d.talent.map(talentCard).join('') + '</div>' +
+      '<p style="font-size:12px;color:var(--muted-2);text-align:center;padding:14px;">' +
+        'Showing ' + d.talent.length + ' of ' + d.total + '.</p>'
+    : '<div class="panel"><p class="empty"><span class="ic">&#9906;</span>No intern matches that search.</p></div>';
+}
+
+function talentCard(t){
+  var name = t.name || t.fullName || 'TEN intern';
+  var perf = t.performanceScore || 0;
+  var att = t.attendancePercentage || 0;
+  return '<div class="card">' +
+    '<div style="font-size:15px;font-weight:800;">' + esc(name) + '</div>' +
+    '<div style="font-size:11.5px;color:var(--muted);margin-top:4px;">' +
+      esc(t.employeeId || '') + '</div>' +
+    '<div style="margin-top:11px;display:flex;gap:7px;flex-wrap:wrap;">' +
+      (t.domain ? '<span class="pill gold">' + esc(t.domain) + '</span>' : '') +
+      (t.tenure ? '<span class="pill grey">' + esc(t.tenure) + '</span>' : '') +
+      (t.internshipCompleted ? '<span class="pill green">Completed</span>' : '') +
+    '</div>' +
+    '<div style="margin-top:13px;font-size:11.5px;color:var(--muted);">Performance ' + perf + '% · Attendance ' + att + '%</div>' +
+    '<div class="bar"><i style="width:' + Math.min(100, perf) + '%"></i></div>' +
+    '<button class="btn sm" style="margin-top:14px;" onclick="openSource(\'' + esc(t.employeeId) + '\',\'' + esc(name) + '\')">' +
+      'Add to a pipeline</button>' +
+  '</div>';
+}
+
+function openSource(employeeId, name){
+  var open = DATA.jobs.filter(function(j){ return j.status === 'open'; });
+  if (!open.length) {
+    sheet('No open job post',
+      '<p style="font-size:13.5px;color:var(--muted);line-height:1.7;">' +
+        'Sourcing someone puts them into a job post’s pipeline, so there has to be one open first. ' +
+        'Post a role and come back.</p>',
+      [{ label:'Close', ghost:true, fn: closeSheet }]);
+    return;
+  }
+  sheet('Source ' + name,
+    '<div class="field"><label>Into which job post?</label><select name="jobId">' +
+      open.map(function(j){ return '<option value="' + j._id + '">' + esc(j.title) + '</option>'; }).join('') +
+    '</select></div>' +
+    '<div class="field"><label>Note to yourself</label><textarea name="note" placeholder="Why this person?"></textarea></div>',
+    [
+      { label:'Cancel', ghost:true, fn: closeSheet },
+      { label:'Add to pipeline', fn: async function(){
+        var v = sheetValues();
+        var d = await api('/talent/' + encodeURIComponent(employeeId) + '/source', {
+          method:'POST', body: JSON.stringify(v)
+        });
+        if (d && d.success) { closeSheet(); toast(name + ' added to the pipeline.'); loadPipeline(); }
+      } }
+    ]);
+}
+
+/* ── fundraising ───────────────────────────────────────────────────────── */
+
+var INV_LABEL = { researching:'Researching', contacted:'Contacted', meeting:'Meeting', diligence:'Diligence', committed:'Committed', passed:'Passed' };
+var INV_STAGES = ['researching','contacted','meeting','diligence','committed','passed'];
+
+async function loadRounds(){
+  var d = await api('/rounds');
+  if (!d || !d.success) return;
+  DATA.rounds = d.rounds;
+  document.getElementById('cntRounds').textContent = d.rounds.length;
+
+  document.getElementById('roundsList').innerHTML = d.rounds.length
+    ? d.rounds.map(roundCard).join('')
+    : '<div class="panel"><p class="empty"><span class="ic">&#9650;</span>' +
+      'No rounds yet. Create one to track a target, the investors in it, and what has been committed.</p></div>';
+}
+
+function roundCard(r){
+  var pct = r.targetAmount ? Math.min(100, Math.round((r.raisedAmount / r.targetAmount) * 100)) : 0;
+  var statusPill = { planning:'grey', raising:'gold', closed:'green', abandoned:'red' }[r.status] || 'grey';
+  return '<div class="panel">' +
+    '<div class="panel-head">' +
+      '<h2>' + esc(r.name) + '</h2>' +
+      '<span class="pill grey">' + esc((r.stage||'').replace(/_/g,' ')) + '</span>' +
+      '<span class="pill ' + statusPill + '">' + esc(r.status) + '</span>' +
+    '</div>' +
+    '<div style="font-size:15px;margin-bottom:4px;">' +
+      '<b style="color:var(--green);font-size:22px;font-family:Outfit,sans-serif;">' + money(r.raisedAmount, r.currency) + '</b>' +
+      '<span style="color:var(--muted);"> committed of ' + money(r.targetAmount, r.currency) + '</span>' +
+      (r.valuation ? '<span style="color:var(--muted-2);font-size:12px;"> · at ' + money(r.valuation, r.currency) + ' valuation</span>' : '') +
+    '</div>' +
+    '<div class="bar"><i style="width:' + pct + '%"></i></div>' +
+    '<div class="tbl-wrap" style="margin-top:18px;">' + investorTable(r) + '</div>' +
+    '<div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:16px;">' +
+      '<button class="btn sm" onclick="openInvestorForm(\'' + r._id + '\')">+ Add investor</button>' +
+      '<button class="btn sm ghost" onclick="openRoundForm(\'' + r._id + '\')">Edit round</button>' +
+      '<button class="btn sm danger" onclick="deleteRound(\'' + r._id + '\')">Delete</button>' +
+    '</div>' +
+  '</div>';
+}
+
+function investorTable(r){
+  if (!r.investors || !r.investors.length) {
+    return '<p style="font-size:12.5px;color:var(--muted-2);padding:10px 0;">No investor conversations in this round yet.</p>';
+  }
+  return '<table><thead><tr><th>Investor</th><th>Stage</th><th>Check</th><th>Next step</th><th>Last contact</th><th></th></tr></thead><tbody>' +
+    r.investors.map(function(i){
+      return '<tr>' +
+        '<td><b>' + esc(i.name || i.firm || 'Unnamed') + '</b>' +
+          (i.firm && i.name ? '<div style="font-size:11px;color:var(--muted)">' + esc(i.firm) + '</div>' : '') + '</td>' +
+        '<td><span class="pill ' + (i.stage === 'committed' ? 'green' : i.stage === 'passed' ? 'red' : 'grey') + '">' +
+          esc(INV_LABEL[i.stage] || i.stage) + '</span></td>' +
+        '<td>' + (i.checkSize ? money(i.checkSize, r.currency) : '—') + '</td>' +
+        '<td style="font-size:12px;color:var(--muted);">' + esc(i.nextStep || '—') + '</td>' +
+        '<td style="font-size:12px;color:var(--muted);">' + when(i.lastContactAt) + '</td>' +
+        '<td><button class="btn sm ghost" onclick="openInvestorForm(\'' + r._id + '\',\'' + i._id + '\')">Edit</button></td>' +
+      '</tr>';
+    }).join('') + '</tbody></table>';
+}
+
+function openRoundForm(id){
+  var r = DATA.rounds.find(function(x){ return x._id === id; }) || {};
+  sheet(id ? 'Edit round' : 'New round',
+    '<div class="field"><label>Name *</label><input name="name" value="' + esc(r.name || '') + '" placeholder="Seed 2026"></div>' +
+    '<div class="grid2">' +
+      '<div class="field"><label>Stage</label><select name="stage">' +
+        opts(['pre_seed','seed','series_a','series_b','bridge','grant','other'], r.stage) + '</select></div>' +
+      '<div class="field"><label>Status</label><select name="status">' +
+        opts(['planning','raising','closed','abandoned'], r.status) + '</select></div>' +
+      '<div class="field"><label>Target</label><input name="targetAmount" type="number" min="0" value="' + (r.targetAmount || 0) + '"></div>' +
+      '<div class="field"><label>Valuation</label><input name="valuation" type="number" min="0" value="' + (r.valuation || 0) + '"></div>' +
+      '<div class="field"><label>Currency</label><select name="currency">' + opts(['INR','USD','EUR'], r.currency || 'INR') + '</select></div>' +
+    '</div>' +
+    '<div class="field"><label>Notes</label><textarea name="notes">' + esc(r.notes || '') + '</textarea></div>' +
+    '<p style="font-size:11.5px;color:var(--muted-2);line-height:1.6;">' +
+      'Committed capital is the sum of the commitments you record against investors, not a number typed here — ' +
+      'so the two can never disagree.</p>',
+    [
+      { label:'Cancel', ghost:true, fn: closeSheet },
+      { label: id ? 'Save' : 'Create round', fn: async function(){
+        var v = sheetValues();
+        if (!v.name || !v.name.trim()) { toast('A round needs a name.', 'err'); return; }
+        var d = id
+          ? await api('/rounds/' + id, { method:'PUT', body: JSON.stringify(v) })
+          : await api('/rounds', { method:'POST', body: JSON.stringify(v) });
+        if (d && d.success) { closeSheet(); toast('Saved.'); loadRounds(); }
+      } }
+    ]);
+}
+
+function deleteRound(id){
+  sheet('Delete this round?',
+    '<p style="font-size:13.5px;color:var(--muted);line-height:1.7;">' +
+      'The investor conversations in it go too. Documents stay in the data room, unlinked.</p>',
+    [
+      { label:'Cancel', ghost:true, fn: closeSheet },
+      { label:'Delete', danger:true, fn: async function(){
+        var d = await api('/rounds/' + id, { method:'DELETE' });
+        if (d && d.success) { closeSheet(); toast('Round deleted.'); loadRounds(); }
+      } }
+    ]);
+}
+
+function openInvestorForm(roundId, investorId){
+  var r = DATA.rounds.find(function(x){ return x._id === roundId; }) || {};
+  var i = (r.investors || []).find(function(x){ return x._id === investorId; }) || {};
+  sheet(investorId ? 'Edit investor' : 'Add investor',
+    '<div class="grid2">' +
+      '<div class="field"><label>Name</label><input name="name" value="' + esc(i.name || '') + '"></div>' +
+      '<div class="field"><label>Firm</label><input name="firm" value="' + esc(i.firm || '') + '"></div>' +
+      '<div class="field"><label>Email</label><input name="email" value="' + esc(i.email || '') + '"></div>' +
+      '<div class="field"><label>Stage</label><select name="stage">' + opts(INV_STAGES, i.stage) + '</select></div>' +
+      '<div class="field"><label>Check size</label><input name="checkSize" type="number" min="0" value="' + (i.checkSize || 0) + '"></div>' +
+      '<div class="field"><label>Next step</label><input name="nextStep" value="' + esc(i.nextStep || '') + '"></div>' +
+    '</div>' +
+    '<div class="field"><label>Notes</label><textarea name="notes">' + esc(i.notes || '') + '</textarea></div>' +
+    '<p style="font-size:11.5px;color:var(--muted-2);line-height:1.6;">' +
+      'Setting the stage to <b>Committed</b> counts this check towards the round total.</p>',
+    [
+      { label:'Cancel', ghost:true, fn: closeSheet },
+      investorId
+        ? { label:'Remove', danger:true, fn: async function(){
+            var d = await api('/rounds/' + roundId + '/investors/' + investorId, { method:'DELETE' });
+            if (d && d.success) { closeSheet(); toast('Removed.'); loadRounds(); }
+          } }
+        : { label:'', ghost:true, fn: function(){} },
+      { label:'Save', fn: async function(){
+        var v = sheetValues();
+        if (investorId) v.investorId = investorId;
+        var d = await api('/rounds/' + roundId + '/investors', { method:'POST', body: JSON.stringify(v) });
+        if (d && d.success) { closeSheet(); toast('Saved.'); loadRounds(); }
+      } }
+    ].filter(function(a){ return a.label; }));
+}
+
+/* ── data room ─────────────────────────────────────────────────────────── */
+
+var DOC_LABEL = { pitch_deck:'Pitch deck', financials:'Financials', cap_table:'Cap table', legal:'Legal', product:'Product', metrics:'Metrics', other:'Other' };
+
+async function loadDocs(){
+  if (!DATA.rounds.length) { var rr = await api('/rounds'); if (rr && rr.success) DATA.rounds = rr.rounds; }
+  var d = await api('/dataroom');
+  if (!d || !d.success) return;
+  DATA.docs = d.documents;
+  document.getElementById('cntDocs').textContent = d.documents.length;
+
+  document.getElementById('docsList').innerHTML = d.documents.length
+    ? '<div class="panel"><div class="tbl-wrap"><table>' +
+      '<thead><tr><th>Document</th><th>Category</th><th>Round</th><th>Visibility</th><th>Views</th><th></th></tr></thead><tbody>' +
+      d.documents.map(function(x){
+        var round = DATA.rounds.find(function(r){ return String(r._id) === String(x.roundId); });
+        return '<tr>' +
+          '<td><b>' + esc(x.title) + '</b>' +
+            (x.url ? '<div style="font-size:11px;"><a href="' + esc(x.url) + '" target="_blank" rel="noopener" style="color:var(--gold)">Open</a></div>' : '') +
+            (x.note ? '<div style="font-size:11px;color:var(--muted);margin-top:3px;">' + esc(x.note) + '</div>' : '') + '</td>' +
+          '<td><span class="pill grey">' + esc(DOC_LABEL[x.category] || x.category) + '</span></td>' +
+          '<td style="font-size:12px;color:var(--muted);">' + esc(round ? round.name : '—') + '</td>' +
+          '<td><span class="pill ' + (x.visibility === 'shared' ? 'green' : 'grey') + '">' + esc(x.visibility) + '</span></td>' +
+          '<td style="font-size:12px;color:var(--muted);">' + (x.viewCount || 0) + '</td>' +
+          '<td><button class="btn sm ghost" onclick="openDocForm(\'' + x._id + '\')">Edit</button></td>' +
+        '</tr>';
+      }).join('') + '</tbody></table></div></div>'
+    : '<div class="panel"><p class="empty"><span class="ic">&#9707;</span>' +
+      'Nothing in the data room yet. Add your deck, your metrics and your cap table — and keep the cap table private.</p></div>';
+}
+
+function openDocForm(id){
+  var x = DATA.docs.find(function(d){ return d._id === id; }) || {};
+  sheet(id ? 'Edit document' : 'Add document',
+    '<div class="field"><label>Title *</label><input name="title" value="' + esc(x.title || '') + '"></div>' +
+    '<div class="field"><label>Link</label><input name="url" value="' + esc(x.url || '') + '" placeholder="https://"></div>' +
+    '<div class="grid2">' +
+      '<div class="field"><label>Category</label><select name="category">' +
+        opts(['pitch_deck','financials','cap_table','legal','product','metrics','other'], x.category) + '</select></div>' +
+      '<div class="field"><label>Visibility</label><select name="visibility">' +
+        '<option value="private"' + (x.visibility !== 'shared' ? ' selected' : '') + '>Private — only you</option>' +
+        '<option value="shared"' + (x.visibility === 'shared' ? ' selected' : '') + '>Shared — investors in a round</option>' +
+      '</select></div>' +
+      '<div class="field"><label>Round</label><select name="roundId"><option value="">Not tied to a round</option>' +
+        DATA.rounds.map(function(r){
+          return '<option value="' + r._id + '"' + (String(r._id) === String(x.roundId) ? ' selected' : '') + '>' + esc(r.name) + '</option>';
+        }).join('') + '</select></div>' +
+    '</div>' +
+    '<div class="field"><label>Note</label><textarea name="note">' + esc(x.note || '') + '</textarea></div>',
+    [
+      { label:'Cancel', ghost:true, fn: closeSheet },
+      { label: id ? 'Save' : 'Add', fn: async function(){
+        var v = sheetValues();
+        if (!v.title || !v.title.trim()) { toast('A document needs a title.', 'err'); return; }
+        var d = id
+          ? await api('/dataroom/' + id, { method:'PUT', body: JSON.stringify(v) })
+          : await api('/dataroom', { method:'POST', body: JSON.stringify(v) });
+        if (d && d.success) { closeSheet(); toast('Saved.'); loadDocs(); }
+      } }
+    ].concat(id ? [{ label:'Delete', danger:true, fn: async function(){
+      var d = await api('/dataroom/' + id, { method:'DELETE' });
+      if (d && d.success) { closeSheet(); toast('Deleted.'); loadDocs(); }
+    } }] : []));
+}
+
+/* ── team ──────────────────────────────────────────────────────────────── */
+
+var MEMBER_TYPE = { cofounder:'Co-founder', employee:'Employee', intern:'Intern', advisor:'Advisor', contractor:'Contractor' };
+
+async function loadTeam(){
+  var d = await api('/team');
+  if (!d || !d.success) return;
+  DATA.team = d.team;
+  document.getElementById('cntTeam').textContent = d.team.filter(function(m){ return m.status === 'active'; }).length;
+
+  document.getElementById('teamList').innerHTML = d.team.length
+    ? '<div class="panel">' +
+      '<p class="lead">' + d.equityAllocated + '% of equity allocated across the team.</p>' +
+      '<div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Role</th><th>Type</th><th>Equity</th><th>Status</th><th>Joined</th><th></th></tr></thead><tbody>' +
+      d.team.map(function(m){
+        return '<tr>' +
+          '<td><b>' + esc(m.name) + '</b>' + (m.email ? '<div style="font-size:11px;color:var(--muted)">' + esc(m.email) + '</div>' : '') + '</td>' +
+          '<td style="font-size:12.5px;">' + esc(m.role || '—') + '</td>' +
+          '<td><span class="pill grey">' + esc(MEMBER_TYPE[m.type] || m.type) + '</span></td>' +
+          '<td>' + (m.equity ? m.equity + '%' : '—') + '</td>' +
+          '<td><span class="pill ' + (m.status === 'active' ? 'green' : m.status === 'invited' ? 'gold' : 'grey') + '">' + esc(m.status) + '</span></td>' +
+          '<td style="font-size:12px;color:var(--muted);">' + when(m.joinedAt) + '</td>' +
+          '<td><button class="btn sm ghost" onclick="openMemberForm(\'' + m._id + '\')">Edit</button></td>' +
+        '</tr>';
+      }).join('') + '</tbody></table></div></div>'
+    : '<div class="panel"><p class="empty"><span class="ic">&#9781;</span>' +
+      'No team members yet. Anyone you move to <b>Hired</b> in the pipeline lands here automatically.</p></div>';
+}
+
+function openMemberForm(id){
+  var m = DATA.team.find(function(x){ return x._id === id; }) || {};
+  sheet(id ? 'Edit team member' : 'Add team member',
+    '<div class="grid2">' +
+      '<div class="field"><label>Name *</label><input name="name" value="' + esc(m.name || '') + '"></div>' +
+      '<div class="field"><label>Email</label><input name="email" value="' + esc(m.email || '') + '"></div>' +
+      '<div class="field"><label>Role</label><input name="role" value="' + esc(m.role || '') + '" placeholder="Head of Product"></div>' +
+      '<div class="field"><label>Type</label><select name="type">' +
+        opts(['cofounder','employee','intern','advisor','contractor'], m.type) + '</select></div>' +
+      '<div class="field"><label>Equity %</label><input name="equity" type="number" min="0" max="100" step="0.01" value="' + (m.equity || 0) + '"></div>' +
+      '<div class="field"><label>Status</label><select name="status">' + opts(['active','invited','alumni'], m.status) + '</select></div>' +
+    '</div>' +
+    '<div class="field"><label>Notes</label><textarea name="notes">' + esc(m.notes || '') + '</textarea></div>',
+    [
+      { label:'Cancel', ghost:true, fn: closeSheet },
+      { label: id ? 'Save' : 'Add', fn: async function(){
+        var v = sheetValues();
+        if (!v.name || !v.name.trim()) { toast('A team member needs a name.', 'err'); return; }
+        var d = id
+          ? await api('/team/' + id, { method:'PUT', body: JSON.stringify(v) })
+          : await api('/team', { method:'POST', body: JSON.stringify(v) });
+        if (d && d.success) { closeSheet(); toast('Saved.'); loadTeam(); }
+      } }
+    ].concat(id ? [{ label:'Remove', danger:true, fn: async function(){
+      var d = await api('/team/' + id, { method:'DELETE' });
+      if (d && d.success) { closeSheet(); toast('Removed.'); loadTeam(); }
+    } }] : []));
+}
+
+/* ── mentors ───────────────────────────────────────────────────────────── */
+
+async function loadMentors(){
+  var [mm, bb] = await Promise.all([api('/mentors'), api('/bookings')]);
+  if (mm && mm.success) DATA.mentors = mm.mentors;
+  if (bb && bb.success) DATA.bookings = bb.bookings;
+
+  var pending = DATA.bookings.filter(function(b){ return b.status === 'requested' || b.status === 'confirmed'; });
+  document.getElementById('cntBookings').textContent = pending.length;
+
+  document.getElementById('bookingsList').innerHTML = DATA.bookings.length
+    ? '<div class="tbl-wrap"><table><thead><tr><th>Topic</th><th>Mentor</th><th>When</th><th>Status</th><th></th></tr></thead><tbody>' +
+      DATA.bookings.map(function(b){
+        var pill = { requested:'gold', confirmed:'green', declined:'red', completed:'blue', cancelled:'grey' }[b.status] || 'grey';
+        return '<tr>' +
+          '<td><b>' + esc(b.topic) + '</b>' +
+            (b.agenda ? '<div style="font-size:11px;color:var(--muted);margin-top:3px;">' + esc(b.agenda.slice(0,120)) + '</div>' : '') + '</td>' +
+          '<td style="font-size:12.5px;">' + esc(b.mentorName || 'TEN Mentor') + '</td>' +
+          '<td style="font-size:12px;color:var(--muted);">' + when(b.requestedFor) + ' · ' + b.durationMins + ' min</td>' +
+          '<td><span class="pill ' + pill + '">' + esc(b.status) + '</span>' +
+            (b.meetingLink ? '<div style="font-size:11px;margin-top:4px;"><a href="' + esc(b.meetingLink) + '" target="_blank" rel="noopener" style="color:var(--gold)">Join</a></div>' : '') + '</td>' +
+          '<td>' + (['requested','confirmed'].indexOf(b.status) !== -1
+            ? '<button class="btn sm ghost" onclick="cancelBooking(\'' + b._id + '\')">Cancel</button>' : '') + '</td>' +
+        '</tr>';
+      }).join('') + '</tbody></table></div>'
+    : '<p class="empty">No sessions yet. Pick a mentor below and ask for time.</p>';
+
+  document.getElementById('mentorsList').innerHTML = DATA.mentors.length
+    ? '<div class="cards">' + DATA.mentors.map(function(m){
+        return '<div class="card">' +
+          '<div style="font-size:15px;font-weight:800;">' + esc(m.name) + '</div>' +
+          (m.headline ? '<div style="font-size:12px;color:var(--muted);margin-top:4px;">' + esc(m.headline) + '</div>' : '') +
+          (m.expertise.length
+            ? '<div style="margin-top:11px;display:flex;gap:6px;flex-wrap:wrap;">' +
+              m.expertise.slice(0,4).map(function(e){ return '<span class="pill grey">' + esc(e) + '</span>'; }).join('') + '</div>'
+            : '') +
+          '<div style="margin-top:12px;font-size:11.5px;color:var(--muted);">' +
+            (m.sessionRate ? money(m.sessionRate) + ' a session' : 'Free') +
+            ' · ' + Math.round(m.totalMentoringHours) + ' hours mentored</div>' +
+          '<button class="btn sm" style="margin-top:14px;" onclick="openBooking(\'' + m.userId + '\',\'' + esc(m.name) + '\')">Request a session</button>' +
+        '</div>';
+      }).join('') + '</div>'
+    : '<div class="panel"><p class="empty"><span class="ic">&#9734;</span>No approved mentors are available right now.</p></div>';
+}
+
+function openBooking(mentorId, mentorName){
+  // A datetime-local wants "YYYY-MM-DDTHH:mm" in LOCAL time. Building it from
+  // toISOString() would silently shift the default by the UTC offset.
+  var t = new Date(Date.now() + 24 * 3600 * 1000);
+  var pad = function(n){ return String(n).padStart(2, '0'); };
+  var local = t.getFullYear() + '-' + pad(t.getMonth()+1) + '-' + pad(t.getDate()) +
+              'T' + pad(t.getHours()) + ':' + pad(t.getMinutes());
+
+  sheet('Request a session with ' + mentorName,
+    '<div class="field"><label>Topic *</label><input name="topic" placeholder="Pricing our first enterprise deal"></div>' +
+    '<div class="field"><label>Agenda</label><textarea name="agenda" placeholder="What you want out of the session, and what you have tried."></textarea></div>' +
+    '<div class="grid2">' +
+      '<div class="field"><label>When *</label><input name="requestedFor" type="datetime-local" value="' + local + '"></div>' +
+      '<div class="field"><label>Length</label><select name="durationMins">' +
+        '<option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60">60 minutes</option></select></div>' +
+    '</div>',
+    [
+      { label:'Cancel', ghost:true, fn: closeSheet },
+      { label:'Send request', fn: async function(){
+        var v = sheetValues();
+        v.mentorId = mentorId;
+        v.mentorName = mentorName;
+        var d = await api('/bookings', { method:'POST', body: JSON.stringify(v) });
+        if (d && d.success) { closeSheet(); toast('Request sent to ' + mentorName + '.'); loadMentors(); }
+      } }
+    ]);
+}
+
+async function cancelBooking(id){
+  var d = await api('/bookings/' + id + '/cancel', { method:'POST' });
+  if (d && d.success) { toast('Session cancelled.'); loadMentors(); }
+}
+
+/* ── boot ──────────────────────────────────────────────────────────────── */
+
+(async function start(){
+  var me = await api('/me');
+  if (!me) return;
+  ME = me;
+  document.getElementById('whoName').textContent = (me.founder && me.founder.fullName) || 'Founder';
+  document.getElementById('whoStartup').textContent =
+    (me.startup && me.startup.startupName) || (me.profile && me.profile.startupName) || '';
+
+  // The domain list comes from the server, so a job post and a student
+  // registration can never offer two different sets of domains.
+  try {
+    var r = await fetch('/api/public/domains', { credentials:'same-origin' });
+    var dd = await r.json();
+    DOMAINS = ((dd && dd.domains) || []).map(function(d){ return d.name; });
+  } catch (e) { DOMAINS = []; }
+  document.getElementById('tDomain').innerHTML =
+    '<option value="">Any domain</option>' + DOMAINS.map(function(d){
+      return '<option>' + esc(d) + '</option>';
+    }).join('');
+
+  // Sections load lazily, but jobs are needed by three of them.
+  await loadJobs();
+
+  var initial = (location.hash || '#overview').slice(1);
+  go(TITLES[initial] ? initial : 'overview');
+})();
+</script>
+</body>
+</html>

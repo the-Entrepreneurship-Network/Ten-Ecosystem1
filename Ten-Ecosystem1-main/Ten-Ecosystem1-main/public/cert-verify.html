@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<!-- NEW FEATURE: Public Certificate Verification Page -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Certificate Verification — The Entrepreneurship Network</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--gold:#D4AF37;--gold-light:#f5c542;--dark:#0a0c14;--card:#10131c;--text:#e8dcc8;--muted:#9a8a6a;--success:#10b981;--error:#f43f5e;--blue:#3b82f6;--border:rgba(212,175,55,0.2)}
+body{font-family:'Inter',sans-serif;background:var(--dark);color:var(--text);min-height:100vh;overflow-x:hidden}
+.hero{background:linear-gradient(160deg,#0b0d14 0%,#1a1510 50%,#0b0d14 100%);padding:80px 20px 60px;text-align:center;position:relative;overflow:hidden}
+.hero::before{content:"";position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:radial-gradient(circle at center,rgba(212,175,55,0.03) 0%,transparent 50%);animation:pulse 8s ease-in-out infinite}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(212,175,55,0.08);border:1px solid var(--border);border-radius:100px;padding:8px 20px;font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:24px}
+.hero h1{font-family:'Playfair Display',serif;font-size:clamp(30px,5vw,48px);font-weight:800;color:#fff;margin-bottom:12px;line-height:1.1}
+.hero h1 span{color:var(--gold);display:block}
+.hero p{font-size:15px;color:var(--muted);max-width:480px;margin:0 auto;line-height:1.6}
+.search-section{max-width:620px;margin:-40px auto 0;padding:0 20px;position:relative;z-index:2}
+.search-card{background:linear-gradient(160deg,#0f1219,#131720);border:1px solid var(--border);border-radius:20px;padding:32px;box-shadow:0 20px 60px rgba(0,0,0,0.4)}
+.search-card h2{font-size:17px;font-weight:700;margin-bottom:4px;color:#fff}
+.search-card .sub{font-size:12px;color:var(--muted);margin-bottom:20px}
+.search-form{display:flex;gap:10px;align-items:stretch}
+.search-form input{flex:1;background:rgba(212,175,55,0.06);border:1px solid var(--border);border-radius:12px;padding:13px 16px;font-size:14px;color:#fff;font-family:'JetBrains Mono',monospace;letter-spacing:0.5px;transition:all 0.3s;outline:none}
+.search-form input::placeholder{color:#555;font-family:'Inter',sans-serif;letter-spacing:0}
+.search-form input:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(212,175,55,0.1)}
+.search-form button{background:linear-gradient(135deg,var(--gold),#c9a227);border:none;border-radius:12px;padding:13px 24px;font-size:14px;font-weight:700;color:#1a1a1a;cursor:pointer;transition:all 0.3s;white-space:nowrap}
+.search-form button:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(212,175,55,0.3)}
+.results-section{max-width:620px;margin:24px auto 60px;padding:0 20px;display:none}
+.results-card{background:linear-gradient(160deg,#0f1219,#131720);border:1px solid var(--border);border-radius:20px;padding:28px;animation:slideUp 0.4s ease}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.result-header{display:flex;align-items:center;gap:14px;margin-bottom:22px;padding-bottom:18px;border-bottom:1px solid rgba(255,255,255,0.06)}
+.result-icon{width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0}
+.result-icon.valid{background:rgba(16,185,129,0.12);color:var(--success)}
+.result-icon.invalid{background:rgba(244,63,94,0.12);color:var(--error)}
+.result-info h3{font-size:17px;font-weight:700;color:#fff}
+.result-info p{font-size:12px;color:var(--muted);margin-top:2px}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px}
+.detail-item{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:10px;padding:12px 14px}
+.detail-item .label{font-size:9px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+.detail-item .value{font-size:13px;font-weight:500;color:#fff;word-break:break-all}
+.detail-item .value.mono{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--gold)}
+.detail-full{grid-column:1/-1}
+.verification-badge{display:flex;align-items:center;gap:12px;padding:14px;border-radius:12px;margin-top:14px}
+.verification-badge.verified{background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2)}
+.verification-badge.invalid{background:rgba(244,63,94,0.08);border:1px solid rgba(244,63,94,0.2)}
+.vb-icon{font-size:28px}
+.vb-text{font-size:13px;font-weight:600}
+.vb-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.cert-type-badge{display:inline-block;padding:3px 12px;border-radius:99px;font-size:11px;font-weight:700;background:rgba(212,175,55,0.1);color:var(--gold);border:1px solid rgba(212,175,55,0.25)}
+.footer{text-align:center;padding:32px 20px;color:var(--muted);font-size:12px;border-top:1px solid rgba(255,255,255,0.04)}
+.footer a{color:var(--gold);text-decoration:none}
+.loading-spinner{display:inline-block;width:20px;height:20px;border:2px solid rgba(255,255,255,0.2);border-top-color:white;border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-badge">🔒 Secure Verification</div>
+  <h1>Certificate <span>Verification</span></h1>
+  <p>Verify the authenticity of any TEN internship certificate instantly.</p>
+</div>
+
+<div class="search-section">
+  <div class="search-card">
+    <h2>Enter Certificate ID</h2>
+    <div class="sub">Format: TEN-2026-EXP-K4M7R2 · TEN-2026-ND-XXXXX · TEN-2026-FEL-XXXXX</div>
+    <div class="search-form">
+      <input type="text" id="certIdInput" placeholder="TEN-2026-EXP-XXXXXX" onkeydown="if(event.key==='Enter') verifyCert()">
+      <button onclick="verifyCert()">Verify →</button>
+    </div>
+  </div>
+</div>
+
+<div class="results-section" id="resultsSection">
+  <div class="results-card" id="resultsCard"></div>
+</div>
+
+<div class="footer">
+  <p>This verification service is provided by <a href="/">The Entrepreneurship Network</a>.<br>Certificates are issued upon successful completion of the internship program.</p>
+</div>
+
+<script>
+// Check URL params on load
+const params = new URLSearchParams(window.location.search);
+const paramId = params.get('id') || params.get('certId');
+if (paramId) { document.getElementById('certIdInput').value = paramId; verifyCert(); }
+
+async function verifyCert() {
+  const certId = document.getElementById('certIdInput').value.trim().toUpperCase();
+  if (!certId) return;
+
+  const section = document.getElementById('resultsSection');
+  const card    = document.getElementById('resultsCard');
+  section.style.display = 'block';
+  card.innerHTML = `<span class="loading-spinner"></span> Verifying certificate...`;
+
+  try {
+    const r = await fetch(`/api/v2/certificates/verify/${encodeURIComponent(certId)}`);
+    const d = await r.json();
+
+    if (d.success && d.valid) {
+      const typeLabels = { expert: 'Expert Certificate', nano_degree: 'Nano Degree Certificate', fellowship: 'Fellowship Certificate' };
+      const typeLabel  = typeLabels[d.certificateType] || d.certificateType;
+      const issuedDate = d.issuedAt ? new Date(d.issuedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' }) : 'N/A';
+
+      card.innerHTML = `
+        <div class="result-header">
+          <div class="result-icon valid">✅</div>
+          <div class="result-info">
+            <h3>Certificate Valid</h3>
+            <p>This certificate has been verified as authentic</p>
+          </div>
+        </div>
+        <div class="detail-grid">
+          <div class="detail-item"><div class="label">Certificate Holder</div><div class="value">${d.studentName || '—'}</div></div>
+          <div class="detail-item"><div class="label">Domain</div><div class="value">${d.domain || '—'}</div></div>
+          <div class="detail-item"><div class="label">Certificate Type</div><div class="value"><span class="cert-type-badge">${typeLabel}</span></div></div>
+          <div class="detail-item"><div class="label">Issue Date</div><div class="value">${issuedDate}</div></div>
+          <div class="detail-item detail-full"><div class="label">Certificate ID</div><div class="value mono">${d.certificateId}</div></div>
+        </div>
+        <div class="verification-badge verified">
+          <div class="vb-icon">🏅</div>
+          <div>
+            <div class="vb-text" style="color:var(--success);">Verified — Issued by The Entrepreneurship Network</div>
+            <div class="vb-sub">This certificate is authentic and was issued upon successful internship completion.</div>
+          </div>
+        </div>`;
+    } else {
+      card.innerHTML = `
+        <div class="result-header">
+          <div class="result-icon invalid">❌</div>
+          <div class="result-info">
+            <h3>Certificate Not Found</h3>
+            <p>This certificate ID could not be verified</p>
+          </div>
+        </div>
+        <div class="verification-badge invalid">
+          <div class="vb-icon">⚠️</div>
+          <div>
+            <div class="vb-text" style="color:var(--error);">Invalid or unrecognised certificate</div>
+            <div class="vb-sub">Please check the certificate ID and try again. Contact hr@entrepreneurshipnetwork.net for support.</div>
+          </div>
+        </div>`;
+    }
+  } catch(e) {
+    card.innerHTML = `<div style="text-align:center;padding:20px;color:var(--muted);">Network error. Please try again.</div>`;
+  }
+}
+</script>
+</body>
+</html>

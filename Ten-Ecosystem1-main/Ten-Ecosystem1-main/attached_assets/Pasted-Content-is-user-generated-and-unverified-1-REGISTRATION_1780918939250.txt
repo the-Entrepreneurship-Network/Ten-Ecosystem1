@@ -1,0 +1,713 @@
+Content is user-generated and unverified.
+1
+REGISTRATION FIX + QUIZ ALL DOMAINS PROMPT
+Platform: The Entrepreneurship Network (TEN)
+Scope: Fix Registration + Implement Quiz in All 14 Domains
+Version: 1.0
+HOW TO USE THIS PROMPT: Give this to Replit AI and say: "Fix every issue described here exactly as written. Read ALL sections before writing a single line of code."
+
+⚠️ CRITICAL DEFENCE RULES
+NEVER delete or overwrite any existing working feature
+NEVER modify existing authentication or login system structure
+Only FIX and ADD — never replace
+All fixes must work across ALL 14 domains
+Test registration end-to-end before marking done
+Test quiz in minimum 3 different domains before marking done
+🐛 SECTION 1: REGISTRATION FAILED — FIX COMPLETELY
+Step 1 — Find the Exact Error
+Before writing any code, check the server logs:
+
+bash
+pm2 logs --lines 50
+Look for the exact error that fires when registration is attempted.
+Common causes to check and fix:
+
+Fix A — Registration Route Not Handling New Fields
+The registration form now sends these fields:
+
+firstName
+lastName
+email
+whatsappNumber
+college
+domain
+duration
+The existing registration route may not accept all of these.
+
+Fix the registration route:
+
+javascript
+// In the existing registration route (DO NOT replace the whole route)
+// ADD handling for new fields:
+
+router.post('/register', async (req, res) => {
+  try {
+    const {
+      firstName,
+      lastName,
+      name,           // fallback if name sent as one field
+      email,
+      password,
+      whatsappNumber,
+      whatsapp,       // fallback field name
+      college,
+      domain,
+      duration,
+      referralCode    // if referral system active
+    } = req.body
+
+    // Validate required fields
+    const studentName = name || `${firstName || ''} ${lastName || ''}`.trim()
+    const studentWhatsapp = whatsappNumber || whatsapp || ''
+
+    if (!studentName || !email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name and email are required'
+      })
+    }
+
+    // Check if email already exists — give specific message
+    const existingUser = await User.findOne({ email: email.toLowerCase() })
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'An account with this email already exists. Please login instead.'
+      })
+    }
+
+    // Generate employee ID
+    const domainCodes = {
+      'python_developer': 'PY',
+      'java_developer': 'JV',
+      'devops': 'DO',
+      'web_development': 'WD',
+      'mern_stack': 'MN',
+      'data_science': 'DS',
+      'cyber_security': 'CS',
+      'flutter': 'FL',
+      'software_engineering': 'SE',
+      'business_analyst': 'BA',
+      'venture_capital': 'VC',
+      'space_research': 'SR',
+      'vibe_coding': 'VB',
+      'hr_development': 'HR'
+    }
+    const domainKey = (domain || '').toLowerCase().replace(/ /g, '_')
+    const domainCode = domainCodes[domainKey] || 'GN'
+    const count = await User.countDocuments({ role: 'student' })
+    const employeeId = `TEN/${domainCode}/${1000 + count + 1}`
+
+    // Calculate internship end date based on duration
+    const startDate = new Date()
+    const durationDays = {
+      '45days': 45,
+      '1month': 30,
+      '3months': 90,
+      '6months': 180
+    }
+    const days = durationDays[duration] || 90
+    const endDate = new Date(startDate.getTime() + days * 24 * 60 * 60 * 1000)
+
+    // Create new user — save ALL fields
+    const newUser = new User({
+      name: studentName,
+      email: email.toLowerCase(),
+      password: password ? await bcryptjs.hash(password, 10) : undefined,
+      role: 'student',
+      whatsappNumber: studentWhatsapp,
+      college: college || '',
+      domain: domain || '',
+      duration: duration || '3months',
+      employeeId: employeeId,
+      startDate: startDate,
+      endDate: endDate,
+      isActive: true,
+      registeredAt: new Date()
+    })
+
+    await newUser.save()
+
+    // Handle referral if present
+    if (referralCode) {
+      try {
+        await processReferral(referralCode, newUser._id)
+      } catch (refErr) {
+        console.error('Referral processing failed (non-critical):', refErr)
+        // Do NOT fail registration because of referral error
+      }
+    }
+
+    // Initialize student coins
+    try {
+      await StudentCoin.create({
+        student_id: newUser._id,
+        total_coins: 0,
+        coins_history: []
+      })
+    } catch (coinErr) {
+      console.error('Coin init failed (non-critical):', coinErr)
+    }
+
+    // Assign task track based on domain + duration
+    try {
+      await assignTaskTrack(newUser._id, domainKey, duration || '3months')
+    } catch (taskErr) {
+      console.error('Task assignment failed (non-critical):', taskErr)
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { id: newUser._id, role: 'student' },
+      process.env.JWT_SECRET,
+      { expiresIn: '30d' }
+    )
+
+    return res.status(201).json({
+      success: true,
+      message: 'Registration successful! Welcome to TEN.',
+      token: token,
+      user: {
+        id: newUser._id,
+        name: newUser.name,
+        email: newUser.email,
+        role: newUser.role,
+        employeeId: newUser.employeeId,
+        domain: newUser.domain,
+        duration: newUser.duration
+      }
+    })
+
+  } catch (error) {
+    console.error('Registration error:', error)
+
+    // Give specific error messages based on error type
+    if (error.code === 11000) {
+      // Duplicate key error
+      return res.status(400).json({
+        success: false,
+        message: 'An account with this email already exists.'
+      })
+    }
+
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(e => e.message)
+      return res.status(400).json({
+        success: false,
+        message: messages.join('. ')
+      })
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: 'Registration failed. Please try again. If the problem persists, contact support.'
+    })
+  }
+})
+Fix B — User Model Missing New Fields
+Add these fields to the User/Student model if they don't exist:
+
+javascript
+// ADD to existing User model — do not replace existing fields
+whatsappNumber: { type: String, default: '' },
+college: { type: String, default: '' },
+domain: { type: String, default: '' },
+duration: {
+  type: String,
+  enum: ['45days', '1month', '3months', '6months'],
+  default: '3months'
+},
+employeeId: { type: String, unique: true, sparse: true },
+startDate: { type: Date, default: Date.now },
+endDate: { type: Date },
+isActive: { type: Boolean, default: true },
+registeredAt: { type: Date, default: Date.now }
+Fix C — Frontend Error Handling
+Update the registration form's error handling to show specific messages:
+
+javascript
+// In register.html — fix the error display
+
+async function submitRegistration(formData) {
+  try {
+    const response = await fetch('/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(formData)
+    })
+
+    const data = await response.json()
+
+    if (data.success) {
+      // Save token
+      localStorage.setItem('token', data.token)
+      localStorage.setItem('user', JSON.stringify(data.user))
+      // Redirect to dashboard
+      window.location.href = '/student-dashboard.html'
+    } else {
+      // Show SPECIFIC error message — not generic "Registration Failed"
+      showError(data.message || 'Registration failed. Please try again.')
+    }
+
+  } catch (error) {
+    showError('Network error. Please check your connection and try again.')
+  }
+}
+
+function showError(message) {
+  // Show as a visible inline error, not just an alert popup
+  const errorDiv = document.getElementById('error-message')
+  if (errorDiv) {
+    errorDiv.textContent = message
+    errorDiv.style.display = 'block'
+    errorDiv.style.color = '#ef4444'
+    errorDiv.style.padding = '12px'
+    errorDiv.style.borderRadius = '8px'
+    errorDiv.style.background = 'rgba(239,68,68,0.1)'
+    errorDiv.style.marginTop = '12px'
+  } else {
+    alert(message) // fallback
+  }
+}
+Fix D — Task Track Assignment After Registration
+javascript
+// NEW FEATURE: Assign task track on registration
+async function assignTaskTrack(studentId, domain, duration) {
+  // Get all tasks for this domain + duration
+  const tasks = await DomainTask.find({
+    domain: domain,
+    duration_type: duration
+  }).sort({ week_number: 1 })
+
+  if (tasks.length === 0) {
+    console.log(`No tasks found for domain: ${domain}, duration: ${duration}`)
+    return
+  }
+
+  // Create progress records — Week 1 available, rest locked
+  const progressRecords = tasks.map((task, index) => ({
+    student_id: studentId,
+    task_id: task._id,
+    status: index === 0 ? 'available' : 'locked',
+    video_watched_percent: 0,
+    quiz_attempts: 0,
+    quiz_passed: false
+  }))
+
+  await StudentTaskProgress.insertMany(progressRecords, { ordered: false })
+  console.log(`Assigned ${tasks.length} tasks to student ${studentId}`)
+}
+📋 SECTION 2: QUIZ SYSTEM — ALL 14 DOMAINS
+The Problem in Detail
+Currently the quiz system is only working in some domains.
+In domains like Cyber Security, Space Research, Vibe Coding, etc.,
+students see the video but then nothing happens — no quiz appears.
+
+This must be fixed so that in EVERY domain, EVERY task follows this flow:
+
+Video loads → Student watches → 80% watched → Quiz button appears →
+Student takes quiz → Passes → Coins awarded → Next week unlocks
+Fix 1 — Ensure Quiz Questions Exist for All 14 Domains
+Check each domain and seed 30 questions per task if missing.
+
+Domains that MUST have quiz questions:
+
+For EACH domain below, generate 30 hard questions per task.
+Questions must be based on the video content for that specific task.
+
+1.  python_developer     — all weeks, all durations
+2.  java_developer       — all weeks, all durations
+3.  devops               — all weeks, all durations
+4.  web_development      — all weeks, all durations
+5.  mern_stack           — all weeks, all durations
+6.  data_science         — all weeks, all durations
+7.  cyber_security       — all weeks, all durations
+8.  flutter              — all weeks, all durations
+9.  software_engineering — all weeks, all durations
+10. business_analyst     — all weeks, all durations
+11. venture_capital      — all weeks, all durations
+12. space_research       — all weeks, all durations
+13. vibe_coding          — all weeks, all durations
+14. hr_development       — all weeks, all durations
+For each domain that is missing questions, run:
+
+javascript
+// Check which domains are missing questions
+async function auditQuizQuestions() {
+  const domains = [
+    'python_developer', 'java_developer', 'devops',
+    'web_development', 'mern_stack', 'data_science',
+    'cyber_security', 'flutter', 'software_engineering',
+    'business_analyst', 'venture_capital', 'space_research',
+    'vibe_coding', 'hr_development'
+  ]
+
+  for (const domain of domains) {
+    const tasks = await DomainTask.find({ domain })
+    let missingCount = 0
+
+    for (const task of tasks) {
+      const questionCount = await QuizQuestion.countDocuments({
+        task_id: task._id
+      })
+      if (questionCount < 30) {
+        missingCount++
+        console.log(`MISSING: ${domain} Week ${task.week_number} 
+          (${duration}) has only ${questionCount}/30 questions`)
+      }
+    }
+
+    if (missingCount === 0) {
+      console.log(`✅ ${domain} — all questions present`)
+    } else {
+      console.log(`❌ ${domain} — ${missingCount} tasks missing questions`)
+    }
+  }
+}
+Fix 2 — Quiz Trigger in Every Domain Task Card
+The quiz must appear in EVERY domain's task card after 80% video watch.
+Check the task card HTML/JS and ensure this logic exists for ALL domains:
+
+javascript
+// NEW FEATURE: Universal Quiz Trigger
+// This must run in EVERY domain's task card — not just specific ones
+
+// YouTube IFrame API — track video progress
+let player
+let quizTriggered = false
+
+function onYouTubeIframeAPIReady() {
+  player = new YT.Player('youtube-player', {
+    events: {
+      onStateChange: onPlayerStateChange,
+      onReady: onPlayerReady
+    }
+  })
+}
+
+function onPlayerReady(event) {
+  // Poll video progress every 5 seconds
+  setInterval(() => {
+    if (player && player.getCurrentTime && player.getDuration) {
+      const currentTime = player.getCurrentTime()
+      const duration = player.getDuration()
+      if (duration > 0) {
+        const percent = (currentTime / duration) * 100
+        updateVideoProgress(percent)
+
+        if (percent >= 80 && !quizTriggered) {
+          quizTriggered = true
+          unlockQuizButton()
+          saveVideoProgress(percent)
+        }
+      }
+    }
+  }, 5000)
+}
+
+function unlockQuizButton() {
+  const quizBtn = document.getElementById('start-quiz-btn')
+  const lockedMsg = document.getElementById('watch-video-message')
+
+  if (quizBtn) {
+    quizBtn.disabled = false
+    quizBtn.style.opacity = '1'
+    quizBtn.style.cursor = 'pointer'
+    quizBtn.textContent = '🎯 Start Quiz'
+  }
+
+  if (lockedMsg) {
+    lockedMsg.style.display = 'none'
+  }
+
+  // Show notification
+  showToast('✅ Video complete! You can now take the quiz.')
+}
+
+async function saveVideoProgress(percent) {
+  const token = getToken()
+  const taskId = getCurrentTaskId()
+
+  await fetch(`/api/v2/tasks/${taskId}/video-progress`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ percent: Math.round(percent) })
+  })
+}
+Fix 3 — Universal Fallback When No Questions
+For tasks that still have no questions seeded:
+
+javascript
+// GET /api/v2/quiz/:taskId/questions
+async function getQuizQuestions(taskId, studentId) {
+  const questions = await QuizQuestion.find({ task_id: taskId })
+
+  if (questions.length >= 10) {
+    // Normal quiz flow
+    const weekNumber = await getStudentWeekNumber(studentId, taskId)
+    const questionCount = getQuestionCountForWeek(weekNumber)
+    const shuffled = questions.sort(() => Math.random() - 0.5)
+    return {
+      mode: 'quiz',
+      questions: shuffled.slice(0, questionCount)
+    }
+  } else {
+    // Fallback: auto-approve after video
+    return {
+      mode: 'fallback',
+      message: 'Quiz coming soon! You have been auto-approved for this task.',
+      auto_approve: true
+    }
+  }
+}
+Fix 4 — Domain-Specific Quiz Questions
+Generate 30 hard questions per task for every domain.
+Questions MUST be based on the specific video URL for that task.
+
+Question generation rules per domain type:
+
+Technical domains (Python, Java, DevOps, Web Dev, MERN, Data Science, Cyber Security, Flutter, Software Engineering, Vibe Coding):
+
+Questions test code understanding, command usage, error identification
+Include code snippets in questions where relevant
+Wrong options must be syntactically valid but semantically wrong
+Example: "What is the output of this code?" type questions
+Business domains (Business Analyst, Venture Capital, HR Development):
+
+Questions test concept application, case analysis, decision making
+Include scenario-based questions ("A startup has X problem, what should...")
+Wrong options must be plausible business decisions
+No pure definition questions
+Research domains (Space Research):
+
+Questions test scientific understanding and data interpretation
+Include calculation-based questions where relevant
+Wrong options must be scientifically plausible but incorrect
+Fix 5 — Quiz UI in Task Card (Universal Template)
+Every task card in every domain must have this quiz section:
+
+html
+<!-- Quiz section in task card — universal for all domains -->
+<div class="quiz-section" id="quiz-section-{{taskId}}">
+
+  <!-- Step 1: Watch video message (shown before 80%) -->
+  <div id="watch-video-message" class="watch-message">
+    <span>🎬 Watch the video above to unlock the quiz</span>
+    <div class="video-progress-bar">
+      <div class="progress-fill" id="video-progress-fill"></div>
+    </div>
+    <span id="video-progress-text">0% watched</span>
+  </div>
+
+  <!-- Step 2: Start quiz button (unlocks at 80%) -->
+  <button
+    id="start-quiz-btn"
+    class="quiz-btn"
+    disabled
+    onclick="startQuizWithCamera('{{taskId}}')"
+  >
+    🔒 Watch 80% of video to unlock quiz
+  </button>
+
+  <!-- Step 3: Quiz result (shown after submission) -->
+  <div id="quiz-result" style="display:none">
+    <div id="result-pass" style="display:none">
+      ✅ Passed! <span id="score-display"></span>
+      <span id="coins-earned-display"></span>
+    </div>
+    <div id="result-fail" style="display:none">
+      ❌ Not quite. <span id="score-display-fail"></span>
+      <button onclick="retryQuiz('{{taskId}}')">Try Again</button>
+    </div>
+  </div>
+
+</div>
+Fix 6 — Camera + Quiz Flow (Universal)
+This must work in EVERY domain:
+
+javascript
+// NEW FEATURE: Universal Quiz Start with Camera
+async function startQuizWithCamera(taskId) {
+  // Step 1: Request camera
+  let cameraStream = null
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user' },
+      audio: false
+    })
+  } catch (err) {
+    alert('Camera access is required to take this quiz. Please allow camera and try again.')
+    return
+  }
+
+  // Step 2: Show camera preview
+  showCameraPreview(cameraStream)
+
+  // Step 3: Load questions for this task
+  const token = getToken()
+  const response = await fetch(`/api/v2/quiz/${taskId}/questions`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+  const data = await response.json()
+
+  if (data.mode === 'fallback') {
+    // No questions yet — auto approve
+    stopCamera(cameraStream)
+    await autoApproveTask(taskId)
+    showSuccess(data.message)
+    return
+  }
+
+  // Step 4: Start quiz with questions
+  startQuizUI(data.questions, taskId, cameraStream)
+}
+Fix 7 — Question Count Per Week (All Domains)
+javascript
+// Universal question count based on week number
+function getQuestionCountForWeek(weekNumber) {
+  if (weekNumber <= 3) return 10      // 15 min timer
+  if (weekNumber <= 6) return 15      // 20 min timer
+  if (weekNumber <= 9) return 20      // 25 min timer
+  if (weekNumber <= 12) return 25     // 30 min timer
+  return 30                           // 40 min timer (6-month extended)
+}
+
+function getTimerForWeek(weekNumber) {
+  if (weekNumber <= 3) return 15 * 60   // 15 minutes in seconds
+  if (weekNumber <= 6) return 20 * 60
+  if (weekNumber <= 9) return 25 * 60
+  if (weekNumber <= 12) return 30 * 60
+  return 40 * 60
+}
+
+function getPassScoreForWeek(weekNumber, totalQuestions) {
+  let passPct = 0.60  // default 60%
+  if (weekNumber > 3) passPct = 0.65
+  if (weekNumber > 6) passPct = 0.70
+  if (weekNumber > 9) passPct = 0.75
+  if (weekNumber > 12) passPct = 0.80
+  return Math.ceil(totalQuestions * passPct)
+}
+Fix 8 — Sample Questions for Each Domain
+Generate domain-specific hard questions for Week 1 of each domain.
+These are examples of the quality required:
+
+Cyber Security — Week 1 (Linux for Security):
+
+json
+{
+  "question": "A penetration tester runs 'ls -la /etc/passwd' and sees permissions '-rw-r--r--'. What does this mean?",
+  "options": {
+    "A": "Only root can read and write; others have no access",
+    "B": "Root can read/write; group and others can only read",
+    "C": "Everyone can read and write the file",
+    "D": "The file is executable by all users"
+  },
+  "correct": "B",
+  "explanation": "'-rw-r--r--' means owner (root) has read+write, group has read-only, others have read-only. No execute permissions for anyone."
+}
+Data Science — Week 1 (Pandas/NumPy):
+
+json
+{
+  "question": "df.groupby('category')['sales'].transform('mean') returns what compared to df.groupby('category')['sales'].mean()?",
+  "options": {
+    "A": "Identical results in the same shape",
+    "B": "transform returns a Series with same index as df; mean returns grouped summary",
+    "C": "transform is faster than mean for large DataFrames",
+    "D": "They are interchangeable with no difference"
+  },
+  "correct": "B",
+  "explanation": "transform preserves the original DataFrame's index shape, broadcasting values back. mean() returns a reduced DataFrame with one row per group."
+}
+Space Research — Week 1:
+
+json
+{
+  "question": "A satellite in Low Earth Orbit (LEO) at 400km altitude has an orbital period of approximately 92 minutes. If moved to 800km, the period will:",
+  "options": {
+    "A": "Decrease because higher altitude means less air resistance",
+    "B": "Stay the same because orbital period depends only on Earth's mass",
+    "C": "Increase because orbital velocity decreases at higher altitudes",
+    "D": "Double because the altitude doubled"
+  },
+  "correct": "C",
+  "explanation": "By Kepler's third law, orbital period increases with altitude. At 800km the period is ~100 minutes. Higher orbits = slower velocity = longer period."
+}
+📋 SECTION 3: COMBINED REGISTRATION + TASK ASSIGNMENT TEST
+After fixing registration, verify this complete flow works:
+
+1. Student fills form with ALL fields
+   (name, email, password, whatsapp, college, domain, duration)
+       ↓
+2. POST /api/register called
+       ↓
+3. Email uniqueness checked → specific error if duplicate
+       ↓
+4. User saved with ALL fields including employeeId
+       ↓
+5. StudentCoin record created (0 coins)
+       ↓
+6. Task track assigned (domain + duration tasks)
+       ↓
+7. JWT token returned
+       ↓
+8. Student redirected to dashboard
+       ↓
+9. Dashboard shows their domain, duration, Week 1 task available
+       ↓
+10. Task card shows video + locked quiz button
+        ↓
+11. Student watches 80% → quiz button unlocks
+        ↓
+12. Camera requested → quiz starts
+        ↓
+13. Student passes → coins awarded → Week 2 unlocks
+Every step in this chain must work end-to-end.
+
+✅ FINAL CHECKLIST
+Registration Fix
+ Registration works for all 14 domains
+ Registration works for all 4 duration types
+ Duplicate email shows: "Account already exists. Please login."
+ Missing fields show specific error messages
+ Server error shows helpful message (not "Registration Failed")
+ All new fields saved to database (college, whatsapp, domain, duration)
+ Employee ID auto-generated correctly per domain
+ Student coins initialized after registration
+ Task track assigned immediately after registration
+ JWT token returned and stored in localStorage
+ Student redirected to dashboard after successful registration
+ Error shown inline on page, not just as browser alert
+Quiz System — All Domains
+ Quiz questions exist for all 14 domains
+ All 4 duration tracks have questions for all domains
+ Video 80% watch tracking works in all domain task cards
+ Quiz button unlocks at 80% in every domain
+ Camera permission requested before quiz in every domain
+ Camera denied = quiz blocked with clear message
+ Camera preview shows during quiz in all domains
+ Question count scales by week (10→15→20→25→30)
+ Timer counts down in all domains
+ Pass = coins awarded + next week unlocks in all domains
+ Fail = score shown + try again in all domains
+ 3 fails = 24-hour lock in all domains
+ Fallback (auto-approve) works when no questions available
+ Quiz tested in minimum these domains:
+ Python Developer
+ Cyber Security
+ Data Science
+ Space Research
+ HR Development
+End-to-End Test
+ New student can register successfully
+ Student lands on dashboard with correct domain/duration
+ Week 1 task is available immediately
+ Video loads in task card
+ Quiz unlocks after watching 80%
+ Quiz completes and next week unlocks
+End of Registration Fix + Quiz All Domains Prompt — Version 1.0 Platform: The Entrepreneurship Network (TEN) Fix registration first. Then audit and fix quiz for all 14 domains. Test end-to-end before marking complete. Do not break any existing features.
+

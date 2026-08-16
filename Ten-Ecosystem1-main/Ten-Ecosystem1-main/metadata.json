@@ -1,0 +1,6 @@
+{
+  "name": "Internship Management System",
+  "description": "A comprehensive backend and frontend system for managing student internships, domain tasks, and attendance tracking.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

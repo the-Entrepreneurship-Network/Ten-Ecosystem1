@@ -1,0 +1,39 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Written by scripts/setup-production-env.sh — the cleartext HR and coordinator
+# passwords, for distribution. Deleted once they have been handed out; ignored
+# so that a stray `git add .` in the meantime cannot commit them.
+credentials-to-distribute.txt
+
+# Local JSON fallback database — contains user records and password hashes.
+.data/
+uploads/local_db/
+
+# User-uploaded files: resumes, marksheets, generated certificates and letters.
+# These are personal data and must never be committed.
+uploads/documents/
+uploads/certificates/
+uploads/offer-letters/
+uploads/*.pdf
+uploads/*.jpg
+uploads/*.jpeg
+uploads/*.png
+
+# graphify scratch and cache.
+#
+# `.graphify_python` and `.graphify_root` hold ABSOLUTE paths to whichever
+# machine last ran the tool, so they are actively wrong in anyone else's
+# checkout. The detect/extract sidecars are intermediates the pipeline deletes
+# on completion, and cache/ is a local extraction cache.
+#
+# If a built graph is ever worth sharing, commit graph.json and
+# GRAPH_REPORT.md explicitly with `git add -f` — not the working directory
+# around them.
+graphify-out/

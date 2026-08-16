@@ -1,0 +1,332 @@
+/* ═══════════════════════════════════════
+   TEN MOTION SYSTEM — ten-motion.css
+   Import this on every page after ten-theme.css
+═══════════════════════════════════════ */
+
+/* ── Keyframes ── */
+@keyframes ten-fadeUp {
+  from { opacity:0; transform:translateY(28px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+@keyframes ten-fadeIn {
+  from { opacity:0; } to { opacity:1; }
+}
+@keyframes ten-slideLeft {
+  from { opacity:0; transform:translateX(-32px); }
+  to   { opacity:1; transform:translateX(0); }
+}
+@keyframes ten-slideRight {
+  from { opacity:0; transform:translateX(32px); }
+  to   { opacity:1; transform:translateX(0); }
+}
+@keyframes ten-scaleIn {
+  from { opacity:0; transform:scale(0.88); }
+  to   { opacity:1; transform:scale(1); }
+}
+@keyframes ten-glowPulse {
+  0%,100% { box-shadow: 0 0 20px rgba(212,175,55,0.15); }
+  50%      { box-shadow: 0 0 45px rgba(212,175,55,0.40), 0 0 80px rgba(212,175,55,0.10); }
+}
+@keyframes ten-borderGlow {
+  0%,100% { border-color: rgba(212,175,55,0.12); }
+  50%      { border-color: rgba(212,175,55,0.45); }
+}
+@keyframes ten-float {
+  0%,100% { transform: translateY(0px) rotate(0deg); }
+  33%      { transform: translateY(-12px) rotate(1deg); }
+  66%      { transform: translateY(-6px) rotate(-1deg); }
+}
+@keyframes ten-spinSlow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes ten-scanLine {
+  0%   { transform: translateY(-100%); opacity:0; }
+  10%  { opacity:1; }
+  90%  { opacity:1; }
+  100% { transform: translateY(100vh); opacity:0; }
+}
+@keyframes ten-shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+@keyframes ten-typeCursor {
+  0%,100% { opacity:1; } 50% { opacity:0; }
+}
+@keyframes ten-particleRise {
+  0%   { transform: translateY(0) scale(1); opacity:0.7; }
+  100% { transform: translateY(-120px) scale(0); opacity:0; }
+}
+@keyframes ten-orbitalRing {
+  from { transform: rotate(0deg) translateX(60px) rotate(0deg); }
+  to   { transform: rotate(360deg) translateX(60px) rotate(-360deg); }
+}
+@keyframes ten-countUp {
+  from { opacity:0; transform:translateY(10px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+@keyframes ten-ripple {
+  0%   { transform:scale(0); opacity:0.6; }
+  100% { transform:scale(4); opacity:0; }
+}
+@keyframes ten-waveBar {
+  0%,100% { transform:scaleY(0.4); }
+  50%      { transform:scaleY(1); }
+}
+
+/* ── Utility animation classes ── */
+.ten-fade-up      { animation: ten-fadeUp    0.6s cubic-bezier(0.22,1,0.36,1) both; }
+.ten-fade-in      { animation: ten-fadeIn    0.5s ease both; }
+.ten-slide-left   { animation: ten-slideLeft 0.6s cubic-bezier(0.22,1,0.36,1) both; }
+.ten-slide-right  { animation: ten-slideRight 0.6s cubic-bezier(0.22,1,0.36,1) both; }
+.ten-scale-in     { animation: ten-scaleIn   0.5s cubic-bezier(0.34,1.56,0.64,1) both; }
+.ten-glow-pulse   { animation: ten-glowPulse 3s ease-in-out infinite; }
+.ten-float        { animation: ten-float     6s ease-in-out infinite; }
+.ten-spin-slow    { animation: ten-spinSlow  12s linear infinite; }
+
+/* Stagger delays */
+.ten-d1  { animation-delay: 0.1s; }
+.ten-d2  { animation-delay: 0.2s; }
+.ten-d3  { animation-delay: 0.3s; }
+.ten-d4  { animation-delay: 0.4s; }
+.ten-d5  { animation-delay: 0.5s; }
+.ten-d6  { animation-delay: 0.6s; }
+.ten-d7  { animation-delay: 0.7s; }
+.ten-d8  { animation-delay: 0.8s; }
+
+/* ── Global animated background canvas ── */
+#ten-bg-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+/* ── Particle dots floating up ── */
+.ten-particle {
+  position: fixed;
+  width: 3px; height: 3px;
+  background: var(--ten-gold, #D4AF37);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  animation: ten-particleRise linear infinite;
+}
+
+/* ── Scan line effect ── */
+.ten-scanline {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(212,175,55,0.3), transparent);
+  z-index: 1;
+  pointer-events: none;
+  animation: ten-scanLine 8s linear infinite;
+}
+
+/* ── Shimmer on gold elements ── */
+.ten-shimmer {
+  background: linear-gradient(90deg,
+    var(--ten-gold, #D4AF37) 0%,
+    var(--ten-gold-light, #f5c542) 40%,
+    #fff8d0 50%,
+    var(--ten-gold-light, #f5c542) 60%,
+    var(--ten-gold, #D4AF37) 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: ten-shimmer 3s linear infinite;
+}
+
+/* ── Card hover lift ── */
+.ten-card-hover {
+  transition: transform 0.3s cubic-bezier(0.22,1,0.36,1),
+              box-shadow 0.3s ease,
+              border-color 0.3s ease;
+  cursor: pointer;
+}
+.ten-card-hover:hover {
+  transform: translateY(-5px) scale(1.01);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 40px rgba(212,175,55,0.15);
+  border-color: rgba(212,175,55,0.4) !important;
+}
+
+/* ── Button ripple ── */
+.ten-btn-ripple {
+  position: relative;
+  overflow: hidden;
+}
+.ten-btn-ripple::after {
+  content: '';
+  position: absolute;
+  inset: 50%;
+  background: rgba(255,255,255,0.2);
+  border-radius: 50%;
+  transform: scale(0);
+  opacity: 0;
+  transition: none;
+}
+.ten-btn-ripple:active::after {
+  animation: ten-ripple 0.5s ease-out;
+}
+
+/* ── Input focus glow ── */
+.ten-input-glow {
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.ten-input-glow:focus {
+  outline: none;
+  border-color: var(--ten-gold, #D4AF37) !important;
+  box-shadow: 0 0 0 3px rgba(212,175,55,0.12), 0 0 20px rgba(212,175,55,0.08);
+}
+
+/* ── Animated border gradient ── */
+.ten-animated-border {
+  position: relative;
+}
+.ten-animated-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--angle, 0deg),
+    transparent 0deg,
+    rgba(212,175,55,0.6) 60deg,
+    transparent 120deg
+  );
+  z-index: -1;
+  animation: ten-spinSlow 4s linear infinite;
+}
+
+/* ── Progress bar animated fill ── */
+.ten-progress-bar {
+  height: 3px;
+  background: rgba(212,175,55,0.1);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.ten-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--ten-gold-dim, #c9a227), var(--ten-gold, #D4AF37), var(--ten-gold-light, #f5c542));
+  background-size: 200% 100%;
+  border-radius: 99px;
+  animation: ten-shimmer 2s linear infinite;
+  transform-origin: left;
+}
+
+/* ── Scroll reveal (added by JS) ── */
+.ten-reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.7s cubic-bezier(0.22,1,0.36,1),
+              transform 0.7s cubic-bezier(0.22,1,0.36,1);
+}
+.ten-reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── Toast notification ── */
+.ten-toast {
+  position: fixed;
+  bottom: 24px; right: 24px;
+  background: var(--ten-card, #0e1428);
+  border: 1px solid rgba(212,175,55,0.3);
+  border-radius: 12px;
+  padding: 14px 20px;
+  font-size: 13px;
+  color: var(--ten-text, #F0EEE8);
+  z-index: 9999;
+  animation: ten-slideRight 0.4s cubic-bezier(0.22,1,0.36,1) both;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 20px rgba(212,175,55,0.1);
+  max-width: 320px;
+}
+
+/* ── Loading skeleton ── */
+.ten-skeleton {
+  background: linear-gradient(90deg,
+    rgba(255,255,255,0.03) 25%,
+    rgba(212,175,55,0.06) 50%,
+    rgba(255,255,255,0.03) 75%
+  );
+  background-size: 200% 100%;
+  animation: ten-shimmer 1.5s linear infinite;
+  border-radius: 6px;
+}
+
+/* ── Number counter ── */
+.ten-counter {
+  animation: ten-countUp 0.8s cubic-bezier(0.22,1,0.36,1) both;
+}
+
+/* ── Orbital decorative element ── */
+.ten-orbital {
+  position: absolute;
+  width: 8px; height: 8px;
+  background: var(--ten-gold, #D4AF37);
+  border-radius: 50%;
+  box-shadow: 0 0 10px var(--ten-gold, #D4AF37);
+  animation: ten-orbitalRing 4s linear infinite;
+}
+
+/* ── Wave equalizer bars (for loading states) ── */
+.ten-wave { display:flex; align-items:flex-end; gap:3px; height:20px; }
+.ten-wave span {
+  display:block; width:3px; background:var(--ten-gold, #D4AF37); border-radius:2px;
+  animation: ten-waveBar 0.8s ease-in-out infinite;
+}
+.ten-wave span:nth-child(2) { animation-delay:0.1s; }
+.ten-wave span:nth-child(3) { animation-delay:0.2s; }
+.ten-wave span:nth-child(4) { animation-delay:0.3s; }
+.ten-wave span:nth-child(5) { animation-delay:0.4s; }
+
+/* ── Typing cursor ── */
+.ten-cursor::after {
+  content: '|';
+  color: var(--ten-gold, #D4AF37);
+  animation: ten-typeCursor 1s step-end infinite;
+  margin-left: 2px;
+}
+
+/* ── Glassmorphism overlay ── */
+.ten-glass {
+  backdrop-filter: blur(16px) saturate(1.5);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  background: rgba(14,20,40,0.7);
+  border: 1px solid rgba(212,175,55,0.1);
+}
+
+/* ── QR radar rings ── */
+.ten-qr-radar {
+  position: relative;
+}
+.ten-qr-radar::before,
+.ten-qr-radar::after {
+  content: '';
+  position: absolute;
+  inset: -12px;
+  border-radius: inherit;
+  border: 1.5px solid rgba(212,175,55,0.25);
+  animation: ten-radarPulse 2s ease-out infinite;
+  pointer-events: none;
+}
+.ten-qr-radar::after {
+  inset: -24px;
+  animation-delay: 0.66s;
+}
+@keyframes ten-radarPulse {
+  0%   { opacity:0.7; transform:scale(1); }
+  100% { opacity:0; transform:scale(1.18); }
+}
+
+/* ── Reduced motion respect ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

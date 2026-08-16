@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Investor Portal Login | TEN Ecosystem</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #070600;
+      background-image: radial-gradient(circle at 10% 20%, rgba(212, 175, 55, 0.08) 0%, transparent 45%);
+    }
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .login-card {
+      background: rgba(14, 20, 40, 0.95);
+      border: 1px solid rgba(212, 175, 55, 0.15);
+      backdrop-filter: blur(10px);
+    }
+  </style>
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <script src="/tailwind-guard.js" defer></script>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center text-slate-100 p-4">
+
+  <div class="w-full max-w-md">
+    
+    <!-- Header -->
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 mb-4 animate-pulse">
+        <i class="fa-solid fa-hand-holding-dollar text-2xl"></i>
+      </div>
+      <div class="text-xs uppercase tracking-widest text-amber-450 font-extrabold mb-1">TEN Ecosystem</div>
+      <h1 class="text-3xl font-black text-slate-100">Investor Portal</h1>
+      <p class="text-slate-400 text-sm mt-1.5">Discover and seed premium startups.</p>
+    </div>
+
+    <!-- Login card -->
+    <div class="login-card rounded-2xl p-8 shadow-2xl relative overflow-hidden">
+      <div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent"></div>
+
+      <form id="loginForm" class="space-y-5">
+        <div>
+          <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Registered Email Address</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
+              <i class="fa-solid fa-envelope"></i>
+            </span>
+            <input class="w-full pl-10 pr-4 py-3 bg-slate-900/40 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500" 
+                   type="email" id="loginId" placeholder="Enter your Investor email address" required autocapitalize="none">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Password</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
+              <i class="fa-solid fa-lock"></i>
+            </span>
+            <input class="w-full pl-10 pr-4 py-3 bg-slate-900/40 border border-slate-800 rounded-xl text-slate-200 placeholder-slate-500" 
+                   type="password" id="password" placeholder="Enter your password" required>
+          </div>
+        </div>
+
+        <button type="submit" class="w-full py-3.5 bg-gradient-to-r from-[#D4AF37] to-yellow-600 hover:from-amber-500 hover:to-yellow-700 text-slate-950 font-bold rounded-xl transition duration-300 shadow-lg shadow-amber-500/10 cursor-pointer">
+          Enter Deal Room
+        </button>
+
+        <div id="loadingText" class="hidden text-center text-xs text-amber-400 animate-pulse mt-3">
+          ⟳ Authenticating investor workspace...
+        </div>
+      </form>
+    </div>
+
+    <!-- Navigation links -->
+    <div class="flex items-center justify-center gap-4 text-xs text-slate-500 mt-6">
+      <a href="/register" class="hover:text-amber-400 transition">Register Investor Profile</a>
+      <span>•</span>
+      <a href="/" class="hover:text-amber-400 transition">Back to Home</a>
+    </div>
+
+  </div>
+
+  <script>
+    document.getElementById("loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const loading = document.getElementById("loadingText");
+      loading.classList.remove("hidden");
+
+      const loginIdInput = document.getElementById("loginId").value.trim();
+      const password = document.getElementById("password").value;
+
+      try {
+        const response = await fetch("/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: loginIdInput, password, role: "investor" })
+        });
+
+        const data = await response.json();
+        loading.classList.add("hidden");
+
+        if (data.success) {
+          const activeRole = data.role || "investor";
+          if (activeRole !== "investor") {
+            Swal.fire({
+              icon: "error",
+              title: "Unauthorized Role",
+              text: `This portal is for investors only. Please sign in via the designated portal.`,
+              background: "#0e1428",
+              color: "#F0EEE8",
+              confirmButtonColor: "#EF4444"
+            });
+            return;
+          }
+
+          localStorage.setItem("role", "investor");
+          if (data.user) {
+            localStorage.setItem("user", JSON.stringify(data.user));
+            localStorage.setItem("userId", data.user._id);
+          }
+
+          Swal.fire({
+            icon: "success",
+            title: "Access Granted",
+            text: `Welcome to the Investor Workspace! 💵`,
+            background: "#0e1428",
+            color: "#F0EEE8",
+            showConfirmButton: false,
+            timer: 1500
+          });
+
+          setTimeout(() => {
+            window.location.href = "investor-dashboard.html";
+          }, 1500);
+
+        } else {
+          Swal.fire({
+            icon: "error",
+            title: "Login Failed",
+            text: data.message || "Invalid credentials",
+            background: "#0e1428",
+            color: "#F0EEE8",
+            confirmButtonColor: "#ef4444"
+          });
+        }
+      } catch (error) {
+        loading.classList.add("hidden");
+        console.error(error);
+        Swal.fire({
+          icon: "error",
+          title: "Network Error",
+          text: "Something went wrong. Please check your connection and try again.",
+          background: "#0e1428",
+          color: "#F0EEE8",
+          confirmButtonColor: "#ef4444"
+        });
+      }
+    });
+  </script>
+  <script src="/password-toggle.js"></script>
+</body>
+</html>

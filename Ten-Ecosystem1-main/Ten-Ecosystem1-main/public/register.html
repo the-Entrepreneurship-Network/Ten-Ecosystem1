@@ -1,0 +1,2204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Register | TEN Ecosystem</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <link rel="stylesheet" href="ten-theme.css">
+  <link rel="stylesheet" href="ten-motion.css">
+  
+  <!-- FontAwesome & Fonts -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Syne:wght@600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  
+  <style>
+    :root {
+      --ten-font-display: 'Outfit', sans-serif;
+      --ten-font-body: 'Plus Jakarta Sans', sans-serif;
+    }
+    body {
+      font-family: var(--ten-font-body);
+      background: radial-gradient(circle at center, #0a0d18 0%, #04050a 100%);
+    }
+    .syne {
+      font-family: var(--ten-font-display);
+    }
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .glass-card {
+      background: rgba(10, 15, 30, 0.45);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      border: 1px solid rgba(212, 175, 55, 0.18);
+      box-shadow: 
+        0 24px 72px rgba(0, 0, 0, 0.7),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05),
+        0 0 40px rgba(212, 175, 55, 0.05);
+    }
+    .role-card {
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .role-card:hover {
+      border-color: rgba(212, 175, 55, 0.35);
+      background: rgba(212, 175, 55, 0.06);
+      transform: translateY(-4px) scale(1.015);
+      box-shadow: 
+        0 12px 28px rgba(212, 175, 55, 0.08), 
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+    .text-gold {
+      color: #D4AF37;
+    }
+    .bg-gold {
+      background-color: #D4AF37;
+    }
+    .border-gold {
+      border-color: rgba(212, 175, 55, 0.3);
+    }
+    .btn-gold {
+      background: linear-gradient(135deg, #D4AF37 0%, #B8960C 100%);
+      color: #0c1220;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 
+        0 8px 24px rgba(212, 175, 55, 0.25), 
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+      transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    .btn-gold:hover {
+      background: linear-gradient(135deg, #F0D060 0%, #D4AF37 100%);
+      border-color: rgba(255, 255, 255, 0.25);
+      transform: translateY(-2px) scale(1.015);
+      box-shadow: 
+        0 12px 32px rgba(212, 175, 55, 0.45), 
+        inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    }
+
+    /* Wizard Step Bar */
+    .step-pill {
+      transition: all 0.3s ease;
+    }
+    .step-pill.active {
+      background: rgba(212, 175, 55, 0.15);
+      border-color: #D4AF37;
+      color: #F59E0B;
+    }
+    .step-pill.completed {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: #10B981;
+      color: #10B981;
+    }
+    
+    /* Skill Tag Chips */
+    .skill-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      background: rgba(212, 175, 55, 0.15);
+      border: 1px solid rgba(212, 175, 55, 0.3);
+      color: #FCD34D;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .skill-chip .remove-chip {
+      cursor: pointer;
+      color: #EF4444;
+      margin-left: 4px;
+    }
+    .skill-chip .remove-chip:hover {
+      color: #F87171;
+    }
+
+    /* Searchable dropdown custom styles */
+    .search-select-dropdown {
+      max-height: 200px;
+      overflow-y: auto;
+      z-index: 50;
+    }
+
+    /* Globally style inputs & selects to match modern design */
+    input[type="text"],
+    input[type="email"],
+    input[type="tel"],
+    input[type="number"],
+    input[type="password"],
+    input[type="url"],
+    select {
+      background-color: rgba(0, 0, 0, 0.25) !important;
+      border: 1px solid rgba(255, 255, 255, 0.08) !important;
+      border-radius: 12px !important;
+      color: #fff !important;
+      transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+    }
+    input[type="text"]:focus,
+    input[type="email"]:focus,
+    input[type="tel"]:focus,
+    input[type="number"]:focus,
+    input[type="password"]:focus,
+    input[type="url"]:focus,
+    select:focus {
+      border-color: rgba(212, 175, 55, 0.45) !important;
+      box-shadow: 
+        0 0 16px rgba(212, 175, 55, 0.15),
+        inset 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+      background-color: rgba(0, 0, 0, 0.4) !important;
+    }
+    input::placeholder {
+      color: rgba(255, 255, 255, 0.25) !important;
+    }
+  </style>
+  <link rel="stylesheet" href="/css/ten-brand.css">
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <script src="/tailwind-guard.js" defer></script>
+</head>
+<body class="min-h-screen text-slate-100 flex items-center justify-center p-4 md:p-8 relative overflow-x-hidden">
+
+  <!-- Mesh Grid & Ambient Spot Orbs -->
+  <div class="ten-grid-bg"></div>
+  <div class="ten-orb ten-orb-1"></div>
+  <div class="ten-orb ten-orb-2"></div>
+
+  <div class="relative w-full max-w-3xl z-10 transition-all duration-500 ease-in-out">
+    
+    <!-- Brand / Header -->
+    <div class="text-center mb-6">
+      <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 mb-3 animate-pulse">
+        <svg class="w-7 h-7" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="20" cy="20" r="14" stroke="#D4AF37" stroke-width="2.5"></circle>
+          <path d="M15 15 H25 V19 H15" stroke="#D4AF37" stroke-width="2.5" stroke-linecap="round"></path>
+          <path d="M20 19 V25" stroke="#D4AF37" stroke-width="2.5" stroke-linecap="round"></path>
+        </svg>
+      </div>
+      <div class="text-xs uppercase tracking-widest text-[#D4AF37] font-extrabold mb-1">TEN Ecosystem</div>
+      <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight syne text-transparent bg-clip-text bg-gradient-to-r from-slate-100 via-amber-100 to-amber-200">
+        JOIN TEN ECOSYSTEM
+      </h1>
+      <p id="topSubtitle" class="text-slate-400 text-xs mt-1 font-medium">Complete your registration wizard to set up your ecosystem workspace.</p>
+    </div>
+
+    <!-- Container Card -->
+    <div class="glass-card rounded-2xl p-6 md:p-8 shadow-2xl relative overflow-hidden">
+      <div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent"></div>
+
+      <!-- STEP 1: ROLE SELECTION -->
+      <div id="roleSelectionScreen" class="space-y-6">
+        <h2 class="text-xl font-bold text-center text-slate-100 mb-4 uppercase tracking-wider">Register As</h2>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          
+          <!-- Student Card -->
+          <button onclick="selectRole('student')" class="role-card text-left p-5 rounded-xl border border-slate-800 bg-slate-900/30 flex items-start gap-4">
+            <div class="flex-shrink-0 w-12 h-12 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center">
+              <i class="fa-solid fa-graduation-cap text-xl"></i>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-slate-100">Student</h3>
+              <p class="text-slate-400 text-xs mt-1 leading-relaxed">Join as an intern, learn real systems, complete milestones, and earn certifications.</p>
+            </div>
+          </button>
+
+          <!-- Founder Card -->
+          <button onclick="selectRole('founder')" class="role-card text-left p-5 rounded-xl border border-slate-800/80 bg-slate-950/40 hover:border-[#D4AF37]/60 flex items-start gap-4 relative overflow-hidden transition duration-300" style="cursor: pointer;">
+            <div class="flex-shrink-0 w-12 h-12 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center">
+              <i class="fa-solid fa-rocket text-xl"></i>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-slate-100">Founder</h3>
+              <p class="text-slate-400 text-xs mt-1 leading-relaxed">Manage your venture pipeline, post jobs/milestones, hire talent, and scale your brand.</p>
+            </div>
+          </button>
+
+          <!-- Mentor Card -->
+          <button onclick="selectRole('mentor')" class="role-card text-left p-5 rounded-xl border border-slate-800/80 bg-slate-950/40 hover:border-pink-500/50 flex items-start gap-4 relative overflow-hidden transition duration-300 cursor-pointer">
+            <div class="flex-shrink-0 w-12 h-12 rounded-lg bg-pink-500/10 text-pink-400 border border-pink-500/20 flex items-center justify-center">
+              <i class="fa-solid fa-user-tie text-xl"></i>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-slate-100">Mentor</h3>
+              <p class="text-slate-400 text-xs mt-1 leading-relaxed">Guide startup ventures, provide professional training, and review milestone completions.</p>
+            </div>
+          </button>
+
+          <!-- Investor Card -->
+          <button onclick="selectRole('investor')" class="role-card text-left p-5 rounded-xl border border-slate-800/80 bg-slate-950/40 flex items-start gap-4 relative overflow-hidden transition duration-300" style="opacity: 0.65; cursor: not-allowed;">
+            <span class="absolute top-2 right-2 bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">🚧 Coming Soon</span>
+            <div class="flex-shrink-0 w-12 h-12 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center">
+              <i class="fa-solid fa-hand-holding-dollar text-xl"></i>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-slate-100">Investor</h3>
+              <p class="text-slate-400 text-xs mt-1 leading-relaxed">Access clean deal rooms, explore startup growth metrics, and fund high-potential ventures.</p>
+            </div>
+          </button>
+
+          <!-- Contractor Card -->
+          <button onclick="selectRole('contractor')" class="role-card text-left p-5 rounded-xl border border-slate-800/80 bg-slate-950/40 flex items-start gap-4 relative overflow-hidden transition duration-300" style="opacity: 0.65; cursor: not-allowed;">
+            <span class="absolute top-2 right-2 bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">🚧 Coming Soon</span>
+            <div class="flex-shrink-0 w-12 h-12 rounded-lg bg-orange-500/10 text-orange-400 border border-orange-500/20 flex items-center justify-center">
+              <i class="fa-solid fa-screwdriver-wrench text-xl"></i>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-slate-100">Contractor</h3>
+              <p class="text-slate-400 text-xs mt-1 leading-relaxed font-normal">Apply premium engineering, programming, or operations skills as a freelancer.</p>
+            </div>
+          </button>
+
+          <!-- Coordinator Card -->
+          <button onclick="window.location.href='coordinator-register.html'" class="role-card text-left p-5 rounded-xl border border-sky-500/40 bg-sky-950/30 hover:border-sky-400 flex items-start gap-4 relative overflow-hidden transition duration-300 cursor-pointer">
+            <span class="absolute top-2 right-2 bg-sky-500/20 text-sky-300 border border-sky-500/30 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">Management</span>
+            <div class="flex-shrink-0 w-12 h-12 rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20 flex items-center justify-center">
+              <i class="fa-solid fa-clipboard-user text-xl"></i>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-slate-100">Coordinator</h3>
+              <p class="text-slate-400 text-xs mt-1 leading-relaxed">Manage student rosters, assign mentors, verify attendance, and oversee domain operations.</p>
+            </div>
+          </button>
+
+        </div>
+
+        <div class="pt-6 border-t border-slate-800/80 flex flex-wrap items-center justify-between text-xs text-slate-400 gap-3">
+          <div>
+            <span class="text-slate-400 font-semibold">Management: </span>
+            <a href="coordinator-login.html" class="text-sky-400 hover:underline font-bold mr-3">👔 Coordinator Login</a>
+            <a href="coordinator-register.html" class="text-emerald-400 hover:underline font-bold">📋 Coordinator Register</a>
+          </div>
+          <div>
+            <a href="login.html" class="text-[#D4AF37] hover:text-amber-300 hover:underline font-bold">Already registered? Log in →</a>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- MULTI-STEP WIZARD SCREEN -->
+      <div id="formSectionScreen" class="hidden">
+        
+        <!-- Form Header info -->
+        <div class="flex items-center justify-between border-b border-slate-800 pb-4 mb-4">
+          <div class="flex items-center gap-3">
+            <div id="roleIconBadge" class="w-10 h-10 rounded-lg flex items-center justify-center text-lg font-bold">
+              🎓
+            </div>
+            <div>
+              <h2 id="roleFormTitle" class="text-lg font-extrabold text-slate-100 uppercase tracking-wide">STUDENT ONBOARDING WIZARD</h2>
+              <p class="text-slate-400 text-xs">Step <span id="wizardStepNumber">1</span> of <span id="wizardTotalSteps">6</span></p>
+            </div>
+          </div>
+          <button type="button" onclick="goBackToSelection()" class="text-xs text-slate-400 hover:text-amber-400 flex items-center gap-1 bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800 transition">
+            <i class="fa-solid fa-arrow-left"></i> Change Role
+          </button>
+        </div>
+
+        <!-- Progress Indicator Bar -->
+        <div class="grid grid-cols-6 gap-1.5 mb-6" id="wizardProgressBar">
+          <div id="stepPill1" class="step-pill active text-[10px] font-bold py-1.5 px-1 rounded-lg border border-slate-800 text-center truncate">1. Personal</div>
+          <div id="stepPill2" class="step-pill text-[10px] font-bold py-1.5 px-1 rounded-lg border border-slate-800 text-center truncate">2. Education</div>
+          <div id="stepPill3" class="step-pill text-[10px] font-bold py-1.5 px-1 rounded-lg border border-slate-800 text-center truncate">3. Tenure</div>
+          <div id="stepPill4" class="step-pill text-[10px] font-bold py-1.5 px-1 rounded-lg border border-slate-800 text-center truncate">4. Skills & Links</div>
+          <div id="stepPill5" class="step-pill text-[10px] font-bold py-1.5 px-1 rounded-lg border border-slate-800 text-center truncate">5. Resume PDF</div>
+          <div id="stepPill6" class="step-pill text-[10px] font-bold py-1.5 px-1 rounded-lg border border-slate-800 text-center truncate">6. Domain</div>
+        </div>
+
+        <form id="unifiedRegForm" class="space-y-5" onkeydown="if(event.key==='Enter' && event.target.tagName !== 'TEXTAREA'){event.preventDefault();}">
+          <!-- Hidden Input for selected role -->
+          <input type="hidden" id="selectedRoleInput" name="role" required>
+
+          <!-- ── SECTION 1: PERSONAL INFORMATION ── -->
+          <div id="wizardStep1" class="wizard-section space-y-4">
+            <h3 class="text-xs font-bold text-[#D4AF37] uppercase tracking-widest border-b border-slate-800/80 pb-2">Section 1 — Personal Details</h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Full Name <span class="text-red-500">*</span></label>
+                <input type="text" id="reg_fullName" name="fullName" class="w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]" placeholder="Your full name" required>
+              </div>
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Email address <span class="text-red-500">*</span></label>
+                <input type="email" id="reg_email" name="email" class="w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]" placeholder="student@example.com" required>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Mobile / WhatsApp Number <span class="text-red-500">*</span></label>
+                <input type="tel" id="reg_mobile" name="mobile" class="w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]" placeholder="Your mobile number" required>
+              </div>
+              <div style="position:relative;">
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Account Password <span class="text-red-500">*</span></label>
+                <input type="password" id="reg_password" name="password" oninput="validatePasswordStrength()" class="w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] pr-12" placeholder="At least 8 characters" minlength="8" required>
+                <span id="togglePasswordBtn"
+                      onclick="toggleRegPwd()"
+                      style="position:absolute;right:16px;top:38px;cursor:pointer;
+                             font-size:18px;color:#8ca0ba;user-select:none;">
+                  👁
+                </span>
+              </div>
+            </div>
+
+            <!-- Confirm Password & Password Strength Indicator -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Confirm Password <span class="text-red-500">*</span></label>
+                <input type="password" id="reg_confirmPassword" name="confirmPassword" oninput="checkPasswordMatch()" class="w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]" placeholder="Re-enter password" required>
+                <p id="passwordMatchMsg" class="text-[11px] mt-1 font-semibold hidden"></p>
+              </div>
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Password Strength</label>
+                <div class="h-3 w-full bg-slate-900 rounded-full overflow-hidden border border-slate-800 mt-2">
+                  <div id="passwordStrengthBar" class="h-full w-0 bg-red-500 transition-all duration-300"></div>
+                </div>
+                <p id="passwordStrengthText" class="text-[11px] text-slate-400 mt-1 font-medium">Enter at least 8 characters</p>
+              </div>
+            </div>
+          </div>
+
+
+          <!-- ── SECTION 2: EDUCATIONAL INFORMATION ── -->
+          <div id="wizardStep2" class="wizard-section hidden space-y-4">
+            <h3 class="text-xs font-bold text-[#D4AF37] uppercase tracking-widest border-b border-slate-800/80 pb-2">Section 2 — Educational Details</h3>
+
+            <!-- Country -> State -> City Cascading Dropdowns -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Country <span class="text-red-500">*</span></label>
+                <select id="stu_country" name="country" onchange="onCountryChange(this.value)" class="stu-req w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]">
+                  <option value="">Select Country</option>
+                </select>
+                <input type="text" id="stu_country_custom" class="hidden mt-2 w-full px-4 py-2 bg-slate-900 border border-amber-500/40 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-[#D4AF37]" placeholder="Type your custom Country name...">
+              </div>
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">State / Province <span class="text-red-500">*</span></label>
+                <select id="stu_state" name="state" onchange="onStateChange(this.value)" class="stu-req w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]">
+                  <option value="">Select State</option>
+                </select>
+                <input type="text" id="stu_state_custom" class="hidden mt-2 w-full px-4 py-2 bg-slate-900 border border-amber-500/40 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-[#D4AF37]" placeholder="Type your custom State / Province...">
+              </div>
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">City <span class="text-red-500">*</span></label>
+                <select id="stu_city" name="city" onchange="onCityChange(this.value)" class="stu-req w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]">
+                  <option value="">Select City</option>
+                </select>
+                <input type="text" id="stu_city_custom" class="hidden mt-2 w-full px-4 py-2 bg-slate-900 border border-amber-500/40 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-[#D4AF37]" placeholder="Type your custom City name...">
+              </div>
+            </div>
+
+            <!-- State -> College -> Degree Cascading Dropdowns -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">University / College <span class="text-red-500">*</span></label>
+                <select id="stu_university" name="university" onchange="onCollegeChange(this.value)" class="stu-req w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]">
+                  <option value="">Select College</option>
+                </select>
+                <input type="text" id="stu_university_custom" class="hidden mt-2 w-full px-4 py-2 bg-slate-900 border border-amber-500/40 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-[#D4AF37]" placeholder="Type your custom College / University...">
+              </div>
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Degree / Major <span class="text-red-500">*</span></label>
+                <select id="stu_degree" name="degree" onchange="onDegreeChange(this.value)" class="stu-req w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]">
+                  <option value="">Select Degree</option>
+                </select>
+                <input type="text" id="stu_degree_custom" class="hidden mt-2 w-full px-4 py-2 bg-slate-900 border border-amber-500/40 rounded-xl text-slate-100 text-xs focus:outline-none focus:border-[#D4AF37]" placeholder="Type your custom Degree / Major...">
+              </div>
+            </div>
+
+            <!-- Current Academic Year -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Current Academic Year <span class="text-red-500">*</span></label>
+                <select id="stu_academicYear" name="academicYear" class="stu-req w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]">
+                  <option value="">Select Academic Year</option>
+                  <option value="1st Year">1st Year</option>
+                  <option value="2nd Year">2nd Year</option>
+                  <option value="3rd Year">3rd Year</option>
+                  <option value="4th Year">4th Year</option>
+                  <option value="Final Year">Final Year</option>
+                  <option value="Graduated">Graduated / Post-Graduate</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Graduation Year <span class="text-red-500">*</span></label>
+                <input type="number" id="stu_graduationYear" name="graduationYear" class="stu-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="e.g. 2026">
+              </div>
+            </div>
+          </div>
+
+
+          <!-- ── MENTOR STEP 2: PROFESSIONAL PROFILE ── -->
+          <div id="mentorStep2" class="wizard-section hidden space-y-4">
+            <h3 class="text-xs font-bold text-[#D4AF37] uppercase tracking-widest border-b border-slate-800/80 pb-2">Section 2 — Professional Profile</h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Current Organization / Company <span class="text-red-500">*</span></label>
+                <input type="text" id="mentor_company" name="mentor_company" class="mentor-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="e.g. Google, TechCorp, Freelancer">
+              </div>
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Designation / Job Title <span class="text-red-500">*</span></label>
+                <input type="text" id="mentor_designation" name="mentor_designation" class="mentor-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="e.g. Senior Software Engineer">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Years of Experience <span class="text-red-500">*</span></label>
+                <select id="mentor_experience" name="mentor_experience" class="mentor-req w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]">
+                  <option value="">Select Experience Range</option>
+                  <option value="1-2 Years">1-2 Years</option>
+                  <option value="3-5 Years">3-5 Years</option>
+                  <option value="5-10 Years">5-10 Years</option>
+                  <option value="10+ Years">10+ Years</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">LinkedIn Profile URL <span class="text-red-500">*</span></label>
+                <input type="url" id="mentor_linkedin" name="mentor_linkedin" class="mentor-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="https://linkedin.com/in/username">
+              </div>
+            </div>
+          </div>
+
+
+          <!-- ── SECTION 3: INTERNSHIP DETAILS ── -->
+          <div id="wizardStep3" class="wizard-section hidden space-y-4">
+            <h3 class="text-xs font-bold text-[#D4AF37] uppercase tracking-widest border-b border-slate-800/80 pb-2">Section 3 — Internship Tenure</h3>
+            
+            <div>
+              <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Internship Duration / Tenure <span class="text-red-500">*</span></label>
+              <select id="stu_tenure" name="tenure" class="stu-req w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]">
+                <!-- The six tenures the rest of the system knows about, in order.
+                     Three were missing here — 1 Week, 15 Days and 45 Days — and
+                     "2 Months" was offered although normalizeTenure() rejects it,
+                     so anyone who chose it had their registration refused with
+                     "Please select a valid internship tenure" and no way to see
+                     why. The fee is shown because it decides the choice, and
+                     students were previously asked to pay only after they had
+                     already registered and been given an employee ID. -->
+                <option value="">Select Tenure Duration</option>
+                <option value="1 Week">1 Week — crash course (₹2000)</option>
+                <option value="15 Days">15 Days — crash course (₹1500)</option>
+                <option value="1 Month">1 Month — crash course (₹1000)</option>
+                <option value="45 Days">45 Days — free</option>
+                <option value="3 Months">3 Months — free</option>
+                <option value="6 Months">6 Months — free</option>
+              </select>
+              <p class="text-xs text-slate-500 mt-2">Selected tenure dictates certificate eligibility and milestone review schedule.</p>
+            </div>
+          </div>
+
+
+          <!-- ── MENTOR STEP 3: EXPERTISE & PREFERENCES ── -->
+          <div id="mentorStep3" class="wizard-section hidden space-y-4">
+            <h3 class="text-xs font-bold text-[#D4AF37] uppercase tracking-widest border-b border-slate-800/80 pb-2">Section 3 — Mentorship Expertise & Availability</h3>
+            
+            <div>
+              <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-3">Select Domains you can Mentor <span class="text-red-500">*</span> (Select at least one)</label>
+              <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <label class="flex items-center gap-2 bg-slate-950/30 border border-slate-800 p-3 rounded-lg cursor-pointer hover:border-amber-500/40 transition">
+                  <input type="checkbox" name="mentor_domains" value="Web Development" class="mentor-domain-check accent-amber-500">
+                  <span class="text-xs font-semibold text-slate-200">Web Development</span>
+                </label>
+                <label class="flex items-center gap-2 bg-slate-950/30 border border-slate-800 p-3 rounded-lg cursor-pointer hover:border-amber-500/40 transition">
+                  <input type="checkbox" name="mentor_domains" value="Python Development" class="mentor-domain-check accent-amber-500">
+                  <span class="text-xs font-semibold text-slate-200">Python Development</span>
+                </label>
+                <label class="flex items-center gap-2 bg-slate-950/30 border border-slate-800 p-3 rounded-lg cursor-pointer hover:border-amber-500/40 transition">
+                  <input type="checkbox" name="mentor_domains" value="Data Science" class="mentor-domain-check accent-amber-500">
+                  <span class="text-xs font-semibold text-slate-200">Data Science</span>
+                </label>
+                <label class="flex items-center gap-2 bg-slate-950/30 border border-slate-800 p-3 rounded-lg cursor-pointer hover:border-amber-500/40 transition">
+                  <input type="checkbox" name="mentor_domains" value="MERN Stack Development" class="mentor-domain-check accent-amber-500">
+                  <span class="text-xs font-semibold text-slate-200">MERN Stack</span>
+                </label>
+                <label class="flex items-center gap-2 bg-slate-950/30 border border-slate-800 p-3 rounded-lg cursor-pointer hover:border-amber-500/40 transition">
+                  <input type="checkbox" name="mentor_domains" value="Artificial Intelligence" class="mentor-domain-check accent-amber-500">
+                  <span class="text-xs font-semibold text-slate-200">Artificial Intelligence</span>
+                </label>
+                <label class="flex items-center gap-2 bg-slate-950/30 border border-slate-800 p-3 rounded-lg cursor-pointer hover:border-amber-500/40 transition">
+                  <input type="checkbox" name="mentor_domains" value="Business Development" class="mentor-domain-check accent-amber-500">
+                  <span class="text-xs font-semibold text-slate-200">Business Development</span>
+                </label>
+                <label class="flex items-center gap-2 bg-slate-950/30 border border-slate-800 p-3 rounded-lg cursor-pointer hover:border-amber-500/40 transition">
+                  <input type="checkbox" name="mentor_domains" value="UI/UX Design" class="mentor-domain-check accent-amber-500">
+                  <span class="text-xs font-semibold text-slate-200">UI/UX Design</span>
+                </label>
+                <label class="flex items-center gap-2 bg-slate-950/30 border border-slate-800 p-3 rounded-lg cursor-pointer hover:border-amber-500/40 transition">
+                  <input type="checkbox" name="mentor_domains" value="Digital Marketing" class="mentor-domain-check accent-amber-500">
+                  <span class="text-xs font-semibold text-slate-200">Digital Marketing</span>
+                </label>
+                <label class="flex items-center gap-2 bg-slate-950/30 border border-slate-800 p-3 rounded-lg cursor-pointer hover:border-amber-500/40 transition">
+                  <input type="checkbox" name="mentor_domains" value="Human Resources" class="mentor-domain-check accent-amber-500">
+                  <span class="text-xs font-semibold text-slate-200">Human Resources</span>
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Weekly Availability <span class="text-red-500">*</span></label>
+              <select id="mentor_availability" name="mentor_availability" class="mentor-req w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]">
+                <option value="">Select Weekly Availability</option>
+                <option value="2-4 Hours/Week">2-4 Hours/Week</option>
+                <option value="5-8 Hours/Week">5-8 Hours/Week</option>
+                <option value="10+ Hours/Week">10+ Hours/Week</option>
+              </select>
+            </div>
+          </div>
+
+
+          <!-- ── SECTION 4: SKILLS & PROFESSIONAL PROFILES ── -->
+          <div id="wizardStep4" class="wizard-section hidden space-y-4">
+            <h3 class="text-xs font-bold text-[#D4AF37] uppercase tracking-widest border-b border-slate-800/80 pb-2">Section 4 — Skills & Professional Profiles</h3>
+
+            <!-- Searchable Multi-Select Skills with Tag Chips -->
+            <div>
+              <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Skills (Search & Tag Chips) <span class="text-red-500">*</span></label>
+              <div class="relative">
+                <input type="text" id="skillSearchInput" onfocus="onSkillSearch(this.value)" oninput="onSkillSearch(this.value)" placeholder="Type skill (e.g. Python, React) and press Enter or select below..." class="w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]">
+                <div id="skillSuggestionsDropdown" class="hidden absolute top-full left-0 right-0 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl mt-1 search-select-dropdown p-2 z-50 max-h-48 overflow-y-auto">
+                  <!-- JS inserts matching skill options -->
+                </div>
+              </div>
+
+              <!-- Quick-Add Popular Skills -->
+              <div class="mt-2.5">
+                <p class="text-[11px] text-slate-400 font-semibold mb-1.5">Quick Add Suggestions:</p>
+                <div class="flex flex-wrap gap-1.5" id="popularSkillsQuickAdd">
+                  <!-- JS inserts popular skill badges -->
+                </div>
+              </div>
+              
+              <!-- Tag Chips Container -->
+              <div class="mt-3">
+                <p class="text-[11px] text-slate-400 font-semibold mb-1">Your Selected Skills Tag Chips <span class="text-red-500">*</span>:</p>
+                <div id="selectedSkillChipsContainer" class="flex flex-wrap gap-2 p-3 bg-slate-950/50 border border-slate-800 rounded-xl min-h-[52px] items-center">
+                  <span class="text-xs text-slate-500 font-medium italic" id="emptySkillsMsg">No skills added yet. Search or click suggestions above.</span>
+                </div>
+              </div>
+              <input type="hidden" id="stu_skills" name="skills" class="stu-req">
+            </div>
+
+            <!-- Mandatory Links -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Portfolio / Git Website <span class="text-red-500">*</span></label>
+                <input type="url" id="stu_portfolio" name="portfolio" class="stu-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="https://myportfolio.com">
+              </div>
+              <div>
+                <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">LinkedIn Profile URL <span class="text-red-500">*</span></label>
+                <input type="url" id="stu_linkedin" name="linkedin" class="stu-req w-full px-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-[#D4AF37]" placeholder="https://linkedin.com/in/username">
+              </div>
+            </div>
+          </div>
+
+
+          <!-- ── SECTION 5: RESUME PDF UPLOAD ── -->
+          <div id="wizardStep5" class="wizard-section hidden space-y-4">
+            <h3 class="text-xs font-bold text-[#D4AF37] uppercase tracking-widest border-b border-slate-800/80 pb-2">Section 5 — Resume PDF Upload</h3>
+
+            <div>
+              <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Upload Resume (PDF ONLY, Max 5MB) <span class="text-red-500">*</span></label>
+              <div class="relative flex items-center justify-center border-2 border-dashed border-slate-800 rounded-xl p-8 bg-slate-950/50 hover:border-[#D4AF37] transition cursor-pointer" id="resumeUploadContainer">
+                <input type="file" id="stu_resume_file" accept=".pdf" class="absolute inset-0 opacity-0 cursor-pointer" onchange="uploadResumeFile(this)">
+                <div class="text-center" id="uploadStatusContent">
+                  <i class="fa-solid fa-file-pdf text-4xl text-slate-500 mb-2" id="uploadPdfIcon"></i>
+                  <p class="text-sm font-semibold text-slate-300" id="uploadStatusText">Drag & drop your PDF resume here, or click to browse</p>
+                  <p class="text-xs text-slate-500 mt-1">Accepts strictly .PDF format (Rejects JPG, PNG, DOCX, etc.)</p>
+                </div>
+              </div>
+
+              <!-- File Name Preview & Replace Action -->
+              <div id="resumeUploadedPreview" class="hidden mt-3 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <i class="fa-solid fa-file-circle-check text-emerald-400 text-2xl"></i>
+                  <div>
+                    <p class="text-xs font-bold text-emerald-300" id="uploadedFileNameDisplay">resume.pdf</p>
+                    <p class="text-[11px] text-emerald-400/80">PDF verified & attached to profile</p>
+                  </div>
+                </div>
+                <button type="button" onclick="replaceUploadedResume()" class="text-xs font-bold text-amber-400 hover:underline bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">Replace PDF</button>
+              </div>
+
+              <input type="hidden" id="stu_resume" name="resume" class="stu-req">
+            </div>
+          </div>
+
+
+          <!-- ── SECTION 6: DOMAIN SELECTION & REVIEW ── -->
+          <div id="wizardStep6" class="wizard-section hidden space-y-4">
+            <h3 class="text-xs font-bold text-[#D4AF37] uppercase tracking-widest border-b border-slate-800/80 pb-2">Section 6 — Domain Selection & Review</h3>
+
+            <div>
+              <label class="block text-slate-[#D4AF37] text-xs font-semibold uppercase tracking-widest mb-3">Domain Selection (Mandatory — Select 1 to 2) <span class="text-red-500">*</span></label>
+              
+              <div class="mb-4">
+                <p class="text-[11px] text-slate-400 font-bold tracking-wider mb-2">TECH DOMAINS:</p>
+                <div class="grid grid-cols-2 gap-3" id="techDomainsSelector">
+                  <div onclick="selectDomainCard('DevOps with AWS')" id="domain_card_DevOps_with_AWS" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-cloud text-amber-500/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">DevOps with AWS</span>
+                  </div>
+                  <div onclick="selectDomainCard('Python Development')" id="domain_card_Python_Development" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-brands fa-python text-amber-500/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Python Development</span>
+                  </div>
+                  <div onclick="selectDomainCard('Java Development')" id="domain_card_Java_Development" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-brands fa-java text-amber-500/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Java Development</span>
+                  </div>
+                  <div onclick="selectDomainCard('Web Development')" id="domain_card_Web_Development" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-code text-amber-500/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Web Development</span>
+                  </div>
+                  <div onclick="selectDomainCard('MERN Stack Development')" id="domain_card_MERN_Stack_Development" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-cubes text-amber-500/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">MERN Stack Development</span>
+                  </div>
+                  <div onclick="selectDomainCard('Artificial Intelligence')" id="domain_card_Artificial_Intelligence" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-brain text-amber-500/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Artificial Intelligence</span>
+                  </div>
+                  <div onclick="selectDomainCard('Data Science')" id="domain_card_Data_Science" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-chart-line text-amber-500/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Data Science</span>
+                  </div>
+                  <div onclick="selectDomainCard('Cyber Security')" id="domain_card_Cyber_Security" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-shield-halved text-amber-500/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Cyber Security</span>
+                  </div>
+                  <div onclick="selectDomainCard('Software Engineering')" id="domain_card_Software_Engineering" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-code text-amber-500/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Software Engineering</span>
+                  </div>
+                  <div onclick="selectDomainCard('Flutter Development')" id="domain_card_Flutter_Development" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-mobile-screen text-amber-500/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Flutter Development</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mt-2">
+                <p class="text-[11px] text-slate-400 font-bold tracking-wider mb-2">BUSINESS &amp; OTHER DOMAINS:</p>
+                <div class="grid grid-cols-2 gap-3" id="bizDomainsSelector">
+                  <div onclick="selectDomainCard('Business Development')" id="domain_card_Business_Development" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-briefcase text-blue-400/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Business Development</span>
+                  </div>
+                  <div onclick="selectDomainCard('HR')" id="domain_card_HR" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-users text-blue-400/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">HR</span>
+                  </div>
+                  <div onclick="selectDomainCard('Space Intern')" id="domain_card_Space_Intern" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-rocket text-blue-400/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Space Intern</span>
+                  </div>
+                  <div onclick="selectDomainCard('Venture Capital')" id="domain_card_Venture_Capital" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-hand-holding-dollar text-blue-400/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Venture Capital</span>
+                  </div>
+                  <div onclick="selectDomainCard('Finance')" id="domain_card_Finance" class="cursor-pointer border border-slate-800 bg-slate-950/40 hover:border-[#D4AF37] p-3 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-indian-rupee-sign text-blue-400/80 text-sm"></i>
+                    <span class="text-xs font-bold text-slate-200">Finance</span>
+                  </div>
+                </div>
+              </div>
+
+              <input type="hidden" id="selected_domains" name="domains" class="stu-req">
+            </div>
+
+            <!-- Final Summary Card -->
+            <div class="p-4 bg-slate-950/60 border border-slate-800 rounded-xl space-y-2 text-xs text-slate-300">
+              <p class="font-bold text-[#D4AF37] uppercase tracking-wider">Registration Summary Review:</p>
+              <div class="grid grid-cols-2 gap-2 text-[11px]">
+                <p><span class="text-slate-500">Name:</span> <span id="sumName" class="font-semibold text-slate-200">-</span></p>
+                <p><span class="text-slate-500">Email:</span> <span id="sumEmail" class="font-semibold text-slate-200">-</span></p>
+                <p><span class="text-slate-500">Location:</span> <span id="sumLocation" class="font-semibold text-slate-200">-</span></p>
+                <p><span class="text-slate-500">College:</span> <span id="sumCollege" class="font-semibold text-slate-200">-</span></p>
+                <p><span class="text-slate-500">Skills:</span> <span id="sumSkills" class="font-semibold text-slate-200">-</span></p>
+                <p><span class="text-slate-500">Resume PDF:</span> <span id="sumResume" class="font-semibold text-emerald-400">Attached</span></p>
+              </div>
+            </div>
+          </div>
+
+
+          <!-- ── MENTOR STEP 6: SUMMARY & SUBMIT ── -->
+          <!-- FOUNDER STEP 2 — the startup -->
+          <div id="founderStep2" class="wizard-section hidden space-y-4">
+            <h3 class="text-xs font-bold text-[#D4AF37] uppercase tracking-widest border-b border-slate-800/80 pb-2">Section 2 &mdash; Your Startup</h3>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Startup Name <span class="text-red-400">*</span></label>
+                <input type="text" id="fnd_startupName" name="startupName" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none" placeholder="Kite Labs">
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Industry <span class="text-red-400">*</span></label>
+                <select id="fnd_industry" name="industry" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none">
+                  <option value="">Select an industry</option>
+                  <option>EdTech</option><option>FinTech</option><option>HealthTech</option>
+                  <option>AgriTech</option><option>CleanTech</option><option>Logistics</option>
+                  <option>E-Commerce</option><option>SaaS</option><option>Gaming</option>
+                  <option>Media</option><option>Other</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Stage <span class="text-red-400">*</span></label>
+                <select id="fnd_stage" name="stage" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none">
+                  <option value="idea">Idea</option>
+                  <option value="validation">Validation</option>
+                  <option value="mvp">MVP built</option>
+                  <option value="early_revenue">Early revenue</option>
+                  <option value="growth">Growth</option>
+                  <option value="scaling">Scaling</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Funding so far</label>
+                <select id="fnd_funding" name="fundingStage" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none">
+                  <option value="bootstrapped">Bootstrapped</option>
+                  <option value="pre_seed">Pre-seed</option>
+                  <option value="seed">Seed</option>
+                  <option value="series_a">Series A</option>
+                  <option value="series_b">Series B</option>
+                  <option value="profitable">Profitable</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Team size</label>
+                <input type="number" min="1" value="1" id="fnd_teamSize" name="teamSize" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none">
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Website</label>
+                <input type="url" id="fnd_website" name="website" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none" placeholder="https://">
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">What does it do? <span class="text-red-400">*</span></label>
+              <textarea id="fnd_description" name="description" rows="3" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none" placeholder="One or two sentences a stranger would understand."></textarea>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-400 mb-2">Who are you hiring? <span class="text-red-400">*</span></label>
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-2" id="fnd_goalsWrap">
+                <label class="flex items-center gap-2 border border-slate-800 bg-slate-950/40 rounded-lg px-3 py-2 text-xs text-slate-300 cursor-pointer"><input type="checkbox" class="fnd-goal accent-amber-500" value="interns" checked> Interns</label>
+                <label class="flex items-center gap-2 border border-slate-800 bg-slate-950/40 rounded-lg px-3 py-2 text-xs text-slate-300 cursor-pointer"><input type="checkbox" class="fnd-goal accent-amber-500" value="developers"> Developers</label>
+                <label class="flex items-center gap-2 border border-slate-800 bg-slate-950/40 rounded-lg px-3 py-2 text-xs text-slate-300 cursor-pointer"><input type="checkbox" class="fnd-goal accent-amber-500" value="designers"> Designers</label>
+                <label class="flex items-center gap-2 border border-slate-800 bg-slate-950/40 rounded-lg px-3 py-2 text-xs text-slate-300 cursor-pointer"><input type="checkbox" class="fnd-goal accent-amber-500" value="marketers"> Marketers</label>
+                <label class="flex items-center gap-2 border border-slate-800 bg-slate-950/40 rounded-lg px-3 py-2 text-xs text-slate-300 cursor-pointer"><input type="checkbox" class="fnd-goal accent-amber-500" value="co_founder"> Co-founder</label>
+                <label class="flex items-center gap-2 border border-slate-800 bg-slate-950/40 rounded-lg px-3 py-2 text-xs text-slate-300 cursor-pointer"><input type="checkbox" class="fnd-goal accent-amber-500" value="mentors"> Mentors</label>
+                <label class="flex items-center gap-2 border border-slate-800 bg-slate-950/40 rounded-lg px-3 py-2 text-xs text-slate-300 cursor-pointer"><input type="checkbox" class="fnd-goal accent-amber-500" value="investors"> Investors</label>
+              </div>
+            </div>
+          </div>
+
+          <!-- FOUNDER STEP 3 — review -->
+          <div id="founderStep3" class="wizard-section hidden space-y-4">
+            <h3 class="text-xs font-bold text-[#D4AF37] uppercase tracking-widest border-b border-slate-800/80 pb-2">Review &amp; Submit</h3>
+            <div class="bg-slate-950/30 border border-slate-800 rounded-xl p-5 space-y-3">
+              <h4 class="text-sm font-bold text-slate-200">Review your information:</h4>
+              <table class="w-full text-xs text-left border-collapse">
+                <tbody>
+                  <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400 w-1/3">Full Name</th><td id="fnd_sumName" class="py-2 text-slate-200 font-semibold">-</td></tr>
+                  <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400">Email</th><td id="fnd_sumEmail" class="py-2 text-slate-200 font-semibold">-</td></tr>
+                  <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400">Startup</th><td id="fnd_sumStartup" class="py-2 text-slate-200 font-semibold">-</td></tr>
+                  <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400">Industry &amp; stage</th><td id="fnd_sumIndustry" class="py-2 text-slate-200 font-semibold">-</td></tr>
+                  <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400">Team size</th><td id="fnd_sumTeam" class="py-2 text-slate-200 font-semibold">-</td></tr>
+                  <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400">Hiring</th><td id="fnd_sumGoals" class="py-2 text-slate-200 font-semibold">-</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="text-[11px] text-slate-500 leading-relaxed">
+              HR reviews founder accounts before they open. You will be emailed when yours is approved,
+              and you land in the <strong class="text-slate-300">Founder OS</strong> &mdash; job posts, a hiring
+              pipeline over TEN&rsquo;s interns, fundraising, a data room and mentor booking.
+            </p>
+          </div>
+
+          <div id="mentorStep6" class="wizard-section hidden space-y-4">
+            <h3 class="text-xs font-bold text-[#D4AF37] uppercase tracking-widest border-b border-slate-800/80 pb-2">Review & Submit Mentorship Registration</h3>
+            
+            <div class="bg-slate-950/30 border border-slate-800 rounded-xl p-5 space-y-3">
+              <h4 class="text-sm font-bold text-slate-200">Review your information:</h4>
+              <table class="w-full text-xs text-left border-collapse">
+                <tbody>
+                  <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400 w-1/3">Full Name</th><td id="mentor_sumName" class="py-2 text-slate-200 font-semibold">-</td></tr>
+                  <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400">Email Address</th><td id="mentor_sumEmail" class="py-2 text-slate-200 font-semibold">-</td></tr>
+                  <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400">Mobile Number</th><td id="mentor_sumMobile" class="py-2 text-slate-200 font-semibold">-</td></tr>
+                  <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400">Organization</th><td id="mentor_sumCompany" class="py-2 text-slate-200 font-semibold">-</td></tr>
+                  <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400">Designation</th><td id="mentor_sumDesignation" class="py-2 text-slate-200 font-semibold">-</td></tr>
+                  <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400">Experience</th><td id="mentor_sumExperience" class="py-2 text-slate-200 font-semibold">-</td></tr>
+                  <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400">Expertise Domains</th><td id="mentor_sumDomains" class="py-2 text-slate-200 font-semibold">-</td></tr>
+                  <tr><th class="py-2 text-slate-400">Availability</th><td id="mentor_sumAvailability" class="py-2 text-slate-200 font-semibold">-</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-start gap-3">
+              <i class="fa-solid fa-circle-check text-emerald-400 text-lg mt-0.5"></i>
+              <p class="text-xs text-slate-300 leading-relaxed">
+                By submitting this form, you apply to become a certified mentor inside the TEN Ecosystem. Once human resource level reviews approve your profile, you will receive workspace credentials.
+              </p>
+            </div>
+          </div>
+
+
+          <!-- WIZARD NAVIGATION BUTTONS -->
+          <div class="flex items-center justify-between pt-4 border-t border-slate-800">
+            <button type="button" id="prevStepBtn" onclick="changeWizardStep(-1)" class="px-5 py-3 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 text-xs font-bold uppercase transition hidden">
+              <i class="fa-solid fa-arrow-left mr-1"></i> Back
+            </button>
+            <div class="flex-1"></div>
+            <button type="button" id="nextStepBtn" onclick="changeWizardStep(1)" class="px-6 py-3 rounded-xl btn-gold text-xs font-extrabold uppercase tracking-wide transition">
+              Next Step <i class="fa-solid fa-arrow-right ml-1"></i>
+            </button>
+            <button type="submit" id="submitRegBtn" class="px-6 py-3 rounded-xl btn-gold text-xs font-extrabold uppercase tracking-wide transition hidden">
+              CREATE MY ACCOUNT <i class="fa-solid fa-user-plus ml-1"></i>
+            </button>
+          </div>
+
+        </form>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    let activeRole = '';
+    let currentStep = 1;
+    let selectedDomains = [];
+    let selectedSkillsList = [];
+
+    // Password Visibility Toggle
+    function toggleRegPwd() {
+      const input = document.getElementById("reg_password");
+      const icon  = document.getElementById("togglePasswordBtn");
+      if (input.type === "password") {
+        input.type = "text";
+        icon.innerText = "🙈";
+      } else {
+        input.type = "password";
+        icon.innerText = "👁";
+      }
+    }
+
+    // Real-time password match check
+    function checkPasswordMatch() {
+      const pwd = document.getElementById("reg_password").value;
+      const confirmPwd = document.getElementById("reg_confirmPassword").value;
+      const msg = document.getElementById("passwordMatchMsg");
+      
+      if (!confirmPwd) {
+        msg.classList.add('hidden');
+        return false;
+      }
+      
+      msg.classList.remove('hidden');
+      if (pwd === confirmPwd) {
+        msg.textContent = "✓ Passwords match";
+        msg.className = "text-[11px] mt-1 font-semibold text-emerald-400";
+        return true;
+      } else {
+        msg.textContent = "✕ Passwords do not match";
+        msg.className = "text-[11px] mt-1 font-semibold text-red-500";
+        return false;
+      }
+    }
+
+    // Password strength indicator
+    function validatePasswordStrength() {
+      const pwd = document.getElementById("reg_password").value;
+      const bar = document.getElementById("passwordStrengthBar");
+      const text = document.getElementById("passwordStrengthText");
+
+      let score = 0;
+      if (pwd.length >= 8) score++;
+      if (/[A-Z]/.test(pwd)) score++;
+      if (/[0-9]/.test(pwd)) score++;
+      if (/[^A-Za-z0-9]/.test(pwd)) score++;
+
+      if (pwd.length < 8) {
+        bar.style.width = "25%";
+        bar.className = "h-full bg-red-500 transition-all duration-300";
+        text.textContent = "Too short (min 8 characters)";
+        text.className = "text-[11px] text-red-400 mt-1 font-medium";
+      } else if (score <= 2) {
+        bar.style.width = "50%";
+        bar.className = "h-full bg-amber-500 transition-all duration-300";
+        text.textContent = "Medium Strength (Add numbers/symbols)";
+        text.className = "text-[11px] text-amber-400 mt-1 font-medium";
+      } else {
+        bar.style.width = "100%";
+        bar.className = "h-full bg-emerald-500 transition-all duration-300";
+        text.textContent = "Strong Password!";
+        text.className = "text-[11px] text-emerald-400 mt-1 font-medium";
+      }
+      checkPasswordMatch();
+    }
+
+    // Embedded Location & Education Dataset for instant client-side rendering & fallback
+    const ALL_INDIAN_STATES = [
+      "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
+      "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka",
+      "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram",
+      "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu",
+      "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal",
+      "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu",
+      "Delhi / NCR", "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry"
+    ];
+
+    const ALL_WORLD_COUNTRIES_LIST = [
+      "India", "United States", "United Kingdom", "Canada", "Australia", "Germany",
+      "United Arab Emirates", "Singapore", "France", "Japan", "China", "Brazil",
+      "South Africa", "Netherlands", "Switzerland", "Spain", "Italy", "Sweden",
+      "Ireland", "New Zealand", "Saudi Arabia", "Qatar", "Kuwait", "Oman",
+      "Malaysia", "Indonesia", "Vietnam", "Philippines", "Thailand", "Mexico",
+      "Argentina", "Egypt", "Nigeria", "Kenya", "South Korea", "Russia", "Turkey"
+    ];
+
+    const STATE_DETAILS_MAP = {
+      "Maharashtra": {
+        cities: ["Mumbai", "Pune", "Nagpur", "Nashik", "Kolhapur", "Satara", "Thane", "Navi Mumbai", "Aurangabad", "Solapur", "Sangli", "Amravati", "Nanded", "Jalgaon"],
+        colleges: [
+          "College of Engineering Pune (COEP)", "Pune Institute of Computer Technology (PICT)",
+          "MIT World Peace University (MIT-WPU)", "Vishwakarma Institute of Technology (VIT Pune)",
+          "D.Y. Patil College of Engineering", "Veermata Jijabai Technological Institute (VJTI Mumbai)",
+          "Indian Institute of Technology Bombay (IIT Bombay)", "Government College of Engineering Aurangabad",
+          "Walchand College of Engineering Sangli", "NMIMS Mumbai", "SPIT Mumbai", "SPPU Pune", "Mumbai University"
+        ]
+      },
+      "Karnataka": {
+        cities: ["Bengaluru", "Mysuru", "Mangaluru", "Hubballi", "Belagavi", "Tumakuru", "Shivamogga", "Davangere", "Ballari"],
+        colleges: [
+          "Indian Institute of Science (IISc Bengaluru)", "RV College of Engineering (RVCE)",
+          "BMS College of Engineering", "Ramaiah Institute of Technology (MSRIT)", "PES University",
+          "NIT Surathkal", "IIIT Bangalore", "Manipal Institute of Technology"
+        ]
+      },
+      "Tamil Nadu": {
+        cities: ["Chennai", "Coimbatore", "Madurai", "Tiruchirappalli", "Salem", "Kanchipuram", "Tirunelveli", "Vellore", "Erode"],
+        colleges: [
+          "SRM Institute of Science and Technology (SRM IST)", "College of Engineering Guindy (Anna Univ)",
+          "Indian Institute of Technology Madras (IIT Madras)", "PSG College of Technology",
+          "Vellore Institute of Technology (VIT Vellore)", "SASTRA University", "NIT Trichy"
+        ]
+      },
+      "Delhi / NCR": {
+        cities: ["New Delhi", "Noida", "Gurugram", "Faridabad", "Ghaziabad", "Greater Noida"],
+        colleges: [
+          "IIT Delhi", "Delhi Technological University (DTU)", "Netaji Subhas University of Technology (NSUT)",
+          "IIIT Delhi", "Amity University Noida", "Jamia Millia Islamia", "JNU Delhi", "GGSIPU Delhi"
+        ]
+      },
+      "Telangana": {
+        cities: ["Hyderabad", "Warangal", "Nizamabad", "Karimnagar", "Khammam"],
+        colleges: ["IIIT Hyderabad", "IIT Hyderabad", "JNTU Hyderabad", "CBIT Hyderabad", "Vasavi College", "Osmania University"]
+      },
+      "Uttar Pradesh": {
+        cities: ["Lucknow", "Kanpur", "Varanasi", "Agra", "Noida", "Greater Noida", "Prayagraj", "Meerut", "Ghaziabad", "Gorakhpur"],
+        colleges: ["IIT Kanpur", "IIT (BHU) Varanasi", "MNNIT Prayagraj", "HBTU Kanpur", "JIIT Noida", "GL Bajaj Noida", "AKTU Lucknow"]
+      },
+      "Gujarat": {
+        cities: ["Ahmedabad", "Surat", "Vadodara", "Rajkot", "Bhavnagar", "Jamnagar", "Gandhinagar"],
+        colleges: ["IIT Gandhinagar", "SVNIT Surat", "DA-IICT Gandhinagar", "Nirma University Ahmedabad", "MS University Vadodara"]
+      },
+      "West Bengal": {
+        cities: ["Kolkata", "Howrah", "Durgapur", "Siliguri", "Asansol", "Kharagpur"],
+        colleges: ["IIT Kharagpur", "Jadavpur University Kolkata", "IIEST Shibpur", "Heritage Institute of Technology", "Techno India"]
+      },
+      "Rajasthan": {
+        cities: ["Jaipur", "Jodhpur", "Udaipur", "Kota", "Ajmer", "Bikaner", "Bhilwara"],
+        colleges: ["BITS Pilani", "MNIT Jaipur", "IIT Jodhpur", "LNMIIT Jaipur", "Manipal University Jaipur"]
+      },
+      "Punjab": {
+        cities: ["Chandigarh", "Ludhiana", "Amritsar", "Jalandhar", "Patiala", "Mohali", "Bathinda"],
+        colleges: ["IIT Ropar", "PEC Chandigarh", "Thapar Institute Patiala", "Chandigarh University", "Lovely Professional University (LPU)"]
+      },
+      "Kerala": {
+        cities: ["Thiruvananthapuram", "Kochi", "Kozhikode", "Thrissur", "Kollam", "Kannur"],
+        colleges: ["NIT Calicut", "IIT Palakkad", "CUSAT Kochi", "College of Engineering Trivandrum (CET)"]
+      },
+      "Madhya Pradesh": {
+        cities: ["Bhopal", "Indore", "Gwalior", "Jabalpur", "Ujjain", "Sagar"],
+        colleges: ["IIT Indore", "MANIT Bhopal", "IIITM Gwalior", "IIITDM Jabalpur"]
+      },
+      "Andhra Pradesh": {
+        cities: ["Visakhapatnam", "Vijayawada", "Guntur", "Tirupati", "Nellore", "Kakinada"],
+        colleges: ["IIT Tirupati", "NIT Tadepalligudem", "KL University", "GITAM Visakhapatnam", "Andhra University"]
+      },
+      "Bihar": {
+        cities: ["Patna", "Gaya", "Muzaffarpur", "Bhagalpur", "Darbhanga"],
+        colleges: ["IIT Patna", "NIT Patna", "BIT Mesra Patna", "Patna University"]
+      },
+      "Odisha": {
+        cities: ["Bhubaneswar", "Cuttack", "Rourkela", "Berhampur", "Sambalpur"],
+        colleges: ["IIT Bhubaneswar", "NIT Rourkela", "KIIT Bhubaneswar", "ITER SOA University"]
+      },
+      "Assam": {
+        cities: ["Guwahati", "Silchar", "Dibrugarh", "Jorhat", "Nagaon"],
+        colleges: ["IIT Guwahati", "NIT Silchar", "AEC Guwahati", "Gauhati University"]
+      },
+      "Haryana": {
+        cities: ["Gurugram", "Faridabad", "Panipat", "Ambala", "Karnal", "Hisar", "Rohtak"],
+        colleges: ["NIT Kurukshetra", "YMCA Faridabad", "Ashoka University", "O.P. Jindal University"]
+      }
+    };
+
+    const DEFAULT_DEGREES_LIST = [
+      "B.Tech Computer Science & Engineering",
+      "B.Tech Information Technology",
+      "B.Tech AI & Data Science",
+      "B.Tech Electronics & Communication",
+      "B.Tech Mechanical Engineering",
+      "B.Tech Civil Engineering",
+      "B.Tech Chemical Engineering",
+      "BCA (Bachelor of Computer Applications)",
+      "MCA (Master of Computer Applications)",
+      "B.Sc Computer Science",
+      "M.Sc Computer Science",
+      "BBA (Bachelor of Business Administration)",
+      "MBA (Master of Business Administration)",
+      "M.Tech Software Engineering",
+      "Ph.D. Computer Science / Engineering",
+      "Other / Custom Degree"
+    ];
+
+    // Location & Custom Input Toggle Handlers
+    function toggleCustomInput(selectId, inputId, isCustomValue) {
+      const select = document.getElementById(selectId);
+      const input = document.getElementById(inputId);
+      if (!select || !input) return;
+
+      if (isCustomValue) {
+        input.classList.remove('hidden');
+        input.setAttribute('required', 'true');
+      } else {
+        input.classList.add('hidden');
+        input.removeAttribute('required');
+        input.value = '';
+      }
+    }
+
+    function getCountryVal() {
+      const selectVal = document.getElementById('stu_country').value;
+      if (selectVal.includes('Other')) {
+        return document.getElementById('stu_country_custom').value.trim();
+      }
+      return selectVal;
+    }
+
+    function getStateVal() {
+      const selectVal = document.getElementById('stu_state').value;
+      if (selectVal.includes('Other')) {
+        return document.getElementById('stu_state_custom').value.trim();
+      }
+      return selectVal;
+    }
+
+    function getCityVal() {
+      const selectVal = document.getElementById('stu_city').value;
+      if (selectVal.includes('Other')) {
+        return document.getElementById('stu_city_custom').value.trim();
+      }
+      return selectVal;
+    }
+
+    function getCollegeVal() {
+      const selectVal = document.getElementById('stu_university').value;
+      if (selectVal.includes('Other')) {
+        return document.getElementById('stu_university_custom').value.trim();
+      }
+      return selectVal;
+    }
+
+    function getDegreeVal() {
+      const selectVal = document.getElementById('stu_degree').value;
+      if (selectVal.includes('Other')) {
+        return document.getElementById('stu_degree_custom').value.trim();
+      }
+      return selectVal;
+    }
+
+    function onCityChange(val) {
+      toggleCustomInput('stu_city', 'stu_city_custom', val.includes('Other'));
+    }
+
+    function onDegreeChange(val) {
+      toggleCustomInput('stu_degree', 'stu_degree_custom', val.includes('Other'));
+    }
+
+    async function loadCountries() {
+      const select = document.getElementById('stu_country');
+      if (!select) return;
+      select.innerHTML = '<option value="">Select Country</option>';
+      ALL_WORLD_COUNTRIES_LIST.forEach(c => {
+        select.innerHTML += `<option value="${c}">${c}</option>`;
+      });
+      select.innerHTML += '<option value="Other / Custom Country">Other / Custom Country...</option>';
+
+      try {
+        const res = await fetch('/api/v2/location-education/countries');
+        const data = await res.json();
+        if (data.success && data.countries && data.countries.length > 0) {
+          select.innerHTML = '<option value="">Select Country</option>';
+          data.countries.forEach(c => {
+            select.innerHTML += `<option value="${c}">${c}</option>`;
+          });
+          select.innerHTML += '<option value="Other / Custom Country">Other / Custom Country...</option>';
+        }
+      } catch (err) {
+        console.warn('Backend API country load failed, using local dataset fallback', err);
+      }
+    }
+
+    async function onCountryChange(country) {
+      toggleCustomInput('stu_country', 'stu_country_custom', country.includes('Other'));
+
+      const stateSelect = document.getElementById('stu_state');
+      const citySelect = document.getElementById('stu_city');
+      const collegeSelect = document.getElementById('stu_university');
+      const degreeSelect = document.getElementById('stu_degree');
+      
+      stateSelect.innerHTML = '<option value="">Select State</option>';
+      citySelect.innerHTML = '<option value="">Select City</option>';
+      collegeSelect.innerHTML = '<option value="">Select College</option>';
+      degreeSelect.innerHTML = '<option value="">Select Degree</option>';
+
+      if (!country) return;
+
+      // Populate states
+      if (country === "India") {
+        ALL_INDIAN_STATES.forEach(s => {
+          stateSelect.innerHTML += `<option value="${s}">${s}</option>`;
+        });
+      } else {
+        const globalStates = ["State / Province 1", "State / Province 2", "Capital Territory", "Central Region"];
+        globalStates.forEach(s => {
+          stateSelect.innerHTML += `<option value="${s}">${s}</option>`;
+        });
+      }
+      stateSelect.innerHTML += '<option value="Other / Custom State">Other / Custom State...</option>';
+
+      try {
+        const res = await fetch(`/api/v2/location-education/states?country=${encodeURIComponent(country)}`);
+        const data = await res.json();
+        if (data.success && data.states && data.states.length > 0) {
+          stateSelect.innerHTML = '<option value="">Select State</option>';
+          data.states.forEach(s => {
+            stateSelect.innerHTML += `<option value="${s}">${s}</option>`;
+          });
+          stateSelect.innerHTML += '<option value="Other / Custom State">Other / Custom State...</option>';
+        }
+      } catch (err) {
+        console.warn('Backend API states load failed, using local dataset fallback', err);
+      }
+    }
+
+    async function onStateChange(state) {
+      toggleCustomInput('stu_state', 'stu_state_custom', state.includes('Other'));
+
+      const country = document.getElementById('stu_country').value;
+      const citySelect = document.getElementById('stu_city');
+      const collegeSelect = document.getElementById('stu_university');
+      const degreeSelect = document.getElementById('stu_degree');
+      
+      citySelect.innerHTML = '<option value="">Select City</option>';
+      collegeSelect.innerHTML = '<option value="">Select College</option>';
+      degreeSelect.innerHTML = '<option value="">Select Degree</option>';
+
+      if (!state) return;
+
+      // Populate cities & colleges with rich dataset or smart fallbacks
+      if (STATE_DETAILS_MAP[state]) {
+        STATE_DETAILS_MAP[state].cities.forEach(c => {
+          citySelect.innerHTML += `<option value="${c}">${c}</option>`;
+        });
+        STATE_DETAILS_MAP[state].colleges.forEach(col => {
+          collegeSelect.innerHTML += `<option value="${col}">${col}</option>`;
+        });
+      } else {
+        const fallbackCities = [`${state} Central City`, `${state} Capital`, "Metro City", "North District", "South District"];
+        fallbackCities.forEach(c => {
+          citySelect.innerHTML += `<option value="${c}">${c}</option>`;
+        });
+
+        const fallbackColleges = [
+          `Government Engineering College (${state})`,
+          `National Institute of Technology (${state})`,
+          `State University of ${state}`,
+          `Private Engineering College (${state})`
+        ];
+        fallbackColleges.forEach(col => {
+          collegeSelect.innerHTML += `<option value="${col}">${col}</option>`;
+        });
+      }
+      citySelect.innerHTML += `<option value="Other / Custom City">Other / Custom City...</option>`;
+      collegeSelect.innerHTML += `<option value="Other / Custom College">Other / Custom College...</option>`;
+
+      try {
+        const [cityRes, colRes] = await Promise.all([
+          fetch(`/api/v2/location-education/cities?country=${encodeURIComponent(country)}&state=${encodeURIComponent(state)}`),
+          fetch(`/api/v2/location-education/colleges?state=${encodeURIComponent(state)}`)
+        ]);
+        const cityData = await cityRes.json();
+        const colData = await colRes.json();
+
+        if (cityData.success && cityData.cities && cityData.cities.length > 0) {
+          citySelect.innerHTML = '<option value="">Select City</option>';
+          cityData.cities.forEach(c => {
+            citySelect.innerHTML += `<option value="${c}">${c}</option>`;
+          });
+          citySelect.innerHTML += `<option value="Other / Custom City">Other / Custom City...</option>`;
+        }
+        if (colData.success && colData.colleges && colData.colleges.length > 0) {
+          collegeSelect.innerHTML = '<option value="">Select College</option>';
+          colData.colleges.forEach(col => {
+            collegeSelect.innerHTML += `<option value="${col}">${col}</option>`;
+          });
+          collegeSelect.innerHTML += `<option value="Other / Custom College">Other / Custom College...</option>`;
+        }
+      } catch (err) {
+        console.warn('Backend API cities/colleges load failed, using local dataset fallback', err);
+      }
+    }
+
+    async function onCollegeChange(college) {
+      toggleCustomInput('stu_university', 'stu_university_custom', college.includes('Other'));
+
+      const degreeSelect = document.getElementById('stu_degree');
+      degreeSelect.innerHTML = '<option value="">Select Degree</option>';
+      
+      DEFAULT_DEGREES_LIST.forEach(d => {
+        degreeSelect.innerHTML += `<option value="${d}">${d}</option>`;
+      });
+      degreeSelect.innerHTML += '<option value="Other / Custom Degree">Other / Custom Degree...</option>';
+
+      if (!college) return;
+
+      try {
+        const res = await fetch(`/api/v2/location-education/degrees?college=${encodeURIComponent(college)}`);
+        const data = await res.json();
+        if (data.success && data.degrees && data.degrees.length > 0) {
+          degreeSelect.innerHTML = '<option value="">Select Degree</option>';
+          data.degrees.forEach(d => {
+            degreeSelect.innerHTML += `<option value="${d}">${d}</option>`;
+          });
+          degreeSelect.innerHTML += '<option value="Other / Custom Degree">Other / Custom Degree...</option>';
+        }
+      } catch (err) {
+        console.warn('Backend API degrees load failed, using default degrees fallback', err);
+      }
+    }
+
+    // Skills Search & Multi-Select Tag Chips
+    const LOCAL_SKILLS_LIST = [
+      "Python", "JavaScript", "React", "Node.js", "Flutter", "Java", "C++", "C#",
+      "HTML5", "CSS3", "TypeScript", "Express.js", "MongoDB", "SQL", "PostgreSQL",
+      "Machine Learning", "Deep Learning", "Artificial Intelligence", "Data Analytics",
+      "Pandas", "NumPy", "TensorFlow", "PyTorch", "Docker", "Kubernetes", "AWS",
+      "Git & GitHub", "Figma", "UI/UX Design", "REST APIs", "GraphQL", "Tailwind CSS",
+      "Android", "iOS / Swift", "Cyber Security", "DevOps", "CI/CD", "Next.js"
+    ];
+
+    function renderPopularSkillsQuickAdd() {
+      const container = document.getElementById('popularSkillsQuickAdd');
+      if (!container) return;
+      
+      const quickSkills = ["Python", "React", "JavaScript", "Node.js", "Flutter", "Java", "C++", "HTML5", "CSS3", "MongoDB", "SQL", "AWS", "Figma", "Artificial Intelligence"];
+      container.innerHTML = quickSkills.map(s => {
+        const isSelected = selectedSkillsList.includes(s);
+        return `
+          <button type="button" onclick="addSkillChip('${s}')" class="px-2.5 py-1 text-[11px] font-semibold rounded-lg border transition ${isSelected ? 'bg-amber-500/20 text-amber-300 border-amber-500/50' : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-amber-500/40 hover:text-amber-400'}">
+            + ${s}
+          </button>
+        `;
+      }).join('');
+    }
+
+    async function onSkillSearch(query) {
+      const dropdown = document.getElementById('skillSuggestionsDropdown');
+      if (!dropdown) return;
+
+      renderPopularSkillsQuickAdd();
+
+      const q = (query || '').toLowerCase().trim();
+      let matches = [];
+
+      if (!q) {
+        matches = LOCAL_SKILLS_LIST.slice(0, 12);
+      } else {
+        matches = LOCAL_SKILLS_LIST.filter(s => s.toLowerCase().includes(q));
+      }
+
+      try {
+        const res = await fetch(`/api/v2/location-education/skills?q=${encodeURIComponent(query)}`);
+        const data = await res.json();
+        if (data.success && data.skills && data.skills.length > 0) {
+          matches = Array.from(new Set([...matches, ...data.skills]));
+        }
+      } catch (err) {
+        // Fallback to local matches
+      }
+
+      if (matches.length > 0) {
+        dropdown.innerHTML = matches.map(s => `
+          <div onclick="addSkillChip('${s}')" class="px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-amber-500/10 hover:text-amber-400 rounded-lg cursor-pointer transition flex items-center justify-between">
+            <span>${s}</span>
+            <span class="text-[10px] text-amber-500/80 font-bold">+ Add Tag</span>
+          </div>
+        `).join('');
+        dropdown.classList.remove('hidden');
+      } else {
+        dropdown.innerHTML = `
+          <div onclick="addSkillChip('${query.trim()}')" class="px-3 py-2 text-xs font-semibold text-amber-400 hover:bg-amber-500/10 rounded-lg cursor-pointer transition">
+            + Add custom skill: "${query.trim()}"
+          </div>
+        `;
+        dropdown.classList.remove('hidden');
+      }
+    }
+
+    function addSkillChip(skillName) {
+      if (!skillName) return;
+      const cleanName = skillName.trim();
+      if (!cleanName || selectedSkillsList.includes(cleanName)) return;
+      
+      selectedSkillsList.push(cleanName);
+      renderSkillChips();
+      renderPopularSkillsQuickAdd();
+      
+      const input = document.getElementById('skillSearchInput');
+      if (input) input.value = '';
+      
+      const dropdown = document.getElementById('skillSuggestionsDropdown');
+      if (dropdown) dropdown.classList.add('hidden');
+    }
+
+    function removeSkillChip(skillName) {
+      selectedSkillsList = selectedSkillsList.filter(s => s !== skillName);
+      renderSkillChips();
+      renderPopularSkillsQuickAdd();
+    }
+
+    function renderSkillChips() {
+      const container = document.getElementById('selectedSkillChipsContainer');
+      const hiddenInput = document.getElementById('stu_skills');
+      
+      if (!container || !hiddenInput) return;
+
+      if (selectedSkillsList.length === 0) {
+        container.innerHTML = `<span class="text-xs text-slate-500 font-medium italic" id="emptySkillsMsg">No skills added yet. Search or click suggestions above.</span>`;
+        hiddenInput.value = '';
+        return;
+      }
+      
+      container.innerHTML = selectedSkillsList.map(s => `
+        <div class="skill-chip">
+          <span>${s}</span>
+          <span class="remove-chip" onclick="removeSkillChip('${s}')">&times;</span>
+        </div>
+      `).join('');
+      hiddenInput.value = selectedSkillsList.join(', ');
+    }
+
+    document.getElementById('skillSearchInput')?.addEventListener('keypress', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const val = this.value.trim();
+        if (val) addSkillChip(val);
+      }
+    });
+
+    document.addEventListener('click', function(e) {
+      const input = document.getElementById('skillSearchInput');
+      const dropdown = document.getElementById('skillSuggestionsDropdown');
+      if (input && dropdown && !input.contains(e.target) && !dropdown.contains(e.target)) {
+        dropdown.classList.add('hidden');
+      }
+    });
+
+    // Domain Selection (Max 2)
+    function selectDomainCard(domain) {
+      const cardId = `domain_card_${domain.replace(/\s+/g, '_')}`;
+      const element = document.getElementById(cardId);
+      if (!element) return;
+
+      const index = selectedDomains.indexOf(domain);
+      if (index !== -1) {
+        selectedDomains.splice(index, 1);
+        element.classList.remove('border-[#D4AF37]', 'bg-amber-500/10');
+      } else {
+        if (selectedDomains.length >= 2) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Selection Limit',
+            text: 'You can select maximum 2 domains.',
+            background: '#0e1428',
+            color: '#F0EEE8',
+            confirmButtonColor: '#D4AF37'
+          });
+          return;
+        }
+        selectedDomains.push(domain);
+        element.classList.add('border-[#D4AF37]', 'bg-amber-500/10');
+      }
+      document.getElementById('selected_domains').value = selectedDomains.join(',');
+    }
+
+    // Resume PDF Upload
+    async function uploadResumeFile(input) {
+      const file = input.files[0];
+      if (!file) return;
+
+      if (!file.name.toLowerCase().endsWith('.pdf') || file.type !== 'application/pdf') {
+        Swal.fire({
+          icon: 'error',
+          title: 'PDF Format Required',
+          text: 'Registration strictly accepts PDF files only. (JPG, PNG, DOCX, ZIP formats are rejected).',
+          background: '#0e1428',
+          color: '#F0EEE8',
+          confirmButtonColor: '#D4AF37'
+        });
+        input.value = '';
+        return;
+      }
+
+      if (file.size > 5 * 1024 * 1024) {
+        Swal.fire({
+          icon: 'error',
+          title: 'File Too Large',
+          text: 'Maximum allowed resume size is 5MB.',
+          background: '#0e1428',
+          color: '#F0EEE8',
+          confirmButtonColor: '#D4AF37'
+        });
+        input.value = '';
+        return;
+      }
+
+      const uploadStatusText = document.getElementById('uploadStatusText');
+      const uploadPdfIcon = document.getElementById('uploadPdfIcon');
+      const container = document.getElementById('resumeUploadContainer');
+
+      uploadStatusText.textContent = 'Uploading resume PDF...';
+      uploadStatusText.className = 'text-sm font-semibold text-amber-400 animate-pulse';
+      uploadPdfIcon.className = 'fa-solid fa-spinner fa-spin text-3xl text-[#D4AF37] mb-2';
+
+      const formData = new FormData();
+      formData.append('resume', file);
+
+      try {
+        const res = await fetch('/api/v2/upload-resume', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('stu_resume').value = data.filePath;
+          document.getElementById('uploadedFileNameDisplay').textContent = file.name;
+          document.getElementById('resumeUploadedPreview').classList.remove('hidden');
+          container.classList.add('hidden');
+        } else {
+          throw new Error(data.message || 'Upload failed');
+        }
+      } catch (err) {
+        console.error(err);
+        uploadStatusText.textContent = 'Upload failed. Tap to retry.';
+        uploadStatusText.className = 'text-sm font-semibold text-red-500';
+        uploadPdfIcon.className = 'fa-solid fa-circle-exclamation text-3xl text-red-500 mb-2';
+        input.value = '';
+      }
+    }
+
+    function replaceUploadedResume() {
+      document.getElementById('stu_resume').value = '';
+      document.getElementById('stu_resume_file').value = '';
+      document.getElementById('resumeUploadedPreview').classList.add('hidden');
+      const container = document.getElementById('resumeUploadContainer');
+      container.classList.remove('hidden');
+      document.getElementById('uploadStatusText').textContent = 'Drag & drop your PDF resume here, or click to browse';
+      document.getElementById('uploadStatusText').className = 'text-sm font-semibold text-slate-300';
+      document.getElementById('uploadPdfIcon').className = 'fa-solid fa-file-pdf text-4xl text-slate-500 mb-2';
+    }
+
+    // Wizard Step Navigation & Validation
+    function changeWizardStep(delta) {
+      const targetStep = currentStep + delta;
+      if (delta > 0 && !validateStep(currentStep)) {
+        return;
+      }
+      const maxSteps = activeRole === 'mentor' ? 5 : activeRole === 'founder' ? 3 : 6;
+      if (targetStep < 1 || targetStep > maxSteps) return;
+
+      currentStep = targetStep;
+      renderWizardStep();
+    }
+
+    function validateStep(step) {
+      if (step === 1) {
+        const name = document.getElementById('reg_fullName').value.trim();
+        const email = document.getElementById('reg_email').value.trim();
+        const mobile = document.getElementById('reg_mobile').value.trim();
+        const pwd = document.getElementById('reg_password').value;
+        const confirmPwd = document.getElementById('reg_confirmPassword').value;
+
+        if (!name || name.length < 2) {
+          showError('Full Name Required', 'Please enter your full name (minimum 2 characters).');
+          return false;
+        }
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          showError('Valid Email Required', 'Please enter a valid email address.');
+          return false;
+        }
+        if (!mobile || mobile.length < 10) {
+          showError('Valid Mobile Required', 'Please enter a valid 10+ digit mobile number.');
+          return false;
+        }
+        if (!pwd || pwd.length < 8) {
+          showError('Password Too Short', 'Password must be at least 8 characters long.');
+          return false;
+        }
+        if (pwd !== confirmPwd) {
+          showError('Password Mismatch', 'Password and Confirm Password do not match.');
+          return false;
+        }
+        return true;
+      }
+
+      if (activeRole === 'founder') {
+        if (step === 2) {
+          const need = [['fnd_startupName','Startup name'],['fnd_industry','Industry'],['fnd_description','Description']];
+          for (const [id, label] of need) {
+            if (!document.getElementById(id).value.trim()) {
+              showError(label + ' required', 'Please fill in the ' + label.toLowerCase() + '.');
+              return false;
+            }
+          }
+          if (!document.querySelectorAll('.fnd-goal:checked').length) {
+            showError('Tell us who you are hiring', 'Pick at least one.');
+            return false;
+          }
+        }
+        return true;
+      }
+
+      if (activeRole === 'mentor') {
+        if (step === 2) {
+          const company = document.getElementById('mentor_company').value.trim();
+          const designation = document.getElementById('mentor_designation').value.trim();
+          const exp = document.getElementById('mentor_experience').value;
+          const linkedin = document.getElementById('mentor_linkedin').value.trim();
+
+          if (!company || company.length < 2) {
+            showError('Organization Required', 'Please enter your current company or organization.');
+            return false;
+          }
+          if (!designation || designation.length < 2) {
+            showError('Designation Required', 'Please enter your designation or job title.');
+            return false;
+          }
+          if (!exp) {
+            showError('Experience Required', 'Please select your years of experience.');
+            return false;
+          }
+          if (!linkedin || !/^https?:\/\/(www\.)?linkedin\.com\/.+/.test(linkedin)) {
+            showError('Valid LinkedIn URL Required', 'Please enter a valid LinkedIn Profile URL.');
+            return false;
+          }
+          return true;
+        }
+
+        if (step === 3) {
+          const checkedDomains = Array.from(document.querySelectorAll('.mentor-domain-check:checked')).map(el => el.value);
+          const availability = document.getElementById('mentor_availability').value;
+
+          if (checkedDomains.length === 0) {
+            showError('Expertise Required', 'Please select at least one domain of expertise.');
+            return false;
+          }
+          if (!availability) {
+            showError('Availability Required', 'Please select your weekly availability.');
+            return false;
+          }
+          return true;
+        }
+
+        if (step === 4) {
+          const resume = document.getElementById('stu_resume').value;
+          if (!resume) {
+            showError('Resume PDF Required', 'Please upload your resume in PDF format.');
+            return false;
+          }
+          return true;
+        }
+
+        return true;
+      }
+
+      if (step === 2) {
+        const country = getCountryVal();
+        const state = getStateVal();
+        const city = getCityVal();
+        const college = getCollegeVal();
+        const degree = getDegreeVal();
+        const year = document.getElementById('stu_academicYear').value;
+        const gradYear = document.getElementById('stu_graduationYear').value;
+
+        if (!country || !state || !city) {
+          showError('Location Missing', 'Country, State, and City selections are mandatory.');
+          return false;
+        }
+        if (!college || !degree || !year || !gradYear) {
+          showError('Education Details Missing', 'College, Degree, Academic Year, and Graduation Year are mandatory.');
+          return false;
+        }
+        return true;
+      }
+
+      if (step === 3) {
+        const tenure = document.getElementById('stu_tenure').value;
+        if (!tenure) {
+          showError('Tenure Required', 'Please select an internship tenure duration.');
+          return false;
+        }
+        return true;
+      }
+
+      if (step === 4) {
+        const skills = document.getElementById('stu_skills').value;
+        const portfolio = document.getElementById('stu_portfolio').value.trim();
+        const linkedin = document.getElementById('stu_linkedin').value.trim();
+
+        if (!skills || selectedSkillsList.length === 0) {
+          showError('Skills Required', 'Please add at least one skill to your profile.');
+          return false;
+        }
+        if (!portfolio || !/^https?:\/\/.+\..+/.test(portfolio)) {
+          showError('Valid Portfolio URL Required', 'Portfolio URL is mandatory and must start with http:// or https://');
+          return false;
+        }
+        if (!linkedin || !/^https?:\/\/(www\.)?linkedin\.com\/.+/.test(linkedin)) {
+          showError('Valid LinkedIn URL Required', 'LinkedIn Profile URL is mandatory (e.g. https://linkedin.com/in/username).');
+          return false;
+        }
+        return true;
+      }
+
+      if (step === 5) {
+        const resume = document.getElementById('stu_resume').value;
+        if (!resume) {
+          showError('Resume PDF Required', 'Please upload your resume in PDF format before proceeding.');
+          return false;
+        }
+        return true;
+      }
+
+      if (step === 6) {
+        const domains = document.getElementById('selected_domains').value;
+        if (!domains || selectedDomains.length === 0) {
+          showError('Domain Required', 'Please select at least 1 domain.');
+          return false;
+        }
+        return true;
+      }
+
+      return true;
+    }
+
+    function showError(title, message) {
+      Swal.fire({
+        icon: 'error',
+        title: title,
+        text: message,
+        background: '#0e1428',
+        color: '#F0EEE8',
+        confirmButtonColor: '#D4AF37'
+      });
+    }
+
+    function renderWizardStep() {
+      const maxSteps = activeRole === 'mentor' ? 5 : activeRole === 'founder' ? 3 : 6;
+      document.getElementById('wizardStepNumber').textContent = currentStep;
+      if (document.getElementById('wizardTotalSteps')) {
+        document.getElementById('wizardTotalSteps').textContent = maxSteps;
+      }
+      
+      const roleIconBadge = document.getElementById('roleIconBadge');
+      const roleFormTitle = document.getElementById('roleFormTitle');
+      const topSubtitle = document.getElementById('topSubtitle');
+      
+      if (activeRole === 'mentor') {
+        if (roleIconBadge) roleIconBadge.textContent = '🧑‍🏫';
+        if (roleFormTitle) roleFormTitle.textContent = 'MENTOR ONBOARDING WIZARD';
+        if (topSubtitle) topSubtitle.textContent = 'Complete your mentorship application to guide start-up ventures.';
+      } else if (activeRole === 'founder') {
+        if (roleIconBadge) roleIconBadge.textContent = '🚀';
+        if (roleFormTitle) roleFormTitle.textContent = 'FOUNDER ONBOARDING WIZARD';
+        if (topSubtitle) topSubtitle.textContent = 'Tell us about your startup. You land in the Founder OS once HR approves.';
+      } else {
+        if (roleIconBadge) roleIconBadge.textContent = '🎓';
+        if (roleFormTitle) roleFormTitle.textContent = 'STUDENT ONBOARDING WIZARD';
+        if (topSubtitle) topSubtitle.textContent = 'Complete your registration wizard to set up your ecosystem workspace.';
+      }
+
+      const pillNames = activeRole === 'mentor'
+        ? ["1. Personal", "2. Professional", "3. Expertise", "4. Resume PDF", "5. Review", ""]
+        : activeRole === 'founder'
+        ? ["1. Personal", "2. Your startup", "3. Review", "", "", ""]
+        : ["1. Personal", "2. Education", "3. Tenure", "4. Skills & Links", "5. Resume PDF", "6. Domain"];
+
+      for (let i = 1; i <= 6; i++) {
+        const pill = document.getElementById(`stepPill${i}`);
+        if (pill) {
+          if (i > maxSteps) {
+            pill.classList.add('hidden');
+          } else {
+            pill.classList.remove('hidden');
+            pill.textContent = pillNames[i - 1];
+            pill.className = 'step-pill text-[10px] font-bold py-1.5 px-1 rounded-lg border border-slate-800 text-center truncate';
+            if (i === currentStep) pill.classList.add('active');
+            else if (i < currentStep) pill.classList.add('completed');
+          }
+        }
+      }
+
+      // Hide all panels
+      const allPanels = [
+        'wizardStep1', 'wizardStep2', 'wizardStep3', 'wizardStep4', 'wizardStep5', 'wizardStep6',
+        'mentorStep2', 'mentorStep3', 'mentorStep6',
+        'founderStep2', 'founderStep3'
+      ];
+      allPanels.forEach(pid => {
+        const el = document.getElementById(pid);
+        if (el) el.classList.add('hidden');
+      });
+
+      // Show active panel
+      let currentPanelId = '';
+      if (activeRole === 'mentor') {
+        const mentorPanelMap = {
+          1: 'wizardStep1',
+          2: 'mentorStep2',
+          3: 'mentorStep3',
+          4: 'wizardStep5',
+          5: 'mentorStep6'
+        };
+        currentPanelId = mentorPanelMap[currentStep];
+      } else if (activeRole === 'founder') {
+        currentPanelId = { 1: 'wizardStep1', 2: 'founderStep2', 3: 'founderStep3' }[currentStep];
+      } else {
+        currentPanelId = `wizardStep${currentStep}`;
+      }
+
+      const activePanel = document.getElementById(currentPanelId);
+      if (activePanel) activePanel.classList.remove('hidden');
+
+      const prevBtn = document.getElementById('prevStepBtn');
+      const nextBtn = document.getElementById('nextStepBtn');
+      const submitBtn = document.getElementById('submitRegBtn');
+
+      if (currentStep === 1) prevBtn.classList.add('hidden');
+      else prevBtn.classList.remove('hidden');
+
+      if (activeRole === 'student' && currentStep === 4) {
+        renderPopularSkillsQuickAdd();
+      }
+
+      if (currentStep === maxSteps) {
+        nextBtn.classList.add('hidden');
+        submitBtn.classList.remove('hidden');
+        if (activeRole === 'mentor') {
+          populateMentorSummary();
+        } else if (activeRole === 'founder') {
+          populateFounderSummary();
+        } else {
+          populateSummary();
+        }
+      } else {
+        nextBtn.classList.remove('hidden');
+        submitBtn.classList.add('hidden');
+      }
+    }
+
+    function populateFounderSummary() {
+      const v = (id) => (document.getElementById(id).value || '-').trim() || '-';
+      document.getElementById('fnd_sumName').textContent = v('reg_fullName');
+      document.getElementById('fnd_sumEmail').textContent = v('reg_email');
+      document.getElementById('fnd_sumStartup').textContent = v('fnd_startupName');
+      document.getElementById('fnd_sumIndustry').textContent =
+        v('fnd_industry') + ' \u00b7 ' + (document.getElementById('fnd_stage').selectedOptions[0] || {}).text;
+      document.getElementById('fnd_sumTeam').textContent = v('fnd_teamSize');
+      document.getElementById('fnd_sumGoals').textContent =
+        Array.from(document.querySelectorAll('.fnd-goal:checked'))
+          .map(c => c.parentNode.textContent.trim()).join(', ') || '-';
+    }
+
+    function populateSummary() {
+      document.getElementById('sumName').textContent = document.getElementById('reg_fullName').value || '-';
+      document.getElementById('sumEmail').textContent = document.getElementById('reg_email').value || '-';
+      document.getElementById('sumLocation').textContent = `${getCityVal()}, ${getCountryVal()}` || '-';
+      document.getElementById('sumCollege').textContent = getCollegeVal() || '-';
+      document.getElementById('sumSkills').textContent = selectedSkillsList.join(', ') || '-';
+    }
+
+    function populateMentorSummary() {
+      document.getElementById('mentor_sumName').textContent = document.getElementById('reg_fullName').value || '-';
+      document.getElementById('mentor_sumEmail').textContent = document.getElementById('reg_email').value || '-';
+      document.getElementById('mentor_sumMobile').textContent = document.getElementById('reg_mobile').value || '-';
+      document.getElementById('mentor_sumCompany').textContent = document.getElementById('mentor_company').value || '-';
+      document.getElementById('mentor_sumDesignation').textContent = document.getElementById('mentor_designation').value || '-';
+      document.getElementById('mentor_sumExperience').textContent = document.getElementById('mentor_experience').value || '-';
+      document.getElementById('mentor_sumAvailability').textContent = document.getElementById('mentor_availability').value || '-';
+      
+      const checkedDomains = Array.from(document.querySelectorAll('.mentor-domain-check:checked')).map(el => el.value);
+      document.getElementById('mentor_sumDomains').textContent = checkedDomains.join(', ') || 'None';
+    }
+
+    function selectRole(role) {
+      // Founder is open: the wizard below has its steps and the backend has
+      // created FounderProfile + StartupProfile from them since Phase 2.
+      // Investor and contractor have no portal on the other side yet.
+      if (['investor', 'contractor'].includes(role)) {
+        Swal.fire({
+          icon: 'info',
+          title: '🚧 Portal Under Construction',
+          text: 'This registration flow is currently under development. Active roles include Student, Mentor, and Coordinator.',
+          background: '#0e1428',
+          color: '#F0EEE8',
+          confirmButtonColor: '#D4AF37'
+        });
+        return;
+      }
+      activeRole = role;
+      document.getElementById("selectedRoleInput").value = role;
+      document.getElementById("roleSelectionScreen").classList.add('hidden');
+      document.getElementById("formSectionScreen").classList.remove('hidden');
+
+      currentStep = 1;
+      loadCountries();
+      renderWizardStep();
+    }
+
+    function goBackToSelection() {
+      document.getElementById("formSectionScreen").classList.add('hidden');
+      document.getElementById("roleSelectionScreen").classList.remove('hidden');
+      activeRole = '';
+    }
+
+    /*
+     * Arriving from /domains with a domain already chosen.
+     *
+     * The domains page asks "internship, or the course first?" — answering
+     * "internship" is a choice of domain as well as of route, and making
+     * someone scroll back through fourteen cards to say it again is how a
+     * two-minute registration turns into an abandoned one. `?role=student`
+     * opens the student form; `?domain=` ticks the card, if it exists on
+     * this page. An unknown value is ignored rather than guessed at.
+     */
+    function prefillFromQuery() {
+      var q = new URLSearchParams(window.location.search);
+      var role = q.get('role');
+      var domain = q.get('domain');
+      if (role !== 'student' && !domain) return;
+
+      function applyDomain() {
+        if (!domain) return;
+        var card = document.getElementById('domain_card_' + domain.replace(/\s+/g, '_'));
+        if (card) selectDomainCard(domain);
+      }
+
+      if (role === 'student') {
+        selectRole('student');
+        // renderWizardStep() has just drawn step 1; the domain cards live on a
+        // later step but are present in the DOM throughout, so this is safe.
+        applyDomain();
+      } else {
+        applyDomain();
+      }
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', prefillFromQuery);
+    } else {
+      prefillFromQuery();
+    }
+
+    // Submit Dynamic Onboarding Profile
+    document.getElementById("unifiedRegForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const maxSteps = activeRole === 'mentor' ? 5 : activeRole === 'founder' ? 3 : 6;
+      if (!validateStep(maxSteps)) return;
+
+      const formData = new FormData(e.target);
+      const flatData = Object.fromEntries(formData);
+
+      // The résumé and domain inputs are hidden — they are filled by the upload
+      // handler and the domain picker — and a hidden field cannot carry
+      // `required`, because the browser refuses to submit while being unable to
+      // focus the element it wants to complain about. So both are excluded from
+      // the .stu-req loop and were, until now, checked nowhere: the red asterisk
+      // beside "Resume Upload" enforced nothing at all. Check them here.
+      if (activeRole === 'student') {
+        if (!String(flatData.resume || '').trim()) {
+          Swal.fire({
+            icon: 'warning', title: 'Resume required',
+            text: 'Please upload your resume as a PDF before submitting.',
+            background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#D4AF37'
+          });
+          document.getElementById('resumeUploadContainer')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          return;
+        }
+        if (!String(flatData.domains || '').trim()) {
+          Swal.fire({
+            icon: 'warning', title: 'Domain required',
+            text: 'Please select at least one internship domain.',
+            background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#D4AF37'
+          });
+          return;
+        }
+      }
+
+      let payload = {};
+
+      if (activeRole === 'founder') {
+        payload = {
+          fullName: flatData.fullName,
+          email: flatData.email,
+          password: flatData.password,
+          phone: flatData.mobile,
+          role: 'founder',
+          roleSpecificData: {
+            startupName: document.getElementById('fnd_startupName').value.trim(),
+            industry: document.getElementById('fnd_industry').value,
+            stage: document.getElementById('fnd_stage').value,
+            fundingStage: document.getElementById('fnd_funding').value,
+            teamSize: Number(document.getElementById('fnd_teamSize').value) || 1,
+            website: document.getElementById('fnd_website').value.trim(),
+            description: document.getElementById('fnd_description').value.trim(),
+            // The controller splits this on commas into its `lookingFor` enum.
+            goals: Array.from(document.querySelectorAll('.fnd-goal:checked')).map(c => c.value).join(',')
+          }
+        };
+      } else if (activeRole === 'mentor') {
+        const checkedDomains = Array.from(document.querySelectorAll('.mentor-domain-check:checked')).map(el => el.value);
+        payload = {
+          fullName: flatData.fullName,
+          email: flatData.email,
+          password: flatData.password,
+          confirmPassword: flatData.confirmPassword,
+          role: 'mentor',
+          roleSpecificData: {
+            mobile: flatData.mobile,
+            company: flatData.mentor_company,
+            designation: flatData.mentor_designation,
+            experience: flatData.mentor_experience,
+            linkedin: flatData.mentor_linkedin,
+            expertiseAreas: checkedDomains.join(','),
+            availability: flatData.mentor_availability,
+            resume: flatData.resume
+          }
+        };
+      } else {
+        payload = {
+          fullName: flatData.fullName,
+          email: flatData.email,
+          password: flatData.password,
+          confirmPassword: flatData.confirmPassword,
+          role: 'student',
+          roleSpecificData: {
+            mobile: flatData.mobile,
+            country: getCountryVal(),
+            state: getStateVal(),
+            city: getCityVal(),
+            university: getCollegeVal(),
+            degree: getDegreeVal(),
+            academicYear: flatData.academicYear,
+            graduationYear: Number(flatData.graduationYear),
+            skills: flatData.skills,
+            portfolio: flatData.portfolio,
+            linkedin: flatData.linkedin,
+            resume: flatData.resume,
+            tenure: flatData.tenure,
+            domains: flatData.domains
+          }
+        };
+      }
+
+      Swal.fire({
+        title: activeRole === 'mentor' ? 'Filing Mentor Application...'
+              : activeRole === 'founder' ? 'Filing Founder Application...'
+              : 'Filing Student Registration...',
+        html: 'Creating account & registering details...',
+        allowOutsideClick: false,
+        didOpen: () => { Swal.showLoading(); },
+        background: '#0e1428',
+        color: '#F0EEE8'
+      });
+
+      try {
+        const res = await fetch("/api/register-hub/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const json = await res.json();
+        clearFieldErrors();
+
+        if (json.success) {
+          Swal.fire({
+            icon: 'success',
+            title: 'Registration Successful!',
+            text: 'Redirecting to onboarding summary...',
+            background: '#0e1428',
+            color: '#F0EEE8',
+            showConfirmButton: false,
+            timer: 1500
+          });
+          
+          setTimeout(() => {
+            // The password is deliberately NOT put in the query string: a URL
+            // ends up in browser history, in the Referer header sent to other
+            // sites, and in every server access log.
+            const pwdQuery = '';
+            if (json.role === 'founder') {
+              window.location.href = `/founder-registration-success?role=${encodeURIComponent(json.role)}&email=${encodeURIComponent(json.email)}&memberId=${encodeURIComponent(json.memberId)}&startupName=${encodeURIComponent(json.startupName || 'Venture')}&status=Pending%20Approval${pwdQuery}`;
+            } else if (json.role === 'student') {
+              window.location.href = `/registration-success?role=${encodeURIComponent(json.role)}&email=${encodeURIComponent(json.email)}&memberId=${encodeURIComponent(json.memberId)}&status=Approved${pwdQuery}`;
+            } else if (json.role === 'mentor') {
+              window.location.href = `/registration-success?role=${encodeURIComponent(json.role)}&email=${encodeURIComponent(json.email)}&memberId=${encodeURIComponent(json.memberId)}&status=Pending${pwdQuery}`;
+            } else {
+              window.location.href = `/registration-success?role=${encodeURIComponent(json.role)}&email=${encodeURIComponent(json.email)}&memberId=${encodeURIComponent(json.memberId)}&status=Pending%20Approval${pwdQuery}`;
+            }
+          }, 1500);
+        } else if (json.errors && typeof json.errors === 'object') {
+          // Show a message directly under each field that failed, the way a
+          // normal form does — this used to be one generic alert that did not
+          // say which field was wrong.
+          showFieldErrors(json.errors);
+        } else {
+          // "Onboarding Denied" told a student their application had been
+          // rejected, when a field was simply blank. Nothing here is a denial —
+          // it is a form that needs one more thing.
+          Swal.fire({
+            icon: 'warning',
+            title: 'Almost there',
+            text: json.error || 'Please check your details and try again. If you already have an account, sign in instead.',
+            background: '#0e1428',
+            color: '#F0EEE8',
+            confirmButtonColor: '#D4AF37'
+          });
+        }
+      } catch (err) {
+        console.error(err);
+        // This branch is a network or server failure, not an authentication
+        // problem — "Authentication timeout" sent students hunting for a
+        // password mistake that did not exist.
+        Swal.fire({
+          icon: 'error',
+          title: 'Could not reach the server',
+          text: 'Your details were not saved. Please check your internet connection and try again.',
+          background: '#0e1428',
+          color: '#F0EEE8',
+          confirmButtonColor: '#D4AF37'
+        });
+      }
+    });
+
+    document.addEventListener("DOMContentLoaded", function() {
+      loadCountries();
+    });
+
+    // ── Inline field validation messages ─────────────────────────────────
+    // Maps a server error key to the element the message should sit under.
+    // Server error key → the element the message belongs under.
+    //
+    // showFieldErrors falls back to `key` when there is no entry here, and the
+    // student inputs are all prefixed (`skills` → `stu_skills`), so every
+    // student-specific error missed its field, `firstEl` stayed null, and the
+    // page fell through to the summary popup. Inline messages had therefore
+    // never appeared for anything below the account section.
+    const FIELD_TARGETS = {
+      fullName:       'reg_fullName',
+      email:          'reg_email',
+      password:       'reg_password',
+      mobile:         'reg_mobile',
+      domains:        'techDomainsSelector',
+      tenure:         'stu_tenure',
+      country:        'stu_country',
+      city:           'stu_city',
+      university:     'stu_university',
+      degree:         'stu_degree',
+      graduationYear: 'stu_graduationYear',
+      skills:         'stu_skills',
+      linkedin:       'stu_linkedin',
+      portfolio:      'stu_portfolio',
+      // The résumé input is hidden, so a message beside it would be invisible.
+      // Point at the drop zone the student can actually see.
+      resume:         'resumeUploadContainer'
+    };
+
+    function clearFieldErrors() {
+      document.querySelectorAll('.field-error-msg').forEach(function (el) { el.remove(); });
+      document.querySelectorAll('.field-error-outline').forEach(function (el) {
+        el.classList.remove('field-error-outline');
+        el.style.borderColor = '';
+      });
+    }
+
+    function showFieldErrors(errors) {
+      clearFieldErrors();
+      let firstEl = null;
+
+      Object.keys(errors).forEach(function (key) {
+        const targetId = FIELD_TARGETS[key] || key;
+        const el = document.getElementById(targetId);
+        if (!el) return;
+
+        el.classList.add('field-error-outline');
+        el.style.borderColor = '#ef4444';
+
+        const msg = document.createElement('p');
+        msg.className = 'field-error-msg';
+        msg.setAttribute('role', 'alert');
+        msg.style.cssText = 'color:#ef4444;font-size:12px;margin-top:6px;font-weight:600;';
+        msg.textContent = errors[key];
+        (el.parentNode || el).insertBefore(msg, el.nextSibling);
+
+        if (!firstEl) firstEl = el;
+      });
+
+      if (firstEl) {
+        firstEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (typeof firstEl.focus === 'function') { try { firstEl.focus({ preventScroll: true }); } catch (e) {} }
+      } else {
+        // Nothing on this page matched — fall back to a readable summary.
+        Swal.fire({
+          icon: 'error',
+          title: 'Please check your details',
+          html: Object.values(errors).map(function (m) { return '• ' + m; }).join('<br>'),
+          background: '#0e1428',
+          color: '#F0EEE8',
+          confirmButtonColor: '#D4AF37'
+        });
+      }
+    }
+  </script>
+</body>
+</html>

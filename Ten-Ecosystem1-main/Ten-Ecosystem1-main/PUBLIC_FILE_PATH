@@ -1,0 +1,33 @@
+<script>
+async function loadDocumentHistory(filter = '') {
+  try {
+    const res = await fetch('/api/v2/hr/document-history');
+    const json = await res.json();
+    let rows = json.data || [];
+    if (filter) {
+      const f = filter.toLowerCase();
+      rows = rows.filter(r =>
+        (r.studentName||'').toLowerCase().includes(f) ||
+        (r.employeeId||'').toLowerCase().includes(f) ||
+        (r.college||'').toLowerCase().includes(f) ||
+        (r.documentType||'').toLowerCase().includes(f)
+      );
+    }
+    const tbody = document.querySelector('#docHistoryTable tbody');
+    if (!tbody) return;
+    tbody.innerHTML = rows.length === 0
+      ? '<tr><td colspan="6" style="text-align:center">No records found</td></tr>'
+      : rows.map(r => '<tr>' +
+          '<td>'+(r.studentName||'')+'</td>' +
+          '<td>'+(r.employeeId||'')+'</td>' +
+          '<td>'+(r.college||'')+'</td>' +
+          '<td>'+(r.documentType||'')+'</td>' +
+          '<td>'+(r.documentNumber||'')+'</td>' +
+          '<td>'+(r.sentOn ? new Date(r.sentOn).toLocaleString() : '')+'</td>' +
+        '</tr>').join('');
+  } catch(e) { console.error('Failed to load document history:', e); }
+}
+var searchBox = document.querySelector('#searchBox') || document.querySelector('input[type="search"]') || document.querySelector('input[placeholder*="earch"]');
+if (searchBox) searchBox.addEventListener('input', function(e) { loadDocumentHistory(e.target.value); });
+loadDocumentHistory();
+</script>

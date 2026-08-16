@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+<title>Edit Student</title>
+<link rel="stylesheet" href="ten-motion.css">
+<style>
+
+body{
+    font-family:Arial;
+    background:#f5f5f5;
+    padding:30px;
+}
+
+.container{
+    width:400px;
+    margin:auto;
+    background:white;
+    padding:20px;
+    border-radius:10px;
+}
+
+input{
+    width:100%;
+    padding:10px;
+    margin-top:10px;
+    margin-bottom:15px;
+}
+
+button{
+    width:100%;
+    padding:12px;
+    background:green;
+    color:white;
+    border:none;
+    border-radius:5px;
+    cursor:pointer;
+}
+
+</style>
+
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+</head>
+
+<body>
+
+<div class="container">
+
+<h2>Edit Student</h2>
+
+<input type="text" id="firstName" placeholder="First Name">
+
+<input type="text" id="lastName" placeholder="Last Name">
+
+<input type="email" id="email" placeholder="Email">
+
+<input type="text" id="whatsapp" placeholder="Whatsapp">
+
+<input type="text" id="domain" placeholder="Domain">
+
+<input type="text" id="employeeId" placeholder="Employee ID">
+
+<input type="text" id="tenure" placeholder="Tenure">
+
+<button onclick="updateStudent()">Update Student</button>
+
+</div>
+
+<script>
+
+const params = new URLSearchParams(window.location.search);
+
+const id = params.get("id");
+
+async function loadStudent(){
+
+    const response = await fetch(`/students/${id}`);
+
+    const student = await response.json();
+
+    document.getElementById("firstName").value = student.firstName;
+    document.getElementById("lastName").value = student.lastName;
+    document.getElementById("email").value = student.email;
+    document.getElementById("whatsapp").value = student.whatsapp;
+    document.getElementById("domain").value = student.domain;
+    document.getElementById("employeeId").value = student.employeeId;
+    document.getElementById("tenure").value = student.tenure;
+}
+
+async function updateStudent(){
+
+    await fetch(`/students/${id}`, {
+
+        method:"PUT",
+
+        headers:{
+            "Content-Type":"application/json"
+        },
+
+        body:JSON.stringify({
+
+            firstName:document.getElementById("firstName").value,
+
+            lastName:document.getElementById("lastName").value,
+
+            email:document.getElementById("email").value,
+
+            whatsapp:document.getElementById("whatsapp").value,
+
+            domain:document.getElementById("domain").value,
+
+            employeeId:document.getElementById("employeeId").value,
+
+            tenure:document.getElementById("tenure").value
+
+        })
+
+    });
+
+    alert("Student Updated");
+
+    window.location.href = "dashboard.html";
+}
+
+loadStudent();
+
+</script>
+
+<script src="ten-motion.js"></script>
+</body>
+</html>

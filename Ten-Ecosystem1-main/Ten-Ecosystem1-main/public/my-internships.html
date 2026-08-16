@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Internships — TEN Platform</title>
+  <link rel="stylesheet" href="/css/design-system.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <script src="/js/theme-toggle.js" defer></script>
+  <script src="/js/components.js" defer></script>
+  <style>
+    .internship-card { background: var(--bg-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); border: 1px solid var(--border-default); padding: var(--space-5); margin-bottom: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); transition: box-shadow 0.2s; }
+    .internship-card:hover { box-shadow: var(--shadow-md); }
+    .status-badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 99px; font-size: 12px; font-weight: 600; }
+    .status-badge.pending  { background: #fef3c7; color: #92400e; }
+    .status-badge.active   { background: #d1fae5; color: #065f46; }
+    .status-badge.completed{ background: #dbeafe; color: #1e40af; }
+    .status-badge.rejected { background: #fee2e2; color: #991b1b; }
+    .empty-state { text-align: center; padding: 60px 20px; }
+    .empty-state .icon { font-size: 64px; margin-bottom: 16px; }
+    .skeleton { background: linear-gradient(90deg, var(--bg-muted, #f0f0f0) 25%, var(--bg-elevated, #e0e0e0) 50%, var(--bg-muted, #f0f0f0) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 8px; }
+    @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+    .sk-line { height: 16px; margin-bottom: 10px; border-radius: 4px; }
+    .sk-card { background: var(--bg-surface); border-radius: var(--radius-lg); border: 1px solid var(--border-default); padding: var(--space-5); margin-bottom: var(--space-4); }
+  </style>
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <script src="/push-client.js" defer></script>
+</head>
+<body class="dashboard-layout">
+  <aside class="sidebar">
+    <a class="sidebar__logo" href="/dashboard">⚡ TEN</a>
+    <nav class="sidebar__nav">
+      <a href="/dashboard"      class="nav-item">🏠 Dashboard</a>
+      <a href="/my-internships" class="nav-item nav-item--active">📋 My Internships</a>
+      <a href="/talent-network" class="nav-item">🌐 Talent Network</a>
+      <a href="/programs"       class="nav-item">🎓 Programs</a>
+      <a href="/community"      class="nav-item">👥 Community</a>
+    </nav>
+    <div class="sidebar__footer">
+      <button id="theme-toggle-btn" class="btn btn--ghost btn--sm" style="width:100%">🌙 Dark Mode</button>
+    </div>
+  </aside>
+
+  <header class="topbar">
+    <button class="btn btn--ghost btn--sm" data-sidebar-toggle>☰</button>
+    <span style="font-weight:600;font-size:16px;">My Internships</span>
+    <div class="topbar__actions">
+      <button id="theme-toggle-btn" class="btn btn--ghost btn--sm">🌙</button>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <div class="page-header">
+      <h1 class="page-header__title">📋 My Internships</h1>
+      <p class="page-header__subtitle">Track all your internship applications and active programs</p>
+    </div>
+
+    <!-- Stats row -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px;margin-bottom:32px;" id="statsRow">
+      <div class="sk-card"><div class="skeleton sk-line" style="width:60%"></div><div class="skeleton sk-line" style="width:40%;height:28px;"></div></div>
+      <div class="sk-card"><div class="skeleton sk-line" style="width:60%"></div><div class="skeleton sk-line" style="width:40%;height:28px;"></div></div>
+      <div class="sk-card"><div class="skeleton sk-line" style="width:60%"></div><div class="skeleton sk-line" style="width:40%;height:28px;"></div></div>
+    </div>
+
+    <!-- Internship list -->
+    <div id="internshipList">
+      <div class="sk-card"><div class="skeleton sk-line" style="width:70%"></div><div class="skeleton sk-line" style="width:50%"></div><div class="skeleton sk-line" style="width:30%"></div></div>
+      <div class="sk-card"><div class="skeleton sk-line" style="width:70%"></div><div class="skeleton sk-line" style="width:50%"></div><div class="skeleton sk-line" style="width:30%"></div></div>
+      <div class="sk-card"><div class="skeleton sk-line" style="width:70%"></div><div class="skeleton sk-line" style="width:50%"></div><div class="skeleton sk-line" style="width:30%"></div></div>
+    </div>
+  </main>
+
+  <script>
+  (async function() {
+    const token = localStorage.getItem('ten_auth_token') || localStorage.getItem('authToken');
+    const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+
+    // Try /api/student/my-internships, fallback to student-dashboard info
+    let internships = [];
+    try {
+      const res = await fetch('/api/student/my-internships', { headers });
+      if (res.ok) {
+        const data = await res.json();
+        internships = data.data || data.applications || [];
+      }
+    } catch(e) {}
+
+    // Render stats
+    const total     = internships.length;
+    const active    = internships.filter(i => (i.status||'').toLowerCase() === 'active').length;
+    const completed = internships.filter(i => (i.status||'').toLowerCase() === 'completed').length;
+
+    document.getElementById('statsRow').innerHTML = `
+      <div class="internship-card" style="text-align:center;">
+        <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;">Total Applied</div>
+        <div style="font-size:32px;font-weight:800;color:var(--color-primary);">${total}</div>
+      </div>
+      <div class="internship-card" style="text-align:center;">
+        <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;">Active</div>
+        <div style="font-size:32px;font-weight:800;color:#10b981;">${active}</div>
+      </div>
+      <div class="internship-card" style="text-align:center;">
+        <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;">Completed</div>
+        <div style="font-size:32px;font-weight:800;color:#6366f1;">${completed}</div>
+      </div>
+    `;
+
+    const list = document.getElementById('internshipList');
+
+    if (internships.length === 0) {
+      list.innerHTML = `
+        <div class="empty-state">
+          <div class="icon">📋</div>
+          <h2 style="font-size:20px;font-weight:700;margin-bottom:8px;">No internships yet</h2>
+          <p style="color:var(--text-muted);margin-bottom:24px;">Browse available programs and apply to start your journey.</p>
+          <a href="/programs" class="btn btn--primary">Browse Programs →</a>
+        </div>`;
+      return;
+    }
+
+    list.innerHTML = internships.map(item => {
+      const title   = (item.internship && item.internship.title) || item.title || 'Internship Program';
+      const company = (item.internship && item.internship.company) || item.company || 'TEN Network';
+      const status  = (item.status || 'pending').toLowerCase();
+      const start   = item.startDate ? new Date(item.startDate).toLocaleDateString('en-IN') : '—';
+      const stipend = (item.internship && item.internship.stipend) || item.stipend || '—';
+      return `
+        <div class="internship-card">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+            <div>
+              <div style="font-size:17px;font-weight:700;margin-bottom:4px;">${title}</div>
+              <div style="font-size:14px;color:var(--text-muted);">${company}</div>
+            </div>
+            <span class="status-badge ${status}">${status.charAt(0).toUpperCase()+status.slice(1)}</span>
+          </div>
+          <div style="display:flex;gap:24px;font-size:13px;color:var(--text-muted);margin-top:8px;flex-wrap:wrap;">
+            <span>📅 Start: ${start}</span>
+            <span>💰 Stipend: ${stipend}</span>
+          </div>
+        </div>`;
+    }).join('');
+  })();
+  </script>
+</body>
+</html>

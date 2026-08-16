@@ -1,0 +1,89 @@
+/* ================================================================
+   TEN Platform — Progressive Enhancement for Existing Pages
+   Low-specificity, non-breaking. Load AFTER existing CSS files.
+   Uses design-system.css tokens wherever possible.
+   NO !important. NO override of existing class names.
+   ================================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* Smooth global font upgrade */
+body {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  scroll-behavior: smooth;
+}
+
+/* Better focus rings for accessibility */
+:focus-visible {
+  outline:        2px solid #6366F1;
+  outline-offset: 2px;
+  border-radius:  4px;
+}
+
+/* Slightly improved default link colour */
+a:not([class]) { color: #6366F1; }
+
+/* Subtle improvement for <input> and <select> without class override */
+input:not([class]),
+select:not([class]),
+textarea:not([class]) {
+  border:        1.5px solid #E5E7EB;
+  border-radius: 6px;
+  padding:       6px 10px;
+  font:          inherit;
+  transition:    border-color 150ms ease;
+  outline:       none;
+}
+input:not([class]):focus,
+select:not([class]):focus,
+textarea:not([class]):focus {
+  border-color: #6366F1;
+  box-shadow:   0 0 0 3px rgba(99,102,241,0.1);
+}
+
+/* Better table aesthetics */
+table:not([class]) {
+  width:           100%;
+  border-collapse: collapse;
+  font-size:       0.875rem;
+}
+table:not([class]) th {
+  font-size:   0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding:     8px 12px;
+  text-align:  left;
+  background:  #F9FAFB;
+}
+table:not([class]) td {
+  padding:       8px 12px;
+  border-bottom: 1px solid #E5E7EB;
+}
+table:not([class]) tbody tr:hover { background: #F9FAFB; }
+
+/* Card-like panels for divs with common dashboard-style classes */
+.panel, .dashboard-card, .info-card, .stat-box {
+  border-radius: 10px;
+  box-shadow:    0 1px 3px rgba(0,0,0,0.06);
+}
+
+/* Better button hover state for plain buttons */
+button:not([class]),
+input[type="submit"]:not([class]),
+input[type="button"]:not([class]) {
+  cursor:     pointer;
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+button:not([class]):hover { opacity: 0.9; }
+button:not([class]):active { transform: scale(0.98); }
+
+/* Improved HR rule */
+hr { border: none; border-top: 1px solid #E5E7EB; margin: 1.5rem 0; }
+
+/* Scrollbar — WebKit only, non-breaking enhancement */
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #9CA3AF; }

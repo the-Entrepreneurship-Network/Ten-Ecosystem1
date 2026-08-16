@@ -1,0 +1,415 @@
+Content is user-generated and unverified.
+FINAL CERTIFICATE UI FIX + AUTOMATION VERIFICATION PROMPT
+Platform: The Entrepreneurship Network (TEN)
+Scope: Fix Certificate Page + Remove Duplicate Tab + Verify All Automations
+Version: FINAL
+HOW TO USE THIS PROMPT: Give this to Replit AI and say: "Fix every issue described here exactly as written. This is the FINAL fix prompt. Read ALL sections before writing any code."
+
+⚠️ CRITICAL DEFENCE RULES
+NEVER delete or overwrite any existing working feature
+NEVER modify existing authentication or login system
+Only FIX and ADD — never replace working things
+Test every change on both desktop and mobile
+If in doubt → ASK, do not assume
+🐛 SECTION 1: REMOVE "MY CERTIFICATES" TAB FROM MY DOCUMENTS PAGE
+Problem:
+The /my-documents.html page currently has THREE tabs:
+
+Upload Documents
+My Documents
+My Certificates ← THIS MUST BE REMOVED
+The "My Certificates" tab does NOT belong in the My Documents page. Certificates have their own dedicated page: /my-certificates.html
+
+Fix:
+Open /my-documents.html (or the equivalent file)
+Find the tab navigation section
+Remove ONLY the "My Certificates" tab and its content panel
+Keep "Upload Documents" tab and "My Documents" tab exactly as they are
+Do NOT touch any upload or document functionality
+After fix, My Documents page should have only 2 tabs:
+
+Upload Documents (existing — keep exactly as is)
+My Documents (existing — keep exactly as is)
+Also add a link button on My Documents page:
+
+html
+<!-- Add this below the tabs, above the content -->
+<a href="/my-certificates.html" class="cert-link-btn">
+  🏅 View My Certificates →
+</a>
+Style it to match the existing button styles on the page.
+
+🐛 SECTION 2: ADD FELLOWSHIP CARD TO MY CERTIFICATES PAGE
+Problem:
+/my-certificates.html only shows 2 certificate cards:
+
+Tier 1 — Expert Certificate (₹100)
+Tier 2 — Nano Degree (₹1000)
+The third card is completely missing:
+
+Tier 3 — Fellowship (₹2500)
+Fix:
+Add the Fellowship card as the THIRD card on the certificates page.
+
+IMPORTANT: Fellowship display rules:
+
+IF student is NOT in top 10% cohort OR completion < 70%:
+  → Show the card BUT as a "mystery" locked card
+  → Do NOT reveal it is called "Fellowship"
+  → Do NOT show the price
+  → Show only: a locked icon, "???" title, "Keep going to unlock this"
+  → This creates curiosity without revealing what it is
+
+IF student IS in top 10% cohort AND completion >= 70%:
+  → Show full Fellowship card with name, price, description
+  → Show "Claim It" button
+Why show a mystery card instead of hiding completely: Showing a mysterious locked third card creates curiosity and makes students want to keep going to unlock it. This is the Zeigarnik Effect — incomplete things stay in the mind.
+
+Fellowship Card HTML — Mystery State (ineligible):
+html
+<!-- Tier 3 — Fellowship Card (Mystery State) -->
+<div class="cert-card tier-3-mystery" id="fellowship-card">
+
+  <!-- Blurred background with lock overlay -->
+  <div class="cert-preview-blurred">
+    <div class="lock-overlay">
+      <div class="mystery-icon">🔮</div>
+      <div class="mystery-title">???</div>
+      <div class="mystery-subtitle">
+        Something rare awaits the best performers
+      </div>
+    </div>
+  </div>
+
+  <!-- Card footer -->
+  <div class="cert-card-footer">
+    <div class="cert-name">? ? ?</div>
+    <div class="cert-desc">Reserved for top performers only</div>
+
+    <div class="progress-row">
+      <span>Your rank</span>
+      <span id="cohort-rank-display">Calculating...</span>
+    </div>
+
+    <div class="locked-badge">
+      🔒 Keep going — top performers unlock this
+    </div>
+  </div>
+
+</div>
+Fellowship Card HTML — Eligible State (top 10% + 70% complete):
+html
+<!-- Tier 3 — Fellowship Card (Eligible State) -->
+<div class="cert-card tier-3-eligible" id="fellowship-card-eligible"
+     style="display:none">
+
+  <div class="tier-badge">TIER 3 — ₹2500</div>
+
+  <!-- Blurred certificate preview with student name -->
+  <div class="cert-preview-blurred fellowship-preview">
+    <div class="preview-overlay">
+      <span class="waiting-text">"This is waiting for you."</span>
+    </div>
+  </div>
+
+  <div class="cert-card-footer">
+    <div class="cert-name">Fellowship</div>
+    <div class="cert-desc">Top 3% of all cohorts — a title, not just a certificate</div>
+
+    <div class="progress-row">
+      <span>Cohort rank</span>
+      <span id="fellowship-rank-display" class="rank-good">Top 10% ✓</span>
+    </div>
+
+    <button class="claim-btn fellowship-btn"
+            onclick="claimCertificate('fellowship')">
+      ✨ Claim It → ₹2500
+    </button>
+    <div class="payment-note">Payment coming soon</div>
+  </div>
+
+</div>
+JavaScript — Load Correct Fellowship Card State:
+javascript
+// NEW FEATURE: Load fellowship card state on page load
+async function loadFellowshipCard() {
+  const token = getToken()
+  try {
+    const response = await fetch('/api/v2/certificates/my-certs', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    const data = await response.json()
+
+    const fellowshipData = data.fellowship
+
+    if (fellowshipData.eligible) {
+      // Show full fellowship card
+      document.getElementById('fellowship-card').style.display = 'none'
+      document.getElementById('fellowship-card-eligible').style.display = 'block'
+
+      if (fellowshipData.cohort_rank_percent !== undefined) {
+        document.getElementById('fellowship-rank-display').textContent =
+          `Top ${Math.round(fellowshipData.cohort_rank_percent)}%`
+      }
+    } else {
+      // Show mystery card
+      document.getElementById('fellowship-card').style.display = 'block'
+      document.getElementById('fellowship-card-eligible').style.display = 'none'
+
+      // Show cohort rank in mystery card
+      if (fellowshipData.cohort_rank_percent !== undefined) {
+        document.getElementById('cohort-rank-display').textContent =
+          `${Math.round(fellowshipData.cohort_rank_percent)}% rank`
+      }
+    }
+
+    // Handle issued state
+    if (fellowshipData.status === 'issued') {
+      showIssuedState('fellowship', fellowshipData)
+    }
+
+  } catch (error) {
+    console.error('Failed to load fellowship card:', error)
+  }
+}
+
+// Call on page load
+document.addEventListener('DOMContentLoaded', () => {
+  loadCertificates()
+  loadFellowshipCard()
+})
+📋 SECTION 3: FINAL CERTIFICATE PAGE LAYOUT
+After all fixes, /my-certificates.html must show:
+
+┌─────────────────────────────────────────────────────────┐
+│  MY CERTIFICATES                                        │
+│  Course Completion: 4%  ████░░░░░░  Progress to Expert │
+│  "Complete more tasks to unlock certificates"           │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │ TIER 1 ₹100  │  │ TIER 2 ₹1000 │  │   TIER 3     │  │
+│  │              │  │              │  │              │  │
+│  │ [Blurred     │  │ [Blurred     │  │ [🔮          │  │
+│  │  preview]    │  │  preview]    │  │  ???         │  │
+│  │ "This is     │  │ "This is     │  │  Mystery]    │  │
+│  │ waiting for  │  │ waiting for  │  │              │  │
+│  │ you."        │  │ you."        │  │              │  │
+│  │              │  │              │  │              │  │
+│  │ Expert       │  │ Nano Degree  │  │ ? ? ?        │  │
+│  │ Certificate  │  │              │  │ Reserved for │  │
+│  │ 30% needed   │  │ 70% needed   │  │ top          │  │
+│  │ [🔒 Locked]  │  │ [🔒 Locked]  │  │ performers   │  │
+│  └──────────────┘  └──────────────┘  └──────────────┘  │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+When a certificate IS issued, show:
+
+┌──────────────────────────────────┐
+│  ✅ ISSUED                       │
+│  [Full certificate preview]      │
+│  TEN-EXP-2026-K4M7R2            │
+│  Issued: 07 Jun 2026            │
+│  [Download] [LinkedIn] [WhatsApp]│
+└──────────────────────────────────┘
+📋 SECTION 4: AUTOMATION VERIFICATION CHECKLIST
+Run through EVERY automation and verify it is working.
+Fix any that are broken.
+
+Automation 1 — DAY1_BLUR_SHOWN
+What should happen: On first login, certificates section shows blurred preview with "This is waiting for you. Keep going."
+
+Verify:
+
+ Fires only on FIRST login (not every login)
+ Blurred preview shows on certificates page for new student
+ Text "This is waiting for you" visible
+ No price shown
+ Logged in psychology_triggers table
+Fix if broken:
+
+javascript
+// Check trigger on dashboard load
+async function checkDay1Trigger() {
+  const token = getToken()
+  const response = await fetch('/api/v2/psychology/check-triggers', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+  const data = await response.json()
+
+  if (data.show_day1_blur && !data.day1_blur_already_shown) {
+    // Show blurred cert in dashboard widget
+    document.getElementById('cert-blur-preview').style.display = 'block'
+    // Log trigger
+    await logTrigger('DAY1_BLUR_SHOWN')
+  }
+}
+Automation 2 — FIRST_TASK_COIN_POPUP
+What should happen: After FIRST task is approved:
+
+Coin animation plays
+Small card appears bottom-right: "🪙 +20 coins earned. You're building something real."
+Expert Certificate progress bar appears for first time
+Verify:
+
+ Fires after first task approval (not second or third)
+ Coin animation plays
+ Progress bar appears for first time on this trigger
+ No price shown yet
+ Logged in psychology_triggers table
+Automation 3 — EXPERT_CERT_UNLOCK
+What should happen: At correct timing AND 30% completion:
+
+Full screen celebration
+Certificate with student name shown
+"Claim It" button appears
+Timing check:
+
+Duration	Days Required
+45 days	Day 10
+1 month	Day 7
+3 months	Day 42 (Week 6)
+6 months	Day 60 (Month 2)
+Verify:
+
+ Fires based on registration date (not just completion %)
+ BOTH conditions required: time AND 30% completion
+ Celebration animation plays
+ Certificate preview shows student's actual name
+ "Claim It" button present
+ If PAYMENT_ENABLED=false → shows "Payment coming soon"
+ Logged in psychology_triggers table
+Automation 4 — NANO_SLOW_BURN
+What should happen: After Expert cert interaction:
+
+Progress bar appears on dashboard: "Nano Degree: X% complete"
+Updates with each task completion
+Verify:
+
+ Progress bar appears on dashboard after Expert cert shown
+ Updates when new task is approved
+ No price shown proactively
+ At 70% → same celebration as Expert fires
+Automation 5 — FELLOWSHIP_WHISPER
+What should happen: ONLY for top 10% cohort + 70% complete:
+
+Private card slides in from right
+Shows personalized message
+No one else sees it
+Verify:
+
+ NEVER fires for students below top 10% cohort rank
+ NEVER fires for students below 70% completion
+ When eligible → slides in from right (not a popup)
+ "Learn More" button only on first view
+ Price shown only after clicking Learn More
+ Logged in psychology_triggers table
+Automation 6 — LOC AUTO-GENERATION
+What should happen: When student reaches 100% task completion:
+
+LOC (Letter of Completion) auto-generated
+PDF created
+Email sent to student
+Appears in student's My Documents tab
+Verify:
+
+ Fires at exactly 100% completion
+ LOC PDF generated correctly
+ Appears in student portal My Documents tab
+ Email sent (or queued if email fails)
+ Document number assigned (TEN-LOC-YEAR-XXXXXX)
+Automation 7 — COIN AWARDS
+What should happen: Coins awarded for these actions:
+
+Action	Coins
+Watch video 80%	+5
+Submit task	+5
+Task approved	+20
+Pass quiz	+25
+Daily login	+3
+7-day streak	+50
+30-day streak	+200
+Refer friend registered	+100
+Complete full course	+500
+Verify:
+
+ Each action above correctly awards coins
+ Coin animation plays on award
+ Coin balance updates in real-time
+ Coin history log shows each transaction
+Automation 8 — SEQUENTIAL WEEK UNLOCK
+What should happen: After passing quiz:
+
+Current week marked complete
+Next week unlocks immediately
+Student sees Week N+1 available
+Verify:
+
+ Week unlocks immediately after quiz pass (not after coordinator)
+ Only ONE week unlocks at a time (not all future weeks)
+ Locked weeks show "Complete Week N to unlock" message
+Automation 9 — COORDINATOR COIN PENALTIES
+What should happen: Coordinator loses coins for late reviews
+
+Delay	Penalty
+After 48 hours	-30 coins
+After 72 hours	-60 coins
+Verify:
+
+ Cron job running (check pm2 logs for "[CRON]" messages)
+ Penalties applied after 48h overdue
+ Penalties applied after 72h overdue
+ Admin alerted after 72h
+Automation 10 — LEADERBOARD SYNC
+What should happen: Leaderboard updates every 30 minutes
+
+Verify:
+
+ Cron job running every 30 minutes
+ Leaderboard data fresh (not stale)
+ Global, domain, and cohort leaderboards all updating
+📋 SECTION 5: MISSING "MADE WITH REPLIT" WATERMARK REMOVAL
+Problem visible in Image 2: "Made with Replit ×" watermark showing on the bottom right.
+
+Fix: Add this CSS to all student-facing pages:
+
+css
+/* Remove Replit watermark */
+[data-replit-badge],
+.replit-ui-theme-root > div:last-child,
+iframe[src*="replit.com/badge"] {
+  display: none !important;
+}
+Or if it's an iframe, remove it from the HTML directly.
+
+✅ FINAL CHECKLIST
+My Documents Page
+ "My Certificates" tab REMOVED from My Documents page
+ Only "Upload Documents" and "My Documents" tabs remain
+ "View My Certificates →" link button added
+ Upload and document functionality untouched
+My Certificates Page
+ 3 certificate cards visible (Expert + Nano Degree + Fellowship/Mystery)
+ Fellowship shows as mystery card when ineligible
+ Fellowship shows full card when eligible (top 10% + 70% complete)
+ All 3 cards show correct blurred preview
+ "This is waiting for you" text on locked cards
+ Progress bars correct for all 3 cards
+ Issued certificates show download + share buttons
+Automations Verified
+ DAY1_BLUR — fires once on first login ✓
+ FIRST_TASK_COIN_POPUP — fires after first task approved ✓
+ EXPERT_CERT_UNLOCK — fires at correct timing + 30% ✓
+ NANO_SLOW_BURN — progress bar appears + updates ✓
+ FELLOWSHIP_WHISPER — only top 10% eligible students ✓
+ LOC — auto-generates at 100% completion ✓
+ COIN AWARDS — all 9 actions correctly rewarded ✓
+ SEQUENTIAL UNLOCK — next week unlocks after quiz pass ✓
+ COORDINATOR PENALTIES — cron job running ✓
+ LEADERBOARD SYNC — updating every 30 minutes ✓
+General
+ "Made with Replit" watermark removed
+ All 3 pages work on mobile
+ Zero existing features broken
+End of Final Certificate UI Fix + Automation Verification Prompt Platform: The Entrepreneurship Network (TEN) This is the final cleanup. Fix UI first, then verify all 10 automations. Do not break any existing working features.
+

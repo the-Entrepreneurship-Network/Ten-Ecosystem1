@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TEN Assistant</title>
+<!--
+  TEN Assistant — full-height chat.
+
+  The page itself never scrolls. The shell is exactly one viewport tall and the
+  message list is the only scrolling region, which is what stops the window
+  jumping when an answer arrives. Everything else — picker, plans, payment —
+  lives in panels over the top rather than pushing the conversation around.
+
+  Self-contained: no framework, no build step, no external request. It talks
+  only to /api/v2/assistant, which answers from the portal's own DomainTask
+  rows, so it cannot invent a task that is not in the database.
+-->
+<style>
+  :root{
+    --void:#05070E; --ink:#090D1A; --card:#0E1428; --edge:#121933; --line:rgba(212,175,55,.13);
+    --gold:#D4AF37; --gold-lift:#F0D060; --gold-dim:#B8960C;
+    --text:#F0EEE8; --sub:#9A9080; --faint:#6D685E;
+    --r-sm:10px; --r-md:16px; --r-lg:22px;
+    --col:760px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;overflow:hidden}
+  body{background:var(--void);color:var(--text);
+       font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.6;
+       -webkit-font-smoothing:antialiased}
+  button,input,select,textarea{font-family:inherit;font-size:inherit}
+  a{color:var(--gold);text-decoration:none}
+  :focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+
+  /* ── shell ───────────────────────────────────────────────────────────── */
+  .app{height:100dvh;display:grid;grid-template-columns:272px 1fr}
+  /* Hidden by default at every width. Without this base rule the scrim is
+     an unstyled div occupying grid column 1 on desktop, which pushes the
+     chat onto a second row and squeezes it to the sidebar's width. */
+  .scrim{display:none}
+  @media(max-width:900px){.app{grid-template-columns:1fr}}
+
+  /* ── sidebar ─────────────────────────────────────────────────────────── */
+  /* The sidebar slides rather than unmounting, so the conversation column
+     does not reflow and lose its scroll position when it is toggled. */
+  .side{background:var(--ink);border-right:1px solid var(--line);
+        display:flex;flex-direction:column;min-height:0;overflow-y:auto;padding:16px 14px;
+        transition:transform .26s cubic-bezier(.16,1,.3,1)}
+  .app.collapsed{grid-template-columns:0 1fr}
+  /* min-width:0 is load-bearing. A grid item defaults to min-width:auto, so
+     without it the sidebar refuses to shrink past its content and the chat
+     column gets squeezed to one word per line instead of taking the space. */
+  .app.collapsed .side{transform:translateX(-100%);width:0;min-width:0;
+                       padding-left:0;padding-right:0;overflow:hidden}
+  @media(max-width:900px){
+    .app{grid-template-columns:1fr}
+    .side{position:fixed;inset:0;z-index:60;width:min(300px,86vw);border-right:1px solid var(--line);
+          transform:translateX(-100%)}
+    .app.mobile-open .side{transform:translateX(0)}
+    .scrim{position:fixed;inset:0;z-index:55;background:rgba(3,5,10,.6);display:none}
+    .app.mobile-open .scrim{display:block}
+  }
+  @media (prefers-reduced-motion:reduce){.side{transition:none}}
+
+  .brand{display:flex;align-items:center;gap:10px;padding:2px 4px 16px}
+  .brand .mk{font-size:24px;color:var(--gold);line-height:1}
+  .brand b{font-size:14px;font-weight:700;letter-spacing:.01em;display:block}
+  .brand small{color:var(--sub);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase}
+
+  .side h3{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);
+           margin:16px 4px 8px;font-weight:600}
+  .newchat{display:flex;align-items:center;gap:8px;width:100%;background:transparent;
+           border:1px solid rgba(212,175,55,.28);color:var(--text);border-radius:var(--r-sm);
+           padding:10px 12px;font-size:13px;font-weight:600;cursor:pointer;text-align:left}
+  .newchat:hover{background:rgba(212,175,55,.09);border-color:rgba(212,175,55,.5)}
+  .newchat span{color:var(--gold);font-size:15px;line-height:1}
+  .sessions{display:flex;flex-direction:column;gap:2px;overflow-y:auto;flex:1;min-height:0}
+  .nochats{color:var(--faint);font-size:12px;padding:6px 10px;margin:0}
+  .sess{display:flex;align-items:center;border-radius:var(--r-sm)}
+  .sess:hover{background:rgba(212,175,55,.07)}
+  .sess.on{background:rgba(212,175,55,.12)}
+  .sess-open{flex:1;min-width:0;background:none;border:0;color:var(--sub);text-align:left;
+             padding:8px 4px 8px 10px;font-size:12.5px;cursor:pointer;
+             white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sess.on .sess-open,.sess:hover .sess-open{color:var(--text)}
+  .sess-del{background:none;border:0;color:transparent;font-size:16px;line-height:1;
+            padding:6px 9px;cursor:pointer}
+  .sess:hover .sess-del{color:var(--faint)}
+  .sess-del:hover{color:#EF4444}
+  .side .foot{margin-top:auto;padding-top:14px;border-top:1px solid var(--line)}
+  .plan-chip{display:flex;align-items:center;justify-content:space-between;gap:8px;
+             background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);padding:10px 12px}
+  .plan-chip b{color:var(--gold);font-size:12.5px;display:block}
+  .plan-chip small{color:var(--sub);font-size:11px}
+  .plan-chip button{background:none;border:1px solid rgba(212,175,55,.3);color:var(--gold);
+                    border-radius:999px;padding:5px 11px;font-size:11px;cursor:pointer}
+  .side .back{display:block;margin-top:10px;color:var(--faint);font-size:12px;text-align:center}
+
+  /* ── main column ─────────────────────────────────────────────────────── */
+  .main{display:flex;flex-direction:column;min-height:0;min-width:0}
+  .top{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);
+       background:rgba(9,13,26,.85);backdrop-filter:blur(8px)}
+  .top .burger{background:none;border:1px solid var(--line);color:var(--sub);
+               border-radius:var(--r-sm);padding:6px 10px;cursor:pointer;line-height:1}
+  .top .burger:hover{color:var(--text);border-color:rgba(212,175,55,.4)}
+  .top h1{font-size:14px;margin:0;font-weight:600;flex:1}
+  .top h1 span{display:block;color:var(--faint);font-size:11px;font-weight:400}
+  .menu{position:relative}
+  .menu .dots{background:none;border:1px solid var(--line);color:var(--sub);font-size:15px;
+              border-radius:var(--r-sm);padding:6px 10px;cursor:pointer;line-height:1}
+  .menu .dots:hover,.menu.on .dots{color:var(--text);border-color:rgba(212,175,55,.4)}
+  .menu-pop{position:absolute;top:calc(100% + 8px);right:0;z-index:40;display:none;min-width:186px;
+            background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);
+            padding:6px;box-shadow:0 18px 40px rgba(0,0,0,.55)}
+  .menu.on .menu-pop{display:block}
+  .menu-pop button,.menu-pop a{display:block;width:100%;box-sizing:border-box;text-align:left;
+            background:none;border:0;color:var(--sub);font:inherit;font-size:13px;text-decoration:none;
+            padding:9px 11px;border-radius:var(--r-sm);cursor:pointer}
+  .menu-pop button:hover,.menu-pop a:hover{background:rgba(212,175,55,.09);color:var(--text)}
+
+  /* The only scrolling region on the page. */
+  #log{flex:1;overflow-y:auto;overscroll-behavior:contain;scroll-behavior:smooth}
+  .row{border-bottom:1px solid rgba(212,175,55,.05)}
+  .row.me{background:rgba(212,175,55,.035)}
+  .row .in{max-width:var(--col);margin:0 auto;padding:20px;display:flex;gap:14px}
+  @media(max-width:640px){.row .in{padding:16px 14px;gap:10px}}
+  .av{flex:none;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;
+      font-size:13px;font-weight:700}
+  .av.ai{background:linear-gradient(145deg,var(--gold-lift),var(--gold-dim));color:#05070E}
+  .av.you{background:var(--edge);color:var(--sub);border:1px solid var(--line)}
+  .body{min-width:0;flex:1;font-size:14.5px;white-space:pre-wrap;word-break:break-word}
+  .body .who{font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px}
+
+  .dots span{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--sub);
+             margin-right:4px;animation:blink 1.2s infinite}
+  .dots span:nth-child(2){animation-delay:.2s}
+  .dots span:nth-child(3){animation-delay:.4s}
+  @keyframes blink{0%,80%,100%{opacity:.25}40%{opacity:1}}
+
+  .empty{max-width:var(--col);margin:0 auto;padding:48px 20px;text-align:center}
+  .empty .mk{font-size:44px;color:var(--gold);line-height:1}
+  .empty h2{font-size:clamp(1.3rem,3.4vw,1.75rem);margin:14px 0 6px}
+  .empty p{color:var(--sub);margin:0 auto;max-width:46ch;font-size:14px}
+  .starters{display:grid;grid-template-columns:1fr;gap:8px;margin-top:22px;text-align:left}
+  @media(min-width:560px){.starters{grid-template-columns:1fr 1fr}}
+  .starters button{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);
+                   padding:12px 14px;cursor:pointer;color:var(--text);font-size:13px}
+  .starters button:hover{border-color:rgba(212,175,55,.4);background:rgba(212,175,55,.06)}
+  .starters b{display:block;font-size:13px}
+  .starters small{color:var(--sub);font-size:11.5px}
+
+  /* ── composer ────────────────────────────────────────────────────────── */
+  .composer{border-top:1px solid var(--line);background:rgba(5,7,14,.9);
+            padding:14px 16px calc(14px + env(safe-area-inset-bottom))}
+  .composer form{max-width:var(--col);margin:0 auto;display:flex;gap:10px;align-items:flex-end;
+                 background:var(--card);border:1px solid rgba(212,175,55,.22);border-radius:var(--r-lg);
+                 padding:8px 8px 8px 16px}
+  .composer form:focus-within{border-color:rgba(212,175,55,.5)}
+  .composer textarea{flex:1;background:none;border:0;color:var(--text);resize:none;outline:none;
+                     font-size:14.5px;line-height:1.5;max-height:180px;padding:8px 0}
+  .composer textarea::placeholder{color:var(--faint)}
+  .composer .send{flex:none;width:38px;height:38px;border-radius:12px;border:0;cursor:pointer;
+                  background:linear-gradient(145deg,var(--gold-lift),var(--gold-dim));color:#05070E;
+                  font-size:17px;font-weight:700}
+  .composer .send:disabled{opacity:.4;cursor:default}
+  .meter{max-width:var(--col);margin:8px auto 0;color:var(--faint);font-size:11px;text-align:center}
+
+  /* ── panels ──────────────────────────────────────────────────────────── */
+  .panel{position:fixed;inset:0;z-index:70;background:rgba(3,5,10,.94);backdrop-filter:blur(10px);
+         overflow-y:auto;padding:32px 18px;display:none}
+  .panel.on{display:block}
+  .panel .inner{max-width:900px;margin:0 auto}
+  .panel h2{font-size:clamp(1.4rem,4vw,2rem);text-align:center;margin:0 0 8px;
+    background:linear-gradient(150deg,#F5E3A3,#D4AF37 55%,#9C7C14);-webkit-background-clip:text;
+    background-clip:text;color:transparent}
+  .panel .lede{color:var(--sub);text-align:center;margin:0 auto 24px;max-width:52ch;font-size:13.5px}
+  .close{display:block;margin:22px auto 0;background:none;border:0;color:var(--sub);
+         font-size:13px;cursor:pointer;text-decoration:underline}
+
+  .plans{display:grid;grid-template-columns:1fr;gap:14px}
+  @media(min-width:820px){.plans{grid-template-columns:repeat(4,1fr)}}
+  .tier{background:var(--card);border:1px solid rgba(212,175,55,.16);border-radius:var(--r-lg);
+        padding:18px;display:flex;flex-direction:column}
+  .tier.on{border-color:rgba(212,175,55,.55)}
+  .tier .nm{font-size:13.5px;font-weight:700}
+  .tier .amt{font-size:24px;font-weight:800;color:var(--gold);margin:6px 0 0}
+  .tier .per{color:var(--sub);font-size:11px;margin-bottom:12px}
+  .tier ul{list-style:none;margin:0 0 14px;padding:0;display:flex;flex-direction:column;gap:6px;flex:1}
+  .tier li{font-size:12.5px;color:#D9D4C9;padding-left:15px;position:relative}
+  .tier li:before{content:"\2022";position:absolute;left:2px;color:var(--gold)}
+  .tier button{background:linear-gradient(145deg,var(--gold-lift),var(--gold-dim));color:#05070E;
+               border:0;border-radius:var(--r-sm);padding:9px;font-weight:700;font-size:13px;cursor:pointer}
+  .tier button[disabled]{background:none;border:1px solid rgba(212,175,55,.3);color:var(--sub);cursor:default}
+
+  /* ── payment ──────────────────────────────────────────────────────────
+     Tokens lifted from public/payment.html rather than eyeballed, so the
+     assistant's checkout and the programme-fee checkout are the same screen
+     to a student: same 16px radii, same gold gradient, same white QR plate. */
+  .pay{margin-top:20px;background:#12100C;border:1px solid rgba(212,175,55,.18);
+       border-radius:22px;padding:28px 24px;max-width:440px;margin-inline:auto;
+       text-align:center;display:none;box-shadow:0 4px 40px rgba(0,0,0,.45)}
+  .pay.on{display:block}
+  .pay .ptitle{font-size:20px;font-weight:700;color:var(--text);margin-bottom:4px}
+  .pay .psub{font-size:13px;color:#9a9080;margin-bottom:18px}
+  /* White plate, 14px radius, lifted off the card - the QR has to read as a
+     physical thing to scan, not as part of the dark UI. */
+  .pay .qrbox{background:#fff;border-radius:14px;padding:12px;display:inline-block;
+              margin:4px auto 12px;box-shadow:0 4px 20px rgba(0,0,0,.3)}
+  .pay .qrbox img{display:block;width:min(200px,56vw);height:auto}
+  .pay .amt2{font-size:26px;font-weight:800;color:var(--gold);letter-spacing:-.01em}
+  .pay .payee{font-size:12px;color:#9a9080;text-transform:uppercase;letter-spacing:.6px;margin-top:2px}
+  .pay .vpa{font-family:ui-monospace,'DM Mono',monospace;font-size:13px;color:var(--gold);
+            font-weight:700;margin-top:10px;word-break:break-all}
+  .pay .reason{display:flex;align-items:center;justify-content:center;gap:7px;
+               background:rgba(212,175,55,.06);border:1px solid rgba(212,175,55,.18);
+               border-radius:16px;padding:11px 14px;margin:14px 0 18px;
+               font-size:13px;font-weight:600;color:var(--gold);line-height:1.4}
+  .pay label{display:block;font-size:12px;font-weight:600;color:#9a9080;margin-bottom:8px;
+             text-transform:uppercase;letter-spacing:.6px;text-align:left}
+  .pay input{width:100%;background:#0B0A07;color:var(--text);border:1px solid rgba(212,175,55,.18);
+             border-radius:16px;padding:13px 16px;font:inherit;font-size:15px;text-align:center;
+             letter-spacing:.06em;outline:none;transition:border-color .2s}
+  .pay input:focus{border-color:var(--gold)}
+  .pay .warn{background:rgba(245,158,11,.09);border:1px solid rgba(245,158,11,.28);color:#F5C87A;
+             border-radius:16px;padding:13px 15px;font-size:12.5px;margin:14px 0;text-align:left;line-height:1.5}
+  .pay .ok{background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);color:#6EE7B7;
+           border-radius:16px;padding:13px 15px;font-size:13px;margin-top:14px;line-height:1.5;text-align:left}
+  .pay .cta{width:100%;padding:16px;background:linear-gradient(135deg,var(--gold),#b8962c);color:#05070e;
+            border:0;border-radius:16px;font:inherit;font-size:16px;font-weight:700;cursor:pointer;
+            display:flex;align-items:center;justify-content:center;gap:8px;margin-top:14px;
+            transition:opacity .2s,transform .16s ease-out}
+  .pay .cta:hover{opacity:.9}
+  .pay .cta:active{transform:scale(.985)}
+  .pay .cta:disabled{opacity:.5;cursor:not-allowed}
+  /* WhatsApp's own green, because the button leaves for WhatsApp. */
+  .pay .wa{width:100%;padding:15px;background:#25D366;color:#05170D;border:0;border-radius:16px;
+           font:inherit;font-size:15px;font-weight:700;cursor:pointer;margin-top:14px;
+           display:flex;align-items:center;justify-content:center;gap:9px;
+           transition:filter .2s,transform .16s ease-out}
+  .pay .wa:hover{filter:brightness(1.06)}
+  .pay .wa:active{transform:scale(.985)}
+  .pay .wa svg{width:19px;height:19px;flex:none}
+  .pay .pend{background:rgba(212,175,55,.06);border:1px solid rgba(212,175,55,.2);border-radius:16px;
+             padding:14px 16px;margin-top:14px;font-size:12.5px;color:#D9D4C9;text-align:left;line-height:1.55}
+  .pay .pend b{color:var(--gold);display:block;margin-bottom:5px}
+
+  /* ── WhatsApp handoff ─────────────────────────────────────────────────
+     Plays between "join the group" and actually leaving. The medallion
+     turns from its back face to its front, hits the glass, and the screen
+     cracks - then we navigate. The link underneath is a real href, so if
+     any of this fails the student still lands in the group. */
+  #wa{position:fixed;inset:0;z-index:10000;background:#050A07;display:none;
+      place-items:center;perspective:1100px;overflow:hidden}
+  #wa.on{display:grid}
+  .wa-coin{width:min(46vw,230px);aspect-ratio:1;transform-style:preserve-3d;
+           animation:waSpin 1.05s cubic-bezier(.23,1,.32,1) forwards}
+  .wa-coin svg{width:100%;height:100%;display:block;filter:drop-shadow(0 18px 44px rgba(0,0,0,.65))}
+  /* Starts on its back face, small and far - then turns to meet you. */
+  @keyframes waSpin{
+    0%  {transform:translateZ(-620px) rotateY(-540deg) scale(.42);opacity:0}
+    35% {opacity:1}
+    82% {transform:translateZ(0) rotateY(0deg) scale(1)}
+    100%{transform:translateZ(90px) rotateY(0deg) scale(1.07)}
+  }
+  .wa-flash{position:absolute;inset:0;pointer-events:none;opacity:0;
+            background:radial-gradient(circle at 50% 50%,rgba(255,255,255,.55) 0%,rgba(37,211,102,.22) 30%,transparent 64%);
+            animation:waFlash .55s ease-out 1s forwards}
+  /* Peaks at .55 rather than full white: the medallion is the subject, the
+     flash is the impact around it, and blowing it out hides the thing. */
+  @keyframes waFlash{0%{opacity:0;transform:scale(.6)}20%{opacity:.85}100%{opacity:0;transform:scale(1.9)}}
+  /* The cracks draw outward from the point of impact. */
+  .wa-crack{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+  /* non-scaling-stroke, or the stretched viewBox turns a 1.4px crack into a
+     20px white slab that buries the medallion it is meant to frame. */
+  .wa-crack path{stroke:rgba(226,255,238,.7);stroke-width:1.4;fill:none;
+                 vector-effect:non-scaling-stroke;stroke-linecap:round;
+                 stroke-dasharray:1400;stroke-dashoffset:1400;
+                 filter:drop-shadow(0 0 3px rgba(37,211,102,.55));
+                 animation:waCrack .5s cubic-bezier(.16,1,.3,1) 1.05s forwards}
+  @keyframes waCrack{to{stroke-dashoffset:0}}
+  #wa .leaving{position:absolute;bottom:46px;left:0;right:0;text-align:center;
+               color:#7E8B83;font-size:12.5px;letter-spacing:.04em;opacity:0;
+               animation:fadeIn .3s ease .55s forwards}
+  /* Motion sickness is not the price of joining a group: hold the mark, go. */
+  @media (prefers-reduced-motion:reduce){
+    .wa-coin{animation:fadeIn .2s ease forwards;transform:none;opacity:1}
+    .wa-flash,.wa-crack path{animation:none;opacity:0}
+  }
+
+  .weeks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}
+  .weeks li{background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);padding:12px 14px}
+  .weeks .hd{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+  .weeks b{font-size:13px}
+  .weeks .mt{font-size:11px;color:var(--sub);white-space:nowrap}
+  .weeks p{margin:3px 0 0;font-size:12.5px;color:#D9D4C9}
+  .pill{display:inline-block;background:rgba(212,175,55,.1);border:1px solid rgba(212,175,55,.26);
+        color:var(--gold);border-radius:999px;padding:4px 11px;font-size:11.5px;font-weight:600;margin:0 6px 10px 0}
+
+  /* ── intro ────────────────────────────────────────────────────────────
+     The brand film itself, on every open. It is skippable from the first
+     frame - a click, a tap or any key ends it - because an animation you
+     cannot get out of stops being a welcome and starts being a toll. */
+  #intro{position:fixed;inset:0;z-index:9999;background:#000;display:grid;place-items:center;
+    cursor:pointer;transition:opacity .42s cubic-bezier(.23,1,.32,1),
+    transform .42s cubic-bezier(.23,1,.32,1),filter .42s cubic-bezier(.23,1,.32,1)}
+  /* Exits faster than it enters, and the blur bridges the two states so the
+     cut to the chat reads as one movement rather than two screens swapping. */
+  #intro.out{opacity:0;transform:scale(1.04);filter:blur(10px);pointer-events:none}
+  #intro.done{display:none}
+
+  #intro .film{position:relative;display:grid;place-items:center;width:100%;height:100%}
+  #intro video{width:min(100vw,calc(100vh * 16 / 9));height:auto;max-height:100vh;
+    object-fit:contain;opacity:0;transform:scale(1.015);
+    transition:opacity .5s ease-out,transform 1.4s cubic-bezier(.23,1,.32,1)}
+  #intro video.on{opacity:1;transform:scale(1)}
+  /* Gold spill from behind the frame, so the film sits in the page rather
+     than on top of it. */
+  #intro .halo{position:absolute;width:62%;aspect-ratio:1;border-radius:50%;pointer-events:none;
+    background:radial-gradient(circle,rgba(255,238,180,.16) 0%,rgba(212,175,55,.09) 45%,transparent 70%);
+    opacity:0;animation:haloIn 2.2s cubic-bezier(.34,.01,.24,1) .25s forwards}
+  @keyframes haloIn{0%{opacity:0}60%{opacity:1}100%{opacity:.62}}
+
+  #intro .skip{position:absolute;bottom:34px;right:26px;background:rgba(255,255,255,.04);
+    border:1px solid rgba(212,175,55,.28);color:var(--sub);border-radius:999px;padding:8px 16px;
+    font-size:12px;cursor:pointer;opacity:0;animation:fadeIn .34s ease .6s forwards;
+    transition:transform .16s ease-out,color .16s ease,border-color .16s ease}
+  #intro .skip:hover{color:var(--text);border-color:rgba(212,175,55,.55)}
+  #intro .skip:active{transform:scale(.97)}
+  @keyframes fadeIn{to{opacity:1}}
+
+  /* Reduced motion keeps the brand but drops the movement: the poster frame,
+     held briefly, then the same fade. */
+  @media (prefers-reduced-motion:reduce){
+    #intro video{display:none}
+    #intro .film{background:#000 center/contain no-repeat url('/ten-intro-poster.jpg')}
+    #intro .halo{animation:none;opacity:.5}
+    #log{scroll-behavior:auto}
+    .dots span{animation:none}
+  }
+</style>
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <script src="/push-client.js" defer></script>
+</head>
+<body>
+
+<div id="intro" role="dialog" aria-modal="true" aria-label="TEN Assistant is opening">
+  <div class="film">
+    <div class="halo" aria-hidden="true"></div>
+    <video id="introFilm" playsinline muted autoplay preload="auto"
+           poster="/ten-intro-poster.jpg"
+           aria-label="The Entrepreneurship Network (TEN)">
+      <source src="/ten-intro.mp4" type="video/mp4">
+    </video>
+  </div>
+  <button class="skip" type="button" id="introSkip">Skip intro</button>
+</div>
+
+<!-- Handoff to the WhatsApp verification group. Built as a medallion rather
+     than a copy of WhatsApp's own screens: this is a doorway out, and it must
+     never look like WhatsApp is asking a student for anything. -->
+<div id="wa" role="dialog" aria-modal="true" aria-label="Opening WhatsApp">
+  <div class="wa-coin">
+    <svg viewBox="0 0 200 200" aria-hidden="true">
+      <defs>
+        <linearGradient id="waRim" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#F4E9C0"/><stop offset=".45" stop-color="#D4AF37"/>
+          <stop offset="1" stop-color="#8A6E1F"/>
+        </linearGradient>
+        <radialGradient id="waFace" cx="50%" cy="38%" r="72%">
+          <stop offset="0" stop-color="#1FA855"/><stop offset="1" stop-color="#06301B"/>
+        </radialGradient>
+      </defs>
+      <circle cx="100" cy="100" r="97" fill="url(#waRim)"/>
+      <circle cx="100" cy="100" r="88" fill="#0A140E"/>
+      <circle cx="100" cy="100" r="80" fill="url(#waFace)"/>
+      <circle cx="100" cy="100" r="80" fill="none" stroke="url(#waRim)" stroke-width="3"/>
+      <circle cx="100" cy="100" r="68" fill="none" stroke="rgba(244,233,192,.35)" stroke-width="1.2"/>
+      <path fill="#F4E9C0" d="M100 52c-26.5 0-48 21.5-48 48 0 8.5 2.2 16.4 6.1 23.3L52 148l25.4-6.6A47.8 47.8 0 0 0 100 148c26.5 0 48-21.5 48-48s-21.5-48-48-48Zm0 87.5c-7.4 0-14.3-2-20.2-5.5l-1.4-.9-15.1 3.9 4-14.7-.9-1.5a39.3 39.3 0 1 1 33.6 18.7Z"/>
+      <path fill="#F4E9C0" d="M121.6 110.9c-1.2-.6-7-3.4-8.1-3.8-1.1-.4-1.9-.6-2.6.6-.8 1.2-3 3.8-3.7 4.6-.7.8-1.4.9-2.5.3-1.2-.6-5-1.8-9.5-5.8-3.5-3.1-5.9-7-6.6-8.2-.7-1.2 0-1.8.5-2.4.5-.5 1.2-1.4 1.8-2.1.6-.7.8-1.2 1.2-2 .4-.8.2-1.5-.1-2.1-.3-.6-2.6-6.4-3.6-8.8-1-2.3-1.9-2-2.6-2h-2.2c-.8 0-2 .3-3.1 1.5-1.1 1.2-4.1 4-4.1 9.8s4.2 11.4 4.8 12.2c.6.8 8.3 12.7 20.1 17.8 2.8 1.2 5 1.9 6.7 2.5 2.8.9 5.4.8 7.4.5 2.3-.3 7-2.9 8-5.6 1-2.8 1-5.1.7-5.6-.3-.5-1.1-.8-2.3-1.4Z"/>
+    </svg>
+  </div>
+  <svg class="wa-crack" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M50 50 L18 4 M50 50 L84 2 M50 50 L2 34 M50 50 L99 26 M50 50 L6 78 M50 50 L96 72 M50 50 L34 99 M50 50 L70 98"/>
+    <path d="M32 27 L20 14 M68 24 L82 12 M24 62 L10 70 M76 66 L92 76 M42 76 L36 90 M60 78 L68 92"/>
+  </svg>
+  <div class="wa-flash" aria-hidden="true"></div>
+  <p class="leaving">Opening the verification group…</p>
+</div>
+
+<div class="app" id="app">
+  <div class="scrim" id="scrim"></div>
+
+  <aside class="side" id="side">
+    <div class="brand">
+      <span class="mk" aria-hidden="true">&#8734;</span>
+      <span><b>TEN Assistant</b><small>The Entrepreneurship Network</small></span>
+    </div>
+
+    <button class="newchat" type="button" id="newChat">
+      <span aria-hidden="true">&#43;</span> New chat
+    </button>
+
+    <h3>Chats</h3>
+    <div class="sessions" id="sessions"></div>
+
+    <div class="foot">
+      <div class="plan-chip">
+        <span><b id="tierName">Starter</b><small id="tierMeter">&nbsp;</small></span>
+      </div>
+      <a class="back" href="/student-dashboard.html">&larr; Back to dashboard</a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="top">
+      <button class="burger" type="button" id="burger" aria-label="Menu">&#9776;</button>
+      <h1>TEN Assistant<span>Answers from the portal's own task library</span></h1>
+      <div class="menu" id="menu">
+        <button class="dots" type="button" id="dots" aria-label="More"
+                aria-haspopup="menu" aria-expanded="false">&#8943;</button>
+        <div class="menu-pop" role="menu" id="menuPop">
+          <button type="button" role="menuitem" id="menuPlans">Pricing &amp; plans</button>
+          <a role="menuitem" href="/student-dashboard.html">Back to dashboard</a>
+        </div>
+      </div>
+    </div>
+
+    <div id="log" aria-live="polite"></div>
+
+    <div class="composer">
+      <form id="ask">
+        <textarea id="q" rows="1" placeholder="Ask about your tasks, coins, certificates…" aria-label="Message"></textarea>
+        <button class="send" type="submit" id="send" aria-label="Send">&uarr;</button>
+      </form>
+      <div class="meter" id="meter"></div>
+    </div>
+  </main>
+</div>
+
+<div class="panel" id="plansPanel" role="dialog" aria-modal="true" aria-label="Plans">
+  <div class="inner">
+    <h2 id="pwHead">Great minds don’t give advice by the hour.</h2>
+    <p class="lede" id="pwSub">Starter gets you unstuck. The paid tiers go deeper on the same question.</p>
+    <div class="plans" id="plans"></div>
+    <div class="pay" id="pay"></div>
+    <button class="close" type="button" id="closePlans">Close</button>
+  </div>
+</div>
+
+<div class="panel" id="planPanel" role="dialog" aria-modal="true" aria-label="Track plan">
+  <div class="inner">
+    <h2 id="planTitle">Your plan</h2>
+    <div id="planBody"></div>
+    <button class="close" type="button" id="closePlan">Close</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ── intro: every time the assistant is opened ───────────────────────
+     No sessionStorage gate any more - the brand film plays on each open.
+     Which makes the exits matter more than the entrance, so there are four:
+     the film ending, the skip button, any key, and a click anywhere. */
+  (function () {
+    var intro = $('intro');
+    var film  = $('introFilm');
+    var over  = false;
+
+    function end() {
+      if (over) { return; }
+      over = true;
+      try { film.pause(); } catch (e) {}
+      intro.classList.add('out');
+      // Left in the DOM until the fade finishes, then taken out of the layout
+      // so it can never swallow a click meant for the composer.
+      var gone = function () { intro.classList.add('done'); };
+      intro.addEventListener('transitionend', gone, { once: true });
+      setTimeout(gone, 700);
+      try { box.focus(); } catch (e) {}
+    }
+
+    // Fade the film up once it has frames to show, rather than cutting from
+    // black to a half-decoded first frame.
+    if (film) {
+      var show = function () { film.classList.add('on'); };
+      if (film.readyState >= 2) { show(); } else { film.addEventListener('loadeddata', show, { once: true }); }
+      film.addEventListener('ended', end);
+      // Autoplay can be refused, and a still frame that never moves is worse
+      // than no intro at all - so treat a refusal as "skip".
+      var p = film.play();
+      if (p && typeof p.catch === 'function') { p.catch(end); }
+      film.addEventListener('error', end);
+    }
+
+    $('introSkip').addEventListener('click', function (e) { e.stopPropagation(); end(); });
+    intro.addEventListener('click', end);
+    document.addEventListener('keydown', end, { once: true });
+    // Backstop: if the file stalls on a slow connection, nobody waits on it.
+    setTimeout(end, 6000);
+  })();
+
+  /* ── who is asking (read-only) ───────────────────────────────────────── */
+  function me() {
+    var o = { userId: '', userName: '', domain: '' };
+    try {
+      var keys = ['employeeId', 'employee_id', 'userId', 'studentId', 'empId'];
+      for (var i = 0; i < keys.length; i++) {
+        var v = localStorage.getItem(keys[i]);
+        if (v) { o.userId = v; break; }
+      }
+      o.userName = localStorage.getItem('name') || localStorage.getItem('studentName') || '';
+      o.domain   = localStorage.getItem('domain') || localStorage.getItem('studentDomain') || '';
+      var raw = localStorage.getItem('student') || localStorage.getItem('user');
+      if (raw) {
+        var p = JSON.parse(raw);
+        o.userId   = o.userId   || p.employeeId || p.userId || p._id || '';
+        o.userName = o.userName || p.name || '';
+        o.domain   = o.domain   || p.domain || '';
+      }
+    } catch (e) {}
+    return o;
+  }
+
+  /* ── message list ────────────────────────────────────────────────────── */
+  var log = $('log');
+
+  function atBottom() {
+    return log.scrollHeight - log.scrollTop - log.clientHeight < 90;
+  }
+  /* Only follow the conversation when the reader is already at the bottom.
+     Yanking someone back down while they are re-reading an earlier answer is
+     the thing that makes a chat feel like it is fighting you. */
+  function follow(force) {
+    if (force || atBottom()) { log.scrollTop = log.scrollHeight; }
+  }
+
+  function bubble(who, text) {
+    var row = document.createElement('div');
+    row.className = 'row' + (who === 'me' ? ' me' : '');
+    var inner = document.createElement('div'); inner.className = 'in';
+    var av = document.createElement('div');
+    av.className = 'av ' + (who === 'me' ? 'you' : 'ai');
+    av.textContent = who === 'me' ? (me().userName ? me().userName[0].toUpperCase() : 'Y') : '∞';
+    var body = document.createElement('div'); body.className = 'body';
+    var lab = document.createElement('div'); lab.className = 'who';
+    lab.textContent = who === 'me' ? 'You' : 'TEN Assistant';
+    var txt = document.createElement('div');
+    txt.textContent = text;                      // text node, never innerHTML
+    body.appendChild(lab); body.appendChild(txt);
+    inner.appendChild(av); inner.appendChild(body);
+    row.appendChild(inner);
+    log.appendChild(row);
+    follow(who === 'me');                        // always follow your own message
+    return txt;
+  }
+
+  function thinking() {
+    var t = bubble('ai', '');
+    t.innerHTML = '<span class="dots"><span></span><span></span><span></span></span>';
+    return t;
+  }
+
+  /* ── empty state ─────────────────────────────────────────────────────── */
+  var STARTERS = [
+    ['My week-by-week plan', 'Every task, coin value and difficulty', 'Give me my week by week plan'],
+    ['How do coins work?', '100 coins = ₹50, and the ones students miss', 'How do coins work and how do I earn the most?'],
+    ['What domains exist?', 'All 14 tracks and 6 durations', 'What are all the domains available?'],
+    ['Certificates', 'Types, and what earns the strongest one', 'What certificates does TEN issue and how do I qualify?']
+  ];
+
+  function showEmpty() {
+    var who = me();
+    var wrap = document.createElement('div');
+    wrap.className = 'empty';
+    var mk = document.createElement('div'); mk.className = 'mk'; mk.textContent = '∞';
+    var h = document.createElement('h2');
+    h.textContent = who.userName ? 'Hello, ' + who.userName.split(' ')[0] + '.' : 'How can I help?';
+    var p = document.createElement('p');
+    p.textContent = who.domain
+      ? 'You are on ' + who.domain + '. Ask me anything about your tasks, coins, certificates or deadlines.'
+      : 'Ask me about your weekly tasks, coins, attendance, documents or certificates.';
+    wrap.appendChild(mk); wrap.appendChild(h); wrap.appendChild(p);
+
+    var grid = document.createElement('div'); grid.className = 'starters';
+    STARTERS.forEach(function (s) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      var t = document.createElement('b'); t.textContent = s[0];
+      var d = document.createElement('small'); d.textContent = s[1];
+      b.appendChild(t); b.appendChild(d);
+      b.addEventListener('click', function () { send(s[2]); });
+      grid.appendChild(b);
+    });
+    wrap.appendChild(grid);
+    log.appendChild(wrap);
+  }
+
+  function clearEmpty() {
+    var e = log.querySelector('.empty');
+    if (e) { e.remove(); }
+  }
+
+  /* ── sending ─────────────────────────────────────────────────────────── */
+  var busy = false;
+  function send(text) {
+    var q = String(text || '').trim();
+    if (!q || busy) { return; }
+    busy = true;
+    $('send').disabled = true;
+    clearEmpty();
+    bubble('me', q);
+    remember('me', q);
+    var pending = thinking();
+    var who = me();
+
+    fetch('/api/v2/assistant/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: q, userId: who.userId, userName: who.userName, domain: who.domain })
+    })
+      .then(function (r) { return r.json().then(function (j) { return { status: r.status, body: j }; }); })
+      .then(function (out) {
+        var d = out.body;
+        if (out.status === 402 && d.paywall) {
+          pending.textContent = d.paywall.headline + '\n\n' + d.paywall.sub;
+          if (d.paywall.plans) { renderPlans(d.paywall); }
+          openPanel('plansPanel');
+          return;
+        }
+        pending.textContent = d.answer || d.error || 'No answer available.';
+        remember('ai', pending.textContent);
+        if (typeof d.remaining === 'number') {
+          $('meter').textContent = d.remaining + ' of ' + d.limit + ' messages left this month';
+        } else if (d.limit === null) {
+          $('meter').textContent = 'Unlimited messages';
+        }
+      })
+      .catch(function () {
+        pending.textContent = 'Could not reach the assistant. Check your connection and try again.';
+      })
+      .then(function () { busy = false; $('send').disabled = false; follow(); });
+  }
+
+  var box = $('q');
+  function grow() { box.style.height = 'auto'; box.style.height = Math.min(box.scrollHeight, 180) + 'px'; }
+  box.addEventListener('input', grow);
+  box.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('ask').requestSubmit(); }
+  });
+  $('ask').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var v = box.value;
+    box.value = ''; grow();
+    send(v);
+  });
+
+  /* ── panels ──────────────────────────────────────────────────────────── */
+  function openPanel(id) { $(id).classList.add('on'); }
+  function closePanel(id) { $(id).classList.remove('on'); }
+  $('closePlans').addEventListener('click', function () { closePanel('plansPanel'); });
+  $('closePlan').addEventListener('click', function () { closePanel('planPanel'); });
+
+  /* ⋯ menu. Pricing lives here rather than in the sidebar footer so it stays
+     one click away when the sidebar is collapsed or off-screen on a phone. */
+  function closeMenu() {
+    $('menu').classList.remove('on');
+    $('dots').setAttribute('aria-expanded', 'false');
+  }
+  $('dots').addEventListener('click', function (e) {
+    e.stopPropagation();
+    var on = $('menu').classList.toggle('on');
+    $('dots').setAttribute('aria-expanded', on ? 'true' : 'false');
+  });
+  $('menuPlans').addEventListener('click', function () { closeMenu(); openPanel('plansPanel'); });
+  document.addEventListener('click', function (e) {
+    if (!$('menu').contains(e.target)) { closeMenu(); }
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      closeMenu(); closePanel('plansPanel'); closePanel('planPanel');
+      $('app').classList.remove('mobile-open');
+    }
+  });
+  /* One control, two behaviours: on a narrow screen it slides the panel over
+     the conversation; on a wide one it collapses the column so the chat gets
+     the full width. */
+  function toggleSide() {
+    var app = $('app');
+    if (window.matchMedia('(max-width:900px)').matches) { app.classList.toggle('mobile-open'); }
+    else { app.classList.toggle('collapsed'); }
+  }
+  $('burger').addEventListener('click', toggleSide);
+  $('scrim').addEventListener('click', function () { $('app').classList.remove('mobile-open'); });
+
+  /* ── plans + payment ─────────────────────────────────────────────────── */
+  var CURRENT = 'starter';
+
+  function renderPlans(wall) {
+    var grid = $('plans'); grid.innerHTML = '';
+    $('pwHead').textContent = wall.headline;
+    $('pwSub').textContent = wall.sub;
+    (wall.plans || []).forEach(function (plan) {
+      var card = document.createElement('div');
+      card.className = 'tier' + (plan.key === CURRENT ? ' on' : '');
+      var nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = plan.label;
+      var amt = document.createElement('div'); amt.className = 'amt'; amt.textContent = plan.priceLabel.split('/')[0];
+      var per = document.createElement('div'); per.className = 'per';
+      per.textContent = plan.key === 'starter' ? 'always' : 'per month';
+      var ul = document.createElement('ul');
+      var feats = [plan.messages, plan.history, plan.blurb];
+      if (plan.deepDive && plan.blurb.toLowerCase().indexOf('deep dive') === -1) { feats.push('Deep Dive Mode'); }
+      feats.forEach(function (t) { var li = document.createElement('li'); li.textContent = t; ul.appendChild(li); });
+      var btn = document.createElement('button'); btn.type = 'button';
+      if (plan.key === CURRENT) { btn.textContent = 'Your plan'; btn.disabled = true; }
+      else if (plan.key === 'starter') { btn.textContent = 'Included'; btn.disabled = true; }
+      else { btn.textContent = 'Choose ' + plan.label; btn.addEventListener('click', function () { showPayment(plan); }); }
+      [nm, amt, per, ul, btn].forEach(function (el) { card.appendChild(el); });
+      grid.appendChild(card);
+    });
+  }
+
+  /*
+   * The button says "I have paid", not "Pay". A static UPI QR reports nothing
+   * back to the server, so this submits a claim a human then verifies. Nothing
+   * here unlocks a tier: a tier unlocked in the browser is one anyone can
+   * unlock.
+   */
+  /* The verification group. A real href, so the animation below is decoration
+     over a link that already works - if the script throws, the student still
+     gets there. */
+  var WA_GROUP = 'https://chat.whatsapp.com/Fs7wEZA5NTk8jv6oTZse4F?s=cl&p=a&ilr=1';
+
+  function waIcon() {
+    var s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('aria-hidden', 'true');
+    var p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    p.setAttribute('fill', 'currentColor');
+    p.setAttribute('d', 'M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2c-1.6 0-3.1-.4-4.4-1.2l-.3-.2-3.1.8.8-3-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1s-.6.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.4-3c-.1-.2 0-.4.1-.5l.4-.5.2-.4v-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.5.1-.7.3a2.9 2.9 0 0 0-.9 2.1 5 5 0 0 0 1.1 2.6 11.4 11.4 0 0 0 4.4 3.9c1.6.6 1.9.5 2.3.5a2.5 2.5 0 0 0 1.7-1.2 2 2 0 0 0 .1-1.2l-.4-.3Z');
+    s.appendChild(p);
+    return s;
+  }
+
+  /* Turn the medallion, crack the glass, then leave. Same tab on purpose:
+     a delayed window.open is what popup blockers exist to stop. */
+  function goWhatsApp(e) {
+    if (e) { e.preventDefault(); }
+    var wa = $('wa');
+    if (!wa) { window.location.href = WA_GROUP; return; }
+    wa.classList.add('on');
+    var reduced = false;
+    try { reduced = window.matchMedia('(prefers-reduced-motion:reduce)').matches; } catch (_e) {}
+    setTimeout(function () { window.location.href = WA_GROUP; }, reduced ? 350 : 1750);
+  }
+
+  /* What a student sees once the reference is in: what happens next, how long
+     it takes, and the one thing that speeds it up. */
+  function afterUtr(box2, ref) {
+    var pend = document.createElement('div'); pend.className = 'pend';
+    var b = document.createElement('b'); b.textContent = '⏳ Verification is under way';
+    var t = document.createElement('span');
+    t.textContent = 'HR checks reference ' + ref + ' against the payment record by hand. That usually takes '
+      + '2 to 24 hours. Your plan turns on the moment it is approved — you do not need to pay again or '
+      + 'submit it twice.';
+    pend.appendChild(b); pend.appendChild(t);
+
+    var speed = document.createElement('div'); speed.className = 'pend';
+    var sb = document.createElement('b'); sb.textContent = '🚀 To be verified sooner';
+    var st = document.createElement('span');
+    st.textContent = 'Post your payment screenshot with your employee ID and this UTR in the verification group.';
+    speed.appendChild(sb); speed.appendChild(st);
+
+    var join = document.createElement('a');
+    join.className = 'wa';
+    join.href = WA_GROUP;
+    join.target = '_blank';
+    join.rel = 'noopener noreferrer';
+    join.appendChild(waIcon());
+    join.appendChild(document.createTextNode('Join WhatsApp Verification Group'));
+    join.addEventListener('click', goWhatsApp);
+
+    box2.appendChild(pend);
+    box2.appendChild(speed);
+    box2.appendChild(join);
+  }
+
+  function showPayment(plan) {
+    var box2 = $('pay');
+    box2.className = 'pay on';
+    box2.innerHTML = '';
+    fetch('/api/v2/assistant/payment-info?tier=' + encodeURIComponent(plan.key))
+      .then(function (r) { return r.json(); })
+      .then(function (info) {
+        if (info.error) { box2.textContent = info.error; return; }
+        var h = document.createElement('div');
+        h.className = 'ptitle';
+        h.textContent = 'Complete your payment';
+        var sub = document.createElement('div');
+        sub.className = 'psub';
+        sub.textContent = plan.label + ' plan · ' + info.priceLabel;
+        var qr = document.createElement('div'); qr.className = 'qrbox';
+        var img = document.createElement('img');
+        img.src = info.qrImage; img.alt = 'UPI QR for ' + info.payeeName;
+        qr.appendChild(img);
+        var amt = document.createElement('div'); amt.className = 'amt2'; amt.textContent = '₹' + info.amount;
+        var payee = document.createElement('div');
+        payee.className = 'payee'; payee.textContent = info.payeeName;
+        var vpa = document.createElement('div'); vpa.className = 'vpa';
+        vpa.textContent = 'UPI ID: ' + info.vpa;
+        var reason = document.createElement('div'); reason.className = 'reason';
+        reason.textContent = '📌 Payment Reason: TEN Assistant ' + plan.label + ' Plan';
+        var open = document.createElement('a');
+        open.href = info.upiLink; open.textContent = 'Open in UPI app';
+        open.style.cssText = 'display:inline-block;font-size:12.5px;margin-bottom:14px';
+        var lab = document.createElement('label');
+        lab.setAttribute('for', 'utr');
+        lab.textContent = 'Enter your UPI transaction ID / UTR';
+        var utr = document.createElement('input');
+        utr.type = 'text'; utr.id = 'utr'; utr.placeholder = 'Enter Transaction ID / UTR';
+        var warn = document.createElement('div'); warn.className = 'warn';
+        warn.textContent = 'Pay the exact amount from your own UPI app first. Submitting a reference does not activate the plan by itself: HR matches it against the payment record, and your tier turns on after that.';
+        var go = document.createElement('button'); go.type = 'button'; go.className = 'cta';
+        go.textContent = 'Submit UTR for HR Approval';
+        var out = document.createElement('div');
+
+        go.addEventListener('click', function () {
+          var ref = utr.value.trim();
+          if (!/^[A-Za-z0-9]{6,25}$/.test(ref)) {
+            out.className = 'warn';
+            out.textContent = 'Enter a valid Transaction ID: 6 to 25 letters and numbers.';
+            return;
+          }
+          go.disabled = true;
+          fetch('/api/v2/assistant/submit-utr', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: me().userId, tier: plan.key, utr: ref })
+          })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+              if (d.error) { out.className = 'warn'; out.textContent = d.error; go.disabled = false; return; }
+              out.className = 'ok'; out.textContent = d.message;
+              utr.disabled = true; go.remove();
+              afterUtr(box2, ref);
+            })
+            .catch(function () {
+              out.className = 'warn';
+              out.textContent = 'Could not submit. Check your connection and try again.';
+              go.disabled = false;
+            });
+        });
+
+        [h, sub, qr, amt, payee, vpa, reason, open, lab, utr, warn, go, out]
+          .forEach(function (el) { box2.appendChild(el); });
+      })
+      .catch(function () { box2.textContent = 'Could not load payment details.'; });
+  }
+
+  /* ── tier ────────────────────────────────────────────────────────────── */
+  (function refreshTier() {
+    var id = me().userId;
+    fetch('/api/v2/assistant/entitlement' + (id ? '?userId=' + encodeURIComponent(id) : ''))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        CURRENT = d.tier || 'starter';
+        if (d.paywall) { renderPlans(d.paywall); }
+        $('tierName').textContent = d.label || 'Starter';
+        var m = d.limit === null ? 'Unlimited' : d.remaining + ' of ' + d.limit + ' left';
+        $('tierMeter').textContent = m;
+        $('meter').textContent = d.limit === null ? 'Unlimited messages'
+          : d.remaining + ' of ' + d.limit + ' messages left this month';
+      })
+      .catch(function () {});
+  })();
+
+  /* ── sessions ────────────────────────────────────────────────────────
+     Conversations live in this browser, keyed per student so two people on a
+     shared machine never see each other's chats.
+
+     Local, not server-side, on purpose: the sidebar has to be useful on the
+     free tier, and server-side history is what the paid tiers actually buy -
+     it survives a different browser, a cleared cache and a new device. This
+     list does not. */
+  var SKEY = 'ten.assistant.sessions.' + (me().userId || 'guest');
+  var sessions = [];
+  var currentId = null;
+
+  function loadSessions() {
+    try { sessions = JSON.parse(localStorage.getItem(SKEY) || '[]'); }
+    catch (e) { sessions = []; }
+    if (!Array.isArray(sessions)) { sessions = []; }
+  }
+  function saveSessions() {
+    try { localStorage.setItem(SKEY, JSON.stringify(sessions.slice(0, 50))); }
+    catch (e) { /* storage full or blocked; the chat still works */ }
+  }
+  function current() {
+    return sessions.filter(function (s) { return s.id === currentId; })[0] || null;
+  }
+
+  /* A title from the first thing they said, because "Chat 3" tells nobody
+     which conversation was which. */
+  function titleFrom(text) {
+    var t = String(text).replace(/\s+/g, ' ').trim();
+    return t.length > 38 ? t.slice(0, 38) + '…' : t;
+  }
+
+  function renderSessions() {
+    var box = $('sessions');
+    box.innerHTML = '';
+    if (!sessions.length) {
+      var none = document.createElement('p');
+      none.className = 'nochats';
+      none.textContent = 'Your chats will appear here.';
+      box.appendChild(none);
+      return;
+    }
+    sessions.forEach(function (s) {
+      var row = document.createElement('div');
+      row.className = 'sess' + (s.id === currentId ? ' on' : '');
+
+      var open = document.createElement('button');
+      open.type = 'button';
+      open.className = 'sess-open';
+      open.textContent = s.title;
+      open.title = s.title;
+      open.addEventListener('click', function () { openSession(s.id); });
+
+      var del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'sess-del';
+      del.setAttribute('aria-label', 'Delete chat: ' + s.title);
+      del.innerHTML = '&times;';
+      del.addEventListener('click', function (e) {
+        e.stopPropagation();
+        sessions = sessions.filter(function (x) { return x.id !== s.id; });
+        saveSessions();
+        if (s.id === currentId) { newChat(); } else { renderSessions(); }
+      });
+
+      row.appendChild(open);
+      row.appendChild(del);
+      box.appendChild(row);
+    });
+  }
+
+  function newChat() {
+    currentId = null;
+    log.innerHTML = '';
+    showEmpty();
+    renderSessions();
+    $('app').classList.remove('mobile-open');
+    box.focus();
+  }
+
+  function openSession(id) {
+    var s = sessions.filter(function (x) { return x.id === id; })[0];
+    if (!s) { return; }
+    currentId = id;
+    log.innerHTML = '';
+    s.messages.forEach(function (m) { bubble(m.role === 'me' ? 'me' : 'ai', m.text); });
+    renderSessions();
+    follow(true);
+    $('app').classList.remove('mobile-open');
+  }
+
+  function remember(role, text) {
+    var s = current();
+    if (!s) {
+      s = { id: String(Date.now()), title: titleFrom(text), messages: [], updatedAt: Date.now() };
+      currentId = s.id;
+      sessions.unshift(s);
+    }
+    s.messages.push({ role: role, text: text });
+    s.updatedAt = Date.now();
+    // Most recent first, the order people actually look for.
+    sessions.sort(function (a, b) { return b.updatedAt - a.updatedAt; });
+    saveSessions();
+    renderSessions();
+  }
+
+  $('newChat').addEventListener('click', newChat);
+  loadSessions();
+  renderSessions();
+
+
+  showEmpty();
+  setTimeout(function () { box.focus(); }, 3000);
+})();
+</script>
+</body>
+</html>

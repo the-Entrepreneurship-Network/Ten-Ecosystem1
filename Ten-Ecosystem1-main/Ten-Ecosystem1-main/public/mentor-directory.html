@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mentor Network — TEN Platform</title>
+  <link rel="stylesheet" href="/css/design-system.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <script src="/js/theme-toggle.js" defer></script>
+  <script src="/js/components.js" defer></script>
+  <style>
+    .profile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-4); }
+    .profile-card { background: var(--bg-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); border: 1px solid var(--border-default); padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-2); transition: box-shadow 0.2s, transform 0.2s; }
+    .profile-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+    .mentor-avatar { width: 52px; height: 52px; border-radius: 50%; background: linear-gradient(135deg, #10b981, #059669); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800; flex-shrink: 0; }
+    .stars { color: #f59e0b; letter-spacing: 2px; }
+    .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+    .badge-free   { background: #d1fae5; color: #065f46; }
+    .badge-avail  { background: #ede9fe; color: #5b21b6; }
+    .badge-expert { background: #dbeafe; color: #1e40af; }
+    .filters { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+    .filters select, .filters input { padding: 8px 12px; border: 1.5px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-surface); color: var(--text-primary); font: inherit; outline: none; min-width: 140px; }
+    .filters select:focus, .filters input:focus { border-color: var(--color-primary); }
+  </style>
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+</head>
+<body class="dashboard-layout">
+  <aside class="sidebar">
+    <a class="sidebar__logo" href="/dashboard">⚡ TEN</a>
+    <nav class="sidebar__nav">
+      <a href="/dashboard"          class="nav-item">🏠 Dashboard</a>
+      <a href="/founder/directory"  class="nav-item">🚀 Founders</a>
+      <a href="/mentor/directory"   class="nav-item nav-item--active">🎓 Mentors</a>
+      <a href="/investor/directory" class="nav-item">💼 Investors</a>
+      <a href="/talent-network"     class="nav-item">🌐 Talent Network</a>
+      <a href="/programs"           class="nav-item">📋 Programs</a>
+    </nav>
+    <div class="sidebar__footer">
+      <button id="theme-toggle-btn" class="btn btn--ghost btn--sm" style="width:100%">🌙 Dark Mode</button>
+    </div>
+  </aside>
+
+  <header class="topbar">
+    <button class="btn btn--ghost btn--sm" data-sidebar-toggle>☰</button>
+    <input class="topbar__search" type="search" placeholder="Search mentors…" />
+    <div class="topbar__actions">
+      <button id="theme-toggle-btn" class="btn btn--ghost btn--sm">🌙</button>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <div class="page-header">
+      <h1 class="page-header__title">🎓 Mentor Network</h1>
+      <p class="page-header__subtitle">Learn from experienced professionals ready to guide your journey</p>
+    </div>
+
+    <div class="filters">
+      <input type="search" id="searchInput" placeholder="🔍 Search mentors…" style="flex:1;min-width:200px;">
+      <select id="availFilter">
+        <option value="">Any Availability</option>
+        <option value="actively_mentoring">Actively Mentoring</option>
+        <option value="limited">Limited</option>
+      </select>
+      <select id="sessionFilter">
+        <option value="">Any Session Type</option>
+        <option value="free">Free</option>
+        <option value="paid">Paid</option>
+        <option value="equity">Equity</option>
+      </select>
+      <button class="btn btn--primary btn--sm" onclick="loadMentors()">Search</button>
+    </div>
+
+    <div id="mentorGrid" class="profile-grid">
+      ${Array(6).fill('<div style="background:var(--bg-surface);border-radius:14px;border:1px solid var(--border-default);padding:20px;"><div style="background:#f0f0f0;height:52px;width:52px;border-radius:50%;margin-bottom:12px;"></div><div style="background:#f0f0f0;height:16px;width:70%;margin-bottom:8px;border-radius:4px;"></div><div style="background:#f0f0f0;height:13px;width:50%;border-radius:4px;"></div></div>').join('')}
+    </div>
+    <div style="text-align:center;margin-top:32px;">
+      <button class="btn btn--outline btn--sm" id="loadMoreBtn" onclick="loadMore()" style="display:none;">Load More</button>
+    </div>
+  </main>
+
+  <script>
+  let page = 1, loading = false;
+
+  async function loadMentors(reset = true) {
+    if (reset) page = 1;
+    if (loading) return;
+    loading = true;
+    const token    = localStorage.getItem('ten_auth_token') || localStorage.getItem('authToken') || '';
+    const search   = document.getElementById('searchInput').value.trim();
+    const avail    = document.getElementById('availFilter').value;
+    const session  = document.getElementById('sessionFilter').value;
+    const params   = new URLSearchParams({ page, limit: 12 });
+    if (search)  params.set('search', search);
+    if (avail)   params.set('availability', avail);
+    if (session) params.set('sessionType', session);
+    try {
+      const res  = await fetch('/api/mentor/directory?' + params, { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+      const data = await res.json();
+      const mentors = data.data || [];
+      const grid = document.getElementById('mentorGrid');
+      if (reset) grid.innerHTML = '';
+      if (!mentors.length && reset) {
+        grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px 20px;"><div style="font-size:64px;margin-bottom:16px;">🎓</div><h2 style="font-size:20px;font-weight:700;margin-bottom:8px;">No mentors found</h2><p style="color:var(--text-muted);">Adjust your filters or check back soon.</p></div>';
+      } else {
+        grid.innerHTML += mentors.map(m => {
+          const stars = '★'.repeat(Math.round(m.rating || 0)) + '☆'.repeat(5 - Math.round(m.rating || 0));
+          return `<div class="profile-card">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+              <div class="mentor-avatar">${((m.userId && m.userId.fullName) || 'M').charAt(0)}</div>
+              <div>
+                <div style="font-size:16px;font-weight:700;">${(m.userId && m.userId.fullName) || 'Mentor'}</div>
+                <div style="font-size:13px;color:var(--text-muted);">${m.headline || ''}</div>
+              </div>
+            </div>
+            ${m.rating ? `<div class="stars" style="font-size:14px;">${stars} <span style="color:var(--text-muted);font-size:12px;">(${m.reviewCount || 0})</span></div>` : ''}
+            ${m.expertise && m.expertise.length ? `<div style="font-size:13px;color:var(--text-secondary);">💡 ${m.expertise.map(e=>e.area).slice(0,2).join(', ')}</div>` : ''}
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
+              ${m.sessionType && m.sessionType.includes('free') ? '<span class="badge badge-free">Free sessions</span>' : ''}
+              ${m.availability === 'actively_mentoring' ? '<span class="badge badge-avail">Active</span>' : ''}
+              ${m.industries && m.industries.length ? `<span class="badge badge-expert">${m.industries[0]}</span>` : ''}
+            </div>
+            ${m.sessionRate > 0 ? `<div style="font-size:13px;color:var(--text-muted);margin-top:4px;">₹${m.sessionRate}/session</div>` : ''}
+          </div>`;
+        }).join('');
+      }
+      document.getElementById('loadMoreBtn').style.display = (data.page < data.totalPages) ? '' : 'none';
+    } catch(e) {
+      document.getElementById('mentorGrid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);">Could not load mentors. Please try again.</div>';
+    }
+    loading = false;
+  }
+  function loadMore() { page++; loadMentors(false); }
+  document.getElementById('searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') loadMentors(); });
+  loadMentors();
+  </script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_SSH_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -euo pipefail
+
+            # The deployment directory. It was hardcoded to
+            # /home/ec2-user/ten-portal-production, which is not where the app
+            # runs — production serves from InternshipManagementSystem-Final —
+            # so `cd` failed and every merge since has left the running code
+            # untouched while the workflow reported nothing useful. Set the
+            # PROD_APP_DIR repository variable to override without a code change.
+            APP_DIR="${PROD_APP_DIR:-/home/ec2-user/InternshipManagementSystem-Final}"
+
+            if [ ! -f "$APP_DIR/server.js" ]; then
+              echo "::error::No server.js in $APP_DIR — refusing to deploy."
+              echo "Set the PROD_APP_DIR repository variable to the directory PM2 runs."
+              exit 1
+            fi
+
+            cd "$APP_DIR"
+            git fetch origin
+            git reset --hard origin/main
+            npm ci --legacy-peer-deps --omit=dev
+
+            # `pm2 restart` re-reads ecosystem.config.js but keeps the process's
+            # existing environment, so a changed .env would not be picked up.
+            pm2 restart ecosystem.config.js --only ten-portal-production --update-env
+            pm2 save
+
+            # Fail loudly if the app did not come back. Without this the job is
+            # green whether or not anything is serving.
+            sleep 10
+            pm2 describe ten-portal-production | grep -q "status.*online" \
+              || { echo "::error::ten-portal-production is not online after restart."; pm2 logs ten-portal-production --lines 40 --nostream; exit 1; }
+            echo "Deployed $(git rev-parse --short HEAD) to $APP_DIR"

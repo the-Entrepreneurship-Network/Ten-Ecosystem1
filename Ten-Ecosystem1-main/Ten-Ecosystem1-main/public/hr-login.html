@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TEN — HR Portal</title>
+<link rel="stylesheet" href="ten-theme.css">
+<link rel="stylesheet" href="ten-motion.css">
+<style>
+
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.hr-wrap {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 460px;
+  animation: ten-fadeUp 0.65s ease both;
+}
+
+/* ── Brand logo section ── */
+.logo-section {
+  text-align: center;
+  margin-bottom: 32px;
+}
+.logo-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px; height: 72px;
+  background: linear-gradient(135deg, var(--ten-gold), var(--ten-gold-dim));
+  border-radius: 20px;
+  font-size: 32px;
+  margin-bottom: 16px;
+  box-shadow: 0 0 40px rgba(212,175,55,0.4);
+  animation: ten-pulse-gold 2.5s ease-in-out infinite;
+}
+.logo-title {
+  font-family: var(--ten-font-display);
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--ten-text);
+}
+.logo-title span {
+  background: linear-gradient(90deg, var(--ten-gold), var(--ten-gold-light));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.logo-sub {
+  font-size: 11px;
+  color: var(--ten-text-muted);
+  font-weight: 400;
+  margin-top: 5px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+/* ── Card ── */
+.hr-card {
+  background: var(--ten-card);
+  border: 1px solid var(--ten-border);
+  border-radius: var(--ten-r-xl);
+  padding: 40px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--ten-shadow-lg), var(--ten-glow-gold);
+}
+.hr-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--ten-gold), var(--ten-gold-dim), transparent);
+}
+
+.card-title {
+  font-family: var(--ten-font-display);
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.card-sub {
+  font-size: 13px;
+  color: var(--ten-text-sub);
+  margin-bottom: 30px;
+}
+
+.form-group { margin-bottom: 20px; }
+label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--ten-text-sub);
+  margin-bottom: 8px;
+}
+input {
+  width: 100%;
+  padding: 14px 18px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--ten-border);
+  border-radius: var(--ten-r-sm);
+  color: var(--ten-text);
+  font-family: var(--ten-font-body);
+  font-size: 15px;
+  outline: none;
+  transition: all 0.2s;
+}
+input:focus {
+  border-color: var(--ten-gold);
+  box-shadow: 0 0 0 3px rgba(212,175,55,0.10);
+}
+input::placeholder { color: #2a2018; }
+
+.submit-btn {
+  width: 100%;
+  padding: 15px;
+  background: linear-gradient(135deg, var(--ten-gold), var(--ten-gold-dim));
+  border: none;
+  border-radius: var(--ten-r-sm);
+  color: #0a0600;
+  font-family: var(--ten-font-display);
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 0.5px;
+  margin-top: 6px;
+}
+.submit-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(212,175,55,0.35);
+}
+.submit-btn:active { transform: translateY(0); }
+
+.error-msg {
+  background: rgba(239,68,68,0.08);
+  border: 1px solid rgba(239,68,68,0.18);
+  color: var(--ten-danger);
+  padding: 12px 16px;
+  border-radius: var(--ten-r-sm);
+  font-size: 13px;
+  margin-top: 16px;
+  display: none;
+}
+
+/* ── Footer ── */
+.back-link {
+  text-align: center;
+  margin-top: 22px;
+  font-size: 13px;
+  color: var(--ten-text-muted);
+}
+.back-link a {
+  color: var(--ten-gold);
+  text-decoration: none;
+  font-weight: 600;
+}
+.back-link a:hover { text-decoration: underline; }
+
+@media (max-width: 500px) {
+  html, body { overflow: auto; height: auto; }
+  .hr-card { padding: 28px 22px; }
+}
+</style>
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+</head>
+<body>
+
+<div class="ten-grid-bg"></div>
+<div class="ten-orb ten-orb-1"></div>
+<div class="ten-orb ten-orb-2"></div>
+
+<div class="hr-wrap">
+
+  <div class="logo-section" style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; margin-bottom: 28px;">
+    <div class="logo-badge ten-float" style="width: 80px; height: 80px; background: #121316; border: 2px solid rgba(212,175,55,0.45); border-radius: 20px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px; box-shadow: 0 0 40px rgba(212,175,55,0.35), inset 0 1px 1px rgba(255,255,255,0.15); transition: all 0.3s ease;">
+      <img src="ten-logo.png" alt="TEN Logo" style="width:56px;height:56px;object-fit:contain;display:block;filter:drop-shadow(0 0 6px rgba(212,175,55,0.35));" />
+    </div>
+    <div class="logo-title" style="font-family: var(--ten-font-display), sans-serif; font-size: 28px; font-weight: 800; color: #D4AF37; letter-spacing: 5px; text-transform: uppercase; margin-bottom: 2px; text-shadow: 0 0 12px rgba(212,175,55,0.3);">TEN</div>
+    <div class="logo-sub" style="font-size: 11px; font-weight: 500; color: rgba(212,175,55,0.85); letter-spacing: 2px; text-transform: uppercase; margin-top: 4px;">THE ENTREPRENEURSHIP NETWORK</div>
+    <div class="logo-sub" style="font-size: 11px; color: #94a3b8; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 6px; opacity: 0.85;">Human Resources Management</div>
+  </div>
+
+  <div class="hr-card">
+    <div class="card-title ten-fade-up ten-d1">HR Sign In</div>
+    <p class="card-sub ten-fade-up ten-d2">Access the HR management and reporting dashboard</p>
+
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" id="email" placeholder="Enter username" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="password" placeholder="Enter password">
+    </div>
+
+    <button class="submit-btn ten-fade-up ten-d3" onclick="doLogin()">Sign In to HR Portal</button>
+    <div class="error-msg" id="errMsg">Invalid credentials. Please try again.</div>
+
+    <div style="text-align:center;margin-bottom:16px;">
+      <span style="color:#94a3b8;font-size:13px;">New intern? </span>
+      <a href="/register.html" style="color:#D4AF37;font-weight:700;font-size:13px;text-decoration:none;">Register as Student →</a>
+    </div>
+
+    <div style="text-align:center; margin-top:18px; font-size:13px;">
+      <a href="/promoted-register.html" style="color: var(--ten-gold); text-decoration:none; font-weight:600;">
+        Promoted staff? Register here →
+      </a>
+    </div>
+  </div>
+
+  <div class="back-link">
+    <a href="/index.html">← Back to Main Portal</a>
+  </div>
+
+</div>
+
+<script src="/forgot-password.js"></script>
+<script>if(window.TenForgotPassword) TenForgotPassword.init({ role: "hr" });</script>
+
+<script>
+/**
+ * Carry the position picked on the landing page through to the portal.
+ *
+ * The landing page's HR chooser sends people here as `/hr-login?level=3`, and
+ * hr-portal.html's initHRActiveLevel() reads the same `level` parameter to
+ * preselect that position. This page sat in the middle and dropped it, so
+ * whichever level was chosen, everyone arrived on Level 1 and had to switch by
+ * hand — which then re-asks for credentials. Read it, sanity-check it against
+ * the eight real positions, and pass it on.
+ */
+function chosenHrLevel() {
+  const raw = parseInt(new URLSearchParams(window.location.search).get('level'), 10);
+  return (raw >= 1 && raw <= 8) ? raw : null;
+}
+
+// Same eight titles as the portal's level switcher and the landing page's
+// chooser. Kept identical so the position named here is the position the
+// dropdown lands on.
+const HR_LEVEL_NAMES = {
+  1: 'Jr HR Associate',
+  2: 'Sr HR Associate',
+  3: 'Jr HR Manager',
+  4: 'Sr HR Manager',
+  5: 'HR Associate Director',
+  6: 'Jr HR Director',
+  7: 'HR Director & HRBP',
+  8: 'Vice President'
+};
+
+// Say which position is being signed into, so a wrong pick is caught here
+// rather than after the password has been typed.
+document.addEventListener('DOMContentLoaded', function () {
+  const level = chosenHrLevel();
+  if (!level) return;
+  const sub = document.querySelector('.card-sub');
+  if (sub) {
+    sub.textContent = 'Signing in as Level ' + level + ' — ' + (HR_LEVEL_NAMES[level] || 'HR');
+  }
+});
+
+async function doLogin() {
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value.trim();
+  if (!email || !password) return;
+
+  const btn = document.querySelector('.submit-btn');
+  btn.textContent = 'Signing in...';
+  btn.disabled = true;
+
+  try {
+    const r = await fetch('/hr-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // Server accepts EITHER `email` (preferred) OR legacy `username`.
+      body: JSON.stringify({ email, username: email, password })
+    });
+    const d = await r.json();
+    if (d.success) {
+      sessionStorage.setItem('hrUser', JSON.stringify(d.hr));
+      const level = chosenHrLevel();
+      window.location.href = level ? ('/hr-portal?level=' + level) : '/hr-portal';
+    } else {
+      const errEl = document.getElementById('errMsg');
+      errEl.textContent = d.message || 'Invalid credentials. Please try again.';
+      errEl.style.display = 'block';
+      btn.textContent = 'Sign In to HR Portal';
+      btn.disabled = false;
+    }
+  } catch (e) {
+    btn.textContent = 'Sign In to HR Portal';
+    btn.disabled = false;
+  }
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+</script>
+
+<script src="ten-motion.js"></script>
+<script src="/password-toggle.js"></script>
+</body>
+</html>

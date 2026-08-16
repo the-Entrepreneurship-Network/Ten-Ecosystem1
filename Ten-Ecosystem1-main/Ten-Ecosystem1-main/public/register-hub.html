@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Join the TEN Ecosystem</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="/css/design-system.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <script src="/js/theme-toggle.js" defer></script>
+  <style>
+    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: var(--space-6); background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 50%, #06B6D4 100%); }
+    .hub-card { background: var(--bg-surface); border-radius: var(--radius-xl); box-shadow: var(--shadow-lg); padding: var(--space-8); width: 100%; max-width: 680px; }
+    .hub-logo { font-size: var(--text-2xl); font-weight: 800; color: var(--color-primary); margin-bottom: var(--space-2); }
+    .hub-hero h1 { font-size: var(--text-3xl); font-weight: 800; color: var(--text-primary); margin-bottom: var(--space-1); }
+    .hub-hero p  { color: var(--text-secondary); margin-bottom: var(--space-6); }
+    .dynamic-fields { display: none; }
+    .dynamic-fields.visible { display: block; animation: ten-toast-in 0.2s ease; }
+    .terms-row { display: flex; align-items: flex-start; gap: var(--space-2); margin-bottom: var(--space-4); }
+    .terms-row input[type="checkbox"] { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--color-primary); }
+    .terms-row label { font-size: var(--text-sm); color: var(--text-secondary); }
+    .hub-footer { text-align: center; margin-top: var(--space-4); font-size: var(--text-sm); color: var(--text-secondary); }
+    .hub-footer a { color: var(--color-primary); }
+    .form-section-title { font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); margin: var(--space-6) 0 var(--space-3); }
+    #error-banner { background: rgba(239,68,68,.1); border: 1px solid var(--color-danger); color: var(--color-danger); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); font-size: var(--text-sm); display: none; margin-bottom: var(--space-4); }
+    #error-banner.visible { display: block; }
+    .selected-role-badge { display: inline-block; background: rgba(99,102,241,.1); color: var(--color-primary); padding: 2px 10px; border-radius: var(--radius-full); font-size: var(--text-xs); font-weight: 600; margin-left: var(--space-2); }
+    @keyframes ten-toast-in { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:none; } }
+  </style>
+  <link rel="stylesheet" href="/css/ten-brand.css">
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+</head>
+<body>
+  <div class="hub-card">
+    <div class="hub-logo">⚡ TEN</div>
+    <div class="hub-hero">
+      <h1>Join the TEN Ecosystem</h1>
+      <p>Choose your role to get started</p>
+    </div>
+
+    <div id="error-banner" role="alert"></div>
+
+    <p class="form-section-title">Select Your Role</p>
+    <div class="role-grid" id="role-grid">
+      <!-- Populated by JS -->
+      <div style="grid-column:1/-1;text-align:center;padding:1rem;color:var(--text-muted);">Loading roles…</div>
+    </div>
+
+    <form id="hub-form" novalidate>
+      <input type="hidden" id="selected-role" name="role" value="" />
+
+      <p class="form-section-title">Your Details</p>
+      <div class="input-group">
+        <label for="fullName">Full Name <span style="color:var(--color-danger)">*</span></label>
+        <input type="text" id="fullName" name="fullName" placeholder="John Doe" required />
+        <span class="error">Please enter your full name</span>
+      </div>
+      <div class="input-group">
+        <label for="email">Email Address <span style="color:var(--color-danger)">*</span></label>
+        <input type="email" id="email" name="email" placeholder="you@example.com" required />
+        <span class="error">Please enter a valid email</span>
+      </div>
+      <div class="input-group">
+        <label for="password">Password <span style="color:var(--color-danger)">*</span></label>
+        <input type="password" id="password" name="password" placeholder="Min 8 characters" minlength="8" required />
+        <span class="error">Password must be at least 8 characters</span>
+      </div>
+      <div class="input-group">
+        <label for="confirmPassword">Confirm Password <span style="color:var(--color-danger)">*</span></label>
+        <input type="password" id="confirmPassword" name="confirmPassword" placeholder="Repeat password" required />
+        <span class="error">Passwords do not match</span>
+      </div>
+
+      <div id="dynamic-fields" class="dynamic-fields">
+        <p class="form-section-title">Role Details <span id="role-label-badge" class="selected-role-badge"></span></p>
+        <div id="dynamic-fields-inner"></div>
+      </div>
+
+      <div class="terms-row">
+        <input type="checkbox" id="terms" name="terms" required />
+        <label for="terms">I agree to the <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a></label>
+      </div>
+
+      <button type="submit" id="submit-btn" class="btn btn--primary" style="width:100%;margin-top:var(--space-2);" disabled>
+        Create Account
+      </button>
+    </form>
+
+    <div class="hub-footer">
+      <p>Already have an account? <a href="login.html">Sign in</a></p>
+      <p style="margin-top:var(--space-2);">Register as student the old way? <a href="register.html">Classic registration</a></p>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      var selectedRole = null;
+      var roleConfigs  = [];
+      var roleGrid     = document.getElementById('role-grid');
+      var dynamicWrap  = document.getElementById('dynamic-fields');
+      var dynamicInner = document.getElementById('dynamic-fields-inner');
+      var roleBadge    = document.getElementById('role-label-badge');
+      var roleInput    = document.getElementById('selected-role');
+      var submitBtn    = document.getElementById('submit-btn');
+      var termsCheck   = document.getElementById('terms');
+      var errorBanner  = document.getElementById('error-banner');
+
+      function updateSubmitState() {
+        submitBtn.disabled = !(selectedRole && termsCheck.checked);
+      }
+
+      termsCheck.addEventListener('change', updateSubmitState);
+
+      function renderRoleCards(roles) {
+        roleGrid.innerHTML = '';
+        roles.forEach(function(r) {
+          var card = document.createElement('div');
+          card.className = 'role-card';
+          card.setAttribute('data-role', r.id);
+          card.innerHTML = '<div class="role-card__icon">' + r.icon + '</div>' +
+            '<div class="role-card__name">' + r.label + '</div>' +
+            '<div class="role-card__desc">' + r.description + '</div>';
+          card.addEventListener('click', function() { selectRole(r); });
+          roleGrid.appendChild(card);
+        });
+      }
+
+      function selectRole(r) {
+        selectedRole = r.id;
+        roleInput.value = r.id;
+        roleGrid.querySelectorAll('.role-card').forEach(function(c) { c.classList.remove('role-card--active'); });
+        var active = roleGrid.querySelector('[data-role="' + r.id + '"]');
+        if (active) active.classList.add('role-card--active');
+
+        roleBadge.textContent = r.label;
+        dynamicInner.innerHTML = '';
+
+        if (r.fields && r.fields.length > 0) {
+          r.fields.forEach(function(f) {
+            var group = document.createElement('div');
+            group.className = 'input-group';
+            var label = '<label for="rsd_' + f.name + '">' + f.label + (f.required ? ' <span style="color:var(--color-danger)">*</span>' : '') + '</label>';
+            var input;
+            if (f.type === 'select') {
+              var opts = (f.options || []).map(function(o) { return '<option value="' + o + '">' + o + '</option>'; }).join('');
+              input = '<select id="rsd_' + f.name + '" name="rsd_' + f.name + '"' + (f.required ? ' required' : '') + '><option value="">-- Select --</option>' + opts + '</select>';
+            } else {
+              input = '<input type="' + f.type + '" id="rsd_' + f.name + '" name="rsd_' + f.name + '" placeholder="' + (f.placeholder || '') + '"' + (f.required ? ' required' : '') + ' />';
+            }
+            group.innerHTML = label + input + '<span class="error">This field is required</span>';
+            dynamicInner.appendChild(group);
+          });
+          dynamicWrap.classList.add('visible');
+        } else {
+          dynamicWrap.classList.remove('visible');
+        }
+
+        updateSubmitState();
+      }
+
+      fetch('/api/register-hub/roles')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.success && data.roles) {
+            roleConfigs = data.roles;
+            renderRoleCards(data.roles);
+          }
+        })
+        .catch(function() {
+          roleGrid.innerHTML = '<p style="color:var(--color-danger);grid-column:1/-1;text-align:center;">Failed to load roles. Refresh to try again.</p>';
+        });
+
+      document.getElementById('hub-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        errorBanner.classList.remove('visible');
+
+        var fullName = document.getElementById('fullName').value.trim();
+        var email    = document.getElementById('email').value.trim();
+        var password = document.getElementById('password').value;
+        var confirm  = document.getElementById('confirmPassword').value;
+
+        if (!selectedRole) { showError('Please select a role first.'); return; }
+        if (!fullName)      { showError('Full name is required.'); return; }
+        if (!email)         { showError('Email is required.'); return; }
+        if (password.length < 8) { showError('Password must be at least 8 characters.'); return; }
+        if (password !== confirm) { showError('Passwords do not match.'); return; }
+
+        var roleSpecificData = {};
+        var cfg = roleConfigs.find(function(r) { return r.id === selectedRole; });
+        if (cfg) {
+          cfg.fields.forEach(function(f) {
+            var el = document.getElementById('rsd_' + f.name);
+            if (el) roleSpecificData[f.name] = el.value;
+          });
+        }
+
+        submitBtn.classList.add('btn--loading');
+        submitBtn.disabled = true;
+
+        fetch('/api/register-hub/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fullName: fullName, email: email, password: password, role: selectedRole, roleSpecificData: roleSpecificData }),
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          submitBtn.classList.remove('btn--loading');
+          if (data.success) {
+            showSuccess('Account created! Redirecting to onboarding summary…');
+            setTimeout(function() { 
+              const pwdQuery = password ? `&password=${encodeURIComponent(password)}` : '';
+              if (data.role === 'founder') {
+                window.location.href = `/founder-registration-success?role=${encodeURIComponent(data.role)}&email=${encodeURIComponent(data.email)}&memberId=${encodeURIComponent(data.memberId)}&startupName=${encodeURIComponent(roleSpecificData.startupName || 'Venture')}&status=Pending%20Approval${pwdQuery}`;
+              } else if (data.role === 'student') {
+                window.location.href = `/registration-success?role=${encodeURIComponent(data.role)}&email=${encodeURIComponent(data.email)}&memberId=${encodeURIComponent(data.memberId)}&status=Approved${pwdQuery}`;
+              } else {
+                window.location.href = `/registration-success?role=${encodeURIComponent(data.role)}&email=${encodeURIComponent(data.email)}&memberId=${encodeURIComponent(data.memberId)}&status=Pending%20Approval${pwdQuery}`;
+              }
+            }, 2000);
+          } else {
+            showError(data.error || 'Registration failed. Please try again.');
+            submitBtn.disabled = false;
+          }
+        })
+        .catch(function() {
+          submitBtn.classList.remove('btn--loading');
+          showError('Network error. Please try again.');
+          submitBtn.disabled = false;
+        });
+      });
+
+      function showError(msg) {
+        errorBanner.textContent = msg;
+        errorBanner.classList.add('visible');
+        errorBanner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+
+      function showSuccess(msg) {
+        errorBanner.style.background = 'rgba(16,185,129,.1)';
+        errorBanner.style.borderColor = 'var(--color-success)';
+        errorBanner.style.color = 'var(--color-success)';
+        errorBanner.textContent = msg;
+        errorBanner.classList.add('visible');
+      }
+    }());
+  </script>
+  <script src="/password-toggle.js"></script>
+</body>
+</html>

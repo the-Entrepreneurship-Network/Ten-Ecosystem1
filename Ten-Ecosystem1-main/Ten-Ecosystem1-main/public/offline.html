@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Offline — TEN</title>
+<style>
+/* Self-contained: this page is shown precisely when the network is gone, so it
+   cannot depend on a stylesheet being fetchable. */
+body{margin:0;min-height:100dvh;display:flex;align-items:center;justify-content:center;
+  background:#080d1a;color:#e8edf7;font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;
+  text-align:center;padding:28px;}
+.card{max-width:380px;}
+.mark{width:76px;height:76px;margin:0 auto 22px;border-radius:20px;background:#0e1628;
+  border:1px solid rgba(245,197,66,0.25);display:flex;align-items:center;justify-content:center;font-size:32px;}
+h1{font-size:21px;margin:0 0 10px;}
+p{color:#8aa4c8;font-size:14.5px;line-height:1.6;margin:0 0 22px;}
+button{background:#f5c542;color:#0a1222;border:none;border-radius:12px;padding:13px 26px;
+  font-weight:800;font-size:15px;cursor:pointer;}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="mark">📡</div>
+    <h1>You are offline</h1>
+    <!-- Deliberately honest. The service worker caches no pages and no API
+         responses, so there is nothing stale to show — and showing yesterday's
+         attendance as though it were today's would be worse than showing
+         nothing. -->
+    <p>The TEN portal needs a connection to show your tasks, attendance and messages. Nothing has been lost — reconnect and everything will be there.</p>
+    <button onclick="location.reload()">Try again</button>
+  </div>
+  <script>
+    // Reload the moment the connection comes back, so nobody is left staring
+    // at this after the network has returned.
+    window.addEventListener('online', function () { location.reload(); });
+  </script>
+</body>
+</html>

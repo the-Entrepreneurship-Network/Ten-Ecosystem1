@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Resume Dashboard — TEN</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; box-sizing: border-box; }
+  body { background: #050505; color: #fff; font-family: 'Inter', sans-serif; min-height: 100vh; }
+  header { display: flex; justify-content: space-between; align-items: center; padding: 20px 32px; }
+  header a { color: #fde68a; text-decoration: none; font-size: 13px; }
+  .brand { font-family: 'Cinzel', serif; color: #fde68a; font-weight: 700; letter-spacing: 2px; }
+  main { max-width: 960px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-family: 'Cinzel', serif; color: #fde68a; font-size: clamp(28px, 5vw, 44px); margin-bottom: 8px; }
+  .sub { color: rgba(255,255,255,.6); font-size: 14px; margin-bottom: 40px; }
+  .cards { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .card { border: 1px solid rgba(253,230,138,.2); background: rgba(255,255,255,.03); border-radius: 18px; padding: 28px; }
+  .card h2 { font-size: 20px; margin-bottom: 10px; color: #fde68a; }
+  .card p { font-size: 14px; line-height: 1.6; color: rgba(255,255,255,.65); margin-bottom: 18px; }
+  .drop { border: 2px dashed rgba(253,230,138,.35); border-radius: 12px; padding: 28px 16px; text-align: center;
+          color: rgba(255,255,255,.55); font-size: 13px; cursor: pointer; transition: all .2s; }
+  .drop:hover { border-color: #fde68a; color: #fff; background: rgba(253,230,138,.05); }
+  .or { text-align: center; color: rgba(255,255,255,.35); font-size: 12px; margin: 14px 0; }
+  .btn { display: block; width: 100%; padding: 14px; border-radius: 999px; border: 0; background: #fde68a;
+         color: #000; font-weight: 700; font-size: 14px; cursor: pointer; transition: transform .15s; }
+  .btn:hover { transform: scale(1.02); }
+  .note { margin-top: 14px; font-size: 12px; color: rgba(255,255,255,.4); }
+  .verdict { margin-top: 16px; padding: 12px 16px; border-radius: 10px; font-size: 13px; display: none; }
+  .verdict.show { display: block; }
+  .verdict.wait { background: rgba(253,230,138,.1); color: #fde68a; }
+  input[type=file] { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <span class="brand">TEN RESUME</span>
+  <a href="/resume-portal/">← Back to Resume Portal</a>
+</header>
+<main>
+  <h1>Resume Dashboard</h1>
+  <p class="sub">Two ways in. Both end with a resume no ATS rejects.</p>
+  <div class="cards">
+    <section class="card">
+      <h2>Resume Checkup</h2>
+      <p>Upload your current resume. The AI checks whether it is ATS-ready — if it is not, you get exact feedback on what fails and why.</p>
+      <label class="drop" for="checkupFile">Drop your resume PDF here<br>or click to browse</label>
+      <input type="file" id="checkupFile" accept=".pdf">
+      <div class="verdict wait" id="checkupVerdict">Received. The AI checkup agent is being connected — your report will appear here.</div>
+    </section>
+    <section class="card">
+      <h2>Build Your Resume</h2>
+      <p>Give the AI your existing PDF to tailor into an unrejectable, ATS-friendly resume — or just your details, and it forges one from scratch.</p>
+      <label class="drop" for="buildFile">Upload a resume to tailor</label>
+      <input type="file" id="buildFile" accept=".pdf">
+      <p class="or">— or —</p>
+      <button class="btn" id="detailsBtn">Enter my details instead</button>
+      <div class="verdict wait" id="buildVerdict">Received. The AI builder agent is being connected — your forged resume will land here.</div>
+    </section>
+  </div>
+  <p class="note">Both options run on the TEN ATS engine — <a href="/resume-portal/#agent" style="color:#fde68a;">open the full agent chat</a> to scan, score and rebuild in one place.</p>
+</main>
+<script>
+  /* Both cards call the same engine the portal's agent uses. */
+  async function scanFile(file, verdictEl) {
+    verdictEl.classList.add('show');
+    verdictEl.textContent = 'Reading and scoring…';
+    const body = new FormData();
+    body.append('file', file);
+    try {
+      const res = await fetch('/api/v2/resume/scan', { method: 'POST', body });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error);
+      const r = data.report;
+      verdictEl.innerHTML =
+        '<b>ATS score ' + r.score + '/100 — ' + r.verdictText + '</b>' +
+        (r.failing.length
+          ? '<br><br>' + r.failing.slice(0, 3).map(f => '• <b>' + f.label + '</b> — ' + f.fix).join('<br>')
+          : '') +
+        (data.rebuilt ? '<br><br>A rebuilt version scoring ' + data.rebuilt.report.score + '/100 is ready in the <a href="/resume-portal/#agent" style="color:#fde68a;">agent chat</a>.' : '');
+    } catch (err) {
+      verdictEl.textContent = 'Could not read that file. Try a text-based PDF (not a scan), or paste the text into the agent chat.';
+    }
+  }
+
+  document.getElementById('checkupFile').addEventListener('change', (e) => {
+    if (e.target.files[0]) scanFile(e.target.files[0], document.getElementById('checkupVerdict'));
+  });
+  document.getElementById('buildFile').addEventListener('change', (e) => {
+    if (e.target.files[0]) scanFile(e.target.files[0], document.getElementById('buildVerdict'));
+  });
+  document.getElementById('detailsBtn').addEventListener('click', () => {
+    window.location.href = '/resume-portal/#agent';
+  });
+</script>
+</body>
+</html>

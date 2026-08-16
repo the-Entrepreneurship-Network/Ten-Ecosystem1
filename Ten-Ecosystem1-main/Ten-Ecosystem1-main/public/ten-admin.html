@@ -1,0 +1,1460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TEN Admin Console</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#0f172a;color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;min-height:100vh}
+  /* SIDEBAR */
+  .sidebar{width:220px;background:#020617;padding:0;display:flex;flex-direction:column;position:fixed;height:100vh;left:0;top:0;z-index:100;border-right:1px solid #1e293b}
+  .sidebar-header{padding:20px 16px;border-bottom:1px solid #1e293b}
+  .sidebar-header h2{font-size:14px;font-weight:700;color:#3b82f6;letter-spacing:1px}
+  .sidebar-header p{font-size:11px;color:#64748b;margin-top:2px}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:12px 16px;cursor:pointer;color:#94a3b8;font-size:13px;font-weight:500;transition:all 0.15s;border-left:3px solid transparent;position:relative}
+  .nav-item:hover{background:#0f172a;color:#f1f5f9}
+  .nav-item.active{background:#0f172a;color:#3b82f6;border-left-color:#3b82f6}
+  .nav-badge{background:#ef4444;color:white;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;margin-left:auto}
+  /* CONTENT */
+  .content{margin-left:220px;flex:1;display:flex;flex-direction:column;min-height:100vh}
+  .topbar{background:#020617;border-bottom:1px solid #1e293b;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+  .topbar-title{font-size:15px;font-weight:600;color:#f1f5f9}
+  .topbar-right{display:flex;align-items:center;gap:16px}
+  .topbar-user{font-size:13px;color:#64748b}
+  .btn-logout{background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer}
+  .btn-logout:hover{background:#334155;color:#f1f5f9}
+  .main{padding:24px;flex:1}
+  /* SECTIONS */
+  .section{display:none}
+  .section.active{display:block}
+  /* CARDS */
+  .stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;margin-bottom:24px}
+  .stat-card{background:#1e293b;border-radius:10px;padding:20px;border:1px solid #334155;cursor:pointer;transition:border-color 0.2s}
+  .stat-card:hover{border-color:#3b82f6}
+  .stat-card .label{font-size:12px;color:#64748b;font-weight:500;margin-bottom:8px}
+  .stat-card .value{font-size:28px;font-weight:700;color:#f1f5f9}
+  .stat-card.blue .value{color:#3b82f6}
+  .stat-card.orange .value{color:#f59e0b}
+  .stat-card.red .value{color:#ef4444}
+  .stat-card.green .value{color:#22c55e}
+  /* TABLE */
+  .table-wrap{background:#1e293b;border-radius:10px;border:1px solid #334155;overflow:hidden;margin-top:16px}
+  .table-wrap table{width:100%;border-collapse:collapse}
+  .table-wrap th{background:#0f172a;color:#64748b;font-size:11px;font-weight:600;padding:12px 16px;text-align:left;border-bottom:1px solid #334155;text-transform:uppercase;letter-spacing:0.5px}
+  .table-wrap td{padding:12px 16px;font-size:13px;border-bottom:1px solid #1e293b;color:#cbd5e1;vertical-align:middle}
+  .table-wrap tr:last-child td{border-bottom:none}
+  .table-wrap tr:hover td{background:#0f172a}
+  /* BADGES */
+  .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+  .badge-green{background:#052e16;color:#22c55e;border:1px solid #166534}
+  .badge-orange{background:#431407;color:#fb923c;border:1px solid #9a3412}
+  .badge-red{background:#450a0a;color:#f87171;border:1px solid #991b1b}
+  .badge-grey{background:#1e293b;color:#94a3b8;border:1px solid #334155}
+  .badge-blue{background:#172554;color:#60a5fa;border:1px solid #1d4ed8}
+  /* BUTTONS */
+  .btn{padding:7px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:opacity 0.15s;background:#1d4ed8;color:#bfdbfe}
+  .btn:hover{opacity:0.85}
+  .btn-green{background:#166534;color:#86efac}
+  .btn-red{background:#991b1b;color:#fca5a5}
+  .btn-blue{background:#1d4ed8;color:#bfdbfe}
+  .btn-grey{background:#334155;color:#94a3b8}
+  /* Used by the chat and override tab strips, which had no rule at all — the
+     buttons rendered with the browser's default grey on a dark panel. */
+  .btn-secondary{background:#334155;color:#94a3b8}
+  .btn-danger{background:#991b1b;color:#fca5a5}
+  /* FORM */
+  .form-group{margin-bottom:16px}
+  .form-group label{display:block;font-size:12px;color:#94a3b8;margin-bottom:6px;font-weight:500}
+  .form-group input,.form-group select,.form-group textarea{width:100%;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:10px 12px;color:#f1f5f9;font-size:14px;outline:none}
+  .form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:#3b82f6}
+  /* MODAL */
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;display:none;align-items:center;justify-content:center}
+  .modal-overlay.open{display:flex}
+  .modal{background:#1e293b;border-radius:12px;padding:28px;width:90%;max-width:480px;border:1px solid #334155}
+  .modal h3{font-size:16px;font-weight:700;margin-bottom:20px;color:#f1f5f9}
+  .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+  /* TOAST */
+  .toast{position:fixed;top:20px;right:20px;z-index:999;padding:14px 20px;border-radius:8px;font-size:14px;font-weight:500;animation:slideIn 0.2s ease}
+  .toast-success{background:#052e16;border:1px solid #22c55e;color:#86efac}
+  .toast-error{background:#450a0a;border:1px solid #ef4444;color:#fca5a5}
+  @keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+  /* PAGINATION */
+  .pagination{display:flex;gap:8px;align-items:center;margin-top:16px}
+  .pagination button{background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px}
+  .pagination button:disabled{opacity:0.4;cursor:not-allowed}
+  .pagination span{font-size:13px;color:#64748b}
+  /* EMPTY STATE */
+  .empty{text-align:center;padding:48px;color:#475569}
+  .empty .icon{font-size:40px;margin-bottom:12px}
+  /* DOMAIN CHART */
+  .domain-chart{background:#1e293b;border-radius:10px;padding:20px;border:1px solid #334155;margin-top:16px}
+  .domain-chart h3{font-size:14px;font-weight:600;color:#94a3b8;margin-bottom:16px}
+  .domain-bar-row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+  .domain-bar-label{width:200px;font-size:12px;color:#94a3b8;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .domain-bar-track{flex:1;background:#0f172a;border-radius:4px;height:22px;position:relative}
+  .domain-bar-fill{height:100%;background:#3b82f6;border-radius:4px;transition:width 0.5s ease;display:flex;align-items:center;justify-content:flex-end;padding-right:8px}
+  .domain-bar-count{font-size:11px;font-weight:700;color:white}
+  /* SEARCH */
+  .search-row{display:flex;gap:12px;margin-bottom:16px;align-items:center}
+  .search-input{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:9px 14px;color:#f1f5f9;font-size:13px;outline:none;flex:1}
+  .search-input:focus{border-color:#3b82f6}
+  select.filter-sel{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:9px 14px;color:#f1f5f9;font-size:13px;outline:none}
+</style>
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <script src="/push-client.js" defer></script>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="sidebar-header">
+    <h2>TEN CONSOLE</h2>
+    <p>Internal Admin Portal</p>
+  </div>
+  <nav>
+    <div class="nav-item active" onclick="showSection('overview')">🏠 Overview</div>
+    <div class="nav-item" onclick="showSection('payments')" id="nav-payments">💳 Payments <span class="nav-badge" id="pendingBadge" style="display:none">0</span></div>
+    <div class="nav-item" onclick="showSection('tenure-payments')" id="nav-tenure-payments">💰 Tenure Payments <span class="nav-badge" id="tenurePendingBadge" style="display:none">0</span></div>
+    <div class="nav-item" onclick="showSection('students')">👨‍🎓 Students</div>
+    <div class="nav-item" onclick="showSection('hr')">👔 HR & Coordinators</div>
+    <div class="nav-item" onclick="showSection('certificates')">🎓 Certificates</div>
+    <div class="nav-item" onclick="showSection('cert-overrides')" id="nav-cert-overrides">🛡️ Certificate Overrides <span class="nav-badge" id="overrideBadge" style="display:none">0</span></div>
+    <div class="nav-item" onclick="showSection('attendance')">🗓️ Attendance</div>
+    <div class="nav-item" onclick="showSection('documents')">📄 Documents</div>
+    <div class="nav-item" onclick="showSection('notifications')">📢 Notifications</div>
+    <div class="nav-item" onclick="showSection('system')">⚙️ System</div>
+    <div class="nav-item" onclick="showSection('chat')" id="nav-chat">💬 Chat &amp; Reports <span class="nav-badge" id="chatReportBadge" style="display:none">0</span></div>
+    <div class="nav-item" onclick="window.location.href='/messages'">✉️ My Messages</div>
+    <div class="nav-item" onclick="showSection('auditlog')">📋 Audit Log</div>
+  </nav>
+</div>
+
+<!-- CONTENT -->
+<div class="content">
+  <div class="topbar">
+    <span class="topbar-title">TEN Internal Console</span>
+    <div class="topbar-right">
+      <span class="topbar-user" id="adminUsername">admin</span>
+      <button class="btn-logout" onclick="logout()">Logout</button>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <!-- OVERVIEW -->
+    <div class="section active" id="section-overview">
+      <div class="stats-grid" id="statsGrid">
+        <div class="stat-card blue"><div class="label">Total Students</div><div class="value" id="st-students">—</div></div>
+        <div class="stat-card orange" onclick="showSection('payments')"><div class="label">Pending Payments</div><div class="value" id="st-payments">—</div></div>
+        <div class="stat-card red" onclick="showSection('students')"><div class="label">Locked Accounts</div><div class="value" id="st-locked">—</div></div>
+        <div class="stat-card" style=""><div class="label">Pending Certs</div><div class="value" id="st-certs">—</div></div>
+        <div class="stat-card green"><div class="label">Active Today</div><div class="value" id="st-active">—</div></div>
+        <div class="stat-card"><div class="label">HRs</div><div class="value" id="st-hrs">—</div></div>
+        <div class="stat-card"><div class="label">Coordinators</div><div class="value" id="st-coords">—</div></div>
+        <div class="stat-card"><div class="label">New Today</div><div class="value" id="st-new">—</div></div>
+      </div>
+      <div class="domain-chart">
+        <h3>Students by Domain</h3>
+        <div id="domainChart"></div>
+      </div>
+    </div>
+
+    <!-- PAYMENTS -->
+    <div class="section" id="section-payments">
+      <div style="display:flex;gap:12px;margin-bottom:20px">
+        <button class="btn btn-blue" onclick="loadPendingPayments()">Pending Verification</button>
+        <button class="btn btn-grey" onclick="loadAllPayments()">All Payments</button>
+        <button class="btn btn-grey" onclick="exportPayments()">⬇ Export CSV</button>
+        <button class="btn btn-grey" onclick="recalcAttendance()">🔄 Recalculate Attendance</button>
+      </div>
+      <div id="paymentsContent"></div>
+    </div>
+
+    <!-- TENURE PAYMENTS -->
+    <div class="section" id="section-tenure-payments">
+      <div style="display:flex;gap:12px;margin-bottom:20px;">
+        <button class="btn btn-blue" onclick="loadTenurePayments()">🔄 Refresh</button>
+      </div>
+      <div id="tenurePaymentsContent"><p style="color:#64748b;padding:16px">Loading...</p></div>
+    </div>
+
+    <!-- STUDENTS -->
+    <div class="section" id="section-students">
+      <div class="search-row">
+        <input class="search-input" id="studentSearch" placeholder="Search by name, employee ID, email..." oninput="debounceStudentSearch()">
+        <select class="filter-sel" id="studentDomainFilter" onchange="loadStudents()">
+          <option value="">All Domains</option>
+          <option>DevOps with AWS</option><option>Python Development</option><option>Java Development</option>
+          <option>Web Development</option><option>MERN Stack Development</option><option>Artificial Intelligence</option>
+          <option>Data Science</option><option>Cyber Security</option><option>Software Engineering</option>
+          <option>Flutter Development</option><option>HR Management</option><option>Venture Capital</option>
+          <option>Vibe Coding</option><option>Space Research</option><option>Business Analyst</option><option>HR</option>
+        </select>
+      </div>
+      <div id="studentsContent"></div>
+    </div>
+
+    <!-- HR & COORDINATORS -->
+    <div class="section" id="section-hr">
+      <div style="display:flex;gap:12px;margin-bottom:20px">
+        <button class="btn btn-blue" onclick="loadHRs()">HR Accounts</button>
+        <button class="btn btn-grey" onclick="loadCoordinators()">Coordinators</button>
+      </div>
+      <div id="hrContent"></div>
+    </div>
+
+    <!-- CERTIFICATES -->
+    <div class="section" id="section-certificates">
+      <div style="display:flex;gap:12px;margin-bottom:20px">
+        <button class="btn btn-blue" onclick="loadPendingCerts()">Pending Requests</button>
+        <button class="btn btn-grey" onclick="loadCertHistory()">History</button>
+      </div>
+      <div id="certsContent"></div>
+    </div>
+
+    <!-- NOTIFICATIONS -->
+    <div class="section" id="section-notifications">
+      <div class="table-wrap" style="padding:24px;max-width:560px">
+        <div class="form-group"><label>Title</label><input id="notifTitle" placeholder="Notification title"></div>
+        <div class="form-group"><label>Message</label><textarea id="notifMessage" rows="4" placeholder="Notification message" style="resize:vertical"></textarea></div>
+        <div class="form-group"><label>Type</label>
+          <select id="notifType">
+            <option value="info">ℹ️ Info</option>
+            <option value="success">✅ Success</option>
+            <option value="warning">⚠️ Warning</option>
+            <option value="urgent">🚨 Urgent</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Target</label>
+          <select id="notifTarget" onchange="updateNotifTargetUI()">
+            <option value="all">All Students</option>
+            <option value="domain">By Domain</option>
+            <option value="student">Specific Student</option>
+          </select>
+        </div>
+        <div class="form-group" id="notifDomainWrap" style="display:none"><label>Domain</label>
+          <select id="notifDomain">
+            <option>DevOps with AWS</option><option>Python Development</option><option>Java Development</option>
+            <option>Web Development</option><option>MERN Stack Development</option><option>Artificial Intelligence</option>
+            <option>Data Science</option><option>Cyber Security</option><option>Software Engineering</option>
+            <option>Flutter Development</option><option>HR Management</option><option>Venture Capital</option>
+            <option>Vibe Coding</option><option>Space Research</option><option>Business Analyst</option><option>HR</option>
+          </select>
+        </div>
+        <div class="form-group" id="notifStudentWrap" style="display:none"><label>Employee ID</label><input id="notifEmployeeId" placeholder="e.g. TEN2024001"></div>
+        <button class="btn btn-blue" style="width:100%;padding:12px" onclick="sendNotification()">📢 Send Notification</button>
+      </div>
+    </div>
+
+    <!-- ATTENDANCE -->
+    <!-- Full control over any student's attendance, per domain. A student
+         holding two domains has two independent records, so both are shown and
+         each is corrected separately. -->
+    <div class="section" id="section-attendance">
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+        <input id="attLookup" placeholder="Employee ID, e.g. TEN/WEB/1005"
+               style="flex:1;min-width:240px;padding:10px 12px;border-radius:8px;border:1px solid #2a3550;background:#0e1628;color:#e2e8f0;">
+        <button class="btn" onclick="loadAdminAttendance()">🔍 Open</button>
+        <button class="btn btn-grey" onclick="recalcAllAttendance()">♻️ Recalculate everyone</button>
+      </div>
+      <div id="attAdminBox"><p style="color:#64748b">Enter an Employee ID to view and correct attendance.</p></div>
+    </div>
+
+    <!-- DOCUMENTS -->
+    <div class="section" id="section-documents">
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+        <input id="docSearch" placeholder="Name, Employee ID or document number"
+               style="flex:1;min-width:220px;padding:10px 12px;border-radius:8px;border:1px solid #2a3550;background:#0e1628;color:#e2e8f0;">
+        <select id="docMethod" style="padding:10px 12px;border-radius:8px;border:1px solid #2a3550;background:#0e1628;color:#e2e8f0;">
+          <option value="">All methods</option>
+          <option value="manual">Manual only</option>
+          <option value="automation">Automation only</option>
+        </select>
+        <button class="btn" onclick="loadAdminDocuments()">🔍 Search</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+        <input id="docGenRef" placeholder="Employee ID"
+               style="min-width:200px;padding:10px 12px;border-radius:8px;border:1px solid #2a3550;background:#0e1628;color:#e2e8f0;">
+        <select id="docGenType" style="padding:10px 12px;border-radius:8px;border:1px solid #2a3550;background:#0e1628;color:#e2e8f0;">
+          <option value="OFFER">Offer Letter</option>
+          <option value="LOC">Letter of Completion</option>
+          <option value="LOR">Letter of Recommendation</option>
+          <option value="STAR">Star Performer</option>
+          <option value="LOP">Letter of Promotion</option>
+        </select>
+        <button class="btn btn-green" onclick="adminGenerateDocument()">⚡ Generate &amp; send</button>
+      </div>
+      <div id="docAdminBox"><p style="color:#64748b">Loading…</p></div>
+    </div>
+
+    <!-- SYSTEM -->
+    <div class="section" id="section-system">
+      <div class="stats-grid" id="systemInfo">
+        <div class="stat-card"><div class="label">Loading...</div><div class="value">—</div></div>
+      </div>
+      <button class="btn btn-grey" onclick="loadSystemInfo()" style="margin-top:8px">🔄 Refresh</button>
+    </div>
+
+    <!-- AUDIT LOG -->
+    <!-- Chat oversight: reported users, and every conversation including
+         private ones. Reports arrive here because a victim raised them; the
+         room list exists so an admin can read the context around one. -->
+    <div class="section" id="section-chat">
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+        <button class="btn" onclick="loadChatReports('open')" id="crTabOpen">🚩 Open reports</button>
+        <button class="btn btn-secondary" onclick="loadChatReports('actioned')">✅ Actioned</button>
+        <button class="btn btn-secondary" onclick="loadChatReports('dismissed')">Dismissed</button>
+        <button class="btn btn-secondary" onclick="loadChatRooms()">💬 All conversations</button>
+      </div>
+      <div id="chatAdminBox"><p style="color:#64748b">Loading…</p></div>
+    </div>
+
+    <!-- Certificates HR issued without the checks passing. See
+         routes/adminPortal.js → /certificate-overrides. -->
+    <div class="section" id="section-cert-overrides">
+      <div style="background:#0e1628;border:1px solid #2a3550;border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+        <div style="font-weight:700;color:#e2e8f0;margin-bottom:6px;">What this is</div>
+        <div style="color:#94a3b8;font-size:13px;line-height:1.6;">
+          HR can issue a certificate directly, skipping the application, the 75% attendance rule
+          and the performance rule — interns who finished over WhatsApp have no portal record to
+          satisfy any of them. Every direct issue is listed here. Rows marked
+          <span style="color:#f87171;font-weight:700;">Requirements not met</span> are the ones
+          where HR saw the warning and went ahead anyway.
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+        <button class="btn" onclick="loadOverrides('unmet')" id="ovTabUnmet">⚠️ Requirements not met</button>
+        <button class="btn btn-secondary" onclick="loadOverrides('all')" id="ovTabAll">All issues</button>
+        <button class="btn btn-secondary" onclick="loadOverrides('met')" id="ovTabMet">Met requirements</button>
+        <button class="btn btn-secondary" onclick="loadOverrides('revoked')" id="ovTabRevoked">Revoked</button>
+        <input class="search-input" id="overrideSearch" placeholder="Employee ID, name, domain or HR…"
+               style="max-width:280px" oninput="debounceOverrideSearch()">
+      </div>
+      <div id="overridesContent"><p style="color:#64748b;padding:16px">Loading…</p></div>
+    </div>
+
+    <div class="section" id="section-auditlog">
+      <div id="auditContent"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <h3 id="modalTitle">Modal</h3>
+    <div id="modalBody"></div>
+    <div class="modal-actions" id="modalActions"></div>
+  </div>
+</div>
+
+<script>
+const API = '/api/admin-internal';
+let currentPaymentPage = 1;
+let currentStudentPage = 1;
+let studentSearchTimer;
+
+// ── UTILS ──────────────────────────────────────────────────────────────────
+function toast(msg, type = 'success') {
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+async function api(path, options = {}) {
+  const res = await fetch(API + path, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...options.headers },
+    ...options
+  });
+  if (res.status === 401) { window.location.href = '/ten-admin/login'; return null; }
+  return res.json();
+}
+
+function showSection(name) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('section-' + name).classList.add('active');
+  const navItems = document.querySelectorAll('.nav-item');
+  navItems.forEach(n => { if (n.onclick && n.onclick.toString().includes(name)) n.classList.add('active'); });
+
+  if (name === 'payments') loadPendingPayments();
+  if (name === 'tenure-payments') loadTenurePayments();
+  if (name === 'students') loadStudents();
+  if (name === 'hr') loadHRs();
+  if (name === 'certificates') loadPendingCerts();
+  if (name === 'system') loadSystemInfo();
+  if (name === 'attendance') { /* waits for an Employee ID */ }
+  if (name === 'documents') loadAdminDocuments();
+  if (name === 'chat') loadChatReports('open');
+  if (name === 'cert-overrides') loadOverrides(overrideFilter);
+  if (name === 'auditlog') loadAuditLog();
+  if (name === 'overview') loadStats();
+}
+
+function openModal(title, bodyHtml, actions = []) {
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalBody').innerHTML = bodyHtml;
+  document.getElementById('modalActions').innerHTML = actions.map(a =>
+    `<button class="btn btn-${a.cls}" onclick="${a.fn}">${a.label}</button>`
+  ).join('');
+  document.getElementById('modalOverlay').classList.add('open');
+}
+function closeModal() { document.getElementById('modalOverlay').classList.remove('open'); }
+
+function logout() {
+  api('/logout', { method: 'POST' }).then(() => { window.location.href = '/ten-admin/login'; });
+}
+
+const PURPOSE_LABELS = {
+  cert_expert: 'Expert Certificate (₹100)',
+  cert_nano_degree: 'Nano Degree (₹1000)',
+  cert_fellowship: 'Fellowship (₹2500)',
+  fine_low_attendance: 'Attendance Fine (₹400)',
+  donation: 'Donation',
+  tenure_1week:   '1 Week Course Fee (₹2,000)',
+  tenure_15days:  '15 Days Course Fee (₹1,500)',
+  tenure_1month:  '1 Month Course Fee (₹1,000)',
+  'tenure_1 week':  '1 Week Course Fee (₹2,000)',
+  'tenure_15 days': '15 Days Course Fee (₹1,500)',
+  'tenure_1 month': '1 Month Course Fee (₹1,000)'
+};
+
+// ── OVERVIEW ────────────────────────────────────────────────────────────────
+async function loadStats() {
+  const data = await api('/stats');
+  if (!data || !data.success) return;
+  const d = data.data;
+  document.getElementById('st-students').textContent = d.totalStudents;
+  document.getElementById('st-payments').textContent = d.pendingPayments;
+  document.getElementById('st-locked').textContent = d.lockedAccounts;
+  document.getElementById('st-certs').textContent = d.pendingCertRequests;
+  document.getElementById('st-active').textContent = d.activeToday;
+  document.getElementById('st-hrs').textContent = d.totalHRs;
+  document.getElementById('st-coords').textContent = d.totalCoordinators;
+  document.getElementById('st-new').textContent = d.newRegistrationsToday;
+
+  const badge = document.getElementById('pendingBadge');
+  if (d.pendingPayments > 0) { badge.textContent = d.pendingPayments; badge.style.display = 'inline'; }
+
+  // Also fetch pending tenure payments count and show badge on the nav item
+  try {
+    const tdata = await api('/tenure-payment/pending');
+    if (tdata && tdata.success) {
+      const tcount = (tdata.data || []).length;
+      const tbadge = document.getElementById('tenurePendingBadge');
+      if (tbadge) {
+        if (tcount > 0) { tbadge.textContent = tcount; tbadge.style.display = 'inline'; }
+        else { tbadge.style.display = 'none'; }
+      }
+    }
+  } catch(e) { /* badge is non-critical */ }
+
+  const maxCount = Math.max(...d.domainBreakdown.map(x => x.count), 1);
+  document.getElementById('domainChart').innerHTML = d.domainBreakdown.map(db => `
+    <div class="domain-bar-row">
+      <div class="domain-bar-label">${db.domain || 'Unknown'}</div>
+      <div class="domain-bar-track">
+        <div class="domain-bar-fill" style="width:${Math.round((db.count/maxCount)*100)}%">
+          <span class="domain-bar-count">${db.count}</span>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── PAYMENTS ────────────────────────────────────────────────────────────────
+async function loadPendingPayments() {
+  document.getElementById('paymentsContent').innerHTML = '<p style="color:#64748b;padding:16px">Loading...</p>';
+  const data = await api('/payments/pending');
+  if (!data || !data.success) return;
+  const rows = data.data;
+  if (rows.length === 0) {
+    document.getElementById('paymentsContent').innerHTML = '<div class="empty"><div class="icon">🎉</div><p>No pending payments</p></div>';
+    return;
+  }
+  document.getElementById('paymentsContent').innerHTML = `
+    <div class="table-wrap"><table>
+      <thead><tr><th>Employee ID</th><th>Name</th><th>Domain</th><th>Purpose</th><th>Amount</th><th>UTR / Transaction ID</th><th>Submitted</th><th>Actions</th></tr></thead>
+      <tbody>${rows.map(p => `
+        <tr id="prow-${p._id}">
+          <td><code>${p.studentEmployeeId}</code></td>
+          <td>${p.studentName}</td>
+          <td>${p.studentDomain}</td>
+          <td>${PURPOSE_LABELS[p.purpose] || p.purpose}</td>
+          <td>₹${p.amount}</td>
+          <td><code>${p.providerPaymentId || '—'}</code></td>
+          <td>${p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-IN') : '—'}</td>
+          <td style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-green" onclick="approvePayment('${p._id}', '${p.studentName}', ${p.amount})">✓ Approve</button>
+            <button class="btn btn-red" onclick="rejectPayment('${p._id}')">✗ Reject</button>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>`;
+}
+
+async function loadAllPayments() {
+  document.getElementById('paymentsContent').innerHTML = '<p style="color:#64748b;padding:16px">Loading...</p>';
+  const data = await api(`/payments/all?page=${currentPaymentPage}`);
+  if (!data || !data.success) return;
+  const rows = data.data;
+  const statusBadge = (s) => {
+    const map = { success: 'green', pending: 'grey', pending_verification: 'orange', failed: 'red' };
+    return `<span class="badge badge-${map[s]||'grey'}">${s}</span>`;
+  };
+  document.getElementById('paymentsContent').innerHTML = `
+    <div class="table-wrap"><table>
+      <thead><tr><th>Employee ID</th><th>Name</th><th>Domain</th><th>Purpose</th><th>Amount</th><th>Status</th><th>UTR</th><th>Date</th></tr></thead>
+      <tbody>${rows.map(p => `<tr>
+        <td><code>${p.studentEmployeeId}</code></td>
+        <td>${p.studentName}</td>
+        <td>${p.studentDomain}</td>
+        <td>${PURPOSE_LABELS[p.purpose] || p.purpose}</td>
+        <td>₹${p.amount}</td>
+        <td>${statusBadge(p.status)}</td>
+        <td><code>${p.providerPaymentId || '—'}</code></td>
+        <td>${p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-IN') : '—'}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+    <div class="pagination">
+      <button onclick="currentPaymentPage--;loadAllPayments()" ${currentPaymentPage<=1?'disabled':''}>← Prev</button>
+      <span>Page ${currentPaymentPage} of ${Math.ceil(data.total/50)}</span>
+      <button onclick="currentPaymentPage++;loadAllPayments()" ${currentPaymentPage*50>=data.total?'disabled':''}>Next →</button>
+    </div>`;
+}
+
+function approvePayment(id, name, amount) {
+  if (!confirm(`Approve payment of ₹${amount} for ${name}?\n\nThis will release the certificate/fine immediately.`)) return;
+  api(`/payments/verify/${id}`, { method: 'POST', body: JSON.stringify({ action: 'approve' }) }).then(d => {
+    if (d && d.success) {
+      toast('Payment approved and processed ✓');
+      const row = document.getElementById('prow-' + id);
+      if (row) row.remove();
+    } else {
+      toast(d?.error || 'Error approving payment', 'error');
+    }
+  });
+}
+
+function rejectPayment(id) {
+  openModal('Reject Payment', `
+    <div class="form-group"><label>Rejection Reason (required)</label>
+    <textarea id="rejectReason" rows="3" placeholder="Explain why this payment is being rejected..." style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:10px;color:#f1f5f9;font-size:14px;resize:vertical"></textarea></div>`,
+    [
+      { label: 'Cancel', cls: 'grey', fn: 'closeModal()' },
+      { label: '✗ Confirm Reject', cls: 'red', fn: `doReject('${id}')` }
+    ]
+  );
+}
+
+async function doReject(id) {
+  const reason = document.getElementById('rejectReason').value.trim();
+  if (reason.length < 5) { toast('Please enter a reason (min 5 chars)', 'error'); return; }
+  const d = await api(`/payments/verify/${id}`, { method: 'POST', body: JSON.stringify({ action: 'reject', rejectionReason: reason }) });
+  if (d && d.success) {
+    toast('Payment rejected');
+    closeModal();
+    const row = document.getElementById('prow-' + id);
+    if (row) row.remove();
+  } else {
+    toast(d?.error || 'Error', 'error');
+  }
+}
+
+async function loadTenurePayments() {
+  document.getElementById('tenurePaymentsContent').innerHTML = '<p style="color:#64748b;padding:16px">Loading...</p>';
+  const data = await api('/tenure-payment/pending');
+  if (!data || !data.success) return;
+  if (!data.data.length) {
+    document.getElementById('tenurePaymentsContent').innerHTML = '<div class="empty"><div class="icon">🎉</div><p>No pending tenure payments</p></div>';
+    return;
+  }
+  const PURPOSE_LABEL = { tenure_1week: '1 Week (₹2000)', tenure_15days: '15 Days (₹1500)', tenure_1month: '1 Month (₹1000)' };
+  document.getElementById('tenurePaymentsContent').innerHTML = `
+    <div class="table-wrap"><table>
+      <thead><tr><th>Employee ID</th><th>Name</th><th>Domain</th><th>Tenure</th><th>Amount</th><th>UTR</th><th>Date</th><th>Actions</th></tr></thead>
+      <tbody>${data.data.map(p => `
+        <tr id="trow-${p.orderId}">
+          <td><code>${p.studentEmployeeId||'—'}</code></td>
+          <td>${p.studentName||'—'}</td>
+          <td>${p.studentDomain||'—'}</td>
+          <td>${PURPOSE_LABEL[p.purpose]||p.purpose}</td>
+          <td>₹${p.amount}</td>
+          <td><code>${p.providerPaymentId||'—'}</code></td>
+          <td>${p.createdAt?new Date(p.createdAt).toLocaleDateString('en-IN'):'—'}</td>
+          <td style="display:flex;gap:6px">
+            <button class="btn btn-green" onclick="approveTenure('${p.orderId}')">✓ Approve</button>
+            <button class="btn btn-red" onclick="rejectTenure('${p.orderId}')">✗ Reject</button>
+          </td>
+        </tr>`).join('')}</tbody>
+    </table></div>`;
+}
+
+async function approveTenure(orderId) {
+  if (!confirm('Approve tenure payment ' + orderId + '? This will unlock full access for the student.')) return;
+  const d = await api('/tenure-payment/approve/' + orderId, { method: 'POST' });
+  if (d && d.success) { toast('Approved ✓'); document.getElementById('trow-' + orderId)?.remove(); }
+  else toast(d?.error || 'Error', 'error');
+}
+
+function rejectTenure(orderId) {
+  openModal('Reject Tenure Payment', `<div class="form-group"><label>Reason</label><textarea id="tenureRejectReason" rows="3" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:10px;color:#f1f5f9;font-size:14px"></textarea></div>`,
+    [{ label: 'Cancel', cls: 'grey', fn: 'closeModal()' }, { label: 'Reject', cls: 'red', fn: `doRejectTenure('${orderId}')` }]);
+}
+
+async function doRejectTenure(orderId) {
+  const reason = document.getElementById('tenureRejectReason').value.trim();
+  if (!reason) { toast('Reason required', 'error'); return; }
+  const d = await api('/tenure-payment/reject/' + orderId, { method: 'POST', body: JSON.stringify({ rejectionReason: reason }) });
+  if (d && d.success) { toast('Rejected'); closeModal(); document.getElementById('trow-' + orderId)?.remove(); }
+  else toast(d?.error || 'Error', 'error');
+}
+
+function exportPayments() { window.location.href = API + '/payments/export'; }
+
+async function recalcAttendance() {
+  if (!confirm('Recalculate attendance percentages for ALL students? This may take a minute.')) return;
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = 'Recalculating...';
+  const d = await api('/attendance/recalculate-all', { method: 'POST' });
+  btn.disabled = false; btn.textContent = '🔄 Recalculate Attendance';
+  if (d && d.success) toast(`Done! Updated ${d.updated} students. Errors: ${d.errors}`);
+  else toast(d?.error || 'Error', 'error');
+}
+
+// ── STUDENTS ────────────────────────────────────────────────────────────────
+function debounceStudentSearch() {
+  clearTimeout(studentSearchTimer);
+  studentSearchTimer = setTimeout(loadStudents, 400);
+}
+
+async function loadStudents() {
+  const search = document.getElementById('studentSearch').value.trim();
+  const domain = document.getElementById('studentDomainFilter').value;
+  let url = `/students?page=${currentStudentPage}`;
+  if (search) url += `&search=${encodeURIComponent(search)}`;
+  if (domain) url += `&domain=${encodeURIComponent(domain)}`;
+  document.getElementById('studentsContent').innerHTML = '<p style="color:#64748b;padding:16px">Loading...</p>';
+  const data = await api(url);
+  if (!data || !data.success) return;
+  if (data.data.length === 0) { document.getElementById('studentsContent').innerHTML = '<div class="empty"><div class="icon">🔍</div><p>No students found</p></div>'; return; }
+  document.getElementById('studentsContent').innerHTML = `
+    <div class="table-wrap"><table>
+      <thead><tr><th>Employee ID</th><th>Name</th><th>Email</th><th>Domain</th><th>Tenure</th><th>LOC</th><th>LOR</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>${data.data.map(s => { const nm = _studentName(s); return `<tr>
+        <td><code>${s.employeeId || '—'}</code></td>
+        <td>${nm ? _aEsc(nm) : '<span style="color:#f87171" title="No name on this record — press Edit to set it">— missing —</span>'}</td>
+        <td>${_aEsc(s.email || '—')}</td>
+        <td>${s.domain || '—'}</td>
+        <td>${s.tenure || '—'}</td>
+        <td><span class="badge badge-grey">${s.locStatus || '—'}</span></td>
+        <td><span class="badge badge-grey">${s.lorStatus || '—'}</span></td>
+        <td>${s.isLockedOut ? '<span class="badge badge-red">Locked 🔒</span>' : '<span class="badge badge-green">Active</span>'}${
+          // Shows that a reset was done and the student has not yet chosen
+          // their own — otherwise there is no way to tell an account still
+          // sitting on an admin-set password from a settled one.
+          (s.mustChangePassword || s.mustChangeEmail)
+            ? ' <span class="badge badge-grey" title="Waiting for the student to set their own">Reset pending</span>' : ''}</td>
+        <td style="display:flex;gap:6px;flex-wrap:wrap">
+          ${s.isLockedOut ? `<button class="btn btn-green" onclick="unlockStudent('${s._id}')">🔓 Unlock</button>` : ''}
+          <button class="btn btn-grey" onclick="editStudent('${s._id}',${_arg(nm)},${_arg(s.email)},${_arg(s.domain)},${_arg(s.tenure)},${_arg(s.whatsapp)},${_arg(s.gender)},${_arg(s.college||s.collegeName)})">✏️ Edit</button>
+          <button class="btn btn-grey" onclick="extendTenure('${s._id}',${_arg(s.employeeId)},${_arg(s.tenure)})">📅 Tenure</button>
+          <button class="btn btn-grey" onclick="resetStudentPw('${s._id}',${_arg(nm)},${_arg(s.email)})" title="Set a working password or correct the email so they can sign in again">🔑 Sign-in</button>
+          <button class="btn btn-red" onclick="deleteStudent('${s._id}',${_arg(s.employeeId)})">🗑</button>
+        </td>
+      </tr>`; }).join('')}</tbody>
+    </table></div>
+    <div class="pagination">
+      <button onclick="currentStudentPage--;loadStudents()" ${currentStudentPage<=1?'disabled':''}>← Prev</button>
+      <span>Page ${currentStudentPage} · ${data.total} total</span>
+      <button onclick="currentStudentPage++;loadStudents()" ${currentStudentPage*50>=data.total?'disabled':''}>Next →</button>
+    </div>`;
+}
+
+async function unlockStudent(id) {
+  if (!confirm('Unlock this account?')) return;
+  const d = await api(`/students/${id}/unlock`, { method: 'POST' });
+  if (d && d.success) { toast('Account unlocked ✓'); loadStudents(); }
+  else toast(d?.error || 'Error', 'error');
+}
+
+// Domains and tenures come from the server so this form cannot offer a value
+// the API will reject. The tenure list here was ["1week","15days",…] while
+// Student.tenure is written as "1 Month" / "45 Days", so saving from this modal
+// used to rewrite a student's tenure into a different format.
+let ADMIN_CONFIG = { domains: [], tenures: [] };
+(async function loadAdminConfig() {
+  try {
+    const res = await fetch('/api/public-config');
+    const cfg = await res.json();
+    if (cfg && cfg.success) ADMIN_CONFIG = { domains: cfg.domains || [], tenures: cfg.tenures || [] };
+  } catch (e) { /* the selects fall back to the current value only */ }
+})();
+
+function _optionList(values, current, labelOf) {
+  const out = values.map(v => {
+    const value = labelOf ? labelOf(v) : v;
+    return `<option value="${_attr(value)}"${value === current ? ' selected' : ''}>${_attr(value)}</option>`;
+  });
+  // Keep whatever the student currently has, even if it is no longer offered.
+  if (current && !values.some(v => (labelOf ? labelOf(v) : v) === current)) {
+    out.unshift(`<option value="${_attr(current)}" selected>${_attr(current)} (current)</option>`);
+  }
+  return out.join('');
+}
+
+function _attr(s) {
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function editStudent(id, name, email, domain, tenure, whatsapp, gender, college) {
+  openModal('Edit Student', `
+    <div class="form-group"><label>Name</label><input id="ed-name" value="${_attr(name)}"></div>
+    <div class="form-group"><label>Email</label><input id="ed-email" value="${_attr(email)}"></div>
+    <div class="form-group"><label>Employee ID</label><input id="ed-employeeId" placeholder="Leave blank to keep unchanged"></div>
+    <div class="form-group"><label>Domain</label><select id="ed-domain">${_optionList(ADMIN_CONFIG.domains, domain)}</select></div>
+    <div class="form-group"><label>Tenure</label><select id="ed-tenure">${_optionList(ADMIN_CONFIG.tenures, tenure, t => t.label)}</select></div>
+    <div class="form-group"><label>WhatsApp</label><input id="ed-whatsapp" value="${_attr(whatsapp)}"></div>
+    <div class="form-group"><label>Gender</label><select id="ed-gender"><option value="" ${!gender?'selected':''}>—</option><option value="male" ${gender==='male'?'selected':''}>Male</option><option value="female" ${gender==='female'?'selected':''}>Female</option></select></div>
+    <div class="form-group"><label>College</label><input id="ed-college" value="${_attr(college)}"></div>
+    <div class="form-group"><label>Internship start date</label><input id="ed-start" type="date"></div>`,
+    [
+      { label: 'Cancel', cls: 'grey', fn: 'closeModal()' },
+      { label: '💾 Save', cls: 'blue', fn: `saveStudent('${id}')` }
+    ]
+  );
+}
+
+async function saveStudent(id) {
+  const body = {
+    name: document.getElementById('ed-name').value,
+    email: document.getElementById('ed-email').value,
+    domain: document.getElementById('ed-domain').value,
+    tenure: document.getElementById('ed-tenure').value,
+    whatsapp: document.getElementById('ed-whatsapp').value,
+    gender: document.getElementById('ed-gender').value,
+    college: document.getElementById('ed-college').value
+  };
+  const empId = document.getElementById('ed-employeeId').value.trim();
+  if (empId) body.employeeId = empId;
+  const start = document.getElementById('ed-start').value;
+  if (start) body.internshipStartDate = start;
+
+  const d = await api(`/students/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+  if (d && d.success) {
+    toast('Student updated ✓');
+    closeModal();
+    loadStudents();
+    // Section 6.1 — the offer letter and the record must not drift apart.
+    if (d.offerLetterNeedsRegeneration) {
+      setTimeout(() => alert(d.offerLetterMessage), 300);
+    }
+  } else {
+    toast(d?.error || 'Error', 'error');
+  }
+}
+
+/**
+ * Extend Tenure (section 15) — updates tenure, durationType and the internship
+ * dates together, so attendance targets and the task journey follow.
+ */
+function extendTenure(id, empId, currentTenure) {
+  openModal(`Extend Tenure — ${_attr(empId)}`, `
+    <p style="color:#8aa4c8;font-size:13px;margin-bottom:12px;">
+      Currently <strong>${_attr(currentTenure || 'not set')}</strong>.
+      Changing this updates the attendance day target, the task journey and the
+      internship end date together.
+    </p>
+    <div class="form-group"><label>New tenure</label><select id="ext-tenure">${_optionList(ADMIN_CONFIG.tenures, currentTenure, t => t.label)}</select></div>
+    <div class="form-group"><label>Internship start date (optional — leave blank to keep)</label><input id="ext-start" type="date"></div>`,
+    [
+      { label: 'Cancel', cls: 'grey', fn: 'closeModal()' },
+      { label: '📅 Extend', cls: 'blue', fn: `doExtendTenure('${id}')` }
+    ]
+  );
+}
+
+async function doExtendTenure(id) {
+  const body = { tenure: document.getElementById('ext-tenure').value };
+  const start = document.getElementById('ext-start').value;
+  if (start) body.internshipStartDate = start;
+
+  const d = await api(`/students/${id}/extend-tenure`, { method: 'POST', body: JSON.stringify(body) });
+  if (d && d.success) {
+    toast(`Tenure updated: ${d.previousTenure || '—'} → ${d.newTenure} ✓`);
+    closeModal();
+    loadStudents();
+    if (d.offerLetterNeedsRegeneration) {
+      setTimeout(() => alert(d.offerLetterMessage), 300);
+    }
+  } else {
+    toast(d?.error || 'Error', 'error');
+  }
+}
+
+/**
+ * Give a student a way back into their account.
+ *
+ * The common cases are a mistyped email at registration that no reset link can
+ * ever reach, and a forgotten password on an account whose email is wrong —
+ * neither of which the student can fix themselves. Both fields are here
+ * because they usually need fixing together.
+ *
+ * Whatever is changed here is temporary by design: the student is asked to set
+ * their own password (and confirm their own email) the next time they sign in,
+ * so the account does not stay on credentials somebody else picked.
+ */
+function resetStudentPw(id, name, email) {
+  openModal(`Reset sign-in details — ${name}`, `
+    <p style="font-size:12.5px;color:#64748b;line-height:1.55;margin:0 0 14px;">
+      Fill in whichever needs changing and leave the other blank. Give the student
+      what you set here — they will be asked to choose their own when they sign in.
+    </p>
+    <div class="form-group">
+      <label>New password <span style="color:#94a3b8;font-weight:400">(min 8 characters — leave blank to keep the current one)</span></label>
+      <input id="newPw" type="text" placeholder="e.g. Ten@Reset2026" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label>Email address <span style="color:#94a3b8;font-weight:400">(leave blank to keep it)</span></label>
+      <input id="newEmail" type="email" placeholder="${_aEsc(email || '')}" autocomplete="off">
+    </div>
+    <label style="display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:#475569;line-height:1.5;">
+      <input id="reqChange" type="checkbox" checked style="width:auto;margin-top:2px;">
+      <span>Ask the student to set their own on next sign-in <b>(recommended)</b>.
+      Untick only when correcting an obvious typo.</span>
+    </label>
+    <p id="resetMsg" style="font-size:12.5px;color:#ef4444;margin:12px 0 0;min-height:1px;"></p>`,
+    [{ label: 'Cancel', cls: 'grey', fn: 'closeModal()' }, { label: '🔑 Update', cls: 'red', fn: `doResetPw('${id}')` }]);
+}
+
+async function doResetPw(id) {
+  const pw = document.getElementById('newPw').value.trim();
+  const em = document.getElementById('newEmail').value.trim();
+  const requireChange = document.getElementById('reqChange').checked;
+  const msg = document.getElementById('resetMsg');
+  msg.textContent = '';
+
+  if (!pw && !em) { msg.textContent = 'Enter a new password, a new email, or both.'; return; }
+  if (pw && pw.length < 8) { msg.textContent = 'The password needs to be at least 8 characters.'; return; }
+
+  const body = { requireChange };
+  if (pw) body.newPassword = pw;
+  if (em) body.newEmail = em;
+
+  const d = await api(`/students/${id}/reset-credentials`, { method: 'POST', body: JSON.stringify(body) });
+  if (d && d.success) {
+    closeModal();
+    toast(d.message || 'Updated ✓');
+    // Spell out what to pass on, since the password is not stored anywhere
+    // readable and this is the only time it is on screen.
+    if (pw) {
+      setTimeout(() => alert(
+        'Give the student these details:\n\n' +
+        (em ? 'Email: ' + em + '\n' : '') +
+        'Password: ' + pw + '\n\n' +
+        (requireChange
+          ? 'They will be asked to set their own password when they sign in.'
+          : 'They will not be prompted to change it.')
+      ), 250);
+    }
+    loadStudents();
+  } else {
+    msg.textContent = d?.error || 'Could not update. Please try again.';
+  }
+}
+
+async function deleteStudent(id, empId) {
+  const confirm1 = confirm(`Delete student ${empId}?\nThis cannot be undone.`);
+  if (!confirm1) return;
+  const confirm2 = prompt(`Type the employee ID to confirm: ${empId}`);
+  if (confirm2 !== empId) { toast('Employee ID did not match — cancelled', 'error'); return; }
+  const d = await api(`/students/${id}`, { method: 'DELETE' });
+  if (d && d.success) { toast('Student deleted'); loadStudents(); }
+  else toast(d?.error || 'Error', 'error');
+}
+
+// ── HR & COORDINATORS ───────────────────────────────────────────────────────
+async function loadHRs() {
+  document.getElementById('hrContent').innerHTML = '<p style="color:#64748b;padding:16px">Loading...</p>';
+  const data = await api('/hrs');
+  if (!data || !data.success) return;
+  document.getElementById('hrContent').innerHTML = `
+    <div class="table-wrap"><table>
+      <thead><tr><th>Username</th><th>Name</th><th>Email</th><th>Role</th><th>Employee ID</th><th>Actions</th></tr></thead>
+      <tbody>${data.data.map(h => `<tr>
+        <td><code>${h.username}</code></td><td>${h.name||'—'}</td><td>${h.email||'—'}</td>
+        <td><span class="badge badge-blue">${h.role||'hr'}</span></td><td>${h.employeeId||'—'}</td>
+        <td style="display:flex;gap:6px">
+          <button class="btn btn-grey" onclick="resetHRPw('${h._id}','${h.username}')">🔑 Reset PW</button>
+          <button class="btn btn-red" onclick="deleteHR('${h._id}','${h.username}')">🗑</button>
+        </td></tr>`).join('')}</tbody>
+    </table></div>`;
+}
+
+function resetHRPw(id, name) {
+  openModal(`Reset HR Password — ${name}`, `<div class="form-group"><label>New Password</label><input id="hrPw" type="password"></div>`,
+    [{ label: 'Cancel', cls: 'grey', fn: 'closeModal()' }, { label: '🔑 Reset', cls: 'red', fn: `doResetHRPw('${id}')` }]);
+}
+async function doResetHRPw(id) {
+  const pw = document.getElementById('hrPw').value;
+  if (pw.length < 8) { toast('Min 8 chars', 'error'); return; }
+  const d = await api(`/hrs/${id}/reset-password`, { method: 'POST', body: JSON.stringify({ newPassword: pw }) });
+  if (d && d.success) { toast('Password reset ✓'); closeModal(); }
+  else toast(d?.error || 'Error', 'error');
+}
+async function deleteHR(id, name) {
+  if (!confirm(`Delete HR account "${name}"?`)) return;
+  const d = await api(`/hrs/${id}`, { method: 'DELETE' });
+  if (d && d.success) { toast('HR deleted'); loadHRs(); }
+  else toast(d?.error || 'Error', 'error');
+}
+
+async function loadCoordinators() {
+  document.getElementById('hrContent').innerHTML = '<p style="color:#64748b;padding:16px">Loading...</p>';
+  const data = await api('/coordinators');
+  if (!data || !data.success) return;
+  document.getElementById('hrContent').innerHTML = `
+    <div class="table-wrap"><table>
+      <thead><tr><th>Username</th><th>Name</th><th>Domain</th><th>Employee ID</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>${data.data.map(c => `<tr>
+        <td><code>${c.username}</code></td><td>${c.name||'—'}</td><td>${c.domain||'—'}</td>
+        <td>${c.employeeId||'—'}</td>
+        <td><span class="badge badge-${c.verificationStatus==='approved'?'green':'grey'}">${c.verificationStatus||'pending'}</span></td>
+        <td style="display:flex;gap:6px">
+          <button class="btn btn-grey" onclick="resetCoordPw('${c._id}','${c.username}')">🔑 Reset PW</button>
+          <button class="btn btn-red" onclick="deleteCoord('${c._id}','${c.username}')">🗑</button>
+        </td></tr>`).join('')}</tbody>
+    </table></div>`;
+}
+function resetCoordPw(id, name) {
+  openModal(`Reset Coordinator Password — ${name}`, `<div class="form-group"><label>New Password</label><input id="coordPw" type="password"></div>`,
+    [{ label: 'Cancel', cls: 'grey', fn: 'closeModal()' }, { label: '🔑 Reset', cls: 'red', fn: `doResetCoordPw('${id}')` }]);
+}
+async function doResetCoordPw(id) {
+  const pw = document.getElementById('coordPw').value;
+  if (pw.length < 8) { toast('Min 8 chars', 'error'); return; }
+  const d = await api(`/coordinators/${id}/reset-password`, { method: 'POST', body: JSON.stringify({ newPassword: pw }) });
+  if (d && d.success) { toast('Password reset ✓'); closeModal(); }
+  else toast(d?.error || 'Error', 'error');
+}
+async function deleteCoord(id, name) {
+  if (!confirm(`Delete coordinator "${name}"?`)) return;
+  const d = await api(`/coordinators/${id}`, { method: 'DELETE' });
+  if (d && d.success) { toast('Coordinator deleted'); loadCoordinators(); }
+  else toast(d?.error || 'Error', 'error');
+}
+
+// ── CERTIFICATES ─────────────────────────────────────────────────────────────
+async function loadPendingCerts() {
+  document.getElementById('certsContent').innerHTML = '<p style="color:#64748b;padding:16px">Loading...</p>';
+  const data = await api('/certificates/pending');
+  if (!data || !data.success) return;
+  if (!data.data.length) { document.getElementById('certsContent').innerHTML = '<div class="empty"><div class="icon">🎉</div><p>No pending certificate requests</p></div>'; return; }
+  document.getElementById('certsContent').innerHTML = `
+    <div class="table-wrap"><table>
+      <thead><tr><th>Student</th><th>Employee ID</th><th>Domain</th><th>LOC Eligible</th><th>LOR Eligible</th><th>Star Eligible</th><th>Requested</th><th>Actions</th></tr></thead>
+      <tbody>${data.data.map(r => `<tr>
+        <td>${r.studentName||'—'}</td><td>${r.studentEmployeeId||'—'}</td><td>${r.studentDomain||'—'}</td>
+        <td>${r.locEligible?'✓':'—'}</td><td>${r.lorEligible?'✓':'—'}</td><td>${r.starPerformanceGrade||'—'}</td>
+        <td>${r.createdAt?new Date(r.createdAt).toLocaleDateString('en-IN'):'—'}</td>
+        <td style="display:flex;gap:6px">
+          <button class="btn btn-green" onclick="approveCert('${r._id}')">✓ Approve</button>
+          <button class="btn btn-red" onclick="rejectCert('${r._id}')">✗ Reject</button>
+        </td></tr>`).join('')}</tbody>
+    </table></div>`;
+}
+
+async function approveCert(id) {
+  if (!confirm('Approve and generate certificates for this request?')) return;
+  const d = await api(`/certificates/${id}/approve`, { method: 'POST', body: JSON.stringify({ approveLoC: true, approveLor: true, approveStarPerformance: true }) });
+  if (d && d.success) { toast('Certificates approved ✓'); loadPendingCerts(); }
+  else toast(d?.error || 'Error', 'error');
+}
+function rejectCert(id) {
+  openModal('Reject Certificate Request', `<div class="form-group"><label>Reason</label><textarea id="certRejectReason" rows="3" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:10px;color:#f1f5f9;font-size:14px"></textarea></div>`,
+    [{ label: 'Cancel', cls: 'grey', fn: 'closeModal()' }, { label: 'Reject', cls: 'red', fn: `doRejectCert('${id}')` }]);
+}
+async function doRejectCert(id) {
+  const reason = document.getElementById('certRejectReason').value.trim();
+  if (!reason) { toast('Reason required', 'error'); return; }
+  const d = await api(`/certificates/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) });
+  if (d && d.success) { toast('Request rejected'); closeModal(); loadPendingCerts(); }
+  else toast(d?.error || 'Error', 'error');
+}
+
+async function loadCertHistory() {
+  const data = await api('/certificates/history');
+  if (!data || !data.success) return;
+  document.getElementById('certsContent').innerHTML = `
+    <div class="table-wrap"><table>
+      <thead><tr><th>Student</th><th>Emp ID</th><th>Document Type</th><th>Doc Number</th><th>Sent On</th><th>Method</th><th>Email</th></tr></thead>
+      <tbody>${data.data.map(d => `<tr>
+        <td>${d.studentName||'—'}</td><td><code>${d.employeeId||'—'}</code></td>
+        <td>${d.documentType||'—'}</td><td><code>${d.documentNumber||'—'}</code></td>
+        <td>${d.sentAt?new Date(d.sentAt).toLocaleDateString('en-IN'):'—'}</td>
+        <td><span class="badge badge-grey">${d.method||'—'}</span></td>
+        <td><span class="badge badge-${d.emailStatus==='sent'?'green':'grey'}">${d.emailStatus||'—'}</span></td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+}
+
+// ── NOTIFICATIONS ─────────────────────────────────────────────────────────────
+function updateNotifTargetUI() {
+  const t = document.getElementById('notifTarget').value;
+  document.getElementById('notifDomainWrap').style.display = t === 'domain' ? '' : 'none';
+  document.getElementById('notifStudentWrap').style.display = t === 'student' ? '' : 'none';
+}
+
+async function sendNotification() {
+  const title = document.getElementById('notifTitle').value.trim();
+  const message = document.getElementById('notifMessage').value.trim();
+  const type = document.getElementById('notifType').value;
+  const targetType = document.getElementById('notifTarget').value;
+  if (!title || !message) { toast('Title and message required', 'error'); return; }
+  const body = { title, message, type, targetType };
+  if (targetType === 'domain') body.targetDomain = document.getElementById('notifDomain').value;
+  if (targetType === 'student') body.targetEmployeeId = document.getElementById('notifEmployeeId').value.trim();
+  const d = await api('/notifications/broadcast', { method: 'POST', body: JSON.stringify(body) });
+  if (d && d.success) {
+    toast(`Sent to ${d.sent} students ✓`);
+    document.getElementById('notifTitle').value = '';
+    document.getElementById('notifMessage').value = '';
+  } else toast(d?.error || 'Error', 'error');
+}
+
+// ── SYSTEM ────────────────────────────────────────────────────────────────────
+async function loadSystemInfo() {
+  const data = await api('/system/info');
+  if (!data || !data.success) return;
+  const d = data.data;
+  document.getElementById('systemInfo').innerHTML = `
+    <div class="stat-card ${d.mongoConnected?'green':'red'}"><div class="label">MongoDB</div><div class="value" style="font-size:18px">${d.mongoConnected?'Connected ✓':'Disconnected ✗'}</div></div>
+    <div class="stat-card ${d.usingLocalDb?'orange':''}"><div class="label">Database Mode</div><div class="value" style="font-size:14px">${d.usingLocalDb?'Local JSON ⚠️':'MongoDB Atlas'}</div></div>
+    <div class="stat-card ${d.paymentEnabled?'green':'grey'}"><div class="label">Payment Gateway</div><div class="value" style="font-size:14px">${d.paymentEnabled?'Enabled':'Disabled'}</div></div>
+    <div class="stat-card"><div class="label">Environment</div><div class="value" style="font-size:16px">${d.nodeEnv}</div></div>
+    <div class="stat-card"><div class="label">Port</div><div class="value">${d.port}</div></div>
+    <div class="stat-card green"><div class="label">Uptime</div><div class="value" style="font-size:18px">${d.uptimeFormatted}</div></div>`;
+}
+
+// ── AUDIT LOG ─────────────────────────────────────────────────────────────────
+/* ── Chat oversight ───────────────────────────────────────────────────────
+   Reports land here because someone on the receiving end raised them.
+   Blocking already protected them the moment they clicked; this is where a
+   person with authority decides what to do about it. */
+function _aEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];}); }
+
+// A value going into an inline onclick="fn('...')" argument. JSON.stringify
+// quotes and escapes it as a JS string literal, then _aEsc makes it safe inside
+// the HTML attribute. The old code interpolated raw: a name with an apostrophe
+// ("O'Brien") broke the handler outright, and a missing one passed the literal
+// text "undefined" straight into the Edit form — where pressing Save wrote it
+// into the database as the student's real name.
+function _arg(v){ return _aEsc(JSON.stringify(v == null ? '' : String(v))); }
+
+// The name to show for a student. `name` is authoritative; firstName/lastName
+// are the fallback for older records. Anything that only looks like a name —
+// "undefined", "null" — counts as missing, because that is what the Edit form
+// used to write back.
+function _studentName(s){
+  var junk = ['undefined','null','nan','-','—'];
+  var ok = function(v){ return typeof v === 'string' && v.trim() && junk.indexOf(v.trim().toLowerCase()) === -1; };
+  if (ok(s.name)) return s.name.trim();
+  var parts = [s.firstName, s.lastName].filter(ok).map(function(x){ return x.trim(); });
+  return parts.length ? parts.join(' ') : '';
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  Attendance control
+//
+//  A student holding two domains has two independent attendance records and
+//  must mark each one. Both are shown side by side here, and each row is
+//  corrected against the domain it belongs to.
+// ══════════════════════════════════════════════════════════════════════
+let _attState = { ref: '', domain: '' };
+
+async function loadAdminAttendance(domain) {
+  const ref = (document.getElementById('attLookup').value || _attState.ref || '').trim();
+  if (!ref) return;
+  _attState.ref = ref;
+
+  const box = document.getElementById('attAdminBox');
+  box.innerHTML = '<p style="color:#64748b">Loading…</p>';
+  try {
+    const qs = domain ? ('?domain=' + encodeURIComponent(domain)) : '';
+    const d = await api('/attendance/' + encodeURIComponent(ref) + qs);
+    if (!d.success) throw new Error(d.error || 'Not found');
+    _attState.domain = d.domain || '';
+
+    const tabs = (d.domains || []).length > 1
+      ? '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">' +
+        d.domains.map(function (dom) {
+          const on = dom === d.domain;
+          return '<button class="btn ' + (on ? '' : 'btn-secondary') +
+            '" onclick="loadAdminAttendance(' + JSON.stringify(dom).replace(/"/g, '&quot;') + ')">' +
+            _aEsc(dom) + '</button>';
+        }).join('') + '</div>'
+      : '';
+
+    const perDomain = (d.perDomain || []).map(function (p) {
+      return '<div class="stat-card"><div class="label">' + _aEsc(p.domain) + '</div>' +
+        '<div class="value">' + (p.summary.percentage || 0) + '%</div>' +
+        '<div style="font-size:11px;color:#64748b;">' + (p.summary.daysPresent || 0) + ' of ' +
+        (p.summary.workingDaysElapsed || 0) + ' working days · needs ' + (p.summary.requiredDays || 0) + '</div></div>';
+    }).join('');
+
+    const rows = (d.records || []).slice(0, 200).map(function (r) {
+      return '<tr>' +
+        '<td>' + _aEsc(r.dateKey) + '</td>' +
+        '<td>' + _aEsc(r.markedBy) + '</td>' +
+        '<td>' + _aEsc(r.domain || '—') + '</td>' +
+        '<td style="color:' + (r.status === 'Present' ? '#10b981' : '#f43f5e') + '">' + _aEsc(r.status) + '</td>' +
+        '<td><button class="btn btn-red" style="padding:4px 10px;font-size:11px;" onclick="deleteAttendanceRecord(' +
+          JSON.stringify(String(r._id)).replace(/"/g, '&quot;') + ')">Delete</button></td>' +
+        '</tr>';
+    }).join('');
+
+    box.innerHTML =
+      '<h3 style="margin:0 0 4px;">' + _aEsc(d.student.name || d.student.employeeId) + '</h3>' +
+      '<p style="color:#64748b;margin:0 0 14px;font-size:12px;">' + _aEsc(d.student.employeeId) +
+      ' · ' + _aEsc(d.student.tenure || '—') + ' · joined ' + _aEsc(d.student.joiningDate || '—') + '</p>' +
+      '<div class="stats-grid" style="margin-bottom:16px;">' + perDomain + '</div>' +
+      tabs +
+      '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">' +
+        '<input type="date" id="attDate" style="padding:8px 10px;border-radius:8px;border:1px solid #2a3550;background:#0e1628;color:#e2e8f0;">' +
+        '<select id="attWho" style="padding:8px 10px;border-radius:8px;border:1px solid #2a3550;background:#0e1628;color:#e2e8f0;">' +
+          '<option value="coordinator">Coordinator mark</option><option value="self">Student mark</option></select>' +
+        '<select id="attStatus" style="padding:8px 10px;border-radius:8px;border:1px solid #2a3550;background:#0e1628;color:#e2e8f0;">' +
+          '<option value="Present">Present</option><option value="Absent">Absent</option></select>' +
+        '<button class="btn btn-green" onclick="saveAttendanceMark()">Save for ' + _aEsc(d.domain || 'this student') + '</button>' +
+      '</div>' +
+      '<table class="data-table"><thead><tr><th>Date</th><th>Source</th><th>Domain</th><th>Status</th><th></th></tr></thead>' +
+      '<tbody>' + (rows || '<tr><td colspan="5" style="color:#64748b;">No attendance recorded for this domain.</td></tr>') + '</tbody></table>';
+  } catch (e) {
+    box.innerHTML = '<p style="color:#f43f5e">' + _aEsc(e.message || 'Could not load attendance') + '</p>';
+  }
+}
+
+async function saveAttendanceMark() {
+  const date = document.getElementById('attDate').value;
+  if (!date) return alert('Pick a date first.');
+  try {
+    const d = await api('/attendance/mark', {
+      method: 'POST',
+      body: JSON.stringify({
+        ref: _attState.ref,
+        date: date,
+        status: document.getElementById('attStatus').value,
+        markedBy: document.getElementById('attWho').value,
+        domain: _attState.domain
+      })
+    });
+    if (!d.success) throw new Error(d.error || 'Failed');
+    loadAdminAttendance(_attState.domain);
+  } catch (e) { alert(e.message || 'Could not save'); }
+}
+
+async function deleteAttendanceRecord(id) {
+  if (!confirm('Delete this attendance record? The percentage is recalculated immediately.')) return;
+  try {
+    const d = await api('/attendance/record/' + encodeURIComponent(id), { method: 'DELETE' });
+    if (!d.success) throw new Error(d.error || 'Failed');
+    loadAdminAttendance(_attState.domain);
+  } catch (e) { alert(e.message || 'Could not delete'); }
+}
+
+async function recalcAllAttendance() {
+  if (!confirm('Recalculate attendance for every student? This runs the shared calculator over the whole database.')) return;
+  try {
+    const d = await api('/attendance/recalculate-all', { method: 'POST' });
+    alert('Recalculated ' + (d.updated || 0) + ' students (' + (d.errors || 0) + ' errors).');
+  } catch (e) { alert(e.message || 'Failed'); }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  Documents — history and on-demand generation
+// ══════════════════════════════════════════════════════════════════════
+async function loadAdminDocuments() {
+  const box = document.getElementById('docAdminBox');
+  box.innerHTML = '<p style="color:#64748b">Loading…</p>';
+  try {
+    const q = encodeURIComponent((document.getElementById('docSearch').value || '').trim());
+    const m = encodeURIComponent(document.getElementById('docMethod').value || '');
+    const d = await api('/documents/history?limit=150&q=' + q + '&method=' + m);
+    if (!d.success) throw new Error(d.error || 'Failed');
+
+    const rows = (d.data || []).map(function (r) {
+      const when = r.sentAt || r.sentOn || r.createdAt;
+      const badge = r.method === 'automation'
+        ? '<span style="background:rgba(59,130,246,0.18);color:#93c5fd;padding:2px 8px;border-radius:6px;font-size:11px;">Automation</span>'
+        : '<span style="background:rgba(245,197,66,0.18);color:#f5c542;padding:2px 8px;border-radius:6px;font-size:11px;">Manual</span>';
+      return '<tr><td>' + _aEsc(r.studentName || '—') + '</td><td>' + _aEsc(r.employeeId || '—') + '</td>' +
+        '<td>' + _aEsc(r.documentType || '—') + '</td><td>' + _aEsc(r.documentNumber || '—') + '</td>' +
+        '<td>' + (when ? new Date(when).toLocaleDateString('en-IN') : '—') + '</td>' +
+        '<td>' + badge + '<div style="font-size:10px;color:#64748b;margin-top:2px;">' + _aEsc(r.sentBy || '') + '</div></td></tr>';
+    }).join('');
+
+    box.innerHTML =
+      '<p style="color:#64748b;font-size:12px;margin:0 0 10px;">' + (d.total || 0) + ' documents · ' +
+      (d.counts ? (d.counts.manual + ' manual, ' + d.counts.automation + ' automation') : '') +
+      ' — only documents that were actually generated are listed.</p>' +
+      '<table class="data-table"><thead><tr><th>Student</th><th>Employee ID</th><th>Type</th><th>Document No.</th><th>Sent</th><th>Method</th></tr></thead>' +
+      '<tbody>' + (rows || '<tr><td colspan="6" style="color:#64748b;">Nothing matches.</td></tr>') + '</tbody></table>';
+  } catch (e) {
+    box.innerHTML = '<p style="color:#f43f5e">' + _aEsc(e.message || 'Could not load documents') + '</p>';
+  }
+}
+
+async function adminGenerateDocument() {
+  const ref = (document.getElementById('docGenRef').value || '').trim();
+  if (!ref) return alert('Enter an Employee ID.');
+  const type = document.getElementById('docGenType').value;
+  if (!confirm('Generate a ' + type + ' for ' + ref + ' and send it? It will be logged as Manual, credited to you.')) return;
+  try {
+    const d = await api('/documents/generate', { method: 'POST', body: JSON.stringify({ ref: ref, certType: type }) });
+    if (!d.success) throw new Error(d.error || 'Failed');
+    alert('Generated.');
+    loadAdminDocuments();
+  } catch (e) { alert(e.message || 'Could not generate'); }
+}
+
+async function loadChatReports(status) {
+  const box = document.getElementById('chatAdminBox');
+  box.innerHTML = '<p style="color:#64748b">Loading…</p>';
+  try {
+    const r = await fetch('/api/chat/admin/reports?status=' + encodeURIComponent(status||'open'), { credentials:'same-origin' });
+    const d = await r.json();
+    if (!r.ok || !d.success) throw new Error(d.message || ('Request failed (' + r.status + ')'));
+
+    const badge = document.getElementById('chatReportBadge');
+    if (badge) { badge.textContent = d.openCount || 0; badge.style.display = d.openCount ? 'inline-block' : 'none'; }
+
+    if (!d.reports.length) {
+      box.innerHTML = '<p style="color:#64748b">No ' + _aEsc(d.status) + ' reports.</p>';
+      return;
+    }
+    box.innerHTML = d.reports.map(function (x) {
+      return '<div style="background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:14px;margin-bottom:10px;">'
+        + '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">'
+          + '<div><strong style="color:#f1f5f9;">' + _aEsc(x.reportedName || x.reportedId) + '</strong>'
+            + ' <span style="color:#64748b;font-size:12px;">(' + _aEsc(x.reportedRole) + ')</span>'
+            + '<div style="color:#64748b;font-size:12px;">reported by ' + _aEsc(x.reporterName || x.reporterId) + ' · ' + _aEsc(x.reporterRole) + '</div></div>'
+          + '<div style="color:#64748b;font-size:12px;">' + (x.createdAt ? new Date(x.createdAt).toLocaleString('en-IN') : '') + '</div>'
+        + '</div>'
+        + (x.reason ? '<div style="color:#cbd5e1;font-size:13px;margin-bottom:6px;"><em>Reason:</em> ' + _aEsc(x.reason) + '</div>' : '')
+        + (x.messageSnapshot ? '<div style="background:#020617;border-left:3px solid #f43f5e;padding:8px 10px;border-radius:6px;color:#e2e8f0;font-size:13px;white-space:pre-wrap;">' + _aEsc(x.messageSnapshot) + '</div>' : '')
+        + '<div style="color:#475569;font-size:11px;margin-top:6px;">Room: ' + _aEsc(x.chatRoom || '—') + '</div>'
+        + (x.status === 'open'
+            ? '<div style="display:flex;gap:8px;margin-top:10px;">'
+              + '<button class="btn" onclick="reviewChatReport(&quot;' + _aEsc(x._id) + '&quot;,&quot;actioned&quot;)">✅ Actioned</button>'
+              + '<button class="btn btn-secondary" onclick="reviewChatReport(&quot;' + _aEsc(x._id) + '&quot;,&quot;dismissed&quot;)">Dismiss</button>'
+              + '</div>'
+            : '<div style="color:#64748b;font-size:12px;margin-top:8px;">' + _aEsc(x.status) + (x.reviewedBy ? ' by ' + _aEsc(x.reviewedBy) : '') + (x.reviewNote ? ' — ' + _aEsc(x.reviewNote) : '') + '</div>')
+        + '</div>';
+    }).join('');
+  } catch (e) {
+    box.innerHTML = '<p style="color:#f43f5e">' + _aEsc(e.message) + '</p>';
+  }
+}
+
+async function reviewChatReport(id, status) {
+  const note = status === 'dismissed' ? (prompt('Note (optional)') || '') : (prompt('What action was taken? (optional)') || '');
+  try {
+    const r = await fetch('/api/chat/admin/reports/' + encodeURIComponent(id), {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: status, note: note })
+    });
+    const d = await r.json();
+    if (!r.ok || !d.success) throw new Error(d.message || 'Failed');
+    loadChatReports('open');
+  } catch (e) { alert(e.message); }
+}
+
+async function loadChatRooms() {
+  const box = document.getElementById('chatAdminBox');
+  box.innerHTML = '<p style="color:#64748b">Loading…</p>';
+  try {
+    const r = await fetch('/api/chat/admin/rooms', { credentials:'same-origin' });
+    const d = await r.json();
+    if (!r.ok || !d.success) throw new Error(d.message || 'Failed');
+    if (!d.rooms.length) { box.innerHTML = '<p style="color:#64748b">No conversations yet.</p>'; return; }
+    box.innerHTML = '<table style="width:100%;border-collapse:collapse;">'
+      + '<thead><tr style="color:#64748b;font-size:12px;text-align:left;"><th style="padding:8px;">Conversation</th><th>Type</th><th>Messages</th><th>Last activity</th></tr></thead><tbody>'
+      + d.rooms.map(function (x) {
+          return '<tr style="border-top:1px solid #1e293b;color:#e2e8f0;font-size:13px;">'
+            + '<td style="padding:8px;font-family:monospace;font-size:12px;">' + _aEsc(x.room) + '</td>'
+            + '<td>' + (x.isPrivate ? '<span style="color:#f59e0b;">🔒 Private</span>' : 'Group') + '</td>'
+            + '<td>' + x.messages + '</td>'
+            + '<td>' + (x.last ? new Date(x.last).toLocaleString('en-IN') : '—') + '</td>'
+            + '</tr>';
+        }).join('')
+      + '</tbody></table>';
+  } catch (e) {
+    box.innerHTML = '<p style="color:#f43f5e">' + _aEsc(e.message) + '</p>';
+  }
+}
+
+async function loadAuditLog() {
+  const data = await api('/audit-log');
+  if (!data || !data.success) return;
+  if (!data.data.length) { document.getElementById('auditContent').innerHTML = '<div class="empty"><div class="icon">📋</div><p>No audit logs yet</p></div>'; return; }
+  document.getElementById('auditContent').innerHTML = `
+    <div class="table-wrap"><table>
+      <thead><tr><th>Timestamp</th><th>Action</th><th>Performed By</th><th>Description</th></tr></thead>
+      <tbody>${data.data.map(l => `<tr>
+        <td style="white-space:nowrap">${l.createdAt?new Date(l.createdAt).toLocaleString('en-IN'):'—'}</td>
+        <td><span class="badge badge-blue">${l.actionType||'—'}</span></td>
+        <td><code>${l.performedBy||'—'}</code></td>
+        <td style="max-width:400px;overflow:hidden;text-overflow:ellipsis">${l.description||'—'}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+}
+
+/* ── CERTIFICATE OVERRIDES ──────────────────────────────────────────────────
+   Everything HR issued without the eligibility checks passing. The bypass is
+   deliberate (WhatsApp interns have no portal record); this is the visibility
+   that keeps it honest. */
+let overrideFilter = 'unmet';
+let overrideSearchTimer;
+
+function ovEsc(v) {
+  return String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function debounceOverrideSearch() {
+  clearTimeout(overrideSearchTimer);
+  overrideSearchTimer = setTimeout(() => loadOverrides(overrideFilter), 350);
+}
+
+async function loadOverrides(filter) {
+  if (filter) overrideFilter = filter;
+  ['Unmet', 'All', 'Met', 'Revoked'].forEach(k => {
+    const btn = document.getElementById('ovTab' + k);
+    if (btn) btn.className = (k.toLowerCase() === overrideFilter) ? 'btn' : 'btn btn-secondary';
+  });
+
+  const box = document.getElementById('overridesContent');
+  box.innerHTML = '<p style="color:#64748b;padding:16px">Loading…</p>';
+
+  const search = (document.getElementById('overrideSearch') || {}).value || '';
+  const data = await api('/certificate-overrides?filter=' + encodeURIComponent(overrideFilter) +
+    '&search=' + encodeURIComponent(search));
+  if (!data) return;
+  if (!data.success) {
+    box.innerHTML = '<div class="empty"><div class="icon">⚠️</div><p>' + ovEsc(data.error || 'Could not load overrides') + '</p></div>';
+    return;
+  }
+
+  updateOverrideBadge(data.unmetCount);
+
+  if (!data.overrides.length) {
+    box.innerHTML = '<div class="empty"><div class="icon">🛡️</div><p>' +
+      (overrideFilter === 'unmet'
+        ? 'No certificate has been issued to a student who did not meet the requirements.'
+        : 'Nothing here yet.') + '</p></div>';
+    return;
+  }
+
+  box.innerHTML = '<div class="table-wrap"><table>' +
+    '<thead><tr><th>Issued</th><th>Student</th><th>Certificate</th><th>Issued by</th>' +
+    '<th>Requirements</th><th>At the time</th><th>Action</th></tr></thead><tbody>' +
+    data.overrides.map(o => {
+      const snap = o.snapshot || {};
+      const met = o.metRequirements
+        ? '<span class="badge badge-green">Met</span>'
+        : '<span class="badge badge-red">Not met</span>';
+      const revoked = o.revokedAt
+        ? '<div style="font-size:11px;color:#f87171;margin-top:4px">Revoked ' +
+          new Date(o.revokedAt).toLocaleDateString('en-IN') +
+          (o.revokedBy ? ' by ' + ovEsc(o.revokedBy) : '') + '</div>'
+        : '';
+      const checks = (o.failedChecks || []).length
+        ? '<ul style="margin:6px 0 0 14px;padding:0;color:#94a3b8;font-size:11.5px;line-height:1.5">' +
+          o.failedChecks.map(c => '<li>' + ovEsc(c) + '</li>').join('') + '</ul>'
+        : '';
+      return '<tr>' +
+        '<td style="white-space:nowrap">' + (o.issuedAt ? new Date(o.issuedAt).toLocaleString('en-IN') : '—') + '</td>' +
+        '<td><div style="font-weight:600">' + ovEsc(o.studentName || '—') + '</div>' +
+          '<code style="font-size:11px">' + ovEsc(o.employeeId) + '</code>' +
+          (o.domain ? '<div style="font-size:11px;color:#64748b">' + ovEsc(o.domain) + '</div>' : '') + '</td>' +
+        '<td><span class="badge badge-blue">' + ovEsc(o.certificateType) + '</span>' + revoked + '</td>' +
+        '<td><code>' + ovEsc(o.issuedBy || '—') + '</code>' +
+          '<div style="font-size:11px;color:#64748b">' + ovEsc(o.issuedByRole || '') + '</div></td>' +
+        '<td style="max-width:320px">' + met + checks +
+          (o.reason ? '<div style="margin-top:6px;font-size:11.5px;color:#cbd5e1"><b>Reason:</b> ' + ovEsc(o.reason) + '</div>' : '') + '</td>' +
+        '<td style="white-space:nowrap;font-size:12px;color:#94a3b8">' +
+          'Attendance ' + (snap.attendancePercentage || 0) + '%<br>' +
+          'Performance ' + (snap.performanceScore || 0) + '%<br>' +
+          'Tasks ' + (snap.taskCompletionPct || 0) + '%<br>' +
+          (snap.hadApplication ? 'Applied' : 'Never applied') + '</td>' +
+        '<td>' + (o.revokedAt
+          ? '<span style="color:#64748b;font-size:12px">Revoked</span>'
+          : '<button class="btn btn-secondary" style="font-size:12px;padding:6px 12px" onclick="revokeOverride(\'' +
+            o._id + '\',\'' + ovEsc(o.certificateType) + '\',\'' + ovEsc(o.employeeId) + '\')">Revoke</button>') +
+        '</td>' +
+      '</tr>';
+    }).join('') +
+    '</tbody></table></div>' +
+    '<p style="color:#64748b;font-size:12px;padding:12px 4px">Showing ' + data.overrides.length +
+      ' of ' + data.total + '.</p>';
+}
+
+function revokeOverride(id, type, employeeId) {
+  openModal('Revoke ' + type + ' for ' + employeeId,
+    '<p style="color:#94a3b8;font-size:13px;line-height:1.6;margin-bottom:12px">' +
+      'This deletes the generated PDF and resets the status, so the student\'s My Documents ' +
+      'stops offering the download. It does not un-send the email that was already delivered.</p>' +
+      '<textarea id="revokeReason" rows="3" placeholder="Why is this being revoked?" ' +
+      'style="width:100%;padding:10px;border-radius:8px;border:1px solid #2a3550;background:#0e1628;color:#e2e8f0;font-family:inherit"></textarea>',
+    [
+      { cls: 'secondary', label: 'Cancel', fn: 'closeModal()' },
+      { cls: 'danger', label: 'Revoke', fn: 'confirmRevokeOverride(\'' + id + '\')' }
+    ]);
+}
+
+async function confirmRevokeOverride(id) {
+  const reason = (document.getElementById('revokeReason') || {}).value || '';
+  const r = await api('/certificate-overrides/' + id + '/revoke', {
+    method: 'POST', body: JSON.stringify({ reason })
+  });
+  closeModal();
+  if (r && r.success) { toast(r.message || 'Revoked'); loadOverrides(overrideFilter); }
+  else { toast((r && r.error) || 'Could not revoke', 'error'); }
+}
+
+function updateOverrideBadge(n) {
+  const badge = document.getElementById('overrideBadge');
+  if (!badge) return;
+  if (n > 0) { badge.textContent = n; badge.style.display = ''; }
+  else { badge.style.display = 'none'; }
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+(async () => {
+  const session = await api('/session-check');
+  if (session && session.success) {
+    document.getElementById('adminUsername').textContent = session.user;
+  }
+  loadStats();
+  // Pre-load tenure payments silently so data is ready when admin opens that tab
+  loadTenurePayments();
+  api('/certificate-overrides/count').then(d => { if (d && d.success) updateOverrideBadge(d.unmetCount); });
+})();
+</script>
+<script src="/notify-orb.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Payment Success — TEN Portal</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg-base:#05070e;--bg-card:#0e1428;--accent-gold:#D4AF37;--text-primary:#F0EEE8;--text-secondary:#9a9080;--accent-green:#10b981;}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg-base);color:var(--text-primary);font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;}
+body::before{content:'';position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:600px;height:600px;border-radius:50%;background:radial-gradient(circle,rgba(16,185,129,.08),transparent 70%);pointer-events:none;}
+.card{background:var(--bg-card);border:1px solid rgba(16,185,129,.2);border-radius:24px;padding:48px 40px;text-align:center;max-width:500px;width:100%;position:relative;overflow:hidden;}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#10b981,#D4AF37,#10b981);}
+.icon-wrap{width:88px;height:88px;background:rgba(16,185,129,.1);border:2px solid rgba(16,185,129,.3);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 24px;animation:pop .5s ease-out;}
+@keyframes pop{0%{transform:scale(0)}80%{transform:scale(1.1)}100%{transform:scale(1)}}
+.check-icon{font-size:44px;}
+.title{font-size:28px;font-weight:800;margin-bottom:8px;color:var(--accent-green);}
+.subtitle{color:var(--text-secondary);font-size:15px;margin-bottom:28px;line-height:1.6;}
+.order-details{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:16px;margin-bottom:24px;text-align:left;}
+.detail-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.04);}
+.detail-row:last-child{border-bottom:none;}
+.detail-label{font-size:13px;color:var(--text-secondary);}
+.detail-value{font-size:13px;font-weight:600;}
+.info-box{background:rgba(16,185,129,.05);border:1px solid rgba(16,185,129,.1);border-radius:10px;padding:14px;margin-bottom:24px;font-size:13px;color:var(--text-secondary);line-height:1.6;}
+.info-box strong{color:var(--accent-green);}
+.action-btns{display:flex;gap:12px;flex-direction:column;}
+.btn-primary{padding:14px;background:linear-gradient(135deg,var(--accent-gold),#b8962e);color:#05070e;border:none;border-radius:12px;font-weight:700;font-size:15px;cursor:pointer;transition:.2s;text-decoration:none;display:block;}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(212,175,55,.3);}
+.btn-outline{padding:14px;background:transparent;border:1px solid rgba(255,255,255,.1);color:var(--text-primary);border-radius:12px;font-weight:600;font-size:14px;cursor:pointer;transition:.2s;text-decoration:none;display:block;}
+.btn-outline:hover{border-color:rgba(255,255,255,.2);}
+.processing{display:none;}
+.processing.visible{display:block;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{width:48px;height:48px;border:3px solid rgba(16,185,129,.2);border-top-color:#10b981;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px;}
+</style>
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+</head>
+<body>
+<div id="successCard" class="card">
+  <div class="icon-wrap"><div class="check-icon">✅</div></div>
+  <div class="title">Payment Successful!</div>
+  <div class="subtitle">Your payment has been verified. Your certificate will be processed and ready to download shortly.</div>
+
+  <div class="order-details" id="orderDetails">
+    <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value" style="color:#10b981">✓ Confirmed</span></div>
+    <div class="detail-row"><span class="detail-label">Certificate Type</span><span class="detail-value" id="certTypeDisplay">-</span></div>
+    <div class="detail-row"><span class="detail-label">Order ID</span><span class="detail-value" id="orderIdDisplay" style="font-size:11px;font-family:monospace">-</span></div>
+    <div class="detail-row"><span class="detail-label">Date</span><span class="detail-value" id="dateDisplay">-</span></div>
+  </div>
+
+  <div class="info-box">
+    <strong>🎓 What happens next?</strong><br>
+    Your certificate is being generated. You'll receive a download link by email and it will appear in your <strong>My Certificates</strong> page within a few minutes.
+  </div>
+
+  <div class="action-btns">
+    <a href="my-certificates.html" class="btn-primary">View My Certificates →</a>
+    <a href="student-dashboard.html" class="btn-outline">Back to Dashboard</a>
+  </div>
+</div>
+
+<div id="processingCard" class="card processing">
+  <div class="spinner"></div>
+  <div class="title" style="font-size:22px">Processing Payment...</div>
+  <div class="subtitle">Please wait while we verify your payment. This may take a moment.</div>
+</div>
+
+<script src="/session-guard.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const certType = params.get('certType') || '';
+const orderId  = params.get('orderId') || '';
+const empId    = params.get('empId') || '';
+
+const CERT_NAMES = {
+  expert: 'Expert Certificate',
+  nano_degree: 'Nano Degree Certificate',
+  fellowship: 'Fellowship Certificate'
+};
+
+document.getElementById('certTypeDisplay').textContent = CERT_NAMES[certType] || certType || 'Certificate';
+document.getElementById('orderIdDisplay').textContent  = orderId || 'N/A';
+document.getElementById('dateDisplay').textContent     = new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'long', year:'numeric' });
+
+// Auto-trigger PDF generation after redirect
+async function triggerPdfGeneration() {
+  if (!empId || !certType) return;
+  try {
+    const res = await fetch(`/api/v2/certificates/generate-pdf/${certType}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-employee-id': empId }
+    });
+    const data = await res.json();
+    if (data.success && data.pdfUrl) {
+      console.log('[Payment Success] PDF generated:', data.pdfUrl);
+    }
+  } catch(e) {
+    console.error('[Payment Success] PDF trigger error:', e.message);
+  }
+}
+
+triggerPdfGeneration();
+</script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+/* ════════════════════════════════════════════════
+   TEN — The Entrepreneurship Network
+   Legacy style.css (now inherits from ten-theme.css)
+   All page-specific styles are in ten-theme.css
+════════════════════════════════════════════════ */
+
+/* Import shared TEN design system */
+@import url('ten-theme.css');
+
+/* Legacy utility overrides kept for backward compatibility */
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'DM Sans', 'Syne', Arial, sans-serif;
+  background: #05070e;
+  color: #F0EEE8;
+}
+
+.container {
+  width: 400px;
+  margin: 50px auto;
+  background: #0e1428;
+  padding: 30px;
+  border-radius: var(--ten-r-lg, 22px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 40px rgba(212,175,55,0.06);
+  border: 1px solid rgba(212,175,55,0.1);
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 25px;
+  color: #D4AF37;
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+}
+
+input {
+  margin-bottom: 15px;
+  padding: 12px;
+  font-size: 16px;
+  border: 1px solid rgba(212,175,55,0.15);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.04);
+  color: #F0EEE8;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+input:focus {
+  border-color: #D4AF37;
+  box-shadow: 0 0 0 3px rgba(212,175,55,0.1);
+}
+
+button {
+  padding: 12px;
+  background: linear-gradient(135deg, #D4AF37, #B8960C);
+  color: #0a0700;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 800;
+  font-family: 'Syne', sans-serif;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(212,175,55,0.35);
+}
+
+#result {
+  margin-top: 20px;
+  text-align: center;
+  color: #10B981;
+}

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Founder Directory — TEN Platform</title>
+  <link rel="stylesheet" href="/css/design-system.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <script src="/js/theme-toggle.js" defer></script>
+  <script src="/js/components.js" defer></script>
+  <style>
+    .profile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-4); }
+    .profile-card { background: var(--bg-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); border: 1px solid var(--border-default); padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-2); transition: box-shadow 0.2s, transform 0.2s; cursor: pointer; }
+    .profile-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+    .startup-avatar { width: 52px; height: 52px; border-radius: 14px; background: linear-gradient(135deg, #6366F1, #8B5CF6); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800; flex-shrink: 0; }
+    .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+    .badge-industry { background: #ede9fe; color: #5b21b6; }
+    .badge-stage    { background: #dbeafe; color: #1e40af; }
+    .badge-looking  { background: #d1fae5; color: #065f46; }
+    .filters { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+    .filters select, .filters input { padding: 8px 12px; border: 1.5px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-surface); color: var(--text-primary); font: inherit; outline: none; min-width: 140px; }
+    .filters select:focus, .filters input:focus { border-color: var(--color-primary); }
+    .skeleton { background: linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; border-radius:8px; }
+    @keyframes shimmer { 0%{background-position:-200% 0}100%{background-position:200% 0} }
+  </style>
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+</head>
+<body class="dashboard-layout">
+  <aside class="sidebar">
+    <a class="sidebar__logo" href="/dashboard">⚡ TEN</a>
+    <nav class="sidebar__nav">
+      <a href="/dashboard"          class="nav-item">🏠 Dashboard</a>
+      <a href="/founder/directory"  class="nav-item nav-item--active">🚀 Founders</a>
+      <a href="/mentor/directory"   class="nav-item">🎓 Mentors</a>
+      <a href="/investor/directory" class="nav-item">💼 Investors</a>
+      <a href="/talent-network"     class="nav-item">🌐 Talent Network</a>
+      <a href="/programs"           class="nav-item">📋 Programs</a>
+    </nav>
+    <div class="sidebar__footer">
+      <button id="theme-toggle-btn" class="btn btn--ghost btn--sm" style="width:100%">🌙 Dark Mode</button>
+    </div>
+  </aside>
+
+  <header class="topbar">
+    <button class="btn btn--ghost btn--sm" data-sidebar-toggle>☰</button>
+    <input class="topbar__search" type="search" id="searchInput" placeholder="Search startups…" />
+    <div class="topbar__actions">
+      <button id="theme-toggle-btn" class="btn btn--ghost btn--sm">🌙</button>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <div class="page-header">
+      <h1 class="page-header__title">🚀 Founder Directory</h1>
+      <p class="page-header__subtitle">Connect with verified startup founders building the future</p>
+    </div>
+
+    <div class="filters">
+      <input type="search" id="searchInput2" placeholder="🔍 Search startups…" style="flex:1;min-width:200px;">
+      <select id="industryFilter"><option value="">All Industries</option><option value="EdTech">EdTech</option><option value="FinTech">FinTech</option><option value="HealthTech">HealthTech</option><option value="SaaS">SaaS</option><option value="E-Commerce">E-Commerce</option><option value="Other">Other</option></select>
+      <select id="stageFilter"><option value="">All Stages</option><option value="idea">Idea</option><option value="validation">Validation</option><option value="mvp">MVP</option><option value="early_revenue">Early Revenue</option><option value="growth">Growth</option></select>
+      <button class="btn btn--primary btn--sm" onclick="loadFounders()">Search</button>
+    </div>
+
+    <div id="founderGrid" class="profile-grid">
+      ${Array(6).fill('<div class="profile-card"><div class="skeleton" style="height:52px;width:52px;border-radius:14px;"></div><div class="skeleton" style="height:16px;width:70%;margin-top:8px;"></div><div class="skeleton" style="height:13px;width:50%;"></div></div>').join('')}
+    </div>
+
+    <div style="text-align:center;margin-top:32px;">
+      <button class="btn btn--outline btn--sm" id="loadMoreBtn" onclick="loadMore()" style="display:none;">Load More</button>
+    </div>
+  </main>
+
+  <script>
+  let page = 1;
+  let loading = false;
+
+  async function loadFounders(reset = true) {
+    if (reset) { page = 1; }
+    if (loading) return;
+    loading = true;
+
+    const search   = document.getElementById('searchInput2').value.trim();
+    const industry = document.getElementById('industryFilter').value;
+    const stage    = document.getElementById('stageFilter').value;
+    const token    = localStorage.getItem('ten_auth_token') || localStorage.getItem('authToken') || '';
+
+    const params = new URLSearchParams({ page, limit: 12 });
+    if (search)   params.set('search', search);
+    if (industry) params.set('industry', industry);
+    if (stage)    params.set('stage', stage);
+
+    try {
+      const res = await fetch('/api/founder/directory?' + params, {
+        headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+      });
+      const data = await res.json();
+      const founders = data.data || [];
+      const grid = document.getElementById('founderGrid');
+
+      if (reset) grid.innerHTML = '';
+
+      if (founders.length === 0 && reset) {
+        grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:60px 20px;">
+          <div style="font-size:64px;margin-bottom:16px;">🚀</div>
+          <h2 style="font-size:20px;font-weight:700;margin-bottom:8px;">No founders found</h2>
+          <p style="color:var(--text-muted);">Try adjusting your filters</p>
+        </div>`;
+      } else {
+        grid.innerHTML += founders.map(f => `
+          <div class="profile-card">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+              <div class="startup-avatar">${(f.startupName||'?').charAt(0).toUpperCase()}</div>
+              <div>
+                <div style="font-size:16px;font-weight:700;">${f.startupName || 'Startup'}</div>
+                <div style="font-size:13px;color:var(--text-muted);">${(f.userId && f.userId.fullName) || 'Founder'}</div>
+              </div>
+            </div>
+            ${f.tagline ? `<div style="font-size:13px;color:var(--text-secondary);line-height:1.5;">${f.tagline}</div>` : ''}
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
+              ${f.industry ? `<span class="badge badge-industry">${f.industry}</span>` : ''}
+              ${f.stage    ? `<span class="badge badge-stage">${f.stage.replace('_',' ')}</span>` : ''}
+              ${f.location ? `<span class="badge" style="background:#f3f4f6;color:#374151;">📍 ${f.location}</span>` : ''}
+            </div>
+            ${f.lookingFor && f.lookingFor.length ? `<div style="font-size:12px;color:var(--text-muted);margin-top:6px;">Looking for: ${f.lookingFor.join(', ')}</div>` : ''}
+          </div>`).join('');
+      }
+
+      const hasMore = data.page < data.totalPages;
+      document.getElementById('loadMoreBtn').style.display = hasMore ? '' : 'none';
+    } catch(e) {
+      document.getElementById('founderGrid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);">Could not load founders. Please try again.</div>';
+    }
+    loading = false;
+  }
+
+  function loadMore() { page++; loadFounders(false); }
+
+  document.getElementById('searchInput2').addEventListener('keydown', e => { if (e.key === 'Enter') loadFounders(); });
+
+  loadFounders();
+  </script>
+</body>
+</html>

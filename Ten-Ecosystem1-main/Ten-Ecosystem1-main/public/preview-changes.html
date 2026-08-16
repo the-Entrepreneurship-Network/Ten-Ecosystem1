@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TEN Portal — Changes Preview</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #05070e; color: #f0eee8; font-family: 'Segoe UI', sans-serif; padding: 32px 16px; }
+  h1 { text-align: center; color: #D4AF37; font-size: 22px; margin-bottom: 6px; letter-spacing: 1px; }
+  .subtitle { text-align: center; color: #6a8a9a; font-size: 13px; margin-bottom: 40px; }
+  .section { max-width: 900px; margin: 0 auto 48px; }
+  .section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; color: #D4AF37; border-bottom: 1px solid rgba(212,175,55,0.2); padding-bottom: 10px; margin-bottom: 24px; display: flex; align-items: center; gap: 8px; }
+  .section-title span.badge { background: rgba(212,175,55,0.15); border: 1px solid rgba(212,175,55,0.3); border-radius: 20px; padding: 2px 10px; font-size: 10px; color: #D4AF37; }
+  .compare { display: flex; gap: 20px; flex-wrap: wrap; }
+  .box { flex: 1; min-width: 280px; border-radius: 14px; padding: 20px; }
+  .box.before { background: rgba(239,68,68,0.05); border: 1px solid rgba(239,68,68,0.2); }
+  .box.after  { background: rgba(16,185,129,0.05); border: 1px solid rgba(16,185,129,0.2); }
+  .box-label  { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 16px; }
+  .box.before .box-label { color: #f87171; }
+  .box.after  .box-label { color: #10b981; }
+
+  /* ─── ATTENDANCE RING ─── */
+  .ring-wrap { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: 20px; }
+  .ring-svg { width: 80px; height: 80px; }
+  .ring-label { font-size: 16px; font-weight: 800; }
+  .ring-label.old { color: #9aa4bf; }
+  .ring-label.new { color: #10b981; }
+
+  /* ─── STAT BOX ─── */
+  .stat-box { background: rgba(13,22,41,0.8); border: 1px solid rgba(99,140,210,0.2); border-radius: 10px; padding: 14px 16px; text-align: center; margin-bottom: 12px; }
+  .stat-box h2 { font-size: 11px; color: #8aa4c8; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .stat-box h1 { font-size: 28px; font-weight: 800; }
+  .stat-box h1.pct { color: #9aa4bf; }
+  .stat-box h1.days { color: #3b82f6; }
+
+  /* ─── ATT CARDS ─── */
+  .att-cards { display: flex; gap: 10px; flex-wrap: wrap; }
+  .att-card { flex: 1; min-width: 100px; background: rgba(13,22,41,0.8); border: 1px solid rgba(99,140,210,0.2); border-radius: 10px; padding: 12px; text-align: center; }
+  .att-card .lbl { font-size: 9px; color: #8aa4c8; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+  .att-card .val { font-size: 22px; font-weight: 800; }
+  .att-card .val.pct { color: #9aa4bf; }
+  .att-card .val.blue { color: #3b82f6; }
+  .att-card .val.purple { color: #8b5cf6; }
+  .att-card .val.green { color: #10b981; }
+
+  /* ─── PAYMENT OVERLAY ─── */
+  .overlay-card { background: linear-gradient(165deg,#0a0e1a,#121b2d); border: 2px solid rgba(212,175,55,0.3); border-radius: 20px; padding: 28px; text-align: center; max-width: 380px; margin: 0 auto; }
+  .overlay-card h2 { font-size: 18px; font-weight: 800; color: #D4AF37; margin-bottom: 8px; }
+  .overlay-card p { font-size: 13px; color: #c8baa0; line-height: 1.5; margin-bottom: 16px; }
+  .btn-gold { background: linear-gradient(135deg,#D4AF37,#bfa130); border: none; border-radius: 10px; color: #05070e; font-size: 13px; font-weight: 800; padding: 12px; width: 100%; cursor: pointer; margin-bottom: 10px; }
+  .btn-green { background: linear-gradient(135deg,rgba(16,185,129,0.2),rgba(16,185,129,0.05)); border: 1px solid rgba(16,185,129,0.35); border-radius: 10px; color: #10b981; font-size: 13px; font-weight: 700; padding: 12px; width: 100%; cursor: pointer; }
+  .pending-icon { font-size: 36px; margin-bottom: 10px; }
+  .pending-info { background: rgba(212,175,55,0.04); border: 1px dashed rgba(212,175,55,0.3); border-radius: 12px; padding: 14px; text-align: left; font-size: 12px; line-height: 1.5; color: #9aa4bf; margin-bottom: 16px; }
+
+  /* ─── EMAIL ─── */
+  .email-old { color: #9aa4bf; font-size: 13px; }
+  .email-new a { color: #D4AF37; text-decoration: none; font-weight: 600; font-size: 13px; }
+  .contact-line { font-size: 13px; color: #9aa4bf; }
+
+  /* ─── WIZARD ─── */
+  .wizard-result { background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); border-radius: 14px; padding: 18px; }
+  .wizard-row { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; margin-bottom: 14px; }
+  .wizard-col { text-align: center; flex: 1; min-width: 110px; }
+  .wizard-col .wlbl { font-size: 10px; color: #a2b1c6; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+  .wizard-col .wval { font-size: 32px; font-weight: 800; }
+  .wizard-col .wval.green { color: #10b981; }
+  .wizard-col .wval.amber { color: #fbbf24; }
+  .wizard-col .wsub { font-size: 10px; color: #6a8a9a; margin-top: 2px; }
+  .wizard-detail { font-size: 12px; color: #8aa4c8; text-align: center; line-height: 1.6; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); }
+
+  .tick { color: #10b981; font-size: 18px; margin-right: 6px; }
+  .cross { color: #f87171; font-size: 18px; margin-right: 6px; }
+  .arrow { font-size: 20px; color: #D4AF37; display: flex; align-items: center; padding-top: 24px; }
+</style>
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+</head>
+<body>
+
+<h1>TEN Portal — Visual Changes Preview</h1>
+<p class="subtitle">Side-by-side comparison of all UI changes. Green = new behaviour. Red = old behaviour.</p>
+
+<!-- ─── FIX 3: EMAIL ─── -->
+<div class="section">
+  <div class="section-title">Fix 3 — Registration Success: Support Email <span class="badge">registration-success.html</span></div>
+  <div class="compare">
+    <div class="box before">
+      <div class="box-label">✕ Before</div>
+      <p class="contact-line">Need assistance? Please contact <span class="email-old">support@tenecosystem.com</span></p>
+    </div>
+    <div class="box after">
+      <div class="box-label">✓ After</div>
+      <p class="contact-line">Need assistance? Please contact <span class="email-new"><a href="mailto:hr@entrepreneurshipnetwork.net">hr@entrepreneurshipnetwork.net</a></span></p>
+    </div>
+  </div>
+</div>
+
+<!-- ─── FIX 4: ATTENDANCE RING ─── -->
+<div class="section">
+  <div class="section-title">Fix 4A–B — Attendance Ring: % → Days <span class="badge">student-dashboard.html</span></div>
+  <div class="compare">
+    <div class="box before">
+      <div class="box-label">✕ Before</div>
+      <div class="ring-wrap">
+        <svg class="ring-svg" viewBox="0 0 60 60">
+          <circle cx="30" cy="30" r="24" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="6"/>
+          <circle cx="30" cy="30" r="24" fill="none" stroke="#10b981" stroke-width="6"
+            stroke-dasharray="150.8" stroke-dashoffset="37.7" stroke-linecap="round" transform="rotate(-90 30 30)"/>
+        </svg>
+        <span class="ring-label old">75%</span>
+      </div>
+      <div class="stat-box"><h2>Attendance</h2><h1 class="pct">75%</h1></div>
+    </div>
+    <div class="box after">
+      <div class="box-label">✓ After</div>
+      <div class="ring-wrap">
+        <svg class="ring-svg" viewBox="0 0 60 60">
+          <circle cx="30" cy="30" r="24" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="6"/>
+          <circle cx="30" cy="30" r="24" fill="none" stroke="#10b981" stroke-width="6"
+            stroke-dasharray="150.8" stroke-dashoffset="37.7" stroke-linecap="round" transform="rotate(-90 30 30)"/>
+        </svg>
+        <span class="ring-label new">15 days</span>
+      </div>
+      <div class="stat-box"><h2>Days Present</h2><h1 class="days">15</h1></div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── FIX 4: ATTENDANCE CARDS ─── -->
+<div class="section">
+  <div class="section-title">Fix 4E–F — Attendance Cards: % → Days + Relabelled <span class="badge">student-dashboard.html</span></div>
+  <div class="compare">
+    <div class="box before">
+      <div class="box-label">✕ Before</div>
+      <div class="att-cards">
+        <div class="att-card"><div class="lbl">My Attendance</div><div class="val pct">100%</div></div>
+        <div class="att-card"><div class="lbl">Class (Coordinator)</div><div class="val pct">80%</div></div>
+        <div class="att-card"><div class="lbl">Combined</div><div class="val pct">90%</div></div>
+      </div>
+    </div>
+    <div class="box after">
+      <div class="box-label">✓ After</div>
+      <div class="att-cards">
+        <div class="att-card"><div class="lbl">My Days Present</div><div class="val blue">20 days</div></div>
+        <div class="att-card"><div class="lbl">Coordinator Marked</div><div class="val purple">16 days</div></div>
+        <div class="att-card"><div class="lbl">Total Days Present</div><div class="val green">18 days</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── FIX 5: WIZARD ─── -->
+<div class="section">
+  <div class="section-title">Fix 5 — WhatsApp Joiner Wizard Result: % → Days <span class="badge">student-dashboard.html</span></div>
+  <div class="compare">
+    <div class="box before">
+      <div class="box-label">✕ Before</div>
+      <div class="wizard-result">
+        <p style="font-size:12px;color:#a2b1c6;margin-bottom:4px;">Calculated Attendance Percentage:</p>
+        <div style="font-size:32px;font-weight:800;color:#10b981;margin-bottom:14px;">67%</div>
+        <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:12px;">
+          <p style="font-size:12px;color:#a2b1c6;margin-bottom:4px;">Days you need to attend more:</p>
+          <div style="font-size:32px;font-weight:800;color:#fbbf24;">6 days</div>
+        </div>
+      </div>
+    </div>
+    <div class="box after">
+      <div class="box-label">✓ After</div>
+      <div class="wizard-result">
+        <div class="wizard-row">
+          <div class="wizard-col">
+            <div class="wlbl">Days Present</div>
+            <div class="wval green">20</div>
+            <div class="wsub">days attended</div>
+          </div>
+          <div class="wizard-col">
+            <div class="wlbl">Still Need</div>
+            <div class="wval amber">3</div>
+            <div class="wsub">more days for 75%</div>
+          </div>
+        </div>
+        <div class="wizard-detail">Your tenure is 30 days. You must attend at least 23 days (75%). You have attended 20 days so far. Attend 3 more days to meet the requirement.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── FIX 1: PAYMENT SUBMIT ─── -->
+<div class="section">
+  <div class="section-title">Fix 1 — Payment Submit: Double-Submit Lock + Pending State <span class="badge">student-dashboard.html</span></div>
+  <div class="compare">
+    <div class="box before">
+      <div class="box-label">✕ Before — After submitting UTR, QR reloads</div>
+      <div class="overlay-card">
+        <div style="font-size:32px;margin-bottom:10px;">🛡️</div>
+        <h2>Course Fee Required</h2>
+        <p>Student submits UTR → server OK → <strong style="color:#f87171;">QR form reloads</strong><br>Student can submit again (double-submit bug)</p>
+        <button class="btn-gold">Submit UTR for HR Approval</button>
+      </div>
+    </div>
+    <div class="box after">
+      <div class="box-label">✓ After — Pending state shown, submit locked</div>
+      <div class="overlay-card">
+        <div class="pending-icon">⌛</div>
+        <h2>Payment Verification Pending</h2>
+        <p>Your transaction ID (<strong style="color:#D4AF37;font-family:monospace;">Submitted — Awaiting Admin Approval</strong>) has been submitted to HR.</p>
+        <div class="pending-info">⌛ <strong style="color:#D4AF37;">Verification is under progress:</strong><br>HR is validating your UTR manually. Usually takes 2–24 hours.</div>
+        <button class="btn-green">🔄 Check Approval Status</button>
+        <p style="font-size:11px;color:#6a8a9a;margin-top:10px;">Clicking Check Status shows "Still Verifying" toast — stays on this screen until admin acts</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── FIX 2 + BACKEND ─── -->
+<div class="section">
+  <div class="section-title">Fix 2 + Backend — Admin Approval Unlocks Student Reliably</div>
+  <div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.2);border-radius:14px;padding:20px;">
+    <p style="font-size:13px;color:#c8baa0;line-height:1.7;margin-bottom:12px;">
+      These are server-side fixes — no visible UI change, but the behaviour is now correct:
+    </p>
+    <div style="display:grid;gap:10px;">
+      <div style="background:rgba(13,22,41,0.7);border-radius:10px;padding:14px;font-size:13px;line-height:1.6;">
+        <span style="color:#10b981;font-weight:700;">✓ Admin approves from Payments tab</span><br>
+        <span style="color:#8aa4c8;">→ <code style="background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:4px;">shortCoursePaid = true</code> is now set via <code style="background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:4px;">Student.updateOne</code> (reliable in both MongoDB + local mode)</span>
+      </div>
+      <div style="background:rgba(13,22,41,0.7);border-radius:10px;padding:14px;font-size:13px;line-height:1.6;">
+        <span style="color:#10b981;font-weight:700;">✓ Status endpoint is self-healing</span><br>
+        <span style="color:#8aa4c8;">→ If payment record shows <code style="background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:4px;">status: 'success'</code> but <code style="background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:4px;">shortCoursePaid</code> was missed, it auto-fixes on next status check</span>
+      </div>
+      <div style="background:rgba(13,22,41,0.7);border-radius:10px;padding:14px;font-size:13px;line-height:1.6;">
+        <span style="color:#10b981;font-weight:700;">✓ Local DB $regex queries fixed</span><br>
+        <span style="color:#8aa4c8;">→ <code style="background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:4px;">matchQuery</code> now handles <code style="background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:4px;">$regex, $in, $exists, $gte/$lte</code> — <code style="background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:4px;">pendingVerification</code> now returns correctly</span>
+      </div>
+      <div style="background:rgba(13,22,41,0.7);border-radius:10px;padding:14px;font-size:13px;line-height:1.6;">
+        <span style="color:#10b981;font-weight:700;">✓ Pending state survives page refresh</span><br>
+        <span style="color:#8aa4c8;">→ <code style="background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:4px;">localStorage.ten_tenure_utr_pending</code> persists the submitted state so the QR form doesn't flash after a browser refresh</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

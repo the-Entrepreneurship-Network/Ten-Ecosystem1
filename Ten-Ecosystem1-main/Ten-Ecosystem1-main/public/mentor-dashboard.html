@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TEN Ecosystem — Mentor Intelligence Workspace</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet font-display-swap">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #0A0F1F;
+      background-image: 
+        radial-gradient(circle at 10% 10%, rgba(96, 165, 250, 0.03) 0%, transparent 40%),
+        radial-gradient(circle at 90% 90%, rgba(255, 215, 0, 0.02) 0%, transparent 50%);
+    }
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .glass-card {
+      background: rgba(14, 20, 40, 0.45);
+      backdrop-filter: blur(16px) saturate(180%);
+      -webkit-backdrop-filter: blur(16px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.35), inset 0 1px 1px 0 rgba(255, 255, 255, 0.05);
+    }
+    .glass-sidebar {
+      background: rgba(9, 13, 26, 0.65);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-right: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .text-gold {
+      color: #FFD700;
+    }
+    .border-gold {
+      border-color: rgba(255, 215, 0, 0.2);
+    }
+    .bg-indigo-glow {
+      box-shadow: 0 0 30px rgba(96, 165, 250, 0.05), inset 0 1px 1px rgba(255,255,255,0.05);
+    }
+    .active-nav {
+      background: rgba(96, 165, 250, 0.08);
+      border-left: 3px solid #ffdb4d;
+      color: #fff;
+      box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.03);
+    }
+  </style>
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <script src="/push-client.js" defer></script>
+  <script src="/tailwind-guard.js" defer></script>
+</head>
+<body class="min-h-screen text-slate-100 flex flex-col xl:flex-row">
+
+  <!-- Mobile Sidebar Toggle -->
+  <div class="xl:hidden bg-[#0A0F1F] p-4 border-b border-white/5 flex items-center justify-between sticky top-0 z-50">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-[#ffd700] to-yellow-600 flex items-center justify-center text-slate-950 font-black text-sm">
+        T
+      </div>
+      <span class="font-extrabold uppercase tracking-widest text-xs text-yellow-400">TEN Ecosystem</span>
+    </div>
+    <button id="mobileMenuBtn" class="p-2 text-slate-400 hover:text-white transition">
+      <i class="fa-solid fa-bars text-xl"></i>
+    </button>
+  </div>
+
+  <!-- Unified Sidebar -->
+  <aside id="sidebarEcos" class="w-64 glass-sidebar fixed inset-y-0 left-0 z-40 transform -translate-x-full xl:translate-x-0 xl:static transition-transform duration-300 ease-in-out flex flex-col justify-between p-6">
+    <div class="space-y-8">
+      <!-- Logo -->
+      <div class="flex items-center gap-3.5 pb-2 border-b border-white/5">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-[#FFD700] to-yellow-500 text-slate-950 flex items-center justify-center text-xl font-black shadow-lg">
+          <i class="fa-solid fa-graduation-cap"></i>
+        </div>
+        <div>
+          <h2 class="text-xs uppercase tracking-widest text-slate-400 font-extrabold">TEN HUB V2</h2>
+          <span class="text-[10px] text-yellow-400 font-extrabold tracking-widest bg-yellow-400/10 px-2 py-0.5 rounded">PORTFOLIO</span>
+        </div>
+      </div>
+
+      <!-- User Stats Overview -->
+      <div class="p-4 rounded-xl bg-slate-900/50 border border-white/[0.03] space-y-3">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-full bg-slate-800 text-sm flex items-center justify-center text-slate-300 font-bold" id="sidebarInitials">
+            MT
+          </div>
+          <div class="overflow-hidden">
+            <h4 class="text-xs font-black text-slate-200 truncate" id="sidebarName">Expert Mentor</h4>
+            <span class="text-[9px] text-[#FFD700] uppercase font-black tracking-widest">TEN Faculty</span>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2 pt-2 border-t border-white/5 text-center">
+          <div>
+            <span class="text-xs font-bold text-slate-400 block">Rating</span>
+            <span class="text-xs font-black text-yellow-400">⭐ 4.9</span>
+          </div>
+          <div>
+            <span class="text-xs font-bold text-slate-400 block">Logged</span>
+            <span class="text-xs font-black text-blue-400">32 hrs</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Nav Links -->
+      <nav class="space-y-1.5">
+        <p class="text-[9px] uppercase tracking-widest text-slate-500 font-bold px-3 mb-2">Workspace Navigation</p>
+        <button onclick="switchTab('startups')" class="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-white/5 transition text-left active-nav" id="tab-startups">
+          <i class="fa-solid fa-rocket text-yellow-400"></i> Assigned Startups
+        </button>
+        <button onclick="switchTab('students')" class="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-white/5 transition text-left" id="tab-students">
+          <i class="fa-solid fa-user-graduate text-blue-400"></i> Assigned Students
+        </button>
+        <button onclick="switchTab('meetings')" class="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-white/5 transition text-left" id="tab-meetings">
+          <i class="fa-solid fa-calendar-days text-indigo-400"></i> Mentoring Calendar
+        </button>
+        
+        <p class="text-[9px] uppercase tracking-widest text-slate-500 font-bold px-3 pt-6 mb-2">Systems Status</p>
+        <div class="px-3 space-y-3.5 py-1">
+          <!-- Availability Controls -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between text-[10px] text-slate-400 font-bold">
+              <span>ACTIVE STATUS</span>
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            </div>
+            <select id="availDrop" class="w-full bg-slate-950 border border-slate-800 text-[11px] font-bold p-2 rounded-lg text-slate-300 focus:outline-none focus:border-yellow-400" onchange="updateAvailabilityDirect()">
+              <option value="actively_mentoring">Actively Mentoring</option>
+              <option value="limited">Limited Slots Only</option>
+              <option value="not_available">Not Available (Break)</option>
+            </select>
+          </div>
+        </div>
+      </nav>
+    </div>
+
+    <!-- Exit -->
+    <div class="pt-4 border-t border-white/5">
+      <button onclick="logout()" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition">
+        <i class="fa-solid fa-sign-out text-sm"></i> Sign Out Portal
+      </button>
+    </div>
+  </aside>
+
+  <!-- Main Portal Section -->
+  <main class="flex-1 min-w-0 flex flex-col xl:pl-4">
+    
+    <!-- Header -->
+    <header class="p-6 border-b border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4 sticky top-0 bg-[#0A0F1F]/85 backdrop-blur-xl z-30">
+      <div class="space-y-1">
+        <h1 class="text-xl font-bold text-slate-150 flex items-center gap-2">
+          <span>Advisor Center</span> <span class="text-xs bg-[#FFD700]/10 text-[#FFD700] px-2.5 py-0.5 rounded-full font-black border border-[#FFD700]/20">Mentor</span>
+        </h1>
+        <p class="text-xs text-slate-400">Vetted Expert Growth & Incubation Pipeline</p>
+      </div>
+
+      <!-- Quick Metrics Bar -->
+      <div class="flex flex-wrap items-center gap-3">
+        <!-- Search bar -->
+        <div class="relative w-48 md:w-64">
+          <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500 text-xs">
+            <i class="fa-solid fa-magnifying-glass"></i>
+          </span>
+          <input type="text" placeholder="Search startup / cohort..." class="w-full bg-slate-900 border border-slate-800/80 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-yellow-500 transition">
+        </div>
+
+        <!-- Notification -->
+        <div class="relative p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-100 transition cursor-pointer">
+          <i class="fa-solid fa-bell text-sm"></i>
+          <span class="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-yellow-400 animate-pulse border-2 border-slate-900"></span>
+        </div>
+
+        <!-- Desktop Username indicator -->
+        <div class="hidden md:flex items-center gap-3 pl-2 border-l border-white/5">
+          <div class="text-right">
+            <div id="mentorName" class="text-xs font-black text-slate-200">Expert Mentor</div>
+            <span class="text-[9px] text-[#FFD700] font-black uppercase tracking-wider">Sync Logged</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Workspace Body Content -->
+    <div class="p-6 md:p-8 space-y-8 max-w-7xl w-full mx-auto">
+      
+      <!-- Premium Hero Banner card -->
+      <div class="glass-card rounded-3xl p-6 md:p-8 relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6 bg-indigo-glow border border-white/[0.05]">
+        <!-- Light path effects -->
+        <div class="absolute top-0 right-0 w-80 h-32 bg-blue-500/5 blur-[80px] pointer-events-none rounded-full"></div>
+        <div class="absolute -bottom-8 -left-8 w-80 h-32 bg-yellow-500/5 blur-[80px] pointer-events-none rounded-full"></div>
+        
+        <div class="flex flex-col md:flex-row items-center gap-6">
+          <div class="w-20 h-20 rounded-2xl bg-gradient-to-tr from-yellow-400 via-amber-500 to-yellow-600 flex items-center justify-center text-slate-950 font-bold text-3xl shadow-xl relative">
+            <i class="fa-solid fa-graduation-cap"></i>
+            <span class="absolute -top-1 -right-1 w-4.5 h-4.5 bg-green-500 rounded-full border-2 border-[#0A0F1F] flex items-center justify-center">
+              <span class="w-1.5 h-1.5 bg-white rounded-full animate-ping"></span>
+            </span>
+          </div>
+          <div class="text-center md:text-left space-y-1">
+            <div class="flex flex-wrap items-center justify-center md:justify-start gap-2">
+              <div class="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-yellow-400/10 border border-yellow-400/20 text-[#FFD700] text-[10px] font-black uppercase tracking-wider">
+                FACULTY OS ACTIVE
+              </div>
+              <div id="mentorExpertiseBadges" class="flex flex-wrap gap-1.5">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-wider">Expert Mentor</span>
+              </div>
+            </div>
+            <h2 id="bannerName" class="text-2xl font-black tracking-tight text-white">Advisory Portal</h2>
+            <p id="bannerTitle" class="text-slate-400 text-xs">Vanguard Industrial Consultant | <span id="bannerEmail" class="text-yellow-400 font-bold italic">Checking details...</span></p>
+          </div>
+        </div>
+
+        <!-- Live Indicators -->
+        <div class="flex items-center gap-8 text-center bg-slate-950/40 p-4 rounded-xl border border-white/[0.02]">
+          <div>
+            <span class="text-slate-500 text-[10px] uppercase font-bold tracking-wider block">Startups</span>
+            <span id="assignedStartupsCount" class="text-lg font-black text-slate-100">0</span>
+          </div>
+          <div class="w-px h-8 bg-white/5"></div>
+          <div>
+            <span class="text-slate-500 text-[10px] uppercase font-bold tracking-wider block">Grading Tasks</span>
+            <span id="gradingTasksCount" class="text-lg font-black text-yellow-400">0</span>
+          </div>
+          <div class="w-px h-8 bg-white/5"></div>
+          <div>
+            <span class="text-slate-500 text-[10px] uppercase font-bold tracking-wider block">Average Rating</span>
+            <span class="text-lg font-black text-blue-400">4.9/5</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab Content Cards -->
+      
+      <!-- startups Tab -->
+      <div id="content-startups" class="tab-content block space-y-6">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div class="space-y-1">
+            <h3 class="text-lg font-black text-white">Active Incubator Startups</h3>
+            <p class="text-xs text-slate-400">High growth ventures assigned block level advice track</p>
+          </div>
+          <span class="text-xs text-[#FFD700] bg-[#FFD700]/10 border border-[#FFD700]/20 px-3 py-1 rounded-xl font-bold">Auto Synchronized</span>
+        </div>
+
+        <!-- Startups Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6" id="startupList">
+          <!-- Dynamic cards or default placeholders -->
+          <div class="glass-card rounded-2xl p-6 space-y-4 hover:border-yellow-400/25 transition duration-300 relative overflow-hidden group">
+            <div class="absolute top-0 right-0 w-24 h-24 bg-yellow-400/5 blur-2xl rounded-full opacity-60 group-hover:opacity-100 transition"></div>
+            <div class="flex justify-between items-start">
+              <div>
+                <h4 class="font-extrabold text-lg text-slate-200">AgroVedic Systems</h4>
+                <p class="text-xs text-slate-500">AgriTech & Analytics Pipeline</p>
+              </div>
+              <span class="px-2.5 py-1 rounded-lg bg-yellow-400/10 border border-yellow-400/20 text-[10px] text-yellow-400 font-extrabold tracking-wider uppercase">MVP Stage</span>
+            </div>
+            <p class="text-xs text-slate-400 leading-relaxed">AI-powered soil intelligence and custom predictive agronomy modeling for dryland crop growth optimization.</p>
+            <div class="pt-4 border-t border-white/[0.04] flex justify-between items-center text-[10px] text-slate-500">
+              <span class="font-semibold block">Team size: <b class="text-slate-300">6 members</b></span>
+              <span class="font-semibold block">Thesis Status: <b class="text-slate-300">Stable</b></span>
+            </div>
+          </div>
+
+          <div class="glass-card rounded-2xl p-6 space-y-4 hover:border-blue-400/25 transition duration-300 relative overflow-hidden group">
+            <div class="absolute top-0 right-0 w-24 h-24 bg-blue-400/5 blur-2xl rounded-full opacity-60 group-hover:opacity-100 transition"></div>
+            <div class="flex justify-between items-start">
+              <div>
+                <h4 class="font-extrabold text-lg text-slate-200">PayBlock Finance</h4>
+                <p class="text-xs text-slate-500">Fintech Blockchain Platform</p>
+              </div>
+              <span class="px-2.5 py-1 rounded-lg bg-blue-400/10 border border-blue-400/20 text-[10px] text-blue-400 font-extrabold tracking-wider uppercase">Seed Funded</span>
+            </div>
+            <p class="text-xs text-slate-400 leading-relaxed">Decentralized credit metrics and transaction history proofs via lightweight Zero Knowledge ledgers.</p>
+            <div class="pt-4 border-t border-white/[0.04] flex justify-between items-center text-[10px] text-slate-500">
+              <span class="font-semibold block">Team size: <b class="text-slate-300">12 members</b></span>
+              <span class="font-semibold block">Thesis Status: <b class="text-slate-300">Scale</b></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Students Tab -->
+      <div id="content-students" class="tab-content hidden space-y-6">
+        <div class="flex items-center justify-between">
+          <div class="space-y-1">
+            <h3 class="text-lg font-black text-white">Assigned Interns & Students</h3>
+            <p class="text-xs text-slate-400">Regular milestones progress grading tracks</p>
+          </div>
+          <button onclick="triggerReview()" class="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-xs text-yellow-400 border border-yellow-400/20 hover:border-yellow-400/40 font-bold rounded-lg transition">
+            <i class="fa-solid fa-stamp mr-1.5"></i> V2 Assessment Log
+          </button>
+        </div>
+
+        <div class="space-y-4" id="studentsList">
+          <div class="glass-card rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border border-white/[0.03] hover:border-white/[0.08] transition">
+            <div class="flex items-center gap-4">
+              <div class="w-12 h-12 rounded-xl bg-slate-800/80 flex items-center justify-center text-slate-300 text-xl font-bold border border-white/5">
+                🎓
+              </div>
+              <div>
+                <h4 class="font-black text-slate-200 text-sm">Intern name</h4>
+                <p class="text-xs text-slate-400 md:text-xs">University · <span class="text-blue-400 font-medium">Domain</span></p>
+              </div>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="px-3 py-1 rounded-full bg-yellow-400/10 text-[10px] text-yellow-500 border border-yellow-400/20 font-black uppercase tracking-wider">Pending Grading</span>
+              <button onclick="triggerStarGrant()" class="px-3.5 py-2 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-500 hover:to-amber-600 text-slate-950 rounded-xl text-xs font-black transition active:translate-y-0.5 shadow">
+                ⭐ Award Stars
+              </button>
+              <button onclick="triggerReview()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 rounded-xl text-xs font-bold transition active:translate-y-0.5">
+                Review Milestones
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Calendar Tab -->
+      <div id="content-meetings" class="tab-content hidden space-y-6">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2">
+          <div class="space-y-1">
+            <h3 class="text-lg font-black text-white">Feedback Sessions & Meetings</h3>
+            <p class="text-xs text-slate-400">Schedule periodic venture board evaluations</p>
+          </div>
+          <button onclick="scheduleMeeting()" class="px-4 py-2.5 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-500 hover:to-amber-600 text-slate-950 font-black rounded-xl text-xs transition shadow active:translate-y-0.5">
+            <i class="fa-solid fa-plus mr-1.5"></i> Schedule Feedback
+          </button>
+        </div>
+
+        <div class="space-y-4" id="meetingsList">
+          <div class="glass-card rounded-2xl p-5 flex justify-between items-center border border-white/[0.03] hover:border-white/10 transition">
+            <div class="space-y-1.5">
+              <span class="inline-flex items-center gap-1.5 text-[9px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-black uppercase tracking-widest">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> LIVE CALENDAR
+              </span>
+              <h4 class="font-black text-slate-200 text-sm">FinTech Capstone Pitch Evaluation</h4>
+              <p class="text-xs text-slate-400">Tomorrow at 5:00 PM · Hosted for PayBlock Founders</p>
+            </div>
+            <a href="https://meet.google.com" target="_blank" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-white/10 hover:border-yellow-400/40 rounded-xl text-xs text-center transition font-bold active:translate-y-0.5">
+              <i class="fa-solid fa-video mr-1.5"></i> Launch Meeting
+            </a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    // Security and Session Check
+    let activeUser = JSON.parse(localStorage.getItem('user') || 'null');
+    let activeRole = localStorage.getItem('role') || 'mentor';
+
+    if (!activeUser) {
+      activeUser = { fullName: "Senior Mentor Advisor", name: "Senior Mentor Advisor", email: "mentor@entrepreneurshipnetwork.net", role: "mentor" };
+      localStorage.setItem('user', JSON.stringify(activeUser));
+      localStorage.setItem('role', 'mentor');
+    }
+
+    if (document.getElementById('mentorName')) document.getElementById('mentorName').textContent = activeUser.fullName || activeUser.name || "Senior Mentor Advisor";
+    if (document.getElementById('bannerName')) document.getElementById('bannerName').textContent = activeUser.fullName || activeUser.name || "Senior Mentor Advisor";
+    if (document.getElementById('bannerEmail')) document.getElementById('bannerEmail').textContent = activeUser.email || "mentor@entrepreneurshipnetwork.net";
+    if (document.getElementById('sidebarName')) document.getElementById('sidebarName').textContent = activeUser.fullName || activeUser.name || "Senior Mentor Advisor";
+
+    async function loadMentorProfileDetails() {
+      const email = (activeUser.email || '').toLowerCase().trim();
+      if (!email) return;
+
+      const badgeContainer = document.getElementById('mentorExpertiseBadges');
+      if (activeUser.expertise && activeUser.expertise.length > 0) {
+        if (badgeContainer) {
+          badgeContainer.innerHTML = activeUser.expertise.map(exp => {
+            const area = exp.area || 'General Mentor';
+            const level = exp.level || 'Expert';
+            return `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-wider">${area} (${level})</span>`;
+          }).join('');
+        }
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/ecosystem/users');
+        const data = await res.json();
+        if (data.success && data.users) {
+          const userObj = data.users.find(u => (u.email || '').toLowerCase().trim() === email);
+          if (userObj) {
+            const profile = userObj.profile || {};
+            
+            let domainsList = [];
+            if (profile.expertise && profile.expertise.length > 0) {
+              domainsList = profile.expertise.map(exp => ({
+                area: exp.area || 'General Mentor',
+                level: exp.level || 'Expert'
+              }));
+            }
+            
+            if (domainsList.length === 0) {
+              const domainVal = userObj.domain || profile.domain || '';
+              if (domainVal) {
+                domainsList.push({ area: domainVal, level: 'Expert' });
+              }
+            }
+
+            if (badgeContainer) {
+              if (domainsList.length > 0) {
+                badgeContainer.innerHTML = domainsList.map(exp => {
+                  return `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-wider">${exp.area} (${exp.level})</span>`;
+                }).join('');
+              } else {
+                badgeContainer.innerHTML = `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-wider">Expert Mentor</span>`;
+              }
+            }
+            
+            if (profile.headline) {
+              const titleEl = document.getElementById('bannerTitle');
+              if (titleEl) {
+                titleEl.innerHTML = `${profile.headline} | <span id="bannerEmail" class="text-yellow-400 font-bold italic">${email}</span>`;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load mentor profile:", e);
+      }
+    }
+    loadMentorProfileDetails();
+
+    // Initials for avatar
+    const parts = (activeUser.fullName || activeUser.name || 'Senior Mentor').split(' ');
+    const initials = parts.length > 1 ? (parts[0][0] + parts[1][0]).toUpperCase() : parts[0].slice(0, 2).toUpperCase();
+    if (document.getElementById('sidebarInitials')) document.getElementById('sidebarInitials').textContent = initials;
+
+    function logout() {
+      localStorage.clear();
+      window.location.href = 'login.html';
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+      const activeEl = document.getElementById('content-' + tabId);
+      if (activeEl) {
+        activeEl.classList.remove('hidden');
+      }
+
+      document.querySelectorAll('[id^="tab-"]').forEach(b => {
+        b.classList.remove('active-nav', 'text-white');
+      });
+      const btn = document.getElementById('tab-' + tabId);
+      if (btn) {
+        btn.classList.add('active-nav', 'text-white');
+      }
+
+      if (tabId === 'meetings') {
+        loadAssignedMentorshipSessions();
+      }
+
+      // Close mobile sidebar if open
+      document.getElementById('sidebarEcos').classList.add('-translate-x-full');
+    }
+
+    async function loadAssignedMentorshipSessions() {
+      const container = document.getElementById('meetingsList');
+      if (!container) return;
+
+      container.innerHTML = '<div class="text-xs text-slate-400 text-center py-4">↻ Fetching live assigned mentorship sessions...</div>';
+
+      try {
+        const mentorEmail = (activeUser && activeUser.email) ? activeUser.email : "shindedevaraj0@gmail.com";
+        const res = await fetch('/api/v2/mentor/assigned-sessions?email=' + encodeURIComponent(mentorEmail));
+        const data = await res.json();
+
+        if (data.success && data.sessions) {
+          const activeSessions = data.sessions.filter(s => s.status !== 'finished');
+          if (document.getElementById('gradingTasksCount')) {
+            document.getElementById('gradingTasksCount').textContent = activeSessions.length;
+          }
+          const uniqueStudents = new Set(data.sessions.map(s => s.studentId || s.studentEmail));
+          if (document.getElementById('assignedStartupsCount')) {
+            document.getElementById('assignedStartupsCount').textContent = uniqueStudents.size;
+          }
+        }
+
+        if (data.success && data.sessions && data.sessions.length > 0) {
+          container.innerHTML = data.sessions.map(s => {
+            const bDate = s.createdAt ? new Date(s.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Just Now';
+            
+            let statusBadge = '';
+            let actionButtons = '';
+
+            if (s.status === 'live') {
+              statusBadge = `
+                <span class="inline-flex items-center gap-1.5 text-[9px] px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-black uppercase tracking-widest animate-pulse">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> LIVE MEETING
+                </span>
+              `;
+              actionButtons = `
+                <a href="${s.meetUrl || 'https://meet.google.com'}" target="_blank" class="px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black transition active:translate-y-0.5 shadow-lg flex items-center gap-1.5">
+                  <i class="fa-solid fa-arrow-up-right-from-square"></i> <span>Re-Join Meeting</span>
+                </a>
+                <button onclick="completeMentorshipSession('${s._id}')" class="px-3 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white rounded-xl text-xs font-black transition active:translate-y-0.5 shadow-lg flex items-center gap-1.5">
+                  <i class="fa-solid fa-circle-check"></i> <span>Complete Session</span>
+                </button>
+              `;
+            } else if (s.status === 'finished') {
+              statusBadge = `
+                <span class="inline-flex items-center gap-1.5 text-[9px] px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-black uppercase tracking-widest">
+                  <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span> COMPLETED
+                </span>
+              `;
+              actionButtons = `
+                <span class="text-xs text-slate-400 font-bold italic flex items-center gap-1"><i class="fa-solid fa-circle-check text-blue-400"></i> Session Completed</span>
+              `;
+            } else {
+              statusBadge = `
+                <span class="inline-flex items-center gap-1.5 text-[9px] px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-black uppercase tracking-widest">
+                  <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span> PENDING LAUNCH
+                </span>
+              `;
+              actionButtons = `
+                <button onclick="window.open('https://meet.google.com/new', '_blank'); launchMentorshipSession('${s._id}')" class="px-3 py-2 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-500 hover:to-amber-600 text-slate-950 rounded-xl text-xs font-black transition active:translate-y-0.5 shadow-lg flex items-center gap-1.5">
+                  <i class="fa-solid fa-video"></i> <span>Launch Video Call</span>
+                </button>
+              `;
+            }
+
+            // Always provide View Student Profile option
+            actionButtons += `
+              <button onclick="viewStudentProfile('${s.employeeId || 'TEN-STU-001'}')" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 rounded-xl text-xs font-bold transition active:translate-y-0.5 flex items-center gap-1.5">
+                <i class="fa-solid fa-user-astronaut"></i> <span>View Intern Profile</span>
+              </button>
+            `;
+
+            return `
+              <div class="glass-card rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border border-white/[0.05] hover:border-yellow-400/30 transition">
+                <div class="space-y-1.5">
+                  <div class="flex items-center gap-2">
+                    ${statusBadge}
+                    <span class="text-[10px] text-blue-400 font-bold bg-blue-400/10 px-2 py-0.5 rounded">${s.domain || 'Web Development'}</span>
+                  </div>
+                  <h4 class="font-black text-slate-100 text-sm md:text-base">${s.itemTitle || '1-on-1 Mentorship Advisory'}</h4>
+                  <p class="text-xs text-slate-300">
+                    <b>Student:</b> <span class="text-yellow-400 font-bold">${s.studentName || 'Student Intern'}</span> <span class="text-slate-400 font-normal">(${s.studentEmail || 'N/A'})</span>
+                  </p>
+                  <p class="text-xs text-slate-400">
+                    <b>Scheduled Slot:</b> <span class="text-slate-200 font-bold">${s.slotTime || 'Tomorrow at 5:00 PM'}</span>
+                  </p>
+                  <div class="text-[10px] text-slate-500 flex flex-wrap gap-x-4">
+                    <span>📅 Booking Date: <b>${bDate}</b></span>
+                    <span>UTR: <span class="font-mono">${s.utrNumber || 'N/A'}</span></span>
+                  </div>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2">
+                  ${actionButtons}
+                </div>
+              </div>
+            `;
+          }).join('');
+        } else {
+          container.innerHTML = `
+            <div class="glass-card rounded-2xl p-6 text-center border border-white/5 space-y-2">
+              <div class="text-2xl">📅</div>
+              <div class="text-sm font-black text-white">No Pending Assigned Sessions</div>
+              <div class="text-xs text-slate-400">Assigned sessions from coordinators will appear live here instantly.</div>
+            </div>`;
+        }
+      } catch (err) {
+        container.innerHTML = '<div class="text-xs text-rose-400 text-center py-4">Error loading sessions.</div>';
+      }
+    }
+
+    async function completeMentorshipSession(bookingId) {
+      const confirmResult = await Swal.fire({
+        title: 'Confirm Completion',
+        text: 'Are you sure you want to mark this mentorship session as completed?',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#10b981',
+        cancelButtonColor: '#ef4444',
+        confirmButtonText: 'Yes, Completed!',
+        background: '#0e1428',
+        color: '#fff'
+      });
+
+      if (!confirmResult.isConfirmed) return;
+
+      try {
+        Swal.fire({
+          title: 'Updating Session...',
+          text: 'Marking session as completed in database...',
+          background: '#0e1428',
+          color: '#fff',
+          allowOutsideClick: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
+
+        const res = await fetch('/api/v2/mentor/complete-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bookingId })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          Swal.fire({
+            icon: 'success',
+            title: 'Completed!',
+            text: 'Mentorship session has been marked as completed successfully.',
+            background: '#0e1428',
+            color: '#fff',
+            confirmButtonColor: '#10b981'
+          });
+          loadAssignedMentorshipSessions();
+        } else {
+          throw new Error(data.message || 'Failed to update status.');
+        }
+      } catch (err) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Update Failed',
+          text: err.message || 'Could not update session status.',
+          background: '#0e1428',
+          color: '#fff',
+          confirmButtonColor: '#D4AF37'
+        });
+      }
+    }
+
+    async function viewStudentProfile(employeeId) {
+      try {
+        Swal.fire({
+          title: 'Loading Profile...',
+          background: '#0e1428',
+          color: '#fff',
+          allowOutsideClick: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
+
+        const res = await fetch(`/api/v2/mentor/student-profile?employeeId=${encodeURIComponent(employeeId)}`);
+        const data = await res.json();
+
+        if (data.success && data.student) {
+          const s = data.student;
+          Swal.fire({
+            title: `👤 Student Profile: ${s.name}`,
+            html: `
+              <div class="text-left space-y-3 font-sans text-xs" style="max-height: 400px; overflow-y: auto; color: #e2eaf7; line-height: 1.6;">
+                <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); display:grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                  <div><b>Employee ID:</b><br><span style="color:#f5c542; font-family: monospace; font-size:11px;">${employeeId}</span></div>
+                  <div><b>Email:</b><br><span style="color:#fff;">${s.email || 'N/A'}</span></div>
+                  <div><b>WhatsApp:</b><br><span style="color:#fff;">${s.whatsapp || 'N/A'}</span></div>
+                  <div><b>Domain:</b><br><span style="color:#38bdf8;">${s.domain || 'N/A'}</span></div>
+                  <div><b>Joining Date:</b><br><span style="color:#fff;">${s.joiningDate || 'N/A'}</span></div>
+                  <div><b>Streak (Active / Best):</b><br><span style="color:#10b981;">🔥 ${s.currentStreak} / ${s.bestStreak}</span></div>
+                </div>
+
+                <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); display:grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                  <div style="text-align: center; border-right: 1px solid rgba(255,255,255,0.1);">
+                    <div style="font-size:20px;">📋</div>
+                    <div style="font-size:16px; font-weight:800; color:#f5c542; margin-top:2px;">${s.attendanceCount} Days</div>
+                    <div style="color:#9aa4bf; font-size:10px; text-transform:uppercase;">Attendance Count</div>
+                  </div>
+                  <div style="text-align: center;">
+                    <div style="font-size:20px;">🚀</div>
+                    <div style="font-size:16px; font-weight:800; color:#10b981; margin-top:2px;">${s.approvedCount} / ${s.submissionsCount}</div>
+                    <div style="color:#9aa4bf; font-size:10px; text-transform:uppercase;">Tasks Approved / Sent</div>
+                  </div>
+                </div>
+              </div>
+            `,
+            background: '#0e1428',
+            color: '#fff',
+            confirmButtonColor: '#D4AF37',
+            confirmButtonText: 'Close Profile'
+          });
+        } else {
+          throw new Error(data.message || 'Intern profile not found.');
+        }
+      } catch (err) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Profile Load Failed',
+          text: err.message || 'Could not fetch intern details.',
+          background: '#0e1428',
+          color: '#fff',
+          confirmButtonColor: '#D4AF37'
+        });
+      }
+    }
+
+    async function launchMentorshipSession(bookingId) {
+      // Premium feature: automatically check clipboard for a Google Meet / HTTP link to auto-fill
+      let clipboardLink = '';
+      try {
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          const clipText = await navigator.clipboard.readText().catch(() => '');
+          if (clipText && (clipText.includes('meet.google.com') || clipText.startsWith('http'))) {
+            clipboardLink = clipText.trim();
+          }
+        }
+      } catch (e) {}
+
+      // Prompt the mentor on-screen to input the active Meet link they just opened
+      const { value: meetUrl } = await Swal.fire({
+        title: '🎥 Meeting Room Opened!',
+        html: `
+          <div style="text-align:left;font-size:13px;color:#cbd5e1;line-height:1.5;">
+            <p style="margin-bottom:12px;">Google Meet has been opened in a new tab. Please enter the meeting room, then:</p>
+            <ol style="margin-left:20px;margin-bottom:16px;display:flex;flex-direction:column;gap:6px;">
+              <li>Copy the actual room link from your browser address bar (e.g. <b>https://meet.google.com/abc-defg-hij</b>).</li>
+              <li>Paste the link below to invite the student immediately.</li>
+            </ol>
+          </div>
+        `,
+        input: 'url',
+        inputPlaceholder: 'https://meet.google.com/abc-defg-hij',
+        inputValue: clipboardLink || '',
+        inputAttributes: {
+          autocapitalize: 'off',
+          autocorrect: 'off'
+        },
+        background: '#0e1428',
+        color: '#fff',
+        confirmButtonColor: '#D4AF37',
+        confirmButtonText: '🚀 Send Invite Email to Student',
+        showCancelButton: true,
+        cancelButtonColor: '#ef4444',
+        validationMessage: 'Please enter a valid Google Meet or video link'
+      });
+
+      if (!meetUrl) return; // User cancelled
+
+
+
+
+      try {
+        Swal.fire({
+          title: 'Sending Invite...',
+          text: 'Sending the active meeting link to the student\'s email...',
+          background: '#0e1428',
+          color: '#fff',
+          allowOutsideClick: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
+
+        const res = await fetch('/api/v2/mentor/launch-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bookingId, meetUrl })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          Swal.fire({
+            icon: 'success',
+            title: 'Invite Dispatched!',
+            text: 'Your student has been notified and sent the active meeting link.',
+            background: '#0e1428',
+            color: '#fff',
+            confirmButtonColor: '#D4AF37'
+          });
+        } else {
+          throw new Error(data.message || 'Failed to dispatch session.');
+        }
+      } catch (err) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Dispatch Failed',
+          text: err.message || 'Could not send invitation email.',
+          background: '#0e1428',
+          color: '#fff',
+          confirmButtonColor: '#D4AF37'
+        });
+      }
+    }
+
+    // Load live sessions on startup
+    document.addEventListener("DOMContentLoaded", () => {
+      loadAssignedMentorshipSessions();
+    });
+
+    function updateAvailabilityDirect() {
+      const selected = document.getElementById('availDrop').value;
+      Swal.fire({
+        icon: 'success',
+        title: 'Availability Status Updated',
+        text: `Your mentor active status has been synced to: ${selected.replace('_', ' ').toUpperCase()}`,
+        background: '#0a0f1f',
+        color: '#F0EEE8',
+        confirmButtonColor: '#FFD700',
+        confirmButtonText: 'Confirm Status'
+      });
+    }
+
+    function triggerReview() {
+      Swal.fire({
+        title: 'V2 Intern Milestone Review',
+        input: 'textarea',
+        inputPlaceholder: 'Log grading notes, capstone reports, or feedback records...',
+        inputAttributes: {
+          'aria-label': 'Enter review logs'
+        },
+        showCancelButton: true,
+        confirmButtonText: 'Record Evaluation',
+        confirmButtonColor: '#FFD700',
+        cancelButtonColor: '#1e293b',
+        background: '#0a0f1f',
+        color: '#F0EEE8',
+      }).then((result) => {
+        if (result.isConfirmed) {
+          Swal.fire({
+            icon: 'success',
+            title: 'Evaluation Logged Complete',
+            text: 'Mentees have been notified and ratings recalculated.',
+            background: '#0a0f1f',
+            color: '#F0EEE8',
+            confirmButtonColor: '#FFD700'
+          });
+        }
+      });
+    }
+
+    function scheduleMeeting() {
+      Swal.fire({
+        title: 'Configure New Advisory Session',
+        html:
+          '<div class="space-y-4 pt-2">' +
+          '<div><label class="block text-left text-xs font-bold text-slate-400 mb-1">Session Title</label>' +
+          '<input id="swal-input1" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-yellow-400" placeholder="e.g. Capstone Phase II Dryrun"></div>' +
+          '<div><label class="block text-left text-xs font-bold text-slate-400 mb-1">Date & Hour</label>' +
+          '<input id="swal-input2" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-yellow-400" placeholder="e.g. Tomorrow, 4:00 PM"></div>' +
+          '</div>',
+        showCancelButton: true,
+        confirmButtonText: 'Activate Schedule',
+        confirmButtonColor: '#FFD700',
+        cancelButtonColor: '#1e293b',
+        background: '#0a0f1f',
+        color: '#F0EEE8',
+        focusConfirm: false,
+        preConfirm: () => {
+          return [
+            document.getElementById('swal-input1').value.trim(),
+            document.getElementById('swal-input2').value.trim()
+          ]
+        }
+      }).then((result) => {
+        if (result.isConfirmed) {
+          const [title, date] = result.value;
+          if (!title || !date) {
+            Swal.fire('Validation Failure', 'Both criteria fields must be completed.', 'error');
+            return;
+          }
+          const container = document.getElementById('meetingsList');
+          const row = document.createElement('div');
+          row.className = "glass-card rounded-2xl p-5 flex justify-between items-center border border-white/[0.03] hover:border-white/10 transition";
+          row.innerHTML = `
+            <div class="space-y-1.5">
+              <span class="inline-flex items-center gap-1.5 text-[9px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-black uppercase tracking-widest">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> ONLINE EVENT
+              </span>
+              <h4 class="font-black text-slate-200 text-sm">${title}</h4>
+              <p class="text-xs text-slate-400">${date} · Live advisory track</p>
+            </div>
+            <a href="https://meet.google.com" target="_blank" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-white/10 hover:border-yellow-400/40 rounded-xl text-xs text-center transition font-bold active:translate-y-0.5">
+              <i class="fa-solid fa-video mr-1.5"></i> Launch Meeting
+            </a>
+          `;
+          container.prepend(row);
+          Swal.fire({
+            icon: 'success',
+            title: 'Meeting Scheduled',
+            text: 'Automatic dispatch system has broadcast session tokens to mentees.',
+            background: '#0a0f1f',
+            color: '#F0EEE8',
+            confirmButtonColor: '#FFD700'
+          });
+        }
+      });
+    }
+
+    function triggerStarGrant() {
+      Swal.fire({
+        title: '⭐ Award Performance Stars',
+        html: `
+          <div class="space-y-4 text-left pt-2">
+            <p class="text-xs text-slate-400">Award stars based on student session attendance and milestone completion. Granted stars directly unlock LOC/LOR certificate status.</p>
+            <div>
+              <label class="block text-xs font-bold text-slate-300 mb-1">Select Intern</label>
+              <select id="starStudent" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-yellow-400">
+                <!-- Populated from the mentor's assigned interns. Three real
+                     students were hardcoded here, naming them and their domains
+                     to every mentor who opened the page. -->
+                <option value="">Select an intern…</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-300 mb-1">Performance Stars (1 to 5 Stars)</label>
+              <select id="starCount" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-sm text-slate-200 focus:outline-none focus:border-yellow-400">
+                <option value="5">⭐⭐⭐⭐⭐ (5 Stars — Outstanding)</option>
+                <option value="4">⭐⭐⭐⭐ (4 Stars — Excellent)</option>
+                <option value="3">⭐⭐⭐ (3 Stars — Good Progress)</option>
+              </select>
+            </div>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Award Stars & Grant Credit',
+        confirmButtonColor: '#FFD700',
+        cancelButtonColor: '#1e293b',
+        background: '#0a0f1f',
+        color: '#F0EEE8'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          Swal.fire({
+            icon: 'success',
+            title: 'Performance Stars Granted!',
+            text: 'Student records updated and LOC/LOR certificate progress updated.',
+            background: '#0a0f1f',
+            color: '#F0EEE8',
+            confirmButtonColor: '#FFD700'
+          });
+        }
+      });
+    }
+
+    // Toggle Mobile Sidebar
+    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+    const sidebar = document.getElementById('sidebarEcos');
+    if (mobileMenuBtn && sidebar) {
+      mobileMenuBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('-translate-x-full');
+      });
+    }
+  </script>
+</body>
+</html>
