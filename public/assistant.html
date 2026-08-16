@@ -348,8 +348,6 @@
   <meta name="apple-mobile-web-app-title" content="TEN">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <script src="/push-client.js" defer></script>
-  <!-- Content merges with the portal backdrop rather than sitting in cards. -->
-  <link rel="stylesheet" href="/portal-dissolve.css">
 </head>
 <body>
 
@@ -1001,29 +999,9 @@
 })();
 </script>
 
-<!-- Portal backdrop. Cosmetic only: it mounts behind everything on the page
-     and nothing above it changes. The theme for "assistant" is registered in
-     portal-backdrops.js, so this portal's background is its own. -->
-<script src="/portal-backdrops.js"></script>
-<style>
-  body { position: relative; }
-  body > .portal-backdrop { position: fixed; inset: 0; z-index: -1; }
-  body > .portal-backdrop::after {
-    content: ''; position: absolute; inset: 0;
-    background: linear-gradient(180deg, rgba(4,7,16,.30), rgba(4,7,16,.48));
-  }
-</style>
-<script>
-  (function () {
-    function paint() {
-      if (!window.PortalBackdrop) return;
-      try { window.PortalBackdrop.showFor(document.body, 'assistant');
-        document.body.classList.add('portal-surface'); } catch (e) {}
-    }
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', paint);
-    } else { paint(); }
-  })();
-</script>
+<!-- The TEN Assistant deliberately keeps its original design.
+     No shader backdrop, no dissolved cards, no legibility pass: this page was
+     built as its own thing and reads better as it was drawn. The other sixteen
+     portals carry the new background treatment; this one is the exception. -->
 </body>
 </html>

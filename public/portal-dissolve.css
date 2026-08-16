@@ -26,7 +26,34 @@
  * without hand-editing several hundred attributes.
  */
 
-/* ── containers dissolve ─────────────────────────────────────────────────── */
+/* ── the surface ─────────────────────────────────────────────────────────── */
+/*
+ * The first version dissolved every container to fully transparent. That
+ * removed the boxes, and it also removed the floor the text was standing on:
+ * a section whose content is loaded by script — Coordinator Task, Domain MCQ
+ * Test — used to show an empty dark card while it waited, and afterwards
+ * showed literally nothing at all. A blank screen is not "merged with the
+ * background".
+ *
+ * So the top level of each section carries a soft full-bleed wash instead of
+ * nothing. It has no border, no corner radius and no shadow, and it runs edge
+ * to edge, so it reads as a darkened region of the background rather than a
+ * card sitting on top of one. Everything nested inside it goes fully
+ * transparent, so the wash never stacks and no inner rectangles appear.
+ */
+.portal-surface .stu-view.active > div,
+.portal-surface .stu-view.active > section {
+  background: linear-gradient(180deg, rgba(4,7,16,.62), rgba(4,7,16,.44)) !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(2px) !important;
+  /* Full bleed: a wash that stops short of the edges is a box again. */
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* Everything deeper is part of that surface, not a thing on it. */
 .portal-surface .top-card,
 .portal-surface .stat-box,
 .portal-surface .task-card,
@@ -50,11 +77,29 @@
  * Inline-styled wrappers. Restricted to block containers that are not
  * something you click, type into, or read as a literal.
  */
-.portal-surface div[style*="background"]:not([class*="btn"]):not([class*="chip"]):not([class*="badge"]):not([class*="pill"]):not([class*="tag"]):not([class*="cm-"]):not([class*="modal"]):not([id*="Btn"]):not([id*="btn"]) {
+.portal-surface .stu-view div div[style*="background"]:not([class*="btn"]):not([class*="chip"]):not([class*="badge"]):not([class*="pill"]):not([class*="tag"]):not([class*="cm-"]):not([class*="modal"]):not([id*="Btn"]):not([id*="btn"]) {
   background: none !important;
   background-color: transparent !important;
   box-shadow: none !important;
   border-color: rgba(255, 255, 255, .10) !important;
+}
+
+/*
+ * A section whose script has not filled it yet, or which has nothing to show,
+ * still needs to occupy space — otherwise the portal opens onto an empty
+ * screen and looks broken. This is what the dissolved cards used to do by
+ * accident.
+ */
+.portal-surface .stu-view.active > div:empty::before,
+.portal-surface .stu-view.active > div > div:empty::before {
+  content: 'Nothing here yet.';
+  display: block;
+  padding: 28px 4px;
+  font-size: 13.5px;
+  color: rgba(255, 255, 255, .55);
+}
+.portal-surface .stu-view.active {
+  min-height: 220px;
 }
 
 /* ── structure without boxes ─────────────────────────────────────────────── */
