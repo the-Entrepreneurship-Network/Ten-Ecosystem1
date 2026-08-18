@@ -157,6 +157,85 @@ describe('the conversation advances instead of repeating', () => {
     expect(out.text).toContain('PRIYA NAIR');
   });
 
+  it('compare ranks the JDs and recommends the strongest', async () => {
+    const a = app();
+    const t1 = await turn(a, 'compare these jobs', null);
+    const t2 = await turn(a, RESUME, t1.session);
+    expect(t2.session.asked).toBe('jds');
+    const jds = [
+      'Frontend Engineer: React, TypeScript, CSS required. Building dashboards.',
+      'Backend Engineer: Java, Spring Boot, REST API and SQL. 2+ years building services.',
+    ].join('\n---\n');
+    const t3 = await turn(a, jds, t2.session);
+    expect(t3.reply).toMatch(/Fit matrix/);
+    // Java/Spring resume: the backend JD must win.
+    expect(t3.reply).toMatch(/Strongest target: #2/);
+  });
+
+  it('cover refuses before a resume ships, then writes one against it', async () => {
+    const a = app();
+    const t1 = await turn(a, 'cover letter please', null);
+    expect(t1.reply).toMatch(/finished resume/i);
+
+    // ship one via tailor, then ask again
+    let out = await turn(a, RESUME, t1.session);
+    out = await turn(a, 'fix it', out.session);
+    for (let i = 0; i < 7 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+    expect(out.kind).toBe('build');
+
+    let cov = await turn(a, 'cover letter', out.session);
+    if (cov.session.asked === 'company') cov = await turn(a, 'Northwind', cov.session);
+    expect(cov.reply).toMatch(/Cover letter — \d+ words/);
+    expect(cov.reply).toMatch(/Northwind/);
+  });
+
+  it('prep gives the five-line defense only after a ship', async () => {
+    const a = app();
+    const t1 = await turn(a, 'interview prep', null);
+    expect(t1.reply).toMatch(/shipped resume/i);
+
+    let out = await turn(a, RESUME, t1.session);
+    out = await turn(a, 'fix it', out.session);
+    for (let i = 0; i < 7 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+    const prep = await turn(a, 'prep', out.session);
+    expect(prep.reply).toMatch(/Five-line defense/);
+    expect(prep.reply.split('\n').filter((l) => /^\d\./.test(l))).toHaveLength(5);
+  });
+
+  it('confirms JD keywords with the person instead of adding them', async () => {
+    const a = app();
+    let out = await turn(a, RESUME, null);
+    out = await turn(a, 'tailor it', out.session, { jd: 'Backend: Java, Spring Boot, PostgreSQL and Docker required.' });
+    let sawConfirm = false;
+    for (let i = 0; i < 7 && out.kind === 'ask'; i++) {
+      if (out.session.asked === 'confirmkw') {
+        sawConfirm = true;
+        expect(out.reply).toMatch(/no evidence/i);
+        out = await turn(a, 'Docker — containerised the attendance service for deployment', out.session);
+      } else {
+        out = await turn(a, 'skip', out.session);
+      }
+    }
+    expect(sawConfirm).toBe(true);
+    expect(out.kind).toBe('build');
+    // The confirmed line is now evidence in the shipped text; the never-
+    // mentioned term stays not-claimed.
+    expect(out.text).toMatch(/containerised the attendance service/);
+    expect(out.packet.notClaimed).toContain('postgresql');
+    expect(out.packet.notClaimed).not.toContain('docker');
+  });
+
+  it('a delivery opens with the path, command, band and the caveat', async () => {
+    const a = app();
+    let out = await turn(a, RESUME, null);
+    out = await turn(a, 'fix it', out.session);
+    for (let i = 0; i < 7 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+    expect(out.kind).toBe('build');
+    expect(out.reply).toMatch(/Path: A · Command: tailor · Band:/);
+    expect(out.reply).toMatch(/Greenhouse does not auto-score/);
+    expect(out.reply).toMatch(/Keyword (N\/A|\d+\/40) · Format \d+\/30/);
+  });
+
   it('help twice is not the trap it used to be: the session survives it', async () => {
     const a = app();
     const t1 = await turn(a, 'hello', null);
