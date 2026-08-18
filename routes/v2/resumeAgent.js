@@ -717,10 +717,18 @@ router.post('/rewrite.pdf', upload.single('file'), async (req, res) => {
  * v5.1's: check, build, tailor, gap.
  */
 
+/**
+ * "Fix it", "resolve them", "yes, improve it" — every way a person says
+ * "make the resume better" after seeing its score. This was the reported
+ * loop: "fix it" matched no command, fell to the help menu, and the visitor
+ * asked again and got the menu again, forever.
+ */
+const FIX_INTENT = /\b(fix|resolve|improve|repair|rebuild|solve|correct)( it| this| them| that| these| my resume| the (issues?|problems?|resume))?\b|\bmake it better\b|\bdo it\b|\bgo ahead\b/;
+
 /** What the visitor wants, read from their sentence — v5.1 command mapping. */
 function commandOf(low, hasFile) {
   if (/\bgap\b|what('?s| is) missing|why would this fail|missing keyword/.test(low)) return 'gap';
-  if (/\btailor|rewrite|convert|recreate|fix (my|this)|improve (my|this)|make (it|this|my resume) ats|for (this|the) (jd|job|company)\b/.test(low)) return 'tailor';
+  if (/\btailor|rewrite|convert|recreate|make (it|this|my resume) ats|for (this|the) (jd|job|company)\b/.test(low) || FIX_INTENT.test(low)) return 'tailor';
   if (/\bscan|check|score|review|rate my|is this rejectable|ats.?(friendly|ready)\b/.test(low)) return 'check';
   if (/\bbuild|create|write|generate|new resume|from scratch|forge\b/.test(low)) return 'build';
   if (hasFile) return 'check'; /* a file with no words means "look at this" */
@@ -843,6 +851,13 @@ router.post('/chat', upload.single('file'), async (req, res) => {
     const command = commandOf(low, Boolean(req.file));
     if (command) {
       session.command = command;
+      /* "Fix it" while being asked for a job title is not a title — it is
+         "just fix it, without one". Settle the question and move, or the
+         agent re-asks and the visitor re-answers the same words forever. */
+      if (session.asked === 'target' && command === 'tailor' && FIX_INTENT.test(low) && !/\btailor|engineer|developer|analyst|designer|manager\b/.test(low)) {
+        session.declined = session.declined || [];
+        if (!session.declined.includes('target')) session.declined.push('target');
+      }
       if (session.asked && ['target', 'jd', 'resume'].includes(session.asked) === false) session.asked = null;
     } else if (session.asked && msg) {
       consumeAnswer(session, session.asked, msg);
@@ -896,7 +911,7 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       if (!session.resumeText.trim() && !Object.keys(session.details).length) {
         return ask('resume', 'Tailoring starts from your facts. Attach or paste the resume — or say "build" and I will interview you from scratch.');
       }
-      if (!session.target && !session.jd) {
+      if (!session.target && !session.jd && !(session.declined || []).includes('target')) {
         return ask('target', 'What job title are you applying for — for example Backend Engineer, Data Analyst, or something else? Paste the job description instead if you have it.');
       }
       /* v5.1 tailor: at most 5 discovery questions, one per turn, then write.

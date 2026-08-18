@@ -131,6 +131,32 @@ describe('the conversation advances instead of repeating', () => {
     expect(out.text).toContain('PRIYA NAIR');
   });
 
+  it('"fix it" after a score starts the fix instead of the help menu', async () => {
+    // The reported loop: score shown → "fix it" → menu → reply → menu again.
+    const a = app();
+    const t1 = await turn(a, RESUME, null);            // scored
+    const t2 = await turn(a, 'fix it', t1.session);
+    expect(t2.kind).not.toBe('help');                  // the old dead end
+    expect(['ask', 'build']).toContain(t2.kind);
+    if (t2.kind === 'ask') expect(t2.session.command).toBe('tailor');
+  });
+
+  it('"fix it" as the answer to "what job title" declines the title and proceeds', async () => {
+    const a = app();
+    const t1 = await turn(a, RESUME, null);
+    let out = await turn(a, 'fix it', t1.session);
+    // If it asks for a title and the visitor just repeats the wish, that is
+    // "no title, just fix" — the same words must never produce the same
+    // question twice.
+    if (out.kind === 'ask' && out.session.asked === 'target') {
+      out = await turn(a, 'fix it please', out.session);
+      expect(out.session.asked).not.toBe('target');
+    }
+    for (let i = 0; i < 6 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+    expect(out.kind).toBe('build');
+    expect(out.text).toContain('PRIYA NAIR');
+  });
+
   it('help twice is not the trap it used to be: the session survives it', async () => {
     const a = app();
     const t1 = await turn(a, 'hello', null);
