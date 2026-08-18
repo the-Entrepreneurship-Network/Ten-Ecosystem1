@@ -76,11 +76,54 @@ function publicEvent(doc, teamCount) {
 // ── Public ──────────────────────────────────────────────────────────────────
 
 /**
+ * The always-on registration pool.
+ *
+ * The portal promises "register once and you are in the pool for every
+ * hackathon and ideathon TEN runs". With no event in the database that promise
+ * was a dead end: REGISTER MY TEAM scrolled to a section offering only "check
+ * your status". So when nothing is published, we open this one instead of
+ * showing an empty page. Staff rename, schedule, or close it from the admin
+ * console like any other event — and once they have touched it, we never
+ * recreate it behind their backs.
+ */
+const POOL_SLUG = 'ten-hackathon-ideathon';
+
+async function ensurePoolEvent() {
+    const existing = await Hackathon.findOne({ slug: POOL_SLUG });
+    if (existing) {
+        // Staff closed or cancelled it — that is a decision, not a gap to fill.
+        return existing.published && existing.status !== 'cancelled' ? existing : null;
+    }
+    try {
+        return await Hackathon.create({
+            title: 'TEN Hackathon & Ideathon',
+            slug: POOL_SLUG,
+            mode: 'hackathon',
+            tagline: 'Register once — you are in the pool for every hackathon and ideathon TEN runs.',
+            description: 'Build in 48 hours or pitch an idea in 24. Register your team, pay the '
+                + 'entry fee, and we place you in the next event with your track and team on file.',
+            tracks: [],
+            minTeamSize: 1,
+            maxTeamSize: 4,
+            venue: 'Online',
+            status: 'registration_open',
+            published: true,
+            publishedAt: new Date(),
+            createdBy: 'system'
+        });
+    } catch (err) {
+        // Two first requests raced; the other one won.
+        if (err && err.code === 11000) return Hackathon.findOne({ slug: POOL_SLUG });
+        throw err;
+    }
+}
+
+/**
  * GET /api/v2/hackathons — published events, soonest first.
  *
- * Returns an empty array when nothing is scheduled, and the portal says so.
- * That is the honest state for a network that has not announced an event yet,
- * and it is the reason nothing here is seeded with sample events.
+ * Never returns an empty list unless staff have deliberately closed the pool:
+ * a portal whose only call to action is "register" must always have something
+ * to register for.
  */
 router.get('/', async (req, res) => {
     try {
@@ -89,7 +132,11 @@ router.get('/', async (req, res) => {
             filter.mode = req.query.mode;
         }
 
-        const events = await Hackathon.find(filter).sort({ startsAt: 1, createdAt: -1 }).limit(50);
+        let events = await Hackathon.find(filter).sort({ startsAt: 1, createdAt: -1 }).limit(50);
+        if (!events.length) {
+            const pool = await ensurePoolEvent();
+            events = pool && (!filter.mode || pool.mode === filter.mode) ? [pool] : [];
+        }
         if (!events.length) return res.json({ success: true, events: [], total: 0 });
 
         // One grouped count rather than a query per event.

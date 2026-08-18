@@ -44,6 +44,14 @@ function when(value: string | null) {
   });
 }
 
+/** The subset Register needs. Shared so every entry point opens the same form. */
+function toRegEvent(e: Event): RegEvent {
+  return {
+    slug: e.slug, title: e.title, mode: e.mode, tracks: e.tracks,
+    minTeamSize: e.minTeamSize, maxTeamSize: e.maxTeamSize, payment: e.payment,
+  };
+}
+
 export default function EventBoard() {
   const [events, setEvents] = useState<Event[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -65,6 +73,31 @@ export default function EventBoard() {
       live = false;
     };
   }, []);
+
+  /**
+   * Every REGISTER / FIND MY TEAM / PITCH AN IDEA button points at #register.
+   * They used to point at #events, which just scrolled the visitor down to a
+   * "check your status" box — the one thing they had not come to do. Opening on
+   * both the current hash and later hashchanges covers the deep link, a click
+   * before the events arrive, and a second click after closing the form.
+   */
+  useEffect(() => {
+    if (!events.length) return;
+    const open = () => {
+      if (window.location.hash === '#register') setRegistering(toRegEvent(events[0]));
+    };
+    open();
+    window.addEventListener('hashchange', open);
+    return () => window.removeEventListener('hashchange', open);
+  }, [events]);
+
+  /** Closing clears #register, so the same button opens the form again. */
+  function closeRegister() {
+    setRegistering(null);
+    if (window.location.hash === '#register') {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  }
 
   return (
     <div id="events" className="relative bg-[#04070a] px-5 py-28 sm:px-10">
@@ -94,9 +127,9 @@ export default function EventBoard() {
         {state === 'ready' && events.length === 0 && (
           <div className="mt-10 max-w-[640px]">
             <p className="text-[15px] leading-relaxed text-white/65" style={inter}>
-              Nothing is scheduled right now. The next hackathon and ideathon will be announced
-              here first — register below and you are in the pool for every one TEN runs, with
-              your domain, stack and timezone already on file.
+              Registration is closed at the moment. The next hackathon and ideathon will be
+              announced here first — check back shortly. If you have already registered, you
+              can still check your status below.
             </p>
           </div>
         )}
@@ -175,10 +208,7 @@ export default function EventBoard() {
                 )}
 
                 <button
-                  onClick={() => setRegistering({
-                    slug: e.slug, title: e.title, mode: e.mode, tracks: e.tracks,
-                    minTeamSize: e.minTeamSize, maxTeamSize: e.maxTeamSize, payment: e.payment,
-                  })}
+                  onClick={() => setRegistering(toRegEvent(e))}
                   className="mt-7 inline-block rounded-full bg-emerald-400 px-7 py-3 text-[13px] font-bold text-black transition-transform hover:scale-[1.04]"
                   style={inter}
                 >
@@ -190,7 +220,7 @@ export default function EventBoard() {
         )}
       </div>
 
-      {registering && <Register event={registering} onClose={() => setRegistering(null)} />}
+      {registering && <Register event={registering} onClose={closeRegister} />}
     </div>
   );
 }

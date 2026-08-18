@@ -150,6 +150,54 @@ describe('admin can create the event — without one the portal is empty', () =>
   });
 });
 
+describe('the portal always has something to register for', () => {
+  it('an empty database falls back to an open pool event, not a dead end', () => {
+    expect(hackRoutes).toMatch(/const POOL_SLUG = 'ten-hackathon-ideathon'/);
+    const fn = hackRoutes.slice(
+      hackRoutes.indexOf('async function ensurePoolEvent'),
+      hackRoutes.indexOf("router.get('/',")
+    );
+    expect(fn).toMatch(/status: 'registration_open'/);
+    expect(fn).toMatch(/published: true/);
+    // The list route uses it when nothing is published.
+    const list = hackRoutes.slice(hackRoutes.indexOf("router.get('/',"), hackRoutes.indexOf("router.get('/me/teams'"));
+    expect(list).toMatch(/await ensurePoolEvent\(\)/);
+  });
+
+  it('staff closing or cancelling the pool is respected, not overwritten', () => {
+    const fn = hackRoutes.slice(
+      hackRoutes.indexOf('async function ensurePoolEvent'),
+      hackRoutes.indexOf("router.get('/',")
+    );
+    // An existing doc is never recreated or re-published behind staff's back.
+    expect(fn).toMatch(/if \(existing\)/);
+    expect(fn).toMatch(/existing\.published && existing\.status !== 'cancelled' \? existing : null/);
+  });
+
+  it('a race on first load does not 500', () => {
+    const fn = hackRoutes.slice(
+      hackRoutes.indexOf('async function ensurePoolEvent'),
+      hackRoutes.indexOf("router.get('/',")
+    );
+    expect(fn).toMatch(/err\.code === 11000/);
+  });
+
+  it('REGISTER opens the form instead of landing on the status box', () => {
+    // #events only scrolls — and with the status checker there, that was the bug.
+    expect(appTsx).toContain('href="#register"');
+    expect(eventBoard).toMatch(/window\.location\.hash === '#register'/);
+    expect(eventBoard).toMatch(/setRegistering\(toRegEvent\(events\[0\]\)\)/);
+    // A click only changes the hash — without this the form never opens.
+    expect(eventBoard).toMatch(/addEventListener\('hashchange', open\)/);
+    // Closing clears the hash, so the same button works a second time.
+    expect(eventBoard).toMatch(/history\.replaceState/);
+  });
+
+  it('the empty state no longer promises a form that is not there', () => {
+    expect(eventBoard).not.toMatch(/register below and you are in the pool/);
+  });
+});
+
 describe('the portal is self-contained — no loop into the student portal', () => {
   it('the register button no longer bounces to the student login', () => {
     expect(eventBoard).not.toContain('student-login.html');
