@@ -1,127 +1,122 @@
 ---
 name: ats-resume
-description: Resume-builder agent that ATS-checks and HR-checks an uploaded PDF, then rebuilds a weak resume by interviewing for skills, projects, target job, and company, or builds from scratch when the user only pastes those details. Always deliver a parse-safe PDF aimed at a high checker plus recruiter-scan score without fabricating experience. Use when a user uploads a resume PDF, wants a resume from scratch, asks for 98/100 ATS, or says make it unrejectable.
+description: Mega resume agent that checks an uploaded PDF like ATS and HR, interviews to rebuild weak files, builds from scratch, or tailors a master fact ledger to a job. Combines career-profile interview, gated JD tailoring, keyword gap tables, XYZ bullets, anti-AI wording, locale rules, versioning, and PDF/DOCX export. Use when the user uploads a resume, wants 98/100 ATS, tailor for a company, compare JDs, or make it unrejectable without fabricating experience.
 metadata:
   type: workflow
-  version: "4.0"
+  version: "5.1"
+  sources: vignzpie, Chasen-Liao, NoahMustafa, dabydat, olegvg, domala81, SankaiAI, nishilbhave, jeromeetienne
 ---
 
-# ATS + HR Resume Builder Agent
+# Mega ATS + HR Resume Agent
 
-This skill *is* the agent loop. Two entry paths. One output: a parse-safe resume PDF plus a score card.
+One skill. Master facts stay; each resume is a derivative.
 
-Never invent jobs, titles, dates, employers, degrees, tools, or metrics.
+Never invent employers, titles, dates, degrees, tools, or metrics. Tag guessed numbers `[verify]` and keep them off the shipped PDF until the user confirms.
 
-Read as needed:
+Load as needed:
 
-1. `references/agent-interview.md` — question order after a weak check or for scratch build
-2. `references/modes-and-essentials.md`
-3. `references/rejection-playbook.md`
-4. `references/ats-rules.md`
-5. `references/hr-scan.md`
-6. `references/rewrite-patterns.md`
-7. `references/scoring-rubric.md`
-8. `references/role-playbooks.md`
-9. `assets/plain-resume-template.md`
+1. `references/mega-pipeline.md` — paths, gates, commands
+2. `references/agent-interview.md` — questions
+3. `references/modes-and-essentials.md`
+4. `references/rejection-playbook.md`
+5. `references/ats-rules.md`
+6. `references/hr-scan.md`
+7. `references/rewrite-patterns.md`
+8. `references/banned-language.md`
+9. `references/gap-and-diff.md`
+10. `references/scoring-rubric.md`
+11. `references/role-playbooks.md`
+12. `references/locale-and-versions.md`
+13. `assets/plain-resume-template.md`
+14. `references/commands-and-open.md` — what to run and which file to open
+15. `references/install-agents.md` — where to unzip this skill
+16. `references/output-contract.md` — delivery shape
 
-For PDF extract/create, load the `pdf` skill. Also offer DOCX via the `docx` skill if asked.
+PDF in/out → `pdf` skill. DOCX → `docx` skill.
 
-## Path A — user uploads a resume PDF
+Do not load every reference at once. Open only the files listed for the current command.
 
-1. Extract text with the `pdf` skill (`pdfplumber` / `pdftotext`). If it is a scan, OCR, then say parse was weak.
-2. Build the fact ledger from recovered text.
-3. Run ATS check + HR check (`references/scoring-rubric.md` + `references/rejection-playbook.md` + `references/hr-scan.md`).
-4. Show the score card and reject reasons **before** rewriting.
-5. Branch on strength:
+## Entry paths
 
-| Band | Checker + scan (use the lower of the two if both exist) | Action |
-|---|---|---|
-| Weak | under 50, or parse under 16/30 | Full rebuild. Interview with `references/agent-interview.md`. Do not polish the old wording. |
-| Salvageable | 50–79 | CONVERT. Interview only the gaps (missing target job, metrics, projects). |
-| Strong | 80+ and ship-gate close | Tight CONVERT. Ask at most one question (usually target JD). |
+**Path A — PDF (or DOCX) uploaded**
+Extract text. If scanned, OCR and mark parse-weak. Score ATS + HR. Show reject reasons. Then:
 
-6. After answers are enough, write the new resume, re-score, pass the ship gate, export PDF.
+- Weak (under 50 or parse killers) → full interview rebuild
+- Salvageable (50–79) → gap questions only
+- Strong (80+) → tailor if a JD exists, else light convert
 
-## Path B — no PDF, user gives details
+**Path B — details only**
+Inventory paste. Interview missing blocks. Build master facts, then the resume.
 
-Trigger when they paste skills, projects, experience, education, target role, or company — anything except a finished resume file.
+**Path C — master + JD (tailor)**
+Requires a fact ledger (from A/B or prior turn). Run gated tailor. Do not draft bullets before JD analysis.
 
-1. Confirm Path B BUILD.
-2. Inventory what they already sent.
-3. Interview remaining gaps with `references/agent-interview.md` (skip questions already answered).
-4. Analyze essentials. Pick role playbook if no JD.
-5. Build from scratch on the skeleton.
-6. Score, ship gate, export PDF.
+Default: file → A, else B. C when both ledger and JD/company exist.
 
-Treat a target company + job title like a mini-JD: pull typical hard skills for that role at that kind of company, then keep only terms the ledger proves.
+## Commands (map user intent)
 
-## Strength rule (weak resume)
+| User says | Run |
+|---|---|
+| upload / check / score / ATS | check |
+| from scratch / I have skills and projects | build |
+| tailor / this JD / this company | tailor |
+| what's missing | gap |
+| compare these jobs | compare (2–5 JDs) |
+| cover letter | cover (optional, after resume ships) |
+| interview prep | 5-line defense + gap scripts from gap-and-diff.md |
 
-A resume is weak if any of these are true:
+## Master fact ledger
 
-- Two columns, tables, icons, or scanned/image PDF
-- No target-role signal in the first 5 lines
-- Duty soup ("responsible for", "worked on") and no outcomes
-- Skills listed with no projects or jobs behind them
-- Checker under 50 or recruiter-scan under 50
+Canonical working memory for the session (and write `resume-facts.md` if the user wants a file):
 
-Weak → rebuild by interview. Do not return a lightly edited version of a 14/100 file.
+Identity, target, jobs, projects, skills evidenced vs listed, education, certs, metrics with source, known gaps, locale, visibility (always / this-JD / hide).
 
-## Interview rules
+Tailor reads the ledger. It does not invent a second biography.
 
-- One question at a time
-- Stop when the ledger can fill Summary, Skills, and either Experience or Projects
-- Never wait for a perfect life story
-- If they refuse metrics, use named scope only
-- Preferred job + company are asked early — they steer keywords
+## Gated tailor (Path C and strong/salvageable A)
 
-## Write rules (both paths)
+Do not skip stages:
 
-Same as v3: essentials first, parse-safe layout, JD nouns only when true, max 3 uses of a hard skill, projects first-class.
+1. Intake — ledger + JD or company+title
+2. JD analysis — must-haves, preferred, seniority, ATS family if URL known
+3. Strategy — what to lead, what to hide, page target
+4. Content — select by fit, rewrite XYZ, humanize (banned-language.md)
+5. ATS check — headings, dates, contact, keyword placement
+6. Dual score + ship gate
+7. Render PDF (and DOCX if asked)
+8. Re-score from extracted PDF text. If worse than pre-render, fix layout, do not ship
 
-Order:
+## Write bar
 
-- Experienced: Contact → Summary → Skills → Experience → Projects → Education → Certs
-- New grad / switch / project-led: Contact → Summary → Skills → Projects → Experience → Education
+- Single column, standard headings, body contact, Month YYYY dates
+- XYZ / verb + object + stack + result-or-scope
+- Essential skills in the first screen
+- Exact JD nouns only when evidenced
+- Max 3 uses of a hard skill
+- Locale from references/locale-and-versions.md (default EN/US)
+- Ban AI filler and first-person bullets
 
-## Scores and "98/100"
+## Scores
 
-Always label scores as **estimated checker** and **recruiter-scan**.
+Always print estimated checker and recruiter-scan from references/scoring-rubric.md.
 
-Aim for:
+Optional second view (Nishil-style): Keyword 40 / Format 30 / Complete 20 / Title 10.
 
-- Parse 28–30/30
-- Recruiter-scan 85+
-- Checker 90+ only when a JD (or company+role) exists and the ledger covers most hard terms
-
-If they ask for 98/100:
-
-- Get there when facts support it
-- If facts do not, state the factual ceiling and what real detail would raise it
-- Never mint tools or percentages to hit 98
-
-Do not say ATS or HR cannot reject the person.
+98/100 only when the ledger covers the JD. State the factual ceiling otherwise. Never say ATS or HR cannot reject.
 
 ## Ship gate
 
-Use `references/scoring-rubric.md`. Add:
+All of references/scoring-rubric.md plus:
 
-- Output file is a text-selectable single-column PDF
-- Path and band (Weak rebuild / Salvageable convert / Scratch build) are stated
+- Path and command stated
+- Diff of material changes (why each rewrite)
+- Not-claimed / DEAL-BREAKER gaps listed
+- PDF text-selectable and paste-order correct
+- No banned-language hits
+- No [verify] items on the shipped file
 
-## Deliver (always)
+## Deliver
 
-1. Path + band
-2. Before scores and reject reasons (Path A) or intake summary (Path B)
-3. Essentials + drop list
-4. Resume markdown
-5. After scores
-6. Not claimed
-7. Remaining risks
-8. **PDF file** via the `pdf` skill (DOCX extra if asked)
+Path + command, before scores, essentials, markdown resume, after scores, not-claimed, risks, PDF.
 
-Optional 5-line interview defense.
-
-## Product note
-
-This skill is the in-chat agent. If they want a hosted upload app, plan software separately and keep this file as the domain brain.
+Cover letter and multi-JD matrix only if asked.

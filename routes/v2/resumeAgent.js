@@ -701,81 +701,263 @@ router.post('/rewrite.pdf', upload.single('file'), async (req, res) => {
   }
 });
 
+/* ── the conversation (v5.1: commands + one-question-at-a-time interview) ── */
+
 /*
- * One chat turn. The agent decides between scanning, building and asking for
- * what is missing — it never answers a resume question with a guess.
+ * The chat was a stateless keyword router, and that is exactly why it kept
+ * repeating itself: it could ask an interview question, but the student's
+ * ANSWER matched no keyword, fell through every branch, and landed on the
+ * same help text — every turn, forever. An agent that asks questions has to
+ * remember having asked them.
+ *
+ * So each turn now carries a session — command, collected answers, resume
+ * text, which question is pending — that the client echoes back. An answer
+ * is consumed by the question that asked for it, the next question follows,
+ * and when the skill's stop rule says build, it builds. The commands are
+ * v5.1's: check, build, tailor, gap.
  */
+
+/** What the visitor wants, read from their sentence — v5.1 command mapping. */
+function commandOf(low, hasFile) {
+  if (/\bgap\b|what('?s| is) missing|why would this fail|missing keyword/.test(low)) return 'gap';
+  if (/\btailor|rewrite|convert|recreate|fix (my|this)|improve (my|this)|make (it|this|my resume) ats|for (this|the) (jd|job|company)\b/.test(low)) return 'tailor';
+  if (/\bscan|check|score|review|rate my|is this rejectable|ats.?(friendly|ready)\b/.test(low)) return 'check';
+  if (/\bbuild|create|write|generate|new resume|from scratch|forge\b/.test(low)) return 'build';
+  if (hasFile) return 'check'; /* a file with no words means "look at this" */
+  return null;
+}
+
+/** A fact ledger shaped from interview answers, so the same question engine
+    serves BUILD, where there is no resume to parse yet. */
+function ledgerFromDetails(d) {
+  const items = (v) => splitItems(v);
+  const skills = items(d.skills);
+  return {
+    name: d.name || null,
+    email: d.email || null,
+    phone: d.phone || null,
+    link: d.linkedin || d.github || null,
+    summaryLines: [],
+    roles: items(d.experience).map((e) => ({ header: '', hasDates: /\d{4}/.test(e), bullets: [e] })),
+    projects: items(d.projects).map((p) => ({ name: '', bullets: [p] })),
+    education: items(d.education),
+    certifications: [],
+    statedSkills: skills,
+    /* The interview asked for tools they can defend, so stating them is the
+       evidence BUILD has. The scan of the finished page re-checks honestly. */
+    evidencedSkills: skills,
+    unevidencedSkills: [],
+    impliedSkills: [],
+    sectionsFound: [],
+    words: 0,
+  };
+}
+
+/** Where each interview answer lands. */
+function consumeAnswer(session, field, msg) {
+  const skip = /^(skip|no|none|nothing|na|n\/a|not now)\.?$/i.test(msg.trim());
+  /* A declined question is settled, not pending. Without this, "skip" left
+     the fact absent, the ledger regenerated the same question, and the agent
+     asked it again every turn — the exact repeat-loop this rewrite removes. */
+  if (skip) {
+    session.declined = session.declined || [];
+    if (!session.declined.includes(field)) session.declined.push(field);
+    return;
+  }
+  if (field === 'target') { session.target = msg.trim(); return; }
+  if (field === 'jd') { session.jd = msg.trim(); return; }
+  if (field === 'resume') { session.resumeText = msg; return; }
+
+  const d = session.details;
+  if (field === 'link') d.linkedin = msg.trim();
+  else if (field === 'metric' || field === 'evidence' || field === 'dates') {
+    /* Their words, added to their history — placement the rewriter can use. */
+    d.experience = [d.experience, msg.trim()].filter(Boolean).join('\n');
+  } else d[field] = msg.trim();
+
+  /* Answers about a scanned resume also extend its text, so tailor and gap
+     see the new facts. Verbatim — these are the student's own statements. */
+  if (session.resumeText && ['email', 'phone', 'name', 'link'].includes(field)) {
+    session.resumeText += `\n${msg.trim()}`;
+  }
+}
+
+/** One question, exactly one, per the skill: the next the ledger cannot answer. */
+function nextQuestion(session) {
+  const ledger = session.resumeText
+    ? atsEngine.factLedger(session.resumeText)
+    : ledgerFromDetails(session.details);
+  const iv = atsEngine.interviewQuestions(ledger, { target: session.target, jd: session.jd });
+  /* Declined questions stay answered — "skip" is an answer. */
+  const declined = session.declined || [];
+  const open = iv.questions.filter((q) => !declined.includes(q.field));
+  return { iv, question: open[0] || null };
+}
+
+/** The finished job, in one response the client already knows how to render. */
+function deliver(res, session, packetOrBuilt, kindNote) {
+  const isPacket = Boolean(packetOrBuilt.resume);
+  const text = isPacket ? packetOrBuilt.resume : packetOrBuilt.text;
+  session.asked = null;
+  session.command = null; /* done — the next message starts fresh, with the facts kept */
+  return res.json({
+    ok: true, kind: 'build',
+    reply: kindNote || null,
+    text,
+    report: scanResume(text, session.target),
+    missing: isPacket ? [] : packetOrBuilt.missing,
+    potentialScore: isPacket ? undefined : packetOrBuilt.potentialScore,
+    details: session.details,
+    packet: isPacket ? packetOrBuilt : undefined,
+    session,
+  });
+}
+
 router.post('/chat', upload.single('file'), async (req, res) => {
   const b = bodyOf(req);
   const msg = String(b.message || '').trim();
   const low = msg.toLowerCase();
 
+  /* The session rides the request; a first turn starts one. */
+  let session;
+  try { session = b.session ? JSON.parse(b.session) : null; } catch (e) { session = null; }
+  if (!session || typeof session !== 'object') session = { command: null, details: {}, resumeText: '', target: '', jd: '', asked: null };
+  if (!session.details) session.details = {};
+
   try {
-    /* Rewrite / convert / recreate wants the full pipeline, not just a score.
-       Checked before scan so "make it ats friendly" lands here. */
-    if (/\brewrite|convert|recreate|fix (my|this)|improve (my|this)|make (it|this|my resume) ats\b/.test(low)) {
-      const text = (await textFromUpload(req.file)) || b.text || '';
-      if (!text.trim()) {
-        return res.json({
-          ok: true, kind: 'ask',
-          reply: 'Attach the resume you want rewritten (PDF or TXT), or paste its text. I will keep every true fact, rebuild it on a parse-safe skeleton, and show the before → after scores. Add the job description too and I will score keywords against it.',
-        });
-      }
-      const packet = atsEngine.rewriteResume(text, { target: b.target, jd: b.jd, mode: 'CONVERT' });
-      return res.json({
-        ok: true, kind: 'build',
-        text: packet.resume,
-        report: scanResume(packet.resume, b.target),
-        missing: [],
-        potentialScore: undefined,
-        details: {},
-        packet,
-      });
+    const uploaded = await textFromUpload(req.file);
+    if (uploaded) session.resumeText = uploaded;
+    if (b.target) session.target = b.target;
+    if (b.jd) session.jd = b.jd;
+
+    /* A block of pasted "field: value" lines is answers in bulk, not chat. */
+    const bulk = parseDetails(msg);
+    if (Object.keys(bulk).length >= 2) {
+      Object.assign(session.details, bulk);
+      if (bulk.role) session.target = session.target || bulk.role;
+      session.asked = null;
     }
 
-    if (req.file || /\bscan|check|score|review|ats.?(friendly|ready)|rate my\b/.test(low)) {
-      const text = (await textFromUpload(req.file)) || b.text || '';
-      if (!text.trim()) {
-        return res.json({
-          ok: true, kind: 'ask',
-          reply: 'Attach your resume (PDF or TXT) with the clip, or paste its text here, and I will score it against what an ATS actually parses — contact block, section headings, action verbs, quantified results, keywords, layout and dates.',
-        });
+    /* Command words win over a pending question — "check this instead" is a
+       change of direction, not an answer to "what is your email". */
+    const command = commandOf(low, Boolean(req.file));
+    if (command) {
+      session.command = command;
+      if (session.asked && ['target', 'jd', 'resume'].includes(session.asked) === false) session.asked = null;
+    } else if (session.asked && msg) {
+      consumeAnswer(session, session.asked, msg);
+      session.asked = null;
+    }
+
+    /* A long paste that reads like a resume is one — whether it arrived
+       unannounced or glued to the command that asked about it ("check this:"
+       followed by the resume). Ignoring the second case asked the visitor to
+       attach the thing they had just pasted. */
+    if (!session.resumeText.trim() && msg.split('\n').length > 5 &&
+        (msg.length > 300 || RE_EMAIL.test(msg) || /\b(experience|skills|education|projects)\b/i.test(msg))) {
+      session.resumeText = msg;
+      if (!session.command) session.command = 'check';
+    }
+
+    const ask = (field, question, note) => {
+      session.asked = field;
+      return res.json({ ok: true, kind: 'ask', reply: [note, question].filter(Boolean).join('\n\n'), session });
+    };
+
+    /* ── dispatch ── */
+
+    if (session.command === 'check') {
+      if (!session.resumeText.trim()) {
+        return ask('resume', 'Attach your resume (PDF or TXT) with the clip, or paste its text here.');
       }
-      const report = scanResume(text, b.target);
+      const report = scanResume(session.resumeText, session.target);
+      const packet = atsEngine.rewriteResume(session.resumeText, { target: session.target, jd: session.jd });
 
-      /* v4.0 weak-file behaviour: the score card comes with the rebuild
-         offer and the first interview questions, in the script's own words —
-         not a verdict the student is left alone with. */
-      const packet = atsEngine.rewriteResume(text, { target: b.target, jd: b.jd });
-      const weakPrompt = packet.band === 'weak'
-        ? `This file would likely bounce (estimated checker ${packet.before.checker}/${packet.before.checkerMax}, recruiter-scan ${packet.before.recruiter}). I will rebuild it — a few questions about target job, skills, projects and experience, then an ATS-safe version.`
-        : null;
+      if (packet.band === 'weak') {
+        /* v5.1 check, step 7: say the rebuild is coming, ask Block 1 Q1 only. */
+        session.command = 'tailor';
+        const q = nextQuestion(session).question;
+        const prompt = `This file would likely bounce (estimated checker ${packet.before.checker}/${packet.before.checkerMax}, recruiter-scan ${packet.before.recruiter}). Band: Weak — I will rebuild it rather than polish it. A few questions first.`;
+        if (q) return ask(q.field, q.question, prompt);
+      }
 
+      session.command = null;
       return res.json({
         ok: true, kind: 'scan', report,
         band: packet.band,
-        prompt: weakPrompt,
+        prompt: packet.band === 'salvageable' ? 'Band: Salvageable — say "tailor" (add the JD if you have it) and I will convert it, keeping every true fact.' : null,
         interview: packet.interview,
         rebuilt: { text: packet.resume, packet },
+        session,
       });
     }
 
-    if (/\bbuild|create|make|write|generate|new resume|forge\b/.test(low)) {
-      const details = parseDetails(msg);
-      const enough = details.name || details.skills || details.experience || details.education;
-      if (!enough) {
-        return res.json({
-          ok: true, kind: 'ask',
-          reply: 'Give me your details on separate lines and I will forge the resume:\n\nname: Aditi Sharma\nrole: Full-Stack Developer\nemail: aditi@example.com\nphone: +91 98765 43210\nskills: React, Node, MongoDB, Express, Git\nexperience: Built a booking app used by 300 students\nprojects: Real-time chat with Socket.io\neducation: B.Tech CSE, 2022 – 2026',
-        });
+    if (session.command === 'tailor') {
+      if (!session.resumeText.trim() && !Object.keys(session.details).length) {
+        return ask('resume', 'Tailoring starts from your facts. Attach or paste the resume — or say "build" and I will interview you from scratch.');
       }
-      const built = buildResume(details);
-      return res.json({ ok: true, kind: 'build', ...built });
+      if (!session.target && !session.jd) {
+        return ask('target', 'What job title are you applying for — for example Backend Engineer, Data Analyst, or something else? Paste the job description instead if you have it.');
+      }
+      /* v5.1 tailor: at most 5 discovery questions, one per turn, then write.
+         The counter is the guarantee this can never become an interrogation. */
+      const { iv, question } = nextQuestion(session);
+      session.tailorAsked = session.tailorAsked || 0;
+      if (question && session.tailorAsked < 5 && !iv.canBuild) {
+        session.tailorAsked += 1;
+        return ask(question.field, question.question);
+      }
+      if (question && session.tailorAsked < 5 && ['email', 'phone', 'metric', 'dates'].includes(question.field)) {
+        session.tailorAsked += 1;
+        return ask(question.field, question.question);
+      }
+      const source = session.resumeText.trim() || Object.entries(session.details)
+        .map(([k, v]) => `${k}: ${v}`).join('\n');
+      const packet = atsEngine.rewriteResume(source, { target: session.target, jd: session.jd, mode: 'CONVERT' });
+      return deliver(res, session, packet,
+        `Band before: ${packet.band}. Converted — checker ${packet.before.checker}→${packet.after.checker}, recruiter-scan ${packet.before.recruiter}→${packet.after.recruiter}.` +
+        (packet.notClaimed.length ? ` Not claimed: ${packet.notClaimed.slice(0, 5).join(', ')}.` : ''));
     }
 
+    if (session.command === 'gap') {
+      if (!session.resumeText.trim()) return ask('resume', 'Attach or paste the resume to run the gap table on.');
+      if (!session.jd) return ask('jd', 'Paste the job description — the gap table is measured against its wording.');
+      const packet = atsEngine.rewriteResume(session.resumeText, { target: session.target, jd: session.jd });
+      const kd = packet.detail.before.checker.keywordDetail || { matched: 0, terms: 0, overlap: 0, missing: [] };
+      session.command = null;
+      return res.json({
+        ok: true, kind: 'help',
+        reply: [
+          `Gap table — ${kd.matched}/${kd.terms} JD terms evidenced (${kd.overlap}% overlap; the competitive band is 60–85%).`,
+          '',
+          ...packet.notClaimed.slice(0, 12).map((t) => `• ${t} — asked for in the JD, no evidence in the resume. Add it only if you have actually used it.`),
+          '',
+          packet.ceiling || 'Nothing on the Not-claimed list — the gap is wording, not facts. Say "tailor" and I will close it.',
+        ].join('\n'),
+        session,
+      });
+    }
+
+    if (session.command === 'build') {
+      const { iv, question } = nextQuestion(session);
+      const forceBuild = /\b(build it|done|that'?s all|go ahead|finish)\b/.test(low);
+      if (question && !forceBuild && !(iv.canBuild && question.block > 3)) {
+        return ask(question.field, question.question);
+      }
+      if (!iv.canBuild && !forceBuild) {
+        const q = question || { field: 'skills', question: 'List the tools and methods you have actually used — only ones you could defend in an interview.' };
+        return ask(q.field, q.question);
+      }
+      const built = buildResume({ ...session.details, role: session.target || session.details.role });
+      return deliver(res, session, built);
+    }
+
+    /* No command, no pending question: the menu — with the session kept, so
+       an answer arriving late still lands somewhere. */
     return res.json({
       ok: true, kind: 'help',
-      reply: 'I do two things, both measured rather than guessed:\n\n• Scan — attach or paste a resume and I score it 0–100 on the nine checks an ATS runs, and tell you exactly which lines cost you points.\n• Build — give me your details and I write a single-column, keyword-matched resume, then score my own output before handing it over.\n\nWhich one?',
+      reply: 'Say what you need and I will run it:\n\n• check — attach or paste your resume, I score it against what an ATS parses and band it Weak / Salvageable / Strong.\n• build — no resume yet: I interview you one question at a time and build from scratch.\n• tailor — resume plus a job description: I convert it to that posting, keeping every true fact.\n• gap — resume plus JD: just the missing-keyword table, no rewrite.\n\nNothing is ever invented — no fake metrics, no skills you do not have.',
+      session,
     });
   } catch (e) {
     res.status(500).json({ ok: false, error: 'Something went wrong reading that. Paste the text instead and I will scan it.' });

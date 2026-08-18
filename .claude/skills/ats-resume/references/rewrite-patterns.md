@@ -39,6 +39,8 @@ One fact per bullet.
 
 Shape: `[Verb] [object] [stack/method] [outcome or scope]`
 
+Google XYZ when a number exists: Accomplished X as measured by Y by doing Z.
+
 | Weak | Strong (same facts) |
 |---|---|
 | Responsible for backend development | Built REST order APIs in Spring Boot used by the checkout web app |

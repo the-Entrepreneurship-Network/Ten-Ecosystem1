@@ -185,6 +185,15 @@ export function AgentChat() {
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  /*
+   * The conversation's memory. The server asks its interview questions one at
+   * a time and needs the answers to land on the question that asked them —
+   * without echoing this back, every answer fell through the keyword router
+   * and the agent repeated the same reply forever. That was the entire
+   * "it keeps repeating itself" bug.
+   */
+  const sessionRef = useRef<Record<string, unknown> | null>(null);
+
   const started = msgs.length > 0;
 
   async function send(text: string, file?: File) {
@@ -196,11 +205,13 @@ export function AgentChat() {
       const body = new FormData();
       body.append('message', text || 'scan my resume');
       if (file) body.append('file', file);
+      if (sessionRef.current) body.append('session', JSON.stringify(sessionRef.current));
       const res = await fetch(`${API}/chat`, { method: 'POST', body });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'failed');
-      if (data.kind === 'scan') setMsgs((m) => [...m, { role: 'agent', report: data.report }]);
-      else if (data.kind === 'build') setMsgs((m) => [...m, { role: 'agent', resume: data.text, report: data.report, missing: data.missing, potentialScore: data.potentialScore, details: data.details }]);
+      if (data.session) sessionRef.current = data.session;
+      if (data.kind === 'scan') setMsgs((m) => [...m, { role: 'agent', report: data.report, text: data.prompt || undefined }]);
+      else if (data.kind === 'build') setMsgs((m) => [...m, { role: 'agent', resume: data.text, report: data.report, missing: data.missing, potentialScore: data.potentialScore, details: data.details, text: data.reply || undefined }]);
       else setMsgs((m) => [...m, { role: 'agent', text: data.reply }]);
     } catch {
       setMsgs((m) => [...m, { role: 'agent', text: 'The agent could not be reached. Check that the portal server is running and try again.' }]);
@@ -225,7 +236,7 @@ export function AgentChat() {
             <span className="text-[#9ca3af]">▤</span>
           </div>
 
-          <button onClick={() => setMsgs([])} className="mb-1 flex items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] text-[#374151] hover:bg-[#eef2ff]">
+          <button onClick={() => { setMsgs([]); sessionRef.current = null; }} className="mb-1 flex items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] text-[#374151] hover:bg-[#eef2ff]">
             <span>✎</span> New Chat
           </button>
           <button className="mb-5 flex items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] text-[#374151] hover:bg-[#eef2ff]">
