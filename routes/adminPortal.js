@@ -1448,6 +1448,148 @@ router.post('/certificate-overrides/:id/revoke', requireAdminAPI, async (req, re
 //  portal, so the hackathon stays separate from everything else. No email.
 // ─────────────────────────────────────────────────────────────────────────
 const HackathonTeam = require('../models/HackathonTeam');
+const Hackathon = require('../models/Hackathon');
+
+// ── Events ────────────────────────────────────────────────────────────────
+//  Without an event, the hackathon portal has nothing to register for and
+//  shows "nothing scheduled". The role-guarded /api/v2/hackathons/admin
+//  endpoints need a student-portal HR/ADMIN session, which the admin console
+//  (password-gated /api/admin-internal) does not have — so staff had no way to
+//  create one. These give the admin console its own create/list/manage path.
+
+/** GET /api/admin-internal/hackathon-events — every event, with team counts. */
+router.get('/hackathon-events', requireAdminAPI, async (req, res) => {
+  try {
+    const events = await Hackathon.find({}).sort({ createdAt: -1 }).limit(100).lean();
+    const counts = await HackathonTeam.aggregate([
+      { $group: { _id: '$hackathonId', n: { $sum: 1 } } }
+    ]);
+    const byId = new Map(counts.map((c) => [String(c._id), c.n]));
+    res.json({
+      success: true,
+      events: events.map((e) => ({
+        id: String(e._id),
+        title: e.title,
+        slug: e.slug,
+        mode: e.mode,
+        tagline: e.tagline || '',
+        tracks: e.tracks || [],
+        prize: e.prize || '',
+        entryFee: e.entryFee == null ? 200 : e.entryFee,
+        minTeamSize: e.minTeamSize,
+        maxTeamSize: e.maxTeamSize,
+        registrationClosesAt: e.registrationClosesAt,
+        startsAt: e.startsAt,
+        venue: e.venue,
+        status: e.status,
+        published: e.published,
+        teamCount: byId.get(String(e._id)) || 0
+      }))
+    });
+  } catch (err) {
+    console.error('[admin] hackathon events list failed:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/** POST /api/admin-internal/hackathon-events — create one. Live by default. */
+router.post('/hackathon-events', requireAdminAPI, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const title = String(b.title || '').trim();
+    if (title.length < 2) return res.status(400).json({ success: false, error: 'Give the event a title.' });
+
+    const slug = String(b.slug || title)
+      .toLowerCase().trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 80);
+    if (!slug) return res.status(400).json({ success: false, error: 'Could not build a URL slug from that title.' });
+
+    // "Go live now" is the common case: publish it and open registration so it
+    // appears on the portal and accepts entrants immediately. Uncheck to keep
+    // it a hidden draft.
+    const live = b.live !== false;
+    const tracks = Array.isArray(b.tracks)
+      ? b.tracks
+      : String(b.tracks || '').split(',').map((t) => t.trim()).filter(Boolean);
+
+    const event = await Hackathon.create({
+      title: title.slice(0, 200),
+      slug,
+      mode: b.mode === 'ideathon' ? 'ideathon' : 'hackathon',
+      tagline: String(b.tagline || '').slice(0, 300),
+      description: String(b.description || '').slice(0, 6000),
+      tracks: tracks.slice(0, 20).map(String),
+      prize: String(b.prize || '').slice(0, 300),
+      entryFee: b.entryFee == null || b.entryFee === '' ? 200 : Math.max(0, Number(b.entryFee) || 0),
+      minTeamSize: Number(b.minTeamSize) || 1,
+      maxTeamSize: Number(b.maxTeamSize) || 4,
+      registrationClosesAt: b.registrationClosesAt ? new Date(b.registrationClosesAt) : null,
+      startsAt: b.startsAt ? new Date(b.startsAt) : null,
+      endsAt:   b.endsAt   ? new Date(b.endsAt)   : null,
+      venue: String(b.venue || 'Online').slice(0, 200),
+      status: live ? 'registration_open' : 'draft',
+      published: live,
+      publishedAt: live ? new Date() : null,
+      createdBy: 'admin'
+    });
+    await AuditLog.create({
+      userId: event._id, actionType: 'hackathon_event_created', performedBy: 'admin',
+      description: `Admin created hackathon event "${event.title}" (${event.slug}), ${live ? 'live' : 'draft'}`,
+      newState: { published: event.published, status: event.status }
+    }).catch(() => {});
+    res.json({ success: true, event: { id: String(event._id), slug: event.slug } });
+  } catch (err) {
+    if (err && err.code === 11000) {
+      return res.status(409).json({ success: false, error: 'An event with that slug already exists.' });
+    }
+    console.error('[admin] hackathon event create failed:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * PATCH /api/admin-internal/hackathon-events/:id — publish/unpublish, open/close
+ * registration, or cancel. Sent as a single { action } for the list buttons.
+ */
+router.patch('/hackathon-events/:id', requireAdminAPI, async (req, res) => {
+  try {
+    const event = await Hackathon.findById(req.params.id);
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found.' });
+    const action = String((req.body || {}).action || '');
+
+    if (action === 'publish')        { event.published = true;  event.publishedAt = new Date();
+                                       if (event.status === 'draft') event.status = 'registration_open'; }
+    else if (action === 'unpublish') { event.published = false; }
+    else if (action === 'open')      { event.status = 'registration_open'; }
+    else if (action === 'close')     { event.status = 'announced'; }
+    else if (action === 'cancel')    { event.status = 'cancelled'; event.published = false; }
+    else return res.status(400).json({ success: false, error: 'Unknown action.' });
+
+    await event.save();
+    res.json({ success: true, event: { id: String(event._id), status: event.status, published: event.published } });
+  } catch (err) {
+    console.error('[admin] hackathon event update failed:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/** DELETE /api/admin-internal/hackathon-events/:id — only when it has no teams. */
+router.delete('/hackathon-events/:id', requireAdminAPI, async (req, res) => {
+  try {
+    const teams = await HackathonTeam.countDocuments({ hackathonId: req.params.id });
+    if (teams > 0) {
+      return res.status(409).json({ success: false, error: `This event has ${teams} registration(s). Cancel it instead of deleting.` });
+    }
+    const event = await Hackathon.findByIdAndDelete(req.params.id);
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found.' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[admin] hackathon event delete failed:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 /** GET /api/admin-internal/hackathon-registrations?status=pending|confirmed|rejected|all */
 router.get('/hackathon-registrations', requireAdminAPI, async (req, res) => {

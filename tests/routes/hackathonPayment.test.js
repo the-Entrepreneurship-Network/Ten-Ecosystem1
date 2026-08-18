@@ -117,6 +117,39 @@ describe('admin verifies it — not HR', () => {
   });
 });
 
+describe('admin can create the event — without one the portal is empty', () => {
+  it('the admin console has create/list/manage endpoints, admin-guarded', () => {
+    expect(adminRoutes).toMatch(/router\.get\('\/hackathon-events', requireAdminAPI/);
+    expect(adminRoutes).toMatch(/router\.post\('\/hackathon-events', requireAdminAPI/);
+    expect(adminRoutes).toMatch(/router\.patch\('\/hackathon-events\/:id', requireAdminAPI/);
+    expect(adminRoutes).toMatch(/router\.delete\('\/hackathon-events\/:id', requireAdminAPI/);
+  });
+
+  it('a new event goes live by default so the portal shows it right away', () => {
+    const block = adminRoutes.slice(
+      adminRoutes.indexOf("router.post('/hackathon-events'"),
+      adminRoutes.indexOf("router.patch('/hackathon-events/:id'")
+    );
+    // live (published + registration_open) unless explicitly saved as draft
+    expect(block).toMatch(/const live = b\.live !== false/);
+    expect(block).toMatch(/status: live \? 'registration_open' : 'draft'/);
+    expect(block).toMatch(/published: live/);
+  });
+
+  it('deleting is blocked once an event has registrations (cancel instead)', () => {
+    const block = adminRoutes.slice(adminRoutes.indexOf("router.delete('/hackathon-events/:id'"));
+    expect(block).toMatch(/countDocuments\(\{ hackathonId: req\.params\.id \}\)/);
+    expect(block).toMatch(/Cancel it instead of deleting/);
+  });
+
+  it('the admin console UI can create and manage events', () => {
+    expect(adminPage).toContain('openNewHackathonEvent');
+    expect(adminPage).toContain('function createHackathonEvent');
+    expect(adminPage).toContain("api('/hackathon-events'");
+    expect(adminPage).toContain('loadHackathonEvents');
+  });
+});
+
 describe('the portal is self-contained — no loop into the student portal', () => {
   it('the register button no longer bounces to the student login', () => {
     expect(eventBoard).not.toContain('student-login.html');
