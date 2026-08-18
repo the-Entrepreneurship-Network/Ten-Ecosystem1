@@ -203,6 +203,24 @@ const studentsSchema = new mongoose.Schema({
       paid:     { type: Boolean, default: false },
       createdAt:{ type: Date, default: Date.now },
     }],
+    /**
+     * What the paid track's bundle actually handed over, recorded when an admin
+     * approves (services/tenureBenefits.js). Kept on the student so the
+     * dashboard can show "here is what you just unlocked" without re-deriving
+     * it, and so `grantedAt` makes a second grant a no-op.
+     */
+    tenureBenefits: {
+        plan:             { type: String, default: '' },
+        durationType:     { type: String, default: '' },
+        grantedAt:        { type: Date,   default: null },
+        coinsGranted:     { type: Number, default: 0 },
+        certificate:      { type: String, default: '' },
+        certificateLabel: { type: String, default: '' },
+        certificateWaived:{ type: Boolean, default: false },
+        valueTotal:       { type: Number, default: 0 },
+        perks:            { type: [String], default: [] }
+    },
+
     shortCoursePaid: { type: Boolean, default: false },
     shortCoursePaymentId: { type: String, default: null },
     shortCoursePaymentVerified: { type: Boolean, default: false },
