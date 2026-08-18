@@ -1,150 +1,127 @@
 ---
 name: ats-resume
-description: Build, recreate, or convert any resume from essential skills, projects, and experience so it is hard for an ATS checker or HR recruiter to bounce. Use when writing from scratch, rebuilding a broken or designed resume, converting a rejectable file, extracting must-keep signals, targeting Workday/Greenhouse/Lever, or raising a low Jobscan-style score without fabricating experience.
+description: Resume-builder agent that ATS-checks and HR-checks an uploaded PDF, then rebuilds a weak resume by interviewing for skills, projects, target job, and company, or builds from scratch when the user only pastes those details. Always deliver a parse-safe PDF aimed at a high checker plus recruiter-scan score without fabricating experience. Use when a user uploads a resume PDF, wants a resume from scratch, asks for 98/100 ATS, or says make it unrejectable.
 metadata:
   type: workflow
-  version: "3.0"
+  version: "4.0"
 ---
 
-# ATS + HR Resume Engine
+# ATS + HR Resume Builder Agent
 
-One agent, three modes. Input can be a polished resume, a rejectable file, a LinkedIn dump, or raw notes. Output is a parse-safe resume built around the essential skills, projects, and experience that actually get interviews.
-
-You cannot force a hire. You can remove the reject reasons writing controls: parse failure, missing keywords, missing essentials, vague duties, wrong-role signal, clutter, and fake claims.
+This skill *is* the agent loop. Two entry paths. One output: a parse-safe resume PDF plus a score card.
 
 Never invent jobs, titles, dates, employers, degrees, tools, or metrics.
 
-Read when the task is non-trivial:
+Read as needed:
 
-1. `references/modes-and-essentials.md` — BUILD / RECREATE / CONVERT + essential-signal rules
-2. `references/rejection-playbook.md`
-3. `references/ats-rules.md`
-4. `references/hr-scan.md`
-5. `references/rewrite-patterns.md`
-6. `references/scoring-rubric.md`
-7. `references/role-playbooks.md`
-8. `assets/plain-resume-template.md`
+1. `references/agent-interview.md` — question order after a weak check or for scratch build
+2. `references/modes-and-essentials.md`
+3. `references/rejection-playbook.md`
+4. `references/ats-rules.md`
+5. `references/hr-scan.md`
+6. `references/rewrite-patterns.md`
+7. `references/scoring-rubric.md`
+8. `references/role-playbooks.md`
+9. `assets/plain-resume-template.md`
 
-File export: `docx` skill default, `pdf` only if asked. Never multi-column.
+For PDF extract/create, load the `pdf` skill. Also offer DOCX via the `docx` skill if asked.
 
-## Modes (pick one, then run the shared pipeline)
+## Path A — user uploads a resume PDF
 
-| Mode | When | What you do |
+1. Extract text with the `pdf` skill (`pdfplumber` / `pdftotext`). If it is a scan, OCR, then say parse was weak.
+2. Build the fact ledger from recovered text.
+3. Run ATS check + HR check (`references/scoring-rubric.md` + `references/rejection-playbook.md` + `references/hr-scan.md`).
+4. Show the score card and reject reasons **before** rewriting.
+5. Branch on strength:
+
+| Band | Checker + scan (use the lower of the two if both exist) | Action |
 |---|---|---|
-| **BUILD** | No resume, or only profile/notes | Assemble from essential skills, projects, experience |
-| **RECREATE** | Designed, scanned, or scrambled file | Recover text, rebuild on the safe skeleton, keep every true fact |
-| **CONVERT** | Existing resume that would bounce | Diagnose rejects, keep essentials, rewrite until the ship gate passes |
+| Weak | under 50, or parse under 16/30 | Full rebuild. Interview with `references/agent-interview.md`. Do not polish the old wording. |
+| Salvageable | 50–79 | CONVERT. Interview only the gaps (missing target job, metrics, projects). |
+| Strong | 80+ and ship-gate close | Tight CONVERT. Ask at most one question (usually target JD). |
 
-If unclear, default: RECREATE if a file exists, else BUILD. CONVERT is RECREATE plus a before/after rejection plan.
+6. After answers are enough, write the new resume, re-score, pass the ship gate, export PDF.
 
-## Mission
+## Path B — no PDF, user gives details
 
-The finished resume must:
+Trigger when they paste skills, projects, experience, education, target role, or company — anything except a finished resume file.
 
-- Parse as a Workday-safe single-column document
-- Surface **essential** skills, projects, and experience in the first screen
-- Hit truthful JD overlap in the 60–85% band when a JD exists
-- Pass a 6-second recruiter scan (role, stack, one proof spike)
-- Contain zero unverified claims
+1. Confirm Path B BUILD.
+2. Inventory what they already sent.
+3. Interview remaining gaps with `references/agent-interview.md` (skip questions already answered).
+4. Analyze essentials. Pick role playbook if no JD.
+5. Build from scratch on the skeleton.
+6. Score, ship gate, export PDF.
 
-## Hard rules
+Treat a target company + job title like a mini-JD: pull typical hard skills for that role at that kind of company, then keep only terms the ledger proves.
 
-1. No fabrication. Scope is allowed only when the ledger already names it.
-2. JD nouns only when true.
-3. Parse-safe layout only.
-4. No stuffing (max 3 uses of a hard skill).
-5. Never say HR or an ATS cannot reject the person. Say hard to reject on parse, essentials, and signal.
-6. Do not mark done if the ship gate fails.
+## Strength rule (weak resume)
 
-## Intake from any source
+A resume is weak if any of these are true:
 
-Accept any mix:
+- Two columns, tables, icons, or scanned/image PDF
+- No target-role signal in the first 5 lines
+- Duty soup ("responsible for", "worked on") and no outcomes
+- Skills listed with no projects or jobs behind them
+- Checker under 50 or recruiter-scan under 50
 
-- PDF / DOCX / markdown / paste
-- LinkedIn About + Experience + Featured
-- Project READMEs, GitHub repos, portfolio blurbs
-- Job description or target title
-- Voice-note style bullets
+Weak → rebuild by interview. Do not return a lightly edited version of a 14/100 file.
 
-Need at least identity-or-name-placeholder plus one of: experience, projects, skills.
+## Interview rules
 
-Prefer a JD. Without one, use a role playbook and mark keywords unanchored.
+- One question at a time
+- Stop when the ledger can fill Summary, Skills, and either Experience or Projects
+- Never wait for a perfect life story
+- If they refuse metrics, use named scope only
+- Preferred job + company are asked early — they steer keywords
 
-One question at a time, only if it changes the page:
+## Write rules (both paths)
 
-1. Target JD or title
-2. Strongest real metric for the top 3 bullets
-3. Country + file type
+Same as v3: essentials first, parse-safe layout, JD nouns only when true, max 3 uses of a hard skill, projects first-class.
 
-Start immediately.
+Order:
 
-## Essential signal pass (mandatory)
+- Experienced: Contact → Summary → Skills → Experience → Projects → Education → Certs
+- New grad / switch / project-led: Contact → Summary → Skills → Projects → Experience → Education
 
-Before writing, extract the essentials. Details in `references/modes-and-essentials.md`.
+## Scores and "98/100"
 
-```
-Essential skills:     tools/methods the target role searches and the ledger proves
-Essential experience: roles that prove the function (latest + most relevant)
-Essential projects:   builds that prove a missing job signal or a rare stack
-Proof spikes:         3–5 facts that stop a bounce
-Drop list:            old, off-target, or unevidenced items
-```
+Always label scores as **estimated checker** and **recruiter-scan**.
 
-The resume is built from essentials, not from dumping the whole life.
+Aim for:
 
-## Shared pipeline
+- Parse 28–30/30
+- Recruiter-scan 85+
+- Checker 90+ only when a JD (or company+role) exists and the ledger covers most hard terms
 
-### 1. Fact ledger
+If they ask for 98/100:
 
-Tag `stated` or `inferred` (abbreviation expansion only).
+- Get there when facts support it
+- If facts do not, state the factual ceiling and what real detail would raise it
+- Never mint tools or percentages to hit 98
 
-Identity, target, experience rows, projects, evidenced vs listed skills, education, certs, gaps, mode.
+Do not say ATS or HR cannot reject the person.
 
-### 2. Rejection diagnosis
+## Ship gate
 
-ATS-reject vs HR-reject with a fix for each (`references/rejection-playbook.md`). For BUILD, diagnose the *empty-page* risks (no function signal, project-only names, skill cloud).
+Use `references/scoring-rubric.md`. Add:
 
-### 3. Dual score (before)
+- Output file is a text-selectable single-column PDF
+- Path and band (Weak rebuild / Salvageable convert / Scratch build) are stated
 
-Checker /100, recruiter-scan /100, factual ceiling. BUILD starts from 0 plus whatever notes already satisfy fields.
+## Deliver (always)
 
-### 4. Map essentials → page
-
-Every JD or playbook term: evidenced verbatim, synonym rewrite, or Not claimed.
-
-Place essentials:
-
-- Skills line = essential skills only (plus a short secondary line if needed)
-- Latest job = essential experience, 3–6 impact bullets
-- Projects = essential projects, problem + stack + outcome
-- Top third = role + essentials + one spike
-
-### 5. Write
-
-`references/rewrite-patterns.md` + role playbook + `assets/plain-resume-template.md`.
-
-Experienced: Contact → Summary → Skills → Experience → Projects → Education → Certs
-
-Project-led / new grad / switch: Contact → Summary → Skills → Projects → Experience → Education
-
-Same constraints as before: safe headings, Month YYYY dates, one-line job headers, 1–2 pages.
-
-### 6. Ship gate
-
-Re-score. Do not call it done unless `references/scoring-rubric.md` ship gate passes, including the new essentials checks.
-
-### 7. Deliver
-
-1. Mode used
-2. Essential skills / projects / experience (and drop list)
-3. Rejection diagnosis
+1. Path + band
+2. Before scores and reject reasons (Path A) or intake summary (Path B)
+3. Essentials + drop list
 4. Resume markdown
-5. Before → after scores
+5. After scores
 6. Not claimed
-7. Remaining human risks
+7. Remaining risks
+8. **PDF file** via the `pdf` skill (DOCX extra if asked)
 
-DOCX when they want a file. Optional 5-line interview defense.
+Optional 5-line interview defense.
 
-## Product builds
+## Product note
 
-If they want an app, this skill is the domain brain. Multi-file coding uses `claude-codex-team`.
+This skill is the in-chat agent. If they want a hosted upload app, plan software separately and keep this file as the domain brain.

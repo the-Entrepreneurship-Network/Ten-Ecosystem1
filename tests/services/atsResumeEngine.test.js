@@ -143,7 +143,7 @@ describe('rewrite (CONVERT)', () => {
   });
 
   it('evaluates the ship gate instead of asserting it', () => {
-    expect(packet.shipGate.checks).toHaveLength(10);
+    expect(packet.shipGate.checks).toHaveLength(12);
     packet.shipGate.checks.forEach((c) => {
       expect(typeof c.pass).toBe('boolean');
       expect(c.why.length).toBeGreaterThan(0);
@@ -176,6 +176,87 @@ describe('rewrite (CONVERT)', () => {
     const projAt = p.resume.indexOf('PROJECTS');
     expect(projAt).toBeGreaterThan(-1);
     expect(p.essentials.projectLed).toBe(true);
+  });
+});
+
+describe('v4.0: strength bands (Path A)', () => {
+  const { strengthBand } = require('../../services/v2/atsResumeEngine');
+
+  it('bands on the lower of the two scores', () => {
+    expect(strengthBand({ total: 90, max: 100, parse: 30 }, { total: 40 })).toBe('weak');
+    expect(strengthBand({ total: 65, max: 100, parse: 28 }, { total: 75 })).toBe('salvageable');
+    expect(strengthBand({ total: 85, max: 100, parse: 30 }, { total: 88 })).toBe('strong');
+  });
+
+  it('a parse under 16/30 is weak regardless of the rest', () => {
+    expect(strengthBand({ total: 80, max: 100, parse: 12 }, { total: 85 })).toBe('weak');
+  });
+
+  it('the rejectable file lands in weak and carries the interview', () => {
+    const p = rewriteResume(REJECTABLE, { target: 'backend developer', jd: JD });
+    expect(p.band).toBe('weak');
+    expect(p.path).toBe('A');
+    expect(p.interview.questions.length).toBeGreaterThan(0);
+  });
+
+  it('a strong resume gets at most one question', () => {
+    const p = rewriteResume(CLEAN, { target: 'backend developer', jd: JD });
+    expect(['salvageable', 'strong']).toContain(p.band);
+    if (p.band === 'strong') expect(p.interview.questions.length).toBeLessThanOrEqual(1);
+  });
+
+  it('the ship gate now runs twelve checks including path and PDF', () => {
+    const p = rewriteResume(CLEAN, { target: 'backend developer', jd: JD });
+    expect(p.shipGate.checks).toHaveLength(12);
+    expect(p.shipGate.checks.find((c) => c.check === 'Path and band stated').why).toMatch(/Path A/);
+    expect(p.shipGate.checks.find((c) => c.check.includes('PDF')).why).toMatch(/rewrite\.pdf/);
+  });
+});
+
+describe('v4.0: the interview asks only what is missing', () => {
+  const { interviewQuestions } = require('../../services/v2/atsResumeEngine');
+
+  it('skips identity questions the ledger already answers', () => {
+    const led = factLedger(CLEAN);
+    const iv = interviewQuestions(led, { target: 'backend developer', jd: JD });
+    const fields = iv.questions.map((q) => q.field);
+    expect(fields).not.toContain('name');
+    expect(fields).not.toContain('email');
+    expect(fields).not.toContain('phone');
+  });
+
+  it('asks for the target first when none is given', () => {
+    const iv = interviewQuestions(factLedger(CLEAN), {});
+    expect(iv.questions[0].field).toBe('target');
+    expect(iv.questions[0].block).toBe(1);
+  });
+
+  it('asks for evidence when skills are stated but nothing shows them in use', () => {
+    const iv = interviewQuestions(factLedger(REJECTABLE), { target: 'backend developer', jd: JD });
+    expect(iv.questions.some((q) => q.field === 'evidence')).toBe(true);
+  });
+
+  it('asks for one real metric rather than inventing one', () => {
+    /* Bullets with no number and no stated scope — nothing to measure by. */
+    const scopeless = [
+      'Ravi Kumar', 'ravi@example.com +91 90000 11111', '',
+      'Experience',
+      'Developer | Acme | Jan 2024 – Present',
+      '- Built the invoicing module in Java and Spring Boot',
+      '- Wrote the PostgreSQL reporting layer',
+      '', 'Skills', 'Java, Spring Boot, PostgreSQL',
+    ].join('\n');
+    const iv = interviewQuestions(factLedger(scopeless), { target: 'backend developer', jd: JD });
+    const metric = iv.questions.find((q) => q.field === 'metric');
+    expect(metric).toBeTruthy();
+    expect(metric.question).toMatch(/stand behind/);
+    expect(metric.question).toMatch(/it stays out/);
+  });
+
+  it('carries the stop rule so nobody waits for a perfect life story', () => {
+    const iv = interviewQuestions(factLedger(CLEAN), { target: 'x', jd: 'y' });
+    expect(iv.canBuild).toBe(true);
+    expect(iv.stopRule).toMatch(/Stop asking/);
   });
 });
 

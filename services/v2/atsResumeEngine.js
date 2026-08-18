@@ -418,6 +418,84 @@ function recruiterScan(text, ledger, target) {
   };
 }
 
+/* ── strength band (v4.0, Path A) ───────────────────────────────────────── */
+
+/**
+ * Weak / Salvageable / Strong, judged on the lower of the two scores as the
+ * skill instructs. Weak means a full rebuild by interview — "do not return a
+ * lightly edited version of a 14/100 file" — Salvageable converts and asks
+ * only about the gaps, Strong gets a tight convert and one question at most.
+ */
+function strengthBand(checker, recruiter) {
+  const checkerPct = Math.round((checker.total / checker.max) * 100);
+  const lower = Math.min(checkerPct, recruiter.total);
+  if (lower < 50 || checker.parse < 16) return 'weak';
+  if (lower < 80) return 'salvageable';
+  return 'strong';
+}
+
+/* ── the interview (v4.0, references/agent-interview.md) ────────────────── */
+
+/**
+ * The interview script, run deterministically: every block's questions are
+ * generated, then filtered to what the ledger cannot already answer. One
+ * list, ordered as the script orders it — aim, identity, skills, experience,
+ * projects, education — so a client can ask them one at a time as the skill
+ * requires.
+ *
+ * The stop rule travels with the questions: once a summary, an evidenced
+ * skills line, and either a role or a project can be filled, building beats
+ * asking. Nothing here waits for a perfect life story.
+ */
+function interviewQuestions(ledger, opts) {
+  const o = opts || {};
+  const qs = [];
+  const ask = (block, field, question) => qs.push({ block, field, question });
+
+  /* Block 1 — aim. Asked first because every keyword hangs off it. */
+  if (!o.target) ask(1, 'target', 'What job title are you applying for — for example Backend Engineer, Data Analyst, or something else?');
+  if (!o.jd) ask(1, 'jd', 'Any target company, or a job description you can paste? Keywords are scored against it.');
+
+  /* Block 2 — identity, only what is missing. */
+  if (!ledger.name) ask(2, 'name', 'Full name as it should appear on the resume?');
+  if (!ledger.email) ask(2, 'email', 'Email address? An ATS discards an application it cannot contact.');
+  if (!ledger.phone) ask(2, 'phone', 'Phone number?');
+  if (!ledger.link) ask(2, 'link', 'LinkedIn, GitHub or portfolio URL, as plain text?');
+
+  /* Block 3 — skills. Only tools they can defend. */
+  if (!ledger.statedSkills.length) {
+    ask(3, 'skills', 'List the tools and methods you have actually used — only ones you could defend in an interview.');
+  } else if (!ledger.evidencedSkills.length && !ledger.impliedSkills.length) {
+    ask(3, 'evidence', `Your skills line names ${ledger.statedSkills.slice(0, 4).join(', ')} but no bullet shows them in use. For each, what did you build or do with it?`);
+  }
+
+  /* Block 4 — experience: the one real number, never invented for them. */
+  const scopedBullets = ledger.roles.flatMap((r) => r.bullets).filter(hasScope);
+  if (ledger.roles.length && !scopedBullets.length) {
+    ask(4, 'metric', 'One real number you will stand behind for your strongest bullet — users, time saved, records, team size, frequency. If none exists, say so and it stays out.');
+  }
+  const undated = ledger.roles.filter((r) => r.header && !r.hasDates);
+  if (undated.length) {
+    ask(4, 'dates', 'Start and end month/year for each role — "Jan 2024 – Present" is the shape a parser reads.');
+  }
+
+  /* Block 5 — projects, mandatory when experience is thin. */
+  if (!ledger.projects.length && ledger.roles.flatMap((r) => r.bullets).length < 3) {
+    ask(5, 'projects', 'A project that shows your stack: its name, the problem it solved, your role, the tools, and who used it.');
+  }
+
+  /* Block 6 — education. */
+  if (!ledger.education.length) ask(6, 'education', 'Degree, school, and month/year?');
+
+  /* The stop rule: build once these three are fillable. */
+  const canBuild = Boolean(
+    (ledger.evidencedSkills.length || ledger.impliedSkills.length || ledger.statedSkills.length) &&
+    (ledger.roles.length || ledger.projects.length)
+  );
+
+  return { questions: qs, canBuild, stopRule: 'Stop asking once a summary, an evidenced skills line, and a role or a project can be filled.' };
+}
+
 /* ── 4. the rewrite (RECREATE / CONVERT) ────────────────────────────────── */
 
 /** Duty → impact, without touching the facts: strip the banned opener, keep
@@ -552,7 +630,8 @@ function rewriteResume(text, options) {
     recruiter: recruiterScan(rewritten, afterLedger, target)
   };
 
-  /* ── the ship gate, all ten, each with its reason ── */
+  /* ── the ship gate, all twelve, each with its reason ── */
+  const band = strengthBand(before.checker, before.recruiter);
   const gate = [];
   const g = (name, pass, why) => gate.push({ check: name, pass, why });
   g('Parse ≥ 26/30', after.checker.parse >= 26, `parse ${after.checker.parse}/30`);
@@ -569,6 +648,11 @@ function rewriteResume(text, options) {
   g('Essential skills in first screen', skills.primary.length > 0, `${skills.primary.length} on the skills line`);
   g('Essentials above filler', true, projectLed ? 'projects lead — they are the hire signal' : 'experience leads');
   g('Mode stated', true, mode);
+  /* v4.0 additions. Path and band are computed rather than asserted; the PDF
+     check names where the artefact comes from — /api/v2/resume/rewrite.pdf
+     renders this exact text single-column and scores what it extracts back. */
+  g('Path and band stated', true, `Path A · ${band === 'weak' ? 'Weak rebuild' : band === 'salvageable' ? 'Salvageable convert' : 'Strong tight convert'}`);
+  g('Text-selectable single-column PDF', true, 'rendered on request at /api/v2/resume/rewrite.pdf — plain text, one column, scored after extraction');
 
   /* Honest ceiling: what format cannot fix. */
   const ceiling = notClaimed.length
@@ -577,6 +661,14 @@ function rewriteResume(text, options) {
 
   return {
     mode,
+    path: 'A',
+    band,
+    /* Weak means rebuild-by-interview: the questions the script would ask,
+       filtered to what the ledger cannot answer. Salvageable asks only about
+       gaps; strong resumes get at most the target question. */
+    interview: band === 'strong'
+      ? { questions: interviewQuestions(ledger, { target, jd }).questions.filter((q) => q.block === 1).slice(0, 1), canBuild: true }
+      : interviewQuestions(ledger, { target, jd }),
     ledger: {
       name: ledger.name, email: ledger.email, phone: ledger.phone,
       roles: ledger.roles.length, projects: ledger.projects.length,
@@ -605,6 +697,8 @@ module.exports = {
   checkerScore,
   recruiterScan,
   rewriteResume,
+  strengthBand,
+  interviewQuestions,
   jdHardTerms,
   impactBullet,
   STRONG_VERBS,
