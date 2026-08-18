@@ -23,6 +23,10 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 
+/* The ats-resume skill (v3.0, .claude/skills/ats-resume) as a deterministic
+   engine: fact ledger, dual scoring, essential-signal pass, ship gate. */
+const atsEngine = require('../../services/v2/atsResumeEngine');
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024 },
@@ -244,11 +248,17 @@ function scanResume(text, target) {
     `${verbStart}/${bullets.length || 0} bullets (${Math.round(verbRatio * 100)}%)`,
     'Start each bullet with a verb — Built, Led, Reduced, Automated — not "Responsible for" or "Worked on".');
 
-  /* 5. quantified achievement */
-  const quantified = bullets.filter((b) => /\d+\s*(%|percent|k\b|x\b|\+)|\b\d{2,}\b|₹|\$|€/.test(b)).length;
+  /* 5. quantified achievement — a number, or the scope the ats-resume skill
+     accepts in its place: users named, team size, frequency. "Ran tests
+     before each weekly submission" is a scoped claim; inventing "cut rework
+     25%" to replace it is what this engine exists to refuse. */
+  const quantified = bullets.filter((b) =>
+    /\d+\s*(%|percent|k\b|x\b|\+)|\b\d{2,}\b|₹|\$|€/.test(b) ||
+    /\b(daily|weekly|monthly|biweekly)\b/i.test(b) ||
+    /\b(users?|students?|clients?|team of)\b/i.test(b)).length;
   const quantRatio = bullets.length ? quantified / bullets.length : 0;
   add('quantified', 'Achievements are quantified', 12, Math.min(12, quantRatio * 24),
-    `${quantified}/${bullets.length || 0} bullets carry a number (${Math.round(quantRatio * 100)}%)`,
+    `${quantified}/${bullets.length || 0} bullets carry a number or stated scope (${Math.round(quantRatio * 100)}%)`,
     'Add measurable outcomes to at least half your bullets: "cut load time 40%", "handled 1,200 users", "raised ₹2L".');
 
   /* 6. skills block, matched against the target role */
@@ -379,23 +389,35 @@ function buildResume(detailsInput) {
   L.push('');
   L.push('EXPERIENCE');
   L.push(`${role} — TEN Virtual Internship | Jan 2026 – Present`);
+  /* True of the programme itself, so every intern can defend it: this line
+     is structure, and it replaces the word count the fabricated metrics used
+     to supply. */
+  L.push(`Remote internship under a domain coordinator: weekly task submissions, code review before merge, and a final evaluated capstone in ${bank.key === 'general' ? 'software development' : bank.key}.`);
+  /*
+   * The student's items go on the page as they gave them — verb-fronted, but
+   * with no metric or tool appended. This used to add ", cutting manual
+   * effort by 30%" and ", serving 100+ users" to bullets that had no number,
+   * which is fabrication: the ats-resume skill's hard limit ("never invent
+   * metrics") bans it, and an interviewer asking "how did you measure that?"
+   * ends the interview. A bullet without scope is reported as a gap instead.
+   */
   if (expItems.length) {
     expItems.forEach((e, i) => {
       const b = toBullet(e, i);
-      if (b) L.push(`- ${b}${/\d/.test(b) ? '' : ', cutting manual effort by 30%'}, using ${skills[i % skills.length]}`);
+      if (b) L.push(`- ${b}`);
     });
   }
-  /* Weekly-track work every TEN intern genuinely does — kept generic enough to
-     be true, specific enough for a parser to match. */
-  L.push(`- Delivered weekly milestones across a 45-day track, closing 100% of assigned tasks on schedule`);
-  L.push(`- Built and shipped 2 reviewed projects using ${skills.slice(0, 3).join(', ')}, reducing manual effort by 30%`);
-  L.push('- Wrote and ran tests before each submission, cutting review rework by 25%');
+  /* Weekly-track facts every TEN intern can defend: structure of the
+     programme, not invented outcomes. */
+  L.push('- Delivered weekly reviewed milestones across a 45-day internship track');
+  L.push(`- Built projects using ${skills.slice(0, 3).join(', ')}, each reviewed by a domain coordinator before merge`);
+  L.push('- Wrote and ran tests before each weekly submission');
   L.push('');
   L.push('PROJECTS');
-  (projItems.length ? projItems : [`Built a ${bank.key === 'general' ? 'full-stack' : bank.key} application used by 50+ classmates, with authentication and a REST API`])
+  (projItems.length ? projItems : [`Built a ${bank.key === 'general' ? 'full-stack' : bank.key} application with authentication and a REST API as the internship capstone`])
     .forEach((p, i) => {
       const b = toBullet(p, i + 2);
-      if (b) L.push(`- ${b}${/\d/.test(b) ? '' : ', serving 100+ users'}`);
+      if (b) L.push(`- ${b}`);
     });
   L.push(`- Documented setup and API usage so a new contributor could run the project in under 10 minutes`);
   L.push('');
@@ -426,6 +448,11 @@ function buildResume(detailsInput) {
   if (!expItems.length)                 missing.push({ field: 'experience', worth: 8,  why: 'Your own wording beats the generic internship bullets used as a fallback.' });
   if (!eduItems.length)                 missing.push({ field: 'education',  worth: 4,  why: 'Degree and years are a standard filter field.' });
   if (!projItems.length)                missing.push({ field: 'projects',   worth: 4,  why: 'Projects are where a student without job history proves the skills.' });
+  /* Numbers are asked for, never added. The old builder appended fake
+     percentages here; now the gap is named and left for the student. */
+  if ([...expItems, ...projItems].length && ![...expItems, ...projItems].some((x) => /\d/.test(x))) {
+    missing.push({ field: 'a real metric', worth: 6, why: 'None of your bullets carries a number. Add one true figure — users, records, time saved — per strong bullet. Invented metrics fail interviews, so none were added for you.' });
+  }
 
   return {
     text,
@@ -553,17 +580,23 @@ router.post('/scan', upload.single('file'), async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Send a resume: attach a PDF/TXT file or paste the text.' });
     }
     const report = scanResume(text, b.target || b.role);
-    /* A failing resume is not left as a verdict — the rebuild is the point. */
-    const rebuilt = report.verdict === 'ats_ready' ? null : buildResume({
-      /* horizontal space only — \s would run past the line end and take the
-         title with the name */
-      name: (text.match(/^[ \t]*([A-Z][A-Za-z.'-]+(?:[ \t]+[A-Z][A-Za-z.'-]+){1,3})[ \t]*$/m) || [])[1],
-      role: b.target || b.role,
-      email: (text.match(RE_EMAIL) || [])[0],
-      phone: (text.match(RE_PHONE) || [])[0],
-      linkedin: (text.match(RE_LINK) || [])[0],
-      skills: report.checks.find((c) => c.id === 'skills') ? '' : '',
-    });
+    /*
+     * A failing resume is not left as a verdict — the rebuild is the point.
+     *
+     * This used to hand back the generic TEN scaffold with the student's name
+     * on it, which threw away their actual experience, projects and skills.
+     * The engine's CONVERT mode rebuilds from their own fact ledger instead:
+     * same facts, safe skeleton, nothing invented.
+     */
+    let rebuilt = null;
+    if (report.verdict !== 'ats_ready') {
+      const packet = atsEngine.rewriteResume(text, { target: b.target || b.role, jd: b.jd, mode: 'CONVERT' });
+      rebuilt = {
+        text: packet.resume,
+        report: scanResume(packet.resume, b.target || b.role),
+        packet,
+      };
+    }
     res.json({ ok: true, report, rebuilt });
   } catch (e) {
     res.status(500).json({ ok: false, error: 'Could not read that file. Try a text-based PDF (not a scan) or paste the text.' });
@@ -574,6 +607,31 @@ router.post('/build', (req, res) => {
   const b = bodyOf(req);
   const built = buildResume(b.details || b.text || b);
   res.json({ ok: true, ...built });
+});
+
+/*
+ * RECREATE / CONVERT — the ats-resume skill's full pipeline over an existing
+ * resume: fact ledger, rejection diagnosis, dual score before, rebuild from
+ * the person's own facts on the safe skeleton, dual score after, ship gate,
+ * Not-claimed list, honest ceiling. Pass `jd` for keyword scoring; without it
+ * the checker is honestly out of 60.
+ */
+router.post('/rewrite', upload.single('file'), async (req, res) => {
+  try {
+    const b = bodyOf(req);
+    const text = (await textFromUpload(req.file)) || b.text || '';
+    if (!text.trim()) {
+      return res.status(400).json({ ok: false, error: 'Send a resume: attach a PDF/TXT file or paste the text.' });
+    }
+    const packet = atsEngine.rewriteResume(text, {
+      target: b.target || b.role,
+      jd: b.jd || b.jobDescription,
+      mode: b.mode === 'RECREATE' ? 'RECREATE' : 'CONVERT',
+    });
+    res.json({ ok: true, ...packet });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'Could not read that file. Try a text-based PDF (not a scan) or paste the text.' });
+  }
 });
 
 /*
@@ -619,6 +677,28 @@ router.post('/chat', upload.single('file'), async (req, res) => {
   const low = msg.toLowerCase();
 
   try {
+    /* Rewrite / convert / recreate wants the full pipeline, not just a score.
+       Checked before scan so "make it ats friendly" lands here. */
+    if (/\brewrite|convert|recreate|fix (my|this)|improve (my|this)|make (it|this|my resume) ats\b/.test(low)) {
+      const text = (await textFromUpload(req.file)) || b.text || '';
+      if (!text.trim()) {
+        return res.json({
+          ok: true, kind: 'ask',
+          reply: 'Attach the resume you want rewritten (PDF or TXT), or paste its text. I will keep every true fact, rebuild it on a parse-safe skeleton, and show the before → after scores. Add the job description too and I will score keywords against it.',
+        });
+      }
+      const packet = atsEngine.rewriteResume(text, { target: b.target, jd: b.jd, mode: 'CONVERT' });
+      return res.json({
+        ok: true, kind: 'build',
+        text: packet.resume,
+        report: scanResume(packet.resume, b.target),
+        missing: [],
+        potentialScore: undefined,
+        details: {},
+        packet,
+      });
+    }
+
     if (req.file || /\bscan|check|score|review|ats.?(friendly|ready)|rate my\b/.test(low)) {
       const text = (await textFromUpload(req.file)) || b.text || '';
       if (!text.trim()) {
