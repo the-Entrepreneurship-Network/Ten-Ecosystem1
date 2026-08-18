@@ -83,15 +83,30 @@ const QUICK = [
   { icon: '⚡', label: 'Fix Rejections', send: 'why do I get rejected' },
 ];
 
-const PROJECTS = [
-  ['Full-Stack CV', '03'],
-  ['Data Science CV', '02'],
-  ['Internship CV', '04'],
-  ['Cover Letters', '03'],
+/*
+ * Starters, not decoration. These rows used to be mock "projects" and a fake
+ * chat history — divs with hover styles and no handlers, which read as broken
+ * the moment anyone clicked them. Every sidebar row now does the thing it
+ * looks like it does: a starter sends its prompt, a history entry restores
+ * that conversation.
+ */
+const STARTERS: [string, string][] = [
+  ['Full-Stack CV', 'Build a Full-Stack Developer resume from scratch'],
+  ['Data Science CV', 'Build a Data Analyst resume from scratch'],
+  ['Internship CV', 'Build a Software Engineering Intern resume from scratch'],
+  ['Cover Letter', 'cover letter'],
 ];
 
-const HISTORY_TODAY = ['ATS score — first pass', 'Rewrite: project bullets'];
-const HISTORY_YESTERDAY = ['Keywords for MERN roles', 'Two-column layout fix', 'Certificate section'];
+type Archive = { title: string; at: number; msgs: Msg[]; session: Record<string, unknown> | null };
+
+const ARCHIVE_KEY = 'ten_resume_agent_archives';
+
+function loadArchives(): Archive[] {
+  try { return JSON.parse(localStorage.getItem(ARCHIVE_KEY) || '[]'); } catch { return []; }
+}
+function saveArchives(list: Archive[]) {
+  try { localStorage.setItem(ARCHIVE_KEY, JSON.stringify(list.slice(0, 12))); } catch { /* full */ }
+}
 
 function ScoreRing({ score }: { score: number }) {
   const tone = score >= 80 ? '#16a34a' : score >= 60 ? '#d97706' : '#dc2626';
@@ -211,6 +226,45 @@ export function AgentChat() {
 
   const started = msgs.length > 0;
 
+  /* Real history: archived conversations, restored on click. */
+  const [archives, setArchives] = useState<Archive[]>(loadArchives);
+  const [filter, setFilter] = useState('');
+  const [searching, setSearching] = useState(false);
+
+  function archiveCurrent() {
+    if (!msgs.length) return;
+    const firstUser = msgs.find((m) => m.role === 'user');
+    const entry: Archive = {
+      title: (firstUser?.text || firstUser?.file || 'Conversation').slice(0, 48),
+      at: Date.now(),
+      msgs,
+      session: sessionRef.current,
+    };
+    const next = [entry, ...archives].slice(0, 12);
+    setArchives(next);
+    saveArchives(next);
+  }
+
+  function newChat() {
+    archiveCurrent();
+    setMsgs([]);
+    persistSession(null);
+  }
+
+  function restore(a: Archive) {
+    archiveCurrent();
+    setMsgs(a.msgs);
+    persistSession(a.session);
+    const rest = archives.filter((x) => x !== a);
+    setArchives(rest);
+    saveArchives(rest);
+  }
+
+  const dayOf = (at: number) => {
+    const d = new Date(at); const today = new Date();
+    return d.toDateString() === today.toDateString() ? 'TODAY' : 'EARLIER';
+  };
+
   async function send(text: string, file?: File) {
     if (!text.trim() && !file) return;
     setMsgs((m) => [...m, { role: 'user', text: text || 'Scan this resume', file: file?.name }]);
@@ -251,33 +305,59 @@ export function AgentChat() {
             <span className="text-[#9ca3af]">▤</span>
           </div>
 
-          <button onClick={() => { setMsgs([]); persistSession(null); }} className="mb-1 flex items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] text-[#374151] hover:bg-[#eef2ff]">
+          <button onClick={newChat} className="mb-1 flex items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] text-[#374151] hover:bg-[#eef2ff]">
             <span>✎</span> New Chat
           </button>
-          <button className="mb-5 flex items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] text-[#374151] hover:bg-[#eef2ff]">
+          <button onClick={() => { setSearching(!searching); setFilter(''); }}
+                  className="mb-2 flex items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] text-[#374151] hover:bg-[#eef2ff]">
             <span>⌕</span> Search
           </button>
+          {searching && (
+            <input
+              autoFocus
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="Filter your chats…"
+              className="mb-3 rounded-lg border border-[#e5e9f0] px-2.5 py-1.5 text-[12.5px] outline-none focus:border-[#c7d2fe]"
+            />
+          )}
 
-          <div className="mb-1 flex items-center justify-between px-2">
-            <span className="text-[11px] font-semibold text-[#9ca3af]">Projects</span>
-            <span className="text-[12px] text-[#9ca3af]">🗀</span>
-          </div>
-          {PROJECTS.map(([name, count]) => (
-            <div key={name} className="flex items-center justify-between rounded-lg px-2 py-1.5 text-[13px] text-[#374151] hover:bg-[#eef2ff]">
-              <span className="truncate">{name}</span><span className="text-[11px] text-[#9ca3af]">{count}</span>
+          {/* The middle of the sidebar scrolls; the account card stays put. */}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="mb-1 flex items-center justify-between px-2">
+              <span className="text-[11px] font-semibold text-[#9ca3af]">Start a resume</span>
             </div>
-          ))}
+            {STARTERS.map(([name, prompt]) => (
+              <button key={name} onClick={() => send(prompt)} disabled={busy}
+                className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-[13px] text-[#374151] hover:bg-[#eef2ff] disabled:opacity-50">
+                <span className="truncate">{name}</span><span className="text-[11px] text-[#9ca3af]">→</span>
+              </button>
+            ))}
 
-          <p className="mb-1 mt-5 px-2 text-[11px] font-semibold text-[#9ca3af]">TODAY</p>
-          {HISTORY_TODAY.map((h) => (
-            <div key={h} className="truncate rounded-lg px-2 py-1.5 text-[13px] text-[#374151] hover:bg-[#eef2ff]">{h}</div>
-          ))}
-          <p className="mb-1 mt-4 px-2 text-[11px] font-semibold text-[#9ca3af]">YESTERDAY</p>
-          {HISTORY_YESTERDAY.map((h) => (
-            <div key={h} className="truncate rounded-lg px-2 py-1.5 text-[13px] text-[#374151] hover:bg-[#eef2ff]">{h}</div>
-          ))}
+            {(['TODAY', 'EARLIER'] as const).map((bucket) => {
+              const rows = archives.filter((a) => dayOf(a.at) === bucket &&
+                (!filter || a.title.toLowerCase().includes(filter.toLowerCase())));
+              if (!rows.length) return null;
+              return (
+                <div key={bucket}>
+                  <p className="mb-1 mt-5 px-2 text-[11px] font-semibold text-[#9ca3af]">{bucket}</p>
+                  {rows.map((a) => (
+                    <button key={a.at} onClick={() => restore(a)}
+                      className="block w-full truncate rounded-lg px-2 py-1.5 text-left text-[13px] text-[#374151] hover:bg-[#eef2ff]">
+                      {a.title}
+                    </button>
+                  ))}
+                </div>
+              );
+            })}
+            {!archives.length && (
+              <p className="mt-5 px-2 text-[12px] leading-relaxed text-[#9ca3af]">
+                Your chats appear here after you start one. New Chat files the current one away; clicking it brings it back.
+              </p>
+            )}
+          </div>
 
-          <div className="mt-auto flex items-center gap-2 rounded-xl border border-[#eef1f6] bg-white p-2.5">
+          <div className="mt-3 flex items-center gap-2 rounded-xl border border-[#eef1f6] bg-white p-2.5">
             <span className="grid h-8 w-8 place-items-center rounded-full bg-[#e0e7ff] text-[12px] font-bold text-[#3730a3]">TE</span>
             <div className="min-w-0 flex-1">
               <p className="truncate text-[12.5px] font-semibold">TEN Student</p>
