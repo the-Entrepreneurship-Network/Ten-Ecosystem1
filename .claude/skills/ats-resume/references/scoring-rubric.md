@@ -112,6 +112,12 @@ Use the lower of checker and recruiter-scan when both exist. If no JD, use recru
 
 If the user asked for "unrejectable" and the gate fails, keep rewriting. If the fail is missing real experience, say so and stop padding.
 
+## Optional Nishil view (second line only)
+
+Keyword match 40 + Formatting 30 + Completeness 20 + Title alignment 10.
+
+Use as a second readout, not a replacement for the dual rubric.
+
 ## Score card format
 
 ```

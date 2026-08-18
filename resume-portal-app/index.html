@@ -11,5 +11,17 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+
+    <!--
+      The paygate lives in the source page, not the built one. A
+      `vite build - -emptyOutDir` rewrites public/resume-portal/index.html
+      from this file, so anything added to the output by hand is deleted on
+      the next build — which is exactly how it vanished once already.
+    -->
+    <script src="/portal-paygate.js?v=5"
+            data-portal="resume"
+            data-title="Resume Builder Access"
+            data-blurb="AI resume building and tailoring, ATS scoring and unlimited exports."
+            data-continue="/resume-dashboard.html"></script>
   </body>
 </html>

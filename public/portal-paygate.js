@@ -219,8 +219,14 @@
   }
 
   /**
-   * The blocking scanner. It has no close button on purpose: the free run is
-   * over and paying is the way through.
+   * The blocking scanner.
+   *
+   * It blocks ENTRY, not the page. The first version had no close button —
+   * "paying is the way through" — which in practice froze the whole portal:
+   * a returning visitor found a screen where no button worked and nothing
+   * scrolled, which reads as breakage, not a paywall. Now it closes; what it
+   * protects is the portal behind Get Started, which reopens it. A paywall
+   * may refuse passage. It must never eat the browser.
    *
    * When the server can take a real payment this shows an order-specific QR
    * and unlocks on confirmation. When it cannot — no credentials configured —
@@ -239,8 +245,18 @@
 
     var box = el('div',
       'background:#0c1220;border:1px solid rgba(212,175,55,.28);border-radius:20px;' +
-      'padding:34px 30px;max-width:420px;width:100%;text-align:center;' +
+      'padding:34px 30px;max-width:420px;width:100%;text-align:center;position:relative;' +
       'box-shadow:0 30px 90px rgba(0,0,0,.7);');
+
+    /* The way out. Closing does not grant anything — Get Started brings the
+       scanner straight back — it just returns the page to the visitor. */
+    var close = el('button',
+      'position:absolute;top:10px;right:14px;background:none;border:0;color:#64748b;' +
+      'font-size:22px;line-height:1;cursor:pointer;padding:6px;font-family:inherit;', '×');
+    close.type = 'button';
+    close.setAttribute('aria-label', 'Close payment dialog');
+    close.addEventListener('click', function () { closePaywall(); });
+    box.appendChild(close);
 
     box.appendChild(el('div',
       'font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;color:#D4AF37;' +
@@ -483,11 +499,19 @@
         write(PAID_KEY, '1');
         return;
       }
-      /* Someone coming back for another run meets the scanner straight away,
-         rather than getting through the portal and being stopped later. */
-      if (mustPay()) openPaywall();
+      /* The scanner is no longer opened on page load. Ambushing a returning
+         visitor before they touched anything left them a page where nothing
+         worked — the landing page stays theirs to read and scroll, and the
+         scanner meets them at the door they actually try to walk through:
+         Get Started, or a portal action behind requireAccess(). */
     });
   }
+
+  /* Esc closes it, same as the × — a dialog that ignores Esc reads as a
+     hang, and that is the exact report this file was rewritten to fix. */
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closePaywall();
+  });
 
   /* Exposed so a portal can gate its own actions on the same rule instead of
      reimplementing it: PortalPaygate.requireAccess() returns false and opens
