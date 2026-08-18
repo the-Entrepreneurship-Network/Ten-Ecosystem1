@@ -12,6 +12,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import Register, { StatusChecker, type RegEvent } from './Register';
 
 const inter = { fontFamily: 'Inter, system-ui, sans-serif' } as const;
 
@@ -23,6 +24,7 @@ type Event = {
   tagline: string;
   tracks: string[];
   prize: string;
+  entryFee: number;
   minTeamSize: number;
   maxTeamSize: number;
   registrationClosesAt: string | null;
@@ -30,6 +32,7 @@ type Event = {
   venue: string;
   status: string;
   teamCount: number;
+  payment: { upiId: string; payeeName: string; qrImage: string; amount: number };
 };
 
 function when(value: string | null) {
@@ -44,6 +47,8 @@ function when(value: string | null) {
 export default function EventBoard() {
   const [events, setEvents] = useState<Event[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [registering, setRegistering] = useState<RegEvent | null>(null);
+  const [showStatus, setShowStatus] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -93,6 +98,19 @@ export default function EventBoard() {
               here first — register below and you are in the pool for every one TEN runs, with
               your domain, stack and timezone already on file.
             </p>
+          </div>
+        )}
+
+        {/* Already registered — check where your payment stands. No login. */}
+        {state === 'ready' && (
+          <div className="mt-8 max-w-[440px]">
+            {!showStatus ? (
+              <button onClick={() => setShowStatus(true)} className="text-[13px] font-semibold text-emerald-300 hover:text-emerald-200" style={inter}>
+                Already registered? Check your status →
+              </button>
+            ) : (
+              <StatusChecker />
+            )}
           </div>
         )}
 
@@ -156,18 +174,23 @@ export default function EventBoard() {
                   </div>
                 )}
 
-                <a
-                  href={`/student-login.html?next=${encodeURIComponent('/hackathon-portal/?event=' + e.slug)}`}
+                <button
+                  onClick={() => setRegistering({
+                    slug: e.slug, title: e.title, mode: e.mode, tracks: e.tracks,
+                    minTeamSize: e.minTeamSize, maxTeamSize: e.maxTeamSize, payment: e.payment,
+                  })}
                   className="mt-7 inline-block rounded-full bg-emerald-400 px-7 py-3 text-[13px] font-bold text-black transition-transform hover:scale-[1.04]"
                   style={inter}
                 >
                   REGISTER A TEAM →
-                </a>
+                </button>
               </article>
             ))}
           </div>
         )}
       </div>
+
+      {registering && <Register event={registering} onClose={() => setRegistering(null)} />}
     </div>
   );
 }

@@ -42,6 +42,11 @@ const hackathonSchema = new mongoose.Schema({
 
     venue:  { type: String, default: "Online", maxlength: 200 },
 
+    // The entry fee, in rupees. Per-event so staff can run a free ideathon and a
+    // paid hackathon side by side. The server always charges this figure; the
+    // amount a registrant's browser sends is never trusted.
+    entryFee: { type: Number, default: 200, min: 0, max: 100000 },
+
     status: {
         type: String,
         enum: ["draft", "announced", "registration_open", "in_progress", "judging", "completed", "cancelled"],

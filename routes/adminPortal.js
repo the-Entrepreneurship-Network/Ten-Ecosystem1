@@ -1439,4 +1439,111 @@ router.post('/certificate-overrides/:id/revoke', requireAdminAPI, async (req, re
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────
+//  Hackathon & Ideathon — payment verification (admin, not HR)
+//
+//  Public entrants register through the hackathon portal and pay the entry fee
+//  by UPI, then wait here. This is a self-contained queue on the HackathonTeam
+//  record — it does NOT touch the student Payment collection or the student
+//  portal, so the hackathon stays separate from everything else. No email.
+// ─────────────────────────────────────────────────────────────────────────
+const HackathonTeam = require('../models/HackathonTeam');
+
+/** GET /api/admin-internal/hackathon-registrations?status=pending|confirmed|rejected|all */
+router.get('/hackathon-registrations', requireAdminAPI, async (req, res) => {
+  try {
+    const status = String(req.query.status || 'pending');
+    const filter = {};
+    if (status !== 'all') filter.paymentStatus = status;
+    // Only teams that went through the paid public flow; legacy logged-in teams
+    // (paymentStatus 'unpaid') are not part of this queue.
+    if (status === 'all') filter.paymentStatus = { $in: ['pending', 'confirmed', 'rejected'] };
+
+    const teams = await HackathonTeam.find(filter).sort({ createdAt: -1 }).limit(200).lean();
+    res.json({
+      success: true,
+      registrations: teams.map((t) => ({
+        id: String(t._id),
+        team: t.name,
+        event: t.eventTitle,
+        track: t.track || '',
+        lead: (t.members || []).find((m) => m.isLead) || { name: '', email: '' },
+        leadEmail: t.leadEmail,
+        leadPhone: t.leadPhone || '',
+        memberCount: (t.members || []).length,
+        amount: t.paymentAmount || 0,
+        utr: t.paymentRef || '',
+        paymentStatus: t.paymentStatus,
+        paidAt: t.paidAt,
+        verifiedBy: t.verifiedBy || '',
+        verifiedAt: t.verifiedAt || null,
+        rejectionReason: t.rejectionReason || ''
+      }))
+    });
+  } catch (err) {
+    console.error('[admin] hackathon list failed:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/** GET /api/admin-internal/hackathon-registrations/count — pending badge. */
+router.get('/hackathon-registrations/count', requireAdminAPI, async (req, res) => {
+  try {
+    const count = await HackathonTeam.countDocuments({ paymentStatus: 'pending' });
+    res.json({ success: true, count });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/** POST /api/admin-internal/hackathon-registrations/:id/verify  { action, rejectionReason } */
+router.post('/hackathon-registrations/:id/verify', requireAdminAPI, async (req, res) => {
+  try {
+    const { action, rejectionReason } = req.body || {};
+    const team = await HackathonTeam.findById(req.params.id);
+    if (!team) return res.status(404).json({ success: false, error: 'Registration not found.' });
+    if (team.paymentStatus !== 'pending') {
+      return res.status(409).json({ success: false, error: `This registration is already ${team.paymentStatus}.` });
+    }
+    const who = (req.session.adminUser && req.session.adminUser.username) || 'admin';
+
+    if (action === 'approve') {
+      team.paymentStatus = 'confirmed';
+      team.status = 'confirmed';
+      team.verifiedBy = who;
+      team.verifiedAt = new Date();
+      team.rejectionReason = '';
+      await team.save();
+      await AuditLog.create({
+        userId: team._id, actionType: 'hackathon_payment_approved', performedBy: 'admin',
+        description: `Admin approved hackathon entry for team "${team.name}" (${team.eventTitle}), UTR ${team.paymentRef}`,
+        newState: { paymentStatus: 'confirmed', verifiedBy: who }
+      }).catch(() => {});
+      return res.json({ success: true, message: `${team.name} is confirmed.` });
+    }
+
+    if (action === 'reject') {
+      if (!rejectionReason || String(rejectionReason).trim().length < 5) {
+        return res.status(400).json({ success: false, error: 'Give a reason (at least 5 characters).' });
+      }
+      team.paymentStatus = 'rejected';
+      team.verifiedBy = who;
+      team.verifiedAt = new Date();
+      team.rejectionReason = String(rejectionReason).trim().slice(0, 500);
+      await team.save();
+      await AuditLog.create({
+        userId: team._id, actionType: 'hackathon_payment_rejected', performedBy: 'admin',
+        description: `Admin rejected hackathon entry for team "${team.name}": ${team.rejectionReason}`,
+        newState: { paymentStatus: 'rejected', verifiedBy: who }
+      }).catch(() => {});
+      return res.json({ success: true, message: `${team.name} was rejected.` });
+    }
+
+    res.status(400).json({ success: false, error: 'Unknown action.' });
+  } catch (err) {
+    console.error('[admin] hackathon verify failed:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;

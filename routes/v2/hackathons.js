@@ -21,6 +21,7 @@ const rateLimit = require('express-rate-limit');
 
 const Hackathon     = require('../../models/Hackathon');
 const HackathonTeam = require('../../models/HackathonTeam');
+const { BUSINESS_UPI } = require('../../config/payment');
 
 const { requireStudent } = require('../../middleware/sessionAuth');
 const { requireRole } = require('../../middleware/roleGuard');
@@ -51,6 +52,7 @@ function publicEvent(doc, teamCount) {
         description: doc.description,
         tracks: doc.tracks || [],
         prize: doc.prize,
+        entryFee: doc.entryFee == null ? 200 : doc.entryFee,
         minTeamSize: doc.minTeamSize,
         maxTeamSize: doc.maxTeamSize,
         registrationClosesAt: doc.registrationClosesAt,
@@ -58,7 +60,16 @@ function publicEvent(doc, teamCount) {
         endsAt: doc.endsAt,
         venue: doc.venue,
         status: doc.status,
-        teamCount: teamCount || 0
+        teamCount: teamCount || 0,
+        // What the entrant scans and pays. The QR image is the static Paytm QR
+        // (public/paytm-qr.jpeg); these fields are the same identity encoded in
+        // it, shown as text so a scanner failure isn't a dead end.
+        payment: {
+            upiId: BUSINESS_UPI.upiId,
+            payeeName: BUSINESS_UPI.payeeName,
+            qrImage: '/paytm-qr.jpeg',
+            amount: doc.entryFee == null ? 200 : doc.entryFee
+        }
     };
 }
 
@@ -120,6 +131,42 @@ router.get('/me/teams', requireStudent, async (req, res) => {
     }
 });
 
+/**
+ * GET /api/v2/hackathons/registration-status?email=&ref= — check my status.
+ *
+ * No login. The email (and optional reference id) is only a lookup key, never
+ * mailed to. Declared before /:slug for the same reason as /me/teams above —
+ * otherwise the parameterised route swallows it. Returns each matching team's
+ * payment/confirmation state so the portal can unlock once an admin approves.
+ */
+router.get('/registration-status', async (req, res) => {
+    try {
+        const email = String(req.query.email || '').toLowerCase().trim();
+        const ref   = String(req.query.ref || '').trim();
+        const or = [];
+        if (/^[a-f0-9]{24}$/i.test(ref)) or.push({ _id: ref });
+        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) or.push({ leadEmail: email });
+        if (!or.length) return res.status(400).json({ success: false, message: 'Enter the email you registered with.' });
+
+        const teams = await HackathonTeam.find({ $or: or }).sort({ createdAt: -1 }).limit(20).lean();
+        res.json({
+            success: true,
+            registrations: teams.map((t) => ({
+                reference: String(t._id),
+                team: t.name,
+                event: t.eventTitle,
+                paymentStatus: t.paymentStatus,
+                confirmed: t.paymentStatus === 'confirmed',
+                rejectionReason: t.paymentStatus === 'rejected' ? (t.rejectionReason || '') : '',
+                submissionUrl: t.submissionUrl || ''
+            }))
+        });
+    } catch (err) {
+        console.error('[hackathons] status lookup failed:', err.message);
+        res.status(500).json({ success: false, message: 'Could not check status.' });
+    }
+});
+
 /** GET /api/v2/hackathons/:slug — one event. */
 router.get('/:slug', async (req, res) => {
     try {
@@ -157,7 +204,10 @@ router.get('/:slug/teams', async (req, res) => {
         const teams = await HackathonTeam.find({
             hackathonId: event._id,
             lookingForMembers: true,
-            status: { $in: ['registered', 'confirmed'] }
+            status: { $in: ['registered', 'confirmed'] },
+            // A team awaiting payment approval isn't on the board yet — only
+            // confirmed teams and legacy logged-in (unpaid) ones appear.
+            paymentStatus: { $in: ['confirmed', 'unpaid'] }
         }).sort({ registeredAt: -1 }).limit(100).lean();
 
         res.json({
@@ -282,6 +332,115 @@ router.post('/:slug/teams', requireStudent, registerLimiter, async (req, res) =>
         res.status(500).json({ success: false, message: 'Could not register your team.' });
     }
 });
+
+/**
+ * POST /api/v2/hackathons/:slug/register-public — register + pay, no login.
+ *
+ * The hackathon portal is deliberately separate from the student login: anyone
+ * can enter with a form (name, email, phone, team, members) and a UPI reference
+ * for the entry fee they paid by scanning the QR. The team is stored
+ * payment-pending and an ADMIN verifies the reference before it is confirmed.
+ * No email is sent anywhere; the email is only a lookup key for "check status".
+ *
+ * When the email system lands later, this is where a confirmation mail and an
+ * account-with-credentials would hook on — nothing here needs to change.
+ */
+router.post('/:slug/register-public', registerLimiter, async (req, res) => {
+    try {
+        const event = await Hackathon.findOne({ slug: String(req.params.slug).toLowerCase(), published: true });
+        if (!event) return res.status(404).json({ success: false, message: 'Event not found.' });
+        if (!event.registrationOpen()) {
+            return res.status(409).json({ success: false, message: 'Registration for this event is not open.' });
+        }
+
+        const body = req.body || {};
+        const teamName  = String(body.teamName || '').trim();
+        const leadName  = String(body.leadName || '').trim();
+        const leadEmail = String(body.leadEmail || '').toLowerCase().trim();
+        const leadPhone = String(body.leadPhone || '').replace(/[^\d+]/g, '').slice(0, 20);
+        const utr       = String(body.utr || '').trim();
+
+        if (teamName.length < 2) return res.status(400).json({ success: false, message: 'Give your team a name.' });
+        if (leadName.length  < 2) return res.status(400).json({ success: false, message: 'Enter your name.' });
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(leadEmail)) {
+            return res.status(400).json({ success: false, message: 'Enter a valid email.' });
+        }
+        if (leadPhone.replace(/\D/g, '').length < 10) {
+            return res.status(400).json({ success: false, message: 'Enter a valid phone number.' });
+        }
+        // The UTR is the proof of payment the admin verifies. Bank UTRs are 12
+        // digits; other UPI refs vary, so accept 6+ alphanumerics.
+        if (!/^[a-zA-Z0-9]{6,}$/.test(utr)) {
+            return res.status(400).json({ success: false, message: 'Enter the UPI reference (UTR) from your payment app.' });
+        }
+
+        const members = [{
+            name: leadName.slice(0, 200),
+            email: leadEmail.slice(0, 320),
+            role: String(body.role || '').slice(0, 100),
+            skills: Array.isArray(body.skills) ? body.skills.slice(0, 12).map(String) : [],
+            isLead: true
+        }];
+        if (Array.isArray(body.members)) {
+            body.members.slice(0, Math.max(0, event.maxTeamSize - 1)).forEach((m) => {
+                const mn = String((m && m.name) || '').trim();
+                const me = String((m && m.email) || '').toLowerCase().trim();
+                if (!mn || !me) return;
+                members.push({ name: mn.slice(0, 200), email: me.slice(0, 320),
+                    role: String((m && m.role) || '').slice(0, 100),
+                    skills: Array.isArray(m && m.skills) ? m.skills.slice(0, 12).map(String) : [],
+                    isLead: false });
+            });
+        }
+        if (members.length > event.maxTeamSize) {
+            return res.status(400).json({ success: false, message: `This event allows at most ${event.maxTeamSize} per team.` });
+        }
+
+        let team;
+        try {
+            team = await HackathonTeam.create({
+                hackathonId: event._id,
+                eventTitle: event.title,
+                name: teamName.slice(0, 120),
+                track: String(body.track || '').slice(0, 120),
+                pitch: String(body.pitch || '').slice(0, 2000),
+                members,
+                lookingForMembers: members.length < event.maxTeamSize && body.lookingForMembers !== false,
+                wantedSkills: Array.isArray(body.wantedSkills) ? body.wantedSkills.slice(0, 12).map(String) : [],
+                timezone: String(body.timezone || 'IST').slice(0, 60),
+                leadEmail,
+                leadPhone,
+                status: 'registered',
+                // Pending until an admin verifies the reference. The amount is
+                // the event's own fee, never anything the form sent.
+                paymentStatus: 'pending',
+                paymentRef: utr.slice(0, 60),
+                paymentAmount: event.entryFee == null ? 200 : event.entryFee,
+                paidAt: new Date()
+            });
+        } catch (err) {
+            if (err && err.code === 11000) {
+                const dupName = String(err.message || '').includes('name');
+                return res.status(409).json({ success: false, message: dupName
+                    ? 'A team with that name is already registered for this event.'
+                    : 'This email has already registered a team for this event. Use "Check status".' });
+            }
+            throw err;
+        }
+
+        res.json({
+            success: true,
+            message: 'Payment received. An admin will verify it shortly.',
+            reference: String(team._id),
+            paymentStatus: team.paymentStatus,
+            team: { id: String(team._id), name: team.name, event: event.title }
+        });
+    } catch (err) {
+        console.error('[hackathons] public registration failed:', err.message);
+        res.status(500).json({ success: false, message: 'Could not register. Please try again.' });
+    }
+});
+
 
 /** POST /api/v2/hackathons/teams/:id/submit — hand in the build. */
 router.post('/teams/:id/submit', requireStudent, async (req, res) => {

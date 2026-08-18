@@ -35,6 +35,10 @@ const hackathonTeamSchema = new mongoose.Schema({
     timezone:          { type: String, default: "IST", maxlength: 60 },
 
     leadEmail: { type: String, required: true, lowercase: true, trim: true, index: true },
+    // A phone number, for the public (no-login) entrants who have no account.
+    // The hackathon portal is deliberately separate from the student login, so a
+    // team's only contact handle is what the lead typed on the form.
+    leadPhone: { type: String, default: "", trim: true, maxlength: 20 },
 
     status: {
         type: String,
@@ -42,6 +46,26 @@ const hackathonTeamSchema = new mongoose.Schema({
         default: "registered",
         index: true
     },
+
+    // Payment lives on the team, not in the student Payment collection, so the
+    // hackathon stays self-contained and an entrant needs no student account.
+    // An admin (not HR) verifies the UPI reference before a team is confirmed.
+    //   unpaid   — a logged-in student team that skipped the fee (legacy path)
+    //   pending  — public entrant paid by UPI and is waiting on admin approval
+    //   confirmed— admin verified the reference; the team is in
+    //   rejected — admin could not find the payment; the entrant may retry
+    paymentStatus: {
+        type: String,
+        enum: ["unpaid", "pending", "confirmed", "rejected"],
+        default: "unpaid",
+        index: true
+    },
+    paymentRef:    { type: String, default: "", trim: true, maxlength: 60 },  // the UTR
+    paymentAmount: { type: Number, default: 0 },                              // set server-side from entryFee
+    paidAt:        { type: Date,   default: null },
+    verifiedBy:    { type: String, default: "" },
+    verifiedAt:    { type: Date,   default: null },
+    rejectionReason: { type: String, default: "", maxlength: 500 },
 
     // Filled in during the event, not at registration.
     submissionUrl:  { type: String, default: "", maxlength: 2000 },

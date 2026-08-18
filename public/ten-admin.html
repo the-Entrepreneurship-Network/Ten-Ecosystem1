@@ -127,6 +127,7 @@
     <div class="nav-item" onclick="showSection('hr')">👔 HR & Coordinators</div>
     <div class="nav-item" onclick="showSection('certificates')">🎓 Certificates</div>
     <div class="nav-item" onclick="showSection('cert-overrides')" id="nav-cert-overrides">🛡️ Certificate Overrides <span class="nav-badge" id="overrideBadge" style="display:none">0</span></div>
+    <div class="nav-item" onclick="showSection('hackathons')" id="nav-hackathons">🏆 Hackathons <span class="nav-badge" id="hackathonBadge" style="display:none">0</span></div>
     <div class="nav-item" onclick="showSection('attendance')">🗓️ Attendance</div>
     <div class="nav-item" onclick="showSection('documents')">📄 Documents</div>
     <div class="nav-item" onclick="showSection('notifications')">📢 Notifications</div>
@@ -341,6 +342,26 @@
       <div id="overridesContent"><p style="color:#64748b;padding:16px">Loading…</p></div>
     </div>
 
+    <div class="section" id="section-hackathons">
+      <div style="background:#0e1628;border:1px solid #2a3550;border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+        <div style="font-weight:700;color:#e2e8f0;margin-bottom:6px;">What this is</div>
+        <div style="color:#94a3b8;font-size:13px;line-height:1.6;">
+          People register for a hackathon or ideathon through the hackathon portal and pay the
+          entry fee by scanning the UPI QR. Each registration waits here with the UPI reference
+          (UTR) they entered. Match it against the payment received, then
+          <span style="color:#34d399;font-weight:700;">Approve</span> to confirm the team, or
+          <span style="color:#f87171;font-weight:700;">Reject</span> with a reason. No email is sent.
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+        <button class="btn" onclick="loadHackathonRegs('pending')" id="hkTabPending">⏳ Pending</button>
+        <button class="btn btn-secondary" onclick="loadHackathonRegs('confirmed')" id="hkTabConfirmed">✅ Confirmed</button>
+        <button class="btn btn-secondary" onclick="loadHackathonRegs('rejected')" id="hkTabRejected">✖️ Rejected</button>
+        <button class="btn btn-secondary" onclick="loadHackathonRegs('all')" id="hkTabAll">All</button>
+      </div>
+      <div id="hackathonContent"><p style="color:#64748b;padding:16px">Loading…</p></div>
+    </div>
+
     <div class="section" id="section-auditlog">
       <div id="auditContent"></div>
     </div>
@@ -399,6 +420,7 @@ function showSection(name) {
   if (name === 'documents') loadAdminDocuments();
   if (name === 'chat') loadChatReports('open');
   if (name === 'cert-overrides') loadOverrides(overrideFilter);
+  if (name === 'hackathons') loadHackathonRegs(hackathonFilter);
   if (name === 'auditlog') loadAuditLog();
   if (name === 'overview') loadStats();
 }
@@ -1340,6 +1362,90 @@ function debounceOverrideSearch() {
   overrideSearchTimer = setTimeout(() => loadOverrides(overrideFilter), 350);
 }
 
+// ── Hackathon & Ideathon registrations ──────────────────────────────────
+let hackathonFilter = 'pending';
+
+async function loadHackathonRegs(filter) {
+  if (filter) hackathonFilter = filter;
+  ['Pending', 'Confirmed', 'Rejected', 'All'].forEach(k => {
+    const btn = document.getElementById('hkTab' + k);
+    if (btn) btn.className = (k.toLowerCase() === hackathonFilter) ? 'btn' : 'btn btn-secondary';
+  });
+
+  const box = document.getElementById('hackathonContent');
+  box.innerHTML = '<p style="color:#64748b;padding:16px">Loading…</p>';
+  const d = await api('/hackathon-registrations?status=' + encodeURIComponent(hackathonFilter));
+  if (!d || !d.success) { box.innerHTML = '<p style="color:#f87171;padding:16px">Could not load registrations.</p>'; return; }
+  if (!d.registrations.length) {
+    box.innerHTML = '<div class="empty"><div class="icon">🏆</div><p>No ' + _aEsc(hackathonFilter === 'all' ? '' : hackathonFilter) + ' registrations.</p></div>';
+    return;
+  }
+
+  const pill = (s) => {
+    const map = { pending: ['#fbbf24', 'Pending'], confirmed: ['#34d399', 'Confirmed'], rejected: ['#f87171', 'Rejected'] };
+    const [c, t] = map[s] || ['#94a3b8', s];
+    return '<span class="badge" style="background:' + c + '22;color:' + c + ';border:1px solid ' + c + '55">' + t + '</span>';
+  };
+
+  box.innerHTML = '<div class="table-wrap"><table><thead><tr>' +
+    '<th>Team</th><th>Event</th><th>Lead</th><th>Contact</th><th>Members</th><th>Amount</th><th>UTR</th><th>Status</th><th>Actions</th>' +
+    '</tr></thead><tbody>' + d.registrations.map(r => {
+      const lead = r.lead || {};
+      const acts = r.paymentStatus === 'pending'
+        ? '<button class="btn btn-green" onclick="approveHackathon(\'' + r.id + '\',' + _arg(r.team) + ')">✅ Approve</button>' +
+          '<button class="btn btn-red" onclick="rejectHackathon(\'' + r.id + '\',' + _arg(r.team) + ')">✖️ Reject</button>'
+        : (r.paymentStatus === 'rejected' && r.rejectionReason
+            ? '<span style="color:#94a3b8;font-size:12px">' + _aEsc(r.rejectionReason) + '</span>'
+            : '<span style="color:#64748b;font-size:12px">' + _aEsc(r.verifiedBy ? 'by ' + r.verifiedBy : '—') + '</span>');
+      return '<tr>' +
+        '<td><b>' + _aEsc(r.team) + '</b>' + (r.track ? '<br><span style="color:#64748b;font-size:11px">' + _aEsc(r.track) + '</span>' : '') + '</td>' +
+        '<td>' + _aEsc(r.event || '—') + '</td>' +
+        '<td>' + _aEsc(lead.name || '—') + '</td>' +
+        '<td style="font-size:12px">' + _aEsc(r.leadEmail || '') + '<br>' + _aEsc(r.leadPhone || '') + '</td>' +
+        '<td>' + r.memberCount + '</td>' +
+        '<td>₹' + (r.amount || 0) + '</td>' +
+        '<td><code>' + _aEsc(r.utr || '—') + '</code></td>' +
+        '<td>' + pill(r.paymentStatus) + '</td>' +
+        '<td style="display:flex;gap:6px;flex-wrap:wrap">' + acts + '</td>' +
+      '</tr>';
+    }).join('') + '</tbody></table></div>';
+}
+
+function approveHackathon(id, team) {
+  openModal('Approve registration', '<p style="color:#cbd5e1">Confirm that you received the payment for <b>' + _aEsc(team) + '</b>? This confirms the team.</p>', [
+    { label: 'Cancel', cls: 'grey', fn: 'closeModal()' },
+    { label: 'Approve', cls: 'green', fn: 'doVerifyHackathon(\'' + id + '\',\'approve\')' }
+  ]);
+}
+function rejectHackathon(id, team) {
+  openModal('Reject registration',
+    '<p style="color:#cbd5e1;margin-bottom:10px">Rejecting <b>' + _aEsc(team) + '</b>. Give a reason (they can see it and re-register).</p>' +
+    '<input class="search-input" id="hkRejectReason" placeholder="e.g. no payment found for this UTR" style="width:100%">', [
+    { label: 'Cancel', cls: 'grey', fn: 'closeModal()' },
+    { label: 'Reject', cls: 'red', fn: 'doVerifyHackathon(\'' + id + '\',\'reject\')' }
+  ]);
+}
+async function doVerifyHackathon(id, action) {
+  const body = { action };
+  if (action === 'reject') {
+    const reason = (document.getElementById('hkRejectReason') || {}).value || '';
+    if (reason.trim().length < 5) { alert('Give a reason (at least 5 characters).'); return; }
+    body.rejectionReason = reason.trim();
+  }
+  const d = await api('/hackathon-registrations/' + id + '/verify', { method: 'POST', body: JSON.stringify(body) });
+  closeModal();
+  if (!d || !d.success) { alert((d && d.error) || 'Could not update.'); return; }
+  loadHackathonRegs(hackathonFilter);
+  updateHackathonBadge();
+}
+async function updateHackathonBadge() {
+  const d = await api('/hackathon-registrations/count').catch(() => null);
+  const badge = document.getElementById('hackathonBadge');
+  if (!badge) return;
+  if (d && d.success && d.count > 0) { badge.textContent = d.count; badge.style.display = ''; }
+  else badge.style.display = 'none';
+}
+
 async function loadOverrides(filter) {
   if (filter) overrideFilter = filter;
   ['Unmet', 'All', 'Met', 'Revoked'].forEach(k => {
@@ -1453,6 +1559,7 @@ function updateOverrideBadge(n) {
   // Pre-load tenure payments silently so data is ready when admin opens that tab
   loadTenurePayments();
   api('/certificate-overrides/count').then(d => { if (d && d.success) updateOverrideBadge(d.unmetCount); });
+  updateHackathonBadge();
 })();
 </script>
 <script src="/notify-orb.js" defer></script>
