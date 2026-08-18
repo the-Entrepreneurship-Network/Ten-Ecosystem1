@@ -668,6 +668,40 @@ router.post('/build.pdf', async (req, res) => {
 });
 
 /*
+ * The rewritten resume as a text-selectable, single-column PDF — ship gate
+ * check 12's artefact. Scored from the text extracted back out of the
+ * rendered file, the same proof the build.pdf route gives.
+ */
+router.post('/rewrite.pdf', upload.single('file'), async (req, res) => {
+  try {
+    const b = bodyOf(req);
+    const text = (await textFromUpload(req.file)) || b.text || '';
+    if (!text.trim()) {
+      return res.status(400).json({ ok: false, error: 'Send a resume: attach a PDF/TXT file or paste the text.' });
+    }
+    const packet = atsEngine.rewriteResume(text, { target: b.target || b.role, jd: b.jd });
+    const buf = await resumePdfBuffer(packet.resume);
+
+    let pdfScore = null;
+    try {
+      const pdfParse = require('pdf-parse');
+      const extracted = (await pdfParse(buf)).text || '';
+      pdfScore = scanResume(extracted, b.target || b.role).score;
+    } catch (_) { /* scoring the artefact is a check, not a gate */ }
+
+    const safeName = String((packet.ledger && packet.ledger.name) || 'resume').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName || 'resume'}-TEN-rewrite.pdf"`);
+    res.setHeader('X-ATS-Checker-After', String(packet.after.checker));
+    res.setHeader('X-Recruiter-Scan-After', String(packet.after.recruiter));
+    if (pdfScore !== null) res.setHeader('X-ATS-Score-From-PDF', String(pdfScore));
+    res.send(buf);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'Could not render the PDF.' });
+  }
+});
+
+/*
  * One chat turn. The agent decides between scanning, building and asking for
  * what is missing — it never answers a resume question with a guess.
  */
@@ -708,7 +742,22 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         });
       }
       const report = scanResume(text, b.target);
-      return res.json({ ok: true, kind: 'scan', report });
+
+      /* v4.0 weak-file behaviour: the score card comes with the rebuild
+         offer and the first interview questions, in the script's own words —
+         not a verdict the student is left alone with. */
+      const packet = atsEngine.rewriteResume(text, { target: b.target, jd: b.jd });
+      const weakPrompt = packet.band === 'weak'
+        ? `This file would likely bounce (estimated checker ${packet.before.checker}/${packet.before.checkerMax}, recruiter-scan ${packet.before.recruiter}). I will rebuild it — a few questions about target job, skills, projects and experience, then an ATS-safe version.`
+        : null;
+
+      return res.json({
+        ok: true, kind: 'scan', report,
+        band: packet.band,
+        prompt: weakPrompt,
+        interview: packet.interview,
+        rebuilt: { text: packet.resume, packet },
+      });
     }
 
     if (/\bbuild|create|make|write|generate|new resume|forge\b/.test(low)) {

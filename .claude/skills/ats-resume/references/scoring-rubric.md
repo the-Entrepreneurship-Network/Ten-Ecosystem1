@@ -85,6 +85,16 @@ Typical converted file (only if skills are real):
 
 HR-scan should land 80+ after conversion. If it does not, the top third is still wrong.
 
+## Strength bands (Path A)
+
+Use the lower of checker and recruiter-scan when both exist. If no JD, use recruiter-scan plus parse-heavy checker.
+
+| Band | Score | Agent action |
+|---|---|---|
+| Weak | under 50 | Full rebuild + interview |
+| Salvageable | 50–79 | CONVERT + gap questions |
+| Strong | 80+ | Tight CONVERT |
+
 ## Ship gate — do not call the draft finished unless all are true
 
 1. Checker parse ≥ 26/30
@@ -97,6 +107,8 @@ HR-scan should land 80+ after conversion. If it does not, the top third is still
 8. Essential skills are in the first screen
 9. Essential experience or essential projects (whichever is the hire signal) sit above filler
 10. Mode is stated (BUILD / RECREATE / CONVERT)
+11. Path A or Path B is stated, with Weak / Salvageable / Strong or Scratch
+12. A text-selectable single-column PDF is produced unless the user blocked file export
 
 If the user asked for "unrejectable" and the gate fails, keep rewriting. If the fail is missing real experience, say so and stop padding.
 
