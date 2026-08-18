@@ -159,6 +159,44 @@
   .hero-strip a { color:#0a0a0a; text-decoration:none; }
   .hero-strip a:hover { text-decoration:underline; }
 
+  /* ---------- ecosystem CTA: the link out to the main company website ----------
+     This is the internship portal; the band sends students to the main TEN
+     site. First thing on scroll, gold on black so the eye lands on it, and the
+     whole card is one big link that opens in a new tab. */
+  .eco-band { background:#000; padding:64px 22px 8px; display:flex; justify-content:center; }
+  .eco-card {
+    position:relative; display:block; max-width:1000px; width:100%;
+    text-decoration:none; color:#fff; text-align:center; overflow:hidden;
+    padding:54px 40px; border-radius:22px;
+    background:
+      radial-gradient(120% 160% at 50% -20%, rgba(245,197,66,.17), transparent 60%),
+      linear-gradient(180deg,#151105,#0a0a0a);
+    border:1px solid rgba(245,197,66,.34);
+    transition:transform .35s cubic-bezier(.2,.8,.2,1), border-color .35s, box-shadow .35s;
+  }
+  .eco-card:hover {
+    transform:translateY(-4px); border-color:rgba(245,197,66,.72);
+    box-shadow:0 26px 64px rgba(0,0,0,.55), inset 0 0 0 1px rgba(245,197,66,.20);
+  }
+  .eco-card:focus-visible { outline:2px solid #f5c542; outline-offset:4px; }
+  /* a slow gold sweep, so the panel reads as the brightest thing on the fold */
+  .eco-card::before {
+    content:''; position:absolute; inset:0; pointer-events:none;
+    background:linear-gradient(100deg,transparent 40%,rgba(245,197,66,.10) 50%,transparent 60%);
+    background-size:260% 100%; animation:ecoSheen 6.5s ease-in-out infinite;
+  }
+  .eco-eyebrow { font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.28em; color:#f5c542; }
+  .eco-title { font-size:clamp(26px,4.6vw,46px); font-weight:900; letter-spacing:-0.03em; line-height:1.05; margin:14px 0 12px; text-wrap:balance; }
+  .eco-sub { font-size:14.5px; line-height:1.6; color:#bcbcbc; max-width:56ch; margin:0 auto 28px; }
+  .eco-go {
+    display:inline-flex; align-items:center; gap:12px;
+    background:#f5c542; color:#0a0a0a; font-weight:800; font-size:14px;
+    padding:16px 30px; border-radius:999px; transition:gap .25s, background .25s;
+  }
+  .eco-card:hover .eco-go { gap:18px; background:#ffd35a; }
+  @keyframes ecoSheen { 0%,15% { background-position:180% 0; } 60%,100% { background-position:-40% 0; } }
+  @media (prefers-reduced-motion:reduce) { .eco-card::before { animation:none; } .eco-card { transition:none; } }
+
   /* ---------- section base ---------- */
   section { position:relative; }
   .sec-head { display:flex; align-items:baseline; gap:18px; padding:70px 22px 30px; }
@@ -534,6 +572,17 @@
   </div>
 </header>
 
+<!-- the main company website: this is the internship portal, so send students
+     out to the full ecosystem site. The whole card is the link; opens a new tab. -->
+<section class="eco-band reveal" aria-label="The Entrepreneurship Network — main website">
+  <a class="eco-card" href="https://www.entrepreneurshipnetwork.net/" target="_blank" rel="noopener noreferrer">
+    <span class="eco-eyebrow">THE MAIN WEBSITE</span>
+    <h2 class="eco-title">TEN is bigger than one internship.</h2>
+    <p class="eco-sub">You are in the internship portal. See everything The Entrepreneurship Network builds — the programmes, the ventures, the community — on the main site.</p>
+    <span class="eco-go">Explore entrepreneurshipnetwork.net <span aria-hidden="true">&rarr;</span></span>
+  </a>
+</section>
+
 <!-- works: what TEN gives -->
 <section class="works" id="works">
   <div class="sec-head"><h2>What TEN gives</h2><span>( twelve ways in )</span></div>
@@ -759,7 +808,7 @@
     </div>
   </div>
   <div class="foot-links">
-    <a href="academics.html">Academics</a><a href="student-portal/">TEN Career Studio</a><a href="job-portal/">Job Portal</a><a href="resume-portal/">Resume Portal</a><a href="student-login.html">Login</a>
+    <a href="https://www.entrepreneurshipnetwork.net/" target="_blank" rel="noopener noreferrer" style="color:#f5c542">Main website</a><a href="academics.html">Academics</a><a href="student-portal/">TEN Career Studio</a><a href="job-portal/">Job Portal</a><a href="resume-portal/">Resume Portal</a><a href="student-login.html">Login</a>
   </div>
   <p class="credits">©2026 — The Entrepreneurship Network. Not a company, an ecosystem.</p>
 </footer>

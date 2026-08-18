@@ -934,3 +934,44 @@ describe('the sideways strips', () => {
     expect(speed('contribList')).toBeGreaterThan(speed('topList'));
   });
 });
+
+describe('the main website link', () => {
+  const MAIN = 'https://www.entrepreneurshipnetwork.net/';
+
+  it('has a prominent CTA band pointing at the main site', () => {
+    const at = page.indexOf('class="eco-card"');
+    expect(at).toBeGreaterThan(-1);
+    const card = page.slice(at, at + 400);
+    expect(card).toContain('href="' + MAIN + '"');
+  });
+
+  it('opens the external site in a new tab, safely', () => {
+    const at = page.indexOf('class="eco-card"');
+    const card = page.slice(at, at + 400);
+    expect(card).toContain('target="_blank"');
+    expect(card).toMatch(/rel="noopener noreferrer"/);
+  });
+
+  it('sits high on the page — after the hero, well before the footer', () => {
+    const band = page.indexOf('class="eco-band');
+    const works = page.indexOf('<section class="works"');
+    const footer = page.indexOf('<footer');
+    expect(band).toBeGreaterThan(-1);
+    expect(band).toBeLessThan(works);   // first section on scroll
+    expect(band).toBeLessThan(footer);
+  });
+
+  it('fades in on scroll like the rest of the page', () => {
+    expect(page).toMatch(/class="eco-band reveal"/);
+  });
+
+  it('also links to the main site from the footer', () => {
+    const foot = page.slice(page.indexOf('class="foot-links"'), page.indexOf('class="foot-links"') + 500);
+    expect(foot).toContain('href="' + MAIN + '"');
+    expect(foot).toContain('target="_blank"');
+  });
+
+  it('holds still for a reader who asked for less movement', () => {
+    expect(page).toMatch(/@media \(prefers-reduced-motion:reduce\) \{ \.eco-card::before \{ animation:none/);
+  });
+});
