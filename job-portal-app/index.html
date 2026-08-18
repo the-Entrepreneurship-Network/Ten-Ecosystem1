@@ -8,36 +8,17 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
 
-    <!-- Content merges with the portal backdrop rather than sitting in cards. -->
-    <link rel="stylesheet" href="/portal-dissolve.css" />
-    <script src="/portal-legibility.js" defer></script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
 
     <!--
-      The paygate and backdrop live in the source page, not in the built one.
+      The paygate lives in the source page, not in the built one.
       A `vite build --emptyOutDir` rewrites public/job-portal/index.html from
       this file, so anything added to the output by hand is deleted on the
       next build — which is exactly how the payment card vanished once.
     -->
-    <script src="/portal-backdrops.js"></script>
-    <script>
-      (function () {
-        function paint() {
-          if (!window.PortalBackdrop) return;
-          try {
-            window.PortalBackdrop.showFor(document.body, 'job');
-            document.body.classList.add('portal-surface');
-            if (window.PortalLegibility) window.PortalLegibility.watch(document.body, 7000);
-          } catch (e) { /* a backdrop must never stop the portal loading */ }
-        }
-        if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', paint);
-        } else { paint(); }
-      })();
-    </script>
     <script
       src="/portal-paygate.js"
       data-portal="job"
