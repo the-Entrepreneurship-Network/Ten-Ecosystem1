@@ -1607,6 +1607,7 @@ router.get('/hackathon-registrations', requireAdminAPI, async (req, res) => {
       registrations: teams.map((t) => ({
         id: String(t._id),
         team: t.name,
+        code: t.code || '',
         event: t.eventTitle,
         track: t.track || '',
         lead: (t.members || []).find((m) => m.isLead) || { name: '', email: '' },

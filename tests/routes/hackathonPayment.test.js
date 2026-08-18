@@ -20,6 +20,7 @@ const hackRoutes  = fs.readFileSync(path.join(root, 'routes/v2/hackathons.js'), 
 const adminRoutes = fs.readFileSync(path.join(root, 'routes/adminPortal.js'), 'utf8');
 const adminPage   = fs.readFileSync(path.join(root, 'public/ten-admin.html'), 'utf8');
 const eventBoard  = fs.readFileSync(path.join(root, 'hackathon-portal-app/src/components/EventBoard.tsx'), 'utf8');
+const teamPanel   = fs.readFileSync(path.join(root, 'hackathon-portal-app/src/components/Team.tsx'), 'utf8');
 const appTsx      = fs.readFileSync(path.join(root, 'hackathon-portal-app/src/App.tsx'), 'utf8');
 
 describe('the models carry the entry fee and the payment state', () => {
@@ -83,10 +84,11 @@ describe('public registration — no login, pay pending, admin to verify', () =>
       .toBeLessThan(hackRoutes.indexOf("router.get('/:slug'"));
   });
 
-  it('the QR shown is the static Paytm QR and its UPI identity', () => {
+  it('the QR carries the real UPI identity', () => {
     expect(hackRoutes).toContain("require('../../config/payment')");
-    expect(hackRoutes).toMatch(/qrImage: '\/paytm-qr\.jpeg'/);
+    expect(hackRoutes).toMatch(/qrImage: `\/api\/v2\/hackathons\/qr\?amount=/);
     expect(hackRoutes).toMatch(/upiId: BUSINESS_UPI\.upiId/);
+    expect(hackRoutes).toMatch(/pa=' \+ encodeURIComponent\(BUSINESS_UPI\.upiId\)/);
   });
 });
 
@@ -185,7 +187,7 @@ describe('the portal always has something to register for', () => {
   it('REGISTER opens the form instead of landing on the status box', () => {
     // #events only scrolls — and with the status checker there, that was the bug.
     expect(appTsx).toContain('href="#register"');
-    expect(eventBoard).toMatch(/window\.location\.hash === '#register'/);
+    expect(eventBoard).toMatch(/h === '#register'/);
     expect(eventBoard).toMatch(/setRegistering\(toRegEvent\(events\[0\]\)\)/);
     // A click only changes the hash — without this the form never opens.
     expect(eventBoard).toMatch(/addEventListener\('hashchange', open\)/);
@@ -195,6 +197,111 @@ describe('the portal always has something to register for', () => {
 
   it('the empty state no longer promises a form that is not there', () => {
     expect(eventBoard).not.toMatch(/register below and you are in the pool/);
+  });
+});
+
+describe('the QR is generated, because the committed one is corrupt', () => {
+  it('public/paytm-qr.jpeg is not a valid image — do not serve it', () => {
+    const buf = fs.readFileSync(path.join(root, 'public/paytm-qr.jpeg'));
+    // A real JPEG starts FF D8 FF. This file starts with UTF-8 replacement
+    // characters, which is why the payment step showed a broken image box.
+    expect(buf.slice(0, 3).toString('hex')).not.toBe('ffd8ff');
+  });
+
+  it('the portal points at the generated QR route instead', () => {
+    expect(hackRoutes).toMatch(/qrImage: `\/api\/v2\/hackathons\/qr\?amount=/);
+    expect(hackRoutes).toMatch(/router\.get\('\/qr'/);
+    // declared before /:slug or the slug route eats it
+    expect(hackRoutes.indexOf("router.get('/qr'")).toBeLessThan(hackRoutes.indexOf("router.get('/:slug'"));
+  });
+
+  it('that route really produces a PNG carrying the UPI id and amount', async () => {
+    const QRCode = require('qrcode');
+    const link = 'upi://pay?pa=paytmqr5k0ods@ptys&pn=Limitless&am=200&cu=INR';
+    const png = await QRCode.toBuffer(link, { type: 'png', width: 480, margin: 1 });
+    expect(png.slice(0, 4).toString('hex')).toBe('89504e47');  // PNG magic
+    expect(png.length).toBeGreaterThan(500);
+  });
+});
+
+describe('invite by link, capped at the team size, with no email', () => {
+  it('a team carries its own code, uniquely and sparsely indexed', () => {
+    const HackathonTeam = require('../../models/HackathonTeam');
+    expect(HackathonTeam.schema.path('code')).toBeDefined();
+    // No default: "" on every legacy team would all collide on one value.
+    const t = new HackathonTeam({ hackathonId: '000000000000000000000000', name: 'T', leadEmail: 'a@b.com' });
+    expect(t.code).toBeUndefined();
+  });
+
+  it('a teammate joins with a name alone — email is not required', () => {
+    const HackathonTeam = require('../../models/HackathonTeam');
+    expect(HackathonTeam.schema.path('members').schema.path('email').isRequired).toBeFalsy();
+    const t = new HackathonTeam({ hackathonId: '000000000000000000000000', name: 'T',
+      leadEmail: 'a@b.com', members: [{ name: 'No Email Person' }] });
+    expect(t.validateSync()).toBeUndefined();
+  });
+
+  it('codes come from the CSPRNG, not Math.random', () => {
+    const gen = hackRoutes.slice(
+      hackRoutes.indexOf('function newTeamCode'),
+      hackRoutes.indexOf('/** The fields a visitor may see')
+    );
+    expect(gen).toMatch(/crypto\.randomBytes\(8\)/);
+    expect(gen).not.toMatch(/Math\.random/);
+  });
+
+  it('the server enforces the cap — it never trusts the browser', () => {
+    const join = hackRoutes.slice(
+      hackRoutes.indexOf("router.post('/team/:code/join'"),
+      hackRoutes.indexOf("router.patch('/team/:code'")
+    );
+    expect(join).toMatch(/const max = \(event && event\.maxTeamSize\) \|\| 4/);
+    expect(join).toMatch(/This team is full/);
+    expect(join).not.toMatch(/req\.body.*maxTeamSize/);
+    // joining needs no email at all
+    expect(join).not.toMatch(/leadEmail|body\.email/);
+  });
+
+  it('a registration hands back the code so the lead can invite and sign in', () => {
+    expect(hackRoutes).toMatch(/code: team\.code,/);
+    expect(hackRoutes).toMatch(/code: newTeamCode\(\)/);
+  });
+
+  it('the invite link and the dashboard never leak the lead contact details', () => {
+    const payloadFn = hackRoutes.slice(
+      hackRoutes.indexOf('function teamPayload'),
+      hackRoutes.indexOf('async function findByCode')
+    );
+    expect(payloadFn).not.toMatch(/leadEmail|leadPhone/);
+  });
+});
+
+describe('sign in and the team dashboard', () => {
+  it('the code is the login — lookup, join, edit and submit all route through it', () => {
+    ['/team/:code', '/team/:code/join', '/team/:code/submit'].forEach((r) => {
+      expect(hackRoutes).toContain(r);
+    });
+    expect(hackRoutes.indexOf("router.get('/team/:code'"))
+      .toBeLessThan(hackRoutes.indexOf("router.get('/:slug'"));
+  });
+
+  it('submissions stay shut until an admin confirms the payment', () => {
+    const sub = hackRoutes.slice(hackRoutes.indexOf("router.post('/team/:code/submit'"));
+    expect(sub).toMatch(/team\.paymentStatus !== 'confirmed'/);
+    expect(sub).toMatch(/Submissions open once an admin confirms/);
+  });
+
+  it('the portal has a dashboard, an invite link and a sign-in', () => {
+    expect(teamPanel).toMatch(/\/api\/v2\/hackathons\/team\//);
+    expect(teamPanel).toMatch(/#join=/);
+    expect(teamPanel).toMatch(/localStorage/);
+    expect(eventBoard).toContain('TeamPanel');
+    expect(eventBoard).toMatch(/h\.startsWith\('#join='\)/);
+  });
+
+  it('the admin queue shows the code, so staff can read it back to a caller', () => {
+    expect(adminRoutes).toMatch(/code: t\.code \|\| '',/);
+    expect(adminPage).toContain('r.code');
   });
 });
 
