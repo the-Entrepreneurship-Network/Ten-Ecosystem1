@@ -234,6 +234,62 @@ const { normalizeTenure, getTenureLabel } = require("../../utils/tenure");
 const { requireTenurePaid } = require("../../middleware/tenurePaymentGate");
 
 // ────────────────────────────────────────────────
+// POST /api/v2/student/extend
+// Handles internship extension requests, strictly capping total at 6 months.
+// ────────────────────────────────────────────────
+router.post("/student/extend", requireStudent, async (req, res) => {
+    try {
+        const student = req.student;
+        const { targetTenure } = req.body;
+        
+        const { getTenureDays } = require("../../utils/attendanceUtils");
+        const { toDurationType, isValidTenure } = require("../../utils/tenure");
+        
+        if (!targetTenure || !isValidTenure(targetTenure)) {
+            return res.status(400).json({ success: false, message: "Invalid extension duration." });
+        }
+        
+        const currentType = toDurationType(student.tenure || student.v2DurationType || "1month");
+        const currentDays = getTenureDays(currentType);
+        
+        const targetType = toDurationType(targetTenure);
+        const targetDays = getTenureDays(targetType);
+        
+        if (targetDays <= currentDays) {
+            return res.status(400).json({ success: false, message: "You can only extend to a longer duration than your current tenure." });
+        }
+        
+        if (targetDays > 180) {
+            return res.status(400).json({ success: false, message: "Maximum allowed tenure is 6 months." });
+        }
+        
+        const TenureRequest = require("../../models/TenureRequest");
+        
+        const existingRequest = await TenureRequest.findOne({
+            studentId: student._id,
+            status: "Pending"
+        });
+        
+        if (existingRequest) {
+            return res.status(400).json({ success: false, message: "You already have a pending tenure extension request." });
+        }
+        
+        const newReq = new TenureRequest({
+            studentId: student._id,
+            currentTenure: currentType,
+            requestedTenure: targetType,
+            reason: req.body.reason || "Tenure extension requested by student"
+        });
+        await newReq.save();
+        
+        res.json({ success: true, message: "Tenure extension request submitted and is pending HR approval.", status: "Pending" });
+    } catch (err) {
+        console.error("Error extending tenure:", err);
+        res.status(500).json({ success: false, message: "Server error." });
+    }
+});
+
+// ────────────────────────────────────────────────
 // FEATURE 2 — GET /api/v2/student/me
 // Validates the student session (used for auto-login)
 // ────────────────────────────────────────────────
@@ -300,6 +356,9 @@ router.get("/student/me", requireStudent, async (req, res) => {
             );
         }
 
+        const TenureRequest = require("../../models/TenureRequest");
+        const latestTenureReq = await TenureRequest.findOne({ studentId: me._id }).sort({ requestedAt: -1 });
+
         res.json({
             success: true,
             student: {
@@ -332,7 +391,12 @@ router.get("/student/me", requireStudent, async (req, res) => {
                     requiredDays: 0,
                     isEligible: currentPct >= 75,
                     stillNeeds: 0
-                }
+                },
+                latestTenureRequest: latestTenureReq ? {
+                    status: latestTenureReq.status,
+                    requestedTenure: latestTenureReq.requestedTenure,
+                    requestedAt: latestTenureReq.requestedAt
+                } : null
             },
             totalCoins,
             rupeeValue
