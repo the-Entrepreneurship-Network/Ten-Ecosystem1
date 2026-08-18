@@ -13,6 +13,7 @@
 
 import { useEffect, useState } from 'react';
 import Register, { StatusChecker, type RegEvent } from './Register';
+import TeamPanel, { storedCode } from './Team';
 
 const inter = { fontFamily: 'Inter, system-ui, sans-serif' } as const;
 
@@ -57,6 +58,8 @@ export default function EventBoard() {
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [registering, setRegistering] = useState<RegEvent | null>(null);
   const [showStatus, setShowStatus] = useState(false);
+  /** '' = closed. Otherwise the code to open, or 'ask' to prompt for one. */
+  const [teamPanel, setTeamPanel] = useState<{ code?: string; join?: string } | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -82,22 +85,33 @@ export default function EventBoard() {
    * before the events arrive, and a second click after closing the form.
    */
   useEffect(() => {
+    // The team panel needs no event — an invite link has to work regardless.
+    const h = window.location.hash;
+    if (h === '#team') setTeamPanel({ code: storedCode() });
+    else if (h.startsWith('#join=')) setTeamPanel({ join: h.slice(6).toUpperCase() });
+  }, []);
+
+  useEffect(() => {
     if (!events.length) return;
     const open = () => {
-      if (window.location.hash === '#register') setRegistering(toRegEvent(events[0]));
+      const h = window.location.hash;
+      if (h === '#register') setRegistering(toRegEvent(events[0]));
+      else if (h === '#team') setTeamPanel({ code: storedCode() });
+      else if (h.startsWith('#join=')) setTeamPanel({ join: h.slice(6).toUpperCase() });
     };
     open();
     window.addEventListener('hashchange', open);
     return () => window.removeEventListener('hashchange', open);
   }, [events]);
 
-  /** Closing clears #register, so the same button opens the form again. */
-  function closeRegister() {
-    setRegistering(null);
-    if (window.location.hash === '#register') {
+  /** Closing clears the hash, so the same button opens the panel again. */
+  function clearHash() {
+    if (window.location.hash) {
       window.history.replaceState(null, '', window.location.pathname + window.location.search);
     }
   }
+  function closeRegister() { setRegistering(null); clearHash(); }
+  function closeTeam() { setTeamPanel(null); clearHash(); }
 
   return (
     <div id="events" className="relative bg-[#04070a] px-5 py-28 sm:px-10">
@@ -138,9 +152,14 @@ export default function EventBoard() {
         {state === 'ready' && (
           <div className="mt-8 max-w-[440px]">
             {!showStatus ? (
-              <button onClick={() => setShowStatus(true)} className="text-[13px] font-semibold text-emerald-300 hover:text-emerald-200" style={inter}>
-                Already registered? Check your status →
-              </button>
+              <div className="flex flex-wrap gap-x-5 gap-y-2">
+                <button onClick={() => setTeamPanel({ code: storedCode() })} className="text-[13px] font-semibold text-emerald-300 hover:text-emerald-200" style={inter}>
+                  Already registered? Open my team →
+                </button>
+                <button onClick={() => setShowStatus(true)} className="text-[13px] font-semibold text-white/45 hover:text-white" style={inter}>
+                  Look me up by email
+                </button>
+              </div>
             ) : (
               <StatusChecker />
             )}
@@ -221,6 +240,7 @@ export default function EventBoard() {
       </div>
 
       {registering && <Register event={registering} onClose={closeRegister} />}
+      {teamPanel && <TeamPanel initialCode={teamPanel.code} joinCode={teamPanel.join} onClose={closeTeam} />}
     </div>
   );
 }

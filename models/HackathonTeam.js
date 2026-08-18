@@ -13,7 +13,9 @@ const teamMemberSchema = new mongoose.Schema({
     studentId:  { type: mongoose.Schema.Types.ObjectId, ref: "Student", default: null },
     employeeId: { type: String, default: "" },
     name:       { type: String, required: true, trim: true, maxlength: 200 },
-    email:      { type: String, required: true, lowercase: true, trim: true, maxlength: 320 },
+    // Optional: a teammate who joins through the invite link gives a name and
+    // nothing else. Only the lead, who registered and paid, has an email.
+    email:      { type: String, default: "", lowercase: true, trim: true, maxlength: 320 },
     role:       { type: String, default: "", maxlength: 100 },
     skills:     { type: [String], default: [] },
     isLead:     { type: Boolean, default: false }
@@ -33,6 +35,14 @@ const hackathonTeamSchema = new mongoose.Schema({
     lookingForMembers: { type: Boolean, default: false, index: true },
     wantedSkills:      { type: [String], default: [] },
     timezone:          { type: String, default: "IST", maxlength: 60 },
+
+    // The team's own key. It is the invite link teammates open, and the only
+    // way anyone signs back in — there is no email and no password in this
+    // portal, so a shareable unguessable code is the whole auth story.
+    // No default: an unset field is absent from the document, which is what
+    // lets the sparse unique index below ignore legacy teams. A default of ""
+    // would make every one of them collide on the same empty string.
+    code: { type: String, uppercase: true, trim: true, maxlength: 12, index: true },
 
     leadEmail: { type: String, required: true, lowercase: true, trim: true, index: true },
     // A phone number, for the public (no-login) entrants who have no account.
@@ -78,5 +88,6 @@ const hackathonTeamSchema = new mongoose.Schema({
 hackathonTeamSchema.index({ hackathonId: 1, name: 1 },      { unique: true });
 hackathonTeamSchema.index({ hackathonId: 1, leadEmail: 1 }, { unique: true });
 hackathonTeamSchema.index({ hackathonId: 1, lookingForMembers: 1 });
+hackathonTeamSchema.index({ code: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model("HackathonTeam", hackathonTeamSchema);

@@ -13,6 +13,7 @@ const NAV = [
   { label: 'JOB', href: '/job-portal/' },
   { label: 'RESUME', href: '/resume-portal/' },
   { label: 'HACK', href: '#top', active: true },
+  { label: 'MY TEAM', href: '#team' },
 ];
 
 /* ---------- 01 · the rain and the hooded coder ---------- */
@@ -220,8 +221,8 @@ function Arena() {
             <a href="#register" className="rounded-full bg-emerald-400 px-10 py-5 text-[15px] font-bold text-black transition-transform hover:scale-[1.04]" style={inter}>
               REGISTER MY TEAM →
             </a>
-            <a href="#events" className="rounded-full border border-emerald-300/50 px-10 py-5 text-[15px] font-semibold text-emerald-100 transition-colors hover:bg-emerald-400/10" style={inter}>
-              Already registered? Check status
+            <a href="#team" className="rounded-full border border-emerald-300/50 px-10 py-5 text-[15px] font-semibold text-emerald-100 transition-colors hover:bg-emerald-400/10" style={inter}>
+              Already registered? My team
             </a>
           </div>
         </FadeIn>

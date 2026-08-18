@@ -1409,7 +1409,9 @@ async function loadHackathonRegs(filter) {
             ? '<span style="color:#94a3b8;font-size:12px">' + _aEsc(r.rejectionReason) + '</span>'
             : '<span style="color:#64748b;font-size:12px">' + _aEsc(r.verifiedBy ? 'by ' + r.verifiedBy : '—') + '</span>');
       return '<tr>' +
-        '<td><b>' + _aEsc(r.team) + '</b>' + (r.track ? '<br><span style="color:#64748b;font-size:11px">' + _aEsc(r.track) + '</span>' : '') + '</td>' +
+        '<td><b>' + _aEsc(r.team) + '</b>' +
+          (r.code ? '<br><code style="color:#34d399;font-size:11px">' + _aEsc(r.code) + '</code>' : '') +
+          (r.track ? '<br><span style="color:#64748b;font-size:11px">' + _aEsc(r.track) + '</span>' : '') + '</td>' +
         '<td>' + _aEsc(r.event || '—') + '</td>' +
         '<td>' + _aEsc(lead.name || '—') + '</td>' +
         '<td style="font-size:12px">' + _aEsc(r.leadEmail || '') + '<br>' + _aEsc(r.leadPhone || '') + '</td>' +

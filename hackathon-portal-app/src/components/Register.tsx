@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { rememberCode, inviteUrl } from './Team';
 
 const inter = { fontFamily: 'Inter, system-ui, sans-serif' } as const;
 
@@ -41,6 +42,8 @@ export default function Register({ event, onClose }: { event: RegEvent; onClose:
   const [members, setMembers] = useState<Member[]>([]);
   const [utr, setUtr] = useState('');
   const [reference, setReference] = useState('');
+  const [teamCode, setTeamCode] = useState('');
+  const [copied, setCopied] = useState(false);
 
   const canAddMore = members.length < event.maxTeamSize - 1;
 
@@ -83,6 +86,9 @@ export default function Register({ event, onClose }: { event: RegEvent; onClose:
       if (!data.success) { setError(data.message || 'Could not register.'); setBusy(false); return; }
       try { localStorage.setItem(REMEMBER_KEY, leadEmail.trim().toLowerCase()); } catch { /* private mode */ }
       setReference(data.reference || '');
+      // The code is how they get back in and how they invite the rest of the
+      // team. Remember it so returning needs nothing typed.
+      if (data.code) { setTeamCode(data.code); rememberCode(data.code); }
       setStep('done');
     } catch {
       setError('Network error. Please try again.');
@@ -184,8 +190,36 @@ export default function Register({ event, onClose }: { event: RegEvent; onClose:
               An admin will check your reference and confirm your team. Come back and check your
               status any time — you're identified by your email, so nothing to remember.
             </p>
-            {reference && <p className="mono text-[12px] text-emerald-200/80">Reference: {reference}</p>}
-            <StatusChecker email={leadEmail.trim()} />
+            {teamCode && (
+              <div className="rounded-xl border border-emerald-300/25 bg-emerald-300/[0.05] p-4 text-left">
+                <p className="mono mb-1 text-[11px] tracking-[0.2em] text-emerald-300/80">YOUR TEAM CODE</p>
+                <p className="mono mb-3 text-[20px] tracking-[0.28em] text-white">{teamCode}</p>
+                <p className="mb-2 text-[12.5px] leading-relaxed text-white/60">
+                  Save this. It signs you back in — there is no password. Share the link below and
+                  your teammates join with just a name, up to {event.maxTeamSize} of you in total.
+                </p>
+                <div className="flex gap-2">
+                  <input readOnly value={inviteUrl(teamCode)} onFocus={(e) => e.currentTarget.select()}
+                    className="w-full rounded-lg border border-emerald-300/20 bg-black/50 px-3 py-2.5 text-[12px] text-white" />
+                  <button
+                    onClick={async () => {
+                      try {
+                        if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(inviteUrl(teamCode));
+                        setCopied(true); setTimeout(() => setCopied(false), 1800);
+                      } catch { /* the field is selectable instead */ }
+                    }}
+                    className="whitespace-nowrap rounded-lg bg-emerald-400 px-3 text-[12.5px] font-bold text-black">
+                    {copied ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+              </div>
+            )}
+            {reference && <p className="mono text-[12px] text-emerald-200/60">Reference: {reference}</p>}
+            <button
+              onClick={() => { onClose(); window.location.hash = '#team'; }}
+              className="w-full rounded-full bg-emerald-400 px-6 py-3.5 text-[14px] font-bold text-black">
+              Open my team dashboard →
+            </button>
             <button onClick={onClose} className="text-[13px] text-white/50 hover:text-white">Close</button>
           </div>
         )}
