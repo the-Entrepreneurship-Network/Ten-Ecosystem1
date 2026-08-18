@@ -732,10 +732,15 @@ const FIX_INTENT = /\b(fix|resolve|improve|repair|rebuild|solve|correct)( it| th
  * new coat: an unmatched message must advance the conversation, never
  * reprint the menu.
  */
-const SCORE_INTENT = /make it \d+|\b\d{2}\s*\/\s*100\b|\bunrejectable\b|\bdo (it all|all|everything|them all)\b|max(imi[sz]e)?( the)? score|\b(raise|boost|increase) (the |my )?score\b|\bfull marks\b|\bbest score\b/;
+const SCORE_INTENT = /make it \d+|\b\d{2}\s*\/\s*100\b|\bunrejectable\b|max(imi[sz]e)?( the)? score|\b(raise|boost|increase) (the |my )?score\b|\bfull marks\b|\bbest score\b/;
+
+/* "do all" is its own command in the ten-resume-agent skill: a pipeline that
+   checks first and only tailors when a JD exists — never four menus. */
+const DO_ALL = /\bdo (it all|all|everything|them all)\b|\brun everything\b|\bfull pipeline\b/;
 
 /** What the visitor wants, read from their sentence — Mega Agent command map. */
 function commandOf(low, hasFile) {
+  if (DO_ALL.test(low)) return 'doall';
   if (/\bcover letter\b|\bcover\b.*\b(letter|note)\b/.test(low)) return 'cover';
   if (/\bcompare\b|which (job|jd|posting)|between these (jobs|jds)/.test(low)) return 'compare';
   if (/\binterview prep\b|\bprep\b|defen[cs]e|walk me through/.test(low)) return 'prep';
@@ -923,8 +928,19 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       }
       if (session.asked && ['target', 'jd', 'resume'].includes(session.asked) === false) session.asked = null;
     } else if (session.asked && msg) {
-      consumeAnswer(session, session.asked, msg);
-      session.asked = null;
+      /* A document is a document wherever it lands. A resume pasted while
+         the pending question was "what job title?" must become the ledger
+         source, not a job title five hundred characters long. */
+      const resumey = msg.split('\n').length > 5 &&
+        (RE_EMAIL.test(msg) || /\b(experience|skills|education|projects)\b/i.test(msg));
+      if (!PASTE_FIELDS.includes(session.asked) && resumey) {
+        session.resumeText = msg;
+        if (session.command === 'build') session.command = 'tailor';
+        session.asked = null;
+      } else {
+        consumeAnswer(session, session.asked, msg);
+        session.asked = null;
+      }
     }
 
     /* A long paste that reads like a resume is one — whether it arrived
@@ -937,12 +953,30 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       if (!session.command) session.command = 'check';
     }
 
+    /* Reply shape from the ten-resume-agent skill: line 1 names the command,
+       then the work or one question — never a greeting, never the menu. */
     const ask = (field, question, note) => {
       session.asked = field;
-      return res.json({ ok: true, kind: 'ask', reply: [note, question].filter(Boolean).join('\n\n'), session });
+      const head = session.command ? `Command: ${session.command}` : null;
+      return res.json({ ok: true, kind: 'ask', reply: [head, note, question].filter(Boolean).join('\n\n'), session });
     };
 
     /* ── dispatch ── */
+
+    /*
+     * doall — the pipeline, as the router skill maps the button: check
+     * first; Weak means the rebuild interview; a JD means tailor; otherwise
+     * the check report IS the answer. Never four menus.
+     */
+    if (session.command === 'doall') {
+      if (!session.resumeText.trim()) {
+        session.command = 'build';
+        const q = nextQuestion(session).question;
+        if (q) return ask(q.field, q.question);
+      } else {
+        session.command = session.jd ? 'tailor' : 'check';
+      }
+    }
 
     if (session.command === 'check') {
       if (!session.resumeText.trim()) {
@@ -972,7 +1006,11 @@ router.post('/chat', upload.single('file'), async (req, res) => {
 
     if (session.command === 'tailor') {
       if (!session.resumeText.trim() && !Object.keys(session.details).length) {
-        return ask('resume', 'Tailoring starts from your facts. Attach or paste the resume — or say "build" and I will interview you from scratch.');
+        /* The button map: "make it 98/100" with no resume means build — ask
+           the job title, not for a document they already said they lack. */
+        session.command = 'build';
+        const q = nextQuestion(session).question;
+        if (q) return ask(q.field, q.question);
       }
       if (!session.target && !session.jd && !(session.declined || []).includes('target')) {
         return ask('target', 'What job title are you applying for — for example Backend Engineer, Data Analyst, or something else? Paste the job description instead if you have it.');
@@ -1149,10 +1187,13 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       session.command = 'check';
       return ask('resume', 'Let us start with the document: attach your resume (PDF or TXT) or paste its text — or say "build" and I will interview you from scratch.');
     }
+    /* The ten-resume-agent skill's empty-state rule: one short line only.
+       The four command bullets live in the UI's chips, not in the agent's
+       mouth — echoing the interface copy back was the bug in the screenshot. */
     session.menuShown = true;
     return res.json({
       ok: true, kind: 'help',
-      reply: 'Say what you need and I will run it:\n\n• check — attach or paste your resume, I score it against what an ATS parses and band it Weak / Salvageable / Strong.\n• build — no resume yet: I interview you one question at a time and build from scratch.\n• tailor — resume plus a job description: I convert it to that posting, keeping every true fact.\n• gap — resume plus JD: just the missing-keyword table, no rewrite.\n\nNothing is ever invented — no fake metrics, no skills you do not have.',
+      reply: 'Upload a resume or say the job title.',
       session,
     });
   } catch (e) {
