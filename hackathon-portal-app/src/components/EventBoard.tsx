@@ -12,6 +12,8 @@
  */
 
 import { useEffect, useState } from 'react';
+import Register, { StatusChecker, type RegEvent } from './Register';
+import TeamPanel, { storedCode } from './Team';
 
 const inter = { fontFamily: 'Inter, system-ui, sans-serif' } as const;
 
@@ -23,6 +25,7 @@ type Event = {
   tagline: string;
   tracks: string[];
   prize: string;
+  entryFee: number;
   minTeamSize: number;
   maxTeamSize: number;
   registrationClosesAt: string | null;
@@ -30,6 +33,7 @@ type Event = {
   venue: string;
   status: string;
   teamCount: number;
+  payment: { upiId: string; payeeName: string; qrImage: string; amount: number };
 };
 
 function when(value: string | null) {
@@ -41,9 +45,21 @@ function when(value: string | null) {
   });
 }
 
+/** The subset Register needs. Shared so every entry point opens the same form. */
+function toRegEvent(e: Event): RegEvent {
+  return {
+    slug: e.slug, title: e.title, mode: e.mode, tracks: e.tracks,
+    minTeamSize: e.minTeamSize, maxTeamSize: e.maxTeamSize, payment: e.payment,
+  };
+}
+
 export default function EventBoard() {
   const [events, setEvents] = useState<Event[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [registering, setRegistering] = useState<RegEvent | null>(null);
+  const [showStatus, setShowStatus] = useState(false);
+  /** '' = closed. Otherwise the code to open, or 'ask' to prompt for one. */
+  const [teamPanel, setTeamPanel] = useState<{ code?: string; join?: string } | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -60,6 +76,42 @@ export default function EventBoard() {
       live = false;
     };
   }, []);
+
+  /**
+   * Every REGISTER / FIND MY TEAM / PITCH AN IDEA button points at #register.
+   * They used to point at #events, which just scrolled the visitor down to a
+   * "check your status" box — the one thing they had not come to do. Opening on
+   * both the current hash and later hashchanges covers the deep link, a click
+   * before the events arrive, and a second click after closing the form.
+   */
+  useEffect(() => {
+    // The team panel needs no event — an invite link has to work regardless.
+    const h = window.location.hash;
+    if (h === '#team') setTeamPanel({ code: storedCode() });
+    else if (h.startsWith('#join=')) setTeamPanel({ join: h.slice(6).toUpperCase() });
+  }, []);
+
+  useEffect(() => {
+    if (!events.length) return;
+    const open = () => {
+      const h = window.location.hash;
+      if (h === '#register') setRegistering(toRegEvent(events[0]));
+      else if (h === '#team') setTeamPanel({ code: storedCode() });
+      else if (h.startsWith('#join=')) setTeamPanel({ join: h.slice(6).toUpperCase() });
+    };
+    open();
+    window.addEventListener('hashchange', open);
+    return () => window.removeEventListener('hashchange', open);
+  }, [events]);
+
+  /** Closing clears the hash, so the same button opens the panel again. */
+  function clearHash() {
+    if (window.location.hash) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  }
+  function closeRegister() { setRegistering(null); clearHash(); }
+  function closeTeam() { setTeamPanel(null); clearHash(); }
 
   return (
     <div id="events" className="relative bg-[#04070a] px-5 py-28 sm:px-10">
@@ -89,10 +141,28 @@ export default function EventBoard() {
         {state === 'ready' && events.length === 0 && (
           <div className="mt-10 max-w-[640px]">
             <p className="text-[15px] leading-relaxed text-white/65" style={inter}>
-              Nothing is scheduled right now. The next hackathon and ideathon will be announced
-              here first — register below and you are in the pool for every one TEN runs, with
-              your domain, stack and timezone already on file.
+              Registration is closed at the moment. The next hackathon and ideathon will be
+              announced here first — check back shortly. If you have already registered, you
+              can still check your status below.
             </p>
+          </div>
+        )}
+
+        {/* Already registered — check where your payment stands. No login. */}
+        {state === 'ready' && (
+          <div className="mt-8 max-w-[440px]">
+            {!showStatus ? (
+              <div className="flex flex-wrap gap-x-5 gap-y-2">
+                <button onClick={() => setTeamPanel({ code: storedCode() })} className="text-[13px] font-semibold text-emerald-300 hover:text-emerald-200" style={inter}>
+                  Already registered? Open my team →
+                </button>
+                <button onClick={() => setShowStatus(true)} className="text-[13px] font-semibold text-white/45 hover:text-white" style={inter}>
+                  Look me up by email
+                </button>
+              </div>
+            ) : (
+              <StatusChecker />
+            )}
           </div>
         )}
 
@@ -156,18 +226,21 @@ export default function EventBoard() {
                   </div>
                 )}
 
-                <a
-                  href={`/student-login.html?next=${encodeURIComponent('/hackathon-portal/?event=' + e.slug)}`}
+                <button
+                  onClick={() => setRegistering(toRegEvent(e))}
                   className="mt-7 inline-block rounded-full bg-emerald-400 px-7 py-3 text-[13px] font-bold text-black transition-transform hover:scale-[1.04]"
                   style={inter}
                 >
                   REGISTER A TEAM →
-                </a>
+                </button>
               </article>
             ))}
           </div>
         )}
       </div>
+
+      {registering && <Register event={registering} onClose={closeRegister} />}
+      {teamPanel && <TeamPanel initialCode={teamPanel.code} joinCode={teamPanel.join} onClose={closeTeam} />}
     </div>
   );
 }

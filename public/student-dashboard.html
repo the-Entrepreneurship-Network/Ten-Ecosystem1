@@ -1281,48 +1281,6 @@ button:active { transform: translateY(0); }
   display: block;
 }
 
-/* ── portal backdrops ──────────────────────────────────────────────────────
-   public/portal-backdrops.js paints a shader behind the open section and
-   alternates two looks across the sixteen portals. Only the background
-   changes: the section's own markup, data and controls are untouched, they
-   just sit on a layer above it. */
-.section-modal-body { position: relative; }
-.section-modal-body .portal-backdrop { position: fixed; inset: 0; z-index: 0; }
-/* Everything that is not the backdrop goes above it, and keeps its own
-   background so long-form content never has to be read through the shader. */
-.section-modal-body .stu-view.active { position: relative; z-index: 1; }
-/* A light scrim only — enough to stop the crystal shader's brightest glow
-   lines fighting text, not enough to erase it. The first version used
-   .72-.86 over a 42%-opacity canvas, which left about nine percent of the
-   shader visible and read as no change at all. Readability is the job of the
-   panels below, which are opaque. */
-.section-modal-body .portal-backdrop::after {
-  content: ''; position: absolute; inset: 0;
-  background: linear-gradient(180deg, rgba(4,7,16,.26), rgba(4,7,16,.42));
-}
-/* Content sits in its own solid panels, so long text is never read through a
-   moving shader no matter how bright a frame gets. */
-.section-modal-body .stu-view.active > * {
-  position: relative;
-}
-.section-modal-body .top-card,
-.section-modal-body .stu-card,
-.section-modal-body .card,
-.section-modal-body .panel {
-  backdrop-filter: blur(9px);
-  background-color: rgba(9, 14, 30, .88);
-}
-[data-theme="light"] .section-modal-body .portal-backdrop { opacity: .38; }
-[data-theme="light"] .section-modal-body .portal-backdrop::after {
-  background: linear-gradient(180deg, rgba(248,250,255,.62), rgba(248,250,255,.74));
-}
-[data-theme="light"] .section-modal-body .top-card,
-[data-theme="light"] .section-modal-body .stu-card,
-[data-theme="light"] .section-modal-body .card,
-[data-theme="light"] .section-modal-body .panel {
-  background-color: rgba(255,255,255,.92);
-}
-
 /* Light mode overrides for section cards/modal */
 [data-theme="light"] .sec-card { background: #ffffff; border-color: rgba(212,175,55,0.15); box-shadow: 0 2px 16px rgba(0,0,0,0.06); }
 [data-theme="light"] .sec-card:hover { border-color: rgba(212,175,55,0.3); box-shadow: 0 8px 32px rgba(0,0,0,0.1); }
@@ -1494,14 +1452,6 @@ button:active { transform: translateY(0); }
   <link rel="stylesheet" href="/css/mobile.css">
   <script src="/mobile-nav.js" defer></script>
   <script src="/push-client.js" defer></script>
-  <!-- Shader backdrops for the portal sections. Cosmetic only, and it fails
-       soft: no WebGL2 or a shader that will not compile leaves a gradient. -->
-  <script src="/portal-backdrops.js" defer></script>
-  <!-- Dissolves the card chrome so content sits in the backdrop rather than on
-       top of it. Scoped to .portal-surface, which openSectionModal adds. -->
-  <link rel="stylesheet" href="/portal-dissolve.css">
-  <!-- Recolours only the text that the dissolve left without enough contrast. -->
-  <script src="/portal-legibility.js" defer></script>
 </head>
 
 <body>
@@ -2515,14 +2465,7 @@ function toggleTheme(){var c=localStorage.getItem('ten-theme')||'dark';var n=c==
 let student = JSON.parse(localStorage.getItem("student"));
 
 if(!student){
-  /* Carry where they were going through the sign-in.
-     The portals ring on the landing page deep-links into sections here
-     (#stu-view-attendance and friends). Bouncing to a bare /login.html threw
-     that away, so somebody who clicked "Daily Attendance" signed in and landed
-     on the dashboard's front page to start hunting again. login.html already
-     honours ?next= and validates it as same-origin, so the fix is to send it. */
-  window.location.href = "/login.html?role=student&next=" +
-    encodeURIComponent(window.location.pathname + window.location.search + window.location.hash);
+  window.location.href="/login.html";
 }
 
 // Silently refresh phone/college/dates from server so profile modal always shows correct data
@@ -5372,16 +5315,6 @@ var sectionTitles = {
   'stu-view-leaderboard': 'Extras & Badges'
 };
 
-/* The sixteen portals in the order they appear on the grid. Only used to
-   decide which of the two backdrops a section gets, so neighbouring sections
-   never share one. Nothing else reads it. */
-var SECTION_ORDER = [
-  'stu-view-overview', 'stu-view-notice', 'stu-view-coordinator-tasks',
-  'stu-view-domain-tasks', 'stu-view-submissions', 'stu-view-attendance',
-  'stu-view-test', 'stu-view-coding', 'stu-view-guidelines',
-  'stu-view-leaderboard'
-];
-
 function openSectionModal(sectionId) {
   var modal = document.getElementById('sectionModal');
   var titleEl = document.getElementById('sectionModalTitle');
@@ -5399,22 +5332,6 @@ function openSectionModal(sectionId) {
   // Open modal
   modal.classList.add('open');
   document.body.style.overflow = 'hidden';
-
-  /* Paint this section's backdrop. Purely cosmetic: it mounts behind the
-     content and every feature above it behaves exactly as before. One canvas
-     is alive at a time, and it is torn down in closeSectionModal(). */
-  if (window.PortalBackdrop) {
-    try {
-      var body = modal.querySelector('.section-modal-body');
-      // Each section has its own background, keyed by its id — not a rotation.
-      window.PortalBackdrop.showFor(body, sectionId, SECTION_ORDER.indexOf(sectionId));
-      // Dissolve the card chrome so the content merges with that backdrop.
-      body.classList.add('portal-surface');
-      // Then rescue any text the dissolve left unreadable. Watches rather than
-      // runs once: most sections are filled by fetch after this point.
-      if (window.PortalLegibility) window.PortalLegibility.watch(body, 7000);
-    } catch (e) { /* a backdrop must never stop a section opening */ }
-  }
   // Hide sidebar when modal opens
   var sidebar = document.querySelector('.stu-sidebar');
   var overlay = document.querySelector('.sidebar-overlay');
@@ -5447,9 +5364,6 @@ function closeSectionModal() {
   var modal = document.getElementById('sectionModal');
   if (modal) modal.classList.remove('open');
   document.body.style.overflow = '';
-  // Stop the shader with the section. A render loop behind a closed modal is
-  // pure battery drain.
-  if (window.PortalBackdrop) { try { window.PortalBackdrop.clear(); } catch (e) {} }
 }
 
 document.addEventListener('keydown', function(e) {
@@ -5462,23 +5376,6 @@ document.addEventListener('keydown', function(e) {
     closeSectionModal();
   }
 });
-
-/* Open a section straight from the URL.
-   The portals ring on the landing page links here with the section in the
-   hash — student-dashboard.html#stu-view-attendance — so somebody who clicks
-   "Daily Attendance" out there arrives at Daily Attendance rather than the
-   dashboard's front page and a second hunt through the grid. Only ids that
-   exist as a .stu-view are honoured, so a stale or invented hash does nothing. */
-(function openSectionFromHash() {
-  function fromHash() {
-    var id = String(window.location.hash || '').replace(/^#/, '');
-    if (!/^stu-view-[a-z-]+$/.test(id)) return;
-    var target = document.getElementById(id);
-    if (target && target.classList.contains('stu-view')) openSectionModal(id);
-  }
-  fromHash();
-  window.addEventListener('hashchange', fromHash);
-})();
 
 // Populate welcome name
 (function() {
@@ -6614,9 +6511,9 @@ function checkTenurePayment(isStatusCheckClick) {
         sessionStorage.setItem('tenure_paid_verified', 'true');
         localStorage.removeItem('ten_tenure_utr_pending');
         _tenureUtrAlreadySubmitted = false;
-        if (isStatusCheckClick && data.isPaid) {
-          Swal.fire({ icon: 'success', title: 'Unlocked! 🎉', text: 'Your payment has been approved. Welcome!', background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#10b981' });
-        }
+        // "Here is what you just unlocked". Shown once when the bundle lands,
+        // and on demand when the student presses check-status.
+        if (data.isPaid) showTenureUnlocked(data, isStatusCheckClick);
         if (typeof showWelcomeModalIfNeeded === 'function') {
           showWelcomeModalIfNeeded();
         }
@@ -6675,6 +6572,106 @@ function checkTenurePayment(isStatusCheckClick) {
     });
 }
 
+/**
+ * Show what the fee includes, not just what it costs.
+ *
+ * The figures come from the server (config/tenurePayment.js), which is also
+ * what services/tenureBenefits.js reads when it grants the bundle on approval —
+ * so this list and what actually arrives cannot drift apart. Nothing is
+ * hardcoded here, and a free-track student is never shown any of it because the
+ * server sends `benefits: null` for those.
+ */
+/**
+ * Tell the student what the fee actually bought, once.
+ *
+ * The old message was "Your payment has been approved. Welcome!" — true, but it
+ * never mentioned the coins or the certificate fee they had just been given, so
+ * the bundle they paid for was invisible the moment they got it. `grantedAt`
+ * keys the once-only flag, so a later re-grant would announce itself again but
+ * a page refresh will not.
+ */
+function showTenureUnlocked(data, force) {
+  var granted = data && data.granted;
+  var key = granted && granted.grantedAt ? 'ten_tenure_unlocked_' + granted.grantedAt : '';
+  var alreadySeen = key ? localStorage.getItem(key) === '1' : true;
+  if (!force && (!granted || alreadySeen)) return;
+  if (typeof Swal === 'undefined') return;
+
+  if (!granted) {
+    if (force) {
+      Swal.fire({ icon: 'success', title: 'Unlocked! 🎉', text: 'Your payment has been approved. Welcome!',
+        background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#10b981' });
+    }
+    return;
+  }
+
+  var esc = function (v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  };
+  var items = (granted.perks || []).map(function (p) {
+    return '<li style="padding:4px 0;">✓ ' + esc(p) + '</li>';
+  }).join('');
+
+  Swal.fire({
+    icon: 'success',
+    title: 'Your ' + esc(granted.plan || '') + ' track is unlocked 🎉',
+    html: '<div style="text-align:left;font-size:14px;line-height:1.6;">'
+        + '<p style="margin:0 0 10px;color:#c8baa0;">Already in your account:</p>'
+        + '<ul style="list-style:none;padding:0;margin:0 0 12px;">' + items + '</ul>'
+        + '<p style="margin:0;font-size:12.5px;color:#8aa4c8;">Your '
+        + esc(granted.certificateLabel || 'certificate')
+        + ' fee is covered — you still need to finish the programme to be issued one.</p>'
+        + '</div>',
+    background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#10b981',
+    confirmButtonText: 'Let\u2019s go'
+  });
+  if (key) { try { localStorage.setItem(key, '1'); } catch (e) { /* private mode */ } }
+}
+
+function renderTenureValueStack(benefits) {
+  var box = document.getElementById('tenureValueStack');
+  if (!box) return;
+  if (!benefits || !benefits.perks || !benefits.perks.length) { box.style.display = 'none'; return; }
+
+  var esc = function (v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  };
+  var money = function (n) { return '₹' + Number(n || 0).toLocaleString('en-IN'); };
+
+  document.getElementById('tenurePlanName').textContent = benefits.name + ' track — what you get';
+  document.getElementById('tenurePlanTagline').textContent = benefits.tagline || '';
+
+  var badge = document.getElementById('tenurePlanBadge');
+  if (benefits.badge) { badge.textContent = benefits.badge; badge.style.display = ''; }
+  else { badge.style.display = 'none'; }
+
+  document.getElementById('tenurePerkList').innerHTML = benefits.perks.map(function (p) {
+    var worth = p.worth > 0
+      ? '<span style="color:#D4AF37;font-weight:700;white-space:nowrap;">' + money(p.worth) + '</span>'
+      : '<span style="color:#8aa4c8;white-space:nowrap;">included</span>';
+    return '<li style="display:flex;justify-content:space-between;gap:12px;padding:3px 0;">'
+      + '<span>✓ ' + esc(p.label) + '</span>' + worth + '</li>';
+  }).join('');
+
+  // Only ever shown when the bundle is genuinely worth more than the fee.
+  var strike = document.getElementById('tenureValueStrike');
+  var saving = document.getElementById('tenureSavingLine');
+  if (benefits.saving > 0) {
+    strike.textContent = money(benefits.valueTotal);
+    strike.style.display = '';
+    saving.textContent = 'You save ' + money(benefits.saving);
+    saving.style.display = '';
+  } else {
+    strike.style.display = 'none';
+    saving.style.display = 'none';
+  }
+  box.style.display = '';
+}
+
 function initiateTenurePaymentTimer(data) {
   currentTenureAmount = data.price || 1000;
   currentTenureUpiId = 'paytmqr5k0ods@ptys';
@@ -6700,12 +6697,17 @@ function initiateTenurePaymentTimer(data) {
     document.getElementById('tenureQrReasonText').textContent = (data.label || 'Short Course') + ' Fee';
   }
 
+  renderTenureValueStack(data.benefits);
+
   // Display dynamic UPI QR code with amount & details, falling back to static QR
   const upiUrl = `upi://pay?pa=${currentTenureUpiId}&pn=${encodeURIComponent(currentTenurePayee)}&am=${currentTenureAmount}&cu=INR&tn=${encodeURIComponent((data.label || 'Short Course') + ' Fee')}`;
   document.getElementById('tenureQrImg').src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiUrl)}`;
   document.getElementById('tenureQrImg').onerror = function() {
     this.onerror = null;
-    this.src = "/paytm-qr.jpeg";
+    // Generated locally. The old fallback was /paytm-qr.jpeg, which is corrupt
+    // in the repository and rendered as a broken image — i.e. no way to pay.
+    this.src = '/api/upi-qr?amount=' + encodeURIComponent(currentTenureAmount)
+      + '&note=' + encodeURIComponent((data.label || 'Short Course') + ' Fee');
   };
 
   if (tenureTimerInterval) clearInterval(tenureTimerInterval);
@@ -6865,16 +6867,31 @@ function submitTenureUtr() {
         Under the TEN Crash Course Internship Program (1 Week, 15 Days, or 1 Month), a fast-track training, administrative, and certification fee is required to activate your dashboard.
       </p>
 
-      <!-- Why make payment box -->
-      <div style="background:rgba(212,175,55,0.06);border:1px solid rgba(212,175,55,0.18);border-radius:12px;padding:14px 18px;margin-bottom:20px;text-align:left;font-size:12px;line-height:1.5;color:#c8baa0;">
-        <strong style="color:#D4AF37;display:block;margin-bottom:4px;">📋 Why do I make this payment?</strong>
-        This program fee offsets fast-track onboarding, premium developer tools, prioritized coordinator review, and immediate release of your LOR, certificate, and performance credits upon completion.
+      <!-- What the fee actually includes. Rendered from /api/tenure-payment/status,
+           which reads config/tenurePayment.js — the same definition the grant on
+           approval uses, so this list cannot promise something never handed over. -->
+      <div id="tenureValueStack" style="display:none;background:rgba(212,175,55,0.06);border:1px solid rgba(212,175,55,0.18);border-radius:12px;padding:16px 18px;margin-bottom:18px;text-align:left;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
+          <strong id="tenurePlanName" style="color:#D4AF37;font-size:13px;letter-spacing:0.6px;text-transform:uppercase;"></strong>
+          <span id="tenurePlanBadge" style="display:none;background:#D4AF37;color:#05070e;font-size:10px;font-weight:800;letter-spacing:0.8px;padding:3px 9px;border-radius:999px;"></span>
+        </div>
+        <p id="tenurePlanTagline" style="font-size:12.5px;color:#c8baa0;line-height:1.5;margin:0 0 12px;"></p>
+        <ul id="tenurePerkList" style="list-style:none;padding:0;margin:0 0 4px;font-size:12.5px;color:#e6e1d6;line-height:1.6;"></ul>
       </div>
 
       <!-- Amount Badge -->
-      <div style="background:#05070e;border:1px solid rgba(212,175,55,0.12);border-radius:16px;padding:14px;margin-bottom:20px;display:inline-block;width:100%;">
+      <div style="background:#05070e;border:1px solid rgba(212,175,55,0.12);border-radius:16px;padding:14px;margin-bottom:14px;display:inline-block;width:100%;">
         <span style="font-size:11px;text-transform:uppercase;color:#8aa4c8;letter-spacing:1px;display:block;margin-bottom:2px;">Fast-Track Internship Fee</span>
-        <strong style="font-size:24px;color:#D4AF37;" id="tenureAmountText">₹0.00</strong>
+        <div style="display:flex;align-items:baseline;justify-content:center;gap:10px;flex-wrap:wrap;">
+          <span id="tenureValueStrike" style="display:none;font-size:15px;color:#8aa4c8;text-decoration:line-through;"></span>
+          <strong style="font-size:24px;color:#D4AF37;" id="tenureAmountText">₹0.00</strong>
+        </div>
+        <div id="tenureSavingLine" style="display:none;font-size:12px;font-weight:700;color:#4ade80;margin-top:4px;"></div>
+      </div>
+
+      <!-- Risk reversal: the last objection before someone abandons the screen. -->
+      <div style="font-size:11.5px;color:#8aa4c8;line-height:1.5;margin-bottom:18px;">
+        🔒 Verified by an admin, usually within 24 hours. Not approved? Your payment is refunded in full.
       </div>
 
       <!-- QR Code Section -->
@@ -6883,7 +6900,7 @@ function submitTenureUtr() {
           ⏳ Session expires in: <span id="tenureTimerCount">02:00</span>
         </div>
         <div class="qr-pulse-active" style="background:#ffffff;border-radius:18px;padding:14px;display:inline-block;box-shadow:0 10px 30px rgba(212,175,55,0.25);border:2px solid rgba(212,175,55,0.35);margin-bottom:12px;">
-          <img id="tenureQrImg" src="/paytm-qr.jpeg" alt="Scan to Pay" style="width:200px;height:200px;display:block;border-radius:8px;object-fit:contain;">
+          <img id="tenureQrImg" src="/api/upi-qr" alt="Scan to Pay" style="width:200px;height:200px;display:block;border-radius:8px;object-fit:contain;">
         </div>
         <div style="font-size:12px;color:#9aa4bf;font-family:monospace;font-weight:600;" id="tenureUpiIdText">UPI ID: Loading...</div>
         <div style="margin-top: 14px; font-size: 13px; color: #D4AF37; font-weight: 700; line-height: 1.4; background: rgba(5,7,14,0.4); border-radius: 8px; padding: 6px 12px; display: inline-block;">

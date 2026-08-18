@@ -159,6 +159,44 @@
   .hero-strip a { color:#0a0a0a; text-decoration:none; }
   .hero-strip a:hover { text-decoration:underline; }
 
+  /* ---------- ecosystem CTA: the link out to the main company website ----------
+     This is the internship portal; the band sends students to the main TEN
+     site. First thing on scroll, gold on black so the eye lands on it, and the
+     whole card is one big link that opens in a new tab. */
+  .eco-band { background:#000; padding:64px 22px 8px; display:flex; justify-content:center; }
+  .eco-card {
+    position:relative; display:block; max-width:1000px; width:100%;
+    text-decoration:none; color:#fff; text-align:center; overflow:hidden;
+    padding:54px 40px; border-radius:22px;
+    background:
+      radial-gradient(120% 160% at 50% -20%, rgba(245,197,66,.17), transparent 60%),
+      linear-gradient(180deg,#151105,#0a0a0a);
+    border:1px solid rgba(245,197,66,.34);
+    transition:transform .35s cubic-bezier(.2,.8,.2,1), border-color .35s, box-shadow .35s;
+  }
+  .eco-card:hover {
+    transform:translateY(-4px); border-color:rgba(245,197,66,.72);
+    box-shadow:0 26px 64px rgba(0,0,0,.55), inset 0 0 0 1px rgba(245,197,66,.20);
+  }
+  .eco-card:focus-visible { outline:2px solid #f5c542; outline-offset:4px; }
+  /* a slow gold sweep, so the panel reads as the brightest thing on the fold */
+  .eco-card::before {
+    content:''; position:absolute; inset:0; pointer-events:none;
+    background:linear-gradient(100deg,transparent 40%,rgba(245,197,66,.10) 50%,transparent 60%);
+    background-size:260% 100%; animation:ecoSheen 6.5s ease-in-out infinite;
+  }
+  .eco-eyebrow { font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.28em; color:#f5c542; }
+  .eco-title { font-size:clamp(26px,4.6vw,46px); font-weight:900; letter-spacing:-0.03em; line-height:1.05; margin:14px 0 12px; text-wrap:balance; }
+  .eco-sub { font-size:14.5px; line-height:1.6; color:#bcbcbc; max-width:56ch; margin:0 auto 28px; }
+  .eco-go {
+    display:inline-flex; align-items:center; gap:12px;
+    background:#f5c542; color:#0a0a0a; font-weight:800; font-size:14px;
+    padding:16px 30px; border-radius:999px; transition:gap .25s, background .25s;
+  }
+  .eco-card:hover .eco-go { gap:18px; background:#ffd35a; }
+  @keyframes ecoSheen { 0%,15% { background-position:180% 0; } 60%,100% { background-position:-40% 0; } }
+  @media (prefers-reduced-motion:reduce) { .eco-card::before { animation:none; } .eco-card { transition:none; } }
+
   /* ---------- section base ---------- */
   section { position:relative; }
   .sec-head { display:flex; align-items:baseline; gap:18px; padding:70px 22px 30px; }
@@ -265,29 +303,6 @@
   .orbit-center { transition:opacity .3s, transform .3s; }
   .orbit.zoomed .orbit-center { opacity:0; transform:scale(.92); }
   @media (prefers-reduced-motion:reduce) { .orbit-zoom { transition:opacity .2s; } }
-  /* A ring that never stops turning is exactly the kind of motion this setting
-     exists to switch off. The chips stay where they are and hover still works. */
-  @media (prefers-reduced-motion:reduce) {
-    .ring, .ring .chip { animation:none !important; }
-  }
-
-  /* ---------- the portals ring ----------
-     The same orbit, carrying what is behind the sign-in rather than the
-     fourteen domains. Portal chips are labelled glyphs, not photographs, so
-     they need a slightly bigger face and their own type. */
-  /* The ring sits on a live backdrop, so its chips need to read against
-     moving colour rather than flat black: a darker, more opaque face and a
-     little blur behind them. */
-  .ring.portals .chip { width:62px; height:62px; margin:-31px; font-size:25px;
-    background:rgba(9,12,22,.82); backdrop-filter:blur(6px); border-color:rgba(255,255,255,.14); }
-  #portalsSection .portal-backdrop { position:absolute; inset:0; z-index:0; }
-  #portalsSection .portal-backdrop::after {
-    content:''; position:absolute; inset:0;
-    background:radial-gradient(80% 70% at 50% 50%, rgba(4,6,15,.72), rgba(4,6,15,.34) 70%, rgba(4,6,15,.62));
-  }
-  .ring.portals .chip:hover, .ring.portals .chip:focus-visible { border-color:#d4af37; }
-  .orbit-zoom .pg { font-size:96px; line-height:1; }
-  .orbit-zoom small { font-size:12.5px; color:#9a9a9a; font-weight:600; letter-spacing:.01em; max-width:230px; text-align:center; line-height:1.5; }
 
   /* ---------- the fourteen domains ----------
      Alternating: odd rows lead with the logo, even rows mirror it, and each
@@ -457,9 +472,6 @@
   <!-- Without this the browser asks for /favicon.ico, which does not exist,
        and every visit logs a 404. -->
   <link rel="icon" href="/icons/icon-192.png" type="image/png">
-  <!-- Backdrop engine for the portals ring. Not deferred: the ring's own
-       script runs inline at the end of the body and asks for it by name. -->
-  <script src="/portal-backdrops.js"></script>
 </head>
 <body class="locked">
 
@@ -559,6 +571,17 @@
     <span><a href="academics.html">ACADEMICS</a> / <a href="student-portal/">STUDIO</a> / <a href="job-portal/">JOB</a> / <a href="resume-portal/">RESUME</a></span>
   </div>
 </header>
+
+<!-- the main company website: this is the internship portal, so send students
+     out to the full ecosystem site. The whole card is the link; opens a new tab. -->
+<section class="eco-band reveal" aria-label="The Entrepreneurship Network — main website">
+  <a class="eco-card" href="https://www.entrepreneurshipnetwork.net/" target="_blank" rel="noopener noreferrer">
+    <span class="eco-eyebrow">THE MAIN WEBSITE</span>
+    <h2 class="eco-title">TEN is bigger than one internship.</h2>
+    <p class="eco-sub">You are in the internship portal. See everything The Entrepreneurship Network builds — the programmes, the ventures, the community — on the main site.</p>
+    <span class="eco-go">Explore entrepreneurshipnetwork.net <span aria-hidden="true">&rarr;</span></span>
+  </a>
+</section>
 
 <!-- works: what TEN gives -->
 <section class="works" id="works">
@@ -662,23 +685,6 @@
     <p class="people-eyebrow">TEN' WITHOUT PEOPLE</p>
     <p class="people-line"><span>is</span> <span>nothing.</span></p>
     <span class="people-rule" aria-hidden="true"></span>
-  </div>
-</section>
-
-<!-- what is behind the sign-in ----------------------------------------------
-     Every section of the student dashboard, on the landing page, turning.
-     There used to be no way to see any of this without an account, so the
-     only honest thing a visitor could learn about the product was that it
-     asked them to log in. Hovering a chip stops the ring and brings that
-     portal to the middle, same as the domains ring above. -->
-<section class="orbit-wrap" id="portalsSection" style="padding:70px 0 110px; position:relative; isolation:isolate">
-  <div style="width:100%; position:relative; z-index:1">
-    <div class="sec-head"><h2>Inside the portal</h2><span>( seventeen of them, one sign-in )</span></div>
-    <div class="orbit" style="margin:34px auto 0">
-      <div class="orbit-center"><b>17 PORTALS</b><span>ONE SIGN-IN</span></div>
-      <div class="orbit-zoom" id="portalZoom" aria-hidden="true"></div>
-      <div class="ring portals" id="portalRing"></div>
-    </div>
   </div>
 </section>
 
@@ -802,7 +808,7 @@
     </div>
   </div>
   <div class="foot-links">
-    <a href="academics.html">Academics</a><a href="student-portal/">TEN Career Studio</a><a href="job-portal/">Job Portal</a><a href="resume-portal/">Resume Portal</a><a href="student-login.html">Login</a>
+    <a href="https://www.entrepreneurshipnetwork.net/" target="_blank" rel="noopener noreferrer" style="color:#f5c542">Main website</a><a href="academics.html">Academics</a><a href="student-portal/">TEN Career Studio</a><a href="job-portal/">Job Portal</a><a href="resume-portal/">Resume Portal</a><a href="student-login.html">Login</a>
   </div>
   <p class="credits">©2026 — The Entrepreneurship Network. Not a company, an ecosystem.</p>
 </footer>
@@ -1503,87 +1509,6 @@ function marquee(viewport, track, pxPerSec) {
     chip.addEventListener('focus', () => show(i));
     chip.addEventListener('mouseleave', hide);
     chip.addEventListener('blur', hide);
-    ring.appendChild(chip);
-  });
-  orbit.addEventListener('mouseleave', hide);
-})();
-
-/* ---- the portals ring ----
-   The seventeen sections of the student dashboard, which until now a visitor
-   could only discover by already having an account. Sixteen are added here;
-   Academics already has its own card further up the page.
-
-   Every chip is a real link. The eight that live inside the dashboard's
-   section modal carry a #hash the dashboard reads on load, so landing on
-   "Daily Attendance" opens Daily Attendance rather than the dashboard's front
-   page. Signed out, student-dashboard.html sends you to the student login —
-   which is the correct destination for a student portal, unlike the staff
-   admin screen that used to sit behind the big button at the foot of the page. */
-const PORTALS = [
-  ['📊', 'Dashboard',        'Your stats and progress',                  'student-dashboard.html#stu-view-overview'],
-  ['📢', 'Important Notice', 'Announcements from your coordinator',      'student-dashboard.html#stu-view-notice'],
-  ['📋', 'Coordinator Task', 'Work your coordinator assigns you',        'student-dashboard.html#stu-view-coordinator-tasks'],
-  ['📚', 'Domain Tasks',     'The learning track for your domain',       'student-dashboard.html#stu-view-domain-tasks'],
-  ['📥', 'Submitted Tasks',  'Everything you have handed in',            'student-dashboard.html#stu-view-submissions'],
-  ['🪪', 'Daily Attendance', 'Mark attendance, watch your 75%',          'student-dashboard.html#stu-view-attendance'],
-  ['📝', 'Domain MCQ Test',  'Prove the domain knowledge',               'student-dashboard.html#stu-view-test'],
-  ['💻', 'Coding Problems',  'Challenges marked on working code',        'student-dashboard.html#stu-view-coding'],
-  ['📖', 'Guidelines',       'The rules, and how onboarding works',      'student-dashboard.html#stu-view-guidelines'],
-  ['🏆', 'Extras & Badges',  'Leaderboard, badges, achievements',        'student-dashboard.html#stu-view-leaderboard'],
-  ['🪙', 'Task Journey',     'Weekly tasks, coins and unlocks',          'v2-tasks.html'],
-  ['🗂️', 'My Documents',     'Address proof and marksheet to your offer letter', 'my-documents.html'],
-  ['🏅', 'My Certificates',  'Expert, Nano Degree and Fellowship',       'my-certificates.html'],
-  ['💳', 'Make Payment',     'Fees by UPI — PhonePe, GPay, Paytm',       'payment.html'],
-  ['∞',  'TEN Assistant',    'Your plan, coins and deadlines — ask it anything', '/assistant'],
-  ['🌐', 'TEN Network',      'The global community and its programmes',  'ten-network.html']
-];
-
-/* The ring's own backdrop. Previously this section sat on flat black, which
-   is the "old school" background it is replacing. */
-(() => {
-  const section = document.getElementById('portalsSection');
-  if (!section || !window.PortalBackdrop) return;
-  window.PortalBackdrop.mount(
-    section,
-    window.PortalBackdrop.themeFor('landing-portals').engine,
-    window.PortalBackdrop.themeFor('landing-portals')
-  );
-})();
-
-(() => {
-  const ring  = document.getElementById('portalRing');
-  const zoom  = document.getElementById('portalZoom');
-  const orbit = ring && ring.closest('.orbit');
-  if (!ring || !zoom || !orbit) return;
-
-  const show = (i) => {
-    const [glyph, name, blurb] = PORTALS[i];
-    // textContent for the strings, so a portal name is never parsed as markup.
-    zoom.textContent = '';
-    const g = document.createElement('span'); g.className = 'pg'; g.textContent = glyph;
-    const b = document.createElement('b');    b.textContent = name;
-    const s = document.createElement('small');s.textContent = blurb;
-    zoom.append(g, b, s);
-    zoom.classList.add('on');
-    orbit.classList.add('zoomed');
-  };
-  const hide = () => { zoom.classList.remove('on'); orbit.classList.remove('zoomed'); };
-
-  PORTALS.forEach(([glyph, name, blurb, href], i) => {
-    const a = (i / PORTALS.length) * 2 * Math.PI;
-    const chip = document.createElement('a');
-    chip.className = 'chip';
-    chip.href = href;
-    chip.title = name;
-    chip.setAttribute('aria-label', name + ' — ' + blurb);
-    chip.textContent = glyph;
-    const R = 46; /* % of half-size, matching the domains ring */
-    chip.style.top  = (50 + R * Math.sin(a)) + '%';
-    chip.style.left = (50 + R * Math.cos(a)) + '%';
-    chip.addEventListener('mouseenter', () => show(i));
-    chip.addEventListener('focus',      () => show(i));
-    chip.addEventListener('mouseleave', hide);
-    chip.addEventListener('blur',       hide);
     ring.appendChild(chip);
   });
   orbit.addEventListener('mouseleave', hide);
