@@ -346,13 +346,24 @@
       <div style="background:#0e1628;border:1px solid #2a3550;border-radius:10px;padding:14px 16px;margin-bottom:16px;">
         <div style="font-weight:700;color:#e2e8f0;margin-bottom:6px;">What this is</div>
         <div style="color:#94a3b8;font-size:13px;line-height:1.6;">
-          People register for a hackathon or ideathon through the hackathon portal and pay the
-          entry fee by scanning the UPI QR. Each registration waits here with the UPI reference
-          (UTR) they entered. Match it against the payment received, then
+          First <b style="color:#e2e8f0;">create an event</b> below — until an event is live and
+          open, the hackathon portal shows "nothing scheduled" and no one can register.
+          People then register through the portal and pay the entry fee by scanning the UPI QR;
+          each registration waits in the queue with the UPI reference (UTR) they entered. Match it
+          against the payment received, then
           <span style="color:#34d399;font-weight:700;">Approve</span> to confirm the team, or
           <span style="color:#f87171;font-weight:700;">Reject</span> with a reason. No email is sent.
         </div>
       </div>
+
+      <!-- Events: create + manage. This is what makes the portal show something. -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+        <div style="font-weight:700;color:#e2e8f0;font-size:15px;">🗓️ Events</div>
+        <button class="btn btn-green" onclick="openNewHackathonEvent()">＋ New event</button>
+      </div>
+      <div id="hackathonEventsContent" style="margin-bottom:26px;"><p style="color:#64748b;padding:12px">Loading…</p></div>
+
+      <div style="font-weight:700;color:#e2e8f0;font-size:15px;margin-bottom:10px;">💳 Registrations &amp; payments</div>
       <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
         <button class="btn" onclick="loadHackathonRegs('pending')" id="hkTabPending">⏳ Pending</button>
         <button class="btn btn-secondary" onclick="loadHackathonRegs('confirmed')" id="hkTabConfirmed">✅ Confirmed</button>
@@ -420,7 +431,7 @@ function showSection(name) {
   if (name === 'documents') loadAdminDocuments();
   if (name === 'chat') loadChatReports('open');
   if (name === 'cert-overrides') loadOverrides(overrideFilter);
-  if (name === 'hackathons') loadHackathonRegs(hackathonFilter);
+  if (name === 'hackathons') { loadHackathonEvents(); loadHackathonRegs(hackathonFilter); }
   if (name === 'auditlog') loadAuditLog();
   if (name === 'overview') loadStats();
 }
@@ -1444,6 +1455,122 @@ async function updateHackathonBadge() {
   if (!badge) return;
   if (d && d.success && d.count > 0) { badge.textContent = d.count; badge.style.display = ''; }
   else badge.style.display = 'none';
+}
+
+// ── Hackathon events (create + manage) ──────────────────────────────────────
+function _hkEventDate(v) {
+  if (!v) return '—';
+  try { return new Date(v).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); }
+  catch (e) { return '—'; }
+}
+async function loadHackathonEvents() {
+  const box = document.getElementById('hackathonEventsContent');
+  if (!box) return;
+  const d = await api('/hackathon-events').catch(() => null);
+  if (!d || !d.success) { box.innerHTML = '<p style="color:#f87171;padding:12px">Could not load events.</p>'; return; }
+  if (!d.events.length) {
+    box.innerHTML = '<div class="empty" style="padding:20px"><div class="icon">🗓️</div>' +
+      '<p>No events yet. Press <b>＋ New event</b> — until one is live, the portal shows nothing to register for.</p></div>';
+    return;
+  }
+  const live = (e) => e.published && e.status === 'registration_open';
+  box.innerHTML = '<div class="table-wrap"><table><thead><tr>' +
+    '<th>Event</th><th>Mode</th><th>Fee</th><th>Team</th><th>Starts</th><th>Reg&nbsp;closes</th><th>Teams</th><th>State</th><th>Actions</th>' +
+    '</tr></thead><tbody>' + d.events.map(e => {
+      const state = e.status === 'cancelled'
+        ? '<span class="badge" style="background:#64748b22;color:#94a3b8;border:1px solid #64748b55">Cancelled</span>'
+        : live(e)
+          ? '<span class="badge" style="background:#34d39922;color:#34d399;border:1px solid #34d39955">Live · open</span>'
+          : (e.published
+              ? '<span class="badge" style="background:#fbbf2422;color:#fbbf24;border:1px solid #fbbf2455">Published · closed</span>'
+              : '<span class="badge" style="background:#94a3b822;color:#94a3b8;border:1px solid #94a3b855">Draft</span>');
+      let acts = '';
+      if (e.status !== 'cancelled') {
+        if (!e.published) acts += '<button class="btn btn-green" onclick="hkEventAction(\'' + e.id + '\',\'publish\')">🚀 Publish &amp; open</button>';
+        else if (e.status === 'registration_open') acts += '<button class="btn btn-secondary" onclick="hkEventAction(\'' + e.id + '\',\'close\')">Close reg</button>';
+        else acts += '<button class="btn btn-green" onclick="hkEventAction(\'' + e.id + '\',\'open\')">Open reg</button>';
+        if (e.published) acts += '<button class="btn btn-secondary" onclick="hkEventAction(\'' + e.id + '\',\'unpublish\')">Unpublish</button>';
+      }
+      acts += (e.teamCount > 0
+        ? '<button class="btn btn-red" onclick="hkEventAction(\'' + e.id + '\',\'cancel\')">Cancel</button>'
+        : '<button class="btn btn-red" onclick="deleteHackathonEvent(\'' + e.id + '\',' + _arg(e.title) + ')">🗑 Delete</button>');
+      return '<tr>' +
+        '<td><b>' + _aEsc(e.title) + '</b><br><span style="color:#64748b;font-size:11px">/' + _aEsc(e.slug) + '</span>' +
+          (e.tracks && e.tracks.length ? '<br><span style="color:#64748b;font-size:11px">' + _aEsc(e.tracks.join(', ')) + '</span>' : '') + '</td>' +
+        '<td>' + (e.mode === 'ideathon' ? 'Ideathon' : 'Hackathon') + '</td>' +
+        '<td>₹' + (e.entryFee || 0) + '</td>' +
+        '<td>' + (e.minTeamSize === e.maxTeamSize ? e.maxTeamSize : e.minTeamSize + '–' + e.maxTeamSize) + '</td>' +
+        '<td>' + _hkEventDate(e.startsAt) + '</td>' +
+        '<td>' + _hkEventDate(e.registrationClosesAt) + '</td>' +
+        '<td>' + e.teamCount + '</td>' +
+        '<td>' + state + '</td>' +
+        '<td style="display:flex;gap:6px;flex-wrap:wrap">' + acts + '</td>' +
+      '</tr>';
+    }).join('') + '</tbody></table></div>';
+}
+function openNewHackathonEvent() {
+  const inp = 'width:100%;box-sizing:border-box;padding:9px 11px;background:#0b1220;border:1px solid #2a3550;border-radius:8px;color:#e2e8f0;font-size:13px';
+  const lbl = 'display:block;color:#94a3b8;font-size:12px;margin:10px 0 4px';
+  const body =
+    '<label style="' + lbl + '">Title *</label><input id="hkNewTitle" style="' + inp + '" placeholder="TEN Winter Hackathon 2026">' +
+    '<div style="display:flex;gap:10px"><div style="flex:1"><label style="' + lbl + '">Mode</label>' +
+      '<select id="hkNewMode" style="' + inp + '"><option value="hackathon">Hackathon</option><option value="ideathon">Ideathon</option></select></div>' +
+      '<div style="flex:1"><label style="' + lbl + '">Entry fee (₹)</label><input id="hkNewFee" type="number" min="0" value="200" style="' + inp + '"></div></div>' +
+    '<label style="' + lbl + '">Tagline</label><input id="hkNewTagline" style="' + inp + '" placeholder="48 hours. One repo. Ship the thing.">' +
+    '<label style="' + lbl + '">Tracks (comma-separated)</label><input id="hkNewTracks" style="' + inp + '" placeholder="AI, Web, FinTech">' +
+    '<label style="' + lbl + '">Prize</label><input id="hkNewPrize" style="' + inp + '" placeholder="₹50,000 pool + interview fast-track">' +
+    '<div style="display:flex;gap:10px"><div style="flex:1"><label style="' + lbl + '">Min team</label><input id="hkNewMin" type="number" min="1" value="1" style="' + inp + '"></div>' +
+      '<div style="flex:1"><label style="' + lbl + '">Max team</label><input id="hkNewMax" type="number" min="1" value="4" style="' + inp + '"></div></div>' +
+    '<div style="display:flex;gap:10px"><div style="flex:1"><label style="' + lbl + '">Starts</label><input id="hkNewStarts" type="date" style="' + inp + '"></div>' +
+      '<div style="flex:1"><label style="' + lbl + '">Registration closes</label><input id="hkNewCloses" type="date" style="' + inp + '"></div></div>' +
+    '<label style="' + lbl + '">Venue</label><input id="hkNewVenue" style="' + inp + '" value="Online">' +
+    '<label style="display:flex;align-items:center;gap:8px;color:#cbd5e1;font-size:13px;margin-top:14px">' +
+      '<input id="hkNewLive" type="checkbox" checked> Publish &amp; open registration now (uncheck to save as a hidden draft)</label>';
+  openModal('New hackathon / ideathon event', body, [
+    { label: 'Cancel', cls: 'grey', fn: 'closeModal()' },
+    { label: 'Create event', cls: 'green', fn: 'createHackathonEvent()' }
+  ]);
+}
+async function createHackathonEvent() {
+  const val = (id) => (document.getElementById(id) || {}).value;
+  const title = (val('hkNewTitle') || '').trim();
+  if (title.length < 2) { alert('Give the event a title.'); return; }
+  const payload = {
+    title,
+    mode: val('hkNewMode'),
+    entryFee: val('hkNewFee'),
+    tagline: val('hkNewTagline'),
+    tracks: val('hkNewTracks'),
+    prize: val('hkNewPrize'),
+    minTeamSize: val('hkNewMin'),
+    maxTeamSize: val('hkNewMax'),
+    startsAt: val('hkNewStarts') || null,
+    registrationClosesAt: val('hkNewCloses') || null,
+    venue: val('hkNewVenue'),
+    live: (document.getElementById('hkNewLive') || {}).checked !== false
+  };
+  const d = await api('/hackathon-events', { method: 'POST', body: JSON.stringify(payload) });
+  if (!d || !d.success) { alert((d && d.error) || 'Could not create the event.'); return; }
+  closeModal();
+  toast('Event created' + (payload.live ? ' and live on the portal.' : ' as a draft.'), 'success');
+  loadHackathonEvents();
+}
+async function hkEventAction(id, action) {
+  const d = await api('/hackathon-events/' + id, { method: 'PATCH', body: JSON.stringify({ action }) });
+  if (!d || !d.success) { alert((d && d.error) || 'Could not update the event.'); return; }
+  loadHackathonEvents();
+}
+function deleteHackathonEvent(id, title) {
+  openModal('Delete event', '<p style="color:#cbd5e1">Delete <b>' + _aEsc(title) + '</b>? This cannot be undone.</p>', [
+    { label: 'Cancel', cls: 'grey', fn: 'closeModal()' },
+    { label: 'Delete', cls: 'red', fn: 'doDeleteHackathonEvent(\'' + id + '\')' }
+  ]);
+}
+async function doDeleteHackathonEvent(id) {
+  const d = await api('/hackathon-events/' + id, { method: 'DELETE' });
+  closeModal();
+  if (!d || !d.success) { alert((d && d.error) || 'Could not delete the event.'); return; }
+  loadHackathonEvents();
 }
 
 async function loadOverrides(filter) {
