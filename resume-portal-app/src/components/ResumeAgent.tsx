@@ -192,7 +192,22 @@ export function AgentChat() {
    * and the agent repeated the same reply forever. That was the entire
    * "it keeps repeating itself" bug.
    */
-  const sessionRef = useRef<Record<string, unknown> | null>(null);
+  const sessionRef = useRef<Record<string, unknown> | null>(
+    /* The agent's memory across visits: the fact ledger, target and shipped
+       resume survive a reload, so a returning student is not interviewed
+       from zero. New Chat wipes it deliberately. */
+    (() => {
+      try { return JSON.parse(localStorage.getItem('ten_resume_agent_session') || 'null'); }
+      catch { return null; }
+    })()
+  );
+  const persistSession = (s: Record<string, unknown> | null) => {
+    sessionRef.current = s;
+    try {
+      if (s) localStorage.setItem('ten_resume_agent_session', JSON.stringify(s));
+      else localStorage.removeItem('ten_resume_agent_session');
+    } catch { /* storage full or blocked — memory lives for the tab only */ }
+  };
 
   const started = msgs.length > 0;
 
@@ -209,7 +224,7 @@ export function AgentChat() {
       const res = await fetch(`${API}/chat`, { method: 'POST', body });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'failed');
-      if (data.session) sessionRef.current = data.session;
+      if (data.session) persistSession(data.session);
       if (data.kind === 'scan') setMsgs((m) => [...m, { role: 'agent', report: data.report, text: data.prompt || undefined }]);
       else if (data.kind === 'build') setMsgs((m) => [...m, { role: 'agent', resume: data.text, report: data.report, missing: data.missing, potentialScore: data.potentialScore, details: data.details, text: data.reply || undefined }]);
       else setMsgs((m) => [...m, { role: 'agent', text: data.reply }]);
@@ -236,7 +251,7 @@ export function AgentChat() {
             <span className="text-[#9ca3af]">▤</span>
           </div>
 
-          <button onClick={() => { setMsgs([]); sessionRef.current = null; }} className="mb-1 flex items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] text-[#374151] hover:bg-[#eef2ff]">
+          <button onClick={() => { setMsgs([]); persistSession(null); }} className="mb-1 flex items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] text-[#374151] hover:bg-[#eef2ff]">
             <span>✎</span> New Chat
           </button>
           <button className="mb-5 flex items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] text-[#374151] hover:bg-[#eef2ff]">

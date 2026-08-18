@@ -725,14 +725,34 @@ router.post('/rewrite.pdf', upload.single('file'), async (req, res) => {
  */
 const FIX_INTENT = /\b(fix|resolve|improve|repair|rebuild|solve|correct)( it| this| them| that| these| my resume| the (issues?|problems?|resume))?\b|\bmake it better\b|\bdo it\b|\bgo ahead\b/;
 
-/** What the visitor wants, read from their sentence — v5.1 command mapping. */
+/** What the visitor wants, read from their sentence — Mega Agent command map. */
 function commandOf(low, hasFile) {
+  if (/\bcover letter\b|\bcover\b.*\b(letter|note)\b/.test(low)) return 'cover';
+  if (/\bcompare\b|which (job|jd|posting)|between these (jobs|jds)/.test(low)) return 'compare';
+  if (/\binterview prep\b|\bprep\b|defen[cs]e|walk me through/.test(low)) return 'prep';
   if (/\bgap\b|what('?s| is) missing|why would this fail|missing keyword/.test(low)) return 'gap';
   if (/\btailor|rewrite|convert|recreate|make (it|this|my resume) ats|for (this|the) (jd|job|company)\b/.test(low) || FIX_INTENT.test(low)) return 'tailor';
   if (/\bscan|check|score|review|rate my|is this rejectable|ats.?(friendly|ready)\b/.test(low)) return 'check';
   if (/\bbuild|create|write|generate|new resume|from scratch|forge\b/.test(low)) return 'build';
   if (hasFile) return 'check'; /* a file with no words means "look at this" */
   return null;
+}
+
+/**
+ * The delivery shape the Mega Agent prompt requires at the top of every
+ * finished job, with the caveat that is never omitted: scores are proxies.
+ */
+function deliveryHeader(path, command, band, packet) {
+  const lines = [`Path: ${path} · Command: ${command} · Band: ${band}`];
+  if (packet) {
+    lines.push(`Estimated checker: ${packet.after.checker}/${packet.after.checkerMax} (before ${packet.before.checker}) · Recruiter-scan: ${packet.after.recruiter}/100 (before ${packet.before.recruiter})`);
+    const c = packet.detail.after.checker;
+    /* The Rezi-style second line, mapped onto measured components. */
+    lines.push(`Keyword ${c.keywords === null ? 'N/A' : c.keywords + '/40'} · Format ${c.parse}/30 · Complete ${c.structure}/15 · Evidence ${c.evidence}/15`);
+    if (packet.ceiling) lines.push(packet.ceiling);
+  }
+  lines.push('Proxy only. Not a live Workday/Greenhouse decision — Greenhouse does not auto-score resumes.');
+  return lines.join('\n');
 }
 
 /** A fact ledger shaped from interview answers, so the same question engine
@@ -778,9 +798,17 @@ function consumeAnswer(session, field, msg) {
 
   const d = session.details;
   if (field === 'link') d.linkedin = msg.trim();
-  else if (field === 'metric' || field === 'evidence' || field === 'dates') {
-    /* Their words, added to their history — placement the rewriter can use. */
+  else if (field === 'metric' || field === 'evidence' || field === 'dates' || field === 'confirmkw') {
+    /* Their words, added to their history — placement the rewriter can use.
+       For confirmkw this is the Rezi-style confirmation: naming where a JD
+       term was used is what makes it claimable. */
     d.experience = [d.experience, msg.trim()].filter(Boolean).join('\n');
+    /* Appended under an Experience heading, not at the tail of the file —
+       the tail belongs to whatever section came last, and a fact filed under
+       Skills is a fact the ledger mangles instead of proving. */
+    if (session.resumeText && field === 'confirmkw') {
+      session.resumeText += `\n\nExperience\n- ${msg.trim()}`;
+    }
   } else d[field] = msg.trim();
 
   /* Answers about a scanned resume also extend its text, so tailor and gap
@@ -806,11 +834,28 @@ function nextQuestion(session) {
 function deliver(res, session, packetOrBuilt, kindNote) {
   const isPacket = Boolean(packetOrBuilt.resume);
   const text = isPacket ? packetOrBuilt.resume : packetOrBuilt.text;
+  const command = session.command;
   session.asked = null;
   session.command = null; /* done — the next message starts fresh, with the facts kept */
+
+  /* A shipped resume is what cover and prep are allowed to work from. */
+  session.shipped = { text, target: session.target, jd: session.jd };
+  if (isPacket) {
+    session.lastPacket = {
+      band: packetOrBuilt.band,
+      notClaimed: packetOrBuilt.notClaimed,
+      after: packetOrBuilt.after,
+      dropped: packetOrBuilt.essentials.dropped,
+    };
+  }
+
+  const header = isPacket
+    ? deliveryHeader('A', command || 'tailor', packetOrBuilt.band, packetOrBuilt)
+    : `Path: B · Command: build · Band: Scratch\nProxy only. Not a live Workday/Greenhouse decision — Greenhouse does not auto-score resumes.`;
+
   return res.json({
     ok: true, kind: 'build',
-    reply: kindNote || null,
+    reply: [header, kindNote].filter(Boolean).join('\n\n'),
     text,
     report: scanResume(text, session.target),
     missing: isPacket ? [] : packetOrBuilt.missing,
@@ -848,7 +893,15 @@ router.post('/chat', upload.single('file'), async (req, res) => {
 
     /* Command words win over a pending question — "check this instead" is a
        change of direction, not an answer to "what is your email". */
-    const command = commandOf(low, Boolean(req.file));
+    /* An answer to a paste-type question is an answer, whatever words it
+       contains — a JD saying "build scalable systems" or "Building
+       dashboards" must never be read as the build command and hijack the
+       conversation mid-answer. Only short conversational replies to other
+       question types may still switch command. */
+    const PASTE_FIELDS = ['resume', 'jd', 'jds', 'confirmkw'];
+    const looksLikePaste = session.asked &&
+      (PASTE_FIELDS.includes(session.asked) || msg.split('\n').length > 3 || msg.length > 200);
+    const command = looksLikePaste ? null : commandOf(low, Boolean(req.file));
     if (command) {
       session.command = command;
       /* "Fix it" while being asked for a job title is not a title — it is
@@ -926,6 +979,23 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         session.tailorAsked += 1;
         return ask(question.field, question.question);
       }
+
+      /* The keyword confirm the Mega Agent spec takes from Rezi: before the
+         rewrite, JD terms with no evidence get one question — "is this real
+         in your experience?" — and only a named answer turns into evidence.
+         A skill is never added on the agent's initiative. */
+      if (session.jd && session.tailorAsked < 5 && !(session.declined || []).includes('confirmkw')) {
+        const probe = atsEngine.rewriteResume(
+          session.resumeText.trim() || Object.entries(session.details).map(([k, v]) => `${k}: ${v}`).join('\n'),
+          { target: session.target, jd: session.jd });
+        if (probe.notClaimed.length) {
+          session.tailorAsked += 1;
+          session.declined = session.declined || [];
+          session.declined.push('confirmkw'); /* asked once, never looped */
+          return ask('confirmkw',
+            `The JD asks for ${probe.notClaimed.slice(0, 5).join(', ')} and your resume shows no evidence of them. Have you actually used any? Name where — one line each, e.g. "Docker — containerised the billing service" — or say skip and they stay on the Not-claimed list.`);
+        }
+      }
       const source = session.resumeText.trim() || Object.entries(session.details)
         .map(([k, v]) => `${k}: ${v}`).join('\n');
       const packet = atsEngine.rewriteResume(source, { target: session.target, jd: session.jd, mode: 'CONVERT' });
@@ -948,6 +1018,87 @@ router.post('/chat', upload.single('file'), async (req, res) => {
           ...packet.notClaimed.slice(0, 12).map((t) => `• ${t} — asked for in the JD, no evidence in the resume. Add it only if you have actually used it.`),
           '',
           packet.ceiling || 'Nothing on the Not-claimed list — the gap is wording, not facts. Say "tailor" and I will close it.',
+        ].join('\n'),
+        session,
+      });
+    }
+
+    /*
+     * compare — 2–5 JDs against one set of facts: a matrix and one
+     * recommended target, as commands-and-open.md orders it. JDs arrive in a
+     * single message separated by --- lines.
+     */
+    if (session.command === 'compare') {
+      if (!session.resumeText.trim()) return ask('resume', 'Attach or paste the resume first — the comparison is measured against your facts.');
+      if (session.asked === 'jds' || /---/.test(msg)) {
+        const jds = msg.split(/\n-{3,}\n?/).map((s) => s.trim()).filter((s) => s.length > 40).slice(0, 5);
+        if (jds.length < 2) return ask('jds', 'I need at least two job descriptions, separated by a line containing only ---');
+        const rows = jds.map((jd, i) => {
+          const p = atsEngine.rewriteResume(session.resumeText, { target: session.target, jd });
+          const kd = p.detail.before.checker.keywordDetail || { overlap: 0, matched: 0, terms: 0 };
+          const title = (jd.match(/^[^\n.]{5,70}/) || [`JD ${i + 1}`])[0].trim();
+          return { i: i + 1, title: title.slice(0, 50), overlap: kd.overlap, matched: kd.matched, terms: kd.terms, notClaimed: p.notClaimed.length };
+        });
+        rows.sort((a, b) => b.overlap - a.overlap);
+        session.command = null;
+        return res.json({
+          ok: true, kind: 'help',
+          reply: [
+            'Fit matrix — evidenced keyword overlap per posting (competitive band 60–85%):',
+            '',
+            ...rows.map((r) => `${r.i}. ${r.title} — ${r.overlap}% (${r.matched}/${r.terms} terms, ${r.notClaimed} not claimed)`),
+            '',
+            `Strongest target: #${rows[0].i} (${rows[0].overlap}%). Say "tailor" with that JD and I will convert for it.`,
+          ].join('\n'),
+          session,
+        });
+      }
+      return ask('jds', 'Paste 2–5 job descriptions in one message, separated by a line containing only ---');
+    }
+
+    /* cover — only after a resume shipped in this session, per the spec. */
+    if (session.command === 'cover') {
+      if (!session.shipped) {
+        session.command = null;
+        return res.json({ ok: true, kind: 'help', reply: 'A cover letter is written against a finished resume. Run check, build or tailor first — once a resume ships, say "cover letter" and I will write it from that exact document.', session });
+      }
+      if (!session.details.company && session.asked !== 'company') {
+        return ask('company', 'Which company is the letter for?');
+      }
+      const { coverLetter } = require('../../services/v2/jobMaterials');
+      const led = atsEngine.factLedger(session.shipped.text);
+      const letter = coverLetter(
+        { name: led.name, role: session.shipped.target || 'the role', skills: led.evidencedSkills, location: null, projects: [] },
+        { title: session.shipped.target || 'the advertised role', company: session.details.company || 'your company', description: session.shipped.jd || '', tags: [] },
+        session.shipped.text
+      );
+      session.command = null;
+      return res.json({ ok: true, kind: 'help', reply: `Cover letter — ${letter.words} words${letter.withinLimit ? '' : ' (over the 300 limit — trim before sending)'}:\n\n${letter.text}`, session });
+    }
+
+    /* prep — the 5-line interview defense from the last shipped packet. */
+    if (session.command === 'prep') {
+      if (!session.lastPacket || !session.shipped) {
+        session.command = null;
+        return res.json({ ok: true, kind: 'help', reply: 'Interview prep works from a shipped resume. Run check, build or tailor first.', session });
+      }
+      const lp = session.lastPacket;
+      const led = atsEngine.factLedger(session.shipped.text);
+      const spike = led.roles.flatMap((r) => r.bullets).find((b) => /\d/.test(b)) || led.projects.flatMap((p) => p.bullets)[0] || 'your strongest project';
+      session.command = null;
+      return res.json({
+        ok: true, kind: 'help',
+        reply: [
+          'Five-line defense — one answer per likely challenge:',
+          `1. "Walk me through your strongest work" → ${String(spike).slice(0, 140)}`,
+          `2. "Why this role" → it is the work your evidenced stack (${led.evidencedSkills.slice(0, 3).join(', ')}) already does.`,
+          lp.notClaimed.length
+            ? `3. "Do you know ${lp.notClaimed[0]}" → the honest line: not in production yet — say what you would learn it from, never claim it.`
+            : '3. Every skill on the page has a bullet behind it — answer from the bullet, not from theory.',
+          lp.dropped.length
+            ? `4. If asked about ${String(lp.dropped[0]).slice(0, 30)} — it was dropped from the page for lack of evidence; do not resurrect it in the room.`
+            : '4. Nothing on the page is unevidenced — there is no claim you cannot defend.',
+          '5. Every number you say aloud must be one you can explain the measurement of. The resume contains no number you did not state yourself.',
         ].join('\n'),
         session,
       });
