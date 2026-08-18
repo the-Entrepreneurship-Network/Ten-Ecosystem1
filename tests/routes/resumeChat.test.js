@@ -243,4 +243,38 @@ describe('the conversation advances instead of repeating', () => {
     const t2 = await turn(a, 'build', t1.session);
     expect(t2.kind).toBe('ask'); /* the menu did not strand the visitor */
   });
+
+  it('"make it 98/100" and "do all" are commands, not menu fodder', async () => {
+    // The screenshots: both messages got the identical help menu.
+    const a = app();
+    const t1 = await turn(a, RESUME, null);
+    const t2 = await turn(a, 'make it 98/100', t1.session);
+    expect(t2.kind).not.toBe('help');
+    expect(t2.session.command === 'tailor' || t2.kind === 'build').toBe(true);
+
+    const s1 = await turn(a, RESUME, null);
+    const s2 = await turn(a, 'do all', s1.session);
+    expect(s2.kind).not.toBe('help');
+  });
+
+  it('the menu never prints twice in a row — the agent takes the lead instead', async () => {
+    const a = app();
+    const t1 = await turn(a, 'ummm', null);
+    expect(t1.kind).toBe('help');
+    const t2 = await turn(a, 'hmmm what', t1.session);
+    expect(t2.kind).toBe('ask');            /* not the menu again */
+    expect(t2.reply).not.toBe(t1.reply);
+    expect(t2.session.asked).toBe('resume'); /* it moved the work forward */
+  });
+
+  it('with a resume already in hand, the second unmatched message starts the fix', async () => {
+    const a = app();
+    const t1 = await turn(a, RESUME, null);       // scored, salvageable
+    const t2 = await turn(a, 'okay so???', t1.session);   // menu once
+    if (t2.kind === 'help') {
+      const t3 = await turn(a, 'and???', t2.session);
+      expect(t3.kind).toBe('ask');
+      expect(t3.session.command).toBe('tailor');
+    }
+  });
 });

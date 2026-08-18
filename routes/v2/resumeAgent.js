@@ -725,13 +725,22 @@ router.post('/rewrite.pdf', upload.single('file'), async (req, res) => {
  */
 const FIX_INTENT = /\b(fix|resolve|improve|repair|rebuild|solve|correct)( it| this| them| that| these| my resume| the (issues?|problems?|resume))?\b|\bmake it better\b|\bdo it\b|\bgo ahead\b/;
 
+/*
+ * "Make it 98/100", "do all", "unrejectable" — the score-chasing phrasings
+ * the skill's own description names as triggers. They fell through to the
+ * help menu, twice in a row for one user, which is the repeat bug wearing a
+ * new coat: an unmatched message must advance the conversation, never
+ * reprint the menu.
+ */
+const SCORE_INTENT = /make it \d+|\b\d{2}\s*\/\s*100\b|\bunrejectable\b|\bdo (it all|all|everything|them all)\b|max(imi[sz]e)?( the)? score|\b(raise|boost|increase) (the |my )?score\b|\bfull marks\b|\bbest score\b/;
+
 /** What the visitor wants, read from their sentence — Mega Agent command map. */
 function commandOf(low, hasFile) {
   if (/\bcover letter\b|\bcover\b.*\b(letter|note)\b/.test(low)) return 'cover';
   if (/\bcompare\b|which (job|jd|posting)|between these (jobs|jds)/.test(low)) return 'compare';
   if (/\binterview prep\b|\bprep\b|defen[cs]e|walk me through/.test(low)) return 'prep';
   if (/\bgap\b|what('?s| is) missing|why would this fail|missing keyword/.test(low)) return 'gap';
-  if (/\btailor|rewrite|convert|recreate|make (it|this|my resume) ats|for (this|the) (jd|job|company)\b/.test(low) || FIX_INTENT.test(low)) return 'tailor';
+  if (/\btailor|rewrite|convert|recreate|make (it|this|my resume) ats|for (this|the) (jd|job|company)\b/.test(low) || FIX_INTENT.test(low) || SCORE_INTENT.test(low)) return 'tailor';
   if (/\bscan|check|score|review|rate my|is this rejectable|ats.?(friendly|ready)\b/.test(low)) return 'check';
   if (/\bbuild|create|write|generate|new resume|from scratch|forge\b/.test(low)) return 'build';
   if (hasFile) return 'check'; /* a file with no words means "look at this" */
@@ -904,6 +913,7 @@ router.post('/chat', upload.single('file'), async (req, res) => {
     const command = looksLikePaste ? null : commandOf(low, Boolean(req.file));
     if (command) {
       session.command = command;
+      session.menuShown = false;
       /* "Fix it" while being asked for a job title is not a title — it is
          "just fix it, without one". Settle the question and move, or the
          agent re-asks and the visitor re-answers the same words forever. */
@@ -1118,8 +1128,28 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       return deliver(res, session, built);
     }
 
-    /* No command, no pending question: the menu — with the session kept, so
-       an answer arriving late still lands somewhere. */
+    /*
+     * No command, no pending question. The menu is shown once. A SECOND
+     * unmatched message must not print it again — the same reply twice in a
+     * row is the repeat bug in every one of its costumes — so the agent takes
+     * the lead instead: with a resume in hand it starts the fix, without one
+     * it asks for the resume or the interview.
+     */
+    if (session.menuShown) {
+      session.menuShown = false;
+      if (session.resumeText.trim()) {
+        session.command = 'tailor';
+        const q = nextQuestion(session).question;
+        if (!session.target && !session.jd) return ask('target', 'Let me just fix it, then. What job title should the resume target? Say skip and I will convert without one.');
+        if (q) { session.tailorAsked = (session.tailorAsked || 0) + 1; return ask(q.field, q.question); }
+        const packet = atsEngine.rewriteResume(session.resumeText, { target: session.target, jd: session.jd, mode: 'CONVERT' });
+        session.command = 'tailor';
+        return deliver(res, session, packet);
+      }
+      session.command = 'check';
+      return ask('resume', 'Let us start with the document: attach your resume (PDF or TXT) or paste its text — or say "build" and I will interview you from scratch.');
+    }
+    session.menuShown = true;
     return res.json({
       ok: true, kind: 'help',
       reply: 'Say what you need and I will run it:\n\n• check — attach or paste your resume, I score it against what an ATS parses and band it Weak / Salvageable / Strong.\n• build — no resume yet: I interview you one question at a time and build from scratch.\n• tailor — resume plus a job description: I convert it to that posting, keeping every true fact.\n• gap — resume plus JD: just the missing-keyword table, no rewrite.\n\nNothing is ever invented — no fake metrics, no skills you do not have.',
