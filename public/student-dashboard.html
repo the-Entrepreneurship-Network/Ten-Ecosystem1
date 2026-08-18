@@ -6511,9 +6511,9 @@ function checkTenurePayment(isStatusCheckClick) {
         sessionStorage.setItem('tenure_paid_verified', 'true');
         localStorage.removeItem('ten_tenure_utr_pending');
         _tenureUtrAlreadySubmitted = false;
-        if (isStatusCheckClick && data.isPaid) {
-          Swal.fire({ icon: 'success', title: 'Unlocked! 🎉', text: 'Your payment has been approved. Welcome!', background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#10b981' });
-        }
+        // "Here is what you just unlocked". Shown once when the bundle lands,
+        // and on demand when the student presses check-status.
+        if (data.isPaid) showTenureUnlocked(data, isStatusCheckClick);
         if (typeof showWelcomeModalIfNeeded === 'function') {
           showWelcomeModalIfNeeded();
         }
@@ -6572,6 +6572,106 @@ function checkTenurePayment(isStatusCheckClick) {
     });
 }
 
+/**
+ * Show what the fee includes, not just what it costs.
+ *
+ * The figures come from the server (config/tenurePayment.js), which is also
+ * what services/tenureBenefits.js reads when it grants the bundle on approval —
+ * so this list and what actually arrives cannot drift apart. Nothing is
+ * hardcoded here, and a free-track student is never shown any of it because the
+ * server sends `benefits: null` for those.
+ */
+/**
+ * Tell the student what the fee actually bought, once.
+ *
+ * The old message was "Your payment has been approved. Welcome!" — true, but it
+ * never mentioned the coins or the certificate fee they had just been given, so
+ * the bundle they paid for was invisible the moment they got it. `grantedAt`
+ * keys the once-only flag, so a later re-grant would announce itself again but
+ * a page refresh will not.
+ */
+function showTenureUnlocked(data, force) {
+  var granted = data && data.granted;
+  var key = granted && granted.grantedAt ? 'ten_tenure_unlocked_' + granted.grantedAt : '';
+  var alreadySeen = key ? localStorage.getItem(key) === '1' : true;
+  if (!force && (!granted || alreadySeen)) return;
+  if (typeof Swal === 'undefined') return;
+
+  if (!granted) {
+    if (force) {
+      Swal.fire({ icon: 'success', title: 'Unlocked! 🎉', text: 'Your payment has been approved. Welcome!',
+        background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#10b981' });
+    }
+    return;
+  }
+
+  var esc = function (v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  };
+  var items = (granted.perks || []).map(function (p) {
+    return '<li style="padding:4px 0;">✓ ' + esc(p) + '</li>';
+  }).join('');
+
+  Swal.fire({
+    icon: 'success',
+    title: 'Your ' + esc(granted.plan || '') + ' track is unlocked 🎉',
+    html: '<div style="text-align:left;font-size:14px;line-height:1.6;">'
+        + '<p style="margin:0 0 10px;color:#c8baa0;">Already in your account:</p>'
+        + '<ul style="list-style:none;padding:0;margin:0 0 12px;">' + items + '</ul>'
+        + '<p style="margin:0;font-size:12.5px;color:#8aa4c8;">Your '
+        + esc(granted.certificateLabel || 'certificate')
+        + ' fee is covered — you still need to finish the programme to be issued one.</p>'
+        + '</div>',
+    background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#10b981',
+    confirmButtonText: 'Let\u2019s go'
+  });
+  if (key) { try { localStorage.setItem(key, '1'); } catch (e) { /* private mode */ } }
+}
+
+function renderTenureValueStack(benefits) {
+  var box = document.getElementById('tenureValueStack');
+  if (!box) return;
+  if (!benefits || !benefits.perks || !benefits.perks.length) { box.style.display = 'none'; return; }
+
+  var esc = function (v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  };
+  var money = function (n) { return '₹' + Number(n || 0).toLocaleString('en-IN'); };
+
+  document.getElementById('tenurePlanName').textContent = benefits.name + ' track — what you get';
+  document.getElementById('tenurePlanTagline').textContent = benefits.tagline || '';
+
+  var badge = document.getElementById('tenurePlanBadge');
+  if (benefits.badge) { badge.textContent = benefits.badge; badge.style.display = ''; }
+  else { badge.style.display = 'none'; }
+
+  document.getElementById('tenurePerkList').innerHTML = benefits.perks.map(function (p) {
+    var worth = p.worth > 0
+      ? '<span style="color:#D4AF37;font-weight:700;white-space:nowrap;">' + money(p.worth) + '</span>'
+      : '<span style="color:#8aa4c8;white-space:nowrap;">included</span>';
+    return '<li style="display:flex;justify-content:space-between;gap:12px;padding:3px 0;">'
+      + '<span>✓ ' + esc(p.label) + '</span>' + worth + '</li>';
+  }).join('');
+
+  // Only ever shown when the bundle is genuinely worth more than the fee.
+  var strike = document.getElementById('tenureValueStrike');
+  var saving = document.getElementById('tenureSavingLine');
+  if (benefits.saving > 0) {
+    strike.textContent = money(benefits.valueTotal);
+    strike.style.display = '';
+    saving.textContent = 'You save ' + money(benefits.saving);
+    saving.style.display = '';
+  } else {
+    strike.style.display = 'none';
+    saving.style.display = 'none';
+  }
+  box.style.display = '';
+}
+
 function initiateTenurePaymentTimer(data) {
   currentTenureAmount = data.price || 1000;
   currentTenureUpiId = 'paytmqr5k0ods@ptys';
@@ -6597,12 +6697,17 @@ function initiateTenurePaymentTimer(data) {
     document.getElementById('tenureQrReasonText').textContent = (data.label || 'Short Course') + ' Fee';
   }
 
+  renderTenureValueStack(data.benefits);
+
   // Display dynamic UPI QR code with amount & details, falling back to static QR
   const upiUrl = `upi://pay?pa=${currentTenureUpiId}&pn=${encodeURIComponent(currentTenurePayee)}&am=${currentTenureAmount}&cu=INR&tn=${encodeURIComponent((data.label || 'Short Course') + ' Fee')}`;
   document.getElementById('tenureQrImg').src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiUrl)}`;
   document.getElementById('tenureQrImg').onerror = function() {
     this.onerror = null;
-    this.src = "/paytm-qr.jpeg";
+    // Generated locally. The old fallback was /paytm-qr.jpeg, which is corrupt
+    // in the repository and rendered as a broken image — i.e. no way to pay.
+    this.src = '/api/upi-qr?amount=' + encodeURIComponent(currentTenureAmount)
+      + '&note=' + encodeURIComponent((data.label || 'Short Course') + ' Fee');
   };
 
   if (tenureTimerInterval) clearInterval(tenureTimerInterval);
@@ -6762,16 +6867,31 @@ function submitTenureUtr() {
         Under the TEN Crash Course Internship Program (1 Week, 15 Days, or 1 Month), a fast-track training, administrative, and certification fee is required to activate your dashboard.
       </p>
 
-      <!-- Why make payment box -->
-      <div style="background:rgba(212,175,55,0.06);border:1px solid rgba(212,175,55,0.18);border-radius:12px;padding:14px 18px;margin-bottom:20px;text-align:left;font-size:12px;line-height:1.5;color:#c8baa0;">
-        <strong style="color:#D4AF37;display:block;margin-bottom:4px;">📋 Why do I make this payment?</strong>
-        This program fee offsets fast-track onboarding, premium developer tools, prioritized coordinator review, and immediate release of your LOR, certificate, and performance credits upon completion.
+      <!-- What the fee actually includes. Rendered from /api/tenure-payment/status,
+           which reads config/tenurePayment.js — the same definition the grant on
+           approval uses, so this list cannot promise something never handed over. -->
+      <div id="tenureValueStack" style="display:none;background:rgba(212,175,55,0.06);border:1px solid rgba(212,175,55,0.18);border-radius:12px;padding:16px 18px;margin-bottom:18px;text-align:left;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
+          <strong id="tenurePlanName" style="color:#D4AF37;font-size:13px;letter-spacing:0.6px;text-transform:uppercase;"></strong>
+          <span id="tenurePlanBadge" style="display:none;background:#D4AF37;color:#05070e;font-size:10px;font-weight:800;letter-spacing:0.8px;padding:3px 9px;border-radius:999px;"></span>
+        </div>
+        <p id="tenurePlanTagline" style="font-size:12.5px;color:#c8baa0;line-height:1.5;margin:0 0 12px;"></p>
+        <ul id="tenurePerkList" style="list-style:none;padding:0;margin:0 0 4px;font-size:12.5px;color:#e6e1d6;line-height:1.6;"></ul>
       </div>
 
       <!-- Amount Badge -->
-      <div style="background:#05070e;border:1px solid rgba(212,175,55,0.12);border-radius:16px;padding:14px;margin-bottom:20px;display:inline-block;width:100%;">
+      <div style="background:#05070e;border:1px solid rgba(212,175,55,0.12);border-radius:16px;padding:14px;margin-bottom:14px;display:inline-block;width:100%;">
         <span style="font-size:11px;text-transform:uppercase;color:#8aa4c8;letter-spacing:1px;display:block;margin-bottom:2px;">Fast-Track Internship Fee</span>
-        <strong style="font-size:24px;color:#D4AF37;" id="tenureAmountText">₹0.00</strong>
+        <div style="display:flex;align-items:baseline;justify-content:center;gap:10px;flex-wrap:wrap;">
+          <span id="tenureValueStrike" style="display:none;font-size:15px;color:#8aa4c8;text-decoration:line-through;"></span>
+          <strong style="font-size:24px;color:#D4AF37;" id="tenureAmountText">₹0.00</strong>
+        </div>
+        <div id="tenureSavingLine" style="display:none;font-size:12px;font-weight:700;color:#4ade80;margin-top:4px;"></div>
+      </div>
+
+      <!-- Risk reversal: the last objection before someone abandons the screen. -->
+      <div style="font-size:11.5px;color:#8aa4c8;line-height:1.5;margin-bottom:18px;">
+        🔒 Verified by an admin, usually within 24 hours. Not approved? Your payment is refunded in full.
       </div>
 
       <!-- QR Code Section -->
@@ -6780,7 +6900,7 @@ function submitTenureUtr() {
           ⏳ Session expires in: <span id="tenureTimerCount">02:00</span>
         </div>
         <div class="qr-pulse-active" style="background:#ffffff;border-radius:18px;padding:14px;display:inline-block;box-shadow:0 10px 30px rgba(212,175,55,0.25);border:2px solid rgba(212,175,55,0.35);margin-bottom:12px;">
-          <img id="tenureQrImg" src="/paytm-qr.jpeg" alt="Scan to Pay" style="width:200px;height:200px;display:block;border-radius:8px;object-fit:contain;">
+          <img id="tenureQrImg" src="/api/upi-qr" alt="Scan to Pay" style="width:200px;height:200px;display:block;border-radius:8px;object-fit:contain;">
         </div>
         <div style="font-size:12px;color:#9aa4bf;font-family:monospace;font-weight:600;" id="tenureUpiIdText">UPI ID: Loading...</div>
         <div style="margin-top: 14px; font-size: 13px; color: #D4AF37; font-weight: 700; line-height: 1.4; background: rgba(5,7,14,0.4); border-radius: 8px; padding: 6px 12px; display: inline-block;">

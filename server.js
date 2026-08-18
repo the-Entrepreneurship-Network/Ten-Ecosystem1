@@ -10159,6 +10159,43 @@ app.post('/api/admin/mark-existing-students', async (req, res) => {
 });
 
 // Check if student needs to pay for their tenure
+/**
+ * GET /api/upi-qr?amount=1000&note=1%20Month%20Fee — the payment QR, generated.
+ *
+ * The payment screen drew its QR from api.qrserver.com and fell back to
+ * public/paytm-qr.jpeg. That file is corrupt — it starts with UTF-8 replacement
+ * characters instead of the JPEG magic bytes — so the "fallback" was a broken
+ * image box, and a student on a network that cannot reach qrserver.com had no
+ * way to pay at all. This generates the code locally from the same UPI identity
+ * with the amount already in it, so the payer's app pre-fills rather than
+ * relying on them typing the right figure.
+ */
+app.get('/api/upi-qr', async (req, res) => {
+  try {
+    const QRCode = require('qrcode');
+    const { BUSINESS_UPI } = require('./config/payment');
+    // The amount is clamped, never trusted as free text into the deep link.
+    const amount = Math.min(100000, Math.max(0, Number(req.query.amount) || 0));
+    const note = String(req.query.note || 'TEN Internship Fee').slice(0, 60);
+
+    const link = 'upi://pay?' + [
+      'pa=' + encodeURIComponent(BUSINESS_UPI.upiId),
+      'pn=' + encodeURIComponent(BUSINESS_UPI.payeeName),
+      amount > 0 ? 'am=' + encodeURIComponent(String(amount)) : '',
+      'cu=INR',
+      'tn=' + encodeURIComponent(note)
+    ].filter(Boolean).join('&');
+
+    const png = await QRCode.toBuffer(link, { type: 'png', width: 480, margin: 1 });
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.end(png);
+  } catch (err) {
+    console.error('[upi-qr] generation failed:', err.message);
+    res.status(500).end();
+  }
+});
+
 app.get('/api/tenure-payment/status', async (req, res) => {
   try {
     const employeeId = req.headers['x-employee-id'] || req.headers['employeeid'] || (req.session && req.session.student && (req.session.student.employeeId || req.session.student._id || req.session.student.id));
@@ -10209,6 +10246,12 @@ app.get('/api/tenure-payment/status', async (req, res) => {
     const pendingVerification = latestPayment && latestPayment.status === 'pending_verification';
     const rejectionReason = latestPayment && latestPayment.status === 'failed' ? latestPayment.rejectionReason : null;
 
+    // What this track includes, so the payment screen can show the student what
+    // the fee actually buys instead of only what it costs. One definition,
+    // shared with the grant that runs on approval (services/tenureBenefits.js).
+    const tenurePaymentConfig = require('./config/tenurePayment');
+    const benefits = tenurePaymentConfig.getBenefitsFor(tenure);
+
     res.json({
       requiresPayment: isShortCourse && !isPaid,
       isExistingStudent: isExistingStudent,
@@ -10218,7 +10261,11 @@ app.get('/api/tenure-payment/status', async (req, res) => {
       tenure: tenure,
       price: price,
       label: SHORT_COURSE_LABELS[tenure] || '',
-      isShortCourse: isShortCourse
+      isShortCourse: isShortCourse,
+      // null for the free tracks, which must never see any of this.
+      benefits: benefits,
+      allPlans: isShortCourse ? tenurePaymentConfig.getAllBenefits() : [],
+      granted: (stu.tenureBenefits && stu.tenureBenefits.grantedAt) ? stu.tenureBenefits : null
     });
   } catch(err) {
     res.status(500).json({ error: err.message });

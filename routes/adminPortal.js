@@ -261,8 +261,18 @@ router.post('/payments/verify/:paymentId', requireAdminAPI, async (req, res) => 
         console.error('Cert generation error after payment approval:', certErr);
       }
 
-      // If this is a tenure payment, unlock student access
+      // If this is a tenure payment, unlock student access AND hand over the
+      // bundle the payment screen sold (coins + certificate fee waived).
       if (payment.purpose && payment.purpose.startsWith('tenure_')) {
+        try {
+          const { grantTenureBenefits } = require('../services/tenureBenefits');
+          await grantTenureBenefits(student, { sourceOrderId: payment.orderId || String(payment._id) });
+        } catch (benefitErr) {
+          // An approved payment stays approved even if a perk could not be
+          // handed over — it is recoverable, and blocking access is not.
+          console.error('[admin] tenure bundle grant failed:', benefitErr.message);
+        }
+
         try {
           // Use updateOne for maximum reliability in both MongoDB and local-fallback modes
           const updateResult = await Student.updateOne(
@@ -379,6 +389,14 @@ router.post('/tenure-payment/approve/:orderId', requireAdminAPI, async (req, res
       student = await Student.findById(payment.studentId);
     }
     if (student) {
+      // Same bundle as the other approval route, so which button an admin
+      // happens to press cannot change what a student receives.
+      try {
+        const { grantTenureBenefits } = require('../services/tenureBenefits');
+        await grantTenureBenefits(student, { sourceOrderId: req.params.orderId });
+      } catch (benefitErr) {
+        console.error('[admin] tenure bundle grant failed:', benefitErr.message);
+      }
       await Notification.notifyStudent(student, {
         title: 'Payment Verified ✓',
         message: 'Your course fee has been verified. You now have full access to all content.',
