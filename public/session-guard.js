@@ -144,9 +144,32 @@
     window.location.replace(LOGIN_PAGE + '?next=' + back);
   }
 
+  /**
+   * Is this 401 really "you are signed out"?
+   *
+   * It used to be enough that a same-origin call answered 401. It is not: a 401
+   * can mean one endpoint refused one request for its own reasons, and treating
+   * every one of them as a lost session is what produced an inescapable sign-in
+   * loop — the guard would clear the cached employeeId, an endpoint that read
+   * that value would then 401 because it was missing, and round it went.
+   *
+   * The server now marks a genuine session failure explicitly, so only that is
+   * acted on. Anything else is left for the calling page to handle.
+   */
+  function isSessionFailure(response) {
+    try {
+      if (response.headers && response.headers.get('X-Session-Expired') === '1') return true;
+    } catch (err) { /* opaque response */ }
+    return false;
+  }
+
   window.fetch = function (input, init) {
     return nativeFetch(input, init).then(function (response) {
       if (response.status !== 401 || redirecting || !isSameOrigin(input)) {
+        return response;
+      }
+      if (!isSessionFailure(response)) {
+        // Not a session problem — hand it back and let the page say so.
         return response;
       }
 

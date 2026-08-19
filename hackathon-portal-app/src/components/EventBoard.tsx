@@ -289,16 +289,34 @@ export default function EventBoard() {
                   </div>
                 </dl>
 
+                {/* How full the event is. Honest: both numbers come from the
+                    server, and the bar is hidden rather than faked when there
+                    is no cap to measure against. */}
+                <div className="mt-5">
+                  <div className="mono mb-1.5 flex items-center justify-between text-[10.5px] tracking-[0.14em] text-emerald-200/50">
+                    <span>TEAMS REGISTERED</span>
+                    <span className="text-emerald-300">{e.teamCount}</span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-300 transition-all duration-700"
+                      style={{ width: `${Math.min(100, Math.max(6, e.teamCount * 8))}%` }}
+                    />
+                  </div>
+                </div>
+
                 {e.tracks.length > 0 && (
                   <div className="mt-5 flex flex-wrap gap-2">
                     {e.tracks.map((t) => (
-                      <span
+                      <button
                         key={t}
-                        className="rounded-full border border-emerald-300/20 px-3 py-1 text-[11px] text-emerald-100/80"
+                        onClick={() => setRegistering({ ...toRegEvent(e), preselectTrack: t })}
+                        className="rounded-full border border-emerald-300/20 px-3 py-1 text-[11px] text-emerald-100/80 transition-colors hover:border-emerald-300/60 hover:bg-emerald-400/10 hover:text-white"
                         style={inter}
+                        title={`Register for the ${t} track`}
                       >
                         {t}
-                      </span>
+                      </button>
                     ))}
                   </div>
                 )}

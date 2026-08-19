@@ -85,3 +85,49 @@ describe('the browser can no longer loop forever', () => {
     expect(guard).toMatch(/Date\.now\(\) - rec\.at\) > LOOP_WINDOW_MS/);
   });
 });
+
+describe('a 401 from one endpoint is not "you are signed out"', () => {
+  const docs = fs.readFileSync(path.join(root, 'routes/v2/documents.js'), 'utf8');
+  const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
+
+  it('the guard acts only on an explicit server signal', () => {
+    expect(guard).toMatch(/function isSessionFailure\(response\)/);
+    expect(guard).toMatch(/X-Session-Expired/);
+    // an unmarked 401 is handed back to the page untouched
+    expect(guard).toMatch(/if \(!isSessionFailure\(response\)\) \{[\s\S]*?return response;/);
+  });
+
+  it('the documents endpoint no longer depends on a browser value the guard deletes', () => {
+    // This was the engine of the loop: a 401 made session-guard clear
+    // localStorage.employeeId, and this endpoint read exactly that.
+    const block = docs.slice(docs.indexOf('async function requireStudent'), docs.indexOf('req.student = student;'));
+    expect(block).toMatch(/await findSessionStudent\(req\)/);
+    expect(block.indexOf('findSessionStudent')).toBeLessThan(block.indexOf('x-employee-id'));
+  });
+
+  it('the shared resolver is one implementation, not three', () => {
+    expect(docs).toContain("require(\"../../middleware/sessionAuth\")");
+    expect(server).toMatch(/findSessionStudent, sessionExpired/);
+  });
+
+  it('server.js accepts a session naming a real account', () => {
+    const block = server.slice(server.indexOf('async function requireStudentSession'));
+    expect(block).toMatch(/await findSessionStudent\(req\)/);
+    expect(block).toMatch(/return sessionExpired\(res\)/);
+  });
+
+  it('genuine expiry still redirects — every real guard marks it', () => {
+    const auth = fs.readFileSync(path.join(root, 'middleware/sessionAuth.js'), 'utf8');
+    const admin = fs.readFileSync(path.join(root, 'middleware/adminAuth.js'), 'utf8');
+    const role = fs.readFileSync(path.join(root, 'middleware/roleGuard.js'), 'utf8');
+    [auth, admin, role].forEach((f) => expect(f).toMatch(/X-Session-Expired/));
+  });
+
+  it('there is a script to clean the records that caused it', () => {
+    expect(fs.existsSync(path.join(root, 'scripts/repair-student-identity.js'))).toBe(true);
+    const rep = fs.readFileSync(path.join(root, 'scripts/repair-student-identity.js'), 'utf8');
+    // reports by default; only touches data when asked
+    expect(rep).toMatch(/const FIX = ARGS\.includes\('--fix'\)/);
+    expect(rep).toMatch(/Duplicates are NOT auto-fixed/);
+  });
+});

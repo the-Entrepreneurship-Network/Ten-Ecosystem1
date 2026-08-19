@@ -1521,6 +1521,8 @@ function sanitizeStudent(student) {
     return safe;
 }
 
+const { findSessionStudent, sessionExpired } = require('./middleware/sessionAuth');
+
 function establishStudentSession(req, student) {
     if (!req.session || !student) return;
     // Student sessions get the longer window — see STUDENT_SESSION_MS.
@@ -1539,11 +1541,30 @@ function sessionEmployeeId(req) {
     return (req.session && req.session.student && req.session.student.employeeId) || "";
 }
 
-function requireStudentSession(req, res, next) {
-    if (!sessionEmployeeId(req)) {
-        return res.status(401).json({ success: false, message: "Please sign in to continue." });
+/**
+ * A session that names a real account is a valid session.
+ *
+ * This used to reject on `!sessionEmployeeId(req)` alone, so a student whose
+ * record carried a blank or malformed employeeId was signed out on every
+ * request while signing in perfectly well — the sign-in loop. The session also
+ * records _id and email, and the shared resolver uses all three.
+ */
+async function requireStudentSession(req, res, next) {
+    if (sessionEmployeeId(req)) return next();
+
+    try {
+        const student = await findSessionStudent(req);
+        if (student) {
+            // Repair the session so the fast path works from here on.
+            if (req.session && req.session.student && student.employeeId) {
+                req.session.student.employeeId = student.employeeId;
+            }
+            return next();
+        }
+    } catch (err) {
+        console.error('[auth] requireStudentSession lookup failed:', err.message);
     }
-    next();
+    return sessionExpired(res);
 }
 
 function requireCoordinatorSession(req, res, next) {

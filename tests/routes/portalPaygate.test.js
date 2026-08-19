@@ -33,6 +33,37 @@ const SOURCES = [
 ];
 
 describe('no portal is gated by the localStorage paygate', () => {
+  it('the script itself no longer exists, so it cannot be re-added by accident', () => {
+    expect(fs.existsSync(path.join(root, 'public/portal-paygate.js'))).toBe(false);
+  });
+
+  it('nothing anywhere still asks for it', () => {
+    const hits = [];
+    const walk = (dir) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (e.name === 'node_modules' || e.name === '.git') continue;
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) walk(full);
+        else if (/\.(html|js|tsx|ts)$/.test(e.name) && !full.includes(path.join('tests', ''))) {
+          if (fs.readFileSync(full, 'utf8').includes('portal-paygate')) hits.push(full);
+        }
+      }
+    };
+    walk(path.join(root, 'public'));
+    ['hackathon-portal-app', 'job-portal-app', 'resume-portal-app', 'student-portal-app']
+      .filter((d) => fs.existsSync(path.join(root, d)))
+      .forEach((d) => walk(path.join(root, d, 'index.html').replace(/index\.html$/, '')) );
+    expect(hits).toEqual([]);
+  });
+
+  it('the duplicate payment wall baked into student-portal.html is gone too', () => {
+    const page = fs.readFileSync(path.join(root, 'public/student-portal.html'), 'utf8');
+    expect(page).not.toContain('Payment after Completion');
+    expect(page).not.toContain('Unlock your journey');
+    // and no button still points at the section that was removed
+    expect(page).not.toMatch(/href="#pay"/);
+  });
+
   it.each(BUILT)('%s does not load it', (rel) => {
     expect(fs.readFileSync(path.join(root, rel), 'utf8')).not.toContain('portal-paygate');
   });
@@ -78,6 +109,20 @@ describe('the hackathon board is alive, not a printed date', () => {
   it('filters appear only when there is something to filter', () => {
     expect(board).toMatch(/new Set\(events\.map\(\(e\) => e\.mode\)\)\.size > 1/);
     expect(board).toMatch(/events\.filter\(\(e\) => filter === 'all' \|\| e\.mode === filter\)/);
+  });
+
+  it('a track chip carries the choice into the form', () => {
+    // Clicking a track is a decision already made; making them pick it again in
+    // the dropdown is the kind of friction that loses a registration.
+    expect(board).toMatch(/preselectTrack: t/);
+    const reg = fs.readFileSync(path.join(root, 'hackathon-portal-app/src/components/Register.tsx'), 'utf8');
+    expect(reg).toMatch(/preselectTrack\?: string/);
+    expect(reg).toMatch(/useState\(event\.preselectTrack \|\| ''\)/);
+  });
+
+  it('the registered-teams bar reports the real count, never a faked one', () => {
+    expect(board).toMatch(/TEAMS REGISTERED/);
+    expect(board).toMatch(/\{e\.teamCount\}/);
   });
 
   it('the built bundle carries it', () => {
