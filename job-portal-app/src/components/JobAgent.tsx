@@ -191,25 +191,30 @@ export default function JobAgent() {
                 </button>
               </div>
 
-              <div className="grid gap-6 lg:grid-cols-[1.35fr_1fr]">
-                {/* live listings */}
+              <div>
+                {/* live listings — the openings ARE the product. Direct
+                    employer links lead; searches live in a drawer below. */}
                 <div>
                   <div className="mb-3 flex items-baseline justify-between">
                     <h2 className="text-xl font-semibold text-white">
-                      Live openings <span className="text-white/40">({jobs.length})</span>
+                      Openings for you <span className="text-white/40">({jobs.length})</span>
                     </h2>
-                    <span className="text-[11px] uppercase tracking-[0.14em] text-emerald-300/80">fetched now</span>
+                    <span className="text-[11px] uppercase tracking-[0.14em] text-emerald-300/80">
+                      {jobs.filter((j) => j.directUrl).length} direct company links
+                    </span>
                   </div>
                   <p className="mb-4 text-[12px] leading-relaxed text-white/45">
-                    Real postings from boards that publish a public API, ranked against your resume.
+                    Every row is a real posting. Green buttons land on the employer's own page or ATS;
+                    the rest open the listing on the board that carries it.
                     {sources.length > 0 && ' Sources: ' + sources.map((s) => `${s.name} ${s.ok ? s.count : '×'}`).join(' · ')}
                   </p>
 
                   <div className="space-y-2.5">
                     {jobs.length === 0 && (
                       <p className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-[13px] text-white/55">
-                        No live matches right now — the aimed searches beside this are where your role
-                        mostly lives. Try again later; these boards refresh hourly.
+                        No live matches from the open boards right now — they refresh hourly, so try
+                        again shortly. The search packs below cover the platforms that hide their
+                        listings behind a login.
                       </p>
                     )}
                     {jobs.map((j, i) => (
@@ -279,33 +284,33 @@ export default function JobAgent() {
                   </div>
                 </div>
 
-                {/* aimed searches */}
-                <div>
-                  <div className="mb-3 flex items-baseline justify-between">
-                    <h2 className="text-xl font-semibold text-white">Aimed searches</h2>
-                    <span className="text-[11px] uppercase tracking-[0.14em] text-sky-300/80">one click</span>
-                  </div>
-                  <p className="mb-4 text-[12px] leading-relaxed text-white/45">
-                    LinkedIn, Upwork and Fiverr have no public job API and cannot be scraped without
-                    breaking their terms — so the agent composes the exact query each one understands
-                    from your resume. You land on real results, already filtered.
+                {/* Search packs, demoted to a drawer. They are searches, not
+                    openings — useful for the login-walled platforms, never
+                    presented as the agent's answer. */}
+                <details className="mt-8 rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+                  <summary className="cursor-pointer text-[13px] font-semibold text-white/60 hover:text-white/85">
+                    Search packs for login-walled platforms ({searches.length}) — LinkedIn, Naukri, Upwork and friends
+                  </summary>
+                  <p className="mb-3 mt-3 text-[12px] leading-relaxed text-white/40">
+                    These platforms hide their listings behind a login, so no agent can hand you their
+                    direct links. Each card opens that platform's own results for a query composed from
+                    your resume — a fallback, not the product.
                   </p>
-
-                  <div className="space-y-2.5">
+                  <div className="grid gap-2.5 sm:grid-cols-2">
                     {searches.map((s) => (
                       <a
                         key={s.platform}
                         href={s.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="block rounded-2xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur-sm transition-colors hover:border-sky-400/40 hover:bg-white/[0.07]"
+                        className="block rounded-xl border border-white/10 bg-white/[0.03] p-3 transition-colors hover:border-sky-400/40"
                       >
-                        <p className="text-[14px] font-semibold text-white">{s.platform} →</p>
-                        <p className="mt-1 text-[12px] leading-relaxed text-white/50">{s.why}</p>
+                        <p className="text-[13px] font-semibold text-white/80">{s.platform} →</p>
+                        <p className="mt-0.5 text-[11.5px] leading-relaxed text-white/45">{s.why}</p>
                       </a>
                     ))}
                   </div>
-                </div>
+                </details>
               </div>
             </div>
           )}
