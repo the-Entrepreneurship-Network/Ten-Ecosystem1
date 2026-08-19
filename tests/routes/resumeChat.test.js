@@ -290,6 +290,58 @@ describe('the conversation advances instead of repeating', () => {
     expect(t1.session.command).toBe('build');
   });
 
+  it('"make a resume of a software developer and make it 98/100" builds one', async () => {
+    /* The recording: this exact sentence returned the DevOps resume the user
+       had uploaded minutes earlier, with a ceiling note. It asked for a new
+       resume for a different role. */
+    const a = app();
+    const devops = ['Bishal Nag', 'bishal@example.com', '', 'Experience',
+      'Senior DevOps Engineer | Acme | Jan 2022 - Present',
+      '- Managed Kubernetes clusters and Terraform on Azure', '',
+      'Skills', 'Azure, Kubernetes, Terraform, Jenkins'].join('\n');
+
+    const t1 = await turn(a, devops, null);                       // scanned
+    let out = await turn(a, 'make a resume of a software developer and make it 98/100', t1.session);
+
+    expect(out.session.command).toBe('build');
+    expect(out.session.target).toBe('software developer');
+    /* The uploaded history must not be reused as the new resume. */
+    expect(out.session.resumeText).toBe('');
+
+    const answers = { target: 'Software Developer', jd: 'skip', name: 'Bishal Nag',
+      email: 'bishal@example.com', phone: '+91 90000 11111', link: 'skip',
+      skills: 'Java, Spring Boot, SQL', projects: 'Built an inventory API in Spring Boot',
+      education: 'B.Tech CSE, 2021' };
+    for (let i = 0; i < 12 && out.kind === 'ask'; i++) {
+      out = await turn(a, answers[out.session.asked] || 'skip', out.session);
+    }
+    expect(out.kind).toBe('build');
+    /* A software developer resume, not the DevOps one. */
+    expect(out.text).not.toMatch(/Kubernetes|Terraform/i);
+    expect(out.text).toMatch(/Spring Boot/);
+    /* The 98 was carried into the build rather than answered about the old file. */
+    expect(out.reply).toMatch(/Checker \d+\/100/);
+  });
+
+  it('the band never flatters the score printed on the card', async () => {
+    /* A screen reading "62/100" beside the word "Strong" is the product
+       contradicting itself, whichever scorer is right. */
+    const a = app();
+    const t = await turn(a, RESUME, null);
+    if (t.kind === 'scan' && t.band) {
+      const s = t.report.score;
+      const expected = s < 50 ? 'weak' : s < 80 ? 'salvageable' : 'strong';
+      const RANK = { weak: 0, salvageable: 1, strong: 2, unknown: 0 };
+      expect(RANK[t.band]).toBeLessThanOrEqual(RANK[expected]);
+    }
+  });
+
+  it('reads the role out of the request', async () => {
+    const a = app();
+    const t1 = await turn(a, 'build me a cv for a data analyst', null);
+    expect(t1.session.target).toBe('data analyst');
+  });
+
   it('"make it 98/100" runs raise, not tailor, and never answers 90 and stops', async () => {
     // The recording: user asked for 98, the agent shipped 90 and said nothing
     // about why. Raise must either reach the target or name the missing fact.

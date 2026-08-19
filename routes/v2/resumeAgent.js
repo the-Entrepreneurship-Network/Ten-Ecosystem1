@@ -837,6 +837,31 @@ function raiseToTarget(text, target, jd, goal) {
    checks first and only tailors when a JD exists — never four menus. */
 const DO_ALL = /\bdo (it all|all|everything|them all)\b|\brun everything\b|\bfull pipeline\b/;
 
+/**
+ * "Make a resume of a software developer" — a request to BUILD, and for a
+ * stated role.
+ *
+ * This lost to the score matcher: "make it 98/100" in the same sentence
+ * routed the whole thing to raise, which handed the student back the DevOps
+ * resume they had uploaded earlier with a ceiling note attached. They asked
+ * for a new resume for a different role and received their old one.
+ *
+ * A score is a quality bar on the thing being made, never the thing itself,
+ * so build wins whenever both appear.
+ */
+const BUILD_INTENT = /\b(make|build|create|write|generate|draft)\s+(me\s+)?(a|an|my)?\s*(new\s+)?(resume|cv)\b|\bfrom scratch\b/;
+
+/**
+ * The role named in the sentence: "resume of a software developer",
+ * "cv for a data analyst", "resume as a devops engineer".
+ */
+function targetFromSentence(low) {
+  const m = String(low).match(
+    /\b(?:resume|cv)\s+(?:of|for|as)\s+(?:an?\s+|the\s+)?([a-z][a-z0-9+#./ -]{2,40}?)(?=\s+(?:and|with|that|which|to|so|please|role|position|job)\b|[,.]|$)/);
+  if (!m) return '';
+  return m[1].trim().replace(/\s+/g, ' ');
+}
+
 /** What the visitor wants, read from their sentence — Mega Agent command map. */
 function commandOf(low, hasFile) {
   if (DO_ALL.test(low)) return 'doall';
@@ -849,8 +874,11 @@ function commandOf(low, hasFile) {
   if (/\bcompare\b|which (job|jd|posting)|between these (jobs|jds)/.test(low)) return 'compare';
   if (/\binterview prep\b|\bprep\b|defen[cs]e|walk me through/.test(low)) return 'prep';
   if (/\bgap\b|what('?s| is) missing|why would this fail|missing keyword/.test(low)) return 'gap';
-  /* "make it 98/100" is its own command — exhaust the levers, then state the
-     ceiling. Routing it to tailor is how it used to answer 90 and stop. */
+  /* Build beats score: "make a resume … and make it 98/100" is a build with
+     a quality bar, not a raise of whatever was uploaded before. */
+  if (BUILD_INTENT.test(low)) return 'build';
+  /* "make it 98/100" alone is its own command — exhaust the levers, then
+     state the ceiling. Routing it to tailor is how it used to answer 90. */
   if (SCORE_INTENT.test(low)) return 'raise';
   if (/\btailor|rewrite|convert|recreate|make (it|this|my resume) ats|for (this|the) (jd|job|company)\b|\b(another|new) version for\b/.test(low) || FIX_INTENT.test(low)) return 'tailor';
   if (/\bscan|check|score|review|rate my|is this rejectable|ats.?(friendly|ready)\b/.test(low)) return 'check';
@@ -1026,6 +1054,31 @@ router.post('/chat', upload.single('file'), async (req, res) => {
     if (command) {
       session.command = command;
       session.menuShown = false;
+
+      /*
+       * A role named in the request is the target, and it replaces whatever
+       * the last upload implied: someone asking for a software developer
+       * resume is not asking about their DevOps history.
+       */
+      const stated = targetFromSentence(low);
+      if (stated) {
+        session.target = stated;
+        session.details.role = stated;
+        if (command === 'build') {
+          /* Building for a new role starts from their answers, not from the
+             file they scanned earlier — otherwise the old resume comes back
+             wearing a new title. */
+          session.resumeText = '';
+          session.declined = [];
+          session.tailorAsked = 0;
+        }
+      }
+
+      /* "and make it 98/100" is a goal carried into the build, honoured once
+         the page exists rather than instead of making one. */
+      if (command === 'build' && SCORE_INTENT.test(low)) {
+        session.raiseAfterBuild = parseInt((low.match(/\b(\d{2})\s*(?:\/\s*100)?\b/) || [])[1], 10) || 98;
+      }
       /* "Fix it" while being asked for a job title is not a title — it is
          "just fix it, without one". Settle the question and move, or the
          agent re-asks and the visitor re-answers the same words forever. */
@@ -1093,6 +1146,18 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       }
       const report = scanResume(session.resumeText, session.target);
       const packet = atsEngine.rewriteResume(session.resumeText, { target: session.target, jd: session.jd });
+
+      /*
+       * The band must agree with the number on the card. The card shows the
+       * nine-check score and the band came from the engine's dual rubric —
+       * two honest scorers, but a screen reading "62/100" beside the word
+       * "Strong" is the product contradicting itself. The stricter of the two
+       * wins, so the label can never flatter the score the student is looking
+       * at.
+       */
+      const cardBand = report.score < 50 ? 'weak' : report.score < 80 ? 'salvageable' : 'strong';
+      const RANK = { weak: 0, salvageable: 1, strong: 2 };
+      if (RANK[cardBand] < RANK[packet.band]) packet.band = cardBand;
 
       if (packet.band === 'weak') {
         /* v5.1 check, step 7: say the rebuild is coming, ask Block 1 Q1 only. */
@@ -1398,6 +1463,24 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         return ask(q.field, q.question);
       }
       const built = buildResume({ ...session.details, role: session.target || session.details.role });
+
+      /*
+       * "and make it 98/100" asked for a bar on this page, so the climb runs
+       * on the page that was just built rather than being answered with a
+       * ceiling about some earlier document.
+       */
+      if (session.raiseAfterBuild) {
+        const goal = session.raiseAfterBuild;
+        session.raiseAfterBuild = null;
+        const out = raiseToTarget(built.text, session.target, session.jd, goal);
+        session.command = 'build';
+        return deliver(res, session,
+          { text: out.text, report: out.report, missing: built.missing, potentialScore: out.report.score },
+          out.reached
+            ? `Checker ${out.report.score}/100 — every parse, heading, verb and keyword lever spent on the facts you gave. Nothing invented.`
+            : `Checker ${out.report.score}/100. To reach ${goal} I need ${out.needFact ? out.needFact.ask : 'facts your answers do not yet contain'}. I will not invent it.`);
+      }
+
       return deliver(res, session, built);
     }
 

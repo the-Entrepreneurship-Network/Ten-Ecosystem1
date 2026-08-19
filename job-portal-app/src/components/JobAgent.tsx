@@ -28,6 +28,21 @@ type TrackRow = {
 const TRACKER_KEY = 'ten_job_tracker';
 const TRACK_STATUSES: TrackStatus[] = ['found', 'emailed', 'tailored', 'applied', 'closed'];
 
+/**
+ * Remote or onsite, read from what the posting actually says. Hybrid is worth
+ * its own word — it is the answer to a different question than either — and a
+ * posting that says nothing gets "not stated" rather than a guess dressed up
+ * as a fact.
+ */
+function workType(job: Job): string {
+  const text = `${job.location || ''} ${job.type || ''}`.toLowerCase();
+  if (/hybrid/.test(text)) return 'Hybrid';
+  if (/\bremote\b|work from home|anywhere|worldwide/.test(text)) return 'Remote';
+  if (/on-?site|in-?office|in person/.test(text)) return 'Onsite';
+  if (/contract|freelance|hourly|fixed-price/.test(text)) return 'Contract';
+  return job.location ? 'Onsite' : 'Not stated';
+}
+
 function loadTracker(): TrackRow[] {
   try { return JSON.parse(localStorage.getItem(TRACKER_KEY) || '[]'); } catch { return []; }
 }
@@ -274,25 +289,25 @@ export default function JobAgent() {
                   */}
                   {jobs.length > 0 && (
                     <div className="mb-6 overflow-x-auto rounded-2xl border border-white/10">
-                      <table className="w-full min-w-[720px] border-collapse text-[12.5px]">
+                      <table className="w-full min-w-[760px] border-collapse text-[12.5px]">
                         <thead>
                           <tr className="bg-white/[0.05] text-left text-white/60">
-                            <th className="px-3 py-2 font-semibold">#</th>
-                            <th className="px-3 py-2 font-semibold">Role</th>
-                            <th className="px-3 py-2 font-semibold">Company</th>
-                            <th className="px-3 py-2 font-semibold">Where</th>
-                            <th className="px-3 py-2 font-semibold">Fit</th>
-                            <th className="px-3 py-2 font-semibold">Opening URL</th>
+                            <th className="px-3 py-2 font-semibold">Job</th>
+                            <th className="px-3 py-2 font-semibold">Position</th>
+                            <th className="px-3 py-2 font-semibold">Type</th>
+                            <th className="px-3 py-2 font-semibold">Link</th>
                           </tr>
                         </thead>
                         <tbody>
                           {jobs.map((j, i) => (
                             <tr key={'row' + j.url + i} className="border-t border-white/[0.07] align-top hover:bg-white/[0.03]">
-                              <td className="px-3 py-2 text-white/40">{i + 1}</td>
-                              <td className="px-3 py-2 font-semibold text-white">{j.title}</td>
-                              <td className="px-3 py-2 text-white/70">{j.company || '—'}</td>
-                              <td className="px-3 py-2 text-white/60">{j.location || 'Remote'}</td>
-                              <td className="px-3 py-2 whitespace-nowrap text-white/70">{j.fit5 ?? '—'}/5</td>
+                              {/* Job — who is hiring. */}
+                              <td className="px-3 py-2 font-semibold text-white">{j.company || '—'}</td>
+                              {/* Position — the role itself. */}
+                              <td className="px-3 py-2 text-white/80">{j.title}</td>
+                              {/* Type — remote or onsite, decided from what the
+                                  posting says rather than guessed. */}
+                              <td className="px-3 py-2 whitespace-nowrap text-white/65">{workType(j)}</td>
                               <td className="px-3 py-2">
                                 <a href={j.directUrl || j.url} target="_blank" rel="noopener noreferrer"
                                    className="break-all text-emerald-300 hover:underline">
