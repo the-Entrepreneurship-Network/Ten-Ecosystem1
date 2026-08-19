@@ -20,6 +20,7 @@ type Job = {
   source: string; title: string; company: string; location: string; type: string;
   tags: string[]; url: string; posted: string | null; matched: string[]; score: number;
   fit?: Fit; jobId?: string; stale?: boolean;
+  directUrl?: string; directKind?: 'ats' | 'company'; linkLabel?: string; fit5?: number;
 };
 type Search = { platform: string; why: string; url: string };
 type SourceStat = { name: string; ok: boolean; count: number; error: string | null };
@@ -32,6 +33,7 @@ type Materials = {
     subject: string; body: string; words: number; note: string;
     followUps: { afterDays: number; subject: string; body: string }[];
   };
+  hrEmail?: { subject: string; body: string; words: number; toNote: string | null };
 };
 
 export default function JobAgent() {
@@ -251,10 +253,25 @@ export default function JobAgent() {
                           >
                             {making === j.url ? 'Writing…' : 'Write my application'}
                           </button>
-                          <a href={j.url} target="_blank" rel="noopener noreferrer"
-                             className="rounded-lg border border-white/15 px-3 py-1.5 text-[12px] text-white/70 hover:border-white/35">
-                            Open posting
-                          </a>
+                          {/* The direct link is the job itself — employer ATS or
+                              careers page — never the board that listed it. */}
+                          {j.directUrl ? (
+                            <>
+                              <a href={j.directUrl} target="_blank" rel="noopener noreferrer"
+                                 className="rounded-lg bg-emerald-400/90 px-3 py-1.5 text-[12px] font-bold text-[#06210f] hover:bg-emerald-300">
+                                {j.directKind === 'ats' ? 'Apply — company ATS' : 'Apply — company site'}
+                              </a>
+                              <a href={j.url} target="_blank" rel="noopener noreferrer"
+                                 className="rounded-lg border border-white/15 px-3 py-1.5 text-[12px] text-white/60 hover:border-white/35">
+                                via {j.source}
+                              </a>
+                            </>
+                          ) : (
+                            <a href={j.url} target="_blank" rel="noopener noreferrer"
+                               className="rounded-lg border border-white/15 px-3 py-1.5 text-[12px] text-white/70 hover:border-white/35">
+                              Opening via {j.source}
+                            </a>
+                          )}
                           {j.jobId && <span className="text-[10.5px] text-white/30">{j.jobId}</span>}
                         </div>
                       </div>
@@ -464,6 +481,20 @@ function MaterialsPanel({ data, onClose }: { data: Materials; onClose: () => voi
             </div>
           ))}
         </div>
+
+        {data.hrEmail && (
+          <>
+            <Doc
+              title="Formal application email to HR"
+              meta={`${data.hrEmail.words} words · subject: ${data.hrEmail.subject}`}
+              text={data.hrEmail.body}
+              onCopy={copy}
+            />
+            {data.hrEmail.toNote && (
+              <p className="-mt-2 mb-5 text-[11.5px] leading-relaxed text-white/40">{data.hrEmail.toNote}</p>
+            )}
+          </>
+        )}
 
         <Doc
           title="Tailored resume"
