@@ -14,10 +14,10 @@
     <div id="root"></div>
     <!-- Sits at the end of the preview, before the student reaches the
          courses and modules. -->
-    <script src="/portal-paygate.js?v=5"
-            data-portal="student"
-            data-title="Internship Program Access"
-            data-blurb="Your full domain journey — courses, modules, quizzes, projects, certificate."
-            data-continue="/student-journeys.html"></script>
+    <!-- The "Unlock your access" paygate was removed from all four portals.
+         It gated the whole page on a localStorage flag, which is not a payment,
+         and it stood in front of flows that take payment properly further in —
+         the hackathon collects its entry fee at registration, and the internship
+         fee is enforced server-side by middleware/tenurePaymentGate.js. -->
   </body>
 </html>

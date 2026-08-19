@@ -45,6 +45,57 @@ function when(value: string | null) {
   });
 }
 
+/**
+ * A live countdown to the moment registration closes.
+ *
+ * A date printed as "26 Aug 2026" reads as "sometime". The same date ticking
+ * down reads as "soon", which is the honest state of a deadline and the thing
+ * that actually moves someone from reading to registering. Ticks once a second
+ * and stops itself when the target passes.
+ */
+function useCountdown(target: string | null) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!target) return;
+    const end = new Date(target).getTime();
+    if (!Number.isFinite(end) || end <= Date.now()) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [target]);
+
+  if (!target) return null;
+  const end = new Date(target).getTime();
+  if (!Number.isFinite(end)) return null;
+  const left = end - now;
+  if (left <= 0) return { over: true, d: 0, h: 0, m: 0, s: 0 };
+  return {
+    over: false,
+    d: Math.floor(left / 86400000),
+    h: Math.floor((left % 86400000) / 3600000),
+    m: Math.floor((left % 3600000) / 60000),
+    s: Math.floor((left % 60000) / 1000),
+  };
+}
+
+function Countdown({ target }: { target: string | null }) {
+  const c = useCountdown(target);
+  if (!c) return null;
+  if (c.over) {
+    return <span className="mono text-[11.5px] tracking-[0.14em] text-rose-300/80">REGISTRATION CLOSED</span>;
+  }
+  const cell = (n: number, label: string) => (
+    <span className="flex flex-col items-center">
+      <span className="mono text-[17px] font-bold leading-none text-emerald-300">{String(n).padStart(2, '0')}</span>
+      <span className="mono text-[9px] tracking-[0.16em] text-emerald-200/45">{label}</span>
+    </span>
+  );
+  return (
+    <div className="flex items-center gap-3">
+      {cell(c.d, 'DAYS')}{cell(c.h, 'HRS')}{cell(c.m, 'MIN')}{cell(c.s, 'SEC')}
+    </div>
+  );
+}
+
 /** The subset Register needs. Shared so every entry point opens the same form. */
 function toRegEvent(e: Event): RegEvent {
   return {
@@ -58,6 +109,7 @@ export default function EventBoard() {
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [registering, setRegistering] = useState<RegEvent | null>(null);
   const [showStatus, setShowStatus] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'hackathon' | 'ideathon'>('all');
   /** '' = closed. Otherwise the code to open, or 'ask' to prompt for one. */
   const [teamPanel, setTeamPanel] = useState<{ code?: string; join?: string } | null>(null);
 
@@ -166,16 +218,41 @@ export default function EventBoard() {
           </div>
         )}
 
+        {/* Filter chips. Rendered only when there is more than one kind to
+            filter between — a control that cannot change anything is noise. */}
+        {state === 'ready' && events.length > 1
+          && new Set(events.map((e) => e.mode)).size > 1 && (
+          <div className="mt-10 flex flex-wrap gap-2">
+            {(['all', 'hackathon', 'ideathon'] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={
+                  (filter === f
+                    ? 'border-emerald-300/70 bg-emerald-400/15 text-emerald-100'
+                    : 'border-emerald-300/20 text-emerald-200/60 hover:border-emerald-300/45')
+                  + ' mono rounded-full border px-4 py-1.5 text-[11px] tracking-[0.16em] transition-colors'
+                }
+              >
+                {f === 'all' ? `ALL · ${events.length}` : `${f.toUpperCase()}S · ${events.filter((e) => e.mode === f).length}`}
+              </button>
+            ))}
+          </div>
+        )}
+
         {state === 'ready' && events.length > 0 && (
           <div className="mt-12 grid gap-5 md:grid-cols-2">
-            {events.map((e) => (
+            {events.filter((e) => filter === 'all' || e.mode === filter).map((e) => (
               <article
                 key={e.id}
-                className="rounded-2xl border border-emerald-300/15 bg-black/40 p-7 transition-colors hover:border-emerald-300/35"
+                className="group rounded-2xl border border-emerald-300/15 bg-black/40 p-7 transition-all duration-300 hover:-translate-y-1 hover:border-emerald-300/45 hover:shadow-[0_18px_50px_rgba(52,211,153,0.10)]"
               >
                 <div className="mono mb-3 flex items-center justify-between text-[11px] tracking-[0.18em] text-emerald-200/60">
                   <span>{e.mode === 'ideathon' ? 'IDEATHON' : 'HACKATHON'}</span>
-                  <span>{e.teamCount} {e.teamCount === 1 ? 'TEAM' : 'TEAMS'}</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" style={{ animation: 'caretBlink 1.4s ease-in-out infinite' }} />
+                    {e.teamCount} {e.teamCount === 1 ? 'TEAM IN' : 'TEAMS IN'}
+                  </span>
                 </div>
 
                 <h3 className="display-font text-[26px] leading-tight text-white">{e.title}</h3>
@@ -223,6 +300,13 @@ export default function EventBoard() {
                         {t}
                       </span>
                     ))}
+                  </div>
+                )}
+
+                {e.registrationClosesAt && (
+                  <div className="mt-6 rounded-xl border border-emerald-300/15 bg-emerald-400/[0.04] px-4 py-3">
+                    <p className="mono mb-2 text-[10px] tracking-[0.2em] text-emerald-200/50">REGISTRATION CLOSES IN</p>
+                    <Countdown target={e.registrationClosesAt} />
                   </div>
                 )}
 

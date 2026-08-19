@@ -33,18 +33,82 @@ function sessionEmployeeId(req) {
   return (session && session.student && session.student.employeeId) || '';
 }
 
+/**
+ * Find the signed-in student from whatever the session holds.
+ *
+ * This used to be one exact `findOne({ employeeId })`, and that single line
+ * produced an unbreakable sign-in loop for individual students. Login finds an
+ * account by email OR employeeId, but the session then carried the employeeId
+ * alone — so if that field held a trailing space, a different case, or nothing
+ * at all, login SUCCEEDED and every request afterwards answered 401. The
+ * browser's session guard treats a 401 as "signed out" and returns to the login
+ * page, where the student signs in perfectly well again, and round it goes,
+ * forever, for that one person while everybody else is fine.
+ *
+ * establishStudentSession already records _id and email beside the employeeId.
+ * So the rule is now: a session that names a real account is a valid session,
+ * whatever shape its employeeId happens to be in. Only a session pointing at an
+ * account that genuinely no longer exists is rejected.
+ */
+async function findSessionStudent(req) {
+  const ses = (sessionOf(req) || {}).student;
+  if (!ses) return null;
+
+  const employeeId = String(ses.employeeId || '').trim();
+  if (employeeId) {
+    const exact = await Student.findOne({ employeeId });
+    if (exact) return exact;
+  }
+
+  // The _id is immutable and was captured at sign-in — the most reliable of
+  // the three, and the reason a malformed employeeId no longer locks anyone out.
+  if (ses._id && /^[a-f0-9]{24}$/i.test(String(ses._id))) {
+    const byId = await Student.findById(String(ses._id));
+    if (byId) return byId;
+  }
+
+  if (ses.email) {
+    const byEmail = await Student.findOne({ email: String(ses.email).toLowerCase().trim() });
+    if (byEmail) return byEmail;
+  }
+
+  // Last resort: the stored id differs only by case or padding.
+  if (employeeId) {
+    const loose = await Student.findOne({
+      employeeId: new RegExp('^\\s*' + employeeId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*$', 'i')
+    });
+    if (loose) return loose;
+  }
+
+  return null;
+}
+
 async function requireStudent(req, res, next) {
   try {
-    const employeeId = sessionEmployeeId(req);
-    if (!employeeId) {
+    const ses = (sessionOf(req) || {}).student;
+    if (!ses) {
       return res.status(401).json({ success: false, message: 'Please sign in to continue.' });
     }
-    const student = await Student.findOne({ employeeId: String(employeeId) });
+
+    const student = await findSessionStudent(req);
     if (!student) {
       // The session points at an account that no longer exists — drop it.
       if (req.session) req.session.student = null;
       return res.status(401).json({ success: false, message: 'Session is no longer valid. Please sign in again.' });
     }
+
+    // Self-heal: write back the identifiers we actually matched on, so the next
+    // request takes the fast exact path and the loop cannot start again.
+    if (req.session && req.session.student) {
+      const trueId = student.employeeId || '';
+      if (trueId && req.session.student.employeeId !== trueId) {
+        console.warn('[auth] repaired session employeeId %j -> %j',
+          req.session.student.employeeId, trueId);
+        req.session.student.employeeId = trueId;
+      }
+      if (!req.session.student._id) req.session.student._id = String(student._id);
+    }
+
     req.student = student;
     next();
   } catch (err) {
@@ -142,6 +206,7 @@ module.exports = {
   requireStudent,
   requireHR,
   requireCoordinator,
+  findSessionStudent,
   requireStaff,
   requireSelfOrStaff
 };
