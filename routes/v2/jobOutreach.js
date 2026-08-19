@@ -26,6 +26,22 @@ const { ALL_ROLES } = require('../../config/roles');
 
 const router = express.Router();
 
+/**
+ * Which of the three email modes a sentence asks for.
+ *
+ * The rule it enforces: "draft" and "write" mean show me the words; only
+ * "send" means put it in someone's inbox. An agent that treats "write an
+ * email to HR" as permission to send has taken an irreversible action nobody
+ * authorised, so the words are read strictly and anything unrecognised
+ * drafts rather than sends.
+ */
+function emailMode(sentence) {
+  const low = String(sentence || '').toLowerCase();
+  if (/\breply\b|\brespond to\b|\banswer (the|this|their)\b/.test(low)) return 'reply';
+  if (/\bsend it\b|\bsend this\b|\bsend the (mail|email)\b|\bmail it\b|\bfire it off\b|\bgo ahead and send\b|\bsend now\b/.test(low)) return 'send';
+  return 'draft';
+}
+
 /*
  * Tight on purpose. This endpoint spends someone's sending reputation, so the
  * ceiling is what a person job-hunting plausibly needs in an hour, not what
@@ -154,6 +170,20 @@ router.post('/send', requireRole(...ALL_ROLES), sendLimiter, async (req, res) =>
     });
   }
 
+  /*
+   * And when the request carries the sentence that triggered it, that
+   * sentence must itself say send. "Write an email to HR" is a request for
+   * words; treating it as permission to deliver is the one mistake in this
+   * whole flow that cannot be taken back.
+   */
+  if (b.intent && emailMode(b.intent) !== 'send') {
+    return res.status(400).json({
+      ok: false,
+      error: 'That asked for a draft, not a send. Say "send it" once you have read the draft.',
+      mode: emailMode(b.intent)
+    });
+  }
+
   try {
     const result = await outreach.activateCampaign(b.campaignId);
     return res.json({ ok: true, sent: true, ...result });
@@ -163,3 +193,4 @@ router.post('/send', requireRole(...ALL_ROLES), sendLimiter, async (req, res) =>
 });
 
 module.exports = router;
+module.exports.emailMode = emailMode;

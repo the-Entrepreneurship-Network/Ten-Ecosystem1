@@ -186,7 +186,7 @@ function relevance(hay, terms) {
 
 const UA = { 'User-Agent': 'TEN-JobAgent/1.0 (+https://entrepreneurshipnetwork.net)' };
 
-async function getJSON(url, ms = 9000) {
+async function getJSON(url, ms = 7000) {
   const res = await fetch(url, { headers: UA, signal: AbortSignal.timeout(ms) });
   if (!res.ok) throw new Error(`${res.status}`);
   return res.json();
@@ -703,7 +703,16 @@ router.post('/search', upload.single('file'), async (req, res) => {
         const inText = directLink.extractApplyLink(j.description, j.url);
         if (inText) { j.directUrl = inText.url; j.directKind = inText.kind; }
       });
-      await directLink.resolveBatch(live.filter((j) => !j.directUrl).slice(0, 20), { budgetMs: 15000 });
+      /*
+       * Budgeted for a person watching a spinner, not for completeness. A
+       * recording showed "Hunting…" running past thirty seconds: six board
+       * fetches, then link verification, then fifteen seconds of resolution,
+       * all before a single row appeared. The text scan above is free and
+       * catches most of them; the network pass now gets six seconds over the
+       * top eight rows, and whatever it misses stays a labelled board link
+       * rather than holding up the answer.
+       */
+      await directLink.resolveBatch(live.filter((j) => !j.directUrl).slice(0, 8), { budgetMs: 6000 });
 
       /* Direct openings are the product; they lead. Within each group the
          fit ordering stands unchanged. */
@@ -770,7 +779,7 @@ function jobIdOf(job) {
  *
  * Checks run in small batches so a slow board cannot hold up the response.
  */
-async function verifyLinks(jobs, budgetMs = 6000) {
+async function verifyLinks(jobs, budgetMs = 4000) {
   const deadline = Date.now() + budgetMs;
   const BATCH = 8;
 
@@ -820,8 +829,10 @@ function ageOf(posted) {
   if (!when || Number.isNaN(when)) return { days: null, label: 'date unknown' };
   const days = Math.max(0, Math.floor((Date.now() - when) / 86400000));
   if (days <= 7) return { days, label: 'this week' };
-  if (days <= 56) return { days, label: `${Math.max(1, Math.round(days / 7))} weeks ago` };
-  return { days, label: `${Math.max(2, Math.round(days / 30))} months ago` };
+  if (days <= 13) return { days, label: 'last week' };
+  if (days <= 56) return { days, label: `${Math.round(days / 7)} weeks ago` };
+  const months = Math.max(2, Math.round(days / 30));
+  return { days, label: `${months} months ago` };
 }
 
 /*

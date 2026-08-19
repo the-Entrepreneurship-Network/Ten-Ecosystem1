@@ -290,6 +290,42 @@ describe('the conversation advances instead of repeating', () => {
     expect(t1.session.command).toBe('build');
   });
 
+  it('"make it 98/100" runs raise, not tailor, and never answers 90 and stops', async () => {
+    // The recording: user asked for 98, the agent shipped 90 and said nothing
+    // about why. Raise must either reach the target or name the missing fact.
+    const a = app();
+    const t1 = await turn(a, RESUME, null);
+    let out = await turn(a, 'make it 98/100', t1.session);
+    expect(out.session.command === 'raise' || out.kind === 'build').toBe(true);
+
+    for (let i = 0; i < 5 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+    expect(out.kind).toBe('build');
+    // Either it reached the goal, or it stated a ceiling with the reason.
+    const reachedOrCeiling = /every parse, heading, verb and keyword lever spent/.test(out.reply)
+      || /Ceiling: Checker \d+\/100/.test(out.reply);
+    expect(reachedOrCeiling).toBe(true);
+    if (/Ceiling/.test(out.reply)) expect(out.reply).toMatch(/I will not invent it|will not invent them/);
+  });
+
+  it('raise asks for the one fact worth the most points before giving up', async () => {
+    const a = app();
+    const thin = ['Ravi Kumar', 'ravi@example.com +91 90000 11111', '',
+      'Experience', 'Developer | Acme | Jan 2024 – Present',
+      '- Built the invoicing module in Java', '', 'Skills', 'Java'].join('\n');
+    const t1 = await turn(a, thin, null);
+    const t2 = await turn(a, 'make it 98', t1.session);
+    if (t2.kind === 'ask') {
+      expect(t2.reply).toMatch(/the next \d+ points need/i);
+      expect(t2.reply).toMatch(/or say skip/i);
+    }
+  });
+
+  it('every reply names the seat', async () => {
+    const a = app();
+    const t1 = await turn(a, 'build from scratch', null);
+    expect(t1.reply).toMatch(/^Seat: RESUME · Command: build/);
+  });
+
   it('the router skill button map: "do all" checks first, tailors only with a JD', async () => {
     const a = app();
     // resume, no JD → the check report is the answer
@@ -310,10 +346,10 @@ describe('the conversation advances instead of repeating', () => {
     expect(t1.reply).not.toMatch(/check —|build —|tailor —|gap —/);
   });
 
-  it('asks open with the command line, per the reply shape', async () => {
+  it('asks open with the seat and command line, per the reply shape', async () => {
     const a = app();
     const t1 = await turn(a, 'build from scratch', null);
-    expect(t1.reply).toMatch(/^Command: build/);
+    expect(t1.reply).toMatch(/^Seat: RESUME · Command: build/);
   });
 
   it('"make it 98/100" and "do all" are commands, not menu fodder', async () => {
@@ -322,7 +358,8 @@ describe('the conversation advances instead of repeating', () => {
     const t1 = await turn(a, RESUME, null);
     const t2 = await turn(a, 'make it 98/100', t1.session);
     expect(t2.kind).not.toBe('help');
-    expect(t2.session.command === 'tailor' || t2.kind === 'build').toBe(true);
+    /* 98 is its own command now — raise, which climbs or states the ceiling. */
+    expect(t2.session.command === 'raise' || t2.kind === 'build').toBe(true);
 
     const s1 = await turn(a, RESUME, null);
     const s2 = await turn(a, 'do all', s1.session);
