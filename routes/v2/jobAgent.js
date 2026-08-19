@@ -25,7 +25,8 @@ const router = express.Router();
 const multer = require('multer');
 
 const { fitness, atsMatch, requiredYears } = require('../../services/v2/jobFitness');
-const { tailorResume, coverLetter, coldEmail } = require('../../services/v2/jobMaterials');
+const { tailorResume, coverLetter, coldEmail, hrEmail } = require('../../services/v2/jobMaterials');
+const directLink = require('../../services/v2/jobDirectLink');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 router.use(express.urlencoded({ extended: true, limit: '2mb' }));
@@ -281,6 +282,9 @@ async function fromRemoteOK(profile) {
       type: 'Remote',
       tags: (j.tags || []).slice(0, 8),
       url: j.url || j.apply_url,
+      /* RemoteOK's apply_url redirects off-board — the direct-link resolver
+         follows it to the employer instead of scraping the board page. */
+      applyUrl: j.apply_url || null,
       posted: j.date,
       description: clean(j.description).slice(0, 4000),
     }));
@@ -487,6 +491,16 @@ function platformSearches(profile) {
       why: 'Internships — the fastest first rung if you are still studying.',
       url: `https://internshala.com/internships/${role.replace(/\s+/g, '-').toLowerCase()}-internship`,
     },
+    {
+      platform: 'Freelancer',
+      why: 'Contract projects matching your stack, bid directly.',
+      url: `https://www.freelancer.com/jobs/?keyword=${roleQ}`,
+    },
+    {
+      platform: 'Unstop',
+      why: 'Competitions, internships and fresher roles across Indian campuses.',
+      url: xray('unstop.com', role, skills, loc),
+    },
 
     /*
      * The Indian boards below are reached the same way: a Google site: query
@@ -657,6 +671,30 @@ router.post('/search', upload.single('file'), async (req, res) => {
       ? scored
       : await verifyLinks(scored);
 
+    /*
+     * The job-hunt-agent skill's core rule: the link must land on the job —
+     * the employer's careers page or ATS — not the board that listed it. The
+     * top of the ranking gets resolved inside a time budget; whatever the
+     * budget cannot reach keeps its board job URL, labelled `via <board>`,
+     * and fit is also expressed 1–5 as the skill's table prints it.
+     */
+    if (!(b.resolve === '0' || b.resolve === false)) {
+      /* The listing text first, for every row — an HN post carries its
+         Greenhouse link in the body, and reading it costs no network. */
+      live.forEach((j) => {
+        if (j.directUrl || !j.description) return;
+        const inText = directLink.extractApplyLink(j.description, j.url);
+        if (inText) { j.directUrl = inText.url; j.directKind = inText.kind; }
+      });
+      await directLink.resolveBatch(live.filter((j) => !j.directUrl).slice(0, 12), { budgetMs: 10000 });
+    }
+    live.forEach((j) => {
+      j.fit5 = Math.max(1, Math.min(5, Math.round((j.fit.percent || 0) / 20)));
+      j.linkLabel = j.directUrl
+        ? (j.directKind === 'ats' ? 'Apply — company ATS' : 'Apply — company site')
+        : `Opening via ${j.source}`;
+    });
+
     res.json({
       ok: true,
       profile,
@@ -772,9 +810,42 @@ router.post('/materials', upload.single('file'), async (req, res) => {
         phone: b.phone || '',
         ask: b.ask || ''
       }),
+      /* The formal application mail in the job-hunt skill's shape — draft
+         only, and the To: is never guessed. */
+      hrEmail: hrEmail(profile, job, resumeText, {
+        to: b.to || '', phone: b.phone || '', email: b.email || '',
+        link: b.link || '', status: b.status || ''
+      }),
     });
   } catch (e) {
     res.status(500).json({ ok: false, error: 'Could not build the documents. Try pasting the resume text.' });
+  }
+});
+
+/*
+ * "Is this real / get me the employer page" for one listing — the skill's
+ * resolve command. Returns the direct URL when one can be proven, and says
+ * so plainly when only the board's listing is live.
+ */
+router.post('/resolve', async (req, res) => {
+  try {
+    const b = bodyOf(req);
+    const url = String(b.url || '');
+    if (!/^https?:\/\//.test(url)) {
+      return res.status(400).json({ ok: false, error: 'Send the listing URL.' });
+    }
+    const direct = await directLink.resolveDirectUrl({ url }, { timeoutMs: 8000 });
+    return res.json({
+      ok: true,
+      input: url,
+      direct: direct ? direct.url : null,
+      kind: direct ? direct.kind : null,
+      note: direct
+        ? (direct.kind === 'ats' ? 'Company ATS posting — this is the job itself.' : 'Employer page found.')
+        : 'No employer page could be proven from here — the board listing is the live opening. Apply there.',
+    });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: 'Could not resolve that URL.' });
   }
 });
 

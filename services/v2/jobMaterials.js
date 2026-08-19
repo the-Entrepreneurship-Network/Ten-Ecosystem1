@@ -302,6 +302,57 @@ function coldEmail(profile, job, resumeText, options) {
   };
 }
 
+/**
+ * The formal application email, in the job-hunt-agent skill's email-hr.md
+ * shape: subject "Application for {Role} — {Name}", 120–180 words, the
+ * opening URL in line one, status plus one evidenced fact, one ask, a
+ * text-only sign-off. Draft only — the student sends it. The To: line is
+ * left to them unless the posting shows an address, because guessing an
+ * email address is inventing a fact.
+ */
+function hrEmail(profile, job, resumeText, options) {
+  const p = profile || {};
+  const opts = options || {};
+  const jobText = [job.title, job.description, (job.tags || []).join(' ')].filter(Boolean).join(' ');
+  const match = atsMatch(resumeText, jobText, p.skills, job.title);
+
+  const bullets = prioritise(bulletsOf(sectionsOf(resumeText)), match.matched);
+  const proof = (bullets.find((b) => b.hits.length && /\d/.test(b.text)) || bullets[0] || { text: '' }).text;
+
+  const role = job.title || p.role || 'the advertised role';
+  const name = p.name || 'Your Name';
+
+  const lines = [];
+  lines.push(`I am applying for the ${role} position${job.company ? ` at ${job.company}` : ''}` +
+    (job.url ? `, listed here: ${job.url}` : '.'));
+  lines.push('');
+  if (opts.status || p.education) {
+    lines.push(`${opts.status || `I hold a ${typeof p.education === 'string' ? p.education : 'relevant degree'}`}${p.location ? `, based in ${p.location}` : ''}.`);
+  }
+  if (proof) lines.push(`Most relevant to your requirements: ${trimSentence(proof)}.`);
+  const relevant = (p.skills || []).filter((s) => hasWord(jobText.toLowerCase(), s)).slice(0, 3);
+  if (relevant.length) lines.push(`I work with ${relevant.join(', ')} day to day.`);
+  lines.push('');
+  lines.push('I would welcome the chance to be considered — a 15-minute call works whenever suits you.');
+  lines.push('');
+  lines.push('Regards,');
+  lines.push(name);
+  [opts.phone, opts.email, opts.link].filter(Boolean).forEach((l) => lines.push(l));
+
+  const body = lines.join('\n');
+  const words = body.split(/\s+/).filter(Boolean).length;
+
+  return {
+    subject: `Application for ${role} — ${name}`,
+    to: opts.to || '',
+    toNote: opts.to ? null : 'Copy the recruiter address from the listing — it is not guessed for you.',
+    body,
+    words,
+    withinShape: words >= 60 && words <= 180,
+    clichesAvoided: CLICHES.every((c) => !body.toLowerCase().includes(c)),
+  };
+}
+
 /** Keep a bullet to one clean sentence so the email stays short. */
 function trimSentence(text) {
   const first = String(text || '').split(/(?<=\.)\s/)[0].trim();
@@ -318,6 +369,6 @@ function fileName(name, job, kind) {
 }
 
 module.exports = {
-  tailorResume, coverLetter, coldEmail,
+  tailorResume, coverLetter, coldEmail, hrEmail,
   sectionsOf, bulletsOf, prioritise, CLICHES
 };
