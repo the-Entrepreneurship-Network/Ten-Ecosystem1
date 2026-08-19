@@ -677,6 +677,40 @@ router.post('/build.pdf', async (req, res) => {
 });
 
 /*
+ * The resume as a .docx — what the ats-resume skill prefers for Workday and
+ * Taleo, and what several of the referenced builders ship first. Scored from
+ * the same text, since a Word file's paragraphs are the reading order.
+ */
+router.post('/build.docx', upload.single('file'), async (req, res) => {
+  try {
+    const b = bodyOf(req);
+    let text = (await textFromUpload(req.file)) || b.resumeText || b.text || '';
+
+    /* A details payload builds first; raw resume text is converted. */
+    if (!text.trim() && (b.details || b.name || b.skills)) {
+      text = buildResume(b.details || b).text;
+    } else if (text.trim() && b.convert !== '0') {
+      text = atsEngine.rewriteResume(text, { target: b.target || b.role, jd: b.jd }).resume;
+    }
+    if (!text.trim()) {
+      return res.status(400).json({ ok: false, error: 'Send a resume: attach a file, paste the text, or give your details.' });
+    }
+
+    const { resumeDocxBuffer } = require('../../services/v2/resumeDocx');
+    const buf = await resumeDocxBuffer(text);
+    const report = scanResume(text, b.target || b.role);
+    const name = (text.split('\n')[0] || 'resume').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="${name || 'resume'}-TEN.docx"`);
+    res.setHeader('X-ATS-Score', String(report.score));
+    res.send(buf);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'Could not render the DOCX.' });
+  }
+});
+
+/*
  * The rewritten resume as a text-selectable, single-column PDF — ship gate
  * check 12's artefact. Scored from the text extracted back out of the
  * rendered file, the same proof the build.pdf route gives.
