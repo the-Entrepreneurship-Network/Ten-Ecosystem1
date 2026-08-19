@@ -122,7 +122,11 @@ describe('the paid course area has a name of its own', () => {
   it('no longer shares its name with the internship funnel', () => {
     // Two different paid things both called "Student Portal" is the confusion.
     expect(funnel).not.toContain('<title>TEN — Student Portal</title>');
-    expect(funnel).toContain('Internship Program Access');
+    // It used to be identified by its "Internship Program Access" pay card.
+    // That card has been removed along with the paygate on every portal, so the
+    // page's own title carries the distinction now — same intent, evidence that
+    // still exists.
+    expect(funnel).toContain('<title>TEN — Internship Portal</title>');
   });
 
   it('leaves the intern dashboard alone', () => {
