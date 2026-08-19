@@ -252,13 +252,12 @@ export default function JobAgent() {
                       Openings for you <span className="text-white/40">({jobs.length})</span>
                     </h2>
                     <span className="text-[11px] uppercase tracking-[0.14em] text-emerald-300/80">
-                      {jobs.filter((j) => j.directUrl).length} direct company links
+                      direct company links only
                     </span>
                   </div>
                   <p className="mb-4 text-[12px] leading-relaxed text-white/45">
-                    Every row is a real posting. Green buttons land on the employer's own page or ATS;
-                    the rest open the listing on the board that carries it.
-                    {sources.length > 0 && ' Sources: ' + sources.map((s) => `${s.name} ${s.ok ? s.count : '×'}`).join(' · ')}
+                    Every link opens the employer's own posting — their careers page or their ATS.
+                    Nothing here routes through a board or a search page.
                   </p>
 
                   {cacheNote && (
@@ -268,10 +267,10 @@ export default function JobAgent() {
                   )}
                   <div className="space-y-2.5">
                     {jobs.length === 0 && (
-                      <p className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-[13px] text-white/55">
-                        No live matches from the open boards right now — they refresh hourly, so try
-                        again shortly. The search packs below cover the platforms that hide their
-                        listings behind a login.
+                      <p className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-[13px] leading-relaxed text-white/55">
+                        No opening this pass could be traced to an employer's own posting, so nothing
+                        is listed — a link to a search page would not be a job. The company boards
+                        refresh through the day; try again shortly.
                       </p>
                     )}
                     {jobs.map((j, i) => (
@@ -279,24 +278,26 @@ export default function JobAgent() {
                         key={j.url + i}
                         className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur-sm transition-colors hover:border-white/25 hover:bg-white/[0.07]"
                       >
+                        {/* The link IS the row. It opens the employer's own
+                            posting, and its age follows in brackets — no
+                            board name, no search page, nothing between the
+                            click and the job. */}
                         <div className="flex items-start justify-between gap-3">
-                          <a href={j.url} target="_blank" rel="noopener noreferrer"
-                             className="text-[14.5px] font-semibold leading-snug text-white hover:underline">
-                            {j.title}
-                          </a>
-                          <div className="flex shrink-0 items-center gap-1.5">
-                            {j.fit && <FitBadge fit={j.fit} />}
-                            {j.fromCache && (
-                              <span className="rounded-full border border-violet-400/30 bg-violet-400/10 px-2 py-0.5 text-[10px] tracking-wide text-violet-200/90">
-                                seen {j.seenDaysAgo === 0 ? 'today' : `${j.seenDaysAgo}d ago`}
-                              </span>
+                          <p className="text-[14.5px] font-semibold leading-snug text-white">
+                            <a href={j.directUrl || j.url} target="_blank" rel="noopener noreferrer"
+                               className="text-emerald-300 hover:underline">
+                              {j.title}
+                            </a>
+                            {j.postedAgo && (
+                              <span className="font-normal text-white/45">{' '}({j.postedAgo})</span>
                             )}
-                            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] tracking-wide text-white/60">{j.source}</span>
-                          </div>
+                          </p>
+                          {j.fit && <div className="shrink-0"><FitBadge fit={j.fit} /></div>}
                         </div>
                         <p className="mt-1 text-[12.5px] text-white/55">
                           {[j.company, j.location, j.type].filter(Boolean).join(' · ')}
                         </p>
+                        <p className="mt-1 break-all text-[11px] text-white/30">{j.directUrl || j.url}</p>
 
                         {/* Why it scored what it scored, in the agent's own arithmetic. */}
                         {j.fit?.reasons?.length > 0 && (
@@ -305,9 +306,9 @@ export default function JobAgent() {
                         {j.matched?.length > 0 && (
                           <p className="mt-1 text-[11.5px] text-sky-300/85">matches your {j.matched.join(', ')}</p>
                         )}
-                        {j.postedAgo && (
-                          <p className={`mt-1 text-[11px] ${j.stale ? 'text-amber-300/80' : 'text-white/40'}`}>
-                            posted {j.postedAgo}{j.stale ? ' — confirm it is still open before investing an evening' : ''}
+                        {j.stale && (
+                          <p className="mt-1 text-[11px] text-amber-300/80">
+                            confirm it is still open before investing an evening
                           </p>
                         )}
 
@@ -320,25 +321,10 @@ export default function JobAgent() {
                           >
                             {making === j.url ? 'Writing…' : 'Write my application'}
                           </button>
-                          {/* The direct link is the job itself — employer ATS or
-                              careers page — never the board that listed it. */}
-                          {j.directUrl ? (
-                            <>
-                              <a href={j.directUrl} target="_blank" rel="noopener noreferrer"
-                                 className="rounded-lg bg-emerald-400/90 px-3 py-1.5 text-[12px] font-bold text-[#06210f] hover:bg-emerald-300">
-                                {j.directKind === 'ats' ? 'Apply — company ATS' : 'Apply — company site'}
-                              </a>
-                              <a href={j.url} target="_blank" rel="noopener noreferrer"
-                                 className="rounded-lg border border-white/15 px-3 py-1.5 text-[12px] text-white/60 hover:border-white/35">
-                                via {j.source}
-                              </a>
-                            </>
-                          ) : (
-                            <a href={j.url} target="_blank" rel="noopener noreferrer"
-                               className="rounded-lg border border-white/15 px-3 py-1.5 text-[12px] text-white/70 hover:border-white/35">
-                              Opening via {j.source}
-                            </a>
-                          )}
+                          <a href={j.directUrl || j.url} target="_blank" rel="noopener noreferrer"
+                             className="rounded-lg bg-emerald-400/90 px-3 py-1.5 text-[12px] font-bold text-[#06210f] hover:bg-emerald-300">
+                            Open the job
+                          </a>
                           <button
                             type="button"
                             onClick={() => track(j, 'found')}
@@ -390,33 +376,13 @@ export default function JobAgent() {
                   </div>
                 )}
 
-                {/* Search packs, demoted to a drawer. They are searches, not
-                    openings — useful for the login-walled platforms, never
-                    presented as the agent's answer. */}
-                <details className="mt-8 rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-                  <summary className="cursor-pointer text-[13px] font-semibold text-white/60 hover:text-white/85">
-                    Search packs for login-walled platforms ({searches.length}) — LinkedIn, Naukri, Upwork and friends
-                  </summary>
-                  <p className="mb-3 mt-3 text-[12px] leading-relaxed text-white/40">
-                    These platforms hide their listings behind a login, so no agent can hand you their
-                    direct links. Each card opens that platform's own results for a query composed from
-                    your resume — a fallback, not the product.
-                  </p>
-                  <div className="grid gap-2.5 sm:grid-cols-2">
-                    {searches.map((s) => (
-                      <a
-                        key={s.platform}
-                        href={s.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block rounded-xl border border-white/10 bg-white/[0.03] p-3 transition-colors hover:border-sky-400/40"
-                      >
-                        <p className="text-[13px] font-semibold text-white/80">{s.platform} →</p>
-                        <p className="mt-0.5 text-[11.5px] leading-relaxed text-white/45">{s.why}</p>
-                      </a>
-                    ))}
-                  </div>
-                </details>
+                {/*
+                  The platform search cards are gone. They listed board names —
+                  LinkedIn, Naukri, Glassdoor — and every click landed on a
+                  search page rather than a job, which is the opposite of what
+                  this portal promises. If a listing cannot be resolved to the
+                  employer's own posting it is not shown at all.
+                */}
               </div>
             </div>
           )}
