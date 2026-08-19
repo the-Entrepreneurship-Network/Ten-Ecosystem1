@@ -1,4 +1,5 @@
 'use strict';
+const { httpFetch } = require('./httpFetch');
 
 /**
  * Sending job applications through Instantly.ai.
@@ -35,14 +36,14 @@ function configured() {
 
 async function call(path, options) {
   const opts = options || {};
-  const res = await fetch(`${INSTANTLY_API}${path}`, {
+  const res = await httpFetch(`${INSTANTLY_API}${path}`, {
     method: opts.method || 'GET',
     headers: {
       Authorization: `Bearer ${apiKey()}`,
       'Content-Type': 'application/json'
     },
     body: opts.body ? JSON.stringify(opts.body) : undefined,
-    signal: AbortSignal.timeout(opts.timeoutMs || 15000)
+    timeoutMs: opts.timeoutMs || 15000
   });
 
   const text = await res.text();
