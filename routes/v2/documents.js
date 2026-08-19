@@ -47,12 +47,39 @@ const docUpload = multer({
 });
 
 // ── Auth middleware (student) ──
+/**
+ * Identity comes from the SESSION first. It used to come only from an
+ * `x-employee-id` header the page read out of localStorage, and that built a
+ * sign-in loop that could not be escaped:
+ *
+ *   this endpoint 401s  ->  session-guard.js treats a 401 as "signed out" and
+ *   DELETES employeeId from localStorage  ->  the header is now missing  ->
+ *   this endpoint 401s again, forever, no matter how many times the student
+ *   signs in correctly.
+ *
+ * The guard was clearing the very value this middleware depended on. A browser
+ * value can never be the source of truth for who someone is; the session is,
+ * and the shared resolver understands every identifier a session carries.
+ */
+const { findSessionStudent } = require("../../middleware/sessionAuth");
+
 async function requireStudent(req, res, next) {
     try {
-        const employeeId = req.headers["x-employee-id"] || req.body.employeeId || req.query.employeeId;
-        if (!employeeId) return res.status(401).json({ success: false, message: "Authentication required" });
-        const student = await Student.findOne({ employeeId: String(employeeId) });
-        if (!student) return res.status(401).json({ success: false, message: "Student not found" });
+        let student = await findSessionStudent(req);
+
+        // Fallback for callers that legitimately pass an id (staff tools).
+        if (!student) {
+            const employeeId = req.headers["x-employee-id"] || (req.body && req.body.employeeId) || req.query.employeeId;
+            if (employeeId) student = await Student.findOne({ employeeId: String(employeeId).trim() });
+        }
+
+        if (!student) {
+            // Only a genuine session failure may log anybody out — see
+            // sessionExpired() for why this header exists.
+            res.set("X-Session-Expired", "1");
+            return res.status(401).json({ success: false, message: "Please sign in to continue." });
+        }
+
         req.student = student;
         next();
     } catch (err) {

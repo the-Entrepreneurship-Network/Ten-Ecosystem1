@@ -27,6 +27,24 @@ function sessionOf(req) {
   return (req && req.session) || null;
 }
 
+/**
+ * The only way to tell a browser it is signed out.
+ *
+ * public/session-guard.js used to treat ANY same-origin 401 as "your session is
+ * gone" and bounce to the login page. But a 401 can mean many things — one
+ * endpoint refusing one request, a missing header, a permission that does not
+ * apply — and treating all of them as a lost session is how a single failing
+ * call turned into an endless sign-in loop for a student whose session was
+ * perfectly valid.
+ *
+ * So the server now says so explicitly. Only a 401 carrying this header means
+ * "sign in again"; everything else is just an error the page can show.
+ */
+function sessionExpired(res, message) {
+    res.set('X-Session-Expired', '1');
+    return res.status(401).json({ success: false, sessionExpired: true, message: message || 'Please sign in to continue.' });
+}
+
 /** The employeeId of the signed-in student, or "" when there is no session. */
 function sessionEmployeeId(req) {
   const session = sessionOf(req);
@@ -87,14 +105,14 @@ async function requireStudent(req, res, next) {
   try {
     const ses = (sessionOf(req) || {}).student;
     if (!ses) {
-      return res.status(401).json({ success: false, message: 'Please sign in to continue.' });
+      return sessionExpired(res);
     }
 
     const student = await findSessionStudent(req);
     if (!student) {
       // The session points at an account that no longer exists — drop it.
       if (req.session) req.session.student = null;
-      return res.status(401).json({ success: false, message: 'Session is no longer valid. Please sign in again.' });
+      return sessionExpired(res, 'Session is no longer valid. Please sign in again.');
     }
 
     // Self-heal: write back the identifiers we actually matched on, so the next
@@ -145,6 +163,7 @@ function requireHR(req, res, next) {
       : session.coordinator ? 'signed in as a coordinator, not HR'
       : 'session exists but holds no HR or admin identity (expired or signed out)';
     console.warn(`[auth] requireHR rejected ${req.method} ${req.originalUrl}: ${reason}`);
+    res.set('X-Session-Expired', '1');
     return res.status(401).json({
       success: false,
       message: 'HR sign-in required.',
@@ -158,7 +177,7 @@ function requireHR(req, res, next) {
 function requireCoordinator(req, res, next) {
   const session = sessionOf(req);
   if (!session || !session.coordinator) {
-    return res.status(401).json({ success: false, message: 'Coordinator sign-in required.' });
+    return sessionExpired(res, 'Coordinator sign-in required.');
   }
   req.coordinator = session.coordinator;
   next();
@@ -171,12 +190,12 @@ function requireCoordinator(req, res, next) {
 function requireStaff(req, res, next) {
   const session = sessionOf(req);
   if (!session) {
-    return res.status(401).json({ success: false, message: 'Staff sign-in required.' });
+    return sessionExpired(res, 'Staff sign-in required.');
   }
   if (session.coordinator) req.coordinator = session.coordinator;
   if (session.hr) req.hrUser = session.hr;
   if (session.coordinator || session.hr || session.adminUser) return next();
-  return res.status(401).json({ success: false, message: 'Staff sign-in required.' });
+  return sessionExpired(res, 'Staff sign-in required.');
 }
 
 /**
@@ -191,7 +210,7 @@ function requireSelfOrStaff(getTargetEmployeeId) {
 
     const mine = sessionEmployeeId(req);
     if (!mine) {
-      return res.status(401).json({ success: false, message: 'Please sign in to continue.' });
+      return sessionExpired(res);
     }
     const target = String(getTargetEmployeeId(req) || '');
     if (target && target !== mine) {
@@ -207,6 +226,7 @@ module.exports = {
   requireHR,
   requireCoordinator,
   findSessionStudent,
+  sessionExpired,
   requireStaff,
   requireSelfOrStaff
 };

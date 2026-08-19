@@ -23,6 +23,7 @@ function requireRole(...roles) {
     const user = req.user;
 
     if (!user) {
+      res.set('X-Session-Expired', '1');
       return res.status(401).json({
         success: false,
         error: 'Authentication required.',
