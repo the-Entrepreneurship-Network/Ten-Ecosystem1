@@ -1447,6 +1447,15 @@ button:active { transform: translateY(0); }
   display: flex; align-items: center; justify-content: center;
   font-size: 12px; font-weight: 800; color: #D4AF37;
 }
+
+/* Premium members get a warmer, gold-lit portal — applied by
+   applyPremiumChrome() adding .is-premium to <body>. Scoped to that class so a
+   free-track student's portal is untouched. */
+body.is-premium { background-image:radial-gradient(1100px 520px at 50% -14%, rgba(212,175,55,0.10), transparent 62%); }
+body.is-premium .sec-card { border-color:rgba(212,175,55,0.22); }
+body.is-premium .sec-card:hover { border-color:rgba(212,175,55,0.55); box-shadow:0 10px 34px rgba(212,175,55,0.14); }
+body.is-premium .stu-nav-btn:hover { border-color:rgba(212,175,55,0.45); }
+body.is-premium #premiumCard { box-shadow:0 0 0 1px rgba(212,175,55,0.25), 0 14px 40px rgba(212,175,55,0.14); }
 </style>
   <link rel="stylesheet" href="/css/ten-brand.css">
   <link rel="stylesheet" href="/css/mobile.css">
@@ -1570,7 +1579,8 @@ button:active { transform: translateY(0); }
     <button class="stu-nav-btn" onclick="window.location.href='my-certificates.html'" style="background:linear-gradient(135deg,rgba(139,92,246,0.08),rgba(139,92,246,0.02));border:1px solid rgba(139,92,246,0.18);"><span class="nav-icon">🏅</span> My Certificates <span style="font-size:10px;background:rgba(139,92,246,0.2);color:#c4b5fd;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
     <button class="stu-nav-btn" onclick="showPaymentComingSoon()" style="background:linear-gradient(135deg,rgba(16,185,129,0.08),rgba(16,185,129,0.02));border:1px solid rgba(16,185,129,0.2);"><span class="nav-icon">💳</span> Make Payment <span style="font-size:10px;background:rgba(16,185,129,0.2);color:#10b981;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
     <button class="stu-nav-btn" onclick="window.location.href='ten-network.html'" style="background:linear-gradient(135deg,rgba(212,175,55,0.12),rgba(212,175,55,0.04));border:1px solid rgba(212,175,55,0.25);"><span class="nav-icon">🌐</span> TEN Network <span style="font-size:10px;background:rgba(212,175,55,0.25);color:#D4AF37;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
-    <button class="stu-nav-btn" onclick="window.location.href='/assistant'" style="background:linear-gradient(135deg,rgba(212,175,55,0.12),rgba(212,175,55,0.04));border:1px solid rgba(212,175,55,0.25);"><span class="nav-icon">∞</span> TEN Assistant <span style="font-size:10px;background:rgba(212,175,55,0.25);color:#D4AF37;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
+    <button class="stu-nav-btn" id="premiumNavBtn" onclick="window.location.href='/premium'" style="background:linear-gradient(135deg,rgba(212,175,55,0.18),rgba(212,175,55,0.05));border:1px solid rgba(212,175,55,0.35);"><span class="nav-icon" id="premiumNavIcon">🔒</span> Premium <span id="premiumNavTag" style="font-size:10px;background:rgba(212,175,55,0.25);color:#D4AF37;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">LOCKED</span></button>
+    <button class="stu-nav-btn" id="assistantNavBtn" onclick="window.location.href='/assistant'" style="display:none;background:linear-gradient(135deg,rgba(212,175,55,0.12),rgba(212,175,55,0.04));border:1px solid rgba(212,175,55,0.25);"><span class="nav-icon">∞</span> TEN Assistant <span style="font-size:10px;background:rgba(212,175,55,0.25);color:#D4AF37;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">PREMIUM</span></button>
     <button class="stu-nav-btn" onclick="window.location.href='/academics'" style="background:linear-gradient(135deg,rgba(59,130,246,0.12),rgba(59,130,246,0.04));border:1px solid rgba(59,130,246,0.28);"><span class="nav-icon">&#127891;</span> Academics <span style="font-size:10px;background:rgba(59,130,246,0.25);color:#93c5fd;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
     <!-- FEATURE 2 — Logout button -->
     <button class="stu-nav-btn" onclick="tenLogout()" style="background:rgba(244,63,94,0.06);border:1px solid rgba(244,63,94,0.18);margin-top:8px;"><span class="nav-icon">🚪</span> Logout</button>
@@ -1737,10 +1747,18 @@ button:active { transform: translateY(0); }
         <div class="sec-card-title" style="color:#10b981;">Make Payment <span style="font-size:10px;background:rgba(16,185,129,0.2);color:#10b981;padding:1px 7px;border-radius:4px;margin-left:4px;font-weight:800;vertical-align:middle;">NEW</span></div>
         <div class="sec-card-desc">Pay fees securely via UPI — PhonePe, GPay, Paytm &amp; more</div>
       </div>
-      <!-- TEN Assistant card -->
-      <div class="sec-card" onclick="window.location.href='/assistant'" style="border-color:rgba(212,175,55,0.3);background:linear-gradient(135deg,rgba(212,175,55,0.08),rgba(212,175,55,0.02));">
+      <!-- Premium card. Always rendered; the lock/★ and the wording are swapped
+           by applyPremiumChrome() once the server says which one applies. -->
+      <div class="sec-card" id="premiumCard" onclick="window.location.href='/premium'" style="border-color:rgba(212,175,55,0.45);background:linear-gradient(135deg,rgba(212,175,55,0.14),rgba(14,20,40,0.5));">
+        <div class="sec-card-icon" id="premiumCardIcon">🔒</div>
+        <div class="sec-card-title" style="color:#D4AF37;">Premium <span id="premiumCardTag" style="font-size:10px;background:rgba(212,175,55,0.2);color:#D4AF37;padding:1px 7px;border-radius:4px;margin-left:4px;font-weight:800;vertical-align:middle;">LOCKED</span></div>
+        <div class="sec-card-desc" id="premiumCardDesc">Coordinator notes, assigned projects &amp; the TEN Assistant</div>
+      </div>
+      <!-- TEN Assistant card. Paid tracks only — hidden entirely for the rest,
+           rather than shown and then refused at the door. -->
+      <div class="sec-card" id="assistantCard" onclick="window.location.href='/assistant'" style="display:none;border-color:rgba(212,175,55,0.3);background:linear-gradient(135deg,rgba(212,175,55,0.08),rgba(212,175,55,0.02));">
         <div class="sec-card-icon">∞</div>
-        <div class="sec-card-title" style="color:#D4AF37;">TEN Assistant <span style="font-size:10px;background:rgba(212,175,55,0.2);color:#D4AF37;padding:1px 7px;border-radius:4px;margin-left:4px;font-weight:800;vertical-align:middle;">NEW</span></div>
+        <div class="sec-card-title" style="color:#D4AF37;">TEN Assistant <span style="font-size:10px;background:rgba(212,175,55,0.2);color:#D4AF37;padding:1px 7px;border-radius:4px;margin-left:4px;font-weight:800;vertical-align:middle;">PREMIUM</span></div>
         <div class="sec-card-desc">Your week-by-week plan, coins &amp; deadlines — ask anything</div>
       </div>
       <!-- TEN Network card -->
@@ -6629,6 +6647,85 @@ function showTenureUnlocked(data, force) {
   });
   if (key) { try { localStorage.setItem(key, '1'); } catch (e) { /* private mode */ } }
 }
+
+/**
+ * Turn the portal premium — or leave it locked.
+ *
+ * The server decides (utils/premium.js); this only reflects it. Everything
+ * starts in the locked state in the markup, so a failed call leaves a student
+ * looking at the upsell rather than at a section they cannot actually use.
+ *
+ * The gold treatment is deliberate: a member paid for something, and the portal
+ * should look different because of it, not merely contain one more tile.
+ */
+async function applyPremiumChrome() {
+  var res, d;
+  try {
+    res = await fetch('/api/v2/premium/me', { credentials: 'same-origin' });
+    if (!res.ok) return;
+    d = await res.json();
+  } catch (e) { return; }
+  if (!d || !d.success) return;
+
+  var card = document.getElementById('premiumCard');
+  var navBtn = document.getElementById('premiumNavBtn');
+
+  if (!d.premium) {
+    // A free track cannot buy this, so it is described rather than dangled.
+    if (!d.onPaidTrack) {
+      var desc = document.getElementById('premiumCardDesc');
+      if (desc) desc.textContent = 'Part of the 1 Week, 15 Days and 1 Month tracks';
+    }
+    return;
+  }
+
+  document.body.classList.add('is-premium');
+
+  ['premiumCardIcon'].forEach(function (id) {
+    var el = document.getElementById(id); if (el) el.textContent = '✦';
+  });
+  var icon = document.getElementById('premiumNavIcon'); if (icon) icon.textContent = '✦';
+  [['premiumCardTag', d.plan], ['premiumNavTag', d.plan]].forEach(function (pair) {
+    var el = document.getElementById(pair[0]);
+    if (el) el.textContent = (pair[1] || 'PREMIUM').toUpperCase();
+  });
+  var cd = document.getElementById('premiumCardDesc');
+  if (cd) cd.textContent = 'Your coordinator\u2019s notes, assigned projects & the TEN Assistant';
+
+  // The assistant belongs to members only.
+  ['assistantCard', 'assistantNavBtn'].forEach(function (id) {
+    var el = document.getElementById(id); if (el) el.style.display = '';
+  });
+
+  // A member badge by the student's name, so the plan is visible everywhere.
+  var host = document.querySelector('.stu-topbar, .topbar, header');
+  if (host && !document.getElementById('premiumChip')) {
+    var chip = document.createElement('span');
+    chip.id = 'premiumChip';
+    chip.textContent = '\u2726 ' + (d.plan || 'PREMIUM').toUpperCase();
+    chip.style.cssText = 'display:inline-flex;align-items:center;margin-left:10px;padding:4px 11px;'
+      + 'border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.6px;color:#D4AF37;'
+      + 'background:linear-gradient(135deg,rgba(212,175,55,0.22),rgba(212,175,55,0.06));'
+      + 'border:1px solid rgba(212,175,55,0.4);';
+    host.appendChild(chip);
+  }
+
+  // Unread coordinator notes / projects.
+  try {
+    var ur = await fetch('/api/v2/premium/unread', { credentials: 'same-origin' });
+    var ud = await ur.json();
+    if (ud && ud.count > 0 && card) {
+      var dot = document.createElement('span');
+      dot.textContent = ud.count;
+      dot.style.cssText = 'position:absolute;top:10px;right:10px;min-width:20px;height:20px;'
+        + 'border-radius:999px;background:#ef4444;color:#fff;font-size:11px;font-weight:800;'
+        + 'display:flex;align-items:center;justify-content:center;padding:0 6px;';
+      card.style.position = 'relative';
+      card.appendChild(dot);
+    }
+  } catch (e) { /* the badge is decoration, not the feature */ }
+}
+document.addEventListener('DOMContentLoaded', applyPremiumChrome);
 
 function renderTenureValueStack(benefits) {
   var box = document.getElementById('tenureValueStack');

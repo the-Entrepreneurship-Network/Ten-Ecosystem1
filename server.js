@@ -7688,7 +7688,13 @@ const BADGE_CATALOG = [
     { id:"top_performer",      name:"Top Performer",         icon:"👑", description:"Rank 1 in your domain leaderboard",       requirement:"Domain rank #1" },
     { id:"day_one",            name:"Day 1",                 icon:"🎉", description:"Complete your first day",                 requirement:"Mark attendance & submit task on day 1" },
     { id:"halfway_there",      name:"Halfway There",         icon:"🎯", description:"Complete 50% of your internship",         requirement:"50% of tenure elapsed" },
-    { id:"graduate",           name:"Graduate",              icon:"🎓", description:"Complete your full internship tenure",    requirement:"100% of tenure elapsed" }
+    { id:"graduate",           name:"Graduate",              icon:"🎓", description:"Complete your full internship tenure",    requirement:"100% of tenure elapsed" },
+    // Paid-track badges. Awarded by services/tenureBenefits.js the moment an
+    // admin approves the fee — not earned by work, so they are described as
+    // what they are rather than dressed up as an achievement.
+    { id:"premium_starter",    name:"Starter Member",        icon:"🥉", description:"On the paid 1 Month track",              requirement:"Programme fee settled" },
+    { id:"premium_accelerate", name:"Accelerate Member",     icon:"🥈", description:"On the paid 15 Days track",              requirement:"Programme fee settled" },
+    { id:"premium_sprint",     name:"Sprint Member",         icon:"🥇", description:"On the paid 1 Week track",               requirement:"Programme fee settled" }
 ];
 const BADGE_CATALOG_BY_ID = Object.fromEntries(BADGE_CATALOG.map(b => [b.id, b]));
 // Major badges trigger a notification (and could be email-extended later).
@@ -10328,11 +10334,39 @@ app.post('/api/tenure-payment/submit-utr', async (req, res) => {
   }
 });
 
+// PREMIUM — the paid tracks' own section: badges, coordinator notes and the
+// projects a coordinator assigns. Mounted before the assistant because the
+// assistant is now one of the things it gates.
+try {
+    app.use('/api/v2/premium', require('./routes/v2/premium'));
+    app.get('/premium', (req, res) => res.sendFile(path.join(__dirname, 'public', 'premium.html')));
+    console.log('[V2] Premium routes mounted at /api/v2/premium');
+} catch (e) {
+    console.error('[V2] Premium routes failed to mount:', e.message);
+}
+
 // TEN ASSISTANT — answers from the portal's own DomainTask rows, no API key
 try {
     const v2Assistant = require('./routes/v2/assistant');
-    app.use('/api/v2/assistant', v2Assistant);
-    app.get('/assistant', (req, res) => res.sendFile(path.join(__dirname, 'public', 'assistant.html')));
+    // The assistant is a paid-track perk. A free-track student never had a way
+    // to buy it, so it is hidden from them rather than dangled and refused.
+    const { requirePremium } = require('./utils/premium');
+    app.use('/api/v2/assistant', requirePremium, v2Assistant);
+    // And the page itself, so a free-track student sees the premium section
+    // explaining it rather than a screen that loads and then fails every call.
+    app.get('/assistant', async (req, res) => {
+        try {
+            const { getPremiumStatus } = require('./utils/premium');
+            const employeeId = req.session && req.session.student && req.session.student.employeeId;
+            if (!employeeId) return res.redirect('/login.html');
+            const stu = await Student.findOne({ employeeId }).lean();
+            if (!getPremiumStatus(stu).premium) return res.redirect('/premium');
+        } catch (err) {
+            console.error('[assistant] premium check failed:', err.message);
+            return res.redirect('/premium');
+        }
+        res.sendFile(path.join(__dirname, 'public', 'assistant.html'));
+    });
 
     const v2Academics = require('./routes/v2/academics');
     app.use('/api/v2/academics', v2Academics);
