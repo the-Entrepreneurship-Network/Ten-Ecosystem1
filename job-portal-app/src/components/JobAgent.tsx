@@ -265,6 +265,50 @@ export default function JobAgent() {
                       {cacheNote}
                     </p>
                   )}
+                  {/*
+                    The hunt table, in the job-hunt skill's own columns:
+                    # | Role | Company | Where | Fit | Opening URL. The URL
+                    cell is the employer's own posting with the posting's age
+                    beside it, so a student can scan the whole hunt in one
+                    pass instead of reading cards.
+                  */}
+                  {jobs.length > 0 && (
+                    <div className="mb-6 overflow-x-auto rounded-2xl border border-white/10">
+                      <table className="w-full min-w-[720px] border-collapse text-[12.5px]">
+                        <thead>
+                          <tr className="bg-white/[0.05] text-left text-white/60">
+                            <th className="px-3 py-2 font-semibold">#</th>
+                            <th className="px-3 py-2 font-semibold">Role</th>
+                            <th className="px-3 py-2 font-semibold">Company</th>
+                            <th className="px-3 py-2 font-semibold">Where</th>
+                            <th className="px-3 py-2 font-semibold">Fit</th>
+                            <th className="px-3 py-2 font-semibold">Opening URL</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {jobs.map((j, i) => (
+                            <tr key={'row' + j.url + i} className="border-t border-white/[0.07] align-top hover:bg-white/[0.03]">
+                              <td className="px-3 py-2 text-white/40">{i + 1}</td>
+                              <td className="px-3 py-2 font-semibold text-white">{j.title}</td>
+                              <td className="px-3 py-2 text-white/70">{j.company || '—'}</td>
+                              <td className="px-3 py-2 text-white/60">{j.location || 'Remote'}</td>
+                              <td className="px-3 py-2 whitespace-nowrap text-white/70">{j.fit5 ?? '—'}/5</td>
+                              <td className="px-3 py-2">
+                                <a href={j.directUrl || j.url} target="_blank" rel="noopener noreferrer"
+                                   className="break-all text-emerald-300 hover:underline">
+                                  {j.directUrl || j.url}
+                                </a>
+                                {j.postedAgo && (
+                                  <span className="ml-1 whitespace-nowrap text-white/40">({j.postedAgo})</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
                   <div className="space-y-2.5">
                     {jobs.length === 0 && (
                       <p className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-[13px] leading-relaxed text-white/55">
