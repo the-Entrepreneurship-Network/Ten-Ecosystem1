@@ -311,6 +311,77 @@ async function fromArbeitnow(profile) {
     }));
 }
 
+/*
+ * Freelancer projects — the gig lane, and the one the recording asked for.
+ *
+ * A freelance brief is an opening in its own right, and its project URL opens
+ * the brief itself, exactly the way the Upwork job-detail link in the video
+ * did. The skill allows these for the same reason: a /projects/ URL is the
+ * posting, not a search over postings.
+ */
+async function fromFreelancer(profile) {
+  const q = encodeURIComponent(profile.role);
+  const data = await getJSON(
+    `https://www.freelancer.com/api/projects/0.1/projects/active/?query=${q}&limit=25&job_details=true&sort_field=time_updated`);
+  const rows = (data && data.result && data.result.projects) || [];
+  return rows
+    .filter((p) => p.seo_url)
+    .map((p) => ({
+      source: 'Freelancer',
+      title: clean(p.title),
+      company: 'Freelance client',
+      location: (p.currency && p.currency.country) || 'Remote',
+      type: p.type === 'hourly' ? 'Hourly contract' : 'Fixed-price contract',
+      tags: (p.jobs || []).map((j) => clean(j.name)).slice(0, 8),
+      /* The brief itself — one click from here to the work. */
+      url: `https://www.freelancer.com/projects/${p.seo_url}`,
+      directUrl: `https://www.freelancer.com/projects/${p.seo_url}`,
+      directKind: 'company',
+      posted: p.time_submitted ? new Date(p.time_submitted * 1000).toISOString() : null,
+      description: clean(p.preview_description).slice(0, 4000),
+    }));
+}
+
+/*
+ * WeWorkRemotely — remote roles, published as RSS with a link per listing.
+ * Each link opens that job's own page, so no resolution is needed.
+ */
+async function fromWeWorkRemotely(profile) {
+  const res = await fetch('https://weworkremotely.com/categories/remote-programming-jobs.rss', {
+    headers: UA, signal: AbortSignal.timeout(7000),
+  });
+  if (!res.ok) throw new Error(String(res.status));
+  const xml = await res.text();
+  const terms = matchTerms(profile);
+
+  return (xml.match(/<item>[\s\S]*?<\/item>/g) || [])
+    .map((item) => {
+      const pick = (tag) => {
+        const m = item.match(new RegExp(`<${tag}>(?:<!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?</${tag}>`));
+        return m ? clean(m[1]) : '';
+      };
+      const title = pick('title');
+      /* WWR titles read "Company: Role" — split so the table has both. */
+      const [company, role] = title.includes(':')
+        ? [title.split(':')[0].trim(), title.split(':').slice(1).join(':').trim()]
+        : ['', title];
+      return {
+        source: 'WeWorkRemotely',
+        title: role || title,
+        company,
+        location: pick('region') || 'Remote',
+        type: pick('type') || 'Remote',
+        tags: [],
+        url: pick('link'),
+        directUrl: pick('link'),
+        directKind: 'company',
+        posted: pick('pubDate') ? new Date(pick('pubDate')).toISOString() : null,
+        description: pick('description').slice(0, 4000),
+      };
+    })
+    .filter((j) => j.url && relevance(`${j.title} ${j.company}`.toLowerCase(), terms).relevant);
+}
+
 /* Hacker News "Who is hiring" — the monthly thread is where a lot of small
    companies post first, and Algolia indexes every comment publicly. */
 async function fromHackerNews(profile) {
@@ -627,6 +698,8 @@ router.post('/search', upload.single('file'), async (req, res) => {
       fromHackerNews(profile),
       fromJobicy(profile),
       fromHimalayas(profile),
+      fromFreelancer(profile),
+      fromWeWorkRemotely(profile),
       atsBoards.huntBoards(boardMatch, {
         budgetMs: 6000,
         perBoard: 4,
@@ -635,7 +708,8 @@ router.post('/search', upload.single('file'), async (req, res) => {
       }),
     ]);
 
-    const names = ['Remotive', 'RemoteOK', 'Arbeitnow', 'HN Who is Hiring', 'Jobicy', 'Himalayas', 'Company ATS boards'];
+    const names = ['Remotive', 'RemoteOK', 'Arbeitnow', 'HN Who is Hiring', 'Jobicy', 'Himalayas',
+      'Freelancer', 'WeWorkRemotely', 'Company ATS boards'];
     const sources = settled.map((s, i) => ({
       name: names[i],
       ok: s.status === 'fulfilled',
