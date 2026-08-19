@@ -686,7 +686,11 @@ router.post('/search', upload.single('file'), async (req, res) => {
         const inText = directLink.extractApplyLink(j.description, j.url);
         if (inText) { j.directUrl = inText.url; j.directKind = inText.kind; }
       });
-      await directLink.resolveBatch(live.filter((j) => !j.directUrl).slice(0, 12), { budgetMs: 10000 });
+      await directLink.resolveBatch(live.filter((j) => !j.directUrl).slice(0, 20), { budgetMs: 15000 });
+
+      /* Direct openings are the product; they lead. Within each group the
+         fit ordering stands unchanged. */
+      live.sort((a, j2) => (j2.directUrl ? 1 : 0) - (a.directUrl ? 1 : 0) || (ordering(j2) - ordering(a)));
     }
     live.forEach((j) => {
       j.fit5 = Math.max(1, Math.min(5, Math.round((j.fit.percent || 0) / 20)));
