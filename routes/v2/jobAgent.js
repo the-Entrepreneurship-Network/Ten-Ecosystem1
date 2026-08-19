@@ -738,6 +738,19 @@ router.post('/search', upload.single('file'), async (req, res) => {
 
     /* This hunt feeds the memory the next one reads — resolved links included. */
     jobCache.remember(live.filter((j) => !j.fromCache));
+
+    /*
+     * Direct links only, by default.
+     *
+     * Asked for repeatedly and correctly: a row whose link opens a board
+     * search page is not an opening, it is homework. Only rows that land on
+     * the employer's own posting survive — company ATS boards supply most of
+     * them by construction, resolution supplies the rest. Pass directOnly=0
+     * to see the board-listed remainder too.
+     */
+    const directOnly = !(b.directOnly === '0' || b.directOnly === false);
+    const shown = directOnly ? live.filter((j) => j.directUrl) : live;
+    const withheld = live.length - shown.length;
     live.forEach((j) => {
       j.fit5 = Math.max(1, Math.min(5, Math.round((j.fit.percent || 0) / 20)));
       j.linkLabel = j.directUrl
@@ -752,14 +765,16 @@ router.post('/search', upload.single('file'), async (req, res) => {
          asking for the file again — a PDF was parsed here, not in the
          browser, so this is the only copy of the text it has. */
       resumeText: resumeText.slice(0, 30000),
-      jobs: live,
+      jobs: shown,
+      withheld,
       counts: {
-        total: live.length,
-        strong: live.filter((j) => j.fit.band === 'strong').length,
-        moderate: live.filter((j) => j.fit.band === 'moderate').length,
-        stretch: live.filter((j) => j.fit.band === 'stretch').length,
+        total: shown.length,
+        strong: shown.filter((j) => j.fit.band === 'strong').length,
+        moderate: shown.filter((j) => j.fit.band === 'moderate').length,
+        stretch: shown.filter((j) => j.fit.band === 'stretch').length,
         deadLinksDropped: scored.length - live.length,
-        fromMemory: live.filter((j) => j.fromCache).length,
+        fromMemory: shown.filter((j) => j.fromCache).length,
+        withheldNoDirectLink: withheld,
       },
       /* Said plainly when the boards were unreachable and memory answered. */
       cacheNote: boardsAllDown && live.some((j) => j.fromCache)
