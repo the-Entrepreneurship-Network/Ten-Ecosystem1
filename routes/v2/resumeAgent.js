@@ -337,7 +337,16 @@ function parseDetails(input) {
   return d;
 }
 
-const splitItems = (v) => String(v || '').split(/[;|]|\s*\n\s*/).map((s) => s.trim()).filter(Boolean);
+/*
+ * Items a student typed. Their own bullet characters are stripped: pasting
+ * "• B.Tech CSE" and having the builder prepend its own dash produced
+ * "- • B.Tech CSE" on the shipped page — two bullets, one line, and a parser
+ * reading a stray glyph as content.
+ */
+const splitItems = (v) => String(v || '')
+  .split(/[;|]|\s*\n\s*/)
+  .map((s) => s.trim().replace(/^[-*•▪◦‣·]+\s*/, '').trim())
+  .filter(Boolean);
 
 /* Bullets are rewritten to open with an action verb, because that is a
    scored check — the builder must not ship what the scanner would fail. */
@@ -668,6 +677,40 @@ router.post('/build.pdf', async (req, res) => {
 });
 
 /*
+ * The resume as a .docx — what the ats-resume skill prefers for Workday and
+ * Taleo, and what several of the referenced builders ship first. Scored from
+ * the same text, since a Word file's paragraphs are the reading order.
+ */
+router.post('/build.docx', upload.single('file'), async (req, res) => {
+  try {
+    const b = bodyOf(req);
+    let text = (await textFromUpload(req.file)) || b.resumeText || b.text || '';
+
+    /* A details payload builds first; raw resume text is converted. */
+    if (!text.trim() && (b.details || b.name || b.skills)) {
+      text = buildResume(b.details || b).text;
+    } else if (text.trim() && b.convert !== '0') {
+      text = atsEngine.rewriteResume(text, { target: b.target || b.role, jd: b.jd }).resume;
+    }
+    if (!text.trim()) {
+      return res.status(400).json({ ok: false, error: 'Send a resume: attach a file, paste the text, or give your details.' });
+    }
+
+    const { resumeDocxBuffer } = require('../../services/v2/resumeDocx');
+    const buf = await resumeDocxBuffer(text);
+    const report = scanResume(text, b.target || b.role);
+    const name = (text.split('\n')[0] || 'resume').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="${name || 'resume'}-TEN.docx"`);
+    res.setHeader('X-ATS-Score', String(report.score));
+    res.send(buf);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'Could not render the DOCX.' });
+  }
+});
+
+/*
  * The rewritten resume as a text-selectable, single-column PDF — ship gate
  * check 12's artefact. Scored from the text extracted back out of the
  * rendered file, the same proof the build.pdf route gives.
@@ -734,6 +777,62 @@ const FIX_INTENT = /\b(fix|resolve|improve|repair|rebuild|solve|correct)( it| th
  */
 const SCORE_INTENT = /make it \d+|\b\d{2}\s*\/\s*100\b|\bunrejectable\b|max(imi[sz]e)?( the)? score|\b(raise|boost|increase) (the |my )?score\b|\bfull marks\b|\bbest score\b/;
 
+/**
+ * The honest levers, run to exhaustion before any number is quoted.
+ *
+ * The rule this exists to keep: when someone asks for 98 they are not asking
+ * for 90. Every point that formatting, headings, verbs, keyword placement or
+ * length can win must be won first — and only a missing FACT may stop the
+ * climb. Then the ceiling is stated with the one fact that would lift it,
+ * and never closed by inventing that fact.
+ *
+ * Returns the best text it could reach plus what is still costing points and
+ * whether a real fact is the blocker.
+ */
+function raiseToTarget(text, target, jd, goal) {
+  const want = goal || 98;
+  let best = String(text || '');
+  let report = scanResume(best, target);
+
+  /* Lever 1 — the parse-safe rebuild. Single column, standard headings,
+     verbs fronted, unevidenced skills dropped: all format, no new claims. */
+  const packet = atsEngine.rewriteResume(best, { target, jd, mode: 'CONVERT' });
+  const rebuiltReport = scanResume(packet.resume, target);
+  if (rebuiltReport.score > report.score) { best = packet.resume; report = rebuiltReport; }
+
+  /* Lever 2 — verb fronting on any bullet the rebuild left without one.
+     Wording only: the fact in the bullet is untouched. */
+  if (report.score < want) {
+    const relined = best.split('\n').map((line, i) => {
+      if (!/^-\s+/.test(line)) return line;
+      const body = line.replace(/^-\s+/, '');
+      const fronted = toBullet(body, i);
+      return fronted ? `- ${fronted}` : line;
+    }).join('\n');
+    const r2 = scanResume(relined, target);
+    if (r2.score > report.score) { best = relined; report = r2; }
+  }
+
+  /* What is still costing points, and whether it is a fact or a format. */
+  const failing = report.checks.filter((c) => c.earned < c.weight)
+    .map((c) => ({ id: c.id, lost: Math.round(c.weight - c.earned), detail: c.detail, fix: c.fix }))
+    .sort((a, b) => b.lost - a.lost);
+
+  /* Only these can be closed by the person, not by the writer. */
+  const FACT_BLOCKED = { quantified: 'one real number for your strongest bullet — users, records, time saved, team size', skills: 'one more evidenced skill the target role asks for', length: 'more detail on what you actually built', contact: 'your email and phone', dates: 'the months and years for each role', sections: 'the missing section' };
+  const blocker = failing.find((f) => FACT_BLOCKED[f.id]);
+
+  return {
+    text: best,
+    report,
+    reached: report.score >= want,
+    failing,
+    /* The one question that would unlock the most points. */
+    needFact: !report.score || report.score >= want ? null
+      : (blocker ? { id: blocker.id, ask: FACT_BLOCKED[blocker.id], lost: blocker.lost } : null),
+  };
+}
+
 /* "do all" is its own command in the ten-resume-agent skill: a pipeline that
    checks first and only tailors when a JD exists — never four menus. */
 const DO_ALL = /\bdo (it all|all|everything|them all)\b|\brun everything\b|\bfull pipeline\b/;
@@ -750,7 +849,10 @@ function commandOf(low, hasFile) {
   if (/\bcompare\b|which (job|jd|posting)|between these (jobs|jds)/.test(low)) return 'compare';
   if (/\binterview prep\b|\bprep\b|defen[cs]e|walk me through/.test(low)) return 'prep';
   if (/\bgap\b|what('?s| is) missing|why would this fail|missing keyword/.test(low)) return 'gap';
-  if (/\btailor|rewrite|convert|recreate|make (it|this|my resume) ats|for (this|the) (jd|job|company)\b|\b(another|new) version for\b/.test(low) || FIX_INTENT.test(low) || SCORE_INTENT.test(low)) return 'tailor';
+  /* "make it 98/100" is its own command — exhaust the levers, then state the
+     ceiling. Routing it to tailor is how it used to answer 90 and stop. */
+  if (SCORE_INTENT.test(low)) return 'raise';
+  if (/\btailor|rewrite|convert|recreate|make (it|this|my resume) ats|for (this|the) (jd|job|company)\b|\b(another|new) version for\b/.test(low) || FIX_INTENT.test(low)) return 'tailor';
   if (/\bscan|check|score|review|rate my|is this rejectable|ats.?(friendly|ready)\b/.test(low)) return 'check';
   if (/\bbuild|create|write|generate|new resume|from scratch|forge\b/.test(low)) return 'build';
   if (hasFile) return 'check'; /* a file with no words means "look at this" */
@@ -869,8 +971,8 @@ function deliver(res, session, packetOrBuilt, kindNote) {
   }
 
   const header = isPacket
-    ? deliveryHeader('A', command || 'tailor', packetOrBuilt.band, packetOrBuilt)
-    : `Path: B · Command: build · Band: Scratch\nProxy only. Not a live Workday/Greenhouse decision — Greenhouse does not auto-score resumes.`;
+    ? `Seat: RESUME · ${deliveryHeader('A', command || 'tailor', packetOrBuilt.band, packetOrBuilt)}`
+    : `Seat: RESUME · Command: ${command || 'build'} · Band: Scratch\nProxy only. Not a live Workday/Greenhouse decision — Greenhouse does not auto-score resumes.`;
 
   return res.json({
     ok: true, kind: 'build',
@@ -960,9 +1062,11 @@ router.post('/chat', upload.single('file'), async (req, res) => {
 
     /* Reply shape from the ten-resume-agent skill: line 1 names the command,
        then the work or one question — never a greeting, never the menu. */
+    /* The router's reply shape: seat, then command, then the work or one
+       question. Never a greeting, never the menu. */
     const ask = (field, question, note) => {
       session.asked = field;
-      const head = session.command ? `Command: ${session.command}` : null;
+      const head = session.command ? `Seat: RESUME · Command: ${session.command}` : null;
       return res.json({ ok: true, kind: 'ask', reply: [head, note, question].filter(Boolean).join('\n\n'), session });
     };
 
@@ -1007,6 +1111,51 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         rebuilt: { text: packet.resume, packet },
         session,
       });
+    }
+
+    /*
+     * raise — "make it 98/100". Runs every honest lever, then either ships at
+     * the target or names the single fact that is holding the number down.
+     * It never answers 90 and stops, and it never invents the fact.
+     */
+    if (session.command === 'raise') {
+      if (!session.resumeText.trim() && !Object.keys(session.details).length) {
+        session.command = 'build';
+        const q = nextQuestion(session).question;
+        if (q) return ask(q.field, q.question, 'Nothing to raise yet — let us build it first.');
+      }
+      const source = session.resumeText.trim() ||
+        Object.entries(session.details).map(([k, v]) => `${k}: ${v}`).join('\n');
+      const goal = parseInt((low.match(/\b(\d{2})\s*(?:\/\s*100)?\b/) || [])[1], 10) || 98;
+      const out = raiseToTarget(source, session.target, session.jd, goal);
+
+      session.resumeText = out.text; /* the climb is kept for the next turn */
+
+      if (out.reached) {
+        session.command = 'raise';
+        return deliver(res, session, { text: out.text, report: out.report, missing: [], potentialScore: out.report.score },
+          `Checker ${out.report.score}/100 · every parse, heading, verb and keyword lever spent on true facts. Nothing was invented to get here.`);
+      }
+
+      /* One question, the one worth the most points. */
+      if (out.needFact && !(session.declined || []).includes('raise-' + out.needFact.id)) {
+        session.declined = session.declined || [];
+        session.declined.push('raise-' + out.needFact.id);
+        session.pendingRaise = goal;
+        return ask('metric',
+          `At ${out.report.score}/100 the formatting levers are spent. The next ${out.needFact.lost} points need ${out.needFact.ask}. Give me that and I will finish the climb — or say skip and I will ship this honestly.`);
+      }
+
+      /* Ceiling stated, exactly as the rule requires. */
+      session.command = 'raise';
+      const ceiling = [
+        `Ceiling: Checker ${out.report.score}/100.`,
+        out.needFact
+          ? `To reach ${goal} I need ${out.needFact.ask}. I will not invent it.`
+          : `The remaining points need facts your history does not show. I will not invent them.`,
+        out.failing.length ? `Still costing points: ${out.failing.slice(0, 3).map((f) => `${f.id} (${f.lost})`).join(', ')}.` : '',
+      ].filter(Boolean).join(' ');
+      return deliver(res, session, { text: out.text, report: out.report, missing: [], potentialScore: goal }, ceiling);
     }
 
     if (session.command === 'tailor') {

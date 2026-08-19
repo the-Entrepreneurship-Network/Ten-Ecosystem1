@@ -28,6 +28,7 @@ const { fitness, atsMatch, requiredYears } = require('../../services/v2/jobFitne
 const { tailorResume, coverLetter, coldEmail, hrEmail } = require('../../services/v2/jobMaterials');
 const directLink = require('../../services/v2/jobDirectLink');
 const jobCache = require('../../services/v2/jobCache');
+const atsBoards = require('../../services/v2/atsBoards');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 router.use(express.urlencoded({ extended: true, limit: '2mb' }));
@@ -186,7 +187,7 @@ function relevance(hay, terms) {
 
 const UA = { 'User-Agent': 'TEN-JobAgent/1.0 (+https://entrepreneurshipnetwork.net)' };
 
-async function getJSON(url, ms = 9000) {
+async function getJSON(url, ms = 7000) {
   const res = await fetch(url, { headers: UA, signal: AbortSignal.timeout(ms) });
   if (!res.ok) throw new Error(`${res.status}`);
   return res.json();
@@ -609,6 +610,16 @@ router.post('/search', upload.single('file'), async (req, res) => {
     if (b.role) profile.role = b.role;
     if (b.location) profile.location = b.location;
 
+    /*
+     * Company ATS boards join the aggregators. Their rows arrive with the
+     * employer's own apply URL already attached — nothing to resolve — and
+     * they live on different hosts, so they still answer on a day when every
+     * aggregator is blocked. That was the "0 openings" the recording showed.
+     */
+    const boardTerms = matchTerms(profile);
+    const boardMatch = (row) =>
+      relevance(`${row.title} ${row.tags.join(' ')} ${row.location}`.toLowerCase(), boardTerms).relevant;
+
     const settled = await Promise.allSettled([
       fromRemotive(profile),
       fromRemoteOK(profile),
@@ -616,9 +627,15 @@ router.post('/search', upload.single('file'), async (req, res) => {
       fromHackerNews(profile),
       fromJobicy(profile),
       fromHimalayas(profile),
+      atsBoards.huntBoards(boardMatch, {
+        budgetMs: 6000,
+        perBoard: 4,
+        /* Rotate the window so the roster is covered across sessions. */
+        offset: Math.floor(Date.now() / 3600000),
+      }),
     ]);
 
-    const names = ['Remotive', 'RemoteOK', 'Arbeitnow', 'HN Who is Hiring', 'Jobicy', 'Himalayas'];
+    const names = ['Remotive', 'RemoteOK', 'Arbeitnow', 'HN Who is Hiring', 'Jobicy', 'Himalayas', 'Company ATS boards'];
     const sources = settled.map((s, i) => ({
       name: names[i],
       ok: s.status === 'fulfilled',
@@ -703,7 +720,16 @@ router.post('/search', upload.single('file'), async (req, res) => {
         const inText = directLink.extractApplyLink(j.description, j.url);
         if (inText) { j.directUrl = inText.url; j.directKind = inText.kind; }
       });
-      await directLink.resolveBatch(live.filter((j) => !j.directUrl).slice(0, 20), { budgetMs: 15000 });
+      /*
+       * Budgeted for a person watching a spinner, not for completeness. A
+       * recording showed "Hunting…" running past thirty seconds: six board
+       * fetches, then link verification, then fifteen seconds of resolution,
+       * all before a single row appeared. The text scan above is free and
+       * catches most of them; the network pass now gets six seconds over the
+       * top eight rows, and whatever it misses stays a labelled board link
+       * rather than holding up the answer.
+       */
+      await directLink.resolveBatch(live.filter((j) => !j.directUrl).slice(0, 8), { budgetMs: 6000 });
 
       /* Direct openings are the product; they lead. Within each group the
          fit ordering stands unchanged. */
@@ -770,14 +796,21 @@ function jobIdOf(job) {
  *
  * Checks run in small batches so a slow board cannot hold up the response.
  */
-async function verifyLinks(jobs, budgetMs = 6000) {
+async function verifyLinks(jobs, budgetMs = 4000) {
   const deadline = Date.now() + budgetMs;
   const BATCH = 8;
 
-  for (let i = 0; i < jobs.length; i += BATCH) {
+  /* A row that came from a company's own ATS API is already proven — the
+     board would not have returned it otherwise. Spending a HEAD request on it
+     buys nothing and costs the student seconds of spinner. It is skipped from
+     CHECKING, not from the results: filtering the working list here would
+     have deleted every company posting from the answer. */
+  const toCheck = jobs.filter((j) => !(j.directKind === 'ats' && j.directUrl));
+
+  for (let i = 0; i < toCheck.length; i += BATCH) {
     if (Date.now() > deadline) break;   // whatever is unchecked stays in, unmarked
 
-    await Promise.all(jobs.slice(i, i + BATCH).map(async (job) => {
+    await Promise.all(toCheck.slice(i, i + BATCH).map(async (job) => {
       if (!job.url) { job.linkChecked = false; return; }
       try {
         const res = await fetch(job.url, {
@@ -820,8 +853,10 @@ function ageOf(posted) {
   if (!when || Number.isNaN(when)) return { days: null, label: 'date unknown' };
   const days = Math.max(0, Math.floor((Date.now() - when) / 86400000));
   if (days <= 7) return { days, label: 'this week' };
-  if (days <= 56) return { days, label: `${Math.max(1, Math.round(days / 7))} weeks ago` };
-  return { days, label: `${Math.max(2, Math.round(days / 30))} months ago` };
+  if (days <= 13) return { days, label: 'last week' };
+  if (days <= 56) return { days, label: `${Math.round(days / 7)} weeks ago` };
+  const months = Math.max(2, Math.round(days / 30));
+  return { days, label: `${months} months ago` };
 }
 
 /*

@@ -73,6 +73,24 @@ describe('job outreach', () => {
       expect(mockActivate).not.toHaveBeenCalled();
     });
 
+    it('"write an email to HR" is a draft request, never a send', async () => {
+      const { emailMode } = require('../../routes/v2/jobOutreach');
+      expect(emailMode('write an email to HR')).toBe('draft');
+      expect(emailMode('draft a mail to the recruiter')).toBe('draft');
+      expect(emailMode('reply to their mail')).toBe('reply');
+      expect(emailMode('send it')).toBe('send');
+      expect(emailMode('go ahead and send')).toBe('send');
+    });
+
+    it('refuses to send when the sentence that asked only wanted a draft', async () => {
+      const res = await request(app())
+        .post('/api/v2/job-outreach/send').set(AUTH)
+        .send({ campaignId: 'camp-1', confirm: true, intent: 'write an email to HR' });
+      expect(res.status).toBe(400);
+      expect(res.body.mode).toBe('draft');
+      expect(mockActivate).not.toHaveBeenCalled();
+    });
+
     it('sends only when confirm is true', async () => {
       const res = await request(app())
         .post('/api/v2/job-outreach/send').set(AUTH).send({ campaignId: 'camp-1', confirm: true });
