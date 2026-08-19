@@ -3,7 +3,7 @@ name: ats-resume
 description: Mega resume agent that checks an uploaded PDF like ATS and HR, interviews to rebuild weak files, builds from scratch, or tailors a master fact ledger to a job. Combines career-profile interview, gated JD tailoring, keyword gap tables, XYZ bullets, anti-AI wording, locale rules, versioning, and PDF/DOCX export. Use when the user uploads a resume, wants 98/100 ATS, tailor for a company, compare JDs, or make it unrejectable without fabricating experience.
 metadata:
   type: workflow
-  version: "5.1"
+  version: "5.2"
   sources: vignzpie, Chasen-Liao, NoahMustafa, dabydat, olegvg, domala81, SankaiAI, nishilbhave, jeromeetienne
 ---
 
@@ -31,6 +31,7 @@ Load as needed:
 14. `references/commands-and-open.md` — what to run and which file to open
 15. `references/install-agents.md` — where to unzip this skill
 16. `references/output-contract.md` — delivery shape
+17. `references/popular-builder-features.md` — Rezi / Teal / Jobscan / LinkedIn extras
 
 PDF in/out → `pdf` skill. DOCX → `docx` skill.
 
@@ -64,6 +65,9 @@ Default: file → A, else B. C when both ledger and JD/company exist.
 | compare these jobs | compare (2–5 JDs) |
 | cover letter | cover (optional, after resume ships) |
 | interview prep | 5-line defense + gap scripts from gap-and-diff.md |
+| match score / Jobscan | check + JD |
+| LinkedIn headline | 5-line profile text |
+| version for Company X | new derivative |
 
 ## Master fact ledger
 
