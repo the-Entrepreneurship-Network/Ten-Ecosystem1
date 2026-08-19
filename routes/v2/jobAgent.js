@@ -57,8 +57,44 @@ const TITLE_HINTS = [
   ['software engineer', ['software engineer','sde','software developer']],
   ['business analyst', ['business analyst','product analyst']],
   ['ui ux designer', ['ux designer','ui designer','product designer']],
-  ['hr executive', ['human resource','hr executive','recruiter','talent acquisition']],
+  ['hr executive', ['human resource','hr executive','recruiter','talent acquisition','recruitment','onboarding','payroll','hris','people operations','campus hiring']],
+  ['marketing executive', ['marketing','seo','social media','content writing','campaign']],
+  ['finance analyst', ['financial modelling','valuation','accounts','audit','bookkeeping']],
 ];
+
+/*
+ * Which role bank a resume's skills point at, used when no title phrase
+ * appeared. Defaulting to "software engineer" mislabelled an HR resume — it
+ * listed recruitment, onboarding, HRIS and payroll — and then handed that
+ * person a maintenance job, because every later filter trusted the wrong
+ * target. Counting evidence beats assuming a default.
+ */
+const ROLE_SKILL_BANK = {
+  'full stack developer': ['react', 'node', 'express', 'mongodb', 'typescript', 'redux', 'next.js'],
+  'frontend developer': ['react', 'html', 'css', 'tailwind', 'javascript', 'accessibility'],
+  'backend developer': ['node', 'express', 'sql', 'postgresql', 'rest api', 'microservices'],
+  'python developer': ['python', 'django', 'flask', 'fastapi'],
+  'java developer': ['java', 'spring', 'spring boot', 'hibernate'],
+  'mobile developer': ['flutter', 'dart', 'android', 'ios', 'kotlin', 'swift'],
+  'data scientist': ['machine learning', 'deep learning', 'tensorflow', 'pytorch', 'scikit-learn', 'nlp'],
+  'data analyst': ['sql', 'excel', 'power bi', 'tableau', 'pandas', 'data analysis', 'data visualization'],
+  'devops engineer': ['docker', 'kubernetes', 'terraform', 'jenkins', 'aws', 'ci/cd', 'linux', 'azure', 'gcp'],
+  'security analyst': ['cyber security', 'penetration testing', 'owasp', 'siem', 'soc', 'cryptography'],
+  'hr executive': ['recruitment', 'onboarding', 'payroll', 'hris'],
+  'marketing executive': ['seo', 'social media', 'content writing', 'market research'],
+  'finance analyst': ['financial modelling', 'valuation', 'excel'],
+};
+
+function roleFromSkills(skills) {
+  let best = '';
+  let bestHits = 0;
+  for (const [role, words] of Object.entries(ROLE_SKILL_BANK)) {
+    const hits = words.filter((w) => skills.includes(w)).length;
+    if (hits > bestHits) { bestHits = hits; best = role; }
+  }
+  /* Two overlapping skills is thin evidence but still evidence; one is noise. */
+  return bestHits >= 2 ? best : '';
+}
 
 const SENIORITY = [
   ['intern', ['intern','internship','trainee']],
@@ -68,6 +104,43 @@ const SENIORITY = [
 ];
 
 const INDIAN_CITIES = ['bengaluru','bangalore','hyderabad','pune','mumbai','delhi','noida','gurgaon','gurugram','chennai','kolkata','ahmedabad','jaipur','indore','bhubaneswar','remote'];
+
+/*
+ * Roles that hire from the same pool.
+ *
+ * A full-stack developer is a serious candidate for a backend or a frontend
+ * post, and a recruiter advertising "Software Engineer" would happily read
+ * their CV. Matching only the exact title handed one contact to a strong
+ * profile and hid four others that were the same job under a different name,
+ * so a role brings its neighbours with it. Each list is deliberately
+ * conservative: a neighbour is a role the person could defend in an
+ * interview, not merely one in the same industry.
+ */
+const ADJACENT_ROLES = {
+  'full stack developer': ['full stack', 'fullstack', 'backend', 'back end', 'frontend', 'front end', 'software engineer', 'web developer', 'mern'],
+  'frontend developer': ['frontend', 'front end', 'ui developer', 'react developer', 'web developer', 'full stack', 'software engineer'],
+  'backend developer': ['backend', 'back end', 'api developer', 'full stack', 'software engineer', 'platform engineer'],
+  'software engineer': ['software engineer', 'software developer', 'backend', 'frontend', 'full stack', 'sde', 'application engineer'],
+  'python developer': ['python', 'backend', 'django', 'flask', 'software engineer', 'data engineer'],
+  'java developer': ['java', 'backend', 'spring', 'software engineer'],
+  'mobile developer': ['mobile', 'android', 'ios', 'flutter', 'react native'],
+  'data scientist': ['data scientist', 'machine learning', 'ml engineer', 'data analyst', 'ai engineer', 'research engineer'],
+  'data analyst': ['data analyst', 'analytics', 'business intelligence', 'data engineer', 'reporting analyst', 'data scientist'],
+  'devops engineer': ['devops', 'sre', 'site reliability', 'platform engineer', 'cloud engineer', 'infrastructure'],
+  'security analyst': ['security', 'soc analyst', 'infosec', 'penetration tester', 'application security'],
+  'business analyst': ['business analyst', 'product analyst', 'operations analyst', 'data analyst'],
+  'ui ux designer': ['ux designer', 'ui designer', 'product designer', 'interaction designer'],
+  'hr executive': ['hr', 'human resource', 'recruiter', 'talent acquisition', 'people operations'],
+};
+
+/** The role plus the roles a recruiter would consider equivalent to it. */
+function roleFamily(role) {
+  const key = String(role || '').toLowerCase().trim();
+  const listed = ADJACENT_ROLES[key];
+  if (listed) return [key, ...listed];
+  /* Unknown role: its own distinctive words still stand in for the family. */
+  return [key, ...key.split(/\s+/).filter((w) => w.length > 3 && !ROLE_STOP.has(w))];
+}
 
 function profileFromResume(text) {
   const raw = String(text || '');
@@ -85,7 +158,11 @@ function profileFromResume(text) {
     /* fall back to a title line near the top — most resumes put it under the name */
     const head = raw.split(/\r?\n/).slice(0, 6).join(' ').toLowerCase();
     const guess = TITLE_HINTS.find(([, hints]) => hints.some((h) => head.includes(h)));
-    role = guess ? guess[0] : (skills.includes('react') || skills.includes('node') ? 'full stack developer' : 'software engineer');
+    /* Then what the skills themselves say, and only then a default — an
+       unrecognised resume is not automatically a software engineer. */
+    role = guess ? guess[0]
+      : roleFromSkills(skills)
+      || (skills.includes('react') || skills.includes('node') ? 'full stack developer' : 'software engineer');
   }
 
   let seniority = 'entry';
@@ -701,6 +778,8 @@ router.post('/search', upload.single('file'), async (req, res) => {
      * aggregator is blocked. That was the "0 openings" the recording showed.
      */
     const boardTerms = matchTerms(profile);
+    /* The target role and everything a recruiter would consider equivalent. */
+    const family = roleFamily(profile.role);
     const boardMatch = (row) =>
       relevance(`${row.title} ${row.tags.join(' ')} ${row.location}`.toLowerCase(), boardTerms).relevant;
 
@@ -866,11 +945,54 @@ router.post('/search', upload.single('file'), async (req, res) => {
        */
       recruiters: recruiterContacts.collectRecruiters(
         deduped
-          /* The same six-month window the openings use. A contact attached to
-             a posting from years ago is not a door, and "(78 months ago)"
-             beside an address is the agent admitting it did not check. */
-          .filter((j) => { const a = ageOf(j.posted); return a.days === null || a.days <= MAX_POSTING_DAYS; })
-          .map((j) => ({ ...j, postedAgo: ageOf(j.posted).label }))),
+          /*
+           * Six weeks, and only postings for the work this person does.
+           *
+           * A recruiter list is a list of people to write to today, so two
+           * filters apply that the openings table does not need. Age is the
+           * first: past six weeks the advert is stale and the reply rate with
+           * it. Relevance is the second — a student who uploaded a full-stack
+           * resume should not be handed the email address of someone hiring a
+           * radiographer. Both are judged the same way the openings are, so
+           * the two lists agree about what this person is looking for.
+           */
+          .filter((j) => {
+            const a = ageOfContact(j.posted);
+            if (a.days !== null && a.days > RECRUITER_MAX_DAYS) return false;
+            /*
+             * Matched on what the advert is FOR, not on everything it says.
+             *
+             * Scanning the whole body sent a Social Selling internship to a
+             * data analyst because the text mentioned SQL once. Matching the
+             * title alone went too far the other way: a Hacker News post has
+             * no title field, only the first line of a comment, so the rows
+             * that actually carry contacts all disappeared.
+             *
+             * The role is stated in the title and in the opening of the post —
+             * "Company | Senior Backend Engineer | Remote" — so that is the
+             * span that has to match, and the requirements paragraph three
+             * screens down does not get a vote.
+             */
+            const roleSpan = `${j.title || ''} ${(j.tags || []).join(' ')} ${String(j.description || '').slice(0, 220)}`
+              .toLowerCase();
+
+            /*
+             * The target role, or one a recruiter would treat as the same
+             * hiring pool. Nothing else: the general relevance fallback let a
+             * "Maintenance and Grounds Officer" reach a DevOps profile
+             * because a single word overlapped somewhere in the opening
+             * paragraph. A recruiter list is a list of people to write to
+             * about your own job, so a near-miss is worse than a short list.
+             */
+            if (family.some((r) => roleSpan.includes(r))) return true;
+
+            /* Or an advert whose named skills are substantially this person's
+               stack — two or more, so one shared word cannot carry it. */
+            const skillHits = (profile.skills || [])
+              .filter((s) => hasWord(roleSpan, s)).length;
+            return skillHits >= 2;
+          })
+          .map((j) => ({ ...j, postedAgo: ageOfContact(j.posted).label }))),
       counts: {
         total: shown.length,
         strong: shown.filter((j) => j.fit.band === 'strong').length,
@@ -979,6 +1101,31 @@ function ageOf(posted) {
 }
 
 /*
+ * A contact goes cold far faster than a posting does. Six weeks is the
+ * outside edge of a recruiter still recognising the advert you are answering,
+ * so the recruiter list stops there rather than at the openings' six months —
+ * and it counts in hours, days and weeks, never months, because "3 days ago"
+ * is the difference between writing today and not bothering.
+ */
+const RECRUITER_MAX_DAYS = 42;
+
+function ageOfContact(posted) {
+  if (!posted) return { days: null, label: '' };
+  const when = new Date(posted).getTime();
+  if (!when || Number.isNaN(when)) return { days: null, label: '' };
+
+  const ms = Math.max(0, Date.now() - when);
+  const hours = Math.floor(ms / 3600000);
+  const days = Math.floor(ms / 86400000);
+
+  if (hours < 1) return { days, label: 'just now' };
+  if (hours < 24) return { days, label: `${hours} hour${hours === 1 ? '' : 's'} ago` };
+  if (days < 7) return { days, label: `${days} day${days === 1 ? '' : 's'} ago` };
+  const weeks = Math.round(days / 7);
+  return { days, label: `${weeks} week${weeks === 1 ? '' : 's'} ago` };
+}
+
+/*
  * Materials for one posting. Given the resume and the job, returns a tailored
  * resume and a cover letter aimed at it — plus, honestly, the gap list of
  * things the posting wanted that the resume cannot support.
@@ -1054,6 +1201,8 @@ router.post('/resolve', async (req, res) => {
 module.exports = router;
 module.exports.profileFromResume = profileFromResume;
 module.exports.jobIdOf = jobIdOf;
+module.exports.ageOfContact = ageOfContact;
+module.exports.RECRUITER_MAX_DAYS = RECRUITER_MAX_DAYS;
 module.exports.isStale = isStale;
 module.exports.xray = xray;
 module.exports.platformSearches = platformSearches;
