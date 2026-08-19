@@ -27,6 +27,7 @@ const multer = require('multer');
 const { fitness, atsMatch, requiredYears } = require('../../services/v2/jobFitness');
 const { tailorResume, coverLetter, coldEmail, hrEmail } = require('../../services/v2/jobMaterials');
 const directLink = require('../../services/v2/jobDirectLink');
+const jobCache = require('../../services/v2/jobCache');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 router.use(express.urlencoded({ extended: true, limit: '2mb' }));
@@ -636,15 +637,31 @@ router.post('/search', upload.single('file'), async (req, res) => {
     });
 
     /*
+     * The agent's memory joins the hunt: every opening seen on an earlier
+     * pass that this one has not refound, marked with its age. When every
+     * board fails at once — an outage, blocked egress — the memory IS the
+     * answer, rather than "0 openings" from an agent that has seen hundreds.
+     */
+    const boardsAllDown = sources.every((s) => !s.ok);
+    const remembered = jobCache.recall(seen);
+    remembered.forEach((j) => deduped.push(j));
+
+    /*
      * Scored, not just sorted. Relevance decides whether a listing belongs in
      * the list at all; fitness answers the question the student is actually
      * asking, which is whether it is worth their evening to apply.
      */
     const resumeText = resumeSource;
-    const scored = rank(deduped, profile).slice(0, 40).map((job) => ({
+    /* Six months is the window; older is presumed filled and never shown. */
+    const inWindow = deduped.filter((j) => {
+      const age = ageOf(j.posted);
+      return age.days === null || age.days <= MAX_POSTING_DAYS;
+    });
+    const scored = rank(inWindow, profile).slice(0, 40).map((job) => ({
       ...job,
       jobId: jobIdOf(job),
       stale: isStale(job.posted),
+      postedAgo: ageOf(job.posted).label,
       fit: fitness(profile, job),
       ats: resumeText
         ? atsMatch(resumeText, `${job.title} ${job.description || ''}`, profile.skills, job.title)
@@ -692,6 +709,9 @@ router.post('/search', upload.single('file'), async (req, res) => {
          fit ordering stands unchanged. */
       live.sort((a, j2) => (j2.directUrl ? 1 : 0) - (a.directUrl ? 1 : 0) || (ordering(j2) - ordering(a)));
     }
+
+    /* This hunt feeds the memory the next one reads — resolved links included. */
+    jobCache.remember(live.filter((j) => !j.fromCache));
     live.forEach((j) => {
       j.fit5 = Math.max(1, Math.min(5, Math.round((j.fit.percent || 0) / 20)));
       j.linkLabel = j.directUrl
@@ -713,7 +733,12 @@ router.post('/search', upload.single('file'), async (req, res) => {
         moderate: live.filter((j) => j.fit.band === 'moderate').length,
         stretch: live.filter((j) => j.fit.band === 'stretch').length,
         deadLinksDropped: scored.length - live.length,
+        fromMemory: live.filter((j) => j.fromCache).length,
       },
+      /* Said plainly when the boards were unreachable and memory answered. */
+      cacheNote: boardsAllDown && live.some((j) => j.fromCache)
+        ? 'The live boards were unreachable this pass — these are the openings from earlier hunts, each marked with when it was seen.'
+        : null,
       sources,
       searches: platformSearches(profile),
     });
@@ -778,6 +803,25 @@ function isStale(posted) {
   const when = new Date(posted).getTime();
   if (!when || Number.isNaN(when)) return false;
   return (Date.now() - when) / 86400000 > 30;
+}
+
+/*
+ * The window is six months, and every row says where in it it sits. A student
+ * asked for older vacancies too — weeks, months back — and the honest way to
+ * include them is with their age on the card, so "2 months ago" is a choice
+ * the reader makes, not a surprise the interview reveals. Past six months a
+ * posting is presumed gone and does not appear at all.
+ */
+const MAX_POSTING_DAYS = 183;
+
+function ageOf(posted) {
+  if (!posted) return { days: null, label: 'date unknown' };
+  const when = new Date(posted).getTime();
+  if (!when || Number.isNaN(when)) return { days: null, label: 'date unknown' };
+  const days = Math.max(0, Math.floor((Date.now() - when) / 86400000));
+  if (days <= 7) return { days, label: 'this week' };
+  if (days <= 56) return { days, label: `${Math.max(1, Math.round(days / 7))} weeks ago` };
+  return { days, label: `${Math.max(2, Math.round(days / 30))} months ago` };
 }
 
 /*

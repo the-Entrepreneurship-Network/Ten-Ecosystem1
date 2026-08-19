@@ -266,6 +266,12 @@ describe('impact bullets', () => {
     expect(impactBullet('worked on a student portal')).toBe('A student portal');
   });
 
+  it('strips first person — a resume bullet is not a diary line', () => {
+    expect(impactBullet('I built the payments API in Go')).toBe('Built the payments API in Go');
+    expect(impactBullet('We have shipped three releases')).toBe('Shipped three releases');
+    expect(impactBullet('I was managing a team of 4')).toBe('Managing a team of 4');
+  });
+
   it('leaves a strong bullet alone', () => {
     expect(impactBullet('Built REST APIs in Spring Boot')).toBe('Built REST APIs in Spring Boot');
   });

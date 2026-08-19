@@ -48,6 +48,14 @@ describe('extracting the apply link from a board page', () => {
     expect(found.kind).toBe('company');
   });
 
+  it('a privacy notice under /careers/ is not a job — nor is any document download', () => {
+    // A live run shipped a recruitment-privacy PDF as "the opening".
+    const html = `
+      <a href="https://www.baringa.com/globalassets/careers/dp-004-privacy-notice.pdf">notice</a>
+      <a href="https://acme.com/careers/terms-and-conditions">terms</a>`;
+    expect(extractApplyLink(html, BOARD)).toBeNull();
+  });
+
   it('never returns a login wall or another aggregator', () => {
     const html = `
       <a href="https://acme.com/login">sign in</a>

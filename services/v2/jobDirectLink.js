@@ -115,10 +115,15 @@ function extractApplyLink(html, boardUrl) {
   const ats = candidates.find(isAts);
   if (ats) return { url: ats, kind: 'ats' };
 
-  /* A careers path on a non-aggregator host is the employer's own page. */
+  /* A careers path on a non-aggregator host is the employer's own page —
+     but not their privacy notice that happens to live under /careers/, and
+     not a document download. A live run resolved a recruitment-privacy PDF
+     as "the job", which is worse than no link at all. */
   const company = candidates.find((u) =>
     !isAggregator(u) && /careers?|jobs?|positions?|openings?|vacanc/i.test(u) &&
-    /[/-][a-z0-9-]{4,}/i.test(new URL(u).pathname));
+    /[/-][a-z0-9-]{4,}/i.test(new URL(u).pathname) &&
+    !/\.(pdf|docx?|xlsx?|zip)([?#]|$)/i.test(u) &&
+    !/privacy|notice|policy|terms|cookie|gdpr|legal/i.test(u));
   if (company) return { url: company, kind: 'company' };
 
   return null;

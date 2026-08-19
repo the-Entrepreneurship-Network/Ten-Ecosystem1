@@ -14,6 +14,35 @@ import KineticGrid from './KineticGrid';
 const API = '/api/v2/jobs';
 const inter = { fontFamily: "'Inter', sans-serif" };
 
+/*
+ * The application tracker, per the job-hunt skill's fit-and-track.md: one row
+ * per opening — date, company, role, url, fit, status, notes — statuses
+ * found | emailed | tailored | applied | closed, and never a duplicate URL.
+ * Lives in localStorage: applications are personal to this browser's owner.
+ */
+type TrackStatus = 'found' | 'emailed' | 'tailored' | 'applied' | 'closed';
+type TrackRow = {
+  date: string; company: string; role: string; url: string;
+  fit: number; status: TrackStatus; notes: string;
+};
+const TRACKER_KEY = 'ten_job_tracker';
+const TRACK_STATUSES: TrackStatus[] = ['found', 'emailed', 'tailored', 'applied', 'closed'];
+
+function loadTracker(): TrackRow[] {
+  try { return JSON.parse(localStorage.getItem(TRACKER_KEY) || '[]'); } catch { return []; }
+}
+function saveTracker(rows: TrackRow[]) {
+  try { localStorage.setItem(TRACKER_KEY, JSON.stringify(rows)); } catch { /* full */ }
+}
+/** Insert or update by URL — the spec's no-duplicates rule. */
+function upsertTrack(rows: TrackRow[], row: Omit<TrackRow, 'date'>): TrackRow[] {
+  const existing = rows.find((r) => r.url === row.url);
+  if (existing) {
+    return rows.map((r) => r.url === row.url ? { ...r, status: row.status, notes: row.notes || r.notes } : r);
+  }
+  return [{ ...row, date: new Date().toISOString().slice(0, 10) }, ...rows].slice(0, 100);
+}
+
 type Profile = { name: string | null; role: string; seniority: string; location: string; skills: string[] };
 type Fit = { percent: number; band: string; advice: string; confidence: number; reasons: string[] };
 type Job = {
@@ -21,6 +50,7 @@ type Job = {
   tags: string[]; url: string; posted: string | null; matched: string[]; score: number;
   fit?: Fit; jobId?: string; stale?: boolean;
   directUrl?: string; directKind?: 'ats' | 'company'; linkLabel?: string; fit5?: number;
+  fromCache?: boolean; seenDaysAgo?: number; postedAgo?: string;
 };
 type Search = { platform: string; why: string; url: string };
 type SourceStat = { name: string; ok: boolean; count: number; error: string | null };
@@ -52,6 +82,26 @@ export default function JobAgent() {
   const [materials, setMaterials] = useState<Materials | null>(null);
   const [making, setMaking] = useState('');
   const [manager, setManager] = useState('');
+  const [cacheNote, setCacheNote] = useState<string | null>(null);
+  const [tracker, setTracker] = useState<TrackRow[]>(loadTracker);
+
+  const track = (job: Job, status: TrackStatus) => {
+    const next = upsertTrack(tracker, {
+      company: job.company || '', role: job.title, url: job.directUrl || job.url,
+      fit: job.fit5 || Math.max(1, Math.round((job.fit?.percent || 20) / 20)),
+      status, notes: '',
+    });
+    setTracker(next); saveTracker(next);
+  };
+  const setTrackStatus = (url: string, status: TrackStatus) => {
+    const next = tracker.map((r) => r.url === url ? { ...r, status } : r);
+    setTracker(next); saveTracker(next);
+  };
+  const untrack = (url: string) => {
+    const next = tracker.filter((r) => r.url !== url);
+    setTracker(next); saveTracker(next);
+  };
+  const tracked = (job: Job) => tracker.some((r) => r.url === (job.directUrl || job.url));
 
   async function buildMaterials(job: Job) {
     setMaking(job.url);
@@ -66,6 +116,7 @@ export default function JobAgent() {
       const data = await res.json();
       if (!data.ok) throw new Error(data.error);
       setMaterials(data);
+      track(job, 'tailored'); /* fit-and-track.md: tailoring is a tracked event */
     } catch (e) {
       setError('Could not write the documents. Paste your resume text and try again.');
     } finally {
@@ -83,6 +134,7 @@ export default function JobAgent() {
       const res = await fetch(`${API}/search`, { method: 'POST', body });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'search failed');
+      setCacheNote(data.cacheNote || null);
       /* Held for the materials step. A PDF is parsed on the server, so its
          text comes back in the response rather than existing here. */
       setResumeText(data.resumeText || text || '');
@@ -209,6 +261,11 @@ export default function JobAgent() {
                     {sources.length > 0 && ' Sources: ' + sources.map((s) => `${s.name} ${s.ok ? s.count : '×'}`).join(' · ')}
                   </p>
 
+                  {cacheNote && (
+                    <p className="mb-3 rounded-xl border border-violet-400/25 bg-violet-400/[0.07] p-3 text-[12.5px] leading-relaxed text-violet-100/85">
+                      {cacheNote}
+                    </p>
+                  )}
                   <div className="space-y-2.5">
                     {jobs.length === 0 && (
                       <p className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-[13px] text-white/55">
@@ -229,6 +286,11 @@ export default function JobAgent() {
                           </a>
                           <div className="flex shrink-0 items-center gap-1.5">
                             {j.fit && <FitBadge fit={j.fit} />}
+                            {j.fromCache && (
+                              <span className="rounded-full border border-violet-400/30 bg-violet-400/10 px-2 py-0.5 text-[10px] tracking-wide text-violet-200/90">
+                                seen {j.seenDaysAgo === 0 ? 'today' : `${j.seenDaysAgo}d ago`}
+                              </span>
+                            )}
                             <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] tracking-wide text-white/60">{j.source}</span>
                           </div>
                         </div>
@@ -243,9 +305,9 @@ export default function JobAgent() {
                         {j.matched?.length > 0 && (
                           <p className="mt-1 text-[11.5px] text-sky-300/85">matches your {j.matched.join(', ')}</p>
                         )}
-                        {j.stale && (
-                          <p className="mt-1 text-[11px] text-amber-300/80">
-                            posted over 30 days ago — may be filled
+                        {j.postedAgo && (
+                          <p className={`mt-1 text-[11px] ${j.stale ? 'text-amber-300/80' : 'text-white/40'}`}>
+                            posted {j.postedAgo}{j.stale ? ' — confirm it is still open before investing an evening' : ''}
                           </p>
                         )}
 
@@ -277,12 +339,56 @@ export default function JobAgent() {
                               Opening via {j.source}
                             </a>
                           )}
+                          <button
+                            type="button"
+                            onClick={() => track(j, 'found')}
+                            disabled={tracked(j)}
+                            className="rounded-lg border border-violet-400/30 px-3 py-1.5 text-[12px] text-violet-200/90 hover:border-violet-300/60 disabled:opacity-40"
+                          >
+                            {tracked(j) ? 'Tracked ✓' : 'Save to tracker'}
+                          </button>
                           {j.jobId && <span className="text-[10.5px] text-white/30">{j.jobId}</span>}
                         </div>
                       </div>
                     ))}
                   </div>
                 </div>
+
+                {/* The application tracker — fit-and-track.md as a panel. */}
+                {tracker.length > 0 && (
+                  <div className="mt-8">
+                    <div className="mb-3 flex items-baseline justify-between">
+                      <h2 className="text-xl font-semibold text-white">
+                        Application tracker <span className="text-white/40">({tracker.length})</span>
+                      </h2>
+                      <span className="text-[11px] uppercase tracking-[0.14em] text-violet-300/80">saved in this browser</span>
+                    </div>
+                    <div className="space-y-2">
+                      {tracker.map((r) => (
+                        <div key={r.url} className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5">
+                          <div className="min-w-0 flex-1">
+                            <a href={r.url} target="_blank" rel="noopener noreferrer"
+                               className="block truncate text-[13px] font-semibold text-white hover:underline">
+                              {r.role}{r.company ? ` — ${r.company}` : ''}
+                            </a>
+                            <p className="text-[11px] text-white/40">{r.date} · fit {r.fit}/5</p>
+                          </div>
+                          <select
+                            value={r.status}
+                            onChange={(e) => setTrackStatus(r.url, e.target.value as TrackStatus)}
+                            className="rounded-lg border border-white/15 bg-[#0b1020] px-2 py-1 text-[12px] text-white/80"
+                          >
+                            {TRACK_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                          <button type="button" onClick={() => untrack(r.url)}
+                                  className="text-[12px] text-white/35 hover:text-rose-300" aria-label="Remove from tracker">
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Search packs, demoted to a drawer. They are searches, not
                     openings — useful for the login-walled platforms, never
@@ -317,7 +423,16 @@ export default function JobAgent() {
         </div>
       </div>
 
-      {materials && <MaterialsPanel data={materials} onClose={() => setMaterials(null)} />}
+      {materials && (
+        <MaterialsPanel
+          data={materials}
+          onClose={() => setMaterials(null)}
+          onEmailed={() => {
+            const j = jobs.find((x) => x.url === materials.job.url);
+            if (j) track(j, 'emailed');
+          }}
+        />
+      )}
     </KineticGrid>
   );
 }
@@ -344,7 +459,7 @@ function FitBadge({ fit }: { fit: Fit }) {
  * is shown as prominently as the resume itself: it is the part that decides
  * whether the application is worth sending.
  */
-function MaterialsPanel({ data, onClose }: { data: Materials; onClose: () => void }) {
+function MaterialsPanel({ data, onClose, onEmailed }: { data: Materials; onClose: () => void; onEmailed?: () => void }) {
   const copy = (text: string) => navigator.clipboard?.writeText(text);
 
   /* Sending is two deliberate steps: prepare puts the letter in Instantly as a
@@ -375,6 +490,7 @@ function MaterialsPanel({ data, onClose }: { data: Materials; onClose: () => voi
       if (!json.ok) throw new Error(json.error);
       setOutreach({ campaignId: json.campaignId, to: json.to });
       setSendState('ready');
+      onEmailed?.(); /* the tracker's "emailed" event, per the skill */
     } catch (e: any) {
       setSendError(e.message || 'Could not prepare the email.');
       setSendState('idle');
