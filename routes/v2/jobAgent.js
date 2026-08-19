@@ -30,6 +30,7 @@ const { tailorResume, coverLetter, coldEmail, hrEmail } = require('../../service
 const directLink = require('../../services/v2/jobDirectLink');
 const jobCache = require('../../services/v2/jobCache');
 const atsBoards = require('../../services/v2/atsBoards');
+const recruiterContacts = require('../../services/v2/recruiterContacts');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 router.use(express.urlencoded({ extended: true, limit: '2mb' }));
@@ -393,10 +394,21 @@ async function fromHackerNews(profile) {
    * where a comment is reliably a real vacancy, so the search is scoped to it:
    * find the latest thread by the whoishiring account, then search inside it.
    */
+  /*
+   * By date, not by relevance.
+   *
+   * Algolia's relevance ranking answers "who is hiring" with a thread from
+   * March 2020 — and every HN row this portal ever showed came out of it,
+   * six-year-old jobs presented as current openings. The monthly thread is
+   * only findable by asking for the newest, so that is what this asks for.
+   * "Who wants to be hired" is the candidates' thread and is skipped.
+   */
   const threads = await getJSON(
-    'https://hn.algolia.com/api/v1/search?tags=story,author_whoishiring&hitsPerPage=5'
+    'https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&hitsPerPage=10'
   );
-  const hiring = (threads.hits || []).find((h) => /who is hiring/i.test(h.title || ''));
+  const hiring = (threads.hits || [])
+    .filter((h) => /who is hiring/i.test(h.title || '') && !/wants to be hired/i.test(h.title || ''))
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
   if (!hiring) return [];   /* no thread found: better nothing than noise */
 
   const q = encodeURIComponent([profile.role.split(' ')[0], profile.skills[0] || ''].join(' ').trim());
@@ -842,6 +854,23 @@ router.post('/search', upload.single('file'), async (req, res) => {
       resumeText: resumeText.slice(0, 30000),
       jobs: shown,
       withheld,
+      /*
+       * Recruiters who published a way to reach them in their own advert.
+       *
+       * Read from every posting the hunt fetched, not only the ones that
+       * survived fit ranking. A hiring manager who wrote "send me your CV at
+       * …" is worth knowing about even when that particular role scored two
+       * out of five — the contact is a door, not a recommendation, and
+       * filtering it away with the job was throwing out the thing being
+       * asked for.
+       */
+      recruiters: recruiterContacts.collectRecruiters(
+        deduped
+          /* The same six-month window the openings use. A contact attached to
+             a posting from years ago is not a door, and "(78 months ago)"
+             beside an address is the agent admitting it did not check. */
+          .filter((j) => { const a = ageOf(j.posted); return a.days === null || a.days <= MAX_POSTING_DAYS; })
+          .map((j) => ({ ...j, postedAgo: ageOf(j.posted).label }))),
       counts: {
         total: shown.length,
         strong: shown.filter((j) => j.fit.band === 'strong').length,
