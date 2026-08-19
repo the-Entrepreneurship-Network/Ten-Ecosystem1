@@ -30,7 +30,9 @@ const CACHE_PATH = process.env.JOB_CACHE_PATH ||
   path.join(__dirname, '..', '..', 'data', 'job-cache.json');
 
 const MAX_ENTRIES = 500;
-const MAX_AGE_DAYS = 30; /* a posting older than this is presumed filled */
+/* Six months, matching the hunt's own window: a remembered opening is shown
+   with its age, and the reader decides — past this it is presumed gone. */
+const MAX_AGE_DAYS = 183;
 
 /* Only board facts and the resolved link are remembered. Fit and ATS scores
    are per-resume and are recomputed for whoever is asking. */

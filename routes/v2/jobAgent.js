@@ -652,10 +652,16 @@ router.post('/search', upload.single('file'), async (req, res) => {
      * asking, which is whether it is worth their evening to apply.
      */
     const resumeText = resumeSource;
-    const scored = rank(deduped, profile).slice(0, 40).map((job) => ({
+    /* Six months is the window; older is presumed filled and never shown. */
+    const inWindow = deduped.filter((j) => {
+      const age = ageOf(j.posted);
+      return age.days === null || age.days <= MAX_POSTING_DAYS;
+    });
+    const scored = rank(inWindow, profile).slice(0, 40).map((job) => ({
       ...job,
       jobId: jobIdOf(job),
       stale: isStale(job.posted),
+      postedAgo: ageOf(job.posted).label,
       fit: fitness(profile, job),
       ats: resumeText
         ? atsMatch(resumeText, `${job.title} ${job.description || ''}`, profile.skills, job.title)
@@ -797,6 +803,25 @@ function isStale(posted) {
   const when = new Date(posted).getTime();
   if (!when || Number.isNaN(when)) return false;
   return (Date.now() - when) / 86400000 > 30;
+}
+
+/*
+ * The window is six months, and every row says where in it it sits. A student
+ * asked for older vacancies too — weeks, months back — and the honest way to
+ * include them is with their age on the card, so "2 months ago" is a choice
+ * the reader makes, not a surprise the interview reveals. Past six months a
+ * posting is presumed gone and does not appear at all.
+ */
+const MAX_POSTING_DAYS = 183;
+
+function ageOf(posted) {
+  if (!posted) return { days: null, label: 'date unknown' };
+  const when = new Date(posted).getTime();
+  if (!when || Number.isNaN(when)) return { days: null, label: 'date unknown' };
+  const days = Math.max(0, Math.floor((Date.now() - when) / 86400000));
+  if (days <= 7) return { days, label: 'this week' };
+  if (days <= 56) return { days, label: `${Math.max(1, Math.round(days / 7))} weeks ago` };
+  return { days, label: `${Math.max(2, Math.round(days / 30))} months ago` };
 }
 
 /*

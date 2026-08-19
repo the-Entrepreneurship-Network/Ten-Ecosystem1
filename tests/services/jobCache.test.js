@@ -56,12 +56,16 @@ describe('the job memory', () => {
     expect(cache.recall(new Set())).toHaveLength(1);
   });
 
-  it('forgets what is over thirty days old', () => {
+  it('keeps a six-week-old opening and forgets a seven-month-old one', () => {
     cache.remember([JOB()]);
     const entries = JSON.parse(fs.readFileSync(TMP, 'utf8'));
-    entries[0].fetchedAt = new Date(Date.now() - 40 * 86400000).toISOString();
+    entries[0].fetchedAt = new Date(Date.now() - 42 * 86400000).toISOString();
     fs.writeFileSync(TMP, JSON.stringify(entries));
-    expect(cache.recall(new Set())).toHaveLength(0);
+    expect(cache.recall(new Set())).toHaveLength(1); /* inside the window, aged honestly */
+
+    entries[0].fetchedAt = new Date(Date.now() - 210 * 86400000).toISOString();
+    fs.writeFileSync(TMP, JSON.stringify(entries));
+    expect(cache.recall(new Set())).toHaveLength(0); /* presumed gone */
   });
 
   it('caps the memory rather than growing forever', () => {

@@ -504,6 +504,10 @@ function impactBullet(text) {
   let t = String(text || '').trim().replace(/\.$/, '');
   if (!t) return null;
   t = t.replace(BANNED_OPENERS, '');
+  /* First person is banned on a resume — "I built the API" is a diary line,
+     "Built the API" is a bullet. Strip the pronoun, keep every fact. */
+  t = t.replace(/^(i|we)\s+(have\s+|had\s+|was\s+|were\s+|am\s+)?/i, '');
+  t = t.replace(/^my\s+(team|role|work)\s+(and i\s+)?/i, '');
   if (!t) return null;
   t = t.charAt(0).toUpperCase() + t.slice(1);
   return t;
@@ -687,6 +691,21 @@ function rewriteResume(text, options) {
     detail: { before, after },
     notClaimed,
     ceiling,
+    /* The finishing pass a careful human runs and a tired one skips: verb
+       monotony and page budget, reported rather than silently "fixed". */
+    risks: (() => {
+      const out = [];
+      const openers = rewritten.split('\n').filter((l) => l.startsWith('- '))
+        .map((l) => (l.slice(2).split(/\s+/)[0] || '').toLowerCase());
+      const counts = {};
+      openers.forEach((v) => { counts[v] = (counts[v] || 0) + 1; });
+      Object.entries(counts).filter(([, n]) => n >= 3).forEach(([verb, n]) => {
+        out.push(`"${verb}" opens ${n} bullets — vary the verb on the weaker ones (shipped, migrated, automated, cut).`);
+      });
+      const words = rewritten.split(/\s+/).filter(Boolean).length;
+      if (words > 650) out.push(`${words} words — likely over one page. Under ~10 years of history, cut to the essentials the target role searches for.`);
+      return out;
+    })(),
     shipGate: { pass: gate.every((c) => c.pass), checks: gate },
     caveat: 'Proxy scores, not a live ATS decision. This is hard to reject on parse, essentials and signal — no resume is unrejectable.'
   };
