@@ -1,4 +1,5 @@
 'use strict';
+const { httpFetch } = require('./httpFetch');
 
 /**
  * @fileoverview Company ATS boards — openings straight from the employer.
@@ -46,7 +47,7 @@ const BOARDS = Object.freeze({
 });
 
 async function getJSON(url, ms) {
-  const res = await fetch(url, { headers: UA, signal: AbortSignal.timeout(ms || 7000) });
+  const res = await httpFetch(url, { headers: UA, timeoutMs: ms || 7000 });
   if (!res.ok) throw new Error(String(res.status));
   return res.json();
 }

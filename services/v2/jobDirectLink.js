@@ -1,4 +1,5 @@
 'use strict';
+const { httpFetch } = require('./httpFetch');
 
 /**
  * @fileoverview Direct opening URLs — the job-hunt-agent skill's url-rules.md
@@ -138,7 +139,7 @@ function extractApplyLink(html, boardUrl) {
  */
 async function resolveDirectUrl(job, options) {
   const opts = options || {};
-  const fetcher = opts.fetch || fetch;
+  const fetcher = opts.fetch || httpFetch;
 
   if (classify(job.url) === 'ats' || classify(job.url) === 'company') {
     return { url: job.url, kind: classify(job.url) };
@@ -159,7 +160,7 @@ async function resolveDirectUrl(job, options) {
     const res = await fetcher(target, {
       headers: { 'User-Agent': 'TEN-JobAgent/1.0 (+https://entrepreneurshipnetwork.net)' },
       redirect: 'follow',
-      signal: AbortSignal.timeout(opts.timeoutMs || 6000),
+      timeoutMs: opts.timeoutMs || 6000,
     });
 
     /* Redirect capture: the request may already have left the board. */

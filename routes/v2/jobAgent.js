@@ -21,6 +21,7 @@
  */
 
 const express = require('express');
+const { httpFetch } = require('../../services/v2/httpFetch');
 const router = express.Router();
 const multer = require('multer');
 
@@ -188,7 +189,7 @@ function relevance(hay, terms) {
 const UA = { 'User-Agent': 'TEN-JobAgent/1.0 (+https://entrepreneurshipnetwork.net)' };
 
 async function getJSON(url, ms = 7000) {
-  const res = await fetch(url, { headers: UA, signal: AbortSignal.timeout(ms) });
+  const res = await httpFetch(url, { headers: UA, timeoutMs: ms });
   if (!res.ok) throw new Error(`${res.status}`);
   return res.json();
 }
@@ -347,8 +348,8 @@ async function fromFreelancer(profile) {
  * Each link opens that job's own page, so no resolution is needed.
  */
 async function fromWeWorkRemotely(profile) {
-  const res = await fetch('https://weworkremotely.com/categories/remote-programming-jobs.rss', {
-    headers: UA, signal: AbortSignal.timeout(7000),
+  const res = await httpFetch('https://weworkremotely.com/categories/remote-programming-jobs.rss', {
+    headers: UA, timeoutMs: 7000,
   });
   if (!res.ok) throw new Error(String(res.status));
   const xml = await res.text();
@@ -902,9 +903,9 @@ async function verifyLinks(jobs, budgetMs = 4000) {
     await Promise.all(toCheck.slice(i, i + BATCH).map(async (job) => {
       if (!job.url) { job.linkChecked = false; return; }
       try {
-        const res = await fetch(job.url, {
+        const res = await httpFetch(job.url, {
           method: 'HEAD', headers: UA, redirect: 'follow',
-          signal: AbortSignal.timeout(3000)
+          timeoutMs: 3000
         });
         job.linkChecked = true;
         job.linkStatus = res.status;
