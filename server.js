@@ -2163,13 +2163,42 @@ const forgotPasswordLimiter = rateLimit({
     message: { success: false, message: "Too many password reset requests from this network. Please wait." }
 });
 
-// General API rate limit — applied broadly to /api but the project has very
-// few endpoints under /api today, so we also expose it for any future use.
+/**
+ * General API rate limit.
+ *
+ * This used to be keyed by IP, which is the wrong unit for this product. A
+ * college lab, an office or a hostel puts every student behind ONE public
+ * address, so thirty students shared a single 300-request budget and the whole
+ * building started seeing "Too many requests. Please slow down." while each
+ * person had made a handful of calls. The portal polls (notifications, chat,
+ * task state), so the budget went in minutes.
+ *
+ * Keyed by the signed-in identity instead: the limit is now per person, which
+ * is what it was always meant to be. Anonymous callers still fall back to the
+ * IP — that path is the one a limiter actually protects, and ipKeyGenerator is
+ * used for it so IPv6 addresses are normalised to a subnet rather than counted
+ * one-address-per-request.
+ */
+function rateLimitKey(req) {
+    const ses = req.session || {};
+    const who = (ses.student && (ses.student.employeeId || ses.student.email))
+        || (ses.hr && (ses.hr.username || ses.hr.email))
+        || (ses.coordinator && ses.coordinator.username)
+        || (ses.adminUser && ses.adminUser.username)
+        || (req.user && String(req.user._id));
+    return who ? `u:${who}` : `ip:${ipKeyGenerator(req.ip)}`;
+}
+
 const apiLimiter = rateLimit({
     windowMs: RATE_LIMIT_CONFIG.authenticated.windowMs,
     max: RATE_LIMIT_CONFIG.authenticated.max,
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator: rateLimitKey,
+    // Read-only polling is what the portal does constantly and is not what this
+    // limiter exists to stop. Counting it is how a student who is simply using
+    // the product hits the ceiling; the writes are still counted.
+    skip: (req) => req.method === 'GET' && /^\/(api\/)?(v2\/)?(notifications|messages|chat)/.test(req.path),
     message: { success: false, message: "Too many requests. Please slow down." }
 });
 app.use('/api', apiLimiter);
@@ -10338,8 +10367,10 @@ app.post('/api/tenure-payment/submit-utr', async (req, res) => {
 // projects a coordinator assigns. Mounted before the assistant because the
 // assistant is now one of the things it gates.
 try {
+    // API only. There is no separate premium page — the premium content is
+    // rendered inline in the student dashboard, so a member simply signs in and
+    // it is there.
     app.use('/api/v2/premium', require('./routes/v2/premium'));
-    app.get('/premium', (req, res) => res.sendFile(path.join(__dirname, 'public', 'premium.html')));
     console.log('[V2] Premium routes mounted at /api/v2/premium');
 } catch (e) {
     console.error('[V2] Premium routes failed to mount:', e.message);
@@ -10360,10 +10391,10 @@ try {
             const employeeId = req.session && req.session.student && req.session.student.employeeId;
             if (!employeeId) return res.redirect('/login.html');
             const stu = await Student.findOne({ employeeId }).lean();
-            if (!getPremiumStatus(stu).premium) return res.redirect('/premium');
+            if (!getPremiumStatus(stu).premium) return res.redirect('/student-dashboard.html');
         } catch (err) {
             console.error('[assistant] premium check failed:', err.message);
-            return res.redirect('/premium');
+            return res.redirect('/student-dashboard.html');
         }
         res.sendFile(path.join(__dirname, 'public', 'assistant.html'));
     });

@@ -276,14 +276,27 @@ export function AgentChat() {
       if (file) body.append('file', file);
       if (sessionRef.current) body.append('session', JSON.stringify(sessionRef.current));
       const res = await fetch(`${API}/chat`, { method: 'POST', body });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'failed');
+      // Read the body before judging the response. A 429 from the rate limiter
+      // and a validation error from the agent both arrive as perfectly good
+      // JSON, and treating every non-ok reply as "unreachable" is what made a
+      // rate limit look like a dead server.
+      let data: any = null;
+      try { data = await res.json(); } catch { data = null; }
+      if (!res.ok || !data || !data.ok) {
+        const reason = (data && (data.error || data.message))
+          || (res.status === 429 ? 'Too many requests just now — wait a moment and try again.' : '')
+          || `The agent replied with an error (HTTP ${res.status}).`;
+        setMsgs((m) => [...m, { role: 'agent', text: reason }]);
+        setBusy(false);
+        return;
+      }
       if (data.session) persistSession(data.session);
       if (data.kind === 'scan') setMsgs((m) => [...m, { role: 'agent', report: data.report, text: data.prompt || undefined }]);
       else if (data.kind === 'build') setMsgs((m) => [...m, { role: 'agent', resume: data.text, report: data.report, missing: data.missing, potentialScore: data.potentialScore, details: data.details, text: data.reply || undefined }]);
       else setMsgs((m) => [...m, { role: 'agent', text: data.reply }]);
     } catch {
-      setMsgs((m) => [...m, { role: 'agent', text: 'The agent could not be reached. Check that the portal server is running and try again.' }]);
+      // Only a real network failure reaches here now.
+      setMsgs((m) => [...m, { role: 'agent', text: 'Could not reach the server. Check your connection and try again.' }]);
     } finally {
       setBusy(false);
     }

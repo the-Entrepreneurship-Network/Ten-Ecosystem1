@@ -20,7 +20,6 @@ const { getPremiumStatus, isPremium } = require('../../utils/premium');
 
 const premiumRoutes = fs.readFileSync(path.join(root, 'routes/v2/premium.js'), 'utf8');
 const serverJs      = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
-const premiumPage   = fs.readFileSync(path.join(root, 'public/premium.html'), 'utf8');
 const dashboard     = fs.readFileSync(path.join(root, 'public/student-dashboard.html'), 'utf8');
 const coordPage     = fs.readFileSync(path.join(root, 'public/coordinator-dashboard.html'), 'utf8');
 const benefitsSvc   = fs.readFileSync(path.join(root, 'services/tenureBenefits.js'), 'utf8');
@@ -91,7 +90,7 @@ describe('the AI assistant belongs to the paid tracks', () => {
 
   it('the page redirects instead of loading and then failing every call', () => {
     const block = serverJs.slice(serverJs.indexOf("app.get('/assistant'"), serverJs.indexOf("const v2Academics"));
-    expect(block).toMatch(/res\.redirect\('\/premium'\)/);
+    expect(block).toMatch(/res\.redirect\('\/student-dashboard\.html'\)/);
     expect(block).toMatch(/res\.redirect\('\/login\.html'\)/);
   });
 
@@ -103,23 +102,37 @@ describe('the AI assistant belongs to the paid tracks', () => {
   });
 });
 
-describe('the premium section is shown to everyone, unlocked for members', () => {
-  it('GET /me answers 200 for a non-member so the locked state can render', () => {
+describe('premium lives inside the portal, not in a section of its own', () => {
+  it('there is no separate premium page or page route', () => {
+    expect(fs.existsSync(path.join(root, 'public/premium.html'))).toBe(false);
+    expect(serverJs).not.toMatch(/app\.get\('\/premium'/);
+    // the API is still mounted
+    expect(serverJs).toMatch(/app\.use\('\/api\/v2\/premium'/);
+  });
+
+  it('the dashboard renders it inline, hidden until the server says premium', () => {
+    expect(dashboard).toContain('id="premiumPanel"');
+    expect(dashboard).toMatch(/id="premiumPanel"[^>]*style="display:none/);
+    expect(dashboard).toContain('applyPremiumChrome');
+    // nothing links out to a page that no longer exists
+    expect(dashboard).not.toMatch(/href='\/premium'|href="\/premium"|location\.href='\/premium'/);
+  });
+
+  it('a non-member simply never sees the panel', () => {
+    const fn = dashboard.slice(dashboard.indexOf('async function applyPremiumChrome'),
+                               dashboard.indexOf('function premiumProjectHtml'));
+    expect(fn).toMatch(/if \(!d \|\| !d\.success \|\| !d\.premium\) return;/);
+  });
+
+  it('GET /me still answers 200 for a non-member rather than erroring', () => {
     const block = premiumRoutes.slice(premiumRoutes.indexOf("router.get('/me'"), premiumRoutes.indexOf("router.get('/unread'"));
     expect(block).toMatch(/premium: false/);
-    expect(block).toMatch(/onPaidTrack: status\.onPaidTrack/);
     expect(block).not.toMatch(/status\(402\)/);
   });
 
-  it('the tile is in the dashboard for everyone, locked by default', () => {
-    expect(dashboard).toContain('id="premiumCard"');
-    expect(dashboard).toContain('id="premiumNavBtn"');
-    expect(dashboard).toMatch(/id="premiumCardTag"[^>]*>LOCKED</);
-  });
-
-  it('a free-track student is told plainly, not offered a button to nowhere', () => {
-    expect(premiumPage).toMatch(/d\.onPaidTrack/);
-    expect(premiumPage).toMatch(/Your track is free/);
+  it('a student can submit an assigned project from the dashboard itself', () => {
+    expect(dashboard).toContain('submitPremiumProject');
+    expect(dashboard).toMatch(/\/api\/v2\/premium\/projects\/'/);
   });
 
   it('the premium look is scoped to members only', () => {
@@ -189,10 +202,10 @@ describe('coordinator notes and assigned projects', () => {
 });
 
 describe('nothing server-supplied reaches innerHTML unescaped', () => {
-  it('the premium page escapes everything it renders', () => {
-    expect(premiumPage).toMatch(/function esc\(/);
+  it('the inline premium panel escapes everything it renders', () => {
+    expect(dashboard).toMatch(/function pEsc\(/);
     ['a.title', 'a.body', 'b.name', 'a.feedback'].forEach((f) => {
-      expect(premiumPage).toContain(`esc(${f})`);
+      expect(dashboard).toContain(`pEsc(${f})`);
     });
   });
 
@@ -201,5 +214,57 @@ describe('nothing server-supplied reaches innerHTML unescaped', () => {
     ['a.title', 'a.body', 's.employeeId'].forEach((f) => {
       expect(coordPage).toContain(`pmEsc(${f})`);
     });
+  });
+});
+
+describe('the "Too many requests" wall', () => {
+  it('the API limit counts per signed-in person, not per IP', () => {
+    // A college lab or office is one public address. Keyed by IP, thirty
+    // students shared one 300-request budget and the whole building was
+    // throttled — which is what the notifications screen was reporting.
+    expect(serverJs).toMatch(/function rateLimitKey\(req\)/);
+    expect(serverJs).toMatch(/keyGenerator: rateLimitKey/);
+    expect(serverJs).toMatch(/ses\.student && \(ses\.student\.employeeId/);
+    // anonymous still falls back to the IP, normalised for IPv6
+    expect(serverJs).toMatch(/ip:\$\{ipKeyGenerator\(req\.ip\)\}/);
+  });
+
+  it('read-only polling is not what the limiter exists to stop', () => {
+    expect(serverJs).toMatch(/skip: \(req\) => req\.method === 'GET'/);
+    expect(serverJs).toMatch(/notifications\|messages\|chat/);
+  });
+});
+
+describe('the resume agent reports what actually happened', () => {
+  const agent = fs.readFileSync(path.join(root, 'resume-portal-app/src/components/ResumeAgent.tsx'), 'utf8');
+
+  it('a rate limit no longer reads as "the server is not running"', () => {
+    expect(agent).toMatch(/res\.status === 429/);
+    expect(agent).not.toMatch(/could not be reached\. Check that the portal server is running/);
+  });
+
+  it('the server’s own message is preferred over a generic one', () => {
+    expect(agent).toMatch(/data\.error \|\| data\.message/);
+  });
+
+  it('the built bundle carries the fix', () => {
+    const idx = fs.readFileSync(path.join(root, 'public/resume-portal/index.html'), 'utf8');
+    const m = idx.match(/assets\/(index-[\w-]+\.js)/);
+    expect(m).not.toBeNull();
+    const bundle = fs.readFileSync(path.join(root, 'public/resume-portal/assets', m[1]), 'utf8');
+    expect(bundle).toContain('Too many requests just now');
+    expect(bundle).not.toContain('Check that the portal server is running');
+  });
+});
+
+describe('push notifications need keys, not code', () => {
+  it('the generator ships, so switching them on is one command', () => {
+    expect(fs.existsSync(path.join(root, 'scripts/generate-vapid-keys.js'))).toBe(true);
+  });
+
+  it('the portal runs normally with push switched off', () => {
+    const push = fs.readFileSync(path.join(root, 'services/pushService.js'), 'utf8');
+    expect(push).toMatch(/VAPID_PUBLIC_KEY/);
+    expect(push).toMatch(/push notifications are off/);
   });
 });
