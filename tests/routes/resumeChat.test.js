@@ -243,4 +243,72 @@ describe('the conversation advances instead of repeating', () => {
     const t2 = await turn(a, 'build', t1.session);
     expect(t2.kind).toBe('ask'); /* the menu did not strand the visitor */
   });
+
+  it('the router skill button map: 98 without a resume asks the job title', async () => {
+    const a = app();
+    const t1 = await turn(a, 'make it 98/100', null);
+    expect(t1.kind).toBe('ask');
+    expect(t1.session.asked).toBe('target');   /* build interview Q1, not "attach a resume" */
+    expect(t1.session.command).toBe('build');
+  });
+
+  it('the router skill button map: "do all" checks first, tailors only with a JD', async () => {
+    const a = app();
+    // resume, no JD → the check report is the answer
+    const t1 = await turn(a, RESUME, null);
+    const t2 = await turn(a, 'do all', t1.session);
+    expect(['scan', 'ask']).toContain(t2.kind);
+
+    // resume + JD → straight into tailor
+    const s1 = await turn(a, RESUME, null);
+    const s2 = await turn(a, 'do all', s1.session, { jd: 'Backend: Java, Spring Boot, PostgreSQL.' });
+    expect(s2.session.command === 'tailor' || s2.kind === 'build').toBe(true);
+  });
+
+  it('the empty-state line is one sentence, not the four bullets', async () => {
+    const a = app();
+    const t1 = await turn(a, 'hello', null);
+    expect(t1.reply).toBe('Upload a resume or say the job title.');
+    expect(t1.reply).not.toMatch(/check —|build —|tailor —|gap —/);
+  });
+
+  it('asks open with the command line, per the reply shape', async () => {
+    const a = app();
+    const t1 = await turn(a, 'build from scratch', null);
+    expect(t1.reply).toMatch(/^Command: build/);
+  });
+
+  it('"make it 98/100" and "do all" are commands, not menu fodder', async () => {
+    // The screenshots: both messages got the identical help menu.
+    const a = app();
+    const t1 = await turn(a, RESUME, null);
+    const t2 = await turn(a, 'make it 98/100', t1.session);
+    expect(t2.kind).not.toBe('help');
+    expect(t2.session.command === 'tailor' || t2.kind === 'build').toBe(true);
+
+    const s1 = await turn(a, RESUME, null);
+    const s2 = await turn(a, 'do all', s1.session);
+    expect(s2.kind).not.toBe('help');
+  });
+
+  it('the menu never prints twice in a row — the agent takes the lead instead', async () => {
+    const a = app();
+    const t1 = await turn(a, 'ummm', null);
+    expect(t1.kind).toBe('help');
+    const t2 = await turn(a, 'hmmm what', t1.session);
+    expect(t2.kind).toBe('ask');            /* not the menu again */
+    expect(t2.reply).not.toBe(t1.reply);
+    expect(t2.session.asked).toBe('resume'); /* it moved the work forward */
+  });
+
+  it('with a resume already in hand, the second unmatched message starts the fix', async () => {
+    const a = app();
+    const t1 = await turn(a, RESUME, null);       // scored, salvageable
+    const t2 = await turn(a, 'okay so???', t1.session);   // menu once
+    if (t2.kind === 'help') {
+      const t3 = await turn(a, 'and???', t2.session);
+      expect(t3.kind).toBe('ask');
+      expect(t3.session.command).toBe('tailor');
+    }
+  });
 });
