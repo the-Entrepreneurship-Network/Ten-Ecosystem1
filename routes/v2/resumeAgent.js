@@ -741,11 +741,16 @@ const DO_ALL = /\bdo (it all|all|everything|them all)\b|\brun everything\b|\bful
 /** What the visitor wants, read from their sentence — Mega Agent command map. */
 function commandOf(low, hasFile) {
   if (DO_ALL.test(low)) return 'doall';
+  /* The popular-builder extra commands (references/popular-builder-features.md). */
+  if (/\bmatch score\b|\bjobscan (this|it|me)?\b|\bmatch (it |this )?(against|with|to) the jd\b/.test(low)) return 'match';
+  if (/\blinked.?in (headline|about|profile)\b|\bheadline and about\b/.test(low)) return 'linkedin';
+  if (/\brecruiter view\b|\b6.second (scan|view|test)\b|\bsix.second\b/.test(low)) return 'recruiter';
+  if (/\bfind (me )?jobs?\b|\bjob hunt\b|\bhunt for jobs\b|\bemail (the )?hr\b|\bapply to jobs\b/.test(low)) return 'jobs';
   if (/\bcover letter\b|\bcover\b.*\b(letter|note)\b/.test(low)) return 'cover';
   if (/\bcompare\b|which (job|jd|posting)|between these (jobs|jds)/.test(low)) return 'compare';
   if (/\binterview prep\b|\bprep\b|defen[cs]e|walk me through/.test(low)) return 'prep';
   if (/\bgap\b|what('?s| is) missing|why would this fail|missing keyword/.test(low)) return 'gap';
-  if (/\btailor|rewrite|convert|recreate|make (it|this|my resume) ats|for (this|the) (jd|job|company)\b/.test(low) || FIX_INTENT.test(low) || SCORE_INTENT.test(low)) return 'tailor';
+  if (/\btailor|rewrite|convert|recreate|make (it|this|my resume) ats|for (this|the) (jd|job|company)\b|\b(another|new) version for\b/.test(low) || FIX_INTENT.test(low) || SCORE_INTENT.test(low)) return 'tailor';
   if (/\bscan|check|score|review|rate my|is this rejectable|ats.?(friendly|ready)\b/.test(low)) return 'check';
   if (/\bbuild|create|write|generate|new resume|from scratch|forge\b/.test(low)) return 'build';
   if (hasFile) return 'check'; /* a file with no words means "look at this" */
@@ -1050,6 +1055,87 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       return deliver(res, session, packet,
         `Band before: ${packet.band}. Converted — checker ${packet.before.checker}→${packet.after.checker}, recruiter-scan ${packet.before.recruiter}→${packet.after.recruiter}.` +
         (packet.notClaimed.length ? ` Not claimed: ${packet.notClaimed.slice(0, 5).join(', ')}.` : ''));
+    }
+
+    /*
+     * match — the Jobscan-style screen: score AND gap table in one reply,
+     * with the 65–80% band and the stuffing warning above it.
+     */
+    if (session.command === 'match') {
+      if (!session.resumeText.trim()) return ask('resume', 'Attach or paste the resume to match.');
+      if (!session.jd) return ask('jd', 'Paste the job description — the match is measured against its wording.');
+      const packet = atsEngine.rewriteResume(session.resumeText, { target: session.target, jd: session.jd });
+      const kd = packet.detail.before.checker.keywordDetail || { matched: 0, terms: 0, overlap: 0 };
+      const bandNote = kd.overlap > 80
+        ? 'Above 80% reads as keyword stuffing to a reviewer — trim repeats rather than adding more.'
+        : kd.overlap >= 65 ? 'Inside the 65–80% competitive band.'
+          : `Below the 65–80% competitive band — ${packet.notClaimed.length} term(s) missing.`;
+      session.command = null;
+      return res.json({
+        ok: true, kind: 'help',
+        reply: [
+          'Command: match',
+          `Match: ${kd.overlap}% evidenced overlap (${kd.matched}/${kd.terms} hard terms) · checker ${packet.before.checker}/${packet.before.checkerMax} · recruiter-scan ${packet.before.recruiter}/100.`,
+          bandNote,
+          '',
+          ...packet.notClaimed.slice(0, 10).map((t) => `• missing: ${t}`),
+          packet.ceiling || '',
+          'Say "tailor" to close the wording gap — facts stay exactly yours.',
+        ].filter(Boolean).join('\n'),
+        session,
+      });
+    }
+
+    /* linkedin — headline and About, text only, from the evidenced ledger. */
+    if (session.command === 'linkedin') {
+      const source = session.resumeText.trim() || (session.shipped && session.shipped.text) || '';
+      if (!source) return ask('resume', 'Attach or paste the resume the profile should be written from.');
+      const led = atsEngine.factLedger(source);
+      const role = session.target || (session.shipped && session.shipped.target) || 'your target role';
+      const skills = led.evidencedSkills.slice(0, 2);
+      const spike = [...led.roles.flatMap((r) => r.bullets), ...led.projects.flatMap((p) => p.bullets)].find((b) => /\d/.test(b));
+      session.command = null;
+      return res.json({
+        ok: true, kind: 'help',
+        reply: [
+          'Command: linkedin',
+          `Headline: ${role}${skills.length ? ' · ' + skills.join(' · ') : ''}`,
+          '',
+          'About:',
+          `${role}. ${led.evidencedSkills.slice(0, 4).join(', ')}${led.evidencedSkills.length ? '.' : ''}`,
+          spike ? String(spike).slice(0, 160) + '.' : '',
+          'Open to roles where that work is the job.',
+        ].filter(Boolean).join('\n'),
+        session,
+      });
+    }
+
+    /* recruiter — the 6-second scan, gate by gate. */
+    if (session.command === 'recruiter') {
+      if (!session.resumeText.trim()) return ask('resume', 'Attach or paste the resume to run the recruiter view on.');
+      const led = atsEngine.factLedger(session.resumeText);
+      const scan = atsEngine.recruiterScan(session.resumeText, led, session.target);
+      session.command = null;
+      return res.json({
+        ok: true, kind: 'help',
+        reply: [
+          'Command: recruiter',
+          `Recruiter-scan: ${scan.total}/100 — what a human decides in six seconds.`,
+          ...scan.gates.map((g) => `• ${g.gate}: ${g.points}/${g.of}`),
+          'Proxy only. Not a live Workday/Greenhouse decision — Greenhouse does not auto-score resumes.',
+        ].join('\n'),
+        session,
+      });
+    }
+
+    /* jobs — the router skill's handoff: hunting lives in the Job Portal. */
+    if (session.command === 'jobs') {
+      session.command = null;
+      return res.json({
+        ok: true, kind: 'help',
+        reply: 'Command: jobs\n\nJob hunting is the Job Portal agent\'s work: it reads your resume, fetches live postings from six boards, scores your fit per posting and writes the cold email to HR. Open /job-portal/ and upload the same resume there — this chat stays your resume workshop.',
+        session,
+      });
     }
 
     if (session.command === 'gap') {

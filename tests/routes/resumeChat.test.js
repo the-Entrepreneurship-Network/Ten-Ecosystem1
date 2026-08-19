@@ -236,6 +236,44 @@ describe('the conversation advances instead of repeating', () => {
     expect(out.reply).toMatch(/Keyword (N\/A|\d+\/40) · Format \d+\/30/);
   });
 
+  it('match runs the Jobscan screen: score plus gap in one reply, with the band', async () => {
+    const a = app();
+    const t1 = await turn(a, RESUME, null);
+    const t2 = await turn(a, 'jobscan this', t1.session, { jd: 'Backend: Java, Spring Boot, PostgreSQL, Docker.' });
+    expect(t2.reply).toMatch(/Command: match/);
+    expect(t2.reply).toMatch(/% evidenced overlap/);
+    expect(t2.reply).toMatch(/65–80%/);
+    expect(t2.reply).toMatch(/missing: postgresql|missing: docker/);
+  });
+
+  it('linkedin writes headline and About from evidence only', async () => {
+    const a = app();
+    const t1 = await turn(a, RESUME, null);
+    const t2 = await turn(a, 'linkedin headline please', t1.session, { target: 'Backend Developer' });
+    expect(t2.reply).toMatch(/Command: linkedin/);
+    expect(t2.reply).toMatch(/Headline: Backend Developer/);
+    expect(t2.reply).toMatch(/About:/);
+    // evidenced skills only — Kubernetes was never on this resume
+    expect(t2.reply).not.toMatch(/kubernetes/i);
+  });
+
+  it('recruiter view prints the six-second gates', async () => {
+    const a = app();
+    const t1 = await turn(a, RESUME, null);
+    const t2 = await turn(a, 'recruiter view', t1.session);
+    expect(t2.reply).toMatch(/Command: recruiter/);
+    expect(t2.reply).toMatch(/6-second function match: \d+\/25/);
+    expect(t2.reply).toMatch(/Greenhouse does not auto-score/);
+  });
+
+  it('job hunting hands off to the Job Portal instead of reprinting resume commands', async () => {
+    const a = app();
+    const t1 = await turn(a, 'find me jobs and email hr', null);
+    expect(t1.reply).toMatch(/Command: jobs/);
+    expect(t1.reply).toMatch(/\/job-portal\//);
+    expect(t1.reply).not.toMatch(/check —|build —/);
+  });
+
   it('help twice is not the trap it used to be: the session survives it', async () => {
     const a = app();
     const t1 = await turn(a, 'hello', null);
