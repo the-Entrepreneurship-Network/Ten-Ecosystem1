@@ -27,6 +27,7 @@ const multer = require('multer');
 const { fitness, atsMatch, requiredYears } = require('../../services/v2/jobFitness');
 const { tailorResume, coverLetter, coldEmail, hrEmail } = require('../../services/v2/jobMaterials');
 const directLink = require('../../services/v2/jobDirectLink');
+const jobCache = require('../../services/v2/jobCache');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 router.use(express.urlencoded({ extended: true, limit: '2mb' }));
@@ -636,6 +637,16 @@ router.post('/search', upload.single('file'), async (req, res) => {
     });
 
     /*
+     * The agent's memory joins the hunt: every opening seen on an earlier
+     * pass that this one has not refound, marked with its age. When every
+     * board fails at once — an outage, blocked egress — the memory IS the
+     * answer, rather than "0 openings" from an agent that has seen hundreds.
+     */
+    const boardsAllDown = sources.every((s) => !s.ok);
+    const remembered = jobCache.recall(seen);
+    remembered.forEach((j) => deduped.push(j));
+
+    /*
      * Scored, not just sorted. Relevance decides whether a listing belongs in
      * the list at all; fitness answers the question the student is actually
      * asking, which is whether it is worth their evening to apply.
@@ -692,6 +703,9 @@ router.post('/search', upload.single('file'), async (req, res) => {
          fit ordering stands unchanged. */
       live.sort((a, j2) => (j2.directUrl ? 1 : 0) - (a.directUrl ? 1 : 0) || (ordering(j2) - ordering(a)));
     }
+
+    /* This hunt feeds the memory the next one reads — resolved links included. */
+    jobCache.remember(live.filter((j) => !j.fromCache));
     live.forEach((j) => {
       j.fit5 = Math.max(1, Math.min(5, Math.round((j.fit.percent || 0) / 20)));
       j.linkLabel = j.directUrl
@@ -713,7 +727,12 @@ router.post('/search', upload.single('file'), async (req, res) => {
         moderate: live.filter((j) => j.fit.band === 'moderate').length,
         stretch: live.filter((j) => j.fit.band === 'stretch').length,
         deadLinksDropped: scored.length - live.length,
+        fromMemory: live.filter((j) => j.fromCache).length,
       },
+      /* Said plainly when the boards were unreachable and memory answered. */
+      cacheNote: boardsAllDown && live.some((j) => j.fromCache)
+        ? 'The live boards were unreachable this pass — these are the openings from earlier hunts, each marked with when it was seen.'
+        : null,
       sources,
       searches: platformSearches(profile),
     });
