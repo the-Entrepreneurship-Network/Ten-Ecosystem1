@@ -29,6 +29,10 @@
 const tenurePaymentConfig = require('../config/tenurePayment');
 const { normalizeTenure } = require('../utils/tenure');
 
+/** Plan name → the badge in server.js's BADGE_CATALOG. */
+const PLAN_BADGES = { Starter: 'premium_starter', Accelerate: 'premium_accelerate', Sprint: 'premium_sprint' };
+const PLAN_BADGE_ICONS = { Starter: '🥉', Accelerate: '🥈', Sprint: '🥇' };
+
 /**
  * Credit coins, creating the balance if the student has never had one.
  *
@@ -152,6 +156,35 @@ async function grantTenureBenefits(student, options = {}) {
                 }
             }
         );
+
+        // The badge that marks them out in the portal. BadgeAward is written
+        // directly rather than through server.js's awardBadgeIfNew, which lives
+        // in the app module and cannot be required from here without a cycle.
+        try {
+            const BadgeAward = require('../models/BadgeAward');
+            const badgeId = PLAN_BADGES[bundle.name];
+            if (badgeId && (fresh && fresh.employeeId)) {
+                await BadgeAward.updateOne(
+                    { employeeId: fresh.employeeId, badgeId },
+                    {
+                        $setOnInsert: {
+                            studentId: student._id,
+                            employeeId: fresh.employeeId,
+                            badgeId,
+                            badgeName: `${bundle.name} Member`,
+                            badgeIcon: PLAN_BADGE_ICONS[bundle.name] || '⭐',
+                            awardedAt: new Date()
+                        }
+                    },
+                    { upsert: true }
+                );
+            }
+        } catch (badgeErr) {
+            // A duplicate is the unique index doing its job, not a failure.
+            if (!badgeErr || badgeErr.code !== 11000) {
+                console.error('[tenure-benefits] badge award failed:', badgeErr.message);
+            }
+        }
 
         // A waived certificate fee is an entitlement granted without money
         // changing hands, so it leaves a record like every other one.
