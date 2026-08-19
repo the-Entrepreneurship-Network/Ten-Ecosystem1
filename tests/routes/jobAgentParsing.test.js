@@ -63,6 +63,57 @@ describe('job identity and freshness', () => {
   });
 });
 
+describe('reading the role a resume is aiming at', () => {
+  const roleOf = (lines) => profileFromResume(lines.join('\n')).role;
+
+  it('does not call an HR resume a software engineer', () => {
+    /* It listed recruitment, onboarding, HRIS and payroll, was labelled a
+       software engineer, and was then handed a maintenance job. */
+    expect(roleOf(['Neha Rao', 'neha@example.com', '', 'Experience',
+      'Ran campus recruitment and onboarding for 60 hires.', '',
+      'Skills', 'Recruitment, Onboarding, HRIS, Payroll'])).toBe('hr executive');
+  });
+
+  it.each([
+    [['Skills', 'Docker, Kubernetes, Terraform, Jenkins, AWS'], 'devops engineer'],
+    [['Skills', 'SQL, Tableau, Power BI, pandas'], 'data analyst'],
+    [['Skills', 'React, Node, MongoDB, Express'], 'full stack developer'],
+  ])('reads %j as %s', (skills, expected) => {
+    expect(roleOf(['A Person', 'a@example.com', '', 'Experience',
+      'Delivered projects end to end.', '', ...skills])).toBe(expected);
+  });
+});
+
+describe('how fresh a recruiter contact is', () => {
+  const { ageOfContact, RECRUITER_MAX_DAYS } = agent;
+  const ago = (ms) => new Date(Date.now() - ms).toISOString();
+
+  it('counts in hours, days and weeks — never months', () => {
+    expect(ageOfContact(ago(30 * 60 * 1000)).label).toBe('just now');
+    expect(ageOfContact(ago(2 * 3600 * 1000)).label).toBe('2 hours ago');
+    expect(ageOfContact(ago(26 * 3600 * 1000)).label).toBe('1 day ago');
+    expect(ageOfContact(ago(3 * 86400 * 1000)).label).toBe('3 days ago');
+    expect(ageOfContact(ago(9 * 86400 * 1000)).label).toBe('1 week ago');
+    expect(ageOfContact(ago(21 * 86400 * 1000)).label).toBe('3 weeks ago');
+  });
+
+  it('never says months, even at the edge of the window', () => {
+    for (const days of [35, 41, 42]) {
+      expect(ageOfContact(ago(days * 86400 * 1000)).label).not.toMatch(/month/i);
+    }
+  });
+
+  it('stops at six weeks — a contact goes cold long before a posting does', () => {
+    expect(RECRUITER_MAX_DAYS).toBe(42);
+    expect(ageOfContact(ago(50 * 86400 * 1000)).days).toBeGreaterThan(RECRUITER_MAX_DAYS);
+  });
+
+  it('says nothing rather than guessing when the date is unusable', () => {
+    expect(ageOfContact(null).label).toBe('');
+    expect(ageOfContact('not a date').label).toBe('');
+  });
+});
+
 describe('x-ray searches', () => {
   it('quotes the phrases so Google does not widen them', () => {
     const url = xray('naukri.com', 'full stack developer', ['react', 'node'], 'Bengaluru');

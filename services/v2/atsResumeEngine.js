@@ -279,9 +279,24 @@ function checkerScore(text, ledger, jd) {
   if ((raw.match(/[^\x00-\x7F–—’“”•éè]/g) || []).length > 25) ded(6, 'Decorative characters many parsers strip or garble.');
   const recognised = all.filter(isHeading).length;
   if (recognised < 3) ded(6, `Only ${recognised} recognised section heading(s) — use Summary, Experience, Skills, Education.`);
+  /*
+   * Dates are judged against how many roles there are, not against a flat
+   * count. Demanding two ranges docked every single-role resume — a first
+   * job, an internship, a career switcher — for a fault it did not have.
+   */
   const dateHits = (raw.match(new RegExp(RE_DATE_RANGE.source, 'gi')) || []).length;
-  if (dateHits < 2) ded(4, 'Dates missing or unparseable — write "Jan 2024 – Present".');
-  if (ledger.words < 40) ded(15, 'Almost no extractable text — reads as a scanned or image-based file.');
+  const rolesNeedingDates = Math.max(1, ledger.roles.length);
+  if (dateHits === 0) ded(4, 'No parseable date range — write "Jan 2024 – Present" next to each role.');
+  else if (dateHits < rolesNeedingDates) ded(2, `${dateHits} of ${rolesNeedingDates} roles carry a parseable date range.`);
+
+  /*
+   * The scanned-PDF signal is about extraction failing, not about brevity. At
+   * forty words it fired on a real one-role resume with perfectly readable
+   * text and took fifteen points, which alone forced the band to Weak. Only a
+   * document that yielded almost nothing is a scan.
+   */
+  if (ledger.words < 15) ded(15, 'Almost no extractable text — reads as a scanned or image-based file.');
+  else if (ledger.words < 120) ded(3, `${ledger.words} words — too thin for a parser to match much against.`);
   parse = Math.max(0, parse);
 
   /* B. keywords — needs a JD */
@@ -370,10 +385,20 @@ function recruiterScan(text, ledger, target) {
     (ledger.roles[0] && ledger.roles[0].header || '').toLowerCase(),
     ledger.statedSkills.join(' ').toLowerCase()
   ];
-  const zoneHits = targetWords.length
-    ? zones.filter((z) => targetWords.some((w) => z.includes(w))).length
-    : zones.filter((z) => z.length > 0).length >= 2 ? 2 : 1; /* no target given: structure stands in */
-  const sixSec = zoneHits >= 2 ? 25 : zoneHits === 1 ? 12 : 0;
+  let sixSec;
+  if (targetWords.length) {
+    const zoneHits = zones.filter((z) => targetWords.some((w) => z.includes(w))).length;
+    sixSec = zoneHits >= 2 ? 25 : zoneHits === 1 ? 12 : 0;
+  } else {
+    /*
+     * No target named, so whether the page announces the right function
+     * cannot be checked — only that it announces something. Full marks here
+     * were how a resume reached 100/100 on the recruiter scan without anyone
+     * knowing what job it was for.
+     */
+    const populated = zones.filter((z) => z.length > 0).length;
+    sixSec = populated >= 2 ? 15 : populated === 1 ? 8 : 0;
+  }
   gates.push({ gate: '6-second function match', points: sixSec, of: 25 });
 
   /* proof in the top third */
@@ -427,10 +452,20 @@ function recruiterScan(text, ledger, target) {
  * only about the gaps, Strong gets a tight convert and one question at most.
  */
 function strengthBand(checker, recruiter) {
-  const checkerPct = Math.round((checker.total / checker.max) * 100);
-  const lower = Math.min(checkerPct, recruiter.total);
-  if (lower < 50 || checker.parse < 16) return 'weak';
-  if (lower < 80) return 'salvageable';
+  /*
+   * Only a checker scored out of 100 is comparable to the rubric's bands,
+   * because those bands assume the keyword block is in the total. Scaling an
+   * out-of-60 score into a percentage inflated it — the same resume came back
+   * "strong" with no job description and "weak" with one, which is not a
+   * judgement, it is an artefact. Without a JD the recruiter scan is the only
+   * number on a true 100 scale, so it decides alone.
+   */
+  const comparable = checker.max === 100
+    ? Math.min(Math.round((checker.total / checker.max) * 100), recruiter.total)
+    : recruiter.total;
+
+  if (comparable < 50 || checker.parse < 16) return 'weak';
+  if (comparable < 80) return 'salvageable';
   return 'strong';
 }
 

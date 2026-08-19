@@ -28,6 +28,21 @@ type TrackRow = {
 const TRACKER_KEY = 'ten_job_tracker';
 const TRACK_STATUSES: TrackStatus[] = ['found', 'emailed', 'tailored', 'applied', 'closed'];
 
+/**
+ * Remote or onsite, read from what the posting actually says. Hybrid is worth
+ * its own word — it is the answer to a different question than either — and a
+ * posting that says nothing gets "not stated" rather than a guess dressed up
+ * as a fact.
+ */
+function workType(job: Job): string {
+  const text = `${job.location || ''} ${job.type || ''}`.toLowerCase();
+  if (/hybrid/.test(text)) return 'Hybrid';
+  if (/\bremote\b|work from home|anywhere|worldwide/.test(text)) return 'Remote';
+  if (/on-?site|in-?office|in person/.test(text)) return 'Onsite';
+  if (/contract|freelance|hourly|fixed-price/.test(text)) return 'Contract';
+  return job.location ? 'Onsite' : 'Not stated';
+}
+
 function loadTracker(): TrackRow[] {
   try { return JSON.parse(localStorage.getItem(TRACKER_KEY) || '[]'); } catch { return []; }
 }
@@ -53,6 +68,13 @@ type Job = {
   fromCache?: boolean; seenDaysAgo?: number; postedAgo?: string;
 };
 type Search = { platform: string; why: string; url: string };
+/* A recruiter row exists because a posting published it — sourceUrl is the
+   evidence, and it is shown so anyone can check the claim. */
+type Recruiter = {
+  company: string; name: string; role: string; email: string; phone: string;
+  sourceUrl: string; sourceTitle: string; postedAgo: string; via: string;
+  alsoHiringFor: string[];
+};
 type SourceStat = { name: string; ok: boolean; count: number; error: string | null };
 type Materials = {
   job: { title: string; company: string; url: string };
@@ -64,6 +86,9 @@ type Materials = {
     followUps: { afterDays: number; subject: string; body: string }[];
   };
   hrEmail?: { subject: string; body: string; words: number; toNote: string | null };
+  /* Prefilled when the posting published an address — the send step should
+     not ask for something the advert already gave. */
+  toEmail?: string;
 };
 
 export default function JobAgent() {
@@ -83,6 +108,7 @@ export default function JobAgent() {
   const [making, setMaking] = useState('');
   const [manager, setManager] = useState('');
   const [cacheNote, setCacheNote] = useState<string | null>(null);
+  const [recruiters, setRecruiters] = useState<Recruiter[]>([]);
   const [tracker, setTracker] = useState<TrackRow[]>(loadTracker);
 
   const track = (job: Job, status: TrackStatus) => {
@@ -103,19 +129,40 @@ export default function JobAgent() {
   };
   const tracked = (job: Job) => tracker.some((r) => r.url === (job.directUrl || job.url));
 
-  async function buildMaterials(job: Job) {
-    setMaking(job.url);
+  /*
+   * The same application writer, aimed at a recruiter rather than a listing.
+   * The row already carries who they are and which posting they published, so
+   * the letter opens with their name and answers the advert they actually
+   * wrote — which is the whole difference between an application and a blast.
+   */
+  async function writeForRecruiter(r: Recruiter) {
+    const asJob: Job = {
+      source: r.via || 'Recruiter', title: r.sourceTitle || 'the advertised role',
+      company: r.company, location: '', type: '', tags: [],
+      url: r.sourceUrl, directUrl: r.sourceUrl, posted: null, matched: [], score: 0,
+      postedAgo: r.postedAgo,
+    };
+    if (r.name) setManager(r.name);
+    await buildMaterials(asJob, r.email || '', r.name || '');
+  }
+
+  async function buildMaterials(job: Job, toEmail?: string, hiringManager?: string) {
+    setMaking(toEmail || job.url);
     setError('');
     try {
       const body = new FormData();
       body.append('text', resumeText);
       body.append('job', JSON.stringify(job));
       if (profile) body.append('profile', JSON.stringify(profile));
-      if (manager) body.append('hiringManager', manager);
+      const named = hiringManager || manager;
+      if (named) body.append('hiringManager', named);
+      /* A recruiter who published an address gets it prefilled, so the send
+         step is not asking for something the posting already said. */
+      if (toEmail) body.append('to', toEmail);
       const res = await fetch(`${API}/materials`, { method: 'POST', body });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error);
-      setMaterials(data);
+      setMaterials({ ...data, toEmail });
       track(job, 'tailored'); /* fit-and-track.md: tailoring is a tracked event */
     } catch (e) {
       setError('Could not write the documents. Paste your resume text and try again.');
@@ -135,6 +182,7 @@ export default function JobAgent() {
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || 'search failed');
       setCacheNote(data.cacheNote || null);
+      setRecruiters(data.recruiters || []);
       /* Held for the materials step. A PDF is parsed on the server, so its
          text comes back in the response rather than existing here. */
       setResumeText(data.resumeText || text || '');
@@ -274,25 +322,25 @@ export default function JobAgent() {
                   */}
                   {jobs.length > 0 && (
                     <div className="mb-6 overflow-x-auto rounded-2xl border border-white/10">
-                      <table className="w-full min-w-[720px] border-collapse text-[12.5px]">
+                      <table className="w-full min-w-[760px] border-collapse text-[12.5px]">
                         <thead>
                           <tr className="bg-white/[0.05] text-left text-white/60">
-                            <th className="px-3 py-2 font-semibold">#</th>
-                            <th className="px-3 py-2 font-semibold">Role</th>
-                            <th className="px-3 py-2 font-semibold">Company</th>
-                            <th className="px-3 py-2 font-semibold">Where</th>
-                            <th className="px-3 py-2 font-semibold">Fit</th>
-                            <th className="px-3 py-2 font-semibold">Opening URL</th>
+                            <th className="px-3 py-2 font-semibold">Job</th>
+                            <th className="px-3 py-2 font-semibold">Position</th>
+                            <th className="px-3 py-2 font-semibold">Type</th>
+                            <th className="px-3 py-2 font-semibold">Link</th>
                           </tr>
                         </thead>
                         <tbody>
                           {jobs.map((j, i) => (
                             <tr key={'row' + j.url + i} className="border-t border-white/[0.07] align-top hover:bg-white/[0.03]">
-                              <td className="px-3 py-2 text-white/40">{i + 1}</td>
-                              <td className="px-3 py-2 font-semibold text-white">{j.title}</td>
-                              <td className="px-3 py-2 text-white/70">{j.company || '—'}</td>
-                              <td className="px-3 py-2 text-white/60">{j.location || 'Remote'}</td>
-                              <td className="px-3 py-2 whitespace-nowrap text-white/70">{j.fit5 ?? '—'}/5</td>
+                              {/* Job — who is hiring. */}
+                              <td className="px-3 py-2 font-semibold text-white">{j.company || '—'}</td>
+                              {/* Position — the role itself. */}
+                              <td className="px-3 py-2 text-white/80">{j.title}</td>
+                              {/* Type — remote or onsite, decided from what the
+                                  posting says rather than guessed. */}
+                              <td className="px-3 py-2 whitespace-nowrap text-white/65">{workType(j)}</td>
                               <td className="px-3 py-2">
                                 <a href={j.directUrl || j.url} target="_blank" rel="noopener noreferrer"
                                    className="break-all text-emerald-300 hover:underline">
@@ -382,6 +430,109 @@ export default function JobAgent() {
                       </div>
                     ))}
                   </div>
+                </div>
+
+                {/*
+                  Recruiters — the people who published a way to reach them in
+                  their own advert. Every row carries the posting it came from,
+                  because that posting is the reason the row is allowed to
+                  exist. Nothing here is guessed and nothing is scraped from a
+                  profile: an address appears only where a hiring team wrote
+                  "send your CV here" in public.
+                */}
+                <div className="mt-8">
+                  <div className="mb-3 flex items-baseline justify-between">
+                    <h2 className="text-xl font-semibold text-white">
+                      Recruiters <span className="text-white/40">({recruiters.length})</span>
+                    </h2>
+                    <span className="text-[11px] uppercase tracking-[0.14em] text-sky-300/80">
+                      published in the posting
+                    </span>
+                  </div>
+                  <p className="mb-4 text-[12px] leading-relaxed text-white/45">
+                    Contacts the hiring team put in their own advert — the "send your CV to…" line.
+                    Every row links to the posting it came from. Nothing is guessed and nothing is
+                    taken from anyone's profile, so what you see is what a company asked you to use.
+                  </p>
+
+                  {recruiters.length === 0 ? (
+                    <p className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-[13px] leading-relaxed text-white/55">
+                      None of this hunt's postings published a direct contact — most large employers
+                      route everything through their apply button. Use the green link on a row and
+                      the agent's cold email; when a posting does name a recruiter, they appear here.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto rounded-2xl border border-white/10">
+                      <table className="w-full min-w-[760px] border-collapse text-[12.5px]">
+                        <thead>
+                          <tr className="bg-white/[0.05] text-left text-white/60">
+                            <th className="px-3 py-2 font-semibold">Company</th>
+                            <th className="px-3 py-2 font-semibold">Contact</th>
+                            <th className="px-3 py-2 font-semibold">Email</th>
+                            <th className="px-3 py-2 font-semibold">Phone</th>
+                            <th className="px-3 py-2 font-semibold">From this posting</th>
+                            <th className="px-3 py-2 font-semibold">Application</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {recruiters.map((r) => (
+                            <tr key={(r.email || r.phone) + r.sourceUrl}
+                                className="border-t border-white/[0.07] align-top hover:bg-white/[0.03]">
+                              <td className="px-3 py-2 font-semibold text-white">{r.company || '—'}</td>
+                              <td className="px-3 py-2 text-white/75">
+                                {r.name || <span className="text-white/35">not named</span>}
+                                {r.role && <span className="block text-[11px] text-white/40">{r.role}</span>}
+                              </td>
+                              <td className="px-3 py-2">
+                                {r.email ? (
+                                  <a href={`mailto:${r.email}`} className="break-all text-emerald-300 hover:underline">
+                                    {r.email}
+                                  </a>
+                                ) : <span className="text-white/30">—</span>}
+                              </td>
+                              <td className="px-3 py-2 whitespace-nowrap">
+                                {r.phone ? (
+                                  <a href={`tel:${r.phone.replace(/\s/g, '')}`} className="text-emerald-300 hover:underline">
+                                    {r.phone}
+                                  </a>
+                                ) : <span className="text-white/30">—</span>}
+                              </td>
+                              <td className="px-3 py-2">
+                                <a href={r.sourceUrl} target="_blank" rel="noopener noreferrer"
+                                   className="text-sky-300 hover:underline">
+                                  {r.sourceTitle ? r.sourceTitle.slice(0, 44) : 'the posting'}
+                                </a>
+                                {r.postedAgo && <span className="text-white/40"> ({r.postedAgo})</span>}
+                                {r.alsoHiringFor.length > 0 && (
+                                  <span className="block text-[11px] text-white/40">
+                                    also hiring: {r.alsoHiringFor.slice(0, 2).join(', ')}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2">
+                                {/* The same writer the job rows use, aimed at
+                                    this recruiter: their name in the greeting,
+                                    their posting in the subject. */}
+                                <button
+                                  type="button"
+                                  onClick={() => writeForRecruiter(r)}
+                                  disabled={making === (r.email || r.phone)}
+                                  className="whitespace-nowrap rounded-lg bg-white px-3 py-1.5 text-[12px] font-bold text-[#0b1020] disabled:opacity-50"
+                                >
+                                  {making === (r.email || r.phone) ? 'Writing…' : 'Write my application'}
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  <p className="mt-3 text-[11.5px] leading-relaxed text-white/35">
+                    Write once, to one person, about the role they posted. A recruiter who published
+                    an address expects applications — they do not expect the same letter sent to
+                    forty of them.
+                  </p>
                 </div>
 
                 {/* The application tracker — fit-and-track.md as a panel. */}
@@ -474,7 +625,7 @@ function MaterialsPanel({ data, onClose, onEmailed }: { data: Materials; onClose
 
   /* Sending is two deliberate steps: prepare puts the letter in Instantly as a
      draft, send is the one that reaches a person. They are never combined. */
-  const [to, setTo] = useState('');
+  const [to, setTo] = useState(data.toEmail || '');
   const [outreach, setOutreach] = useState<{ campaignId: string; to: string } | null>(null);
   const [sendState, setSendState] = useState<'idle' | 'preparing' | 'ready' | 'sending' | 'sent'>('idle');
   const [sendError, setSendError] = useState('');

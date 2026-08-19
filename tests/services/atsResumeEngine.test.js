@@ -188,6 +188,27 @@ describe('v4.0: strength bands (Path A)', () => {
     expect(strengthBand({ total: 85, max: 100, parse: 30 }, { total: 88 })).toBe('strong');
   });
 
+  it('does not inflate a partial checker into a band', () => {
+    /* 49/60 is 82% only because the keyword block was never scored. Reading
+       that as "strong" made one resume strong without a JD and weak with one. */
+    const partial = { total: 49, max: 60, parse: 28 };
+    const full = { total: 49, max: 100, parse: 28 };
+    const recruiter = { total: 62 };
+    expect(strengthBand(partial, recruiter)).toBe(strengthBand(partial, recruiter));
+    expect(strengthBand(partial, recruiter)).toBe('salvageable');   /* judged on the recruiter scan */
+    expect(strengthBand(full, recruiter)).toBe('weak');             /* 49% checker drags it down */
+  });
+
+  it('will not award a full six-second match when no target is known', () => {
+    const led = factLedger(CLEAN);
+    const withTarget = recruiterScan(CLEAN, led, 'backend developer');
+    const noTarget = recruiterScan(CLEAN, led, '');
+    const gateOf = (s) => s.gates.find((g) => g.gate.includes('6-second')).points;
+    expect(gateOf(withTarget)).toBe(25);
+    expect(gateOf(noTarget)).toBeLessThan(25);
+    expect(noTarget.total).toBeLessThan(100);
+  });
+
   it('a parse under 16/30 is weak regardless of the rest', () => {
     expect(strengthBand({ total: 80, max: 100, parse: 12 }, { total: 85 })).toBe('weak');
   });
