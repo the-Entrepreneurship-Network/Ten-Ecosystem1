@@ -29,6 +29,9 @@ const atsEngine = require('../../services/v2/atsResumeEngine');
 const career = require('../../services/v2/careerData');
 const interview = require('../../services/v2/resumeInterview');
 const githubImport = require('../../services/v2/githubImport');
+const mockInterview = require('../../services/v2/mockInterview');
+const parserView = require('../../services/v2/parserView');
+const library = require('../../services/v2/resumeLibrary');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -363,9 +366,13 @@ function scanResume(text, target, options) {
     : wc > 900 ? (wc <= 1200 ? 5 : 2)
       : wc <= 120 ? 2
         : 2 + ((wc - 120) / (250 - 120)) * 6;
-  add('length', 'Length is in range', 8, lengthScore, `${wc} words`,
+  /* The label names the fault, not the check. Under the heading "what is
+     costing you shortlists", a row reading "Length is in range — Too long"
+     tells the reader the opposite of itself in four words. */
+  add('length', wc < 250 ? 'Length — too thin' : wc > 900 ? 'Length — too long' : 'Length is in range',
+    8, lengthScore, `${wc} words`,
     wc < 250 ? 'Thin for a full page — an ATS has less to match. Expand bullets with the tools used and the outcome.'
-             : 'Too long — trim to one or two pages of dense, relevant content.');
+             : 'Over one page — cut the weakest bullets, the ones with no number and no outcome.');
 
   /* 8. parse hazards */
   const hazards = parseHazards(raw, all);
@@ -796,6 +803,27 @@ async function textFromUpload(file) {
     const out = await pdfParse(file.buffer);
     return out.text || '';
   }
+  /*
+   * A .docx is a zip, and reading it as UTF-8 gives you the zip.
+   *
+   * The accept list said "PDF or TXT" while the code fell through to
+   * `buffer.toString('utf8')` for everything else — so a student who
+   * attached the Word file they actually keep their resume in had a few
+   * kilobytes of binary scored as their career. Mammoth is already a
+   * dependency of the docx export path.
+   */
+  if (name.endsWith('.docx')) {
+    try {
+      const mammoth = require('mammoth');
+      const out = await mammoth.extractRawText({ buffer: file.buffer });
+      return (out && out.value) || '';
+    } catch (e) {
+      return '';
+    }
+  }
+  /* A .doc is the old binary format, which nothing here can read. Saying so
+     beats scoring gibberish. */
+  if (name.endsWith('.doc')) return '';
   return file.buffer.toString('utf8');
 }
 
@@ -1037,6 +1065,8 @@ const SCORE_INTENT = /make it \d+|\b\d{2}\s*\/\s*100\b|\bunrejectable\b|max(imi[
  * Returns the best text it could reach plus what is still costing points and
  * whether a real fact is the blocker.
  */
+const STRONG_VERB_SET = new Set(ACTION_VERBS);
+
 function raiseToTarget(text, target, jd, goal) {
   const want = goal || 98;
   let best = String(text || '');
@@ -1059,6 +1089,62 @@ function raiseToTarget(text, target, jd, goal) {
     }).join('\n');
     const r2 = scanResume(relined, target);
     if (r2.score > report.score) { best = relined; report = r2; }
+  }
+
+  /*
+   * Lever 3 — cut an over-long page down.
+   *
+   * A 993-word resume is two pages of a one-page job, and the agent used to
+   * report that as a fact about the student rather than something it could
+   * fix: it asked them for MORE work to add. Trimming is the one length
+   * problem that is entirely ours to solve, and it is done by dropping the
+   * weakest lines — the ones with no number and no verb — never the strongest.
+   */
+  if (report.score < want) {
+    const words = best.split(/\s+/).filter(Boolean).length;
+    if (words > 900) {
+      const lines = best.split('\n');
+      /* Rank the bullets: a line with a number and a verb is the last to go. */
+      const weight = (l) => {
+        const b = l.replace(/^-\s+/, '');
+        return (/\d/.test(b) ? 2 : 0) +
+          (STRONG_VERB_SET.has((b.split(/\s+/)[0] || '').toLowerCase().replace(/[^a-z]/g, '')) ? 1 : 0);
+      };
+      /*
+       * Cut toward the band, not by a fixed fraction.
+       *
+       * A single 25% pass on a 1,650-word page still leaves 1,240 words, which
+       * scores the same — so the trim was measured as no improvement and
+       * discarded, and the page stayed twice as long as it should be. The
+       * weakest bullets come off until the page is inside one sheet or there
+       * is nothing weak left to lose.
+       */
+      /*
+       * Keep the best bullets that fit, rather than dropping the worst ones.
+       *
+       * The first version refused to cut any line carrying both a number and
+       * a verb — sound advice for a page that is slightly long, and useless
+       * for one with sixty bullets, where every line qualified and nothing
+       * was cut at all. A sheet of paper holds what it holds: the strongest
+       * lines are kept in their original order until the budget is spent, and
+       * the rest come off however good they are.
+       */
+      const bulletLines = lines.map((l, i) => ({ l, i })).filter((x) => /^-\s+/.test(x.l));
+      const keep = new Set();
+      let used = words - bulletLines.reduce((n, x) => n + x.l.split(/\s+/).filter(Boolean).length, 0);
+      [...bulletLines]
+        .sort((a, b) => weight(b.l) - weight(a.l) || a.i - b.i)
+        .forEach((cand) => {
+          const cost = cand.l.split(/\s+/).filter(Boolean).length;
+          if (used + cost <= 780) { keep.add(cand.i); used += cost; }
+        });
+      const doomed = new Set(bulletLines.filter((x) => !keep.has(x.i)).map((x) => x.i));
+      if (doomed.size) {
+        const trimmed = lines.filter((_, i) => !doomed.has(i)).join('\n');
+        const r3 = scanResume(trimmed, target);
+        if (r3.score >= report.score) { best = trimmed; report = r3; }
+      }
+    }
   }
 
   /* What is still costing points, and whether it is a fact or a format. */
@@ -1162,6 +1248,16 @@ function commandOf(low, hasFile) {
   if (/\bfind (me )?jobs?\b|\bjob hunt\b|\bhunt for jobs\b|\bemail (the )?hr\b|\bapply to jobs\b/.test(low)) return 'jobs';
   if (/\bcover letter\b|\bcover\b.*\b(letter|note)\b/.test(low)) return 'cover';
   if (/\bcompare\b|which (job|jd|posting)|between these (jobs|jds)/.test(low)) return 'compare';
+  /* The Rezi-parity commands, ahead of the looser matchers below so that
+     "score" reaches the five bars rather than the single number. */
+  if (/\bmock interview\b|\bai interview\b|\binterview me\b|\bpractice interview\b|\bstart (the )?interview\b/.test(low)) return 'interview';
+  if (/\breview (my )?interview\b|\binterview review\b|\bmy transcript\b/.test(low)) return 'interview-review';
+  if (/\bscore5\b|\bfive bars?\b|\bbreak ?down (my )?score\b|\bdetailed score\b|\bscore breakdown\b/.test(low)) return 'score5';
+  if (/\bwhat (does|will) (the |an )?ats (see|read|extract)\b|\bparser view\b|\bparse (my )?resume\b|\bextraction\b/.test(low)) return 'parser';
+  if (/\bquick check\b|\broast\b|\bten.second\b|\bfirst impression\b/.test(low)) return 'quickcheck';
+  if (/\blist (my )?(resumes?|versions?)\b|\bmy versions?\b|\bsaved resumes?\b/.test(low)) return 'versions';
+  if (/\bbest bullets?\b|\bmy bullets?\b|\bbullet library\b|\brelevant bullets?\b/.test(low)) return 'bullets';
+  if (/\bmissing keywords?\b|\bkeyword (table|gap|check)\b|\bwhich keywords?\b/.test(low)) return 'keywords';
   if (/\binterview prep\b|\bprep\b|defen[cs]e|walk me through/.test(low)) return 'prep';
   if (/\bgap\b|what('?s| is) missing|why would this fail|missing keyword/.test(low)) return 'gap';
   /* Build beats score: "make a resume … and make it 98/100" is a build with
@@ -1385,6 +1481,20 @@ function consumeAnswer(session, field, msg) {
     if (!session.declined.includes(field)) session.declined.push(field);
     return;
   }
+  /*
+   * An interview answer belongs to the interview, not to the details bag.
+   *
+   * It was landing in `session.details.answer` — overwritten by the next
+   * one — while the interview's own array stayed empty, so every answer read
+   * as unanswered and the same question came back with "your last message did
+   * not read as an answer to it".
+   */
+  if (field === 'answer' && session.interview) {
+    const iv = session.interview;
+    iv.answers.push({ question: iv.questions[iv.at], transcript: msg.trim() });
+    iv.at += 1;
+    return;
+  }
   if (field === 'target') {
     /* One fact, two names. The engine's script calls it the target and the
        interview bank calls it the position, so answering either used to leave
@@ -1473,7 +1583,26 @@ function consumeAnswer(session, field, msg) {
      * under Skills is a fact the ledger mangles instead of proving.
      */
     if (session.resumeText) {
-      session.resumeText += `\n\nExperience\n- ${msg.trim()}`;
+      /*
+       * A fact is only made into a bullet if it reads like one.
+       *
+       * Every answer was appended as "- <whatever they typed>", so a page
+       * came back carrying "- Built 12 records and 500 users", "- Delivered
+       * jan 2026 - present" and "- Implemented aug 2026-presernt": a bare
+       * measurement and two date ranges, each with a verb bolted on, sitting
+       * among real achievements. A date belongs on the role header, and a
+       * number on its own is not a claim about anything.
+       */
+      const t = msg.trim();
+      const bareDate = RE_DATE_RANGE.test(t) && t.split(/\s+/).length <= 6;
+      const bareNumber = /^[\d\s,.%+-]+$|^\d[\w\s,.%+-]{0,24}$/.test(t);
+      if (bareDate) {
+        /* Attach it to the most recent role header rather than list it. */
+        session.resumeText = session.resumeText.replace(
+          /^([^\n]*\|[^\n]*)$/m, (line) => (RE_DATE_RANGE.test(line) ? line : `${line} | ${t}`));
+      } else if (!bareNumber && t.split(/\s+/).length >= 4) {
+        session.resumeText += `\n\nExperience\n- ${t}`;
+      }
     }
   } else d[field] = msg.trim();
 
@@ -1522,6 +1651,32 @@ function deliver(res, session, packetOrBuilt, kindNote) {
 
   /* A shipped resume is what cover and prep are allowed to work from. */
   session.shipped = { text, target: session.target, jd: session.jd };
+
+  /*
+   * Filed beside the master rather than over it.
+   *
+   * Every tailoring used to replace the last, so somebody who tailored for
+   * one company on Monday and another on Tuesday had a single file by
+   * Tuesday evening and no way back to Monday's. A version keeps the note it
+   * shipped with — the score and what it did not claim — because a document
+   * opened in three weeks needs its caveat as much as its text.
+   */
+  if (isPacket || command === 'build') {
+    session.library = library.saveVersion(
+      library.setMaster(session.library, session.library && session.library.master ? session.library.master : text),
+      {
+        text,
+        /* Named from whatever is actually known — the company they said, the
+           role they targeted, or the title on the page — so the library does
+           not fill up with rows called "unnamed-role". */
+        company: (session.details && session.details.company) || null,
+        role: session.target || (session.details && session.details.position)
+          || atsEngine.factLedger(text).title || null,
+        jd: session.jd,
+        score: session.lastScore,
+        notClaimed: isPacket ? packetOrBuilt.notClaimed : [],
+      });
+  }
 
   /*
    * The improved page becomes the working copy.
@@ -1858,7 +2013,19 @@ router.post('/chat', upload.single('file'), async (req, res) => {
        * and each answer adds real content and real points. It stops asking
        * when they stop answering.
        */
-      const short = out.failing.find((f) => f.id === 'length');
+      /*
+       * Only a SHORT page is asked for more.
+       *
+       * The length check fires at both ends, and this read it as one signal:
+       * a 993-word resume — comfortably over a page — was told "3 of the
+       * missing points are page length" and then asked "anything else? a
+       * second project, a competition, a paper", which is the opposite of
+       * what that page needs. Too long is a cutting problem, and cutting is
+       * something the agent can do itself.
+       */
+      const lengthLoss = out.failing.find((f) => f.id === 'length');
+      const words = String(out.text || '').split(/\s+/).filter(Boolean).length;
+      const short = lengthLoss && words < 250 ? lengthLoss : null;
       session.moreAsked = session.moreAsked || 0;
       if (short && short.lost >= 2 && session.moreAsked < 4 &&
           !(session.declined || []).includes('more')) {
@@ -1880,8 +2047,23 @@ router.post('/chat', upload.single('file'), async (req, res) => {
            instead of re-printing the same worklist at somebody who has read
            it. Asking the same question twice is the bug this whole pass is
            about; asking about a different line every time is the work. */
+        /*
+         * The five worst lines, not all of them.
+         *
+         * A recording caught this offering to walk somebody through their
+         * bullets one at a time and telling them "54 left after this one".
+         * Nobody answers fifty-five questions about their own resume, and
+         * being told how many are left is discouragement rather than help.
+         * A page with that many weak lines has a length problem, which the
+         * trim lever now solves; what survives is a handful worth fixing by
+         * hand, and those are worked worst-first.
+         */
+        const QUEUE = 5;
         session.bulletsAsked = session.bulletsAsked || [];
-        const pending = audit.weak.filter((r) => !session.bulletsAsked.includes(r.text));
+        const queue = [...audit.weak]
+          .sort((a, b) => b.problems.length - a.problems.length)
+          .slice(0, QUEUE);
+        const pending = queue.filter((r) => !session.bulletsAsked.includes(r.text));
 
         if (pending.length) {
           const target = pending[0];
@@ -1893,13 +2075,13 @@ router.post('/chat', upload.single('file'), async (req, res) => {
             reply: [
               'Seat: RESUME · Command: raise',
               firstRound
-                ? `Checker ${out.report.score}/100 and formatting is spent — the rest of the points are in the lines themselves. ${audit.strong}/${audit.total} bullets already pull their weight; these do not.`
-                : `Checker ${out.report.score}/100. Next line, ${pending.length} left after this one.`,
+                ? `Checker ${out.report.score}/100 and formatting is spent — the rest of the points are in the lines themselves. ${audit.strong}/${audit.total} bullets already pull their weight. These are the ${queue.length} worth fixing first${audit.weak.length > queue.length ? `, out of ${audit.weak.length}` : ''}.`
+                : `Checker ${out.report.score}/100. Next one.`,
               '',
               ...(firstRound ? [
                 '| Line | What is wrong | What fixes it |',
                 '|---|---|---|',
-                ...audit.weak.slice(0, 8).map((r) =>
+                ...queue.map((r) =>
                   `| ${r.text.replace(/\|/g, '\\|')} | ${r.problems.join('; ')} | ${(r.fix || '').replace(/\|/g, '\\|')} |`),
                 '',
               ] : []),
@@ -2287,6 +2469,254 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       return res.json({ ok: true, kind: 'help', reply: `Cover letter — ${letter.words} words${letter.withinLimit ? '' : ' (over the 300 limit — trim before sending)'}:\n\n${letter.text}`, session });
     }
 
+    /*
+     * parser — what an ATS actually pulls out of the file.
+     *
+     * Every other view is an opinion. This one is a fact, and a student who
+     * sees their phone number extracted broken stops arguing with the score
+     * and fixes the document.
+     */
+    if (session.command === 'parser') {
+      if (!session.resumeText.trim()) return ask('resume', 'Attach the file itself — this shows what a parser gets out of it.');
+      const v = parserView.parserView(session.resumeText);
+      session.command = null;
+      const mark = { high: '✓', low: '~', none: '✗' };
+      return res.json({
+        ok: true, kind: 'help',
+        reply: [
+          'Seat: RESUME · Command: parser',
+          v.verdict,
+          `${v.summary.extracted}/${v.summary.of} fields came out.`,
+          '',
+          '| Field | Extracted | Confidence | Why |',
+          '|---|---|---|---|',
+          ...v.fields.map((f) => `| ${f.name} | ${(f.value || '—').toString().slice(0, 46)} | ${mark[f.confidence]} ${f.confidence} | ${f.why} |`),
+          '',
+          v.roles.length ? 'Roles as the parser splits them:' : '',
+          ...v.roles.map((r) => `· ${r.header.slice(0, 70)} — ${r.bullets} bullet${r.bullets === 1 ? '' : 's'}${r.warning ? ` · ${r.warning}` : ''}`),
+          v.hazards.length ? '\nLayout faults:' : '',
+          ...v.hazards.map((h) => `· ${h.what} — ${h.why}`),
+          '',
+          v.caveat,
+        ].filter(Boolean).join('\n'),
+        session,
+      });
+    }
+
+    /* quickcheck — the ten-second read, before the detailed score. */
+    if (session.command === 'quickcheck') {
+      if (!session.resumeText.trim()) return ask('resume', 'Attach or paste the resume first.');
+      const q = library.quickCheck(session.resumeText);
+      session.command = null;
+      return res.json({
+        ok: true, kind: 'help',
+        reply: [
+          'Seat: RESUME · Command: quickcheck',
+          `${q.passed}/${q.of} — ${q.verdict}`,
+          '',
+          ...q.checks.map((c) => `${c.pass ? '✓' : '✗'} ${c.label} — ${c.note}`),
+        ].join('\n'),
+        session,
+      });
+    }
+
+    /* versions — the master and every tailored derivative of it. */
+    if (session.command === 'versions') {
+      const list = library.listVersions(session.library);
+      session.command = null;
+      return res.json({
+        ok: true, kind: 'help',
+        reply: [
+          'Seat: RESUME · Command: versions',
+          list.hasMaster ? 'Master resume on file.' : 'No master yet — upload one and every tailoring keeps it intact.',
+          '',
+          list.versions.length ? '| Version | Company | Role | Score | Not claimed |' : 'No tailored versions yet. Tailor against a posting and it is saved here.',
+          list.versions.length ? '|---|---|---|---|---|' : '',
+          ...list.versions.map((v) =>
+            `| ${v.id} | ${v.company || '—'} | ${v.role || '—'} | ${v.score == null ? '—' : `${v.score}/100`} | ${v.notClaimed} |`),
+          '',
+          list.versions.length ? 'Each version keeps the note it shipped with, so opening one later shows what it did not claim.' : '',
+        ].filter(Boolean).join('\n'),
+        session,
+      });
+    }
+
+    /*
+     * bullets — the best lines this person has ever written, for this job.
+     *
+     * Somebody who has tailored four times has written the same achievement
+     * four ways, and the best phrasing is rarely the newest. Ranking is by
+     * the posting's own hard terms: a bullet that names the required tool AND
+     * carries a figure is the first line of the page, and knowing that needs
+     * no model.
+     */
+    if (session.command === 'bullets') {
+      const lib = library.setMaster(session.library, session.resumeText || '');
+      if (!session.jd) {
+        const all = library.bulletLibrary(lib);
+        session.command = null;
+        return res.json({
+          ok: true, kind: 'help',
+          reply: [
+            'Seat: RESUME · Command: bullets',
+            `${all.length} bullet${all.length === 1 ? '' : 's'} on file across your master and every version you have tailored.`,
+            '',
+            ...all.slice(0, 12).map((b) => `${b.hasNumber ? '#' : '·'} ${b.text.slice(0, 110)}`),
+            '',
+            'Paste a job description and I will rank these against it.',
+          ].join('\n'),
+          session,
+        });
+      }
+      const ranked = library.rankForJd(lib, session.jd, 8);
+      session.command = null;
+      return res.json({
+        ok: true, kind: 'help',
+        reply: [
+          'Seat: RESUME · Command: bullets',
+          ranked.length
+            ? `Your ${ranked.length} most relevant lines for this posting, best first.`
+            : 'None of your bullets name anything this posting asks for. That gap is facts, not wording.',
+          '',
+          ...ranked.map((b, i) => `${i + 1}. ${b.text.slice(0, 120)}\n   matches: ${b.hits.join(', ') || '—'}${b.hasNumber ? ' · carries a number' : ' · no number'}`),
+          '',
+          ranked.length ? 'Lead the tailored page with these. Nothing was rewritten — they are your own lines, reordered.' : '',
+        ].filter(Boolean).join('\n'),
+        session,
+      });
+    }
+
+    /*
+     * score5 — the same measurement, in the five parts it is made of.
+     *
+     * One number tells somebody they are at 80 and nothing about what to do
+     * next. Split the way the work splits, it says which of them is theirs to
+     * fix and which is ours.
+     */
+    if (session.command === 'score5') {
+      if (!session.resumeText.trim()) return ask('resume', 'Attach or paste the resume to score.');
+      const s = atsEngine.score5(session.resumeText, { target: session.target, jd: session.jd });
+      session.command = null;
+      const bar = (v) => (v === null ? '—'.padEnd(10) : '█'.repeat(Math.round(v / 10)).padEnd(10, '░'));
+      return res.json({
+        ok: true, kind: 'help',
+        reply: [
+          'Seat: RESUME · Command: score5',
+          `Overall ${s.overall}/${s.of} · recruiter-scan ${s.recruiter}/100`,
+          s.scaledFromPartial
+            ? 'No posting supplied, so the keyword bar was never measured — this is the rest of the rubric, rescaled. Paste a job description for the real number.'
+            : '',
+          '',
+          ...s.bars.map((b) => `${b.name.padEnd(18)} ${bar(b.value)} ${b.value === null ? 'N/A' : `${b.value}/100`}\n${' '.repeat(19)}${b.why}`),
+          '',
+          s.fixes.length ? 'Worst first:' : 'Nothing left that formatting can move.',
+          ...s.fixes.map((f, i) => `${i + 1}. [${f.bar}] ${f.fix}`),
+          '',
+          s.caveat,
+        ].filter(Boolean).join('\n'),
+        session,
+      });
+    }
+
+    /* keywords — present, weak or missing, with where each one belongs. */
+    if (session.command === 'keywords') {
+      if (!session.resumeText.trim()) return ask('resume', 'Attach or paste the resume first.');
+      if (!session.jd) return ask('jd', 'Paste the job description — keywords are only real against a posting.');
+      const led = atsEngine.factLedger(session.resumeText);
+      const map = atsEngine.jdMap(session.resumeText, led, session.jd);
+      session.command = null;
+      if (!map) {
+        return res.json({ ok: true, kind: 'help', reply: 'That posting names no hard terms I can measure against. Paste the requirements section.', session });
+      }
+      const state = { evidenced: 'present', 'listed only': 'weak', 'not claimed': 'missing' };
+      const priority = (r) => (r.kind === 'must' ? (r.status === 'not claimed' ? 'high' : 'medium') : 'low');
+      return res.json({
+        ok: true, kind: 'help',
+        reply: [
+          'Seat: RESUME · Command: keywords',
+          `${map.evidenced}/${map.rows.length} of the posting's terms are evidenced${map.listedOnly ? `, ${map.listedOnly} claimed with nothing behind them` : ''}.`,
+          '',
+          '| Term | State | Priority | Where it belongs |',
+          '|---|---|---|---|',
+          ...map.rows.slice(0, 16).map((r) => {
+            const where = r.status === 'evidenced' ? r.where
+              : r.status === 'listed only' ? 'a bullet, not the skills line'
+                : r.kind === 'must' ? 'a bullet — only if you have used it' : 'optional';
+            return `| ${r.term} | ${state[r.status]} | ${priority(r)} | ${where} |`;
+          }),
+          '',
+          'Nothing is added for you. A keyword you cannot defend in the room is worse than a missing one.',
+        ].join('\n'),
+        session,
+      });
+    }
+
+    /*
+     * interview — questions from THIS resume, one at a time.
+     *
+     * Generic STAR prompts rehearse nothing. The questions worth practising
+     * are the ones a real interviewer would ask about this page: the bullet
+     * with the number in it, the skill listed with nothing behind it, the
+     * term the posting wants that the page cannot prove.
+     */
+    if (session.command === 'interview') {
+      const source = session.resumeText.trim() || (session.shipped && session.shipped.text) || '';
+      if (!source) return ask('resume', 'Attach or paste the resume — the questions come out of it, not from a generic list.');
+
+      if (!session.interview) {
+        const built = mockInterview.questionsFor(source, {
+          role: session.target || undefined, jd: session.jd, limit: 8,
+        });
+        session.interview = { role: built.role, questions: built.questions, answers: [], at: 0 };
+      }
+      const iv = session.interview;
+      /* The answer itself was consumed on the way in, by consumeAnswer. */
+      if (iv.at >= iv.questions.length) {
+        session.command = 'interview-review';
+      } else {
+        const q = iv.questions[iv.at];
+        session.command = 'interview';
+        return ask('answer', q.prompt,
+          `Question ${iv.at + 1} of ${iv.questions.length} · ${iv.role}. Answer as you would out loud — about 45 seconds. Say "review" when you want the report.`);
+      }
+    }
+
+    /* interview-review — what the words show, and nothing they do not. */
+    if (session.command === 'interview-review') {
+      const iv = session.interview;
+      if (!iv || !iv.answers.length) {
+        session.command = null;
+        return res.json({ ok: true, kind: 'help', reply: 'No interview to review yet. Say "mock interview" and I will ask the first question.', session });
+      }
+      const report = mockInterview.scoreSession(iv.answers);
+      const better = mockInterview.betterAnswers(session.resumeText || (session.shipped && session.shipped.text) || '', 3);
+      session.command = null;
+      session.interview = null;
+
+      return res.json({
+        ok: true, kind: 'help',
+        reply: [
+          'Seat: INTERVIEW · Command: interview-review',
+          `Overall ${report.score}/${report.of} — ${report.verdict}`,
+          report.detail || '',
+          '',
+          report.tone ? `Clarity: ${report.tone.clarity} — ${report.tone.clarityWhy}` : '',
+          report.tone ? `Confidence: ${report.tone.confidence} — ${report.tone.confidenceWhy}` : '',
+          report.tone ? `Enthusiasm: ${report.tone.enthusiasm} — ${report.tone.enthusiasmWhy}` : '',
+          report.pace ? `Pace: ${report.pace.estimate}. ${report.pace.note}` : '',
+          '',
+          report.strengths.length ? `What worked: ${report.strengths.join(' ')}` : '',
+          report.fixes.length ? 'What to fix, worst first:' : '',
+          ...report.fixes.map((f, i) => `${i + 1}. ${f}`),
+          better.length ? '\nThree answers to rehearse, built only from what your resume already says:' : '',
+          ...better.flatMap((b) => [`\n"${b.from}"`, ...b.scaffold.map((s) => `  · ${s}`)]),
+          '',
+          report.tone ? report.tone.caveat : '',
+        ].filter(Boolean).join('\n'),
+        session,
+      });
+    }
+
     /* prep — the 5-line interview defense from the last shipped packet. */
     if (session.command === 'prep') {
       if (!session.lastPacket || !session.shipped) {
@@ -2534,5 +2964,6 @@ router.post('/chat', upload.single('file'), async (req, res) => {
 
 module.exports = router;
 module.exports.scanResume = scanResume;
+module.exports.raiseToTarget = raiseToTarget;
 module.exports.buildResume = buildResume;
 module.exports.resumePdfBuffer = resumePdfBuffer;

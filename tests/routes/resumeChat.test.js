@@ -309,8 +309,11 @@ describe('the conversation advances instead of repeating', () => {
     /* Terms are shown as the posting spells them, so the match is case-blind. */
     expect(t2.reply).toMatch(/\| PostgreSQL \| no \|/i);
     expect(t2.reply).toMatch(/\| Docker \| no \|/i);
-    /* Evidenced terms say where the proof is, so the row is checkable. */
-    expect(t2.reply).toMatch(/\| Spring \| yes \| Experience \|/i);
+    /* Evidenced terms say where the proof is, so the row is checkable — and
+       "Spring Boot" appears once, not also as a bare "Spring" row: a term
+       wholly inside a longer one is that term. */
+    expect(t2.reply).toMatch(/\| Spring Boot \| yes \| Experience \|/i);
+    expect(t2.reply).not.toMatch(/\| Spring \|/i);
   });
 
   it('never asks the identical question twice in a row', async () => {

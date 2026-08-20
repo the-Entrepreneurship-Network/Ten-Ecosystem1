@@ -106,7 +106,20 @@ function evidences(proofText, skill) {
   return words.length > 1 && words.every((w) => hasWord(proofText, w));
 }
 
-const toLines = (text) => String(text || '').split(/\r?\n/).map((l) => l.trim());
+/*
+ * A PDF that ran a word into the year after it.
+ *
+ * Two-column and tightly-kerned PDFs extract as "Hyderabad2026" and
+ * "Asansol2021", which then ship on the rewritten page exactly as extracted —
+ * and a date the parser cannot see is a date the ATS cannot read either.
+ * Separating a word from a trailing four-digit year is safe: no English word
+ * ends in one.
+ */
+const unglueYears = (line) => String(line)
+  .replace(/([A-Za-z])((?:19|20)\d{2})\b/g, '$1 $2')
+  .replace(/\b((?:19|20)\d{2})([A-Za-z])/g, '$1 $2');
+
+const toLines = (text) => String(text || '').split(/\r?\n/).map((l) => unglueYears(l.trim()));
 
 function isHeading(line) {
   const l = line.toLowerCase().replace(/[^a-z& ]/g, '').trim();
@@ -409,7 +422,18 @@ function jdHardTerms(jd) {
     if (/[0-9+#]/.test(w) || /\.(js|ts|py|net|io)$/.test(w) || w.includes('-')) add(w);
   });
 
-  return [...found].slice(0, 40);
+  /*
+   * "Spring Boot" and "Spring" are one demand, not two.
+   *
+   * Both were extracted, and because the resume's skills line proved the
+   * longer one, the bare fragment stayed on the unproven list — so the agent
+   * told a student "this role asks for Spring" about a page that says Spring
+   * Boot. A term wholly contained in a longer term is that term.
+   */
+  const terms = [...found];
+  return terms
+    .filter((t) => !terms.some((other) => other !== t && other.length > t.length && hasWord(other, t)))
+    .slice(0, 40);
 }
 
 /**
@@ -455,6 +479,12 @@ function jdRequirements(jd) {
  * number; showing them the bullet that proves Terraform and the four terms
  * with no bullet behind them is a decision they can act on.
  */
+/** A list with the entries that are only fragments of longer ones removed. */
+function dropFragments(terms) {
+  return terms.filter((t) => !terms.some((other) =>
+    other !== t && other.length > t.length && hasWord(other.toLowerCase(), t.toLowerCase())));
+}
+
 function jdMap(text, ledger, jd, opts = {}) {
   const req = jdRequirements(jd);
   if (!req.all.length) return null;
@@ -509,8 +539,13 @@ function jdMap(text, ledger, jd, opts = {}) {
     nice: req.nice.length,
     evidenced: evidenced.length,
     listedOnly: rows.filter((r) => r.status === 'listed only').length,
-    mustMissing: rows.filter((r) => r.kind === 'must' && r.status === 'not claimed').map((r) => r.term),
-    niceMissing: rows.filter((r) => r.kind === 'nice' && r.status === 'not claimed').map((r) => r.term),
+    /*
+     * Without the fragments of longer entries. "Spring Boot, Spring" is one
+     * demand written twice, and whichever came first got quoted back at the
+     * student — "this role asks for Spring" — naming half a technology.
+     */
+    mustMissing: dropFragments(rows.filter((r) => r.kind === 'must' && r.status === 'not claimed').map((r) => r.term)),
+    niceMissing: dropFragments(rows.filter((r) => r.kind === 'nice' && r.status === 'not claimed').map((r) => r.term)),
   };
 }
 
@@ -705,6 +740,122 @@ function recruiterScan(text, ledger, target) {
   return {
     total: gates.reduce((s, g) => s + g.points, 0),
     gates
+  };
+}
+
+/**
+ * The score, in the five parts it is actually made of.
+ *
+ * One number tells somebody they are at 80 and nothing about what to do
+ * about it. The same measurements, split the way the work splits, say which
+ * afternoon of effort moves it: content is facts they have to supply, format
+ * is ours to fix, optimisation only exists once a posting does.
+ *
+ * Nothing new is measured here. Every bar is built from the checker and the
+ * recruiter scan that already ran, so the five bars and the headline can
+ * never disagree with each other.
+ */
+function score5(text, opts = {}) {
+  const jd = opts.jd || '';
+  const target = opts.target || '';
+  const ledger = factLedger(text);
+  const checker = checkerScore(text, ledger, jd);
+  const recruiter = recruiterScan(text, ledger, target);
+  const all = toLines(text);
+
+  const pct = (n, of) => Math.max(0, Math.min(100, Math.round((n / of) * 100)));
+  const bullets = [
+    ...ledger.roles.flatMap((r) => r.bullets),
+    ...ledger.projects.flatMap((p) => p.bullets),
+  ];
+  const scoped = bullets.filter(hasScope).length;
+  const banned = bullets.filter((b) => BANNED_OPENERS.test(b)).length;
+  const buzz = BANNED_BUZZWORDS.filter((w) => String(text).toLowerCase().includes(w));
+  const words = String(text).split(/\s+/).filter(Boolean).length;
+
+  const bars = [];
+  const bar = (name, value, why, fixes) => bars.push({ name, value, why, fixes: fixes.filter(Boolean) });
+
+  /* 1. Content — do the claims carry facts? */
+  const contentRaw =
+    (bullets.length ? Math.min(40, (scoped / bullets.length) * 40) : 0) +
+    (ledger.evidencedSkills.length ? 25 : 0) +
+    (ledger.title || target ? 15 : 0) +
+    (ledger.roles.length ? 10 : 0) +
+    (ledger.projects.length ? 10 : 0);
+  bar('Content', Math.round(contentRaw),
+    `${scoped}/${bullets.length || 0} bullets carry a number · ${ledger.evidencedSkills.length} evidenced skills`,
+    [
+      scoped < bullets.length / 2 && 'Put one true figure on each strong bullet — how many, how much, how often.',
+      !ledger.projects.length && 'Add a project: it is where a student proves a stack no employer has paid them for yet.',
+      !ledger.title && !target && 'Name the role you are applying for under your name.',
+    ]);
+
+  /* 2. Format — ours to fix, and the half a parser actually reads. */
+  bar('Format', pct(checker.parse, 30),
+    `parse ${checker.parse}/30 · ${ledger.sectionsFound.length} standard sections`,
+    checker.deductions.slice(0, 3).map((d) => d.why));
+
+  /* 3. Optimisation — only real when a posting exists. */
+  const kd = checker.keywordDetail;
+  bar('Optimisation', jd ? (kd ? kd.overlap : 0) : null,
+    jd ? `${(kd || {}).matched || 0}/${(kd || {}).terms || 0} of the posting's hard terms are evidenced`
+       : 'No job description supplied — paste one and this becomes a real measurement.',
+    jd && kd && kd.missing.length ? [`Not evidenced: ${kd.missing.slice(0, 6).join(', ')}. Add only what you have used.`] : []);
+
+  /* 4. Best practices — the writing rules, not the parsing ones. */
+  const bpRaw = 100
+    - (bullets.length ? (banned / bullets.length) * 40 : 0)
+    - buzz.length * 8
+    - (words > 900 ? 20 : words < 250 ? 15 : 0);
+  bar('Best practices', Math.max(0, Math.round(bpRaw)),
+    `${banned} duty-phrased bullet${banned === 1 ? '' : 's'} · ${buzz.length} banned word${buzz.length === 1 ? '' : 's'} · ${words} words`,
+    [
+      banned && 'Rewrite the duty phrases: say what you produced, not what you were assigned.',
+      buzz.length && `Cut: ${buzz.slice(0, 4).join(', ')}.`,
+      words > 900 && 'Over a page — cut the weakest bullets.',
+      words < 250 && 'Thin for a page — the words have to be yours; add more of your work.',
+    ]);
+
+  /* 5. Application ready — can they be contacted and dated? */
+  const dated = ledger.roles.filter((r) => r.hasDates).length;
+  const readyRaw = (ledger.email ? 30 : 0) + (ledger.phone ? 25 : 0) + (ledger.link ? 15 : 0) +
+    (ledger.roles.length ? (dated / ledger.roles.length) * 20 : 20) + (ledger.education.length ? 10 : 0);
+  bar('Application ready', Math.round(readyRaw),
+    `${ledger.email ? 'email ✓' : 'email ✗'} · ${ledger.phone ? 'phone ✓' : 'phone ✗'} · ${ledger.link ? 'link ✓' : 'link ✗'} · ${dated}/${ledger.roles.length || 0} roles dated`,
+    [
+      !ledger.email && 'Add an email address in the body — an ATS discards what it cannot reply to.',
+      !ledger.phone && 'Add a phone number with country code.',
+      !ledger.link && 'Add a GitHub or LinkedIn URL as plain text.',
+      ledger.roles.length && dated < ledger.roles.length && 'Date every role — "Jun 2024 – Dec 2024".',
+    ]);
+
+  /*
+   * The headline is the checker's own number, so the bars can never disagree
+   * with the score printed beside them — and the denominator is the one the
+   * number was actually scaled to. Reporting a percentage over the raw
+   * out-of-60 total printed "Overall 88/60", which is not a score.
+   */
+  const scaled = checker.max !== 100;
+  const overall = scaled ? Math.round((checker.total / checker.max) * 100) : checker.total;
+
+  /* Worst bar first, and only bars that can still move. */
+  const fixes = bars
+    .filter((b) => b.value !== null && b.value < 100 && b.fixes.length)
+    .sort((a, b) => a.value - b.value)
+    .flatMap((b) => b.fixes.map((f) => ({ bar: b.name, fix: f })))
+    .slice(0, 6);
+
+  return {
+    overall,
+    of: 100,
+    /* Said plainly: without a posting the keyword block was never measured,
+       so this is the parse-and-evidence half rescaled, not a full score. */
+    scaledFromPartial: scaled,
+    recruiter: recruiter.total,
+    bars,
+    fixes,
+    caveat: 'This rubric, not a live ATS. Greenhouse and Workday do not publish a score, and nobody outside this page can promise you one.',
   };
 }
 
@@ -1136,7 +1287,17 @@ function rewriteResume(text, options) {
    */
   if (ledger.education.length) {
     L.push('EDUCATION');
-    ledger.education.forEach((e) => L.push(`- ${stripBullet(String(e))}`));
+    /*
+     * A section heading that fell into education is not a qualification.
+     *
+     * "LANGUAGES" shipped as an education entry — "- LANGUAGES" — with the
+     * languages themselves beneath it as a second entry, because the parser
+     * had filed both under the previous heading. A bare all-caps word is a
+     * heading wherever it lands.
+     */
+    ledger.education
+      .filter((e) => !/^[A-Z][A-Z &]{2,24}$/.test(String(e).trim()))
+      .forEach((e) => L.push(`- ${stripBullet(String(e))}`));
     L.push('');
   }
   if (ledger.certifications.length) {
@@ -1246,6 +1407,7 @@ module.exports = {
   jdMap,
   bulletAudit,
   metricQuestion,
+  score5,
   impactBullet,
   STRONG_VERBS,
   BANNED_OPENERS,
