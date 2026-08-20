@@ -40,8 +40,31 @@ router.post('/login', adminLoginLimiter, async (req, res) => {
     const { username, password } = req.body || {};
     const isValid = await verifyAdminCredentials(username, password);
     if (isValid) {
-      // Regenerate the session id on privilege change (session fixation).
+      /*
+       * Regenerating the session id on a privilege change is right — it is what
+       * stops session fixation. Throwing away the rest of the session with it
+       * was not.
+       *
+       * One browser holds one cookie for the whole product, so the HR, student
+       * and coordinator portals share this session. regenerate() destroys it
+       * wholesale, so signing into the admin console silently signed the same
+       * person out of every other portal they had open. The HR dashboard renders
+       * from sessionStorage, so it went on LOOKING signed in while every request
+       * behind it answered 401 — "Your HR session has expired", out of nowhere,
+       * for someone who had done nothing but open a second tab. In a private
+       * window, where the admin console had never been used, HR worked perfectly.
+       *
+       * So the other roles are carried across. They were authenticated in this
+       * session already and are not re-granted here; only the session ID
+       * changes, which is the part fixation cares about.
+       */
+      const carried = {};
+      for (const role of ['student', 'hr', 'coordinator']) {
+        if (req.session && req.session[role]) carried[role] = req.session[role];
+      }
+
       const grant = () => {
+        Object.assign(req.session, carried);
         req.session.adminUser = { username: ADMIN_USERNAME, lastActivity: Date.now() };
         res.json({ success: true });
       };
