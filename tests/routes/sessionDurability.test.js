@@ -65,8 +65,19 @@ describe('the signing key is the same after a restart', () => {
 
   it('the key is written private to the owner', () => {
     loadResolver(dir)();
-    const mode = fs.statSync(path.join(dir, '.session-secret')).mode & 0o777;
-    expect(mode).toBe(0o600);
+    const file = path.join(dir, '.session-secret');
+    expect(fs.existsSync(file)).toBe(true);
+
+    /*
+     * Windows has no POSIX mode bits. NTFS reports 0666 for every regular
+     * file — writing with { mode: 0o600 } and calling chmod(0o600) both come
+     * back 0666 — so asserting the number there fails on a correct
+     * implementation and told a developer their tests were broken when the
+     * server they deploy to writes the file exactly right. The permission is
+     * asserted where the deployment runs.
+     */
+    if (process.platform === 'win32') return;
+    expect(fs.statSync(file).mode & 0o777).toBe(0o600);
   });
 
   it('an explicit SESSION_SECRET still wins', () => {

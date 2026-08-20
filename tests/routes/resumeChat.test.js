@@ -221,8 +221,10 @@ describe('the conversation advances instead of repeating', () => {
     // The confirmed line is now evidence in the shipped text; the never-
     // mentioned term stays not-claimed.
     expect(out.text).toMatch(/containerised the attendance service/);
-    expect(out.packet.notClaimed).toContain('postgresql');
-    expect(out.packet.notClaimed).not.toContain('docker');
+    /* Listed as the posting spells them, so compare case-blind. */
+    const notClaimed = out.packet.notClaimed.map((t) => t.toLowerCase());
+    expect(notClaimed).toContain('postgresql');
+    expect(notClaimed).not.toContain('docker');
   });
 
   it('a delivery opens with the path, command, band and the caveat', async () => {
@@ -243,7 +245,166 @@ describe('the conversation advances instead of repeating', () => {
     expect(t2.reply).toMatch(/Command: match/);
     expect(t2.reply).toMatch(/% evidenced overlap/);
     expect(t2.reply).toMatch(/65–80%/);
-    expect(t2.reply).toMatch(/missing: postgresql|missing: docker/);
+    /*
+     * The screen must show the posting was read term by term, not just
+     * scored. This used to assert a "• missing: docker" bullet list; the
+     * reply now carries the mapping table the tailor spec asks for — term,
+     * whether it is evidenced, where, and what to do — so the assertion
+     * checks the table and that the two absent terms are named in it.
+     */
+    expect(t2.reply).toMatch(/\| JD term \| Have it \| Where \| Action \|/);
+    /* Terms are shown as the posting spells them, so the match is case-blind. */
+    expect(t2.reply).toMatch(/\| PostgreSQL \| no \|/i);
+    expect(t2.reply).toMatch(/\| Docker \| no \|/i);
+    /* Evidenced terms say where the proof is, so the row is checkable. */
+    expect(t2.reply).toMatch(/\| Spring \| yes \| Experience \|/i);
+  });
+
+  it('reads a job description pasted into the message', async () => {
+    /*
+     * "Tailor it to this job: Must have Python, AWS, Kubernetes…" was
+     * answered with "paste the job description instead if you have it" —
+     * about a message that was the job description.
+     */
+    const a = app();
+    const t1 = await turn(a, RESUME, null);
+    const t2 = await turn(a, 'tailor it to this job: Senior Backend Developer. Must have: Java, Spring Boot, Kubernetes. Nice to have: Kafka.', t1.session);
+    expect(t2.session.jd).toMatch(/Kubernetes/);
+    expect(t2.reply || '').not.toMatch(/Paste the job description/i);
+  });
+
+  it('does not claim a skill that is only the tail of a compound word', async () => {
+    /*
+     * "ran the billing service on a 3-node cluster" was read as evidence of
+     * Node.js, and Node went onto the skills line of a resume the student
+     * would have sent — a claim they never made, produced by a hyphen.
+     */
+    const a = app();
+    const withCluster = [
+      'Priya Nair', 'Backend Developer', 'priya@example.com | +91 90000 00000',
+      '', 'EXPERIENCE', 'Backend Developer | Zeta | Jan 2023 - Present',
+      '- Ran the billing service on a 3-node cluster, cutting failover time 40%',
+      '', 'SKILLS', 'Java, Spring Boot', '', 'EDUCATION', 'B.Tech CS, 2021 - 2025',
+    ].join('\n');
+    let out = await turn(a, withCluster, null);
+    out = await turn(a, 'fix it', out.session);
+    for (let i = 0; i < 8 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+    expect(out.kind).toBe('build');
+    const skillsLine = (out.text.match(/^SKILLS\n(.+)$/m) || [])[1] || '';
+    expect(skillsLine.toLowerCase().split(/,\s*/)).not.toContain('node');
+  });
+
+  it('treats a pasted resume as a resume, not as an instruction', async () => {
+    /*
+     * The agent asks people to paste their resume, then read the paste as a
+     * sentence. A summary saying "2 years building services on AWS" matched
+     * the build verb, so pasting a finished resume was answered with "what
+     * job title are you applying for?" — about a document whose second line
+     * is the job title.
+     */
+    const a = app();
+    const pasted = [
+      'Priya Nair',
+      'Backend Developer',
+      'priya.nair@example.com | +91 98765 43210',
+      '',
+      'SUMMARY',
+      'Backend developer with 2 years building services on AWS.',
+      '',
+      'EXPERIENCE',
+      'Backend Developer | Zeta Systems | Jan 2023 - Present',
+      '- Built an API on AWS serving 5,000 requests a day, cutting latency 30%',
+      '',
+      'SKILLS',
+      'Python, AWS, Terraform',
+      '',
+      'EDUCATION',
+      'B.Tech Computer Science, 2021 - 2025',
+    ].join('\n');
+
+    const out = await turn(a, pasted, null);
+    expect(out.session.resumeText).toContain('Zeta Systems');
+    /* Looked at, not interrogated. */
+    expect(out.reply || '').not.toMatch(/What job title are you applying for/i);
+    expect(out.kind).not.toBe('ask');
+  });
+
+  it('reads an ordinary posting instead of treating it as no target at all', async () => {
+    /*
+     * The reported failure, as a test. A student pasted a real posting and
+     * got scores out of 60 with an empty Not-claimed list and no ceiling —
+     * the agent had scored their resume as though no job description
+     * existed. The cause was term extraction that only recognised tools
+     * already in this file's vocabulary plus tokens containing a digit, a
+     * dot or a hyphen: "Kubernetes, Terraform, AWS, Prometheus, Go" yielded
+     * too few terms to clear the keyword block's floor, so the block was
+     * skipped in silence.
+     *
+     * Two properties keep it dead: the keyword block is scored (the score is
+     * out of 100, not 60), and terms this codebase has never heard of are
+     * still recognised as demands.
+     */
+    const a = app();
+    const t1 = await turn(a, RESUME, null);
+    const t2 = await turn(a, 'gap', t1.session, {
+      jd: 'Site Reliability Engineer. Required: Kubernetes, Terraform, AWS, Prometheus, Go.',
+    });
+    expect(t2.reply).toMatch(/Gap table — \d+\/\d+ JD terms evidenced/);
+    /* Prometheus is in no vocabulary here and must still be read as a demand. */
+    expect(t2.reply).toMatch(/prometheus/i);
+    expect(t2.reply).toMatch(/kubernetes/i);
+    expect(t2.reply).toMatch(/Factual ceiling/);
+  });
+
+  it('scores against a posting out of 100, not out of 60', async () => {
+    const a = app();
+    const t1 = await turn(a, RESUME, null);
+    const t2 = await turn(a, 'jobscan this', t1.session, {
+      jd: 'Backend Developer. Required: Java, Spring Boot, Kubernetes, Terraform.',
+    });
+    expect(t2.reply).toMatch(/checker \d+\/100/);
+    expect(t2.reply).not.toMatch(/checker \d+\/60/);
+  });
+
+  it('separates what the posting requires from what it merely prefers', async () => {
+    const a = app();
+    const t1 = await turn(a, RESUME, null);
+    const t2 = await turn(a, 'gap', t1.session, {
+      jd: 'Backend Developer. Must have: Java, Spring Boot. Nice to have: Kafka, Grafana.',
+    });
+    expect(t2.reply).toMatch(/must-have/);
+    expect(t2.reply).toMatch(/nice-to-have/);
+    /* An optional term absent from the resume is not a failure to fix. */
+    expect(t2.reply).toMatch(/\| Grafana \*\(nice to have\)\* \| no \|.*Safe to leave out/i);
+  });
+
+  it('keeps the title the resume already states instead of writing "Professional"', async () => {
+    /*
+     * A page headed "Backend Developer" came back headed "Professional",
+     * because nothing read the line under the name — the rewriter's
+     * last-resort placeholder was standing in for a fact printed at the top
+     * of the document it had just parsed.
+     */
+    const a = app();
+    const withTitle = ['Priya Nair', 'Backend Developer', ...RESUME.split('\n').slice(1)].join('\n');
+    let out = await turn(a, withTitle, null);
+    out = await turn(a, 'fix it', out.session);
+    for (let i = 0; i < 8 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+    expect(out.kind).toBe('build');
+    expect(out.text).toMatch(/Backend Developer/);
+    expect(out.text).not.toMatch(/^Professional$/m);
+  });
+
+  it('does not print its own bookkeeping words on the shipped page', async () => {
+    /* "Evidenced in Python, AWS" was this engine's internal term for where a
+       skill came from, printed in the summary of a document being sent to a
+       recruiter. */
+    const a = app();
+    let out = await turn(a, RESUME, null);
+    out = await turn(a, 'fix it', out.session);
+    for (let i = 0; i < 8 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+    expect(out.kind).toBe('build');
+    expect(out.text).not.toMatch(/Evidenced in/i);
   });
 
   it('linkedin writes headline and About from evidence only', async () => {

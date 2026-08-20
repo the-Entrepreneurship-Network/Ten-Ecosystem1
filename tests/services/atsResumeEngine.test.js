@@ -138,8 +138,20 @@ describe('rewrite (CONVERT)', () => {
   });
 
   it('lists what the JD wants that the ledger cannot prove, and states the ceiling', () => {
-    expect(packet.notClaimed).toEqual(expect.arrayContaining(['postgresql', 'docker']));
+    /* Spelled as the posting spells them — this list is read by a person. */
+    const missing = packet.notClaimed.map((t) => t.toLowerCase());
+    expect(missing).toEqual(expect.arrayContaining(['postgresql', 'docker']));
     expect(packet.ceiling).toMatch(/cannot close that gap/i);
+  });
+
+  it('does not list a fragment of a term it has already listed', () => {
+    /* "REST API, REST, API" is one demand written three times, and it made
+       the ceiling sentence read like a far larger gap than it was. */
+    const missing = packet.notClaimed.map((t) => t.toLowerCase());
+    missing.forEach((t) => {
+      const swallowedBy = missing.filter((o) => o !== t && o.length > t.length && o.split(/\s+/).includes(t));
+      expect(swallowedBy).toHaveLength(0);
+    });
   });
 
   it('evaluates the ship gate instead of asserting it', () => {
