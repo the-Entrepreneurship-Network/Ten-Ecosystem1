@@ -29,7 +29,14 @@ type Report = {
   missingKeywords: string[];
 };
 type Missing = { field: string; worth: number; why: string };
-type Msg = { role: 'user' | 'agent'; text?: string; report?: Report; resume?: string; file?: string; missing?: Missing[]; potentialScore?: number; details?: Record<string, string> };
+type Choice = { label: string; value: string; note?: string };
+type Options = {
+  multi?: boolean;
+  options?: Choice[];
+  groups?: { group: string; options: Choice[] }[];
+  other?: Choice;
+};
+type Msg = { role: 'user' | 'agent'; text?: string; report?: Report; resume?: string; file?: string; missing?: Missing[]; potentialScore?: number; details?: Record<string, string>; options?: Options };
 
 /* ---------- frame one: the statement ---------- */
 
@@ -250,6 +257,68 @@ function ReplyBody({ text }: { text: string }) {
 }
 
 /*
+ * The answers to a question, offered rather than demanded.
+ *
+ * A blank prompt is the hardest kind of question to answer well: "which
+ * company is the letter for?" got back "amazon" and nothing else, and the
+ * letter was written on that alone. Picking from a list is faster and gives
+ * the agent a fact it can rely on — and the last chip is always the way out,
+ * because a menu you cannot answer outside of is worse than no menu.
+ */
+function ChoiceList({ options, onPick, disabled }: {
+  options: Options; onPick: (value: string) => void; disabled: boolean;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const groups = options.groups || (options.options ? [{ group: '', options: options.options }] : []);
+  /* Long lists collapse: fifteen chips is a menu, ninety is a wall. */
+  const LIMIT = 12;
+  const total = groups.reduce((n, g) => n + g.options.length, 0);
+  const collapsed = !showAll && total > LIMIT;
+
+  const chip = (c: Choice, key: string) => (
+    <button
+      key={key}
+      type="button"
+      disabled={disabled}
+      onClick={() => onPick(c.value || c.label)}
+      className="rounded-full border border-[#d9e0ea] bg-white px-3 py-1.5 text-left text-[12.5px] text-[#374151] transition hover:border-[#2563eb] hover:text-[#2563eb] disabled:opacity-50"
+    >
+      {c.label}
+      {c.note && <span className="ml-1.5 text-[11px] text-[#9ca3af]">{c.note}</span>}
+    </button>
+  );
+
+  return (
+    <div className="space-y-3">
+      {groups.map((g, gi) => {
+        const shown = collapsed ? g.options.slice(0, Math.max(2, Math.floor(LIMIT / groups.length))) : g.options;
+        if (!shown.length) return null;
+        return (
+          <div key={gi}>
+            {g.group && <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#9ca3af]">{g.group}</p>}
+            <div className="flex flex-wrap gap-1.5">{shown.map((c, i) => chip(c, `${gi}-${i}`))}</div>
+          </div>
+        );
+      })}
+      <div className="flex flex-wrap items-center gap-2">
+        {collapsed && (
+          <button type="button" onClick={() => setShowAll(true)}
+            className="text-[12px] font-semibold text-[#2563eb] hover:underline">
+            Show all {total}
+          </button>
+        )}
+        {/* The escape hatch, never hidden behind "show all". */}
+        {options.other && (
+          <span className="text-[12px] text-[#6b7280]">
+            {options.other.label} — just type it below.
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/*
  * Fetches the rendered PDF and hands it to the browser. Posting rather than
  * linking keeps the details out of the URL bar and out of server logs.
  */
@@ -370,7 +439,7 @@ export function AgentChat() {
       if (data.session) persistSession(data.session);
       if (data.kind === 'scan') setMsgs((m) => [...m, { role: 'agent', report: data.report, text: data.prompt || undefined }]);
       else if (data.kind === 'build') setMsgs((m) => [...m, { role: 'agent', resume: data.text, report: data.report, missing: data.missing, potentialScore: data.potentialScore, details: data.details, text: data.reply || undefined }]);
-      else setMsgs((m) => [...m, { role: 'agent', text: data.reply }]);
+      else setMsgs((m) => [...m, { role: 'agent', text: data.reply, options: data.options }]);
     } catch {
       // Only a real network failure reaches here now.
       setMsgs((m) => [...m, { role: 'agent', text: 'Could not reach the server. Check your connection and try again.' }]);
@@ -489,6 +558,12 @@ export function AgentChat() {
                     ) : (
                       <div className="space-y-3">
                         {m.text && <ReplyBody text={m.text} />}
+                        {/* Only the newest question is answerable — older
+                            chips would post an answer to a question that has
+                            already moved on. */}
+                        {m.options && i === msgs.length - 1 && (
+                          <ChoiceList options={m.options} disabled={busy} onPick={(v) => send(v)} />
+                        )}
                         {m.resume && (
                           <div className="rounded-2xl border border-[#e5e9f0] bg-[#fbfcfe] p-4">
                             <div className="mb-2 flex items-center justify-between gap-2">
