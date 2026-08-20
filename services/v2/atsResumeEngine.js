@@ -56,7 +56,12 @@ const SECTION_ALIASES = {
 const RE_EMAIL = /[\w.+-]+@[\w-]+\.[\w.]{2,}/;
 const RE_PHONE = /(\+?\d[\d\s().-]{7,}\d)/;
 const RE_LINK = /(linkedin\.com\/[\w\-/]+|github\.com\/[\w\-/]+|https?:\/\/[\w./-]+)/i;
-const RE_DATE_RANGE = /((19|20)\d{2}|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[^\n]{0,24}(-|–|—|\bto\b)\s*((19|20)\d{2}|present|current|now)/i;
+/* "Jun 2024 – Dec 2024" — the format the guidance asks students to use — did
+   not parse here either: the closing half demanded a bare year or "Present",
+   so a correctly written role read as undated. */
+const RE_MONTH_WORD = '(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*';
+const RE_DATE_RANGE = new RegExp(
+  `((19|20)\\d{2}|${RE_MONTH_WORD})[^\\n]{0,24}(-|–|—|\\bto\\b)\\s*(${RE_MONTH_WORD}\\.?\\s*)?((19|20)\\d{2}|present|current|now)`, 'i');
 /* What a job title is made of. Deliberately a noun list rather than "any
    short capitalised line" — a company name and a city are both short and
    capitalised, and neither is what the person does. */
@@ -763,13 +768,32 @@ function interviewQuestions(ledger, opts) {
     ask(4, 'dates', 'Start and end month/year for each role — "Jan 2024 – Present" is the shape a parser reads.');
   }
 
-  /* Block 5 — projects, mandatory when experience is thin. */
-  if (!ledger.projects.length && ledger.roles.flatMap((r) => r.bullets).length < 3) {
-    ask(5, 'projects', 'A project that shows your stack: its name, the problem it solved, your role, the tools, and who used it.');
+  /* Block 5 — projects. Asked whenever there are none, not only when the
+     work history is thin: for most students applying into these roles the
+     projects section is the evidence, and a page without one is a page with
+     nothing to point at. */
+  if (!ledger.projects.length) {
+    ask(5, 'projects', 'A project that shows your stack: its name, the problem it solved, your role, the tools, and who used it. Two or three lines is plenty.');
   }
 
-  /* Block 6 — education. */
-  if (!ledger.education.length) ask(6, 'education', 'Degree, school, and month/year?');
+  /* Block 6 — education, and the last few facts a page is judged on. */
+  if (!ledger.education.length) ask(6, 'education', 'Degree, institution, and the years — "B.Tech Computer Science, Ramaiah Institute of Technology, 2022 – 2026".');
+  if (!ledger.certifications.length) {
+    ask(6, 'certifications', 'Any certifications worth listing — the issuer and the year? Say skip if none; an invented one is worse than an empty section.');
+  }
+  /*
+   * Asked because people ask for it, answered honestly.
+   *
+   * A photograph is normal on a CV in much of Europe, Latin America and
+   * parts of Asia, and is screened out — sometimes automatically — in the
+   * US, UK, Canada and Australia. Either way it cannot live in the plain
+   * text an ATS reads, so the answer decides what the export does with it
+   * rather than what goes in the parsed page.
+   */
+  if (!o.photoAnswered) {
+    ask(6, 'photo', 'Should the exported CV carry a photo? Most ATS markets — US, UK, Canada, India tech — expect none, and the parsed text cannot hold one either way.');
+  }
+  if (!o.location) ask(6, 'location', 'Which city are you based in, and are you open to relocating?');
 
   /* The stop rule: build once these three are fillable. */
   const canBuild = Boolean(

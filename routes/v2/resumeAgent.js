@@ -26,6 +26,7 @@ const multer = require('multer');
 /* The ats-resume skill (v3.0, .claude/skills/ats-resume) as a deterministic
    engine: fact ledger, dual scoring, essential-signal pass, ship gate. */
 const atsEngine = require('../../services/v2/atsResumeEngine');
+const career = require('../../services/v2/careerData');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -56,6 +57,11 @@ const ACTION_VERBS = [
   'engineered','streamlined','resolved','debugged','configured','modelled','modeled','forecasted',
   'raised','sourced','onboarded','trained','audited','secured','documented','benchmarked',
   'wrote','ran','achieved','collaborated','planned','simplified','rewrote','shipped','cut','saved',
+  /* Missing from the list, so a bullet already opening with one of these got
+     a second verb bolted on: "Automated added Redux state management". */
+  'added','set','extended','ported','replaced','removed','fixed','converted','introduced','launched',
+  'measured','instrumented','profiled','validated','verified','standardised','standardized',
+  'consolidated','partnered','supported','facilitated','organised','organized','prototyped',
 ];
 
 /* Headings an ATS recognises. Cute alternatives are the classic silent
@@ -135,7 +141,19 @@ function roleBank(target) {
 const RE_EMAIL = /[\w.+-]+@[\w-]+\.[\w.]{2,}/;
 const RE_PHONE = /(\+?\d[\d\s().-]{7,}\d)/;
 const RE_LINK  = /(linkedin\.com\/[\w\-/]+|github\.com\/[\w\-/]+)/i;
-const RE_DATE_RANGE = /((19|20)\d{2}|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[^\n]{0,24}(-|–|—|to)\s*((19|20)\d{2}|present|current|now)/i;
+/*
+ * A date range, in the shapes people actually write.
+ *
+ * The closing half used to demand a bare year or "Present", so "Jun 2024 –
+ * Dec 2024" did not parse — the exact format this project's own guidance
+ * tells students to use ("Mon YYYY – Mon YYYY"). Four of the six commonest
+ * formats failed, which quietly docked the date check on well-written
+ * resumes and made a correct page look unparseable. The closing month is
+ * optional now, and "to" is accepted as a separator.
+ */
+const MONTH = '(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*';
+const RE_DATE_RANGE = new RegExp(
+  `((19|20)\\d{2}|${MONTH})[^\\n]{0,24}(-|–|—|\\bto\\b)\\s*(${MONTH}\\.?\\s*)?((19|20)\\d{2}|present|current|now)`, 'i');
 
 function lines(text) {
   return String(text || '').split(/\r?\n/).map((l) => l.trim());
@@ -148,8 +166,20 @@ function lines(text) {
  */
 function bulletLines(all) {
   const marked = all.filter((l) => BULLET_RE.test(l));
-  if (marked.length >= 2) return marked;
-  return all.filter((l) => l.length > 25 && /^[A-Z]/.test(l) && !isHeading(l));
+  /*
+   * One marked bullet is still a bullet list.
+   *
+   * The threshold was two, so a resume with a single "- Built ..." line fell
+   * through to the prose fallback below and was scored on its summary
+   * sentence, its role header and its skills line — none of which open with
+   * a verb, and none of which are achievements. The report read "0/4 bullets
+   * (0%)" to somebody whose only bullet began with "Built".
+   */
+  if (marked.length) return marked;
+  /* No markers anywhere: fall back to prose lines that read like claims,
+     excluding headings and the contact block, which are neither. */
+  return all.filter((l) => l.length > 25 && /^[A-Z]/.test(l) && !isHeading(l) &&
+    !RE_EMAIL.test(l) && !RE_LINK.test(l));
 }
 
 /* Which section a line sits under, so a check can ask about the right ones. */
@@ -180,7 +210,7 @@ function achievementBullets(all) {
     .map((l, i) => ({ line: l, section: sectionOf(all, i) }))
     .filter((b) => BULLET_RE.test(b.line));
 
-  if (marked.length < 2) return bulletLines(all);
+  if (!marked.length) return bulletLines(all);
 
   const claims = marked.filter((b) => b.section === 'experience' || b.section === 'projects');
   return (claims.length ? claims : marked).map((b) => b.line);
@@ -305,9 +335,19 @@ function scanResume(text, target) {
 
   /* 7. length */
   const wc = words.length;
-  const lengthScore = wc < 180 ? 2 : wc < 250 ? 5 : wc <= 900 ? 8 : wc <= 1200 ? 5 : 2;
+  /*
+   * A ramp, not a cliff. The bands stepped 2 → 5 → 8 at 180 and 250 words, so
+   * a 235-word resume lost three points to a 255-word one for a difference no
+   * reader would notice, and a focused one-page intern resume was scored as
+   * though it were a stub. Thinness is a matter of degree, so the points are
+   * too: full marks from 250 words, sliding down to the floor at 120.
+   */
+  const lengthScore = wc >= 250 && wc <= 900 ? 8
+    : wc > 900 ? (wc <= 1200 ? 5 : 2)
+      : wc <= 120 ? 2
+        : 2 + ((wc - 120) / (250 - 120)) * 6;
   add('length', 'Length is in range', 8, lengthScore, `${wc} words`,
-    wc < 250 ? 'Too thin — an ATS has little to match. Expand bullets with tools used and outcomes.'
+    wc < 250 ? 'Thin for a full page — an ATS has less to match. Expand bullets with the tools used and the outcome.'
              : 'Too long — trim to one or two pages of dense, relevant content.');
 
   /* 8. parse hazards */
@@ -394,6 +434,40 @@ const splitItems = (v) => String(v || '')
   .map((s) => s.trim().replace(/^[-*•▪◦‣·]+\s*/, '').trim())
   .filter(Boolean);
 
+/*
+ * The same split for fields where a pipe separates columns, not items.
+ *
+ * "Web Developer Intern | Zeta Labs | Jun 2024 – Dec 2024" is one role
+ * written the way every resume writes one. Splitting it on the pipe turned a
+ * header into three fragments, which then came back verb-fronted as "Built
+ * web Developer Intern", "Delivered zeta Labs" and "Implemented jun 2024 -
+ * Dec 2024" — three achievements nobody claimed, and the dates lost.
+ */
+const splitLines = (v) => String(v || '')
+  .split(/;|\s*\n\s*/)
+  .map((s) => s.trim().replace(/^[-*•▪◦‣·]+\s*/, '').trim())
+  .filter(Boolean);
+
+/*
+ * A line naming where and when somebody worked, rather than what they did.
+ *
+ * "Backend Engineer | Zeta Systems | Jan 2023 – Present" and "Web Developer
+ * Intern, Zeta Labs, Jun 2024 – Dec 2024" are headers: they carry the dates
+ * the parser reads, and they are the one kind of experience line that must
+ * not be verb-fronted into a bullet.
+ */
+function looksLikeRoleHeader(line) {
+  const t = String(line || '').trim();
+  if (!t || t.length > 120) return false;
+  if (/^[-*•]/.test(t)) return false;             /* they marked it a bullet themselves */
+  if (!RE_DATE_RANGE.test(t) && !/\|/.test(t)) return false;
+  /* A bullet can mention a date too, so require a title word and no verb. */
+  const first = t.split(/\s+/)[0].toLowerCase().replace(/[^a-z]/g, '');
+  if (ACTION_VERBS.includes(first)) return false;
+  return RE_JOB_TITLE_LINE.test(t) || /\|/.test(t);
+}
+const RE_JOB_TITLE_LINE = /\b(engineer|developer|analyst|scientist|designer|architect|manager|consultant|specialist|associate|assistant|coordinator|executive|officer|lead|intern|trainee|freelancer|administrator|technician|researcher)\b/i;
+
 /* Bullets are rewritten to open with an action verb, because that is a
    scored check — the builder must not ship what the scanner would fail. */
 function toBullet(text, i) {
@@ -403,7 +477,12 @@ function toBullet(text, i) {
   if (!ACTION_VERBS.includes(first)) {
     t = t.replace(/^(responsible for|worked on|helped with|involved in)\s*/i, '');
     const verb = ['Built', 'Delivered', 'Implemented', 'Led', 'Automated', 'Improved'][i % 6];
-    t = verb + ' ' + t.charAt(0).toLowerCase() + t.slice(1);
+    /* Lowercasing the joint turned "JWT authentication service" into "jWT"
+       and "Zeta Labs" into "zeta Labs". A word that is not plain capitalised
+       prose — an acronym, a product, a name — keeps its own spelling. */
+    const head = t.split(/\s+/)[0];
+    const isProper = /^[A-Z]{2,}$/.test(head) || /[A-Z]/.test(head.slice(1));
+    t = verb + ' ' + (isProper ? t : t.charAt(0).toLowerCase() + t.slice(1));
   } else {
     t = t.charAt(0).toUpperCase() + t.slice(1);
   }
@@ -414,7 +493,10 @@ function buildResume(detailsInput) {
   const d = parseDetails(detailsInput);
   const bank = roleBank(d.role);
   const name = d.name || 'Your Name';
-  const role = d.role || 'Software Developer';
+  /* A title typed as "Backend Engineer," carries its punctuation onto the
+     page and into the cover letter — "applying for the Backend Engineer,
+     role". It is a title, not a sentence. */
+  const role = String(d.role || 'Software Developer').replace(/[\s,;:.\-–]+$/, '').trim() || 'Software Developer';
 
   const contactBits = [d.email, d.phone, d.linkedin, d.github, d.location].filter(Boolean);
   /*
@@ -428,9 +510,9 @@ function buildResume(detailsInput) {
    */
   const skills = splitItems(d.skills);
 
-  const expItems = splitItems(d.experience);
-  const projItems = splitItems(d.projects);
-  const eduItems = splitItems(d.education);
+  const expItems = splitLines(d.experience);
+  const projItems = splitLines(d.projects);
+  const eduItems = splitLines(d.education);
 
   const L = [];
   L.push(name.toUpperCase());
@@ -444,52 +526,61 @@ function buildResume(detailsInput) {
    * is allowed to fail honestly so `missing` can report what it costs.
    */
   L.push(contactBits.join(' | ') || '[ add your email and phone here — an ATS discards an application it cannot contact ]');
+  /*
+   * From here down, every line is the student's, or it does not exist.
+   *
+   * This block used to be a template with a name poured into it. A person who
+   * gave only a name and a job title got back a page carrying a four-sentence
+   * character reference they never wrote ("reads existing code before changing
+   * it, keeps commits small enough to review"), a TEN Virtual Internship dated
+   * Jan 2026 – Present whether or not they had done one, three invented
+   * bullets, a capstone project, a documentation bullet promising setup "in
+   * under 10 minutes", a B.Tech in Computer Science dated 2022 – 2026, and a
+   * completion certificate — and the same function reported "education" as
+   * missing while the page it had just written showed a degree.
+   *
+   * An earlier pass took out the invented metrics and left the invented
+   * biography, which is the more dangerous half: a fabricated number ends an
+   * interview, a fabricated degree ends a career. A section with no facts
+   * behind it is now absent from the page and named in `missing` instead.
+   */
+  const section = (heading, lines) => {
+    const kept = lines.filter(Boolean);
+    if (!kept.length) return;
+    L.push('');
+    L.push(heading);
+    kept.forEach((l) => L.push(l));
+  };
+
+  /* The summary states the role and the tools they claimed — nothing else.
+     With no skills it stays one clause, rather than trailing "across ." */
   L.push('');
   L.push('SUMMARY');
-  L.push(`${role} with hands-on project experience across ${skills.slice(0, 5).join(', ')}. Builds features end to end — data model, API and interface — writes tests alongside the code, and measures the result rather than describing the effort. Comfortable owning a task from a written requirement through review and deployment, and used to working to a weekly deadline with code reviewed by a domain coordinator. Reads existing code before changing it, keeps commits small enough to review, and documents what a new contributor needs to run the project.`);
-  L.push('');
-  L.push('SKILLS');
-  L.push(skills.join(', '));
-  L.push('');
-  L.push('EXPERIENCE');
-  L.push(`${role} — TEN Virtual Internship | Jan 2026 – Present`);
-  /* True of the programme itself, so every intern can defend it: this line
-     is structure, and it replaces the word count the fabricated metrics used
-     to supply. */
-  L.push(`Remote internship under a domain coordinator: weekly task submissions, code review before merge, and a final evaluated capstone in ${bank.key === 'general' ? 'software development' : bank.key}.`);
+  L.push(skills.length
+    ? `${role} with hands-on experience across ${skills.slice(0, 5).join(', ')}.`
+    : `${role}.`);
+
+  section('SKILLS', [skills.join(', ')]);
   /*
-   * The student's items go on the page as they gave them — verb-fronted, but
-   * with no metric or tool appended. This used to add ", cutting manual
-   * effort by 30%" and ", serving 100+ users" to bullets that had no number,
-   * which is fabrication: the ats-resume skill's hard limit ("never invent
-   * metrics") bans it, and an interviewer asking "how did you measure that?"
-   * ends the interview. A bullet without scope is reported as a gap instead.
+   * A role header is a header, not an achievement.
+   *
+   * Every experience line was verb-fronted, so "Backend Engineer — TEN
+   * Virtual Internship | Jan 2026 – Present" shipped as "- Built backend
+   * Engineer, - TEN Virtual Internship" and the dates beneath it as
+   * "- Delivered jan 2026 - Present". The header also carries the dates the
+   * parser looks for, and turning it into prose is what lost them.
    */
-  if (expItems.length) {
-    expItems.forEach((e, i) => {
-      const b = toBullet(e, i);
-      if (b) L.push(`- ${b}`);
-    });
-  }
-  /* Weekly-track facts every TEN intern can defend: structure of the
-     programme, not invented outcomes. */
-  L.push('- Delivered weekly reviewed milestones across a 45-day internship track');
-  L.push(`- Built projects using ${skills.slice(0, 3).join(', ')}, each reviewed by a domain coordinator before merge`);
-  L.push('- Wrote and ran tests before each weekly submission');
-  L.push('');
-  L.push('PROJECTS');
-  (projItems.length ? projItems : [`Built a ${bank.key === 'general' ? 'full-stack' : bank.key} application with authentication and a REST API as the internship capstone`])
-    .forEach((p, i) => {
-      const b = toBullet(p, i + 2);
-      if (b) L.push(`- ${b}`);
-    });
-  L.push(`- Documented setup and API usage so a new contributor could run the project in under 10 minutes`);
-  L.push('');
-  L.push('EDUCATION');
-  (eduItems.length ? eduItems : ['B.Tech, Computer Science — 2022 – 2026']).forEach((e) => L.push(`- ${e}`));
-  L.push('');
-  L.push('CERTIFICATIONS');
-  L.push('- TEN Virtual Internship — verifiable completion certificate, Jan 2026 – Mar 2026');
+  section('EXPERIENCE', expItems.map((e, i) => {
+    if (looksLikeRoleHeader(e)) return String(e).trim();
+    const b = toBullet(e, i);
+    return b ? `- ${b}` : null;
+  }));
+  section('PROJECTS', projItems.map((p, i) => {
+    const b = toBullet(p, i + 2);
+    return b ? `- ${b}` : null;
+  }));
+  section('EDUCATION', eduItems.map((e) => `- ${e}`));
+  section('CERTIFICATIONS', splitItems(d.certifications).map((c) => `- ${c}`));
 
   const text = L.join('\n');
   const report = scanResume(text, role);
@@ -1061,6 +1152,76 @@ function deliveryHeader(path, command, band, packet) {
 }
 
 /**
+ * The choices offered alongside a question, when the answer comes from a
+ * known set.
+ *
+ * Every list is capped — a wall of two hundred job titles is a worse prompt
+ * than a blank box — and every list ends with a free-text escape, so nothing
+ * here can stop somebody answering with the thing we did not think of. What
+ * is offered narrows as the conversation learns: once a country is chosen,
+ * the city list is that country's, and the employer list is who recruits
+ * there.
+ */
+function optionsFor(field, session) {
+  const d = (session && session.details) || {};
+  const other = { label: 'Something else — I will type it', value: '' };
+
+  if (field === 'target' || field === 'position') {
+    /* Grouped, so a long list reads as a menu rather than a wall. */
+    return {
+      multi: false,
+      groups: career.POSITION_GROUPS.map((g) => ({
+        group: g.group,
+        options: g.roles.map((r) => ({ label: r, value: r })),
+      })),
+      other,
+    };
+  }
+
+  if (field === 'level') {
+    return { multi: false, options: career.LEVELS.map((l) => ({ label: l.label, value: l.id })), other };
+  }
+
+  if (field === 'country') {
+    /* If they named a company, its home market leads the list. */
+    const home = d.company ? career.companyCountry(d.company) : null;
+    const list = home
+      ? [home, ...career.COUNTRIES.filter((c) => c !== home)]
+      : career.COUNTRIES;
+    return { multi: false, options: list.map((c) => ({ label: c, value: c })), other };
+  }
+
+  if (field === 'city') {
+    const cities = career.citiesIn(d.country);
+    if (!cities.length) return null;
+    return { multi: false, options: cities.map((c) => ({ label: c, value: c })), other };
+  }
+
+  if (field === 'company') {
+    const inMarket = d.country ? career.companiesHiringIn(d.country) : career.COMPANIES;
+    const list = (inMarket.length ? inMarket : career.COMPANIES).slice(0, 40);
+    return {
+      multi: false,
+      options: list.map((c) => ({ label: c.name, note: c.country, value: c.name })),
+      other,
+    };
+  }
+
+  if (field === 'photo') {
+    return {
+      multi: false,
+      options: [
+        { label: 'No photo', note: 'What most ATS markets expect', value: 'no' },
+        { label: 'Include one', note: 'Common in parts of the EU and Asia', value: 'yes' },
+      ],
+      other,
+    };
+  }
+
+  return null;
+}
+
+/**
  * The tailor step's mapping table, rendered.
  *
  * The skill has always required it — "JD term | in resume | where | action" —
@@ -1089,6 +1250,33 @@ function jdMapBlock(map) {
   return lines.join('\n');
 }
 
+/**
+ * Facts a build can take from a resume already in the session.
+ *
+ * A recording caught this: someone uploaded Bishal_Nag_DevOps_Cloud_Engineer_
+ * Resume.pdf, watched it score, then asked for a Full-Stack resume — and was
+ * told "it would go out saying your name is missing. What should it be?"
+ * about a document whose first line is their name. BUILD read only the
+ * interview answers, and the upload was not one.
+ *
+ * Only the facts that do not depend on the target role are carried across.
+ * Their name, address and phone number are theirs whatever they apply for; a
+ * DevOps work history is not the evidence for a Full-Stack page, so the
+ * interview still asks for the parts that changed.
+ */
+function detailsFromResume(resumeText) {
+  const text = String(resumeText || '').trim();
+  if (!text) return {};
+  const led = atsEngine.factLedger(text);
+  const out = {};
+  if (led.name) out.name = led.name;
+  if (led.email) out.email = led.email;
+  if (led.phone) out.phone = led.phone;
+  if (led.link) out.linkedin = led.link;
+  if (led.education.length) out.education = led.education.join('\n');
+  return out;
+}
+
 /** A fact ledger shaped from interview answers, so the same question engine
     serves BUILD, where there is no resume to parse yet. */
 function ledgerFromDetails(d) {
@@ -1103,7 +1291,7 @@ function ledgerFromDetails(d) {
     roles: items(d.experience).map((e) => ({ header: '', hasDates: /\d{4}/.test(e), bullets: [e] })),
     projects: items(d.projects).map((p) => ({ name: '', bullets: [p] })),
     education: items(d.education),
-    certifications: [],
+    certifications: items(d.certifications),
     statedSkills: skills,
     /* The interview asked for tools they can defend, so stating them is the
        evidence BUILD has. The scan of the finished page re-checks honestly. */
@@ -1131,16 +1319,28 @@ function consumeAnswer(session, field, msg) {
   if (field === 'resume') { session.resumeText = msg; return; }
 
   const d = session.details;
-  if (field === 'link') d.linkedin = msg.trim();
+  /* Stored under both names: the builder reads `linkedin`, the cover letter
+     reads `link`, and one answer has to satisfy whichever asked. */
+  if (field === 'link') { d.linkedin = msg.trim(); d.link = msg.trim(); }
   else if (field === 'metric' || field === 'evidence' || field === 'dates' || field === 'confirmkw') {
     /* Their words, added to their history — placement the rewriter can use.
        For confirmkw this is the Rezi-style confirmation: naming where a JD
        term was used is what makes it claimable. */
     d.experience = [d.experience, msg.trim()].filter(Boolean).join('\n');
-    /* Appended under an Experience heading, not at the tail of the file —
-       the tail belongs to whatever section came last, and a fact filed under
-       Skills is a fact the ledger mangles instead of proving. */
-    if (session.resumeText && field === 'confirmkw') {
+    /*
+     * Added to the resume itself, not only to the interview answers.
+     *
+     * Only confirmkw did this, so the raise command would ask for the fact
+     * holding the score down — "one more evidenced skill the target role
+     * asks for" — receive it, and then re-score the untouched document and
+     * report the identical ceiling. The person had answered the question and
+     * watched nothing happen, which is the complaint this portal gets most.
+     *
+     * Appended under an Experience heading rather than at the tail of the
+     * file: the tail belongs to whatever section came last, and a fact filed
+     * under Skills is a fact the ledger mangles instead of proving.
+     */
+    if (session.resumeText) {
       session.resumeText += `\n\nExperience\n- ${msg.trim()}`;
     }
   } else d[field] = msg.trim();
@@ -1157,7 +1357,14 @@ function nextQuestion(session) {
   const ledger = session.resumeText
     ? atsEngine.factLedger(session.resumeText)
     : ledgerFromDetails(session.details);
-  const iv = atsEngine.interviewQuestions(ledger, { target: session.target, jd: session.jd });
+  const d = session.details || {};
+  const iv = atsEngine.interviewQuestions(ledger, {
+    target: session.target,
+    jd: session.jd,
+    /* Answers already given, so a question is never asked twice. */
+    photoAnswered: Boolean(d.photo),
+    location: d.location,
+  });
   /* Declined questions stay answered — "skip" is an answer. */
   const declined = session.declined || [];
   const open = iv.questions.filter((q) => !declined.includes(q.field));
@@ -1334,10 +1541,45 @@ router.post('/chat', upload.single('file'), async (req, res) => {
        then the work or one question — never a greeting, never the menu. */
     /* The router's reply shape: seat, then command, then the work or one
        question. Never a greeting, never the menu. */
+    /*
+     * One question, and never the same one twice in a row.
+     *
+     * A recording caught the loop this exists to stop: asked for a name, the
+     * person typed "build for google", the word "build" re-triggered the
+     * build command, the pending question was discarded unanswered, and the
+     * identical sentence came back — "I can lay the page out, but it would
+     * go out saying your name is missing. What should it be?" — word for
+     * word. From the outside that is an agent that cannot hear.
+     *
+     * Repeating a question is now itself the signal that the last exchange
+     * did not land, so the second attempt says so and offers the way out
+     * instead of restating.
+     */
     const ask = (field, question, note) => {
+      const repeat = session.lastAsk === question;
+      session.lastAsk = question;
       session.asked = field;
       const head = session.command ? `Seat: RESUME · Command: ${session.command}` : null;
-      return res.json({ ok: true, kind: 'ask', reply: [head, note, question].filter(Boolean).join('\n\n'), session });
+      const body = repeat
+        ? `${question}\n\nI asked this a moment ago and I do not have it yet — your last message did not read as an answer to it. Reply with just the value, or say "build it anyway" and I will ship the draft without it.`
+        : question;
+      /*
+       * Answers to pick from, where the answer comes from a known set.
+       *
+       * A blank prompt is the hardest kind of question. "Which company is
+       * the letter for?" got back "amazon" and nothing else, and a letter
+       * was written on that alone. Offering the options turns the question
+       * into a choice — and every list ends in a free-text escape, because a
+       * menu you cannot answer outside of is worse than no menu.
+       */
+      const choices = optionsFor(field, session);
+      return res.json({
+        ok: true,
+        kind: 'ask',
+        reply: [head, note, body].filter(Boolean).join('\n\n'),
+        options: choices || undefined,
+        session,
+      });
     };
 
     /* ── dispatch ── */
@@ -1408,15 +1650,28 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       }
       const source = session.resumeText.trim() ||
         Object.entries(session.details).map(([k, v]) => `${k}: ${v}`).join('\n');
-      const goal = parseInt((low.match(/\b(\d{2})\s*(?:\/\s*100)?\b/) || [])[1], 10) || 98;
+      /*
+       * The number they asked for, not the one we prefer.
+       *
+       * A person who says "make it 91" is asking for 91 — perhaps because a
+       * portal filters there, perhaps because they want it done and stopped.
+       * The target is read from their sentence, remembered across the
+       * follow-up question (whose answer contains no number of its own, so
+       * re-parsing it silently reset the goal to 98), and stated back so they
+       * can see which bar is being worked to.
+       */
+      const stated = parseInt((low.match(/\b(\d{2})\s*(?:\/\s*100)?\b/) || [])[1], 10);
+      const goal = Math.min(100, Math.max(1, stated || session.pendingRaise || 98));
+      session.pendingRaise = goal;
       const out = raiseToTarget(source, session.target, session.jd, goal);
 
       session.resumeText = out.text; /* the climb is kept for the next turn */
 
       if (out.reached) {
         session.command = 'raise';
+        session.pendingRaise = null;
         return deliver(res, session, { text: out.text, report: out.report, missing: [], potentialScore: out.report.score },
-          `Checker ${out.report.score}/100 · every parse, heading, verb and keyword lever spent on true facts. Nothing was invented to get here.`);
+          `You asked for ${goal}. Checker ${out.report.score}/100 — every parse, heading, verb and keyword lever spent on true facts. Nothing was invented to get here.`);
       }
 
       /* One question, the one worth the most points. */
@@ -1425,13 +1680,14 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         session.declined.push('raise-' + out.needFact.id);
         session.pendingRaise = goal;
         return ask('metric',
-          `At ${out.report.score}/100 the formatting levers are spent. The next ${out.needFact.lost} points need ${out.needFact.ask}. Give me that and I will finish the climb — or say skip and I will ship this honestly.`);
+          `You asked for ${goal}. It is at ${out.report.score}/100 and the formatting levers are spent — the next ${out.needFact.lost} points need ${out.needFact.ask}. Give me that and I will finish the climb to ${goal} — or say skip and I will ship this honestly at ${out.report.score}.`);
       }
 
       /* Ceiling stated, exactly as the rule requires. */
       session.command = 'raise';
+      session.pendingRaise = null;
       const ceiling = [
-        `Ceiling: Checker ${out.report.score}/100.`,
+        `You asked for ${goal}. Ceiling: Checker ${out.report.score}/100.`,
         out.needFact
           ? `To reach ${goal} I need ${out.needFact.ask}. I will not invent it.`
           : `The remaining points need facts your history does not show. I will not invent them.`,
@@ -1695,14 +1951,56 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         session.command = null;
         return res.json({ ok: true, kind: 'help', reply: 'A cover letter is written against a finished resume. Run check, build or tailor first — once a resume ships, say "cover letter" and I will write it from that exact document.', session });
       }
-      if (!session.details.company && session.asked !== 'company') {
-        return ask('company', 'Which company is the letter for?');
-      }
-      const { coverLetter } = require('../../services/v2/jobMaterials');
+      /*
+       * A letter needs more than a company name.
+       *
+       * This asked one question — "which company is the letter for?" — took
+       * "amazon" for an answer and wrote the letter on that alone: no
+       * position, no market, no project to point at, and a greeting reading
+       * "Dear Hiring Team at for amazon". A letter is the most personal
+       * artefact here and it was the least informed.
+       *
+       * So it interviews, one question per turn, each with the answers to
+       * pick from where a known set exists. Nothing is required: skip any
+       * question and the letter is written from what it has, minus whatever
+       * that answer would have carried.
+       */
       const led = atsEngine.factLedger(session.shipped.text);
+      const coverAsk = [
+        { field: 'position', q: 'Which position is this letter for? Pick one or type your own.' },
+        { field: 'company', q: 'Which company is it going to?' },
+        { field: 'country', q: 'Which country is the role in? It sets the tone and the notice-period line.' },
+        { field: 'city', q: 'Which city — or remote?' },
+        { field: 'level', q: 'What level are you applying at?' },
+        { field: 'coverproof', q: 'Which piece of your work should the letter lead with? Name the project or the result — one line, in your words. It goes in verbatim.' },
+        { field: 'link', q: 'GitHub, LinkedIn or portfolio URL to include in the sign-off?' },
+      ];
+      const declined = session.declined || [];
+      const pending = coverAsk.find((a) => !session.details[a.field] && !declined.includes(a.field));
+      if (pending) return ask(pending.field, pending.q);
+
+      const { coverLetter } = require('../../services/v2/jobMaterials');
+      /* Their own answers first, the shipped resume second — never a guess. */
+      const position = session.details.position || session.shipped.target || 'the advertised role';
+      const place = [session.details.city, session.details.country].filter(Boolean).join(', ');
       const letter = coverLetter(
-        { name: led.name, role: session.shipped.target || 'the role', skills: led.evidencedSkills, location: null, projects: [] },
-        { title: session.shipped.target || 'the advertised role', company: session.details.company || 'your company', description: session.shipped.jd || '', tags: [] },
+        {
+          name: led.name,
+          role: position,
+          skills: led.evidencedSkills,
+          location: place || null,
+          projects: [],
+          link: session.details.link || led.link || null,
+          lead: session.details.coverproof || null,
+          level: session.details.level || null,
+        },
+        {
+          title: position,
+          company: session.details.company || 'your company',
+          description: session.shipped.jd || '',
+          tags: [],
+          country: session.details.country || null,
+        },
         session.shipped.text
       );
       session.command = null;
@@ -1738,9 +2036,37 @@ router.post('/chat', upload.single('file'), async (req, res) => {
     }
 
     if (session.command === 'build') {
+      /* Whatever they already gave us counts. Their own answers win over the
+         resume's, so a correction typed in the chat is never overwritten. */
+      if (session.resumeText.trim() && !session.seededFromResume) {
+        session.details = { ...detailsFromResume(session.resumeText), ...session.details };
+        session.seededFromResume = true;
+      }
+      /*
+       * The stop rule used to cut the interview off after block 3, which was
+       * safe only while the builder invented the rest: a page with no
+       * education section still shipped a fabricated B.Tech. Now that nothing
+       * is invented the section is simply absent, and the score drops over a
+       * fact that was one question away. The remaining single-fact questions
+       * are worth asking; the counter below is what keeps it from becoming an
+       * interrogation.
+       */
       const { iv, question } = nextQuestion(session);
-      const forceBuild = /\b(build it|done|that'?s all|go ahead|finish)\b/.test(low);
-      if (question && !forceBuild && !(iv.canBuild && question.block > 3)) {
+      /*
+       * "Build for google" is a person saying build it now, not an answer to
+       * whatever was last asked. It was read as the build command instead, so
+       * the pending question was thrown away and re-asked verbatim — the loop
+       * a recording caught. Anything that reads as "just build it", with or
+       * without a company after it, ships the draft.
+       */
+      /* A bare "build" is the command that starts the interview, so it must
+         never force: only a build with an object after it ("build it",
+         "build for google") is somebody saying ship what you have. */
+      const forceBuild = /\b(build it|done|that'?s all|go ahead|finish|just build)\b/.test(low) ||
+        /^\s*(?:ok(?:ay)?[, ]+)?(?:just |now |please )?build\s+(?:(?:it|this|one|the resume)\b|(?:for|at|to)\s+\S)/i.test(msg);
+      session.buildAsked = session.buildAsked || 0;
+      if (question && !forceBuild && !(iv.canBuild && question.block > 6) && session.buildAsked < 12) {
+        session.buildAsked += 1;
         return ask(question.field, question.question);
       }
       if (!iv.canBuild && !forceBuild) {

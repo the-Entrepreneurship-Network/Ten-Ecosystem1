@@ -49,12 +49,25 @@ function sectionsOf(resumeText) {
 }
 
 /** Lines that look like accomplishment bullets rather than prose or headers. */
+/*
+ * A role header names where somebody worked; it is not something they did.
+ * "Backend Engineer | TEN Virtual Internship | Jan 2026 – Present" was
+ * offered to a recruiter as one of three achievements, under the line "three
+ * things from my recent work that speak to it directly".
+ */
+const RE_ROLE_HEADER = /^[^-*•]{0,80}(\|.*\||\s[–—-]\s.*\d{4})/;
+function isRoleHeader(line) {
+  const t = String(line).trim();
+  if (/^[-*•]/.test(t)) return false;      /* marked as a bullet by its author */
+  return RE_ROLE_HEADER.test(t) && /\b(19|20)\d{2}\b/.test(t);
+}
+
 function bulletsOf(sections) {
   const wanted = /experience|project|achievement|employment/i;
   return sections
     .filter((s) => wanted.test(s.heading))
     .flatMap((s) => s.lines)
-    .filter((l) => l.length > 25);
+    .filter((l) => l.length > 25 && !isRoleHeader(l));
 }
 
 /**
@@ -164,8 +177,21 @@ function coverLetter(profile, job, resumeText) {
     .slice(0, 3)
     .map((b) => b.text);
 
-  const company = job.company || 'your team';
-  const role = job.title || p.role;
+  /*
+   * A company and a title, cleaned of the sentence they arrived in.
+   *
+   * Someone answering "which company is this for?" with "for amazon" was
+   * greeted by "Dear Hiring Team at for amazon", and a title typed "Backend
+   * Engineer," produced "applying for the Backend Engineer, role". These are
+   * the two most visible lines in the letter, so they are trimmed of leading
+   * prepositions and trailing punctuation before they are used.
+   */
+  const clean = (v) => String(v || '')
+    .replace(/^\s*(?:for|at|with|to|the)\s+/i, '')
+    .replace(/[\s,;:.\-–]+$/, '')
+    .trim();
+  const company = clean(job.company) || 'your team';
+  const role = clean(job.title) || clean(p.role) || 'the advertised role';
 
   const body = [];
   body.push(`Dear Hiring Team at ${company},`);
@@ -178,10 +204,26 @@ function coverLetter(profile, job, resumeText) {
   );
   body.push('');
 
-  if (evidence.length) {
-    body.push('Three things from my recent work that speak to it directly:');
-    evidence.forEach((e) => body.push('• ' + e));
+  /* The one piece of work they chose to lead with, in their own words and
+     ahead of anything picked by keyword overlap. */
+  const strip = (s) => String(s).replace(/^\s*[-*•▪◦‣·–—]+\s*/, '').trim();
+  if (p.lead) {
+    body.push(`The work I would point to first: ${strip(p.lead).replace(/\.$/, '')}.`);
     body.push('');
+  }
+
+  if (evidence.length) {
+    const rest = evidence.filter((e) => !p.lead || strip(e) !== strip(p.lead));
+    if (rest.length) {
+      body.push(p.lead
+        ? 'Alongside it, from the same work:'
+        : 'Three things from my recent work that speak to it directly:');
+      /* The resume's own bullet marker comes across with the line, so adding
+         one produced "• - Built a backend application" — two bullets on the
+         same line of a letter going to a recruiter. */
+      rest.forEach((e) => body.push('• ' + strip(e)));
+      body.push('');
+    }
   }
 
   body.push(
@@ -192,6 +234,9 @@ function coverLetter(profile, job, resumeText) {
   body.push('I would welcome the chance to talk it through.');
   body.push('');
   body.push(p.name || 'Your Name');
+  /* A profile link is the cheapest credibility in the letter, and it only
+     appears when they gave one. */
+  if (p.link) body.push(String(p.link).trim());
 
   const text = body.join('\n');
   const words = text.split(/\s+/).filter(Boolean).length;

@@ -183,10 +183,52 @@ describe('the conversation advances instead of repeating', () => {
     for (let i = 0; i < 7 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
     expect(out.kind).toBe('build');
 
+    /*
+     * The letter interviews before it writes. It used to ask one question —
+     * the company — and write from that alone, which is how "amazon" became
+     * a whole letter: no position, no market, no project to point at. Each
+     * question is skippable, so this answers the company and skips the rest.
+     */
     let cov = await turn(a, 'cover letter', out.session);
-    if (cov.session.asked === 'company') cov = await turn(a, 'Northwind', cov.session);
+    for (let i = 0; i < 10 && cov.kind === 'ask'; i++) {
+      cov = await turn(a, cov.session.asked === 'company' ? 'Northwind' : 'skip', cov.session);
+    }
     expect(cov.reply).toMatch(/Cover letter — \d+ words/);
     expect(cov.reply).toMatch(/Northwind/);
+  });
+
+  it('the letter asks what it needs instead of writing from a company name', async () => {
+    const a = app();
+    let out = await turn(a, RESUME, null);
+    out = await turn(a, 'fix it', out.session);
+    for (let i = 0; i < 8 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+
+    const asked = [];
+    let cov = await turn(a, 'cover letter', out.session);
+    for (let i = 0; i < 10 && cov.kind === 'ask'; i++) {
+      asked.push(cov.session.asked);
+      cov = await turn(a, 'skip', cov.session);
+    }
+    /* The position and the market are the two the old flow never asked. */
+    expect(asked).toContain('position');
+    expect(asked).toContain('company');
+    expect(asked).toContain('country');
+  });
+
+  it('offers the answers to pick from when the answer comes from a known set', async () => {
+    const a = app();
+    let out = await turn(a, RESUME, null);
+    out = await turn(a, 'fix it', out.session);
+    for (let i = 0; i < 8 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+
+    const cov = await turn(a, 'cover letter', out.session);
+    expect(cov.session.asked).toBe('position');
+    expect(cov.options).toBeTruthy();
+    const all = (cov.options.groups || []).flatMap((g) => g.options.map((o) => o.label));
+    expect(all).toContain('Backend Engineer');
+    expect(all).toContain('Machine Learning Engineer');
+    /* And it must always be possible to answer with something not listed. */
+    expect(cov.options.other).toBeTruthy();
   });
 
   it('prep gives the five-line defense only after a ship', async () => {
@@ -258,6 +300,84 @@ describe('the conversation advances instead of repeating', () => {
     expect(t2.reply).toMatch(/\| Docker \| no \|/i);
     /* Evidenced terms say where the proof is, so the row is checkable. */
     expect(t2.reply).toMatch(/\| Spring \| yes \| Experience \|/i);
+  });
+
+  it('never asks the identical question twice in a row', async () => {
+    /*
+     * From a recording: asked for a name, the person typed "build for
+     * google", the word "build" re-triggered the build command, the pending
+     * question was discarded unanswered, and the identical sentence came
+     * back word for word. From the outside that is an agent that cannot
+     * hear, and it is the complaint this portal gets most.
+     */
+    const a = app();
+    let out = await turn(a, 'build', null);
+    const seen = [];
+    for (let i = 0; i < 10 && out.kind === 'ask'; i += 1) {
+      /* Answering with a phrase that contains a command word, every turn. */
+      out = await turn(a, 'build for google', out.session);
+      if (out.kind !== 'ask') break;
+      expect(seen).not.toContain(out.reply);
+      seen.push(out.reply);
+    }
+    expect(out.kind).toBe('build');
+  });
+
+  it('takes the name and contact from a resume already uploaded', async () => {
+    /*
+     * Someone uploaded their resume, watched it score, then asked for a
+     * resume aimed at a different role — and was told "it would go out
+     * saying your name is missing" about a document whose first line is
+     * their name. BUILD read only the interview answers, and an upload was
+     * not one of them.
+     */
+    const a = app();
+    let out = await turn(a, RESUME, null);
+    out = await turn(a, 'Build a Full-Stack Developer resume from scratch', out.session);
+    for (let i = 0; i < 10 && out.kind === 'ask'; i += 1) {
+      expect(out.reply || '').not.toMatch(/your name is missing/i);
+      out = await turn(a, 'skip', out.session);
+    }
+    expect(out.text).toMatch(/PRIYA NAIR/);
+  });
+
+  it('works to the score the person asked for, not always 98', async () => {
+    const a = app();
+    for (const goal of [88, 91, 95, 99]) {
+      const t1 = await turn(a, RESUME, null);
+      const t2 = await turn(a, `make it ${goal}', please`, t1.session);
+      const said = (t2.reply || '');
+      expect(said).toMatch(new RegExp(`You asked for ${goal}\\b`));
+      /* And it never claims to have reached a bar it did not reach. */
+      const claimed = said.match(/Checker (\d+)\/100/);
+      if (claimed && /Ceiling/.test(said)) expect(Number(claimed[1])).toBeLessThan(goal);
+    }
+  });
+
+  it('uses the fact it asked for, instead of re-reporting the same ceiling', async () => {
+    /*
+     * The raise command asks for the one fact holding the score down, and
+     * only the JD-keyword confirmation was ever written back into the
+     * resume. So a person answered the question, watched the agent re-score
+     * the untouched document, and got the identical ceiling sentence back —
+     * having given it exactly what it asked for.
+     */
+    const a = app();
+    const t1 = await turn(a, RESUME, null);
+    const t2 = await turn(a, 'make it 95', t1.session);
+    expect(t2.kind).toBe('ask');
+
+    const before = t2.session.resumeText;
+    const scoreBefore = Number((t2.reply.match(/at (\d+)\/100/) || [])[1]);
+
+    const t3 = await turn(a, 'Docker — containerised the billing service and ran it on AWS ECS', t2.session);
+    /* The answer reached the document being scored, not just the notes. */
+    expect(t3.session.resumeText).not.toBe(before);
+    expect(t3.session.resumeText).toMatch(/containerised the billing service/);
+    /* And the conversation moved: a different number, or a different ask. */
+    const after = Number((String(t3.reply).match(/(?:at|Checker) (\d+)\/100/) || [])[1]);
+    expect(t3.reply).not.toBe(t2.reply);
+    if (scoreBefore && after) expect(after).toBeGreaterThanOrEqual(scoreBefore);
   });
 
   it('reads a job description pasted into the message', async () => {

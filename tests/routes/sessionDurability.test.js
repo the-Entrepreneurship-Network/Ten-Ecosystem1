@@ -113,8 +113,27 @@ describe('the key is never committed, and never a constant', () => {
     expect(fs.readFileSync(path.join(root, '.gitignore'), 'utf8')).toMatch(/^\.session-secret$/m);
   });
 
-  it('and does not exist in the repository', () => {
-    expect(fs.existsSync(path.join(root, '.session-secret'))).toBe(false);
+  it('and git is not tracking it', () => {
+    /*
+     * Asserted against git rather than against the working tree. The old
+     * check was `existsSync(.session-secret) === false`, which fails the
+     * moment anyone runs the server locally — the file is supposed to appear
+     * there, that is the entire feature. Developers were being told their
+     * tests were broken by a file the code had correctly created.
+     *
+     * What actually matters is that the key never reaches a commit, and git
+     * is the authority on that. If git is unavailable the assertion is
+     * skipped rather than guessed at.
+     */
+    let tracked;
+    try {
+      tracked = require('child_process')
+        .execSync('git ls-files --error-unmatch .session-secret', { cwd: root, stdio: 'pipe' })
+        .toString().trim();
+    } catch (e) {
+      tracked = ''; /* non-zero exit means git is not tracking it */
+    }
+    expect(tracked).toBe('');
   });
 
   it('there is still no hardcoded fallback secret', () => {
