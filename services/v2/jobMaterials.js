@@ -226,10 +226,33 @@ function coverLetter(profile, job, resumeText) {
     }
   }
 
-  body.push(
-    (p.location ? `I am based in ${p.location} and ` : 'I am ') +
-    'available to start on a standard notice period, and open to relocating for the right team.'
-  );
+  /*
+   * The terms paragraph — what a hiring manager reads before the prose.
+   *
+   * Every letter used to close with the same sentence: "available to start on
+   * a standard notice period, and open to relocating for the right team",
+   * whether or not either was true, and silent on hours, availability, length
+   * of commitment and pay. Those are the four things a manager screening an
+   * intern actually needs, and the student was never asked for them. Each one
+   * appears only when it was stated.
+   */
+  const terms = [];
+  if (p.location) terms.push(`I am based in ${p.location}`);
+  if (p.workmode && p.workmode !== 'no preference') terms.push(`looking for ${p.workmode} work`);
+  if (p.hours) terms.push(`able to commit ${p.hours}`);
+  if (p.window) terms.push(`working ${p.window}`);
+  if (p.availableFrom) terms.push(`free from ${p.availableFrom}`);
+  if (p.commitLength) terms.push(String(p.commitLength).replace(/^can commit/, 'and can commit'));
+  if (p.notice) terms.push(p.notice);
+
+  body.push(terms.length
+    ? `${terms.join(', ').replace(/^./, (c) => c.toUpperCase())}.`
+    : (p.location ? `I am based in ${p.location} and available to start on a standard notice period.`
+      : 'I am available to start on a standard notice period.'));
+  /* A figure only when they named one, and never a range they did not pick. */
+  if (p.salary && !/^open to discussion$/i.test(p.salary)) {
+    body.push(`On compensation I am looking at ${p.salary}, and open to discussing it against the scope of the role.`);
+  }
   body.push('');
   body.push('I would welcome the chance to talk it through.');
   body.push('');

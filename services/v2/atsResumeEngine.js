@@ -209,7 +209,18 @@ function factLedger(text) {
   const roles = [];
   let role = null;
   bySection.experience.forEach((line) => {
-    const looksHeader = RE_DATE_RANGE.test(line) || (/\|/.test(line) && !isBullet(line));
+    /*
+     * "Software Developer, Acme Solutions" is a role header too.
+     *
+     * Only a date range or a pipe counted, so a comma-separated header — the
+     * commonest shape on an Indian student resume — was filed as an
+     * achievement bullet. It then came back on the rewritten page as
+     * "- Software Developer, Acme Solutions", a bullet with no verb dragging
+     * the verb check down, while the role it named lost its heading.
+     */
+    const commaHeader = !isBullet(line) && line.length <= 70 &&
+      /^[^,]{3,40},\s*[^,]{2,40}$/.test(line) && RE_JOB_TITLE.test(line) && !/\d/.test(line);
+    const looksHeader = RE_DATE_RANGE.test(line) || (/\|/.test(line) && !isBullet(line)) || commaHeader;
     if (looksHeader) {
       if (role) roles.push(role);
       role = { header: line, hasDates: RE_DATE_RANGE.test(line), bullets: [] };
@@ -817,8 +828,154 @@ function impactBullet(text) {
   t = t.replace(/^(i|we)\s+(have\s+|had\s+|was\s+|were\s+|am\s+)?/i, '');
   t = t.replace(/^my\s+(team|role|work)\s+(and i\s+)?/i, '');
   if (!t) return null;
+
+  /*
+   * Put the verb back that stripping the opener took away.
+   *
+   * "Responsible for developing web applications" lost its opener and shipped
+   * as "Developing web applications" — a gerund, which the verb check scores
+   * as no verb at all. So the rewrite took a resume whose bullets at least
+   * began with a word and handed back one scoring 0/3 on verbs, then reported
+   * the drop as the student's problem. A gerund has a verb inside it:
+   * "developing" is "Developed", "maintenance of X" is "Maintained X". That is
+   * grammar, not a new claim.
+   */
+  const first = t.split(/\s+/)[0].toLowerCase().replace(/[^a-z]/g, '');
+  const gerund = t.match(/^([A-Za-z]+)ing\b(.*)$/);
+  if (!STRONG_VERBS.has(first) && gerund) {
+    /* Only when the derived past tense is a verb this file already knows.
+       Guessing at irregulars ("running" → "runned") would put a word on
+       somebody's resume that no one wrote. */
+    const stem = gerund[1];
+    for (const past of [`${stem}ed`, `${stem}d`, stem]) {
+      if (STRONG_VERBS.has(past.toLowerCase())) {
+        t = past.charAt(0).toUpperCase() + past.slice(1) + gerund[2];
+        break;
+      }
+    }
+  }
   t = t.charAt(0).toUpperCase() + t.slice(1);
   return t;
+}
+
+/**
+ * Every bullet on the page, judged one at a time.
+ *
+ * The score alone plateaus and then says nothing new: "I need one real number
+ * for your strongest bullet" is true, unactionable, and identical every time
+ * it is repeated. What the good builders do instead — Rezi, Teal, Enhancv all
+ * work this way — is show the person their own bullets with a verdict on each,
+ * so "add a number" becomes "this line, this missing piece".
+ *
+ * Nothing here rewrites anything. It reports what is wrong with each line and
+ * what would fix it, because the fix is a fact only the author has.
+ */
+function bulletAudit(text) {
+  const ledger = factLedger(text);
+  const rows = [];
+
+  const judge = (line, where) => {
+    const t = stripBullet(String(line || '')).trim();
+    if (!t) return;
+    const words = t.split(/\s+/).filter(Boolean);
+    const first = (words[0] || '').toLowerCase().replace(/[^a-z]/g, '');
+    const problems = [];
+    const fixes = [];
+
+    if (BANNED_OPENERS.test(t)) {
+      problems.push('opens with a duty phrase');
+      fixes.push('Say what you produced, not what you were assigned: "Built…", "Cut…", "Shipped…".');
+    } else if (!STRONG_VERBS.has(first)) {
+      problems.push('does not open with an action verb');
+      fixes.push('Start with the verb: Built, Automated, Migrated, Reduced, Wrote.');
+    }
+    if (!hasScope(t)) {
+      problems.push('carries no number');
+      fixes.push('Add one true figure — how many, how much, how often, or how long.');
+    }
+    if (words.length < 6) {
+      problems.push('too short to match on');
+      fixes.push('Name the tool and the outcome, not just the task.');
+    } else if (words.length > 34) {
+      problems.push('too long to scan');
+      fixes.push('Split it, or cut to the result and the method.');
+    }
+    if (BANNED_BUZZWORDS.some((b) => t.toLowerCase().includes(b))) {
+      problems.push('contains filler wording');
+      fixes.push('Cut the adjective; the achievement is the argument.');
+    }
+
+    rows.push({
+      where,
+      text: t.slice(0, 130),
+      ok: problems.length === 0,
+      problems,
+      fix: fixes[0] || null,
+      /* The question that would close the biggest gap on this line. */
+      ask: !hasScope(t) ? metricQuestion(t) : null,
+    });
+  };
+
+  ledger.roles.forEach((r) => r.bullets.forEach((b) => judge(b, 'Experience')));
+  ledger.projects.forEach((p) => p.bullets.forEach((b) => judge(b, 'Projects')));
+
+  const weak = rows.filter((r) => !r.ok);
+  return {
+    rows,
+    total: rows.length,
+    strong: rows.length - weak.length,
+    weak,
+    /* Worst first: a bullet with three problems is the one to fix today. */
+    worst: [...weak].sort((a, b) => b.problems.length - a.problems.length)[0] || null,
+  };
+}
+
+/**
+ * The quantification question for one bullet, and the shapes of answer that
+ * would satisfy it.
+ *
+ * "Add a metric" is the single most repeated piece of resume advice and the
+ * least actionable, because the person does not know which number is wanted.
+ * Naming the candidate measures — for this line, in their words — is what
+ * turns it into an answer.
+ */
+function metricQuestion(bullet) {
+  const t = String(bullet || '').toLowerCase();
+  const kinds = [];
+  const add = (label, hint) => kinds.push({ label, hint });
+
+  if (/\b(built|created|developed|designed|shipped|launched|made)\b/.test(t)) {
+    add('How many people used it', 'users, students, customers, teams');
+    add('How long it took', 'shipped in 6 weeks');
+  }
+  if (/\b(api|service|endpoint|server|backend|database|query|pipeline)\b/.test(t)) {
+    add('Traffic or volume it handled', 'requests a day, records processed');
+    add('Speed change', 'cut latency 30%, query time 2s → 400ms');
+  }
+  if (/\b(automat|script|deploy|pipeline|manual|process)\b/.test(t)) {
+    add('Time saved', 'hours a week, days per release');
+  }
+  if (/\b(test|bug|error|fix|qa|quality|maintain)\b/.test(t)) {
+    add('Defects caught or removed', 'bugs found before release, crash rate');
+    add('Coverage reached', 'endpoints covered, % of the suite');
+  }
+  if (/\b(team|led|mentor|review|coordinat|manag)\b/.test(t)) {
+    add('People involved', 'size of the team, reviews handled');
+  }
+  if (/\b(sales|revenue|cost|budget|growth|conversion|campaign)\b/.test(t)) {
+    add('Money or growth', '₹ figure, % change');
+  }
+  if (!kinds.length) {
+    add('How many', 'the count that made this worth doing');
+    add('How much it changed', 'before → after, or a percentage');
+  }
+  add('How often it ran', 'daily, weekly, per release');
+
+  return {
+    question: `What number belongs on this line — "${String(bullet).slice(0, 80)}"?`,
+    /* De-duplicated, capped: a list of nine measures is another wall. */
+    kinds: kinds.filter((k, i, all) => all.findIndex((x) => x.label === k.label) === i).slice(0, 4),
+  };
 }
 
 /**
@@ -927,9 +1084,24 @@ function rewriteResume(text, options) {
     spike ? `${spike}.` : ''
   ].filter(Boolean).join(' '));
   L.push('');
-  L.push('SKILLS');
-  L.push(skills.primary.join(', ') || '[ list the tools your bullets actually show ]');
-  L.push('');
+  /*
+   * A skills line the person wrote survives, even when no bullet proves it.
+   *
+   * The rule was: drop every skill without a bullet behind it. On a resume
+   * whose bullets are duty-phrased — "responsible for developing web
+   * applications" — that is all of them, so a page listing Java, HTML and CSS
+   * came back with "[ list the tools your bullets actually show ]" where its
+   * skills used to be. The student lost their own three skills, the keyword
+   * check went to 0/9, and the score FELL. Dropping a claim they made is not
+   * honesty, it is deletion: honesty is keeping it and saying which ones no
+   * bullet backs, which the Not-evidenced list does.
+   */
+  const skillLine = skills.primary.length ? skills.primary : ledger.statedSkills;
+  if (skillLine.length) {
+    L.push('SKILLS');
+    L.push(skillLine.join(', '));
+    L.push('');
+  }
 
   const experienceBlock = () => {
     if (!ledger.roles.length) return;
@@ -1071,6 +1243,8 @@ module.exports = {
   jdHardTerms,
   jdRequirements,
   jdMap,
+  bulletAudit,
+  metricQuestion,
   impactBullet,
   STRONG_VERBS,
   BANNED_OPENERS,

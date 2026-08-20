@@ -221,8 +221,13 @@ function ReplyBody({ text }: { text: string }) {
         if (b.kind === 'text') {
           const body = b.lines.join('\n').trim();
           if (!body) return null;
+          /* The agent bolds the one line it wants read first — the bullet it
+             is asking about. Printed raw, the asterisks read as noise. */
           return (
-            <p key={i} className="whitespace-pre-wrap text-[13.5px] leading-relaxed text-[#374151]">{body}</p>
+            <p key={i} className="whitespace-pre-wrap text-[13.5px] leading-relaxed text-[#374151]">
+              {body.split(/\*\*([^*]+)\*\*/).map((part, n) =>
+                n % 2 ? <b key={n} className="text-[#111827]">{part}</b> : part)}
+            </p>
           );
         }
         const [head, ...rest] = b.rows;
@@ -284,7 +289,9 @@ function ChoiceList({ options, onPick, disabled }: {
       className="rounded-full border border-[#d9e0ea] bg-white px-3 py-1.5 text-left text-[12.5px] text-[#374151] transition hover:border-[#2563eb] hover:text-[#2563eb] disabled:opacity-50"
     >
       {c.label}
-      {c.note && <span className="ml-1.5 text-[11px] text-[#9ca3af]">{c.note}</span>}
+      {/* The separator is a character, not only a margin: copied text and
+          screen readers both flatten the gap and ran the two together. */}
+      {c.note && <span className="ml-1.5 text-[11px] text-[#9ca3af]">· {c.note}</span>}
     </button>
   );
 

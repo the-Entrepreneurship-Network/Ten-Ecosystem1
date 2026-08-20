@@ -78,7 +78,7 @@ describe('the conversation advances instead of repeating', () => {
       education: 'B.Tech CSE, 2022 – 2026',
       metric: 'skip', dates: 'skip', evidence: 'skip',
     };
-    for (let i = 0; i < 12 && out.kind === 'ask'; i++) {
+    for (let i = 0; i < 24 && out.kind === 'ask'; i++) {
       out = await turn(a, answers[out.session.asked] || 'skip', out.session);
     }
     expect(out.kind).toBe('build');
@@ -180,7 +180,7 @@ describe('the conversation advances instead of repeating', () => {
     // ship one via tailor, then ask again
     let out = await turn(a, RESUME, t1.session);
     out = await turn(a, 'fix it', out.session);
-    for (let i = 0; i < 7 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+    for (let i = 0; i < 24 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
     expect(out.kind).toBe('build');
 
     /*
@@ -190,7 +190,7 @@ describe('the conversation advances instead of repeating', () => {
      * question is skippable, so this answers the company and skips the rest.
      */
     let cov = await turn(a, 'cover letter', out.session);
-    for (let i = 0; i < 10 && cov.kind === 'ask'; i++) {
+    for (let i = 0; i < 24 && cov.kind === 'ask'; i++) {
       cov = await turn(a, cov.session.asked === 'company' ? 'Northwind' : 'skip', cov.session);
     }
     expect(cov.reply).toMatch(/Cover letter — \d+ words/);
@@ -201,11 +201,14 @@ describe('the conversation advances instead of repeating', () => {
     const a = app();
     let out = await turn(a, RESUME, null);
     out = await turn(a, 'fix it', out.session);
-    for (let i = 0; i < 8 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+    /* The interview covers the whole page now — education, internships,
+       projects, certifications, links — so a walkthrough that skips every
+       question has more of them to skip. */
+    for (let i = 0; i < 24 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
 
     const asked = [];
     let cov = await turn(a, 'cover letter', out.session);
-    for (let i = 0; i < 10 && cov.kind === 'ask'; i++) {
+    for (let i = 0; i < 24 && cov.kind === 'ask'; i++) {
       asked.push(cov.session.asked);
       cov = await turn(a, 'skip', cov.session);
     }
@@ -219,7 +222,10 @@ describe('the conversation advances instead of repeating', () => {
     const a = app();
     let out = await turn(a, RESUME, null);
     out = await turn(a, 'fix it', out.session);
-    for (let i = 0; i < 8 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+    /* The interview covers the whole page now — education, internships,
+       projects, certifications, links — so a walkthrough that skips every
+       question has more of them to skip. */
+    for (let i = 0; i < 24 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
 
     const cov = await turn(a, 'cover letter', out.session);
     expect(cov.session.asked).toBe('position');
@@ -238,7 +244,7 @@ describe('the conversation advances instead of repeating', () => {
 
     let out = await turn(a, RESUME, t1.session);
     out = await turn(a, 'fix it', out.session);
-    for (let i = 0; i < 7 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+    for (let i = 0; i < 24 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
     const prep = await turn(a, 'prep', out.session);
     expect(prep.reply).toMatch(/Five-line defense/);
     expect(prep.reply.split('\n').filter((l) => /^\d\./.test(l))).toHaveLength(5);
@@ -249,7 +255,7 @@ describe('the conversation advances instead of repeating', () => {
     let out = await turn(a, RESUME, null);
     out = await turn(a, 'tailor it', out.session, { jd: 'Backend: Java, Spring Boot, PostgreSQL and Docker required.' });
     let sawConfirm = false;
-    for (let i = 0; i < 7 && out.kind === 'ask'; i++) {
+    for (let i = 0; i < 24 && out.kind === 'ask'; i++) {
       if (out.session.asked === 'confirmkw') {
         sawConfirm = true;
         expect(out.reply).toMatch(/no evidence/i);
@@ -273,7 +279,7 @@ describe('the conversation advances instead of repeating', () => {
     const a = app();
     let out = await turn(a, RESUME, null);
     out = await turn(a, 'fix it', out.session);
-    for (let i = 0; i < 7 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+    for (let i = 0; i < 24 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
     expect(out.kind).toBe('build');
     expect(out.reply).toMatch(/Path: A · Command: tailor · Band:/);
     expect(out.reply).toMatch(/Greenhouse does not auto-score/);
@@ -313,7 +319,7 @@ describe('the conversation advances instead of repeating', () => {
     const a = app();
     let out = await turn(a, 'build', null);
     const seen = [];
-    for (let i = 0; i < 10 && out.kind === 'ask'; i += 1) {
+    for (let i = 0; i < 24 && out.kind === 'ask'; i += 1) {
       /* Answering with a phrase that contains a command word, every turn. */
       out = await turn(a, 'build for google', out.session);
       if (out.kind !== 'ask') break;
@@ -334,7 +340,7 @@ describe('the conversation advances instead of repeating', () => {
     const a = app();
     let out = await turn(a, RESUME, null);
     out = await turn(a, 'Build a Full-Stack Developer resume from scratch', out.session);
-    for (let i = 0; i < 10 && out.kind === 'ask'; i += 1) {
+    for (let i = 0; i < 24 && out.kind === 'ask'; i += 1) {
       expect(out.reply || '').not.toMatch(/your name is missing/i);
       out = await turn(a, 'skip', out.session);
     }
@@ -352,6 +358,110 @@ describe('the conversation advances instead of repeating', () => {
       const claimed = said.match(/Checker (\d+)\/100/);
       if (claimed && /Ceiling/.test(said)) expect(Number(claimed[1])).toBeLessThan(goal);
     }
+  });
+
+  it('the score keeps climbing as facts arrive, instead of stalling on one number', async () => {
+    /*
+     * The complaint, as a test. A resume went 68 → 74 → 80 across releases and
+     * then stopped: every later "make it 98" re-ran two spent levers and
+     * returned the identical score and the identical sentence. The rewrite was
+     * also actively damaging the page — stripping "Responsible for" without
+     * putting a verb back, and replacing a stated skills line with a
+     * placeholder — so the climb started from a hole it had dug itself.
+     */
+    const a = app();
+    const WEAK = [
+      'Rahul Verma', 'rahul.verma@example.com  9876543210',
+      '', 'Objective', 'Seeking a challenging role in a reputed organization.',
+      '', 'Experience', 'Software Developer, Acme Solutions',
+      'Responsible for developing web applications',
+      'Worked on bug fixes and maintenance',
+      '', 'Skills', 'Java, HTML, CSS',
+      '', 'Education', 'B.Tech Computer Science',
+    ].join('\n');
+
+    /* A weak resume opens the rebuild interview rather than a score card, so
+       the baseline is read directly rather than from the first reply. */
+    const start = require('../../routes/v2/resumeAgent').scanResume(WEAK, 'Software Developer').score;
+    let out = await turn(a, WEAK, null);
+
+    const facts = [
+      'Built the customer portal in Java used by 4,000 users a month',
+      'Fixed 120 bugs before release, cutting the crash rate 35%',
+      'Jan 2022 - Present',
+    ];
+    const seen = [start];
+    out = await turn(a, 'make it 98', out.session);
+    for (const f of facts) {
+      out = await turn(a, f, out.session);
+      if (out.report) seen.push(out.report.score);
+    }
+
+    /* Every fact moved the number, and the last is well above the first. */
+    expect(seen[seen.length - 1]).toBeGreaterThan(start);
+    expect(seen[seen.length - 1]).toBeGreaterThanOrEqual(78);
+  });
+
+  it('shows which line is holding the score down once formatting is spent', async () => {
+    /* "I need one real number for your strongest bullet" is true, identical
+       every time, and unactionable. The per-bullet worklist names the line. */
+    const a = app();
+    const WEAK = [
+      'Rahul Verma', 'rahul.verma@example.com  9876543210',
+      '', 'Experience', 'Software Developer, Acme Solutions',
+      'Responsible for developing web applications',
+      'Worked on bug fixes and maintenance',
+      '', 'Skills', 'Java, HTML, CSS', '', 'Education', 'B.Tech CS',
+    ].join('\n');
+
+    let out = await turn(a, WEAK, null);
+    const replies = [];
+    for (let i = 0; i < 3; i += 1) {
+      out = await turn(a, 'make it 98', out.session);
+      replies.push(String(out.reply || ''));
+    }
+    /* Never the same sentence twice. */
+    expect(new Set(replies).size).toBe(replies.length);
+    const worklist = replies.find((r) => /What is wrong/.test(r));
+    expect(worklist).toBeTruthy();
+    expect(worklist).toMatch(/carries no number|action verb|duty phrase/);
+  });
+
+  it('offers the kinds of number that fit the bullet, to pick from', async () => {
+    /* "Add a metric" is the least actionable advice in resume writing because
+       nobody knows which number is wanted. The options name the candidates. */
+    const a = app();
+    const WEAK = [
+      'Rahul Verma', 'rahul.verma@example.com  9876543210',
+      '', 'Experience', 'Software Developer, Acme Solutions',
+      'Responsible for developing web applications',
+      'Worked on bug fixes and maintenance',
+      '', 'Skills', 'Java, HTML, CSS', '', 'Education', 'B.Tech CS',
+    ].join('\n');
+
+    let out = await turn(a, WEAK, null);
+    let withOptions = null;
+    for (let i = 0; i < 4 && !withOptions; i += 1) {
+      out = await turn(a, 'make it 98', out.session);
+      if (out.options && out.options.options) withOptions = out.options;
+    }
+    expect(withOptions).toBeTruthy();
+    expect(withOptions.options.length).toBeGreaterThan(1);
+    expect(withOptions.other).toBeTruthy();
+  });
+
+  it('reads a fact typed after a delivery as a fact, not as a lost visitor', async () => {
+    /* Handed a rewritten page and typing "Jan 2022 – Present" — an answer to
+       the dates question — the student was told "upload a resume or say the
+       job title", about the document on their screen. */
+    const a = app();
+    let out = await turn(a, RESUME, null);
+    out = await turn(a, 'fix it', out.session);
+    for (let i = 0; i < 8 && out.kind === 'ask'; i += 1) out = await turn(a, 'skip', out.session);
+
+    const after = await turn(a, 'Led the migration to Spring Boot across 12 services', out.session);
+    expect(String(after.reply || '')).not.toMatch(/Upload a resume/i);
+    expect(after.session.resumeText).toMatch(/Led the migration/);
   });
 
   it('uses the fact it asked for, instead of re-reporting the same ceiling', async () => {
@@ -408,7 +518,10 @@ describe('the conversation advances instead of repeating', () => {
     ].join('\n');
     let out = await turn(a, withCluster, null);
     out = await turn(a, 'fix it', out.session);
-    for (let i = 0; i < 8 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+    /* The interview covers the whole page now — education, internships,
+       projects, certifications, links — so a walkthrough that skips every
+       question has more of them to skip. */
+    for (let i = 0; i < 24 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
     expect(out.kind).toBe('build');
     const skillsLine = (out.text.match(/^SKILLS\n(.+)$/m) || [])[1] || '';
     expect(skillsLine.toLowerCase().split(/,\s*/)).not.toContain('node');
@@ -509,7 +622,10 @@ describe('the conversation advances instead of repeating', () => {
     const withTitle = ['Priya Nair', 'Backend Developer', ...RESUME.split('\n').slice(1)].join('\n');
     let out = await turn(a, withTitle, null);
     out = await turn(a, 'fix it', out.session);
-    for (let i = 0; i < 8 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+    /* The interview covers the whole page now — education, internships,
+       projects, certifications, links — so a walkthrough that skips every
+       question has more of them to skip. */
+    for (let i = 0; i < 24 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
     expect(out.kind).toBe('build');
     expect(out.text).toMatch(/Backend Developer/);
     expect(out.text).not.toMatch(/^Professional$/m);
@@ -522,7 +638,10 @@ describe('the conversation advances instead of repeating', () => {
     const a = app();
     let out = await turn(a, RESUME, null);
     out = await turn(a, 'fix it', out.session);
-    for (let i = 0; i < 8 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+    /* The interview covers the whole page now — education, internships,
+       projects, certifications, links — so a walkthrough that skips every
+       question has more of them to skip. */
+    for (let i = 0; i < 24 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
     expect(out.kind).toBe('build');
     expect(out.text).not.toMatch(/Evidenced in/i);
   });
@@ -593,7 +712,7 @@ describe('the conversation advances instead of repeating', () => {
       email: 'bishal@example.com', phone: '+91 90000 11111', link: 'skip',
       skills: 'Java, Spring Boot, SQL', projects: 'Built an inventory API in Spring Boot',
       education: 'B.Tech CSE, 2021' };
-    for (let i = 0; i < 12 && out.kind === 'ask'; i++) {
+    for (let i = 0; i < 24 && out.kind === 'ask'; i++) {
       out = await turn(a, answers[out.session.asked] || 'skip', out.session);
     }
     expect(out.kind).toBe('build');
