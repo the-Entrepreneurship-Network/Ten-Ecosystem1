@@ -371,7 +371,16 @@ function buildResume(detailsInput) {
   const role = d.role || 'Software Developer';
 
   const contactBits = [d.email, d.phone, d.linkedin, d.github, d.location].filter(Boolean);
-  const skills = splitItems(d.skills).length ? splitItems(d.skills) : bank.words.slice(0, 10);
+  /*
+   * The student's skills, or none.
+   *
+   * This used to fall back to the role bank's generic words, so a resume
+   * built without answers shipped "communication, teamwork, problem solving,
+   * project, git" as though the person had claimed them — skills nobody
+   * stated, on a page they could download and send. A resume is a set of
+   * claims; the agent does not get to make them.
+   */
+  const skills = splitItems(d.skills);
 
   const expItems = splitItems(d.experience);
   const projItems = splitItems(d.projects);
@@ -565,6 +574,36 @@ function resumePdfBuffer(text, opts = {}) {
 
 /* ── routes ─────────────────────────────────────────────────────────────── */
 
+/*
+ * Placeholders that mean the page is not finished.
+ *
+ * A recording showed a downloaded PDF headed "YOUR NAME", carrying "[ add
+ * your email and phone here ]" and a skills line of words the student never
+ * claimed. That file is a template wearing a resume's clothes, and letting it
+ * export is worse than refusing: somebody sends it.
+ */
+const PLACEHOLDER_MARKS = [
+  /^\s*YOUR NAME\s*$/mi,
+  /\[\s*add your email and phone/i,
+  /\[\s*list the tools your bullets actually show/i,
+];
+
+/** What is still missing, phrased so a person knows what to type next. */
+function missingEssentials(text) {
+  const gaps = [];
+  const t = String(text || '');
+  if (/^\s*YOUR NAME\s*$/mi.test(t)) gaps.push('your name');
+  if (/\[\s*add your email and phone/i.test(t)) gaps.push('an email address and phone number');
+  if (/\[\s*list the tools/i.test(t)) gaps.push('the tools you have actually used');
+  const skillsLine = (t.split(/\r?\n/)[t.split(/\r?\n/).findIndex((l) => l.trim() === 'SKILLS') + 1] || '').trim();
+  if (!skillsLine || /^\[/.test(skillsLine)) {
+    if (!gaps.includes('the tools you have actually used')) gaps.push('the tools you have actually used');
+  }
+  return gaps;
+}
+
+const hasPlaceholders = (text) => PLACEHOLDER_MARKS.some((re) => re.test(String(text || '')));
+
 async function textFromUpload(file) {
   if (!file) return '';
   const name = (file.originalname || '').toLowerCase();
@@ -652,10 +691,27 @@ router.post('/rewrite', upload.single('file'), async (req, res) => {
  * and we would know. A resume PDF that scores well only in theory is the exact
  * failure this portal exists to prevent.
  */
-router.post('/build.pdf', async (req, res) => {
+/*
+ * `upload.any()` because the details arrive as multipart from the browser's
+ * FormData. Without a multipart parser this route saw an empty body, built a
+ * page of placeholders from nothing, and — once the placeholder guard existed
+ * — rejected every download including the complete ones.
+ */
+router.post('/build.pdf', upload.any(), async (req, res) => {
   try {
     const b = bodyOf(req);
     const built = buildResume(b.details || b.text || b);
+
+    /* A page still carrying placeholders is not a resume, and a downloaded
+       file is the one artefact nobody reviews again before sending it. */
+    if (hasPlaceholders(built.text)) {
+      return res.status(400).json({
+        ok: false,
+        error: `This is not finished yet — it still needs ${missingEssentials(built.text).join(', ')}. Give me those and the download will carry your details instead of placeholders.`,
+        missing: missingEssentials(built.text),
+      });
+    }
+
     const buf = await resumePdfBuffer(built.text);
 
     let pdfScore = null;
@@ -694,6 +750,14 @@ router.post('/build.docx', upload.single('file'), async (req, res) => {
     }
     if (!text.trim()) {
       return res.status(400).json({ ok: false, error: 'Send a resume: attach a file, paste the text, or give your details.' });
+    }
+
+    if (hasPlaceholders(text)) {
+      return res.status(400).json({
+        ok: false,
+        error: `This is not finished yet — it still needs ${missingEssentials(text).join(', ')}.`,
+        missing: missingEssentials(text),
+      });
     }
 
     const { resumeDocxBuffer } = require('../../services/v2/resumeDocx');
@@ -1547,6 +1611,23 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         return ask(q.field, q.question);
       }
       const built = buildResume({ ...session.details, role: session.target || session.details.role });
+
+      /*
+       * Refuse to hand over a template.
+       *
+       * A recording ended with a downloaded PDF headed "YOUR NAME", carrying
+       * "[ add your email and phone here ]" and a skills line the student had
+       * never claimed. Building on empty answers produces a page that looks
+       * finished and is not, so the missing fact is asked for instead — the
+       * force words still ship it, because someone who says "build it anyway"
+       * has been told and chosen.
+       */
+      if (hasPlaceholders(built.text) && !forceBuild) {
+        const gaps = missingEssentials(built.text);
+        const field = /name/.test(gaps[0]) ? 'name' : /email|phone/.test(gaps[0]) ? 'email' : 'skills';
+        return ask(field,
+          `I can lay the page out, but it would go out saying ${gaps[0]} is missing. What should it be? (Say "build it anyway" to take the draft as it stands.)`);
+      }
 
       /*
        * "and make it 98/100" asked for a bar on this page, so the climb runs
