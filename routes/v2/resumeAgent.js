@@ -27,6 +27,8 @@ const multer = require('multer');
    engine: fact ledger, dual scoring, essential-signal pass, ship gate. */
 const atsEngine = require('../../services/v2/atsResumeEngine');
 const career = require('../../services/v2/careerData');
+const interview = require('../../services/v2/resumeInterview');
+const githubImport = require('../../services/v2/githubImport');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -577,8 +579,18 @@ function buildResume(detailsInput) {
     const b = toBullet(e, i);
     return b ? `- ${b}` : null;
   }));
+  /*
+   * A project line names the project first.
+   *
+   * Verb-fronting is right for an achievement and wrong for a title: "globby
+   * — user-friendly glob matching" came back as "Led globby", and the next
+   * one as "Automated awesome", because the rotating verb was applied to the
+   * project's own name. A line already shaped "Name — what it does" is left
+   * exactly as written.
+   */
   section('PROJECTS', projItems.map((p, i) => {
-    const b = toBullet(p, i + 2);
+    const named = /^[^—–-]{2,40}\s[—–-]\s\S/.test(String(p).trim());
+    const b = named ? String(p).trim() : toBullet(p, i + 2);
     return b ? `- ${b}` : null;
   }));
   section('EDUCATION', eduItems.map((e) => `- ${e}`));
@@ -1316,7 +1328,16 @@ function consumeAnswer(session, field, msg) {
     if (!session.declined.includes(field)) session.declined.push(field);
     return;
   }
-  if (field === 'target') { session.target = msg.trim(); return; }
+  if (field === 'target') {
+    /* One fact, two names. The engine's script calls it the target and the
+       interview bank calls it the position, so answering either used to leave
+       the other unanswered — and the person was asked their job title twice,
+       in two wordings, which reads as an agent that was not listening. */
+    session.target = msg.trim();
+    session.details.position = session.details.position || msg.trim();
+    session.details.role = session.details.role || msg.trim();
+    return;
+  }
   if (field === 'jd') { session.jd = msg.trim(); return; }
   if (field === 'resume') { session.resumeText = msg; return; }
 
@@ -1324,6 +1345,65 @@ function consumeAnswer(session, field, msg) {
   /* Stored under both names: the builder reads `linkedin`, the cover letter
      reads `link`, and one answer has to satisfy whichever asked. */
   if (field === 'link') { d.linkedin = msg.trim(); d.link = msg.trim(); }
+  /*
+   * The interview's answers, folded into the shapes the builder writes from.
+   *
+   * The bank asks in the language a person thinks in — "which degree", "which
+   * college", "which years", "was it paid" — and the page needs one education
+   * line and one dated role. Assembling them here keeps the questions human
+   * and the document correct, and means an answer given to any command is
+   * available to all three.
+   */
+  else if (field === 'degree' || field === 'college' || field === 'gradyear') {
+    d[field] = msg.trim();
+    d.education = [d.degree, d.college, d.gradyear].filter(Boolean).join(', ');
+  } else if (field === 'internship' || field === 'internshipdates' || field === 'stipend') {
+    d[field] = msg.trim();
+    if (d.internship) {
+      /*
+       * Header line first so the dates parse, then the work beneath it — and
+       * the work is what is LEFT after the header, not the whole answer. The
+       * fallback repeated everything, so the page read "TEN Virtual
+       * Internship, Backend Engineer | Jan 2026 – Present" and then, as its
+       * one achievement, "Delivered TEN Virtual Internship, Backend Engineer.
+       * Built a backend service…" — the heading said twice.
+       */
+      const text = String(d.internship).trim();
+      const cut = text.search(/[.\n]/);
+      const first = cut > 0 ? text.slice(0, cut).trim() : text;
+      const rest = cut > 0 ? text.slice(cut + 1).trim() : '';
+      const header = [first, d.internshipdates].filter(Boolean).join(' | ');
+      const paid = d.stipend === 'paid' ? ' (paid internship)' : '';
+      d.experience = [header + paid, rest].filter(Boolean).join('\n');
+    }
+  } else if (field === 'github' || field === 'linkedin') {
+    d[field] = msg.trim();
+    d.link = d.link || msg.trim();
+  } else if (field === 'pickprojects') {
+    /* "all" takes the lot; otherwise only the repos they named. Matching on
+       the label as well as the bullet, because a chip sends its value but a
+       typed answer is the project's name. */
+    const picks = String(msg).split(/\s*[,;\n]\s*/).map((s) => s.trim()).filter(Boolean);
+    const all = session.githubProjects || [];
+    const chosen = /^\s*all\s*$/i.test(msg)
+      ? all
+      : all.filter((b) => picks.some((p) => b.toLowerCase().includes(p.toLowerCase())));
+    if (chosen.length) {
+      d.projects = [d.projects, ...chosen].filter(Boolean).join('\n');
+      d.hasprojects = 'yes';
+    }
+    /*
+     * The languages those repos are written in are a suggestion for the
+     * skills question, never an answer to it. Filling `skills` here meant the
+     * question was never asked, so a student who would have said "Java,
+     * Spring Boot, REST API" got the languages of their GitHub instead — the
+     * agent answering on their behalf, with facts about a different stack.
+     */
+  } else if (field === 'position') {
+    d.position = msg.trim();
+    d.role = d.role || msg.trim();
+    if (!session.target) session.target = msg.trim();
+  }
   else if (field === 'metric' || field === 'evidence' || field === 'dates' || field === 'confirmkw') {
     /* Their words, added to their history — placement the rewriter can use.
        For confirmkw this is the Rezi-style confirmation: naming where a JD
@@ -1574,7 +1654,11 @@ router.post('/chat', upload.single('file'), async (req, res) => {
        * into a choice — and every list ends in a free-text escape, because a
        * menu you cannot answer outside of is worse than no menu.
        */
-      const choices = optionsFor(field, session);
+      /* The interview bank knows its own answer sets; the older per-field map
+         still covers the questions the engine generates. */
+      const entry = interview.BANK.find((q) => q.field === field);
+      const choices = (entry && interview.optionsFor(entry, session.details)) ||
+        optionsFor(field, session);
       return res.json({
         ok: true,
         kind: 'ask',
@@ -1582,6 +1666,22 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         options: choices || undefined,
         session,
       });
+    };
+
+    /*
+     * One question from the shared bank, with the progress left to run.
+     *
+     * A person answering eight questions deserves to know it is eight. The
+     * count also keeps the agent honest: if the bank has nothing left, the
+     * command must build rather than invent another thing to ask.
+     */
+    const askInterview = (command, note) => {
+      const ledger = session.resumeText.trim() ? atsEngine.factLedger(session.resumeText) : null;
+      const q = interview.nextFor(command, session.details, ledger, session.declined || []);
+      if (!q) return null;
+      const left = interview.remainingFor(command, session.details, ledger, session.declined || []).length;
+      const progress = left > 1 ? `${q.group} · ${left} to go, and you can skip any of them.` : q.group;
+      return ask(q.field, q.question, [note, progress].filter(Boolean).join('\n\n'));
     };
 
     /* ── dispatch ── */
@@ -2041,23 +2141,27 @@ router.post('/chat', upload.single('file'), async (req, res) => {
        * that answer would have carried.
        */
       const led = atsEngine.factLedger(session.shipped.text);
-      const coverAsk = [
-        { field: 'position', q: 'Which position is this letter for? Pick one or type your own.' },
-        { field: 'company', q: 'Which company is it going to?' },
-        { field: 'country', q: 'Which country is the role in? It sets the tone and the notice-period line.' },
-        { field: 'city', q: 'Which city — or remote?' },
-        { field: 'level', q: 'What level are you applying at?' },
-        { field: 'coverproof', q: 'Which piece of your work should the letter lead with? Name the project or the result — one line, in your words. It goes in verbatim.' },
-        { field: 'link', q: 'GitHub, LinkedIn or portfolio URL to include in the sign-off?' },
-      ];
-      const declined = session.declined || [];
-      const pending = coverAsk.find((a) => !session.details[a.field] && !declined.includes(a.field));
-      if (pending) return ask(pending.field, pending.q);
+      /*
+       * The letter's own interview, from the shared bank.
+       *
+       * A letter states terms a resume does not — what the person wants to be
+       * paid, how many hours they can give, which months they are free, how
+       * long they can commit, how soon they can start. None of it was ever
+       * asked, so every letter went out silent on the things a hiring manager
+       * reads first. All of it is skippable; a term nobody states simply does
+       * not appear.
+       */
+      const asked = askInterview('cover');
+      if (asked) return asked;
+      if (!session.details.coverproof && !(session.declined || []).includes('coverproof')) {
+        return ask('coverproof', 'Last one: which piece of your work should the letter lead with? Name the project or the result, in your words — it goes in verbatim.');
+      }
 
       const { coverLetter } = require('../../services/v2/jobMaterials');
       /* Their own answers first, the shipped resume second — never a guess. */
       const position = session.details.position || session.shipped.target || 'the advertised role';
       const place = [session.details.city, session.details.country].filter(Boolean).join(', ');
+      const d = session.details;
       const letter = coverLetter(
         {
           name: led.name,
@@ -2065,9 +2169,17 @@ router.post('/chat', upload.single('file'), async (req, res) => {
           skills: led.evidencedSkills,
           location: place || null,
           projects: [],
-          link: session.details.link || led.link || null,
-          lead: session.details.coverproof || null,
-          level: session.details.level || null,
+          link: d.link || d.github || d.linkedin || led.link || null,
+          lead: d.coverproof || null,
+          level: d.level || null,
+          /* The terms they stated, each one optional. */
+          workmode: d.workmode || null,
+          hours: d.hours || null,
+          window: d.window || null,
+          availableFrom: d.availablefrom || null,
+          commitLength: d.commitlength || null,
+          notice: d.notice || null,
+          salary: d.salary || null,
         },
         {
           title: position,
@@ -2139,8 +2251,69 @@ router.post('/chat', upload.single('file'), async (req, res) => {
          "build for google") is somebody saying ship what you have. */
       const forceBuild = /\b(build it|done|that'?s all|go ahead|finish|just build)\b/.test(low) ||
         /^\s*(?:ok(?:ay)?[, ]+)?(?:just |now |please )?build\s+(?:(?:it|this|one|the resume)\b|(?:for|at|to)\s+\S)/i.test(msg);
+      /*
+       * The full interview before a page is written.
+       *
+       * Build used to ask six things and start typing. It never asked where
+       * somebody studied, whether their internship was paid, what they had
+       * actually built, or what certifications they hold — then filled those
+       * sections with a template, which is where the invented B.Tech came
+       * from. The bank covers the whole page, one question per turn, every
+       * one skippable, and the parts nobody answers are simply absent.
+       */
       session.buildAsked = session.buildAsked || 0;
-      if (question && !forceBuild && !(iv.canBuild && question.block > 6) && session.buildAsked < 12) {
+      /* The aim first — every keyword hangs off the target, so it is asked
+         before anything else, exactly as the interview script orders it. */
+      if (question && question.block === 1 && !forceBuild && session.buildAsked < 20) {
+        session.buildAsked += 1;
+        return ask(question.field, question.question);
+      }
+      /*
+       * Their own repositories, read back to them.
+       *
+       * "Describe a project" is the question people freeze on — the work
+       * exists, they just cannot summon it in a chat box. It is already
+       * written down on GitHub, so once they give the handle the repos come
+       * back as a list to pick from. Public API only, nothing a signed-out
+       * visitor could not see, and nothing reaches the page until they choose
+       * it: a description written at 2am is still a claim to defend in a room.
+       */
+      if (session.details.github && !session.githubImported && !session.details.projects) {
+        session.githubImported = true;
+        const gh = await githubImport.importProfile(session.details.github, { limit: 8 });
+        if (gh.ok && gh.projects.length) {
+          session.githubProjects = gh.projects.map((p) => p.bullet);
+          if (gh.languages.length && !session.details.skills) {
+            session.details.githubLanguages = gh.languages.join(', ');
+          }
+          session.asked = 'pickprojects';
+          return res.json({
+            ok: true, kind: 'ask',
+            reply: [
+              `Seat: RESUME · Command: build`,
+              `I read ${gh.username}'s public GitHub — ${gh.publicRepos} repositories, ${gh.projects.length} that look like real projects rather than forks or scaffolds${gh.skipped ? ` (${gh.skipped} skipped)` : ''}.`,
+              '',
+              'Which of these should go on the resume? Pick one, or say "all", or skip and describe your own.',
+            ].join('\n'),
+            options: {
+              multi: true,
+              options: gh.projects.map((p) => ({
+                label: p.name,
+                note: [p.language, p.stars >= 5 ? `${p.stars}★` : null].filter(Boolean).join(' · '),
+                value: p.bullet,
+              })),
+              other: { label: 'Something else — I will describe it', value: '' },
+            },
+            session,
+          });
+        }
+      }
+
+      if (!forceBuild && session.buildAsked < 20) {
+        const asked = askInterview('build');
+        if (asked) { session.buildAsked += 1; return asked; }
+      }
+      if (question && !forceBuild && !(iv.canBuild && question.block > 6) && session.buildAsked < 20) {
         session.buildAsked += 1;
         return ask(question.field, question.question);
       }

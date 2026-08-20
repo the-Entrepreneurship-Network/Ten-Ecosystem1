@@ -78,7 +78,7 @@ describe('the conversation advances instead of repeating', () => {
       education: 'B.Tech CSE, 2022 – 2026',
       metric: 'skip', dates: 'skip', evidence: 'skip',
     };
-    for (let i = 0; i < 12 && out.kind === 'ask'; i++) {
+    for (let i = 0; i < 24 && out.kind === 'ask'; i++) {
       out = await turn(a, answers[out.session.asked] || 'skip', out.session);
     }
     expect(out.kind).toBe('build');
@@ -180,7 +180,7 @@ describe('the conversation advances instead of repeating', () => {
     // ship one via tailor, then ask again
     let out = await turn(a, RESUME, t1.session);
     out = await turn(a, 'fix it', out.session);
-    for (let i = 0; i < 7 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+    for (let i = 0; i < 24 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
     expect(out.kind).toBe('build');
 
     /*
@@ -190,7 +190,7 @@ describe('the conversation advances instead of repeating', () => {
      * question is skippable, so this answers the company and skips the rest.
      */
     let cov = await turn(a, 'cover letter', out.session);
-    for (let i = 0; i < 10 && cov.kind === 'ask'; i++) {
+    for (let i = 0; i < 24 && cov.kind === 'ask'; i++) {
       cov = await turn(a, cov.session.asked === 'company' ? 'Northwind' : 'skip', cov.session);
     }
     expect(cov.reply).toMatch(/Cover letter — \d+ words/);
@@ -201,11 +201,14 @@ describe('the conversation advances instead of repeating', () => {
     const a = app();
     let out = await turn(a, RESUME, null);
     out = await turn(a, 'fix it', out.session);
-    for (let i = 0; i < 8 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+    /* The interview covers the whole page now — education, internships,
+       projects, certifications, links — so a walkthrough that skips every
+       question has more of them to skip. */
+    for (let i = 0; i < 24 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
 
     const asked = [];
     let cov = await turn(a, 'cover letter', out.session);
-    for (let i = 0; i < 10 && cov.kind === 'ask'; i++) {
+    for (let i = 0; i < 24 && cov.kind === 'ask'; i++) {
       asked.push(cov.session.asked);
       cov = await turn(a, 'skip', cov.session);
     }
@@ -219,7 +222,10 @@ describe('the conversation advances instead of repeating', () => {
     const a = app();
     let out = await turn(a, RESUME, null);
     out = await turn(a, 'fix it', out.session);
-    for (let i = 0; i < 8 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+    /* The interview covers the whole page now — education, internships,
+       projects, certifications, links — so a walkthrough that skips every
+       question has more of them to skip. */
+    for (let i = 0; i < 24 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
 
     const cov = await turn(a, 'cover letter', out.session);
     expect(cov.session.asked).toBe('position');
@@ -238,7 +244,7 @@ describe('the conversation advances instead of repeating', () => {
 
     let out = await turn(a, RESUME, t1.session);
     out = await turn(a, 'fix it', out.session);
-    for (let i = 0; i < 7 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+    for (let i = 0; i < 24 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
     const prep = await turn(a, 'prep', out.session);
     expect(prep.reply).toMatch(/Five-line defense/);
     expect(prep.reply.split('\n').filter((l) => /^\d\./.test(l))).toHaveLength(5);
@@ -249,7 +255,7 @@ describe('the conversation advances instead of repeating', () => {
     let out = await turn(a, RESUME, null);
     out = await turn(a, 'tailor it', out.session, { jd: 'Backend: Java, Spring Boot, PostgreSQL and Docker required.' });
     let sawConfirm = false;
-    for (let i = 0; i < 7 && out.kind === 'ask'; i++) {
+    for (let i = 0; i < 24 && out.kind === 'ask'; i++) {
       if (out.session.asked === 'confirmkw') {
         sawConfirm = true;
         expect(out.reply).toMatch(/no evidence/i);
@@ -273,7 +279,7 @@ describe('the conversation advances instead of repeating', () => {
     const a = app();
     let out = await turn(a, RESUME, null);
     out = await turn(a, 'fix it', out.session);
-    for (let i = 0; i < 7 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+    for (let i = 0; i < 24 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
     expect(out.kind).toBe('build');
     expect(out.reply).toMatch(/Path: A · Command: tailor · Band:/);
     expect(out.reply).toMatch(/Greenhouse does not auto-score/);
@@ -313,7 +319,7 @@ describe('the conversation advances instead of repeating', () => {
     const a = app();
     let out = await turn(a, 'build', null);
     const seen = [];
-    for (let i = 0; i < 10 && out.kind === 'ask'; i += 1) {
+    for (let i = 0; i < 24 && out.kind === 'ask'; i += 1) {
       /* Answering with a phrase that contains a command word, every turn. */
       out = await turn(a, 'build for google', out.session);
       if (out.kind !== 'ask') break;
@@ -334,7 +340,7 @@ describe('the conversation advances instead of repeating', () => {
     const a = app();
     let out = await turn(a, RESUME, null);
     out = await turn(a, 'Build a Full-Stack Developer resume from scratch', out.session);
-    for (let i = 0; i < 10 && out.kind === 'ask'; i += 1) {
+    for (let i = 0; i < 24 && out.kind === 'ask'; i += 1) {
       expect(out.reply || '').not.toMatch(/your name is missing/i);
       out = await turn(a, 'skip', out.session);
     }
@@ -512,7 +518,10 @@ describe('the conversation advances instead of repeating', () => {
     ].join('\n');
     let out = await turn(a, withCluster, null);
     out = await turn(a, 'fix it', out.session);
-    for (let i = 0; i < 8 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+    /* The interview covers the whole page now — education, internships,
+       projects, certifications, links — so a walkthrough that skips every
+       question has more of them to skip. */
+    for (let i = 0; i < 24 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
     expect(out.kind).toBe('build');
     const skillsLine = (out.text.match(/^SKILLS\n(.+)$/m) || [])[1] || '';
     expect(skillsLine.toLowerCase().split(/,\s*/)).not.toContain('node');
@@ -613,7 +622,10 @@ describe('the conversation advances instead of repeating', () => {
     const withTitle = ['Priya Nair', 'Backend Developer', ...RESUME.split('\n').slice(1)].join('\n');
     let out = await turn(a, withTitle, null);
     out = await turn(a, 'fix it', out.session);
-    for (let i = 0; i < 8 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+    /* The interview covers the whole page now — education, internships,
+       projects, certifications, links — so a walkthrough that skips every
+       question has more of them to skip. */
+    for (let i = 0; i < 24 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
     expect(out.kind).toBe('build');
     expect(out.text).toMatch(/Backend Developer/);
     expect(out.text).not.toMatch(/^Professional$/m);
@@ -626,7 +638,10 @@ describe('the conversation advances instead of repeating', () => {
     const a = app();
     let out = await turn(a, RESUME, null);
     out = await turn(a, 'fix it', out.session);
-    for (let i = 0; i < 8 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+    /* The interview covers the whole page now — education, internships,
+       projects, certifications, links — so a walkthrough that skips every
+       question has more of them to skip. */
+    for (let i = 0; i < 24 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
     expect(out.kind).toBe('build');
     expect(out.text).not.toMatch(/Evidenced in/i);
   });
@@ -697,7 +712,7 @@ describe('the conversation advances instead of repeating', () => {
       email: 'bishal@example.com', phone: '+91 90000 11111', link: 'skip',
       skills: 'Java, Spring Boot, SQL', projects: 'Built an inventory API in Spring Boot',
       education: 'B.Tech CSE, 2021' };
-    for (let i = 0; i < 12 && out.kind === 'ask'; i++) {
+    for (let i = 0; i < 24 && out.kind === 'ask'; i++) {
       out = await turn(a, answers[out.session.asked] || 'skip', out.session);
     }
     expect(out.kind).toBe('build');
