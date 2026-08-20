@@ -63,6 +63,53 @@ describe('the scanner separates a good resume from a bad one', () => {
     });
   });
 
+  it('lists only what actually cost points under "costing you shortlists"', () => {
+    /*
+     * The list filtered on "has a fix string", which every check that lost a
+     * single point keeps. A resume with all three core sections, an email and
+     * a phone number was shown "Core sections present — Add the missing
+     * section(s): —." and "Contact details parseable — put a plain-text email
+     * and phone number at the top", both under the heading telling the
+     * student what was getting them rejected. Neither was true of the page.
+     */
+    const solid = [
+      'Priya Nair', 'Backend Developer', 'priya@example.com | +91 90000 00000',
+      '', 'SUMMARY', 'Backend developer building services on AWS.',
+      '', 'EXPERIENCE', 'Backend Developer | Zeta | Jan 2023 - Present',
+      '- Built an API on AWS serving 5,000 requests a day, cutting latency 30%',
+      '- Automated deploys with Terraform, saving 4 hours a week',
+      '', 'SKILLS', 'Python, AWS, Terraform, Docker',
+      '', 'EDUCATION', 'B.Tech Computer Science, 2021 - 2025',
+    ].join('\n');
+
+    const report = agent.scanResume(solid);
+    const named = report.failing.map((f) => f.label);
+    expect(named).not.toContain('Core sections present');
+    expect(named).not.toContain('Contact details parseable');
+    /* And nothing on the list may print an empty enumeration. */
+    report.failing.forEach((f) => expect(f.fix).not.toMatch(/:\s*—\s*\.?$/));
+  });
+
+  it('never advises adding the filler words the rubric bans', () => {
+    /* The fallback keyword bank led with "communication, teamwork, problem
+       solving" — words banned from a resume — and the scanner recommended
+       them to any resume scanned without a target. */
+    const report = agent.scanResume(BAD_RESUME);
+    const advice = [report.missingKeywords.join(' '), ...report.failing.map((f) => f.fix)].join(' ').toLowerCase();
+    expect(advice).not.toMatch(/communication|teamwork|problem solving/);
+  });
+
+  it('takes the target from the resume when none was given', () => {
+    /* A page headed "Backend Developer" was scored against the generic bank
+       because the caller passed no target, then told to add its words. */
+    const headed = [
+      'Priya Nair', 'Backend Developer', 'priya@example.com | +91 90000 00000',
+      '', 'EXPERIENCE', '- Built an API on AWS serving 5,000 requests a day',
+      '', 'SKILLS', 'Python, AWS', '', 'EDUCATION', 'B.Tech CS, 2021 - 2025',
+    ].join('\n');
+    expect(agent.scanResume(headed).target).not.toBe('default');
+  });
+
   it('does not dock a resume for its education line', () => {
     /*
      * Nobody writes "Delivered B.Tech". Scoring education and certification

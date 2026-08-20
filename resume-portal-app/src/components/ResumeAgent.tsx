@@ -173,6 +173,83 @@ function ReportCard({ report }: { report: Report }) {
 }
 
 /*
+ * The agent's reply, with pipe tables drawn as tables.
+ *
+ * The tailor step answers with a mapping table — every term the posting asks
+ * for, whether the resume evidences it, and where. Rendered as pre-wrapped
+ * text in a proportional font, those rows arrive as a wall of pipes with
+ * nothing lining up, which reads as broken rather than as analysis. Splitting
+ * the reply into prose and table blocks is about twenty lines and needs no
+ * markdown dependency; anything the agent formats as a table from here on
+ * renders as one.
+ */
+function isTableRow(line: string) {
+  return /^\s*\|.*\|\s*$/.test(line);
+}
+function cellsOf(line: string) {
+  return line.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+}
+/* Markdown marks the header with a |---|---| separator row. */
+const isDividerRow = (line: string) => /^\s*\|[\s:|-]+\|\s*$/.test(line);
+
+function ReplyBody({ text }: { text: string }) {
+  const lines = text.split('\n');
+  const blocks: Array<{ kind: 'text'; lines: string[] } | { kind: 'table'; rows: string[][] }> = [];
+
+  lines.forEach((line) => {
+    const last = blocks[blocks.length - 1];
+    if (isTableRow(line)) {
+      if (isDividerRow(line)) return; /* structural, never shown */
+      if (last && last.kind === 'table') last.rows.push(cellsOf(line));
+      else blocks.push({ kind: 'table', rows: [cellsOf(line)] });
+      return;
+    }
+    if (last && last.kind === 'text') last.lines.push(line);
+    else blocks.push({ kind: 'text', lines: [line] });
+  });
+
+  return (
+    <div className="space-y-3">
+      {blocks.map((b, i) => {
+        if (b.kind === 'text') {
+          const body = b.lines.join('\n').trim();
+          if (!body) return null;
+          return (
+            <p key={i} className="whitespace-pre-wrap text-[13.5px] leading-relaxed text-[#374151]">{body}</p>
+          );
+        }
+        const [head, ...rest] = b.rows;
+        return (
+          <div key={i} className="overflow-x-auto rounded-xl border border-[#e5e9f0]">
+            <table className="w-full border-collapse text-[12.5px]">
+              <thead>
+                <tr className="bg-[#f6f8fb] text-left text-[#6b7280]">
+                  {head.map((h, j) => <th key={j} className="px-3 py-2 font-semibold">{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {rest.map((r, j) => (
+                  <tr key={j} className="border-t border-[#eef1f6] align-top">
+                    {r.map((c, k) => (
+                      <td key={k} className="px-3 py-2 text-[#374151]">
+                        {/* The agent italicises "(nice to have)" — the only
+                            inline markup these cells ever carry. */}
+                        {c.split(/\*([^*]+)\*/).map((part, n) =>
+                          n % 2 ? <i key={n} className="text-[#6b7280]">{part}</i> : part)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/*
  * Fetches the rendered PDF and hands it to the browser. Posting rather than
  * linking keeps the details out of the URL bar and out of server logs.
  */
@@ -398,7 +475,7 @@ export function AgentChat() {
                       </div>
                     ) : (
                       <div className="space-y-3">
-                        {m.text && <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed text-[#374151]">{m.text}</p>}
+                        {m.text && <ReplyBody text={m.text} />}
                         {m.resume && (
                           <div className="rounded-2xl border border-[#e5e9f0] bg-[#fbfcfe] p-4">
                             <div className="mb-2 flex items-center justify-between gap-2">
@@ -456,11 +533,30 @@ function Composer({ input, setInput, onSubmit, fileRef, send, busy }: {
 }) {
   return (
     <form onSubmit={onSubmit} className="mt-7 w-full max-w-[560px] rounded-2xl border border-[#e5e9f0] bg-white p-3 shadow-[0_2px_10px_rgba(16,24,40,0.04)]">
-      <input
+      {/*
+        A textarea, because the agent keeps asking people to paste things.
+        "Attach or paste the resume", "paste the job description" — and a
+        single-line <input> silently joins every pasted line into one, so a
+        pasted resume arrived as one continuous string with no headings and
+        no bullets for the parser to find. Enter still sends; Shift+Enter is
+        the newline, as in every chat box.
+      */}
+      <textarea
         value={input}
         onChange={(e) => setInput(e.target.value)}
-        placeholder="Ask me anything…"
-        className="w-full bg-transparent px-2 py-1.5 text-[14px] text-[#111827] outline-none placeholder:text-[#9ca3af]"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSubmit(e as unknown as FormEvent); }
+        }}
+        rows={1}
+        placeholder="Ask me anything, or paste a resume or job description…"
+        className="max-h-[220px] w-full resize-none bg-transparent px-2 py-1.5 text-[14px] text-[#111827] outline-none placeholder:text-[#9ca3af]"
+        style={{ height: 'auto', minHeight: '2rem' }}
+        onInput={(e) => {
+          /* Grows with the paste instead of hiding it behind a scrollbar. */
+          const t = e.currentTarget;
+          t.style.height = 'auto';
+          t.style.height = `${Math.min(t.scrollHeight, 220)}px`;
+        }}
       />
       <div className="mt-2 flex items-center gap-3">
         <button type="button" onClick={() => fileRef.current?.click()} className="text-[#6b7280] hover:text-[#111827]" aria-label="Attach resume">📎</button>

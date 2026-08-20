@@ -40,6 +40,14 @@ router.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
 /* ── vocabulary ─────────────────────────────────────────────────────────── */
 
+/*
+ * A bullet as a PDF extractor leaves it. See the note in atsResumeEngine:
+ * requiring a glyph-plus-space missed "•Managed", "– Managed" and Word's
+ * "o Managed", which is how a resume with 32 achievements reported that none
+ * of them opened with a verb.
+ */
+const BULLET_RE = /^\s*(?:[-*•▪◦‣·▸►●○◆■□➤➢‧⁃–—]+\s*|o\s+(?=[A-Z])|\d+[.)]\s*)/;
+
 const ACTION_VERBS = [
   'built','designed','developed','led','shipped','launched','created','implemented','architected',
   'automated','optimized','optimised','reduced','increased','improved','migrated','integrated',
@@ -69,7 +77,15 @@ const ROLE_KEYWORDS = {
   'web': ['html','css','javascript','react','responsive','dom','git','api','accessibility','deployment'],
   'mern': ['mongodb','express','react','node','rest api','jwt','authentication','hooks','redux','socket'],
   'flutter': ['flutter','dart','widgets','state management','firebase','rest api','android','ios','animations'],
-  'software engineering': ['system design','design patterns','clean code','testing','ci/cd','git','database','api design','agile'],
+  /*
+   * Backend has its own bank because it was folded into software engineering,
+   * whose words are practices rather than tools. A backend resume listing
+   * Python, AWS, Terraform, Docker, PostgreSQL and Kafka scored 0/9 and was
+   * advised to add "clean code" and "design patterns" — phrases no ATS keys
+   * on and no recruiter believes.
+   */
+  'backend': ['rest api','sql','database','docker','aws','testing','git','microservices','caching','authentication'],
+  'software engineering': ['api','testing','git','database','ci/cd','sql','debugging','code review','system design'],
   'data science': ['python','pandas','numpy','machine learning','scikit-learn','sql','visualization','statistics','nlp','model'],
   'devops': ['linux','docker','kubernetes','ci/cd','jenkins','terraform','aws','monitoring','bash','git'],
   'cyber security': ['owasp','penetration testing','network security','linux','cryptography','siem','incident response','vulnerability','firewall'],
@@ -77,7 +93,10 @@ const ROLE_KEYWORDS = {
   'venture capital': ['valuation','due diligence','term sheet','market sizing','portfolio','deal sourcing','financial modelling'],
   'hr': ['recruitment','onboarding','engagement','performance management','hris','labour law','interviewing','payroll'],
   'space': ['orbital mechanics','satellite','remote sensing','astrophysics','mission planning','matlab','python'],
-  'default': ['communication','teamwork','problem solving','project','git','api','sql','testing','documentation'],
+  /* The fallback bank names tools, not virtues. It used to lead with
+     "communication, teamwork, problem solving" — the exact words the rubric
+     bans from a resume — so the scanner's own advice was to add filler. */
+  'default': ['git','api','sql','testing','documentation','project','database','deployment'],
 };
 
 /* How people actually write the role on a resume, mapped to a bank. Without
@@ -89,7 +108,8 @@ const ROLE_ALIASES = {
   'data science': ['data scientist', 'data science', 'machine learning', 'ml engineer', 'ai engineer', 'analyst - data'],
   devops: ['devops', 'sre', 'cloud engineer', 'platform engineer', 'aws'],
   'cyber security': ['cyber', 'security analyst', 'infosec', 'penetration'],
-  'software engineering': ['software engineer', 'sde', 'backend', 'back-end', 'back end'],
+  backend: ['backend', 'back-end', 'back end', 'api developer', 'server-side'],
+  'software engineering': ['software engineer', 'sde', 'software developer'],
   python: ['python'],
   java: ['java'],
   flutter: ['flutter', 'mobile', 'android', 'ios'],
@@ -127,7 +147,7 @@ function lines(text) {
  * lines for not starting with a verb, which no ATS does.
  */
 function bulletLines(all) {
-  const marked = all.filter((l) => /^([-*•▪◦‣·]|\d+[.)])\s+/.test(l));
+  const marked = all.filter((l) => BULLET_RE.test(l));
   if (marked.length >= 2) return marked;
   return all.filter((l) => l.length > 25 && /^[A-Z]/.test(l) && !isHeading(l));
 }
@@ -158,7 +178,7 @@ function sectionOf(all, index) {
 function achievementBullets(all) {
   const marked = all
     .map((l, i) => ({ line: l, section: sectionOf(all, i) }))
-    .filter((b) => /^([-*•▪◦‣·]|\d+[.)])\s+/.test(b.line));
+    .filter((b) => BULLET_RE.test(b.line));
 
   if (marked.length < 2) return bulletLines(all);
 
@@ -208,7 +228,12 @@ function scanResume(text, target) {
   /* Claims about work only — an education line is not an achievement. */
   const bullets = achievementBullets(all);
   const sections = foundSections(all);
-  const bank = roleBank(target);
+  /*
+   * A resume headed "Backend Developer" states its own target. Scoring it
+   * against the generic bank because no target was passed in measured it for
+   * a role nobody mentioned, and then advised adding words from that role.
+   */
+  const bank = roleBank(target || (atsEngine.factLedger(raw).title || ''));
 
   const checks = [];
   const add = (id, label, weight, earned, detail, fix) =>
@@ -218,10 +243,16 @@ function scanResume(text, target) {
   const hasEmail = RE_EMAIL.test(raw);
   const hasPhone = RE_PHONE.test(raw);
   const hasLink = RE_LINK.test(raw);
+  /* The advice names what is actually absent. A resume with an email and a
+     phone number was told to "put a plain-text email and phone number at the
+     top of page one" — advice for a defect it did not have, printed because
+     it was short a LinkedIn URL. */
   add('contact', 'Contact details parseable', 12,
     (hasEmail ? 6 : 0) + (hasPhone ? 4 : 0) + (hasLink ? 2 : 0),
     `${hasEmail ? 'email ✓' : 'email ✗'} · ${hasPhone ? 'phone ✓' : 'phone ✗'} · ${hasLink ? 'LinkedIn/GitHub ✓' : 'LinkedIn/GitHub ✗'}`,
-    'Put a plain-text email and phone number at the top of page one, in the body — never inside a header, footer or image.');
+    !hasEmail || !hasPhone
+      ? `Add your ${[!hasEmail && 'email address', !hasPhone && 'phone number'].filter(Boolean).join(' and ')} as plain text at the top of page one, in the body — never inside a header, footer or image.`
+      : 'Add your LinkedIn or GitHub URL as plain text — it is the two points left on this check, and recruiters click it.');
 
   /* 2. required sections */
   const core = ['experience', 'education', 'skills'];
@@ -229,7 +260,11 @@ function scanResume(text, target) {
   add('sections', 'Core sections present', 16,
     (coreFound / core.length) * 13 + (sections.projects ? 2 : 0) + (sections.summary ? 1 : 0),
     `${coreFound}/3 core (${core.filter((k) => sections[k]).join(', ') || 'none'})${sections.projects ? ' + projects' : ''}`,
-    `Add the missing section(s): ${core.filter((k) => !sections[k]).join(', ') || '—'}.`);
+    /* "Add the missing section(s): —." was printed to resumes that had all
+       three core sections and were merely short the projects bonus. */
+    coreFound < core.length
+      ? `Add the missing section(s): ${core.filter((k) => !sections[k]).join(', ')}.`
+      : `All three core sections are here. The points left are the bonus ones: ${[!sections.projects && 'a Projects section', !sections.summary && 'a short Summary'].filter(Boolean).join(' and ')}.`);
 
   /* 3. standard heading wording */
   const headingCount = all.filter(isHeading).length;
@@ -240,7 +275,7 @@ function scanResume(text, target) {
 
   /* 4. action verbs */
   const verbStart = bullets.filter((b) => {
-    const first = b.replace(/^([-*•▪◦‣·]|\d+[.)])\s+/, '').split(/\s+/)[0] || '';
+    const first = b.replace(BULLET_RE, '').split(/\s+/)[0] || '';
     return ACTION_VERBS.includes(first.toLowerCase().replace(/[^a-z]/g, ''));
   }).length;
   const verbRatio = bullets.length ? verbStart / bullets.length : 0;
@@ -301,7 +336,18 @@ function scanResume(text, target) {
     target: bank.key,
     stats: { words: wc, bullets: bullets.length, sections: Object.keys(sections).filter((k) => sections[k]) },
     checks,
-    failing: checks.filter((c) => c.fix).map((c) => ({ label: c.label, fix: c.fix, lost: c.weight - c.earned })).sort((a, b) => b.lost - a.lost),
+    /*
+     * "What is costing you shortlists" means points actually lost, not every
+     * check that happens to carry advice. This filtered on the presence of a
+     * fix string, so a resume scoring 14/16 on sections — all three core
+     * sections present, short only the projects bonus — appeared on the list
+     * of what was getting it rejected. A check has to lose at least a fifth
+     * of its weight, and at least one whole point, to be named there.
+     */
+    failing: checks
+      .filter((c) => c.fix && c.weight - c.earned >= Math.max(1, c.weight * 0.2))
+      .map((c) => ({ label: c.label, fix: c.fix, lost: c.weight - c.earned }))
+      .sort((a, b) => b.lost - a.lost),
     hazards,
     missingKeywords: bank.words.filter((w) => !lower.includes(w)),
   };
@@ -926,6 +972,48 @@ function targetFromSentence(low) {
   return m[1].trim().replace(/\s+/g, ' ');
 }
 
+/**
+ * A pasted resume, recognised as a document rather than read as a sentence.
+ *
+ * The agent invites this — "attach or paste the resume" — and then ran the
+ * paste through the command map, where a career summary reading "2 years
+ * building services" matched the BUILD verb and the reply was "what job title
+ * are you applying for?" about a resume that names the title in line two. A
+ * document is not an instruction: it is several lines long, carries contact
+ * details or the standard headings, and nothing in it was addressed to the
+ * agent.
+ */
+function looksLikeResume(text) {
+  const t = String(text || '');
+  if (t.split('\n').filter((l) => l.trim()).length < 5) return false;
+  const headings = (t.match(/^\s*(summary|objective|experience|work experience|education|skills|projects|certifications|achievements)\s*:?\s*$/gim) || []).length;
+  const hasContact = RE_EMAIL_LINE.test(t) || RE_PHONE_LINE.test(t);
+  return headings >= 2 || (headings >= 1 && hasContact) || (hasContact && t.split('\n').length >= 10);
+}
+const RE_EMAIL_LINE = /[\w.+-]+@[\w-]+\.[\w.]{2,}/;
+const RE_PHONE_LINE = /(\+?\d[\d\s().-]{7,}\d)/;
+
+/**
+ * A job description pasted into the message, rather than answered into the
+ * question that asks for one.
+ *
+ * "Tailor it to this job: Must have Python, AWS, Kubernetes…" was answered
+ * with "paste the job description if you have it" — about a message that was
+ * the job description. The posting is right there in the sentence; asking for
+ * it again is the agent not reading what it was given.
+ */
+const RE_JD_SIGNAL = /\b(must[- ]have|nice[- ]to[- ]have|requirements?|responsibilities|we(?:'re| are) looking for|you will|qualifications|job description|required\s*:|preferred\s*:|tech(?:nical)? stack)\b/i;
+function looksLikeJd(text) {
+  const t = String(text || '');
+  return t.length >= 40 && RE_JD_SIGNAL.test(t);
+}
+/** The posting itself, with any leading instruction to the agent removed. */
+function jdBody(text) {
+  return String(text)
+    .replace(/^.{0,90}?\b(?:jd|job description|job|posting|role|opening)\b\s*[:\-–]\s*/i, '')
+    .trim();
+}
+
 /** What the visitor wants, read from their sentence — Mega Agent command map. */
 function commandOf(low, hasFile) {
   if (DO_ALL.test(low)) return 'doall';
@@ -969,6 +1057,35 @@ function deliveryHeader(path, command, band, packet) {
     if (packet.ceiling) lines.push(packet.ceiling);
   }
   lines.push('Proxy only. Not a live Workday/Greenhouse decision — Greenhouse does not auto-score resumes.');
+  return lines.join('\n');
+}
+
+/**
+ * The tailor step's mapping table, rendered.
+ *
+ * The skill has always required it — "JD term | in resume | where | action" —
+ * and the reply never carried it, so a student who pasted a job description
+ * got two score numbers and a list of missing words with no sign that the
+ * posting had been read at all. This is that reading, shown.
+ */
+function jdMapBlock(map) {
+  if (!map || !map.rows.length) return '';
+  const lines = [
+    `Read from the posting: ${map.must} must-have${map.must === 1 ? '' : 's'}` +
+    (map.nice ? ` and ${map.nice} nice-to-have${map.nice === 1 ? '' : 's'}` : '') +
+    `. ${map.evidenced} evidenced in your resume${map.listedOnly ? `, ${map.listedOnly} listed without proof` : ''}.`,
+    '',
+    '| JD term | Have it | Where | Action |',
+    '|---|---|---|---|',
+  ];
+  const mark = { evidenced: 'yes', 'listed only': 'listed only', 'not claimed': 'no' };
+  map.rows.slice(0, 14).forEach((r) => {
+    const term = r.kind === 'nice' ? `${r.term} *(nice to have)*` : r.term;
+    lines.push(`| ${term} | ${mark[r.status]} | ${r.where} | ${r.action} |`);
+  });
+  if (map.mustMissing.length) {
+    lines.push('', `Required and unproven: ${map.mustMissing.join(', ')}. Nothing was added for these — say where you used one and it goes in.`);
+  }
   return lines.join('\n');
 }
 
@@ -1131,7 +1248,26 @@ router.post('/chat', upload.single('file'), async (req, res) => {
     const PASTE_FIELDS = ['resume', 'jd', 'jds', 'confirmkw'];
     const looksLikePaste = session.asked &&
       (PASTE_FIELDS.includes(session.asked) || msg.split('\n').length > 3 || msg.length > 200);
-    const command = looksLikePaste ? null : commandOf(low, Boolean(req.file));
+
+    /*
+     * A resume pasted into the box is the resume, whatever verbs it happens to
+     * contain — the first thing to do with it is look at it, exactly as with
+     * an uploaded file. Without this the paste was parsed as a sentence, and
+     * "2 years building services" made it a request to build a new one.
+     */
+    const pastedResume = !session.asked && !req.file && looksLikeResume(msg);
+    if (pastedResume) session.resumeText = msg;
+
+    /* A posting in the message is the posting. Captured before the command is
+       read, so "tailor it to this job: …" tailors against it instead of
+       asking for what it was just handed. */
+    if (!pastedResume && !PASTE_FIELDS.includes(session.asked) && looksLikeJd(msg)) {
+      session.jd = jdBody(msg);
+    }
+
+    const command = pastedResume ? 'check'
+      : looksLikePaste ? null
+        : commandOf(low, Boolean(req.file));
     if (command) {
       session.command = command;
       session.menuShown = false;
@@ -1414,9 +1550,10 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         });
       }
 
-      return deliver(res, session, packet,
-        `Band before: ${packet.band}. Converted — checker ${packet.before.checker}→${packet.after.checker}, recruiter-scan ${packet.before.recruiter}→${packet.after.recruiter}.` +
-        (packet.notClaimed.length ? ` Not claimed: ${packet.notClaimed.slice(0, 5).join(', ')}.` : ''));
+      return deliver(res, session, packet, [
+        `Band before: ${packet.band}. Converted — checker ${packet.before.checker}→${packet.after.checker}, recruiter-scan ${packet.before.recruiter}→${packet.after.recruiter}.`,
+        jdMapBlock(packet.jdMap),
+      ].filter(Boolean).join('\n\n'));
     }
 
     /*
@@ -1440,7 +1577,7 @@ router.post('/chat', upload.single('file'), async (req, res) => {
           `Match: ${kd.overlap}% evidenced overlap (${kd.matched}/${kd.terms} hard terms) · checker ${packet.before.checker}/${packet.before.checkerMax} · recruiter-scan ${packet.before.recruiter}/100.`,
           bandNote,
           '',
-          ...packet.notClaimed.slice(0, 10).map((t) => `• missing: ${t}`),
+          jdMapBlock(packet.jdMap),
           packet.ceiling || '',
           'Say "tailor" to close the wording gap — facts stay exactly yours.',
         ].filter(Boolean).join('\n'),
@@ -1511,10 +1648,10 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         reply: [
           `Gap table — ${kd.matched}/${kd.terms} JD terms evidenced (${kd.overlap}% overlap; the competitive band is 60–85%).`,
           '',
-          ...packet.notClaimed.slice(0, 12).map((t) => `• ${t} — asked for in the JD, no evidence in the resume. Add it only if you have actually used it.`),
+          jdMapBlock(packet.jdMap),
           '',
           packet.ceiling || 'Nothing on the Not-claimed list — the gap is wording, not facts. Say "tailor" and I will close it.',
-        ].join('\n'),
+        ].filter(Boolean).join('\n'),
         session,
       });
     }

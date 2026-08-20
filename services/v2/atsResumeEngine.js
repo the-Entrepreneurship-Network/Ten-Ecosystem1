@@ -57,11 +57,37 @@ const RE_EMAIL = /[\w.+-]+@[\w-]+\.[\w.]{2,}/;
 const RE_PHONE = /(\+?\d[\d\s().-]{7,}\d)/;
 const RE_LINK = /(linkedin\.com\/[\w\-/]+|github\.com\/[\w\-/]+|https?:\/\/[\w./-]+)/i;
 const RE_DATE_RANGE = /((19|20)\d{2}|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[^\n]{0,24}(-|–|—|\bto\b)\s*((19|20)\d{2}|present|current|now)/i;
+/* What a job title is made of. Deliberately a noun list rather than "any
+   short capitalised line" — a company name and a city are both short and
+   capitalised, and neither is what the person does. */
+const RE_JOB_TITLE = /\b(engineer|developer|programmer|analyst|scientist|designer|architect|administrator|manager|consultant|specialist|associate|assistant|coordinator|executive|officer|lead|intern|trainee|freelancer|writer|editor|marketer|recruiter|accountant|auditor|nurse|teacher|technician|researcher|strategist|planner|operator|supervisor|director|founder|devops|sre|qa|tester)\b/i;
 
 const escapeRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-/* Plural-tolerant: "REST API" is evidenced by "REST APIs". */
+/*
+ * Plural-tolerant: "REST API" is evidenced by "REST APIs".
+ *
+ * The second lookbehind rejects a term that is only the tail of a compound.
+ * "ran the billing service on a 3-node cluster" was reported as evidence of
+ * Node.js, and the skill went onto a resume the student would have sent —
+ * a claim they never made, produced by a hyphen. A hyphen AFTER the term is
+ * still the term: "Docker-based deployment" does evidence Docker.
+ */
 const hasWord = (hay, term) =>
-  new RegExp(`(^|[^a-z0-9+#])${escapeRe(String(term).toLowerCase())}s?([^a-z0-9+#]|$)`, 'i').test(hay);
+  new RegExp(`(?<![a-z0-9+#])(?<![a-z0-9]-)${escapeRe(String(term).toLowerCase())}s?([^a-z0-9+#]|$)`, 'i').test(hay);
+
+/**
+ * A term spelled the way the document spells it.
+ *
+ * Terms are lowercased everywhere inside this file so they can be compared,
+ * and that lowercase leaked out to the reader: skills lines printing
+ * "kubernetes" and gap tables listing "aws" and "postgresql". Where the
+ * source spells the word, its spelling is the one shown.
+ */
+function spelledAsIn(source, term) {
+  const m = String(source || '').match(
+    new RegExp(`(?<![a-z0-9+#])(?<![a-z0-9]-)(${escapeRe(term)})(?![a-z0-9+#])`, 'i'));
+  return m ? m[1] : term;
+}
 
 /**
  * Whether a skill is evidenced by the proof text. A single word must appear
@@ -91,8 +117,25 @@ function headingKey(line) {
   return null;
 }
 
-const isBullet = (l) => /^([-*•▪◦‣·]|\d+[.)])\s+/.test(l);
-const stripBullet = (l) => l.replace(/^([-*•▪◦‣·]|\d+[.)])\s+/, '');
+/*
+ * What a bullet looks like once a PDF has been through text extraction.
+ *
+ * The old pattern wanted one of seven glyphs followed by a space, and a
+ * recording showed the cost: a real resume reported "0/32 bullets open with
+ * action verbs" because its bullets extracted as "•Managed" with no space,
+ * "– Managed" with an en-dash, and "o Managed" — the letter o, which is what
+ * Word's Symbol-font bullet becomes in plain text. Every achievement on that
+ * page was invisible to the verb check, so the advice was wrong and the score
+ * was wrong with it.
+ *
+ * The space is optional, the glyph set covers what extractors actually emit,
+ * and a lone "o" counts only when a capital follows it — otherwise words like
+ * "of" would be read as bullets.
+ */
+const BULLET_RE = /^\s*(?:[-*•▪◦‣·▸►●○◆■□➤➢‧⁃–—]+\s*|o\s+(?=[A-Z])|\d+[.)]\s*)/;
+
+const isBullet = (l) => BULLET_RE.test(l);
+const stripBullet = (l) => String(l).replace(BULLET_RE, '');
 
 /* Scope, per the skill: a number, money, or a stated extent — users named,
    team size, frequency. What the person gave; never what we might add. */
@@ -214,8 +257,31 @@ function factLedger(text) {
 
   const name = (raw.match(/^[ \t]*([A-Z][A-Za-z.'-]+(?:[ \t]+[A-Z][A-Za-z.'-]+){1,3})[ \t]*$/m) || [])[1] || null;
 
+  /*
+   * The headline title, which almost every resume writes on the line under
+   * the name. Nothing read it, so a page saying "Backend Developer" in point
+   * 16 was rewritten under the heading "Professional" — the rewriter's
+   * last-resort placeholder standing in for a fact printed at the top of the
+   * document it had just parsed.
+   */
+  const title = (() => {
+    const head = all.slice(0, 6).map((l) => String(l).trim()).filter(Boolean);
+    const start = name ? head.findIndex((l) => l === name) + 1 : 1;
+    for (let i = Math.max(start, 0); i < head.length; i += 1) {
+      const line = head[i];
+      if (!line || line.length > 60) continue;
+      if (RE_EMAIL.test(line) || RE_PHONE.test(line) || RE_LINK.test(line)) continue;
+      if (headingKey(line) || isBullet(line)) continue;
+      if (/\d/.test(line)) continue;                        /* dates and metrics are not titles */
+      if (line.split(/\s+/).length > 6) continue;           /* a sentence, not a title */
+      if (RE_JOB_TITLE.test(line)) return line.replace(/[|·,].*$/, '').trim();
+    }
+    return null;
+  })();
+
   return {
     name,
+    title,
     email: (raw.match(RE_EMAIL) || [])[0] || null,
     phone: (raw.match(RE_PHONE) || [])[0] || null,
     link: (raw.match(RE_LINK) || [])[0] || null,
@@ -241,17 +307,195 @@ function factLedger(text) {
  * known tools plus technical-looking tokens. Fluff is ignored — matching
  * "collaborative" tells nobody anything.
  */
+/* Words that look like requirements but name no skill. */
+const JD_FLUFF = new Set([
+  'the', 'and', 'for', 'with', 'you', 'our', 'are', 'will', 'work', 'team', 'role', 'job',
+  'years', 'year', 'experience', 'strong', 'good', 'plus', 'must', 'have', 'this', 'that',
+  'from', 'your', 'about', 'time', 'full', 'part', 'well', 'able', 'into', 'they', 'their',
+  'required', 'requirements', 'preferred', 'responsibilities', 'candidate', 'ideal', 'looking',
+  'company', 'position', 'opportunity', 'benefits', 'salary', 'apply', 'join', 'help', 'build',
+  'working', 'excellent', 'ability', 'skills', 'knowledge', 'understanding', 'familiarity',
+  'own', 'lead', 'across', 'within', 'using', 'while', 'also', 'more', 'other', 'such',
+  /* Job-title and grading words. A posting saying "Senior Engineer" is naming
+     a level, not a tool, and scoring a resume for containing "engineer" tells
+     nobody whether they can do the work. */
+  'nice', 'proficient', 'familiarity', 'engineer', 'engineering', 'developer', 'analyst',
+  'manager', 'senior', 'junior', 'staff', 'principal', 'lead', 'intern', 'associate',
+  'site', 'reliability', 'role', 'team', 'stack', 'boot', 'plus',
+]);
+
+/**
+ * The hard terms a checker would pull out of a job description.
+ *
+ * The old version only recognised skills already in the vocabulary plus
+ * tokens containing a digit, a dot or a hyphen. A perfectly ordinary posting —
+ * "Required: Kubernetes, Terraform, AWS, Prometheus, Go" — yielded three
+ * terms, fell under the five-term threshold, and the entire keyword block
+ * silently became N/A: no overlap, no Not-claimed list, no ceiling. The agent
+ * looked like it had not read the job at all, which is exactly what a student
+ * reported.
+ *
+ * So the requirement lines are mined directly. Anything listed after
+ * "required", "must have", "tech stack" and friends is a demand whether or
+ * not this codebase has heard of it, comma-separated runs in those lines are
+ * split into their items, and capitalised nouns elsewhere are picked up too —
+ * Prometheus and Grafana are proper nouns long before they are in any list.
+ */
 function jdHardTerms(jd) {
   if (!jd || !String(jd).trim()) return [];
-  const low = String(jd).toLowerCase();
+  const raw = String(jd);
+  const low = raw.toLowerCase();
   const found = new Set();
-  SKILL_VOCAB.forEach((s) => { if (hasWord(low, s)) found.add(s); });
-  (low.match(/[a-z][a-z0-9+#.-]{2,19}/g) || []).forEach((raw) => {
-    const w = raw.replace(/[.\-]+$/, '');
-    if (w.length < 3) return;
-    if (/[0-9+#]/.test(w) || /\.(js|ts|py|net|io)$/.test(w) || w.includes('-')) found.add(w);
+
+  const add = (term) => {
+    let t = String(term).toLowerCase().trim();
+    /* A posting writes "Snowflake is required", not "Snowflake". Left alone,
+       the whole clause became a keyword the resume could never match, and
+       "snowflake is required" sat next to "snowflake" on the Not-claimed
+       list looking like two separate demands. */
+    t = t
+      .replace(/^(?:experience|proficiency|familiarity|knowledge)\s+(?:with|in|of)\s+/, '')
+      .replace(/\s+(?:is|are)?\s*(?:required|preferred|a\s+(?:plus|must)|essential|desirable)$/, '')
+      .trim()
+      .replace(/^[^a-z0-9]+|[^a-z0-9+#.]+$/g, '');
+    if (t.length < 2 || t.length > 30) return;
+    /* Anything still carrying a verb is a sentence fragment, not a skill. */
+    if (/\b(?:is|are|was|were|will|would|should|must|have|has|can)\b/.test(t)) return;
+    if (JD_FLUFF.has(t)) return;
+    if (/^\d+$/.test(t)) return;
+    found.add(t);
+  };
+
+  /* Known skills first — the terms an ATS is most likely keyed on. */
+  SKILL_VOCAB.forEach((s) => { if (hasWord(low, s)) add(s); });
+
+  /* Requirement lines: everything a posting lists after asking for it. */
+  const REQUIRE = /(?:required|requirements?|must[- ]have|nice[- ]to[- ]have|preferred|proficient(?:\s+in)?|experience\s+(?:with|in)|familiarity\s+(?:with|in)|knowledge\s+of|working\s+with|tech(?:nical)?\s+stack|skills?)\s*[:\-–]?\s*([^.\n;]{3,200})/gi;
+  let m;
+  while ((m = REQUIRE.exec(raw)) !== null) {
+    m[1].split(/,|\band\b|\bor\b|\/|\|/).forEach((piece) => {
+      const item = piece.trim();
+      /* Short items are the tool names; a clause is prose, so take its nouns. */
+      if (item && item.split(/\s+/).length <= 3) add(item);
+      else (item.match(/\b[A-Z][A-Za-z0-9+#.]{2,}\b/g) || []).forEach(add);
+    });
+  }
+
+  /* Capitalised names anywhere: Prometheus, Grafana, Kafka, Django. */
+  (raw.match(/\b[A-Z][A-Za-z0-9+#.]{2,19}\b/g) || []).forEach((word) => {
+    if (/^[A-Z]{2,6}$/.test(word)) { add(word); return; }   /* AWS, SLO, CI */
+    add(word);
   });
+
+  /* Technical-looking tokens the vocabulary has never heard of. */
+  (low.match(/[a-z][a-z0-9+#.-]{2,19}/g) || []).forEach((token) => {
+    const w = token.replace(/[.\-]+$/, '');
+    if (/[0-9+#]/.test(w) || /\.(js|ts|py|net|io)$/.test(w) || w.includes('-')) add(w);
+  });
+
   return [...found].slice(0, 40);
+}
+
+/**
+ * The same terms, split the way the posting splits them.
+ *
+ * A posting does not ask for everything equally. "Must have: Java, Spring"
+ * and "Nice to have: Kafka" are two different sentences, and a student
+ * deciding what to learn next needs to know which list a missing term is on.
+ * Anything the posting did not grade sits in `must` — an unqualified
+ * requirement is a requirement.
+ */
+function jdRequirements(jd) {
+  const all = jdHardTerms(jd);
+  if (!all.length) return { must: [], nice: [], all };
+
+  const raw = String(jd);
+  const nice = new Set();
+
+  /* Everything downstream of a nice-to-have marker, up to the next full stop
+     or line break, is optional. */
+  const NICE = /(?:nice[- ]to[- ]have|preferred|a\s+plus|bonus|desirable|good\s+to\s+have)\s*[:\-–]?\s*([^.\n;]{0,200})/gi;
+  let m;
+  while ((m = NICE.exec(raw)) !== null) {
+    const window = m[1].toLowerCase();
+    all.forEach((t) => { if (window.includes(t)) nice.add(t); });
+  }
+  /* "Familiarity with dbt preferred" puts the marker after the term, so the
+     sentence containing both counts too. */
+  raw.split(/[.\n;]/).forEach((sentence) => {
+    if (!/(nice to have|preferred|a plus|bonus|desirable)/i.test(sentence)) return;
+    const low = sentence.toLowerCase();
+    all.forEach((t) => { if (low.includes(t)) nice.add(t); });
+  });
+
+  return { must: all.filter((t) => !nice.has(t)), nice: [...nice], all };
+}
+
+/**
+ * The mapping table the tailor step owes the student: every term the posting
+ * asks for, whether the resume evidences it, and where.
+ *
+ * "Where" is the point. Telling somebody they match 60% of a posting is a
+ * number; showing them the bullet that proves Terraform and the four terms
+ * with no bullet behind them is a decision they can act on.
+ */
+function jdMap(text, ledger, jd, opts = {}) {
+  const req = jdRequirements(jd);
+  if (!req.all.length) return null;
+
+  /* Where a term could be proved, in the order a reader trusts them. */
+  const places = [
+    ...ledger.roles.flatMap((r) => r.bullets.map((b) => ({ where: 'Experience', line: b }))),
+    ...ledger.projects.flatMap((p) => p.bullets.map((b) => ({ where: 'Projects', line: b }))),
+    ...ledger.summaryLines.map((l) => ({ where: 'Summary', line: l })),
+    ...(ledger.roles.map((r) => r.header).filter(Boolean).map((h) => ({ where: 'Job title', line: h }))),
+  ];
+  /*
+   * Skills claimed on the ORIGINAL page as well as the rewritten one. The
+   * rewrite drops a skill no bullet supports, which is right for the document
+   * and wrong for this table: "you listed Kafka and cannot prove it" is the
+   * most useful row here, and reading only the cleaned page loses it.
+   */
+  const statedLow = new Set([...ledger.statedSkills, ...(opts.alsoStated || [])]
+    .map((s) => String(s).toLowerCase()));
+
+  const row = (lowTerm, kind) => {
+    /* Shown as the posting wrote it — "AWS", not "aws". */
+    const term = spelledAsIn(jd, lowTerm);
+    const hit = places.find((p) => hasWord(String(p.line).toLowerCase(), lowTerm));
+    if (hit) {
+      return {
+        term, kind, status: 'evidenced', where: hit.where,
+        proof: String(hit.line).replace(/^[-*•]\s*/, '').slice(0, 110),
+        action: `Keep — your ${hit.where.toLowerCase()} already proves it.`,
+      };
+    }
+    if (statedLow.has(lowTerm)) {
+      return {
+        term, kind, status: 'listed only', where: 'Skills line',
+        proof: '',
+        action: 'On the skills line with no bullet behind it. Name where you used it and it becomes evidence.',
+      };
+    }
+    return {
+      term, kind, status: 'not claimed', where: '—', proof: '',
+      action: kind === 'must'
+        ? 'Required by the posting and absent. Add it only if you have actually used it.'
+        : 'Optional in the posting and absent. Safe to leave out.',
+    };
+  };
+
+  const rows = [...req.must.map((t) => row(t, 'must')), ...req.nice.map((t) => row(t, 'nice'))];
+  const evidenced = rows.filter((r) => r.status === 'evidenced');
+  return {
+    rows,
+    must: req.must.length,
+    nice: req.nice.length,
+    evidenced: evidenced.length,
+    listedOnly: rows.filter((r) => r.status === 'listed only').length,
+    mustMissing: rows.filter((r) => r.kind === 'must' && r.status === 'not claimed').map((r) => r.term),
+    niceMissing: rows.filter((r) => r.kind === 'nice' && r.status === 'not claimed').map((r) => r.term),
+  };
 }
 
 /* ── 2. checker score /100 ──────────────────────────────────────────────── */
@@ -303,7 +547,12 @@ function checkerScore(text, ledger, jd) {
   const terms = jdHardTerms(jd);
   let keywords = null;
   let keywordDetail = null;
-  if (terms.length >= 5) {
+  /* Three terms is a job description; two is a job title. Under the old
+     five-term floor a short posting — "React, TypeScript and GraphQL" — was
+     scored as if no target existed at all, so the student got no overlap
+     figure, no Not-claimed list and no ceiling from a posting that plainly
+     stated what it wanted. */
+  if (terms.length >= 3) {
     const resumeLow = lower;
     /* Rubric wording: "overlap of evidenced hard terms". A term sitting on
        the skills line with no bullet behind it earns nothing — that is the
@@ -553,11 +802,21 @@ function impactBullet(text) {
  * role cares AND the ledger proves them; everything else either drops or, if
  * evidenced but off-target, trails after. Capped at 16, as the skill caps it.
  */
-function essentialSkills(ledger, targetTerms) {
+function essentialSkills(ledger, targetTerms, sourceText) {
   const proven = [...new Set([...ledger.evidencedSkills, ...ledger.impliedSkills])];
   const onTarget = proven.filter((s) => targetTerms.some((t) => t === s.toLowerCase() || hasWord(t, s)));
   const rest = proven.filter((s) => !onTarget.includes(s));
-  return { primary: [...onTarget, ...rest].slice(0, 16), dropped: ledger.unevidencedSkills };
+  /*
+   * Implied skills carry the vocabulary's lowercase spelling, so a resume
+   * whose bullet says "Kubernetes" got "kubernetes" on its skills line —
+   * this file's internal spelling, printed on the student's document. Where
+   * the page itself spells the tool, that spelling wins.
+   */
+  const asWritten = (skill) => spelledAsIn(sourceText, skill);
+  return {
+    primary: [...onTarget, ...rest].slice(0, 16).map(asWritten),
+    dropped: ledger.unevidencedSkills,
+  };
 }
 
 /**
@@ -581,12 +840,21 @@ function rewriteResume(text, options) {
 
   const jdTerms = jdHardTerms(jd);
   const targetTerms = jdTerms.length ? jdTerms : String(target).toLowerCase().split(/[^a-z0-9+#.]+/).filter(Boolean);
-  const skills = essentialSkills(ledger, targetTerms);
+  const skills = essentialSkills(ledger, targetTerms, text);
 
   /* Not claimed: what the JD wants that no evidence supports. Listed, never
      smuggled onto the page. */
   const resumeLow = String(text || '').toLowerCase();
-  const notClaimed = jdTerms.filter((t) => !hasWord(resumeLow, t));
+  /*
+   * Named as the posting names them — this list is read by a person — and
+   * without the fragments of longer entries. "REST API, REST, API" is one
+   * demand written three times, and it made the ceiling sentence read like a
+   * much bigger gap than it was.
+   */
+  const missingLow = jdTerms.filter((t) => !hasWord(resumeLow, t));
+  const notClaimed = missingLow
+    .filter((t) => !missingLow.some((other) => other !== t && other.length > t.length && hasWord(other, t)))
+    .map((t) => spelledAsIn(jd, t));
 
   /* Rejection diagnosis, from the before-scores' own arithmetic. */
   const diagnosis = [
@@ -596,7 +864,11 @@ function rewriteResume(text, options) {
   ];
 
   /* ── write on the safe skeleton ── */
-  const roleLine = target || (ledger.roles[0] && ledger.roles[0].header.split('|')[0].trim()) || 'Professional';
+  /* The target if one was named, then the title the page already carries,
+     then the most recent job header. "Professional" is what is left when the
+     document genuinely never said — not a substitute for reading it. */
+  const roleLine = target || ledger.title ||
+    (ledger.roles[0] && ledger.roles[0].header.split('|')[0].trim()) || 'Professional';
 
   /* Projects lead when they are the hire signal: no dated roles, or the
      experience is thinner than the projects. */
@@ -619,9 +891,15 @@ function rewriteResume(text, options) {
      exists — the person's own strongest scoped bullet, verbatim. */
   const spike = [...ledger.roles.flatMap((r) => r.bullets), ...keptProjects.flatMap((p) => p.bullets)]
     .map(impactBullet).filter(Boolean).find(hasScope);
+  /* Written as a person writes it. "Evidenced in Python, AWS" was the
+     engine's own bookkeeping term printed on the document being sent to a
+     recruiter — accurate about where the words came from, and not English. */
+  const top = skills.primary.slice(0, 4);
+  const toolList = top.length > 1
+    ? `${top.slice(0, -1).join(', ')} and ${top[top.length - 1]}`
+    : top[0] || '';
   L.push([
-    `${roleLine}.`,
-    skills.primary.length ? `Evidenced in ${skills.primary.slice(0, 4).join(', ')}.` : '',
+    toolList ? `${roleLine} working in ${toolList}.` : `${roleLine}.`,
     spike ? `${spike}.` : ''
   ].filter(Boolean).join(' '));
   L.push('');
@@ -751,6 +1029,10 @@ function rewriteResume(text, options) {
       return out;
     })(),
     shipGate: { pass: gate.every((c) => c.pass), checks: gate },
+    /* What the posting asked for and where the finished page answers it. Read
+       off the rewritten resume, so the "where" points at the document the
+       student is about to send rather than the one they uploaded. */
+    jdMap: jdMap(rewritten, afterLedger, jd, { alsoStated: ledger.statedSkills }),
     caveat: 'Proxy scores, not a live ATS decision. This is hard to reject on parse, essentials and signal — no resume is unrejectable.'
   };
 }
@@ -763,6 +1045,8 @@ module.exports = {
   strengthBand,
   interviewQuestions,
   jdHardTerms,
+  jdRequirements,
+  jdMap,
   impactBullet,
   STRONG_VERBS,
   BANNED_OPENERS,
