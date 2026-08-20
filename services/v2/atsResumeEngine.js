@@ -774,10 +774,17 @@ function interviewQuestions(ledger, opts) {
   if (ledger.roles.length && !scopedBullets.length) {
     ask(4, 'metric', 'One real number you will stand behind for your strongest bullet — users, time saved, records, team size, frequency. If none exists, say so and it stays out.');
   }
-  const undated = ledger.roles.filter((r) => r.header && !r.hasDates);
-  if (undated.length) {
-    ask(4, 'dates', 'Start and end month/year for each role — "Jan 2024 – Present" is the shape a parser reads.');
-  }
+  /*
+   * The dates question is gone.
+   *
+   * It asked a person to think like a parser — "Jan 2024 – Present is the
+   * shape a parser reads" — and its answer was appended as a bullet rather
+   * than attached to the role header, so the role stayed undated and the
+   * question came back every turn. A recording caught it rejecting "aug
+   * 2026-presernt" with "your last message did not read as an answer to it".
+   * Missing dates are reported by the scan, where a fix is a fix rather than
+   * a loop.
+   */
 
   /* Block 5 — projects. Asked whenever there are none, not only when the
      work history is thin: for most students applying into these roles the
@@ -787,24 +794,18 @@ function interviewQuestions(ledger, opts) {
     ask(5, 'projects', 'A project that shows your stack: its name, the problem it solved, your role, the tools, and who used it. Two or three lines is plenty.');
   }
 
-  /* Block 6 — education, and the last few facts a page is judged on. */
-  if (!ledger.education.length) ask(6, 'education', 'Degree, institution, and the years — "B.Tech Computer Science, Ramaiah Institute of Technology, 2022 – 2026".');
-  if (!ledger.certifications.length) {
-    ask(6, 'certifications', 'Any certifications worth listing — the issuer and the year? Say skip if none; an invented one is worse than an empty section.');
-  }
   /*
-   * Asked because people ask for it, answered honestly.
+   * Block 6 is the interview bank's now.
    *
-   * A photograph is normal on a CV in much of Europe, Latin America and
-   * parts of Asia, and is screened out — sometimes automatically — in the
-   * US, UK, Canada and Australia. Either way it cannot live in the plain
-   * text an ATS reads, so the answer decides what the export does with it
-   * rather than what goes in the parsed page.
+   * Education, photo, location and certifications were asked here AND in the
+   * shared bank, in two different wordings, so a student was asked their city
+   * twice and their certifications after a question set that had already
+   * covered it. One place asks each thing. The bank is that place, because it
+   * is the one all three commands read.
    */
-  if (!o.photoAnswered) {
-    ask(6, 'photo', 'Should the exported CV carry a photo? Most ATS markets — US, UK, Canada, India tech — expect none, and the parsed text cannot hold one either way.');
+  if (!ledger.education.length && !o.educationAsked) {
+    ask(6, 'education', 'Degree, institution, and the years — "B.Tech Computer Science, Ramaiah Institute of Technology, 2022 – 2026".');
   }
-  if (!o.location) ask(6, 'location', 'Which city are you based in, and are you open to relocating?');
 
   /* The stop rule: build once these three are fillable. */
   const canBuild = Boolean(
