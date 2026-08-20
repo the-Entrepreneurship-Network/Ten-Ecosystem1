@@ -238,7 +238,11 @@ describe('the certificate reaches My Documents', () => {
     const at = certRoutes.indexOf('async function handleMyCerts(');
     const fn = certRoutes.slice(at, certRoutes.indexOf('\n}\n', at));
     expect(fn).not.toContain('if (!employeeId && headerEmployeeId)');
-    expect(fn).toContain('const targetId = isStaff ? requestedId : sessionEmployeeId;');
+    // The old form was `isStaff ? requestedId : sessionEmployeeId`, which threw
+    // the student's own identity away the moment the browser also held a staff
+    // session — "My Certificates" then asked them to name a student. Your own
+    // record is the default; an explicit lookup is a staff-only override.
+    expect(fn).toContain('const targetId = (isStaff && requestedId) ? requestedId : (sessionEmployeeId || "");');
   });
 
   it('still never sends the base64 PDFs to the browser', () => {

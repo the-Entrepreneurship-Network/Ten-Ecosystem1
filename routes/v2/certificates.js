@@ -7,6 +7,7 @@ const router              = express.Router();
 const path                = require("path");
 const fs                  = require("fs");
 const Student             = require("../../models/Student");
+const { findSessionStudent } = require('../../middleware/sessionAuth');
 if (!Student.schema.path("starContributionFeedback")) {
   Student.schema.add({ starContributionFeedback: { type: String, default: null } });
 }
@@ -156,13 +157,34 @@ async function handleMyCerts(req, res) {
   try {
     const session = req.session || {};
     const isStaff = !!(session.coordinator || session.hr || session.adminUser);
-    const sessionEmployeeId = (session.student && session.student.employeeId) || "";
 
-    // Staff may target a specific student; everyone else only ever sees self.
+    // The student's own identity, resolved the resilient way: a session that
+    // names a real account is valid whatever shape its employeeId is in. Doing
+    // this by hand is how two other endpoints produced sign-in loops.
+    const me = await findSessionStudent(req);
+    const sessionEmployeeId = (me && me.employeeId) || (session.student && session.student.employeeId) || "";
+
     const requestedId = (req.query && req.query.employeeId) || (req.body && req.body.employeeId);
-    const targetId = isStaff ? requestedId : sessionEmployeeId;
+
+    /*
+     * Whose certificates are these?
+     *
+     * This used to read `isStaff ? requestedId : sessionEmployeeId`, so the
+     * moment a browser held a staff session the student half was ignored
+     * entirely. One person signed into both the admin console and their own
+     * student account — the ordinary case while testing, and for any staff
+     * member who is also an intern — opened "My Certificates" and was told to
+     * name a student, because `requestedId` was empty and their own session had
+     * been discarded on the way past.
+     *
+     * The page is called MY certificates. So: an explicit lookup wins, but only
+     * for staff; otherwise it is always your own, and only a session with
+     * neither is asked to name somebody.
+     */
+    const targetId = (isStaff && requestedId) ? requestedId : (sessionEmployeeId || "");
 
     if (!isStaff && !sessionEmployeeId) {
+      res.set('X-Session-Expired', '1');
       return res.status(401).json({ success: false, message: "Please sign in to continue." });
     }
 

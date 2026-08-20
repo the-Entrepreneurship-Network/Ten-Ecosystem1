@@ -23,6 +23,8 @@ export type RegEvent = {
   minTeamSize: number;
   maxTeamSize: number;
   payment: { upiId: string; payeeName: string; qrImage: string; amount: number };
+  /** Set when the visitor opened the form by clicking a track chip. */
+  preselectTrack?: string;
 };
 
 type Member = { name: string; email: string };
@@ -38,7 +40,9 @@ export default function Register({ event, onClose }: { event: RegEvent; onClose:
   const [leadName, setLeadName] = useState('');
   const [leadEmail, setLeadEmail] = useState('');
   const [leadPhone, setLeadPhone] = useState('');
-  const [track, setTrack] = useState('');
+  // Clicking a track on the card is a choice already made — carry it in
+  // rather than making them find the same option again in the dropdown.
+  const [track, setTrack] = useState(event.preselectTrack || '');
   const [members, setMembers] = useState<Member[]>([]);
   const [utr, setUtr] = useState('');
   const [reference, setReference] = useState('');

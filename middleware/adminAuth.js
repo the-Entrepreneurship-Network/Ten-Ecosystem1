@@ -103,10 +103,12 @@ function requireAdmin(req, res, next) {
 function requireAdminAPI(req, res, next) {
   const admin = req.session && req.session.adminUser;
   if (!admin) {
+    res.set('X-Session-Expired', '1');
     return res.status(401).json({ error: 'Not authenticated' });
   }
   if (!isSessionFresh(admin)) {
     req.session.adminUser = null;
+    res.set('X-Session-Expired', '1');
     return res.status(401).json({ error: 'Session expired' });
   }
   req.session.adminUser.lastActivity = Date.now();

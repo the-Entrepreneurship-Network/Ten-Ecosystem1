@@ -90,8 +90,10 @@ describe('middleware/adminAuth', () => {
   describe('requireAdminAPI', () => {
     const mockRes = () => {
       const res = {};
+      res.headers = {};
       res.status = jest.fn(() => res);
       res.json = jest.fn(() => res);
+      res.set = jest.fn((k, v) => { res.headers[String(k).toLowerCase()] = v; return res; });
       return res;
     };
 

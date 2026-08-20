@@ -7,12 +7,32 @@ const Student = require("../../models/Student");
 const quizEngine = require("../../services/v2/quizEngine");
 
 // NEW FEATURE: Quiz System (auth mirror for V2)
+/**
+ * Identity from the SESSION first — the same fix documents.js needed.
+ *
+ * Reading it from an `x-employee-id` header the page filled out of
+ * localStorage builds a trap: session-guard.js clears that key whenever a call
+ * 401s, so the next request has no header, 401s again, and the student is
+ * bounced between the quiz and the login page forever. A browser value cannot
+ * be the source of truth for who somebody is.
+ */
+const { findSessionStudent } = require("../../middleware/sessionAuth");
+
 async function requireStudent(req, res, next) {
     try {
-        const employeeId = req.headers["x-employee-id"] || req.body.employeeId || req.query.employeeId;
-        if (!employeeId) return res.status(401).json({ success: false, message: "Authentication required" });
-        const student = await Student.findOne({ employeeId: String(employeeId) });
-        if (!student) return res.status(401).json({ success: false, message: "Student not found" });
+        let student = await findSessionStudent(req);
+
+        // Kept for staff tooling that legitimately names a student.
+        if (!student) {
+            const employeeId = req.headers["x-employee-id"] || (req.body && req.body.employeeId) || (req.query && req.query.employeeId);
+            if (employeeId) student = await Student.findOne({ employeeId: String(employeeId).trim() });
+        }
+
+        if (!student) {
+            res.set("X-Session-Expired", "1");
+            return res.status(401).json({ success: false, message: "Please sign in to continue." });
+        }
+
         req.student = student;
         next();
     } catch (err) {

@@ -1521,6 +1521,8 @@ function sanitizeStudent(student) {
     return safe;
 }
 
+const { findSessionStudent, sessionExpired } = require('./middleware/sessionAuth');
+
 function establishStudentSession(req, student) {
     if (!req.session || !student) return;
     // Student sessions get the longer window — see STUDENT_SESSION_MS.
@@ -1539,11 +1541,30 @@ function sessionEmployeeId(req) {
     return (req.session && req.session.student && req.session.student.employeeId) || "";
 }
 
-function requireStudentSession(req, res, next) {
-    if (!sessionEmployeeId(req)) {
-        return res.status(401).json({ success: false, message: "Please sign in to continue." });
+/**
+ * A session that names a real account is a valid session.
+ *
+ * This used to reject on `!sessionEmployeeId(req)` alone, so a student whose
+ * record carried a blank or malformed employeeId was signed out on every
+ * request while signing in perfectly well — the sign-in loop. The session also
+ * records _id and email, and the shared resolver uses all three.
+ */
+async function requireStudentSession(req, res, next) {
+    if (sessionEmployeeId(req)) return next();
+
+    try {
+        const student = await findSessionStudent(req);
+        if (student) {
+            // Repair the session so the fast path works from here on.
+            if (req.session && req.session.student && student.employeeId) {
+                req.session.student.employeeId = student.employeeId;
+            }
+            return next();
+        }
+    } catch (err) {
+        console.error('[auth] requireStudentSession lookup failed:', err.message);
     }
-    next();
+    return sessionExpired(res);
 }
 
 function requireCoordinatorSession(req, res, next) {
@@ -1647,14 +1668,61 @@ app.use(express.json());
 
 const session = require('express-session');
 
-// No fallback secret: a committed signing key lets anyone mint a session for
-// any role. config/secrets.js has already refused the boot in production if
-// this is unset; outside production we generate a throwaway key per process so
-// sessions simply do not survive a restart.
-const SESSION_SECRET = (process.env.SESSION_SECRET || '').trim()
-    || crypto.randomBytes(32).toString('hex');
-if (!process.env.SESSION_SECRET) {
-    console.warn('[session] SESSION_SECRET is unset; using a random per-process key. Sessions will not survive a restart.');
+/*
+ * The key that signs session cookies.
+ *
+ * No fallback constant: a committed signing key lets anyone mint a session for
+ * any role. But the old fallback — a fresh random key per process — was its own
+ * outage. Every cookie is signed with it, so a new key on boot invalidates every
+ * cookie in existence: one `pm2 restart` and every signed-in person is thrown
+ * out at once. In a browser that already held a cookie the portal renders from
+ * its own storage, looks signed in, and every request 401s — "Your HR session
+ * has expired" arriving for someone who never left. A private window, signing in
+ * fresh after the restart, works perfectly. That difference is the whole
+ * fingerprint of this bug, and it was reported exactly that way.
+ *
+ * config/secrets.js refuses the boot in production when SESSION_SECRET is unset,
+ * but that guard only fires when NODE_ENV is actually "production" — a server
+ * that never sets it took the random path silently, and re-took it on every
+ * deploy.
+ *
+ * So a generated key is now PERSISTED and reused. Restarts stop signing
+ * everybody out, whatever NODE_ENV says. Setting SESSION_SECRET in .env is still
+ * the right answer and still takes precedence; this only removes the failure
+ * mode from forgetting to.
+ */
+function resolveSessionSecret() {
+    const fromEnv = (process.env.SESSION_SECRET || '').trim();
+    if (fromEnv) return { secret: fromEnv, source: 'env' };
+
+    const secretFile = path.join(__dirname, '.session-secret');
+    try {
+        const saved = fs.readFileSync(secretFile, 'utf8').trim();
+        if (saved.length >= 32) return { secret: saved, source: 'file' };
+    } catch (_e) { /* first boot, or unreadable — fall through and create one */ }
+
+    const generated = crypto.randomBytes(32).toString('hex');
+    try {
+        fs.writeFileSync(secretFile, generated, { mode: 0o600 });
+        return { secret: generated, source: 'file-created' };
+    } catch (err) {
+        // Read-only deploy: nothing to do but carry on, and say plainly that
+        // this restart has signed everyone out.
+        console.error('[session] Could not persist a session key (%s). Sessions will NOT survive this restart.', err.message);
+        return { secret: generated, source: 'memory' };
+    }
+}
+
+const { secret: SESSION_SECRET, source: SESSION_SECRET_SOURCE } = resolveSessionSecret();
+
+if (SESSION_SECRET_SOURCE !== 'env') {
+    console.warn(
+        '\n[session] SESSION_SECRET is not set in .env.\n' +
+        '[session] Using a generated key kept in .session-secret (%s).\n' +
+        '[session] Sessions survive restarts, but set a real one to be safe:\n' +
+        "[session]   node -e \"console.log('SESSION_SECRET=' + require('crypto').randomBytes(32).toString('hex'))\" >> .env\n",
+        SESSION_SECRET_SOURCE === 'file' ? 'reused' : 'created now'
+    );
 }
 
 const sessionOptions = {
@@ -2163,13 +2231,42 @@ const forgotPasswordLimiter = rateLimit({
     message: { success: false, message: "Too many password reset requests from this network. Please wait." }
 });
 
-// General API rate limit — applied broadly to /api but the project has very
-// few endpoints under /api today, so we also expose it for any future use.
+/**
+ * General API rate limit.
+ *
+ * This used to be keyed by IP, which is the wrong unit for this product. A
+ * college lab, an office or a hostel puts every student behind ONE public
+ * address, so thirty students shared a single 300-request budget and the whole
+ * building started seeing "Too many requests. Please slow down." while each
+ * person had made a handful of calls. The portal polls (notifications, chat,
+ * task state), so the budget went in minutes.
+ *
+ * Keyed by the signed-in identity instead: the limit is now per person, which
+ * is what it was always meant to be. Anonymous callers still fall back to the
+ * IP — that path is the one a limiter actually protects, and ipKeyGenerator is
+ * used for it so IPv6 addresses are normalised to a subnet rather than counted
+ * one-address-per-request.
+ */
+function rateLimitKey(req) {
+    const ses = req.session || {};
+    const who = (ses.student && (ses.student.employeeId || ses.student.email))
+        || (ses.hr && (ses.hr.username || ses.hr.email))
+        || (ses.coordinator && ses.coordinator.username)
+        || (ses.adminUser && ses.adminUser.username)
+        || (req.user && String(req.user._id));
+    return who ? `u:${who}` : `ip:${ipKeyGenerator(req.ip)}`;
+}
+
 const apiLimiter = rateLimit({
     windowMs: RATE_LIMIT_CONFIG.authenticated.windowMs,
     max: RATE_LIMIT_CONFIG.authenticated.max,
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator: rateLimitKey,
+    // Read-only polling is what the portal does constantly and is not what this
+    // limiter exists to stop. Counting it is how a student who is simply using
+    // the product hits the ceiling; the writes are still counted.
+    skip: (req) => req.method === 'GET' && /^\/(api\/)?(v2\/)?(notifications|messages|chat)/.test(req.path),
     message: { success: false, message: "Too many requests. Please slow down." }
 });
 app.use('/api', apiLimiter);
@@ -7688,7 +7785,13 @@ const BADGE_CATALOG = [
     { id:"top_performer",      name:"Top Performer",         icon:"👑", description:"Rank 1 in your domain leaderboard",       requirement:"Domain rank #1" },
     { id:"day_one",            name:"Day 1",                 icon:"🎉", description:"Complete your first day",                 requirement:"Mark attendance & submit task on day 1" },
     { id:"halfway_there",      name:"Halfway There",         icon:"🎯", description:"Complete 50% of your internship",         requirement:"50% of tenure elapsed" },
-    { id:"graduate",           name:"Graduate",              icon:"🎓", description:"Complete your full internship tenure",    requirement:"100% of tenure elapsed" }
+    { id:"graduate",           name:"Graduate",              icon:"🎓", description:"Complete your full internship tenure",    requirement:"100% of tenure elapsed" },
+    // Paid-track badges. Awarded by services/tenureBenefits.js the moment an
+    // admin approves the fee — not earned by work, so they are described as
+    // what they are rather than dressed up as an achievement.
+    { id:"premium_starter",    name:"Starter Member",        icon:"🥉", description:"On the paid 1 Month track",              requirement:"Programme fee settled" },
+    { id:"premium_accelerate", name:"Accelerate Member",     icon:"🥈", description:"On the paid 15 Days track",              requirement:"Programme fee settled" },
+    { id:"premium_sprint",     name:"Sprint Member",         icon:"🥇", description:"On the paid 1 Week track",               requirement:"Programme fee settled" }
 ];
 const BADGE_CATALOG_BY_ID = Object.fromEntries(BADGE_CATALOG.map(b => [b.id, b]));
 // Major badges trigger a notification (and could be email-extended later).
@@ -10328,11 +10431,41 @@ app.post('/api/tenure-payment/submit-utr', async (req, res) => {
   }
 });
 
+// PREMIUM — the paid tracks' own section: badges, coordinator notes and the
+// projects a coordinator assigns. Mounted before the assistant because the
+// assistant is now one of the things it gates.
+try {
+    // API only. There is no separate premium page — the premium content is
+    // rendered inline in the student dashboard, so a member simply signs in and
+    // it is there.
+    app.use('/api/v2/premium', require('./routes/v2/premium'));
+    console.log('[V2] Premium routes mounted at /api/v2/premium');
+} catch (e) {
+    console.error('[V2] Premium routes failed to mount:', e.message);
+}
+
 // TEN ASSISTANT — answers from the portal's own DomainTask rows, no API key
 try {
     const v2Assistant = require('./routes/v2/assistant');
-    app.use('/api/v2/assistant', v2Assistant);
-    app.get('/assistant', (req, res) => res.sendFile(path.join(__dirname, 'public', 'assistant.html')));
+    // The assistant is a paid-track perk. A free-track student never had a way
+    // to buy it, so it is hidden from them rather than dangled and refused.
+    const { requirePremium } = require('./utils/premium');
+    app.use('/api/v2/assistant', requirePremium, v2Assistant);
+    // And the page itself, so a free-track student sees the premium section
+    // explaining it rather than a screen that loads and then fails every call.
+    app.get('/assistant', async (req, res) => {
+        try {
+            const { getPremiumStatus } = require('./utils/premium');
+            const employeeId = req.session && req.session.student && req.session.student.employeeId;
+            if (!employeeId) return res.redirect('/login.html');
+            const stu = await Student.findOne({ employeeId }).lean();
+            if (!getPremiumStatus(stu).premium) return res.redirect('/student-dashboard.html');
+        } catch (err) {
+            console.error('[assistant] premium check failed:', err.message);
+            return res.redirect('/student-dashboard.html');
+        }
+        res.sendFile(path.join(__dirname, 'public', 'assistant.html'));
+    });
 
     const v2Academics = require('./routes/v2/academics');
     app.use('/api/v2/academics', v2Academics);

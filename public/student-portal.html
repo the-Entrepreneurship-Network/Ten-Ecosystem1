@@ -355,7 +355,7 @@ footer a { color:var(--accent-gold); text-decoration:none; }
   </a>
   <div class="nav-spacer"></div>
   <a class="nav-link" href="student-login.html">Login</a>
-  <a class="nav-link nav-cta" href="#pay">Get Started</a>
+  <a class="nav-link nav-cta" href="student-journeys.html">Get Started</a>
 </nav>
 
 <!-- ═══════════ HERO ═══════════ -->
@@ -373,7 +373,7 @@ footer a { color:var(--accent-gold); text-decoration:none; }
       that opens the door to resumes and jobs.
     </p>
     <div class="hero-actions">
-      <a class="btn btn-gold" href="#pay">Start Your Journey →</a>
+      <a class="btn btn-gold" href="student-journeys.html">Start Your Journey →</a>
       <a class="btn btn-ghost" href="#domains">Explore Domains</a>
     </div>
   </div>
@@ -493,26 +493,12 @@ footer a { color:var(--accent-gold); text-decoration:none; }
   </div>
 </section>
 
-<!-- ═══════════ PAYMENT ═══════════ -->
-<section class="section" id="pay">
-  <div class="reveal" style="text-align:center;">
-    <div class="sec-eyebrow">One step left</div>
-    <h2 class="sec-title">Unlock your journey.</h2>
-    <p class="sec-sub" style="margin:0 auto;">Scan to pay, or start now and pay after completion. Either way — your dashboard is waiting.</p>
-  </div>
-  <div class="pay-wrap reveal">
-    <div class="pay-card">
-      <div class="qr-panel"><img src="assets/portal-payment-qr.png" alt="Payment QR code"></div>
-      <div class="pay-scan-hint">Scan with any UPI app</div>
-      <div class="pay-title">Internship Program Access</div>
-      <div class="pay-sub">Full access to your domain journey — courses, quizzes, projects, certificate.</div>
-      <div class="pay-btns">
-        <a class="btn btn-gold" style="justify-content:center;" href="student-journeys.html?paid=1">Pay Now</a>
-        <a class="btn pay-later" style="justify-content:center;" href="student-journeys.html">Payment after Completion</a>
-      </div>
-    </div>
-  </div>
-</section>
+<!-- The payment wall that stood here was removed, as it was from
+     the student, job, resume and hackathon portals. It was a marketing panel
+     with a static QR and two links that both went to the same place — paying
+     and not paying led to the identical page, so it collected nothing and
+     decided nothing. The internship fee is charged and verified for real in
+     the dashboard (middleware/tenurePaymentGate.js), which fails closed. -->
 
 <footer>
   © The Entrepreneurship Network ·

@@ -79,7 +79,17 @@ const CATALOG_LOOKUP = Object.fromEntries(
 );
 
 // Helper: Extract & Validate Student from Request
+//
+// The session is asked first. This used to start from an `x-employee-id`
+// header the page read out of localStorage — a value session-guard.js deletes
+// whenever any call 401s, which is how the same pattern produced an
+// inescapable sign-in loop elsewhere in the portal.
+const { findSessionStudent } = require('../../middleware/sessionAuth');
+
 async function _getStudentFromReq(req) {
+    const fromSession = await findSessionStudent(req);
+    if (fromSession) return fromSession;
+
     const empId = (
         req.headers['x-employee-id'] ||
         (req.body && req.body.employeeId) ||
@@ -176,7 +186,9 @@ router.post('/quote', async (req, res) => {
     try {
         const student = await _getStudentFromReq(req);
         if (!student) {
-            return res.status(401).json({ success: false, message: "Student account or employeeId required" });
+            // A real session failure, so the browser guard may act on it.
+            res.set("X-Session-Expired", "1");
+            return res.status(401).json({ success: false, message: "Please sign in to continue." });
         }
 
         const { itemKey, proposedCoins } = req.body || {};
@@ -242,7 +254,9 @@ router.post('/checkout', async (req, res) => {
     try {
         const student = await _getStudentFromReq(req);
         if (!student) {
-            return res.status(401).json({ success: false, message: "Student account or employeeId required" });
+            // A real session failure, so the browser guard may act on it.
+            res.set("X-Session-Expired", "1");
+            return res.status(401).json({ success: false, message: "Please sign in to continue." });
         }
 
         const { itemKey, proposedCoins, paymentGateway } = req.body || {};
@@ -381,7 +395,9 @@ router.post('/verify-payment', async (req, res) => {
     try {
         const student = await _getStudentFromReq(req);
         if (!student) {
-            return res.status(401).json({ success: false, message: "Student account or employeeId required" });
+            // A real session failure, so the browser guard may act on it.
+            res.set("X-Session-Expired", "1");
+            return res.status(401).json({ success: false, message: "Please sign in to continue." });
         }
 
         const { redemptionId, itemKey, utr, paymentId, transactionRef, provider, coinsRedeemed, cardDetails, bankName, walletName } = req.body || {};
@@ -886,7 +902,9 @@ router.post('/redeem-booster', async (req, res) => {
     try {
         const student = await _getStudentFromReq(req);
         if (!student) {
-            return res.status(401).json({ success: false, message: "Student account or employeeId required" });
+            // A real session failure, so the browser guard may act on it.
+            res.set("X-Session-Expired", "1");
+            return res.status(401).json({ success: false, message: "Please sign in to continue." });
         }
 
         const { itemKey } = req.body || {};

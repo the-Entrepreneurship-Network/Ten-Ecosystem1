@@ -5237,8 +5237,17 @@ async function loadPendingDocsBadge() {
   } catch(_) {}
 }
 
-// Load badge on page init
-setTimeout(loadPendingDocsBadge, 2000);
+/*
+ * Confirm the SERVER session as the page loads, not two seconds into it.
+ *
+ * This portal draws itself from sessionStorage, so it renders a complete,
+ * signed-in dashboard whether or not the server still agrees. Waiting two
+ * seconds to find out meant HR could read a stat, click a tab and start work
+ * before being told the session was gone — and everything they did in that
+ * window silently failed. Asking straight away means the page is either usable
+ * or honest about not being.
+ */
+loadPendingDocsBadge();
 </script>
 
 
