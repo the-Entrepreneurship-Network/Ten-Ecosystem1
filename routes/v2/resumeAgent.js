@@ -30,6 +30,8 @@ const career = require('../../services/v2/careerData');
 const interview = require('../../services/v2/resumeInterview');
 const githubImport = require('../../services/v2/githubImport');
 const mockInterview = require('../../services/v2/mockInterview');
+const parserView = require('../../services/v2/parserView');
+const library = require('../../services/v2/resumeLibrary');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -801,6 +803,27 @@ async function textFromUpload(file) {
     const out = await pdfParse(file.buffer);
     return out.text || '';
   }
+  /*
+   * A .docx is a zip, and reading it as UTF-8 gives you the zip.
+   *
+   * The accept list said "PDF or TXT" while the code fell through to
+   * `buffer.toString('utf8')` for everything else — so a student who
+   * attached the Word file they actually keep their resume in had a few
+   * kilobytes of binary scored as their career. Mammoth is already a
+   * dependency of the docx export path.
+   */
+  if (name.endsWith('.docx')) {
+    try {
+      const mammoth = require('mammoth');
+      const out = await mammoth.extractRawText({ buffer: file.buffer });
+      return (out && out.value) || '';
+    } catch (e) {
+      return '';
+    }
+  }
+  /* A .doc is the old binary format, which nothing here can read. Saying so
+     beats scoring gibberish. */
+  if (name.endsWith('.doc')) return '';
   return file.buffer.toString('utf8');
 }
 
@@ -1230,6 +1253,10 @@ function commandOf(low, hasFile) {
   if (/\bmock interview\b|\bai interview\b|\binterview me\b|\bpractice interview\b|\bstart (the )?interview\b/.test(low)) return 'interview';
   if (/\breview (my )?interview\b|\binterview review\b|\bmy transcript\b/.test(low)) return 'interview-review';
   if (/\bscore5\b|\bfive bars?\b|\bbreak ?down (my )?score\b|\bdetailed score\b|\bscore breakdown\b/.test(low)) return 'score5';
+  if (/\bwhat (does|will) (the |an )?ats (see|read|extract)\b|\bparser view\b|\bparse (my )?resume\b|\bextraction\b/.test(low)) return 'parser';
+  if (/\bquick check\b|\broast\b|\bten.second\b|\bfirst impression\b/.test(low)) return 'quickcheck';
+  if (/\blist (my )?(resumes?|versions?)\b|\bmy versions?\b|\bsaved resumes?\b/.test(low)) return 'versions';
+  if (/\bbest bullets?\b|\bmy bullets?\b|\bbullet library\b|\brelevant bullets?\b/.test(low)) return 'bullets';
   if (/\bmissing keywords?\b|\bkeyword (table|gap|check)\b|\bwhich keywords?\b/.test(low)) return 'keywords';
   if (/\binterview prep\b|\bprep\b|defen[cs]e|walk me through/.test(low)) return 'prep';
   if (/\bgap\b|what('?s| is) missing|why would this fail|missing keyword/.test(low)) return 'gap';
@@ -1624,6 +1651,32 @@ function deliver(res, session, packetOrBuilt, kindNote) {
 
   /* A shipped resume is what cover and prep are allowed to work from. */
   session.shipped = { text, target: session.target, jd: session.jd };
+
+  /*
+   * Filed beside the master rather than over it.
+   *
+   * Every tailoring used to replace the last, so somebody who tailored for
+   * one company on Monday and another on Tuesday had a single file by
+   * Tuesday evening and no way back to Monday's. A version keeps the note it
+   * shipped with — the score and what it did not claim — because a document
+   * opened in three weeks needs its caveat as much as its text.
+   */
+  if (isPacket || command === 'build') {
+    session.library = library.saveVersion(
+      library.setMaster(session.library, session.library && session.library.master ? session.library.master : text),
+      {
+        text,
+        /* Named from whatever is actually known — the company they said, the
+           role they targeted, or the title on the page — so the library does
+           not fill up with rows called "unnamed-role". */
+        company: (session.details && session.details.company) || null,
+        role: session.target || (session.details && session.details.position)
+          || atsEngine.factLedger(text).title || null,
+        jd: session.jd,
+        score: session.lastScore,
+        notClaimed: isPacket ? packetOrBuilt.notClaimed : [],
+      });
+  }
 
   /*
    * The improved page becomes the working copy.
@@ -2414,6 +2467,123 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       );
       session.command = null;
       return res.json({ ok: true, kind: 'help', reply: `Cover letter — ${letter.words} words${letter.withinLimit ? '' : ' (over the 300 limit — trim before sending)'}:\n\n${letter.text}`, session });
+    }
+
+    /*
+     * parser — what an ATS actually pulls out of the file.
+     *
+     * Every other view is an opinion. This one is a fact, and a student who
+     * sees their phone number extracted broken stops arguing with the score
+     * and fixes the document.
+     */
+    if (session.command === 'parser') {
+      if (!session.resumeText.trim()) return ask('resume', 'Attach the file itself — this shows what a parser gets out of it.');
+      const v = parserView.parserView(session.resumeText);
+      session.command = null;
+      const mark = { high: '✓', low: '~', none: '✗' };
+      return res.json({
+        ok: true, kind: 'help',
+        reply: [
+          'Seat: RESUME · Command: parser',
+          v.verdict,
+          `${v.summary.extracted}/${v.summary.of} fields came out.`,
+          '',
+          '| Field | Extracted | Confidence | Why |',
+          '|---|---|---|---|',
+          ...v.fields.map((f) => `| ${f.name} | ${(f.value || '—').toString().slice(0, 46)} | ${mark[f.confidence]} ${f.confidence} | ${f.why} |`),
+          '',
+          v.roles.length ? 'Roles as the parser splits them:' : '',
+          ...v.roles.map((r) => `· ${r.header.slice(0, 70)} — ${r.bullets} bullet${r.bullets === 1 ? '' : 's'}${r.warning ? ` · ${r.warning}` : ''}`),
+          v.hazards.length ? '\nLayout faults:' : '',
+          ...v.hazards.map((h) => `· ${h.what} — ${h.why}`),
+          '',
+          v.caveat,
+        ].filter(Boolean).join('\n'),
+        session,
+      });
+    }
+
+    /* quickcheck — the ten-second read, before the detailed score. */
+    if (session.command === 'quickcheck') {
+      if (!session.resumeText.trim()) return ask('resume', 'Attach or paste the resume first.');
+      const q = library.quickCheck(session.resumeText);
+      session.command = null;
+      return res.json({
+        ok: true, kind: 'help',
+        reply: [
+          'Seat: RESUME · Command: quickcheck',
+          `${q.passed}/${q.of} — ${q.verdict}`,
+          '',
+          ...q.checks.map((c) => `${c.pass ? '✓' : '✗'} ${c.label} — ${c.note}`),
+        ].join('\n'),
+        session,
+      });
+    }
+
+    /* versions — the master and every tailored derivative of it. */
+    if (session.command === 'versions') {
+      const list = library.listVersions(session.library);
+      session.command = null;
+      return res.json({
+        ok: true, kind: 'help',
+        reply: [
+          'Seat: RESUME · Command: versions',
+          list.hasMaster ? 'Master resume on file.' : 'No master yet — upload one and every tailoring keeps it intact.',
+          '',
+          list.versions.length ? '| Version | Company | Role | Score | Not claimed |' : 'No tailored versions yet. Tailor against a posting and it is saved here.',
+          list.versions.length ? '|---|---|---|---|---|' : '',
+          ...list.versions.map((v) =>
+            `| ${v.id} | ${v.company || '—'} | ${v.role || '—'} | ${v.score == null ? '—' : `${v.score}/100`} | ${v.notClaimed} |`),
+          '',
+          list.versions.length ? 'Each version keeps the note it shipped with, so opening one later shows what it did not claim.' : '',
+        ].filter(Boolean).join('\n'),
+        session,
+      });
+    }
+
+    /*
+     * bullets — the best lines this person has ever written, for this job.
+     *
+     * Somebody who has tailored four times has written the same achievement
+     * four ways, and the best phrasing is rarely the newest. Ranking is by
+     * the posting's own hard terms: a bullet that names the required tool AND
+     * carries a figure is the first line of the page, and knowing that needs
+     * no model.
+     */
+    if (session.command === 'bullets') {
+      const lib = library.setMaster(session.library, session.resumeText || '');
+      if (!session.jd) {
+        const all = library.bulletLibrary(lib);
+        session.command = null;
+        return res.json({
+          ok: true, kind: 'help',
+          reply: [
+            'Seat: RESUME · Command: bullets',
+            `${all.length} bullet${all.length === 1 ? '' : 's'} on file across your master and every version you have tailored.`,
+            '',
+            ...all.slice(0, 12).map((b) => `${b.hasNumber ? '#' : '·'} ${b.text.slice(0, 110)}`),
+            '',
+            'Paste a job description and I will rank these against it.',
+          ].join('\n'),
+          session,
+        });
+      }
+      const ranked = library.rankForJd(lib, session.jd, 8);
+      session.command = null;
+      return res.json({
+        ok: true, kind: 'help',
+        reply: [
+          'Seat: RESUME · Command: bullets',
+          ranked.length
+            ? `Your ${ranked.length} most relevant lines for this posting, best first.`
+            : 'None of your bullets name anything this posting asks for. That gap is facts, not wording.',
+          '',
+          ...ranked.map((b, i) => `${i + 1}. ${b.text.slice(0, 120)}\n   matches: ${b.hits.join(', ') || '—'}${b.hasNumber ? ' · carries a number' : ' · no number'}`),
+          '',
+          ranked.length ? 'Lead the tailored page with these. Nothing was rewritten — they are your own lines, reordered.' : '',
+        ].filter(Boolean).join('\n'),
+        session,
+      });
     }
 
     /*

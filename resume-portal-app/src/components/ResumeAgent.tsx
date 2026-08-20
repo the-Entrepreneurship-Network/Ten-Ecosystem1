@@ -100,10 +100,13 @@ const QUICK = [
 const RAIL: { icon: string; label: string; send?: string }[] = [
   { icon: '✎', label: 'New chat' },
   { icon: '⌸', label: 'Scan a resume', send: 'scan my resume' },
+  { icon: '⟐', label: 'What the ATS extracts', send: 'what does the ats see' },
   { icon: '✦', label: 'Improve my ATS score', send: 'make it 98' },
   { icon: '▤', label: 'Score breakdown', send: 'score breakdown' },
   { icon: '◎', label: 'Target a posting', send: 'tailor my resume' },
   { icon: '⌘', label: 'Keyword gaps', send: 'missing keywords' },
+  { icon: '≡', label: 'My best bullets', send: 'my most relevant bullets' },
+  { icon: '⧉', label: 'My versions', send: 'list my versions' },
   { icon: '◉', label: 'Mock interview', send: 'mock interview' },
   { icon: '✉', label: 'Cover letter', send: 'cover letter' },
 ];
@@ -698,7 +701,9 @@ function Composer({ input, setInput, onSubmit, fileRef, send, busy }: {
         }}
       />
       <div className="mt-2 flex items-center gap-2">
-        <input ref={fileRef} type="file" accept=".pdf,.txt,.md" className="hidden"
+        {/* Word files are what most people actually keep a resume in, and
+            they used to fall through to a raw-bytes read. */}
+        <input ref={fileRef} type="file" accept=".pdf,.docx,.txt,.md" className="hidden"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) send('Scan this resume', f); e.target.value = ''; }} />
         <button type="button" onClick={() => fileRef.current?.click()}
           className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11.5px] font-semibold tracking-wide text-[#c7cbd6] hover:bg-white/[0.08]">
