@@ -93,9 +93,21 @@ describe('a resume built from a student\'s details scores at the top', () => {
     expect(built.missing).toHaveLength(0);
   });
 
-  it('still clears the bar with only a name and a role', () => {
+  it('claims no skills when the student named none', () => {
+    /*
+     * This used to assert 80+ from a name and a role alone, and it passed
+     * because the builder filled the skills line from a generic bank —
+     * "communication, teamwork, problem solving" — words the student had
+     * never claimed, on a page they could download and send. The score was
+     * real; the skills behind it were not. A thin page scoring like a thin
+     * page is the correct behaviour, and the gap is reported instead.
+     */
     const built = agent.buildResume({ name: 'Rahul K', role: 'Data Scientist' });
-    expect(built.report.score).toBeGreaterThanOrEqual(80);
+    expect(built.text).not.toMatch(/communication, teamwork, problem solving/i);
+    expect(built.missing.map((m) => m.field)).toContain('skills');
+    /* The page still exists and still carries what was actually given. */
+    expect(built.text).toMatch(/RAHUL K/);
+    expect(built.text).toMatch(/Data Scientist/);
   });
 
   it('says what is missing and what it is worth, instead of inventing it', () => {

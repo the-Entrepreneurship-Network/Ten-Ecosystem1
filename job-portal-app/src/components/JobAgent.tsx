@@ -34,6 +34,61 @@ const TRACK_STATUSES: TrackStatus[] = ['found', 'emailed', 'tailored', 'applied'
  * posting that says nothing gets "not stated" rather than a guess dressed up
  * as a fact.
  */
+/*
+ * Where the work is, split into the city and the country the posting names.
+ *
+ * Board locations arrive in every shape — "Bangalore, IND", "Massachusetts -
+ * Boston", "San Francisco Bay Area", "Remote U.S." — so this reads what is
+ * there rather than assuming a format, and says "—" when a posting simply
+ * does not say. Guessing a country from a city name would be inventing a fact
+ * about somebody's relocation.
+ */
+const COUNTRY_WORDS: [RegExp, string][] = [
+  [/\b(ind|india|bangalore|bengaluru|hyderabad|pune|mumbai|delhi|noida|gurgaon|gurugram|chennai|kolkata)\b/i, 'India'],
+  [/\b(usa|u\.s\.a?|united states|us|america|california|new york|texas|massachusetts|washington|seattle|austin|boston|chicago|san francisco|nyc)\b/i, 'USA'],
+  [/\b(uk|united kingdom|england|london|manchester|scotland)\b/i, 'UK'],
+  [/\b(canada|toronto|vancouver|montreal|ontario)\b/i, 'Canada'],
+  [/\b(germany|deutschland|berlin|munich|münchen|hamburg)\b/i, 'Germany'],
+  [/\b(australia|sydney|melbourne|brisbane)\b/i, 'Australia'],
+  [/\b(singapore)\b/i, 'Singapore'],
+  [/\b(ireland|dublin)\b/i, 'Ireland'],
+  [/\b(netherlands|amsterdam|holland)\b/i, 'Netherlands'],
+  [/\b(france|paris)\b/i, 'France'],
+  [/\b(spain|madrid|barcelona)\b/i, 'Spain'],
+  [/\b(poland|warsaw|krakow)\b/i, 'Poland'],
+  [/\b(japan|tokyo)\b/i, 'Japan'],
+  [/\b(uae|dubai|abu dhabi)\b/i, 'UAE'],
+  [/\b(brazil|sao paulo|são paulo)\b/i, 'Brazil'],
+  [/\b(mexico|mexico city)\b/i, 'Mexico'],
+  [/\b(worldwide|anywhere|global)\b/i, 'Worldwide'],
+];
+
+function placeOf(job: Job): { city: string; country: string } {
+  const raw = String(job.location || '').trim();
+  if (!raw) return { city: '—', country: job.type && /remote/i.test(job.type) ? 'Worldwide' : '—' };
+
+  const country = (COUNTRY_WORDS.find(([re]) => re.test(raw)) || [null, ''])[1] as string;
+
+  /* The city is the part that is not the country marker: boards write it
+     either side of the separator, so the longest human-looking fragment that
+     is not a country name is the best answer available. */
+  const parts = raw.split(/[,–—|/;]| - /).map((p) => p.trim()).filter(Boolean);
+
+  /* Country names are not cities. "United States" and "IND" belong in the
+     country column, and repeating them under City tells the reader nothing. */
+  const COUNTRY_ONLY = /^(usa|u\.s\.a?\.?|united states( of america)?|us|india|ind|uk|united kingdom|england|canada|germany|australia|singapore|ireland|netherlands|france|spain|poland|japan|uae|brazil|mexico|europe|emea|apac|worldwide|global|anywhere)$/i;
+
+  const cityPart = parts.find((p) =>
+    p.length > 2 &&
+    !/^(remote|hybrid|onsite|on-site|in-office|full-time|part-time|contract)$/i.test(p) &&
+    !COUNTRY_ONLY.test(p)) || '';
+
+  return {
+    city: cityPart ? cityPart.replace(/\s+/g, ' ').slice(0, 28) : (/remote/i.test(raw) ? 'Remote' : '—'),
+    country: country || '—',
+  };
+}
+
 function workType(job: Job): string {
   const text = `${job.location || ''} ${job.type || ''}`.toLowerCase();
   if (/hybrid/.test(text)) return 'Hybrid';
@@ -322,12 +377,14 @@ export default function JobAgent() {
                   */}
                   {jobs.length > 0 && (
                     <div className="mb-6 overflow-x-auto rounded-2xl border border-white/10">
-                      <table className="w-full min-w-[760px] border-collapse text-[12.5px]">
+                      <table className="w-full min-w-[900px] border-collapse text-[12.5px]">
                         <thead>
                           <tr className="bg-white/[0.05] text-left text-white/60">
                             <th className="px-3 py-2 font-semibold">Job</th>
                             <th className="px-3 py-2 font-semibold">Position</th>
                             <th className="px-3 py-2 font-semibold">Type</th>
+                            <th className="px-3 py-2 font-semibold">City</th>
+                            <th className="px-3 py-2 font-semibold">Country</th>
                             <th className="px-3 py-2 font-semibold">Link</th>
                           </tr>
                         </thead>
@@ -341,6 +398,10 @@ export default function JobAgent() {
                               {/* Type — remote or onsite, decided from what the
                                   posting says rather than guessed. */}
                               <td className="px-3 py-2 whitespace-nowrap text-white/65">{workType(j)}</td>
+                              {/* Where the work is — read from the posting,
+                                  never guessed when it does not say. */}
+                              <td className="px-3 py-2 text-white/65">{placeOf(j).city}</td>
+                              <td className="px-3 py-2 whitespace-nowrap text-white/65">{placeOf(j).country}</td>
                               <td className="px-3 py-2">
                                 <a href={j.directUrl || j.url} target="_blank" rel="noopener noreferrer"
                                    className="break-all text-emerald-300 hover:underline">
@@ -463,7 +524,7 @@ export default function JobAgent() {
                     </p>
                   ) : (
                     <div className="overflow-x-auto rounded-2xl border border-white/10">
-                      <table className="w-full min-w-[760px] border-collapse text-[12.5px]">
+                      <table className="w-full min-w-[900px] border-collapse text-[12.5px]">
                         <thead>
                           <tr className="bg-white/[0.05] text-left text-white/60">
                             <th className="px-3 py-2 font-semibold">Company</th>
