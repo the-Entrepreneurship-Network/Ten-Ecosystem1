@@ -266,6 +266,9 @@ function relevance(hay, terms) {
 
 const UA = { 'User-Agent': 'TEN-JobAgent/1.0 (+https://entrepreneurshipnetwork.net)' };
 
+/* Used to sort hiring posts that publish an address to the front. */
+const RE_CONTACT_EMAIL = /[\w.+-]+@[\w-]+\.[\w.]{2,}/;
+
 async function getJSON(url, ms = 7000) {
   const res = await httpFetch(url, { headers: UA, timeoutMs: ms });
   if (!res.ok) throw new Error(`${res.status}`);
@@ -488,16 +491,34 @@ async function fromHackerNews(profile) {
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
   if (!hiring) return [];   /* no thread found: better nothing than noise */
 
+  /*
+   * A hundred, not twenty-five.
+   *
+   * This thread is where the recruiter contacts live — the posts that print
+   * an email address to write to — and only a fraction of any month's posts
+   * carry one. Fetching twenty-five comments, then keeping the top-level
+   * ones, then keeping the recent ones with an address, left the Recruiters
+   * section empty on most hunts. The thread holds forty-odd top-level posts
+   * and roughly a quarter publish an address, so the pool has to start large
+   * enough for that quarter to survive the filters.
+   */
   const q = encodeURIComponent([profile.role.split(' ')[0], profile.skills[0] || ''].join(' ').trim());
   const data = await getJSON(
-    `https://hn.algolia.com/api/v1/search?query=${q}&tags=comment,story_${hiring.objectID}&hitsPerPage=25`
+    `https://hn.algolia.com/api/v1/search?query=${q}&tags=comment,story_${hiring.objectID}&hitsPerPage=100`
   );
 
   return (data.hits || [])
     /* Top-level comments only. Replies are questions and salary arguments,
        not postings. */
     .filter((h) => h.comment_text && String(h.parent_id) === String(hiring.objectID))
-    .slice(0, 15)
+    /* Posts that publish a way to reach a human come first, because those are
+       the ones the Recruiters section is built from — capping at fifteen by
+       arrival order threw most of them away before it ever saw them. */
+    .sort((a, b) => {
+      const has = (h) => (RE_CONTACT_EMAIL.test(h.comment_text) ? 1 : 0);
+      return has(b) - has(a);
+    })
+    .slice(0, 30)
     .map((h) => {
       const body = clean(h.comment_text);
       const head = parseHiringPost(body);
