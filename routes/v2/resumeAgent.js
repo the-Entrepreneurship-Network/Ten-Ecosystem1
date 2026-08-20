@@ -363,9 +363,13 @@ function scanResume(text, target, options) {
     : wc > 900 ? (wc <= 1200 ? 5 : 2)
       : wc <= 120 ? 2
         : 2 + ((wc - 120) / (250 - 120)) * 6;
-  add('length', 'Length is in range', 8, lengthScore, `${wc} words`,
+  /* The label names the fault, not the check. Under the heading "what is
+     costing you shortlists", a row reading "Length is in range — Too long"
+     tells the reader the opposite of itself in four words. */
+  add('length', wc < 250 ? 'Length — too thin' : wc > 900 ? 'Length — too long' : 'Length is in range',
+    8, lengthScore, `${wc} words`,
     wc < 250 ? 'Thin for a full page — an ATS has less to match. Expand bullets with the tools used and the outcome.'
-             : 'Too long — trim to one or two pages of dense, relevant content.');
+             : 'Over one page — cut the weakest bullets, the ones with no number and no outcome.');
 
   /* 8. parse hazards */
   const hazards = parseHazards(raw, all);
@@ -1037,6 +1041,8 @@ const SCORE_INTENT = /make it \d+|\b\d{2}\s*\/\s*100\b|\bunrejectable\b|max(imi[
  * Returns the best text it could reach plus what is still costing points and
  * whether a real fact is the blocker.
  */
+const STRONG_VERB_SET = new Set(ACTION_VERBS);
+
 function raiseToTarget(text, target, jd, goal) {
   const want = goal || 98;
   let best = String(text || '');
@@ -1059,6 +1065,62 @@ function raiseToTarget(text, target, jd, goal) {
     }).join('\n');
     const r2 = scanResume(relined, target);
     if (r2.score > report.score) { best = relined; report = r2; }
+  }
+
+  /*
+   * Lever 3 — cut an over-long page down.
+   *
+   * A 993-word resume is two pages of a one-page job, and the agent used to
+   * report that as a fact about the student rather than something it could
+   * fix: it asked them for MORE work to add. Trimming is the one length
+   * problem that is entirely ours to solve, and it is done by dropping the
+   * weakest lines — the ones with no number and no verb — never the strongest.
+   */
+  if (report.score < want) {
+    const words = best.split(/\s+/).filter(Boolean).length;
+    if (words > 900) {
+      const lines = best.split('\n');
+      /* Rank the bullets: a line with a number and a verb is the last to go. */
+      const weight = (l) => {
+        const b = l.replace(/^-\s+/, '');
+        return (/\d/.test(b) ? 2 : 0) +
+          (STRONG_VERB_SET.has((b.split(/\s+/)[0] || '').toLowerCase().replace(/[^a-z]/g, '')) ? 1 : 0);
+      };
+      /*
+       * Cut toward the band, not by a fixed fraction.
+       *
+       * A single 25% pass on a 1,650-word page still leaves 1,240 words, which
+       * scores the same — so the trim was measured as no improvement and
+       * discarded, and the page stayed twice as long as it should be. The
+       * weakest bullets come off until the page is inside one sheet or there
+       * is nothing weak left to lose.
+       */
+      /*
+       * Keep the best bullets that fit, rather than dropping the worst ones.
+       *
+       * The first version refused to cut any line carrying both a number and
+       * a verb — sound advice for a page that is slightly long, and useless
+       * for one with sixty bullets, where every line qualified and nothing
+       * was cut at all. A sheet of paper holds what it holds: the strongest
+       * lines are kept in their original order until the budget is spent, and
+       * the rest come off however good they are.
+       */
+      const bulletLines = lines.map((l, i) => ({ l, i })).filter((x) => /^-\s+/.test(x.l));
+      const keep = new Set();
+      let used = words - bulletLines.reduce((n, x) => n + x.l.split(/\s+/).filter(Boolean).length, 0);
+      [...bulletLines]
+        .sort((a, b) => weight(b.l) - weight(a.l) || a.i - b.i)
+        .forEach((cand) => {
+          const cost = cand.l.split(/\s+/).filter(Boolean).length;
+          if (used + cost <= 780) { keep.add(cand.i); used += cost; }
+        });
+      const doomed = new Set(bulletLines.filter((x) => !keep.has(x.i)).map((x) => x.i));
+      if (doomed.size) {
+        const trimmed = lines.filter((_, i) => !doomed.has(i)).join('\n');
+        const r3 = scanResume(trimmed, target);
+        if (r3.score >= report.score) { best = trimmed; report = r3; }
+      }
+    }
   }
 
   /* What is still costing points, and whether it is a fact or a format. */
@@ -1473,7 +1535,26 @@ function consumeAnswer(session, field, msg) {
      * under Skills is a fact the ledger mangles instead of proving.
      */
     if (session.resumeText) {
-      session.resumeText += `\n\nExperience\n- ${msg.trim()}`;
+      /*
+       * A fact is only made into a bullet if it reads like one.
+       *
+       * Every answer was appended as "- <whatever they typed>", so a page
+       * came back carrying "- Built 12 records and 500 users", "- Delivered
+       * jan 2026 - present" and "- Implemented aug 2026-presernt": a bare
+       * measurement and two date ranges, each with a verb bolted on, sitting
+       * among real achievements. A date belongs on the role header, and a
+       * number on its own is not a claim about anything.
+       */
+      const t = msg.trim();
+      const bareDate = RE_DATE_RANGE.test(t) && t.split(/\s+/).length <= 6;
+      const bareNumber = /^[\d\s,.%+-]+$|^\d[\w\s,.%+-]{0,24}$/.test(t);
+      if (bareDate) {
+        /* Attach it to the most recent role header rather than list it. */
+        session.resumeText = session.resumeText.replace(
+          /^([^\n]*\|[^\n]*)$/m, (line) => (RE_DATE_RANGE.test(line) ? line : `${line} | ${t}`));
+      } else if (!bareNumber && t.split(/\s+/).length >= 4) {
+        session.resumeText += `\n\nExperience\n- ${t}`;
+      }
     }
   } else d[field] = msg.trim();
 
@@ -1858,7 +1939,19 @@ router.post('/chat', upload.single('file'), async (req, res) => {
        * and each answer adds real content and real points. It stops asking
        * when they stop answering.
        */
-      const short = out.failing.find((f) => f.id === 'length');
+      /*
+       * Only a SHORT page is asked for more.
+       *
+       * The length check fires at both ends, and this read it as one signal:
+       * a 993-word resume — comfortably over a page — was told "3 of the
+       * missing points are page length" and then asked "anything else? a
+       * second project, a competition, a paper", which is the opposite of
+       * what that page needs. Too long is a cutting problem, and cutting is
+       * something the agent can do itself.
+       */
+      const lengthLoss = out.failing.find((f) => f.id === 'length');
+      const words = String(out.text || '').split(/\s+/).filter(Boolean).length;
+      const short = lengthLoss && words < 250 ? lengthLoss : null;
       session.moreAsked = session.moreAsked || 0;
       if (short && short.lost >= 2 && session.moreAsked < 4 &&
           !(session.declined || []).includes('more')) {
@@ -2534,5 +2627,6 @@ router.post('/chat', upload.single('file'), async (req, res) => {
 
 module.exports = router;
 module.exports.scanResume = scanResume;
+module.exports.raiseToTarget = raiseToTarget;
 module.exports.buildResume = buildResume;
 module.exports.resumePdfBuffer = resumePdfBuffer;

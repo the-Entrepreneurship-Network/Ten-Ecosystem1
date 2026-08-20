@@ -229,6 +229,75 @@ describe('a resume built from a student\'s details scores at the top', () => {
     expect(built.missing.map((m) => m.field)).toEqual(expect.arrayContaining(['skills', 'education']));
   });
 
+  it('cuts an over-long page instead of asking for more work', () => {
+    /*
+     * From a recording: a 993-word resume — comfortably over a page — was
+     * told "3 of the missing points are page length" and then asked "anything
+     * else? a second project, a competition, a paper". The length check fires
+     * at both ends and this read it as one signal, so the advice was the
+     * opposite of what the page needed. Too long is a cutting problem, and
+     * cutting is the one length problem the agent can solve itself.
+     */
+    const bullets = [];
+    for (let i = 0; i < 60; i += 1) {
+      bullets.push(`- Supporting release operations for a healthcare client on Microsoft Azure, applying CI/CD, containerisation and infrastructure automation practices developed on AWS across delivery teams, item ${i}`);
+    }
+    const bloated = [
+      'Bishal Nag', 'DevOps Engineer', 'b@example.com | +91 90000 00000',
+      '', 'EXPERIENCE', 'DevOps Engineer | RunElix | Aug 2024 - Present',
+      ...bullets,
+      '', 'SKILLS', 'Docker, Kubernetes, Terraform, AWS',
+      '', 'EDUCATION', 'B.Tech CS, 2019 - 2023',
+    ].join('\n');
+
+    const before = agent.scanResume(bloated, 'DevOps Engineer');
+    expect(before.checks.find((c) => c.id === 'length').label).toBe('Length — too long');
+
+    const out = agent.raiseToTarget(bloated, 'DevOps Engineer', '', 98);
+    const words = out.text.split(/\s+/).filter(Boolean).length;
+    expect(words).toBeLessThan(bloated.split(/\s+/).filter(Boolean).length);
+    expect(out.report.score).toBeGreaterThan(before.score);
+  });
+
+  it('never labels a check as in range while telling you it is not', () => {
+    /* Under "what is costing you shortlists", a row read "Length is in range
+       — Too long", which says the opposite of itself in four words. */
+    const long = 'A '.repeat(1000);
+    const r = agent.scanResume(`Ravi Kumar\nr@example.com +91 90000 11111\n\nExperience\n- ${long}`, 'developer');
+    const len = r.checks.find((c) => c.id === 'length');
+    if (len.fix && /too long/i.test(len.fix)) expect(len.label).not.toMatch(/in range/i);
+  });
+
+  it('separates a place from the year a PDF glued to it', () => {
+    /* Two-column PDFs extract as "Hyderabad2026" and "Asansol2021", and a
+       date the parser cannot see is a date the ATS cannot read either. */
+    const glued = [
+      'Bishal Nag', 'b@example.com | +91 90000 00000',
+      '', 'EXPERIENCE', 'DevOps Engineer | RunElix | Aug 2024 - Present',
+      '- Built CI/CD pipelines with Jenkins serving 12 teams',
+      '', 'EDUCATION', 'B.Tech, Computer Science - Sri Indu College, Hyderabad2026',
+    ].join('\n');
+    const engine = require('../../services/v2/atsResumeEngine');
+    const out = engine.rewriteResume(glued, { target: 'DevOps Engineer', mode: 'CONVERT' });
+    expect(out.resume).toMatch(/Hyderabad 2026/);
+    expect(out.resume).not.toMatch(/Hyderabad2026/);
+  });
+
+  it('does not list a section heading as a qualification', () => {
+    /* "LANGUAGES" shipped as an education entry — "- LANGUAGES" — with the
+       languages themselves beneath it as a second one. */
+    const withHeading = [
+      'Bishal Nag', 'b@example.com | +91 90000 00000',
+      '', 'EXPERIENCE', 'DevOps Engineer | RunElix | Aug 2024 - Present',
+      '- Built CI/CD pipelines with Jenkins serving 12 teams',
+      '', 'EDUCATION', 'B.Tech, Computer Science, 2019 - 2023',
+      'LANGUAGES', 'Bengali (Native), English (Fluent)',
+    ].join('\n');
+    const engine = require('../../services/v2/atsResumeEngine');
+    const out = engine.rewriteResume(withHeading, { target: 'DevOps Engineer', mode: 'CONVERT' });
+    expect(out.resume).not.toMatch(/^- LANGUAGES$/m);
+  });
+
   it('does not leave a dangling phrase where a list should be', () => {
     /* "Backend Engineer, with hands-on project experience across ." — the
        summary joined an empty skills list into the sentence. */

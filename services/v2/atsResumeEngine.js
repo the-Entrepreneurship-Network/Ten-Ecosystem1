@@ -106,7 +106,20 @@ function evidences(proofText, skill) {
   return words.length > 1 && words.every((w) => hasWord(proofText, w));
 }
 
-const toLines = (text) => String(text || '').split(/\r?\n/).map((l) => l.trim());
+/*
+ * A PDF that ran a word into the year after it.
+ *
+ * Two-column and tightly-kerned PDFs extract as "Hyderabad2026" and
+ * "Asansol2021", which then ship on the rewritten page exactly as extracted —
+ * and a date the parser cannot see is a date the ATS cannot read either.
+ * Separating a word from a trailing four-digit year is safe: no English word
+ * ends in one.
+ */
+const unglueYears = (line) => String(line)
+  .replace(/([A-Za-z])((?:19|20)\d{2})\b/g, '$1 $2')
+  .replace(/\b((?:19|20)\d{2})([A-Za-z])/g, '$1 $2');
+
+const toLines = (text) => String(text || '').split(/\r?\n/).map((l) => unglueYears(l.trim()));
 
 function isHeading(line) {
   const l = line.toLowerCase().replace(/[^a-z& ]/g, '').trim();
@@ -1136,7 +1149,17 @@ function rewriteResume(text, options) {
    */
   if (ledger.education.length) {
     L.push('EDUCATION');
-    ledger.education.forEach((e) => L.push(`- ${stripBullet(String(e))}`));
+    /*
+     * A section heading that fell into education is not a qualification.
+     *
+     * "LANGUAGES" shipped as an education entry — "- LANGUAGES" — with the
+     * languages themselves beneath it as a second entry, because the parser
+     * had filed both under the previous heading. A bare all-caps word is a
+     * heading wherever it lands.
+     */
+    ledger.education
+      .filter((e) => !/^[A-Z][A-Z &]{2,24}$/.test(String(e).trim()))
+      .forEach((e) => L.push(`- ${stripBullet(String(e))}`));
     L.push('');
   }
   if (ledger.certifications.length) {
