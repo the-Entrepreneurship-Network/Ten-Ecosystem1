@@ -254,7 +254,8 @@ function parseHazards(text, all) {
   return hazards;
 }
 
-function scanResume(text, target) {
+function scanResume(text, target, options) {
+  const jdSupplied = Boolean(options && options.jd);
   const raw = String(text || '');
   const all = lines(raw);
   const words = raw.split(/\s+/).filter(Boolean);
@@ -332,8 +333,20 @@ function scanResume(text, target) {
 
   /* 6. skills block, matched against the target role */
   const matched = bank.words.filter((w) => lower.includes(w));
+  /*
+   * Without a job description the bank is a proxy, not a requirement.
+   *
+   * It demanded roughly 60% of a twelve-word list, so a backend engineer
+   * naming Java, Spring Boot, REST API, PostgreSQL, Git, Docker, SQL and
+   * Testing was marked down for having no HTML, CSS or Python — languages the
+   * role they named does not use. Nobody can reach full marks against a list
+   * of every language in the family, and being told to add them is advice to
+   * put things on a resume that are not true. With a real posting the bar
+   * stays where it was, because then the list is the employer's, not ours.
+   */
+  const bar = jdSupplied ? bank.words.length * 0.6 : bank.words.length * 0.4;
   add('skills', 'Skills match the target role', 10,
-    Math.min(10, (matched.length / Math.max(6, bank.words.length * 0.6)) * 10),
+    Math.min(10, (matched.length / Math.max(4, bar)) * 10),
     `${matched.length}/${bank.words.length} ${bank.key} keywords present`,
     `Work these into Skills and your bullets where true: ${bank.words.filter((w) => !lower.includes(w)).slice(0, 6).join(', ')}.`);
 
@@ -560,9 +573,29 @@ function buildResume(detailsInput) {
      With no skills it stays one clause, rather than trailing "across ." */
   L.push('');
   L.push('SUMMARY');
-  L.push(skills.length
-    ? `${role} with hands-on experience across ${skills.slice(0, 5).join(', ')}.`
-    : `${role}.`);
+  /*
+   * Their strongest quantified line, repeated at the top.
+   *
+   * A summary of one clause — "Software Engineer with hands-on experience
+   * across Java, Spring Boot" — is the shortest section on the page and the
+   * first one read. The convert path has always led with the person's best
+   * scoped achievement; the builder did not, which cost the page both its
+   * opening and forty words of length it had honestly earned. Nothing new is
+   * claimed: this is a sentence they already wrote, in the place a recruiter
+   * looks first.
+   */
+  const spike = [...expItems, ...projItems]
+    .map((t) => String(t).trim())
+    .filter((t) => /\d/.test(t) && !looksLikeRoleHeader(t) && t.split(/\s+/).length > 6)[0];
+  L.push([
+    skills.length
+      ? `${role} with hands-on experience across ${skills.slice(0, 6).join(', ')}.`
+      : `${role}.`,
+    spike ? `${toBullet(spike, 0)}.` : '',
+    d.availablefrom || d.hours
+      ? `${[d.availablefrom, d.hours && `able to commit ${d.hours}`].filter(Boolean).join(', ').replace(/^./, (c) => c.toUpperCase())}.`
+      : '',
+  ].filter(Boolean).join(' '));
 
   section('SKILLS', [skills.join(', ')]);
   /*
@@ -1317,6 +1350,30 @@ function ledgerFromDetails(d) {
   };
 }
 
+/**
+ * The experience block, rebuilt from every part of it.
+ *
+ * It used to be assembled inside whichever answer arrived last, from that
+ * answer plus the dates — so answering the stipend question after describing
+ * two more achievements rebuilt the block without them, and the two bullets
+ * the student had just typed were gone from the page. Every part is read
+ * every time, so the order the questions are answered in stops mattering.
+ */
+function rebuildExperience(d) {
+  if (!d.internship) return;
+  /* Header line first so the dates parse, then the work beneath it — and the
+     work is what is LEFT after the header, not the whole answer, or the page
+     says the heading twice. */
+  const text = String(d.internship).trim();
+  const cut = text.search(/[.\n]/);
+  const first = cut > 0 ? text.slice(0, cut).trim() : text;
+  const rest = cut > 0 ? text.slice(cut + 1).trim() : '';
+  const header = [first, d.internshipdates].filter(Boolean).join(' | ');
+  const paid = d.stipend === 'paid' ? ' (paid internship)' : '';
+  d.experience = [header + paid, rest, d.internship2, d.internship3]
+    .filter(Boolean).join('\n');
+}
+
 /** Where each interview answer lands. */
 function consumeAnswer(session, field, msg) {
   const skip = /^(skip|no|none|nothing|na|n\/a|not now)\.?$/i.test(msg.trim());
@@ -1357,25 +1414,18 @@ function consumeAnswer(session, field, msg) {
   else if (field === 'degree' || field === 'college' || field === 'gradyear') {
     d[field] = msg.trim();
     d.education = [d.degree, d.college, d.gradyear].filter(Boolean).join(', ');
+  } else if (field === 'internship2' || field === 'internship3') {
+    d[field] = msg.trim();
+    rebuildExperience(d);
+  } else if (field === 'projects2') {
+    /* The flag is set as well as the text: appending only to `projects` left
+       the question's own condition true, so it asked for a second project
+       twelve times in a row. */
+    d.projects2 = msg.trim();
+    d.projects = [d.projects, msg.trim()].filter(Boolean).join('\n');
   } else if (field === 'internship' || field === 'internshipdates' || field === 'stipend') {
     d[field] = msg.trim();
-    if (d.internship) {
-      /*
-       * Header line first so the dates parse, then the work beneath it — and
-       * the work is what is LEFT after the header, not the whole answer. The
-       * fallback repeated everything, so the page read "TEN Virtual
-       * Internship, Backend Engineer | Jan 2026 – Present" and then, as its
-       * one achievement, "Delivered TEN Virtual Internship, Backend Engineer.
-       * Built a backend service…" — the heading said twice.
-       */
-      const text = String(d.internship).trim();
-      const cut = text.search(/[.\n]/);
-      const first = cut > 0 ? text.slice(0, cut).trim() : text;
-      const rest = cut > 0 ? text.slice(cut + 1).trim() : '';
-      const header = [first, d.internshipdates].filter(Boolean).join(' | ');
-      const paid = d.stipend === 'paid' ? ' (paid internship)' : '';
-      d.experience = [header + paid, rest].filter(Boolean).join('\n');
-    }
+    rebuildExperience(d);
   } else if (field === 'github' || field === 'linkedin') {
     d[field] = msg.trim();
     d.link = d.link || msg.trim();
@@ -1404,7 +1454,7 @@ function consumeAnswer(session, field, msg) {
     d.role = d.role || msg.trim();
     if (!session.target) session.target = msg.trim();
   }
-  else if (field === 'metric' || field === 'evidence' || field === 'dates' || field === 'confirmkw') {
+  else if (field === 'more' || field === 'metric' || field === 'evidence' || field === 'dates' || field === 'confirmkw') {
     /* Their words, added to their history — placement the rewriter can use.
        For confirmkw this is the Rezi-style confirmation: naming where a JD
        term was used is what makes it claimable. */
@@ -1446,7 +1496,16 @@ function nextQuestion(session) {
     /* Answers already given, so a question is never asked twice. */
     photoAnswered: Boolean(d.photo),
     location: d.location,
+    educationAsked: Boolean(d.degree || d.college || d.gradyear || d.education),
   });
+  /*
+   * The bank owns identity, links, skills, projects and education; the engine
+   * keeps the questions only it can generate — the evidence and metric probes
+   * that come out of reading the actual bullets. Asked from both, a student
+   * got their links requested twice in two wordings and their projects twice.
+   */
+  const OWNED_BY_BANK = ['name', 'email', 'phone', 'link', 'skills', 'projects', 'education'];
+  iv.questions = iv.questions.filter((q) => !OWNED_BY_BANK.includes(q.field));
   /* Declined questions stay answered — "skip" is an answer. */
   const declined = session.declined || [];
   const open = iv.questions.filter((q) => !declined.includes(q.field));
@@ -1788,6 +1847,33 @@ router.post('/chat', upload.single('file'), async (req, res) => {
        * and it is the thing every good builder does that this one did not.
        */
       session.raiseRounds = (session.raiseRounds || 0) + 1;
+
+      /*
+       * When the page is simply short, ask for more of their history.
+       *
+       * Length is the one check no formatting lever can move: the words have
+       * to come from somewhere, and the only honest somewhere is the person.
+       * A resume built from one internship and two projects lands at 165
+       * words and stops at 96 — so the agent asks what else they have done,
+       * and each answer adds real content and real points. It stops asking
+       * when they stop answering.
+       */
+      const short = out.failing.find((f) => f.id === 'length');
+      session.moreAsked = session.moreAsked || 0;
+      if (short && short.lost >= 2 && session.moreAsked < 4 &&
+          !(session.declined || []).includes('more')) {
+        session.moreAsked += 1;
+        const prompts = [
+          'The page is short for a full sheet, and length is the only thing left that formatting cannot fix — the words have to be yours. What else have you done? Another role, a freelance piece, a hackathon, a college project, coursework you built something for.',
+          'Anything else? A second project, an open-source contribution, a competition, a paper, a club you built something for.',
+          'One more if there is one — teaching, tutoring, a volunteer build, a tool you made for yourself that other people ended up using.',
+          'Last one. Anything you have built or run that is not on the page yet?',
+        ];
+        session.command = 'raise';
+        return ask('more', prompts[Math.min(session.moreAsked - 1, prompts.length - 1)],
+          `You asked for ${goal}. It is at ${out.report.score}/100 — ${short.lost} of the missing points are page length.`);
+      }
+
       if (session.raiseRounds >= 2) {
         const audit = atsEngine.bulletAudit(out.text);
         /* Bullets already put to them, so the next round takes the next line
@@ -1834,8 +1920,15 @@ router.post('/chat', upload.single('file'), async (req, res) => {
           });
         }
 
-        /* Every weak line has been put to them. Say so, once, and stop. */
-        if (audit.weak.length) {
+        /*
+         * Every weak line has been put to them. Say so once — and only once.
+         *
+         * Repeating "I have asked about every line" is the same failure the
+         * whole pass is about, so the second time round the page is simply
+         * delivered with its honest score.
+         */
+        if (audit.weak.length && !session.toldExhausted) {
+          session.toldExhausted = true;
           session.command = null;
           return res.json({
             ok: true, kind: 'help',
@@ -2317,9 +2410,19 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         session.buildAsked += 1;
         return ask(question.field, question.question);
       }
-      if (!iv.canBuild && !forceBuild) {
-        const q = question || { field: 'skills', question: 'List the tools and methods you have actually used — only ones you could defend in an interview.' };
-        return ask(q.field, q.question);
+      /*
+       * The stop rule stops.
+       *
+       * When the interview had nothing left to ask, this fell back to a
+       * hard-coded skills question — with a fixed field, so a person who had
+       * already declined skills was asked for them again, and again, and
+       * again. It asked seven times in one walkthrough. A question that has
+       * been declined is answered; if nothing is left to ask, the page gets
+       * built out of whatever was given and the gaps are reported on it.
+       */
+      const declinedAll = session.declined || [];
+      if (!iv.canBuild && !forceBuild && question && !declinedAll.includes(question.field)) {
+        return ask(question.field, question.question);
       }
       const built = buildResume({ ...session.details, role: session.target || session.details.role });
 
@@ -2333,10 +2436,21 @@ router.post('/chat', upload.single('file'), async (req, res) => {
        * force words still ship it, because someone who says "build it anyway"
        * has been told and chosen.
        */
-      if (hasPlaceholders(built.text) && !forceBuild) {
-        const gaps = missingEssentials(built.text);
-        const field = /name/.test(gaps[0]) ? 'name' : /email|phone/.test(gaps[0]) ? 'email' : 'skills';
-        return ask(field,
+      /*
+       * Asked once, then honoured.
+       *
+       * The guard re-asked for whatever was missing on every pass, so a
+       * person who had already declined to give their name was asked for it
+       * twelve times in one walkthrough — the loop, wearing the manners of a
+       * safety check. A decline is an answer: the second time round the page
+       * ships with the gap named on it rather than the question repeated.
+       */
+      const gaps = hasPlaceholders(built.text) ? missingEssentials(built.text) : [];
+      const gapField = gaps.length
+        ? (/name/.test(gaps[0]) ? 'name' : /email|phone/.test(gaps[0]) ? 'email' : 'skills')
+        : null;
+      if (gaps.length && !forceBuild && !(session.declined || []).includes(gapField)) {
+        return ask(gapField,
           `I can lay the page out, but it would go out saying ${gaps[0]} is missing. What should it be? (Say "build it anyway" to take the draft as it stands.)`);
       }
 

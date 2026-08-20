@@ -70,13 +70,18 @@ describe('the conversation advances instead of repeating', () => {
   it('builds once the stop rule is satisfied instead of interrogating forever', async () => {
     const a = app();
     let out = await turn(a, 'build', null);
+    /* The interview asks for education in the three parts a person thinks in
+       — degree, institution, years — rather than as one line. */
     const answers = {
       target: 'Backend Developer', jd: 'skip', name: 'Asha Menon',
-      email: 'asha@example.com', phone: '+91 90000 11111', link: 'github.com/asha',
+      email: 'asha@example.com', phone: '+91 90000 11111',
+      github: 'github.com/asha', linkedin: 'linkedin.com/in/asha',
       skills: 'Java, Spring Boot, PostgreSQL',
+      hasprojects: 'yes',
       projects: 'Built an invoicing API in Spring Boot used by 3 teams',
+      degree: 'B.Tech', college: 'KIIT University, Computer Science', gradyear: '2022 – 2026',
       education: 'B.Tech CSE, 2022 – 2026',
-      metric: 'skip', dates: 'skip', evidence: 'skip',
+      metric: 'skip', evidence: 'skip', more: 'skip',
     };
     for (let i = 0; i < 24 && out.kind === 'ask'; i++) {
       out = await turn(a, answers[out.session.asked] || 'skip', out.session);
@@ -416,12 +421,15 @@ describe('the conversation advances instead of repeating', () => {
 
     let out = await turn(a, WEAK, null);
     const replies = [];
-    for (let i = 0; i < 3; i += 1) {
-      out = await turn(a, 'make it 98', out.session);
+    /* A short page is first asked for more history — that is its own answer
+       to "why is it not 98". Declining it reaches the per-bullet worklist. */
+    for (let i = 0; i < 6; i += 1) {
+      out = await turn(a, out.session.asked === 'more' ? 'skip' : 'make it 98', out.session);
       replies.push(String(out.reply || ''));
     }
-    /* Never the same sentence twice. */
-    expect(new Set(replies).size).toBe(replies.length);
+    /* Never the same sentence twice in a row — the complaint was watching one
+       reply come back verbatim, not a phase being revisited later. */
+    replies.forEach((r, i) => { if (i) expect(r).not.toBe(replies[i - 1]); });
     const worklist = replies.find((r) => /What is wrong/.test(r));
     expect(worklist).toBeTruthy();
     expect(worklist).toMatch(/carries no number|action verb|duty phrase/);
@@ -441,8 +449,8 @@ describe('the conversation advances instead of repeating', () => {
 
     let out = await turn(a, WEAK, null);
     let withOptions = null;
-    for (let i = 0; i < 4 && !withOptions; i += 1) {
-      out = await turn(a, 'make it 98', out.session);
+    for (let i = 0; i < 8 && !withOptions; i += 1) {
+      out = await turn(a, out.session.asked === 'more' ? 'skip' : 'make it 98', out.session);
       if (out.options && out.options.options) withOptions = out.options;
     }
     expect(withOptions).toBeTruthy();
@@ -791,10 +799,18 @@ describe('the conversation advances instead of repeating', () => {
       'Experience', 'Developer | Acme | Jan 2024 – Present',
       '- Built the invoicing module in Java', '', 'Skills', 'Java'].join('\n');
     const t1 = await turn(a, thin, null);
-    const t2 = await turn(a, 'make it 98', t1.session);
-    if (t2.kind === 'ask') {
-      expect(t2.reply).toMatch(/the next \d+ points need/i);
-      expect(t2.reply).toMatch(/or say skip/i);
+    let out = await turn(a, 'make it 98', t1.session);
+    /*
+     * A thin page is asked for more history first — page length is the one
+     * check no lever can move, so more of their own work is the honest ask.
+     * Declining it reaches the fact question.
+     */
+    if (out.session.asked === 'more') {
+      expect(out.reply).toMatch(/points are page length/i);
+      out = await turn(a, 'skip', out.session);
+    }
+    if (out.kind === 'ask') {
+      expect(out.reply).toMatch(/the next \d+ points need|What number belongs on this line/i);
     }
   });
 

@@ -178,6 +178,14 @@ const BANK = [
     question: 'Full name, as it should appear at the top of the page?',
     when: (d, l) => !d.name && !(l && l.name),
   },
+  /*
+   * Asked when building from scratch, not when improving an upload.
+   *
+   * A resume already carries its own contact block, so asking someone who
+   * just uploaded one to retype their email is asking them for something on
+   * the screen in front of them. From scratch there is nothing to read, and
+   * a page an ATS cannot reply to is discarded — so it is asked every time.
+   */
   {
     field: 'email', uses: ['build', 'raise', 'cover'], group: 'You',
     question: 'Email address? An ATS discards an application it cannot reply to.',
@@ -255,6 +263,25 @@ const BANK = [
     question: 'From which month to which month? "Jun 2025 – Dec 2025", or "Jan 2026 – Present".',
     when: (d) => d.hasinternship === 'yes' && !d.internshipdates,
   },
+  /*
+   * Two more things they did there, asked one at a time.
+   *
+   * One line about an internship is not a page. A resume built from a single
+   * bullet came out at 109 words, which the length check reads as thin and
+   * which no formatting lever can fix — the words have to come from
+   * somewhere, and the only honest somewhere is the person. Asking "what
+   * else" twice is the difference between a stub and a full page.
+   */
+  {
+    field: 'internship2', uses: ['build'], group: 'Internships',
+    question: 'What else did you do there? Another thing you built, fixed or automated — with a number if you have one.',
+    when: (d) => d.hasinternship === 'yes' && d.internship && !d.internship2,
+  },
+  {
+    field: 'internship3', uses: ['build'], group: 'Internships',
+    question: 'And one more, if there is one. Anything you improved, measured or shipped.',
+    when: (d) => d.hasinternship === 'yes' && d.internship2 && !d.internship3,
+  },
   {
     field: 'stipend', uses: ['build'], group: 'Internships',
     question: 'Was it paid? A paid internship is worth naming; an unpaid one is worth just as much on the page, and neither goes on it unless you say so.',
@@ -279,6 +306,11 @@ const BANK = [
     when: (d) => d.hasprojects === 'yes' && !d.projects,
   },
   {
+    field: 'projects2', uses: ['build'], group: 'Projects',
+    question: 'A second project? Same shape — what it does, what you built it with, and who used it.',
+    when: (d) => d.hasprojects === 'yes' && d.projects && !d.projects2,
+  },
+  {
     field: 'skills', uses: ['build', 'raise'], group: 'Skills',
     question: 'Which tools and languages have you actually used? Only ones you could defend in an interview.',
     /* GitHub's languages are offered here as a starting point, never as the
@@ -289,54 +321,56 @@ const BANK = [
       : null),
     when: (d, l) => !d.skills && !(l && l.statedSkills && l.statedSkills.length),
   },
-  {
-    field: 'hascerts', uses: ['build'], group: 'Proof',
-    question: 'Any certifications or achievements worth listing?',
-    options: () => YES_NO('Yes', 'None to list'),
-    when: (d, l) => !d.hascerts && !(l && l.certifications && l.certifications.length),
-  },
-  {
-    field: 'certifications', uses: ['build'], group: 'Proof',
-    question: 'Name them — the issuer and the year. One per line.',
-    when: (d) => d.hascerts === 'yes' && !d.certifications,
-  },
+  /*
+   * Certifications are not asked.
+   *
+   * They were two questions — "any certifications?" then "name them" — for a
+   * section most students leave empty, in the middle of an interview that
+   * still had the things a page is actually scored on to get through. The
+   * skills question and the GitHub import cover the same ground with better
+   * evidence. Anyone who has one can put it in the skills answer.
+   */
 
-  /* — terms, for a letter or an enquiry — */
+  /* — terms: availability, asked the way a person is asked it — */
   {
     field: 'salary', uses: ['cover'], group: 'Terms',
     question: 'What pay are you asking for? These are public ranges for your level and market, not offers — check the posting before you commit to a number.',
     options: (d) => salaryOptions(d),
     when: (d) => !d.salary,
   },
+  /*
+   * Availability, asked as "when can you start" and "how many hours".
+   *
+   * The old date question — "start and end month/year for each role, 'Jan
+   * 2024 – Present' is the shape a parser reads" — asked a person to think
+   * like a parser, and a recording caught it rejecting "aug 2026-presernt"
+   * and asking again. It is gone. These three are what a manager actually
+   * wants to know, they are on both the resume path and the letter path now,
+   * and every one of them is a list to pick from.
+   */
   {
-    field: 'hours', uses: ['cover'], group: 'Terms',
+    field: 'availablefrom', uses: ['build', 'cover'], group: 'Availability',
+    question: 'When are you available to start?',
+    options: () => NOTICE.concat(MONTHS.map((m) => ({ label: `From ${m}`, value: `available from ${m}` }))),
+    when: (d) => !d.availablefrom,
+  },
+  {
+    field: 'hours', uses: ['build', 'cover'], group: 'Availability',
     question: 'How many hours a week can you commit?',
     options: () => HOURS_PER_WEEK,
     when: (d) => !d.hours,
   },
   {
-    field: 'window', uses: ['cover'], group: 'Terms',
-    question: 'Which part of the day can you work?',
-    options: () => WORKING_WINDOW,
-    when: (d) => !d.window,
-  },
-  {
-    field: 'availablefrom', uses: ['cover'], group: 'Terms',
-    question: 'From which month are you available?',
-    options: () => MONTHS.map((m) => ({ label: m, value: m })),
-    when: (d) => !d.availablefrom,
-  },
-  {
-    field: 'commitlength', uses: ['cover'], group: 'Terms',
+    field: 'commitlength', uses: ['build', 'cover'], group: 'Availability',
     question: 'How long can you commit for?',
     options: () => COMMIT_LENGTH,
     when: (d) => !d.commitlength,
   },
   {
-    field: 'notice', uses: ['cover'], group: 'Terms',
-    question: 'How soon could you start?',
-    options: () => NOTICE,
-    when: (d) => !d.notice,
+    field: 'window', uses: ['cover'], group: 'Availability',
+    question: 'Which part of the day can you work?',
+    options: () => WORKING_WINDOW,
+    when: (d) => !d.window,
   },
 ];
 
