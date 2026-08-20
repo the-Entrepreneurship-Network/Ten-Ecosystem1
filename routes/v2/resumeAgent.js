@@ -29,6 +29,7 @@ const atsEngine = require('../../services/v2/atsResumeEngine');
 const career = require('../../services/v2/careerData');
 const interview = require('../../services/v2/resumeInterview');
 const githubImport = require('../../services/v2/githubImport');
+const mockInterview = require('../../services/v2/mockInterview');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -1224,6 +1225,12 @@ function commandOf(low, hasFile) {
   if (/\bfind (me )?jobs?\b|\bjob hunt\b|\bhunt for jobs\b|\bemail (the )?hr\b|\bapply to jobs\b/.test(low)) return 'jobs';
   if (/\bcover letter\b|\bcover\b.*\b(letter|note)\b/.test(low)) return 'cover';
   if (/\bcompare\b|which (job|jd|posting)|between these (jobs|jds)/.test(low)) return 'compare';
+  /* The Rezi-parity commands, ahead of the looser matchers below so that
+     "score" reaches the five bars rather than the single number. */
+  if (/\bmock interview\b|\bai interview\b|\binterview me\b|\bpractice interview\b|\bstart (the )?interview\b/.test(low)) return 'interview';
+  if (/\breview (my )?interview\b|\binterview review\b|\bmy transcript\b/.test(low)) return 'interview-review';
+  if (/\bscore5\b|\bfive bars?\b|\bbreak ?down (my )?score\b|\bdetailed score\b|\bscore breakdown\b/.test(low)) return 'score5';
+  if (/\bmissing keywords?\b|\bkeyword (table|gap|check)\b|\bwhich keywords?\b/.test(low)) return 'keywords';
   if (/\binterview prep\b|\bprep\b|defen[cs]e|walk me through/.test(low)) return 'prep';
   if (/\bgap\b|what('?s| is) missing|why would this fail|missing keyword/.test(low)) return 'gap';
   /* Build beats score: "make a resume … and make it 98/100" is a build with
@@ -1445,6 +1452,20 @@ function consumeAnswer(session, field, msg) {
   if (skip) {
     session.declined = session.declined || [];
     if (!session.declined.includes(field)) session.declined.push(field);
+    return;
+  }
+  /*
+   * An interview answer belongs to the interview, not to the details bag.
+   *
+   * It was landing in `session.details.answer` — overwritten by the next
+   * one — while the interview's own array stayed empty, so every answer read
+   * as unanswered and the same question came back with "your last message did
+   * not read as an answer to it".
+   */
+  if (field === 'answer' && session.interview) {
+    const iv = session.interview;
+    iv.answers.push({ question: iv.questions[iv.at], transcript: msg.trim() });
+    iv.at += 1;
     return;
   }
   if (field === 'target') {
@@ -2393,6 +2414,137 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       );
       session.command = null;
       return res.json({ ok: true, kind: 'help', reply: `Cover letter — ${letter.words} words${letter.withinLimit ? '' : ' (over the 300 limit — trim before sending)'}:\n\n${letter.text}`, session });
+    }
+
+    /*
+     * score5 — the same measurement, in the five parts it is made of.
+     *
+     * One number tells somebody they are at 80 and nothing about what to do
+     * next. Split the way the work splits, it says which of them is theirs to
+     * fix and which is ours.
+     */
+    if (session.command === 'score5') {
+      if (!session.resumeText.trim()) return ask('resume', 'Attach or paste the resume to score.');
+      const s = atsEngine.score5(session.resumeText, { target: session.target, jd: session.jd });
+      session.command = null;
+      const bar = (v) => (v === null ? '—'.padEnd(10) : '█'.repeat(Math.round(v / 10)).padEnd(10, '░'));
+      return res.json({
+        ok: true, kind: 'help',
+        reply: [
+          'Seat: RESUME · Command: score5',
+          `Overall ${s.overall}/${s.of} · recruiter-scan ${s.recruiter}/100`,
+          s.scaledFromPartial
+            ? 'No posting supplied, so the keyword bar was never measured — this is the rest of the rubric, rescaled. Paste a job description for the real number.'
+            : '',
+          '',
+          ...s.bars.map((b) => `${b.name.padEnd(18)} ${bar(b.value)} ${b.value === null ? 'N/A' : `${b.value}/100`}\n${' '.repeat(19)}${b.why}`),
+          '',
+          s.fixes.length ? 'Worst first:' : 'Nothing left that formatting can move.',
+          ...s.fixes.map((f, i) => `${i + 1}. [${f.bar}] ${f.fix}`),
+          '',
+          s.caveat,
+        ].filter(Boolean).join('\n'),
+        session,
+      });
+    }
+
+    /* keywords — present, weak or missing, with where each one belongs. */
+    if (session.command === 'keywords') {
+      if (!session.resumeText.trim()) return ask('resume', 'Attach or paste the resume first.');
+      if (!session.jd) return ask('jd', 'Paste the job description — keywords are only real against a posting.');
+      const led = atsEngine.factLedger(session.resumeText);
+      const map = atsEngine.jdMap(session.resumeText, led, session.jd);
+      session.command = null;
+      if (!map) {
+        return res.json({ ok: true, kind: 'help', reply: 'That posting names no hard terms I can measure against. Paste the requirements section.', session });
+      }
+      const state = { evidenced: 'present', 'listed only': 'weak', 'not claimed': 'missing' };
+      const priority = (r) => (r.kind === 'must' ? (r.status === 'not claimed' ? 'high' : 'medium') : 'low');
+      return res.json({
+        ok: true, kind: 'help',
+        reply: [
+          'Seat: RESUME · Command: keywords',
+          `${map.evidenced}/${map.rows.length} of the posting's terms are evidenced${map.listedOnly ? `, ${map.listedOnly} claimed with nothing behind them` : ''}.`,
+          '',
+          '| Term | State | Priority | Where it belongs |',
+          '|---|---|---|---|',
+          ...map.rows.slice(0, 16).map((r) => {
+            const where = r.status === 'evidenced' ? r.where
+              : r.status === 'listed only' ? 'a bullet, not the skills line'
+                : r.kind === 'must' ? 'a bullet — only if you have used it' : 'optional';
+            return `| ${r.term} | ${state[r.status]} | ${priority(r)} | ${where} |`;
+          }),
+          '',
+          'Nothing is added for you. A keyword you cannot defend in the room is worse than a missing one.',
+        ].join('\n'),
+        session,
+      });
+    }
+
+    /*
+     * interview — questions from THIS resume, one at a time.
+     *
+     * Generic STAR prompts rehearse nothing. The questions worth practising
+     * are the ones a real interviewer would ask about this page: the bullet
+     * with the number in it, the skill listed with nothing behind it, the
+     * term the posting wants that the page cannot prove.
+     */
+    if (session.command === 'interview') {
+      const source = session.resumeText.trim() || (session.shipped && session.shipped.text) || '';
+      if (!source) return ask('resume', 'Attach or paste the resume — the questions come out of it, not from a generic list.');
+
+      if (!session.interview) {
+        const built = mockInterview.questionsFor(source, {
+          role: session.target || undefined, jd: session.jd, limit: 8,
+        });
+        session.interview = { role: built.role, questions: built.questions, answers: [], at: 0 };
+      }
+      const iv = session.interview;
+      /* The answer itself was consumed on the way in, by consumeAnswer. */
+      if (iv.at >= iv.questions.length) {
+        session.command = 'interview-review';
+      } else {
+        const q = iv.questions[iv.at];
+        session.command = 'interview';
+        return ask('answer', q.prompt,
+          `Question ${iv.at + 1} of ${iv.questions.length} · ${iv.role}. Answer as you would out loud — about 45 seconds. Say "review" when you want the report.`);
+      }
+    }
+
+    /* interview-review — what the words show, and nothing they do not. */
+    if (session.command === 'interview-review') {
+      const iv = session.interview;
+      if (!iv || !iv.answers.length) {
+        session.command = null;
+        return res.json({ ok: true, kind: 'help', reply: 'No interview to review yet. Say "mock interview" and I will ask the first question.', session });
+      }
+      const report = mockInterview.scoreSession(iv.answers);
+      const better = mockInterview.betterAnswers(session.resumeText || (session.shipped && session.shipped.text) || '', 3);
+      session.command = null;
+      session.interview = null;
+
+      return res.json({
+        ok: true, kind: 'help',
+        reply: [
+          'Seat: INTERVIEW · Command: interview-review',
+          `Overall ${report.score}/${report.of} — ${report.verdict}`,
+          report.detail || '',
+          '',
+          report.tone ? `Clarity: ${report.tone.clarity} — ${report.tone.clarityWhy}` : '',
+          report.tone ? `Confidence: ${report.tone.confidence} — ${report.tone.confidenceWhy}` : '',
+          report.tone ? `Enthusiasm: ${report.tone.enthusiasm} — ${report.tone.enthusiasmWhy}` : '',
+          report.pace ? `Pace: ${report.pace.estimate}. ${report.pace.note}` : '',
+          '',
+          report.strengths.length ? `What worked: ${report.strengths.join(' ')}` : '',
+          report.fixes.length ? 'What to fix, worst first:' : '',
+          ...report.fixes.map((f, i) => `${i + 1}. ${f}`),
+          better.length ? '\nThree answers to rehearse, built only from what your resume already says:' : '',
+          ...better.flatMap((b) => [`\n"${b.from}"`, ...b.scaffold.map((s) => `  · ${s}`)]),
+          '',
+          report.tone ? report.tone.caveat : '',
+        ].filter(Boolean).join('\n'),
+        session,
+      });
     }
 
     /* prep — the 5-line interview defense from the last shipped packet. */
