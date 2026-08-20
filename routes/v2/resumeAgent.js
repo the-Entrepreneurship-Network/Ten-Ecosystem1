@@ -877,6 +877,10 @@ function commandOf(low, hasFile) {
   /* Build beats score: "make a resume … and make it 98/100" is a build with
      a quality bar, not a raise of whatever was uploaded before. */
   if (BUILD_INTENT.test(low)) return 'build';
+  /* "Why is it not 98", "why so low", "what is stopping it" — a question
+     about the score, which raise answers by naming the blocking fact. It was
+     falling through to the menu and asking for a resume already uploaded. */
+  if (/\bwhy\b.*(not|only|so low|stuck|less)|what('?s| is) (stopping|blocking|missing)|why.*\d{2}\b/.test(low)) return 'raise';
   /* "make it 98/100" alone is its own command — exhaust the levers, then
      state the ceiling. Routing it to tailor is how it used to answer 90. */
   if (SCORE_INTENT.test(low)) return 'raise';
@@ -989,6 +993,19 @@ function deliver(res, session, packetOrBuilt, kindNote) {
 
   /* A shipped resume is what cover and prep are allowed to work from. */
   session.shipped = { text, target: session.target, jd: session.jd };
+
+  /*
+   * The improved page becomes the working copy.
+   *
+   * Without this, every later "fix it" re-converted the ORIGINAL upload and
+   * returned a byte-identical document — a person asking to improve it more
+   * got exactly what they already had, again and again, which is what the
+   * repeated-mistake reports were describing. Improvement has to compound,
+   * and the score has to be remembered so a second pass can tell whether it
+   * actually moved.
+   */
+  session.resumeText = text;
+  session.lastScore = (scanResume(text, session.target) || {}).score;
   if (isPacket) {
     session.lastPacket = {
       band: packetOrBuilt.band,
@@ -1266,6 +1283,73 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       const source = session.resumeText.trim() || Object.entries(session.details)
         .map(([k, v]) => `${k}: ${v}`).join('\n');
       const packet = atsEngine.rewriteResume(source, { target: session.target, jd: session.jd, mode: 'CONVERT' });
+
+      /*
+       * A second conversion of an already-converted page changes nothing, and
+       * reprinting the identical document is how this agent looked broken.
+       * When there is no gain left, say what is actually blocking the score
+       * instead of handing back the same page with the same numbers.
+       */
+      /*
+       * Compared against what was last handed over, not against the input.
+       * Comparing to the source never matched — the rewriter always changes
+       * something on a first pass — so the guard never fired and the same
+       * document went out three times in a row.
+       */
+      const sameAsLast = session.shipped &&
+        packet.resume.replace(/\s+/g, ' ').trim() === String(session.shipped.text).replace(/\s+/g, ' ').trim();
+      if (sameAsLast) {
+        const blocked = raiseToTarget(source, session.target, session.jd, 98);
+
+        /*
+         * Explained once, then acted on. Repeating the same explanation to
+         * someone asking a third time is the same failure in a politer voice,
+         * so the follow-up asks for the fact that would actually move the
+         * score instead of restating why it will not move on its own.
+         */
+        /*
+         * Each repeat moves the conversation on rather than restating: the
+         * reason, then the request for the fact, then the ceiling and a stop.
+         * Saying the same sentence three times is the bug wearing manners.
+         */
+        session.convertedRepeats = (session.convertedRepeats || 0) + 1;
+
+        if (session.convertedRepeats === 2 && blocked.needFact) {
+          session.command = 'raise';
+          return ask('metric',
+            `Still ${blocked.report.score}/100, and formatting cannot add another point. Give me ${blocked.needFact.ask} and I will put it in — or say skip and this is the honest version.`);
+        }
+
+        if (session.convertedRepeats >= 3) {
+          session.command = null;
+          return res.json({
+            ok: true, kind: 'help',
+            reply: [
+              'Seat: RESUME · Command: tailor',
+              `Ceiling reached: ${blocked.report.score}/100 on these facts. I have spent every formatting lever and I will not invent the rest.`,
+              'Three things would move it, and all three are yours to supply: a real number on your strongest bullet, a skill the target role asks for that you have actually used, or a project that shows it.',
+              'Otherwise this is the honest version — download it and apply.',
+            ].join('\n\n'),
+            session,
+          });
+        }
+
+        session.toldAlreadyConverted = true;
+        session.command = null;
+        return res.json({
+          ok: true, kind: 'help',
+          reply: [
+            'Seat: RESUME · Command: tailor',
+            'This page is already converted — re-running it produces the same document, so nothing was changed.',
+            blocked.needFact
+              ? `What is holding the score at ${blocked.report.score}/100 is a fact, not formatting: ${blocked.needFact.ask}. Give me that and I will use it.`
+              : 'The remaining points need evidence your history does not show. I will not invent it.',
+            packet.notClaimed.length ? `Not claimed: ${packet.notClaimed.slice(0, 6).join(', ')}.` : '',
+          ].filter(Boolean).join('\n\n'),
+          session,
+        });
+      }
+
       return deliver(res, session, packet,
         `Band before: ${packet.band}. Converted — checker ${packet.before.checker}→${packet.after.checker}, recruiter-scan ${packet.before.recruiter}→${packet.after.recruiter}.` +
         (packet.notClaimed.length ? ` Not claimed: ${packet.notClaimed.slice(0, 5).join(', ')}.` : ''));

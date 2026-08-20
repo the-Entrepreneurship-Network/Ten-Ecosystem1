@@ -336,6 +336,32 @@ describe('the conversation advances instead of repeating', () => {
     }
   });
 
+  it('does not hand back the same document when asked to improve it again', async () => {
+    /* "ok do it" and "improve it more" returned byte-identical output three
+       times running — the agent looking broken while working as written. */
+    const a = app();
+    let out = await turn(a, RESUME, null);
+    out = await turn(a, 'make it better', out.session);
+    if (out.session.asked === 'target') out = await turn(a, 'Backend Developer', out.session);
+
+    const replies = [];
+    for (const msg of ['ok do it', 'improve it more', 'fix it again']) {
+      out = await turn(a, msg, out.session);
+      replies.push((out.reply || '').slice(0, 120));
+    }
+    for (let i = 1; i < replies.length; i += 1) {
+      expect(replies[i]).not.toBe(replies[i - 1]);
+    }
+  });
+
+  it('explains the score instead of asking for a resume it already has', async () => {
+    const a = app();
+    let out = await turn(a, RESUME, null);
+    out = await turn(a, 'why is it not 98', out.session);
+    expect(out.reply).not.toMatch(/Upload a resume or say the job title/);
+    expect(out.reply).toMatch(/Command: raise/);
+  });
+
   it('reads the role out of the request', async () => {
     const a = app();
     const t1 = await turn(a, 'build me a cv for a data analyst', null);

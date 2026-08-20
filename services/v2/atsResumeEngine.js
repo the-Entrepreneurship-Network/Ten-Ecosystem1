@@ -650,14 +650,23 @@ function rewriteResume(text, options) {
 
   if (projectLed) { projectsBlock(); experienceBlock(); } else { experienceBlock(); projectsBlock(); }
 
+  /*
+   * Bullet characters are stripped before one is added.
+   *
+   * Converting an already-converted page put a second dash on every education
+   * line — "- B.Tech" became "- - B.Tech", then "- - - B.Tech" — so a student
+   * pressing "fix it" twice watched their resume grow dashes and decay. The
+   * rewrite has to be idempotent: running it on its own output must produce
+   * that same output, or repeating the command corrupts the document.
+   */
   if (ledger.education.length) {
     L.push('EDUCATION');
-    ledger.education.forEach((e) => L.push(`- ${e}`));
+    ledger.education.forEach((e) => L.push(`- ${stripBullet(String(e))}`));
     L.push('');
   }
   if (ledger.certifications.length) {
     L.push('CERTIFICATIONS');
-    ledger.certifications.forEach((c) => L.push(`- ${c}`));
+    ledger.certifications.forEach((c) => L.push(`- ${stripBullet(String(c))}`));
   }
 
   const rewritten = L.join('\n').replace(/\n{3,}/g, '\n\n').trim();

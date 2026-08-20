@@ -281,6 +281,39 @@ describe('v4.0: the interview asks only what is missing', () => {
   });
 });
 
+describe('running the rewrite twice', () => {
+  const SOURCE = [
+    'Bishal Nag', 'bishal@example.com +91 98765 43210', '',
+    'Experience', 'Senior DevOps Engineer | Acme | Jan 2022 - Present',
+    '- Managed Kubernetes clusters and Terraform on Azure for 12 services', '',
+    'Skills', 'Azure, Kubernetes, Terraform, Jenkins, Docker', '',
+    'Education', 'B.Tech CSE, 2021',
+  ].join('\n');
+  const convert = (text) => rewriteResume(text, { target: 'DevOps Engineer', mode: 'CONVERT' }).resume;
+  const norm = (s) => s.replace(/\s+/g, ' ').trim();
+
+  it('produces the same document — converting a converted page changes nothing', () => {
+    const once = convert(SOURCE);
+    expect(norm(convert(once))).toBe(norm(once));
+  });
+
+  it('never grows a second bullet on a line that already had one', () => {
+    /* "- B.Tech" became "- - B.Tech" and then "- - - B.Tech": a student
+       pressing "fix it" twice watched their resume decay. */
+    let text = SOURCE;
+    for (let i = 0; i < 4; i += 1) text = convert(text);
+    expect(text).not.toMatch(/-\s+-/);
+    expect(text).toMatch(/^- B\.Tech CSE, 2021$/m);
+  });
+
+  it('does not drift in length across repeated passes', () => {
+    let text = convert(SOURCE);
+    const first = text.length;
+    for (let i = 0; i < 3; i += 1) text = convert(text);
+    expect(text.length).toBe(first);
+  });
+});
+
 describe('impact bullets', () => {
   it('strips banned openers and keeps the substance', () => {
     expect(impactBullet('Responsible for backend development')).toBe('Backend development');
