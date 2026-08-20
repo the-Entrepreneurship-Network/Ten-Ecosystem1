@@ -1973,8 +1973,23 @@ router.post('/chat', upload.single('file'), async (req, res) => {
            instead of re-printing the same worklist at somebody who has read
            it. Asking the same question twice is the bug this whole pass is
            about; asking about a different line every time is the work. */
+        /*
+         * The five worst lines, not all of them.
+         *
+         * A recording caught this offering to walk somebody through their
+         * bullets one at a time and telling them "54 left after this one".
+         * Nobody answers fifty-five questions about their own resume, and
+         * being told how many are left is discouragement rather than help.
+         * A page with that many weak lines has a length problem, which the
+         * trim lever now solves; what survives is a handful worth fixing by
+         * hand, and those are worked worst-first.
+         */
+        const QUEUE = 5;
         session.bulletsAsked = session.bulletsAsked || [];
-        const pending = audit.weak.filter((r) => !session.bulletsAsked.includes(r.text));
+        const queue = [...audit.weak]
+          .sort((a, b) => b.problems.length - a.problems.length)
+          .slice(0, QUEUE);
+        const pending = queue.filter((r) => !session.bulletsAsked.includes(r.text));
 
         if (pending.length) {
           const target = pending[0];
@@ -1986,13 +2001,13 @@ router.post('/chat', upload.single('file'), async (req, res) => {
             reply: [
               'Seat: RESUME · Command: raise',
               firstRound
-                ? `Checker ${out.report.score}/100 and formatting is spent — the rest of the points are in the lines themselves. ${audit.strong}/${audit.total} bullets already pull their weight; these do not.`
-                : `Checker ${out.report.score}/100. Next line, ${pending.length} left after this one.`,
+                ? `Checker ${out.report.score}/100 and formatting is spent — the rest of the points are in the lines themselves. ${audit.strong}/${audit.total} bullets already pull their weight. These are the ${queue.length} worth fixing first${audit.weak.length > queue.length ? `, out of ${audit.weak.length}` : ''}.`
+                : `Checker ${out.report.score}/100. Next one.`,
               '',
               ...(firstRound ? [
                 '| Line | What is wrong | What fixes it |',
                 '|---|---|---|',
-                ...audit.weak.slice(0, 8).map((r) =>
+                ...queue.map((r) =>
                   `| ${r.text.replace(/\|/g, '\\|')} | ${r.problems.join('; ')} | ${(r.fix || '').replace(/\|/g, '\\|')} |`),
                 '',
               ] : []),
