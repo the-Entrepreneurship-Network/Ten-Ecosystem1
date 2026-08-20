@@ -131,10 +131,42 @@ describe('rewrite (CONVERT)', () => {
     outputNumbers.forEach((n) => expect(sourceNumbers).toContain(n));
   });
 
-  it('drops unevidenced skills from the skills line and reports them', () => {
-    const skillsLine = packet.resume.split('\n')[packet.resume.split('\n').findIndex((l) => l === 'SKILLS') + 1] || '';
-    expect(skillsLine).not.toMatch(/kubernetes|terraform|leadership/i);
+  it('reports unevidenced skills, and never ships a placeholder in their place', () => {
+    /*
+     * The rule was: drop every skill no bullet proves. On this fixture that
+     * is all of them — the bullets are duty-phrased and name no tool — so the
+     * page came back with "[ list the tools your bullets actually show ]"
+     * where the student's Java, Spring Boot and React used to be. They lost
+     * their own skills line, the keyword check fell to zero, and the score
+     * went DOWN: the rewrite was making the resume worse and reporting it as
+     * the student's problem.
+     *
+     * Deleting a claim somebody made is not honesty, it is deletion. The line
+     * survives; which entries no bullet backs is reported instead, and that
+     * report is what the interview then asks about.
+     */
+    const lines = packet.resume.split('\n');
+    const skillsLine = lines[lines.findIndex((l) => l === 'SKILLS') + 1] || '';
+    expect(skillsLine).not.toMatch(/\[ list the tools/i);
+    expect(skillsLine).toMatch(/Java/);
+    /* The unevidenced ones are still named as unevidenced. */
     expect(packet.essentials.dropped.join(' ')).toMatch(/Kubernetes/);
+    expect(packet.ledger.unevidencedSkills.join(' ')).toMatch(/Terraform/);
+  });
+
+  it('keeps only the evidenced skills when some are evidenced', () => {
+    /* The skill-dump rule still applies where it can: a resume whose bullets
+       prove three of its five tools ships those three. */
+    const p = rewriteResume([
+      'Asha Rao', 'asha@example.com | +91 90000 00000',
+      '', 'Experience', 'Backend Developer | Zeta | Jan 2023 - Present',
+      '- Built a REST API in Java with Spring Boot serving 5,000 requests a day',
+      '', 'Skills', 'Java, Spring Boot, Kubernetes, Terraform',
+    ].join('\n'), { target: 'backend developer' });
+    const l = p.resume.split('\n');
+    const line = l[l.findIndex((x) => x === 'SKILLS') + 1] || '';
+    expect(line).toMatch(/Java/);
+    expect(line).not.toMatch(/kubernetes|terraform/i);
   });
 
   it('lists what the JD wants that the ledger cannot prove, and states the ceiling', () => {
@@ -335,7 +367,9 @@ describe('impact bullets', () => {
   it('strips first person — a resume bullet is not a diary line', () => {
     expect(impactBullet('I built the payments API in Go')).toBe('Built the payments API in Go');
     expect(impactBullet('We have shipped three releases')).toBe('Shipped three releases');
-    expect(impactBullet('I was managing a team of 4')).toBe('Managing a team of 4');
+    /* "Managing" is a gerund, which the verb check reads as no verb at all,
+       so the past tense of the same word goes in — grammar, not a new claim. */
+    expect(impactBullet('I was managing a team of 4')).toBe('Managed a team of 4');
   });
 
   it('leaves a strong bullet alone', () => {

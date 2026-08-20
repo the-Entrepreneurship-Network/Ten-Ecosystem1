@@ -354,6 +354,110 @@ describe('the conversation advances instead of repeating', () => {
     }
   });
 
+  it('the score keeps climbing as facts arrive, instead of stalling on one number', async () => {
+    /*
+     * The complaint, as a test. A resume went 68 → 74 → 80 across releases and
+     * then stopped: every later "make it 98" re-ran two spent levers and
+     * returned the identical score and the identical sentence. The rewrite was
+     * also actively damaging the page — stripping "Responsible for" without
+     * putting a verb back, and replacing a stated skills line with a
+     * placeholder — so the climb started from a hole it had dug itself.
+     */
+    const a = app();
+    const WEAK = [
+      'Rahul Verma', 'rahul.verma@example.com  9876543210',
+      '', 'Objective', 'Seeking a challenging role in a reputed organization.',
+      '', 'Experience', 'Software Developer, Acme Solutions',
+      'Responsible for developing web applications',
+      'Worked on bug fixes and maintenance',
+      '', 'Skills', 'Java, HTML, CSS',
+      '', 'Education', 'B.Tech Computer Science',
+    ].join('\n');
+
+    /* A weak resume opens the rebuild interview rather than a score card, so
+       the baseline is read directly rather than from the first reply. */
+    const start = require('../../routes/v2/resumeAgent').scanResume(WEAK, 'Software Developer').score;
+    let out = await turn(a, WEAK, null);
+
+    const facts = [
+      'Built the customer portal in Java used by 4,000 users a month',
+      'Fixed 120 bugs before release, cutting the crash rate 35%',
+      'Jan 2022 - Present',
+    ];
+    const seen = [start];
+    out = await turn(a, 'make it 98', out.session);
+    for (const f of facts) {
+      out = await turn(a, f, out.session);
+      if (out.report) seen.push(out.report.score);
+    }
+
+    /* Every fact moved the number, and the last is well above the first. */
+    expect(seen[seen.length - 1]).toBeGreaterThan(start);
+    expect(seen[seen.length - 1]).toBeGreaterThanOrEqual(78);
+  });
+
+  it('shows which line is holding the score down once formatting is spent', async () => {
+    /* "I need one real number for your strongest bullet" is true, identical
+       every time, and unactionable. The per-bullet worklist names the line. */
+    const a = app();
+    const WEAK = [
+      'Rahul Verma', 'rahul.verma@example.com  9876543210',
+      '', 'Experience', 'Software Developer, Acme Solutions',
+      'Responsible for developing web applications',
+      'Worked on bug fixes and maintenance',
+      '', 'Skills', 'Java, HTML, CSS', '', 'Education', 'B.Tech CS',
+    ].join('\n');
+
+    let out = await turn(a, WEAK, null);
+    const replies = [];
+    for (let i = 0; i < 3; i += 1) {
+      out = await turn(a, 'make it 98', out.session);
+      replies.push(String(out.reply || ''));
+    }
+    /* Never the same sentence twice. */
+    expect(new Set(replies).size).toBe(replies.length);
+    const worklist = replies.find((r) => /What is wrong/.test(r));
+    expect(worklist).toBeTruthy();
+    expect(worklist).toMatch(/carries no number|action verb|duty phrase/);
+  });
+
+  it('offers the kinds of number that fit the bullet, to pick from', async () => {
+    /* "Add a metric" is the least actionable advice in resume writing because
+       nobody knows which number is wanted. The options name the candidates. */
+    const a = app();
+    const WEAK = [
+      'Rahul Verma', 'rahul.verma@example.com  9876543210',
+      '', 'Experience', 'Software Developer, Acme Solutions',
+      'Responsible for developing web applications',
+      'Worked on bug fixes and maintenance',
+      '', 'Skills', 'Java, HTML, CSS', '', 'Education', 'B.Tech CS',
+    ].join('\n');
+
+    let out = await turn(a, WEAK, null);
+    let withOptions = null;
+    for (let i = 0; i < 4 && !withOptions; i += 1) {
+      out = await turn(a, 'make it 98', out.session);
+      if (out.options && out.options.options) withOptions = out.options;
+    }
+    expect(withOptions).toBeTruthy();
+    expect(withOptions.options.length).toBeGreaterThan(1);
+    expect(withOptions.other).toBeTruthy();
+  });
+
+  it('reads a fact typed after a delivery as a fact, not as a lost visitor', async () => {
+    /* Handed a rewritten page and typing "Jan 2022 – Present" — an answer to
+       the dates question — the student was told "upload a resume or say the
+       job title", about the document on their screen. */
+    const a = app();
+    let out = await turn(a, RESUME, null);
+    out = await turn(a, 'fix it', out.session);
+    for (let i = 0; i < 8 && out.kind === 'ask'; i += 1) out = await turn(a, 'skip', out.session);
+
+    const after = await turn(a, 'Led the migration to Spring Boot across 12 services', out.session);
+    expect(String(after.reply || '')).not.toMatch(/Upload a resume/i);
+    expect(after.session.resumeText).toMatch(/Led the migration/);
+  });
+
   it('uses the fact it asked for, instead of re-reporting the same ceiling', async () => {
     /*
      * The raise command asks for the one fact holding the score down, and

@@ -91,7 +91,9 @@ const ROLE_KEYWORDS = {
    * on and no recruiter believes.
    */
   'backend': ['rest api','sql','database','docker','aws','testing','git','microservices','caching','authentication'],
-  'software engineering': ['api','testing','git','database','ci/cd','sql','debugging','code review','system design'],
+  /* Languages belong here. A Java/HTML/CSS resume scored 0/9 against a bank of
+     pure practice words, so the person was told their own stack was missing. */
+  'software engineering': ['java','python','javascript','sql','git','api','testing','database','html','css','debugging','oop'],
   'data science': ['python','pandas','numpy','machine learning','scikit-learn','sql','visualization','statistics','nlp','model'],
   'devops': ['linux','docker','kubernetes','ci/cd','jenkins','terraform','aws','monitoring','bash','git'],
   'cyber security': ['owasp','penetration testing','network security','linux','cryptography','siem','incident response','vulnerability','firewall'],
@@ -1674,6 +1676,79 @@ router.post('/chat', upload.single('file'), async (req, res) => {
           `You asked for ${goal}. Checker ${out.report.score}/100 — every parse, heading, verb and keyword lever spent on true facts. Nothing was invented to get here.`);
       }
 
+      /*
+       * The bullet worklist, once formatting has nothing left to give.
+       *
+       * Asked to raise the same page a second time, this used to re-run two
+       * levers that were already spent and return the identical ceiling
+       * sentence — the same score, the same words, every time, which is what
+       * "no improvement when asked" looks like from the outside. The score has
+       * genuinely stopped moving; what has not been said is WHICH line is
+       * holding it down and what is missing from it. That is per-bullet work,
+       * and it is the thing every good builder does that this one did not.
+       */
+      session.raiseRounds = (session.raiseRounds || 0) + 1;
+      if (session.raiseRounds >= 2) {
+        const audit = atsEngine.bulletAudit(out.text);
+        /* Bullets already put to them, so the next round takes the next line
+           instead of re-printing the same worklist at somebody who has read
+           it. Asking the same question twice is the bug this whole pass is
+           about; asking about a different line every time is the work. */
+        session.bulletsAsked = session.bulletsAsked || [];
+        const pending = audit.weak.filter((r) => !session.bulletsAsked.includes(r.text));
+
+        if (pending.length) {
+          const target = pending[0];
+          session.bulletsAsked.push(target.text);
+          const firstRound = session.raiseRounds === 2;
+          return res.json({
+            ok: true,
+            kind: 'help',
+            reply: [
+              'Seat: RESUME · Command: raise',
+              firstRound
+                ? `Checker ${out.report.score}/100 and formatting is spent — the rest of the points are in the lines themselves. ${audit.strong}/${audit.total} bullets already pull their weight; these do not.`
+                : `Checker ${out.report.score}/100. Next line, ${pending.length} left after this one.`,
+              '',
+              ...(firstRound ? [
+                '| Line | What is wrong | What fixes it |',
+                '|---|---|---|',
+                ...audit.weak.slice(0, 8).map((r) =>
+                  `| ${r.text.replace(/\|/g, '\\|')} | ${r.problems.join('; ')} | ${(r.fix || '').replace(/\|/g, '\\|')} |`),
+                '',
+              ] : []),
+              `**${target.text}**`,
+              target.problems.length ? `Wrong with it: ${target.problems.join('; ')}.` : '',
+              target.ask
+                ? target.ask.question
+                : `${target.fix} Give me the line as it should read and I will put it in.`,
+            ].filter(Boolean).join('\n'),
+            options: target.ask
+              ? {
+                multi: false,
+                options: target.ask.kinds.map((k) => ({ label: k.label, note: k.hint, value: k.label })),
+                other: { label: 'Something else — I will type it', value: '' },
+              }
+              : undefined,
+            session: Object.assign(session, { asked: 'metric', command: 'raise' }),
+          });
+        }
+
+        /* Every weak line has been put to them. Say so, once, and stop. */
+        if (audit.weak.length) {
+          session.command = null;
+          return res.json({
+            ok: true, kind: 'help',
+            reply: [
+              'Seat: RESUME · Command: raise',
+              `Checker ${out.report.score}/100, and I have asked about every line that is holding it there — ${audit.weak.length} of them. None of the remaining points are formatting, so there is nothing left for me to spend.`,
+              'Give me a number for any of those lines, or a project that shows the target role\'s stack, and the score moves the same turn. Otherwise this is the honest version.',
+            ].join('\n\n'),
+            session,
+          });
+        }
+      }
+
       /* One question, the one worth the most points. */
       if (out.needFact && !(session.declined || []).includes('raise-' + out.needFact.id)) {
         session.declined = session.declined || [];
@@ -2136,6 +2211,29 @@ router.post('/chat', upload.single('file'), async (req, res) => {
     /* The ten-resume-agent skill's empty-state rule: one short line only.
        The four command bullets live in the UI's chips, not in the agent's
        mouth — echoing the interface copy back was the bug in the screenshot. */
+    /*
+     * With a resume in hand, this is a fact, not a lost visitor.
+     *
+     * Somebody who has just been handed a rewritten page and types "Jan 2022 –
+     * Present" is answering the question about dates that was asked two turns
+     * earlier. They were told "upload a resume or say the job title" — about
+     * the document on the screen. Anything substantial said while a resume is
+     * loaded goes onto that resume and the page is re-scored, which is the
+     * only reading under which the sentence makes sense.
+     */
+    if (session.resumeText.trim() && msg.trim().length > 8) {
+      session.resumeText += `\n\nExperience\n- ${msg.trim()}`;
+      const rescored = scanResume(session.resumeText, session.target);
+      session.lastScore = rescored.score;
+      return res.json({
+        ok: true,
+        kind: 'scan',
+        report: rescored,
+        prompt: `Added to your experience, in your words. Checker ${rescored.score}/100. Say "make it 98" to spend the levers on it again, or keep giving me facts.`,
+        session,
+      });
+    }
+
     session.menuShown = true;
     return res.json({
       ok: true, kind: 'help',
