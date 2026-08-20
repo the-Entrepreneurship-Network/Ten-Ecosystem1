@@ -530,18 +530,39 @@
 
         const myDomain = opts.myDomain || "";
 
-        const defaultList = [
-            { rank: 1, name: "Shravan Das", employeeId: "TEN/NERI/1665", score: 10.3, grade: "Needs Improvement", attendancePct: 33, tasksApproved: 0 },
-            { rank: 2, name: "Areeba", employeeId: "TEN/SDE/1649", score: 10.3, grade: "Needs Improvement", attendancePct: 75, tasksApproved: 0 },
-            { rank: 3, name: "ef", employeeId: "TEN/AI/16122", score: 7.1, grade: "Needs Improvement", attendancePct: 9, tasksApproved: 0 },
-            { rank: 4, name: "edasx", employeeId: "TEN/PY/1549", score: 6.7, grade: "Needs Improvement", attendancePct: 5, tasksApproved: 0 },
-            { rank: 5, name: "sca", employeeId: "TEN/PY/1516", score: 4.6, grade: "Needs Improvement", attendancePct: 9, tasksApproved: 0 }
-        ];
-
-        const render = (entries, activeTab) => {
+        // Previously any fetch failure (or a genuinely-empty result) silently
+        // fell back to this hardcoded list of fake students — real interns
+        // would see "Shravan Das" and friends ranked above them with no
+        // indication the data wasn't real. We now only ever show real rows,
+        // a real "No data yet" state, or a real error message.
+        const render = (entries, activeTab, errorMsg) => {
             const targetEl = document.getElementById("ten-x-lb") || el;
             if(!targetEl) return;
-            const rows = (Array.isArray(entries) && entries.length > 0) ? entries : defaultList;
+            const rows = Array.isArray(entries) ? entries : [];
+
+            const tabsHtml = `
+              <div class="ten-x-tabs">
+                <button class="ten-x-tab ${activeTab === 'domain' ? 'active' : ''}" id="ten-lb-tab-domain">MY DOMAIN ${myDomain ? '('+esc(myDomain)+')' : ''}</button>
+                <button class="ten-x-tab ${activeTab === 'overall' ? 'active' : ''}" id="ten-lb-tab-overall">OVERALL</button>
+              </div>
+            `;
+
+            if (errorMsg) {
+                targetEl.innerHTML = tabsHtml + '<div class="ten-x-empty">' + esc(errorMsg) + '</div>';
+                const btnDomainErr = document.getElementById("ten-lb-tab-domain");
+                const btnOverallErr = document.getElementById("ten-lb-tab-overall");
+                if (btnDomainErr) btnDomainErr.onclick = () => fetchAndRender('domain');
+                if (btnOverallErr) btnOverallErr.onclick = () => fetchAndRender('overall');
+                return;
+            }
+            if (!rows.length) {
+                targetEl.innerHTML = tabsHtml + '<div class="ten-x-empty">No data yet</div>';
+                const btnDomainEmpty = document.getElementById("ten-lb-tab-domain");
+                const btnOverallEmpty = document.getElementById("ten-lb-tab-overall");
+                if (btnDomainEmpty) btnDomainEmpty.onclick = () => fetchAndRender('domain');
+                if (btnOverallEmpty) btnOverallEmpty.onclick = () => fetchAndRender('overall');
+                return;
+            }
 
             const r1 = rows[0] || { name: 'Top Intern', score: 100 };
             const r2 = rows[1] || { name: 'Runner Up', score: 90 };
@@ -576,10 +597,7 @@
             `;
 
             targetEl.innerHTML = `
-              <div class="ten-x-tabs">
-                <button class="ten-x-tab ${activeTab === 'domain' ? 'active' : ''}" id="ten-lb-tab-domain">MY DOMAIN ${myDomain ? '('+esc(myDomain)+')' : ''}</button>
-                <button class="ten-x-tab ${activeTab === 'overall' ? 'active' : ''}" id="ten-lb-tab-overall">OVERALL</button>
-              </div>
+              ${tabsHtml}
 
               ${podiumHtml}
 
@@ -612,15 +630,15 @@
                 : "/leaderboard/overall";
             try {
                 const r = await fetch(url);
-                if (r.ok) {
-                    const d = await r.json();
-                    if (d && d.success && Array.isArray(d.leaderboard) && d.leaderboard.length > 0) {
-                        render(d.leaderboard, tab);
-                        return;
-                    }
+                const d = await r.json().catch(() => null);
+                if (r.ok && d && d.success && Array.isArray(d.leaderboard)) {
+                    render(d.leaderboard, tab); // real rows, or a real "No data yet" if empty
+                    return;
                 }
-            } catch (_) {}
-            render(defaultList, tab);
+                render(null, tab, (d && d.error) || "Could not load the leaderboard.");
+            } catch (_) {
+                render(null, tab, "Could not load the leaderboard.");
+            }
         };
 
         fetchAndRender('domain');
