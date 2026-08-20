@@ -1668,14 +1668,61 @@ app.use(express.json());
 
 const session = require('express-session');
 
-// No fallback secret: a committed signing key lets anyone mint a session for
-// any role. config/secrets.js has already refused the boot in production if
-// this is unset; outside production we generate a throwaway key per process so
-// sessions simply do not survive a restart.
-const SESSION_SECRET = (process.env.SESSION_SECRET || '').trim()
-    || crypto.randomBytes(32).toString('hex');
-if (!process.env.SESSION_SECRET) {
-    console.warn('[session] SESSION_SECRET is unset; using a random per-process key. Sessions will not survive a restart.');
+/*
+ * The key that signs session cookies.
+ *
+ * No fallback constant: a committed signing key lets anyone mint a session for
+ * any role. But the old fallback — a fresh random key per process — was its own
+ * outage. Every cookie is signed with it, so a new key on boot invalidates every
+ * cookie in existence: one `pm2 restart` and every signed-in person is thrown
+ * out at once. In a browser that already held a cookie the portal renders from
+ * its own storage, looks signed in, and every request 401s — "Your HR session
+ * has expired" arriving for someone who never left. A private window, signing in
+ * fresh after the restart, works perfectly. That difference is the whole
+ * fingerprint of this bug, and it was reported exactly that way.
+ *
+ * config/secrets.js refuses the boot in production when SESSION_SECRET is unset,
+ * but that guard only fires when NODE_ENV is actually "production" — a server
+ * that never sets it took the random path silently, and re-took it on every
+ * deploy.
+ *
+ * So a generated key is now PERSISTED and reused. Restarts stop signing
+ * everybody out, whatever NODE_ENV says. Setting SESSION_SECRET in .env is still
+ * the right answer and still takes precedence; this only removes the failure
+ * mode from forgetting to.
+ */
+function resolveSessionSecret() {
+    const fromEnv = (process.env.SESSION_SECRET || '').trim();
+    if (fromEnv) return { secret: fromEnv, source: 'env' };
+
+    const secretFile = path.join(__dirname, '.session-secret');
+    try {
+        const saved = fs.readFileSync(secretFile, 'utf8').trim();
+        if (saved.length >= 32) return { secret: saved, source: 'file' };
+    } catch (_e) { /* first boot, or unreadable — fall through and create one */ }
+
+    const generated = crypto.randomBytes(32).toString('hex');
+    try {
+        fs.writeFileSync(secretFile, generated, { mode: 0o600 });
+        return { secret: generated, source: 'file-created' };
+    } catch (err) {
+        // Read-only deploy: nothing to do but carry on, and say plainly that
+        // this restart has signed everyone out.
+        console.error('[session] Could not persist a session key (%s). Sessions will NOT survive this restart.', err.message);
+        return { secret: generated, source: 'memory' };
+    }
+}
+
+const { secret: SESSION_SECRET, source: SESSION_SECRET_SOURCE } = resolveSessionSecret();
+
+if (SESSION_SECRET_SOURCE !== 'env') {
+    console.warn(
+        '\n[session] SESSION_SECRET is not set in .env.\n' +
+        '[session] Using a generated key kept in .session-secret (%s).\n' +
+        '[session] Sessions survive restarts, but set a real one to be safe:\n' +
+        "[session]   node -e \"console.log('SESSION_SECRET=' + require('crypto').randomBytes(32).toString('hex'))\" >> .env\n",
+        SESSION_SECRET_SOURCE === 'file' ? 'reused' : 'created now'
+    );
 }
 
 const sessionOptions = {
