@@ -28,6 +28,7 @@ const multer = require('multer');
 const atsEngine = require('../../services/v2/atsResumeEngine');
 const career = require('../../services/v2/careerData');
 const interview = require('../../services/v2/resumeInterview');
+const { httpFetch } = require('../../services/v2/httpFetch');
 const githubImport = require('../../services/v2/githubImport');
 const mockInterview = require('../../services/v2/mockInterview');
 const parserView = require('../../services/v2/parserView');
@@ -1301,7 +1302,24 @@ function commandOf(low, hasFile) {
   if (/\bwhy\b.*(not|only|so low|stuck|less)|what('?s| is) (stopping|blocking|missing)|why.*\d{2}\b/.test(low)) return 'raise';
   /* "make it 98/100" alone is its own command — exhaust the levers, then
      state the ceiling. Routing it to tailor is how it used to answer 90. */
-  if (SCORE_INTENT.test(low)) return 'raise';
+  /*
+   * "Tailor this and make it 98 for the Google backend engineer role" is a
+   * tailor, not a raise.
+   *
+   * A score anywhere in the sentence claimed the turn, so a student who named
+   * the action, the company, the role AND the level in one line was answered
+   * with the ceiling speech about needing a metric — every one of those four
+   * facts discarded. A number is a quality bar on the thing being asked for;
+   * it is never the thing itself. Where the sentence also says tailor, or
+   * names an employer to aim at, the tailor wins and the number becomes its
+   * goal.
+   */
+  if (SCORE_INTENT.test(low) &&
+      !/\btailor\b/.test(low) &&
+      !/\bfor (?:the )?[a-z0-9][\w.& -]{2,40}\b(?:role|position|job|opening)\b/.test(low) &&
+      !/\bfor [a-z0-9][\w.&-]{2,30}\b(?:'s)?\s+(?:[a-z]+\s+){0,3}(?:engineer|developer|analyst|scientist|designer|manager|intern)\b/.test(low)) {
+    return 'raise';
+  }
   if (/\btailor|rewrite|convert|recreate|make (it|this|my resume) ats|for (this|the) (jd|job|company)\b|\b(another|new) version for\b/.test(low) || FIX_INTENT.test(low)) return 'tailor';
   if (/\bscan|check|score|review|rate my|is this rejectable|ats.?(friendly|ready)\b/.test(low)) return 'check';
   if (/\bbuild|create|write|generate|new resume|from scratch|forge\b/.test(low)) return 'build';
@@ -1602,14 +1620,29 @@ function consumeAnswer(session, field, msg) {
    */
   if (field === 'addproject') {
     const plan = session.planCache;
+    const low = String(msg).toLowerCase();
+    /* Several at once: one project rarely closes a gap, and somebody
+       planning a month of work should be able to plan all of it. */
     const chosen = plan && plan.ok
-      ? plan.plans.find((p) => String(msg).toLowerCase().includes(String(p.term).toLowerCase()))
-      : null;
-    if (chosen) {
-      const entries = skillPlan.projectEntries({ ok: true, plans: [chosen] });
-      session.resumeText = skillPlan.withPlannedProjects(session.resumeText, entries);
-      session.details.addProject = chosen.term;
-      session.plannedGuide = chosen;
+      ? plan.plans.filter((p) => low.includes(String(p.term).toLowerCase()) || low.includes(String(p.build).toLowerCase()))
+      : [];
+    if (chosen.length) {
+      session.resumeText = skillPlan.withPlannedProjects(
+        session.resumeText, skillPlan.projectEntries({ ok: true, plans: chosen }));
+      session.details.addProject = chosen.map((c) => c.term).join(', ');
+      session.plannedGuide = chosen[0];
+      session.plannedGuides = chosen;
+    } else {
+      /*
+       * Declining is an answer.
+       *
+       * Without recording it the question came back on the next pass, which
+       * is the repeat-loop this whole design exists to prevent — and it also
+       * blocked the fact questions behind it, so a student who wanted to give
+       * a real number never got asked for one.
+       */
+      session.declined = session.declined || [];
+      if (!session.declined.includes('addproject')) session.declined.push('addproject');
     }
     session.planCache = null;
     return;
@@ -1761,6 +1794,99 @@ function nextQuestion(session) {
   return { iv, question: open[0] || null };
 }
 
+/**
+ * The openings, from the Job Portal's own search.
+ *
+ * The two seats were each running their own hunt, so a student read a role
+ * here, tailored for it, walked to the portal — and it was not in the list.
+ * Two pipelines over the same boards cannot be kept in step by care; they
+ * drift the moment either is touched, which is exactly what happened.
+ *
+ * So there is one hunt. This calls the portal's `/search` endpoint in
+ * process, with the parameters its own UI sends, and shows what comes back in
+ * the order it comes back. Nothing in the job agent is changed or
+ * reimplemented — sources, ranking, fit, link resolution and the direct-only
+ * rule all stay exactly where they are, and whatever the portal will list is
+ * what appears here.
+ *
+ * The difference between the seats is presentation, not content: the portal
+ * hands over a link to apply through, and this shows the role to tailor for.
+ */
+async function portalJobs(resumeText, role) {
+  const port = process.env.PORT || 3000;
+  const res = await httpFetch(`http://127.0.0.1:${port}/api/v2/jobs/search`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    /* The portal's own defaults: verified links, resolved to the employer,
+       direct openings only. Anything else would list a different set. */
+    body: JSON.stringify({ text: String(resumeText || ''), role: String(role || '') }),
+    timeout: 45000,
+  });
+  if (!res.ok) throw new Error(`job search replied ${res.status}`);
+  const data = await res.json();
+  if (!data || !data.ok || !Array.isArray(data.jobs)) throw new Error('job search returned nothing usable');
+
+  /* Read, never re-sorted: the order IS the parity. */
+  return data.jobs.slice(0, 8).map((j) => ({
+    title: String(j.title || '').slice(0, 120),
+    company: String(j.company || '').slice(0, 60),
+    location: String(j.location || '').slice(0, 60),
+    /* Carried so a tailor can read the posting, and so the row can be matched
+       to the portal's — but never rendered as a link in this seat. */
+    url: String(j.directUrl || j.url || ''),
+    description: String(j.description || '').slice(0, 4000),
+    tags: Array.isArray(j.tags) ? j.tags.slice(0, 12) : [],
+    posted: j.posted || null,
+    type: String(j.type || '').slice(0, 40) || null,
+    salary: String(j.salary || '').slice(0, 60) || null,
+    fit: j.fit5 || null,
+    snippet: String(j.description || '').split('\n').find((l) => l.length > 40) || '',
+  }));
+}
+
+/**
+ * What the page will score once the planned work exists.
+ *
+ * A planned project carries blanks where its numbers will go, so the page it
+ * sits on scores as if those bullets had no figures — which is true today and
+ * useless as an answer to "will this get me to 98?". The projected score
+ * reads the same page with the blanks filled, and is always reported beside
+ * the real one rather than instead of it: today's number is what an ATS sees
+ * today, and the projection is what the month of work buys.
+ *
+ * It is a projection, not a promise, and it is labelled as one everywhere it
+ * appears.
+ */
+function projectedScore(text, target) {
+  const filled = String(text || '')
+    .split('\n')
+    .map((line) => {
+      /*
+       * The planned block becomes an ordinary Projects section.
+       *
+       * Left as "PLANNED PROJECTS (not yet built — …)" it is not a heading
+       * any parser recognises, so the projection lost section points for a
+       * page that will not have that problem once the work is done — and
+       * came out lower than today's score, which is the opposite of useful.
+       */
+      if (/^PLANNED PROJECTS/i.test(line.trim())) return 'PROJECTS';
+      if (!/\[PLANNED/i.test(line)) return line;
+      /* "Name — achievement" becomes the achievement, which is what a
+         project bullet is; the name is already in it. */
+      const body = line.replace(/^-\s*/, '').replace(/\[PLANNED[^\]]*\]\s*/i, '');
+      const dash = body.indexOf(' — ');
+      return `- ${dash > 0 ? body.slice(dash + 3) : body}`;
+    })
+    .join('\n')
+    /* Representative values so the checks can read a shape. None of these
+       ever reach the page the student downloads. */
+    .replace(/<N>/g, '12')
+    .replace(/<before>/g, '1,400')
+    .replace(/<after>/g, '380')
+    .replace(/<[^>]{1,40}>/g, 'the service');
+  return scanResume(filled, target).score;
+}
+
 /** The finished job, in one response the client already knows how to render. */
 function deliver(res, session, packetOrBuilt, kindNote) {
   const isPacket = Boolean(packetOrBuilt.resume);
@@ -1835,8 +1961,15 @@ function deliver(res, session, packetOrBuilt, kindNote) {
   }
 
   const header = isPacket
-    ? `Seat: RESUME · ${deliveryHeader('A', command || 'tailor', packetOrBuilt.band, packetOrBuilt)}`
-    : `Seat: RESUME · Command: ${command || 'build'} · Band: Scratch\nProxy only. Not a live Workday/Greenhouse decision — Greenhouse does not auto-score resumes.`;
+    /*
+     * What changed, not which branch of the router ran.
+     *
+     * Every reply used to open "Seat: RESUME · Command: raise" — internal
+     * state printed at somebody who asked for a better resume. The scores
+     * are the news; the command name never was.
+     */
+    ? deliveryHeader('A', command || 'tailor', packetOrBuilt.band, packetOrBuilt)
+    : 'Proxy only. Not a live Workday/Greenhouse decision — Greenhouse does not auto-score resumes.';
 
   /*
    * The gap, and the offer to close it, at the moment it is visible.
@@ -1855,6 +1988,13 @@ function deliver(res, session, packetOrBuilt, kindNote) {
    * they are looking at the version they want to send.
    */
   const guide = session.plannedGuide;
+  const guides = session.plannedGuides || (guide ? [guide] : []);
+
+  /* Today's number, and what the planned work is worth — side by side, so
+     "will this get me to 98?" has an answer that is not a guess. */
+  const projected = guides.length ? projectedScore(text, session.target) : null;
+  const nowScore = (scanResume(text, session.target) || {}).score;
+
   const updatedNote = [
     session.details.leadProject || session.details.leadSkill
       ? `Updated: this version leads with ${[
@@ -1862,17 +2002,21 @@ function deliver(res, session, packetOrBuilt, kindNote) {
         session.details.leadSkill ? `${session.details.leadSkill} first on the skills line` : '',
       ].filter(Boolean).join(', and ')}.`
       : '',
-    guide
+    guides.length
       ? [
-        `I have added **${guide.build}** under PLANNED PROJECTS for ${guide.term}, with the numbers left blank.`,
+        `Added ${guides.length === 1 ? '1 project' : `${guides.length} projects`} under PLANNED PROJECTS, with the numbers left blank.`,
         '',
-        '**Before you send this anywhere, build it.** The page will not export to PDF while it is marked planned — a project you cannot walk through fails the first question an interviewer asks about it.',
+        `**Your page is ${nowScore}/100 today, and ${projected}/100 once ${guides.length === 1 ? 'this is' : 'these are'} built.** That gap is the work, not the wording — no rewrite closes it.`,
         '',
-        `**How to build it** · about ${guide.hours}`,
-        ...guide.steps.map((s, i) => `${i + 1}. ${s}`),
-        `Be ready for: ${guide.defend}`,
+        '**Do not send this yet.** It will not export to PDF while anything is marked planned: a project you cannot walk through fails the first question an interviewer asks about it.',
+        ...guides.flatMap((g) => [
+          '',
+          `**${g.build}** · ${g.hours}`,
+          ...g.steps.map((s, i) => `${i + 1}. ${s}`),
+          `Be ready for: ${g.defend}`,
+        ]),
         '',
-        'When it is done, say "I built it" and give me the real numbers — I will move it into your actual Projects section.',
+        'As each one is finished, say "I built it" and give me the real numbers — I will move it into your actual Projects section and the score becomes real.',
       ].join('\n')
       : '',
   ].filter(Boolean).join('\n\n');
@@ -1990,6 +2134,33 @@ router.post('/chat', upload.single('file'), async (req, res) => {
      * meant the answer was never consumed, so the question asked itself
      * again, and again.
      */
+    /*
+     * The company, the role and the level, read out of the sentence.
+     *
+     * "Tailor this resume and make it 98/100 for google backend engineer role
+     * entry level" names four things, and all four were being thrown away —
+     * the reply asked which job title to target, on a line that had just said
+     * it. Whatever the sentence states, the agent should already know.
+     */
+    if (/\bfor\b/.test(low) && !session.asked) {
+      const roleAt = low.match(/\bfor (?:the )?([a-z0-9][\w.& -]{2,44}?)\s+(?:role|position|job|opening)\b/);
+      const companyRole = low.match(
+        /\bfor ([a-z0-9][\w.&-]{2,30})(?:'s)?\s+((?:[a-z]+\s+){0,3}(?:engineer|developer|analyst|scientist|designer|manager|intern))\b/);
+
+      if (companyRole) {
+        const [, company, role] = companyRole;
+        if (!session.details.company) session.details.company = company.replace(/\b\w/g, (c) => c.toUpperCase());
+        if (!session.target) session.target = role.trim();
+      } else if (roleAt) {
+        /* "for the backend engineer role" — a title, with no employer. */
+        const said = roleAt[1].replace(/\b(entry|junior|senior|mid|lead|staff)\s+level\b/g, '').trim();
+        if (said && !session.target) session.target = said;
+      }
+
+      const level = low.match(/\b(entry|junior|mid|senior|lead|staff|principal)[\s-]*level\b/);
+      if (level && !session.details.level) session.details.level = level[1];
+    }
+
     const command = pastedResume ? 'check'
       : looksLikePaste ? null
         : (session.pendingTailor && !session.asked) ? 'jobs-confirm'
@@ -2078,7 +2249,9 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       const repeat = session.lastAsk === question;
       session.lastAsk = question;
       session.asked = field;
-      const head = session.command ? `Seat: RESUME · Command: ${session.command}` : null;
+      /* No banner. The question is the message; which branch produced it was
+       never the student's business. */
+    const head = null;
       const body = repeat
         ? `${question}\n\nI asked this a moment ago and I do not have it yet — your last message did not read as an answer to it. Reply with just the value, or say "build it anyway" and I will ship the draft without it.`
         : question;
@@ -2248,6 +2421,73 @@ router.post('/chat', upload.single('file'), async (req, res) => {
        */
       const lengthLoss = out.failing.find((f) => f.id === 'length');
       const words = String(out.text || '').split(/\s+/).filter(Boolean).length;
+      /*
+       * Ask for a project and a skill to pick, not for an essay.
+       *
+       * "What else have you done?" is a blank page handed to somebody who
+       * came here because they did not know what to write. The gap is
+       * already computed — which of the target role's tools their page cannot
+       * show — so it becomes three projects to choose between, each with the
+       * steps to build it. Choosing is a second; composing is why they gave
+       * up last time.
+       */
+      /*
+       * Picked projects end the raise, with both numbers.
+       *
+       * The turn after the picks used to fall through to the bullet worklist,
+       * so the student answered the question and got a table instead of the
+       * page — and never saw what the work they had just committed to was
+       * worth. What they asked for was a target; this is where it is given.
+       */
+      if (session.plannedGuides && session.plannedGuides.length && !session.raiseDelivered) {
+        session.raiseDelivered = true;
+        session.resumeText = skillPlan.plannedLines(session.resumeText).length
+          ? session.resumeText
+          : skillPlan.withPlannedProjects(session.resumeText,
+            skillPlan.projectEntries({ ok: true, plans: session.plannedGuides }));
+        return deliver(res, session, {
+          text: session.resumeText,
+          report: scanResume(session.resumeText, session.target),
+          missing: [],
+          potentialScore: projectedScore(session.resumeText, session.target),
+        }, null);
+      }
+
+      const skillsCheck = (out.report.checks || []).find((c) => c.id === 'skills');
+      const missingWords = skillsCheck && skillsCheck.fix
+        ? (skillsCheck.fix.match(/:\s*(.+)\.$/) || [, ''])[1].split(',').map((s) => s.trim()).filter(Boolean)
+        : [];
+      const rPlan = session.jd
+        ? skillPlan.planFor(out.text, session.jd, { limit: 5 })
+        : skillPlan.planForTarget(out.text, missingWords);
+
+      if (rPlan && rPlan.ok && rPlan.plans.length &&
+          !session.details.addProject && !(session.declined || []).includes('addproject')) {
+        session.asked = 'addproject';
+        session.planCache = rPlan;
+        session.resumeText = out.text;
+        session.pendingRaise = goal;
+        return res.json({
+          ok: true,
+          kind: 'ask',
+          /* The goal they named stays in front of them — a person who asked
+             for 88 is owed the distance to 88, not to a number we prefer. */
+          reply: `You asked for ${goal}. It is at ${out.report.score}/100, and to go higher your page needs to show ${rPlan.missing.slice(0, 3).join(', ')}. Pick as many of these as you want to build — each goes on the page with its steps, and I will tell you what the page scores once they exist. Say skip if you would rather give me facts you already have.`,
+          options: {
+            /* Several, because one project rarely closes a gap and a student
+               planning a month of work should be able to plan all of it. */
+            multi: true,
+            options: rPlan.plans.map((p) => ({
+              label: `${p.build} (${p.term})`,
+              note: `${p.hours} · production-grade`,
+              value: p.term,
+            })),
+            other: { label: 'None of these', value: 'skip' },
+          },
+          session,
+        });
+      }
+
       const short = lengthLoss && words < 250 ? lengthLoss : null;
       session.moreAsked = session.moreAsked || 0;
       if (short && short.lost >= 2 && session.moreAsked < 4 &&
@@ -2291,12 +2531,15 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         if (pending.length) {
           const target = pending[0];
           session.bulletsAsked.push(target.text);
-          const firstRound = session.raiseRounds === 2;
+          /* The table comes the first time the worklist is shown, whenever
+             that is — tying it to a round number meant a page that reached
+             the worklist late never saw which lines were weak, only which
+             one it was being asked about. */
+          const firstRound = session.bulletsAsked.length === 1;
           return res.json({
             ok: true,
             kind: 'help',
             reply: [
-              'Seat: RESUME · Command: raise',
               firstRound
                 ? `Checker ${out.report.score}/100 and formatting is spent — the rest of the points are in the lines themselves. ${audit.strong}/${audit.total} bullets already pull their weight. These are the ${queue.length} worth fixing first${audit.weak.length > queue.length ? `, out of ${audit.weak.length}` : ''}.`
                 : `Checker ${out.report.score}/100. Next one.`,
@@ -2338,7 +2581,6 @@ router.post('/chat', upload.single('file'), async (req, res) => {
           return res.json({
             ok: true, kind: 'help',
             reply: [
-              'Seat: RESUME · Command: raise',
               `Checker ${out.report.score}/100, and I have asked about every line that is holding it there — ${audit.weak.length} of them. None of the remaining points are formatting, so there is nothing left for me to spend.`,
               'Give me a number for any of those lines, or a project that shows the target role\'s stack, and the score moves the same turn. Otherwise this is the honest version.',
             ].join('\n\n'),
@@ -2415,7 +2657,7 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         session.asked = 'leadproject';
         return res.json({
           ok: true, kind: 'ask',
-          reply: 'Seat: RESUME · Command: tailor\n\nWhich piece of your work should this version lead with? It goes first on the page, so pick the one you would most want to be asked about.',
+          reply: 'Which piece of your work should this version lead with? It goes first on the page, so pick the one you would most want to be asked about.',
           options: {
             multi: false,
             options: mine.map((p) => ({ label: p.slice(0, 90), value: p })),
@@ -2553,7 +2795,6 @@ router.post('/chat', upload.single('file'), async (req, res) => {
           return res.json({
             ok: true, kind: 'help',
             reply: [
-              'Seat: RESUME · Command: tailor',
               `Ceiling reached: ${blocked.report.score}/100 on these facts. I have spent every formatting lever and I will not invent the rest.`,
               'Three things would move it, and all three are yours to supply: a real number on your strongest bullet, a skill the target role asks for that you have actually used, or a project that shows it.',
               'Otherwise this is the honest version — download it and apply.',
@@ -2567,7 +2808,6 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         return res.json({
           ok: true, kind: 'help',
           reply: [
-            'Seat: RESUME · Command: tailor',
             'This page is already converted — re-running it produces the same document, so nothing was changed.',
             blocked.needFact
               ? `What is holding the score at ${blocked.report.score}/100 is a fact, not formatting: ${blocked.needFact.ask}. Give me that and I will use it.`
@@ -2672,17 +2912,23 @@ router.post('/chat', upload.single('file'), async (req, res) => {
          resume is right for somebody staying in their lane and wrong for
          everybody else, and a person browsing openings is choosing between
          known titles rather than composing one. */
+      /*
+       * One question, and it is a pick.
+       *
+       * Finding openings is the whole job of this seat — the student is here
+       * because they do not know what is out there, so asking them to supply
+       * a job title is asking them for the answer. The only thing the search
+       * genuinely cannot know is which position they are aiming at, so that
+       * is asked, from a list, once.
+       */
       if (!session.jobRole && !(session.declined || []).includes('jobrole')) {
         session.command = 'jobs';
-        return ask('jobrole', 'Which role are you applying for? I will search openings for that title.');
+        return ask('jobrole', 'Which position are you applying for?');
       }
 
       let found = [];
       try {
-        found = await require('./jobAgent').findJobs(source, {
-          role: session.jobRole || session.target || undefined,
-          limit: 8,
-        });
+        found = await portalJobs(source, session.jobRole || session.target || '');
       } catch (e) {
         session.command = null;
         return res.json({
@@ -2874,7 +3120,6 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       return res.json({
         ok: true, kind: 'help',
         reply: [
-          'Seat: RESUME · Command: parser',
           v.verdict,
           `${v.summary.extracted}/${v.summary.of} fields came out.`,
           '',
@@ -2901,7 +3146,6 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       return res.json({
         ok: true, kind: 'help',
         reply: [
-          'Seat: RESUME · Command: quickcheck',
           `${q.passed}/${q.of} — ${q.verdict}`,
           '',
           ...q.checks.map((c) => `${c.pass ? '✓' : '✗'} ${c.label} — ${c.note}`),
@@ -2917,7 +3161,6 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       return res.json({
         ok: true, kind: 'help',
         reply: [
-          'Seat: RESUME · Command: versions',
           list.hasMaster ? 'Master resume on file.' : 'No master yet — upload one and every tailoring keeps it intact.',
           '',
           list.versions.length ? '| Version | Company | Role | Score | Not claimed |' : 'No tailored versions yet. Tailor against a posting and it is saved here.',
@@ -2948,7 +3191,6 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         return res.json({
           ok: true, kind: 'help',
           reply: [
-            'Seat: RESUME · Command: bullets',
             `${all.length} bullet${all.length === 1 ? '' : 's'} on file across your master and every version you have tailored.`,
             '',
             ...all.slice(0, 12).map((b) => `${b.hasNumber ? '#' : '·'} ${b.text.slice(0, 110)}`),
@@ -2963,7 +3205,6 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       return res.json({
         ok: true, kind: 'help',
         reply: [
-          'Seat: RESUME · Command: bullets',
           ranked.length
             ? `Your ${ranked.length} most relevant lines for this posting, best first.`
             : 'None of your bullets name anything this posting asks for. That gap is facts, not wording.',
@@ -2991,7 +3232,6 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       return res.json({
         ok: true, kind: 'help',
         reply: [
-          'Seat: RESUME · Command: score5',
           `Overall ${s.overall}/${s.of} · recruiter-scan ${s.recruiter}/100`,
           s.scaledFromPartial
             ? 'No posting supplied, so the keyword bar was never measured — this is the rest of the rubric, rescaled. Paste a job description for the real number.'
@@ -3027,7 +3267,6 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       return res.json({
         ok: true, kind: 'help',
         reply: [
-          'Seat: RESUME · Command: plan',
           plan.plans.length
             ? `${plan.missing.length} term${plan.missing.length === 1 ? '' : 's'} this posting wants that your page cannot prove. Here is how to make ${plan.plans.length === 1 ? 'the first one' : `the top ${plan.plans.length}`} true.`
             : 'Your page already evidences everything this posting names. Nothing to build.',
@@ -3076,7 +3315,6 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         report: scanResume(session.resumeText, session.target),
         details: session.details,
         reply: [
-          'Seat: RESUME · Command: plan-add',
           `${entries.length} project${entries.length === 1 ? '' : 's'} added under their own heading, each marked "${skillPlan.PLANNED}" with the numbers left blank.`,
           '',
           '**Before you send this to anyone, read this.** These projects do not exist yet. The page will not export to PDF while they are on it, and that is on purpose — a project you cannot walk through fails the first question an interviewer asks about it.',
@@ -3120,7 +3358,6 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         report: scanResume(session.resumeText, session.target),
         details: session.details,
         reply: [
-          'Seat: RESUME · Command: plan-remove',
           before
             ? `${before} planned project${before === 1 ? '' : 's'} taken off. This is the honest version of your page and it exports now.`
             : 'Nothing was marked as planned. This page already exports.',
@@ -3145,7 +3382,6 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       return res.json({
         ok: true, kind: 'help',
         reply: [
-          'Seat: RESUME · Command: keywords',
           `${map.evidenced}/${map.rows.length} of the posting's terms are evidenced${map.listedOnly ? `, ${map.listedOnly} claimed with nothing behind them` : ''}.`,
           '',
           '| Term | State | Priority | Where it belongs |',
@@ -3208,7 +3444,6 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       return res.json({
         ok: true, kind: 'help',
         reply: [
-          'Seat: INTERVIEW · Command: interview-review',
           `Overall ${report.score}/${report.of} — ${report.verdict}`,
           report.detail || '',
           '',
@@ -3325,8 +3560,7 @@ router.post('/chat', upload.single('file'), async (req, res) => {
           return res.json({
             ok: true, kind: 'ask',
             reply: [
-              `Seat: RESUME · Command: build`,
-              `I read ${gh.username}'s public GitHub — ${gh.publicRepos} repositories, ${gh.projects.length} that look like real projects rather than forks or scaffolds${gh.skipped ? ` (${gh.skipped} skipped)` : ''}.`,
+                  `I read ${gh.username}'s public GitHub — ${gh.publicRepos} repositories, ${gh.projects.length} that look like real projects rather than forks or scaffolds${gh.skipped ? ` (${gh.skipped} skipped)` : ''}.`,
               '',
               'Which of these should go on the resume? Pick one, or say "all", or skip and describe your own.',
             ].join('\n'),
@@ -3450,6 +3684,23 @@ router.post('/chat', upload.single('file'), async (req, res) => {
      * loaded goes onto that resume and the page is re-scored, which is the
      * only reading under which the sentence makes sense.
      */
+    /*
+     * A posting pasted here is a posting, not a line of your history.
+     *
+     * "Product Manager. Must have: SQL, analytics, roadmapping." arrived
+     * after a delivery and was filed under Experience — the student's resume
+     * grew a bullet claiming the job advert they had just pasted. Anything
+     * naming requirements is the job, and belongs in the JD.
+     */
+    if (session.resumeText.trim() && /\b(must have|requirements?|responsibilities|nice to have|qualifications|we are (looking|seeking))\b/i.test(msg)) {
+      session.jd = msg.trim();
+      return res.json({
+        ok: true, kind: 'help',
+        reply: 'Read that as the job description. Say "tailor" to convert your page against it, or "missing keywords" for the gap table.',
+        session,
+      });
+    }
+
     if (session.resumeText.trim() && msg.trim().length > 8) {
       session.resumeText += `\n\nExperience\n- ${msg.trim()}`;
       const rescored = scanResume(session.resumeText, session.target);
