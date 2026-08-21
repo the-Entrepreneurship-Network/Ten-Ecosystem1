@@ -229,7 +229,7 @@ function factLedger(text) {
   /* Which section each line belongs to. */
   let current = null;
   const bySection = { experience: [], education: [], skills: [], projects: [], summary: [], certifications: [], top: [] };
-  all.forEach((line) => {
+  all.forEach((line, idx) => {
     if (!line) return;
     const key = headingKey(line);
     if (key) { current = key; return; }
@@ -266,6 +266,26 @@ function factLedger(text) {
       /* Degree words only. "university" and "college" appear in experience
          bullets — "built a portal for my college" is work, not education. */
       bySection.education.push(line);
+    } else if (
+      /*
+       * The job title under the name is a title, not an achievement.
+       *
+       * Anything longer than 25 characters above the first heading was filed
+       * as experience, so "Business Intelligence Analyst" became a bullet —
+       * a bullet with no verb, which dragged the verb ratio down, and the
+       * rewrite then emitted it a second time. Short titles like "Data
+       * Analyst" slipped under the limit, which is why only the long-named
+       * roles lost points: Technical Support Engineer, Quantum Computing
+       * Researcher, Aerospace and Automotive Software Engineer.
+       *
+       * A title is near the top, carries no digits, no bullet marker and no
+       * sentence punctuation, and reads as a role.
+       */
+      current === null && idx < 4 && !isBullet(line) &&
+      !/\d/.test(line) && !/[.;]/.test(line) && line.split(/\s+/).length <= 6 &&
+      RE_JOB_TITLE.test(line)
+    ) {
+      bySection.top.push(line);
     } else if (line.length > 25 || isBullet(line) || RE_DATE_RANGE.test(line)) {
       bySection.experience.push(line);
     }
@@ -301,6 +321,23 @@ function factLedger(text) {
     }
   });
   if (role) roles.push(role);
+
+  /*
+   * The job title is not one of its own achievements.
+   *
+   * A long title above the name — "Business Intelligence Analyst",
+   * "Aerospace Software Engineer" — was long enough to be filed as
+   * experience, so it became a bullet with no verb and no number. It pulled
+   * the verb ratio down, the rewrite emitted it a second time, and tailoring
+   * those five roles cost a point. Short titles slipped under the length
+   * test, which is why only the long ones showed it.
+   */
+  const titleLine = (bySection.top.find((l) => RE_JOB_TITLE.test(l) && !/\d|@/.test(l)) || '').trim().toLowerCase();
+  if (titleLine) {
+    roles.forEach((r) => {
+      r.bullets = r.bullets.filter((b) => String(b).trim().toLowerCase() !== titleLine);
+    });
+  }
 
   /* Projects: name lines and their bullets. A name with nothing under it is
      the "name-only repo" the skill tells us to drop. */

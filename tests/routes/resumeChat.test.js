@@ -843,8 +843,12 @@ describe('the conversation advances instead of repeating', () => {
 
     for (let i = 0; i < 5 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
     expect(out.kind).toBe('build');
-    // Either it reached the goal, or it stated a ceiling with the reason.
+    // Reached on today's facts, reached by naming the work to build, or a
+    // stated ceiling with the reason. The middle one is the good outcome and
+    // did not exist when this was written: declining the suggestions used to
+    // end at the ceiling, which is a no to somebody who asked how.
     const reachedOrCeiling = /every parse, heading, verb and keyword lever spent/.test(out.reply)
+      || /With this work built, the page scores \d+\/100/.test(out.reply)
       || /Ceiling: Checker \d+\/100/.test(out.reply);
     expect(reachedOrCeiling).toBe(true);
     if (/Ceiling/.test(out.reply)) expect(out.reply).toMatch(/I will not invent it|will not invent them/);
