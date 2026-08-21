@@ -266,7 +266,7 @@ describe('the conversation advances instead of repeating', () => {
     expect(prep.reply.split('\n').filter((l) => /^\d\./.test(l))).toHaveLength(5);
   });
 
-  it('never adds a JD keyword the resume cannot prove', async () => {
+  it('adds the posting\'s skills as work to do, never as work already done', async () => {
     /*
      * This used to be enforced by asking — "the JD asks for Docker and your
      * resume shows no evidence; have you actually used it? Name where." That
@@ -285,10 +285,19 @@ describe('the conversation advances instead of repeating', () => {
     for (let i = 0; i < 24 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
 
     expect(out.kind).toBe('build');
-    /* Nothing was invented: the resume names Java and Spring Boot, not
-       PostgreSQL or Docker, and the shipped page still does not. */
-    expect(out.text).not.toMatch(/PostgreSQL/i);
-    expect(out.text).not.toMatch(/\bDocker\b/i);
+    /*
+     * They appear — reporting them as "missing keywords" told a student what
+     * was wrong and nothing about what to do — but only under LEARNING, and
+     * only marked as not yet true. The claim is never made on their behalf.
+     */
+    const learning = out.text.split(/^LEARNING/m)[1] || '';
+    expect(learning).toMatch(/PostgreSQL/i);
+    expect(out.text).toMatch(/LEARNING \(\[PLANNED/);
+    /* And the marked page cannot leave as a PDF. */
+    expect(require('../../services/v2/skillPlan').plannedLines(out.text).length).toBeGreaterThan(0);
+    /* The experience section still claims only what it always claimed. */
+    const experience = out.text.split(/^EXPERIENCE/m)[1].split(/^LEARNING/m)[0];
+    expect(experience).not.toMatch(/PostgreSQL/i);
     /* Both unproven terms are reported as not claimed — listed as the
        posting spells them, so compare case-blind. Nothing here was
        confirmed by the student, so nothing here became evidence. */

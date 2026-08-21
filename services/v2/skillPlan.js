@@ -335,6 +335,53 @@ function withPlannedProjects(resumeText, entries) {
   return [...lines.slice(0, eduAt), ...block, '', ...lines.slice(eduAt)].join('\n');
 }
 
+/**
+ * The skills the posting wants, added to the page and marked as not yet true.
+ *
+ * Reporting them as "missing keywords" told a student what was wrong and
+ * nothing about what to do, on a page they had just asked to be tailored —
+ * the one moment they are looking for the finished thing. So they go on,
+ * under their own heading, marked, with the same rule as a planned project:
+ * the draft may carry them, the PDF may not exist while it does.
+ *
+ * A skill is smaller than a project, so it earns a shorter plan — but it is
+ * still work, and the deadline is the day they apply.
+ */
+function withPlannedSkills(resumeText, skills) {
+  const wanted = (skills || []).filter(Boolean).slice(0, 8);
+  if (!wanted.length) return String(resumeText || '');
+  const lines = String(resumeText || '').split('\n');
+  const block = ['', `LEARNING (${PLANNED} — remove or complete before applying)`, wanted.join(', ')];
+
+  const at = lines.findIndex((l) => /^(PLANNED PROJECTS|EDUCATION)\b/i.test(l.trim()));
+  if (at === -1) return [...lines, ...block].join('\n');
+  return [...lines.slice(0, at), ...block, '', ...lines.slice(at)].join('\n');
+}
+
+/** How to make one claimed skill true, in the days before applying. */
+function learnPlan(term) {
+  const recipe = RECIPES.find((r) => r.match.test(term));
+  if (recipe) {
+    return {
+      term,
+      hours: recipe.hours,
+      steps: recipe.steps.slice(0, 4),
+      proof: `You can say you have used ${term} once ${recipe.build.toLowerCase()} exists and you can walk through it.`,
+    };
+  }
+  return {
+    term,
+    hours: '1–2 days',
+    steps: [
+      `Finish the official ${term} getting-started guide end to end — not a video, the docs.`,
+      `Add ${term} to a project you have already built, replacing something you did another way.`,
+      'Break it deliberately and fix it: the failure is what gets asked about.',
+      `Write two sentences on when you would choose ${term} and when you would not.`,
+    ],
+    proof: `You can say you have used ${term} once it is running in something of yours and you can explain the tradeoff.`,
+  };
+}
+
 /** Every planned line still on a page. Empty means it is safe to export. */
 function plannedLines(resumeText) {
   return String(resumeText || '')
@@ -407,5 +454,6 @@ function planForTarget(resumeText, missingTerms) {
 
 module.exports = {
   planFor, planForTarget, RECIPES, projectEntries, withPlannedProjects,
+  withPlannedSkills, learnPlan,
   plannedLines, withoutPlanned, PLANNED, RE_PLANNED,
 };

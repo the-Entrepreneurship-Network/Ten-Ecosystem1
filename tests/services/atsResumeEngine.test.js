@@ -154,9 +154,18 @@ describe('rewrite (CONVERT)', () => {
     expect(packet.ledger.unevidencedSkills.join(' ')).toMatch(/Terraform/);
   });
 
-  it('keeps only the evidenced skills when some are evidenced', () => {
-    /* The skill-dump rule still applies where it can: a resume whose bullets
-       prove three of its five tools ships those three. */
+  it('puts the evidenced skills first and deletes none of them', () => {
+    /*
+     * Evidence decides the order, not who survives.
+     *
+     * Keeping only what a bullet proves removed Docker and Terraform from a
+     * real resume's "AWS, Docker, Kubernetes, Terraform" — the keyword count
+     * halved and tailoring handed back a page scoring four points lower than
+     * the one uploaded. The student watched two of their skills be deleted
+     * and called an improvement. What the bullets prove now leads, where a
+     * reader and a parser both look; the rest keep their place and are
+     * reported as unevidenced.
+     */
     const p = rewriteResume([
       'Asha Rao', 'asha@example.com | +91 90000 00000',
       '', 'Experience', 'Backend Developer | Zeta | Jan 2023 - Present',
@@ -165,8 +174,12 @@ describe('rewrite (CONVERT)', () => {
     ].join('\n'), { target: 'backend developer' });
     const l = p.resume.split('\n');
     const line = l[l.findIndex((x) => x === 'SKILLS') + 1] || '';
-    expect(line).toMatch(/Java/);
-    expect(line).not.toMatch(/kubernetes|terraform/i);
+    /* Java is proven by a bullet, so it leads. Kubernetes and Terraform are
+       not, so they follow — but they are still the student's own claims and
+       are still on the page. */
+    expect(line.indexOf('Java')).toBeLessThan(line.toLowerCase().indexOf('kubernetes'));
+    expect(line).toMatch(/Kubernetes/i);
+    expect(p.essentials.dropped.join(' ')).toMatch(/Kubernetes|Terraform/i);
   });
 
   it('lists what the JD wants that the ledger cannot prove, and states the ceiling', () => {

@@ -1194,8 +1194,29 @@ function essentialSkills(ledger, targetTerms, sourceText) {
    * the page itself spells the tool, that spelling wins.
    */
   const asWritten = (skill) => spelledAsIn(sourceText, skill);
+
+  /*
+   * A skill the person listed is never deleted from their own page.
+   *
+   * The rule was: keep only what a bullet proves. On a real resume that
+   * removed Docker and Terraform from "AWS, Docker, Kubernetes, Terraform" —
+   * because no bullet happened to name them — and the keyword count halved,
+   * so tailoring handed back a page scoring four points LOWER than the one
+   * uploaded. The student watched the agent delete two of their skills and
+   * call it an improvement.
+   *
+   * Evidence still decides the ORDER, which is what it is good for: what the
+   * bullets prove goes first, where a reader and a parser both look. What no
+   * bullet proves keeps its place further along, and is reported as
+   * unevidenced so they know which claims are exposed. Ordering is help;
+   * deleting is damage.
+   */
+  const evidencedFirst = [...onTarget, ...rest].map(asWritten);
+  const stillListed = (ledger.statedSkills || [])
+    .filter((s) => !evidencedFirst.some((e) => e.toLowerCase() === String(s).toLowerCase()));
+
   return {
-    primary: [...onTarget, ...rest].slice(0, 16).map(asWritten),
+    primary: [...evidencedFirst, ...stillListed].slice(0, 20),
     dropped: ledger.unevidencedSkills,
   };
 }
