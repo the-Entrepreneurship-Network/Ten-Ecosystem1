@@ -368,10 +368,12 @@ describe('the playful bits are gone', () => {
   });
 
   it('the opening counts down once and then gets out of the way', () => {
-    // The intro is deliberate (PR #108) — 50 ticks at 58ms, then the E lands.
-    // What matters here is that it always ends: the interval is cleared and
-    // the body unlocks, so nothing can leave the page stuck behind the curtain.
-    expect(page).toMatch(/let n = 50/);
+    // The intro is deliberate (PR #108). The step count used to be a literal
+    // 50 and is now derived from INTRO_MS, so this no longer pins the number —
+    // the point of this test was never the count. What matters is that it
+    // always ends: the interval is cleared and the body unlocks, so nothing
+    // can leave the page stuck behind the curtain.
+    expect(page).toMatch(/let n = Math\.max\(/);
     expect(page).toMatch(/clearInterval\(tick\)/);
     expect(page).toMatch(/document\.body\.classList\.remove\('locked'\)/);
   });
@@ -973,5 +975,59 @@ describe('the main website link', () => {
 
   it('holds still for a reader who asked for less movement', () => {
     expect(page).toMatch(/@media \(prefers-reduced-motion:reduce\) \{ \.eco-card::before \{ animation:none/);
+  });
+});
+
+/**
+ * The opening curtain.
+ *
+ * It ran about 6.6 seconds — a 50-step countdown and then three seconds
+ * holding on the finished word — and the counter at the bottom of the black
+ * screen showed "50", which sat exactly where a timer sits and read as a
+ * fifty-second wait. Nobody arrives at a landing page to watch a logo.
+ *
+ * These pin the shape of the fix rather than the taste of it: one duration
+ * knob everything derives from, an honest counter, and the two things that
+ * would silently break if the intro is ever shortened again.
+ */
+describe('opening curtain', () => {
+  const introMs = Number(/const INTRO_MS = (\d+)/.exec(page)[1]);
+
+  it('has one knob for the whole opening', () => {
+    expect(introMs).toBeGreaterThan(0);
+    // Everything is a fraction of it, so no phase can drift out of step.
+    expect(page).toContain('INTRO_MS * 0.55');
+    expect(page).toContain('const FINALE_MS = INTRO_MS - COUNT_MS');
+  });
+
+  it('is short enough that nobody waits on it', () => {
+    expect(introMs).toBeLessThanOrEqual(3000);
+  });
+
+  it('counts real seconds, not an abstract step count', () => {
+    expect(page).toMatch(/left\.toFixed\(1\) \+ 's'/);
+    // The old literal start value is gone; the count derives from the duration.
+    expect(page).toMatch(/Math\.round\(COUNT_MS \/ TICK_MS\)/);
+  });
+
+  it('lands the E exactly when the impact fires', () => {
+    // The fly-in is a CSS animation fixed at .8s, which is longer than the
+    // finale now — left alone the flash would fire mid-flight.
+    expect(page).toContain("slot.style.animationDuration = impactAt + 'ms'");
+  });
+
+  it('takes the shake off before lifting the curtain', () => {
+    // pre-shake animates transform on #pre, and a running animation beats the
+    // transition that slides the curtain away. At three seconds' distance it
+    // had always finished on its own; at this speed it has not.
+    const finale = page.slice(page.indexOf('function finale()'));
+    const lift = finale.indexOf("pre.classList.add('done')");
+    const unshake = finale.indexOf("pre.classList.remove('pre-shake')");
+    expect(unshake).toBeGreaterThan(-1);
+    expect(unshake).toBeLessThan(lift);
+  });
+
+  it('still swaps the domain logos however short it gets', () => {
+    expect(page).toMatch(/const swapEvery = Math\.max\(1, Math\.round\(startN \/ 5\)\)/);
   });
 });

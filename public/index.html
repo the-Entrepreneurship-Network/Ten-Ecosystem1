@@ -917,12 +917,25 @@ const DOMAINS = [
 const DOMAIN_IMGS = ['python.jpg','java.jpg','web.jpg','mern.jpg','flutter.jpg','softeng.jpg','vibe.jpg','datasci.jpg','devops.jpg','cyber.jpg','space.jpg','business.jpg','venture.jpg','hr.jpg'].map(f => 'logo/' + f);
 
 /* ---- opening curtain ----
-   A 3-second countdown from 50 with a domain logo cycling inside "T_N",
-   then the E lands and completes the word. */
+   A domain logo cycles inside "T_N", then the E lands and completes the word.
+
+   ONE knob for the whole opening: INTRO_MS. Everything below is a fraction of
+   it, so changing this number changes the intro and nothing else drifts.
+
+   It was ~6.6s, split between a 50-step countdown and a 3-second hold on the
+   finished word. Nobody came to the site to watch a logo, and the "50" read as
+   a 50-second wait because it sat where a timer sits — so the counter now
+   counts real seconds remaining, and there are few of them. */
+const INTRO_MS = 2000;
 (() => {
   const count = document.getElementById('preCount');
   const slot = document.getElementById('preSlot');
-  let n = 50, gi = 0, useImgs = true;
+  /* Countdown gets a bit over half; the finale takes the rest. */
+  const COUNT_MS = Math.round(INTRO_MS * 0.55);
+  const FINALE_MS = INTRO_MS - COUNT_MS;
+  const TICK_MS = 60;
+  let n = Math.max(6, Math.round(COUNT_MS / TICK_MS)), gi = 0, useImgs = true;
+  const startN = n;
   DOMAIN_IMGS.forEach(f => { const im = new Image(); im.src = 'assets/domains/' + f; }); /* pre-warm */
   const probe = new Image();
   probe.onerror = () => { useImgs = false; };
@@ -936,28 +949,36 @@ const DOMAIN_IMGS = ['python.jpg','java.jpg','web.jpg','mern.jpg','flutter.jpg',
     else slot.textContent = DOMAINS[gi][1];
   };
   setSlot();
-  /* 50 ticks at 58ms ≈ 3s of countdown, then the finale. */
+  /* Honest clock: seconds still to wait, not an abstract step count. */
+  const showSeconds = () => {
+    const left = (n * TICK_MS + FINALE_MS) / 1000;
+    count.textContent = left.toFixed(1) + 's';
+  };
+  showSeconds();
+  /* Swap the logo a fixed number of times however short the countdown is,
+     so shortening the intro never leaves a single frozen logo on screen. */
+  const swapEvery = Math.max(1, Math.round(startN / 5));
   const tick = setInterval(() => {
     n--;
-    count.textContent = n;
-    if (n > 0 && n % 4 === 0) {
+    showSeconds();
+    if (n > 0 && n % swapEvery === 0) {
       slot.classList.add('swap');
       setTimeout(() => {
         gi = (gi + 1) % DOMAIN_IMGS.length;
         setSlot();
         slot.classList.remove('swap');
-      }, 120);
+      }, 60);
     }
     if (n <= 0) {
       clearInterval(tick);
       finale();
     }
-  }, 58);
+  }, TICK_MS);
 
   /*
    * The last domain logo has had its turn; now the missing letter arrives.
    * The E spins in from far away, lands hard enough to fracture the screen,
-   * and the finished word holds for three seconds before the wipe.
+   * and the finished word holds briefly before the wipe.
    */
   function finale() {
     const pre = document.getElementById('pre');
@@ -970,19 +991,33 @@ const DOMAIN_IMGS = ['python.jpg','java.jpg','web.jpg','mern.jpg','flutter.jpg',
     slot.classList.add('eletter', 'e-fly');
     slot.textContent = 'E';
 
-    /* impact lands as the fly-in settles */
+    /* The fly-in is a CSS animation with a fixed .8s in the stylesheet, which
+       is longer than the whole finale now — the flash would have fired while
+       the E was still on its way in. Drive its duration from here instead, so
+       the impact lands exactly when the letter does at any INTRO_MS. */
+    const impactAt = Math.round(FINALE_MS * 0.55);
+    slot.style.animationDuration = impactAt + 'ms';
+
     setTimeout(() => {
       flash.classList.add('on');
       crack.classList.add('on');
       word.classList.add('pre-shake');
       pre.classList.add('pre-shake');
-    }, 700);
+    }, impactAt);
 
-    /* TEN, whole, for three seconds — then the site */
+    /* TEN, whole, for a beat — then the site.
+       pre-shake comes off first, and this is not cosmetic: it animates
+       transform on #pre, and a running animation beats the transition that
+       lifts the curtain. With three seconds between the two it had always
+       finished on its own; at this speed it has not, and leaving it on would
+       pin the black screen in place. */
     setTimeout(() => {
+      count.textContent = '';
+      pre.classList.remove('pre-shake');
+      word.classList.remove('pre-shake');
       pre.classList.add('done');
       document.body.classList.remove('locked');
-    }, 700 + 3000);
+    }, FINALE_MS);
   }
 })();
 
