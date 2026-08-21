@@ -126,6 +126,26 @@ describe('no event both attaches a PDF and sends the thin mirror', () => {
     });
 });
 
+describe('dashboard-generated notifications stay in-app', () => {
+    // These three are created WHILE the student is looking at the dashboard
+    // that requested them, and a refresh generates another. Emailing them is a
+    // mail loop — the same shape as the auto-document resend that got the
+    // sending account suspended.
+    const IN_APP_ONLY = [
+        'New Automated Task Assigned',
+        'New Automated Coding Challenge',
+        'Daily Micro-Learning'
+    ];
+
+    it.each(IN_APP_ONLY)('%s does not email', (title) => {
+        const src = read('routes/v2/studentPortal.js');
+        const at = src.indexOf(title);
+        expect(at).toBeGreaterThan(-1);
+        const call = src.slice(src.lastIndexOf('notifyStudent(', at), src.indexOf('});', at));
+        expect(call).toMatch(/email: false/);
+    });
+});
+
 describe('the EMAIL_US typo is gone from every send', () => {
     const FILES = ['routes/v2/documents.js', 'services/automationCron.js',
                    'routes/v2/certificates.js', 'routes/v2/payment.js', 'server.js'];
