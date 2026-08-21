@@ -58,6 +58,12 @@ export default function Keywords() {
           <Button kind="ghost" onClick={() => run('how do I get these skills', setPlan)} disabled={busy || !hasResume}>
             How do I get what is missing
           </Button>
+          {/* The planned section is a target you can see. It cannot be
+              exported until the work behind it exists, which is what makes
+              putting it on the draft safe rather than a fabrication. */}
+          <Button kind="ghost" onClick={() => run('add these projects to my resume', setPlan)} disabled={busy || !hasResume}>
+            Plan them onto my resume
+          </Button>
         </div>
         {!hasResume && (
           <p className="mt-2 text-[11.5px] text-[var(--warn)]">Upload a resume first — there is nothing to match against.</p>

@@ -915,6 +915,30 @@ router.post('/build.pdf', upload.any(), async (req, res) => {
     const b = bodyOf(req);
     const built = buildResume(b.details || b.text || b);
 
+    /*
+     * A planned project never leaves as a PDF.
+     *
+     * The planned section exists so somebody can see the page they are
+     * working towards. A downloaded file is the one artefact nobody reviews
+     * again before attaching it to an application, so this is the boundary:
+     * the draft may say "not built yet", the export may not exist at all
+     * while it does. Either they say the work is done and give the numbers,
+     * or the section comes off and the honest page downloads.
+     */
+    /* Everything this route could be building from, not just one field: the
+       browser sends details, a script might send text, and a planned line
+       must not slip through whichever door it arrives at. */
+    const planned = skillPlan.plannedLines(
+      [b.text, built.text, b.projects, b.experience, JSON.stringify(b.details || '')].filter(Boolean).join('\n'),
+    );
+    if (planned.length) {
+      return res.status(400).json({
+        ok: false,
+        error: `This page still carries ${planned.length} project you have not built yet. It will not export while it does — a project you cannot walk through fails the first question an interviewer asks about it. Say "I built it" and give me the real numbers, or say "apply with what I have" and I will take the planned section off.`,
+        planned,
+      });
+    }
+
     /* A page still carrying placeholders is not a resume, and a downloaded
        file is the one artefact nobody reviews again before sending it. */
     if (hasPlaceholders(built.text)) {
@@ -1260,6 +1284,9 @@ function commandOf(low, hasFile) {
   if (/\bbest bullets?\b|\bmy bullets?\b|\bbullet library\b|\brelevant bullets?\b/.test(low)) return 'bullets';
   if (/\bmissing keywords?\b|\bkeyword (table|gap|check)\b|\bwhich keywords?\b/.test(low)) return 'keywords';
   if (/\b(how (do|can) i (get|learn|gain)|skill plan|gap plan|what should i build|how to (get|learn|gain) (these|those)|close the gap)\b/.test(low)) return 'plan';
+  if (/\b(add (the|these|those) projects?|put (them|these) on|add them to my resume|plan (them|these) onto)\b/.test(low)) return 'plan-add';
+  if (/\b(i built (it|them|these)|i(?:'ve| have) (built|done|finished) (it|them|these)|mark (it|them) (built|done)|they are built)\b/.test(low)) return 'plan-built';
+  if (/\b(remove (the )?planned|drop (the )?planned|apply (now|with what i have)|take (them|those) off)\b/.test(low)) return 'plan-remove';
   if (/\binterview prep\b|\bprep\b|defen[cs]e|walk me through/.test(low)) return 'prep';
   if (/\bgap\b|what('?s| is) missing|why would this fail|missing keyword/.test(low)) return 'gap';
   /* Build beats score: "make a resume … and make it 98/100" is a build with
@@ -1491,6 +1518,45 @@ function consumeAnswer(session, field, msg) {
    * as unanswered and the same question came back with "your last message did
    * not read as an answer to it".
    */
+  /*
+   * A planned project becomes a real one, in their words.
+   *
+   * The planned line is removed and their sentence goes into the actual
+   * Projects section — so the only route from "planned" to "on the resume"
+   * runs through the student stating what the finished thing did.
+   */
+  if (field === 'builtproof') {
+    const skillPlanMod = require('../../services/v2/skillPlan');
+    const said = msg.trim();
+    const lines = String(session.resumeText || '').split('\n');
+    /* The planned entry this answer is about — matched on the words they
+       used, so "the Kafka one" finds the Kafka row. */
+    const words = said.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
+    let hit = -1;
+    lines.forEach((l, i) => {
+      if (hit !== -1 || !skillPlanMod.RE_PLANNED.test(l)) return;
+      if (words.some((w) => l.toLowerCase().includes(w))) hit = i;
+    });
+    if (hit === -1) hit = lines.findIndex((l) => skillPlanMod.RE_PLANNED.test(l));
+    if (hit !== -1) lines.splice(hit, 1);
+
+    let text = lines.join('\n');
+    const projAt = text.split('\n').findIndex((l) => /^PROJECTS\b/i.test(l.trim()));
+    const rows = text.split('\n');
+    if (projAt === -1) {
+      const eduAt = rows.findIndex((l) => /^EDUCATION\b/i.test(l.trim()));
+      const block = ['', 'PROJECTS', `- ${said}`];
+      text = eduAt === -1 ? [...rows, ...block].join('\n') : [...rows.slice(0, eduAt), ...block, '', ...rows.slice(eduAt)].join('\n');
+    } else {
+      rows.splice(projAt + 1, 0, `- ${said}`);
+      text = rows.join('\n');
+    }
+    /* An empty planned heading is tidied away rather than left as a stub. */
+    session.resumeText = /\[PLANNED/i.test(text) ? text : skillPlanMod.withoutPlanned(text);
+    session.plannedCount = skillPlanMod.plannedLines(session.resumeText).length;
+    return;
+  }
+
   if (field === 'answer' && session.interview) {
     const iv = session.interview;
     iv.answers.push({ question: iv.questions[iv.at], transcript: msg.trim() });
@@ -2667,6 +2733,89 @@ router.post('/chat', upload.single('file'), async (req, res) => {
           '',
           plan.rule,
         ].filter(Boolean).join('\n'),
+        session,
+      });
+    }
+
+    /*
+     * plan-add — the planned projects, onto the draft.
+     *
+     * A list of things to build is a to-do list; the same list written as
+     * the projects section it will become is a target you can see, which is
+     * what was asked for. What makes it safe rather than a fabrication is
+     * everything around it: its own heading, a marker on every line, blanks
+     * where the numbers will go, and an export that refuses to produce a PDF
+     * while any of it is still unbuilt.
+     */
+    if (session.command === 'plan-add') {
+      if (!session.resumeText.trim()) return ask('resume', 'Attach or paste the resume first.');
+      if (!session.jd) return ask('jd', 'Paste the job description — the projects are chosen from what it asks for.');
+      const plan = skillPlan.planFor(session.resumeText, session.jd, { limit: 4 });
+      session.command = null;
+      if (!plan.ok || !plan.plans.length) {
+        return res.json({ ok: true, kind: 'help', reply: 'Your page already evidences everything this posting names — there is nothing to plan.', session });
+      }
+      const entries = skillPlan.projectEntries(plan);
+      session.resumeText = skillPlan.withPlannedProjects(session.resumeText, entries);
+      session.plannedCount = entries.length;
+
+      return res.json({
+        ok: true,
+        kind: 'build',
+        text: session.resumeText,
+        report: scanResume(session.resumeText, session.target),
+        details: session.details,
+        reply: [
+          'Seat: RESUME · Command: plan-add',
+          `${entries.length} project${entries.length === 1 ? '' : 's'} added under their own heading, each marked "${skillPlan.PLANNED}" with the numbers left blank.`,
+          '',
+          '**Before you send this to anyone, read this.** These projects do not exist yet. The page will not export to PDF while they are on it, and that is on purpose — a project you cannot walk through fails the first question an interviewer asks about it.',
+          '',
+          'Here is how to build each one. When one is done, say "I built it" and I will ask you for the real numbers and move it into your actual Projects section.',
+          ...entries.flatMap((e) => [
+            '',
+            `**${e.term} — ${e.name}** · about ${e.hours}`,
+            ...e.steps.map((s, i) => `${i + 1}. ${s}`),
+            `Be ready for: ${e.defend}`,
+          ]),
+          '',
+          'Or say "apply with what I have" and I will take them back off and export the honest version now.',
+        ].join('\n'),
+        session,
+      });
+    }
+
+    /* plan-built — a planned project becomes a real one, with real numbers. */
+    if (session.command === 'plan-built') {
+      const pending = skillPlan.plannedLines(session.resumeText);
+      if (!pending.length) {
+        session.command = null;
+        return res.json({ ok: true, kind: 'help', reply: 'Nothing is marked as planned right now — your page is all real work.', session });
+      }
+      session.command = 'plan-built';
+      return ask('builtproof',
+        `Good. Which one, and what did it actually do? Give me the line as it should read, with the real numbers in it — for example "Built a Kafka order pipeline handling 400 messages a minute, verified by killing consumers mid-run".\n\nStill planned: ${pending.slice(0, 4).map((p) => p.split('—')[0].trim()).join(', ')}.`);
+    }
+
+    /* plan-remove — apply now, with what actually exists. */
+    if (session.command === 'plan-remove') {
+      const before = skillPlan.plannedLines(session.resumeText).length;
+      session.resumeText = skillPlan.withoutPlanned(session.resumeText);
+      session.plannedCount = 0;
+      session.command = null;
+      return res.json({
+        ok: true,
+        kind: 'build',
+        text: session.resumeText,
+        report: scanResume(session.resumeText, session.target),
+        details: session.details,
+        reply: [
+          'Seat: RESUME · Command: plan-remove',
+          before
+            ? `${before} planned project${before === 1 ? '' : 's'} taken off. This is the honest version of your page and it exports now.`
+            : 'Nothing was marked as planned. This page already exports.',
+          'The build steps are still yours — say "how do I get these skills" whenever you want them back.',
+        ].join('\n\n'),
         session,
       });
     }
