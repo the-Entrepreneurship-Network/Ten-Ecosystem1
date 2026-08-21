@@ -2352,7 +2352,7 @@ async function sendActivityMail(student, studentName, mailType){
     let mailError = "";
     try {
         await transporter.sendMail({
-            from: '"TEN HR Department" <hr@entrepreneurshipnetwork.net>',
+            from: EMAIL_FROM,
             to: email,
             subject: spec.subject,
             html: spec.html(studentName)
@@ -3393,7 +3393,12 @@ try{
             let mailError = "";
             try {
                 await transporter.sendMail({
-                    from:"TEN Internship Portal <ten.internshipportal@gmail.com>",
+                    // EMAIL_FROM, not a hardcoded gmail.com address. A relay
+                    // only sends From a domain verified in ITS account —
+                    // gmail.com is not ours, so this From was refused outright
+                    // while every other mail from the same process went out.
+                    // This is why a student who registered got no welcome mail.
+                    from: EMAIL_FROM,
                     to: emailLc,
                     subject:`🎉 Welcome to The Entrepreneurship Network, ${newStudent.name.trim()}!`,
                     html,
@@ -3402,6 +3407,10 @@ try{
             } catch (err) {
                 mailStatus = "failed";
                 mailError = err && err.message ? String(err.message) : "";
+                // The only record of a failed welcome mail used to be a
+                // MailHistory row nobody reads. A student who registers and
+                // gets nothing is a support ticket; say so in the log.
+                console.error(`[Email] ✗ Welcome mail to ${emailLc} failed: ${mailError}`);
             } finally {
                 try {
                     await MailHistory.create({
@@ -7602,7 +7611,7 @@ async function sendPromotionEmail({ to, name, fromRoleLabel, toRoleLabel, employ
     const subject = "🎉 Congratulations! You've been promoted at The Entrepreneurship Network";
     try {
         await transporter.sendMail({
-            from: "TEN HR <ten.internshipportal@gmail.com>",
+            from: EMAIL_FROM,   // see the note on the welcome email
             to, subject, html,
             text: `Hello ${name}, you have been promoted to ${toRoleLabel}. Temporary password: ${tempPassword}. Complete registration at ${loginUrl} within 48 hours.`
         });
