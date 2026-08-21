@@ -107,7 +107,7 @@ function hrActor(req) {
 }
 
 // ── Mailer helper ──
-const { createEmailTransporter, EMAIL_FROM, HR_NOTIFY_EMAIL } = require("../../utils/mailer");
+const { createEmailTransporter, EMAIL_FROM, HR_NOTIFY_EMAIL, renderEmail, escapeHtml, PORTAL_URL } = require("../../utils/mailer");
 function createTransporter() {
     return createEmailTransporter();
 }
@@ -195,7 +195,14 @@ async function tryAutoGenerateLOC(student) {
                 from:        EMAIL_FROM,
                 to:          student.email,
                 subject:     "Congratulations! Your Letter of Completion — The Entrepreneurship Network",
-                html:        `<p>Dear ${student.name},</p><p>🎉 Congratulations on completing 100% of your internship programme!</p><p>Your Letter of Completion is now available in your Student Portal under <strong>My Documents</strong>.</p><p>Best regards,<br>HR Team<br>The Entrepreneurship Network</p>`,
+                html:        renderEmail({
+                    heading: "🎓 Your Letter of Completion",
+                    name: student.name,
+                    bodyHtml: `<p style="margin:0 0 14px;">Congratulations on completing <b style="color:#f5c542;">100%</b> of your internship programme.</p>
+                               <p style="margin:0;">Your Letter of Completion is attached to this email, and it is always available in your Student Portal under <b>My Documents</b>.</p>`,
+                    cta: { label: "Open My Documents", url: PORTAL_URL + "/student-dashboard.html" },
+                    note: "Keep this document — employers can verify it against our records."
+                }),
                 attachments: [{ filename: "TEN_Letter_of_Completion.pdf", path: outPath }]
             });
         } catch (_) {}
@@ -528,7 +535,13 @@ router.post("/admin/documents/generate-offer-letters", requireHR, async (req, re
                         from:    EMAIL_FROM,
                         to:      student.email,
                         subject: `Your Internship Offer Letter — The Entrepreneurship Network`,
-                        html:    `<p>Dear ${student.name},</p><p>Congratulations! Please find your Internship Offer Letter attached to this email.</p><p>Welcome to TEN! Log in to your student portal to track your progress.</p><p>Best regards,<br>HR Team<br>The Entrepreneurship Network</p>`,
+                        html:    renderEmail({
+                            heading: "📄 Your Internship Offer Letter",
+                            name: student.name,
+                            bodyHtml: `<p style="margin:0 0 14px;">Congratulations — your Internship Offer Letter is attached to this email.</p>
+                                       <p style="margin:0;">Welcome to TEN. Sign in to your portal to start your task journey and track your progress.</p>`,
+                            cta: { label: "Open my portal", url: PORTAL_URL + "/student-dashboard.html" }
+                        }),
                         attachments: [{ filename: "TEN_Offer_Letter.pdf", path: pdfPath }]
                     });
                 } catch (mailErr) {
@@ -742,7 +755,14 @@ router.patch("/admin/documents/reject/:studentId", requireHR, async (req, res) =
                     from:    EMAIL_FROM,
                     to:      student.email,
                     subject: `[TEN] Document Review Update`,
-                    html:    `<p>Dear ${student.name},</p><p>Your submitted documents have been reviewed and require re-submission.</p><p><strong>Reason:</strong> ${doc.rejectionReason}</p><p>Please log in to your student portal and re-upload your documents.</p>`
+                    html:    renderEmail({
+                        heading: "📋 Your documents need re-submitting",
+                        name: student.name,
+                        bodyHtml: `<p style="margin:0;">Your submitted documents have been reviewed and need to be uploaded again.</p>`,
+                        panel: { label: "REASON", html: escapeHtml(doc.rejectionReason || "No reason given") },
+                        cta: { label: "Re-upload my documents", url: PORTAL_URL + "/student-dashboard.html" },
+                        note: "Nothing else is affected — your place on the programme is unchanged."
+                    })
                 });
             }
         } catch (_) {}

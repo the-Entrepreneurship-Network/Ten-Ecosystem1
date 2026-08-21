@@ -2301,7 +2301,7 @@ const upload = multer({
 
 // ================= MAIL =================
 
-const { createEmailTransporter, mailerReady, isSendableAddress, EMAIL_FROM } = require("./utils/mailer");
+const { createEmailTransporter, mailerReady, isSendableAddress, renderEmail, PORTAL_URL, EMAIL_FROM } = require("./utils/mailer");
 const transporter = createEmailTransporter();
 
 // The third copy of the credential chain used to live here. It agreed with the
@@ -2321,14 +2321,24 @@ if (mailerReady()) {
 const ACTIVITY_MAILS = {
     "active-appreciation": {
         subject: "Keep it up! You're doing great 🌟",
-        html: (name) => `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6">Hi ${name||"Intern"},<br><br>Great work staying active this week. Keep it up!<br><br>— TEN HR Team</div>`,
+        html: (name) => renderEmail({
+            heading: "🌟 Keep it up",
+            name: name || "Intern",
+            bodyHtml: `<p style="margin:0;">Great work staying active this week. Your consistency is what turns an internship into a portfolio — keep it up.</p>`,
+            cta: { label: "Open my portal", url: PORTAL_URL + "/student-dashboard.html" }
+        }),
         notifTitle: "🌟 Appreciation from HR",
         notifMessage: (name) => `Hi ${name || "Intern"}, great work staying active this week. Keep it up! — TEN HR Team`,
         notifType: "success"
     },
     "inactive-reengagement": {
         subject: "We miss you! Come back and keep growing 💪",
-        html: (name) => `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6">Hi ${name||"Intern"},<br><br>We noticed you haven’t been active recently. Jump back in whenever you’re ready — we’re here to help you keep growing.<br><br>— TEN HR Team</div>`,
+        html: (name) => renderEmail({
+            heading: "💪 We miss you",
+            name: name || "Intern",
+            bodyHtml: `<p style="margin:0;">We noticed you haven’t been active recently. Jump back in whenever you’re ready — your tasks are waiting and we’re here to help you keep growing.</p>`,
+            cta: { label: "Pick up where I left off", url: PORTAL_URL + "/student-dashboard.html" }
+        }),
         notifTitle: "💪 Inactivity Alert",
         notifMessage: (name) => `Hi ${name || "Intern"}, we noticed you haven't been active recently. Jump back in whenever you're ready — we're here to help you keep growing. — TEN HR Team`,
         notifType: "warning"

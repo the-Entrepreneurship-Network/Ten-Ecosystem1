@@ -684,7 +684,7 @@ const PDFDocument         = require("pdfkit");
 const cron                = require("node-cron");
 
 // Find the existing transporter and make it fault-tolerant
-const { createEmailTransporter, mailerReady, isSendableAddress, EMAIL_FROM } = require("../../utils/mailer");
+const { createEmailTransporter, mailerReady, isSendableAddress, renderEmail, escapeHtml, PORTAL_URL, EMAIL_FROM } = require("../../utils/mailer");
 const transporter = createEmailTransporter();
 
 async function sendCertificateEmail(toEmail, studentName, certType, pdfBuffer) {
@@ -729,28 +729,15 @@ async function sendCertificateEmail(toEmail, studentName, certType, pdfBuffer) {
 
 function buildCertEmailHTML(name, certType) {
   const labels = { LOC:'Letter of Completion', LOR:'Letter of Recommendation', STAR:'Star Performer Certificate', OFFER:'Offer Letter', LOP:'Letter of Promotion' };
-  return `
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#0a0a19;color:#e2e8f0;padding:40px;border-radius:16px;">
-      <h2 style="color:#f59e0b;text-align:center;">🎓 TEN Internship Network</h2>
-      <hr style="border-color:#1e293b;">
-      <h3 style="color:#f1f5f9;">Dear ${name},</h3>
-      <p style="color:#94a3b8;line-height:1.7;">
-        Congratulations! Your <strong style="color:#f1f5f9">${labels[certType] || certType}</strong> has been officially issued by TEN.
-      </p>
-      <p style="color:#94a3b8;line-height:1.7;">
-        Your certificate is attached to this email as a PDF. You can also download it anytime from your 
-        <strong style="color:#f59e0b">My Documents</strong> section in the student portal.
-      </p>
-      <div style="background:#1e293b;border-radius:10px;padding:16px;margin:20px 0;">
-        <p style="margin:0;color:#64748b;font-size:13px;">
-          📌 Keep this certificate safe — it is your official proof of internship with TEN.
-        </p>
-      </div>
-      <p style="color:#475569;font-size:12px;text-align:center;margin-top:30px;">
-        The Entrepreneurship Network · virtualinternships.entrepreneurshipnetwork.net
-      </p>
-    </div>
-  `;
+  const label = labels[certType] || certType;
+  return renderEmail({
+    heading: `🎓 Your ${label}`,
+    name,
+    bodyHtml: `<p style="margin:0 0 14px;">Congratulations — your <b style="color:#f5c542;">${escapeHtml(label)}</b> has been officially issued by TEN.</p>`
+            + `<p style="margin:0;">It is attached to this email as a PDF, and you can download it any time from <b>My Documents</b> in your portal.</p>`,
+    cta: { label: 'Open My Documents', url: PORTAL_URL + '/student-dashboard.html' },
+    note: 'Keep this document — employers can verify it against our records.'
+  });
 }
 
 async function buildCertPDF(student, certType) {

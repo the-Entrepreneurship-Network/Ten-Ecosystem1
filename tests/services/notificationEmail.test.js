@@ -126,6 +126,85 @@ describe('no event both attaches a PDF and sends the thin mirror', () => {
     });
 });
 
+describe('one email shell for every send', () => {
+    // There were three visual identities and five emails with no design at all
+    // — the offer letter, the letter of completion and the certificate bundle
+    // went out as `<p>Dear X,</p><p>Congratulations!</p>`. Those are the mails
+    // a student forwards to a recruiter.
+    const { renderEmail, escapeHtml, PORTAL_URL } = require('../../utils/mailer');
+
+    const BRANDED = [
+        'services/notificationEmail.js',
+        'routes/v2/certificates.js',
+        'routes/v2/documents.js',
+        'services/automationCron.js',
+        'server.js'
+    ];
+
+    it.each(BRANDED)('%s builds its bodies with the shared shell', (file) => {
+        expect(read(file)).toContain('renderEmail');
+    });
+
+    it('no student-facing send is a bare paragraph any more', () => {
+        for (const file of ['routes/v2/documents.js', 'services/automationCron.js']) {
+            const src = read(file);
+            // The internal HR/coordinator notices are allowed to stay plain —
+            // they are work items for the team, not documents for a student.
+            const studentBare = src.match(/html:\s*`<p>Dear \$\{student\.name/g) || [];
+            expect(studentBare).toHaveLength(0);
+        }
+    });
+
+    it('escapes what callers pass into the header and greeting', () => {
+        const html = renderEmail({ heading: 'A <script>x</script>', name: 'B & C', bodyHtml: '<p>ok</p>' });
+        expect(html).not.toContain('<script>');
+        expect(html).toContain('A &lt;script&gt;');
+        expect(html).toContain('B &amp; C');
+        expect(html).toContain('<p>ok</p>');   // body is trusted, callers escape their own
+    });
+
+    it('renders a complete document email clients can open', () => {
+        const html = renderEmail({ heading: 'H', bodyHtml: '<p>b</p>', cta: { label: 'Go', url: 'https://x.example' } });
+        expect(html.startsWith('<!doctype html>')).toBe(true);
+        expect(html).toContain('THE ENTREPRENEURSHIP NETWORK');
+        expect(html).toContain(PORTAL_URL);
+        // Tables and inline styles: Outlook ignores flexbox, Gmail strips <style>.
+        expect(html).toContain('<table');
+        expect(html).not.toMatch(/<style[\s>]/);
+        expect(html).not.toContain('display:flex');
+    });
+
+    it('leaves optional pieces out rather than rendering empty boxes', () => {
+        const bare = renderEmail({ heading: 'H', bodyHtml: '<p>b</p>' });
+        expect(bare).not.toContain('undefined');
+        expect(bare).not.toContain('Dear <b>');
+    });
+
+    it('escapeHtml is exported for callers building their own panels', () => {
+        expect(escapeHtml('<a href="x">&')).toBe('&lt;a href=&quot;x&quot;&gt;&amp;');
+    });
+});
+
+describe('dashboard-generated notifications stay in-app', () => {
+    // These three are created WHILE the student is looking at the dashboard
+    // that requested them, and a refresh generates another. Emailing them is a
+    // mail loop — the same shape as the auto-document resend that got the
+    // sending account suspended.
+    const IN_APP_ONLY = [
+        'New Automated Task Assigned',
+        'New Automated Coding Challenge',
+        'Daily Micro-Learning'
+    ];
+
+    it.each(IN_APP_ONLY)('%s does not email', (title) => {
+        const src = read('routes/v2/studentPortal.js');
+        const at = src.indexOf(title);
+        expect(at).toBeGreaterThan(-1);
+        const call = src.slice(src.lastIndexOf('notifyStudent(', at), src.indexOf('});', at));
+        expect(call).toMatch(/email: false/);
+    });
+});
+
 describe('the EMAIL_US typo is gone from every send', () => {
     const FILES = ['routes/v2/documents.js', 'services/automationCron.js',
                    'routes/v2/certificates.js', 'routes/v2/payment.js', 'server.js'];

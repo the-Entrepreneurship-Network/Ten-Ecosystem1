@@ -1935,6 +1935,13 @@ You MUST return a JSON object following the format below. Create a realistic, ch
         try {
             const Notification = require("../../models/Notification");
             await Notification.notifyStudent(student, {
+                // In-app only. All three of these are generated WHILE the
+                // student is looking at the dashboard that requested them, so
+                // an email is telling someone about a thing already on their
+                // screen — and a refresh generates another one. That is a mail
+                // loop, and a mail loop is what gets a sending account
+                // suspended.
+                email: false,
                 title: "New Automated Task Assigned",
                 message: `An automated ${difficultyLevel} task: "${generated.title}" has been added to your curriculum space!`,
                 type: "success"
@@ -2052,6 +2059,7 @@ Output strict schema JSON format with input/output cases.`;
         try {
             const Notification = require("../../models/Notification");
             await Notification.notifyStudent(student, {
+                email: false,   // in-app only — see the note above
                 title: "New Automated Coding Challenge",
                 message: `The dynamic custom coding exercise: "${newQuestion.title}" is ready on your dashboard!`,
                 type: "info"
@@ -2320,6 +2328,7 @@ The response MUST follow the strict JSON format matching the schema rules. Make 
         try {
             const Notification = require("../../models/Notification");
             await Notification.notifyStudent(student, {
+                email: false,   // in-app only — see the note above
                 title: `Daily Micro-Learning: ${generated.conceptTitle}`,
                 message: `Morning boost is live! Tip of the day: ${generated.conceptTitle}. Tap card to expand!`,
                 type: "info"
