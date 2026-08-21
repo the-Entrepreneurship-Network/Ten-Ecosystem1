@@ -101,3 +101,42 @@ describe('mailer credentials', () => {
         expect(body).toMatch(/catch[\s\S]*return \{ sent: false/);
     });
 });
+
+/**
+ * No send may name its own From address.
+ *
+ * The welcome email — the first thing a student ever receives — was sent from
+ * a hardcoded "ten.internshipportal@gmail.com". A relay only sends From a
+ * domain verified in ITS account, and gmail.com is not ours, so that From was
+ * refused outright while every other mail from the same process went out. A
+ * student would register, see "a welcome email has been sent to you" in the
+ * portal, and receive nothing. The promotion email had the same address.
+ *
+ * EMAIL_FROM is the one definition and already falls back through SMTP_USER.
+ */
+describe('the From address is never hardcoded', () => {
+    const FILES = ['server.js', 'routes/v2/certificates.js', 'routes/v2/payment.js',
+                   'routes/v2/documents.js', 'services/automationCron.js',
+                   'services/notificationEmail.js'];
+
+    it.each(FILES)('%s names no literal sender address', (file) => {
+        const src = read(file);
+        // `from:` followed by a quoted string containing an @ — a literal address.
+        const literal = src.match(/from:\s*['"`][^'"`]*@[^'"`]*['"`]/g) || [];
+        expect(literal).toEqual([]);
+    });
+
+    it('no send goes out from a gmail.com address', () => {
+        for (const file of FILES) {
+            expect(read(file)).not.toContain('ten.internshipportal@gmail.com');
+        }
+    });
+
+    it('a failed welcome mail is logged, not just recorded', () => {
+        // A MailHistory row with status "failed" is not something anyone reads.
+        const src = read('server.js');
+        const at = src.indexOf('Welcome mail to');
+        expect(at).toBeGreaterThan(-1);
+        expect(src.slice(at - 500, at)).toContain('mailStatus = "failed"');
+    });
+});
