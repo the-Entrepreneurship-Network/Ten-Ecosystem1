@@ -2367,7 +2367,10 @@ async function sendActivityMail(student, studentName, mailType){
     await Notification.notifyStudent(student, {
         title: spec.notifTitle,
         message: spec.notifMessage(studentName),
-        type: spec.notifType
+        type: spec.notifType,
+        // The HR mail above IS this message. The notification is its in-app
+        // mirror, not a second thing to send.
+        email: false
     });
     await AutoMailLog.create({ studentName, studentEmail: email, employeeId: student.employeeId || "", mailType });
 }

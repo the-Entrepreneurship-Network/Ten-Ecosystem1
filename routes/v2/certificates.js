@@ -972,7 +972,11 @@ async function generateAndSaveCert(studentId, certType, studentData = null, sent
     await Notification.notifyStudent(student, {
       title: `📄 ${docLabel} Issued`,
       message: `Dear ${student.name || student.fullName || "Student"}, your ${docLabel} has been generated${emailResult.sent ? ` and emailed to ${student.email}` : ""}. You can view it in your Student Portal under My Documents.`,
-      type: "success"
+      type: "success",
+      // sendCertificateEmail above already mailed the PDF itself. Two emails
+      // for one event, the second of them thinner than the first, is worse
+      // than one.
+      email: false
     });
   }
 

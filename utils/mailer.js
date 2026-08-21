@@ -70,9 +70,23 @@ const EMAIL_FROM =
         ? `TEN <${process.env.SMTP_USER || process.env.EMAIL_USER}>`
         : 'TEN <no-reply@entrepreneurshipnetwork.net>');
 
+/*
+ * Where the team's own notices go — a student submitted documents, a
+ * certificate needs approving.
+ *
+ * Three call sites addressed these to process.env.EMAIL_US, which is a typo of
+ * EMAIL_USER that spread by copy-paste. Unset, `to` was undefined, the send
+ * threw, and every one of those sites swallowed the error — so HR was never
+ * told a student had submitted anything. The default is the address
+ * routes/v2/payment.js already hardcodes for exactly this purpose.
+ */
+const HR_NOTIFY_EMAIL =
+    (process.env.HR_NOTIFY_EMAIL || '').trim() || 'growth@entrepreneurshipnetwork.net';
+
 module.exports = {
     createEmailTransporter,
     mailerReady,
     smtpCredentials,
-    EMAIL_FROM
+    EMAIL_FROM,
+    HR_NOTIFY_EMAIL
 };

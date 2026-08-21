@@ -107,7 +107,7 @@ function hrActor(req) {
 }
 
 // ── Mailer helper ──
-const { createEmailTransporter } = require("../../utils/mailer");
+const { createEmailTransporter, EMAIL_FROM, HR_NOTIFY_EMAIL } = require("../../utils/mailer");
 function createTransporter() {
     return createEmailTransporter();
 }
@@ -192,7 +192,7 @@ async function tryAutoGenerateLOC(student) {
         try {
             const transporter = createTransporter();
             await transporter.sendMail({
-                from:        process.env.EMAIL_US,
+                from:        EMAIL_FROM,
                 to:          student.email,
                 subject:     "Congratulations! Your Letter of Completion — The Entrepreneurship Network",
                 html:        `<p>Dear ${student.name},</p><p>🎉 Congratulations on completing 100% of your internship programme!</p><p>Your Letter of Completion is now available in your Student Portal under <strong>My Documents</strong>.</p><p>Best regards,<br>HR Team<br>The Entrepreneurship Network</p>`,
@@ -200,6 +200,9 @@ async function tryAutoGenerateLOC(student) {
             });
         } catch (_) {}
         await Notification.notifyStudent(student, {
+            // The mail above IS this message, with the PDF attached. The
+            // notification is its in-app mirror, not a second send.
+            email: false,
             title: "🎓 Letter of Completion Issued",
             message: `Congratulations ${student.name}! You completed 100% of your internship programme. Your Letter of Completion (${docNumber}) is available under My Documents and has been emailed to you.`,
             type: "success"
@@ -297,7 +300,7 @@ async function autoSubmitWhenComplete(doc, student) {
 async function notifyHROfSubmission(student) {
     const subject = `[TEN] New Document Submission — ${student.name} (${student.employeeId})`;
     const base = {
-        recipientEmail: process.env.EMAIL_US || "",
+        recipientEmail: HR_NOTIFY_EMAIL,
         recipientName: "HR",
         studentId: student._id,
         subject,
@@ -307,8 +310,8 @@ async function notifyHROfSubmission(student) {
     try {
         const transporter = createTransporter();
         await transporter.sendMail({
-            from: process.env.EMAIL_US,
-            to: process.env.EMAIL_US,
+            from: EMAIL_FROM,
+            to: HR_NOTIFY_EMAIL,
             subject,
             html: `<p>Student <strong>${student.name}</strong> (${student.employeeId}) has submitted their documents for review.</p><p>Please log in to the HR portal → Generate Documents → Pending to review.</p>`
         });
@@ -522,7 +525,7 @@ router.post("/admin/documents/generate-offer-letters", requireHR, async (req, re
                 try {
                     const transporter = createTransporter();
                     await transporter.sendMail({
-                        from:    process.env.EMAIL_US,
+                        from:    EMAIL_FROM,
                         to:      student.email,
                         subject: `Your Internship Offer Letter — The Entrepreneurship Network`,
                         html:    `<p>Dear ${student.name},</p><p>Congratulations! Please find your Internship Offer Letter attached to this email.</p><p>Welcome to TEN! Log in to your student portal to track your progress.</p><p>Best regards,<br>HR Team<br>The Entrepreneurship Network</p>`,
@@ -568,6 +571,7 @@ router.post("/admin/documents/generate-offer-letters", requireHR, async (req, re
                     });
                 } catch (_) {}
                 await Notification.notifyStudent(student, {
+                    email: false,   // the offer letter was just emailed, attached
                     title: "📄 Offer Letter Sent",
                     message: `Congratulations ${studentName}! Your Internship Offer Letter (${docNumber}) has been generated and emailed to ${student.email || "your registered email"}. You can also download it from My Documents.`,
                     type: "success"
@@ -735,7 +739,7 @@ router.patch("/admin/documents/reject/:studentId", requireHR, async (req, res) =
             if (student) {
                 const transporter = createTransporter();
                 await transporter.sendMail({
-                    from:    process.env.EMAIL_US,
+                    from:    EMAIL_FROM,
                     to:      student.email,
                     subject: `[TEN] Document Review Update`,
                     html:    `<p>Dear ${student.name},</p><p>Your submitted documents have been reviewed and require re-submission.</p><p><strong>Reason:</strong> ${doc.rejectionReason}</p><p>Please log in to your student portal and re-upload your documents.</p>`
