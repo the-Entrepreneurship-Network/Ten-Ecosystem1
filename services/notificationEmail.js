@@ -28,7 +28,7 @@
  *   none.
  */
 
-const { createEmailTransporter, mailerReady, isSendableAddress, EMAIL_FROM } = require('../utils/mailer');
+const { createEmailTransporter, mailerReady, isSendableAddress, renderEmail, escapeHtml, PORTAL_URL, EMAIL_FROM } = require('../utils/mailer');
 
 let transporter = null;
 function getTransporter() {
@@ -38,29 +38,21 @@ function getTransporter() {
     return transporter;
 }
 
-const TYPE_COLOURS = {
-    success: '#16a34a',
-    warning: '#f59e0b',
-    urgent: '#dc2626',
-    info: '#2563eb'
-};
+/*
+ * The body. The shell — header, footer, button, widths — is renderEmail in
+ * utils/mailer.js, shared with the offer letter, the certificates and the
+ * welcome mail, so a student sees one identity rather than a different design
+ * per event.
+ */
+const TYPE_HEADINGS = { success: '✅', warning: '⚠️', urgent: '🚨', info: '🔔' };
 
 function buildHTML(name, title, message, type) {
-    const accent = TYPE_COLOURS[type] || TYPE_COLOURS.info;
-    const esc = (s) => String(s == null ? '' : s)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;padding:8px">
-  <div style="border-left:4px solid ${accent};padding:20px 24px;background:#f8fafc;border-radius:6px">
-    <h2 style="margin:0 0 12px;font-size:18px;color:#0f172a">${esc(title)}</h2>
-    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#334155">${esc(message)}</p>
-    <a href="https://virtualinternships.entrepreneurshipnetwork.net/student-dashboard.html"
-       style="display:inline-block;background:${accent};color:#fff;text-decoration:none;
-              padding:10px 20px;border-radius:6px;font-size:14px">Open my portal</a>
-  </div>
-  <p style="margin:16px 0 0;font-size:12px;color:#94a3b8;text-align:center">
-    Sent to ${esc(name || 'you')} by The Entrepreneurship Network because of activity on your internship account.
-  </p>
-</div>`;
+    return renderEmail({
+        heading: `${TYPE_HEADINGS[type] || TYPE_HEADINGS.info} ${title}`,
+        name,
+        bodyHtml: `<p style="margin:0;">${escapeHtml(message)}</p>`,
+        cta: { label: 'Open my portal', url: PORTAL_URL + '/student-dashboard.html' }
+    });
 }
 
 /**

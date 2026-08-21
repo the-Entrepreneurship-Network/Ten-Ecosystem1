@@ -53,6 +53,83 @@ function isSendableAddress(address) {
     return true;
 }
 
+/*
+ * The one email shell.
+ *
+ * There were three visual identities and five emails with no design at all —
+ * the offer letter, the letter of completion and the certificate bundle went
+ * out as `<p>Dear X,</p><p>Congratulations!</p>`. Those are exactly the mails a
+ * student forwards to a recruiter.
+ *
+ * This is not a new look. It is the dark-navy-and-gold shell that
+ * welcomeEmailHtml, promotionEmailHtml and passwordResetEmailHtml in server.js
+ * already use, lifted out so every other send can have it too. Those three are
+ * left alone on purpose: they are already this design, and rewriting a working
+ * credentials email to reach the same result is a diff for nothing.
+ *
+ * Table-based and inline-styled because that is what email clients render.
+ * Outlook ignores flexbox, Gmail strips <style> blocks.
+ */
+const PORTAL_URL = (process.env.BASE_URL || 'https://virtualinternships.entrepreneurshipnetwork.net')
+    .replace(/\/$/, '');
+
+function escapeHtml(value) {
+    return String(value == null ? '' : value)
+        .replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/**
+ * @param {object} opts
+ * @param {string} opts.heading   the line in the gold header
+ * @param {string} [opts.name]    who it is addressed to
+ * @param {string} opts.bodyHtml  trusted HTML for the body — callers escape their own values
+ * @param {{label: string, url: string}} [opts.cta]
+ * @param {{label: string, html: string}} [opts.panel]  a boxed detail block
+ * @param {string} [opts.note]    small print under the button
+ */
+function renderEmail({ heading, name, bodyHtml, cta, panel, note } = {}) {
+    const button = cta && cta.url ? `
+      <table cellspacing="0" cellpadding="0" style="margin:24px 0 4px;"><tr><td
+        style="background:linear-gradient(135deg,#f5c542,#d9a520);border-radius:10px;">
+        <a href="${escapeHtml(cta.url)}" style="display:inline-block;padding:13px 30px;color:#1a1208;
+           text-decoration:none;font-weight:700;font-size:14px;">${escapeHtml(cta.label || 'Open my portal')}</a>
+      </td></tr></table>` : '';
+
+    const panelBlock = panel ? `
+      <table width="100%" cellspacing="0" cellpadding="0" style="background:#0c1220;
+             border:1px solid rgba(245,197,66,0.15);border-radius:12px;margin:18px 0;">
+        <tr><td style="padding:18px 22px;">
+          <div style="color:#f5c542;font-size:11px;letter-spacing:2px;font-weight:700;">${escapeHtml(panel.label || '')}</div>
+          <div style="margin-top:10px;font-size:14px;line-height:1.85;color:#f0eee8;">${panel.html || ''}</div>
+        </td></tr>
+      </table>` : '';
+
+    return `<!doctype html><html><body style="margin:0;background:#0c1220;font-family:Segoe UI,Arial,sans-serif;color:#f0eee8;">
+<table width="100%" cellspacing="0" cellpadding="0" style="background:#0c1220;padding:32px 0;"><tr><td align="center">
+  <table width="600" cellspacing="0" cellpadding="0" style="max-width:600px;background:#0e1628;
+         border:1px solid rgba(245,197,66,0.18);border-radius:18px;overflow:hidden;">
+    <tr><td style="background:linear-gradient(135deg,#1a1208,#3a2a08);padding:26px 32px;text-align:center;">
+      <div style="font-size:12px;letter-spacing:5px;color:#f5c542;font-weight:700;">THE ENTREPRENEURSHIP NETWORK</div>
+      <div style="font-size:21px;color:#fff7d6;font-weight:800;margin-top:8px;">${escapeHtml(heading || '')}</div>
+    </td></tr>
+    <tr><td style="padding:28px 34px;">
+      ${name ? `<p style="font-size:15px;line-height:1.55;margin:0 0 14px;">Dear <b>${escapeHtml(name)}</b>,</p>` : ''}
+      <div style="font-size:15px;line-height:1.65;color:#e8e5dd;">${bodyHtml || ''}</div>
+      ${panelBlock}
+      ${button}
+      ${note ? `<p style="margin:14px 0 0;font-size:12px;color:#cdb24a;">${note}</p>` : ''}
+    </td></tr>
+    <tr><td style="padding:18px 34px 26px;border-top:1px solid rgba(245,197,66,0.12);">
+      <p style="margin:0;font-size:11px;line-height:1.6;color:#8b8578;">
+        The Entrepreneurship Network · <a href="${PORTAL_URL}" style="color:#cdb24a;">${PORTAL_URL.replace(/^https?:\/\//, '')}</a><br>
+        You are receiving this because of activity on your TEN internship account.
+      </p>
+    </td></tr>
+  </table>
+</td></tr></table>
+</body></html>`;
+}
+
 /** True when this process can actually deliver mail. */
 function mailerReady() {
     const { user, pass } = smtpCredentials();
@@ -118,6 +195,9 @@ module.exports = {
     mailerReady,
     smtpCredentials,
     isSendableAddress,
+    renderEmail,
+    escapeHtml,
+    PORTAL_URL,
     EMAIL_FROM,
     HR_NOTIFY_EMAIL
 };

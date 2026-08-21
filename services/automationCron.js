@@ -27,7 +27,7 @@ try { fs.mkdirSync(offerLetterDir,  { recursive: true }); } catch (_) {}
 try { fs.mkdirSync(certificatesDir, { recursive: true }); } catch (_) {}
 
 // ── Mail helper ──
-const { createEmailTransporter, EMAIL_FROM, HR_NOTIFY_EMAIL } = require("../utils/mailer");
+const { createEmailTransporter, EMAIL_FROM, HR_NOTIFY_EMAIL, renderEmail, escapeHtml, PORTAL_URL } = require("../utils/mailer");
 function createTransporter() {
     return createEmailTransporter();
 }
@@ -475,7 +475,18 @@ async function autoGenerateOfferLetter(doc) {
                 from:    EMAIL_FROM,
                 to:      student.email,
                 subject: "Your Internship Offer Letter is Ready — TEN",
-                html:    `<p>Dear ${student.name || "Intern"},</p><p>Congratulations! Your offer letter for the <strong>${student.domain || ""}</strong> internship at The Entrepreneurship Network is ready. Please find it attached to this email.</p><p>Your Employee ID: <strong>${student.employeeId || "N/A"}</strong></p><p>You can also download it from the <a href="${process.env.BASE_URL || "https://virtualinternships.entrepreneurshipnetwork.net"}">TEN Student Portal</a>.</p><p>Best regards,<br/>HR Team, TEN</p>`,
+                html:    renderEmail({
+                    heading: "📄 Your Internship Offer Letter",
+                    name: student.name || "Intern",
+                    bodyHtml: `<p style="margin:0;">Congratulations — your offer letter for the
+                               <b style="color:#f5c542;">${escapeHtml(student.domain || "")}</b> internship is ready and attached to this email.</p>`,
+                    panel: {
+                        label: "YOUR DETAILS",
+                        html: `<b>Employee ID:</b> <span style="color:#f5c542;">${escapeHtml(student.employeeId || "N/A")}</span><br>`
+                            + `<b>Domain:</b> ${escapeHtml(student.domain || "—")}`
+                    },
+                    cta: { label: "Open my portal", url: PORTAL_URL + "/student-dashboard.html" }
+                }),
                 attachments: [{ filename: "Offer_Letter_TEN.pdf", path: outputPath }]
             });
         } catch (mailErr) {
@@ -691,7 +702,19 @@ async function autoGenerateCertificates(certReq) {
                 from:    EMAIL_FROM,
                 to:      student.email,
                 subject: "🏅 Your TEN Internship Certificates Are Ready!",
-                html:    `<p>Dear ${student.name || "Intern"},</p><p>Congratulations on completing your <strong>${student.domain || ""}</strong> internship at The Entrepreneurship Network!</p><h3>Certificates Earned:</h3><ul>${earnedHtml}</ul>${missedHtml ? `<h3>Not Earned:</h3><ul>${missedHtml}</ul>` : ""}<p>Please find your certificates attached. You can also view them in the <a href="${process.env.BASE_URL || "https://virtualinternships.entrepreneurshipnetwork.net"}/my-certificates.html">TEN Student Portal</a>.</p><p>Best regards,<br/>TEN Team</p>`,
+                html:    renderEmail({
+                    heading: "🏅 Your certificates are ready",
+                    name: student.name || "Intern",
+                    bodyHtml: `<p style="margin:0;">Congratulations on completing your
+                               <b style="color:#f5c542;">${escapeHtml(student.domain || "")}</b> internship. Your certificates are attached to this email.</p>`,
+                    panel: {
+                        label: "EARNED",
+                        html: `<ul style="margin:0;padding-left:18px;">${earnedHtml}</ul>`
+                            + (missedHtml ? `<div style="margin-top:12px;color:#8b8578;font-size:12px;letter-spacing:2px;font-weight:700;">NOT EARNED</div>`
+                                          + `<ul style="margin:6px 0 0;padding-left:18px;color:#8b8578;">${missedHtml}</ul>` : "")
+                    },
+                    cta: { label: "View my certificates", url: PORTAL_URL + "/my-certificates.html" }
+                }),
                 attachments
             });
         } catch (mailErr) {
