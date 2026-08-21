@@ -2301,7 +2301,7 @@ const upload = multer({
 
 // ================= MAIL =================
 
-const { createEmailTransporter, mailerReady, EMAIL_FROM } = require("./utils/mailer");
+const { createEmailTransporter, mailerReady, isSendableAddress, EMAIL_FROM } = require("./utils/mailer");
 const transporter = createEmailTransporter();
 
 // The third copy of the credential chain used to live here. It agreed with the
@@ -2449,6 +2449,31 @@ async function sendAutoDocumentsToStudent(student, docType, sentBy = "System") {
     }
 }
 
+/*
+ * Mark a student as done, so the loop below never picks them up again.
+ *
+ * This is the whole bug. `documentsAutoSent` was declared on the schema, the
+ * query filtered on it, and NOTHING ever set it to true — the only write in
+ * the codebase set it to false. So every student past their end date was
+ * eligible forever, and the check runs 30 seconds after each boot and every 6
+ * hours after that. Each pass sent three documents. Production has restarted
+ * 151 times.
+ *
+ * That is what got the sending account suspended for "suspicious activity":
+ * the same three attachments to the same addresses, over and over, including
+ * every dead test row in the database. It was never a provider quirk.
+ */
+async function markAutoDocumentsSent(studentId) {
+    try {
+        await Student.updateOne(
+            { _id: studentId },
+            { $set: { documentsAutoSent: true, documentsAutoSentAt: new Date() } }
+        );
+    } catch (err) {
+        console.error('[AUTO-DOCS] Could not mark student as sent:', err.message);
+    }
+}
+
 async function runAutoDocumentCheck() {
     try {
         if (!checkMongoStatus()) {
@@ -2458,15 +2483,38 @@ async function runAutoDocumentCheck() {
         const students = await Student.find({ documentsAutoSent: { $ne: true } });
         const now = new Date();
         let count = 0;
+        let healed = 0;
         for (const student of students) {
             if (!student.joiningDate || !student.tenure || !student.email) continue;
             const endDate = getInternshipEndDate(student.joiningDate, student.tenure);
-            if (endDate && now >= endDate) {
-                await sendAutoDocumentsToStudent(student, 'all', "System Automation");
-                count++;
-                await new Promise(r => setTimeout(r, 2000));
+            if (!(endDate && now >= endDate)) continue;
+
+            // Self-healing backlog: the flag was never written, so on the first
+            // pass after this fix every student who has ALREADY had their
+            // documents would be mailed one more time. DocumentHistory is the
+            // record of that, so an existing row means the work is done and the
+            // flag is simply set to what it should have been.
+            const already = await DocumentHistory.exists({ studentId: student._id });
+            if (already) {
+                await markAutoDocumentsSent(student._id);
+                healed++;
+                continue;
             }
+
+            if (!isSendableAddress(student.email)) {
+                // A dead test row is not worth a bounce. Bounces are what the
+                // provider counts against the sending domain.
+                console.warn(`[AUTO-DOCS] Skipping unsendable address: ${student.email}`);
+                await markAutoDocumentsSent(student._id);
+                continue;
+            }
+
+            await sendAutoDocumentsToStudent(student, 'all', "System Automation");
+            await markAutoDocumentsSent(student._id);
+            count++;
+            await new Promise(r => setTimeout(r, 2000));
         }
+        if (healed > 0) console.log('[AUTO-DOCS] Marked ' + healed + ' already-sent student(s); they will not be mailed again.');
         if (count > 0) console.log('[AUTO-DOCS] Sent to ' + count + ' students.');
     } catch(err) {
         console.error('[AUTO-DOCS] Scheduler error:', err.message);
