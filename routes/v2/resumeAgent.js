@@ -32,6 +32,7 @@ const githubImport = require('../../services/v2/githubImport');
 const mockInterview = require('../../services/v2/mockInterview');
 const parserView = require('../../services/v2/parserView');
 const library = require('../../services/v2/resumeLibrary');
+const skillPlan = require('../../services/v2/skillPlan');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -1258,6 +1259,7 @@ function commandOf(low, hasFile) {
   if (/\blist (my )?(resumes?|versions?)\b|\bmy versions?\b|\bsaved resumes?\b/.test(low)) return 'versions';
   if (/\bbest bullets?\b|\bmy bullets?\b|\bbullet library\b|\brelevant bullets?\b/.test(low)) return 'bullets';
   if (/\bmissing keywords?\b|\bkeyword (table|gap|check)\b|\bwhich keywords?\b/.test(low)) return 'keywords';
+  if (/\b(how (do|can) i (get|learn|gain)|skill plan|gap plan|what should i build|how to (get|learn|gain) (these|those)|close the gap)\b/.test(low)) return 'plan';
   if (/\binterview prep\b|\bprep\b|defen[cs]e|walk me through/.test(low)) return 'prep';
   if (/\bgap\b|what('?s| is) missing|why would this fail|missing keyword/.test(low)) return 'gap';
   /* Build beats score: "make a resume … and make it 98/100" is a build with
@@ -1703,9 +1705,21 @@ function deliver(res, session, packetOrBuilt, kindNote) {
     ? `Seat: RESUME · ${deliveryHeader('A', command || 'tailor', packetOrBuilt.band, packetOrBuilt)}`
     : `Seat: RESUME · Command: ${command || 'build'} · Band: Scratch\nProxy only. Not a live Workday/Greenhouse decision — Greenhouse does not auto-score resumes.`;
 
+  /*
+   * The gap, and the offer to close it, at the moment it is visible.
+   *
+   * A tailored page ships with a Not-claimed list, which tells somebody what
+   * they are missing and nothing about what to do next — so the terms sit
+   * there looking like a verdict. They are a to-do list, and the plan that
+   * turns them into buildable weekends is one sentence away.
+   */
+  const gapOffer = isPacket && packetOrBuilt.notClaimed && packetOrBuilt.notClaimed.length
+    ? `Those ${packetOrBuilt.notClaimed.length} not-claimed term${packetOrBuilt.notClaimed.length === 1 ? '' : 's'} are a to-do list, not a verdict. Say "how do I get these skills" and I will give you a project for each one — what to build, the steps in order, and the bullet it earns once it exists. Nothing goes on the page until you have built it.`
+    : '';
+
   return res.json({
     ok: true, kind: 'build',
-    reply: [header, kindNote].filter(Boolean).join('\n\n'),
+    reply: [header, kindNote, gapOffer].filter(Boolean).join('\n\n'),
     text,
     report: scanResume(text, session.target),
     missing: isPacket ? [] : packetOrBuilt.missing,
@@ -2613,6 +2627,45 @@ router.post('/chat', upload.single('file'), async (req, res) => {
           ...s.fixes.map((f, i) => `${i + 1}. [${f.bar}] ${f.fix}`),
           '',
           s.caveat,
+        ].filter(Boolean).join('\n'),
+        session,
+      });
+    }
+
+    /*
+     * plan — the skills the posting wants, and how to actually get them.
+     *
+     * The version of this feature that writes the missing skills onto the
+     * page and teaches them afterwards trades a document somebody can defend
+     * for one they cannot: the first interviewer asks about the project and
+     * the conversation ends there, having cost them the interview rather
+     * than won them the line. The gap is real, so it is reported; the plan is
+     * real, so it is buildable in a weekend.
+     */
+    if (session.command === 'plan') {
+      if (!session.resumeText.trim()) return ask('resume', 'Attach or paste the resume first.');
+      if (!session.jd) return ask('jd', 'Paste the job description — the plan is built from what this posting asks for and your page cannot prove.');
+      const plan = skillPlan.planFor(session.resumeText, session.jd, { limit: 4 });
+      session.command = null;
+      if (!plan.ok) return res.json({ ok: true, kind: 'help', reply: plan.reason, session });
+      return res.json({
+        ok: true, kind: 'help',
+        reply: [
+          'Seat: RESUME · Command: plan',
+          plan.plans.length
+            ? `${plan.missing.length} term${plan.missing.length === 1 ? '' : 's'} this posting wants that your page cannot prove. Here is how to make ${plan.plans.length === 1 ? 'the first one' : `the top ${plan.plans.length}`} true.`
+            : 'Your page already evidences everything this posting names. Nothing to build.',
+          plan.weakNote || '',
+          ...plan.plans.flatMap((p) => [
+            '',
+            `**${p.term}${p.essential ? ' — essential for this role' : ''}**`,
+            `Build: ${p.build} · about ${p.hours}`,
+            ...p.steps.map((s, i) => `${i + 1}. ${s}`),
+            `Then it earns this line: "${p.bulletAfter}" — fill the blanks from what it actually did.`,
+            `Be ready for: ${p.defend}`,
+          ]),
+          '',
+          plan.rule,
         ].filter(Boolean).join('\n'),
         session,
       });
