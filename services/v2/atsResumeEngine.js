@@ -168,8 +168,44 @@ const hasScope = (l) =>
  * The ledger is the boundary of what the rewriter may say: a fact that is not
  * in it does not go on the page.
  */
+/**
+ * Put a wrapped sentence back together before anything reads it as a bullet.
+ *
+ * A PDF has no paragraphs, only lines. Extracting one gives back the visual
+ * line breaks, so a single sentence that ran across three lines on the page
+ * arrives as three lines here — and a recording caught the agent lecturing a
+ * student about "scalability, monitoring and security." and "Service (AKS)
+ * for deployment.", scoring 53 bullets on a resume that has about eight, then
+ * telling them 1 in 53 pulled its weight. Every one of those complaints was
+ * about a fragment nobody wrote as a line.
+ *
+ * A continuation is recognisable without knowing the content: the line before
+ * it did not finish a sentence, and this one does not start one — no bullet
+ * marker, no capital, no date, no heading. Joining those two is not a guess
+ * about meaning, it is undoing the page's line wrapping.
+ */
+function joinWrapped(lines) {
+  const out = [];
+  lines.forEach((line) => {
+    const prev = out[out.length - 1];
+    const isContinuation =
+      prev &&
+      line &&
+      /[a-z,(]$/.test(prev.trim()) &&          /* the previous line stopped mid-sentence */
+      !BULLET_RE.test(line) &&                  /* this one is not its own bullet */
+      !/^[A-Z][A-Z &]{2,}$/.test(line) &&       /* nor a heading */
+      !RE_DATE_RANGE.test(line) &&              /* nor a dated role header */
+      !/\|/.test(line) &&                       /* nor a piped header */
+      !/^[A-Z]/.test(line) &&                   /* a new sentence starts with a capital */
+      prev.length < 200;                        /* never build a runaway line */
+    if (isContinuation) out[out.length - 1] = `${prev} ${line}`.replace(/\s+/g, ' ');
+    else out.push(line);
+  });
+  return out;
+}
+
 function factLedger(text) {
-  const all = toLines(text);
+  const all = joinWrapped(toLines(text));
   const raw = String(text || '');
 
   /* Which section each line belongs to. */
@@ -1174,6 +1210,21 @@ function rewriteResume(text, options) {
   const jdTerms = jdHardTerms(jd);
   const targetTerms = jdTerms.length ? jdTerms : String(target).toLowerCase().split(/[^a-z0-9+#.]+/).filter(Boolean);
   const skills = essentialSkills(ledger, targetTerms, text);
+
+  /*
+   * The student's own pick leads, ahead of the keyword count.
+   *
+   * Ordering by overlap with the posting puts whichever line happens to
+   * share the most words at the top — which is not the same as the work they
+   * would most want to be asked about, and they are the one who has to
+   * answer for it in the room. Neither pick adds anything: both are lines
+   * already on the page, moved.
+   */
+  if (opts.leadSkill) {
+    const lead = String(opts.leadSkill).toLowerCase();
+    skills.primary.sort((a, b) =>
+      (String(b).toLowerCase() === lead ? 1 : 0) - (String(a).toLowerCase() === lead ? 1 : 0));
+  }
 
   /* Not claimed: what the JD wants that no evidence supports. Listed, never
      smuggled onto the page. */

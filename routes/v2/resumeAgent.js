@@ -1271,7 +1271,10 @@ function commandOf(low, hasFile) {
   if (/\blinked.?in (headline|about|profile)\b|\bheadline and about\b/.test(low)) return 'linkedin';
   if (/\brecruiter view\b|\b6.second (scan|view|test)\b|\bsix.second\b/.test(low)) return 'recruiter';
   if (/\bfind (me )?jobs?\b|\bjob hunt\b|\bhunt for jobs\b|\bemail (the )?hr\b|\bapply to jobs\b/.test(low)) return 'jobs';
-  if (/\bcover letter\b|\bcover\b.*\b(letter|note)\b/.test(low)) return 'cover';
+  /* "Write the letter" is what a person says when the agent has just offered
+     one, and it used to route to a resume rebuild — the offer suggested a
+     phrase the router did not recognise. */
+  if (/\bcover letter\b|\bcover\b.*\b(letter|note)\b|\bwrite (the|a|me a) letter\b|\byes,? write it\b/.test(low)) return 'cover';
   if (/\bcompare\b|which (job|jd|posting)|between these (jobs|jds)/.test(low)) return 'compare';
   /* The Rezi-parity commands, ahead of the looser matchers below so that
      "score" reaches the five bars rather than the single number. */
@@ -1338,7 +1341,9 @@ function optionsFor(field, session) {
   const d = (session && session.details) || {};
   const other = { label: 'Something else — I will type it', value: '' };
 
-  if (field === 'target' || field === 'position') {
+  /* The job search asks the same question the resume does, and deserves the
+     same list — a person browsing openings is picking a known title. */
+  if (field === 'target' || field === 'position' || field === 'jobrole') {
     /* Grouped, so a long list reads as a menu rather than a wall. */
     return {
       multi: false,
@@ -1563,6 +1568,53 @@ function consumeAnswer(session, field, msg) {
     iv.at += 1;
     return;
   }
+  /* The role to search openings for — kept apart from the resume's target,
+     because looking at data roles does not retitle the page you already have. */
+  if (field === 'jobrole') { session.jobRole = msg.trim(); return; }
+
+  /*
+   * The answer to "should I tailor for this?".
+   *
+   * Consumed here, where every other answer is consumed, so the pending
+   * posting is cleared before the router runs again — leaving it set made
+   * the confirmation re-ask itself on the yes that was meant to end it.
+   */
+  if (field === 'confirmtailor') {
+    const job = session.pendingTailor;
+    session.pendingTailor = null;
+    session.tailorConfirmed = /\b(yes|yeah|yep|sure|ok|okay|go|do it|please|tailor)\b/i.test(msg);
+    if (session.tailorConfirmed && job) session.pickedJob = job;
+    return;
+  }
+
+  /* Their pick of what to lead with. Both are lines already on the page, so
+     recording one can never introduce a claim. */
+  if (field === 'leadproject') { session.details.leadProject = msg.trim(); return; }
+  if (field === 'leadskill') { session.details.leadSkill = msg.trim(); return; }
+
+  /*
+   * The project they chose to build next.
+   *
+   * It goes on the page under its own heading, marked as planned, with the
+   * numbers blank — and the export refuses while it is there. So the student
+   * can see the resume they are working towards without ever being able to
+   * send one that claims work they have not done.
+   */
+  if (field === 'addproject') {
+    const plan = session.planCache;
+    const chosen = plan && plan.ok
+      ? plan.plans.find((p) => String(msg).toLowerCase().includes(String(p.term).toLowerCase()))
+      : null;
+    if (chosen) {
+      const entries = skillPlan.projectEntries({ ok: true, plans: [chosen] });
+      session.resumeText = skillPlan.withPlannedProjects(session.resumeText, entries);
+      session.details.addProject = chosen.term;
+      session.plannedGuide = chosen;
+    }
+    session.planCache = null;
+    return;
+  }
+
   if (field === 'target') {
     /* One fact, two names. The engine's script calls it the target and the
        interview bank calls it the position, so answering either used to leave
@@ -1712,10 +1764,25 @@ function nextQuestion(session) {
 /** The finished job, in one response the client already knows how to render. */
 function deliver(res, session, packetOrBuilt, kindNote) {
   const isPacket = Boolean(packetOrBuilt.resume);
-  const text = isPacket ? packetOrBuilt.resume : packetOrBuilt.text;
+  let text = isPacket ? packetOrBuilt.resume : packetOrBuilt.text;
   const command = session.command;
   session.asked = null;
   session.command = null; /* done — the next message starts fresh, with the facts kept */
+
+  /*
+   * The planned project survives the rewrite.
+   *
+   * A tailor regenerates the page from the ledger, and the planned block is
+   * not in the ledger — it is a note about work that does not exist yet. So
+   * it was silently dropped by the very pass the student asked for it in,
+   * taking the export gate with it.
+   */
+  if (session.plannedGuide && !/PLANNED PROJECTS/i.test(text)) {
+    text = skillPlan.withPlannedProjects(text, skillPlan.projectEntries({
+      ok: true, plans: [session.plannedGuide],
+    }));
+    session.resumeText = text;
+  }
 
   /* A shipped resume is what cover and prep are allowed to work from. */
   session.shipped = { text, target: session.target, jd: session.jd };
@@ -1779,13 +1846,50 @@ function deliver(res, session, packetOrBuilt, kindNote) {
    * there looking like a verdict. They are a to-do list, and the plan that
    * turns them into buildable weekends is one sentence away.
    */
+  /*
+   * What changed, and what to do before this page goes anywhere.
+   *
+   * A rewrite that arrives silently leaves the student guessing what moved.
+   * And a planned project on the page is a promise to themselves, not a
+   * claim — so the steps that make it real come with it, here, at the moment
+   * they are looking at the version they want to send.
+   */
+  const guide = session.plannedGuide;
+  const updatedNote = [
+    session.details.leadProject || session.details.leadSkill
+      ? `Updated: this version leads with ${[
+        session.details.leadProject ? 'the work you picked' : '',
+        session.details.leadSkill ? `${session.details.leadSkill} first on the skills line` : '',
+      ].filter(Boolean).join(', and ')}.`
+      : '',
+    guide
+      ? [
+        `I have added **${guide.build}** under PLANNED PROJECTS for ${guide.term}, with the numbers left blank.`,
+        '',
+        '**Before you send this anywhere, build it.** The page will not export to PDF while it is marked planned — a project you cannot walk through fails the first question an interviewer asks about it.',
+        '',
+        `**How to build it** · about ${guide.hours}`,
+        ...guide.steps.map((s, i) => `${i + 1}. ${s}`),
+        `Be ready for: ${guide.defend}`,
+        '',
+        'When it is done, say "I built it" and give me the real numbers — I will move it into your actual Projects section.',
+      ].join('\n')
+      : '',
+  ].filter(Boolean).join('\n\n');
+
+  /* A tailored page and a letter for the same posting are one errand, and we
+     already know which job it is for. */
+  const coverOffer = session.pickedJob
+    ? `Want a cover letter for ${session.pickedJob.title} at ${session.pickedJob.company}? Say "yes, write the letter".`
+    : '';
+
   const gapOffer = isPacket && packetOrBuilt.notClaimed && packetOrBuilt.notClaimed.length
     ? `Those ${packetOrBuilt.notClaimed.length} not-claimed term${packetOrBuilt.notClaimed.length === 1 ? '' : 's'} are a to-do list, not a verdict. Say "how do I get these skills" and I will give you a project for each one — what to build, the steps in order, and the bullet it earns once it exists. Nothing goes on the page until you have built it.`
     : '';
 
   return res.json({
     ok: true, kind: 'build',
-    reply: [header, kindNote, gapOffer].filter(Boolean).join('\n\n'),
+    reply: [header, kindNote, updatedNote, coverOffer, gapOffer].filter(Boolean).join('\n\n'),
     text,
     report: scanResume(text, session.target),
     missing: isPacket ? [] : packetOrBuilt.missing,
@@ -1848,9 +1952,48 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       session.jd = jdBody(msg);
     }
 
+    /*
+     * A row from the job list becomes the target, before anything dispatches.
+     *
+     * "Tailor my resume for the Site Reliability Engineer role at
+     * commercetools" is a tailor request that already names its posting, and
+     * so is "tailor number 2" — the list is on screen and numbered, and a
+     * number is how a person refers to a row. Resolving it here means the
+     * tailor that follows knows which job it is for, which is also what lets
+     * the letter be offered for that job by name.
+     */
+    if (Array.isArray(session.jobs) && session.jobs.length && /(tailor|apply)/.test(low)) {
+      const numbered = low.match(/\b(?:tailor|number|row|option|no\.?|#)\s*(\d{1,2})\b/) || low.match(/\b(\d{1,2})\b/);
+      const named = session.jobs.find((j) =>
+        j.title && low.includes(String(j.title).toLowerCase().slice(0, 24)));
+      const job = named || (numbered ? session.jobs[parseInt(numbered[1], 10) - 1] : null);
+      if (job) {
+        session.target = job.title;
+        /* The posting's own text is the job description — tailoring against
+           a title maps a title and nothing else. */
+        session.jd = [
+          `${job.title} at ${job.company}${job.location ? `, ${job.location}` : ''}.`,
+          job.description || '',
+          (job.tags || []).join(', '),
+        ].filter(Boolean).join('\n');
+        session.pickedJob = job;
+        /* Pressing Tailor states an intention, not a decision: the agent
+           names the job and waits for a yes before rewriting the page. */
+        if (/\bi want to tailor\b/.test(low)) session.pendingTailor = job;
+      }
+    }
+
+    /*
+     * A posting awaiting confirmation outranks the word "tailor" in the
+     * sentence that raised it — but never outranks a question already on
+     * screen. Treating the "yes" that answers the confirmation as a command
+     * meant the answer was never consumed, so the question asked itself
+     * again, and again.
+     */
     const command = pastedResume ? 'check'
       : looksLikePaste ? null
-        : commandOf(low, Boolean(req.file));
+        : (session.pendingTailor && !session.asked) ? 'jobs-confirm'
+          : commandOf(low, Boolean(req.file));
     if (command) {
       session.command = command;
       session.menuShown = false;
@@ -2226,6 +2369,99 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       return deliver(res, session, { text: out.text, report: out.report, missing: [], potentialScore: goal }, ceiling);
     }
 
+    /*
+     * The confirmation for a posting the student pressed Tailor on, and the
+     * answer to it.
+     */
+    if (session.tailorConfirmed === false) {
+      session.tailorConfirmed = null;
+      session.command = null;
+      return res.json({
+        ok: true, kind: 'help',
+        reply: 'Left as it is. Open another opening whenever you want to compare, or say "find me jobs" to search again.',
+        session,
+      });
+    }
+    if (session.tailorConfirmed === true) {
+      session.tailorConfirmed = null;
+      session.command = 'tailor';
+    } else if (session.command === 'jobs-confirm' && session.pendingTailor) {
+      const j = session.pendingTailor;
+      return ask('confirmtailor',
+        `Should I tailor your resume for ${j.title} at ${j.company}? I will rewrite the wording against this posting and keep every fact exactly as it is on your page.`);
+    }
+
+    /*
+     * Before tailoring: what to lead with, and what to build next.
+     *
+     * The rewrite has to decide what goes first, and it was deciding by
+     * keyword count — which puts whichever line shares the most words with
+     * the advert at the top, regardless of what the person would actually
+     * want to be asked about. They are their projects. And the gap between
+     * what the posting wants and what the page proves is already computed,
+     * so it becomes "here are three projects that would close it, pick one"
+     * rather than a list of missing words.
+     */
+    if (session.command === 'tailor' && session.pickedJob && !session.tailorPicked) {
+      const led = atsEngine.factLedger(session.resumeText || '');
+      const mine = [
+        ...led.projects.flatMap((p) => p.bullets || []),
+        ...led.roles.flatMap((r) => r.bullets || []),
+      ].map((s) => String(s).trim()).filter((s) => s.split(/\s+/).length > 4).slice(0, 6);
+      const skills = [...new Set([...led.evidencedSkills, ...led.statedSkills])].slice(0, 10);
+      const declinedNow = session.declined || [];
+
+      if (!session.details.leadProject && mine.length > 1 && !declinedNow.includes('leadproject')) {
+        session.asked = 'leadproject';
+        return res.json({
+          ok: true, kind: 'ask',
+          reply: 'Seat: RESUME · Command: tailor\n\nWhich piece of your work should this version lead with? It goes first on the page, so pick the one you would most want to be asked about.',
+          options: {
+            multi: false,
+            options: mine.map((p) => ({ label: p.slice(0, 90), value: p })),
+            other: { label: 'Let me decide from the posting', value: 'skip' },
+          },
+          session,
+        });
+      }
+
+      if (!session.details.leadSkill && skills.length > 1 && !declinedNow.includes('leadskill')) {
+        session.asked = 'leadskill';
+        return res.json({
+          ok: true, kind: 'ask',
+          reply: 'And which skill should sit first on the skills line? The one you can defend in most detail.',
+          options: {
+            multi: false,
+            options: skills.map((s) => ({ label: s, value: s })),
+            other: { label: 'Let me decide from the posting', value: 'skip' },
+          },
+          session,
+        });
+      }
+
+      const plan = session.jd ? skillPlan.planFor(session.resumeText, session.jd, { limit: 3 }) : null;
+      if (plan && plan.ok && plan.plans.length &&
+          !session.details.addProject && !declinedNow.includes('addproject')) {
+        session.asked = 'addproject';
+        session.planCache = plan;
+        return res.json({
+          ok: true, kind: 'ask',
+          reply: `This posting asks for ${plan.missing.slice(0, 3).join(', ')} and your page cannot prove ${plan.missing.length === 1 ? 'it' : 'them'} yet. Which project should I add as your next build? It goes on the page marked as planned, with the steps — and stays out of the PDF until you have actually built it.`,
+          options: {
+            multi: false,
+            options: plan.plans.map((p) => ({
+              label: `${p.build} (${p.term})`,
+              note: `about ${p.hours}`,
+              value: p.term,
+            })),
+            other: { label: 'None — keep only what I have built', value: 'skip' },
+          },
+          session,
+        });
+      }
+      session.tailorPicked = true;
+    }
+
     if (session.command === 'tailor') {
       if (!session.resumeText.trim() && !Object.keys(session.details).length) {
         /* The button map: "make it 98/100" with no resume means build — ask
@@ -2268,7 +2504,13 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       }
       const source = session.resumeText.trim() || Object.entries(session.details)
         .map(([k, v]) => `${k}: ${v}`).join('\n');
-      const packet = atsEngine.rewriteResume(source, { target: session.target, jd: session.jd, mode: 'CONVERT' });
+      const packet = atsEngine.rewriteResume(source, {
+        target: session.target,
+        jd: session.jd,
+        mode: 'CONVERT',
+        /* Their pick leads, ahead of the keyword count. */
+        leadSkill: session.details.leadSkill,
+      });
 
       /*
        * A second conversion of an already-converted page changes nothing, and
@@ -2414,11 +2656,63 @@ router.post('/chat', upload.single('file'), async (req, res) => {
     }
 
     /* jobs — the router skill's handoff: hunting lives in the Job Portal. */
+    /*
+     * jobs — real openings, and the offer to tailor for one.
+     *
+     * This used to send people to a different portal, which meant uploading
+     * the same resume twice and losing the thread. Finding an opening and
+     * tailoring for it are one motion; the boards are already written, so
+     * the hunt happens here and every row can start a tailor.
+     */
     if (session.command === 'jobs') {
+      const source = session.resumeText.trim() || (session.shipped && session.shipped.text) || '';
+      if (!source) return ask('resume', 'Attach your resume first — the search is built from what it can prove.');
+
+      /* Which role, before searching for it. Guessing the target from the
+         resume is right for somebody staying in their lane and wrong for
+         everybody else, and a person browsing openings is choosing between
+         known titles rather than composing one. */
+      if (!session.jobRole && !(session.declined || []).includes('jobrole')) {
+        session.command = 'jobs';
+        return ask('jobrole', 'Which role are you applying for? I will search openings for that title.');
+      }
+
+      let found = [];
+      try {
+        found = await require('./jobAgent').findJobs(source, {
+          role: session.jobRole || session.target || undefined,
+          limit: 8,
+        });
+      } catch (e) {
+        session.command = null;
+        return res.json({
+          ok: true, kind: 'help',
+          reply: 'The job boards did not answer just now. Try again in a moment — I will not invent openings to fill the gap.',
+          session,
+        });
+      }
+
       session.command = null;
+      session.jobs = found;
+      if (!found.length) {
+        return res.json({
+          ok: true, kind: 'help',
+          reply: `Nothing came back for ${session.jobRole || 'that role'} with a real listing behind it. Try a nearby title and I will search again — a row with nowhere to apply is not a result.`,
+          session,
+        });
+      }
+
       return res.json({
-        ok: true, kind: 'help',
-        reply: 'Command: jobs\n\nJob hunting is the Job Portal agent\'s work: it reads your resume, fetches live postings from six boards, scores your fit per posting and writes the cold email to HR. Open /job-portal/ and upload the same resume there — this chat stays your resume workshop.',
+        ok: true,
+        kind: 'help',
+        jobs: found,
+        reply: [
+          `${found.length} opening${found.length === 1 ? '' : 's'} for ${session.jobRole || 'your target'}, matched to what your resume can prove.`,
+          '',
+          ...found.slice(0, 8).map((j, i) => `${i + 1}. **${j.title}** — ${j.company}${j.location ? ` · ${j.location}` : ''}`),
+          '',
+          'Open any of them to read the role. Tailor resume is at the top of the posting.',
+        ].join('\n'),
         session,
       });
     }
@@ -2495,6 +2789,22 @@ router.post('/chat', upload.single('file'), async (req, res) => {
        * question and the letter is written from what it has, minus whatever
        * that answer would have carried.
        */
+      /*
+       * A letter for the job we just tailored for asks nothing it already
+       * knows: the position, the employer and the market are on the screen
+       * the offer was made from, and asking again is the agent forgetting
+       * what it just did.
+       */
+      if (session.pickedJob && !session.coverPrefilled) {
+        session.coverPrefilled = true;
+        const j = session.pickedJob;
+        session.details.company = session.details.company || j.company;
+        session.details.position = session.details.position || j.title;
+        session.details.role = session.details.role || j.title;
+        if (!session.details.location && j.location) session.details.location = j.location;
+        if (!session.target) session.target = j.title;
+      }
+
       const led = atsEngine.factLedger(session.shipped.text);
       /*
        * The letter's own interview, from the shared bank.
@@ -3160,6 +3470,10 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       session,
     });
   } catch (e) {
+    /* The stack goes to the server log. A 500 that says only "something went
+       wrong" is unfixable from the outside, and this handler is 2,000 lines
+       of branches — the line number is the whole diagnosis. */
+    console.error('[resume-agent] chat failed:', e && e.stack ? e.stack : e);
     res.status(500).json({ ok: false, error: 'Something went wrong reading that. Paste the text instead and I will scan it.' });
   }
 });

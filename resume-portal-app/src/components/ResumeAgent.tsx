@@ -1,5 +1,7 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
+import { ResumeDocument } from './ResumeDocument';
+import { JobPosting } from './JobPosting';
 
 /*
  * The agent, in two frames.
@@ -89,6 +91,38 @@ export function AgentHero() {
  * Job hunting lives in the Job Portal, so it is not one of these: an agent
  * that offers a button it has to hand off is offering a dead end.
  */
+/** A row in the job list — whatever the search returns, narrowed to what a
+    row needs to show and a tailor needs to run. */
+type Job = {
+  title: string; company: string; location?: string; url: string;
+  description?: string; tags?: string[];
+  posted?: string; salary?: string; type?: string; snippet?: string;
+};
+
+/* "2 days ago" beats a timestamp on a job card: how fresh a posting is
+   decides whether it is worth applying to at all. */
+function ageOf(posted: string): string {
+  const days = Math.floor((Date.now() - new Date(posted).getTime()) / 86400000);
+  if (!Number.isFinite(days) || days < 0) return '';
+  if (days === 0) return 'Posted today';
+  if (days === 1) return 'Posted yesterday';
+  if (days < 30) return `Posted ${days} days ago`;
+  return `Posted ${Math.floor(days / 30)} month${days < 60 ? '' : 's'} ago`;
+}
+
+/*
+ * The three things, offered as three sentences.
+ *
+ * Not a command palette and not a menu of eleven verbs — a student arriving
+ * here wants one of three outcomes, and naming the outcome is a better
+ * prompt than naming the command that produces it.
+ */
+const START = [
+  { label: 'Fix my resume', note: 'Attach it, or answer a few questions and I will write one.', send: 'scan my resume' },
+  { label: 'Find me jobs', note: 'Real openings, matched to what your page can prove.', send: 'find me jobs' },
+  { label: 'Write a cover letter', note: 'For one role, from facts already on your resume.', send: 'write a cover letter' },
+];
+
 const QUICK = [
   { icon: '✦', label: 'IMPROVE MY ATS SCORE', send: 'make it 98' },
   { icon: '◎', label: 'TARGET MY RESUME', send: 'tailor my resume' },
@@ -376,6 +410,22 @@ export function AgentChat() {
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const endRef = useRef<HTMLDivElement>(null);
+
+  /* Which of the three things is on screen. The agent switches it when a
+     reply arrives about one of the others, so finding a job puts the jobs in
+     front of you without a click. */
+  const [tab, setTab] = useState<'resume' | 'jobs' | 'cover'>('resume');
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [letter, setLetter] = useState('');
+  /* The row they opened. Clicking a job shows the role before anything is
+     rewritten, because "tailor for this" is a decision and a decision needs
+     the posting in front of it. */
+  const [openJob, setOpenJob] = useState<Job | null>(null);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [msgs, busy]);
 
   /*
    * The conversation's memory. The server asks its interview questions one at
@@ -468,9 +518,31 @@ export function AgentChat() {
         return;
       }
       if (data.session) persistSession(data.session);
+
+      /*
+       * The reply decides which panel you are looking at.
+       *
+       * Asking for jobs and then having to find the jobs tab is a step that
+       * only exists because the tabs exist. Whatever the agent just produced
+       * is what comes to the front.
+       */
+      if (Array.isArray(data.jobs) && data.jobs.length) {
+        setJobs(data.jobs.filter((j: Job) => /^https?:\/\//.test(String(j.url || ''))));
+        /* A fresh search closes whatever posting was open — the detail on
+           screen would belong to the previous list. */
+        setOpenJob(null);
+        setTab('jobs');
+      }
+      if (data.letter || (data.kind === 'help' && /^Dear |Sincerely,/m.test(String(data.reply || '')))) {
+        setLetter(String(data.letter || data.reply || ''));
+        setTab('cover');
+      }
+
       if (data.kind === 'scan') setMsgs((m) => [...m, { role: 'agent', report: data.report, text: data.prompt || undefined }]);
-      else if (data.kind === 'build') setMsgs((m) => [...m, { role: 'agent', resume: data.text, report: data.report, missing: data.missing, potentialScore: data.potentialScore, details: data.details, text: data.reply || undefined }]);
-      else setMsgs((m) => [...m, { role: 'agent', text: data.reply, options: data.options }]);
+      else if (data.kind === 'build') {
+        setTab('resume');
+        setMsgs((m) => [...m, { role: 'agent', resume: data.text, report: data.report, missing: data.missing, potentialScore: data.potentialScore, details: data.details, text: data.reply || undefined }]);
+      } else setMsgs((m) => [...m, { role: 'agent', text: data.reply, options: data.options }]);
     } catch {
       // Only a real network failure reaches here now.
       setMsgs((m) => [...m, { role: 'agent', text: 'Could not reach the server. Check your connection and try again.' }]);
@@ -482,187 +554,218 @@ export function AgentChat() {
   const onSubmit = (e: FormEvent) => { e.preventDefault(); send(input); };
 
   /*
-   * The document under discussion: the newest page the agent has produced,
-   * or the one that was uploaded before it produced anything. It sits beside
-   * the conversation rather than inside it, because a resume is the thing
-   * being worked on and a chat log is a poor place to keep it.
+   * The document under discussion: the newest page the agent has produced, or
+   * the one that was uploaded before it produced anything.
    */
   const latestResume = [...msgs].reverse().find((m) => m.resume)?.resume
     || (sessionRef.current && (sessionRef.current as { resumeText?: string }).resumeText)
     || '';
   const latestDetails = [...msgs].reverse().find((m) => m.details)?.details || {};
-  const docName = (latestDetails.name || 'Your resume').replace(/\s+/g, '_');
+  const docName = String(latestDetails.name || 'Your resume').replace(/\s+/g, '_');
+
+  /*
+   * Three tabs, because the agent does three things.
+   *
+   * It briefly had ten pages and a navigation rail — a dashboard, a sample
+   * library, a settings screen — in front of a student who wanted to fix one
+   * resume. Build it, find work, write the letter. Everything else was
+   * scaffolding around those three, and scaffolding is what you remove.
+   */
+  const tabs = [
+    { id: 'resume' as const, label: 'RESUME' },
+    { id: 'jobs' as const, label: 'JOB SEARCH' },
+    { id: 'cover' as const, label: 'COVER LETTER' },
+  ];
 
   return (
-    <section className="bg-[#0b0d13] px-3 py-4 text-[#e7e9ee]" style={{ fontFamily: "'Inter', sans-serif" }}>
-      <div className="mx-auto flex max-w-[1500px] overflow-hidden rounded-2xl border border-white/10 bg-[#11131b]"
-           style={{ height: 'min(820px, 90vh)' }}>
+    <section id="agent" className="bg-[#f6f8fb] px-3 py-6 text-[#111827]" style={{ fontFamily: "'Inter', sans-serif" }}>
+      <div className="mx-auto flex max-w-[1400px] flex-col overflow-hidden rounded-2xl border border-[#e5e9f0] bg-white"
+           style={{ height: 'min(780px, 88vh)' }}>
 
-        {/* ── icon rail ─────────────────────────────────────────────────
-            Narrow, always visible, one glyph per surface. The old sidebar
-            spent 248px on a list of four starters that the empty state
-            already offers as buttons. */}
-        <nav className="hidden w-[64px] shrink-0 flex-col items-center gap-1 border-r border-white/10 bg-[#0d0f16] py-4 sm:flex">
-          <span className="mb-4 grid h-9 w-9 place-items-center rounded-xl bg-[#5b5bd6] text-[15px] font-bold text-white">T</span>
-          {RAIL.map((r) => (
-            <button key={r.label} title={r.label} onClick={() => (r.send ? send(r.send) : newChat())}
-              disabled={busy}
-              className="grid h-10 w-10 place-items-center rounded-xl text-[16px] text-[#8b90a0] transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-40">
-              {r.icon}
-            </button>
-          ))}
-          <div className="mt-auto flex flex-col items-center gap-1">
-            <a href="/student-login.html" title="Your account"
-               className="grid h-9 w-9 place-items-center rounded-full bg-[#2b2f3f] text-[11px] font-bold text-[#c7cbd6]">TE</a>
+        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[#eef1f6] px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span className="grid h-6 w-6 place-items-center rounded-md bg-[#2563eb] text-[13px] text-white">✦</span>
+            <b className="text-[13.5px]">TEN Resume AI</b>
           </div>
-        </nav>
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          {/* ── top bar: recent chats, new chat ── */}
-          <header className="flex items-center justify-between gap-3 px-4 py-3">
-            <div className="relative">
-              <button onClick={() => { setSearching(!searching); setFilter(''); }}
-                className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1.5 text-[11.5px] font-semibold tracking-wide text-[#c7cbd6] hover:bg-white/[0.08]">
-                <span>◷</span> RECENT CHATS
+          <div className="flex gap-1 rounded-full bg-[#f3f4f6] p-1">
+            {tabs.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={[
+                  'rounded-full px-3 py-1 text-[11.5px] font-semibold tracking-wide transition-colors',
+                  tab === t.id ? 'bg-white text-[#111827] shadow-sm' : 'text-[#6b7280] hover:text-[#111827]',
+                ].join(' ')}
+              >
+                {t.label}
               </button>
-              {searching && (
-                <div className="absolute left-0 top-[42px] z-20 w-[290px] rounded-xl border border-white/10 bg-[#171a24] p-2 shadow-2xl">
-                  <input autoFocus value={filter} onChange={(e) => setFilter(e.target.value)}
-                    placeholder="Filter your chats…"
-                    className="mb-2 w-full rounded-lg border border-white/10 bg-[#0f121a] px-2.5 py-1.5 text-[12.5px] text-[#e7e9ee] outline-none placeholder:text-[#6b7280] focus:border-[#5b5bd6]" />
-                  <div className="max-h-[280px] overflow-y-auto">
-                    {(['TODAY', 'EARLIER'] as const).map((bucket) => {
-                      const rows = archives.filter((a) => dayOf(a.at) === bucket &&
-                        (!filter || a.title.toLowerCase().includes(filter.toLowerCase())));
-                      if (!rows.length) return null;
-                      return (
-                        <div key={bucket}>
-                          <p className="mb-1 mt-2 px-2 text-[10.5px] font-semibold tracking-wider text-[#6b7280]">{bucket}</p>
-                          {rows.map((a) => (
-                            <button key={a.at} onClick={() => { restore(a); setSearching(false); }}
-                              className="block w-full truncate rounded-lg px-2 py-1.5 text-left text-[12.5px] text-[#c7cbd6] hover:bg-white/[0.06]">
-                              {a.title}
-                            </button>
-                          ))}
-                        </div>
-                      );
-                    })}
-                    {!archives.length && (
-                      <p className="px-2 py-3 text-[12px] leading-relaxed text-[#6b7280]">
-                        Nothing filed yet. New Chat puts the current conversation here.
-                      </p>
-                    )}
-                  </div>
-                </div>
+            ))}
+          </div>
+
+          <button
+            onClick={newChat}
+            className="rounded-full border border-[#e5e9f0] px-3 py-1.5 text-[11.5px] font-semibold text-[#6b7280] hover:border-[#c7d2fe] hover:text-[#111827]"
+          >
+            New chat
+          </button>
+        </header>
+
+        <div className="flex min-h-0 flex-1">
+          {/* ── the document, or the job, or the letter ── */}
+          <div className="hidden min-w-0 flex-1 flex-col border-r border-[#eef1f6] lg:flex">
+            <div className="flex shrink-0 items-center gap-2 border-b border-[#eef1f6] px-4 py-2.5">
+              <p className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">
+                {tab === 'resume' ? docName : tab === 'jobs' ? 'Job search' : 'Cover letter'}
+              </p>
+              {tab === 'resume' && latestResume && (
+                <>
+                  <button onClick={() => navigator.clipboard?.writeText(latestResume)}
+                    className="rounded-lg border border-[#d1d5db] px-2.5 py-1 text-[11px] font-semibold text-[#374151] hover:bg-[#f3f4f6]">Copy</button>
+                  <button onClick={() => downloadPdf(latestDetails)}
+                    className="rounded-lg bg-[#2563eb] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[#1d4ed8]">Download PDF</button>
+                </>
               )}
             </div>
 
-            <button onClick={newChat}
-              className="flex items-center gap-2 rounded-full bg-[#5b5bd6] px-3.5 py-1.5 text-[11.5px] font-semibold tracking-wide text-white hover:bg-[#6b6be0]">
-              <span>＋</span> NEW CHAT
-            </button>
-          </header>
-
-          {!started ? (
-            /* ── empty state ── */
-            <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-5 py-6">
-              <h3 className="max-w-[620px] text-center text-[21px] font-semibold text-white md:text-[24px]">
-                How can TEN Resume AI help with your resume?
-              </h3>
-              <div className="mt-5 flex flex-wrap justify-center gap-2.5">
-                {QUICK.map((q) => (
-                  <button key={q.label} onClick={() => send(q.send)} disabled={busy}
-                    className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-[12px] font-semibold tracking-wide text-[#c7cbd6] transition-colors hover:border-[#5b5bd6] hover:bg-white/[0.08] hover:text-white disabled:opacity-50">
-                    <span>{q.icon}</span> {q.label}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-6 w-full max-w-[720px]">
-                <Composer {...{ input, setInput, onSubmit, fileRef, send, busy }} />
-              </div>
-            </div>
-          ) : (
-            /* ── working: the document on the left, the conversation on the right ── */
-            <div className="flex min-h-0 flex-1 gap-3 px-3 pb-3">
-              <div className="hidden min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/10 bg-white lg:flex">
-                <div className="flex items-center gap-2 border-b border-[#e5e9f0] px-3 py-2">
-                  <p className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-[#111827]">{docName}</p>
-                  {latestResume && (
-                    <>
-                      <button onClick={() => navigator.clipboard?.writeText(latestResume)}
-                        className="rounded-lg border border-[#d1d5db] px-2.5 py-1 text-[11px] font-semibold text-[#374151] hover:bg-[#f3f4f6]">Copy</button>
-                      <button onClick={() => downloadPdf(latestDetails)}
-                        className="rounded-lg bg-[#2563eb] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[#1d4ed8]">Download PDF</button>
-                    </>
-                  )}
-                </div>
-                <div className="min-h-0 flex-1 overflow-y-auto p-5">
-                  {latestResume ? (
-                    <pre className="whitespace-pre-wrap font-mono text-[11.5px] leading-relaxed text-[#374151]">{latestResume}</pre>
-                  ) : (
-                    <p className="mt-10 text-center text-[12.5px] text-[#9ca3af]">
-                      Your resume appears here as soon as one is uploaded or written.
+            <div className="min-h-0 flex-1 overflow-y-auto bg-[#f6f8fb] p-5">
+              {tab === 'resume' && (
+                latestResume
+                  ? <ResumeDocument text={latestResume} />
+                  : <p className="mt-10 text-center text-[12.5px] text-[#9ca3af]">
+                      Attach your resume, or say “build me a resume” and I will ask you a few questions.
                     </p>
+              )}
+
+              {tab === 'jobs' && (
+                openJob ? (
+                  /* ── the role, before anything is rewritten ── */
+                  <div className="mx-auto max-w-[760px]">
+                    <div className="mb-2.5 flex items-center gap-1.5 text-[12px]">
+                      <button onClick={() => setOpenJob(null)} className="text-[#6b7280] hover:text-[#111827]">
+                        Job Search
+                      </button>
+                      <span className="text-[#9ca3af]">/</span>
+                      <span className="truncate text-[#9ca3af]">{openJob.title}</span>
+                    </div>
+                    <JobPosting
+                      job={openJob}
+                      busy={busy}
+                      /* Starts the conversation, not the rewrite: the agent
+                         asks before it changes the page you are working on. */
+                      onTailor={() => send(`I want to tailor my resume for the ${openJob.title} role at ${openJob.company}`)}
+                    />
+                  </div>
+                ) : jobs.length ? (
+                  <div className="mx-auto max-w-[760px] space-y-3">
+                    {jobs.map((j, i) => (
+                      /* The whole card opens the posting. Deciding to tailor
+                         without reading the role is not a decision. */
+                      <button
+                        key={j.url + i}
+                        onClick={() => setOpenJob(j)}
+                        className="block w-full rounded-xl border border-[#e5e9f0] bg-white p-4 text-left transition-colors hover:border-[#c7d2fe] hover:shadow-[0_1px_6px_rgba(16,24,40,0.06)]"
+                      >
+                        <p className="text-[14.5px] font-semibold leading-snug text-[#111827]">{j.title}</p>
+                        <p className="mt-0.5 text-[12.5px] text-[#374151]">{j.company}</p>
+
+                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-[#6b7280]">
+                          {j.location && <span>📍 {j.location}</span>}
+                          {j.salary && <span>💰 {j.salary}</span>}
+                          {j.type && <span>🕐 {j.type}</span>}
+                        </div>
+
+                        {j.snippet && (
+                          <p className="mt-2 line-clamp-2 text-[12px] leading-relaxed text-[#6b7280]">
+                            {j.snippet.slice(0, 170)}
+                            {j.snippet.length > 170 ? '…' : ''}
+                          </p>
+                        )}
+
+                        {j.tags && j.tags.length > 0 && (
+                          <div className="mt-2.5 flex flex-wrap gap-1.5">
+                            {j.tags.slice(0, 6).map((t) => (
+                              <span key={t} className="rounded bg-[#f3f4f6] px-2 py-0.5 text-[11px] text-[#374151]">{t}</span>
+                            ))}
+                          </div>
+                        )}
+
+                        {j.posted && (
+                          <p className="mt-2.5 text-[11.5px] text-[#059669]">{ageOf(j.posted)}</p>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-10 text-center text-[12.5px] leading-relaxed text-[#9ca3af]">
+                    Say “find me jobs” and I will search from what your resume can prove.
+                    <br />Every row opens a real listing, or it is not shown.
+                  </p>
+                )
+              )}
+
+              {tab === 'cover' && (
+                letter
+                  ? <pre className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-[#374151]">{letter}</pre>
+                  : <p className="mt-10 text-center text-[12.5px] text-[#9ca3af]">
+                      Say “write a cover letter” and I will ask which role it is for.
+                    </p>
+              )}
+            </div>
+          </div>
+
+          {/* ── the conversation ── */}
+          <div className="flex min-w-0 flex-1 flex-col lg:max-w-[430px]">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
+              {!started && (
+                <div className="pt-8">
+                  <h3 className="text-center text-[19px] font-semibold text-[#111827]">What are we doing today?</h3>
+                  <div className="mt-5 flex flex-col gap-2">
+                    {START.map((s) => (
+                      <button key={s.label} onClick={() => send(s.send)} disabled={busy}
+                        className="rounded-xl border border-[#e5e9f0] px-3.5 py-2.5 text-left text-[12.5px] transition-colors hover:border-[#c7d2fe] hover:bg-[#f5f7ff] disabled:opacity-50">
+                        <b className="block text-[13px] text-[#111827]">{s.label}</b>
+                        <span className="text-[11.5px] text-[#6b7280]">{s.note}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {msgs.map((m, i) => (
+                <div key={i} className={m.role === 'user' ? 'flex justify-end' : ''}>
+                  {m.role === 'user' ? (
+                    <div className="max-w-[85%] rounded-2xl bg-[#2563eb] px-3.5 py-2 text-[13px] text-white">
+                      {m.text}
+                      {m.file && <span className="mt-1 block text-[11px] opacity-80">📎 {m.file}</span>}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {m.text && <ReplyBody text={m.text} />}
+                      {/* Only the newest question is answerable — older chips
+                          would answer something already left behind. */}
+                      {m.options && i === msgs.length - 1 && (
+                        <ChoiceList options={m.options} disabled={busy} onPick={(v) => send(v)} />
+                      )}
+                      {m.resume && (
+                        <p className="rounded-xl border border-[#c7d2fe] bg-[#f5f7ff] px-3 py-2 text-[12px] text-[#374151]">
+                          Resume updated — it is on the left, ready to download.
+                        </p>
+                      )}
+                      {m.report && <ReportCard report={m.report} />}
+                    </div>
                   )}
                 </div>
-              </div>
+              ))}
 
-              <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/10 bg-[#141722] lg:max-w-[460px]">
-                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
-                  {msgs.map((m, i) => (
-                    <div key={i} className={m.role === 'user' ? 'flex justify-end' : ''}>
-                      {m.role === 'user' ? (
-                        <div className="max-w-[85%] rounded-2xl bg-[#2b2f3f] px-3.5 py-2 text-[13px] text-[#e7e9ee]">
-                          {m.text}
-                          {m.file && <span className="mt-1 block text-[11px] text-[#9ca3af]">📎 {m.file}</span>}
-                        </div>
-                      ) : (
-                        <div className="space-y-3 text-[#c7cbd6] [&_b]:text-white [&_p]:text-[#c7cbd6] [&_table]:bg-white/[0.02] [&_td]:text-[#c7cbd6] [&_th]:text-[#9ca3af]">
-                          {m.text && <ReplyBody text={m.text} />}
-                          {/* Only the newest question is answerable — older chips
-                              would answer a question that has already moved on. */}
-                          {m.options && i === msgs.length - 1 && (
-                            <ChoiceList options={m.options} disabled={busy} onPick={(v) => send(v)} />
-                          )}
-                          {/* The page itself lives in the panel beside this one;
-                              here it is a line saying it has been updated, so the
-                              conversation stays readable. */}
-                          {m.resume && (
-                            <p className="rounded-xl border border-[#5b5bd6]/40 bg-[#5b5bd6]/10 px-3 py-2 text-[12px] text-[#c7cbd6]">
-                              Resume updated — it is on the left, ready to download.
-                            </p>
-                          )}
-                          {m.missing && m.missing.length > 0 && (
-                            <div className="rounded-xl border border-[#b45309]/40 bg-[#b45309]/10 p-3">
-                              <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-[#fbbf24]">
-                                Give me these and it reaches {m.potentialScore}/100
-                              </p>
-                              <ul className="mt-1.5 space-y-1.5">
-                                {m.missing.map((f) => (
-                                  <li key={f.field} className="text-[12px] leading-relaxed text-[#c7cbd6]">
-                                    <b className="text-white">{f.field}</b> <span className="text-[#fbbf24]">+{f.worth}</span> — {f.why}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                          {m.report && (
-                            <div className="rounded-xl bg-white p-1">
-                              <ReportCard report={m.report} />
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  {busy && <p className="text-[12.5px] text-[#6b7280]">Reading and scoring…</p>}
-                </div>
-                <div className="border-t border-white/10 px-3 py-3">
-                  <Composer {...{ input, setInput, onSubmit, fileRef, send, busy }} />
-                </div>
-              </div>
+              {busy && <p className="text-[12.5px] text-[#9ca3af]">Working…</p>}
+              <div ref={endRef} />
             </div>
-          )}
+
+            <div className="border-t border-[#eef1f6] px-3 py-3">
+              <Composer {...{ input, setInput, onSubmit, fileRef, send, busy }} />
+            </div>
+          </div>
         </div>
       </div>
     </section>

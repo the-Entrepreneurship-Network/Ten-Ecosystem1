@@ -307,6 +307,15 @@ async function fromRemotive(profile) {
     /* Kept for scoring: fitness and ATS matching both read the posting's own
        words, and a title alone is not enough to judge either. */
     description: clean(j.description).slice(0, 4000),
+    /*
+     * And kept unflattened for the reader.
+     *
+     * `clean` removes the tags, which is right for keyword matching and
+     * wrong for a person: it turns the responsibilities, the requirements
+     * and the perks into one 4,000-character paragraph. The markup is where
+     * the headings and the bullets are, so it travels alongside.
+     */
+    descriptionHtml: String(j.description || '').slice(0, 12000),
   }));
 }
 
@@ -1219,7 +1228,179 @@ router.post('/resolve', async (req, res) => {
   }
 });
 
+/**
+ * A job advert, turned from markup into readable lines.
+ *
+ * Boards send HTML. Stripping every tag gives one long paragraph in which
+ * the responsibilities, the requirements and the perks are indistinguishable
+ * — and those headings are exactly what a candidate reads to decide, and
+ * what the tailor reads to match. The tags that carry structure become
+ * structure; everything else goes.
+ */
+function postingText(html) {
+  return String(html || '')
+    /* Block ends become line breaks before the tags are removed. */
+    .replace(/<\/(p|div|h[1-6]|li|ul|ol|tr|section)>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    /* A list item is a bullet, and a heading is a heading. */
+    .replace(/<li[^>]*>/gi, '• ')
+    .replace(/<(h[1-6]|strong|b)[^>]*>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&(?:quot|#34);/gi, '"')
+    .replace(/&(?:apos|#39);/gi, "'")
+    .replace(/&[a-z]+;/gi, ' ')
+    .split('\n')
+    .map((l) => l.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    /* Three blank-ish lines in a row is the markup's spacing, not the
+       author's paragraphs. */
+    .filter((l, i, arr) => l !== arr[i - 1])
+    .join('\n')
+    .slice(0, 4000);
+}
+
+/**
+ * The same hunt, callable in process.
+ *
+ * The resume agent asks for openings now, and the only way to reach this
+ * search was an HTTP request to our own port — a hop that depends on knowing
+ * where the server is listening in order to talk to code in the same module
+ * graph. The boards, the dedupe and the ranking are already written; this
+ * exposes them.
+ */
+async function findJobs(resumeText, opts = {}) {
+  const profile = profileFromResume(String(resumeText || ''));
+  if (opts.role) profile.role = opts.role;
+  if (opts.location) profile.location = opts.location;
+
+  const boardTerms = matchTerms(profile);
+  const family = roleFamily(profile.role);
+  const boardMatch = (row) =>
+    relevance(`${row.title} ${(row.tags || []).join(' ')} ${row.location}`.toLowerCase(), boardTerms).relevant;
+
+  const settled = await Promise.allSettled([
+    fromRemotive(profile),
+    fromRemoteOK(profile),
+    fromArbeitnow(profile),
+    fromJobicy(profile),
+    fromHimalayas(profile),
+    fromWeWorkRemotely(profile),
+    atsBoards.huntBoards(boardMatch, { budgetMs: 6000, perBoard: 4, offset: Math.floor(Date.now() / 3600000) }),
+  ]);
+
+  const all = settled.flatMap((s) => (s.status === 'fulfilled' ? s.value : []));
+  const seen = new Set();
+  return all
+    /* A row without a destination is not a result; it is the absence of one. */
+    .filter((j) => /^https?:\/\//.test(String(j.url || j.applyUrl || '')))
+    /*
+     * The title has to be the job they do, not merely contain "engineer".
+     *
+     * The aggregators return their whole feed, and matching on any role word
+     * put "Laborer", "COSTING ENGINEER" and "Maintenance and Grounds Officer"
+     * in front of a DevOps engineer — real openings, correctly linked, and
+     * nothing to do with them. So the title must carry either the role family
+     * or one of the tools they actually use. A list you have to read past is
+     * worse than a shorter one.
+     */
+    /*
+     * Mostly the role they asked for, and a couple they could actually get.
+     *
+     * Two failure modes sit either side of this. Filter on the exact title
+     * and a backend engineer never sees the platform and full-stack roles
+     * they would walk into; filter loosely and the first result is "SaaS
+     * Product Support Jedi" because a tag matched. So the list is graded:
+     * the title carrying the distinctive word is an exact match, a title in
+     * an adjacent family that also shares several of their tools is a
+     * stretch worth showing, and everything else is noise.
+     *
+     * Nine in ten are the role they named. The last one is the door they did
+     * not know was open.
+     */
+    .map((j) => {
+      const title = String(j.title || '').toLowerCase();
+      const hay = `${title} ${(j.tags || []).join(' ')}`.toLowerCase();
+
+      /* "Engineer", "developer" and "analyst" are in every posting in the
+         industry; what separates a backend role from a data one is the word
+         "backend". */
+      const GENERIC = new Set(['engineer', 'developer', 'analyst', 'scientist', 'manager', 'specialist', 'senior', 'lead', 'staff', 'principal']);
+      const distinctive = family.filter((w) => w.length > 3 && !GENERIC.has(w));
+      const exact = distinctive.length
+        ? distinctive.some((w) => title.includes(w))
+        : family.some((w) => w.length > 3 && title.includes(w));
+
+      /* A stretch has to be a real role in a neighbouring family AND carry
+         enough of their stack that they could do it — one shared tag is a
+         coincidence, three is a qualification. */
+      const skillHits = (profile.skills || []).filter((s) => s.length > 2 && hay.includes(String(s).toLowerCase())).length;
+      const adjacentTitle = /\b(full[- ]?stack|platform|infrastructure|devops|sre|site reliability|software|architect|api|integration|cloud)\b/.test(title);
+      const stretch = !exact && adjacentTitle && skillHits >= 3;
+
+      return { j, exact, stretch, skillHits };
+    })
+    .filter((r) => r.exact || r.stretch)
+    /* Exact first, then the stretches — and within each, the ones matching
+       more of their stack. */
+    .sort((a, b) => (b.exact ? 1 : 0) - (a.exact ? 1 : 0) || b.skillHits - a.skillHits)
+    .filter((r, i, all) => {
+      /* One in ten is a stretch, and at least one whenever any exists — a
+         list of eight that is all stretches is not a search result. */
+      if (r.exact) return true;
+      const exactCount = all.filter((x) => x.exact).length;
+      const stretchesBefore = all.slice(0, i).filter((x) => !x.exact).length;
+      return stretchesBefore < Math.max(1, Math.round(exactCount / 9));
+    })
+    .map((r) => r.j)
+    .filter((j) => {
+      const key = `${j.title}|${j.company}`.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, opts.limit || 8)
+    .map((j) => ({
+      title: String(j.title || '').slice(0, 90),
+      company: String(j.company || '').slice(0, 60),
+      location: String(j.location || '').slice(0, 60),
+      url: String(j.url || j.applyUrl),
+      /*
+       * The posting's own words travel with the row.
+       *
+       * Deciding to tailor for a job means reading it first, and a title and
+       * a company name are not a job description — without this the student
+       * is choosing between eight strings. Tags come along because they are
+       * what the tailor will actually match against.
+       */
+      /*
+       * The posting keeps its shape.
+       *
+       * Flattening the HTML to one paragraph gave back a 2,500-character
+       * wall — the responsibilities, the requirements and the benefits run
+       * together, which is unreadable and is also where the tailor's keywords
+       * live. Boards send <h3>, <ul> and <li>; turning those into headings
+       * and bullet lines keeps the structure a reader needs without trusting
+       * any markup to the page.
+       */
+      description: postingText(j.descriptionHtml || j.description || j.summary || ''),
+      tags: Array.isArray(j.tags) ? j.tags.slice(0, 12) : [],
+      /* What a job card shows besides the title: how old the posting is, what
+         it pays if the board said, and the first line of what the work is. */
+      posted: j.posted || null,
+      salary: String(j.salary || j.compensation || '').slice(0, 60) || null,
+      type: String(j.type || '').slice(0, 40) || null,
+      snippet: postingText(j.descriptionHtml || j.description || '')
+        .split('\n')
+        .find((l) => l.length > 40) || '',
+    }));
+}
+
 module.exports = router;
+module.exports.findJobs = findJobs;
 module.exports.profileFromResume = profileFromResume;
 module.exports.jobIdOf = jobIdOf;
 module.exports.ageOfContact = ageOfContact;
