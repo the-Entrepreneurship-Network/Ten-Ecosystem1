@@ -27,7 +27,7 @@ try { fs.mkdirSync(offerLetterDir,  { recursive: true }); } catch (_) {}
 try { fs.mkdirSync(certificatesDir, { recursive: true }); } catch (_) {}
 
 // ── Mail helper ──
-const { createEmailTransporter } = require("../utils/mailer");
+const { createEmailTransporter, EMAIL_FROM, HR_NOTIFY_EMAIL } = require("../utils/mailer");
 function createTransporter() {
     return createEmailTransporter();
 }
@@ -472,7 +472,7 @@ async function autoGenerateOfferLetter(doc) {
         try {
             const transporter = createTransporter();
             await transporter.sendMail({
-                from:    process.env.EMAIL_US,
+                from:    EMAIL_FROM,
                 to:      student.email,
                 subject: "Your Internship Offer Letter is Ready — TEN",
                 html:    `<p>Dear ${student.name || "Intern"},</p><p>Congratulations! Your offer letter for the <strong>${student.domain || ""}</strong> internship at The Entrepreneurship Network is ready. Please find it attached to this email.</p><p>Your Employee ID: <strong>${student.employeeId || "N/A"}</strong></p><p>You can also download it from the <a href="${process.env.BASE_URL || "https://virtualinternships.entrepreneurshipnetwork.net"}">TEN Student Portal</a>.</p><p>Best regards,<br/>HR Team, TEN</p>`,
@@ -498,6 +498,7 @@ async function autoGenerateOfferLetter(doc) {
         }, "automation");
 
         await Notification.notifyStudent(student, {
+            email: false,   // the offer letter was just emailed, attached
             title: "📄 Offer Letter Ready",
             message: `Congratulations ${student.name || "Intern"}! Your internship offer letter (${docNum}) is ready and has been emailed to ${student.email || "your registered email"}. You can also download it from the Student Portal.`,
             type: "success"
@@ -548,8 +549,8 @@ async function initiateCertificateApproval(student) {
         try {
             const transporter = createTransporter();
             await transporter.sendMail({
-                from:    process.env.EMAIL_US,
-                to:      process.env.EMAIL_US,
+                from:    EMAIL_FROM,
+                to:      HR_NOTIFY_EMAIL,
                 subject: `[TEN] Certificate Approval Required — ${student.name} (${student.domain})`,
                 html:    `<p>The internship for <strong>${student.name}</strong> (Employee ID: ${student.employeeId}, Domain: ${student.domain}) has ended.</p><p>Please review and approve the certificate request via the TEN HR Portal or the coordinator portal.</p><p>Request ID: ${req._id}</p><p>Deadline: 24 hours from now.</p>`
             });
@@ -687,7 +688,7 @@ async function autoGenerateCertificates(certReq) {
             const earnedHtml  = earnedList.map(e => `<li>✅ ${e}</li>`).join("");
             const missedHtml  = missedList.map(m => `<li>❌ ${m}</li>`).join("");
             await transporter.sendMail({
-                from:    process.env.EMAIL_US,
+                from:    EMAIL_FROM,
                 to:      student.email,
                 subject: "🏅 Your TEN Internship Certificates Are Ready!",
                 html:    `<p>Dear ${student.name || "Intern"},</p><p>Congratulations on completing your <strong>${student.domain || ""}</strong> internship at The Entrepreneurship Network!</p><h3>Certificates Earned:</h3><ul>${earnedHtml}</ul>${missedHtml ? `<h3>Not Earned:</h3><ul>${missedHtml}</ul>` : ""}<p>Please find your certificates attached. You can also view them in the <a href="${process.env.BASE_URL || "https://virtualinternships.entrepreneurshipnetwork.net"}/my-certificates.html">TEN Student Portal</a>.</p><p>Best regards,<br/>TEN Team</p>`,
@@ -716,6 +717,7 @@ async function autoGenerateCertificates(certReq) {
         }
 
         await Notification.notifyStudent(student, {
+            email: false,   // the certificates were just emailed, attached
             title: "🏅 Your Internship Certificates Are Ready!",
             message: `Congratulations ${student.name || "Intern"} on completing your ${student.domain || ""} internship! Earned: ${earnedList.join("; ")}.${missedList.length ? ` Not earned: ${missedList.join("; ")}.` : ""} The certificates have been emailed to you and are available in the Student Portal.`,
             type: "success"

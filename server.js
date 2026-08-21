@@ -100,6 +100,29 @@ const RATE_LIMIT_CONFIG = {
       ? parseInt(process.env.RATE_AUTH_USER_MAX)
       : 300,
   },
+  /*
+   * Registration — deliberately NOT the login limit.
+   *
+   * It used to share it, and 10 per address per 15 minutes is a *login*
+   * number: it exists to stop someone guessing one student's password. A
+   * signup is not a guess. What it actually caps is an intake day, because a
+   * college, a hostel or an office puts every student behind ONE public
+   * address — so the 11th person to register from campus wifi is told to wait,
+   * then told to wait longer, while the server sits idle. Forty an hour per
+   * campus was never a capacity limit; it was a login rule applied to the
+   * wrong route.
+   *
+   * 40 per 15 minutes still stops a signup farm — a real one runs orders of
+   * magnitude above this — while letting a lab full of students through.
+   */
+  register: {
+    windowMs: process.env.RATE_REGISTER_WINDOW_MS
+      ? parseInt(process.env.RATE_REGISTER_WINDOW_MS)
+      : 15 * 60 * 1000,
+    max: process.env.RATE_REGISTER_MAX
+      ? parseInt(process.env.RATE_REGISTER_MAX)
+      : 40,
+  },
   // Payment endpoints — strict
   payment: {
     windowMs: process.env.RATE_PAYMENT_WINDOW_MS
@@ -2196,10 +2219,10 @@ const loginIpLimiter = rateLimit({
     message: { success: false, message: "Too many login attempts from this network. Please wait." }
 });
 
-// Registration rate limit
+// Registration rate limit. Its own budget — see RATE_LIMIT_CONFIG.register.
 const registerLimiter = rateLimit({
-    windowMs: RATE_LIMIT_CONFIG.auth.windowMs,
-    max: RATE_LIMIT_CONFIG.auth.max,
+    windowMs: RATE_LIMIT_CONFIG.register.windowMs,
+    max: RATE_LIMIT_CONFIG.register.max,
     standardHeaders: true,
     legacyHeaders: false,
     handler: (req, res, next, options) => {
@@ -2278,12 +2301,13 @@ const upload = multer({
 
 // ================= MAIL =================
 
-const { createEmailTransporter, EMAIL_FROM } = require("./utils/mailer");
+const { createEmailTransporter, mailerReady, EMAIL_FROM } = require("./utils/mailer");
 const transporter = createEmailTransporter();
 
-const smtpUser = process.env.SMTP_USER || process.env.SES_SMTP_USER || process.env.EMAIL_USER || process.env.EMAIL_US;
-const smtpPass = process.env.SMTP_PASS || process.env.SES_SMTP_PASS || process.env.EMAIL_PASS;
-if (smtpUser && smtpPass) {
+// The third copy of the credential chain used to live here. It agreed with the
+// mailer, which is exactly why the one in routes/v2/certificates.js that did
+// NOT agree went unnoticed for so long.
+if (mailerReady()) {
     transporter.verify((error)=>{
         if(error){ console.log("SMTP verification status: OFFLINE —", error.message); }
         else{ console.log("Email Server Ready"); }
@@ -2343,7 +2367,10 @@ async function sendActivityMail(student, studentName, mailType){
     await Notification.notifyStudent(student, {
         title: spec.notifTitle,
         message: spec.notifMessage(studentName),
-        type: spec.notifType
+        type: spec.notifType,
+        // The HR mail above IS this message. The notification is its in-app
+        // mirror, not a second thing to send.
+        email: false
     });
     await AutoMailLog.create({ studentName, studentEmail: email, employeeId: student.employeeId || "", mailType });
 }
