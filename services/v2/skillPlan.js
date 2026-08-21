@@ -254,4 +254,87 @@ function planFor(resumeText, jd, options = {}) {
   };
 }
 
-module.exports = { planFor, RECIPES };
+/*
+ * The marker that keeps a planned project out of a real application.
+ *
+ * It is deliberately loud and deliberately machine-readable: the export path
+ * refuses to build a PDF while any line carries it, so the only way a planned
+ * project reaches an employer is if the student states the work is done.
+ */
+const PLANNED = '[PLANNED — not built yet]';
+const RE_PLANNED = /\[PLANNED[^\]]*\]/i;
+
+/**
+ * The plan, written in the shape of the resume it is aiming at.
+ *
+ * A list of things to build is a to-do list; the same list written as the
+ * projects section it will become is a target you can see. So the entries go
+ * onto the draft — marked, blanked, and gated — and the student works towards
+ * a page that already shows them what it will say.
+ *
+ * Every claim is a blank until they fill it. Nothing here asserts a number,
+ * a date or an outcome, because none of those exist yet.
+ */
+function projectEntries(plan) {
+  if (!plan || !plan.ok) return [];
+  return plan.plans.map((p) => ({
+    term: p.term,
+    /* Named for what it does, not for the technology, because that is how a
+       project is named on a resume. */
+    name: p.build,
+    line: `${PLANNED} ${p.build} — ${p.bulletAfter}`,
+    hours: p.hours,
+    steps: p.steps,
+    defend: p.defend,
+  }));
+}
+
+/**
+ * The draft with the planned projects added under their own heading.
+ *
+ * A separate heading rather than mixed into PROJECTS: a reader — and the
+ * student themselves three weeks later — must be able to tell at a glance
+ * which of these exist.
+ */
+function withPlannedProjects(resumeText, entries) {
+  if (!entries.length) return String(resumeText || '');
+  const lines = String(resumeText || '').split('\n');
+  const block = ['', 'PLANNED PROJECTS (not yet built — remove or complete before applying)'];
+  entries.forEach((e) => block.push(`- ${e.line}`));
+
+  /* Placed before EDUCATION where there is one, so the page keeps its
+     ordinary shape. */
+  const eduAt = lines.findIndex((l) => /^EDUCATION\b/i.test(l.trim()));
+  if (eduAt === -1) return [...lines, ...block].join('\n');
+  return [...lines.slice(0, eduAt), ...block, '', ...lines.slice(eduAt)].join('\n');
+}
+
+/** Every planned line still on a page. Empty means it is safe to export. */
+function plannedLines(resumeText) {
+  return String(resumeText || '')
+    .split('\n')
+    .filter((l) => RE_PLANNED.test(l))
+    .map((l) => l.replace(/^-\s*/, '').replace(RE_PLANNED, '').trim());
+}
+
+/**
+ * The page with the planned section taken back out — for a student who
+ * decides to apply now with what they actually have.
+ */
+function withoutPlanned(resumeText) {
+  const lines = String(resumeText || '').split('\n');
+  const out = [];
+  let skipping = false;
+  lines.forEach((l) => {
+    if (/^PLANNED PROJECTS\b/i.test(l.trim())) { skipping = true; return; }
+    /* The section ends at the next heading. */
+    if (skipping && /^[A-Z][A-Z &]{2,30}$/.test(l.trim())) skipping = false;
+    if (skipping || RE_PLANNED.test(l)) return;
+    out.push(l);
+  });
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+module.exports = {
+  planFor, RECIPES, projectEntries, withPlannedProjects, plannedLines, withoutPlanned, PLANNED, RE_PLANNED,
+};
