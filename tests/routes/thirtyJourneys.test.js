@@ -311,31 +311,28 @@ describe('no resume at all · the same errand from the other end', () => {
    * document, and no next move — when the openings for the exact title they
    * had just named were one search away.
    */
-  const build = async () => {
+  const listing = async () => {
     const a = agent();
-    let out = await turn(a, 'build me a resume for a software engineer', null);
-    for (let i = 0; i < 25 && out.kind === 'ask'; i += 1) {
-      const all = choices(out);
-      // eslint-disable-next-line no-await-in-loop
-      out = await turn(a, all.length ? all[0].value : 'skip', out.session);
-    }
+    const out = await turn(a, 'build me a resume for a software engineer', null);
     return { a, out };
   };
 
-  it('carries the title through to the search, with no second question', async () => {
-    const { a, out } = await build();
-    expect(String(out.session.target || out.session.jobRole || '').toLowerCase()).toContain('software');
-    const jobs = await turn(a, 'show me the openings', out.session);
-    expect(jobs.kind).not.toBe('ask');
-    expect(Array.isArray(jobs.jobs)).toBe(true);
+  it('shows the openings for that title before writing a word', async () => {
+    const { out } = await listing();
+    expect(out.kind).not.toBe('ask');
+    expect(Array.isArray(out.jobs)).toBe(true);
+    expect(String(out.session.jobRole || out.session.target || '').toLowerCase()).toContain('software');
+    expect(out.jobs.some((j) => j.company === 'stripe')).toBe(true);
   });
 
-  it('a row on that list tailors the page it just built', async () => {
-    const { a, out } = await build();
-    const jobs = await turn(a, 'show me the openings', out.session);
-    const tailored = await walk(a, await turn(a, 'tailor number 1', jobs.session));
+  it('the row they open is what the page is built and tailored for', async () => {
+    const { a, out } = await listing();
+    /* Twenty-odd interview questions, each one a pick — the walk answers them
+       the way the picker would, and the page lands tailored to the row. */
+    const tailored = await walk(a, await turn(a, 'tailor number 1', out.session), 'first', 40);
     expect(tailored.session.pickedJob.company).toBe('stripe');
     expect(tailored.kind).toBe('build');
+    expect(String(tailored.reply)).toMatch(/Built and tailored for/i);
   });
 });
 

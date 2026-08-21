@@ -538,6 +538,32 @@ const BENCH_FOR = [
  * build the thing they have already built. The order is bench order, which is
  * roughly what a team would want in what order.
  */
+/** Plans for a named list of terms, in the order given. */
+function plansFor(terms, exclude = [], limit = 50) {
+  const skip = new Set((exclude || []).map((s) => String(s).toLowerCase()));
+  const seen = new Set();
+  return (terms || [])
+    .filter((t) => {
+      const k = String(t || '').toLowerCase();
+      if (!k || seen.has(k) || skip.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .slice(0, Math.max(1, limit))
+    .map((term) => {
+      const recipe = RECIPES.find((r) => r.match.test(term)) || generic(term);
+      return {
+        term,
+        essential: true,
+        build: recipe.build,
+        hours: recipe.hours,
+        steps: recipe.steps,
+        bulletAfter: recipe.bullet,
+        defend: recipe.defend,
+      };
+    });
+}
+
 function catalogueFor(target, exclude = [], limit = 25) {
   const skip = new Set((exclude || []).map((s) => String(s).toLowerCase()));
   const benches = (BENCH_FOR.find(([re]) => re.test(String(target || ''))) || [, ['software']])[1];
@@ -565,6 +591,6 @@ function catalogueFor(target, exclude = [], limit = 25) {
 
 module.exports = {
   planFor, planForTarget, RECIPES, projectEntries, withPlannedProjects,
-  withPlannedSkills, learnPlan, catalogueFor, DEEP_BENCH,
+  withPlannedSkills, learnPlan, catalogueFor, plansFor, DEEP_BENCH,
   plannedLines, withoutPlanned, PLANNED, RE_PLANNED,
 };

@@ -27,6 +27,7 @@ const multer = require('multer');
    engine: fact ledger, dual scoring, essential-signal pass, ship gate. */
 const atsEngine = require('../../services/v2/atsResumeEngine');
 const aspirationalCompanies = require('../../services/v2/aspirationalCompanies');
+const companyProfiles = require('../../services/v2/companyProfiles');
 const career = require('../../services/v2/careerData');
 const interview = require('../../services/v2/resumeInterview');
 const { httpFetch } = require('../../services/v2/httpFetch');
@@ -1981,7 +1982,7 @@ function projectedScore(text, target) {
  * Returns the page, both numbers, and the plans actually used, so the caller
  * can print the build order.
  */
-function climbToGoal(text, target, goal, plans, picked = []) {
+function climbToGoal(text, target, goal, plans, picked = [], houseSkills = []) {
   const want = Math.min(100, Math.max(1, goal || 98));
   /* Their picks first, in the order they picked them — a student who chose
      Kafka is owed Kafka on the page, whether or not it was the cheapest
@@ -1996,31 +1997,81 @@ function climbToGoal(text, target, goal, plans, picked = []) {
      original page rather than from the previous round's output — building on
      the output stacks a second PLANNED PROJECTS heading on every iteration. */
   const base = String(text || '');
+  /*
+   * The employer's named skills sit in LEARNING beside the ones the projects
+   * carry. A student building Netflix's chaos-testing project should also see
+   * "resilience patterns" and "observability" on the page as things to make
+   * true — those are what the interview asks about, and the project alone
+   * does not name them.
+   */
   const compose = (list) => skillPlan.withPlannedSkills(
     skillPlan.withPlannedProjects(base, skillPlan.projectEntries({ ok: true, plans: list })),
-    list.map((p) => p.term),
+    [...list.map((p) => p.term), ...houseSkills],
   );
 
+  /*
+   * More work is not always a better page.
+   *
+   * The first version added projects until the goal was met and handed back
+   * whatever it was holding when it stopped. Thirty of them ran the page to
+   * 1,205 words — two sheets of a one-sheet job — and length costs points, so
+   * a climb aimed at 96 delivered 94 and blamed the student's facts for it.
+   * The page that scores best is the one that gets returned, and once three
+   * additions in a row have failed to improve it there is nothing left up
+   * there to find.
+   */
+  /*
+   * A plan can be a year long. A resume is one page.
+   *
+   * Somebody who ticks every box on a fifty-project bench has made a real
+   * plan, and putting all fifty on the page produced 2,244 words and 67
+   * planned lines — so length cost the points the projects were meant to win,
+   * and a climb aimed at 96 delivered 94. The page carries what fits, their
+   * picks first; the rest of what they chose is still theirs and is listed in
+   * the build order, which is where a plan belongs.
+   */
+  const ON_PAGE = 12;
+  const STALE = 3;
   const used = [];
   let page = base;
   let projected = projectedScore(page, target);
+  let best = { text: page, projected, used: [] };
+  let sinceGain = 0;
 
   for (const plan of order) {
     /* Stop the moment the goal is met — a plan of thirty projects for a page
-       that needed four is its own kind of unhelpful. Their own picks always
-       go on, whether or not the goal was already clear. */
-    if (projected >= want && used.length >= picked.length) break;
+       that needed four is its own kind of unhelpful. Their own picks lead,
+       whether or not the goal was already clear. */
+    if (used.length >= ON_PAGE) break;
+    if (projected >= want && used.length >= Math.min(picked.length, ON_PAGE)) break;
     used.push(plan);
     page = compose(used);
     projected = projectedScore(page, target);
+
+    /* A pick is theirs and stays on, whatever it does to the number. */
+    const mandatory = used.length <= Math.min(picked.length, ON_PAGE);
+    if (mandatory || projected > best.projected) {
+      best = { text: page, projected, used: [...used] };
+      sinceGain = 0;
+    } else if (++sinceGain >= STALE) {
+      break;
+    }
   }
 
+  /* Everything they chose that the page had no room for — named, so the plan
+     survives even though the sheet of paper does not grow. */
+  const onPage = new Set(best.used.map((p) => String(p.term).toLowerCase()));
+  const alsoPlanned = order
+    .slice(0, picked.length)
+    .filter((p) => !onPage.has(String(p.term).toLowerCase()));
+
   return {
-    text: page,
-    used,
-    projected,
-    today: scanResume(page, target).score,
-    reached: projected >= want,
+    text: best.text,
+    used: best.used,
+    alsoPlanned,
+    projected: best.projected,
+    today: scanResume(best.text, target).score,
+    reached: best.projected >= want,
   };
 }
 
@@ -2225,17 +2276,32 @@ function deliver(res, session, packetOrBuilt, kindNote) {
   /* The role is not a skill to learn. "Backend" turned up in the list beside
      Kafka and Terraform — it is the job being applied for. */
   const ROLE_WORDS = /^(backend|frontend|full[- ]?stack|software|senior|junior|lead|staff|principal|engineer|developer|analyst|scientist|manager|intern|devops|sre)$/i;
-  const wantedSkills = isPacket && Array.isArray(packetOrBuilt.notClaimed)
-    ? packetOrBuilt.notClaimed.filter((t) => !ROLE_WORDS.test(String(t).trim())).slice(0, 6)
+  /*
+   * A target has no advert, so its skills come from the employer instead.
+   *
+   * Tailoring against one of the large employers produced an empty LEARNING
+   * block, because the list was built from terms the posting named and a
+   * target has no posting. What that company screens the role on is exactly
+   * as real a list, and it is the one somebody aiming there needs.
+   */
+  const houseSkills = session.pickedJob
+    ? companyProfiles.profileFor(
+      session.pickedJob.company,
+      session.target || session.scoreTarget || '',
+    ).skills.slice(0, 4)
     : [];
+  const fromPosting = isPacket && Array.isArray(packetOrBuilt.notClaimed)
+    ? packetOrBuilt.notClaimed.filter((t) => !ROLE_WORDS.test(String(t).trim()))
+    : [];
+  const wantedSkills = [...new Set([...fromPosting, ...houseSkills])].slice(0, 6);
 
-  if (wantedSkills.length && !/LEARNING \(/i.test(text)) {
+  if (isPacket && wantedSkills.length && !/LEARNING \(/i.test(text)) {
     text = skillPlan.withPlannedSkills(text, wantedSkills);
     session.resumeText = text;
     session.plannedSkills = wantedSkills;
   }
 
-  const learnNote = wantedSkills.length
+  const learnNote = isPacket && wantedSkills.length
     ? [
       `Added to your page under LEARNING: ${wantedSkills.join(', ')} — marked as not yet true, because they are not yet true.`,
       '',
@@ -2362,8 +2428,19 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         session.target = job.title;
         /* The posting's own text is the job description — tailoring against
            a title maps a title and nothing else. */
+        /*
+         * A city is not a skill.
+         *
+         * The location went into the posting text and came straight back out
+         * as a hard requirement: a page was told it could not prove
+         * "Bengaluru", the word was added under LEARNING, and the agent
+         * offered to walk somebody through "the official Bengaluru
+         * getting-started guide". Where a job is stays on the job, where it
+         * belongs; what it asks for is the title, the description and the
+         * tags.
+         */
         session.jd = [
-          `${job.title} at ${job.company}${job.location ? `, ${job.location}` : ''}.`,
+          `${job.title} at ${job.company}.`,
           job.description || '',
           (job.tags || []).join(', '),
         ].filter(Boolean).join('\n');
@@ -2766,12 +2843,26 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       const jdPlan = session.jd ? skillPlan.planFor(out.text, session.jd, { limit: deep }) : null;
       const targetPlan = skillPlan.planForTarget(out.text, missingWords, { limit: deep });
       const evidenced = (atsEngine.factLedger(out.text).statedSkills || []);
-      const bench = skillPlan.catalogueFor(
-        session.scoreTarget || session.target || atsEngine.factLedger(out.text).title || '',
-        evidenced, deep,
-      );
+      const roleForBench = session.scoreTarget || session.target ||
+        atsEngine.factLedger(out.text).title || '';
+      /*
+       * The employer's own bar, ahead of the domain's.
+       *
+       * Tailoring for Google and for JPMorgan used to produce the same
+       * twenty-five projects, and they are not the same job — one screens on
+       * distributed systems under load, the other on correctness and an audit
+       * trail. Whoever the page is aimed at decides what leads the list; the
+       * role's bench still fills in behind, because a backend engineer at a
+       * bank is still a backend engineer.
+       */
+      const house = session.pickedJob
+        ? companyProfiles.profileFor(session.pickedJob.company, roleForBench)
+        : null;
+      const housePlans = house ? skillPlan.plansFor(house.projects, evidenced, deep) : [];
+      const bench = skillPlan.catalogueFor(roleForBench, evidenced, deep);
       const seenTerm = new Set();
       const catalogue = [
+        ...housePlans,
         ...((jdPlan && jdPlan.ok && jdPlan.plans) || []),
         ...((targetPlan && targetPlan.ok && targetPlan.plans) || []),
         ...bench,
@@ -2819,13 +2910,17 @@ router.post('/chat', upload.single('file'), async (req, res) => {
 
       if (!alreadyClimbed && alreadyAsked && !session.raiseDelivered && catalogue.length) {
         session.raiseDelivered = true;
-        const climb = climbToGoal(out.text, session.scoreTarget, goal, catalogue, picked);
+        const climb = climbToGoal(out.text, session.scoreTarget, goal, catalogue, picked,
+          house ? house.skills : []);
         session.resumeText = climb.text;
         session.pendingRaise = null;
         session.climbedTo = Math.max(session.climbedTo || 0, goal);
         session.command = 'raise';
 
         const order = climb.used.map((p, i) => `${i + 1}. **${p.build}** (${p.term}) — ${p.hours}`);
+        const overflow = (climb.alsoPlanned || []).length
+          ? `Also on your plan, once the page has room: ${climb.alsoPlanned.map((p) => p.term).join(', ')}. A resume is one sheet — finish the ${climb.used.length} above and swap these in as they land.`
+          : '';
         /*
          * When the bench runs out short of the goal, name what is holding it.
          *
@@ -2837,6 +2932,7 @@ router.post('/chat', upload.single('file'), async (req, res) => {
          */
         const stillShort = climb.reached ? [] : (climbReport(climb.text, session.scoreTarget) || []);
         const note = [
+          house ? companyProfiles.noteFor(session.pickedJob.company, roleForBench) : '',
           climb.reached
             ? `You asked for ${goal}. With this work built, the page scores ${climb.projected}/100.`
             : `You asked for ${goal}. With this work built, the page scores ${climb.projected}/100 — everything worth building for this role is already on it. Ceiling: ${climb.projected}/100 on facts you can defend — the remaining points need facts your page does not show, and I will not invent them.${stillShort.length ? ` What is still costing points: ${stillShort.join('; ')}.` : ''}`,
@@ -2847,6 +2943,7 @@ router.post('/chat', upload.single('file'), async (req, res) => {
           '',
           'Build order:',
           ...order,
+          overflow,
           '',
           `Every line is marked ${skillPlan.PLANNED} and the PDF will not export while the markers are there. Finish one, tell me the numbers it produced, and it becomes a real bullet.`,
         ].filter((l) => l !== undefined).join('\n');
@@ -2877,7 +2974,7 @@ router.post('/chat', upload.single('file'), async (req, res) => {
           kind: 'ask',
           /* The goal they named stays in front of them — a person who asked
              for 88 is owed the distance to 88, not to a number we prefer. */
-          reply: `You asked for ${goal}. It is at ${out.report.score}/100 today. ${session.aspirational ? `${session.pickedJob ? session.pickedJob.company : 'Companies at that bar'} screen this role on the work below` : `Here is the whole bench for ${session.scoreTarget || session.target || 'this role'}`} — ${catalogue.length} project${catalogue.length === 1 ? '' : 's'}, strongest first${(rPlan && rPlan.ok && rPlan.missing || []).length ? `, starting with ${rPlan.missing.slice(0, 3).join(', ')}` : ''}. Pick as many as you want; each goes on the page with its steps. Pick none and I will still take you to ${goal} with the ones that get you there fastest.`,
+          reply: `You asked for ${goal}. It is at ${out.report.score}/100 today. ${house ? `${companyProfiles.noteFor(session.pickedJob.company, roleForBench)} Their work leads the list` : `Here is the whole bench for ${roleForBench || 'this role'}`} — ${catalogue.length} project${catalogue.length === 1 ? '' : 's'}, strongest first${(rPlan && rPlan.ok && rPlan.missing || []).length ? `, starting with ${rPlan.missing.slice(0, 3).join(', ')}` : ''}. Pick as many as you want; each goes on the page with its steps. Pick none and I will still take you to ${goal} with the ones that get you there fastest.`,
           options: {
             /* Several, because one project rarely closes a gap and a student
                planning a month of work should be able to plan all of it. */
@@ -3079,17 +3176,48 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         });
       }
 
-      const plan = session.jd ? skillPlan.planFor(session.resumeText, session.jd, { limit: 3 }) : null;
-      if (plan && plan.ok && plan.plans.length &&
+      /*
+       * The employer's own bench, and as deep as the employer warrants.
+       *
+       * Three projects off the advert is right for a small company with a
+       * specific posting and thin for one of the large employers, where there
+       * is no advert at all — only a bar. Whoever the page is aimed at leads
+       * the list, the posting's gaps follow, and picking is still picking.
+       */
+      const tailorRole = session.target || atsEngine.factLedger(session.resumeText).title || '';
+      const tailorHouse = session.pickedJob
+        ? companyProfiles.profileFor(session.pickedJob.company, tailorRole) : null;
+      const width = session.aspirational ? 50 : 12;
+      const jdSide = session.jd ? skillPlan.planFor(session.resumeText, session.jd, { limit: width }) : null;
+      const owned = [...new Set([...led.evidencedSkills, ...led.statedSkills])];
+      const seenPlan = new Set();
+      const offer = [
+        ...(tailorHouse ? skillPlan.plansFor(tailorHouse.projects, owned, width) : []),
+        ...((jdSide && jdSide.ok && jdSide.plans) || []),
+      ].filter((p) => {
+        const k = String(p.term).toLowerCase();
+        const b = String(p.build).toLowerCase();
+        if (seenPlan.has(k) || seenPlan.has(b)) return false;
+        seenPlan.add(k); seenPlan.add(b);
+        return true;
+      }).slice(0, width);
+
+      const plan = (jdSide && jdSide.ok) ? jdSide : null;
+      if (offer.length &&
           !session.details.addProject && !declinedNow.includes('addproject')) {
         session.asked = 'addproject';
-        session.planCache = plan;
+        session.planCache = { ok: true, plans: offer, missing: offer.map((p) => p.term) };
+        const gaps = (plan && plan.missing) || [];
         return res.json({
           ok: true, kind: 'ask',
-          reply: `This posting asks for ${plan.missing.slice(0, 3).join(', ')} and your page cannot prove ${plan.missing.length === 1 ? 'it' : 'them'} yet. Which project should I add as your next build? It goes on the page marked as planned, with the steps — and stays out of the PDF until you have actually built it.`,
+          reply: tailorHouse
+            ? `${companyProfiles.noteFor(session.pickedJob.company, tailorRole)} These are the ${offer.length} pieces of work that shows${gaps.length ? `, starting with what this posting names — ${gaps.slice(0, 3).join(', ')}` : ''}. Pick as many as you want to build. Each goes on the page marked as planned, with its steps, and stays out of the PDF until you have actually built it.`
+            : `This posting asks for ${gaps.slice(0, 3).join(', ')} and your page cannot prove ${gaps.length === 1 ? 'it' : 'them'} yet. Pick as many as you want to build. Each goes on the page marked as planned, with the steps — and stays out of the PDF until you have actually built it.`,
           options: {
-            multi: false,
-            options: plan.plans.map((p) => ({
+            /* Several, because one project rarely closes a gap and somebody
+               planning a month of work should be able to plan all of it. */
+            multi: true,
+            options: offer.map((p) => ({
               label: `${p.build} (${p.term})`,
               note: `about ${p.hours}`,
               value: p.term,
@@ -3102,14 +3230,23 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       session.tailorPicked = true;
     }
 
+    /*
+     * You cannot tailor a document that does not exist.
+     *
+     * The guard used to be "no resume AND no details", so the moment somebody
+     * answered one interview question it fell through and tailored an empty
+     * page: a new user picked a stripe opening, was interviewed, and got back
+     * a converted resume scoring 18 with a gap table about a document that had
+     * never been written. Build first, then tailor — the build finishes
+     * against the posting they picked, which is the order they asked for.
+     */
+    if (session.command === 'tailor' && !session.resumeText.trim()) {
+      session.command = 'build';
+      const q = nextQuestion(session).question;
+      if (q) return ask(q.field, q.question);
+    }
+
     if (session.command === 'tailor') {
-      if (!session.resumeText.trim() && !Object.keys(session.details).length) {
-        /* The button map: "make it 98/100" with no resume means build — ask
-           the job title, not for a document they already said they lack. */
-        session.command = 'build';
-        const q = nextQuestion(session).question;
-        if (q) return ask(q.field, q.question);
-      }
       if (!session.target && !session.jd && !(session.declined || []).includes('target')) {
         return ask('target', 'What job title are you applying for — for example Backend Engineer, Data Analyst, or something else? Paste the job description instead if you have it.');
       }
@@ -3308,9 +3445,31 @@ router.post('/chat', upload.single('file'), async (req, res) => {
      * tailoring for it are one motion; the boards are already written, so
      * the hunt happens here and every row can start a tailor.
      */
-    if (session.command === 'jobs') {
+    /*
+     * The openings come before the blank page, not after it.
+     *
+     * "Build me a resume for a software engineer" is somebody who wants a job,
+     * and the page is the means. Interviewing them for twenty minutes and then
+     * handing over a document leaves them exactly where they started: a
+     * resume aimed at nothing in particular. The postings for the title they
+     * just named are one search away, so they come first — and the row they
+     * open is what the page is then built and tailored against.
+     */
+    const buildNeedsJobs = session.command === 'build' &&
+      !session.resumeText.trim() && !session.pickedJob &&
+      Boolean(session.target) && !session.jobsShownForBuild;
+
+    if (session.command === 'jobs' || buildNeedsJobs) {
       const source = session.resumeText.trim() || (session.shipped && session.shipped.text) || '';
-      if (!source) return ask('resume', 'Attach your resume first — the search is built from what it can prove.');
+      if (buildNeedsJobs) {
+        session.jobsShownForBuild = true;
+        session.jobRole = session.jobRole || session.target;
+      }
+      /* A title is enough to search with. Only somebody who has given neither
+         a page nor a role is being asked for the page. */
+      if (!source && !session.jobRole && !session.target) {
+        return ask('resume', 'Attach your resume first — the search is built from what it can prove.');
+      }
 
       /* Which role, before searching for it. Guessing the target from the
          resume is right for somebody staying in their lane and wrong for
@@ -3349,6 +3508,13 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       try {
         found = await portalJobs(source, session.jobRole || session.target || '');
       } catch (e) {
+        /* A silent board must not strand somebody with no page at all — they
+           came to build one, so the interview starts and the list can wait. */
+        if (buildNeedsJobs) {
+          session.command = 'build';
+          const q = nextQuestion(session).question;
+          if (q) return ask(q.field, q.question, 'The job boards did not answer just now, so let us build the page first — say "show me the openings" whenever you want to try the search again.');
+        }
         session.command = null;
         return res.json({
           ok: true, kind: 'help',
@@ -3397,6 +3563,11 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       session.command = null;
       session.jobs = [...found, ...aspirational];
       if (!found.length) {
+        if (buildNeedsJobs) {
+          session.command = 'build';
+          const q = nextQuestion(session).question;
+          if (q) return ask(q.field, q.question, `No live listing came back for ${role} just now, so let us build the page first — the targets are still there to aim at, and "show me the openings" retries the search.`);
+        }
         return res.json({
           ok: true, kind: 'help',
           reply: `Nothing came back for ${session.jobRole || 'that role'} with a real listing behind it. Try a nearby title and I will search again — a row with nowhere to apply is not a result.`,
@@ -3410,13 +3581,17 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         /* The whole list, not the boards' half of it. */
         jobs: session.jobs,
         reply: [
-          `${found.length} opening${found.length === 1 ? '' : 's'} for ${role}, matched to what your resume can prove.`,
+          buildNeedsJobs
+            ? `${found.length} opening${found.length === 1 ? '' : 's'} for ${role} before we write a word — a page aimed at a real posting beats one aimed at nothing in particular.`
+            : `${found.length} opening${found.length === 1 ? '' : 's'} for ${role}, matched to what your resume can prove.`,
           '',
           ...found.slice(0, 8).map((j, i) => `${i + 1}. **${j.title}** — ${j.company}${j.location ? ` · ${j.location}` : ''}`),
           '',
           `And ${aspirational.length} worth aiming at: ${aspirational.slice(0, 12).map((j) => j.company).join(', ')} — and ${aspirational.length - 12} more below. Not postings, targets. Tailoring against one rewrites your page for the bar they screen at, so it is ready the day something opens.`,
           '',
-          'Open any of them to read the role. Tailor resume is at the top.',
+          buildNeedsJobs
+            ? 'Open the one you want and I will build the page for it — its projects and its skills, the ones that employer screens on.'
+            : 'Open any of them to read the role. Tailor resume is at the top.',
         ].join('\n'),
         session,
       });
@@ -4127,6 +4302,32 @@ router.post('/chat', upload.single('file'), async (req, res) => {
        * and every row on it can start a tailor for the real posting.
        */
       if (!session.jobRole && session.target) session.jobRole = session.target;
+
+      /*
+       * Built for a row they already opened, so it lands tailored.
+       *
+       * The order the student asked for runs openings → pick → page, and
+       * stopping at a generic page after they had already chosen the job
+       * throws the choice away. The posting is on the session, so the build
+       * finishes against it and the reply names what that employer screens on
+       * — the projects worth building come from the same profile.
+       */
+      if (session.pickedJob && session.jd) {
+        const j = session.pickedJob;
+        const packet = atsEngine.rewriteResume(built.text, {
+          target: session.target || j.title,
+          jd: session.jd,
+          mode: 'CONVERT',
+        });
+        session.command = 'tailor';
+        session.resumeText = packet.resume || built.text;
+        return deliver(res, session, packet, [
+          `Built and tailored for ${j.title} at ${j.company}.`,
+          companyProfiles.noteFor(j.company, session.target || j.title),
+          'Say "make it 96" — or any number — and I will name the projects and skills that get it there.',
+        ].join(' '));
+      }
+
       return deliver(res, session, built, session.jobRole
         ? `Built for ${session.jobRole}. Say "show me the openings" and I will list who is hiring for it right now, plus the large employers worth aiming at — open any row to tailor this page for it.`
         : null);
