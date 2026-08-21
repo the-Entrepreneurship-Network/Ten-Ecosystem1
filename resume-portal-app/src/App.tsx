@@ -7,6 +7,19 @@ import { navigateToRoute } from './shared';
 
 const ASSETS = '/assets/resume-portal';
 
+/*
+ * Resume AI is its own app now, not a section of this page.
+ *
+ * The agent was one anchor on a marketing page, so everything it could do —
+ * the score breakdown, the keyword map, what a parser extracts, saved
+ * versions — was reachable only by typing the right sentence at a chat box.
+ * It has a rail and ten pages of its own at /resume-ai/, and both buttons
+ * that used to scroll to the anchor go there instead.
+ */
+const goToResumeAI = () => {
+  window.location.href = '/resume-ai/';
+};
+
 const inter = { fontFamily: "'Inter', sans-serif" };
 const cinzel = { fontFamily: "'Cinzel', serif" };
 
@@ -66,7 +79,7 @@ function Hero() {
         </div>
         <button
           type="button"
-          onClick={() => { window.location.hash = 'agent'; }}
+          onClick={goToResumeAI}
           className="whitespace-nowrap rounded-full border border-amber-200/70 px-3 py-2 text-xs text-amber-100 transition-all hover:bg-amber-200 hover:text-black sm:px-5"
           style={inter}
         >
@@ -254,7 +267,7 @@ function Finale() {
       <FadeIn delay={0.15}>
         <button
           type="button"
-          onClick={() => { window.location.hash = 'agent'; }}
+          onClick={goToResumeAI}
           className="rounded-full bg-amber-200 font-semibold text-black shadow-2xl transition-all hover:scale-[1.03] hover:bg-amber-100 active:scale-95"
           style={{ ...inter, fontSize: '17px', padding: '26px 70px' }}
         >
