@@ -23,6 +23,36 @@ function smtpCredentials() {
     };
 }
 
+/*
+ * Addresses that are not worth a delivery attempt.
+ *
+ * Deliberately conservative. A bounce counts against the sending domain, so
+ * there is real value in not mailing dead rows — but a false positive here
+ * silently denies a real student their certificate, which is worse than a
+ * bounce. So this rejects only what cannot be a real mailbox: a malformed
+ * address, and the domains RFC 2606 reserves for documentation and testing.
+ *
+ * It does NOT try to guess from the local part. "test@abc.com" and
+ * "asdads@gmail.com" are junk rows in the database, not something a regex
+ * should be deciding about — real people are called Test, and abc.com is a
+ * registered domain. Those are for HR to delete.
+ */
+const RESERVED_DOMAINS = new Set([
+    'example.com', 'example.net', 'example.org',
+    'test', 'example', 'invalid', 'localhost', 'localdomain'
+]);
+
+function isSendableAddress(address) {
+    const addr = String(address || '').trim().toLowerCase();
+    // One @, something either side, a dot in the domain, no whitespace.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(addr)) return false;
+    const domain = addr.slice(addr.lastIndexOf('@') + 1);
+    if (RESERVED_DOMAINS.has(domain)) return false;
+    // .test / .invalid / .example / .localhost are reserved TLDs.
+    if (/\.(test|invalid|example|localhost)$/.test(domain)) return false;
+    return true;
+}
+
 /** True when this process can actually deliver mail. */
 function mailerReady() {
     const { user, pass } = smtpCredentials();
@@ -87,6 +117,7 @@ module.exports = {
     createEmailTransporter,
     mailerReady,
     smtpCredentials,
+    isSendableAddress,
     EMAIL_FROM,
     HR_NOTIFY_EMAIL
 };

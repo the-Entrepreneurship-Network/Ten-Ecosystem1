@@ -684,7 +684,7 @@ const PDFDocument         = require("pdfkit");
 const cron                = require("node-cron");
 
 // Find the existing transporter and make it fault-tolerant
-const { createEmailTransporter, mailerReady, EMAIL_FROM } = require("../../utils/mailer");
+const { createEmailTransporter, mailerReady, isSendableAddress, EMAIL_FROM } = require("../../utils/mailer");
 const transporter = createEmailTransporter();
 
 async function sendCertificateEmail(toEmail, studentName, certType, pdfBuffer) {
@@ -697,9 +697,10 @@ async function sendCertificateEmail(toEmail, studentName, certType, pdfBuffer) {
       console.warn('[Email] SMTP credentials not set — certificate email skipped for ' + toEmail);
       return { sent: false, reason: 'Email not configured' };
     }
-    if (!toEmail) {
-      console.warn(`[Email] ${certType} has no recipient address — skipped`);
-      return { sent: false, reason: 'No recipient address' };
+    if (!isSendableAddress(toEmail)) {
+      // A bounce counts against the sending domain. A dead row is not worth one.
+      console.warn(`[Email] ${certType} has no usable recipient address (${toEmail || 'empty'}) — skipped`);
+      return { sent: false, reason: 'No usable recipient address' };
     }
     await transporter.sendMail({
       // EMAIL_FROM, not EMAIL_USER: on an SMTP_USER-configured server that

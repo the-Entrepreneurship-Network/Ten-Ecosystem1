@@ -28,7 +28,7 @@
  *   none.
  */
 
-const { createEmailTransporter, mailerReady, EMAIL_FROM } = require('../utils/mailer');
+const { createEmailTransporter, mailerReady, isSendableAddress, EMAIL_FROM } = require('../utils/mailer');
 
 let transporter = null;
 function getTransporter() {
@@ -87,7 +87,7 @@ async function mirror(doc) {
             .select('email name fullName')
             .lean();
         const to = student && student.email;
-        if (!to) return { sent: false, reason: 'student has no email address' };
+        if (!isSendableAddress(to)) return { sent: false, reason: 'student has no usable email address' };
 
         await getTransporter().sendMail({
             from: EMAIL_FROM,
