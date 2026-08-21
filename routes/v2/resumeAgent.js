@@ -28,6 +28,7 @@ const multer = require('multer');
 const atsEngine = require('../../services/v2/atsResumeEngine');
 const career = require('../../services/v2/careerData');
 const interview = require('../../services/v2/resumeInterview');
+const { httpFetch } = require('../../services/v2/httpFetch');
 const githubImport = require('../../services/v2/githubImport');
 const mockInterview = require('../../services/v2/mockInterview');
 const parserView = require('../../services/v2/parserView');
@@ -1761,6 +1762,56 @@ function nextQuestion(session) {
   return { iv, question: open[0] || null };
 }
 
+/**
+ * The openings, from the Job Portal's own search.
+ *
+ * The two seats were each running their own hunt, so a student read a role
+ * here, tailored for it, walked to the portal — and it was not in the list.
+ * Two pipelines over the same boards cannot be kept in step by care; they
+ * drift the moment either is touched, which is exactly what happened.
+ *
+ * So there is one hunt. This calls the portal's `/search` endpoint in
+ * process, with the parameters its own UI sends, and shows what comes back in
+ * the order it comes back. Nothing in the job agent is changed or
+ * reimplemented — sources, ranking, fit, link resolution and the direct-only
+ * rule all stay exactly where they are, and whatever the portal will list is
+ * what appears here.
+ *
+ * The difference between the seats is presentation, not content: the portal
+ * hands over a link to apply through, and this shows the role to tailor for.
+ */
+async function portalJobs(resumeText, role) {
+  const port = process.env.PORT || 3000;
+  const res = await httpFetch(`http://127.0.0.1:${port}/api/v2/jobs/search`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    /* The portal's own defaults: verified links, resolved to the employer,
+       direct openings only. Anything else would list a different set. */
+    body: JSON.stringify({ text: String(resumeText || ''), role: String(role || '') }),
+    timeout: 45000,
+  });
+  if (!res.ok) throw new Error(`job search replied ${res.status}`);
+  const data = await res.json();
+  if (!data || !data.ok || !Array.isArray(data.jobs)) throw new Error('job search returned nothing usable');
+
+  /* Read, never re-sorted: the order IS the parity. */
+  return data.jobs.slice(0, 8).map((j) => ({
+    title: String(j.title || '').slice(0, 120),
+    company: String(j.company || '').slice(0, 60),
+    location: String(j.location || '').slice(0, 60),
+    /* Carried so a tailor can read the posting, and so the row can be matched
+       to the portal's — but never rendered as a link in this seat. */
+    url: String(j.directUrl || j.url || ''),
+    description: String(j.description || '').slice(0, 4000),
+    tags: Array.isArray(j.tags) ? j.tags.slice(0, 12) : [],
+    posted: j.posted || null,
+    type: String(j.type || '').slice(0, 40) || null,
+    salary: String(j.salary || '').slice(0, 60) || null,
+    fit: j.fit5 || null,
+    snippet: String(j.description || '').split('\n').find((l) => l.length > 40) || '',
+  }));
+}
+
 /** The finished job, in one response the client already knows how to render. */
 function deliver(res, session, packetOrBuilt, kindNote) {
   const isPacket = Boolean(packetOrBuilt.resume);
@@ -2679,10 +2730,7 @@ router.post('/chat', upload.single('file'), async (req, res) => {
 
       let found = [];
       try {
-        found = await require('./jobAgent').findJobs(source, {
-          role: session.jobRole || session.target || undefined,
-          limit: 8,
-        });
+        found = await portalJobs(source, session.jobRole || session.target || '');
       } catch (e) {
         session.command = null;
         return res.json({
