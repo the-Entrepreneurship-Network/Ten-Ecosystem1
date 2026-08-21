@@ -205,8 +205,26 @@ function joinWrapped(lines) {
 }
 
 function factLedger(text) {
-  const all = joinWrapped(toLines(text));
-  const raw = String(text || '');
+  /*
+   * Planned work is not a fact about this person yet.
+   *
+   * The planned blocks carry template text — "serving <N> users at <N>ms" —
+   * and reading them as history put that fragment onto the student's SKILLS
+   * line, twice, as though it were a tool they knew. Everything downstream
+   * reads this ledger, so the blocks are removed here rather than in each
+   * reader.
+   */
+  const cleaned = String(text || '')
+    .split('\n')
+    .filter((l, i, arr) => {
+      if (/\[PLANNED/i.test(l)) return false;
+      if (/^(PLANNED PROJECTS|LEARNING)\b/i.test(l.trim())) return false;
+      return !/^LEARNING\b/i.test((arr[i - 1] || '').trim());
+    })
+    .join('\n');
+
+  const all = joinWrapped(toLines(cleaned));
+  const raw = cleaned;
 
   /* Which section each line belongs to. */
   let current = null;

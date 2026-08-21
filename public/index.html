@@ -922,18 +922,24 @@ const DOMAIN_IMGS = ['python.jpg','java.jpg','web.jpg','mern.jpg','flutter.jpg',
    ONE knob for the whole opening: INTRO_MS. Everything below is a fraction of
    it, so changing this number changes the intro and nothing else drifts.
 
-   It was ~6.6s, split between a 50-step countdown and a 3-second hold on the
-   finished word. Nobody came to the site to watch a logo, and the "50" read as
-   a 50-second wait because it sat where a timer sits — so the counter now
-   counts real seconds remaining, and there are few of them. */
-const INTRO_MS = 2000;
+   Two knobs, because the opening has two halves that are timed for different
+   reasons. COUNTDOWN_MS is the wait, and it is deliberately long enough to
+   watch the domain logos cycle. HOLD_MS is the beat after the word cracks
+   into place, before the curtain lifts — three seconds, so the finished TEN
+   is actually seen rather than glimpsed. */
+const COUNTDOWN_MS = 50000;
+const HOLD_MS = 3000;
+const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
 (() => {
   const count = document.getElementById('preCount');
   const slot = document.getElementById('preSlot');
-  /* Countdown gets a bit over half; the finale takes the rest. */
-  const COUNT_MS = Math.round(INTRO_MS * 0.55);
-  const FINALE_MS = INTRO_MS - COUNT_MS;
-  const TICK_MS = 60;
+  /* Each half is set directly now rather than split from one total, so the
+     hold after the crack stays three seconds whatever the countdown is. */
+  const COUNT_MS = COUNTDOWN_MS;
+  const FINALE_MS = HOLD_MS;
+  /* A tick a second: the counter shows real seconds, so it should move once
+     a second rather than seventeen times. */
+  const TICK_MS = 1000;
   let n = Math.max(6, Math.round(COUNT_MS / TICK_MS)), gi = 0, useImgs = true;
   const startN = n;
   DOMAIN_IMGS.forEach(f => { const im = new Image(); im.src = 'assets/domains/' + f; }); /* pre-warm */
@@ -951,8 +957,9 @@ const INTRO_MS = 2000;
   setSlot();
   /* Honest clock: seconds still to wait, not an abstract step count. */
   const showSeconds = () => {
-    const left = (n * TICK_MS + FINALE_MS) / 1000;
-    count.textContent = left.toFixed(1) + 's';
+    /* Whole seconds of countdown left. The three-second hold is the finale,
+       not part of the wait, so it is not counted here. */
+    count.textContent = String(Math.max(0, Math.round(n * TICK_MS / 1000)));
   };
   showSeconds();
   /* Swap the logo a fixed number of times however short the countdown is,

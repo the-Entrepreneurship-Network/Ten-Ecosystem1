@@ -93,10 +93,28 @@ async function hunt() {
 
 describe('both seats show the same openings', () => {
   it('lists the portal\'s jobs, in the portal\'s order', async () => {
+    /*
+     * Parity is about the openings. The big-tech names appended after them
+     * are not postings and are marked as such — they are somewhere to aim,
+     * and the portal has no equivalent because you cannot apply to an
+     * aspiration.
+     */
     const out = await hunt();
-    expect(out.jobs.map((j) => `${j.title}|${j.company}`)).toEqual(
+    const real = out.jobs.filter((j) => !j.aspirational);
+    expect(real.map((j) => `${j.title}|${j.company}`)).toEqual(
       PORTAL_JOBS.map((j) => `${j.title}|${j.company}`),
     );
+  });
+
+  it('appends the big names as targets, never as openings', () => {
+    return hunt().then((out) => {
+      const aspirational = out.jobs.filter((j) => j.aspirational);
+      expect(aspirational.map((j) => j.company)).toEqual(
+        expect.arrayContaining(['Google', 'Meta', 'Amazon', 'Microsoft']),
+      );
+      /* No link, because there is nothing to apply to yet. */
+      aspirational.forEach((j) => expect(j.url).toBe(''));
+    });
   });
 
   it('keeps every company the portal listed, so the walk across matches', async () => {

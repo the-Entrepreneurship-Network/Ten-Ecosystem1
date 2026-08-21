@@ -458,13 +458,15 @@ export function AgentChat() {
   /* Which of the three things is on screen. The agent switches it when a
      reply arrives about one of the others, so finding a job puts the jobs in
      front of you without a click. */
-  const [tab, setTab] = useState<'resume' | 'jobs' | 'cover'>('resume');
+  const [tab, setTab] = useState<'resume' | 'jobs' | 'cover'>('jobs');
   const [jobs, setJobs] = useState<Job[]>([]);
   const [letter, setLetter] = useState('');
   /* The row they opened. Clicking a job shows the role before anything is
      rewritten, because "tailor for this" is a decision and a decision needs
      the posting in front of it. */
   const [openJob, setOpenJob] = useState<Job | null>(null);
+  /* Whether the pane is showing the rewritten page or the list it came from. */
+  const [showTailored, setShowTailored] = useState(false);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -570,7 +572,10 @@ export function AgentChat() {
        * is what comes to the front.
        */
       if (Array.isArray(data.jobs) && data.jobs.length) {
-        setJobs(data.jobs.filter((j: Job) => /^https?:\/\//.test(String(j.url || ''))));
+        /* Real openings need a destination; the big-tech targets at the end
+           of the list deliberately have none — they are something to tailor
+           against, not something to click through to. */
+        setJobs(data.jobs.filter((j: Job) => j.aspirational || /^https?:\/\//.test(String(j.url || ''))));
         /* A fresh search closes whatever posting was open — the detail on
            screen would belong to the previous list. */
         setOpenJob(null);
@@ -581,9 +586,17 @@ export function AgentChat() {
         setTab('cover');
       }
 
-      if (data.kind === 'scan') setMsgs((m) => [...m, { role: 'agent', report: data.report, text: data.prompt || undefined }]);
-      else if (data.kind === 'build') {
-        setTab('resume');
+      if (data.kind === 'scan') {
+        setMsgs((m) => [...m, { role: 'agent', report: data.report, text: data.prompt || undefined }]);
+        /* A resume arriving is the start of a search, not the end of one:
+           scanning it is what the hunt is built from. */
+        if (data.session && String(data.session.resumeText || '').trim() && !jobs.length) {
+          setTimeout(() => send('find me jobs'), 400);
+        }
+      } else if (data.kind === 'build') {
+        /* A rewrite shows the page it produced, in the pane you were in. */
+        setShowTailored(true);
+        setOpenJob(null);
         setMsgs((m) => [...m, { role: 'agent', resume: data.text, report: data.report, missing: data.missing, potentialScore: data.potentialScore, details: data.details, text: data.reply || undefined }]);
       } else setMsgs((m) => [...m, { role: 'agent', text: data.reply, options: data.options }]);
     } catch {
@@ -614,9 +627,20 @@ export function AgentChat() {
    * resume. Build it, find work, write the letter. Everything else was
    * scaffolding around those three, and scaffolding is what you remove.
    */
+  /*
+   * Two tabs, because there are two things to do.
+   *
+   * A RESUME tab invited people to rewrite a page in the abstract, which is
+   * the one thing this tool cannot do well — a resume is only tailored
+   * against something. The work starts with a job, so it starts in Job
+   * Search: pick the position, read the role, tailor for it. The tailored
+   * page appears in that same pane, which is where you were looking.
+   */
+  /* Not "Job Search": that is the Job Portal's name, and two things called
+     the same thing in one product is a support ticket waiting to happen.
+     This one finds a role in order to rewrite your page against it. */
   const tabs = [
-    { id: 'resume' as const, label: 'RESUME' },
-    { id: 'jobs' as const, label: 'JOB SEARCH' },
+    { id: 'jobs' as const, label: 'RESUME BUILDER' },
     { id: 'cover' as const, label: 'COVER LETTER' },
   ];
 
@@ -671,9 +695,9 @@ export function AgentChat() {
           <div className="hidden min-w-0 flex-1 flex-col border-r border-[#eef1f6] lg:flex">
             <div className="flex shrink-0 items-center gap-2 border-b border-[#eef1f6] px-4 py-2.5">
               <p className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">
-                {tab === 'resume' ? docName : tab === 'jobs' ? 'Job search' : 'Cover letter'}
+                {tab === 'jobs' ? (showTailored ? docName : 'Resume builder') : 'Cover letter'}
               </p>
-              {tab === 'resume' && latestResume && (
+              {tab === 'jobs' && showTailored && latestResume && (
                 <>
                   <button onClick={() => navigator.clipboard?.writeText(latestResume)}
                     className="rounded-lg border border-[#d1d5db] px-2.5 py-1 text-[11px] font-semibold text-[#374151] hover:bg-[#f3f4f6]">Copy</button>
@@ -684,16 +708,23 @@ export function AgentChat() {
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto bg-[#f6f8fb] p-5">
-              {tab === 'resume' && (
-                latestResume
-                  ? <ResumeDocument text={latestResume} />
-                  : <p className="mt-10 text-center text-[12.5px] text-[#9ca3af]">
-                      Attach your resume, or say “build me a resume” and I will ask you a few questions.
-                    </p>
-              )}
-
               {tab === 'jobs' && (
-                openJob ? (
+                /*
+                 * The tailored page appears where the work happened.
+                 *
+                 * With no RESUME tab, a rewrite that landed in another pane
+                 * would land nowhere — so the newest version shows here,
+                 * above the openings, with a way back to the list.
+                 */
+                showTailored && latestResume ? (
+                  <div className="mx-auto max-w-[760px]">
+                    <button onClick={() => setShowTailored(false)}
+                      className="mb-2.5 text-[12px] text-[#6b7280] hover:text-[#111827]">
+                      ← Back to openings
+                    </button>
+                    <ResumeDocument text={latestResume} />
+                  </div>
+                ) : openJob ? (
                   /* ── the role, before anything is rewritten ── */
                   <div className="mx-auto max-w-[760px]">
                     <div className="mb-2.5 flex items-center gap-1.5 text-[12px]">

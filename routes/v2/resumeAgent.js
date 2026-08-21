@@ -261,7 +261,22 @@ function parseHazards(text, all) {
 
 function scanResume(text, target, options) {
   const jdSupplied = Boolean(options && options.jd);
-  const raw = String(text || '');
+  /*
+   * Work that is planned is not scored.
+   *
+   * The planned blocks carry blanks where their numbers will go — "<N>
+   * messages a minute" — and no finished verb, so counting them as bullets
+   * made a page score LOWER the moment a student picked projects to build.
+   * They asked for help and watched the number fall for accepting it.
+   */
+  const raw = String(text || '')
+    .split('\n')
+    .filter((l, i, all) => {
+      if (/\[PLANNED/i.test(l)) return false;
+      if (/^(PLANNED PROJECTS|LEARNING)\b/i.test(l.trim())) return false;
+      return !/^LEARNING\b/i.test((all[i - 1] || '').trim());
+    })
+    .join('\n');
   const all = lines(raw);
   const words = raw.split(/\s+/).filter(Boolean);
   const lower = raw.toLowerCase();
@@ -1987,8 +2002,22 @@ function deliver(res, session, packetOrBuilt, kindNote) {
    * and the score has to be remembered so a second pass can tell whether it
    * actually moved.
    */
+  /*
+   * One yardstick for the whole session.
+   *
+   * The score is measured against the keyword bank for a role, and picking a
+   * job changes the role — so a DevOps page scored against the backend bank
+   * came back a point lower and read as "tailoring made it worse". It had
+   * not changed at all; it had been measured with a different ruler.
+   *
+   * The first target seen is the one the number is always reported against,
+   * so it means the same thing on every turn. How well the page fits the job
+   * just chosen is a different question, and the match line answers it.
+   */
+  if (session.scoreTarget === undefined) session.scoreTarget = session.target || '';
+
   session.resumeText = text;
-  session.lastScore = (scanResume(text, session.target) || {}).score;
+  session.lastScore = (scanResume(text, session.scoreTarget) || {}).score;
   if (isPacket) {
     session.lastPacket = {
       band: packetOrBuilt.band,
@@ -2111,7 +2140,7 @@ function deliver(res, session, packetOrBuilt, kindNote) {
     ok: true, kind: 'build',
     reply: [header, kindNote, updatedNote, learnNote, coverOffer].filter(Boolean).join('\n\n'),
     text,
-    report: scanResume(text, session.target),
+    report: scanResume(text, session.scoreTarget),
     missing: isPacket ? [] : packetOrBuilt.missing,
     potentialScore: isPacket ? undefined : packetOrBuilt.potentialScore,
     details: session.details,
@@ -2134,6 +2163,31 @@ router.post('/chat', upload.single('file'), async (req, res) => {
   try {
     const uploaded = await textFromUpload(req.file);
     if (uploaded) session.resumeText = uploaded;
+
+    /*
+     * The yardstick is fixed the moment a resume arrives.
+     *
+     * Setting it on the first delivery was too late: the first turn is a
+     * scan, so by the time anything shipped the student had already picked a
+     * job and the target had moved — which is what made a DevOps page score
+     * a point lower against a backend bank and read as damage.
+     */
+    if (session.scoreTarget === undefined && String(session.resumeText || '').trim()) {
+      /*
+       * Pinned to the role the resume itself claims, not left empty.
+       *
+       * An empty target makes the scorer read the bank off the page's own
+       * title line — and tailoring rewrites that line to the job being
+       * targeted. So a frontend engineer aiming at a backend role had their
+       * page re-measured against backend keywords and shown 89 → 85: a true
+       * fact about the fit, printed where a verdict on their resume goes.
+       * Fixing the bank at what they actually are keeps the number about the
+       * page, and the match line keeps saying how well it suits the job.
+       */
+      session.scoreTarget = session.target
+        || atsEngine.factLedger(session.resumeText).title
+        || '';
+    }
     if (b.target) session.target = b.target;
     if (b.jd) session.jd = b.jd;
 
@@ -2431,7 +2485,9 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       if (!session.resumeText.trim()) {
         return ask('resume', 'Attach your resume (PDF or TXT) with the clip, or paste its text here.');
       }
-      const report = scanResume(session.resumeText, session.target);
+      /* The pinned yardstick, so the first number and every later one are
+       measured the same way. */
+    const report = scanResume(session.resumeText, session.scoreTarget);
       const packet = atsEngine.rewriteResume(session.resumeText, { target: session.target, jd: session.jd });
 
       /*
@@ -2563,7 +2619,7 @@ router.post('/chat', upload.single('file'), async (req, res) => {
             skillPlan.projectEntries({ ok: true, plans: session.plannedGuides }));
         return deliver(res, session, {
           text: session.resumeText,
-          report: scanResume(session.resumeText, session.target),
+          report: scanResume(session.resumeText, session.scoreTarget),
           missing: [],
           potentialScore: projectedScore(session.resumeText, session.target),
         }, null);
@@ -3041,8 +3097,36 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         });
       }
 
+      /*
+       * The companies everybody is aiming at, on the end of every list.
+       *
+       * The boards return whoever is advertising today, which is rarely the
+       * handful of employers a student actually has in mind. These are not
+       * openings and are not presented as any — they are a target to tailor
+       * against, so somebody can see their page rewritten for Google before
+       * a Google posting ever appears.
+       *
+       * The blurb is for the reader and nothing else: given to the tailor as
+       * a job description, its own words became required terms and a page
+       * came back needing to evidence "Tailoring". A target has no posting
+       * behind it — it has a role, and that is all there is to match.
+       */
+      const BIG_TECH = ['Google', 'Meta', 'Amazon', 'Microsoft', 'Apple', 'Netflix',
+        'OpenAI', 'Nvidia', 'Tesla', 'SpaceX'];
+      const role = session.jobRole || session.target || 'Engineer';
+      const aspirational = BIG_TECH.map((company) => ({
+        title: role,
+        company,
+        location: 'United States · and their global offices',
+        url: '',
+        aspirational: true,
+        blurb: `${company} hires ${role.toLowerCase()}s continuously. This is not a posting — it is a target. Tailoring against it rewrites your page for the bar these companies screen at, so it is ready the day one opens.`,
+        description: '',
+        tags: [],
+      }));
+
       session.command = null;
-      session.jobs = found;
+      session.jobs = [...found, ...aspirational];
       if (!found.length) {
         return res.json({
           ok: true, kind: 'help',
@@ -3054,13 +3138,16 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       return res.json({
         ok: true,
         kind: 'help',
-        jobs: found,
+        /* The whole list, not the boards' half of it. */
+        jobs: session.jobs,
         reply: [
-          `${found.length} opening${found.length === 1 ? '' : 's'} for ${session.jobRole || 'your target'}, matched to what your resume can prove.`,
+          `${found.length} opening${found.length === 1 ? '' : 's'} for ${role}, matched to what your resume can prove.`,
           '',
           ...found.slice(0, 8).map((j, i) => `${i + 1}. **${j.title}** — ${j.company}${j.location ? ` · ${j.location}` : ''}`),
           '',
-          'Open any of them to read the role. Tailor resume is at the top of the posting.',
+          `And the ones worth aiming at: ${BIG_TECH.join(', ')}. Not postings — targets. Tailoring against one rewrites your page for the bar they screen at, so it is ready the day something opens.`,
+          '',
+          'Open any of them to read the role. Tailor resume is at the top.',
         ].join('\n'),
         session,
       });
@@ -3415,7 +3502,7 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         ok: true,
         kind: 'build',
         text: session.resumeText,
-        report: scanResume(session.resumeText, session.target),
+        report: scanResume(session.resumeText, session.scoreTarget),
         details: session.details,
         reply: [
           `${entries.length} project${entries.length === 1 ? '' : 's'} added under their own heading, each marked "${skillPlan.PLANNED}" with the numbers left blank.`,
@@ -3458,7 +3545,7 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         ok: true,
         kind: 'build',
         text: session.resumeText,
-        report: scanResume(session.resumeText, session.target),
+        report: scanResume(session.resumeText, session.scoreTarget),
         details: session.details,
         reply: [
           before
