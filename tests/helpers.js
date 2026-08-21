@@ -2,8 +2,12 @@
 
 function mockRes() {
   const res = {};
+  res.headers = {};
   res.status = jest.fn().mockReturnValue(res);
   res.json = jest.fn().mockReturnValue(res);
+  // Express responses have set(); guards use it to mark a genuine session
+  // failure (X-Session-Expired), so the double has to have it too.
+  res.set = jest.fn((k, v) => { res.headers[String(k).toLowerCase()] = v; return res; });
   return res;
 }
 

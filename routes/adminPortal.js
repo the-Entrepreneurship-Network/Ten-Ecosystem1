@@ -7,6 +7,7 @@ const { broadcastNotification } = require('../utils/sseHub');
 const { normalizeDomain } = require('../config/domains');
 const { normalizeTenure, getTenureLabel, getInternshipEndDate } = require('../utils/tenure');
 const { isEmployeeIdAvailable } = require('../utils/employeeId');
+const { propagateStudentChange } = require('../services/studentPropagation');
 
 // Brute-force guard on the admin login. Keyed by IP only — there is a single
 // admin account, so there is no per-account key to add and no other user to
@@ -29,6 +30,8 @@ const DocumentHistory = require('../models/DocumentHistory');
 const AuditLog = require('../models/AuditLog');
 const Attendance = require('../models/Attendance');
 const CertificateRequest = require('../models/CertificateRequest');
+const attendanceUtils = require('../utils/attendanceUtils');
+const attendanceDomain = require('../utils/attendanceDomain');
 
 // ─── AUTH ────────────────────────────────────────────────────────────────────
 
@@ -37,8 +40,31 @@ router.post('/login', adminLoginLimiter, async (req, res) => {
     const { username, password } = req.body || {};
     const isValid = await verifyAdminCredentials(username, password);
     if (isValid) {
-      // Regenerate the session id on privilege change (session fixation).
+      /*
+       * Regenerating the session id on a privilege change is right — it is what
+       * stops session fixation. Throwing away the rest of the session with it
+       * was not.
+       *
+       * One browser holds one cookie for the whole product, so the HR, student
+       * and coordinator portals share this session. regenerate() destroys it
+       * wholesale, so signing into the admin console silently signed the same
+       * person out of every other portal they had open. The HR dashboard renders
+       * from sessionStorage, so it went on LOOKING signed in while every request
+       * behind it answered 401 — "Your HR session has expired", out of nowhere,
+       * for someone who had done nothing but open a second tab. In a private
+       * window, where the admin console had never been used, HR worked perfectly.
+       *
+       * So the other roles are carried across. They were authenticated in this
+       * session already and are not re-granted here; only the session ID
+       * changes, which is the part fixation cares about.
+       */
+      const carried = {};
+      for (const role of ['student', 'hr', 'coordinator']) {
+        if (req.session && req.session[role]) carried[role] = req.session[role];
+      }
+
       const grant = () => {
+        Object.assign(req.session, carried);
         req.session.adminUser = { username: ADMIN_USERNAME, lastActivity: Date.now() };
         res.json({ success: true });
       };
@@ -258,8 +284,18 @@ router.post('/payments/verify/:paymentId', requireAdminAPI, async (req, res) => 
         console.error('Cert generation error after payment approval:', certErr);
       }
 
-      // If this is a tenure payment, unlock student access
+      // If this is a tenure payment, unlock student access AND hand over the
+      // bundle the payment screen sold (coins + certificate fee waived).
       if (payment.purpose && payment.purpose.startsWith('tenure_')) {
+        try {
+          const { grantTenureBenefits } = require('../services/tenureBenefits');
+          await grantTenureBenefits(student, { sourceOrderId: payment.orderId || String(payment._id) });
+        } catch (benefitErr) {
+          // An approved payment stays approved even if a perk could not be
+          // handed over — it is recoverable, and blocking access is not.
+          console.error('[admin] tenure bundle grant failed:', benefitErr.message);
+        }
+
         try {
           // Use updateOne for maximum reliability in both MongoDB and local-fallback modes
           const updateResult = await Student.updateOne(
@@ -376,6 +412,14 @@ router.post('/tenure-payment/approve/:orderId', requireAdminAPI, async (req, res
       student = await Student.findById(payment.studentId);
     }
     if (student) {
+      // Same bundle as the other approval route, so which button an admin
+      // happens to press cannot change what a student receives.
+      try {
+        const { grantTenureBenefits } = require('../services/tenureBenefits');
+        await grantTenureBenefits(student, { sourceOrderId: req.params.orderId });
+      } catch (benefitErr) {
+        console.error('[admin] tenure bundle grant failed:', benefitErr.message);
+      }
       await Notification.notifyStudent(student, {
         title: 'Payment Verified ✓',
         message: 'Your course fee has been verified. You now have full access to all content.',
@@ -478,8 +522,13 @@ router.get('/students', requireAdminAPI, async (req, res) => {
     const filter = {};
     if (domain) filter.domain = domain;
     if (search) {
+      // firstName/lastName are searched too: a record whose `name` never got
+      // set is exactly the one an admin is hunting for, and searching only
+      // `name` could not find it by name at all.
       filter.$or = [
         { name: { $regex: search, $options: 'i' } },
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } },
         { employeeId: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } }
       ];
@@ -487,7 +536,12 @@ router.get('/students', requireAdminAPI, async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const [students, total] = await Promise.all([
       Student.find(filter)
-        .select('name employeeId email domain tenure joiningDate locStatus lorStatus starStatus isLockedOut failedLoginAttempts createdAt')
+        // mustChange* drive the "Reset pending" badge: without them there is no
+        // way to tell an account still sitting on an admin-set password from
+        // one the student has since taken back over.
+        // firstName/lastName ride along so the console can fall back to them
+        // for a record whose `name` was never written.
+        .select('name firstName lastName employeeId email domain tenure joiningDate locStatus lorStatus starStatus isLockedOut failedLoginAttempts createdAt mustChangePassword mustChangeEmail')
         .skip(skip)
         .limit(parseInt(limit))
         .sort({ createdAt: -1 }),
@@ -581,6 +635,17 @@ router.put('/students/:id', requireAdminAPI, async (req, res) => {
 
     const student = await Student.findByIdAndUpdate(req.params.id, { $set: update }, { new: true });
 
+    // This route already derived v2DurationType and internshipEndDate, but the
+    // Task Journey was left untouched — task rows are assigned once at
+    // enrolment and never revisited, so a tenure or domain change here did not
+    // reach the student's actual task list.
+    const propagation = await propagateStudentChange({
+      student,
+      before: { tenure: existing.tenure, domain: existing.domain,
+                joiningDate: existing.joiningDate, internshipStartDate: existing.internshipStartDate },
+      actor: req.session.adminUser?.username || 'admin'
+    });
+
     await AuditLog.create({
       userId: student._id,
       actionType: 'student_updated',
@@ -600,6 +665,7 @@ router.put('/students/:id', requireAdminAPI, async (req, res) => {
     res.json({
       success: true,
       data: student,
+      propagated: propagation,
       offerLetterNeedsRegeneration: identityChanged && hasIssuedOffer,
       offerLetterMessage: (identityChanged && hasIssuedOffer)
         ? "This student's offer letter was issued with the previous domain/tenure and no longer matches their record. Regenerate it so the two agree."
@@ -651,6 +717,15 @@ router.post('/students/:id/extend-tenure', requireAdminAPI, async (req, res) => 
 
     const updated = await Student.findByIdAndUpdate(req.params.id, { $set: update }, { new: true });
 
+    // Extending a tenure without resyncing left the student on the old number
+    // of weeks — the record said 3 Months and the Task Journey still showed 4
+    // weeks of the 1-Month plan.
+    const propagation = await propagateStudentChange({
+      student: updated,
+      before: { tenure: oldState.tenure, internshipStartDate: oldState.internshipStartDate },
+      actor: req.session.adminUser?.username || 'admin'
+    });
+
     await AuditLog.create({
       userId: student._id,
       actionType: 'student_tenure_extended',
@@ -666,6 +741,7 @@ router.post('/students/:id/extend-tenure', requireAdminAPI, async (req, res) => 
     res.json({
       success: true,
       data: updated,
+      propagated: propagation,
       previousTenure: oldState.tenure,
       newTenure: update.tenure,
       internshipEndDate: endDate,
@@ -707,29 +783,138 @@ router.post('/students/:id/unlock', requireAdminAPI, async (req, res) => {
   }
 });
 
-router.post('/students/:id/reset-password', requireAdminAPI, async (req, res) => {
+/**
+ * Give a student a way back into their account — password, email, or both.
+ *
+ * Students who are registered and working get locked out: a mistyped email at
+ * registration that no reset link can ever reach, a forgotten password on an
+ * account whose email is wrong, a lockout that outlasts anyone's patience. An
+ * admin needs to be able to hand them working credentials.
+ *
+ * What that must NOT do is leave the account sitting on a password somebody
+ * else chose and knows. So both changes raise a flag, and the student's next
+ * sign-in stops on a screen asking them to set their own password (and confirm
+ * their own email, if that was changed) before they can go anywhere. See
+ * POST /api/student/security/* in server.js for the other half.
+ *
+ * `requireChange: false` skips the prompt — for the case where an admin is
+ * correcting an obvious typo and there is nothing for the student to redo.
+ */
+async function resetStudentCredentials(req, res) {
   try {
-    const { newPassword } = req.body;
-    if (!newPassword || newPassword.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
-    const hashed = await bcrypt.hash(newPassword, 10);
+    const body = req.body || {};
+    const newPassword = typeof body.newPassword === 'string' ? body.newPassword : '';
+    const newEmail = typeof body.newEmail === 'string' ? body.newEmail.trim().toLowerCase() : '';
+    const requireChange = body.requireChange !== false;
+
+    if (!newPassword && !newEmail) {
+      return res.status(400).json({ error: 'Supply a new password, a new email, or both.' });
+    }
+    if (newPassword && newPassword.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+    // Deliberately permissive but real: something@something.tld. A stricter
+    // pattern rejects valid addresses, and this is the address a locked-out
+    // student's only way back in will be sent to.
+    if (newEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(newEmail)) {
+      return res.status(400).json({ error: 'That does not look like a valid email address.' });
+    }
+
     const student = await Student.findById(req.params.id);
     if (!student) return res.status(404).json({ error: 'Student not found' });
-    student.password = hashed;
+
+    // An email already on another account would give two students the same
+    // sign-in identifier, and the email branch of /login resolves exactly one.
+    if (newEmail && newEmail !== String(student.email || '').toLowerCase()) {
+      const clash = await Student.findOne({
+        email: new RegExp('^' + newEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i'),
+        _id: { $ne: student._id }
+      }).select('employeeId').lean();
+      if (clash) {
+        return res.status(409).json({ error: `That email is already used by ${clash.employeeId}.` });
+      }
+    }
+
+    const oldState = {
+      email: student.email,
+      mustChangePassword: student.mustChangePassword,
+      mustChangeEmail: student.mustChangeEmail
+    };
+    const changed = [];
+
+    if (newPassword) {
+      student.password = await bcrypt.hash(newPassword, 10);
+      student.mustChangePassword = requireChange;
+      changed.push('password');
+    }
+    if (newEmail && newEmail !== String(student.email || '').toLowerCase()) {
+      student.previousEmail = student.email || null;
+      student.email = newEmail;
+      student.mustChangeEmail = requireChange;
+      changed.push('email');
+    }
+
+    // A student who could not get in was very likely locked out as well.
+    // Leaving the lock on would make the new password look wrong too.
+    student.isLockedOut = false;
+    student.failedLoginAttempts = 0;
+    student.lockoutUntil = null;
+
+    // Any session opened with the old credentials ends here. If the reason for
+    // the reset was somebody else in the account, leaving their session alive
+    // would defeat the whole exercise.
+    student.activeSessionToken = null;
+    // A pending reset link issued under the old email must not still work.
+    student.passwordResetToken = null;
+    student.passwordResetExpiry = null;
+
+    student.credentialResetAt = new Date();
+    student.credentialResetBy = req.session.adminUser?.username || 'admin';
     await student.save();
+
     await AuditLog.create({
       userId: student._id,
-      actionType: 'student_password_reset',
-      performedBy: req.session.adminUser?.username || 'admin',
-      description: `Admin reset password for ${student.employeeId}`,
-      // Deliberately records only THAT the password changed. Never log a
-      // password, a hash, or its length.
-      oldState: { password: '[redacted]' },
-      newState: { password: '[redacted]' }
+      actionType: 'student_credentials_reset',
+      performedBy: student.credentialResetBy,
+      description: `Admin reset ${changed.join(' and ')} for ${student.employeeId}`,
+      // Records THAT the password changed and nothing about its value — never
+      // a password, a hash, or even its length.
+      oldState: Object.assign({}, oldState, newPassword ? { password: '[redacted]' } : {}),
+      newState: {
+        email: student.email,
+        mustChangePassword: student.mustChangePassword,
+        mustChangeEmail: student.mustChangeEmail,
+        ...(newPassword ? { password: '[redacted]' } : {})
+      }
     });
-    res.json({ success: true, message: 'Password reset successfully' });
+
+    res.json({
+      success: true,
+      changed,
+      email: student.email,
+      requireChange,
+      message: requireChange
+        ? `Updated ${changed.join(' and ')}. Give the student these details — they will be asked to set their own when they sign in.`
+        : `Updated ${changed.join(' and ')}.`
+    });
   } catch (err) {
+    console.error('[admin] credential reset failed:', err.message);
     res.status(500).json({ error: err.message });
   }
+}
+
+router.post('/students/:id/reset-credentials', requireAdminAPI, resetStudentCredentials);
+
+/**
+ * Password only — what the older admin screens call. Same handler, so there is
+ * one code path and one set of side effects; the email simply is not supplied.
+ */
+router.post('/students/:id/reset-password', requireAdminAPI, (req, res) => {
+  req.body = {
+    newPassword: (req.body || {}).newPassword,
+    requireChange: (req.body || {}).requireChange
+  };
+  return resetStudentCredentials(req, res);
 });
 
 router.delete('/students/:id', requireAdminAPI, async (req, res) => {
@@ -956,24 +1141,20 @@ router.get('/audit-log', requireAdminAPI, async (req, res) => {
 
 router.post('/attendance/recalculate-all', requireAdminAPI, async (req, res) => {
   try {
-    const TENURE_DAYS = { '1week': 7, '15days': 15, '1month': 30, '45days': 45, '3months': 90, '6months': 180 };
-    const students = await Student.find({});
+    // This used to carry its own copy of the tenure table and its own formula:
+    // elapsed CALENDAR days as the denominator, Sundays counted, and
+    // `countDocuments({status:'Present'})` as the numerator — which counts a
+    // day twice when both the student and their coordinator marked it. So the
+    // one button whose whole job is to correct attendance wrote numbers that
+    // disagreed with every other screen in the portal. It now runs the shared
+    // calculator, the same one the dashboard and the certificate rules use.
+    const students = await Student.find({}).select('employeeId').lean();
     let updated = 0, errors = 0;
 
     for (const student of students) {
       try {
-        if (!student.joiningDate) continue;
-        const tenure = student.tenure || student.v2DurationType || '1month';
-        const totalTenureDays = TENURE_DAYS[tenure] || 30;
-        const joiningDate = new Date(student.joiningDate);
-        const today = new Date();
-        const daysElapsed = Math.min(Math.floor((today - joiningDate) / 86400000) + 1, totalTenureDays);
-        const expectedDays = Math.max(daysElapsed, 1);
-        const presentCount = await Attendance.countDocuments({ employeeId: student.employeeId, status: 'Present' });
-        const percentage = Math.min(Math.round((presentCount / expectedDays) * 100), 100);
-        student.calculatedAttendancePercentage = percentage;
-        student.attendanceLastCalculated = new Date();
-        await student.save();
+        if (!student.employeeId) continue;
+        await attendanceUtils.recomputeAndSaveAttendance(Student, Attendance, student.employeeId);
         updated++;
       } catch (e) { errors++; }
     }
@@ -988,6 +1169,564 @@ router.post('/attendance/recalculate-all', requireAdminAPI, async (req, res) => 
     res.json({ success: true, updated, errors });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── ATTENDANCE CONTROL ───────────────────────────────────────────────────────
+//
+// Full read/write on any student's attendance, scoped to a domain. A student
+// holding two domains has two independent records, so every route here takes a
+// domain and defaults to their primary one — see utils/attendanceDomain.js.
+
+/** Resolve a student by employee ID or Mongo id. */
+async function findStudentByRef(ref) {
+  if (!ref) return null;
+  const byEmployee = await Student.findOne({ employeeId: String(ref).trim() });
+  if (byEmployee) return byEmployee;
+  if (/^[0-9a-fA-F]{24}$/.test(String(ref))) return Student.findById(ref);
+  return null;
+}
+
+router.get('/attendance/:ref', requireAdminAPI, async (req, res) => {
+  try {
+    const student = await findStudentByRef(decodeURIComponent(req.params.ref));
+    if (!student) return res.status(404).json({ success: false, error: 'Student not found' });
+
+    const domains = attendanceDomain.studentDomains(student);
+    const domain = attendanceDomain.resolveActiveDomain(student, req.query.domain);
+
+    const all = await Attendance.find({ employeeId: student.employeeId }).sort({ date: -1 }).lean();
+    const records = attendanceDomain.filterByDomain(all, domain, student);
+    const summary = attendanceUtils.getAttendanceSummary(records, student);
+
+    res.json({
+      success: true,
+      student: {
+        _id: student._id, name: student.name, employeeId: student.employeeId,
+        domain: student.domain, tenure: student.tenure, joiningDate: student.joiningDate
+      },
+      domain,
+      domains,
+      summary,
+      // Every domain's figures at once, so the admin can see both sides of a
+      // dual-domain student without switching.
+      perDomain: domains.map((d) => ({
+        domain: d,
+        summary: attendanceUtils.getAttendanceSummary(
+          attendanceDomain.filterByDomain(all, d, student), student)
+      })),
+      records
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/attendance/mark', requireAdminAPI, async (req, res) => {
+  try {
+    const { ref, employeeId, date, status, domain, markedBy } = req.body || {};
+    const student = await findStudentByRef(ref || employeeId);
+    if (!student) return res.status(404).json({ success: false, error: 'Student not found' });
+
+    const when = new Date(date || Date.now());
+    if (isNaN(when.getTime())) return res.status(400).json({ success: false, error: 'Invalid date' });
+
+    const source = markedBy === 'self' ? 'self' : 'coordinator';
+    const st = status === 'Absent' ? 'Absent' : 'Present';
+    const markDomain = attendanceDomain.domainForWrite(student, domain);
+    const dateKey = attendanceUtils.toDateKey(when);
+
+    let record = await Attendance.findOne({
+      employeeId: student.employeeId, dateKey, markedBy: source, domain: markDomain
+    });
+
+    const before = record ? record.status : null;
+    if (record) {
+      record.status = st;
+      record.date = when;
+      record.coordinatorId = 'ADMIN';
+      await record.save();
+    } else {
+      record = await Attendance.create({
+        studentId: student._id, employeeId: student.employeeId, domain: markDomain,
+        date: when, dateKey, status: st, markedBy: source,
+        coordinatorId: source === 'coordinator' ? 'ADMIN' : '',
+        source: 'admin'
+      });
+    }
+
+    await attendanceUtils.recomputeAndSaveAttendance(Student, Attendance, student.employeeId);
+
+    await AuditLog.create({
+      userId: req.session.adminUser?.username || 'admin',
+      actionType: 'attendance_mark',
+      performedBy: 'admin',
+      description: `${before ? 'Changed' : 'Created'} ${source} attendance for ${student.employeeId} / ${markDomain || '(no domain)'} on ${dateKey}: ${before || '—'} → ${st}`,
+      oldState: before ? { status: before } : null,
+      newState: { status: st, dateKey, domain: markDomain, markedBy: source }
+    }).catch(() => {});
+
+    res.json({ success: true, record, domain: markDomain });
+  } catch (err) {
+    if (err.code === 11000) return res.status(409).json({ success: false, error: 'Already marked for that day and domain' });
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/attendance/record/:id', requireAdminAPI, async (req, res) => {
+  try {
+    const record = await Attendance.findById(req.params.id);
+    if (!record) return res.status(404).json({ success: false, error: 'Record not found' });
+
+    await Attendance.deleteOne({ _id: record._id });
+    await attendanceUtils.recomputeAndSaveAttendance(Student, Attendance, record.employeeId);
+
+    await AuditLog.create({
+      userId: req.session.adminUser?.username || 'admin',
+      actionType: 'attendance_delete',
+      performedBy: 'admin',
+      description: `Deleted ${record.markedBy} attendance for ${record.employeeId} / ${record.domain || '(no domain)'} on ${record.dateKey}`,
+      oldState: { status: record.status, dateKey: record.dateKey, domain: record.domain, markedBy: record.markedBy },
+      newState: null
+    }).catch(() => {});
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── DOCUMENT CONTROL ─────────────────────────────────────────────────────────
+
+router.get('/documents/history', requireAdminAPI, async (req, res) => {
+  try {
+    const page   = Math.max(1, parseInt(req.query.page || '1', 10) || 1);
+    const limit  = Math.min(200, Math.max(1, parseInt(req.query.limit || '100', 10) || 100));
+    const skip   = (page - 1) * limit;
+    const method = req.query.method;
+    const q      = String(req.query.q || '').trim();
+
+    // Same rule as the HR view: a row is a send only if it carries the
+    // document number that was printed on the paper.
+    const filter = {
+      documentNumber: { $exists: true, $nin: [null, '', '—'] },
+      documentType:   { $exists: true, $nin: [null, ''] }
+    };
+    if (method === 'manual' || method === 'automation') filter.method = method;
+    if (q) {
+      const rx = new RegExp(q.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'i');
+      filter.$or = [{ studentName: rx }, { employeeId: rx }, { documentNumber: rx }];
+    }
+
+    const [docs, total, manual, automation] = await Promise.all([
+      DocumentHistory.find(filter).sort({ sentAt: -1 }).skip(skip).limit(limit).lean(),
+      DocumentHistory.countDocuments(filter),
+      DocumentHistory.countDocuments({ ...filter, method: 'manual' }),
+      DocumentHistory.countDocuments({ ...filter, method: 'automation' })
+    ]);
+
+    res.json({
+      success: true,
+      total, page, counts: { manual, automation },
+      data: docs.map((d) => ({
+        ...d,
+        method: DocumentHistory.resolveMethod(d.method, d.sentBy)
+      }))
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+const ADMIN_DOC_TYPES = ['OFFER', 'LOC', 'LOR', 'STAR', 'LOP'];
+
+router.post('/documents/generate', requireAdminAPI, async (req, res) => {
+  try {
+    const { ref, employeeId, certType } = req.body || {};
+    const type = String(certType || '').toUpperCase();
+    if (!ADMIN_DOC_TYPES.includes(type)) {
+      return res.status(400).json({ success: false, error: `certType must be one of ${ADMIN_DOC_TYPES.join(', ')}` });
+    }
+
+    const student = await findStudentByRef(ref || employeeId);
+    if (!student) return res.status(404).json({ success: false, error: 'Student not found' });
+
+    const who = req.session.adminUser?.username || 'admin';
+    const { generateAndSaveCert } = require('./v2/certificates');
+    // The sentBy string is what decides Manual vs Automation in Document
+    // History, so it names the admin who pressed the button.
+    const result = await generateAndSaveCert(
+      student._id.toString(), type, student, `Admin Portal (${who})`
+    );
+
+    await AuditLog.create({
+      userId: who,
+      actionType: 'document_generate',
+      performedBy: 'admin',
+      description: `Generated ${type} for ${student.employeeId}`,
+      newState: { certType: type, employeeId: student.employeeId }
+    }).catch(() => {});
+
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ════════════════════════════════════════════════════════════════════════
+   Certificate overrides — what HR issued without the checks passing
+   ════════════════════════════════════════════════════════════════════════
+
+   HR can now issue a certificate directly (POST /api/v2/certificates/hr-issue),
+   skipping the application, the attendance rule and the performance rule. That
+   is deliberate: interns who did the whole internship over WhatsApp have no
+   portal record to satisfy any of it. But an issuing power with no visibility
+   above it is how a certificate stops meaning anything, so every direct issue
+   writes a row and this is where an admin reads them.
+
+   The list defaults to the ones that matter — issues where the student did NOT
+   meet the requirements — with a filter for the rest.
+   ═══════════════════════════════════════════════════════════════════════ */
+const CertificateOverride = require('../models/CertificateOverride');
+
+router.get('/certificate-overrides', requireAdminAPI, async (req, res) => {
+  try {
+    const { filter = 'all', search = '', page = 1, limit = 50 } = req.query;
+    const q = {};
+    if (filter === 'unmet') q.metRequirements = false;
+    else if (filter === 'met') q.metRequirements = true;
+    else if (filter === 'revoked') q.revokedAt = { $ne: null };
+
+    if (search) {
+      const rx = new RegExp(String(search).replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'i');
+      q.$or = [{ employeeId: rx }, { studentName: rx }, { issuedBy: rx }, { domain: rx }];
+    }
+
+    const lim = Math.min(200, Math.max(1, parseInt(limit, 10) || 50));
+    const skip = (Math.max(1, parseInt(page, 10) || 1) - 1) * lim;
+
+    const [rows, total, unmetCount] = await Promise.all([
+      CertificateOverride.find(q).sort({ issuedAt: -1 }).skip(skip).limit(lim).lean(),
+      CertificateOverride.countDocuments(q),
+      CertificateOverride.countDocuments({ metRequirements: false, revokedAt: null })
+    ]);
+
+    res.json({ success: true, overrides: rows, total, unmetCount, page: Number(page), limit: lim });
+  } catch (err) {
+    console.error('[admin/certificate-overrides]', err.message);
+    res.status(500).json({ success: false, error: err.message, overrides: [], total: 0, unmetCount: 0 });
+  }
+});
+
+// The badge on the nav item — cheap enough to poll.
+router.get('/certificate-overrides/count', requireAdminAPI, async (req, res) => {
+  try {
+    const unmetCount = await CertificateOverride.countDocuments({ metRequirements: false, revokedAt: null });
+    res.json({ success: true, unmetCount });
+  } catch (err) {
+    res.json({ success: true, unmetCount: 0 });
+  }
+});
+
+/**
+ * Revoke one.
+ *
+ * This is the counterweight to the bypass: if HR issued a certificate that
+ * should not exist, an admin takes it back. Revoking clears the PDF and resets
+ * the status, so the student's My Documents stops offering the download — a
+ * revocation that left the file downloadable would be theatre.
+ */
+router.post('/certificate-overrides/:id/revoke', requireAdminAPI, async (req, res) => {
+  try {
+    const { reason } = req.body || {};
+    const who = (req.session && req.session.adminUser && req.session.adminUser.username) || 'admin';
+
+    const row = await CertificateOverride.findById(req.params.id);
+    if (!row) return res.status(404).json({ success: false, error: 'Override not found' });
+    if (row.revokedAt) return res.status(400).json({ success: false, error: 'Already revoked' });
+
+    const fieldMap = {
+      LOC:   { pdf: 'locPdfBase64',   status: 'locStatus',   date: 'locIssuedAt',   flag: 'locIssuedByOverride',   reset: 'not_eligible' },
+      LOR:   { pdf: 'lorPdfBase64',   status: 'lorStatus',   date: 'lorIssuedAt',   flag: 'lorIssuedByOverride',   reset: 'not_eligible' },
+      STAR:  { pdf: 'starPdfBase64',  status: 'starStatus',  date: 'starIssuedAt',  flag: 'starIssuedByOverride',  reset: 'not_submitted' },
+      OFFER: { pdf: 'offerPdfBase64', status: 'offerLetterStatus', date: 'offerLetterGeneratedAt', flag: 'offerIssuedByOverride', reset: 'not_uploaded' },
+      LOP:   { pdf: 'lopPdfBase64',   status: 'lopStatus',   date: 'lopIssuedAt',   flag: 'lopIssuedByOverride',   reset: 'not_eligible' }
+    };
+    const f = fieldMap[row.certificateType];
+    if (f && row.studentId) {
+      await Student.findByIdAndUpdate(row.studentId, {
+        [f.pdf]: null, [f.status]: f.reset, [f.date]: null, [f.flag]: false
+      }).catch((e) => console.error('[revoke] student update failed:', e.message));
+    }
+
+    row.revokedAt = new Date();
+    row.revokedBy = who;
+    row.revokeReason = String(reason || '').slice(0, 1000);
+    await row.save();
+
+    await AuditLog.create({
+      userId: who,
+      actionType: 'certificate_revoke',
+      performedBy: 'admin',
+      description: `Revoked ${row.certificateType} issued to ${row.employeeId} by ${row.issuedBy}`,
+      oldState: { certificateType: row.certificateType, employeeId: row.employeeId, issuedBy: row.issuedBy },
+      newState: { revoked: true, reason: row.revokeReason }
+    }).catch(() => {});
+
+    res.json({ success: true, message: `${row.certificateType} revoked for ${row.employeeId}.` });
+  } catch (err) {
+    console.error('[admin/certificate-overrides revoke]', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+//  Hackathon & Ideathon — payment verification (admin, not HR)
+//
+//  Public entrants register through the hackathon portal and pay the entry fee
+//  by UPI, then wait here. This is a self-contained queue on the HackathonTeam
+//  record — it does NOT touch the student Payment collection or the student
+//  portal, so the hackathon stays separate from everything else. No email.
+// ─────────────────────────────────────────────────────────────────────────
+const HackathonTeam = require('../models/HackathonTeam');
+const Hackathon = require('../models/Hackathon');
+
+// ── Events ────────────────────────────────────────────────────────────────
+//  Without an event, the hackathon portal has nothing to register for and
+//  shows "nothing scheduled". The role-guarded /api/v2/hackathons/admin
+//  endpoints need a student-portal HR/ADMIN session, which the admin console
+//  (password-gated /api/admin-internal) does not have — so staff had no way to
+//  create one. These give the admin console its own create/list/manage path.
+
+/** GET /api/admin-internal/hackathon-events — every event, with team counts. */
+router.get('/hackathon-events', requireAdminAPI, async (req, res) => {
+  try {
+    const events = await Hackathon.find({}).sort({ createdAt: -1 }).limit(100).lean();
+    const counts = await HackathonTeam.aggregate([
+      { $group: { _id: '$hackathonId', n: { $sum: 1 } } }
+    ]);
+    const byId = new Map(counts.map((c) => [String(c._id), c.n]));
+    res.json({
+      success: true,
+      events: events.map((e) => ({
+        id: String(e._id),
+        title: e.title,
+        slug: e.slug,
+        mode: e.mode,
+        tagline: e.tagline || '',
+        tracks: e.tracks || [],
+        prize: e.prize || '',
+        entryFee: e.entryFee == null ? 200 : e.entryFee,
+        minTeamSize: e.minTeamSize,
+        maxTeamSize: e.maxTeamSize,
+        registrationClosesAt: e.registrationClosesAt,
+        startsAt: e.startsAt,
+        venue: e.venue,
+        status: e.status,
+        published: e.published,
+        teamCount: byId.get(String(e._id)) || 0
+      }))
+    });
+  } catch (err) {
+    console.error('[admin] hackathon events list failed:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/** POST /api/admin-internal/hackathon-events — create one. Live by default. */
+router.post('/hackathon-events', requireAdminAPI, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const title = String(b.title || '').trim();
+    if (title.length < 2) return res.status(400).json({ success: false, error: 'Give the event a title.' });
+
+    const slug = String(b.slug || title)
+      .toLowerCase().trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 80);
+    if (!slug) return res.status(400).json({ success: false, error: 'Could not build a URL slug from that title.' });
+
+    // "Go live now" is the common case: publish it and open registration so it
+    // appears on the portal and accepts entrants immediately. Uncheck to keep
+    // it a hidden draft.
+    const live = b.live !== false;
+    const tracks = Array.isArray(b.tracks)
+      ? b.tracks
+      : String(b.tracks || '').split(',').map((t) => t.trim()).filter(Boolean);
+
+    const event = await Hackathon.create({
+      title: title.slice(0, 200),
+      slug,
+      mode: b.mode === 'ideathon' ? 'ideathon' : 'hackathon',
+      tagline: String(b.tagline || '').slice(0, 300),
+      description: String(b.description || '').slice(0, 6000),
+      tracks: tracks.slice(0, 20).map(String),
+      prize: String(b.prize || '').slice(0, 300),
+      entryFee: b.entryFee == null || b.entryFee === '' ? 200 : Math.max(0, Number(b.entryFee) || 0),
+      minTeamSize: Number(b.minTeamSize) || 1,
+      maxTeamSize: Number(b.maxTeamSize) || 4,
+      registrationClosesAt: b.registrationClosesAt ? new Date(b.registrationClosesAt) : null,
+      startsAt: b.startsAt ? new Date(b.startsAt) : null,
+      endsAt:   b.endsAt   ? new Date(b.endsAt)   : null,
+      venue: String(b.venue || 'Online').slice(0, 200),
+      status: live ? 'registration_open' : 'draft',
+      published: live,
+      publishedAt: live ? new Date() : null,
+      createdBy: 'admin'
+    });
+    await AuditLog.create({
+      userId: event._id, actionType: 'hackathon_event_created', performedBy: 'admin',
+      description: `Admin created hackathon event "${event.title}" (${event.slug}), ${live ? 'live' : 'draft'}`,
+      newState: { published: event.published, status: event.status }
+    }).catch(() => {});
+    res.json({ success: true, event: { id: String(event._id), slug: event.slug } });
+  } catch (err) {
+    if (err && err.code === 11000) {
+      return res.status(409).json({ success: false, error: 'An event with that slug already exists.' });
+    }
+    console.error('[admin] hackathon event create failed:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * PATCH /api/admin-internal/hackathon-events/:id — publish/unpublish, open/close
+ * registration, or cancel. Sent as a single { action } for the list buttons.
+ */
+router.patch('/hackathon-events/:id', requireAdminAPI, async (req, res) => {
+  try {
+    const event = await Hackathon.findById(req.params.id);
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found.' });
+    const action = String((req.body || {}).action || '');
+
+    if (action === 'publish')        { event.published = true;  event.publishedAt = new Date();
+                                       if (event.status === 'draft') event.status = 'registration_open'; }
+    else if (action === 'unpublish') { event.published = false; }
+    else if (action === 'open')      { event.status = 'registration_open'; }
+    else if (action === 'close')     { event.status = 'announced'; }
+    else if (action === 'cancel')    { event.status = 'cancelled'; event.published = false; }
+    else return res.status(400).json({ success: false, error: 'Unknown action.' });
+
+    await event.save();
+    res.json({ success: true, event: { id: String(event._id), status: event.status, published: event.published } });
+  } catch (err) {
+    console.error('[admin] hackathon event update failed:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/** DELETE /api/admin-internal/hackathon-events/:id — only when it has no teams. */
+router.delete('/hackathon-events/:id', requireAdminAPI, async (req, res) => {
+  try {
+    const teams = await HackathonTeam.countDocuments({ hackathonId: req.params.id });
+    if (teams > 0) {
+      return res.status(409).json({ success: false, error: `This event has ${teams} registration(s). Cancel it instead of deleting.` });
+    }
+    const event = await Hackathon.findByIdAndDelete(req.params.id);
+    if (!event) return res.status(404).json({ success: false, error: 'Event not found.' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[admin] hackathon event delete failed:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/** GET /api/admin-internal/hackathon-registrations?status=pending|confirmed|rejected|all */
+router.get('/hackathon-registrations', requireAdminAPI, async (req, res) => {
+  try {
+    const status = String(req.query.status || 'pending');
+    const filter = {};
+    if (status !== 'all') filter.paymentStatus = status;
+    // Only teams that went through the paid public flow; legacy logged-in teams
+    // (paymentStatus 'unpaid') are not part of this queue.
+    if (status === 'all') filter.paymentStatus = { $in: ['pending', 'confirmed', 'rejected'] };
+
+    const teams = await HackathonTeam.find(filter).sort({ createdAt: -1 }).limit(200).lean();
+    res.json({
+      success: true,
+      registrations: teams.map((t) => ({
+        id: String(t._id),
+        team: t.name,
+        code: t.code || '',
+        event: t.eventTitle,
+        track: t.track || '',
+        lead: (t.members || []).find((m) => m.isLead) || { name: '', email: '' },
+        leadEmail: t.leadEmail,
+        leadPhone: t.leadPhone || '',
+        memberCount: (t.members || []).length,
+        amount: t.paymentAmount || 0,
+        utr: t.paymentRef || '',
+        paymentStatus: t.paymentStatus,
+        paidAt: t.paidAt,
+        verifiedBy: t.verifiedBy || '',
+        verifiedAt: t.verifiedAt || null,
+        rejectionReason: t.rejectionReason || ''
+      }))
+    });
+  } catch (err) {
+    console.error('[admin] hackathon list failed:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/** GET /api/admin-internal/hackathon-registrations/count — pending badge. */
+router.get('/hackathon-registrations/count', requireAdminAPI, async (req, res) => {
+  try {
+    const count = await HackathonTeam.countDocuments({ paymentStatus: 'pending' });
+    res.json({ success: true, count });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/** POST /api/admin-internal/hackathon-registrations/:id/verify  { action, rejectionReason } */
+router.post('/hackathon-registrations/:id/verify', requireAdminAPI, async (req, res) => {
+  try {
+    const { action, rejectionReason } = req.body || {};
+    const team = await HackathonTeam.findById(req.params.id);
+    if (!team) return res.status(404).json({ success: false, error: 'Registration not found.' });
+    if (team.paymentStatus !== 'pending') {
+      return res.status(409).json({ success: false, error: `This registration is already ${team.paymentStatus}.` });
+    }
+    const who = (req.session.adminUser && req.session.adminUser.username) || 'admin';
+
+    if (action === 'approve') {
+      team.paymentStatus = 'confirmed';
+      team.status = 'confirmed';
+      team.verifiedBy = who;
+      team.verifiedAt = new Date();
+      team.rejectionReason = '';
+      await team.save();
+      await AuditLog.create({
+        userId: team._id, actionType: 'hackathon_payment_approved', performedBy: 'admin',
+        description: `Admin approved hackathon entry for team "${team.name}" (${team.eventTitle}), UTR ${team.paymentRef}`,
+        newState: { paymentStatus: 'confirmed', verifiedBy: who }
+      }).catch(() => {});
+      return res.json({ success: true, message: `${team.name} is confirmed.` });
+    }
+
+    if (action === 'reject') {
+      if (!rejectionReason || String(rejectionReason).trim().length < 5) {
+        return res.status(400).json({ success: false, error: 'Give a reason (at least 5 characters).' });
+      }
+      team.paymentStatus = 'rejected';
+      team.verifiedBy = who;
+      team.verifiedAt = new Date();
+      team.rejectionReason = String(rejectionReason).trim().slice(0, 500);
+      await team.save();
+      await AuditLog.create({
+        userId: team._id, actionType: 'hackathon_payment_rejected', performedBy: 'admin',
+        description: `Admin rejected hackathon entry for team "${team.name}": ${team.rejectionReason}`,
+        newState: { paymentStatus: 'rejected', verifiedBy: who }
+      }).catch(() => {});
+      return res.json({ success: true, message: `${team.name} was rejected.` });
+    }
+
+    res.status(400).json({ success: false, error: 'Unknown action.' });
+  } catch (err) {
+    console.error('[admin] hackathon verify failed:', err.message);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

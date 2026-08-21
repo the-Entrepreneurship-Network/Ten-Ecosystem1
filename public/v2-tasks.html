@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="v2-quiz.css">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="/session-guard.js"></script>
+<script src="/credential-reset.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <style>
 /* NEW FEATURE: Task Portal V2 — full stylesheet matching TEN dark gold theme */
@@ -406,6 +407,15 @@ body::after {
 }
 </style>
   <link rel="stylesheet" href="/css/ten-brand.css">
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <script src="/push-client.js" defer></script>
 </head>
 <body>
 
@@ -493,7 +503,7 @@ body::after {
   <div id="dailyJobPostCard" style="margin-bottom:20px;background:linear-gradient(135deg,rgba(212,175,55,0.08),rgba(212,175,55,0.02));border:1px solid rgba(212,175,55,0.3);border-radius:20px;padding:24px 28px;position:relative;overflow:hidden;">
     <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,#D4AF37,transparent);"></div>
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;">
-      <div style="flex:1;min-width:0;">
+      <div style="flex:1 1 260px;min-width:min(100%,260px);">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;">
           <span style="font-size:22px;">📢</span>
           <h2 style="font-size:18px;font-weight:800;color:#D4AF37;margin:0;">Daily Job Posting Task</h2>
@@ -688,7 +698,7 @@ async function apiFetch(path, opts = {}) {
       localStorage.removeItem('v2StudentData');
     } catch (_) { /* private mode — nothing to clear */ }
     const back = encodeURIComponent(location.pathname + location.search);
-    location.replace('/student-login.html?next=' + back);
+    location.replace('/login.html?next=' + back);
     // Never resolves: the navigation is already underway, and resolving would
     // let the caller render an error dialog over a page that is going away.
     return new Promise(() => {});
@@ -1602,28 +1612,58 @@ async function submitDailyJobPosting() {
   try {
     var stu = JSON.parse(localStorage.getItem('student') || sessionStorage.getItem('student') || '{}');
     var empId = stu.employeeId || stu.employee_id || localStorage.getItem('employeeId') || '';
+    /*
+     * This endpoint did not exist until now. The fetch rejected, the catch
+     * below turned the failure into `{ success: true }`, and the task was
+     * marked done in localStorage with coins the server never credited.
+     * The award is decided server-side from the platform count, so `coins`
+     * is sent for the record only and `d.coinsAwarded` is what actually landed.
+     */
     var r = await fetch('/api/v2/student/daily-job-post', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-employee-id': empId },
+      credentials: 'same-origin',
       body: JSON.stringify({ platforms, coins, date: todayKey() })
     });
-    var d = await r.json().catch(() => ({ success: true }));
-    saveDjpDone(coins);
-    showDjpDoneState(coins);
+    var d = await r.json().catch(() => ({ success: false, message: 'The server did not answer.' }));
+
+    if (!r.ok || !d.success) {
+      if (d.alreadyDone) {
+        saveDjpDone(d.coinsAwarded || 0);
+        showDjpDoneState(d.coinsAwarded || 0);
+        Swal.fire({ icon: 'info', title: 'Already logged today', text: d.message });
+        return;
+      }
+      btn.disabled = false;
+      btn.textContent = 'Submit';
+      Swal.fire({ icon: 'error', title: 'Not recorded', text: d.message || 'Could not record today\'s job post.' });
+      return;
+    }
+
+    var awarded = d.coinsAwarded || 0;
+    saveDjpDone(awarded);
+    showDjpDoneState(awarded);
     Swal.fire({
       icon: 'success',
-      title: '🎉 +' + coins + ' Coins Earned!',
+      title: '🎉 +' + awarded + ' Coins Earned!',
       html: '<p>Great job! Posted on ' + platforms.length + ' platform(s).</p>' +
-            (coins >= 10 ? '<p style="color:#D4AF37;font-weight:700;">🔥 Max 10 coins reached!</p>' : ''),
+            '<p style="opacity:.75;font-size:13px;">New balance: ' + (d.totalCoins || 0) + ' coins.</p>',
       background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#D4AF37'
     });
     // Refresh coin badge
     if (typeof loadCoins === 'function') loadCoins();
     if (typeof refreshCoinBadge === 'function') refreshCoinBadge();
   } catch(e) {
-    saveDjpDone(coins);
-    showDjpDoneState(coins);
-    Swal.fire({ icon:'success', title:'🎉 +' + coins + ' Coins Earned!', text:'Daily posting recorded!', background:'#0e1428', color:'#F0EEE8', confirmButtonColor:'#D4AF37' });
+    // A network failure is a failure. Reporting it as coins earned is how this
+    // task came to be "completed" thousands of times without a single record.
+    btn.disabled = false;
+    btn.textContent = 'Submit';
+    Swal.fire({
+      icon: 'error',
+      title: 'Could not reach the server',
+      text: 'Nothing was recorded. Check your connection and try again.',
+      background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#D4AF37'
+    });
   }
 }
 
@@ -1672,5 +1712,6 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 </script>
+<script src="/notify-orb.js" defer></script>
 </body>
 </html>

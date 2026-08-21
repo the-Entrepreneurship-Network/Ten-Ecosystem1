@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#D4AF37">
-<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="TEN Portal">
 <link rel="apple-touch-icon" href="/icons/icon-192.png">
@@ -764,6 +765,9 @@ body::before {
   .section-modal-title { font-size: 16px; }
 }
 </style>
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <script src="/push-client.js" defer></script>
 </head>
 <body>
 
@@ -779,6 +783,7 @@ body::before {
   </div>
   <div class="coord-nav">
     <button class="coord-nav-btn active" data-tab="submissions" onclick="openCoordModal('submissions')"><span class="nav-icon">📂</span> Submissions</button>
+    <button class="coord-nav-btn" onclick="window.location.href='/messages'"><span class="nav-icon">💬</span> Messages</button>
     <button class="coord-nav-btn" data-tab="attendance" onclick="openCoordModal('attendance')"><span class="nav-icon">🪪</span> Attendance</button>
     <button class="coord-nav-btn" data-tab="overview" onclick="openCoordModal('overview')"><span class="nav-icon">👥</span> Student Overview</button>
     <button class="coord-nav-btn" data-tab="notice" onclick="openCoordModal('notice')"><span class="nav-icon">📢</span> Notice Board</button>
@@ -789,6 +794,7 @@ body::before {
     <button class="coord-nav-btn" data-tab="lbperf" onclick="openCoordModal('lbperf')"><span class="nav-icon">⭐</span> Performance Ranking</button>
     <button class="coord-nav-btn" data-tab="guidelines" onclick="openCoordModal('guidelines')"><span class="nav-icon">📋</span> Intern Guidelines</button>
     <button class="coord-nav-btn" data-tab="mentorship" onclick="openCoordModal('mentorship')"><span class="nav-icon">🤝</span> Mentorship Bookings</button>
+    <button class="coord-nav-btn" data-tab="premium" onclick="openCoordModal('premium')"><span class="nav-icon">✦</span> Premium Students</button>
   </div>
   <div style="padding:12px 16px;border-top:1px solid rgba(212,175,55,0.08);">
     <div style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;">THEME</div>
@@ -1366,6 +1372,51 @@ Test Cases:
   </div>
 
   <!-- ── MENTORSHIP BOOKINGS TAB ── -->
+  <!-- Premium students: the coordinator's private line to the people who paid.
+       Only premium students appear here; the server refuses a non-premium
+       recipient, because a note nobody can open helps no one. -->
+  <div class="tab-section" id="tab-premium">
+    <div class="test-section">
+      <div class="section-header" style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+        <div class="section-icon">✦</div>
+        <div>
+          <div class="section-title" style="font-size:18px;font-weight:800;color:#fff;">Premium Students</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px;">Write a note, or assign a project with a deadline. It appears in that student's Premium section only.</div>
+        </div>
+      </div>
+
+      <div style="display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));margin-bottom:18px;">
+        <div>
+          <label style="display:block;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Student</label>
+          <select id="pmStudent" style="width:100%;min-height:44px;padding:10px 12px;border-radius:10px;border:1px solid #26334d;background:#0a1120;color:#e2e8f0;font-size:14px;">
+            <option value="">Loading…</option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Type</label>
+          <select id="pmKind" onchange="pmToggleDue()" style="width:100%;min-height:44px;padding:10px 12px;border-radius:10px;border:1px solid #26334d;background:#0a1120;color:#e2e8f0;font-size:14px;">
+            <option value="note">Note</option>
+            <option value="project">Project</option>
+          </select>
+        </div>
+        <div id="pmDueWrap" style="display:none;">
+          <label style="display:block;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Due date</label>
+          <input type="date" id="pmDue" style="width:100%;min-height:44px;padding:10px 12px;border-radius:10px;border:1px solid #26334d;background:#0a1120;color:#e2e8f0;font-size:14px;">
+        </div>
+      </div>
+
+      <input type="text" id="pmTitle" placeholder="Title" style="width:100%;min-height:44px;padding:10px 13px;border-radius:10px;border:1px solid #26334d;background:#0a1120;color:#e2e8f0;font-size:14px;margin-bottom:10px;">
+      <textarea id="pmBody" rows="4" placeholder="What do you want them to know, or build?" style="width:100%;padding:11px 13px;border-radius:10px;border:1px solid #26334d;background:#0a1120;color:#e2e8f0;font-size:14px;font-family:inherit;margin-bottom:12px;"></textarea>
+      <button class="btn" id="pmSendBtn" onclick="pmSend()" style="min-height:44px;padding:11px 22px;border-radius:10px;border:none;background:#D4AF37;color:#05070e;font-weight:800;font-size:14px;cursor:pointer;">Send</button>
+      <div id="pmMsg" style="margin-top:10px;font-size:13px;"></div>
+
+      <div style="margin-top:26px;">
+        <div style="font-size:12px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">Sent so far</div>
+        <div id="pmList"><div style="color:var(--muted);font-size:13px;">Loading…</div></div>
+      </div>
+    </div>
+  </div>
+
   <div class="tab-section" id="tab-mentorship">
     <div class="test-section">
       <div class="section-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
@@ -3138,11 +3189,121 @@ var coordSectionTitles = {
   'lbperf': 'Performance Ranking',
   'tasks': 'Task Manager',
   'guidelines': 'Intern Onboarding Guidelines (Reference)',
-  'mentorship': 'Paid Mentorship Session Bookings'
+  'mentorship': 'Paid Mentorship Session Bookings',
+  'premium': 'Premium Students — notes & projects'
 };
+
+/* ── Premium students: notes and assigned projects ────────────────────────
+   The list is served already filtered to premium students in this
+   coordinator's domain, so this file never decides who is premium — that
+   lives in utils/premium.js and is the same rule the student's own page uses. */
+function pmEsc(v){return String(v==null?'':v)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  .replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+
+function pmToggleDue(){
+  var wrap = document.getElementById('pmDueWrap');
+  if (wrap) wrap.style.display = document.getElementById('pmKind').value === 'project' ? '' : 'none';
+}
+
+async function pmLoadStudents(){
+  var sel = document.getElementById('pmStudent');
+  if (!sel) return;
+  try{
+    var r = await fetch('/api/v2/premium/students', { credentials:'same-origin' });
+    var d = await r.json();
+    if (!d.success || !d.students.length){
+      sel.innerHTML = '<option value="">No premium students in your domain yet</option>';
+      return;
+    }
+    sel.innerHTML = d.students.map(function(s){
+      return '<option value="'+pmEsc(s.employeeId)+'">'+pmEsc(s.name||s.employeeId)
+           + ' — '+pmEsc(s.employeeId)+' ('+pmEsc(s.plan||'Premium')+')</option>';
+    }).join('');
+  }catch(e){ sel.innerHTML = '<option value="">Could not load students</option>'; }
+}
+
+async function pmLoadSent(){
+  var box = document.getElementById('pmList');
+  if (!box) return;
+  try{
+    var r = await fetch('/api/v2/premium/assignments', { credentials:'same-origin' });
+    var d = await r.json();
+    if (!d.success || !d.assignments.length){
+      box.innerHTML = '<div style="color:var(--muted);font-size:13px;">Nothing sent yet.</div>'; return;
+    }
+    box.innerHTML = d.assignments.map(function(a){
+      var review = (a.kind==='project' && a.status==='submitted')
+        ? '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">'
+          + '<input id="fb_'+pmEsc(a.id)+'" placeholder="Feedback (needed to ask for changes)" style="flex:1;min-width:200px;min-height:38px;padding:8px 11px;border-radius:8px;border:1px solid #26334d;background:#0a1120;color:#e2e8f0;font-size:13px;">'
+          + '<button onclick="pmReview(\''+pmEsc(a.id)+'\',\'approve\')" style="min-height:38px;padding:8px 15px;border-radius:8px;border:none;background:#34d399;color:#05070e;font-weight:800;cursor:pointer;">Approve</button>'
+          + '<button onclick="pmReview(\''+pmEsc(a.id)+'\',\'changes\')" style="min-height:38px;padding:8px 15px;border-radius:8px;border:none;background:#f87171;color:#05070e;font-weight:800;cursor:pointer;">Changes</button>'
+          + '</div>'
+        : '';
+      var link = a.submissionUrl
+        ? '<div style="font-size:12.5px;margin-top:5px;"><a href="'+pmEsc(a.submissionUrl)+'" target="_blank" rel="noopener noreferrer" style="color:#60a5fa;">'+pmEsc(a.submissionUrl)+'</a></div>'
+        : '';
+      return '<div style="background:#0a1120;border:1px solid #1e293b;border-radius:12px;padding:14px;margin-bottom:9px;">'
+        + '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">'
+        + '<b style="color:#e2e8f0;font-size:14px;">'+pmEsc(a.title)+'</b>'
+        + '<span style="font-size:11px;color:var(--muted);">'+pmEsc(a.kind)+' · '+pmEsc(a.status.replace('_',' '))+'</span></div>'
+        + '<div style="font-size:11.5px;color:var(--muted);margin-top:3px;">'+pmEsc(a.employeeId||'')+'</div>'
+        + (a.body?'<div style="font-size:13px;color:#cbd5e1;margin-top:7px;white-space:pre-wrap;">'+pmEsc(a.body)+'</div>':'')
+        + link + review
+        + '</div>';
+    }).join('');
+  }catch(e){ box.innerHTML = '<div style="color:#f87171;font-size:13px;">Could not load.</div>'; }
+}
+
+async function pmSend(){
+  var btn = document.getElementById('pmSendBtn');
+  var msg = document.getElementById('pmMsg');
+  var employeeId = document.getElementById('pmStudent').value;
+  var kind = document.getElementById('pmKind').value;
+  var title = document.getElementById('pmTitle').value.trim();
+  var body = document.getElementById('pmBody').value.trim();
+  var due = document.getElementById('pmDue') ? document.getElementById('pmDue').value : '';
+
+  if (!employeeId){ msg.style.color='#f87171'; msg.textContent='Pick a student.'; return; }
+  if (title.length < 3){ msg.style.color='#f87171'; msg.textContent='Give it a title.'; return; }
+
+  btn.disabled = true; msg.style.color='var(--muted)'; msg.textContent='Sending…';
+  try{
+    var r = await fetch('/api/v2/premium/assign', {
+      method:'POST', credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ employeeId, kind, title, body, dueAt: kind==='project' && due ? due : null })
+    });
+    var d = await r.json();
+    if (!d.success){ msg.style.color='#f87171'; msg.textContent = d.message || 'Could not send.'; }
+    else {
+      msg.style.color='#34d399'; msg.textContent='Sent.';
+      document.getElementById('pmTitle').value=''; document.getElementById('pmBody').value='';
+      pmLoadSent();
+    }
+  }catch(e){ msg.style.color='#f87171'; msg.textContent='Could not reach the server.'; }
+  btn.disabled = false;
+}
+
+async function pmReview(id, action){
+  var fb = document.getElementById('fb_'+id);
+  var feedback = fb ? fb.value.trim() : '';
+  if (action === 'changes' && feedback.length < 5){ alert('Say what needs changing (at least 5 characters).'); return; }
+  try{
+    var r = await fetch('/api/v2/premium/projects/'+encodeURIComponent(id)+'/review', {
+      method:'POST', credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ action, feedback })
+    });
+    var d = await r.json();
+    if (!d.success){ alert(d.message || 'Could not save that.'); return; }
+    pmLoadSent();
+  }catch(e){ alert('Could not reach the server.'); }
+}
 
 function openCoordModal(tabName) {
   switchTab(tabName);
+  if (tabName === 'premium') { pmLoadStudents(); pmLoadSent(); pmToggleDue(); }
   var modal = document.getElementById('coordModal');
   var titleEl = document.getElementById('coordModalTitle');
   if (!modal) return;
@@ -3172,13 +3333,14 @@ document.addEventListener('keydown', function(e) {
 
 <div class="sidebar-overlay" onclick="closeSidebar()"></div>
 <script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', function () {
-      navigator.serviceWorker.register('/sw.js')
-        .then(function (reg) { console.log('SW registered'); })
-        .catch(function (err) { console.log('SW error:', err); });
-    });
-  }
+  // No service worker is registered here.
+  //
+  // These pages used to register '/sw.js', a file that has never existed in
+  // this repository, so every load 404'd and logged a SecurityError. Beyond
+  // the noise, a service worker on a portal that serves per-student data is a
+  // caching hazard — this project already lost a week to stale HTML being
+  // served from a cache — so the correct fix is to stop asking for one rather
+  // than to add an empty file that starts caching.
 </script>
 
 <!-- ══════ PROFILE MODAL (Coordinator) ══════ -->
@@ -3700,5 +3862,6 @@ async function assignMentorToBooking(bookingId) {
 </script>
 
 <script src="ten-motion.js"></script>
+<script src="/notify-orb.js" defer></script>
 </body>
 </html>

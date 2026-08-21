@@ -2,202 +2,553 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Student Portal Sign In | TEN Ecosystem</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <meta name="description" content="Sign in to the TEN Ecosystem Student Portal to manage your internship, tasks, attendance and certificates.">
+  <link rel="stylesheet" href="ten-theme.css">
+  <link rel="stylesheet" href="ten-motion.css">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <style>
+    /* This page used to load the Tailwind CDN and Font Awesome purely for a
+       handful of utility classes, and painted itself emerald/teal — a palette
+       that appears nowhere else in the product. Both CDN tags are gone (they
+       were render-blocking on the very first screen a student sees) and the
+       page now uses the same gold-on-navy language as login.html, so the two
+       student doors are recognisably the same product. */
+
+    :root {
+      --ten-font-display: 'Outfit', sans-serif;
+      --ten-font-body: 'Plus Jakarta Sans', sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { height: 100%; }
+
     body {
-      font-family: 'Plus Jakarta Sans', sans-serif;
-      background-color: #050814;
-      background-image: radial-gradient(circle at 10% 20%, rgba(16, 185, 129, 0.08) 0%, transparent 45%);
+      margin: 0;
+      font-family: var(--ten-font-body);
+      background: radial-gradient(circle at center, #0a0d18 0%, #04050a 100%);
+      color: var(--ten-text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      /* Padding, not centring alone: on a short phone the card must be able to
+         scroll rather than be clipped at the top. */
+      padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
+      overflow-x: hidden;
     }
-    .mono {
-      font-family: 'JetBrains Mono', monospace;
+
+    .login-wrap {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      max-width: 420px;
+      animation: ten-fadeUp 0.6s ease both;
     }
+
+    /* ── Brand header ── */
+    .brand-header { text-align: center; margin-bottom: 24px; }
+    .brand-logo-ring {
+      width: 72px; height: 72px;
+      background: #121316;
+      border: 2px solid rgba(212,175,55,0.45);
+      border-radius: 20px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 14px;
+      box-shadow: 0 0 40px rgba(212,175,55,0.3), inset 0 1px 1px rgba(255,255,255,0.12);
+    }
+    .brand-logo-ring img {
+      width: 50px; height: 50px;
+      object-fit: contain;
+      display: block;
+      filter: drop-shadow(0 0 6px rgba(212,175,55,0.35));
+    }
+    .brand-name {
+      font-family: var(--ten-font-display);
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: 5px;
+      color: var(--ten-gold);
+      text-transform: uppercase;
+      line-height: 1.1;
+      text-shadow: 0 0 12px rgba(212,175,55,0.3);
+    }
+    .brand-full {
+      font-size: 10.5px;
+      font-weight: 600;
+      color: rgba(212,175,55,0.85);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-top: 6px;
+    }
+
+    /* ── Card ── */
     .login-card {
-      background: rgba(14, 20, 40, 0.95);
-      border: 1px solid rgba(16, 185, 129, 0.15);
-      backdrop-filter: blur(10px);
+      background: rgba(14, 20, 40, 0.55);
+      backdrop-filter: blur(16px) saturate(180%);
+      -webkit-backdrop-filter: blur(16px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: var(--ten-r-xl);
+      padding: 32px 30px;
+      box-shadow: 0 24px 72px rgba(0,0,0,0.7), inset 0 1px 1px rgba(255,255,255,0.05);
+      position: relative;
+      overflow: hidden;
+    }
+    .login-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, rgba(212,175,55,0.45), transparent);
+    }
+
+    .role-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 1.4px;
+      text-transform: uppercase;
+      color: var(--ten-gold);
+      background: rgba(212,175,55,0.08);
+      border: 1px solid rgba(212,175,55,0.22);
+      border-radius: 999px;
+      padding: 5px 12px;
+      margin-bottom: 14px;
+    }
+    .card-title {
+      font-family: var(--ten-font-display);
+      font-size: 25px;
+      font-weight: 800;
+      letter-spacing: -0.4px;
+      margin: 0 0 6px;
+    }
+    .card-sub {
+      font-size: 13.5px;
+      color: var(--ten-text-sub);
+      margin: 0 0 26px;
+      line-height: 1.6;
+    }
+
+    /* ── Fields ── */
+    .field-group { margin-bottom: 18px; }
+    .field-label {
+      display: block;
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.4px;
+      color: var(--ten-text-sub);
+      margin-bottom: 8px;
+    }
+    /* Deliberately NOT named .field-inner: forgot-password.js appends its link
+       to the closest .form-group/.field-group/.field-inner, and we want that
+       link below the whole field, not inside the input shell next to the
+       password-toggle eye. */
+    .input-shell { position: relative; display: block; }
+    .input-icon {
+      position: absolute;
+      left: 15px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      color: var(--ten-text-muted);
+      pointer-events: none;
+    }
+    .input-icon svg { width: 17px; height: 17px; display: block; }
+    .field-input {
+      width: 100%;
+      padding: 14px 16px 14px 44px;
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--ten-r-sm);
+      color: var(--ten-text);
+      font-family: var(--ten-font-body);
+      font-size: 15px;
+      outline: none;
+      transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+      /* The old placeholder ("e.g. TEN/WEB/1005 or your email") ran off the
+         right edge on a phone. It is shorter now, and this stops any future
+         one from being clipped mid-word. */
+      text-overflow: ellipsis;
+    }
+    .field-input:focus {
+      border-color: rgba(212, 175, 55, 0.45);
+      box-shadow: 0 0 16px rgba(212,175,55,0.15), inset 0 1px 2px rgba(0,0,0,0.3);
+      background: rgba(0, 0, 0, 0.4);
+    }
+    .field-input:focus + .input-icon,
+    .input-shell:focus-within .input-icon { color: var(--ten-gold); }
+    .field-input::placeholder { color: rgba(255, 255, 255, 0.22); }
+
+    /* ── Button ── */
+    .login-btn {
+      width: 100%;
+      padding: 15px;
+      background: linear-gradient(135deg, var(--ten-gold) 0%, var(--ten-gold-dim) 100%);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: var(--ten-r-sm);
+      color: #0c1220;
+      font-family: var(--ten-font-display);
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+      margin-top: 8px;
+      box-shadow: 0 8px 24px rgba(212,175,55,0.25), inset 0 1px 0 rgba(255,255,255,0.3);
+    }
+    .login-btn:hover {
+      background: linear-gradient(135deg, var(--ten-gold-light) 0%, var(--ten-gold) 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 32px rgba(212,175,55,0.45), inset 0 1px 0 rgba(255,255,255,0.4);
+    }
+    .login-btn:active { transform: translateY(0); }
+    .login-btn:disabled {
+      opacity: 0.6;
+      cursor: progress;
+      transform: none;
+    }
+
+    .loading-text {
+      display: none;
+      text-align: center;
+      margin-top: 14px;
+      font-size: 12.5px;
+      color: var(--ten-gold);
+      letter-spacing: 0.8px;
+    }
+
+    .register-prompt {
+      text-align: center;
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(255,255,255,0.05);
+      font-size: 13px;
+      color: var(--ten-text-sub);
+    }
+    .register-prompt a {
+      color: var(--ten-gold);
+      font-weight: 700;
+      text-decoration: none;
+      margin-left: 4px;
+    }
+    .register-prompt a:hover { text-decoration: underline; }
+
+    /* ── Trust strip ──
+       Students are typing an ID that also appears on their offer letter, so
+       say plainly what this page is and that the session is encrypted. */
+    .trust-row {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .trust-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      color: var(--ten-text-sub);
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 999px;
+      padding: 6px 11px;
+    }
+    .trust-chip svg { width: 12px; height: 12px; flex: none; }
+    .trust-chip.ok { color: #34d399; border-color: rgba(52,211,153,0.2); }
+
+    .card-nav {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 12px;
+      margin-top: 18px;
+      flex-wrap: wrap;
+    }
+    .card-nav a {
+      font-size: 12px;
+      color: var(--ten-text-sub);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .card-nav a:hover { color: var(--ten-gold); }
+    .card-nav .sep { color: var(--ten-text-muted); opacity: 0.5; font-size: 11px; }
+
+    .page-footer {
+      text-align: center;
+      margin-top: 16px;
+      font-size: 10.5px;
+      color: var(--ten-text-muted);
+      letter-spacing: 0.4px;
+    }
+
+    @media (max-width: 420px) {
+      .login-card { padding: 26px 20px; }
+      .brand-name { font-size: 23px; letter-spacing: 4px; }
+      .card-title { font-size: 22px; }
+      .field-input { font-size: 14px; padding-left: 42px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .login-wrap { animation: none; }
+      .login-btn { transition: none; }
     }
   </style>
   <link rel="stylesheet" href="/css/ten-brand.css">
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
 </head>
-<body class="min-h-screen flex flex-col items-center justify-center text-slate-100 p-4">
+<body>
 
-  <div class="w-full max-w-md">
-    
-    <!-- Header -->
-    <div class="text-center mb-8">
-      <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mb-4 animate-pulse">
-        <i class="fa-solid fa-graduation-cap text-3xl"></i>
-      </div>
-      <div class="text-xs uppercase tracking-widest text-emerald-400 font-extrabold mb-1">TEN Ecosystem</div>
-      <h1 class="text-3xl font-black text-slate-100">Student Portal</h1>
-      <p class="text-slate-400 text-sm mt-1.5">Sign in to manage your internships and portfolios.</p>
+<div class="ten-grid-bg"></div>
+<div class="ten-orb ten-orb-1"></div>
+<div class="ten-orb ten-orb-2"></div>
+
+<div class="login-wrap">
+
+  <div class="brand-header">
+    <div class="brand-logo-ring ten-float">
+      <img src="ten-logo.png" alt="The Entrepreneurship Network">
     </div>
-
-    <!-- Login card -->
-    <div class="login-card rounded-2xl p-8 shadow-2xl relative overflow-hidden">
-      <div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-500 to-transparent"></div>
-
-      <form id="loginForm" class="space-y-5">
-        <div>
-          <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Email Address or Student ID</label>
-          <div class="relative">
-            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
-              <i class="fa-solid fa-envelope"></i>
-            </span>
-            <input class="w-full pl-10 pr-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition duration-200" 
-                   type="text" id="loginId" placeholder="e.g. TEN/WEB/1005 or your email" required autocapitalize="none">
-          </div>
-        </div>
-
-        <div>
-          <label class="block text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Password</label>
-          <div class="relative">
-            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
-              <i class="fa-solid fa-lock"></i>
-            </span>
-            <input class="w-full pl-10 pr-4 py-3 bg-slate-950/50 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition duration-200" 
-                   type="password" id="password" placeholder="Enter your password" required>
-          </div>
-        </div>
-
-        <button type="submit" class="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 font-bold rounded-xl transition duration-300 shadow-lg shadow-emerald-500/10">
-          Sign In to Portal
-        </button>
-
-        <div id="loadingText" class="hidden text-center text-xs text-emerald-400 animate-pulse mt-3">
-          ⟳ Authenticating student workspace...
-        </div>
-      </form>
-    </div>
-
-    <!-- Navigation links -->
-    <div class="flex items-center justify-center gap-4 text-xs text-slate-500 mt-6">
-      <a href="/register" class="hover:text-emerald-400 transition">Register Account</a>
-      <span>•</span>
-      <a href="/" class="hover:text-emerald-400 transition">Back to Home</a>
-    </div>
-
+    <div class="brand-name">TEN</div>
+    <div class="brand-full">The Entrepreneurship Network</div>
   </div>
 
-  <script>
-    document.addEventListener("DOMContentLoaded", () => {
-      const params = new URLSearchParams(window.location.search);
-      const urlEmail = params.get("email");
-      const savedEmail = sessionStorage.getItem("lastRegisteredEmail");
-      const emailToUse = urlEmail || savedEmail;
+  <div class="login-card">
+    <div class="role-pill">🎓 Student Portal</div>
+    <h1 class="card-title">Sign In</h1>
+    <p class="card-sub">Access your internship tasks, attendance, documents and certificates.</p>
 
-      if (emailToUse) {
-        const loginInput = document.getElementById("loginId");
-        if (loginInput) {
-          loginInput.value = emailToUse;
-        }
-      }
-    });
+    <form id="loginForm" novalidate>
+      <div class="field-group">
+        <label class="field-label" for="loginId">Email Address or Student ID</label>
+        <span class="input-shell">
+          <span class="input-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>
+          </span>
+          <input class="field-input" type="text" id="loginId"
+                 placeholder="TEN/WEB/1005 or your email"
+                 autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+        </span>
+      </div>
 
-    document.getElementById("loginForm").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const loading = document.getElementById("loadingText");
-      loading.classList.remove("hidden");
+      <div class="field-group">
+        <label class="field-label" for="password">Password</label>
+        <span class="input-shell">
+          <span class="input-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </span>
+          <input class="field-input" type="password" id="password"
+                 placeholder="Enter your password" autocomplete="current-password" required>
+        </span>
+      </div>
 
-      const loginIdInput = document.getElementById("loginId").value.trim();
-      const password = document.getElementById("password").value;
+      <button class="login-btn" type="submit" id="submitBtn">Sign In to Portal</button>
+      <div class="loading-text" id="loadingText">⟳ Authenticating student workspace…</div>
 
-      try {
-        const isEmail = loginIdInput.includes("@");
-        const payload = isEmail 
-          ? { email: loginIdInput, password, role: "student" } 
-          : { employeeId: loginIdInput, password, role: "student" };
+      <div class="register-prompt">
+        Don't have an account?
+        <a href="/register">Register here</a>
+      </div>
+    </form>
+  </div>
 
-        const response = await fetch("/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
+  <div class="trust-row">
+    <span class="trust-chip ok">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      Encrypted session
+    </span>
+    <span class="trust-chip">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      Official TEN portal
+    </span>
+  </div>
 
-        const data = await response.json();
-        loading.classList.add("hidden");
+  <div class="card-nav">
+    <a href="/register">Register Account</a>
+    <span class="sep">·</span>
+    <a href="/verify-document">Verify a Certificate</a>
+    <span class="sep">·</span>
+    <a href="/">Back to Home</a>
+  </div>
 
-        if (data.success) {
-          const activeRole = data.role || "student";
-          if (activeRole !== "student") {
-            Swal.fire({
-              icon: "error",
-              title: "Unauthorized Role",
-              text: `This portal is only for Students. Please sign in via the appropriate portal.`,
-              background: "#0e1428",
-              color: "#F0EEE8",
-              confirmButtonColor: "#EF4444"
-            });
-            return;
-          }
+  <div class="page-footer">© 2026 The Entrepreneurship Network</div>
 
-          localStorage.setItem("role", "student");
-          if (data.sessionToken) {
-            localStorage.setItem("sessionToken", data.sessionToken);
-          }
-          if (data.user) {
-            localStorage.setItem("user", JSON.stringify(data.user));
-            localStorage.setItem("userId", data.user._id);
-          }
-          if (data.student) {
-            localStorage.setItem("employeeId", data.student.employeeId);
-            localStorage.setItem("student", JSON.stringify(data.student));
-            localStorage.setItem("ten_token", data.sessionToken || data.student.employeeId);
-            localStorage.setItem("ten_employee_id", data.student.employeeId);
-          }
+</div>
 
-          Swal.fire({
-            icon: "success",
-            title: "Access Granted",
-            text: `Welcome to your Student Workspace! 🚀`,
-            background: "#0e1428",
-            color: "#F0EEE8",
-            showConfirmButton: false,
-            timer: 1500
-          });
+<script>
+  const urlParams = new URLSearchParams(window.location.search);
 
-          setTimeout(() => {
-            window.location.href = "/student-dashboard";
-          }, 1500);
+  /**
+   * Where to land after signing in.
+   *
+   * A signed-out student can be sent here with `?next=<page they were on>` so
+   * they resume where they left off. Only same-origin paths are honoured —
+   * anything absolute, or protocol-relative ("//evil.com", which new URL()
+   * happily resolves to another host), is discarded so this cannot be used as
+   * an open redirect.
+   */
+  function safeNextTarget() {
+    const raw = urlParams.get("next");
+    if (!raw) return null;
+    if (raw.charAt(0) !== "/" || raw.charAt(1) === "/") return null;
+    try {
+      const resolved = new URL(raw, window.location.origin);
+      if (resolved.origin !== window.location.origin) return null;
+      return resolved.pathname + resolved.search + resolved.hash;
+    } catch (err) {
+      return null;
+    }
+  }
 
-        } else {
+  document.addEventListener("DOMContentLoaded", () => {
+    const urlEmail = urlParams.get("email");
+    const savedEmail = sessionStorage.getItem("lastRegisteredEmail");
+    const emailToUse = urlEmail || savedEmail;
+
+    const loginInput = document.getElementById("loginId");
+    if (emailToUse && loginInput) {
+      // Arriving straight from registration: the ID is already known, so put
+      // the cursor on the only field they still have to fill.
+      loginInput.value = emailToUse;
+      document.getElementById("password").focus();
+    }
+    // Deliberately no autofocus otherwise — on a phone it opens the keyboard
+    // immediately and hides the card the student just navigated to.
+  });
+
+  document.getElementById("loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const loading = document.getElementById("loadingText");
+    const submitBtn = document.getElementById("submitBtn");
+
+    const loginIdInput = document.getElementById("loginId").value.trim();
+    const password = document.getElementById("password").value;
+
+    if (!loginIdInput || !password) {
+      Swal.fire({
+        icon: "warning",
+        title: "Missing details",
+        text: "Please enter both your Email/Student ID and your password.",
+        background: "#0e1428",
+        color: "#F0EEE8",
+        confirmButtonColor: "#D4AF37"
+      });
+      return;
+    }
+
+    loading.style.display = "block";
+    submitBtn.disabled = true;
+
+    try {
+      const isEmail = loginIdInput.includes("@");
+      const payload = isEmail
+        ? { email: loginIdInput, password, role: "student" }
+        : { employeeId: loginIdInput, password, role: "student" };
+
+      const response = await fetch("/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+      loading.style.display = "none";
+      submitBtn.disabled = false;
+
+      if (data.success) {
+        const activeRole = data.role || "student";
+        if (activeRole !== "student") {
           Swal.fire({
             icon: "error",
-            title: "Login Failed",
-            text: data.message || "Invalid credentials",
+            title: "Unauthorized Role",
+            text: `This portal is only for Students. Please sign in via the appropriate portal.`,
             background: "#0e1428",
             color: "#F0EEE8",
-            confirmButtonColor: "#ef4444"
+            confirmButtonColor: "#EF4444"
           });
+          return;
         }
-      } catch (error) {
-        loading.classList.add("hidden");
-        console.error(error);
+
+        localStorage.setItem("role", "student");
+        if (data.sessionToken) {
+          localStorage.setItem("sessionToken", data.sessionToken);
+        }
+        if (data.user) {
+          localStorage.setItem("user", JSON.stringify(data.user));
+          localStorage.setItem("userId", data.user._id);
+        }
+        if (data.student) {
+          sessionStorage.removeItem("tenure_paid_verified");
+          localStorage.setItem("employeeId", data.student.employeeId);
+          localStorage.setItem("student", JSON.stringify(data.student));
+          localStorage.setItem("ten_token", data.sessionToken || data.student.employeeId);
+          localStorage.setItem("ten_employee_id", data.student.employeeId);
+        }
+
+        Swal.fire({
+          icon: "success",
+          title: "Access Granted",
+          text: `Welcome to your Student Workspace! 🚀`,
+          background: "#0e1428",
+          color: "#F0EEE8",
+          showConfirmButton: false,
+          timer: 1200
+        });
+
+        setTimeout(() => {
+          window.location.href = safeNextTarget() || "/student-dashboard";
+        }, 1200);
+
+      } else {
         Swal.fire({
           icon: "error",
-          title: "Network Error",
-          text: "Something went wrong. Please check your connection and try again.",
+          title: "Login Failed",
+          text: data.message || "Invalid credentials",
           background: "#0e1428",
           color: "#F0EEE8",
           confirmButtonColor: "#ef4444"
         });
       }
-    });
-  </script>
-  <script src="/password-toggle.js"></script>
-  <script src="/forgot-password.js"></script>
-  <script>
-    document.addEventListener("DOMContentLoaded", function() {
-      if (window.TenForgotPassword) {
-        TenForgotPassword.init({ role: "student" });
-      }
-    });
-  </script>
+    } catch (error) {
+      loading.style.display = "none";
+      submitBtn.disabled = false;
+      console.error(error);
+      Swal.fire({
+        icon: "error",
+        title: "Network Error",
+        text: "Something went wrong. Please check your connection and try again.",
+        background: "#0e1428",
+        color: "#F0EEE8",
+        confirmButtonColor: "#ef4444"
+      });
+    }
+  });
+</script>
+<script src="ten-motion.js"></script>
+<script src="/password-toggle.js"></script>
+<script src="/forgot-password.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    if (window.TenForgotPassword) {
+      TenForgotPassword.init({ role: "student" });
+    }
+  });
+</script>
 </body>
 </html>

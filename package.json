@@ -23,11 +23,14 @@
     "compression": "^1.8.1",
     "connect-mongo": "^4.6.0",
     "cors": "^2.8.6",
+    "docx": "^9.7.1",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2",
     "express-session": "^1.19.0",
     "helmet": "^8.2.0",
+    "instantly-cli": "^0.1.21",
+    "mammoth": "^1.12.1",
     "mongodb": "^4.17.2",
     "mongoose": "^6.13.8",
     "multer": "^2.1.1",
@@ -40,6 +43,7 @@
     "qrcode": "^1.5.4",
     "razorpay": "^2.9.6",
     "socket.io": "^4.8.3",
+    "web-push": "^3.6.7",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

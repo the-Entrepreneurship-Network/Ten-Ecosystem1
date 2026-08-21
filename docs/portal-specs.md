@@ -56,6 +56,19 @@ contact details for an unapproved profile.
 
 ## Founder portal
 
+> **Status: built.** See `docs/founder-os.md` for what shipped —
+> `public/founder-os.html`, `routes/founderOS.js`, `models/founderOS.js`.
+> The scope grew past this spec on the owner's instruction ("full startup OS"):
+> the hiring pipeline below is there, and so are fundraising rounds with an
+> investor tracker, a data room, a team roster and mentor booking.
+>
+> One precondition in this document turned out to be worse than described.
+> `attachEcosystemUser` had been fixed to read the session only — but it was
+> **never mounted in `server.js`**, so `req.user` was undefined for everyone and
+> `requireRole()` refused every founder, mentor, investor and contractor route
+> in the application. That is now mounted, which unblocks the three portals
+> below as well.
+
 **Benchmark: Wellfound (AngelList Talent) / Y Combinator's Work at a Startup.**
 Both are built around company profile → job posting → applicant pipeline, which
 is exactly this shape at a smaller scale.

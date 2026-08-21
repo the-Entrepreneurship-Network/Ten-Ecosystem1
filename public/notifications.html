@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Notifications — TEN</title>
+<link rel="manifest" href="/manifest-notifications.webmanifest">
+<meta name="theme-color" content="#0e1628">
+<link rel="apple-touch-icon" href="/icons/notif-192.png">
+<link rel="stylesheet" href="/css/mobile.css">
+<style>
+:root{
+  --bg:#080d1a; --panel:#0e1628; --panel-2:#111c33; --line:rgba(245,197,66,0.14);
+  --gold:#f5c542; --text:#e8edf7; --muted:#8aa4c8;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;min-height:100dvh;background:var(--bg);color:var(--text);
+  font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;}
+.wrap{max-width:760px;margin:0 auto;padding:0 16px 60px;}
+
+.head{position:sticky;top:0;z-index:10;background:var(--panel-2);border-bottom:1px solid var(--line);
+  display:flex;align-items:center;gap:12px;padding:14px 16px;margin:0 -16px 18px;}
+.head h1{font-size:17px;margin:0;flex:1;font-weight:800;}
+.icon-btn{background:transparent;border:1px solid var(--line);color:var(--text);
+  border-radius:10px;padding:8px 11px;font-size:14px;cursor:pointer;line-height:1;}
+.icon-btn:hover{background:rgba(245,197,66,0.08);}
+
+/* ── the push / install card ─────────────────────────────────────────── */
+.setup{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:20px;}
+.setup h2{font-size:14px;margin:0 0 6px;letter-spacing:.3px;}
+.setup p{color:var(--muted);font-size:13px;line-height:1.6;margin:0 0 14px;}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+.btn{background:var(--gold);color:#0a1222;border:none;border-radius:11px;padding:11px 18px;
+  font-weight:800;font-size:14px;cursor:pointer;}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--text);}
+.btn:disabled{opacity:.55;cursor:not-allowed;}
+.state{font-size:12px;padding:4px 11px;border-radius:999px;font-weight:700;}
+.state.on{background:rgba(16,185,129,0.16);color:#6ee7b7;}
+.state.off{background:rgba(148,163,184,0.16);color:#cbd5e1;}
+.state.blocked{background:rgba(244,63,94,0.16);color:#fda4af;}
+
+/* ── the list ────────────────────────────────────────────────────────── */
+.filters{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+.chip{background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:999px;
+  padding:7px 15px;font-size:13px;cursor:pointer;font-weight:600;}
+.chip.active{background:rgba(245,197,66,0.14);color:var(--gold);border-color:rgba(245,197,66,0.35);}
+
+.note{display:flex;gap:13px;background:var(--panel);border:1px solid var(--line);
+  border-radius:14px;padding:14px 16px;margin-bottom:10px;}
+.note.unread{border-color:rgba(245,197,66,0.34);background:linear-gradient(135deg,rgba(245,197,66,0.06),var(--panel));}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--gold);flex:0 0 auto;margin-top:7px;}
+.dot.read{background:transparent;border:1px solid rgba(255,255,255,0.14);}
+.note-main{flex:1;min-width:0;}
+.note-top{display:flex;justify-content:space-between;gap:10px;align-items:baseline;}
+.note-title{font-weight:700;font-size:14.5px;}
+.note-time{font-size:11px;color:var(--muted);flex:0 0 auto;}
+.note-body{color:var(--muted);font-size:13.5px;line-height:1.55;margin-top:4px;word-wrap:break-word;}
+.note-from{font-size:11px;color:var(--muted);margin-top:7px;}
+.kind{font-size:10px;padding:2px 8px;border-radius:999px;text-transform:uppercase;
+  letter-spacing:.5px;font-weight:800;margin-left:6px;}
+.kind.info{background:rgba(59,130,246,0.18);color:#93c5fd;}
+.kind.success{background:rgba(16,185,129,0.18);color:#6ee7b7;}
+.kind.warning{background:rgba(245,158,11,0.18);color:#fcd34d;}
+.kind.urgent{background:rgba(244,63,94,0.18);color:#fda4af;}
+
+.empty{text-align:center;color:var(--muted);padding:52px 20px;}
+.empty .big{font-size:44px;margin-bottom:12px;}
+</style>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN Alerts">
+  <link rel="apple-touch-icon" href="/icons/notif-192.png">
+</head>
+<body>
+
+<div class="wrap">
+  <div class="head">
+    <button class="icon-btn" onclick="goBack()" title="Back">←</button>
+    <h1>Notifications</h1>
+    <button class="icon-btn" onclick="markAllRead()" title="Mark all as read">✓✓</button>
+    <button class="icon-btn" onclick="load()" title="Refresh">↻</button>
+  </div>
+
+  <!-- Install + push. Rendered from the real state of the browser, so it never
+       claims notifications are on when the browser has blocked them. -->
+  <div class="setup" id="setup" style="display:none;">
+    <h2 id="setupTitle">Get notified when something happens</h2>
+    <p id="setupText"></p>
+    <div class="row" id="setupRow"></div>
+  </div>
+
+  <div class="filters">
+    <button class="chip active" data-filter="all"    onclick="setFilter('all',this)">All</button>
+    <button class="chip"        data-filter="unread" onclick="setFilter('unread',this)">Unread</button>
+    <button class="chip"        data-filter="message" onclick="setFilter('message',this)">Messages</button>
+  </div>
+
+  <div id="list"><p style="color:#8aa4c8;">Loading…</p></div>
+</div>
+
+<script src="/session-guard.js"></script>
+<script src="/credential-reset.js"></script>
+<script src="/push-client.js"></script>
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   The notification centre.
+
+   Reads the portal's existing notification store — nothing new is invented
+   here — and adds unread direct messages as their own rows, because a
+   message someone sent you is a notification whatever table it lives in.
+   ═══════════════════════════════════════════════════════════════════════ */
+"use strict";
+
+var items = [];
+var filter = "all";
+var me = null;
+
+function esc(s){
+  return String(s == null ? "" : s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+
+function ago(iso){
+  if (!iso) return "";
+  var diff = Date.now() - new Date(iso).getTime();
+  var m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return m + "m ago";
+  var h = Math.floor(m / 60);
+  if (h < 24) return h + "h ago";
+  var d = Math.floor(h / 24);
+  if (d < 7) return d + "d ago";
+  return new Date(iso).toLocaleDateString([], { day: "numeric", month: "short" });
+}
+
+function goBack(){
+  if (history.length > 1) history.back();
+  else window.location.href = "/student-dashboard";
+}
+
+/* ── install + push state ────────────────────────────────────────────── */
+function isInstalled(){
+  return window.matchMedia("(display-mode: standalone)").matches ||
+         window.navigator.standalone === true;
+}
+
+var deferredInstall = null;
+window.addEventListener("beforeinstallprompt", function (e) {
+  // Chrome fires this when the app is installable. Holding it lets the page
+  // offer Install at a moment the user chose, rather than a banner they did not.
+  e.preventDefault();
+  deferredInstall = e;
+  renderSetup();
+});
+
+function renderSetup(){
+  if (!window.TenPush) return;
+  TenPush.status().then(function (s) {
+    var box = document.getElementById("setup");
+    var title = document.getElementById("setupTitle");
+    var text = document.getElementById("setupText");
+    var row = document.getElementById("setupRow");
+    box.style.display = "block";
+    row.innerHTML = "";
+
+    var bits = [];
+
+    if (!s.supported){
+      title.textContent = "Notifications are not available in this browser";
+      text.textContent = "Push notifications need a modern browser. On an iPhone you must add the portal to your Home Screen first — Safari only allows notifications for installed web apps.";
+    } else if (!s.serverEnabled){
+      title.textContent = "Notifications are not switched on yet";
+      text.textContent = "The server has not been given its notification keys. Once an administrator adds them you will be able to turn this on.";
+    } else if (s.permission === "denied"){
+      title.textContent = "Notifications are blocked";
+      text.textContent = "This site is blocked from sending notifications. Allow them in your browser's site settings for this page, then come back and turn them on.";
+      bits.push('<span class="state blocked">Blocked</span>');
+    } else if (s.subscribed){
+      title.textContent = "Notifications are on";
+      text.textContent = "You will be told about new messages and portal updates on this device, even when the portal is closed.";
+      bits.push('<span class="state on">On for this device</span>');
+      bits.push('<button class="btn ghost" onclick="sendTest()">Send a test</button>');
+      bits.push('<button class="btn ghost" onclick="turnOff()">Turn off</button>');
+    } else {
+      title.textContent = "Get notified when something happens";
+      text.textContent = "Turn this on and the portal will tell you about new messages and updates on this device, even when it is closed.";
+      bits.push('<span class="state off">Off</span>');
+      bits.push('<button class="btn" onclick="turnOn()">Turn on notifications</button>');
+    }
+
+    // This page carries its OWN manifest, so installing from here adds a
+    // separate "TEN Alerts" app that opens straight onto this list — alongside
+    // the portal app rather than replacing it. Say so, or it reads as a second
+    // copy of something already installed.
+    if (deferredInstall && !isInstalled()){
+      bits.push('<button class="btn ghost" onclick="installApp()">Install the Notifications app</button>');
+      bits.push('<span style="font-size:12px;color:#8aa4c8;">Adds “TEN Alerts” to your home screen — it opens straight here.</span>');
+    } else if (isInstalled()){
+      bits.push('<span class="state on">Installed</span>');
+    } else if (s.supported){
+      // Safari and Firefox never fire beforeinstallprompt, so the only honest
+      // thing is to say how it is actually done there.
+      bits.push('<span style="font-size:12px;color:#8aa4c8;">To install “TEN Alerts”: use your browser menu → “Add to Home Screen” / “Install”.</span>');
+    }
+
+    row.innerHTML = bits.join(" ");
+  }).catch(function(){});
+}
+
+function turnOn(){
+  TenPush.enable().then(function (r) {
+    if (!r.ok) alert(r.reason || "Could not turn notifications on.");
+    renderSetup();
+  });
+}
+function turnOff(){
+  TenPush.disable().then(function(){ renderSetup(); });
+}
+function sendTest(){
+  TenPush.test().then(function (r) {
+    if (!r.success || !r.sent) alert("The test could not be delivered. Try turning notifications off and on again.");
+  });
+}
+function installApp(){
+  if (!deferredInstall) return;
+  deferredInstall.prompt();
+  deferredInstall.userChoice.then(function(){ deferredInstall = null; renderSetup(); });
+}
+
+/* ── the list ────────────────────────────────────────────────────────── */
+async function load(){
+  var box = document.getElementById("list");
+  try {
+    var r = await fetch("/api/notifications/feed", { credentials: "same-origin" });
+    var d = await r.json();
+    if (!d.success) throw new Error(d.message || "Could not load notifications");
+    me = d.me || null;
+    items = d.items || [];
+    render();
+  } catch (e) {
+    box.innerHTML = '<p style="color:#f43f5e;">' + esc(e.message) + "</p>";
+  }
+}
+
+function setFilter(f, btn){
+  filter = f;
+  Array.prototype.forEach.call(document.querySelectorAll(".chip"), function (c) { c.classList.remove("active"); });
+  if (btn) btn.classList.add("active");
+  render();
+}
+
+function render(){
+  var box = document.getElementById("list");
+  var list = items.filter(function (n) {
+    if (filter === "unread")  return !n.read;
+    if (filter === "message") return n.kind === "message";
+    return true;
+  });
+
+  if (!list.length){
+    box.innerHTML = '<div class="empty"><div class="big">🔔</div><div>' +
+      (filter === "unread" ? "Nothing unread." : "No notifications yet.") + "</div></div>";
+    return;
+  }
+
+  box.innerHTML = list.map(function (n) {
+    var kind = ["info","success","warning","urgent"].indexOf(n.type) !== -1 ? n.type : "info";
+    var clickable = n.url ? ' onclick="open_(' + JSON.stringify(n.url).replace(/"/g,"&quot;") + ')" style="cursor:pointer;"' : "";
+    return '<div class="note' + (n.read ? "" : " unread") + '"' + clickable + ">" +
+      '<div class="dot' + (n.read ? " read" : "") + '"></div>' +
+      '<div class="note-main">' +
+        '<div class="note-top"><span class="note-title">' + esc(n.title) +
+          '<span class="kind ' + kind + '">' + esc(n.kind === "message" ? "message" : kind) + "</span></span>" +
+          '<span class="note-time">' + esc(ago(n.at)) + "</span></div>" +
+        '<div class="note-body">' + esc(n.body) + "</div>" +
+        (n.from ? '<div class="note-from">from ' + esc(n.from) + "</div>" : "") +
+      "</div></div>";
+  }).join("");
+}
+
+function open_(url){ window.location.href = url; }
+
+async function markAllRead(){
+  try {
+    await fetch("/api/notifications/read-all", { method: "POST", credentials: "same-origin" });
+    items.forEach(function (n) { n.read = true; });
+    render();
+    if (window.TenNotifyOrb) window.TenNotifyOrb.refresh();
+  } catch (e) { /* the next load will reflect the truth either way */ }
+}
+
+// The app shortcut "Unread only" lands on /notifications?filter=unread.
+(function applyUrlFilter(){
+  var want = new URLSearchParams(window.location.search).get("filter");
+  if (["all","unread","message"].indexOf(want) === -1) return;
+  filter = want;
+  Array.prototype.forEach.call(document.querySelectorAll(".chip"), function (c) {
+    c.classList.toggle("active", c.getAttribute("data-filter") === want);
+  });
+})();
+
+renderSetup();
+load();
+setInterval(load, 60000);
+</script>
+<script src="/notify-orb.js" defer></script>
+</body>
+</html>

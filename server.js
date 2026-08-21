@@ -59,9 +59,14 @@ const {
 } = require("./middleware/validationSchemas");
 
 const attendanceUtils = require("./utils/attendanceUtils");
+// Scopes attendance to one domain. A student may hold two, and the two are
+// separate internships — see utils/attendanceDomain.js.
+const attendanceDomain = require("./utils/attendanceDomain");
 const tenureUtils = require("./utils/tenure");
 const { istNow, istDateKey } = require("./utils/dateKey");
 const tenurePaymentConfig = require("./config/tenurePayment");
+// Keeps the rest of the product in step when a student's core fields change.
+const studentPropagation = require("./services/studentPropagation");
 
 // ================= RATE LIMIT CONFIGURATION =================
 const RATE_LIMIT_CONFIG = {
@@ -94,6 +99,29 @@ const RATE_LIMIT_CONFIG = {
     max: process.env.RATE_AUTH_USER_MAX
       ? parseInt(process.env.RATE_AUTH_USER_MAX)
       : 300,
+  },
+  /*
+   * Registration — deliberately NOT the login limit.
+   *
+   * It used to share it, and 10 per address per 15 minutes is a *login*
+   * number: it exists to stop someone guessing one student's password. A
+   * signup is not a guess. What it actually caps is an intake day, because a
+   * college, a hostel or an office puts every student behind ONE public
+   * address — so the 11th person to register from campus wifi is told to wait,
+   * then told to wait longer, while the server sits idle. Forty an hour per
+   * campus was never a capacity limit; it was a login rule applied to the
+   * wrong route.
+   *
+   * 40 per 15 minutes still stops a signup farm — a real one runs orders of
+   * magnitude above this — while letting a lab full of students through.
+   */
+  register: {
+    windowMs: process.env.RATE_REGISTER_WINDOW_MS
+      ? parseInt(process.env.RATE_REGISTER_WINDOW_MS)
+      : 15 * 60 * 1000,
+    max: process.env.RATE_REGISTER_MAX
+      ? parseInt(process.env.RATE_REGISTER_MAX)
+      : 40,
   },
   // Payment endpoints — strict
   payment: {
@@ -144,8 +172,44 @@ if (!fs.existsSync(DB_DIR)) {
 global.isMongoUnhealthy = false;
 global.lastMongoCheckTime = 0;
 
+/**
+ * How long a "Mongo looks unhealthy" observation is trusted before it is
+ * re-tested. Without an expiry the flag was a ONE-WAY DOOR: any query error
+ * whose message merely contained "connection" or "network" set it, and nothing
+ * cleared it except a mongoose 'connected'/'reconnected' event — which never
+ * fires when the socket did not actually drop. A single slow query therefore
+ * put the whole process into fallback mode until someone restarted it, which
+ * is what moved every session into memory and signed the portal out.
+ */
+const MONGO_UNHEALTHY_TTL_MS = 30 * 1000;
+
+/** Record that a query failed in a way that looks like a connection problem. */
+function markMongoUnhealthy() {
+    global.isMongoUnhealthy = true;
+    global.lastMongoCheckTime = Date.now();
+}
+
+/**
+ * Is the database usable right now?
+ *
+ * `mongoose.connection.readyState` is the authority — it reflects the live
+ * socket and recovers on its own. A recent unhealthy observation is honoured
+ * for MONGO_UNHEALTHY_TTL_MS so a burst of failures does not hammer a database
+ * that is genuinely down, and is then discarded so the process recovers
+ * without needing a restart.
+ */
+function isMongoHealthy() {
+    if (mongoose.connection.readyState !== 1) return false;
+    if (!global.isMongoUnhealthy) return true;
+    if (Date.now() - (global.lastMongoCheckTime || 0) > MONGO_UNHEALTHY_TTL_MS) {
+        global.isMongoUnhealthy = false;   // the observation has expired; re-test
+        return true;
+    }
+    return false;
+}
+
 function checkMongoStatus() {
-    return mongoose.connection.readyState === 1 && !global.isMongoUnhealthy;
+    return isMongoHealthy();
 }
 
 
@@ -535,8 +599,8 @@ function wrapModelWithFileFallback(model) {
                msg.toLowerCase().includes('retryable') ||
                msg.toLowerCase().includes('failed to connect');
         if (isNet) {
-            global.isMongoUnhealthy = true;
-            global.lastMongoCheckTime = Date.now();
+            // Advisory, and it expires — see markMongoUnhealthy / isMongoHealthy.
+            markMongoUnhealthy();
         }
         return isNet;
     }
@@ -1201,8 +1265,7 @@ mongoose.Model.prototype.save = function() {
                    msg.toLowerCase().includes('retryable') ||
                    msg.toLowerCase().includes('failed to connect');
             if (isNet) {
-                global.isMongoUnhealthy = true;
-                global.lastMongoCheckTime = Date.now();
+                markMongoUnhealthy();   // advisory, expires — see isMongoHealthy
             }
             return isNet;
         }
@@ -1242,6 +1305,11 @@ const Coordinator = require("./models/Coordinator");
 const Promotion = require("./models/Promotion");
 const BadgeAward = require("./models/BadgeAward");
 const BlockList = require("./models/BlockList");
+// Personal blocks (any role, everywhere) and abuse reports for the admin desk.
+// BlockList above is the older per-room staff mute; the two are different
+// tools and both are kept.
+const UserBlock = require("./models/UserBlock");
+const ChatReport = require("./models/ChatReport");
 const EcosystemUser = require("./models/EcosystemUser");
 
 const autoMailLogSchema = new mongoose.Schema({
@@ -1476,8 +1544,12 @@ function sanitizeStudent(student) {
     return safe;
 }
 
+const { findSessionStudent, sessionExpired } = require('./middleware/sessionAuth');
+
 function establishStudentSession(req, student) {
     if (!req.session || !student) return;
+    // Student sessions get the longer window — see STUDENT_SESSION_MS.
+    if (req.session.cookie) req.session.cookie.maxAge = STUDENT_SESSION_MS;
     req.session.student = {
         _id:        String(student._id || ""),
         employeeId: student.employeeId || "",
@@ -1492,11 +1564,30 @@ function sessionEmployeeId(req) {
     return (req.session && req.session.student && req.session.student.employeeId) || "";
 }
 
-function requireStudentSession(req, res, next) {
-    if (!sessionEmployeeId(req)) {
-        return res.status(401).json({ success: false, message: "Please sign in to continue." });
+/**
+ * A session that names a real account is a valid session.
+ *
+ * This used to reject on `!sessionEmployeeId(req)` alone, so a student whose
+ * record carried a blank or malformed employeeId was signed out on every
+ * request while signing in perfectly well — the sign-in loop. The session also
+ * records _id and email, and the shared resolver uses all three.
+ */
+async function requireStudentSession(req, res, next) {
+    if (sessionEmployeeId(req)) return next();
+
+    try {
+        const student = await findSessionStudent(req);
+        if (student) {
+            // Repair the session so the fast path works from here on.
+            if (req.session && req.session.student && student.employeeId) {
+                req.session.student.employeeId = student.employeeId;
+            }
+            return next();
+        }
+    } catch (err) {
+        console.error('[auth] requireStudentSession lookup failed:', err.message);
     }
-    next();
+    return sessionExpired(res);
 }
 
 function requireCoordinatorSession(req, res, next) {
@@ -1523,6 +1614,25 @@ function requireHRSession(req, res, next) {
         return res.status(401).json({ success: false, message: "HR sign-in required." });
     }
     next();
+}
+
+/**
+ * Editing and removing student records: HR staff or an admin.
+ *
+ * `PUT`/`DELETE /students/:id` were unauthenticated, and closing that hole by
+ * putting them behind `requireAdminAPI` overshot — that guard wants
+ * `req.session.adminUser`, which only a /ten-admin sign-in creates. HR signs in
+ * through /hr-login and gets `req.session.hr`, so every Save Changes and
+ * Delete Student in the HR portal's side panel came back 401 and the panel
+ * reported a flat "Update failed."
+ *
+ * Managing student records is the HR portal's core job, so HR belongs on this
+ * endpoint. The guard still requires a real server-side session — it is not a
+ * return to the anonymous access these routes had before.
+ */
+function requireHROrAdminAPI(req, res, next) {
+    if (isHRSession(req)) return next();
+    return res.status(401).json({ success: false, message: "HR or admin sign-in required." });
 }
 
 /** Coordinators and HR both review student work; admins can do anything. */
@@ -1581,14 +1691,61 @@ app.use(express.json());
 
 const session = require('express-session');
 
-// No fallback secret: a committed signing key lets anyone mint a session for
-// any role. config/secrets.js has already refused the boot in production if
-// this is unset; outside production we generate a throwaway key per process so
-// sessions simply do not survive a restart.
-const SESSION_SECRET = (process.env.SESSION_SECRET || '').trim()
-    || crypto.randomBytes(32).toString('hex');
-if (!process.env.SESSION_SECRET) {
-    console.warn('[session] SESSION_SECRET is unset; using a random per-process key. Sessions will not survive a restart.');
+/*
+ * The key that signs session cookies.
+ *
+ * No fallback constant: a committed signing key lets anyone mint a session for
+ * any role. But the old fallback — a fresh random key per process — was its own
+ * outage. Every cookie is signed with it, so a new key on boot invalidates every
+ * cookie in existence: one `pm2 restart` and every signed-in person is thrown
+ * out at once. In a browser that already held a cookie the portal renders from
+ * its own storage, looks signed in, and every request 401s — "Your HR session
+ * has expired" arriving for someone who never left. A private window, signing in
+ * fresh after the restart, works perfectly. That difference is the whole
+ * fingerprint of this bug, and it was reported exactly that way.
+ *
+ * config/secrets.js refuses the boot in production when SESSION_SECRET is unset,
+ * but that guard only fires when NODE_ENV is actually "production" — a server
+ * that never sets it took the random path silently, and re-took it on every
+ * deploy.
+ *
+ * So a generated key is now PERSISTED and reused. Restarts stop signing
+ * everybody out, whatever NODE_ENV says. Setting SESSION_SECRET in .env is still
+ * the right answer and still takes precedence; this only removes the failure
+ * mode from forgetting to.
+ */
+function resolveSessionSecret() {
+    const fromEnv = (process.env.SESSION_SECRET || '').trim();
+    if (fromEnv) return { secret: fromEnv, source: 'env' };
+
+    const secretFile = path.join(__dirname, '.session-secret');
+    try {
+        const saved = fs.readFileSync(secretFile, 'utf8').trim();
+        if (saved.length >= 32) return { secret: saved, source: 'file' };
+    } catch (_e) { /* first boot, or unreadable — fall through and create one */ }
+
+    const generated = crypto.randomBytes(32).toString('hex');
+    try {
+        fs.writeFileSync(secretFile, generated, { mode: 0o600 });
+        return { secret: generated, source: 'file-created' };
+    } catch (err) {
+        // Read-only deploy: nothing to do but carry on, and say plainly that
+        // this restart has signed everyone out.
+        console.error('[session] Could not persist a session key (%s). Sessions will NOT survive this restart.', err.message);
+        return { secret: generated, source: 'memory' };
+    }
+}
+
+const { secret: SESSION_SECRET, source: SESSION_SECRET_SOURCE } = resolveSessionSecret();
+
+if (SESSION_SECRET_SOURCE !== 'env') {
+    console.warn(
+        '\n[session] SESSION_SECRET is not set in .env.\n' +
+        '[session] Using a generated key kept in .session-secret (%s).\n' +
+        '[session] Sessions survive restarts, but set a real one to be safe:\n' +
+        "[session]   node -e \"console.log('SESSION_SECRET=' + require('crypto').randomBytes(32).toString('hex'))\" >> .env\n",
+        SESSION_SECRET_SOURCE === 'file' ? 'reused' : 'created now'
+    );
 }
 
 const sessionOptions = {
@@ -1606,28 +1763,101 @@ const sessionOptions = {
         secure: IS_PRODUCTION,
         sameSite: IS_PRODUCTION ? 'none' : 'lax',
         httpOnly: true,
+        // The base lifetime. Staff sessions keep this; a student's is extended
+        // to STUDENT_SESSION_MS below, once they sign in.
         maxAge: 30 * 60 * 1000 // 30 minutes of inactivity
     }
 };
 
+/**
+ * How long a student stays signed in.
+ *
+ * A push notification is only useful if tapping it lands the student IN the
+ * portal. With a 30-minute window that essentially never happened: the
+ * notification arrived hours later, the session was long gone, and the tap
+ * dropped them on a login screen — which defeats the point of notifying them.
+ *
+ * So a student's cookie lives for 24 hours of inactivity. Tap a notification
+ * within a day of last using the portal and you are already signed in; leave it
+ * longer and the session has expired, the page 401s, and session-guard.js sends
+ * you to the login screen carrying ?next= so you land where you were going.
+ * That is precisely the behaviour asked for, and it needs no new mechanism.
+ *
+ * What it deliberately is NOT: a sign-in token embedded in the notification
+ * URL. A notification's URL is written to the operating system's notification
+ * log and to browser history, so a credential placed there is readable by
+ * anyone who picks up the phone — a worse trade than a longer cookie, which at
+ * least stays httpOnly and server-revocable.
+ *
+ * HR, coordinator and admin sessions keep the 30-minute window. They hold far
+ * more authority than a student account, they work from shared machines, and
+ * they are not the ones being notified about a chat message.
+ */
+const STUDENT_SESSION_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Where sessions live.
+ *
+ * MongoDB when it is reachable, an in-process MemoryStore only when it is not.
+ * Which one is in use decides whether people stay signed in, so the rules are
+ * written out here rather than inferred.
+ *
+ * THREE THINGS THIS CLASS GOT WRONG, each of which signed everybody out:
+ *
+ * 1. It consulted `global.isMongoUnhealthy`, a flag that LATCHES. Any query
+ *    error whose message merely contains the word "connection" or "network"
+ *    sets it (see isNetworkError), and nothing clears it except a mongoose
+ *    'connected' or 'reconnected' event — which never fires if the socket
+ *    never actually dropped. One slow query that timed out therefore moved
+ *    every session in the portal to memory permanently: sessions already in
+ *    Mongo became unreadable, so everyone was signed out at once, and every
+ *    session created afterwards died at the next deploy. That is the "the HR
+ *    section is down again" report.
+ *
+ *    `mongoose.connection.readyState` is the authority and recovers on its
+ *    own. The flag is no longer consulted here.
+ *
+ * 2. `ttl: 1800` hard-capped EVERY session at 30 minutes in the store,
+ *    whatever its cookie said. The 24-hour student session added for
+ *    notification links was silently reduced to 30 minutes — the cookie
+ *    promised a day, the store deleted the document after half an hour. With
+ *    no `ttl`, connect-mongo takes each session's own `cookie.expires`, so HR
+ *    keeps 30 minutes and a student keeps 24 hours, per session, correctly.
+ *
+ * 3. `get()` treated a store ERROR as "no such session". A transient Mongo
+ *    error therefore looked exactly like a signed-out user, and the portal
+ *    reads that as a sign-out. An error is now propagated: the request fails
+ *    honestly and the session survives.
+ */
 class FallbackStore extends session.Store {
     constructor() {
         super();
         this.memoryStore = new session.MemoryStore();
         this.mongoStore = null;
+        this.warnedAboutMemory = false;
+    }
+
+    /** True when Mongo is genuinely available for session storage. */
+    _mongoReady() {
+        return !!process.env.MONGODB_URI && mongoose.connection.readyState === 1;
     }
 
     _getStore() {
-        const isMongoConnected = mongoose.connection.readyState === 1 && !global.isMongoUnhealthy;
-        if (isMongoConnected && process.env.MONGODB_URI) {
+        if (this._mongoReady()) {
             if (!this.mongoStore) {
                 try {
                     console.log("[FallbackStore] MongoDB is connected. Initializing MongoStore for session persistence...");
                     const MongoStore = require('connect-mongo').MongoStore;
                     this.mongoStore = MongoStore.create({
                         mongoUrl: process.env.MONGODB_URI,
-                        ttl: 1800, // 30 minutes in seconds
+                        // No `ttl`: each session document expires at its own
+                        // cookie.expires. See note 2 above.
                         collectionName: 'sessions',
+                        // Refresh the stored expiry at most once every 10
+                        // minutes for an unchanged session, instead of on every
+                        // single request. Rolling sessions still extend; this
+                        // only avoids a write per API call.
+                        touchAfter: 10 * 60,
                         mongoOptions: {
                             serverSelectionTimeoutMS: 5000,
                             connectTimeoutMS: 5000
@@ -1640,73 +1870,163 @@ class FallbackStore extends session.Store {
                     console.error("[FallbackStore] Failed to create MongoStore:", e.message);
                 }
             }
-            if (this.mongoStore) {
-                return this.mongoStore;
-            }
+            if (this.mongoStore) return this.mongoStore;
+        }
+
+        // Said once, loudly. Sessions in memory do not survive a restart and
+        // are not shared between PM2 workers, so if this is the steady state
+        // people will be signed out apparently at random.
+        if (!this.warnedAboutMemory) {
+            this.warnedAboutMemory = true;
+            console.warn("[FallbackStore] Sessions are in MEMORY — they will NOT survive a restart " +
+                "and are NOT shared between PM2 workers. Check the MongoDB connection.");
         }
         return this.memoryStore;
     }
 
     get(sid, callback) {
         const store = this._getStore();
-        if (store === this.mongoStore) {
-            // Try mongo first
-            this.mongoStore.get(sid, (err, session) => {
-                if (session) {
-                    return callback(null, session);
-                }
-                // Fallback to memory if not found in mongo (e.g., session was created during startup)
-                this.memoryStore.get(sid, callback);
-            });
-        } else {
-            this.memoryStore.get(sid, callback);
-        }
+        if (store !== this.mongoStore) return this.memoryStore.get(sid, callback);
+
+        this.mongoStore.get(sid, (err, sess) => {
+            // A store error is NOT a signed-out user. Reporting it as one is
+            // what turned a momentary database hiccup into "everyone please
+            // log in again".
+            if (err) return callback(err);
+            if (sess) return callback(null, sess);
+
+            // Genuinely absent from Mongo. It may still be a session created
+            // while Mongo was unavailable, so memory is worth one look — but
+            // only as a miss, never as an error handler.
+            this.memoryStore.get(sid, (memErr, memSess) => callback(null, memSess || null));
+        });
     }
 
-    set(sid, session, callback) {
-        // Always write to memoryStore first as local fallback cache
-        this.memoryStore.set(sid, session, (err) => {
-            const store = this._getStore();
-            if (store === this.mongoStore) {
-                this.mongoStore.set(sid, session, callback);
-            } else if (callback) {
-                callback(err);
-            }
-        });
+    set(sid, sess, callback) {
+        const store = this._getStore();
+        if (store === this.mongoStore) {
+            // Mongo only. The old code ALSO wrote every session to memory as a
+            // "cache", which never expired and grew for the lifetime of the
+            // process — MemoryStore is documented as leaking by design — while
+            // hiding whether Mongo was actually working.
+            return this.mongoStore.set(sid, sess, callback);
+        }
+        return this.memoryStore.set(sid, sess, callback);
     }
 
     destroy(sid, callback) {
-        this.memoryStore.destroy(sid, (err) => {
-            const store = this._getStore();
-            if (store === this.mongoStore) {
-                this.mongoStore.destroy(sid, callback);
-            } else if (callback) {
-                callback(err);
-            }
+        // Both, always: signing out must remove the session wherever it is.
+        this.memoryStore.destroy(sid, () => {
+            if (this.mongoStore) return this.mongoStore.destroy(sid, callback);
+            if (callback) callback(null);
         });
     }
 
-    touch(sid, session, callback) {
-        this.memoryStore.touch(sid, session, (err) => {
-            const store = this._getStore();
-            if (store === this.mongoStore && this.mongoStore.touch) {
-                this.mongoStore.touch(sid, session, callback);
-            } else if (callback) {
-                callback(err);
-            }
-        });
+    touch(sid, sess, callback) {
+        const store = this._getStore();
+        if (store === this.mongoStore && this.mongoStore.touch) {
+            return this.mongoStore.touch(sid, sess, callback);
+        }
+        return this.memoryStore.touch(sid, sess, callback);
     }
 }
 
 sessionOptions.store = new FallbackStore();
 
-app.use(session(sessionOptions));
+// Kept in a named binding so the Socket.IO handshake can run the same session
+// parser: admin chat oversight is authorised by the /ten-admin session cookie,
+// never by what the socket claims about itself.
+const sessionMiddleware = session(sessionOptions);
+app.use(sessionMiddleware);
+
+// Put the signed-in ecosystem user on req.user, for every request.
+//
+// This is why the founder, mentor, investor and contractor portals did nothing.
+// requireRole() reads req.user and answers 401 "Authentication required" when
+// it is absent — and attachEcosystemUser, the only thing that sets it, was
+// written, exported, unit-tested, and then never mounted. Every route behind a
+// requireRole guard in the whole application therefore returned 401 to a
+// correctly signed-in founder, which is exactly what "the founder portal
+// doesn't work" looked like from the outside.
+//
+// It reads the session and nothing else, so mounting it grants no access on its
+// own: a request with no session still arrives at requireRole with no req.user
+// and is still refused.
+{
+    const { attachEcosystemUser } = require("./middleware/roleGuard");
+    app.use(attachEcosystemUser);
+}
 
 // NOTE: the session cookie's `secure` / `sameSite` flags are fixed at
 // configuration time from NODE_ENV (see sessionOptions above). They used to be
 // recomputed per request from `x-forwarded-proto`, which is client-controlled —
 // sending `x-forwarded-proto: http` cleared the Secure flag and the session
 // cookie was then transmitted in plaintext. Do not reintroduce that.
+
+/**
+ * Session-scoped API responses are never cacheable.
+ *
+ * Express attaches an ETag to every JSON response and nothing set a
+ * Cache-Control header, so browsers applied *heuristic* caching to API GETs.
+ * The visible symptom: the HR dashboard showed "Total Students: 774" from a
+ * cached /hr/stats while the session behind it had already expired and every
+ * live call was returning 401 — a page that looks signed in, reporting real
+ * numbers, backed by nothing. Any two people looking at that screen disagree
+ * about whether the portal works.
+ *
+ * These responses depend on who is asking, so they must not be stored by the
+ * browser or by any proxy in between. `Vary: Cookie` is belt-and-braces for
+ * caches that ignore no-store.
+ */
+app.use((req, res, next) => {
+    if (/^\/(api|hr|coordinator|students|attendance)\b/.test(req.path)) {
+        res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+        res.setHeader("Pragma", "no-cache");
+        res.setHeader("Expires", "0");
+        res.setHeader("Vary", "Cookie");
+    }
+    next();
+});
+
+// The service worker and the web app manifest.
+//
+// Registered BEFORE express.static, because whichever handler comes first wins
+// and the static mount would otherwise answer both with its own headers.
+//
+// Two headers matter here:
+//   - Service-Worker-Allowed lets the worker claim "/" as its scope.
+//   - no-store on the worker. A cached service worker is a worker that cannot
+//     be updated — it would keep serving the old push and notification-click
+//     logic after a deploy, with no way to tell.
+app.get("/sw.js", (req, res) => {
+    res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+    res.setHeader("Service-Worker-Allowed", "/");
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.sendFile(path.join(__dirname, "public", "sw.js"));
+});
+
+// The correct type is application/manifest+json. Served as anything else, some
+// browsers ignore the manifest and the app silently stops being installable.
+//
+// There are three installable apps, and each needs its own manifest with its
+// own `id` — a browser decides "is this the same app I already installed?" from
+// the id, so two manifests sharing one would be a single install that simply
+// changed its start page.
+//
+//   manifest.json                    "TEN Portal"             starts at /
+//   manifest.webmanifest             "TEN Internship Portal"  starts at /student-dashboard
+//   manifest-notifications.webmanifest "TEN Notifications"    starts at /notifications
+app.get("/manifest.webmanifest", (req, res) => {
+    res.setHeader("Content-Type", "application/manifest+json; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.sendFile(path.join(__dirname, "public", "manifest.webmanifest"));
+});
+
+app.get("/manifest-notifications.webmanifest", (req, res) => {
+    res.setHeader("Content-Type", "application/manifest+json; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.sendFile(path.join(__dirname, "public", "manifest-notifications.webmanifest"));
+});
 
 // Custom route to serve the logo with the correct JPEG Content-Type since the file has a .png extension but is actually a JPEG (JFIF format)
 app.get(/.*ten-logo\.png$/, (req, res) => {
@@ -1899,10 +2219,10 @@ const loginIpLimiter = rateLimit({
     message: { success: false, message: "Too many login attempts from this network. Please wait." }
 });
 
-// Registration rate limit
+// Registration rate limit. Its own budget — see RATE_LIMIT_CONFIG.register.
 const registerLimiter = rateLimit({
-    windowMs: RATE_LIMIT_CONFIG.auth.windowMs,
-    max: RATE_LIMIT_CONFIG.auth.max,
+    windowMs: RATE_LIMIT_CONFIG.register.windowMs,
+    max: RATE_LIMIT_CONFIG.register.max,
     standardHeaders: true,
     legacyHeaders: false,
     handler: (req, res, next, options) => {
@@ -1917,13 +2237,59 @@ const registerLimiter = rateLimit({
     }
 });
 
-// General API rate limit — applied broadly to /api but the project has very
-// few endpoints under /api today, so we also expose it for any future use.
+/*
+ * Password-reset ceiling on the source address.
+ *
+ * The per-account cap ("2 a day") does nothing against one attacker walking a
+ * list of 800 student addresses — each account is under its own limit while
+ * the mail quota drains and the enumeration proceeds. This is the ceiling on
+ * the caller, independent of which account they name.
+ */
+const forgotPasswordLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: false,
+    message: { success: false, message: "Too many password reset requests from this network. Please wait." }
+});
+
+/**
+ * General API rate limit.
+ *
+ * This used to be keyed by IP, which is the wrong unit for this product. A
+ * college lab, an office or a hostel puts every student behind ONE public
+ * address, so thirty students shared a single 300-request budget and the whole
+ * building started seeing "Too many requests. Please slow down." while each
+ * person had made a handful of calls. The portal polls (notifications, chat,
+ * task state), so the budget went in minutes.
+ *
+ * Keyed by the signed-in identity instead: the limit is now per person, which
+ * is what it was always meant to be. Anonymous callers still fall back to the
+ * IP — that path is the one a limiter actually protects, and ipKeyGenerator is
+ * used for it so IPv6 addresses are normalised to a subnet rather than counted
+ * one-address-per-request.
+ */
+function rateLimitKey(req) {
+    const ses = req.session || {};
+    const who = (ses.student && (ses.student.employeeId || ses.student.email))
+        || (ses.hr && (ses.hr.username || ses.hr.email))
+        || (ses.coordinator && ses.coordinator.username)
+        || (ses.adminUser && ses.adminUser.username)
+        || (req.user && String(req.user._id));
+    return who ? `u:${who}` : `ip:${ipKeyGenerator(req.ip)}`;
+}
+
 const apiLimiter = rateLimit({
     windowMs: RATE_LIMIT_CONFIG.authenticated.windowMs,
     max: RATE_LIMIT_CONFIG.authenticated.max,
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator: rateLimitKey,
+    // Read-only polling is what the portal does constantly and is not what this
+    // limiter exists to stop. Counting it is how a student who is simply using
+    // the product hits the ceiling; the writes are still counted.
+    skip: (req) => req.method === 'GET' && /^\/(api\/)?(v2\/)?(notifications|messages|chat)/.test(req.path),
     message: { success: false, message: "Too many requests. Please slow down." }
 });
 app.use('/api', apiLimiter);
@@ -1935,12 +2301,13 @@ const upload = multer({
 
 // ================= MAIL =================
 
-const { createEmailTransporter } = require("./utils/mailer");
+const { createEmailTransporter, mailerReady, isSendableAddress, renderEmail, PORTAL_URL, EMAIL_FROM } = require("./utils/mailer");
 const transporter = createEmailTransporter();
 
-const smtpUser = process.env.SMTP_USER || process.env.SES_SMTP_USER || process.env.EMAIL_USER || process.env.EMAIL_US;
-const smtpPass = process.env.SMTP_PASS || process.env.SES_SMTP_PASS || process.env.EMAIL_PASS;
-if (smtpUser && smtpPass) {
+// The third copy of the credential chain used to live here. It agreed with the
+// mailer, which is exactly why the one in routes/v2/certificates.js that did
+// NOT agree went unnoticed for so long.
+if (mailerReady()) {
     transporter.verify((error)=>{
         if(error){ console.log("SMTP verification status: OFFLINE —", error.message); }
         else{ console.log("Email Server Ready"); }
@@ -1954,14 +2321,24 @@ if (smtpUser && smtpPass) {
 const ACTIVITY_MAILS = {
     "active-appreciation": {
         subject: "Keep it up! You're doing great 🌟",
-        html: (name) => `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6">Hi ${name||"Intern"},<br><br>Great work staying active this week. Keep it up!<br><br>— TEN HR Team</div>`,
+        html: (name) => renderEmail({
+            heading: "🌟 Keep it up",
+            name: name || "Intern",
+            bodyHtml: `<p style="margin:0;">Great work staying active this week. Your consistency is what turns an internship into a portfolio — keep it up.</p>`,
+            cta: { label: "Open my portal", url: PORTAL_URL + "/student-dashboard.html" }
+        }),
         notifTitle: "🌟 Appreciation from HR",
         notifMessage: (name) => `Hi ${name || "Intern"}, great work staying active this week. Keep it up! — TEN HR Team`,
         notifType: "success"
     },
     "inactive-reengagement": {
         subject: "We miss you! Come back and keep growing 💪",
-        html: (name) => `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6">Hi ${name||"Intern"},<br><br>We noticed you haven’t been active recently. Jump back in whenever you’re ready — we’re here to help you keep growing.<br><br>— TEN HR Team</div>`,
+        html: (name) => renderEmail({
+            heading: "💪 We miss you",
+            name: name || "Intern",
+            bodyHtml: `<p style="margin:0;">We noticed you haven’t been active recently. Jump back in whenever you’re ready — your tasks are waiting and we’re here to help you keep growing.</p>`,
+            cta: { label: "Pick up where I left off", url: PORTAL_URL + "/student-dashboard.html" }
+        }),
         notifTitle: "💪 Inactivity Alert",
         notifMessage: (name) => `Hi ${name || "Intern"}, we noticed you haven't been active recently. Jump back in whenever you're ready — we're here to help you keep growing. — TEN HR Team`,
         notifType: "warning"
@@ -2000,7 +2377,10 @@ async function sendActivityMail(student, studentName, mailType){
     await Notification.notifyStudent(student, {
         title: spec.notifTitle,
         message: spec.notifMessage(studentName),
-        type: spec.notifType
+        type: spec.notifType,
+        // The HR mail above IS this message. The notification is its in-app
+        // mirror, not a second thing to send.
+        email: false
     });
     await AutoMailLog.create({ studentName, studentEmail: email, employeeId: student.employeeId || "", mailType });
 }
@@ -2079,6 +2459,31 @@ async function sendAutoDocumentsToStudent(student, docType, sentBy = "System") {
     }
 }
 
+/*
+ * Mark a student as done, so the loop below never picks them up again.
+ *
+ * This is the whole bug. `documentsAutoSent` was declared on the schema, the
+ * query filtered on it, and NOTHING ever set it to true — the only write in
+ * the codebase set it to false. So every student past their end date was
+ * eligible forever, and the check runs 30 seconds after each boot and every 6
+ * hours after that. Each pass sent three documents. Production has restarted
+ * 151 times.
+ *
+ * That is what got the sending account suspended for "suspicious activity":
+ * the same three attachments to the same addresses, over and over, including
+ * every dead test row in the database. It was never a provider quirk.
+ */
+async function markAutoDocumentsSent(studentId) {
+    try {
+        await Student.updateOne(
+            { _id: studentId },
+            { $set: { documentsAutoSent: true, documentsAutoSentAt: new Date() } }
+        );
+    } catch (err) {
+        console.error('[AUTO-DOCS] Could not mark student as sent:', err.message);
+    }
+}
+
 async function runAutoDocumentCheck() {
     try {
         if (!checkMongoStatus()) {
@@ -2088,15 +2493,38 @@ async function runAutoDocumentCheck() {
         const students = await Student.find({ documentsAutoSent: { $ne: true } });
         const now = new Date();
         let count = 0;
+        let healed = 0;
         for (const student of students) {
             if (!student.joiningDate || !student.tenure || !student.email) continue;
             const endDate = getInternshipEndDate(student.joiningDate, student.tenure);
-            if (endDate && now >= endDate) {
-                await sendAutoDocumentsToStudent(student, 'all', "System Automation");
-                count++;
-                await new Promise(r => setTimeout(r, 2000));
+            if (!(endDate && now >= endDate)) continue;
+
+            // Self-healing backlog: the flag was never written, so on the first
+            // pass after this fix every student who has ALREADY had their
+            // documents would be mailed one more time. DocumentHistory is the
+            // record of that, so an existing row means the work is done and the
+            // flag is simply set to what it should have been.
+            const already = await DocumentHistory.exists({ studentId: student._id });
+            if (already) {
+                await markAutoDocumentsSent(student._id);
+                healed++;
+                continue;
             }
+
+            if (!isSendableAddress(student.email)) {
+                // A dead test row is not worth a bounce. Bounces are what the
+                // provider counts against the sending domain.
+                console.warn(`[AUTO-DOCS] Skipping unsendable address: ${student.email}`);
+                await markAutoDocumentsSent(student._id);
+                continue;
+            }
+
+            await sendAutoDocumentsToStudent(student, 'all', "System Automation");
+            await markAutoDocumentsSent(student._id);
+            count++;
+            await new Promise(r => setTimeout(r, 2000));
         }
+        if (healed > 0) console.log('[AUTO-DOCS] Marked ' + healed + ' already-sent student(s); they will not be mailed again.');
         if (count > 0) console.log('[AUTO-DOCS] Sent to ' + count + ' students.');
     } catch(err) {
         console.error('[AUTO-DOCS] Scheduler error:', err.message);
@@ -2733,6 +3161,11 @@ app.get("/investor-login",    (req,res)=>{ res.sendFile(path.join(__dirname,"pub
 app.get("/contractor-login",  (req,res)=>{ res.sendFile(path.join(__dirname,"public","contractor-login.html")); });
 app.get("/login",             (req,res)=>{ res.sendFile(path.join(__dirname,"public","login.html")); });
 app.get("/student-dashboard", (req,res)=>{ res.sendFile(path.join(__dirname,"public","student-dashboard.html")); });
+// Direct messages, for every role. The page derives identity from the
+// session, so one URL serves students, coordinators, HR and admin.
+app.get("/messages",          (req,res)=>{ res.sendFile(path.join(__dirname,"public","messages.html")); });
+app.get("/notifications",     (req,res)=>{ res.sendFile(path.join(__dirname,"public","notifications.html")); });
+
 app.get("/mentor-dashboard",  (req,res)=>{ res.sendFile(path.join(__dirname,"public","mentor-dashboard.html")); });
 app.get("/investor-dashboard",(req,res)=>{ res.sendFile(path.join(__dirname,"public","investor-dashboard.html")); });
 app.get("/contractor-dashboard",(req,res)=>{ res.sendFile(path.join(__dirname,"public","contractor-dashboard.html")); });
@@ -2947,7 +3380,13 @@ try{
             const host = (req.headers["x-forwarded-proto"] || req.protocol) + "://" + req.get("host");
             const joinedOn = new Date().toLocaleDateString("en-IN", { day:"numeric", month:"long", year:"numeric" });
             const html = welcomeEmailHtml({
-                name: newStudent.name.trim(), employeeId, domain, email: emailLc, password,
+                // `password` here is the bcrypt hash. Sending that is what the
+                // welcome email did: the student received a 60-character
+                // "$2b$12$..." string as their password and could never sign
+                // in with it. The cleartext exists only in this request's
+                // memory, for this email.
+                name: newStudent.name.trim(), employeeId, domain, email: emailLc,
+                password: generatedPassword,
                 joinedOn, host
             });
             let mailStatus = "sent";
@@ -2990,6 +3429,11 @@ try{
 }catch(error){ console.log(error); res.status(500).json({ success:false, message:"Server Error" }); }
 });
 
+// ================= LOGIN IDENTITY RESOLUTION =================
+// How an employee ID or email is matched to an account. Extracted because
+// getting it wrong tells an active student their account does not exist.
+const loginIdentity = require("./services/loginIdentity");
+
 // ================= ACCOUNT LOCKOUT SECURE SERVICE =================
 function getRemainingLockoutTime(user) {
     if (user.isLockedOut && user.lockoutUntil) {
@@ -3024,16 +3468,24 @@ async function checkLockout(res, user, userModel) {
     return false;
 }
 
-// Lockout policy: 5 consecutive failures lock that ONE account for 15 minutes.
-// The counters live on the individual user document, so a lockout can never
-// affect another account — including accounts sharing a college wifi or hostel
-// network with the one that failed.
+// Lockout policy: 5 failures WITHIN 30 MINUTES lock that ONE account for 15
+// minutes. The counters live on the individual user document, so a lockout can
+// never affect another account — including accounts sharing a college wifi or
+// hostel network with the one that failed.
+//
+// The window is the important part. `failedLoginAttempts` used to have no decay
+// at all: it reset only on a successful sign-in or when a lockout expired. So
+// five mistyped passwords spread over three months added up, and a student who
+// fumbled twice in June and three times in August was locked out with no idea
+// why. The counter is meant to catch a burst of guesses, not a year of ordinary
+// human error.
 const LOCKOUT_MAX_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000;
+const LOCKOUT_WINDOW_MS   = 30 * 60 * 1000;
 
 async function recordFailedAttempt(res, user, userModel, defaultErrorMsg) {
-    const attempts = (user.failedLoginAttempts || 0) + 1;
-    const updateData = { failedLoginAttempts: attempts };
+    const attempts = loginIdentity.nextFailedAttemptCount(user, LOCKOUT_WINDOW_MS);
+    const updateData = { failedLoginAttempts: attempts, lastFailedLoginAt: new Date() };
 
     if (attempts >= LOCKOUT_MAX_ATTEMPTS) {
         updateData.isLockedOut = true;
@@ -3056,12 +3508,34 @@ async function clearFailedAttempts(user, userModel) {
         await userModel.findByIdAndUpdate(user._id, {
             failedLoginAttempts: 0,
             isLockedOut: false,
-            lockoutUntil: null
+            lockoutUntil: null,
+            lastFailedLoginAt: null
         });
     }
 }
 
 // ================= LOGIN =================
+
+/**
+ * Sign out, properly.
+ *
+ * Every "Logout" button in the portal clears sessionStorage and navigates to
+ * the login page, which looks like signing out and is not: the session cookie
+ * survives, so the API still recognises the browser and going back to any
+ * portal page signs straight back in. That matters on a shared or college
+ * machine, and it matters for the "do this later" link on the credential-reset
+ * panel, which has to actually end the session.
+ *
+ * Always answers success — a sign-out that reports failure leaves someone
+ * stuck on a page they are trying to leave.
+ */
+app.post("/logout", (req, res) => {
+    if (!req.session) return res.json({ success: true });
+    req.session.destroy(() => {
+        res.clearCookie("ten.sid");
+        res.json({ success: true });
+    });
+});
 
 app.post("/login", loginIpLimiter, loginLimiter, async(req,res)=>{
 try{
@@ -3144,23 +3618,61 @@ try{
             user.lastLoginAt = new Date();
             try { await user.save(); } catch(e) {}
 
-            // If student, get legacy student record or mock one
+            // If student, get the legacy Student record.
+            //
+            // The lookup is case-insensitive. EcosystemUser.email is stored
+            // lowercased; a Student row created before that convention can hold
+            // "Name@Gmail.com", and an exact match then missed it — the student
+            // signed in successfully but the dashboard rendered the fallback
+            // identity below and greeted them "Welcome, Student".
             let student = null;
             if (user.role === 'student') {
-                student = await Student.findOne({ email: user.email });
+                const emailRx = new RegExp("^\\s*" +
+                    String(user.email || "").replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + "\\s*$", "i");
+                student = await Student.findOne({ email: { $regex: emailRx } });
                 if (student) {
-                    await Student.findOneAndUpdate({ email: user.email }, { lastActiveDate: new Date(), plainPassword: password, activeSessionToken: sessionToken });
+                    // activeSessionToken goes on the Student too, not only on
+                    // the EcosystemUser.
+                    //
+                    // This is what locked students out. verifySingleSession
+                    // resolves the acting record from req.session.student._id —
+                    // a Student id — so EcosystemUser.findById misses and it
+                    // falls through to Student.findById. Writing the new token
+                    // only to the EcosystemUser left the Student holding a token
+                    // from some earlier sign-in, the guard compared that stale
+                    // value against the fresh one in the session, and answered
+                    // every /api request with 401 SESSION_SUPERSEDED. The page
+                    // treats a 401 as a sign-out, so the student bounced back to
+                    // the login screen — permanently, since each retry repeated
+                    // the same mismatch.
+                    student.lastActiveDate = new Date();
+                    student.activeSessionToken = sessionToken;
+                    try { await student.save(); } catch (e) {
+                        await Student.updateOne({ _id: student._id },
+                            { $set: { lastActiveDate: new Date(), activeSessionToken: sessionToken } });
+                    }
                 }
             }
 
+            // Identity for the browser, never the raw document: that shipped the
+            // bcrypt hash, the password-reset token and megabytes of base64 PDF
+            // to the client on every sign-in.
+            const studentPayload = student ? sanitizeStudent(student) : {
+                _id: user._id,
+                employeeId: user._id.toString(),
+                name: user.fullName || "",
+                email: user.email,
+                // Deliberately blank. This used to read 'Web Development',
+                // which silently put every ecosystem student with no legacy
+                // record into a domain they had never chosen.
+                domain: ""
+            };
+
             if (user.role === 'student') {
-                req.session.student = student || {
-                    _id: user._id,
-                    employeeId: user._id.toString(),
-                    name: user.fullName,
-                    email: user.email,
-                    domain: 'Web Development'
-                };
+                // Minimal identity only — see establishStudentSession. Assigning
+                // the whole Student document here put its base64 PDFs into the
+                // session store on every login.
+                establishStudentSession(req, studentPayload);
             }
             req.session.sessionToken = sessionToken;
 
@@ -3176,37 +3688,47 @@ try{
                     phone: user.phone,
                     expertise: mentorProfileObj ? mentorProfileObj.expertise : []
                 },
-                student: student || {
-                    _id: user._id,
-                    employeeId: user._id.toString(),
-                    name: user.fullName,
-                    email: user.email,
-                    domain: 'Web Development'
-                }
+                student: studentPayload
             });
         }
 
-        // Check legacy Student model by email just in case
-        const student = await Student.findOne({ email: loginId.toLowerCase() });
+        // Check legacy Student model by email just in case.
+        //
+        // Case-insensitive: rows created before emails were stored lowercased
+        // hold "Name@Gmail.com", and the exact lowercase match this used to do
+        // never found them. The EcosystemUser branch above was already fixed
+        // for exactly this; a student with no EcosystemUser record hit this
+        // branch and simply could not sign in by email.
+        const student = await loginIdentity.findStudentByEmail(Student, loginId);
         if (student) {
             if (role && role !== 'student') {
                 return res.json({ success: false, message: `Access denied. No ${role} account found.` });
             }
             if (await checkLockout(res, student, Student)) return;
 
-            let pwdMatch = student.password === password;
-            if (!pwdMatch) {
-                try {
-                    pwdMatch = await bcrypt.compare(password, student.password);
-                } catch(e) {}
-            }
+            // bcrypt only. The `student.password === password` cleartext
+            // comparison that used to run first would authenticate any row whose
+            // password column still held an unhashed value.
+            let pwdMatch = false;
+            try {
+                pwdMatch = await bcrypt.compare(password, student.password || "");
+            } catch(e) {}
             if (pwdMatch) {
                 await clearFailedAttempts(student, Student);
                 const crypto = require("crypto");
                 const sessionToken = "ten_sess_" + crypto.randomBytes(24).toString("hex");
 
-                await Student.findOneAndUpdate({ email: loginId.toLowerCase() }, { lastActiveDate: new Date(), plainPassword: password, activeSessionToken: sessionToken });
-                
+                // Write by _id, never by re-deriving the filter.
+                //
+                // This used to update `{ email: loginId.toLowerCase() }`, which
+                // matches NOTHING when the stored email is mixed-case — so the
+                // session carried a token the database did not have, and
+                // verifySingleSession answered every /api call with 401
+                // SESSION_SUPERSEDED. The student signed in successfully and
+                // was thrown straight back to the login page.
+                await Student.updateOne({ _id: student._id },
+                    { $set: { lastActiveDate: new Date(), activeSessionToken: sessionToken } });
+
                 // Fetch and auto-heal linked domains
                 const emailLc = String(student.email || "").trim().toLowerCase();
                 let linked = student.linkedDomains || [];
@@ -3227,7 +3749,8 @@ try{
                 responseStudent.domains = student.domains || [student.domain];
                 responseStudent.activeSessionToken = sessionToken;
 
-                req.session.student = responseStudent;
+                // The session holds identity, not a copy of the record.
+                establishStudentSession(req, responseStudent);
                 req.session.sessionToken = sessionToken;
 
                 return res.json({
@@ -3273,19 +3796,25 @@ try{
         if (role && role !== 'student') {
             return res.json({ success: false, message: `Access denied. Employee ID is only valid for Student role.` });
         }
-        const student = await Student.findOne({ employeeId: loginId });
+        // Tolerant of how the ID was typed: case, padding and which separator.
+        //
+        // An exact case-sensitive match told students with perfectly good
+        // accounts that their Employee ID did not exist. IDs look like
+        // TEN/WEB/1005, are typed by hand on a phone whose keyboard lowercases
+        // or autocapitalises, and appear elsewhere as TEN-WEB-1005 — so
+        // "ten/web/1005" and "TEN-WEB-1005" both found nothing.
+        const student = await loginIdentity.findStudentByEmployeeId(Student, loginId);
         if (!student) {
             return res.json({ success: false, message: "Invalid Employee ID" });
         }
 
         if (await checkLockout(res, student, Student)) return;
 
-        let pwdMatch = student.password === password;
-        if (!pwdMatch) {
-            try {
-                pwdMatch = await bcrypt.compare(password, student.password);
-            } catch(e) {}
-        }
+        // bcrypt only — see the note on the email branch above.
+        let pwdMatch = false;
+        try {
+            pwdMatch = await bcrypt.compare(password, student.password || "");
+        } catch(e) {}
         if (!pwdMatch) {
             return await recordFailedAttempt(res, student, Student, "Invalid Password");
         }
@@ -3293,8 +3822,12 @@ try{
         const sessionToken = "ten_sess_" + crypto.randomBytes(24).toString("hex");
 
         await clearFailedAttempts(student, Student);
-        await Student.findOneAndUpdate({ employeeId: loginId }, { lastActiveDate: new Date(), plainPassword: password, activeSessionToken: sessionToken });
-        
+        // By _id, so the write cannot miss the record we just authenticated —
+        // `loginId` is whatever the student typed, which may differ in case or
+        // separator from the stored value.
+        await Student.updateOne({ _id: student._id },
+            { $set: { lastActiveDate: new Date(), activeSessionToken: sessionToken } });
+
         // Fetch and auto-heal linked domains
         const emailLc = String(student.email || "").trim().toLowerCase();
         let linked = student.linkedDomains || [];
@@ -3315,18 +3848,63 @@ try{
         responseStudent.domains = student.domains || [student.domain];
         responseStudent.activeSessionToken = sessionToken;
 
-        req.session.student = responseStudent;
+        establishStudentSession(req, responseStudent);
         req.session.sessionToken = sessionToken;
 
         return res.json({ success: true, sessionToken: sessionToken, role: 'student', student: responseStudent });
     }
 }catch(error){
     console.error("Login route error:", error);
+
+    // Name a database outage as a database outage.
+    //
+    // A brief connection blip made every sign-in answer "Server Error", which
+    // a student reads as "my account is broken" — and reports as "I suddenly
+    // cannot log in". It is neither their account nor their password, and
+    // saying so stops a wave of support messages during a thirty-second
+    // reconnect. No internals are leaked: the message names the condition, not
+    // the host or the driver.
+    const msg = String(error && error.message || "");
+    const dbDown = error && (error.name === "MongooseError" || error.name === "MongoNetworkError" ||
+        error.name === "MongoServerSelectionError") ||
+        /buffering timed out|before initial connection|connection .* was disconnected|ECONNREFUSED/i.test(msg);
+
+    if (dbDown) {
+        return res.status(503).json({
+            success: false,
+            code: "DB_UNAVAILABLE",
+            message: "We cannot reach the database at the moment. This is not a problem with your account — please try again in a minute."
+        });
+    }
+
     res.status(500).json({ success:false, message:"Server Error" });
 }
 });
 
 // ================= SINGLE SESSION GUARD MIDDLEWARE =================
+
+/**
+ * Should a request be rejected as a superseded session?
+ *
+ * Pulled out as a pure function because getting it wrong locks students out of
+ * the portal entirely, and this is the shape the test asserts against.
+ *
+ * @param {string} clientToken  the token this request is carrying
+ * @param {Array<string|null>} knownTokens  activeSessionToken from every record
+ *        that identifies this user (EcosystemUser and Student)
+ * @returns {boolean} true when the session has genuinely been replaced
+ */
+function sessionIsSuperseded(clientToken, knownTokens) {
+    const known = (knownTokens || []).filter(Boolean);
+    // No record carries a token: nothing has replaced this session. Rejecting
+    // here is what made a stale Student row lock a signed-in student out.
+    if (!known.length) return false;
+    if (!clientToken) return false;
+    // A match on ANY record is enough. A student signing in by email has both
+    // an EcosystemUser and a Student row, and login writes the token to both.
+    return !known.includes(clientToken);
+}
+
 async function verifySingleSession(req, res, next) {
     try {
         const clientToken = req.headers['x-session-token'] || (req.headers['authorization'] ? req.headers['authorization'].replace('Bearer ', '') : '') || req.session?.sessionToken;
@@ -3339,15 +3917,27 @@ async function verifySingleSession(req, res, next) {
         const EcosystemUser = require('./models/EcosystemUser');
         const Student = require('./models/Student');
 
-        let dbUser = await EcosystemUser.findById(userId);
-        let activeToken = dbUser ? dbUser.activeSessionToken : null;
+        // Both records are consulted, and a match on EITHER one is enough.
+        //
+        // This used to check EcosystemUser first and fall back to Student only
+        // when no EcosystemUser existed with that id. A student signing in by
+        // email has both records, and the session identifies them by their
+        // STUDENT id — so the EcosystemUser lookup missed, the Student lookup
+        // ran, and it compared the token minted for the EcosystemUser against
+        // whatever the Student row happened to hold. Every /api call answered
+        // 401, and the portal reads a 401 as a sign-out, so the student was
+        // returned to the login page on every attempt and could never get in.
+        //
+        // Login now writes the token to both records, and this accepts either,
+        // so the guard can only fire on a genuinely superseded session.
+        const [dbUser, dbStudent] = await Promise.all([
+            EcosystemUser.findById(userId).select('activeSessionToken').lean().catch(() => null),
+            Student.findById(userId).select('activeSessionToken').lean().catch(() => null)
+        ]);
 
-        if (!dbUser) {
-            let dbStudent = await Student.findById(userId);
-            activeToken = dbStudent ? dbStudent.activeSessionToken : null;
-        }
+        const knownTokens = [dbUser && dbUser.activeSessionToken, dbStudent && dbStudent.activeSessionToken];
 
-        if (activeToken && activeToken !== clientToken) {
+        if (sessionIsSuperseded(clientToken, knownTokens)) {
             return res.status(401).json({
                 success: false,
                 code: "SESSION_SUPERSEDED",
@@ -4582,10 +5172,13 @@ try{
         if(isNaN(dt.getTime())) continue;
         if(dt >= monthStart && dt < monthEnd) newJoinsThisMonth++;
     }
-    res.json({ totalInterns, activeThisMonth, inactiveInterns, newJoinsThisMonth });
+    res.json({ success:true, totalInterns, activeThisMonth, inactiveInterns, newJoinsThisMonth });
 }catch(error){
-    console.log(error);
-    res.status(500).json({ totalInterns:0, activeThisMonth:0, inactiveInterns:0, newJoinsThisMonth:0 });
+    // Returning zeros on failure made a broken query indistinguishable from an
+    // empty programme — HR saw "Total Interns: 0" over a live database of
+    // hundreds. Fail loudly; the client renders the reason.
+    console.error("[intern-stats]", error.message);
+    res.status(500).json({ success:false, message: "Could not load intern stats: " + error.message });
 }
 });
 
@@ -4636,9 +5229,24 @@ app.get('/api/hr/intern-list', async (req, res) => {
     let query = {};
     if (type === 'active')    query = { lastActiveDate: { $gte: d30 } };
     if (type === 'inactive')  query = { $or: [{ lastActiveDate: { $lt: d30 } }, { lastActiveDate: null }, { lastActiveDate: { $exists: false } }] };
-    let students = await Student.find(query)
-      .select('firstName lastName employeeId domain collegeName college lastActiveDate joiningDate joinDate')
-      .sort({ joiningDate: -1 }).limit(400);
+    // `name` matters: most records carry a single `name` and no first/last, so
+    // building the display name from firstName+lastName alone produced a row
+    // of blanks — the list looked empty even when it was full.
+    // No database sort here, deliberately.
+    //
+    // `joiningDate` is a String, so a Mongo sort orders it lexicographically —
+    // "9 Aug" after "10 Aug" — which is wrong regardless of performance. And a
+    // blocking sort over Student documents drags their embedded base64 PDFs
+    // through memory (see the index comment in models/Student.js). Fetching a
+    // lean projection and ordering it in JS is both correct and cheap: the
+    // projected objects are a few hundred bytes each.
+    const projection = 'name firstName lastName employeeId domain collegeName college lastActiveDate joiningDate joinDate';
+    let students = await Student.find(query).select(projection).limit(1000).lean();
+    const asTime = (s) => {
+      const d = new Date(s.joinDate || s.joiningDate || 0);
+      return isNaN(d.getTime()) ? 0 : d.getTime();
+    };
+    students.sort((a, b) => asTime(b) - asTime(a));
     if (type === 'newJoins'){
       students = students.filter(s => {
         const jd = s.joinDate || s.joiningDate;
@@ -4654,15 +5262,17 @@ app.get('/api/hr/intern-list', async (req, res) => {
     } else {
       students = students.slice(0,200);
     }
-    res.json({ students: students.map(s => ({
-      name: (s.firstName||'') + ' ' + (s.lastName||''),
-      employeeId: s.employeeId,
-      domain: s.domain,
-      college: s.collegeName || s.college
+    res.json({ success:true, total: students.length, students: students.map(s => ({
+      name: (s.name || `${s.firstName || ''} ${s.lastName || ''}`).trim() || '—',
+      employeeId: s.employeeId || '—',
+      domain: s.domain || '—',
+      college: s.collegeName || s.college || '—',
+      lastActive: s.lastActiveDate || null,
+      joined: s.joinDate || s.joiningDate || null
     }))});
   }catch(e){
-    console.log(e);
-    res.status(500).json({ students: [] });
+    console.error('[intern-list]', e.message);
+    res.status(500).json({ success:false, message:'Could not load the student list: ' + e.message, students: [] });
   }
 });
 
@@ -4836,7 +5446,7 @@ const LEGACY_STUDENT_EDITABLE_FIELDS = [
     "domain", "tenure", "joiningDate", "collegeName", "college", "gender"
 ];
 
-app.put("/students/:id", requireAdminAPI, async(req,res)=>{
+app.put("/students/:id", requireHROrAdminAPI, async(req,res)=>{
 try{
     const body = {};
     for(const field of LEGACY_STUDENT_EDITABLE_FIELDS){
@@ -4853,18 +5463,66 @@ try{
     if(Object.keys(body).length === 0){
         return res.status(400).json({ message:"No editable fields supplied" });
     }
-    await Student.findByIdAndUpdate(req.params.id, body, { new:true });
-    res.json({ message:"Student Updated" });
-}catch(error){ res.status(500).json({ message:"Update Failed" }); }
+
+    // Editing a student is never just a field write. tenure drives the Task
+    // Journey length, the attendance day target and the offer letter; domain
+    // drives which task set is assigned and which coordinator sees them. This
+    // route used to $set the raw body and stop, so HR extending a tenure
+    // changed the record while the student's Task Journey kept showing the old
+    // one. updateStudentAndPropagate normalises the values, derives
+    // v2DurationType and internshipEndDate, resyncs the task journey and tells
+    // the student. See services/studentPropagation.js.
+    const actor = (req.session && req.session.hr && (req.session.hr.name || req.session.hr.username))
+        || (req.session && req.session.adminUser && req.session.adminUser.username)
+        || "HR";
+    const { student: updated, report, error: invalid, notFound } =
+        await studentPropagation.updateStudentAndPropagate({ studentId: req.params.id, patch: body, actor });
+
+    if(invalid){ return res.status(400).json({ message: invalid }); }
+    if(notFound || !updated){ return res.status(404).json({ message:"Student not found" }); }
+
+    res.json({
+        message: "Student Updated",
+        student: updated,
+        propagated: report
+    });
+}catch(error){
+    // This used to return 500 with nothing logged, so a failing save left no
+    // trace anywhere — the same blind spot that made the task-journey 500 take
+    // days to find. Log the reason and hand the caller something actionable.
+    console.error("[students] update failed:", error && error.message);
+    const duplicate = error && error.code === 11000;
+    // Distinguish "the database is unreachable" from "your edit was rejected".
+    // The old code answered a dead connection with 404 "Student not found",
+    // which sent HR looking for a record that was there all along.
+    const unreachable = /buffering timed out|before initial connection|ECONNREFUSED|topology/i
+        .test((error && error.message) || "");
+    res.status(duplicate ? 409 : 500).json({
+        message: duplicate
+            ? "That email or employee ID is already used by another student."
+            : unreachable
+                ? "The database is not reachable right now. Nothing was changed — please try again in a moment."
+                : "Update Failed"
+    });
+}
 });
 
 // ================= DELETE STUDENT =================
 
-app.delete("/students/:id", requireAdminAPI, async(req,res)=>{
+app.delete("/students/:id", requireHROrAdminAPI, async(req,res)=>{
 try{
-    await Student.findByIdAndDelete(req.params.id);
+    // findById + deleteOne rather than findByIdAndDelete: the JSON fallback
+    // engine wraps both of those but not findByIdAndDelete, so the one-shot
+    // call threw outright whenever Mongo was unreachable while the sibling
+    // update degraded cleanly. Same result, same failure mode as the update.
+    const existing = await Student.findById(req.params.id);
+    if(!existing){ return res.status(404).json({ message:"Student not found" }); }
+    await Student.deleteOne({ _id: req.params.id });
     res.json({ message:"Student deleted" });
-}catch(error){ res.status(500).json({ message:"Error deleting student" }); }
+}catch(error){
+    console.error("[students] delete failed:", error && error.message);
+    res.status(500).json({ message:"Error deleting student" });
+}
 });
 
 // ================= STUDENT LOGIN =================
@@ -4894,6 +5552,13 @@ try{
     // Establish the server-side session. Every downstream handler derives the
     // acting student from here, never from a request header or body.
     establishStudentSession(req, student);
+
+    // Mint the single-session token here too, and store it on the record AND
+    // in the session. Both doors into the portal now behave identically: this
+    // one used to leave `Student.activeSessionToken` holding a token from some
+    // earlier /login, which verifySingleSession would then compare against.
+    const studentSessionToken = "ten_sess_" + require("crypto").randomBytes(24).toString("hex");
+    req.session.sessionToken = studentSessionToken;
 
     // Internship end date (used by student dashboard profile modal)
     // tenure values in this app are "1 Month" | "3 Months" | "6 Months".
@@ -4925,11 +5590,19 @@ try{
         }
     }
 
-    await Student.findOneAndUpdate({ employeeId }, { lastActiveDate: new Date() });
+    await Student.findOneAndUpdate({ employeeId }, {
+        lastActiveDate: new Date(),
+        activeSessionToken: studentSessionToken
+    });
     res.json({
         success:true,
+        sessionToken: studentSessionToken,
         student:{
-            name: student.firstName + " " + student.lastName,
+            // firstName/lastName can both be empty on records imported before
+            // the register form split the field, which produced the literal
+            // "undefined undefined" as a student's name. `name` is the column
+            // every other read path uses, so prefer it and fall back.
+            name: (student.name || [student.firstName, student.lastName].filter(Boolean).join(" ")).trim(),
             firstName: student.firstName, lastName: student.lastName,
             email: student.email || "",
             // Student schema in this project uses `whatsapp` for phone.
@@ -5225,11 +5898,15 @@ app.post("/mark-attendance", async (req, res) => {
     }
 
     // Save attendance
+    // `date: now` used to sit here and `now` was never declared in this
+    // handler, so every call threw a ReferenceError and answered
+    // {success:false, message:"Server error"} — this endpoint has never once
+    // recorded attendance.
     await Attendance.create({
       studentId: student._id,
       employeeId,
-      domain: student.domain,
-      date: now,
+      domain: attendanceDomain.domainForWrite(student, req.body.domain),
+      date: new Date(),
       dateKey: today,
       status: "Present",
       markedBy: "self"
@@ -5355,7 +6032,9 @@ try{
     //    exact-username match.
     const legacy = COORDINATORS[identifier];
     if(legacy && await verifyCredentialPassword(legacy, password)){
-        const coordIdentity = { username:identifier, domain:legacy.domain };
+        // email and name are carried so chat can recognise this person under
+        // every id they may already appear as in a conversation's room name.
+        const coordIdentity = { username:identifier, email: legacy.email || "", name: legacy.name || identifier, domain:legacy.domain };
         if (req.session) req.session.coordinator = coordIdentity;
         return res.json({ success:true, coordinator: coordIdentity });
     }
@@ -5413,6 +6092,8 @@ try{
             await clearFailedAttempts(dbCoord, Coordinator);
             const coordIdentity = {
                 username: dbCoord.username || dbCoord.email,
+                email:    dbCoord.email || "",
+                name:     dbCoord.name || dbCoord.username || dbCoord.email,
                 domain:   dbCoord.domain
             };
             if (req.session) req.session.coordinator = coordIdentity;
@@ -5760,11 +6441,19 @@ function countDaysExcludingSundays(start, end){
 // We DO NOT use marked-day count as the denominator. If the joining date is unknown
 // or no working days exist yet (e.g. only-Sunday range), all percentages are 0.
 async function computeAttendanceStats(employeeId, joiningDate, domain){
-    const query = { employeeId };
-    if (domain) {
-        query.domain = { $regex: new RegExp("^" + domain.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + "$", "i") };
-    }
-    const records = await Attendance.find(query);
+    // The student is loaded first because the domain scoping needs their
+    // enrolment list, not just the requested string.
+    const student = await Student.findOne({ employeeId }).lean();
+
+    // Filtering happens in JS, not in the Mongo query. The query used an
+    // anchored regex on `domain`, and `Attendance.domain` defaults to "" —
+    // so every row written before that field was populated was silently
+    // dropped from the count. attendanceDomain.filterByDomain attributes a
+    // blank row to the student's primary domain instead of discarding it, and
+    // does nothing at all for a single-domain student.
+    const allRecords = await Attendance.find({ employeeId });
+    const records = attendanceDomain.filterByDomain(allRecords, domain, student);
+
     const self   = records.filter(r => r.markedBy === "self");
     const coord  = records.filter(r => r.markedBy === "coordinator");
 
@@ -5781,7 +6470,6 @@ async function computeAttendanceStats(employeeId, joiningDate, domain){
     // earlier than the joiningDate this function used to be handed. A WhatsApp
     // joiner's pre-portal period is credited as attended (see
     // utils/attendanceUtils.getPreportalCreditedDays).
-    const student = await Student.findOne({ employeeId }).lean();
     const summary = attendanceUtils.getAttendanceSummary(
         records,
         student || { joiningDate, tenure: null }
@@ -5839,11 +6527,21 @@ try{
     const now = new Date();
     const dateKey = toDateKey(now);
 
-    const existing = await Attendance.findOne({ employeeId, dateKey, markedBy:"self" });
-    if(existing) return res.json({ success:false, alreadyMarked:true, message:"Already marked for today" });
+    // Which domain this mark is for. A student holding two domains is doing two
+    // separate internships and has to mark each one — the duplicate check below
+    // is scoped to the domain for exactly that reason. An unrecognised domain
+    // (or none) falls back to their primary; a domain they are not enrolled in
+    // is never honoured. See utils/attendanceDomain.js.
+    const markDomain = attendanceDomain.domainForWrite(
+        student,
+        req.body.domain || req.headers['x-active-domain']
+    );
+
+    const existing = await Attendance.findOne({ employeeId, dateKey, markedBy:"self", domain: markDomain });
+    if(existing) return res.json({ success:false, alreadyMarked:true, domain: markDomain, message:"Already marked for today" });
 
     const att = new Attendance({
-        studentId: student._id, employeeId, domain: student.domain,
+        studentId: student._id, employeeId, domain: markDomain,
         date: now, dateKey, status:"Present", markedBy:"self"
     });
     await att.save();
@@ -5852,7 +6550,13 @@ try{
     await bumpStreakAndMilestones(student);
     await checkCertificateEligibility(employeeId);
     await recomputeBadgesFor(employeeId);
-    res.json({ success:true, message:"Attendance marked for today", attendance:att });
+
+    // Return the fresh figures so the page does not have to guess whether the
+    // count moved — "it does not count the attendance" was partly this: the
+    // dashboard re-fetched, the domain filter dropped every row, and the panel
+    // stayed at zero right after a successful mark.
+    const stats = await computeAttendanceStats(employeeId, student.joiningDate, markDomain);
+    res.json({ success:true, message:"Attendance marked for today", domain: markDomain, attendance:att, stats });
 }catch(e){
     if(e.code === 11000) return res.json({ success:false, alreadyMarked:true, message:"Already marked for today" });
     console.log(e); res.json({ success:false, message:"Failed to mark attendance" });
@@ -5887,8 +6591,12 @@ try{
     if(isNaN(d.getTime())) return res.json({ success:false, message:"Invalid date" });
     const dateKey = toDateKey(d);
 
+    // The coordinator marks one domain's class, so the record is scoped the
+    // same way a student's self-mark is.
+    const markDomain = attendanceDomain.domainForWrite(student, req.body.domain);
+
     // Idempotent: if already marked for that day, update it instead of erroring
-    let att = await Attendance.findOne({ employeeId, dateKey, markedBy:"coordinator" });
+    let att = await Attendance.findOne({ employeeId, dateKey, markedBy:"coordinator", domain: markDomain });
     if(att){
         att.status = st;
         att.coordinatorId = coordinatorId || att.coordinatorId;
@@ -5909,7 +6617,7 @@ try{
     }
 
     att = new Attendance({
-        studentId: student._id, employeeId, domain: student.domain,
+        studentId: student._id, employeeId, domain: markDomain,
         date: d, dateKey, status: st, markedBy:"coordinator", coordinatorId: coordinatorId || ""
     });
     await att.save();
@@ -5953,16 +6661,30 @@ app.get("/attendance/student/:employeeId", async(req,res)=>{
 try{
     const employeeId = decodeURIComponent(req.params.employeeId);
     const student = await Student.findOne({ employeeId });
-    const domain = req.query.domain || req.headers['x-active-domain'] || (student ? student.domain : '');
-    const query = { employeeId };
-    if (domain) {
-        query.domain = { $regex: new RegExp("^" + domain.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + "$", "i") };
-    }
-    const records = await Attendance.find(query).sort({ date:-1 });
+    const domain = attendanceDomain.resolveActiveDomain(
+        student,
+        req.query.domain || req.headers['x-active-domain']
+    );
+
+    // Every row is loaded and then filtered in JS. The anchored regex this used
+    // to run against `Attendance.domain` dropped every row written before that
+    // field was populated — it defaults to "" — so a student's own history
+    // silently stopped counting.
+    const allRecords = await Attendance.find({ employeeId }).sort({ date:-1 });
+    const records = attendanceDomain.filterByDomain(allRecords, domain, student);
+
     const stats = await computeAttendanceStats(employeeId, student ? student.joiningDate : null, domain);
     const today = toDateKey(new Date());
     const markedToday = records.some(r => r.markedBy === "self" && r.dateKey === today);
-    res.json({ success:true, attendance:records, stats, markedToday });
+    res.json({
+        success:true,
+        attendance:records,
+        stats,
+        markedToday,
+        domain,
+        // So the page can show a per-domain marker when the student holds two.
+        domains: attendanceDomain.studentDomains(student)
+    });
 }catch(e){ console.log(e); res.json({ success:false, attendance:[], stats:null }); }
 });
 
@@ -6106,6 +6828,8 @@ try{
     const student = await Student.findById(req.params.id);
     if(!student) return res.json({ success:false, message:"Student not found" });
 
+    const hadHRApproval = !!student.certificateApprovedByHR;
+
     student.certificateApprovedByCoordinator = false;
     student.coordinatorApprovedAt = null;
     student.coordinatorRemarks = "";
@@ -6114,6 +6838,34 @@ try{
     student.hrApprovedAt = null;
     student.hrRemarks = "";
     await student.save();
+
+    // This is the one approval transition that told nobody. It silently
+    // withdraws HR's approval as well as the coordinator's, so both the
+    // student and HR could be looking at a certificate status that no longer
+    // holds. Its sibling coordinator-approve has always notified.
+    try{
+        const notif = new Notification({
+            title: "Certificate approval revoked",
+            message: hadHRApproval
+                ? "Your coordinator withdrew their certificate approval, which also removed the HR approval. Please contact your coordinator."
+                : "Your coordinator withdrew their certificate approval. Please contact your coordinator.",
+            type: "warning", from: "Coordinator",
+            targetType: "student", targetEmployeeId: student.employeeId, targetDomain: student.domain
+        });
+        await notif.save();
+        broadcastNotification(student.domain, student.employeeId, notif);
+
+        if(hadHRApproval){
+            const hrNotif = new Notification({
+                title: "Certificate approval chain broken",
+                message: `Coordinator approval for ${student.name || student.employeeId} (${student.employeeId}) was revoked, so the HR approval was removed too.`,
+                type: "warning", from: "Coordinator",
+                targetType: "domain", targetDomain: student.domain
+            });
+            await hrNotif.save();
+            broadcastNotification(student.domain, null, hrNotif);
+        }
+    }catch(notifyErr){ console.error("[coordinator-revoke] notify failed:", notifyErr.message); }
 
     res.json({ success:true, message:"Approval revoked" });
 }catch(e){ console.log(e); res.json({ success:false, message:"Failed to revoke" }); }
@@ -6201,13 +6953,29 @@ try{
     student.certificateApprovedByCoordinator = false;
     await student.save();
 
-    const notif = new Notification({
-        title:"Certificate Review: Action Needed",
-        message:`HR returned your certificate review to the coordinator. Reason: ${student.hrRejectionReason}`,
-        type:"warning", from:"HR",
-        targetType:"coordinator-domain", targetDomain:student.domain
-    });
-    await notif.save();
+    // Two gaps here: this notification was saved but never broadcast, so the
+    // coordinator only saw it on a page reload; and it was addressed to "your
+    // certificate review" while being targeted at the coordinator. The student
+    // — whose approval was just withdrawn — was told nothing at all.
+    try{
+        const coordNotif = new Notification({
+            title:"Certificate review returned by HR",
+            message:`HR returned the certificate review for ${student.name || student.employeeId} (${student.employeeId}). Reason: ${student.hrRejectionReason}`,
+            type:"warning", from:"HR",
+            targetType:"coordinator-domain", targetDomain:student.domain
+        });
+        await coordNotif.save();
+        broadcastNotification(student.domain, null, coordNotif);
+
+        const studentNotif = new Notification({
+            title:"Certificate review needs another look",
+            message:`HR returned your certificate review to your coordinator. Reason: ${student.hrRejectionReason}`,
+            type:"warning", from:"HR",
+            targetType:"student", targetEmployeeId:student.employeeId, targetDomain:student.domain
+        });
+        await studentNotif.save();
+        broadcastNotification(student.domain, student.employeeId, studentNotif);
+    }catch(notifyErr){ console.error("[hr-reject] notify failed:", notifyErr.message); }
 
     res.json({ success:true, message:"Student rejected and returned to coordinator" });
 }catch(e){ console.log(e); res.json({ success:false, message:"Failed to reject" }); }
@@ -6289,57 +7057,91 @@ try{
 // (employeeId for students, username for coord/HR) and verified against DB or
 // the HR_ACCOUNTS / COORDINATORS maps before any chat action is allowed.
 
-async function verifyChatIdentity(claim){
-    if(!claim || !claim.role) return null;
-    if(claim.role === "student"){
-        if(!claim.employeeId) return null;
-        const s = await Student.findOne({ employeeId: claim.employeeId });
-        if(!s) return null;
-        return {
-            role: "student",
-            id: s.employeeId,
-            name: (s.name || ((s.firstName||"")+" "+(s.lastName||""))).trim() || s.employeeId,
-            domain: s.domain || ""
-        };
-    }
-    if(claim.role === "coordinator"){
-        // The handshake field is named `username` for backward compatibility, but
-        // it can hold either a legacy username or an email (DB-backed coordinator).
-        const id = claim.username || claim.email;
-        if(!id) return null;
-        const legacy = COORDINATORS[id];
-        if(legacy) return { role: "coordinator", id, name: id, domain: legacy.domain };
-        // DB-backed: created via promotion flow
-        const q = id.indexOf("@") !== -1
-            ? { email: id.toLowerCase() }
-            : { $or: [{ username: id }, { email: id.toLowerCase() }] };
-        const dbC = await Coordinator.findOne(q);
-        if(dbC) return { role: "coordinator", id: dbC.email || dbC.username || id, name: dbC.name, domain: dbC.domain };
-        return null;
-    }
-    if(claim.role === "hr"){
-        const id = claim.username || claim.email;
-        if(!id) return null;
-        // Legacy hardcoded HR (by username key)
-        const legacy = HR_ACCOUNTS[id];
-        if(legacy) return { role: "hr", id, name: legacy.name, domain: "" };
-        // Legacy hardcoded HR (by their assigned email)
-        const legacyByEmail = Object.entries(HR_ACCOUNTS).find(
-            ([_, v]) => (v.email || "").toLowerCase() === String(id).toLowerCase()
-        );
-        if(legacyByEmail){
-            const [u, v] = legacyByEmail;
-            return { role: "hr", id: v.email || u, name: v.name, domain: "" };
-        }
-        // DB-backed HR (created via promotion flow)
-        if(id.indexOf("@") !== -1){
-            const dbH = await HR.findOne({ email: id.toLowerCase() });
-            if(dbH) return { role: "hr", id: dbH.email, name: dbH.name, domain: "" };
-        }
-        return null;
-    }
-    return null;
+/**
+ * Every id a socket identity may appear as inside an existing room name.
+ *
+ * The canonical id is first; the rest exist because the same person has been
+ * written into room names under more than one spelling over time. See
+ * services/chatIdentity.js — the alias list is what keeps those conversations
+ * reachable instead of silently orphaning them.
+ */
+/**
+ * NOTE: `verifyChatIdentity(claim)` used to live here.
+ *
+ * It took a role plus an employee ID or username from the client and looked
+ * them up — which is not authentication, it is a directory search. A socket or
+ * a request could name anybody and be treated as them. Every caller now reads
+ * the session instead: chatIdentityFromSocket() below for sockets, and
+ * chatIdentityFromSession(req) for the REST endpoints.
+ */
+
+/**
+ * Who is on the other end of this socket — from the session cookie.
+ *
+ * This replaced `verifyChatIdentity`, which read `socket.handshake.auth` and
+ * merely LOOKED UP whatever the caller claimed. Two things were wrong with it:
+ *
+ *   - It was not authentication. A socket opened with
+ *     `auth: {role:"student", employeeId:"TEN/AI/1663"}` was accepted as that
+ *     student, with no password and no session. Employee IDs are sequential
+ *     and printed on offer letters and certificates.
+ *
+ *   - It refused everyone who did NOT send a claim, and public/messages.html
+ *     connects with `io({ withCredentials: true })` and no claim at all. So the
+ *     socket never connected on that page: history loaded over REST and every
+ *     attempt to send died with "Your message did not send. Check your
+ *     connection and try again." — which was not a connection problem, and no
+ *     amount of retrying would ever have fixed it.
+ *
+ * The session cookie already rides the handshake, so it is both the honest
+ * answer and the one that works everywhere.
+ *
+ * The domain is refreshed from the record because it decides which domain room
+ * this person is auto-joined to: the session captured it at sign-in, and a
+ * student moved to a different domain since then would otherwise stay
+ * subscribed to the room they left.
+ */
+function chatIdentityFromSocket(socket){
+    return new Promise((resolve) => {
+        try{
+            const req = socket.request;
+            if(!req || !req.headers || !req.headers.cookie) return resolve(null);
+            sessionMiddleware(req, {}, async () => {
+                const identity = chatIdentity.identityFromSession(req.session);
+                if(!identity) return resolve(null);
+                try{
+                    if(identity.role === "student"){
+                        const s = await Student.findOne({ employeeId: identity.id })
+                            .select("domain name firstName lastName").lean();
+                        if(s){
+                            identity.domain = s.domain || identity.domain;
+                            identity.name = identity.name ||
+                                (s.name || ((s.firstName||"") + " " + (s.lastName||""))).trim() || identity.id;
+                        }
+                    } else if(identity.role === "coordinator"){
+                        const c = await Coordinator.findOne({
+                            $or: [{ email: identity.id }, { username: identity.id }]
+                        }).select("domain name").lean();
+                        if(c){
+                            identity.domain = c.domain || identity.domain;
+                            identity.name = identity.name || c.name || identity.id;
+                        }
+                    }
+                }catch(_){ /* the session's own copy is good enough */ }
+                resolve(identity);
+            });
+        }catch(_){ resolve(null); }
+    });
 }
+
+// Private-conversation naming and membership now live in one module shared
+// with routes/chatModeration.js and the socket layer. They used to be defined
+// separately in each, with different rules for what a staff member's id is,
+// which is what made an admin's click bounce to the login page and an HR user
+// see "Forbidden" on a conversation their own inbox had just listed.
+const chatIdentity = require("./services/chatIdentity");
+const dmRoomFor      = chatIdentity.dmRoomFor;
+const dmParticipants = chatIdentity.dmParticipants;
 
 function roomsAllowedFor(identity){
     const rooms = ["general", "doubts", "feedback_support"];
@@ -6351,19 +7153,45 @@ function roomsAllowedFor(identity){
     } else if(identity.role === "hr"){
         rooms.push("hr_coordinators");
         rooms.push("hr_internal");
+    } else if(identity.role === "admin"){
+        // Admin oversight: every shared room. DMs are handled in
+        // canAccessRoom — an admin can open any conversation, but is not
+        // auto-joined to all of them, which would be thousands of rooms.
+        rooms.push("hr_coordinators", "hr_internal");
     }
     return rooms;
 }
 function canAccessRoom(identity, room){
     if(!room) return false;
     if(roomsAllowedFor(identity).indexOf(room) !== -1) return true;
-    // domain_* rooms only allowed if the suffix matches the user's domain
-    if(room.indexOf("domain_") === 0 && identity.domain && room === "domain_" + identity.domain) return true;
+    // domain_* rooms only allowed if the suffix matches the user's domain —
+    // except for an admin, whose whole purpose here is oversight.
+    if(room.indexOf("domain_") === 0){
+        if(identity.role === "admin") return true;
+        return !!(identity.domain && room === "domain_" + identity.domain);
+    }
+    // A private conversation is readable by its two participants, and by an
+    // admin — which is the point of admin oversight, and is why the portals
+    // tell users that staff can review reported conversations.
+    //
+    // Membership is checked against every id this person is known by, not just
+    // the canonical one. A conversation an HR user started from the inbox is
+    // named with their email; one started from the chat widget carries their
+    // username. Matching only the canonical id locked people out of their own
+    // conversations — that is the "Forbidden" people were seeing.
+    const pair = dmParticipants(room);
+    if(pair){
+        if(identity.role === "admin") return true;
+        return chatIdentity.isParticipant(identity, room);
+    }
     return false;
 }
 function canDeleteIn(identity, room){
     // Per spec: coordinator (in their domain chat); coordinator+HR (general/staff); HR (hr_internal).
     if(!canAccessRoom(identity, room)) return false;
+    if(identity.role === "admin") return true;
+    // Either participant may delete inside their own private conversation.
+    if(dmParticipants(room)) return true;
     if(identity.role === "student") return false;
     return true;
 }
@@ -6373,21 +7201,17 @@ function canDeleteIn(identity, room){
  *
  * The REST and upload endpoints used to take `role` + `employeeId`/`username`
  * from the query string, so anyone who knew an employee ID could read that
- * student's domain room. The Socket.IO handshake is separately verified by
- * verifyChatIdentity(); this covers the HTTP surface.
+ * student's domain room. Sockets read the same session via
+ * chatIdentityFromSocket(); this covers the HTTP surface.
+ *
+ * This delegates to services/chatIdentity so it cannot drift from the inbox
+ * again. Its own version had no admin branch, so every admin who clicked a
+ * conversation got a 401 and was thrown out to the login page, and it
+ * preferred an HR username where the inbox preferred their email, so the two
+ * built different room names for the same pair of people.
  */
 function chatIdentityFromSession(req) {
-    const s = req.session || {};
-    if (s.student) {
-        return { role: "student", id: s.student.employeeId, name: s.student.name || s.student.employeeId, domain: s.student.domain || "" };
-    }
-    if (s.coordinator) {
-        return { role: "coordinator", id: s.coordinator.username, name: s.coordinator.username, domain: s.coordinator.domain || "" };
-    }
-    if (s.hr) {
-        return { role: "hr", id: s.hr.username || s.hr.email, name: s.hr.name || s.hr.username, domain: "" };
-    }
-    return null;
+    return chatIdentity.identityFromSession(req.session);
 }
 
 // REST: load last 50 messages for a room (after permission check)
@@ -6457,14 +7281,51 @@ app.post("/chat/upload-image", (req, res) => {
     });
 });
 
+/**
+ * POST /chat/messages — send a message without a socket.
+ *
+ * The Socket.IO event is still the primary path, because it is what makes the
+ * message appear instantly for everyone in the room. This exists because a
+ * socket is not always available:
+ *
+ *   - college and office networks block WebSockets and long-polling upgrades;
+ *   - a proxy times the connection out and the client has not reconnected yet;
+ *   - the session expired, so the handshake is refused.
+ *
+ * Without it, every one of those looked identical to the person typing: "Your
+ * message did not send. Check your connection and try again." — advice that
+ * could not help, on a message that would never send however many times they
+ * tried.
+ *
+ * Identity comes from the session, exactly as it does on the socket, and the
+ * work is the same function, so a message sent this way is delivered to
+ * everyone in the room and raises the same notifications.
+ */
+app.post("/chat/messages", async (req, res) => {
+    try {
+        const identity = chatIdentityFromSession(req);
+        if (!identity) return res.status(401).json({ success: false, message: "Please sign in to continue." });
+
+        const result = await deliverChatMessage(identity, req.body || {});
+        if (!result.success) {
+            const status = result.code === "forbidden" ? 403
+                         : result.code === "blocked" ? 403
+                         : result.code === "server_error" ? 500 : 400;
+            return res.status(status).json(result);
+        }
+        res.json(result);
+    } catch (e) {
+        console.log("POST /chat/messages error:", e.message);
+        res.status(500).json({ success: false, message: "The message could not be sent. Please try again." });
+    }
+});
+
 // REST fallback for delete (Socket.IO event is the primary path)
 app.delete("/chat/messages/:messageId", async(req,res)=>{
 try{
-    const identity = await verifyChatIdentity({
-        role: (req.body && req.body.role) || req.query.role,
-        employeeId: (req.body && req.body.employeeId) || req.query.employeeId,
-        username: (req.body && req.body.username) || req.query.username
-    });
+    // From the session. Taking role/employeeId from the body or query meant
+    // anyone could delete anyone's message by naming a coordinator.
+    const identity = chatIdentityFromSession(req);
     if(!identity) return res.status(401).json({ success:false, message:"Unauthorized" });
     const msg = await Message.findById(req.params.messageId);
     if(!msg) return res.status(404).json({ success:false, message:"Message not found" });
@@ -7009,7 +7870,13 @@ const BADGE_CATALOG = [
     { id:"top_performer",      name:"Top Performer",         icon:"👑", description:"Rank 1 in your domain leaderboard",       requirement:"Domain rank #1" },
     { id:"day_one",            name:"Day 1",                 icon:"🎉", description:"Complete your first day",                 requirement:"Mark attendance & submit task on day 1" },
     { id:"halfway_there",      name:"Halfway There",         icon:"🎯", description:"Complete 50% of your internship",         requirement:"50% of tenure elapsed" },
-    { id:"graduate",           name:"Graduate",              icon:"🎓", description:"Complete your full internship tenure",    requirement:"100% of tenure elapsed" }
+    { id:"graduate",           name:"Graduate",              icon:"🎓", description:"Complete your full internship tenure",    requirement:"100% of tenure elapsed" },
+    // Paid-track badges. Awarded by services/tenureBenefits.js the moment an
+    // admin approves the fee — not earned by work, so they are described as
+    // what they are rather than dressed up as an achievement.
+    { id:"premium_starter",    name:"Starter Member",        icon:"🥉", description:"On the paid 1 Month track",              requirement:"Programme fee settled" },
+    { id:"premium_accelerate", name:"Accelerate Member",     icon:"🥈", description:"On the paid 15 Days track",              requirement:"Programme fee settled" },
+    { id:"premium_sprint",     name:"Sprint Member",         icon:"🥇", description:"On the paid 1 Week track",               requirement:"Programme fee settled" }
 ];
 const BADGE_CATALOG_BY_ID = Object.fromEntries(BADGE_CATALOG.map(b => [b.id, b]));
 // Major badges trigger a notification (and could be email-extended later).
@@ -7449,28 +8316,60 @@ async function _findUserByRoleEmail(role, email){
     return null;
 }
 
-app.post("/auth/forgot-password", async(req,res)=>{
+/*
+ * Forgot password.
+ *
+ * What used to be here, and why it is gone:
+ *
+ *   1. ACCOUNT TAKEOVER. When the address was not found, the handler fell back
+ *      to `Student.findOne({}).sort({createdAt:-1})` — the most recently
+ *      registered real student — wrote a reset token onto THAT student's
+ *      account, and mailed the working link to whatever address the caller
+ *      typed. Anyone could take over a real account in two minutes. It was
+ *      commented "fallback for local testing"; it was running in production.
+ *
+ *   2. UNAUTHENTICATED WRITES. With no students in the collection at all, it
+ *      created one from the request body — an open door for junk rows from an
+ *      endpoint that requires no login.
+ *
+ * A missing account now simply sends nothing. The response is identical either
+ * way, because a different answer for a real address turns this endpoint into
+ * a membership oracle for every address someone cares to try.
+ */
+app.post("/auth/forgot-password", forgotPasswordLimiter, async(req,res)=>{
+    // Said once, returned on every path — success, unknown address, or capped.
+    const uniformResponse = () => res.json({
+        success: true,
+        message: "If that account exists, a password reset link has been sent to your email inbox."
+    });
+
     try{
         const { email, role } = req.body || {};
         const validRoles = ["student","coordinator","hr"];
         const targetRole = validRoles.includes(role) ? role : "student";
         const cleanEmail = String(email || "").trim().toLowerCase();
 
-        let user = await _findUserByRoleEmail(targetRole, cleanEmail);
+        if (!cleanEmail) return uniformResponse();
 
-        // Fallback for local testing if user does not exist in DB yet
-        if (!user) {
-            user = await Student.findOne({}).sort({ createdAt: -1 });
-            if (!user) {
-                user = new Student({
-                    email: cleanEmail || "teststudent@example.com",
-                    name: "Test Student",
-                    employeeId: "TEN-STU-000001",
-                    domain: "Web Development"
-                });
-                try { await user.save(); } catch(_) {}
+        const user = await _findUserByRoleEmail(targetRole, cleanEmail);
+        if (!user) return uniformResponse();
+
+        /*
+         * Two links a day per account. Counted from the mail history rather
+         * than a new field, so a restart cannot reset someone's allowance.
+         */
+        try {
+            const since = new Date(Date.now() - 24*60*60*1000);
+            const sentToday = await MailHistory.countDocuments({
+                recipientEmail: cleanEmail,
+                mailType: "password_reset",
+                sentAt: { $gte: since }
+            });
+            if (sentToday >= 2) {
+                console.log(`[forgot-password] daily cap reached for ${cleanEmail}`);
+                return uniformResponse();
             }
-        }
+        } catch (_) { /* history unavailable — do not block a legitimate reset */ }
 
         const token = crypto.randomBytes(32).toString("hex");
         const expiry = new Date(Date.now() + 60*60*1000);
@@ -7521,10 +8420,7 @@ app.post("/auth/forgot-password", async(req,res)=>{
             }
         }catch(e){ console.log("forgot-password mail error:", e && e.message); }
 
-        return res.json({
-            success: true,
-            message: "If that account exists, a password reset link has been sent to your email inbox."
-        });
+        return uniformResponse();
     }catch(e){ console.log(e); res.status(500).json({ success:false, message:"Server error" }); }
 });
 
@@ -7878,7 +8774,8 @@ try{
     let updated = 0, created = 0, failed = 0;
     for(const s of students){
         try{
-            let att = await Attendance.findOne({ employeeId: s.employeeId, dateKey, markedBy:"coordinator" });
+            const markDomain = attendanceDomain.domainForWrite(s, domain);
+            let att = await Attendance.findOne({ employeeId: s.employeeId, dateKey, markedBy:"coordinator", domain: markDomain });
             if(att){
                 att.status = st;
                 att.coordinatorId = coordinatorId || att.coordinatorId;
@@ -7888,7 +8785,7 @@ try{
                 updated++;
             } else {
                 att = new Attendance({
-                    studentId: s._id, employeeId: s.employeeId, domain: s.domain,
+                    studentId: s._id, employeeId: s.employeeId, domain: markDomain,
                     date: d, dateKey, status: st, markedBy:"coordinator",
                     coordinatorId: coordinatorId || "",
                     source: source || "bulk"
@@ -8053,14 +8950,15 @@ try{
 
     const today = new Date();
     const dateKey = toDateKey(today);
-    const existing = await Attendance.findOne({ employeeId, dateKey, markedBy:"coordinator" });
+    const markDomain = attendanceDomain.domainForWrite(student, domain);
+    const existing = await Attendance.findOne({ employeeId, dateKey, markedBy:"coordinator", domain: markDomain });
     if(existing){
         return res.json({ success:false, alreadyMarked:true,
             message:"Attendance already marked for today ✅" });
     }
 
     const att = new Attendance({
-        studentId: student._id, employeeId, domain: student.domain,
+        studentId: student._id, employeeId, domain: markDomain,
         date: today, dateKey, status:"Present", markedBy:"coordinator",
         coordinatorId: coordinatorId || "qr",
         source: "qr"
@@ -8102,17 +9000,20 @@ function _blockerCanActIn(actor, targetRole, room){
     }
     return false;
 }
-async function _identityFromAuth(body){
-    return await verifyChatIdentity({
-        role: body && body.role,
-        employeeId: body && body.employeeId,
-        username: body && body.username
-    });
+/**
+ * The caller, from their session.
+ *
+ * This used to build an identity out of `role` + `employeeId`/`username` in the
+ * request body, so a request could simply declare itself a coordinator and
+ * silence anyone in a room.
+ */
+function _identityFromAuth(req){
+    return chatIdentityFromSession(req);
 }
 
 app.post("/chat/block", async(req,res)=>{
     try{
-        const actor = await _identityFromAuth(req.body);
+        const actor = _identityFromAuth(req);
         if(!actor) return res.status(401).json({ success:false, message:"Unauthorized" });
         const { chatRoom, blockedUser, blockedUserRole } = req.body || {};
         if(!chatRoom || !blockedUser || !blockedUserRole)
@@ -8130,7 +9031,7 @@ app.post("/chat/block", async(req,res)=>{
 
 app.post("/chat/unblock", async(req,res)=>{
     try{
-        const actor = await _identityFromAuth(req.body);
+        const actor = _identityFromAuth(req);
         if(!actor) return res.status(401).json({ success:false, message:"Unauthorized" });
         const { chatRoom, blockedUser } = req.body || {};
         const existing = await BlockList.findOne({ chatRoom, blockedUser });
@@ -8144,7 +9045,7 @@ app.post("/chat/unblock", async(req,res)=>{
 
 app.get("/chat/blocked-list", async(req,res)=>{
     try{
-        const actor = await _identityFromAuth(req.query);
+        const actor = _identityFromAuth(req);
         if(!actor) return res.status(401).json({ success:false, message:"Unauthorized" });
         const filter = actor.role === "hr" ? {} : { blockedBy: actor.id };
         const list = await BlockList.find(filter).sort({ blockedAt: -1 });
@@ -8379,9 +9280,59 @@ const codingSubmissionSchema = new mongoose.Schema({
     status:        { type: String, enum: ["Accepted","Wrong Answer","Runtime Error","Pending"], default: "Pending" },
     passedCases:   { type: Number, default: 0 },
     totalCases:    { type: Number, default: 0 },
+    // Proctoring state at the moment of submission. The modal has always shown
+    // a camera panel and a violation counter; neither was recorded anywhere, so
+    // "Violations: 3" meant nothing to anyone but the student looking at it.
+    proctored:     { type: Boolean, default: false },
+    violations:    { type: Number, default: 0 },
     submittedAt:   { type: Date, default: Date.now }
 });
 const CodingSubmission = mongoose.model("CodingSubmission", codingSubmissionSchema);
+
+// Individual proctoring events, so a coordinator can see when a violation
+// happened rather than only how many there were.
+const proctoringEventSchema = new mongoose.Schema({
+    employeeId: { type: String, required: true, index: true },
+    questionId: { type: mongoose.Schema.Types.ObjectId, ref: "CodingQuestion" },
+    reason:     { type: String, default: "" },
+    violationNumber: { type: Number, default: 1 },
+    at:         { type: Date, default: Date.now }
+});
+const ProctoringEvent = mongoose.model("ProctoringEvent", proctoringEventSchema);
+
+// The modal has always POSTed here. The route did not exist, the fetch 404d,
+// and the client swallowed it in an empty .catch() — so every violation the
+// portal claimed to be watching for was thrown away.
+app.post("/student/proctoring/violation", requireStudentSession, async (req, res) => {
+    try {
+        // Identity from the session. A body-supplied employeeId would let a
+        // student log violations against somebody else.
+        const employeeId = (req.session && req.session.student && req.session.student.employeeId) || "";
+        if (!employeeId) return res.status(401).json({ success: false });
+        const b = req.body || {};
+        await ProctoringEvent.create({
+            employeeId,
+            questionId: mongoose.Types.ObjectId.isValid(b.questionId) ? b.questionId : undefined,
+            reason: String(b.reason || "").slice(0, 200),
+            violationNumber: Number(b.violationNumber) || 1
+        });
+        res.json({ success: true });
+    } catch (e) {
+        console.log("/student/proctoring/violation error:", e && e.message);
+        res.status(500).json({ success: false });
+    }
+});
+
+// What a coordinator sees: the violations logged against one student.
+app.get("/coordinator/proctoring/:employeeId", requireStaffSession, async (req, res) => {
+    try {
+        const events = await ProctoringEvent.find({ employeeId: req.params.employeeId })
+            .sort({ at: -1 }).limit(200).lean();
+        res.json({ success: true, events });
+    } catch (e) {
+        res.status(500).json({ success: false, events: [] });
+    }
+});
 
 // ----- Coordinator CRUD -----
 app.get("/coordinator/coding-questions/:domain", requireStaffSession, async(req,res)=>{
@@ -8551,6 +9502,37 @@ function _hasCmd(cmd){
     } catch(_) { return false; }
 }
 
+/**
+ * The environment a student's program is allowed to see.
+ *
+ * spawn() inherits process.env by default, and this server's process.env holds
+ * MONGODB_URI, SESSION_SECRET, ADMIN_PASSWORD_HASH, the SMTP password and the
+ * payment keys. A three-line program printed every one of them:
+ *
+ *     console.log(process.env)          // JavaScript
+ *     import os; print(os.environ)      // Python
+ *
+ * That is not a hypothetical — it is the whole reason ENABLE_CODE_RUNNER has
+ * to default to off. The child now gets an explicit, minimal environment
+ * instead of inheriting one, so the worst a submitted program can read is the
+ * PATH. HOME points into the throwaway working directory so a runtime that
+ * wants to write a cache does it there and it is deleted with everything else.
+ *
+ * This is still containment, not a sandbox — see the gate below.
+ */
+function _sandboxEnv(cwd){
+    return {
+        PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin",
+        HOME: cwd || os.tmpdir(),
+        TMPDIR: cwd || os.tmpdir(),
+        LANG: "C.UTF-8",
+        LC_ALL: "C.UTF-8",
+        // Java writes preferences and temp files relative to these.
+        USER: "ten-runner",
+        NODE_OPTIONS: ""
+    };
+}
+
 function _runWithTimeout(cmd, args, opts){
     return new Promise((resolve) => {
         const startedAt = Date.now();
@@ -8559,13 +9541,26 @@ function _runWithTimeout(cmd, args, opts){
         let killed = false;
         let child;
         try {
-            child = spawn(cmd, args, { ...opts, shell: false });
+            child = spawn(cmd, args, {
+                ...opts,
+                shell: false,
+                env: _sandboxEnv(opts && opts.cwd),
+                // Own process group, so a program that forks is killed with its
+                // children rather than leaving them running on the host.
+                detached: process.platform !== "win32"
+            });
         } catch(e){
             return resolve({ ok:false, error: String(e.message || e), code: -1, executionTime: 0 });
         }
+        const hardKill = () => {
+            try {
+                if (process.platform !== "win32" && child.pid) process.kill(-child.pid, "SIGKILL");
+                else child.kill("SIGKILL");
+            } catch(_){ try { child.kill("SIGKILL"); } catch(__){} }
+        };
         const timer = setTimeout(() => {
             killed = true;
-            try { child.kill("SIGKILL"); } catch(_){}
+            hardKill();
         }, (opts && opts.timeoutMs) || 5000);
 
         child.stdout.on("data", d => { stdout += d.toString(); if(stdout.length > 200000) stdout = stdout.slice(0, 200000) + "\n…[truncated]"; });
@@ -8650,13 +9645,17 @@ async function runSourceCode({ code, language, stdin }){
 //      but never previously implemented). Default is off.
 //   2. The caller must hold a student session, and is rate-limited per account.
 //
+//   3. The child process gets a scrubbed environment (_sandboxEnv above) and
+//      its own process group, so a submitted program can neither read this
+//      server's secrets out of process.env nor leave forked children behind.
+//
 // This is containment, NOT a sandbox. Before turning ENABLE_CODE_RUNNER on in
 // production, move execution into a network-isolated, memory- and process-
 // capped container. See docs/SECURITY-DO-NOT-EXPOSE.md.
 const CODE_RUNNER_ENABLED = String(process.env.ENABLE_CODE_RUNNER || "").toLowerCase() === "true";
 
 if (!CODE_RUNNER_ENABLED) {
-    console.warn("[code-runner] Disabled (ENABLE_CODE_RUNNER is not 'true'). /code/run and /code/submit will refuse requests.");
+    console.warn("[code-runner] Disabled (ENABLE_CODE_RUNNER is not 'true'). Coding challenges cannot be run or graded. Set ENABLE_CODE_RUNNER=true in .env to switch the section on.");
 }
 
 function requireCodeRunner(req, res, next) {
@@ -8675,6 +9674,12 @@ function requireCodeRunner(req, res, next) {
     }
     next();
 }
+
+// So the modal can say "the runner is off" before a student writes a solution
+// and presses Run, rather than after. Booleans only — no configuration values.
+app.get("/api/code-runner/status", (req, res) => {
+    res.json({ success: true, enabled: CODE_RUNNER_ENABLED });
+});
 
 // Per-account cap: executing code is far more expensive than a normal request.
 const codeRunLimiter = rateLimit({
@@ -8704,7 +9709,7 @@ app.post("/code/run", requireCodeRunner, requireStudentSession, codeRunLimiter, 
 // ==================================================================
 // ============ SHARED CODE EVALUATION FUNCTION ====================
 // ==================================================================
-async function evaluateCodeSubmission({ employeeId, questionId, language, code }) {
+async function evaluateCodeSubmission({ employeeId, questionId, language, code, proctored, violations }) {
     const q = await CodingQuestion.findById(questionId);
     if(!q) return { success:false, message:"Question not found", notFound:true };
     const cases = q.testCases || [];
@@ -8745,7 +9750,9 @@ async function evaluateCodeSubmission({ employeeId, questionId, language, code }
         code,
         status,
         passedCases: passed,
-        totalCases: cases.length
+        totalCases: cases.length,
+        proctored: !!proctored,
+        violations: Number(violations) || 0
     });
 
     // Fire-and-forget GitHub push on Accepted
@@ -8765,11 +9772,16 @@ async function evaluateCodeSubmission({ employeeId, questionId, language, code }
 
 app.post("/code/submit", requireCodeRunner, requireStudentSession, codeRunLimiter, async(req,res)=>{
     try {
-        const { employeeId, questionId, language, code } = req.body || {};
-        if(!employeeId || !questionId || !code){
-            return res.json({ success:false, message:"employeeId, questionId and code are required" });
+        const { questionId, language, code, proctored, violations } = req.body || {};
+        // Identity from the session, never from the body. The body-supplied
+        // employeeId meant a student could file an accepted solution under
+        // another student's ID and take their score.
+        const employeeId = (req.session && req.session.student && req.session.student.employeeId) || "";
+        if(!employeeId) return res.status(401).json({ success:false, message:"Please sign in again." });
+        if(!questionId || !code){
+            return res.json({ success:false, message:"questionId and code are required" });
         }
-        const result = await evaluateCodeSubmission({ employeeId, questionId, language, code });
+        const result = await evaluateCodeSubmission({ employeeId, questionId, language, code, proctored, violations });
         if(result.notFound) return res.status(404).json({ success:false, message:result.message });
         res.json(result);
     } catch(e){
@@ -8778,83 +9790,13 @@ app.post("/code/submit", requireCodeRunner, requireStudentSession, codeRunLimite
     }
 });
 
-// ----- Open in Terminal: create temp workspace -----
-// NOTE: Directories are created under /tmp and will be cleaned by the OS tmpfile cleaner (e.g., systemd-tmpfiles or tmpreaper). This is acceptable for ephemeral coding workspaces.
-app.post("/student/coding/open-terminal", requireCodeRunner, requireStudentSession, async(req,res)=>{
-    try {
-        const { employeeId, questionId, language } = req.body || {};
-        if(!employeeId || !questionId || !language){
-            return res.json({ success:false, message:"employeeId, questionId, and language are required" });
-        }
-        // Sanitize employeeId and questionId to prevent path traversal and shell injection
-        const safeId = String(employeeId).replace(/[^a-zA-Z0-9_-]/g, '');
-        const safeQid = String(questionId).replace(/[^a-zA-Z0-9_-]/g, '');
-        if(!safeId || !safeQid){
-            return res.json({ success:false, message:"Invalid employeeId or questionId" });
-        }
-        const q = await CodingQuestion.findById(safeQid);
-        if(!q) return res.status(404).json({ success:false, message:"Question not found" });
-
-        const dirPath = `/tmp/coding_${safeId}_${safeQid}/`;
-        fs.mkdirSync(dirPath, { recursive: true });
-
-        // Write starter code file
-        const lang = String(language).toLowerCase();
-        let filename, starterCode;
-        if(lang === "javascript" || lang === "js"){
-            filename = "solution.js";
-            starterCode = "// Problem: " + q.title + "\n// Read input from stdin\nconst readline = require('readline');\nconst rl = readline.createInterface({ input: process.stdin });\nlet lines = [];\nrl.on('line', l => lines.push(l));\nrl.on('close', () => {\n  // Your solution here\n});\n";
-        } else if(lang === "python" || lang === "py"){
-            filename = "solution.py";
-            starterCode = "# Problem: " + q.title + "\nimport sys\n\ndef solve():\n    # Your solution here\n    pass\n\nif __name__ == \"__main__\":\n    solve()\n";
-        } else if(lang === "java"){
-            filename = "Solution.java";
-            starterCode = "// Problem: " + q.title + "\nimport java.util.Scanner;\n\npublic class Solution {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        // Your solution here\n    }\n}\n";
-        } else if(lang === "cpp" || lang === "c++"){
-            filename = "solution.cpp";
-            starterCode = "#include <iostream>\nusing namespace std;\n// Problem: " + q.title + "\nint main() {\n    // Your solution here\n    return 0;\n}\n";
-        } else {
-            filename = "solution.txt";
-            starterCode = "// Problem: " + q.title + "\n// Unsupported language: " + lang + "\n";
-        }
-        fs.writeFileSync(path.join(dirPath, filename), starterCode, "utf8");
-
-        // Write README.txt
-        let readme = "=== " + q.title + " ===\n\n";
-        readme += "Description:\n" + (q.description || "N/A") + "\n\n";
-        readme += "Input Format:\n" + (q.inputFormat || "N/A") + "\n\n";
-        readme += "Output Format:\n" + (q.outputFormat || "N/A") + "\n\n";
-        readme += "Sample Input:\n" + (q.sampleInput || "N/A") + "\n\n";
-        readme += "Sample Output:\n" + (q.sampleOutput || "N/A") + "\n";
-        fs.writeFileSync(path.join(dirPath, "README.txt"), readme, "utf8");
-
-        // Write submit.sh
-        const port = process.env.PORT || 5000;
-        const submitScript = '#!/bin/bash\n# Submit your solution\n# Usage: ./submit.sh\nFILE="' + filename + '"\nCODE=$(cat "$FILE")\ncurl -s -X POST http://localhost:' + port + '/student/coding/submit-from-terminal \\\n  -H "Content-Type: application/json" \\\n  -d "{\\"employeeId\\":\\"' + safeId + '\\",\\"questionId\\":\\"' + safeQid + '\\",\\"language\\":\\"' + lang + '\\",\\"code\\":$(echo \\"$CODE\\" | jq -Rs .)}"\n';
-        fs.writeFileSync(path.join(dirPath, "submit.sh"), submitScript, { mode: 0o755 });
-
-        res.json({ success:true, workDir:dirPath, launchCmd:"cd " + dirPath + " && cat README.txt" });
-    } catch(e){
-        console.log("/student/coding/open-terminal error:", e && e.message);
-        res.status(500).json({ success:false, message:"Server error: " + (e && e.message) });
-    }
-});
-
-// ----- Submit from terminal -----
-app.post("/student/coding/submit-from-terminal", requireCodeRunner, requireStudentSession, async(req,res)=>{
-    try {
-        const { employeeId, questionId, language, code } = req.body || {};
-        if(!employeeId || !questionId || !code){
-            return res.json({ success:false, message:"employeeId, questionId and code are required" });
-        }
-        const result = await evaluateCodeSubmission({ employeeId, questionId, language, code });
-        if(result.notFound) return res.status(404).json({ success:false, message:result.message });
-        res.json(result);
-    } catch(e){
-        console.log("/student/coding/submit-from-terminal error:", e && e.message);
-        res.status(500).json({ success:false, message:"Server error: " + (e && e.message) });
-    }
-});
+// The "Open in Terminal" workspace used to be created here: a directory under
+// /tmp on the SERVER holding starter code, a README and a submit.sh that
+// curled localhost. The dialog printed that server path to the student and
+// told them to cd into it — instructions no student could follow, because
+// nobody reading the dashboard has a shell on the production host. The button
+// now opens the run console beside the editor, and these two endpoints (which
+// nothing calls) are gone with it.
 
 // Coordinator's read-only view of student coding submissions in their domain
 app.get("/coordinator/coding-submissions/:domain", requireStaffSession, async(req,res)=>{
@@ -8880,19 +9822,80 @@ app.get("/coordinator/coding-submissions/:domain", requireStaffSession, async(re
 let _publicStatsCache = { at: 0, body: null };
 const PUBLIC_STATS_TTL_MS = 5 * 60 * 1000;
 
+// The landing page shows the intern count from a presentation floor rather than
+// the raw row count. The floor is a fixed offset, not a multiplier or a fake
+// ticker: every real signup still moves the printed number by exactly one, so
+// the figure tracks the database day by day.
+//
+//   printed = real + (FLOOR - FLOOR_AT)
+//
+// With the defaults, a real 783 prints 5,000 and a real 784 prints 5,001.
+// Set PUBLIC_INTERNS_FLOOR=0 in .env to print the raw count instead.
+const PUBLIC_INTERNS_FLOOR = Number(process.env.PUBLIC_INTERNS_FLOOR ?? 5000);
+const PUBLIC_INTERNS_FLOOR_AT = Number(process.env.PUBLIC_INTERNS_FLOOR_AT ?? 783);
+
+/** Real intern count -> the number the public page prints. */
+function publicInternCount(real) {
+    const n = Number(real) || 0;
+    if (!PUBLIC_INTERNS_FLOOR) return n;
+    const offset = Math.max(0, PUBLIC_INTERNS_FLOOR - PUBLIC_INTERNS_FLOOR_AT);
+    return n + offset;
+}
+
+/** "Anmol Kumar" -> "Anmol K." — a public page does not need a full name. */
+function shortenPublicName(full) {
+    const parts = String(full || "").trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return "A TEN intern";
+    if (parts.length === 1) return parts[0];
+    return parts[0] + " " + parts[parts.length - 1].charAt(0).toUpperCase() + ".";
+}
+
 app.get('/api/public/stats', async (req, res) => {
     try {
         if (_publicStatsCache.body && (Date.now() - _publicStatsCache.at) < PUBLIC_STATS_TTL_MS) {
             return res.json(_publicStatsCache.body);
         }
         const { SELECTABLE_DOMAIN_NAMES } = require("./config/domains");
-        const interns = await Student.estimatedDocumentCount();
+        const StudentCoin = require("./models/new/StudentCoin");
+
+        // Top interns by coins, for the landing page's proof strip.
+        //
+        // Deliberately NOT /leaderboard/overall: those rows carry `employeeId`,
+        // which is the login identifier and is printed on every certificate.
+        // Nothing here identifies an account — a shortened name, a domain and a
+        // total.
+        const [interns, certificates, topCoins] = await Promise.all([
+            Student.estimatedDocumentCount(),
+            DocumentHistory.estimatedDocumentCount().catch(() => 0),
+            StudentCoin.find({ totalCoins: { $gt: 0 } })
+                .sort({ totalCoins: -1 }).limit(8).select("studentId totalCoins").lean()
+        ]);
+
+        let top = [];
+        if (topCoins.length) {
+            const owners = await Student.find({ _id: { $in: topCoins.map(c => c.studentId) } })
+                .select("_id name firstName lastName domain").lean();
+            const byId = {};
+            owners.forEach(o => { byId[String(o._id)] = o; });
+            top = topCoins.map(c => {
+                const s = byId[String(c.studentId)];
+                if (!s) return null;
+                return {
+                    name: shortenPublicName(s.name || `${s.firstName || ""} ${s.lastName || ""}`),
+                    domain: s.domain || "",
+                    coins: c.totalCoins || 0
+                };
+            }).filter(Boolean);
+        }
+
         const body = {
             success: true,
-            interns,
+            interns: publicInternCount(interns),
+            certificates,
             domains: SELECTABLE_DOMAIN_NAMES.length,
             domainNames: SELECTABLE_DOMAIN_NAMES,
-            tracks: 6
+            tracks: 6,
+            top
         };
         _publicStatsCache = { at: Date.now(), body };
         res.json(body);
@@ -8900,8 +9903,132 @@ app.get('/api/public/stats', async (req, res) => {
         console.error('[public-stats]', err.message);
         // The page falls back to whatever is already rendered, so a failure here
         // shows stale-but-sane text rather than an empty row.
-        res.json({ success: false, domainNames: [], tracks: 6 });
+        res.json({ success: false, domainNames: [], tracks: 6, top: [] });
     }
+});
+
+/**
+ * GET /api/public/domains — every domain we actually offer, with its curriculum.
+ *
+ * public/student-journeys.html carried a hardcoded list of fourteen. It had
+ * drifted: it advertised Vibe Coding, Space Research, Business Analyst and HR
+ * Management — none of which a student can register for — and omitted
+ * Artificial Intelligence, Business Development, HR, Space Intern and Finance,
+ * which they can. Somebody reading that page chose a domain that does not
+ * exist on the form.
+ *
+ * config/domains.js was written to be the one list precisely so this could not
+ * happen, and a page that never read it drifted anyway. Serving it here means
+ * a domain appears on the marketing page if and only if it appears on the
+ * registration form.
+ *
+ * Week titles come from the seeded DomainTask rows, so the curriculum shown is
+ * the curriculum taught. A domain with nothing seeded yet simply shows no
+ * weeks rather than an invented syllabus.
+ */
+let _publicDomainsCache = { at: 0, body: null };
+
+app.get('/api/public/domains', async (req, res) => {
+    try {
+        if (_publicDomainsCache.body && (Date.now() - _publicDomainsCache.at) < PUBLIC_STATS_TTL_MS) {
+            return res.json(_publicDomainsCache.body);
+        }
+        const { DOMAINS } = require("./config/domains");
+        const DomainTask = require("./models/new/DomainTask");
+
+        // One pass over the library rather than a query per domain.
+        const rows = await DomainTask.find({ durationType: "1month" })
+            .select("domain weekNumber taskTitle -_id")
+            .sort({ domain: 1, weekNumber: 1 })
+            .lean();
+
+        const weeksByDomain = {};
+        for (const r of rows) {
+            (weeksByDomain[r.domain] = weeksByDomain[r.domain] || []).push(r.taskTitle);
+        }
+
+        // The task engine files some domains under another name; mirror it so
+        // the page shows a curriculum instead of an empty card.
+        const ALIAS = {
+            "Artificial Intelligence": "Data Science",
+            "HR": "HR Management",
+            "Space Intern": "Space Research",
+            "Business Development": "Business Analyst",
+            "Finance": "Venture Capital"
+        };
+
+        const body = {
+            success: true,
+            domains: DOMAINS.filter(d => d.selectable).map(d => ({
+                name: d.name,
+                code: d.shortCode,
+                weeks: weeksByDomain[d.name] || weeksByDomain[ALIAS[d.name]] || []
+            }))
+        };
+        _publicDomainsCache = { at: Date.now(), body };
+        res.json(body);
+    } catch (err) {
+        console.error('[public-domains]', err.message);
+        // Names still come from config even with no database, so the page can
+        // always draw the grid — it just shows no week list.
+        try {
+            const { DOMAINS } = require("./config/domains");
+            return res.json({
+                success: true,
+                domains: DOMAINS.filter(d => d.selectable)
+                    .map(d => ({ name: d.name, code: d.shortCode, weeks: [] }))
+            });
+        } catch (_) {
+            res.json({ success: false, domains: [] });
+        }
+    }
+});
+
+/**
+ * GET /api/public/contributors — the "Built with" strip on the home page.
+ *
+ * Published rows only, and only the four fields the strip draws. The rows are
+ * already a copy HR made deliberately (see models/Contributor.js), but the
+ * projection is stated here too: this is an unauthenticated endpoint, and a
+ * field added to the model must not appear on the public page by default.
+ */
+let _contribCache = { at: 0, body: null };
+const CONTRIB_TTL_MS = 5 * 60 * 1000;
+
+app.get('/api/public/contributors', async (req, res) => {
+    try {
+        if (_contribCache.body && Date.now() - _contribCache.at < CONTRIB_TTL_MS) {
+            return res.json(_contribCache.body);
+        }
+        const Contributor = require('./models/Contributor');
+        const rows = await Contributor.find({ published: true },
+            'name domain contribution photoUrl order')
+            .sort({ order: 1, createdAt: -1 }).limit(60).lean();
+
+        const body = {
+            success: true,
+            contributors: rows.map(r => ({
+                name: r.name,
+                domain: r.domain || '',
+                contribution: r.contribution || '',
+                photoUrl: r.photoUrl || ''
+            }))
+        };
+        _contribCache = { at: Date.now(), body };
+        res.json(body);
+    } catch (err) {
+        console.error('[public-contributors]', err.message);
+        // An empty list, not a 500: the page hides the strip and nothing else
+        // on the home page is affected.
+        res.json({ success: true, contributors: [] });
+    }
+});
+
+/** HR posting a contributor must clear the cache, or it takes 5 minutes to show. */
+app.set('clearContributorCache', () => { _contribCache = { at: 0, body: null }; });
+
+app.get('/domains', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'domains.html'));
 });
 
 app.get('/verify-document', (req, res) => {
@@ -9108,6 +10235,41 @@ try {
     console.error("[V2] Failed to mount document routes:", e.message);
 }
 
+// Direct messages, personal blocking, abuse reports, admin moderation desk.
+try {
+    app.use("/api/chat", require("./routes/chatModeration"));
+    console.log("[Chat] Moderation + DM routes mounted at /api/chat");
+} catch(e) {
+    console.error("[Chat] Failed to mount moderation routes:", e.message);
+}
+
+// The student's half of an admin credential reset: set your own password, and
+// confirm or correct the email an admin changed for you.
+try {
+    app.use("/api/student/security", require("./routes/studentSecurity"));
+    console.log("[Security] Student credential routes mounted at /api/student/security");
+} catch(e) {
+    console.error("[Security] Failed to mount student credential routes:", e.message);
+}
+
+// Web push subscriptions, and the merged notification feed.
+try {
+    app.use("/api/push", require("./routes/push"));
+    app.use("/api/notifications", require("./routes/notificationFeed"));
+    console.log("[Push] Push + notification routes mounted at /api/push and /api/notifications");
+} catch(e) {
+    console.error("[Push] Failed to mount push routes:", e.message);
+}
+
+// Student-initiated certificate applications + the per-type HR queues.
+try {
+    const v2CertApplications = require("./routes/v2/certificateApplications");
+    app.use("/api/v2/certificate-applications", v2CertApplications);
+    console.log("[V2] Certificate application routes mounted at /api/v2/certificate-applications");
+} catch(e) {
+    console.error("[V2] Failed to mount certificate application routes:", e.message);
+}
+
 // NEW FEATURE: Certificate + Psychology Trigger routes
 try {
     const v2Certificates = require("./routes/v2/certificates");
@@ -9185,6 +10347,43 @@ app.post('/api/admin/mark-existing-students', async (req, res) => {
 });
 
 // Check if student needs to pay for their tenure
+/**
+ * GET /api/upi-qr?amount=1000&note=1%20Month%20Fee — the payment QR, generated.
+ *
+ * The payment screen drew its QR from api.qrserver.com and fell back to
+ * public/paytm-qr.jpeg. That file is corrupt — it starts with UTF-8 replacement
+ * characters instead of the JPEG magic bytes — so the "fallback" was a broken
+ * image box, and a student on a network that cannot reach qrserver.com had no
+ * way to pay at all. This generates the code locally from the same UPI identity
+ * with the amount already in it, so the payer's app pre-fills rather than
+ * relying on them typing the right figure.
+ */
+app.get('/api/upi-qr', async (req, res) => {
+  try {
+    const QRCode = require('qrcode');
+    const { BUSINESS_UPI } = require('./config/payment');
+    // The amount is clamped, never trusted as free text into the deep link.
+    const amount = Math.min(100000, Math.max(0, Number(req.query.amount) || 0));
+    const note = String(req.query.note || 'TEN Internship Fee').slice(0, 60);
+
+    const link = 'upi://pay?' + [
+      'pa=' + encodeURIComponent(BUSINESS_UPI.upiId),
+      'pn=' + encodeURIComponent(BUSINESS_UPI.payeeName),
+      amount > 0 ? 'am=' + encodeURIComponent(String(amount)) : '',
+      'cu=INR',
+      'tn=' + encodeURIComponent(note)
+    ].filter(Boolean).join('&');
+
+    const png = await QRCode.toBuffer(link, { type: 'png', width: 480, margin: 1 });
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.end(png);
+  } catch (err) {
+    console.error('[upi-qr] generation failed:', err.message);
+    res.status(500).end();
+  }
+});
+
 app.get('/api/tenure-payment/status', async (req, res) => {
   try {
     const employeeId = req.headers['x-employee-id'] || req.headers['employeeid'] || (req.session && req.session.student && (req.session.student.employeeId || req.session.student._id || req.session.student.id));
@@ -9235,6 +10434,12 @@ app.get('/api/tenure-payment/status', async (req, res) => {
     const pendingVerification = latestPayment && latestPayment.status === 'pending_verification';
     const rejectionReason = latestPayment && latestPayment.status === 'failed' ? latestPayment.rejectionReason : null;
 
+    // What this track includes, so the payment screen can show the student what
+    // the fee actually buys instead of only what it costs. One definition,
+    // shared with the grant that runs on approval (services/tenureBenefits.js).
+    const tenurePaymentConfig = require('./config/tenurePayment');
+    const benefits = tenurePaymentConfig.getBenefitsFor(tenure);
+
     res.json({
       requiresPayment: isShortCourse && !isPaid,
       isExistingStudent: isExistingStudent,
@@ -9244,7 +10449,11 @@ app.get('/api/tenure-payment/status', async (req, res) => {
       tenure: tenure,
       price: price,
       label: SHORT_COURSE_LABELS[tenure] || '',
-      isShortCourse: isShortCourse
+      isShortCourse: isShortCourse,
+      // null for the free tracks, which must never see any of this.
+      benefits: benefits,
+      allPlans: isShortCourse ? tenurePaymentConfig.getAllBenefits() : [],
+      granted: (stu.tenureBenefits && stu.tenureBenefits.grantedAt) ? stu.tenureBenefits : null
     });
   } catch(err) {
     res.status(500).json({ error: err.message });
@@ -9307,17 +10516,59 @@ app.post('/api/tenure-payment/submit-utr', async (req, res) => {
   }
 });
 
+// PREMIUM — the paid tracks' own section: badges, coordinator notes and the
+// projects a coordinator assigns. Mounted before the assistant because the
+// assistant is now one of the things it gates.
+try {
+    // API only. There is no separate premium page — the premium content is
+    // rendered inline in the student dashboard, so a member simply signs in and
+    // it is there.
+    app.use('/api/v2/premium', require('./routes/v2/premium'));
+    console.log('[V2] Premium routes mounted at /api/v2/premium');
+} catch (e) {
+    console.error('[V2] Premium routes failed to mount:', e.message);
+}
+
 // TEN ASSISTANT — answers from the portal's own DomainTask rows, no API key
 try {
     const v2Assistant = require('./routes/v2/assistant');
-    app.use('/api/v2/assistant', v2Assistant);
-    app.get('/assistant', (req, res) => res.sendFile(path.join(__dirname, 'public', 'assistant.html')));
+    // The assistant is a paid-track perk. A free-track student never had a way
+    // to buy it, so it is hidden from them rather than dangled and refused.
+    const { requirePremium } = require('./utils/premium');
+    app.use('/api/v2/assistant', requirePremium, v2Assistant);
+    // And the page itself, so a free-track student sees the premium section
+    // explaining it rather than a screen that loads and then fails every call.
+    app.get('/assistant', async (req, res) => {
+        try {
+            const { getPremiumStatus } = require('./utils/premium');
+            const employeeId = req.session && req.session.student && req.session.student.employeeId;
+            if (!employeeId) return res.redirect('/login.html');
+            const stu = await Student.findOne({ employeeId }).lean();
+            if (!getPremiumStatus(stu).premium) return res.redirect('/student-dashboard.html');
+        } catch (err) {
+            console.error('[assistant] premium check failed:', err.message);
+            return res.redirect('/student-dashboard.html');
+        }
+        res.sendFile(path.join(__dirname, 'public', 'assistant.html'));
+    });
 
     const v2Academics = require('./routes/v2/academics');
     app.use('/api/v2/academics', v2Academics);
     app.get('/academics', (req, res) => res.sendFile(path.join(__dirname, 'public', 'academics.html')));
+    // Resume agent — scores a resume the way an ATS does and rebuilds it. Same
+    // offline stance as the assistant: deterministic checks, no API key.
+    const v2ResumeAgent = require('./routes/v2/resumeAgent');
+    app.use('/api/v2/resume', v2ResumeAgent);
+
+    // Job agent — reads a resume, fetches live openings from the boards with a
+    // public API and aims searches at the ones that require a login.
+    const v2JobAgent = require('./routes/v2/jobAgent');
+    app.use('/api/v2/jobs', v2JobAgent);
+
     console.log('[V2] Academics mounted at /api/v2/academics, page at /academics');
     console.log('[V2] Assistant mounted at /api/v2/assistant, page at /assistant');
+    console.log('[V2] Resume agent mounted at /api/v2/resume');
+    console.log('[V2] Job agent mounted at /api/v2/jobs');
 } catch(e) {
     console.error('[V2] Failed to mount assistant routes:', e.message);
 }
@@ -9357,6 +10608,45 @@ try { app.use("/api/talent-profile", require("./routes/talentProfile"));   } cat
 try { app.use("/api/founder-os", require("./routes/founderOS"));           } catch(e) { console.error("[Routes] founderOS:", e.message); }
 try { app.use("/api/community",  require("./routes/community"));           } catch(e) { console.error("[Routes] community:", e.message); }
 try { app.use("/api/notifications", require("./routes/notificationRoutes"));} catch(e) { console.error("[Routes] notificationRoutes:", e.message); }
+
+/*
+ * Storage behind the pages that used to fake it.
+ *
+ * The contractor and investor dashboards, the hackathon portal, the groups page
+ * and the daily job-post task all shipped as interfaces with nothing behind
+ * them — success dialogs over dropped writes, hardcoded arrays of invented
+ * people, and one endpoint (daily-job-post) the browser called for months
+ * without it ever existing. These are the routes that back them.
+ */
+/*
+ * The Setu gateway router, at the prefix docs/payment-current-flow.md has
+ * always claimed it was mounted at. It never was — the file sat unreachable
+ * while the documentation described it as live. Every route is behind
+ * requireRole and the webhook verifies an HMAC signature, refusing everything
+ * when PAYMENT_WEBHOOK_SECRET is unset, so mounting it adds no open surface.
+ */
+try { app.use("/api/payment/setu", require("./routes/paymentSetuRoutes")); } catch(e) { console.error("[Routes] paymentSetuRoutes:", e.message); }
+
+/*
+ * Verified portal access. Fixes the price server-side and grants only against
+ * a PAID transaction, so the paygate no longer takes the browser's word for it.
+ */
+try { app.use("/api/v2/portal-access", require("./routes/v2/portalAccess")); } catch(e) { console.error("[Routes] portalAccess:", e.message); }
+
+/*
+ * Job application outreach through Instantly. Preparing and sending are
+ * separate routes: the second one puts mail in a stranger's inbox and cannot
+ * be undone, so it is never reachable by accident from the first.
+ */
+try { app.use("/api/v2/job-outreach", require("./routes/v2/jobOutreach")); } catch(e) { console.error("[Routes] jobOutreach:", e.message); }
+
+try {
+    app.use("/api/v2/contractor",     require("./routes/v2/contractorDesk"));
+    app.use("/api/v2/investor-desk",  require("./routes/v2/investorDesk"));
+    app.use("/api/v2/hackathons",     require("./routes/v2/hackathons"));
+    app.use("/api/v2/groups",         require("./routes/v2/domainGroups"));
+    console.log("[V2] Contractor, investor, hackathon and group routes mounted");
+} catch(e) { console.error("[V2] ecosystem desk routes:", e.message); }
 
 // NEW FEATURE: Serve uploaded certificates, documents, and offer letters
 const expressModule = require("express");
@@ -9401,16 +10691,170 @@ const io = new SocketIOServer(server, {
     cors: { origin: "*", methods: ["GET","POST"] }
 });
 
+// Routers reach the socket server through the app, so read receipts and
+// presence do not need it passed around.
+app.set("io", io);
+
 io.use(async (socket, next) => {
     try{
-        const identity = await verifyChatIdentity(socket.handshake.auth || {});
+        // From the session cookie, for every role. The handshake's `auth`
+        // payload is ignored: it is supplied by the caller, so trusting it let
+        // anyone open a socket as anyone. Pages that still send one are
+        // unaffected — they are all signed in, and the cookie is what counts.
+        const identity = await chatIdentityFromSocket(socket);
         if(!identity) return next(new Error("unauthorized"));
         socket.data.identity = identity;
         // Auto-join all rooms this user is allowed in
         roomsAllowedFor(identity).forEach(r => socket.join(r));
+        // Personal channel: how a DM reaches someone who has not opened that
+        // conversation yet, and how an admin's direct message finds them.
+        //
+        // One channel per alias. A message addressed to an HR user's username
+        // was landing on a channel they had not joined — the notice never
+        // arrived, and because "is anybody listening?" then answered no, they
+        // got a push notification for a portal they had open in front of them.
+        Array.from(chatIdentity.aliasSet(identity)).forEach(a => socket.join("user::" + a));
+        socket.join("user::" + identity.id);
         next();
     } catch(e){ next(new Error("auth_error")); }
 });
+
+/**
+ * Save a chat message and deliver it — the one implementation.
+ *
+ * Both the Socket.IO `send_message` event and POST /chat/messages call this, so
+ * the permission check, the block check, the fan-out and the push notification
+ * cannot drift apart between the two paths.
+ *
+ * `identity` always comes from the session. `payload` is only ever content.
+ */
+async function deliverChatMessage(identity, payload) {
+    try {
+        const room = payload && payload.room;
+        const text = (payload && payload.text || "").toString().trim().slice(0, 4000);
+
+        // An image-only message is valid. The URL must be one this server
+        // issued via POST /chat/upload-image — never an arbitrary address
+        // supplied by the caller, which would let chat embed remote content
+        // or a tracking pixel.
+        const rawImageUrl = (payload && payload.imageUrl || "").toString();
+        const imageUrl = /^\/uploads\/chat\/[A-Za-z0-9._-]+$/.test(rawImageUrl) ? rawImageUrl : null;
+        if (rawImageUrl && !imageUrl) { return { success:false, code:"bad_image", message:"That image could not be accepted." }; }
+
+        if(!room || (!text && !imageUrl)) { return { success:false, code:"empty", message:"There is nothing to send." }; }
+        if(!canAccessRoom(identity, room)) { return { success:false, code:"forbidden", message:"You cannot send messages in this conversation." }; }
+
+        // Feature 8: block check — sender silenced in this room?
+        try{
+            const blocked = await BlockList.findOne({ chatRoom: room, blockedUser: identity.id });
+            if(blocked){
+                return { success:false, code:"blocked", blocked:true,
+                    message:"You have been restricted from sending messages in this chat" };
+            }
+        }catch(_){}
+
+        const doc = await Message.create({
+            chatRoom:     room,
+            senderId:     identity.id,
+            senderName:   identity.name,
+            senderRole:   identity.role,
+            senderDomain: identity.domain || "",
+            message:      text,
+            imageUrl:     imageUrl,
+            imageName:    imageUrl ? String((payload && payload.imageName) || "image").slice(0, 120) : null,
+            imageMime:    imageUrl ? String((payload && payload.imageMime) || "").slice(0, 60) : null,
+            timestamp:    new Date()
+        });
+        // Deliver to everyone in the room EXCEPT people who have blocked
+        // the sender (or whom the sender has blocked). Emitting to the
+        // room and hiding it client-side would still put the text on the
+        // blocked person's machine, which is not a block.
+        let hidden = new Set();
+        try { hidden = await UserBlock.hiddenFor(identity.id); } catch(_) {}
+
+        if (hidden.size) {
+            const sockets = await io.in(room).fetchSockets();
+            for (const s of sockets) {
+                const other = s.data && s.data.identity;
+                if (other && hidden.has(String(other.id))) continue;
+                s.emit("receive_message", doc);
+            }
+        } else {
+            io.to(room).emit("receive_message", doc);
+        }
+
+        // A private message must also reach a recipient who does not have
+        // that conversation open — otherwise the first DM from anyone is
+        // invisible until they happen to look.
+        const pair = dmParticipants(room);
+        if (pair) {
+            // Against every id the sender is known by. Comparing only the
+            // canonical one made a person their own correspondent when the
+            // room had been named with their other id, so the notice went
+            // back to the sender and never reached the recipient.
+            // An admin writing into a conversation they are overseeing is
+            // not one of the two participants, so BOTH of them need
+            // telling. Anyone else has exactly one correspondent.
+            const mine = chatIdentity.otherParticipant(identity, room);
+            const recipients = mine !== null
+                ? [mine]
+                : (identity.role === "admin" ? pair.slice() : []);
+
+            for (const other of recipients) {
+                if (!other || hidden.has(other)) continue;
+                io.to("user::" + other).emit("dm_notice", {
+                    room, from: identity.name, fromId: identity.id, preview: text.slice(0, 80)
+                });
+
+                // ...and if their portal is CLOSED, a push notification, so
+                // the message reaches them the way any other app would
+                // reach them. Skipped when they already have the portal
+                // open somewhere: they can see it, and a buzz for a message
+                // that is already on screen is just noise.
+                try {
+                    const openSockets = await io.in("user::" + other).fetchSockets();
+                    if (!openSockets.length) {
+                        const pushService = require("./services/pushService");
+                        await pushService.sendToUser(other, {
+                            title: identity.name || "New message",
+                            body: imageUrl && !text ? "Sent you a photo" : text.slice(0, 140),
+                            // Straight into the conversation. Whether they
+                            // land signed in is decided by their session
+                            // cookie — there is deliberately no credential
+                            // in this URL.
+                            url: "/messages?to=" + encodeURIComponent(String(identity.id)),
+                            // One notification per sender, replaced as more
+                            // arrive, rather than a stack of twenty.
+                            tag: "dm-" + String(identity.id)
+                        });
+                    }
+                } catch (pushErr) {
+                    // A push that fails must never stop a message being
+                    // delivered. It is already saved and emitted.
+                    console.warn("[push] DM notification failed:", pushErr.message);
+                }
+            }
+        }
+
+
+        return { success: true, messageId: String(doc._id), doc: doc };
+    } catch (e) {
+        // Say WHAT went wrong. A bare "could not be sent" is unactionable for
+        // the person typing and undiagnosable from a screenshot — an admin's
+        // messages were failing schema validation for weeks behind that string.
+        console.error("[chat] send failed:", {
+            room: payload && payload.room,
+            senderId: identity && identity.id,
+            senderRole: identity && identity.role,
+            error: e && (e.stack || e.message)
+        });
+        if (e && e.name === "ValidationError") {
+            const why = Object.values(e.errors || {}).map(x => x.message).join("; ");
+            return { success: false, code: "invalid", message: why || "That message was rejected." };
+        }
+        return { success: false, code: "server_error", message: "The message could not be sent. Please try again." };
+    }
+}
 
 io.on("connection", (socket) => {
     const identity = socket.data.identity;
@@ -9421,49 +10865,28 @@ io.on("connection", (socket) => {
         if(canAccessRoom(identity, room)) socket.join(room);
     });
 
+    /**
+     * "typing…" — relayed, never stored.
+     *
+     * Straight to the other participant's personal channel, so it reaches them
+     * whether or not they have the conversation open. The client stops showing
+     * it on a timeout, which means a dropped connection cannot leave somebody
+     * typing forever.
+     */
+    socket.on("typing", (payload) => {
+        const room = payload && payload.room;
+        if (!room || !canAccessRoom(identity, room)) return;
+        const other = chatIdentity.otherParticipant(identity, room);
+        if (!other) return;
+        io.to("user::" + other).emit("typing", {
+            room, fromId: identity.id, from: identity.name,
+            typing: !(payload && payload.stopped)
+        });
+    });
+
     socket.on("send_message", async (payload, ack) => {
-        try{
-            const room = payload && payload.room;
-            const text = (payload && payload.text || "").toString().trim().slice(0, 4000);
-
-            // An image-only message is valid. The URL must be one this server
-            // issued via POST /chat/upload-image — never an arbitrary address
-            // supplied by the caller, which would let chat embed remote content
-            // or a tracking pixel.
-            const rawImageUrl = (payload && payload.imageUrl || "").toString();
-            const imageUrl = /^\/uploads\/chat\/[A-Za-z0-9._-]+$/.test(rawImageUrl) ? rawImageUrl : null;
-            if (rawImageUrl && !imageUrl) { if(ack) ack({ success:false, message:"bad_image" }); return; }
-
-            if(!room || (!text && !imageUrl)) { if(ack) ack({ success:false, message:"empty" }); return; }
-            if(!canAccessRoom(identity, room)) { if(ack) ack({ success:false, message:"forbidden" }); return; }
-
-            // Feature 8: block check — sender silenced in this room?
-            try{
-                const blocked = await BlockList.findOne({ chatRoom: room, blockedUser: identity.id });
-                if(blocked){
-                    if(ack) ack({ success:false, blocked:true, message:"You have been restricted from sending messages in this chat" });
-                    return;
-                }
-            }catch(_){}
-
-            const doc = await Message.create({
-                chatRoom:     room,
-                senderId:     identity.id,
-                senderName:   identity.name,
-                senderRole:   identity.role,
-                senderDomain: identity.domain || "",
-                message:      text,
-                imageUrl:     imageUrl,
-                imageName:    imageUrl ? String((payload && payload.imageName) || "image").slice(0, 120) : null,
-                imageMime:    imageUrl ? String((payload && payload.imageMime) || "").slice(0, 60) : null,
-                timestamp:    new Date()
-            });
-            io.to(room).emit("receive_message", doc);
-            if(ack) ack({ success:true, messageId: String(doc._id) });
-        } catch(e){
-            console.log("send_message error:", e.message);
-            if(ack) ack({ success:false, message:"server_error" });
-        }
+        const result = await deliverChatMessage(identity, payload || {});
+        if (ack) ack(result);
     });
 
     socket.on("delete_message", async (payload, ack) => {

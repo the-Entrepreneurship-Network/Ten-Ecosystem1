@@ -7,6 +7,7 @@
 <title>My Certificates — TEN Portal</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
 <script src="/session-guard.js"></script>
+<script src="/credential-reset.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <style>
@@ -129,6 +130,15 @@ body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans
 #revealClose{position:absolute;top:24px;right:24px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:white;padding:8px 16px;font-size:13px;cursor:pointer;font-family:inherit;}
 #muteBtn{position:absolute;top:24px;left:24px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:white;padding:8px 16px;font-size:13px;cursor:pointer;font-family:inherit;}
 </style>
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <script src="/push-client.js" defer></script>
 </head>
 <body>
 
@@ -187,7 +197,10 @@ body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans
 </div>
 
 <script>
-const EMP_ID   = localStorage.getItem('employeeId') || sessionStorage.getItem('employeeId') || '';
+// A local hint only. Identity comes from the session on every request; this
+// is cleared by session-guard.js after any 401, so it must never gate the page.
+let EMP_ID = localStorage.getItem('employeeId') || sessionStorage.getItem('employeeId') ||
+             new URLSearchParams(location.search).get('employeeId') || '';
 let muted      = false;
 let certData   = {};
 let currentRevealType = null;
@@ -200,7 +213,6 @@ const CERT_LABELS = {
 };
 
 async function loadCerts() {
-  if (!EMP_ID) { renderError('Please log in to view your certificates.'); return; }
   try {
     // No x-employee-id: the server takes identity from the session and ignores
     // that header, so sending it only implies a trust model that no longer
@@ -209,9 +221,17 @@ async function loadCerts() {
     // the server's own message says more than "Could not load certificates."
     const r = await fetch('/api/v2/certificates/my-certs', { credentials: 'same-origin' });
     const d = await r.json();
-    if (!d.success) { renderError(d.message || 'Could not load certificates.'); return; }
+    if (!d.success) {
+      // `d.error` as well as `d.message`: some responses on this route carry
+      // only the former, and falling straight to the generic string threw away
+      // the server's actual reason — which is how a specific failure showed up
+      // as an unexplained "Could not load certificates."
+      renderError(d.message || d.error || ('Could not load certificates (HTTP ' + r.status + ').'));
+      return;
+    }
 
     certData = d;
+    if (d.employeeId) EMP_ID = d.employeeId;
     document.getElementById('completionValue').textContent = (d.expert?.completionPct || 0) + '%';
     const pct = Math.min(100, d.expert?.completionPct || 0);
     document.getElementById('mainProgressBar').style.width = pct + '%';
@@ -226,10 +246,19 @@ async function loadCerts() {
     }
 
     renderCerts(d);
-  } catch(e) { renderError('Network error. Please try again.'); }
+  } catch(e) {
+    console.error('[my-certificates] load failed:', e);
+    renderError('Could not reach the server. Check your connection and try again.');
+  }
 }
 
 function renderError(msg) {
+  // Leave no half-drawn state behind. The completion figure keeps its "—"
+  // placeholder on failure, which reads as "we are still working it out"
+  // rather than "this did not load".
+  const cv = document.getElementById('completionValue');
+  if (cv && cv.textContent.indexOf('%') === -1) cv.textContent = '—';
+
   // textContent, not innerHTML: msg can now carry a server-supplied string, and
   // interpolating that into markup would make any message an injection point.
   const grid = document.getElementById('certGrid');
@@ -238,6 +267,26 @@ function renderError(msg) {
   box.style.cssText = 'grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);';
   box.textContent = msg;
   grid.appendChild(box);
+
+  // Staff open this page too, and for them there is no "own" certificate to
+  // show. The message already tells them to name a student — so give them the
+  // box to do it in, rather than a sentence and a dead end.
+  if (/employeeId/i.test(msg)) {
+    const form = document.createElement('form');
+    form.style.cssText = 'grid-column:1/-1;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:-18px;';
+    form.innerHTML =
+      '<input name="employeeId" placeholder="TEN/WEB/1005" required ' +
+      'style="min-height:44px;padding:10px 14px;border-radius:10px;border:1px solid #1e293b;' +
+      'background:#0a1222;color:#e2e8f0;font-size:16px;min-width:200px;">' +
+      '<button style="min-height:44px;padding:10px 20px;border-radius:10px;border:none;' +
+      'background:#D4AF37;color:#0a1222;font-weight:800;font-size:15px;cursor:pointer;">Look up</button>';
+    form.onsubmit = (e) => {
+      e.preventDefault();
+      const id = form.employeeId.value.trim();
+      if (id) location.search = '?employeeId=' + encodeURIComponent(id);
+    };
+    grid.appendChild(form);
+  }
 }
 
 function renderCerts(d) {
@@ -524,5 +573,6 @@ function showSocialProof(msg) {
 
 loadCerts();
 </script>
+<script src="/notify-orb.js" defer></script>
 </body>
 </html>

@@ -53,12 +53,16 @@
   .badge-grey{background:#1e293b;color:#94a3b8;border:1px solid #334155}
   .badge-blue{background:#172554;color:#60a5fa;border:1px solid #1d4ed8}
   /* BUTTONS */
-  .btn{padding:7px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:opacity 0.15s}
+  .btn{padding:7px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:opacity 0.15s;background:#1d4ed8;color:#bfdbfe}
   .btn:hover{opacity:0.85}
   .btn-green{background:#166534;color:#86efac}
   .btn-red{background:#991b1b;color:#fca5a5}
   .btn-blue{background:#1d4ed8;color:#bfdbfe}
   .btn-grey{background:#334155;color:#94a3b8}
+  /* Used by the chat and override tab strips, which had no rule at all — the
+     buttons rendered with the browser's default grey on a dark panel. */
+  .btn-secondary{background:#334155;color:#94a3b8}
+  .btn-danger{background:#991b1b;color:#fca5a5}
   /* FORM */
   .form-group{margin-bottom:16px}
   .form-group label{display:block;font-size:12px;color:#94a3b8;margin-bottom:6px;font-weight:500}
@@ -97,6 +101,15 @@
   .search-input:focus{border-color:#3b82f6}
   select.filter-sel{background:#1e293b;border:1px solid #334155;border-radius:6px;padding:9px 14px;color:#f1f5f9;font-size:13px;outline:none}
 </style>
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <script src="/push-client.js" defer></script>
 </head>
 <body>
 
@@ -113,8 +126,14 @@
     <div class="nav-item" onclick="showSection('students')">👨‍🎓 Students</div>
     <div class="nav-item" onclick="showSection('hr')">👔 HR & Coordinators</div>
     <div class="nav-item" onclick="showSection('certificates')">🎓 Certificates</div>
+    <div class="nav-item" onclick="showSection('cert-overrides')" id="nav-cert-overrides">🛡️ Certificate Overrides <span class="nav-badge" id="overrideBadge" style="display:none">0</span></div>
+    <div class="nav-item" onclick="showSection('hackathons')" id="nav-hackathons">🏆 Hackathons <span class="nav-badge" id="hackathonBadge" style="display:none">0</span></div>
+    <div class="nav-item" onclick="showSection('attendance')">🗓️ Attendance</div>
+    <div class="nav-item" onclick="showSection('documents')">📄 Documents</div>
     <div class="nav-item" onclick="showSection('notifications')">📢 Notifications</div>
     <div class="nav-item" onclick="showSection('system')">⚙️ System</div>
+    <div class="nav-item" onclick="showSection('chat')" id="nav-chat">💬 Chat &amp; Reports <span class="nav-badge" id="chatReportBadge" style="display:none">0</span></div>
+    <div class="nav-item" onclick="window.location.href='/messages'">✉️ My Messages</div>
     <div class="nav-item" onclick="showSection('auditlog')">📋 Audit Log</div>
   </nav>
 </div>
@@ -236,6 +255,47 @@
       </div>
     </div>
 
+    <!-- ATTENDANCE -->
+    <!-- Full control over any student's attendance, per domain. A student
+         holding two domains has two independent records, so both are shown and
+         each is corrected separately. -->
+    <div class="section" id="section-attendance">
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+        <input id="attLookup" placeholder="Employee ID, e.g. TEN/WEB/1005"
+               style="flex:1;min-width:240px;padding:10px 12px;border-radius:8px;border:1px solid #2a3550;background:#0e1628;color:#e2e8f0;">
+        <button class="btn" onclick="loadAdminAttendance()">🔍 Open</button>
+        <button class="btn btn-grey" onclick="recalcAllAttendance()">♻️ Recalculate everyone</button>
+      </div>
+      <div id="attAdminBox"><p style="color:#64748b">Enter an Employee ID to view and correct attendance.</p></div>
+    </div>
+
+    <!-- DOCUMENTS -->
+    <div class="section" id="section-documents">
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+        <input id="docSearch" placeholder="Name, Employee ID or document number"
+               style="flex:1;min-width:220px;padding:10px 12px;border-radius:8px;border:1px solid #2a3550;background:#0e1628;color:#e2e8f0;">
+        <select id="docMethod" style="padding:10px 12px;border-radius:8px;border:1px solid #2a3550;background:#0e1628;color:#e2e8f0;">
+          <option value="">All methods</option>
+          <option value="manual">Manual only</option>
+          <option value="automation">Automation only</option>
+        </select>
+        <button class="btn" onclick="loadAdminDocuments()">🔍 Search</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+        <input id="docGenRef" placeholder="Employee ID"
+               style="min-width:200px;padding:10px 12px;border-radius:8px;border:1px solid #2a3550;background:#0e1628;color:#e2e8f0;">
+        <select id="docGenType" style="padding:10px 12px;border-radius:8px;border:1px solid #2a3550;background:#0e1628;color:#e2e8f0;">
+          <option value="OFFER">Offer Letter</option>
+          <option value="LOC">Letter of Completion</option>
+          <option value="LOR">Letter of Recommendation</option>
+          <option value="STAR">Star Performer</option>
+          <option value="LOP">Letter of Promotion</option>
+        </select>
+        <button class="btn btn-green" onclick="adminGenerateDocument()">⚡ Generate &amp; send</button>
+      </div>
+      <div id="docAdminBox"><p style="color:#64748b">Loading…</p></div>
+    </div>
+
     <!-- SYSTEM -->
     <div class="section" id="section-system">
       <div class="stats-grid" id="systemInfo">
@@ -245,6 +305,74 @@
     </div>
 
     <!-- AUDIT LOG -->
+    <!-- Chat oversight: reported users, and every conversation including
+         private ones. Reports arrive here because a victim raised them; the
+         room list exists so an admin can read the context around one. -->
+    <div class="section" id="section-chat">
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+        <button class="btn" onclick="loadChatReports('open')" id="crTabOpen">🚩 Open reports</button>
+        <button class="btn btn-secondary" onclick="loadChatReports('actioned')">✅ Actioned</button>
+        <button class="btn btn-secondary" onclick="loadChatReports('dismissed')">Dismissed</button>
+        <button class="btn btn-secondary" onclick="loadChatRooms()">💬 All conversations</button>
+      </div>
+      <div id="chatAdminBox"><p style="color:#64748b">Loading…</p></div>
+    </div>
+
+    <!-- Certificates HR issued without the checks passing. See
+         routes/adminPortal.js → /certificate-overrides. -->
+    <div class="section" id="section-cert-overrides">
+      <div style="background:#0e1628;border:1px solid #2a3550;border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+        <div style="font-weight:700;color:#e2e8f0;margin-bottom:6px;">What this is</div>
+        <div style="color:#94a3b8;font-size:13px;line-height:1.6;">
+          HR can issue a certificate directly, skipping the application, the 75% attendance rule
+          and the performance rule — interns who finished over WhatsApp have no portal record to
+          satisfy any of them. Every direct issue is listed here. Rows marked
+          <span style="color:#f87171;font-weight:700;">Requirements not met</span> are the ones
+          where HR saw the warning and went ahead anyway.
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+        <button class="btn" onclick="loadOverrides('unmet')" id="ovTabUnmet">⚠️ Requirements not met</button>
+        <button class="btn btn-secondary" onclick="loadOverrides('all')" id="ovTabAll">All issues</button>
+        <button class="btn btn-secondary" onclick="loadOverrides('met')" id="ovTabMet">Met requirements</button>
+        <button class="btn btn-secondary" onclick="loadOverrides('revoked')" id="ovTabRevoked">Revoked</button>
+        <input class="search-input" id="overrideSearch" placeholder="Employee ID, name, domain or HR…"
+               style="max-width:280px" oninput="debounceOverrideSearch()">
+      </div>
+      <div id="overridesContent"><p style="color:#64748b;padding:16px">Loading…</p></div>
+    </div>
+
+    <div class="section" id="section-hackathons">
+      <div style="background:#0e1628;border:1px solid #2a3550;border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+        <div style="font-weight:700;color:#e2e8f0;margin-bottom:6px;">What this is</div>
+        <div style="color:#94a3b8;font-size:13px;line-height:1.6;">
+          First <b style="color:#e2e8f0;">create an event</b> below — until an event is live and
+          open, the hackathon portal shows "nothing scheduled" and no one can register.
+          People then register through the portal and pay the entry fee by scanning the UPI QR;
+          each registration waits in the queue with the UPI reference (UTR) they entered. Match it
+          against the payment received, then
+          <span style="color:#34d399;font-weight:700;">Approve</span> to confirm the team, or
+          <span style="color:#f87171;font-weight:700;">Reject</span> with a reason. No email is sent.
+        </div>
+      </div>
+
+      <!-- Events: create + manage. This is what makes the portal show something. -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+        <div style="font-weight:700;color:#e2e8f0;font-size:15px;">🗓️ Events</div>
+        <button class="btn btn-green" onclick="openNewHackathonEvent()">＋ New event</button>
+      </div>
+      <div id="hackathonEventsContent" style="margin-bottom:26px;"><p style="color:#64748b;padding:12px">Loading…</p></div>
+
+      <div style="font-weight:700;color:#e2e8f0;font-size:15px;margin-bottom:10px;">💳 Registrations &amp; payments</div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+        <button class="btn" onclick="loadHackathonRegs('pending')" id="hkTabPending">⏳ Pending</button>
+        <button class="btn btn-secondary" onclick="loadHackathonRegs('confirmed')" id="hkTabConfirmed">✅ Confirmed</button>
+        <button class="btn btn-secondary" onclick="loadHackathonRegs('rejected')" id="hkTabRejected">✖️ Rejected</button>
+        <button class="btn btn-secondary" onclick="loadHackathonRegs('all')" id="hkTabAll">All</button>
+      </div>
+      <div id="hackathonContent"><p style="color:#64748b;padding:16px">Loading…</p></div>
+    </div>
+
     <div class="section" id="section-auditlog">
       <div id="auditContent"></div>
     </div>
@@ -299,6 +427,11 @@ function showSection(name) {
   if (name === 'hr') loadHRs();
   if (name === 'certificates') loadPendingCerts();
   if (name === 'system') loadSystemInfo();
+  if (name === 'attendance') { /* waits for an Employee ID */ }
+  if (name === 'documents') loadAdminDocuments();
+  if (name === 'chat') loadChatReports('open');
+  if (name === 'cert-overrides') loadOverrides(overrideFilter);
+  if (name === 'hackathons') { loadHackathonEvents(); loadHackathonRegs(hackathonFilter); }
   if (name === 'auditlog') loadAuditLog();
   if (name === 'overview') loadStats();
 }
@@ -553,23 +686,28 @@ async function loadStudents() {
   document.getElementById('studentsContent').innerHTML = `
     <div class="table-wrap"><table>
       <thead><tr><th>Employee ID</th><th>Name</th><th>Email</th><th>Domain</th><th>Tenure</th><th>LOC</th><th>LOR</th><th>Status</th><th>Actions</th></tr></thead>
-      <tbody>${data.data.map(s => `<tr>
+      <tbody>${data.data.map(s => { const nm = _studentName(s); return `<tr>
         <td><code>${s.employeeId || '—'}</code></td>
-        <td>${s.name}</td>
-        <td>${s.email}</td>
+        <td>${nm ? _aEsc(nm) : '<span style="color:#f87171" title="No name on this record — press Edit to set it">— missing —</span>'}</td>
+        <td>${_aEsc(s.email || '—')}</td>
         <td>${s.domain || '—'}</td>
         <td>${s.tenure || '—'}</td>
         <td><span class="badge badge-grey">${s.locStatus || '—'}</span></td>
         <td><span class="badge badge-grey">${s.lorStatus || '—'}</span></td>
-        <td>${s.isLockedOut ? '<span class="badge badge-red">Locked 🔒</span>' : '<span class="badge badge-green">Active</span>'}</td>
+        <td>${s.isLockedOut ? '<span class="badge badge-red">Locked 🔒</span>' : '<span class="badge badge-green">Active</span>'}${
+          // Shows that a reset was done and the student has not yet chosen
+          // their own — otherwise there is no way to tell an account still
+          // sitting on an admin-set password from a settled one.
+          (s.mustChangePassword || s.mustChangeEmail)
+            ? ' <span class="badge badge-grey" title="Waiting for the student to set their own">Reset pending</span>' : ''}</td>
         <td style="display:flex;gap:6px;flex-wrap:wrap">
           ${s.isLockedOut ? `<button class="btn btn-green" onclick="unlockStudent('${s._id}')">🔓 Unlock</button>` : ''}
-          <button class="btn btn-grey" onclick="editStudent('${s._id}','${s.name}','${s.email}','${s.domain||''}','${s.tenure||''}','${s.whatsapp||''}','${s.gender||''}','${s.college||s.collegeName||''}')">✏️ Edit</button>
-          <button class="btn btn-grey" onclick="extendTenure('${s._id}','${s.employeeId}','${s.tenure||''}')">📅 Tenure</button>
-          <button class="btn btn-grey" onclick="resetStudentPw('${s._id}','${s.name}')">🔑 Reset PW</button>
-          <button class="btn btn-red" onclick="deleteStudent('${s._id}','${s.employeeId}')">🗑</button>
+          <button class="btn btn-grey" onclick="editStudent('${s._id}',${_arg(nm)},${_arg(s.email)},${_arg(s.domain)},${_arg(s.tenure)},${_arg(s.whatsapp)},${_arg(s.gender)},${_arg(s.college||s.collegeName)})">✏️ Edit</button>
+          <button class="btn btn-grey" onclick="extendTenure('${s._id}',${_arg(s.employeeId)},${_arg(s.tenure)})">📅 Tenure</button>
+          <button class="btn btn-grey" onclick="resetStudentPw('${s._id}',${_arg(nm)},${_arg(s.email)})" title="Set a working password or correct the email so they can sign in again">🔑 Sign-in</button>
+          <button class="btn btn-red" onclick="deleteStudent('${s._id}',${_arg(s.employeeId)})">🗑</button>
         </td>
-      </tr>`).join('')}</tbody>
+      </tr>`; }).join('')}</tbody>
     </table></div>
     <div class="pagination">
       <button onclick="currentStudentPage--;loadStudents()" ${currentStudentPage<=1?'disabled':''}>← Prev</button>
@@ -699,17 +837,75 @@ async function doExtendTenure(id) {
   }
 }
 
-function resetStudentPw(id, name) {
-  openModal(`Reset Password — ${name}`, `<div class="form-group"><label>New Password (min 8 chars)</label><input id="newPw" type="password" placeholder="New password"></div>`,
-    [{ label: 'Cancel', cls: 'grey', fn: 'closeModal()' }, { label: '🔑 Reset', cls: 'red', fn: `doResetPw('${id}')` }]);
+/**
+ * Give a student a way back into their account.
+ *
+ * The common cases are a mistyped email at registration that no reset link can
+ * ever reach, and a forgotten password on an account whose email is wrong —
+ * neither of which the student can fix themselves. Both fields are here
+ * because they usually need fixing together.
+ *
+ * Whatever is changed here is temporary by design: the student is asked to set
+ * their own password (and confirm their own email) the next time they sign in,
+ * so the account does not stay on credentials somebody else picked.
+ */
+function resetStudentPw(id, name, email) {
+  openModal(`Reset sign-in details — ${name}`, `
+    <p style="font-size:12.5px;color:#64748b;line-height:1.55;margin:0 0 14px;">
+      Fill in whichever needs changing and leave the other blank. Give the student
+      what you set here — they will be asked to choose their own when they sign in.
+    </p>
+    <div class="form-group">
+      <label>New password <span style="color:#94a3b8;font-weight:400">(min 8 characters — leave blank to keep the current one)</span></label>
+      <input id="newPw" type="text" placeholder="e.g. Ten@Reset2026" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label>Email address <span style="color:#94a3b8;font-weight:400">(leave blank to keep it)</span></label>
+      <input id="newEmail" type="email" placeholder="${_aEsc(email || '')}" autocomplete="off">
+    </div>
+    <label style="display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:#475569;line-height:1.5;">
+      <input id="reqChange" type="checkbox" checked style="width:auto;margin-top:2px;">
+      <span>Ask the student to set their own on next sign-in <b>(recommended)</b>.
+      Untick only when correcting an obvious typo.</span>
+    </label>
+    <p id="resetMsg" style="font-size:12.5px;color:#ef4444;margin:12px 0 0;min-height:1px;"></p>`,
+    [{ label: 'Cancel', cls: 'grey', fn: 'closeModal()' }, { label: '🔑 Update', cls: 'red', fn: `doResetPw('${id}')` }]);
 }
 
 async function doResetPw(id) {
-  const pw = document.getElementById('newPw').value;
-  if (pw.length < 8) { toast('Min 8 characters', 'error'); return; }
-  const d = await api(`/students/${id}/reset-password`, { method: 'POST', body: JSON.stringify({ newPassword: pw }) });
-  if (d && d.success) { toast('Password reset ✓'); closeModal(); }
-  else toast(d?.error || 'Error', 'error');
+  const pw = document.getElementById('newPw').value.trim();
+  const em = document.getElementById('newEmail').value.trim();
+  const requireChange = document.getElementById('reqChange').checked;
+  const msg = document.getElementById('resetMsg');
+  msg.textContent = '';
+
+  if (!pw && !em) { msg.textContent = 'Enter a new password, a new email, or both.'; return; }
+  if (pw && pw.length < 8) { msg.textContent = 'The password needs to be at least 8 characters.'; return; }
+
+  const body = { requireChange };
+  if (pw) body.newPassword = pw;
+  if (em) body.newEmail = em;
+
+  const d = await api(`/students/${id}/reset-credentials`, { method: 'POST', body: JSON.stringify(body) });
+  if (d && d.success) {
+    closeModal();
+    toast(d.message || 'Updated ✓');
+    // Spell out what to pass on, since the password is not stored anywhere
+    // readable and this is the only time it is on screen.
+    if (pw) {
+      setTimeout(() => alert(
+        'Give the student these details:\n\n' +
+        (em ? 'Email: ' + em + '\n' : '') +
+        'Password: ' + pw + '\n\n' +
+        (requireChange
+          ? 'They will be asked to set their own password when they sign in.'
+          : 'They will not be prompted to change it.')
+      ), 250);
+    }
+    loadStudents();
+  } else {
+    msg.textContent = d?.error || 'Could not update. Please try again.';
+  }
 }
 
 async function deleteStudent(id, empId) {
@@ -886,6 +1082,263 @@ async function loadSystemInfo() {
 }
 
 // ── AUDIT LOG ─────────────────────────────────────────────────────────────────
+/* ── Chat oversight ───────────────────────────────────────────────────────
+   Reports land here because someone on the receiving end raised them.
+   Blocking already protected them the moment they clicked; this is where a
+   person with authority decides what to do about it. */
+function _aEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];}); }
+
+// A value going into an inline onclick="fn('...')" argument. JSON.stringify
+// quotes and escapes it as a JS string literal, then _aEsc makes it safe inside
+// the HTML attribute. The old code interpolated raw: a name with an apostrophe
+// ("O'Brien") broke the handler outright, and a missing one passed the literal
+// text "undefined" straight into the Edit form — where pressing Save wrote it
+// into the database as the student's real name.
+function _arg(v){ return _aEsc(JSON.stringify(v == null ? '' : String(v))); }
+
+// The name to show for a student. `name` is authoritative; firstName/lastName
+// are the fallback for older records. Anything that only looks like a name —
+// "undefined", "null" — counts as missing, because that is what the Edit form
+// used to write back.
+function _studentName(s){
+  var junk = ['undefined','null','nan','-','—'];
+  var ok = function(v){ return typeof v === 'string' && v.trim() && junk.indexOf(v.trim().toLowerCase()) === -1; };
+  if (ok(s.name)) return s.name.trim();
+  var parts = [s.firstName, s.lastName].filter(ok).map(function(x){ return x.trim(); });
+  return parts.length ? parts.join(' ') : '';
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  Attendance control
+//
+//  A student holding two domains has two independent attendance records and
+//  must mark each one. Both are shown side by side here, and each row is
+//  corrected against the domain it belongs to.
+// ══════════════════════════════════════════════════════════════════════
+let _attState = { ref: '', domain: '' };
+
+async function loadAdminAttendance(domain) {
+  const ref = (document.getElementById('attLookup').value || _attState.ref || '').trim();
+  if (!ref) return;
+  _attState.ref = ref;
+
+  const box = document.getElementById('attAdminBox');
+  box.innerHTML = '<p style="color:#64748b">Loading…</p>';
+  try {
+    const qs = domain ? ('?domain=' + encodeURIComponent(domain)) : '';
+    const d = await api('/attendance/' + encodeURIComponent(ref) + qs);
+    if (!d.success) throw new Error(d.error || 'Not found');
+    _attState.domain = d.domain || '';
+
+    const tabs = (d.domains || []).length > 1
+      ? '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">' +
+        d.domains.map(function (dom) {
+          const on = dom === d.domain;
+          return '<button class="btn ' + (on ? '' : 'btn-secondary') +
+            '" onclick="loadAdminAttendance(' + JSON.stringify(dom).replace(/"/g, '&quot;') + ')">' +
+            _aEsc(dom) + '</button>';
+        }).join('') + '</div>'
+      : '';
+
+    const perDomain = (d.perDomain || []).map(function (p) {
+      return '<div class="stat-card"><div class="label">' + _aEsc(p.domain) + '</div>' +
+        '<div class="value">' + (p.summary.percentage || 0) + '%</div>' +
+        '<div style="font-size:11px;color:#64748b;">' + (p.summary.daysPresent || 0) + ' of ' +
+        (p.summary.workingDaysElapsed || 0) + ' working days · needs ' + (p.summary.requiredDays || 0) + '</div></div>';
+    }).join('');
+
+    const rows = (d.records || []).slice(0, 200).map(function (r) {
+      return '<tr>' +
+        '<td>' + _aEsc(r.dateKey) + '</td>' +
+        '<td>' + _aEsc(r.markedBy) + '</td>' +
+        '<td>' + _aEsc(r.domain || '—') + '</td>' +
+        '<td style="color:' + (r.status === 'Present' ? '#10b981' : '#f43f5e') + '">' + _aEsc(r.status) + '</td>' +
+        '<td><button class="btn btn-red" style="padding:4px 10px;font-size:11px;" onclick="deleteAttendanceRecord(' +
+          JSON.stringify(String(r._id)).replace(/"/g, '&quot;') + ')">Delete</button></td>' +
+        '</tr>';
+    }).join('');
+
+    box.innerHTML =
+      '<h3 style="margin:0 0 4px;">' + _aEsc(d.student.name || d.student.employeeId) + '</h3>' +
+      '<p style="color:#64748b;margin:0 0 14px;font-size:12px;">' + _aEsc(d.student.employeeId) +
+      ' · ' + _aEsc(d.student.tenure || '—') + ' · joined ' + _aEsc(d.student.joiningDate || '—') + '</p>' +
+      '<div class="stats-grid" style="margin-bottom:16px;">' + perDomain + '</div>' +
+      tabs +
+      '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">' +
+        '<input type="date" id="attDate" style="padding:8px 10px;border-radius:8px;border:1px solid #2a3550;background:#0e1628;color:#e2e8f0;">' +
+        '<select id="attWho" style="padding:8px 10px;border-radius:8px;border:1px solid #2a3550;background:#0e1628;color:#e2e8f0;">' +
+          '<option value="coordinator">Coordinator mark</option><option value="self">Student mark</option></select>' +
+        '<select id="attStatus" style="padding:8px 10px;border-radius:8px;border:1px solid #2a3550;background:#0e1628;color:#e2e8f0;">' +
+          '<option value="Present">Present</option><option value="Absent">Absent</option></select>' +
+        '<button class="btn btn-green" onclick="saveAttendanceMark()">Save for ' + _aEsc(d.domain || 'this student') + '</button>' +
+      '</div>' +
+      '<table class="data-table"><thead><tr><th>Date</th><th>Source</th><th>Domain</th><th>Status</th><th></th></tr></thead>' +
+      '<tbody>' + (rows || '<tr><td colspan="5" style="color:#64748b;">No attendance recorded for this domain.</td></tr>') + '</tbody></table>';
+  } catch (e) {
+    box.innerHTML = '<p style="color:#f43f5e">' + _aEsc(e.message || 'Could not load attendance') + '</p>';
+  }
+}
+
+async function saveAttendanceMark() {
+  const date = document.getElementById('attDate').value;
+  if (!date) return alert('Pick a date first.');
+  try {
+    const d = await api('/attendance/mark', {
+      method: 'POST',
+      body: JSON.stringify({
+        ref: _attState.ref,
+        date: date,
+        status: document.getElementById('attStatus').value,
+        markedBy: document.getElementById('attWho').value,
+        domain: _attState.domain
+      })
+    });
+    if (!d.success) throw new Error(d.error || 'Failed');
+    loadAdminAttendance(_attState.domain);
+  } catch (e) { alert(e.message || 'Could not save'); }
+}
+
+async function deleteAttendanceRecord(id) {
+  if (!confirm('Delete this attendance record? The percentage is recalculated immediately.')) return;
+  try {
+    const d = await api('/attendance/record/' + encodeURIComponent(id), { method: 'DELETE' });
+    if (!d.success) throw new Error(d.error || 'Failed');
+    loadAdminAttendance(_attState.domain);
+  } catch (e) { alert(e.message || 'Could not delete'); }
+}
+
+async function recalcAllAttendance() {
+  if (!confirm('Recalculate attendance for every student? This runs the shared calculator over the whole database.')) return;
+  try {
+    const d = await api('/attendance/recalculate-all', { method: 'POST' });
+    alert('Recalculated ' + (d.updated || 0) + ' students (' + (d.errors || 0) + ' errors).');
+  } catch (e) { alert(e.message || 'Failed'); }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  Documents — history and on-demand generation
+// ══════════════════════════════════════════════════════════════════════
+async function loadAdminDocuments() {
+  const box = document.getElementById('docAdminBox');
+  box.innerHTML = '<p style="color:#64748b">Loading…</p>';
+  try {
+    const q = encodeURIComponent((document.getElementById('docSearch').value || '').trim());
+    const m = encodeURIComponent(document.getElementById('docMethod').value || '');
+    const d = await api('/documents/history?limit=150&q=' + q + '&method=' + m);
+    if (!d.success) throw new Error(d.error || 'Failed');
+
+    const rows = (d.data || []).map(function (r) {
+      const when = r.sentAt || r.sentOn || r.createdAt;
+      const badge = r.method === 'automation'
+        ? '<span style="background:rgba(59,130,246,0.18);color:#93c5fd;padding:2px 8px;border-radius:6px;font-size:11px;">Automation</span>'
+        : '<span style="background:rgba(245,197,66,0.18);color:#f5c542;padding:2px 8px;border-radius:6px;font-size:11px;">Manual</span>';
+      return '<tr><td>' + _aEsc(r.studentName || '—') + '</td><td>' + _aEsc(r.employeeId || '—') + '</td>' +
+        '<td>' + _aEsc(r.documentType || '—') + '</td><td>' + _aEsc(r.documentNumber || '—') + '</td>' +
+        '<td>' + (when ? new Date(when).toLocaleDateString('en-IN') : '—') + '</td>' +
+        '<td>' + badge + '<div style="font-size:10px;color:#64748b;margin-top:2px;">' + _aEsc(r.sentBy || '') + '</div></td></tr>';
+    }).join('');
+
+    box.innerHTML =
+      '<p style="color:#64748b;font-size:12px;margin:0 0 10px;">' + (d.total || 0) + ' documents · ' +
+      (d.counts ? (d.counts.manual + ' manual, ' + d.counts.automation + ' automation') : '') +
+      ' — only documents that were actually generated are listed.</p>' +
+      '<table class="data-table"><thead><tr><th>Student</th><th>Employee ID</th><th>Type</th><th>Document No.</th><th>Sent</th><th>Method</th></tr></thead>' +
+      '<tbody>' + (rows || '<tr><td colspan="6" style="color:#64748b;">Nothing matches.</td></tr>') + '</tbody></table>';
+  } catch (e) {
+    box.innerHTML = '<p style="color:#f43f5e">' + _aEsc(e.message || 'Could not load documents') + '</p>';
+  }
+}
+
+async function adminGenerateDocument() {
+  const ref = (document.getElementById('docGenRef').value || '').trim();
+  if (!ref) return alert('Enter an Employee ID.');
+  const type = document.getElementById('docGenType').value;
+  if (!confirm('Generate a ' + type + ' for ' + ref + ' and send it? It will be logged as Manual, credited to you.')) return;
+  try {
+    const d = await api('/documents/generate', { method: 'POST', body: JSON.stringify({ ref: ref, certType: type }) });
+    if (!d.success) throw new Error(d.error || 'Failed');
+    alert('Generated.');
+    loadAdminDocuments();
+  } catch (e) { alert(e.message || 'Could not generate'); }
+}
+
+async function loadChatReports(status) {
+  const box = document.getElementById('chatAdminBox');
+  box.innerHTML = '<p style="color:#64748b">Loading…</p>';
+  try {
+    const r = await fetch('/api/chat/admin/reports?status=' + encodeURIComponent(status||'open'), { credentials:'same-origin' });
+    const d = await r.json();
+    if (!r.ok || !d.success) throw new Error(d.message || ('Request failed (' + r.status + ')'));
+
+    const badge = document.getElementById('chatReportBadge');
+    if (badge) { badge.textContent = d.openCount || 0; badge.style.display = d.openCount ? 'inline-block' : 'none'; }
+
+    if (!d.reports.length) {
+      box.innerHTML = '<p style="color:#64748b">No ' + _aEsc(d.status) + ' reports.</p>';
+      return;
+    }
+    box.innerHTML = d.reports.map(function (x) {
+      return '<div style="background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:14px;margin-bottom:10px;">'
+        + '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">'
+          + '<div><strong style="color:#f1f5f9;">' + _aEsc(x.reportedName || x.reportedId) + '</strong>'
+            + ' <span style="color:#64748b;font-size:12px;">(' + _aEsc(x.reportedRole) + ')</span>'
+            + '<div style="color:#64748b;font-size:12px;">reported by ' + _aEsc(x.reporterName || x.reporterId) + ' · ' + _aEsc(x.reporterRole) + '</div></div>'
+          + '<div style="color:#64748b;font-size:12px;">' + (x.createdAt ? new Date(x.createdAt).toLocaleString('en-IN') : '') + '</div>'
+        + '</div>'
+        + (x.reason ? '<div style="color:#cbd5e1;font-size:13px;margin-bottom:6px;"><em>Reason:</em> ' + _aEsc(x.reason) + '</div>' : '')
+        + (x.messageSnapshot ? '<div style="background:#020617;border-left:3px solid #f43f5e;padding:8px 10px;border-radius:6px;color:#e2e8f0;font-size:13px;white-space:pre-wrap;">' + _aEsc(x.messageSnapshot) + '</div>' : '')
+        + '<div style="color:#475569;font-size:11px;margin-top:6px;">Room: ' + _aEsc(x.chatRoom || '—') + '</div>'
+        + (x.status === 'open'
+            ? '<div style="display:flex;gap:8px;margin-top:10px;">'
+              + '<button class="btn" onclick="reviewChatReport(&quot;' + _aEsc(x._id) + '&quot;,&quot;actioned&quot;)">✅ Actioned</button>'
+              + '<button class="btn btn-secondary" onclick="reviewChatReport(&quot;' + _aEsc(x._id) + '&quot;,&quot;dismissed&quot;)">Dismiss</button>'
+              + '</div>'
+            : '<div style="color:#64748b;font-size:12px;margin-top:8px;">' + _aEsc(x.status) + (x.reviewedBy ? ' by ' + _aEsc(x.reviewedBy) : '') + (x.reviewNote ? ' — ' + _aEsc(x.reviewNote) : '') + '</div>')
+        + '</div>';
+    }).join('');
+  } catch (e) {
+    box.innerHTML = '<p style="color:#f43f5e">' + _aEsc(e.message) + '</p>';
+  }
+}
+
+async function reviewChatReport(id, status) {
+  const note = status === 'dismissed' ? (prompt('Note (optional)') || '') : (prompt('What action was taken? (optional)') || '');
+  try {
+    const r = await fetch('/api/chat/admin/reports/' + encodeURIComponent(id), {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: status, note: note })
+    });
+    const d = await r.json();
+    if (!r.ok || !d.success) throw new Error(d.message || 'Failed');
+    loadChatReports('open');
+  } catch (e) { alert(e.message); }
+}
+
+async function loadChatRooms() {
+  const box = document.getElementById('chatAdminBox');
+  box.innerHTML = '<p style="color:#64748b">Loading…</p>';
+  try {
+    const r = await fetch('/api/chat/admin/rooms', { credentials:'same-origin' });
+    const d = await r.json();
+    if (!r.ok || !d.success) throw new Error(d.message || 'Failed');
+    if (!d.rooms.length) { box.innerHTML = '<p style="color:#64748b">No conversations yet.</p>'; return; }
+    box.innerHTML = '<table style="width:100%;border-collapse:collapse;">'
+      + '<thead><tr style="color:#64748b;font-size:12px;text-align:left;"><th style="padding:8px;">Conversation</th><th>Type</th><th>Messages</th><th>Last activity</th></tr></thead><tbody>'
+      + d.rooms.map(function (x) {
+          return '<tr style="border-top:1px solid #1e293b;color:#e2e8f0;font-size:13px;">'
+            + '<td style="padding:8px;font-family:monospace;font-size:12px;">' + _aEsc(x.room) + '</td>'
+            + '<td>' + (x.isPrivate ? '<span style="color:#f59e0b;">🔒 Private</span>' : 'Group') + '</td>'
+            + '<td>' + x.messages + '</td>'
+            + '<td>' + (x.last ? new Date(x.last).toLocaleString('en-IN') : '—') + '</td>'
+            + '</tr>';
+        }).join('')
+      + '</tbody></table>';
+  } catch (e) {
+    box.innerHTML = '<p style="color:#f43f5e">' + _aEsc(e.message) + '</p>';
+  }
+}
+
 async function loadAuditLog() {
   const data = await api('/audit-log');
   if (!data || !data.success) return;
@@ -902,6 +1355,329 @@ async function loadAuditLog() {
     </table></div>`;
 }
 
+/* ── CERTIFICATE OVERRIDES ──────────────────────────────────────────────────
+   Everything HR issued without the eligibility checks passing. The bypass is
+   deliberate (WhatsApp interns have no portal record); this is the visibility
+   that keeps it honest. */
+let overrideFilter = 'unmet';
+let overrideSearchTimer;
+
+function ovEsc(v) {
+  return String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function debounceOverrideSearch() {
+  clearTimeout(overrideSearchTimer);
+  overrideSearchTimer = setTimeout(() => loadOverrides(overrideFilter), 350);
+}
+
+// ── Hackathon & Ideathon registrations ──────────────────────────────────
+let hackathonFilter = 'pending';
+
+async function loadHackathonRegs(filter) {
+  if (filter) hackathonFilter = filter;
+  ['Pending', 'Confirmed', 'Rejected', 'All'].forEach(k => {
+    const btn = document.getElementById('hkTab' + k);
+    if (btn) btn.className = (k.toLowerCase() === hackathonFilter) ? 'btn' : 'btn btn-secondary';
+  });
+
+  const box = document.getElementById('hackathonContent');
+  box.innerHTML = '<p style="color:#64748b;padding:16px">Loading…</p>';
+  const d = await api('/hackathon-registrations?status=' + encodeURIComponent(hackathonFilter));
+  if (!d || !d.success) { box.innerHTML = '<p style="color:#f87171;padding:16px">Could not load registrations.</p>'; return; }
+  if (!d.registrations.length) {
+    box.innerHTML = '<div class="empty"><div class="icon">🏆</div><p>No ' + _aEsc(hackathonFilter === 'all' ? '' : hackathonFilter) + ' registrations.</p></div>';
+    return;
+  }
+
+  const pill = (s) => {
+    const map = { pending: ['#fbbf24', 'Pending'], confirmed: ['#34d399', 'Confirmed'], rejected: ['#f87171', 'Rejected'] };
+    const [c, t] = map[s] || ['#94a3b8', s];
+    return '<span class="badge" style="background:' + c + '22;color:' + c + ';border:1px solid ' + c + '55">' + t + '</span>';
+  };
+
+  box.innerHTML = '<div class="table-wrap"><table><thead><tr>' +
+    '<th>Team</th><th>Event</th><th>Lead</th><th>Contact</th><th>Members</th><th>Amount</th><th>UTR</th><th>Status</th><th>Actions</th>' +
+    '</tr></thead><tbody>' + d.registrations.map(r => {
+      const lead = r.lead || {};
+      const acts = r.paymentStatus === 'pending'
+        ? '<button class="btn btn-green" onclick="approveHackathon(\'' + r.id + '\',' + _arg(r.team) + ')">✅ Approve</button>' +
+          '<button class="btn btn-red" onclick="rejectHackathon(\'' + r.id + '\',' + _arg(r.team) + ')">✖️ Reject</button>'
+        : (r.paymentStatus === 'rejected' && r.rejectionReason
+            ? '<span style="color:#94a3b8;font-size:12px">' + _aEsc(r.rejectionReason) + '</span>'
+            : '<span style="color:#64748b;font-size:12px">' + _aEsc(r.verifiedBy ? 'by ' + r.verifiedBy : '—') + '</span>');
+      return '<tr>' +
+        '<td><b>' + _aEsc(r.team) + '</b>' +
+          (r.code ? '<br><code style="color:#34d399;font-size:11px">' + _aEsc(r.code) + '</code>' : '') +
+          (r.track ? '<br><span style="color:#64748b;font-size:11px">' + _aEsc(r.track) + '</span>' : '') + '</td>' +
+        '<td>' + _aEsc(r.event || '—') + '</td>' +
+        '<td>' + _aEsc(lead.name || '—') + '</td>' +
+        '<td style="font-size:12px">' + _aEsc(r.leadEmail || '') + '<br>' + _aEsc(r.leadPhone || '') + '</td>' +
+        '<td>' + r.memberCount + '</td>' +
+        '<td>₹' + (r.amount || 0) + '</td>' +
+        '<td><code>' + _aEsc(r.utr || '—') + '</code></td>' +
+        '<td>' + pill(r.paymentStatus) + '</td>' +
+        '<td style="display:flex;gap:6px;flex-wrap:wrap">' + acts + '</td>' +
+      '</tr>';
+    }).join('') + '</tbody></table></div>';
+}
+
+function approveHackathon(id, team) {
+  openModal('Approve registration', '<p style="color:#cbd5e1">Confirm that you received the payment for <b>' + _aEsc(team) + '</b>? This confirms the team.</p>', [
+    { label: 'Cancel', cls: 'grey', fn: 'closeModal()' },
+    { label: 'Approve', cls: 'green', fn: 'doVerifyHackathon(\'' + id + '\',\'approve\')' }
+  ]);
+}
+function rejectHackathon(id, team) {
+  openModal('Reject registration',
+    '<p style="color:#cbd5e1;margin-bottom:10px">Rejecting <b>' + _aEsc(team) + '</b>. Give a reason (they can see it and re-register).</p>' +
+    '<input class="search-input" id="hkRejectReason" placeholder="e.g. no payment found for this UTR" style="width:100%">', [
+    { label: 'Cancel', cls: 'grey', fn: 'closeModal()' },
+    { label: 'Reject', cls: 'red', fn: 'doVerifyHackathon(\'' + id + '\',\'reject\')' }
+  ]);
+}
+async function doVerifyHackathon(id, action) {
+  const body = { action };
+  if (action === 'reject') {
+    const reason = (document.getElementById('hkRejectReason') || {}).value || '';
+    if (reason.trim().length < 5) { alert('Give a reason (at least 5 characters).'); return; }
+    body.rejectionReason = reason.trim();
+  }
+  const d = await api('/hackathon-registrations/' + id + '/verify', { method: 'POST', body: JSON.stringify(body) });
+  closeModal();
+  if (!d || !d.success) { alert((d && d.error) || 'Could not update.'); return; }
+  loadHackathonRegs(hackathonFilter);
+  updateHackathonBadge();
+}
+async function updateHackathonBadge() {
+  const d = await api('/hackathon-registrations/count').catch(() => null);
+  const badge = document.getElementById('hackathonBadge');
+  if (!badge) return;
+  if (d && d.success && d.count > 0) { badge.textContent = d.count; badge.style.display = ''; }
+  else badge.style.display = 'none';
+}
+
+// ── Hackathon events (create + manage) ──────────────────────────────────────
+function _hkEventDate(v) {
+  if (!v) return '—';
+  try { return new Date(v).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); }
+  catch (e) { return '—'; }
+}
+async function loadHackathonEvents() {
+  const box = document.getElementById('hackathonEventsContent');
+  if (!box) return;
+  const d = await api('/hackathon-events').catch(() => null);
+  if (!d || !d.success) { box.innerHTML = '<p style="color:#f87171;padding:12px">Could not load events.</p>'; return; }
+  if (!d.events.length) {
+    box.innerHTML = '<div class="empty" style="padding:20px"><div class="icon">🗓️</div>' +
+      '<p>No events yet. Press <b>＋ New event</b> — until one is live, the portal shows nothing to register for.</p></div>';
+    return;
+  }
+  const live = (e) => e.published && e.status === 'registration_open';
+  box.innerHTML = '<div class="table-wrap"><table><thead><tr>' +
+    '<th>Event</th><th>Mode</th><th>Fee</th><th>Team</th><th>Starts</th><th>Reg&nbsp;closes</th><th>Teams</th><th>State</th><th>Actions</th>' +
+    '</tr></thead><tbody>' + d.events.map(e => {
+      const state = e.status === 'cancelled'
+        ? '<span class="badge" style="background:#64748b22;color:#94a3b8;border:1px solid #64748b55">Cancelled</span>'
+        : live(e)
+          ? '<span class="badge" style="background:#34d39922;color:#34d399;border:1px solid #34d39955">Live · open</span>'
+          : (e.published
+              ? '<span class="badge" style="background:#fbbf2422;color:#fbbf24;border:1px solid #fbbf2455">Published · closed</span>'
+              : '<span class="badge" style="background:#94a3b822;color:#94a3b8;border:1px solid #94a3b855">Draft</span>');
+      let acts = '';
+      if (e.status !== 'cancelled') {
+        if (!e.published) acts += '<button class="btn btn-green" onclick="hkEventAction(\'' + e.id + '\',\'publish\')">🚀 Publish &amp; open</button>';
+        else if (e.status === 'registration_open') acts += '<button class="btn btn-secondary" onclick="hkEventAction(\'' + e.id + '\',\'close\')">Close reg</button>';
+        else acts += '<button class="btn btn-green" onclick="hkEventAction(\'' + e.id + '\',\'open\')">Open reg</button>';
+        if (e.published) acts += '<button class="btn btn-secondary" onclick="hkEventAction(\'' + e.id + '\',\'unpublish\')">Unpublish</button>';
+      }
+      acts += (e.teamCount > 0
+        ? '<button class="btn btn-red" onclick="hkEventAction(\'' + e.id + '\',\'cancel\')">Cancel</button>'
+        : '<button class="btn btn-red" onclick="deleteHackathonEvent(\'' + e.id + '\',' + _arg(e.title) + ')">🗑 Delete</button>');
+      return '<tr>' +
+        '<td><b>' + _aEsc(e.title) + '</b><br><span style="color:#64748b;font-size:11px">/' + _aEsc(e.slug) + '</span>' +
+          (e.tracks && e.tracks.length ? '<br><span style="color:#64748b;font-size:11px">' + _aEsc(e.tracks.join(', ')) + '</span>' : '') + '</td>' +
+        '<td>' + (e.mode === 'ideathon' ? 'Ideathon' : 'Hackathon') + '</td>' +
+        '<td>₹' + (e.entryFee || 0) + '</td>' +
+        '<td>' + (e.minTeamSize === e.maxTeamSize ? e.maxTeamSize : e.minTeamSize + '–' + e.maxTeamSize) + '</td>' +
+        '<td>' + _hkEventDate(e.startsAt) + '</td>' +
+        '<td>' + _hkEventDate(e.registrationClosesAt) + '</td>' +
+        '<td>' + e.teamCount + '</td>' +
+        '<td>' + state + '</td>' +
+        '<td style="display:flex;gap:6px;flex-wrap:wrap">' + acts + '</td>' +
+      '</tr>';
+    }).join('') + '</tbody></table></div>';
+}
+function openNewHackathonEvent() {
+  const inp = 'width:100%;box-sizing:border-box;padding:9px 11px;background:#0b1220;border:1px solid #2a3550;border-radius:8px;color:#e2e8f0;font-size:13px';
+  const lbl = 'display:block;color:#94a3b8;font-size:12px;margin:10px 0 4px';
+  const body =
+    '<label style="' + lbl + '">Title *</label><input id="hkNewTitle" style="' + inp + '" placeholder="TEN Winter Hackathon 2026">' +
+    '<div style="display:flex;gap:10px"><div style="flex:1"><label style="' + lbl + '">Mode</label>' +
+      '<select id="hkNewMode" style="' + inp + '"><option value="hackathon">Hackathon</option><option value="ideathon">Ideathon</option></select></div>' +
+      '<div style="flex:1"><label style="' + lbl + '">Entry fee (₹)</label><input id="hkNewFee" type="number" min="0" value="200" style="' + inp + '"></div></div>' +
+    '<label style="' + lbl + '">Tagline</label><input id="hkNewTagline" style="' + inp + '" placeholder="48 hours. One repo. Ship the thing.">' +
+    '<label style="' + lbl + '">Tracks (comma-separated)</label><input id="hkNewTracks" style="' + inp + '" placeholder="AI, Web, FinTech">' +
+    '<label style="' + lbl + '">Prize</label><input id="hkNewPrize" style="' + inp + '" placeholder="₹50,000 pool + interview fast-track">' +
+    '<div style="display:flex;gap:10px"><div style="flex:1"><label style="' + lbl + '">Min team</label><input id="hkNewMin" type="number" min="1" value="1" style="' + inp + '"></div>' +
+      '<div style="flex:1"><label style="' + lbl + '">Max team</label><input id="hkNewMax" type="number" min="1" value="4" style="' + inp + '"></div></div>' +
+    '<div style="display:flex;gap:10px"><div style="flex:1"><label style="' + lbl + '">Starts</label><input id="hkNewStarts" type="date" style="' + inp + '"></div>' +
+      '<div style="flex:1"><label style="' + lbl + '">Registration closes</label><input id="hkNewCloses" type="date" style="' + inp + '"></div></div>' +
+    '<label style="' + lbl + '">Venue</label><input id="hkNewVenue" style="' + inp + '" value="Online">' +
+    '<label style="display:flex;align-items:center;gap:8px;color:#cbd5e1;font-size:13px;margin-top:14px">' +
+      '<input id="hkNewLive" type="checkbox" checked> Publish &amp; open registration now (uncheck to save as a hidden draft)</label>';
+  openModal('New hackathon / ideathon event', body, [
+    { label: 'Cancel', cls: 'grey', fn: 'closeModal()' },
+    { label: 'Create event', cls: 'green', fn: 'createHackathonEvent()' }
+  ]);
+}
+async function createHackathonEvent() {
+  const val = (id) => (document.getElementById(id) || {}).value;
+  const title = (val('hkNewTitle') || '').trim();
+  if (title.length < 2) { alert('Give the event a title.'); return; }
+  const payload = {
+    title,
+    mode: val('hkNewMode'),
+    entryFee: val('hkNewFee'),
+    tagline: val('hkNewTagline'),
+    tracks: val('hkNewTracks'),
+    prize: val('hkNewPrize'),
+    minTeamSize: val('hkNewMin'),
+    maxTeamSize: val('hkNewMax'),
+    startsAt: val('hkNewStarts') || null,
+    registrationClosesAt: val('hkNewCloses') || null,
+    venue: val('hkNewVenue'),
+    live: (document.getElementById('hkNewLive') || {}).checked !== false
+  };
+  const d = await api('/hackathon-events', { method: 'POST', body: JSON.stringify(payload) });
+  if (!d || !d.success) { alert((d && d.error) || 'Could not create the event.'); return; }
+  closeModal();
+  toast('Event created' + (payload.live ? ' and live on the portal.' : ' as a draft.'), 'success');
+  loadHackathonEvents();
+}
+async function hkEventAction(id, action) {
+  const d = await api('/hackathon-events/' + id, { method: 'PATCH', body: JSON.stringify({ action }) });
+  if (!d || !d.success) { alert((d && d.error) || 'Could not update the event.'); return; }
+  loadHackathonEvents();
+}
+function deleteHackathonEvent(id, title) {
+  openModal('Delete event', '<p style="color:#cbd5e1">Delete <b>' + _aEsc(title) + '</b>? This cannot be undone.</p>', [
+    { label: 'Cancel', cls: 'grey', fn: 'closeModal()' },
+    { label: 'Delete', cls: 'red', fn: 'doDeleteHackathonEvent(\'' + id + '\')' }
+  ]);
+}
+async function doDeleteHackathonEvent(id) {
+  const d = await api('/hackathon-events/' + id, { method: 'DELETE' });
+  closeModal();
+  if (!d || !d.success) { alert((d && d.error) || 'Could not delete the event.'); return; }
+  loadHackathonEvents();
+}
+
+async function loadOverrides(filter) {
+  if (filter) overrideFilter = filter;
+  ['Unmet', 'All', 'Met', 'Revoked'].forEach(k => {
+    const btn = document.getElementById('ovTab' + k);
+    if (btn) btn.className = (k.toLowerCase() === overrideFilter) ? 'btn' : 'btn btn-secondary';
+  });
+
+  const box = document.getElementById('overridesContent');
+  box.innerHTML = '<p style="color:#64748b;padding:16px">Loading…</p>';
+
+  const search = (document.getElementById('overrideSearch') || {}).value || '';
+  const data = await api('/certificate-overrides?filter=' + encodeURIComponent(overrideFilter) +
+    '&search=' + encodeURIComponent(search));
+  if (!data) return;
+  if (!data.success) {
+    box.innerHTML = '<div class="empty"><div class="icon">⚠️</div><p>' + ovEsc(data.error || 'Could not load overrides') + '</p></div>';
+    return;
+  }
+
+  updateOverrideBadge(data.unmetCount);
+
+  if (!data.overrides.length) {
+    box.innerHTML = '<div class="empty"><div class="icon">🛡️</div><p>' +
+      (overrideFilter === 'unmet'
+        ? 'No certificate has been issued to a student who did not meet the requirements.'
+        : 'Nothing here yet.') + '</p></div>';
+    return;
+  }
+
+  box.innerHTML = '<div class="table-wrap"><table>' +
+    '<thead><tr><th>Issued</th><th>Student</th><th>Certificate</th><th>Issued by</th>' +
+    '<th>Requirements</th><th>At the time</th><th>Action</th></tr></thead><tbody>' +
+    data.overrides.map(o => {
+      const snap = o.snapshot || {};
+      const met = o.metRequirements
+        ? '<span class="badge badge-green">Met</span>'
+        : '<span class="badge badge-red">Not met</span>';
+      const revoked = o.revokedAt
+        ? '<div style="font-size:11px;color:#f87171;margin-top:4px">Revoked ' +
+          new Date(o.revokedAt).toLocaleDateString('en-IN') +
+          (o.revokedBy ? ' by ' + ovEsc(o.revokedBy) : '') + '</div>'
+        : '';
+      const checks = (o.failedChecks || []).length
+        ? '<ul style="margin:6px 0 0 14px;padding:0;color:#94a3b8;font-size:11.5px;line-height:1.5">' +
+          o.failedChecks.map(c => '<li>' + ovEsc(c) + '</li>').join('') + '</ul>'
+        : '';
+      return '<tr>' +
+        '<td style="white-space:nowrap">' + (o.issuedAt ? new Date(o.issuedAt).toLocaleString('en-IN') : '—') + '</td>' +
+        '<td><div style="font-weight:600">' + ovEsc(o.studentName || '—') + '</div>' +
+          '<code style="font-size:11px">' + ovEsc(o.employeeId) + '</code>' +
+          (o.domain ? '<div style="font-size:11px;color:#64748b">' + ovEsc(o.domain) + '</div>' : '') + '</td>' +
+        '<td><span class="badge badge-blue">' + ovEsc(o.certificateType) + '</span>' + revoked + '</td>' +
+        '<td><code>' + ovEsc(o.issuedBy || '—') + '</code>' +
+          '<div style="font-size:11px;color:#64748b">' + ovEsc(o.issuedByRole || '') + '</div></td>' +
+        '<td style="max-width:320px">' + met + checks +
+          (o.reason ? '<div style="margin-top:6px;font-size:11.5px;color:#cbd5e1"><b>Reason:</b> ' + ovEsc(o.reason) + '</div>' : '') + '</td>' +
+        '<td style="white-space:nowrap;font-size:12px;color:#94a3b8">' +
+          'Attendance ' + (snap.attendancePercentage || 0) + '%<br>' +
+          'Performance ' + (snap.performanceScore || 0) + '%<br>' +
+          'Tasks ' + (snap.taskCompletionPct || 0) + '%<br>' +
+          (snap.hadApplication ? 'Applied' : 'Never applied') + '</td>' +
+        '<td>' + (o.revokedAt
+          ? '<span style="color:#64748b;font-size:12px">Revoked</span>'
+          : '<button class="btn btn-secondary" style="font-size:12px;padding:6px 12px" onclick="revokeOverride(\'' +
+            o._id + '\',\'' + ovEsc(o.certificateType) + '\',\'' + ovEsc(o.employeeId) + '\')">Revoke</button>') +
+        '</td>' +
+      '</tr>';
+    }).join('') +
+    '</tbody></table></div>' +
+    '<p style="color:#64748b;font-size:12px;padding:12px 4px">Showing ' + data.overrides.length +
+      ' of ' + data.total + '.</p>';
+}
+
+function revokeOverride(id, type, employeeId) {
+  openModal('Revoke ' + type + ' for ' + employeeId,
+    '<p style="color:#94a3b8;font-size:13px;line-height:1.6;margin-bottom:12px">' +
+      'This deletes the generated PDF and resets the status, so the student\'s My Documents ' +
+      'stops offering the download. It does not un-send the email that was already delivered.</p>' +
+      '<textarea id="revokeReason" rows="3" placeholder="Why is this being revoked?" ' +
+      'style="width:100%;padding:10px;border-radius:8px;border:1px solid #2a3550;background:#0e1628;color:#e2e8f0;font-family:inherit"></textarea>',
+    [
+      { cls: 'secondary', label: 'Cancel', fn: 'closeModal()' },
+      { cls: 'danger', label: 'Revoke', fn: 'confirmRevokeOverride(\'' + id + '\')' }
+    ]);
+}
+
+async function confirmRevokeOverride(id) {
+  const reason = (document.getElementById('revokeReason') || {}).value || '';
+  const r = await api('/certificate-overrides/' + id + '/revoke', {
+    method: 'POST', body: JSON.stringify({ reason })
+  });
+  closeModal();
+  if (r && r.success) { toast(r.message || 'Revoked'); loadOverrides(overrideFilter); }
+  else { toast((r && r.error) || 'Could not revoke', 'error'); }
+}
+
+function updateOverrideBadge(n) {
+  const badge = document.getElementById('overrideBadge');
+  if (!badge) return;
+  if (n > 0) { badge.textContent = n; badge.style.display = ''; }
+  else { badge.style.display = 'none'; }
+}
+
 // ── INIT ──────────────────────────────────────────────────────────────────────
 (async () => {
   const session = await api('/session-check');
@@ -911,7 +1687,10 @@ async function loadAuditLog() {
   loadStats();
   // Pre-load tenure payments silently so data is ready when admin opens that tab
   loadTenurePayments();
+  api('/certificate-overrides/count').then(d => { if (d && d.success) updateOverrideBadge(d.unmetCount); });
+  updateHackathonBadge();
 })();
 </script>
+<script src="/notify-orb.js" defer></script>
 </body>
 </html>

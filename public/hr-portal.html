@@ -4,8 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#D4AF37">
-<meta name="apple-mobile-web-app-capable" content="yes">
+<!-- The status bar is painted with this. It was the gold ACCENT, which
+     put a bright yellow band above a near-black page on every Android
+     phone. It must match the page background, not the highlight. -->
+<meta name="theme-color" content="#0c1220">
+<meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="TEN Portal">
 <link rel="apple-touch-icon" href="/icons/icon-192.png">
@@ -383,6 +387,9 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
 .chart-wrap-tall{height:260px;}
 @media (max-width: 768px){.charts-grid{grid-template-columns:1fr;}.chart-card-wide{grid-column:1;}}
 </style>
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <script src="/push-client.js" defer></script>
 </head>
 <body>
 <div class="bg-grid"></div>
@@ -400,6 +407,7 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
   <div class="sidebar-nav">
     <div class="nav-section-title">Overview</div>
     <button class="nav-btn active" onclick="showView('overview')" data-view="overview"><span class="icon">📊</span> Dashboard</button>
+    <button class="nav-btn" onclick="window.location.href='/messages'"><span class="icon">💬</span> Messages <span id="hrDmBadge" style="display:none;font-size:10px;background:#10b981;color:#04121f;padding:1px 6px;border-radius:999px;margin-left:auto;font-weight:800;">0</span></button>
     <button class="nav-btn" onclick="showView('ecosystem')" data-view="ecosystem"><span class="icon">🕸️</span> TEN Ecosystem</button>
     <button class="nav-btn" onclick="showView('insights')" data-view="insights"><span class="icon">📊</span> Insights</button>
     <div class="nav-divider"></div>
@@ -415,10 +423,16 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
     <button class="nav-btn" onclick="showView('certificates')" data-view="certificates"><span class="icon">🎓</span> Certificate Approvals</button>
     <button class="nav-btn" onclick="showView('star-submissions')" data-view="star-submissions"><span class="icon">⭐</span> Star Submissions</button>
     <!-- Section 9 — student feedback. Every HR account sees every submission. -->
+    <!-- Per-certificate application queues, so HR works one kind at a time
+         and can issue a whole queue in a single action. -->
+    <button class="nav-btn" onclick="showView('cert-apps')" data-view="cert-apps"><span class="icon">🎓</span> Certificate Requests <span id="certAppBadge" style="display:none;background:#f5c542;color:#0a0600;font-size:10px;font-weight:800;padding:1px 6px;border-radius:99px;margin-left:4px;">0</span></button>
     <button class="nav-btn" onclick="showView('feedback')" data-view="feedback"><span class="icon">💌</span> Student Feedback <span id="feedbackUnreadBadge" style="display:none;background:#f43f5e;color:#fff;font-size:10px;font-weight:800;padding:1px 6px;border-radius:99px;margin-left:4px;">0</span></button>
     <div class="nav-divider"></div>
     <div class="nav-section-title">Promotions</div>
     <button class="nav-btn" onclick="showView('promotions')" data-view="promotions"><span class="icon">🚀</span> Promotions</button>
+    <div class="nav-divider"></div>
+    <div class="nav-section-title">Home page</div>
+    <button class="nav-btn" onclick="showView('contributors')" data-view="contributors"><span class="icon">🙌</span> Contributors</button>
     <div class="nav-divider"></div>
     <div class="nav-section-title">Leaderboard</div>
     <button class="nav-btn" onclick="showView('leaderboard')" data-view="leaderboard"><span class="icon">🏆</span> Performance Leaderboard</button>
@@ -1226,6 +1240,47 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
     <div class="doc-tabs">
       <button class="doc-tab active" onclick="switchCertTab('pending',this)">🕓 Coordinator-Approved (Pending HR)</button>
       <button class="doc-tab" onclick="switchCertTab('approved',this)">✅ HR-Approved (Generate)</button>
+      <button class="doc-tab" onclick="switchCertTab('direct',this)">⚡ Issue Directly</button>
+    </div>
+
+    <!-- Direct issue: the WhatsApp-intern path.
+         Skips the application, the attendance rule and the performance rule.
+         Every issue is recorded and shown in the admin portal. -->
+    <div class="cert-panel" id="cert-direct">
+      <div class="section-header" style="margin-bottom:16px;">
+        <div class="section-title">⚡ Issue a certificate directly</div>
+      </div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:18px;line-height:1.7;">
+        For interns who completed their internship outside the portal — over WhatsApp, for
+        instance — and registered only to collect the certificate. This skips the application,
+        the 75% attendance rule, the performance rule and coordinator approval. The certificate
+        appears in the student's <strong>My Documents</strong> immediately and is emailed to them.
+        <br><br>
+        If the student has not met the requirements you will be shown exactly what is missing and
+        asked to confirm once. Either way, every direct issue is recorded and listed in the
+        admin portal.
+      </p>
+
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:20px;">
+        <div class="form-group-hr" style="margin:0;">
+          <label class="form-label">Employee ID</label>
+          <input class="form-input" id="directEmpId" placeholder="e.g. TEN/WEB/1630" style="min-width:220px;">
+        </div>
+        <div class="form-group-hr" style="margin:0;">
+          <label class="form-label">Certificate</label>
+          <select class="form-input" id="directCertType" style="min-width:230px;">
+            <option value="LOC">Letter of Completion (LOC)</option>
+            <option value="LOR">Letter of Recommendation (LOR)</option>
+            <option value="STAR">Star Performer Certificate</option>
+            <option value="OFFER">Offer Letter</option>
+          </select>
+        </div>
+        <button class="send-btn" style="padding:12px 24px;font-size:13px;" onclick="directIssueCheck()">
+          Check &amp; issue
+        </button>
+      </div>
+
+      <div id="directIssueResult"></div>
     </div>
 
     <!-- Pending HR review -->
@@ -1280,6 +1335,27 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
 
   <!-- LEADERBOARD (Phase 1) -->
   <!-- ══ Section 9 — Student Feedback ══════════════════════════════════════ -->
+  <!-- ══════ CERTIFICATE APPLICATION QUEUES ══════ -->
+  <div class="view" id="view-cert-apps">
+    <div class="section-card">
+      <div class="section-header" style="margin-bottom:18px;">
+        <div>
+          <div class="section-title">🎓 Certificate Requests</div>
+          <p style="color:#8aa4c8;font-size:13px;margin:4px 0 0;">Students apply once they meet the bar. Each certificate has its own queue — select a whole queue and issue it in one action.</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <select id="certAppStatus" onchange="loadCertQueues()" style="background:#101a2e;border:1px solid rgba(99,140,210,0.25);color:#e2eaf7;border-radius:8px;padding:7px 10px;font-size:13px;">
+            <option value="pending">Pending review</option>
+            <option value="issued">Issued</option>
+            <option value="rejected">Rejected</option>
+          </select>
+          <button class="send-btn" style="padding:8px 16px;font-size:13px;" onclick="loadCertQueues()">🔄 Refresh</button>
+        </div>
+      </div>
+      <div id="certQueuesBox"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
+  </div>
+
   <div class="view" id="view-feedback">
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
@@ -1306,6 +1382,49 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
   </div>
 
   <!-- PROMOTIONS -->
+  <!-- CONTRIBUTORS: the "Built with" strip on the public home page -->
+  <div class="view" id="view-contributors">
+    <div class="section-header" style="margin-bottom:8px;">
+      <div class="section-title">🙌 Contributors on the home page</div>
+      <button class="send-btn" style="padding:10px 20px;font-size:13px;" onclick="loadContributors()">↻ Refresh</button>
+    </div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.7;max-width:760px;">
+      Type an Employee ID and the student&rsquo;s name, domain and photo fill in from their own record &mdash;
+      you only add the line about what they contributed. Leave the ID blank to add someone who is not a
+      TEN student. Nothing appears on the site until <strong>Published</strong> is on.
+    </p>
+
+    <div style="background:rgba(255,255,255,.02);border:1px solid rgba(245,197,66,.14);border-radius:16px;padding:22px;margin-bottom:26px;">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px;">
+        <div class="form-group-hr" style="margin:0;">
+          <label class="form-label">Employee ID</label>
+          <input class="form-input" id="cbEmpId" placeholder="TEN/WEB/1630" style="min-width:200px;">
+        </div>
+        <button class="send-btn" style="padding:12px 22px;font-size:13px;" onclick="contribLookup()">Look up</button>
+        <span id="cbLookupMsg" style="font-size:12.5px;color:var(--muted);"></span>
+      </div>
+
+      <div class="grid2" style="display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));">
+        <div class="form-group-hr"><label class="form-label">Name *</label><input class="form-input" id="cbName" placeholder="Anmol Kumar"></div>
+        <div class="form-group-hr"><label class="form-label">Domain</label><input class="form-input" id="cbDomain" placeholder="Web Development"></div>
+        <div class="form-group-hr"><label class="form-label">Photo</label><input class="form-input" id="cbPhoto" type="file" accept="image/jpeg,image/png,image/webp"></div>
+        <div class="form-group-hr"><label class="form-label">Order (lower first)</label><input class="form-input" id="cbOrder" type="number" value="0"></div>
+      </div>
+      <div class="form-group-hr"><label class="form-label">What they contributed</label>
+        <input class="form-input" id="cbNote" maxlength="240" placeholder="Rebuilt the attendance calendar and found the Sunday bug.">
+      </div>
+      <label style="display:flex;align-items:center;gap:9px;font-size:13px;color:#cbd5e1;margin:12px 0 16px;cursor:pointer;">
+        <input type="checkbox" id="cbPublished" checked style="width:16px;height:16px;accent-color:#D4AF37;">
+        Publish to the home page now
+      </label>
+      <button class="send-btn" style="padding:12px 26px;font-size:13px;" onclick="contribSave()" id="cbSaveBtn">Post contributor</button>
+      <button class="send-btn" style="padding:12px 20px;font-size:13px;background:rgba(255,255,255,.06);color:#cbd5e1;display:none;" onclick="contribCancelEdit()" id="cbCancelBtn">Cancel edit</button>
+      <div id="cbFormMsg" style="margin-top:12px;font-size:13px;"></div>
+    </div>
+
+    <div id="contribList"><div class="loading"><div class="spinner"></div></div></div>
+  </div>
+
   <div class="view" id="view-promotions">
     <div class="doc-tabs">
       <button class="doc-tab active" onclick="switchPromoTab('coord',this)">⬆️ Promote to Coordinator</button>
@@ -1365,10 +1484,15 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
     </div>
     <span class="sp-field-label">Email</span><input class="sp-input" type="email" id="sp-email" placeholder="Email">
     <span class="sp-field-label">WhatsApp</span><input class="sp-input" type="text" id="sp-whatsapp" placeholder="WhatsApp">
-    <span class="sp-field-label">Domain</span><input class="sp-input" type="text" id="sp-domain" placeholder="Domain">
+    <!-- Domain and Tenure are pickers, not free text. Typed values like
+         "3 months" or "Web Dev" do not match the lookup tables the task engine
+         and attendance calculator use, so a typo here silently put the student
+         on the wrong plan. Options come from /api/public-config so this list
+         cannot drift from the server's. -->
+    <span class="sp-field-label">Domain</span><select class="sp-input" id="sp-domain" data-options="domains"></select>
     <div class="sp-two-col">
       <div><span class="sp-field-label">Employee ID</span><input class="sp-input" type="text" id="sp-employeeId" readonly></div>
-      <div><span class="sp-field-label">Tenure</span><input class="sp-input" type="text" id="sp-tenure" placeholder="e.g. 3 Months"></div>
+      <div><span class="sp-field-label">Tenure</span><select class="sp-input" id="sp-tenure" data-options="tenures"></select></div>
     </div>
     <span class="sp-field-label">College</span><input class="sp-input" type="text" id="sp-college" placeholder="Not Provided">
     <span class="sp-field-label">Joining Date</span><input class="sp-input" type="text" id="sp-joining" readonly>
@@ -1429,11 +1553,11 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
     </div>
     <div class="modal-label">Email</div><input class="modal-input-hr" type="email" id="es-email">
     <div class="modal-label">WhatsApp</div><input class="modal-input-hr" type="text" id="es-whatsapp">
-    <div class="modal-label">Domain</div><input class="modal-input-hr" type="text" id="es-domain">
+    <div class="modal-label">Domain</div><select class="modal-input-hr" id="es-domain" data-options="domains"></select>
     <div class="modal-label">College Name</div><input class="modal-input-hr" type="text" id="es-college" placeholder="Not Provided">
     <div class="two-col-hr">
       <div><div class="modal-label">Employee ID (read-only)</div><input class="modal-input-hr" type="text" id="es-employeeId" readonly></div>
-      <div><div class="modal-label">Tenure</div><input class="modal-input-hr" type="text" id="es-tenure"></div>
+      <div><div class="modal-label">Tenure</div><select class="modal-input-hr" id="es-tenure" data-options="tenures"></select></div>
     </div>
     <div class="modal-actions-hr">
       <button class="btn-save-hr" onclick="saveStudentEdit()">💾 Save</button>
@@ -1647,25 +1771,25 @@ const hrLevelDetails = {
     title: "Level 5: HR Associate Director",
     desc: "Active Focus: High-level recruitment strategies, coordinator approvals, promotions management, and certificate boards.",
     icon: "👑",
-    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard', 'ecosystem', 'submissions', 'certificates', 'star-submissions', 'promotions']
+    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard', 'ecosystem', 'submissions', 'certificates', 'star-submissions', 'promotions', 'contributors']
   },
   6: {
     title: "Level 6: Jr HR Director",
     desc: "Active Focus: Full operational oversight, official letter/LOR generation, global broadcast communications, and escalation desk.",
     icon: "💼",
-    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard', 'ecosystem', 'submissions', 'insights', 'domains', 'certificates', 'star-submissions', 'promotions', 'documents', 'send-notif', 'notif-history']
+    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard', 'ecosystem', 'submissions', 'insights', 'domains', 'certificates', 'star-submissions', 'promotions', 'documents', 'send-notif', 'notif-history', 'contributors']
   },
   7: {
     title: "Level 7: HR Director & HRBP",
     desc: "Active Focus: Executive leadership, policy engineering, brand promotions, and global ecosystem administration dashboard.",
     icon: "🏛️",
-    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard', 'ecosystem', 'submissions', 'insights', 'domains', 'certificates', 'star-submissions', 'promotions', 'documents', 'send-notif', 'notif-history']
+    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard', 'ecosystem', 'submissions', 'insights', 'domains', 'certificates', 'star-submissions', 'promotions', 'documents', 'send-notif', 'notif-history', 'contributors']
   },
   8: {
     title: "Level 8: Vice President",
     desc: "Active Focus: Supreme system orchestrations, venture coaching, startup diagnostics, and executive mentorship loops.",
     icon: "✨",
-    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard', 'ecosystem', 'submissions', 'insights', 'domains', 'certificates', 'star-submissions', 'promotions', 'documents', 'send-notif', 'notif-history']
+    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard', 'ecosystem', 'submissions', 'insights', 'domains', 'certificates', 'star-submissions', 'promotions', 'documents', 'send-notif', 'notif-history', 'contributors']
   }
 };
 
@@ -1700,7 +1824,9 @@ function switchHRActiveLevel(lvl) {
   }).then((result) => {
     if (result.isConfirmed) {
       // User says yes, redirect to HR login page so they can authenticate.
-      window.location.href = '/hr-login';
+      // Carry the level they asked for, or signing back in drops them on
+      // Level 1 and the switch they just confirmed is thrown away.
+      window.location.href = '/hr-login?level=' + encodeURIComponent(targetLvl);
     } else {
       // User says no, show insightful administrative message and revert selection.
       let roleTitle = hrLevelDetails[targetLvl].title.split(': ')[1];
@@ -1978,11 +2104,19 @@ async function loadHRFeedback(){
           '</div>' +
         '</div>' +
         '<div style="color:#cdd9ec;font-size:13px;white-space:pre-wrap;line-height:1.55;">' + _hrEsc(f.message) + '</div>' +
-        '<div style="margin-top:10px;display:flex;gap:8px;align-items:center;">' +
+        '<div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
           (isNew
             ? '<button onclick="markFeedback(\'' + _hrEsc(f._id) + '\',\'read\')" style="background:rgba(99,140,210,0.15);color:#8aa4c8;border:1px solid rgba(99,140,210,0.3);border-radius:7px;padding:5px 12px;cursor:pointer;font-size:12px;">Mark read</button>'
             : '<span style="color:#5a7299;font-size:11px;">' + _hrEsc(f.status) + (f.readBy ? ' by ' + _hrEsc(f.readBy) : '') + '</span>') +
           '<button onclick="markFeedback(\'' + _hrEsc(f._id) + '\',\'actioned\')" style="background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.3);border-radius:7px;padding:5px 12px;cursor:pointer;font-size:12px;">Mark actioned</button>' +
+          // Section 4 of the home page (testimonials) renders ONLY feedback HR
+          // has published — the backend has supported this since the
+          // StudentFeedback.published field landed, but no button ever called
+          // it, so the testimonial section could never appear.
+          (f.published
+            ? '<span style="background:rgba(212,175,55,0.12);color:#f5c542;border:1px solid rgba(212,175,55,0.3);border-radius:99px;padding:4px 11px;font-size:11px;font-weight:700;">🌐 On home page</span>' +
+              '<button onclick="publishFeedback(\'' + _hrEsc(f._id) + '\',false)" style="background:rgba(244,63,94,0.1);color:#f43f5e;border:1px solid rgba(244,63,94,0.3);border-radius:7px;padding:5px 12px;cursor:pointer;font-size:12px;">Unpublish</button>'
+            : '<button onclick="publishFeedback(\'' + _hrEsc(f._id) + '\',true)" style="background:rgba(212,175,55,0.1);color:#f5c542;border:1px solid rgba(212,175,55,0.3);border-radius:7px;padding:5px 12px;cursor:pointer;font-size:12px;">🌐 Publish as testimonial</button>') +
         '</div>' +
       '</div>';
     }).join('');
@@ -2007,13 +2141,166 @@ async function markFeedback(id, status){
   }
 }
 
+/* ── Certificate application queues ───────────────────────────────────────
+   One queue per certificate type. Students apply only when the server says
+   they qualify; HR reviews the figures each application was made on, and can
+   select an entire queue and issue it in a single request. */
+let certQueueData = {};
+
+async function loadCertQueues(){
+  const box = document.getElementById('certQueuesBox');
+  if(!box) return;
+  box.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  const status = (document.getElementById('certAppStatus')||{}).value || 'pending';
+  try{
+    const r = await fetch('/api/v2/certificate-applications/hr/queues?status='+encodeURIComponent(status), { credentials:'same-origin' });
+    if(r.status===401){ handleHRSessionExpired(); return; }
+    const d = await r.json();
+    if(!r.ok || !d.success) throw new Error(d.message || ('Request failed ('+r.status+')'));
+
+    certQueueData = d.queues;
+    const badge = document.getElementById('certAppBadge');
+    if(badge){
+      const pending = status==='pending' ? d.total : 0;
+      badge.textContent = pending; badge.style.display = pending ? 'inline-block' : 'none';
+    }
+
+    const order = ['LOC','LOR','STAR'];
+    box.innerHTML = order.map(function(type){
+      const q = d.queues[type] || { label:type, applications:[] };
+      const apps = q.applications || [];
+      const head = '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:22px 0 10px;">'
+        + '<div style="font-weight:800;color:#f5c542;font-size:15px;">'+_hrEsc(q.label)+' <span style="color:#8aa4c8;font-weight:600;">('+apps.length+')</span></div>'
+        + (apps.length && status==='pending'
+            ? '<div style="display:flex;gap:8px;">'
+              + '<button onclick="selectWholeQueue(\''+type+'\')" style="padding:6px 12px;background:rgba(99,140,210,0.15);border:1px solid rgba(99,140,210,0.3);border-radius:7px;color:#8aa4c8;font-size:12px;cursor:pointer;">Select all</button>'
+              + '<button onclick="reviewCertQueue(\''+type+'\',\'approve\')" style="padding:6px 14px;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.35);border-radius:7px;color:#10b981;font-size:12px;font-weight:700;cursor:pointer;">✅ Generate &amp; send selected</button>'
+              + '<button onclick="reviewCertQueue(\''+type+'\',\'reject\')" style="padding:6px 14px;background:rgba(244,63,94,0.1);border:1px solid rgba(244,63,94,0.3);border-radius:7px;color:#f43f5e;font-size:12px;cursor:pointer;">Reject selected</button>'
+              + '</div>'
+            : '')
+        + '</div>';
+
+      if(!apps.length){
+        return head + '<p style="color:#5a7299;font-size:13px;padding:6px 0 14px;">No '+_hrEsc(q.label)+' requests '+_hrEsc(status)+'.</p>';
+      }
+
+      const rows = apps.map(function(a){
+        const snap = a.snapshot || {};
+        return '<tr>'
+          + (status==='pending' ? '<td><input type="checkbox" class="certChk-'+type+'" value="'+_hrEsc(a._id)+'"></td>' : '')
+          + '<td><strong>'+_hrEsc(a.studentName||a.employeeId)+'</strong><div style="color:#5a7299;font-size:11px;">'+_hrEsc(a.employeeId)+'</div></td>'
+          + '<td>'+_hrEsc(a.domain||'—')+'</td>'
+          + '<td style="font-size:12px;">Attendance <strong>'+(snap.attendancePercentage||0)+'%</strong><br>Performance <strong>'+(snap.performanceScore||0)+'%</strong><br>Tasks <strong>'+(snap.taskCompletionPercent||0)+'%</strong></td>'
+          + '<td style="font-size:12px;">'+(a.appliedAt ? new Date(a.appliedAt).toLocaleDateString('en-IN') : '—')+'</td>'
+          + '<td style="font-size:12px;">'+_hrEsc(a.documentNumber||a.status)+'</td>'
+          + '</tr>';
+      }).join('');
+
+      return head + '<div style="overflow:auto;max-height:46vh;border:1px solid rgba(245,197,66,0.12);border-radius:10px;"><table class="ins-table"><thead><tr>'
+        + (status==='pending' ? '<th style="width:34px;"></th>' : '')
+        + '<th>Student</th><th>Domain</th><th>Figures when applied</th><th>Applied</th><th>Status / Doc No.</th></tr></thead><tbody>'
+        + rows + '</tbody></table></div>';
+    }).join('');
+  }catch(e){
+    box.innerHTML = '<p style="color:#f43f5e;padding:14px 0;">'+_hrEsc(e.message||'Could not load the queues.')+'</p>';
+  }
+}
+
+function selectWholeQueue(type){
+  document.querySelectorAll('.certChk-'+type).forEach(function(c){ c.checked = true; });
+}
+
+async function reviewCertQueue(type, action){
+  const ids = Array.from(document.querySelectorAll('.certChk-'+type))
+    .filter(function(c){ return c.checked; }).map(function(c){ return c.value; });
+  if(!ids.length){ showHRToast('Select at least one request first.','error'); return; }
+
+  const verb = action==='approve' ? 'Generate and send' : 'Reject';
+  const confirmed = await Swal.fire({
+    title: verb+' '+ids.length+' certificate'+(ids.length===1?'':'s')+'?',
+    text: action==='approve'
+      ? 'Each student is re-checked against the rules, then the certificate is generated and emailed.'
+      : 'The students will be told their request was not approved.',
+    icon:'question', showCancelButton:true, confirmButtonText:verb,
+    background:'#0e1428', color:'#F0EEE8',
+    confirmButtonColor: action==='approve' ? '#10b981' : '#f43f5e'
+  });
+  if(!confirmed.isConfirmed) return;
+
+  let note = '';
+  if(action==='reject'){
+    const asked = await Swal.fire({
+      title:'Reason (optional)', input:'text',
+      inputPlaceholder:'Shown to the student',
+      background:'#0e1428', color:'#F0EEE8', confirmButtonColor:'#f43f5e'
+    });
+    note = asked.value || '';
+  }
+
+  showHRToast('Working through '+ids.length+' request'+(ids.length===1?'':'s')+'…','success');
+  try{
+    const r = await fetch('/api/v2/certificate-applications/hr/review', {
+      method:'POST', credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ applicationIds: ids, action: action, note: note })
+    });
+    if(r.status===401){ handleHRSessionExpired(); return; }
+    const d = await r.json();
+    if(!r.ok || !d.success) throw new Error(d.message || ('Request failed ('+r.status+')'));
+
+    // Report per-item outcomes: one student failing must not hide the rest.
+    const failures = (d.results||[]).filter(function(x){ return !x.ok; });
+    if(failures.length){
+      Swal.fire({
+        icon: d.succeeded ? 'warning' : 'error',
+        title: d.succeeded+' done, '+failures.length+' could not be processed',
+        html: '<div style="text-align:left;max-height:240px;overflow:auto;font-size:13px;">'
+          + failures.map(function(f){ return '<div><strong>'+_hrEsc(f.employeeId||f.id)+'</strong>: '+_hrEsc(f.message||'failed')+'</div>'; }).join('')
+          + '</div>',
+        background:'#0e1428', color:'#F0EEE8', confirmButtonColor:'#D4AF37'
+      });
+    } else {
+      showHRToast('✅ '+d.succeeded+' certificate'+(d.succeeded===1?'':'s')+' processed.','success');
+    }
+    loadCertQueues();
+  }catch(e){
+    showHRToast('❌ '+(e.message||'Request failed'),'error');
+  }
+}
+
+/**
+ * Put a piece of intern feedback on the public home page — or take it down.
+ *
+ * Publishing shows the intern's name, domain, star rating and message to
+ * every visitor, so it asks before doing it. The home page shows only what
+ * this button has published; nothing a student writes goes public on its own.
+ */
+async function publishFeedback(id, publish){
+  if (publish && !confirm('Publish this feedback as a testimonial on the public home page?\n\nThe intern’s name, domain, star rating and message will be visible to every visitor.')) return;
+  try {
+    const res = await fetch('/api/feedback/hr/' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ published: publish })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message);
+    showHRToast(publish ? '🌐 Published to the home page.' : 'Removed from the home page.', 'success');
+    loadHRFeedback();
+  } catch (err) {
+    alert(err.message || 'Could not update that feedback.');
+  }
+}
+
 function showView(v){
   document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(el=>el.classList.remove('active'));
   document.getElementById('view-'+v).classList.add('active');
   document.querySelector(`[data-view="${v}"]`)?.classList.add('active');
-  const t={overview:'<span>Dashboard</span> Overview',ecosystem:'<span>TEN</span> Ecosystem Control Center',insights:'<span>Insights</span>',students:'<span>All</span> Students',tracker:'<span>Internship</span> Tracker',submissions:'<span>Task</span> Submissions',domains:'<span>Domain</span> Analytics',documents:'<span>Generate</span> Documents','send-notif':'<span>Send</span> Notification','notif-history':'<span>Notification</span> History','attendance-monitor':'<span>Attendance</span> Monitor',certificates:'<span>Certificate</span> Approvals','star-submissions':'<span>Star Performer</span> Submissions',feedback:'<span>Student</span> Feedback',promotions:'<span>Promotions</span>',leaderboard:'<span>Performance</span> Leaderboard'};
+  const t={overview:'<span>Dashboard</span> Overview',ecosystem:'<span>TEN</span> Ecosystem Control Center',insights:'<span>Insights</span>',students:'<span>All</span> Students',tracker:'<span>Internship</span> Tracker',submissions:'<span>Task</span> Submissions',domains:'<span>Domain</span> Analytics',documents:'<span>Generate</span> Documents','send-notif':'<span>Send</span> Notification','notif-history':'<span>Notification</span> History','attendance-monitor':'<span>Attendance</span> Monitor',certificates:'<span>Certificate</span> Approvals','star-submissions':'<span>Star Performer</span> Submissions',feedback:'<span>Student</span> Feedback','cert-apps':'<span>Certificate</span> Requests',promotions:'<span>Promotions</span>',contributors:'<span>Home page</span> Contributors',leaderboard:'<span>Performance</span> Leaderboard'};
   document.getElementById('pageTitle').innerHTML=t[v]||v;
+  if(v==='cert-apps') loadCertQueues();
   if(v==='ecosystem') loadEcosystem();
   if(v==='insights') initInsights();
   if(v==='students') loadStudents();
@@ -2027,6 +2314,7 @@ function showView(v){
   if(v==='star-submissions') loadStarSubmissions();
   if(v==='feedback') loadHRFeedback();
   if(v==='promotions') loadPromoCandidatesStudents();
+  if(v==='contributors') loadContributors();
   if(v==='leaderboard'){
     if(window.TenExtras){
       TenExtras.injectHR({ mountId: "ten-extras-hr-mount" });
@@ -2056,24 +2344,34 @@ async function showStatDetail(type) {
   const panel = document.getElementById('statDetailPanel');
   panel.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
   panel.style.display = 'block';
+  const LABELS = { total:'All registered interns', active:'Active in the last 30 days', inactive:'No activity in 30 days', newJoins:'Joined this calendar month' };
   try{
-    const res = await fetch('/api/hr/intern-list?type=' + encodeURIComponent(type||'total'), { headers:{ Authorization: hrToken } });
+    const res = await fetch('/api/hr/intern-list?type=' + encodeURIComponent(type||'total'), { credentials:'same-origin', headers:{ Authorization: hrToken } });
+    if(res.status===401){ handleHRSessionExpired(); return; }
     const data = await res.json();
+    if(!res.ok || data.success===false) throw new Error(data.message || ('Request failed ('+res.status+')'));
     const students = (data && data.students) ? data.students : [];
     panel.innerHTML =
-      `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-         <div style="font-weight:800;">Student List</div>
+      `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+         <div>
+           <div style="font-weight:800;">Student List <span style="color:var(--gold);">(${students.length})</span></div>
+           <div style="font-size:12px;color:var(--muted);">${LABELS[type||'total']||''}</div>
+         </div>
          <button class="send-btn" style="padding:8px 14px;font-size:12px;" onclick="closeStatDetail()">✖ Close</button>
        </div>` +
-      `<div style="overflow-x:auto;"><table class="ins-table">
-         <thead><tr><th>Name</th><th>Employee ID</th><th>Domain</th></tr></thead>
+      // Capped height with its own scrollbar: the list can be 200 rows, and
+      // rendering them all inline pushed the page metres down so the data
+      // looked absent unless you scrolled a long way.
+      `<div style="overflow:auto;max-height:60vh;border:1px solid rgba(245,197,66,0.12);border-radius:10px;"><table class="ins-table">
+         <thead><tr><th>Name</th><th>Employee ID</th><th>Domain</th><th>College</th></tr></thead>
          <tbody>` +
            (students.length ? students.map(s =>
-             `<tr><td>${s.name||'—'}</td><td>${s.employeeId||'—'}</td><td>${s.domain||'—'}</td></tr>`
-           ).join('') : `<tr><td colspan="3"><div class="empty-state"><div class="es-icon">👥</div><p>No students</p></div></td></tr>`) +
+             `<tr><td>${_hrEsc(s.name)}</td><td>${_hrEsc(s.employeeId)}</td><td>${_hrEsc(s.domain)}</td><td>${_hrEsc(s.college)}</td></tr>`
+           ).join('') : `<tr><td colspan="4"><div class="empty-state"><div class="es-icon">👥</div><p>No students in this group</p></div></td></tr>`) +
          `</tbody></table></div>`;
+    panel.scrollIntoView({ behavior:'smooth', block:'nearest' });
   }catch(e){
-    panel.innerHTML = '<div class="empty-state"><div class="es-icon">👥</div><p>Failed to load</p></div>';
+    panel.innerHTML = '<div class="empty-state"><div class="es-icon">⚠️</div><p>'+_hrEsc(e.message||'Failed to load')+'</p></div>';
   }
 }
 
@@ -2088,19 +2386,49 @@ setInterval(() => {
   if (p && p.classList.contains('active')) loadInsightsMailHistory();
 }, 30000);
 
+/**
+ * Report the truth on the stat cards.
+ *
+ * The cards used to render `d.totalInterns||0` inside an empty catch, so an
+ * expired session (401), a failed query (500) and a genuinely empty
+ * programme all displayed identically as "0" — HR read zeros over a live
+ * database of hundreds of students with no hint anything was wrong.
+ */
+function insightsFailure(msg){
+  ['insTotalInterns','insActiveThisMonth','insInactiveInterns','insNewJoinsThisMonth']
+    .forEach(id=>{ const el=document.getElementById(id); if(el) el.textContent='—'; });
+  showHRToast('❌ Insights: '+msg,'error');
+}
+
 async function loadInsightsMonthly(){
   try{
-    const r=await fetch('/api/hr/intern-stats',{headers:{Authorization:hrToken}});
+    const r=await fetch('/api/hr/intern-stats',{credentials:'same-origin',headers:{Authorization:hrToken}});
+    if(r.status===401){
+      insightsFailure('Your HR session has expired — please sign in again.');
+      setTimeout(()=>{ window.location.href='/hr-login'; }, 1800);
+      return;
+    }
     const d=await r.json();
-    document.getElementById('insTotalInterns').textContent=d.totalInterns||0;
-    document.getElementById('insActiveThisMonth').textContent=d.activeThisMonth||0;
-    document.getElementById('insInactiveInterns').textContent=d.inactiveInterns||0;
-    document.getElementById('insNewJoinsThisMonth').textContent=d.newJoinsThisMonth||0;
-  }catch(e){}
+    if(!r.ok || d.success===false) throw new Error(d.message||('Request failed ('+r.status+')'));
+    document.getElementById('insTotalInterns').textContent=d.totalInterns??0;
+    document.getElementById('insActiveThisMonth').textContent=d.activeThisMonth??0;
+    document.getElementById('insInactiveInterns').textContent=d.inactiveInterns??0;
+    document.getElementById('insNewJoinsThisMonth').textContent=d.newJoinsThisMonth??0;
+  }catch(e){ insightsFailure(e.message||'Could not reach the server.'); return; }
   try{
-    const r=await fetch('/api/hr/intern-stats/monthly',{headers:{Authorization:hrToken}});
+    const r=await fetch('/api/hr/intern-stats/monthly',{credentials:'same-origin',headers:{Authorization:hrToken}});
     const d=await r.json();
-    if(!window.Chart) return;
+    if(!window.Chart){
+      // Chart.js comes from a CDN; when it is blocked the join counts should
+      // still be readable rather than an empty box.
+      const box=document.getElementById('insightsJoinChart');
+      if(box && Array.isArray(d)){
+        const wrap=box.parentElement;
+        wrap.innerHTML='<div style="display:flex;gap:18px;flex-wrap:wrap;padding:14px 4px;">'+
+          d.map(x=>'<div style="text-align:center;"><div style="font-size:22px;font-weight:800;color:var(--gold);">'+(x.count||0)+'</div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;">'+x.month+'</div></div>').join('')+'</div>';
+      }
+      return;
+    }
     const gold=getComputedStyle(document.documentElement).getPropertyValue('--gold').trim();
     const existing=Chart.getChart('insightsJoinChart');
     if(existing) existing.destroy();
@@ -2138,11 +2466,17 @@ function renderInsightsDocumentHistory(list){
       :type==='LOC'||type==='Letter of Completion'?'blue'
       :type==='Star Performer'?'amber'
       :'';
-    const typeHtml=type?`<span class="ins-badge ${bc}">${type}</span>`:'—';
+    const typeHtml=type?`<span class="ins-badge ${bc}">${_hrEsc(type)}</span>`:'—';
     const college=(r.college && String(r.college).trim() && r.college!=='—')?r.college:'Not provided';
-    const method=(r.method==='automation'||/auto|system|cron/i.test(r.sentBy||''))?'automation':'manual';
+    // The server decides this now. The page used to re-derive it with
+    // /auto|system|cron/, and "System" is the placeholder several generate
+    // paths write into sentBy — so a document an HR user made by hand was
+    // relabelled "Automation" on the way to the screen.
+    const method=r.method==='automation'?'automation':'manual';
     const methodHtml=method==='automation'?'<span class="ins-badge blue">Automation</span>':'<span class="ins-badge gold">Manual</span>';
-    return `<tr><td>${r.studentName||'—'}</td><td>${r.employeeId||'—'}</td><td>${college}</td><td>${typeHtml}</td><td>${r.documentNumber||'—'}</td><td>${sent}</td><td>${methodHtml}</td></tr>`;
+    const by=(r.sentBy||'').trim();
+    const byHtml=by&&by!=='System'?`<div style="font-size:10px;color:#8aa4c8;margin-top:2px;">${_hrEsc(by)}</div>`:'';
+    return `<tr><td>${_hrEsc(r.studentName)||'—'}</td><td>${_hrEsc(r.employeeId)||'—'}</td><td>${_hrEsc(college)}</td><td>${typeHtml}</td><td>${_hrEsc(r.documentNumber)||'—'}</td><td>${sent}</td><td>${methodHtml}${byHtml}</td></tr>`;
   }).join('');
 }
 
@@ -2364,9 +2698,15 @@ function openSidePanel(id){
   document.getElementById('sp-lastName').value=s.lastName||'';
   document.getElementById('sp-email').value=s.email||'';
   document.getElementById('sp-whatsapp').value=s.whatsapp||'';
-  document.getElementById('sp-domain').value=s.domain||'';
   document.getElementById('sp-employeeId').value=s.employeeId||'';
-  document.getElementById('sp-tenure').value=s.tenure||'';
+  // Options load asynchronously; seed the current values immediately so the
+  // panel is never briefly blank, then reconcile once the list arrives.
+  setTenSelect(document.getElementById('sp-domain'), s.domain);
+  setTenSelect(document.getElementById('sp-tenure'), s.tenure);
+  loadTenOptions().then(()=>{
+    setTenSelect(document.getElementById('sp-domain'), s.domain);
+    setTenSelect(document.getElementById('sp-tenure'), s.tenure);
+  });
   document.getElementById('sp-college').value=s.collegeName||s.college||'';
   document.getElementById('sp-joining').value=s.joiningDate||'';
   const fn=((s.firstName||'')+' '+(s.lastName||'')).trim();
@@ -2434,15 +2774,82 @@ async function loadStudentSubmissionsInPanel(){
     listEl.innerHTML='<div class="sp-no-submissions"><div class="sp-no-submissions-icon">⚠️</div><p>Failed to load</p></div>';
   }
 }
+/* ── Canonical domain / tenure options ──────────────────────────────────────
+   Loaded once from /api/public-config, which is generated from the same
+   config/domains.js and utils/tenure.js the server validates against, so this
+   list cannot drift from what the server will accept. */
+let tenOptions = null;
+
+async function loadTenOptions(){
+  if(tenOptions) return tenOptions;
+  try{
+    const r = await fetch('/api/public-config', {credentials:'same-origin'});
+    const d = await r.json();
+    tenOptions = { domains: d.domains||[], tenures: (d.tenures||[]).map(t=>t.label) };
+  }catch(e){
+    tenOptions = { domains: [], tenures: [] };
+  }
+  document.querySelectorAll('select[data-options]').forEach(sel=>{
+    const list = tenOptions[sel.dataset.options] || [];
+    if(!list.length) return;
+    const current = sel.value;
+    sel.innerHTML = list.map(v=>`<option value="${v}">${v}</option>`).join('');
+    if(current) setTenSelect(sel, current);
+  });
+  return tenOptions;
+}
+
+/* A student whose stored value predates the canonical list must not have it
+   silently blanked by assigning an unknown value to a <select>. Keep it as an
+   extra option, marked, so HR can see it and choose a real one. */
+function setTenSelect(el, value){
+  if(!el) return;
+  const v = value || '';
+  if(v && !Array.from(el.options).some(o=>o.value===v)){
+    const opt=document.createElement('option');
+    opt.value=v; opt.textContent=v+' (not a standard option)';
+    el.insertBefore(opt, el.firstChild);
+  }
+  el.value=v;
+}
+
+/* Tell HR what the save actually did downstream, so a tenure change that
+   rebuilt the student's Task Journey is visible rather than silent. */
+function propagationSummary(report){
+  if(!report || !report.changed || !report.changed.length) return '';
+  const bits=[];
+  if(report.tasks && report.tasks.added)   bits.push(report.tasks.added+' task(s) added');
+  if(report.tasks && report.tasks.removed) bits.push(report.tasks.removed+' removed');
+  if(report.tasks && report.tasks.preserved) bits.push(report.tasks.preserved+' kept (work already done)');
+  if(report.offerLetterStale) bits.push('offer letter needs regenerating');
+  return bits.length ? ' — Task Journey updated: '+bits.join(', ') : '';
+}
+
+/**
+ * Report why a student write failed instead of a flat "Update failed."
+ *
+ * Both of these calls used to `throw new Error()` on any non-2xx and show one
+ * fixed message, so a 401 (signed-out HR session), a 409 (duplicate email) and
+ * a genuine 500 were indistinguishable. A signed-out session is the common
+ * case and it is the one the old message described worst.
+ */
+async function studentWriteError(res){
+  let msg='';
+  try{ const d=await res.json(); msg=d && (d.message||d.error) || ''; }catch(e){}
+  if(res.status===401) return msg||'Your HR session has expired. Please sign in again.';
+  return msg||('Request failed ('+res.status+').');
+}
+
 async function saveSidePanelStudent(){
   const id=document.getElementById('sp-id').value;
   const body={firstName:document.getElementById('sp-firstName').value.trim(),lastName:document.getElementById('sp-lastName').value.trim(),email:document.getElementById('sp-email').value.trim(),whatsapp:document.getElementById('sp-whatsapp').value.trim(),domain:document.getElementById('sp-domain').value.trim(),tenure:document.getElementById('sp-tenure').value.trim(),collegeName:document.getElementById('sp-college').value.trim(),college:document.getElementById('sp-college').value.trim()};
   try{
-    const res=await fetch('/students/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(!res.ok)throw new Error();
-    closeSidePanel();showHRToast('✅ Student updated!','success');
+    const res=await fetch('/students/'+id,{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!res.ok){ showHRToast('❌ '+await studentWriteError(res),'error'); return; }
+    const d=await res.json().catch(()=>({}));
+    closeSidePanel();showHRToast('✅ Student updated!'+propagationSummary(d.propagated),'success');
     allStudents=[];allTrackerStudents=[];loadStudents();
-  }catch(e){showHRToast('❌ Update failed.','error');}
+  }catch(e){showHRToast('❌ Update failed — could not reach the server.','error');}
 }
 function deleteSidePanelStudent(){
   const id=document.getElementById('sp-id').value;
@@ -2637,7 +3044,10 @@ async function openEditStudent(id){
     document.getElementById('es-id').value=s._id;
     document.getElementById('es-firstName').value=s.firstName||'';document.getElementById('es-lastName').value=s.lastName||'';
     document.getElementById('es-email').value=s.email||'';document.getElementById('es-whatsapp').value=s.whatsapp||'';
-    document.getElementById('es-domain').value=s.domain||'';document.getElementById('es-college').value=collegeValue(s);document.getElementById('es-employeeId').value=s.employeeId||'';document.getElementById('es-tenure').value=s.tenure||'';
+    await loadTenOptions();
+    setTenSelect(document.getElementById('es-domain'), s.domain);
+    setTenSelect(document.getElementById('es-tenure'), s.tenure);
+    document.getElementById('es-college').value=collegeValue(s);document.getElementById('es-employeeId').value=s.employeeId||'';
     document.getElementById('editStudentModal').classList.add('open');
   }catch(e){showHRToast('Failed to load student.','error');}
 }
@@ -2646,10 +3056,11 @@ async function saveStudentEdit(){
   const id=document.getElementById('es-id').value;
   const body={firstName:document.getElementById('es-firstName').value.trim(),lastName:document.getElementById('es-lastName').value.trim(),email:document.getElementById('es-email').value.trim(),whatsapp:document.getElementById('es-whatsapp').value.trim(),domain:document.getElementById('es-domain').value.trim(),collegeName:document.getElementById('es-college').value.trim(),college:document.getElementById('es-college').value.trim(),tenure:document.getElementById('es-tenure').value.trim()};
   try{
-    const res=await fetch('/students/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(!res.ok)throw new Error();
-    closeEditStudent();showHRToast('✅ Student updated!','success');allStudents=[];allTrackerStudents=[];loadStudents();
-  }catch(e){showHRToast('❌ Update failed.','error');}
+    const res=await fetch('/students/'+id,{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!res.ok){ showHRToast('❌ '+await studentWriteError(res),'error'); return; }
+    const d=await res.json().catch(()=>({}));
+    closeEditStudent();showHRToast('✅ Student updated!'+propagationSummary(d.propagated),'success');allStudents=[];allTrackerStudents=[];loadStudents();
+  }catch(e){showHRToast('❌ Update failed — could not reach the server.','error');}
 }
 async function generateLOR(studentId, studentName, force = false) {
   if (!force) {
@@ -2714,12 +3125,12 @@ function confirmDelStudent(id,name){
 async function executeDelStudent(){
   closeConfirmDel();
   try{
-    const res=await fetch('/students/'+pendingDelId,{method:'DELETE'});
-    if(!res.ok)throw new Error();
+    const res=await fetch('/students/'+pendingDelId,{method:'DELETE',credentials:'same-origin'});
+    if(!res.ok){ showHRToast('❌ '+await studentWriteError(res),'error'); return; }
     document.getElementById('srow-'+pendingDelId)?.remove();
     allStudents=allStudents.filter(s=>s._id!==pendingDelId);allTrackerStudents=allTrackerStudents.filter(s=>s._id!==pendingDelId);
     showHRToast('🗑 Student deleted.','success');
-  }catch(e){showHRToast('❌ Delete failed.','error');}
+  }catch(e){showHRToast('❌ Delete failed — could not reach the server.','error');}
 }
 function closeConfirmDel(){document.getElementById('confirmDelModal').classList.remove('open');}
 document.getElementById('editStudentModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeEditStudent();});
@@ -3558,6 +3969,166 @@ ${qrDataUrl ? `<div style="text-align:center"><img src="${qrDataUrl}" width="80"
 }
 
 /* ============ CERTIFICATE APPROVALS ============ */
+/* ── Contributors: the "Built with" strip on the public home page ──────────
+   Level 5 and above. The Employee ID lookup fills the fields from the
+   student's own record so HR types one line, not four — and so the name on
+   the site cannot end up spelled two ways. The row is then a copy; see
+   models/Contributor.js. */
+let CONTRIB_EDIT_ID = null;
+
+function cbEsc(v){
+  return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+const cbEl = (id) => document.getElementById(id);
+
+async function contribLookup(){
+  const id = (cbEl('cbEmpId').value || '').trim();
+  const msg = cbEl('cbLookupMsg');
+  if(!id){ msg.textContent = 'Enter an Employee ID, or fill the fields by hand.'; return; }
+  msg.textContent = 'Looking up…';
+  try{
+    const r = await fetch('/api/v2/hr/contributors/lookup/' + encodeURIComponent(id), { credentials:'same-origin' });
+    const d = await r.json();
+    if(!d.success){ msg.style.color = '#f87171'; msg.textContent = d.message || 'Not found.'; return; }
+    cbEl('cbName').value = d.student.name || '';
+    cbEl('cbDomain').value = d.student.domain || '';
+    cbEl('cbName').dataset.studentId = d.student.studentId || '';
+    cbEl('cbName').dataset.photoUrl = d.student.photoUrl || '';
+    msg.style.color = '#34d399';
+    msg.textContent = 'Found ' + d.student.name + (d.student.photoUrl ? '' : ' — no photo on file, upload one below.');
+  }catch(e){ msg.style.color='#f87171'; msg.textContent = 'Could not reach the server.'; }
+}
+
+async function contribSave(){
+  const out = cbEl('cbFormMsg');
+  const name = (cbEl('cbName').value || '').trim();
+  if(!name){ out.style.color='#f87171'; out.textContent='A contributor needs a name.'; return; }
+
+  const fd = new FormData();
+  fd.append('employeeId', (cbEl('cbEmpId').value||'').trim());
+  fd.append('studentId', cbEl('cbName').dataset.studentId || '');
+  fd.append('name', name);
+  fd.append('domain', (cbEl('cbDomain').value||'').trim());
+  fd.append('contribution', (cbEl('cbNote').value||'').trim());
+  fd.append('order', cbEl('cbOrder').value || 0);
+  fd.append('published', cbEl('cbPublished').checked ? 'true' : 'false');
+  fd.append('photoUrl', cbEl('cbName').dataset.photoUrl || '');
+  const file = cbEl('cbPhoto').files[0];
+  if(file) fd.append('photo', file);
+
+  cbEl('cbSaveBtn').disabled = true;
+  out.style.color = 'var(--muted)'; out.textContent = 'Saving…';
+  try{
+    const url = CONTRIB_EDIT_ID ? '/api/v2/hr/contributors/' + CONTRIB_EDIT_ID : '/api/v2/hr/contributors';
+    const r = await fetch(url, { method: CONTRIB_EDIT_ID ? 'PUT' : 'POST', credentials:'same-origin', body: fd });
+    const d = await r.json();
+    if(!d.success) throw new Error(d.message || 'Could not save.');
+    out.style.color = '#34d399';
+    out.textContent = CONTRIB_EDIT_ID ? 'Updated.' : 'Posted. It is on the home page now.';
+    contribCancelEdit(true);
+    loadContributors();
+  }catch(e){ out.style.color='#f87171'; out.textContent = e.message; }
+  finally{ cbEl('cbSaveBtn').disabled = false; }
+}
+
+function contribCancelEdit(keepMsg){
+  CONTRIB_EDIT_ID = null;
+  ['cbEmpId','cbName','cbDomain','cbNote'].forEach(id => cbEl(id).value = '');
+  cbEl('cbOrder').value = 0;
+  cbEl('cbPhoto').value = '';
+  cbEl('cbPublished').checked = true;
+  cbEl('cbName').dataset.studentId = '';
+  cbEl('cbName').dataset.photoUrl = '';
+  cbEl('cbLookupMsg').textContent = '';
+  cbEl('cbSaveBtn').textContent = 'Post contributor';
+  cbEl('cbCancelBtn').style.display = 'none';
+  if(!keepMsg) cbEl('cbFormMsg').textContent = '';
+}
+
+let CONTRIB_ROWS = [];
+async function loadContributors(){
+  const box = cbEl('contribList');
+  if(!box) return;
+  try{
+    const r = await fetch('/api/v2/hr/contributors', { credentials:'same-origin' });
+    const d = await r.json();
+    CONTRIB_ROWS = d.contributors || [];
+    if(!CONTRIB_ROWS.length){
+      box.innerHTML = '<p style="color:var(--muted);font-size:13.5px;padding:24px 0;">' +
+        'Nobody yet. The strip stays hidden on the home page until you post someone.</p>';
+      return;
+    }
+    box.innerHTML = '<div class="table-wrap"><div style="overflow-x:auto;"><table><thead><tr>' +
+      '<th>Person</th><th>Domain</th><th>Contribution</th><th>Order</th><th>On the site</th><th></th>' +
+      '</tr></thead><tbody>' +
+      CONTRIB_ROWS.map(function(c, i){
+        return '<tr>' +
+          '<td><div style="display:flex;align-items:center;gap:10px;">' +
+            (c.photoUrl ? '<img src="' + cbEsc(c.photoUrl) + '" alt="" style="width:34px;height:34px;border-radius:50%;object-fit:cover;">' : '') +
+            '<div><div style="font-weight:700;">' + cbEsc(c.name) + '</div>' +
+            (c.employeeId ? '<div style="font-size:11px;color:var(--muted);">' + cbEsc(c.employeeId) + '</div>' : '') +
+            '</div></div></td>' +
+          '<td style="font-size:12.5px;">' + cbEsc(c.domain || '—') + '</td>' +
+          '<td style="font-size:12.5px;max-width:320px;">' + cbEsc(c.contribution || '—') + '</td>' +
+          '<td>' + (c.order || 0) + '</td>' +
+          '<td>' + (c.published
+            ? '<span style="color:#34d399;font-weight:700;font-size:12px;">Published</span>'
+            : '<span style="color:#9aa4bf;font-size:12px;">Hidden</span>') + '</td>' +
+          '<td style="white-space:nowrap;">' +
+            '<button class="send-btn" style="padding:6px 12px;font-size:11.5px;" onclick="contribEdit(' + i + ')">Edit</button> ' +
+            '<button class="send-btn" style="padding:6px 12px;font-size:11.5px;background:rgba(255,255,255,.06);color:#cbd5e1;" onclick="contribTogglePublish(' + i + ')">' +
+              (c.published ? 'Unpublish' : 'Publish') + '</button> ' +
+            '<button class="send-btn" style="padding:6px 12px;font-size:11.5px;background:rgba(244,63,94,.14);color:#f87171;" onclick="contribDelete(' + i + ')">Remove</button>' +
+          '</td></tr>';
+      }).join('') + '</tbody></table></div></div>';
+  }catch(e){
+    box.innerHTML = '<p style="color:#f87171;font-size:13px;">Could not load contributors: ' + cbEsc(e.message) + '</p>';
+  }
+}
+
+function contribEdit(i){
+  const c = CONTRIB_ROWS[i];
+  if(!c) return;
+  CONTRIB_EDIT_ID = c._id;
+  cbEl('cbEmpId').value = c.employeeId || '';
+  cbEl('cbName').value = c.name || '';
+  cbEl('cbDomain').value = c.domain || '';
+  cbEl('cbNote').value = c.contribution || '';
+  cbEl('cbOrder').value = c.order || 0;
+  cbEl('cbPublished').checked = !!c.published;
+  cbEl('cbName').dataset.photoUrl = c.photoUrl || '';
+  cbEl('cbName').dataset.studentId = c.studentId || '';
+  cbEl('cbSaveBtn').textContent = 'Save changes';
+  cbEl('cbCancelBtn').style.display = '';
+  cbEl('cbEmpId').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+async function contribTogglePublish(i){
+  const c = CONTRIB_ROWS[i];
+  if(!c) return;
+  const fd = new FormData();
+  fd.append('published', c.published ? 'false' : 'true');
+  const r = await fetch('/api/v2/hr/contributors/' + c._id, { method:'PUT', credentials:'same-origin', body: fd });
+  const d = await r.json();
+  if(d.success) loadContributors();
+}
+
+async function contribDelete(i){
+  const c = CONTRIB_ROWS[i];
+  if(!c) return;
+  const ok = await Swal.fire({
+    icon:'warning', title:'Remove ' + c.name + '?',
+    text:'They come off the home page. This does not touch their student record.',
+    showCancelButton:true, confirmButtonText:'Remove', confirmButtonColor:'#ef4444',
+    background:'#0c1220', color:'#f0eee8'
+  });
+  if(!ok.isConfirmed) return;
+  const r = await fetch('/api/v2/hr/contributors/' + c._id, { method:'DELETE', credentials:'same-origin' });
+  const d = await r.json();
+  if(d.success) loadContributors();
+}
+
 function switchCertTab(tab,btn){
   document.querySelectorAll('#view-certificates .doc-tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.cert-panel').forEach(p=>p.classList.remove('active'));
@@ -3565,6 +4136,122 @@ function switchCertTab(tab,btn){
   document.getElementById('cert-'+tab).classList.add('active');
   if(tab==='pending') loadCertPending();
   if(tab==='approved') loadCertApproved();
+}
+
+/* ── Direct issue ─────────────────────────────────────────────────────────
+   Two steps on purpose. The precheck is read-only and produces the ONE
+   warning; the issue itself then carries `acknowledged`, so the warning
+   cannot be walked past by a request that never asked for it. The server
+   enforces the same rule — it answers 409 to an unacknowledged issue for a
+   student who falls short — so this is a prompt, not the gate. */
+function _diEsc(v){
+  return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+async function directIssueCheck(){
+  const empId = (document.getElementById('directEmpId').value || '').trim();
+  const type  = document.getElementById('directCertType').value;
+  const box   = document.getElementById('directIssueResult');
+  if(!empId){
+    box.innerHTML = '<p style="color:#f87171;font-size:13px">Enter an Employee ID first.</p>';
+    return;
+  }
+  box.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+  try{
+    const r = await fetch('/api/v2/certificates/hr-issue/precheck?employeeId=' +
+      encodeURIComponent(empId) + '&certType=' + encodeURIComponent(type),
+      { credentials:'same-origin' });
+    const d = await r.json();
+    if(!d.success){
+      box.innerHTML = '<p style="color:#f87171;font-size:13px">' + _diEsc(d.message || 'Lookup failed') + '</p>';
+      return;
+    }
+
+    const snap = d.snapshot || {};
+    const already = d.alreadyIssued
+      ? '<div style="margin-top:10px;padding:10px 12px;background:rgba(245,197,66,.08);border:1px solid rgba(245,197,66,.25);border-radius:8px;color:#f5c542;font-size:12.5px;">' +
+        'This student already has a ' + _diEsc(d.certificateType) + '. Issuing again replaces it.</div>'
+      : '';
+
+    box.innerHTML =
+      '<div style="padding:18px 20px;background:rgba(255,255,255,.02);border:1px solid rgba(245,197,66,.14);border-radius:14px;">' +
+        '<div style="font-size:16px;font-weight:800;color:var(--gold);margin-bottom:4px;">' +
+          _diEsc(d.studentName || d.employeeId) + '</div>' +
+        '<div style="font-size:12.5px;color:var(--muted);margin-bottom:14px;">' +
+          _diEsc(d.employeeId) + (d.domain ? ' &middot; ' + _diEsc(d.domain) : '') +
+          ' &middot; ' + _diEsc(d.certificateLabel) + '</div>' +
+        '<div style="display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px;color:#9aa4bf;margin-bottom:14px;">' +
+          '<span>Attendance <b style="color:#e8e6df">' + (snap.attendancePercentage||0) + '%</b></span>' +
+          '<span>Performance <b style="color:#e8e6df">' + (snap.performanceScore||0) + '%</b></span>' +
+          '<span>Tasks <b style="color:#e8e6df">' + (snap.taskCompletionPct||0) + '%</b></span>' +
+          '<span>' + (snap.hadApplication ? 'Applied through the portal' : 'Never applied') + '</span>' +
+        '</div>' +
+        (d.metRequirements
+          ? '<div style="padding:12px 14px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.25);border-radius:8px;color:#34d399;font-size:13px;">' +
+            '✅ This student meets the requirements.</div>'
+          : '<div style="padding:12px 14px;background:rgba(244,63,94,.08);border:1px solid rgba(244,63,94,.3);border-radius:8px;">' +
+            '<div style="color:#f87171;font-weight:700;font-size:13px;margin-bottom:8px;">⚠️ This student has not met the requirements</div>' +
+            '<ul style="margin:0 0 0 16px;padding:0;color:#cbd5e1;font-size:12.5px;line-height:1.7;">' +
+              (d.failedChecks||[]).map(c => '<li>' + _diEsc(c) + '</li>').join('') +
+            '</ul></div>') +
+        already +
+        '<textarea id="directReason" rows="2" placeholder="Reason (recorded in the admin portal)" ' +
+          'style="width:100%;margin-top:14px;padding:10px;border-radius:8px;border:1px solid rgba(245,197,66,.16);' +
+          'background:rgba(0,0,0,.3);color:#e8e6df;font-family:inherit;font-size:13px;"></textarea>' +
+        '<button class="send-btn" style="margin-top:12px;padding:12px 24px;font-size:13px;" ' +
+          'onclick="directIssueConfirm(\'' + _diEsc(d.employeeId) + '\',\'' + _diEsc(d.certificateType) + '\',' +
+          (d.metRequirements ? 'true' : 'false') + ')">' +
+          (d.metRequirements ? 'Issue certificate' : 'Issue anyway') + '</button>' +
+      '</div>';
+  }catch(e){
+    box.innerHTML = '<p style="color:#f87171;font-size:13px">Could not reach the server: ' + _diEsc(e.message) + '</p>';
+  }
+}
+
+async function directIssueConfirm(employeeId, certType, meets){
+  // The one warning. Shown only when the student falls short — a student who
+  // meets the bar does not need a scary dialog to receive what they earned.
+  if(!meets){
+    const ok = await Swal.fire({
+      icon: 'warning',
+      title: 'Issue anyway?',
+      html: '<div style="text-align:left;font-size:13.5px;line-height:1.7;">' +
+        '<b>' + _diEsc(employeeId) + '</b> has not completed the requirements for this ' +
+        'certificate.<br><br>Issuing it now bypasses every check. The certificate will appear in ' +
+        'the student\'s My Documents and be emailed to them, and this override will be listed in ' +
+        'the admin portal under your name.</div>',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, issue it',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#ef4444',
+      background: '#0c1220', color: '#f0eee8'
+    });
+    if(!ok.isConfirmed) return;
+  }
+
+  const reason = (document.getElementById('directReason') || {}).value || '';
+  const box = document.getElementById('directIssueResult');
+  box.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+  try{
+    const r = await fetch('/api/v2/certificates/hr-issue', {
+      method:'POST', credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ employeeId, certType, acknowledged: true, reason })
+    });
+    const d = await r.json();
+    if(!d.success){
+      box.innerHTML = '<p style="color:#f87171;font-size:13px">' + _diEsc(d.message || 'Could not issue') + '</p>';
+      return;
+    }
+    box.innerHTML = '<div style="padding:16px 18px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.25);' +
+      'border-radius:12px;color:#34d399;font-size:13.5px;line-height:1.7;">✅ ' + _diEsc(d.message) + '</div>';
+    Swal.fire({ icon:'success', title:'Issued', text:d.message, background:'#0c1220', color:'#f0eee8', confirmButtonColor:'#D4AF37' });
+  }catch(e){
+    box.innerHTML = '<p style="color:#f87171;font-size:13px">Could not reach the server: ' + _diEsc(e.message) + '</p>';
+  }
 }
 
 let starPendingSubmissions = [];
@@ -4320,13 +5007,14 @@ window.addEventListener('popstate', function (e) {
 </script>
 <div class="sidebar-overlay" onclick="closeSidebar()"></div>
 <script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', function () {
-      navigator.serviceWorker.register('/sw.js')
-        .then(function (reg) { console.log('SW registered'); })
-        .catch(function (err) { console.log('SW error:', err); });
-    });
-  }
+  // No service worker is registered here.
+  //
+  // These pages used to register '/sw.js', a file that has never existed in
+  // this repository, so every load 404'd and logged a SecurityError. Beyond
+  // the noise, a service worker on a portal that serves per-student data is a
+  // caching hazard — this project already lost a week to stale HTML being
+  // served from a cache — so the correct fix is to stop asking for one rather
+  // than to add an empty file that starts caching.
 </script>
 
 <!-- ══════ PROFILE MODAL (HR) ══════ -->
@@ -4551,16 +5239,44 @@ async function rejectPendingDoc(studentId) {
   } catch(e) { showHRToast('❌ Network error', 'error'); }
 }
 
+/**
+ * The badge poll was the first call the page made and the only one that
+ * swallowed its result entirely — `catch(_){}` around a fetch whose 401 never
+ * reached a human. The portal renders from sessionStorage, so an expired
+ * SERVER session leaves the page looking signed in while every request fails.
+ * A dead session is now said out loud, once, and returns HR to sign-in.
+ */
+let _hrSessionExpiredNoticed = false;
+function handleHRSessionExpired() {
+  if (_hrSessionExpiredNoticed) return;
+  _hrSessionExpiredNoticed = true;
+  showHRToast('❌ Your HR session has expired — signing you back in…', 'error');
+  setTimeout(function () {
+    try { sessionStorage.removeItem('hrUser'); } catch (e) {}
+    window.location.href = '/hr-login';
+  }, 2000);
+}
+
 async function loadPendingDocsBadge() {
   try {
-    const r = await fetch('/api/v2/admin/documents/pending', { headers: { Authorization: hrToken } });
+    const r = await fetch('/api/v2/admin/documents/pending', { credentials: 'same-origin', headers: { Authorization: hrToken } });
+    if (r.status === 401) { handleHRSessionExpired(); return; }
     const d = await r.json();
     if (d.success) updatePendingBadge(d.count || 0);
   } catch(_) {}
 }
 
-// Load badge on page init
-setTimeout(loadPendingDocsBadge, 2000);
+/*
+ * Confirm the SERVER session as the page loads, not two seconds into it.
+ *
+ * This portal draws itself from sessionStorage, so it renders a complete,
+ * signed-in dashboard whether or not the server still agrees. Waiting two
+ * seconds to find out meant HR could read a stat, click a tab and start work
+ * before being told the session was gone — and everything they did in that
+ * window silently failed. Asking straight away means the page is either usable
+ * or honest about not being.
+ */
+loadPendingDocsBadge();
 </script>
 
 
@@ -5345,5 +6061,6 @@ setTimeout(loadPendingDocsBadge, 2000);
 </script>
 
 <script src="ten-motion.js"></script>
+<script src="/notify-orb.js" defer></script>
 </body>
 </html>

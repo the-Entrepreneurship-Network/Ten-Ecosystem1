@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TEN Job Portal — Your resume does the talking</title>
+    <meta name="description" content="The TEN Job Portal — upload your resume and an AI agent finds real, live jobs for you from LinkedIn, Google, Upwork, Fiverr and more." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+
+    <!--
+      The paygate lives in the source page, not in the built one.
+      A `vite build --emptyOutDir` rewrites public/job-portal/index.html from
+      this file, so anything added to the output by hand is deleted on the
+      next build — which is exactly how the payment card vanished once.
+    -->
+    <!-- The "Unlock your access" paygate was removed from all four portals. It
+         gated the page on a localStorage flag, which is not a payment. Do not
+         re-add it here: this template is what the build copies. -->
+  </body>
+</html>

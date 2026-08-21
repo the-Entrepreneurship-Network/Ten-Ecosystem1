@@ -44,6 +44,16 @@
       color: #fff;
     }
   </style>
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <script src="/push-client.js" defer></script>
+  <script src="/tailwind-guard.js" defer></script>
 </head>
 <body class="min-h-screen text-slate-100 flex flex-col xl:flex-row">
 
@@ -228,45 +238,12 @@
           <span class="text-xs text-[#FFD700] bg-[#FFD700]/10 border border-[#FFD700]/20 px-3 py-1 rounded-xl font-bold">Synchronized</span>
         </div>
 
-        <!-- Projects Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          
-          <div class="glass-card rounded-2xl p-6 space-y-4 hover:border-yellow-400/25 transition duration-300 relative overflow-hidden group">
-            <div class="absolute top-0 right-0 w-24 h-24 bg-yellow-400/5 blur-2xl rounded-full opacity-60 group-hover:opacity-100 transition"></div>
-            <div class="flex justify-between items-start">
-              <div>
-                <h4 class="font-extrabold text-lg text-slate-200">Interactive Canvas UI Rewrite</h4>
-                <p class="text-xs text-slate-500">Client: AgroVedic Systems</p>
-              </div>
-              <span class="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400 font-extrabold tracking-wider uppercase">Active</span>
-            </div>
-            <p class="text-xs text-slate-400 leading-relaxed font-normal">Develop a responsive collaborative canvas whiteboard layout utilizing Konva libraries and client-side vector markers.</p>
-            <div class="pt-4 border-t border-white/[0.04] flex justify-between items-center text-[10px] text-slate-500">
-              <span class="font-semibold block">Tech: <b class="text-slate-300">Konva, Canvas, TS</b></span>
-              <button onclick="submitProjectTask('whiteboard_canvas')" class="text-xs text-yellow-400 hover:text-yellow-500 font-bold active:scale-95 transition">
-                Submit Milestone &rarr;
-              </button>
-            </div>
-          </div>
-
-          <div class="glass-card rounded-2xl p-6 space-y-4 hover:border-blue-400/25 transition duration-300 relative overflow-hidden group">
-            <div class="absolute top-0 right-0 w-24 h-24 bg-blue-400/5 blur-2xl rounded-full opacity-60 group-hover:opacity-100 transition"></div>
-            <div class="flex justify-between items-start">
-              <div>
-                <h4 class="font-extrabold text-lg text-slate-200">Auth Token Migration Logic</h4>
-                <p class="text-xs text-slate-500">Client: TEN Founders</p>
-              </div>
-              <span class="px-2.5 py-1 rounded-lg bg-yellow-400/10 border border-yellow-400/20 text-[10px] text-yellow-500 font-extrabold tracking-wider uppercase font-black animate-pulse">Diligence Pending</span>
-            </div>
-            <p class="text-xs text-slate-400 leading-relaxed font-normal">Migrate legacy student login structures to support multi-role encryption models, checking indexes via Bcrypt vectors.</p>
-            <div class="pt-4 border-t border-white/[0.04] flex justify-between items-center text-[10px] text-slate-500">
-              <span class="font-semibold block">Tech: <b class="text-slate-300">Bcrypt, Node, Express</b></span>
-              <button onclick="submitProjectTask('auth_token_migration')" class="text-xs text-yellow-400 hover:text-yellow-500 font-bold active:scale-95 transition">
-                Submit Milestone &rarr;
-              </button>
-            </div>
-          </div>
-
+        <!-- Projects Grid — filled from /api/v2/contractor/overview.
+             The two cards that used to live here ("Interactive Canvas UI
+             Rewrite" for AgroVedic Systems, "Auth Token Migration Logic") were
+             markup, so every contractor who signed in saw the same two. -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6" id="projectsGrid">
+          <p class="text-xs text-slate-500 col-span-full" id="projectsEmpty">Loading your projects&hellip;</p>
         </div>
       </div>
 
@@ -406,7 +383,176 @@
       });
     }
 
-    function submitProjectTask(milestoneId) {
+    /* ── Real data ────────────────────────────────────────────────────────
+       Everything below this line used to be theatre. The project cards were
+       markup, "Submit Milestone" reported that the deliverable had been routed
+       to HR without sending a request, and the timesheet ledger claimed payroll
+       tracking while storing nothing. It all talks to /api/v2/contractor now,
+       which authenticates from the server session rather than the localStorage
+       blob this page used to trust. */
+
+    const API = '/api/v2/contractor';
+    let overview = { projects: [], milestones: [], timesheets: [], totals: {} };
+
+    function money(n) { return '₹' + Number(n || 0).toLocaleString('en-IN'); }
+
+    /* Server strings are rendered as text nodes, never interpolated into an
+       HTML string — a project title is written by HR and a milestone note by
+       another contractor. */
+    function el(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined && text !== null) node.textContent = String(text);
+      return node;
+    }
+
+    const STATUS_STYLE = {
+      active:         ['bg-emerald-500/10 border-emerald-500/20 text-emerald-400', 'Active'],
+      pending_review: ['bg-yellow-400/10 border-yellow-400/20 text-yellow-500',    'In review'],
+      on_hold:        ['bg-slate-500/10 border-slate-500/20 text-slate-400',       'On hold'],
+      completed:      ['bg-sky-500/10 border-sky-500/20 text-sky-400',             'Completed'],
+      cancelled:      ['bg-rose-500/10 border-rose-500/20 text-rose-400',          'Cancelled']
+    };
+
+    function renderProjects() {
+      const grid = document.getElementById('projectsGrid');
+      if (!grid) return;
+      grid.innerHTML = '';
+
+      if (!overview.projects.length) {
+        grid.appendChild(el(
+          'p',
+          'text-xs text-slate-500 col-span-full',
+          'No projects assigned yet. HR assigns work here — nothing appears until it does.'
+        ));
+        return;
+      }
+
+      overview.projects.forEach((p) => {
+        const card = el('div', 'glass-card rounded-2xl p-6 space-y-4 hover:border-yellow-400/25 transition duration-300');
+
+        const head = el('div', 'flex justify-between items-start gap-3');
+        const left = el('div');
+        left.appendChild(el('h4', 'font-extrabold text-lg text-slate-200', p.title));
+        if (p.client) left.appendChild(el('p', 'text-xs text-slate-500', 'Client: ' + p.client));
+        head.appendChild(left);
+
+        const style = STATUS_STYLE[p.status] || STATUS_STYLE.active;
+        head.appendChild(el(
+          'span',
+          'px-2.5 py-1 rounded-lg border text-[10px] font-extrabold tracking-wider uppercase shrink-0 ' + style[0],
+          style[1]
+        ));
+        card.appendChild(head);
+
+        if (p.description) {
+          card.appendChild(el('p', 'text-xs text-slate-400 leading-relaxed font-normal', p.description));
+        }
+
+        const foot = el('div', 'pt-4 border-t border-white/[0.04] flex justify-between items-center gap-3 text-[10px] text-slate-500');
+        foot.appendChild(el('span', 'font-semibold', p.tech ? 'Tech: ' + p.tech : ''));
+
+        const btn = el('button', 'text-xs text-yellow-400 hover:text-yellow-500 font-bold active:scale-95 transition shrink-0', 'Submit Milestone →');
+        btn.type = 'button';
+        btn.addEventListener('click', () => submitProjectTask(p._id, p.title));
+        foot.appendChild(btn);
+
+        card.appendChild(foot);
+        grid.appendChild(card);
+      });
+    }
+
+    function renderTimesheets() {
+      const list = document.getElementById('timesheetLogs');
+      if (!list) return;
+      list.innerHTML = '';
+
+      if (!overview.timesheets.length) {
+        list.appendChild(el('p', 'text-xs text-slate-500', 'No billable time logged yet.'));
+        return;
+      }
+
+      overview.timesheets.forEach((t) => {
+        const row = el('div', 'glass-card rounded-2xl p-5 flex justify-between items-center gap-4 border border-white/[0.03]');
+
+        const left = el('div', 'space-y-1.5');
+        left.appendChild(el(
+          'span',
+          'inline-flex items-center gap-1 text-[9px] px-2 py-0.5 rounded bg-yellow-400/15 text-yellow-400 border border-yellow-400/20 font-black uppercase tracking-widest',
+          'Billable work'
+        ));
+        left.appendChild(el('h4', 'font-black text-slate-200 text-sm mt-1', t.title));
+        left.appendChild(el(
+          'p',
+          'text-xs text-slate-400',
+          new Date(t.workedOn).toLocaleDateString('en-IN') + ' · ' + t.hours + ' hours · ' + money(t.hourlyRate) + '/hr'
+        ));
+        row.appendChild(left);
+
+        const right = el('div', 'text-right shrink-0');
+        right.appendChild(el('span', 'text-sm font-black text-slate-200 block', money(t.amount)));
+        right.appendChild(el('span', 'text-[10px] text-yellow-400 font-bold', (t.status || 'logged').replace('_', ' ')));
+        row.appendChild(right);
+
+        list.appendChild(row);
+      });
+    }
+
+    async function loadOverview() {
+      try {
+        const res = await fetch(API + '/overview', { credentials: 'same-origin' });
+        if (res.status === 401 || res.status === 403) {
+          window.location.href = 'login.html';
+          return;
+        }
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || 'Could not load your workspace.');
+
+        overview = data;
+
+        // The profile the server holds wins over the localStorage copy, which
+        // is whatever was true at login and never updated after.
+        if (data.profile) {
+          const rate = data.profile.hourlyRate || 0;
+          const banner = document.getElementById('bannerHourly');
+          if (banner) {
+            banner.textContent = rate
+              ? 'Contractor Service Rate: ' + money(rate) + ' / hr'
+              : 'Contractor Service Rate: not set — ask HR to set it before logging time';
+          }
+          const tags = document.getElementById('skillTags');
+          if (tags && Array.isArray(data.profile.skills) && data.profile.skills.length) {
+            tags.innerHTML = '';
+            data.profile.skills.forEach((s) => {
+              tags.appendChild(el('span', 'px-2 py-1 bg-white/5 rounded text-[10px] text-slate-300 font-bold border border-white/[0.02]', s));
+            });
+          }
+        }
+
+        renderProjects();
+        renderTimesheets();
+      } catch (err) {
+        const grid = document.getElementById('projectsGrid');
+        if (grid) {
+          grid.innerHTML = '';
+          grid.appendChild(el('p', 'text-xs text-rose-400 col-span-full', err.message));
+        }
+      }
+    }
+
+    async function postJson(path, payload) {
+      const res = await fetch(API + path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json().catch(() => ({ success: false, message: 'The server did not answer.' }));
+      if (!res.ok || !data.success) throw new Error(data.message || 'That did not go through.');
+      return data;
+    }
+
+    function submitProjectTask(projectId, projectTitle) {
       Swal.fire({
         title: 'Deliverable Verification Record',
         html:
@@ -429,17 +575,29 @@
             document.getElementById('swal-mnotes').value.trim()
           ]
         }
-      }).then((result) => {
-        if (result.isConfirmed) {
-          const [repo, notes] = result.value;
-          if (!repo || !notes) {
-            Swal.fire('Validation Failure', 'Please fill raw deliverable link and notes.', 'error');
-            return;
-          }
+      }).then(async (result) => {
+        if (!result.isConfirmed) return;
+        const [repo, notes] = result.value;
+        if (!repo || !notes) {
+          Swal.fire('Validation Failure', 'Please fill raw deliverable link and notes.', 'error');
+          return;
+        }
+        try {
+          await postJson('/milestones', { projectId, deliverableUrl: repo, notes });
+          await loadOverview();
           Swal.fire({
             icon: 'success',
-            title: 'Milestone Dispatched',
-            text: 'Deliverable registered. Review has been routed to client and HR administrators queues.',
+            title: 'Milestone submitted',
+            text: 'Your deliverable is stored and is now in the HR review queue.',
+            background: '#0a0f1f',
+            color: '#F0EEE8',
+            confirmButtonColor: '#FFD700'
+          });
+        } catch (err) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Not submitted',
+            text: err.message,
             background: '#0a0f1f',
             color: '#F0EEE8',
             confirmButtonColor: '#FFD700'
@@ -472,36 +630,31 @@
             document.getElementById('swal-whrs').value
           ]
         }
-      }).then((result) => {
-        if (result.isConfirmed) {
-          const [title, hrs] = result.value;
-          if (!title || !hrs) {
-            Swal.fire('Validation Failure', 'Please log both valid work title and hours.', 'error');
-            return;
-          }
-          const price = Number(hrs) * globalRate;
-          const list = document.getElementById('timesheetLogs');
-          const element = document.createElement('div');
-          element.className = "glass-card rounded-2xl p-5 flex justify-between items-center border border-white/[0.03] hover:border-white/10 transition";
-          element.innerHTML = `
-            <div class="space-y-1.5">
-              <span class="inline-flex items-center gap-1 text-[9px] px-2 py-0.5 rounded bg-yellow-400/15 text-yellow-400 border border-yellow-400/20 font-black uppercase tracking-widest">
-                BILLABLE WORK
-              </span>
-              <h4 class="font-black text-slate-200 text-sm mt-1">${title}</h4>
-              <p class="text-xs text-slate-400">Just logged · Time: ${hrs} hours · Rate: ₹${Number(globalRate).toLocaleString()}/hr</p>
-            </div>
-            <div class="text-right">
-              <span class="text-sm font-black text-slate-200 block">₹${price.toLocaleString()}</span>
-              <span class="text-[10px] text-yellow-400 font-bold">Pending Review</span>
-            </div>
-          `;
-          list.prepend(element);
-
+      }).then(async (result) => {
+        if (!result.isConfirmed) return;
+        const [title, hrs] = result.value;
+        if (!title || !hrs) {
+          Swal.fire('Validation Failure', 'Please log both valid work title and hours.', 'error');
+          return;
+        }
+        try {
+          // The rate is applied server-side from the profile, so the row cannot
+          // be billed at whatever rate the browser happened to be holding.
+          const data = await postJson('/timesheets', { title, hours: Number(hrs) });
+          await loadOverview();
           Swal.fire({
             icon: 'success',
-            title: 'Timesheet Slot Logged',
-            text: 'Tracked activity has been logged and queued for payment review verification.',
+            title: 'Time recorded',
+            text: 'Logged ' + data.entry.hours + ' hours at ' + money(data.entry.hourlyRate) + '/hr — ' + money(data.entry.amount) + ', now awaiting HR approval.',
+            background: '#0a0f1f',
+            color: '#F0EEE8',
+            confirmButtonColor: '#FFD700'
+          });
+        } catch (err) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Not recorded',
+            text: err.message,
             background: '#0a0f1f',
             color: '#F0EEE8',
             confirmButtonColor: '#FFD700'
@@ -509,6 +662,8 @@
         }
       });
     }
+
+    loadOverview();
 
     // Toggle Mobile Sidebar
     const mobileMenuBtn = document.getElementById('mobileMenuBtn');

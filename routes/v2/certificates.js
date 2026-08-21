@@ -7,6 +7,7 @@ const router              = express.Router();
 const path                = require("path");
 const fs                  = require("fs");
 const Student             = require("../../models/Student");
+const { findSessionStudent } = require('../../middleware/sessionAuth');
 if (!Student.schema.path("starContributionFeedback")) {
   Student.schema.add({ starContributionFeedback: { type: String, default: null } });
 }
@@ -73,20 +74,40 @@ async function getCompletionPercent(studentId) {
 }
 
 // ── Compute leaderboard rank (top X% in cohort) ──
+//
+// One aggregation, not one query per classmate.
+//
+// This used to load every student in the domain and then fire a separate
+// countDocuments for each of them, all concurrently, on EVERY load of the My
+// Certificates page. In a domain with 200 students that is 200 simultaneous
+// queries to answer one number — slow at best, and a reliable way to exhaust
+// the connection pool under load, at which point the whole page fails.
 async function getCohortRankPercent(student) {
     try {
-        // All students in same domain, count those with more approvals
-        const allStudents = await Student.find({ domain: student.domain }).select("_id");
-        if (!allStudents.length) return 50;
-        const scores = await Promise.all(allStudents.map(async (s) => {
-            const cnt = await StudentTaskProgress.countDocuments({ studentId: s._id, status: "approved" });
-            return { id: s._id.toString(), cnt };
-        }));
-        scores.sort((a, b) => b.cnt - a.cnt);
-        const myIdx = scores.findIndex(s => s.id === student._id.toString());
+        const domainStudents = await Student.find({ domain: student.domain }).select("_id").lean();
+        if (!domainStudents.length) return 50;
+
+        const ids = domainStudents.map(s => s._id);
+        const counts = await StudentTaskProgress.aggregate([
+            { $match: { studentId: { $in: ids }, status: "approved" } },
+            { $group: { _id: "$studentId", cnt: { $sum: 1 } } }
+        ]);
+
+        // Students with no approvals are absent from the aggregation and must
+        // still be ranked — they are the bottom of the cohort, not missing
+        // from it.
+        const byId = new Map(counts.map(c => [String(c._id), c.cnt]));
+        const scores = domainStudents
+            .map(s => ({ id: String(s._id), cnt: byId.get(String(s._id)) || 0 }))
+            .sort((a, b) => b.cnt - a.cnt);
+
+        const myIdx = scores.findIndex(s => s.id === String(student._id));
         if (myIdx === -1) return 50;
-        return Math.round(((myIdx) / scores.length) * 100); // 0 = top
-    } catch (_) { return 50; }
+        return Math.round((myIdx / scores.length) * 100); // 0 = top
+    } catch (err) {
+        console.warn("[My-Certs] cohort rank unavailable:", err.message);
+        return 50;
+    }
 }
 
 // ── Determine unlock state for each cert type ──
@@ -136,118 +157,218 @@ async function handleMyCerts(req, res) {
   try {
     const session = req.session || {};
     const isStaff = !!(session.coordinator || session.hr || session.adminUser);
-    const sessionEmployeeId = (session.student && session.student.employeeId) || "";
 
-    // Staff may target a specific student; everyone else only ever sees self.
+    // The student's own identity, resolved the resilient way: a session that
+    // names a real account is valid whatever shape its employeeId is in. Doing
+    // this by hand is how two other endpoints produced sign-in loops.
+    const me = await findSessionStudent(req);
+    const sessionEmployeeId = (me && me.employeeId) || (session.student && session.student.employeeId) || "";
+
     const requestedId = (req.query && req.query.employeeId) || (req.body && req.body.employeeId);
-    const employeeId = isStaff ? requestedId : null;
-    const headerEmployeeId = isStaff ? null : sessionEmployeeId;
+
+    /*
+     * Whose certificates are these?
+     *
+     * This used to read `isStaff ? requestedId : sessionEmployeeId`, so the
+     * moment a browser held a staff session the student half was ignored
+     * entirely. One person signed into both the admin console and their own
+     * student account — the ordinary case while testing, and for any staff
+     * member who is also an intern — opened "My Certificates" and was told to
+     * name a student, because `requestedId` was empty and their own session had
+     * been discarded on the way past.
+     *
+     * The page is called MY certificates. So: an explicit lookup wins, but only
+     * for staff; otherwise it is always your own, and only a session with
+     * neither is asked to name somebody.
+     */
+    const targetId = (isStaff && requestedId) ? requestedId : (sessionEmployeeId || "");
 
     if (!isStaff && !sessionEmployeeId) {
+      res.set('X-Session-Expired', '1');
       return res.status(401).json({ success: false, message: "Please sign in to continue." });
     }
 
-    // Legacy portal shape (my-certificates.html) — full status payload.
-    if (!employeeId && headerEmployeeId) {
-      const student = await Student.findOne({ employeeId: String(headerEmployeeId) });
-      if (!student) return res.status(401).json({ success: false, message: "Student not found" });
-      const status  = await getCertStatus(student);
-
-      const certs = await StudentCertificate.find({ studentId: student._id });
-      const certMap = {};
-      certs.forEach(c => { certMap[c.certificateType] = c; });
-
-      const result = {
-          expert: {
-              unlocked:      status.expertUnlocked,
-              completionPct: status.completionPct,
-              threshold:     30,
-              record:        certMap["expert"]     ? { certificateId: certMap["expert"].certificateId, pdfUrl: certMap["expert"].pdfUrl, issuedAt: certMap["expert"].issuedAt } : null
-          },
-          nano_degree: {
-              unlocked:      status.nanoDegreeUnlocked,
-              completionPct: status.completionPct,
-              threshold:     70,
-              record:        certMap["nano_degree"] ? { certificateId: certMap["nano_degree"].certificateId, pdfUrl: certMap["nano_degree"].pdfUrl, issuedAt: certMap["nano_degree"].issuedAt } : null
-          },
-          fellowship: {
-              visible:       status.fellowshipUnlocked,
-              unlocked:      status.fellowshipUnlocked,
-              cohortRankPct: status.cohortRankPct,
-              completionPct: status.completionPct,
-              threshold:     10,
-              record:        certMap["fellowship"]  ? { certificateId: certMap["fellowship"].certificateId, pdfUrl: certMap["fellowship"].pdfUrl, issuedAt: certMap["fellowship"].issuedAt } : null
-          }
-      };
-
-      const customPrices = {
-          expert: getCertificatePrice("expert", student.tenure),
-          nano_degree: getCertificatePrice("nano_degree", student.tenure),
-          fellowship: getCertificatePrice("fellowship", student.tenure)
-      };
-
-      return res.json({ success: true, ...result, paymentEnabled: paymentConfig.PAYMENT_ENABLED, prices: customPrices });
-    }
-
-    const targetId = employeeId || headerEmployeeId;
     if (!targetId) {
-      return res.status(400).json({ error: 'employeeId query parameter or header is required' });
+      // Reached when a STAFF session opens this page without naming a student.
+      // Staff have no certificates of their own, and the previous bare `error`
+      // key rendered as the generic "Could not load certificates." — which
+      // reads as a broken page rather than the wrong page.
+      return res.status(400).json({
+        success: false,
+        message: "This page shows a student's own certificates. Open it from a student account, or add ?employeeId=... to look one up.",
+        error: 'employeeId query parameter or header is required'
+      });
     }
 
-    const student = await Student.findOne({ employeeId: targetId },
-      'name fullName employeeId locStatus locIssuedAt lorStatus lorIssuedAt starStatus starIssuedAt ' +
-      'offerLetterStatus offerLetterGeneratedAt documentRejectionReason ' +
-      'locPdfBase64 lorPdfBase64 starPdfBase64 offerPdfBase64 ' +
-      'attendancePercentage performanceScore pendingFines starContribution'
-    ).lean();
-    if (!student) return res.status(404).json({ error: 'Not found' });
-    
-    const { locPdfBase64, lorPdfBase64, starPdfBase64, offerPdfBase64, ...safeStudent } = student;
-    safeStudent.hasLocPdf   = !!locPdfBase64;
-    safeStudent.hasLorPdf   = !!lorPdfBase64;
-    safeStudent.hasStarPdf  = !!starPdfBase64;
-    safeStudent.hasOfferPdf = !!offerPdfBase64;
+    const student = await Student.findOne({ employeeId: String(targetId) });
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'No student found with that Employee ID.', error: 'Not found' });
+    }
+
+    // ── Both shapes, one response ────────────────────────────────────────
+    //
+    // Two pages read this route and each needs a different half of it:
+    //
+    //   my-certificates.html  wants  expert / nano_degree / fellowship
+    //   my-documents.html     wants  offerLetterStatus / locStatus / lorStatus
+    //                                / starStatus + hasLocPdf + document numbers
+    //
+    // It used to return one or the other, chosen by a branch that turned on
+    // whether an employeeId had been passed in the query. After identity moved
+    // to the session, a student's own `?employeeId=` was (correctly) ignored —
+    // which meant a student ALWAYS took the first branch. So every request from
+    // my-documents.html came back holding expert/nano/fellowship, the document
+    // table read `data.locStatus` and friends off an object that had none of
+    // them, and every row in the OFFICIAL DOCUMENTS table rendered
+    // "Not Available / Not yet issued" — including certificates that had
+    // genuinely been issued and were sitting in the database.
+    //
+    // The two payloads share no key names, so there is nothing to choose
+    // between: build both and send both. Neither page has to change, and a
+    // certificate HR issues is visible the moment it exists.
+    const payload = { success: true, employeeId: student.employeeId };
+
+    // ── the course certificates (my-certificates.html) ───────────────────
+    try {
+      const status = await getCertStatus(student);
+
+      // Already-issued certificate records. These are decoration: whether a
+      // certificate is UNLOCKED comes from getCertStatus above, and this only
+      // adds the download link for one already issued. An error here used to
+      // take the whole page down to "Could not load certificates." — the
+      // student could not even see their progress, over a record that in most
+      // cases does not exist yet.
+      const certMap = {};
+      try {
+        const certs = await StudentCertificate.find({ studentId: student._id }).lean();
+        certs.forEach(c => { certMap[c.certificateType] = c; });
+      } catch (certErr) {
+        console.error("[My-Certs] could not read issued certificates for " +
+          student.employeeId + ":", certErr.message);
+      }
+      const rec = (k) => certMap[k]
+        ? { certificateId: certMap[k].certificateId, pdfUrl: certMap[k].pdfUrl, issuedAt: certMap[k].issuedAt }
+        : null;
+
+      payload.expert = {
+        unlocked:      status.expertUnlocked,
+        completionPct: status.completionPct,
+        threshold:     30,
+        record:        rec("expert")
+      };
+      payload.nano_degree = {
+        unlocked:      status.nanoDegreeUnlocked,
+        completionPct: status.completionPct,
+        threshold:     70,
+        record:        rec("nano_degree")
+      };
+      payload.fellowship = {
+        visible:       status.fellowshipUnlocked,
+        unlocked:      status.fellowshipUnlocked,
+        cohortRankPct: status.cohortRankPct,
+        completionPct: status.completionPct,
+        threshold:     10,
+        record:        rec("fellowship")
+      };
+      payload.paymentEnabled = paymentConfig.PAYMENT_ENABLED;
+      payload.prices = {
+        expert:      getCertificatePrice("expert", student.tenure),
+        nano_degree: getCertificatePrice("nano_degree", student.tenure),
+        fellowship:  getCertificatePrice("fellowship", student.tenure)
+      };
+    } catch (courseErr) {
+      // The document half is the half a student is usually here for. A failure
+      // computing course progress must not take it down with it.
+      console.error("[My-Certs] course certificate status failed for " +
+        student.employeeId + ":", courseErr.message);
+    }
+
+    // ── the official documents (my-documents.html) ───────────────────────
+    const doc = student.toObject ? student.toObject() : student;
+    payload.name              = doc.name || doc.fullName || "";
+    payload.locStatus         = doc.locStatus;
+    payload.locIssuedAt       = doc.locIssuedAt;
+    payload.lorStatus         = doc.lorStatus;
+    payload.lorIssuedAt       = doc.lorIssuedAt;
+    payload.starStatus        = doc.starStatus;
+    payload.starIssuedAt      = doc.starIssuedAt;
+    payload.starContribution  = doc.starContribution;
+    payload.starContributionFeedback = doc.starContributionFeedback;
+    payload.offerLetterStatus = doc.offerLetterStatus;
+    payload.offerLetterGeneratedAt = doc.offerLetterGeneratedAt;
+    payload.documentRejectionReason = doc.documentRejectionReason;
+    payload.attendancePercentage = doc.attendancePercentage;
+    payload.performanceScore  = doc.performanceScore;
+    payload.pendingFines      = doc.pendingFines || [];
+
+    // The base64 PDFs themselves never leave the server — only whether one
+    // exists, which is all the page needs to draw a Download button.
+    payload.hasLocPdf   = !!doc.locPdfBase64;
+    payload.hasLorPdf   = !!doc.lorPdfBase64;
+    payload.hasStarPdf  = !!doc.starPdfBase64;
+    payload.hasOfferPdf = !!doc.offerPdfBase64;
+
+    // Certificates issued by HR bypassing the normal checks. The student is
+    // told plainly that HR issued it — nothing about the override reason,
+    // which is between HR and the admin portal.
+    payload.hrIssued = {
+      LOC:  !!doc.locIssuedByOverride,
+      LOR:  !!doc.lorIssuedByOverride,
+      STAR: !!doc.starIssuedByOverride
+    };
 
     try {
       const StudentDocument = require("../../models/new/StudentDocument");
       const docRec = await StudentDocument.findOne({ studentId: student._id }).lean();
       if (docRec) {
-        if (!safeStudent.offerLetterStatus || safeStudent.offerLetterStatus === 'not_uploaded' || safeStudent.offerLetterStatus === 'not_eligible') {
-          safeStudent.offerLetterStatus = docRec.uploadStatus || 'not_uploaded';
+        // The printed document numbers, so the portal can offer a "Verify"
+        // link — the same check an employer runs, from the student's own page.
+        payload.offerDocumentNumber = docRec.offerLetterDocumentNumber || null;
+        payload.locDocumentNumber   = docRec.locDocumentNumber || null;
+        payload.lorDocumentNumber   = docRec.lorDocumentNumber || null;
+        if (!payload.offerLetterStatus || payload.offerLetterStatus === 'not_uploaded' || payload.offerLetterStatus === 'not_eligible') {
+          payload.offerLetterStatus = docRec.uploadStatus || 'not_uploaded';
         }
         if (docRec.offerLetterUrl) {
-          safeStudent.hasOfferPdf = true;
-          safeStudent.offerLetterStatus = 'issued';
-          if (docRec.offerLetterSentAt && !safeStudent.offerLetterGeneratedAt) {
-            safeStudent.offerLetterGeneratedAt = docRec.offerLetterSentAt;
+          payload.hasOfferPdf = true;
+          payload.offerLetterStatus = 'issued';
+          if (docRec.offerLetterSentAt && !payload.offerLetterGeneratedAt) {
+            payload.offerLetterGeneratedAt = docRec.offerLetterSentAt;
           }
         }
         if (docRec.locUrl) {
-          safeStudent.hasLocPdf = true;
-          safeStudent.locStatus = 'issued';
-          if (docRec.locSentAt && !safeStudent.locIssuedAt) {
-            safeStudent.locIssuedAt = docRec.locSentAt;
-          }
+          payload.hasLocPdf = true;
+          payload.locStatus = 'issued';
+          if (docRec.locSentAt && !payload.locIssuedAt) payload.locIssuedAt = docRec.locSentAt;
         }
         if (docRec.lorUrl) {
-          safeStudent.hasLorPdf = true;
-          safeStudent.lorStatus = 'issued';
-          if (docRec.lorSentAt && !safeStudent.lorIssuedAt) {
-            safeStudent.lorIssuedAt = docRec.lorSentAt;
-          }
+          payload.hasLorPdf = true;
+          payload.lorStatus = 'issued';
+          if (docRec.lorSentAt && !payload.lorIssuedAt) payload.lorIssuedAt = docRec.lorSentAt;
         }
-        if (docRec.rejectionReason && !safeStudent.documentRejectionReason) {
-          safeStudent.documentRejectionReason = docRec.rejectionReason;
+        if (docRec.rejectionReason && !payload.documentRejectionReason) {
+          payload.documentRejectionReason = docRec.rejectionReason;
         }
       }
     } catch (fallbackErr) {
       console.error('[My-Certs] StudentDocument fallback error:', fallbackErr.message);
     }
 
-    res.json(safeStudent);
+    return res.json(payload);
   } catch(e) {
-    console.error('[My-Certs] Error:', e.stack || e.message);
-    res.status(500).json({ error: e.message });
+    // `success` and `message`, not a bare `error`.
+    //
+    // my-certificates.html checks `d.success` and falls back to the string
+    // "Could not load certificates." when there is no `message` — so this
+    // handler's real reason never reached anyone, on screen or in a bug
+    // report. The page now shows what the server actually said.
+    const who = (req.session && req.session.student && req.session.student.employeeId) || 'unknown';
+    console.error('[My-Certs] failed for ' + who + ':', e.stack || e.message);
+    res.status(500).json({
+      success: false,
+      message: 'Could not load your certificates: ' + e.message,
+      error: e.message
+    });
   }
 }
 
@@ -425,7 +546,7 @@ router.post("/certificates/generate-pdf/:type", requireStudent, async (req, res)
             const college = (student.collegeName || student.college || "Not provided").trim();
             const docTypeMap = { expert: "Expert Certificate", nano_degree: "Nano Degree", fellowship: "Fellowship" };
             const docKeyMap = { expert: "expert_certificate", nano_degree: "nano_degree", fellowship: "fellowship" };
-            await DocumentHistory.create({
+            await DocumentHistory.logSend({
                 studentId: student._id,
                 studentName,
                 studentEmail: student.email || "",
@@ -436,7 +557,7 @@ router.post("/certificates/generate-pdf/:type", requireStudent, async (req, res)
                 documentKey: docKeyMap[type] || "certificate",
                 documentNumber: certRecord.certificateId,
                 sentAt: certRecord.issuedAt || new Date(),
-                sentBy: "System",
+                sentBy: "HR Portal",
                 sentToEmail: student.email || ""
             });
         } catch (_) {}
@@ -563,17 +684,28 @@ const PDFDocument         = require("pdfkit");
 const cron                = require("node-cron");
 
 // Find the existing transporter and make it fault-tolerant
-const { createEmailTransporter } = require("../../utils/mailer");
+const { createEmailTransporter, mailerReady, isSendableAddress, renderEmail, escapeHtml, PORTAL_URL, EMAIL_FROM } = require("../../utils/mailer");
 const transporter = createEmailTransporter();
 
 async function sendCertificateEmail(toEmail, studentName, certType, pdfBuffer) {
   try {
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      console.warn('[Email] EMAIL_USER or EMAIL_PASS not set — skipping email');
+    // Ask the mailer whether it can send. This used to check EMAIL_USER and
+    // EMAIL_PASS directly, which is only one of the four names the mailer
+    // accepts — so a server set up with SMTP_USER/SMTP_PASS skipped every
+    // certificate email while every other mail on the same box went out.
+    if (!mailerReady()) {
+      console.warn('[Email] SMTP credentials not set — certificate email skipped for ' + toEmail);
       return { sent: false, reason: 'Email not configured' };
     }
+    if (!isSendableAddress(toEmail)) {
+      // A bounce counts against the sending domain. A dead row is not worth one.
+      console.warn(`[Email] ${certType} has no usable recipient address (${toEmail || 'empty'}) — skipped`);
+      return { sent: false, reason: 'No usable recipient address' };
+    }
     await transporter.sendMail({
-      from:    `"TEN Internship" <${process.env.EMAIL_USER}>`,
+      // EMAIL_FROM, not EMAIL_USER: on an SMTP_USER-configured server that
+      // interpolated to the string "undefined" and the message was refused.
+      from:    EMAIL_FROM,
       to:      toEmail,
       subject: `🎓 Your ${certType} — TEN Internship Network`,
       html:    buildCertEmailHTML(studentName, certType),
@@ -586,35 +718,26 @@ async function sendCertificateEmail(toEmail, studentName, certType, pdfBuffer) {
     console.log(`[Email] ✓ ${certType} sent to ${toEmail}`);
     return { sent: true };
   } catch(e) {
-    console.log(`[Email] Info: Fallback simulation successful to ${toEmail} for ${certType}.`);
-    return { sent: true, simulated: true, reason: e.message };
+    // This used to log "Fallback simulation successful" and return sent:true.
+    // Nothing was simulated and nothing was sent: the DocumentHistory row was
+    // written as "sent", and the student was told their certificate had been
+    // emailed to them. A failure is reported as a failure.
+    console.error(`[Email] ✗ ${certType} to ${toEmail} failed: ${e.message}`);
+    return { sent: false, reason: e.message };
   }
 }
 
 function buildCertEmailHTML(name, certType) {
   const labels = { LOC:'Letter of Completion', LOR:'Letter of Recommendation', STAR:'Star Performer Certificate', OFFER:'Offer Letter', LOP:'Letter of Promotion' };
-  return `
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#0a0a19;color:#e2e8f0;padding:40px;border-radius:16px;">
-      <h2 style="color:#f59e0b;text-align:center;">🎓 TEN Internship Network</h2>
-      <hr style="border-color:#1e293b;">
-      <h3 style="color:#f1f5f9;">Dear ${name},</h3>
-      <p style="color:#94a3b8;line-height:1.7;">
-        Congratulations! Your <strong style="color:#f1f5f9">${labels[certType] || certType}</strong> has been officially issued by TEN.
-      </p>
-      <p style="color:#94a3b8;line-height:1.7;">
-        Your certificate is attached to this email as a PDF. You can also download it anytime from your 
-        <strong style="color:#f59e0b">My Documents</strong> section in the student portal.
-      </p>
-      <div style="background:#1e293b;border-radius:10px;padding:16px;margin:20px 0;">
-        <p style="margin:0;color:#64748b;font-size:13px;">
-          📌 Keep this certificate safe — it is your official proof of internship with TEN.
-        </p>
-      </div>
-      <p style="color:#475569;font-size:12px;text-align:center;margin-top:30px;">
-        The Entrepreneurship Network · virtualinternships.entrepreneurshipnetwork.net
-      </p>
-    </div>
-  `;
+  const label = labels[certType] || certType;
+  return renderEmail({
+    heading: `🎓 Your ${label}`,
+    name,
+    bodyHtml: `<p style="margin:0 0 14px;">Congratulations — your <b style="color:#f5c542;">${escapeHtml(label)}</b> has been officially issued by TEN.</p>`
+            + `<p style="margin:0;">It is attached to this email as a PDF, and you can download it any time from <b>My Documents</b> in your portal.</p>`,
+    cta: { label: 'Open My Documents', url: PORTAL_URL + '/student-dashboard.html' },
+    note: 'Keep this document — employers can verify it against our records.'
+  });
 }
 
 async function buildCertPDF(student, certType) {
@@ -655,6 +778,17 @@ async function buildCertPDF(student, certType) {
     effectiveDate: fmtDate(student.lopEffectiveDate) || fmtDate(new Date())
   };
 
+  // The number printed on the PDF and the number stored for verification must
+  // be the same value, generated exactly once. mapData used to carry no
+  // documentNumber at all, so the PDF templates fell back to a random
+  // "TEN/CT/xxxxx" that was never stored anywhere — while generateAndSaveCert
+  // logged a different, derived number to DocumentHistory. An employer typing
+  // the number off the paper could never find it. This is the single origin.
+  const numberTypeMap = { OFFER: "offer_letter", LOC: "loc", LOR: "lor", STAR: "star", LOP: "lop" };
+  const { generateDocumentNumber, normalizeDocumentNumber } = require("../../utils/documentNumber");
+  const documentNumber = normalizeDocumentNumber(generateDocumentNumber(numberTypeMap[certType] || "doc"));
+  mapData.documentNumber = documentNumber;
+
   const tempFile = path.join(os.tmpdir(), `cert_${certType}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.pdf`);
 
   if (certType === 'OFFER') {
@@ -678,7 +812,7 @@ async function buildCertPDF(student, certType) {
     console.error(`[Cert] Temp file cleanup error:`, err.message);
   }
 
-  return pdfBuffer;
+  return { pdfBuffer, documentNumber };
 }
 
 async function generateAndSaveCert(studentId, certType, studentData = null, sentBy = "System") {
@@ -687,8 +821,8 @@ async function generateAndSaveCert(studentId, certType, studentData = null, sent
     console.error(`[Cert] Student not found: ${studentId}`);
     return { success: false, error: 'Student not found' };
   }
-  const pdfBuffer = await buildCertPDF(student, certType);
-  
+  const { pdfBuffer, documentNumber } = await buildCertPDF(student, certType);
+
   const fieldMap = {
     LOC:   { pdfField: 'locPdfBase64',   statusField: 'locStatus',   dateField: 'locIssuedAt' },
     LOR:   { pdfField: 'lorPdfBase64',   statusField: 'lorStatus',   dateField: 'lorIssuedAt' },
@@ -740,12 +874,15 @@ async function generateAndSaveCert(studentId, certType, studentData = null, sent
       docRec.uploadStatus = "approved";
       docRec.offerLetterUrl = `/uploads/offer-letters/${student.employeeId ? student.employeeId.replace(/\//g, "-") : studentId}_offer_letter.pdf`;
       docRec.offerLetterSentAt = new Date();
+      docRec.offerLetterDocumentNumber = documentNumber;
     } else if (certType === 'LOC') {
       docRec.locUrl = `/uploads/certificates/${student.employeeId ? student.employeeId.replace(/\//g, "-") : studentId}_loc.pdf`;
       docRec.locSentAt = new Date();
+      docRec.locDocumentNumber = documentNumber;
     } else if (certType === 'LOR') {
       docRec.lorUrl = `/uploads/certificates/${student.employeeId ? student.employeeId.replace(/\//g, "-") : studentId}_lor.pdf`;
       docRec.lorSentAt = new Date();
+      docRec.lorDocumentNumber = documentNumber;
     }
     await docRec.save();
     console.log(`[CertSync] ✓ Synced ${certType} to StudentDocument for student ${studentId}`);
@@ -756,7 +893,10 @@ async function generateAndSaveCert(studentId, certType, studentData = null, sent
   try {
     const studentName = (student.name || student.fullName || "").trim();
     const college = (student.collegeName || student.college || "Not provided").trim();
-    const docNumber = `TEN-${certType}-${student.employeeId ? student.employeeId.replace(/\//g, "-") : student._id.toString().slice(-6)}`.toUpperCase();
+    // The same number buildCertPDF printed on the PDF. This used to derive a
+    // different number from the employee ID, so the stored record and the
+    // paper could never agree and verification always came back "not found".
+    const docNumber = documentNumber;
 
     const labels = { 
       LOC: 'Letter of Completion', 
@@ -766,7 +906,13 @@ async function generateAndSaveCert(studentId, certType, studentData = null, sent
       LOP: 'Letter of Promotion'
     };
 
-    await DocumentHistory.create({
+    // Manual or automation is decided from who triggered this generate, which
+    // every caller already passes down as `sentBy`. Going through logSend
+    // instead of create() is what applies that rule — a direct create() left
+    // the model to guess from the string, and the placeholder "System" read as
+    // automation, so HR's own generates were labelled Automation in the
+    // history.
+    await DocumentHistory.logSend({
       studentId: student._id,
       studentName,
       studentEmail: student.email || "",
@@ -814,7 +960,11 @@ async function generateAndSaveCert(studentId, certType, studentData = null, sent
     await Notification.notifyStudent(student, {
       title: `📄 ${docLabel} Issued`,
       message: `Dear ${student.name || student.fullName || "Student"}, your ${docLabel} has been generated${emailResult.sent ? ` and emailed to ${student.email}` : ""}. You can view it in your Student Portal under My Documents.`,
-      type: "success"
+      type: "success",
+      // sendCertificateEmail above already mailed the PDF itself. Two emails
+      // for one event, the second of them thinner than the first, is worse
+      // than one.
+      email: false
     });
   }
 
@@ -874,6 +1024,203 @@ async function checkAndIssueCerts(studentId, sentBy = "System Automation") {
     await generateAndSaveCert(studentId, 'STAR', student, sentBy);
   }
 }
+
+/* ═════════════════════════════════════════════════════════════════════════
+   HR direct issue — the bypass, and the record it leaves behind
+   ═════════════════════════════════════════════════════════════════════════
+
+   A large number of interns did their whole internship over WhatsApp. They
+   registered on the portal only to collect the certificate they had already
+   earned, so:
+
+     · there is no certificate application, because there was no portal to
+       apply through while they were interning;
+     · attendance reads 0%, because nobody marked a register that did not
+       exist;
+     · the task journey is untouched, so completion is 0%.
+
+   Every check the portal runs therefore refuses them, and the refusals are
+   correct about the data and wrong about the student. HR needs to issue the
+   certificate directly, and this is that path: it skips the application, the
+   75% attendance rule, the performance rule and the coordinator approval, and
+   it does not look at any of them before generating.
+
+   What it does NOT skip is the record. `precheck` tells HR exactly what the
+   student fails so the portal can show one warning before the fact, and every
+   issue — warned or not — writes a CertificateOverride row that the admin
+   portal lists. A bypass nobody can audit is not a bypass, it is a hole.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const CertificateOverride = require("../../models/CertificateOverride");
+const certEligibility     = require("../../services/certificateEligibility");
+
+const OVERRIDE_FIELDS = {
+    LOC:   { flag: "locIssuedByOverride",   label: "Letter of Completion" },
+    LOR:   { flag: "lorIssuedByOverride",   label: "Letter of Recommendation" },
+    STAR:  { flag: "starIssuedByOverride",  label: "Star Performer Certificate" },
+    OFFER: { flag: "offerIssuedByOverride", label: "Offer Letter" },
+    LOP:   { flag: "lopIssuedByOverride",   label: "Letter of Promotion" }
+};
+
+/** Who is issuing, from the session. Never from the request body. */
+function issuerFrom(session) {
+    const s = session || {};
+    if (s.hr) return { name: s.hr.name || s.hr.username || s.hr.email || "HR", role: "hr" };
+    if (s.adminUser) return { name: s.adminUser.username || "Admin", role: "admin" };
+    if (s.coordinator) return { name: s.coordinator.username || "Coordinator", role: "coordinator" };
+    return { name: "Unknown", role: "unknown" };
+}
+
+/**
+ * What this student fails, in the words the warning will use.
+ * Read-only — it decides nothing, it only describes.
+ */
+async function describeShortfall(student, certType) {
+    const type = String(certType || "").toUpperCase();
+    const failed = [];
+
+    let measured = {};
+    try {
+        const verdict = await certEligibility.evaluate(student);
+        measured = verdict.measured || {};
+        const one = verdict[type];
+        if (one && !one.eligible && one.reason) failed.push(one.reason);
+    } catch (err) {
+        console.error("[HR-Issue] eligibility check failed:", err.message);
+        failed.push("Eligibility could not be evaluated: " + err.message);
+    }
+
+    let hadApplication = false;
+    try {
+        const CertificateApplication = require("../../models/new/CertificateApplication");
+        hadApplication = !!(await CertificateApplication.findOne({
+            studentId: student._id, certificateType: type
+        }).lean());
+    } catch (_) { /* the collection may not exist yet */ }
+    if (!hadApplication && ["LOC", "LOR", "STAR"].includes(type)) {
+        failed.push("The student never applied for this certificate through the portal.");
+    }
+
+    if (!student.internshipCompleted && !student.internshipCompletedAt) {
+        failed.push("The internship is not marked complete on the student's record.");
+    }
+
+    const snapshot = {
+        attendancePercentage: Number(measured.attendancePercentage) || 0,
+        performanceScore:     Number(measured.performanceScore) || 0,
+        taskCompletionPct:    Number(measured.taskCompletionPercent) || 0,
+        internshipCompleted:  !!measured.internshipCompleted,
+        hadApplication
+    };
+
+    return { failed, snapshot, metRequirements: failed.length === 0 };
+}
+
+// GET /api/v2/certificates/hr-issue/precheck?employeeId=…&certType=LOC
+//
+// The one warning. HR calls this before issuing; if `metRequirements` is false
+// the portal shows the popup listing `failedChecks` and asks for a reason.
+router.get("/hr-issue/precheck", requireStaff, async (req, res) => {
+    try {
+        const { employeeId, certType } = req.query || {};
+        const type = String(certType || "").toUpperCase();
+        if (!OVERRIDE_FIELDS[type]) {
+            return res.status(400).json({ success: false, message: "Unknown certificate type: " + certType });
+        }
+        const student = await Student.findOne({ employeeId: String(employeeId || "") }).lean();
+        if (!student) return res.status(404).json({ success: false, message: "No student with that Employee ID." });
+
+        const { failed, snapshot, metRequirements } = await describeShortfall(student, type);
+        res.json({
+            success: true,
+            employeeId: student.employeeId,
+            studentName: student.name || student.fullName || "",
+            domain: student.domain || "",
+            certificateType: type,
+            certificateLabel: OVERRIDE_FIELDS[type].label,
+            metRequirements,
+            failedChecks: failed,
+            snapshot,
+            alreadyIssued: !!student[{ LOC:"locPdfBase64", LOR:"lorPdfBase64", STAR:"starPdfBase64", OFFER:"offerPdfBase64", LOP:"lopPdfBase64" }[type]]
+        });
+    } catch (e) {
+        console.error("[HR-Issue precheck]", e.message);
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// POST /api/v2/certificates/hr-issue
+// { employeeId, certType, acknowledged, reason }
+//
+// Generates the certificate outright. No eligibility call gates this — that is
+// the point of it. `acknowledged` is required only when the student falls
+// short, so the warning cannot be skipped by a script that never asked for it.
+router.post("/hr-issue", requireStaff, async (req, res) => {
+    try {
+        const { employeeId, certType, acknowledged, reason } = req.body || {};
+        const type = String(certType || "").toUpperCase();
+        if (!OVERRIDE_FIELDS[type]) {
+            return res.status(400).json({ success: false, message: "Unknown certificate type: " + certType });
+        }
+
+        const student = await Student.findOne({ employeeId: String(employeeId || "") });
+        if (!student) return res.status(404).json({ success: false, message: "No student with that Employee ID." });
+
+        const { failed, snapshot, metRequirements } = await describeShortfall(student, type);
+
+        if (!metRequirements && !acknowledged) {
+            // 409, not 400: the request is well-formed, it just has not been
+            // confirmed yet. The portal turns this into the warning popup.
+            return res.status(409).json({
+                success: false,
+                requiresConfirmation: true,
+                message: "This student has not met the requirements for this certificate.",
+                failedChecks: failed,
+                snapshot
+            });
+        }
+
+        const issuer = issuerFrom(req.session);
+
+        // Generate. generateAndSaveCert writes the PDF, sets the status to
+        // 'issued', writes the file, emails it and updates StudentDocument —
+        // which is what puts it in the student's My Documents.
+        const result = await generateAndSaveCert(student._id, type, student, `${issuer.name} (Direct issue)`);
+        if (result && result.success === false) {
+            return res.status(500).json({ success: false, message: result.error || "Certificate generation failed." });
+        }
+
+        await Student.findByIdAndUpdate(student._id, { [OVERRIDE_FIELDS[type].flag]: true });
+
+        const record = await CertificateOverride.create({
+            studentId:   student._id,
+            employeeId:  student.employeeId,
+            studentName: student.name || student.fullName || "",
+            domain:      student.domain || "",
+            certificateType: type,
+            issuedBy:     issuer.name,
+            issuedByRole: issuer.role,
+            metRequirements,
+            failedChecks: failed,
+            snapshot,
+            reason: String(reason || "").slice(0, 1000)
+        });
+
+        console.log(`[HR-Issue] ${type} issued to ${student.employeeId} by ${issuer.name} ` +
+            `(met requirements: ${metRequirements})`);
+
+        res.json({
+            success: true,
+            message: `${OVERRIDE_FIELDS[type].label} issued to ${student.employeeId}. It is now in their My Documents.`,
+            overrideId: record._id,
+            metRequirements,
+            failedChecks: failed
+        });
+    } catch (e) {
+        console.error("[HR-Issue]", e.stack || e.message);
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
 
 // POST /api/v2/certificates/hr-approve — HR manually approves
 router.post('/hr-approve', async (req, res) => {

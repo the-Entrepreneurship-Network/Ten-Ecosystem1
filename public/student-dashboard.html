@@ -4,8 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#D4AF37">
-<meta name="apple-mobile-web-app-capable" content="yes">
+<!-- The status bar is painted with this. It was the gold ACCENT, which
+     put a bright yellow band above a near-black page on every Android
+     phone. It must match the page background, not the highlight. -->
+<meta name="theme-color" content="#0c1220">
+<meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="TEN Portal">
 <link rel="apple-touch-icon" href="/icons/icon-192.png">
@@ -14,6 +18,7 @@
 <link rel="stylesheet" href="ten-motion.css">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="/session-guard.js"></script>
+<script src="/credential-reset.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
@@ -725,25 +730,6 @@ button:active { transform: translateY(0); }
   position: relative; z-index: 1;
   display: flex; align-items: center; gap: 10px; flex-shrink: 0;
 }
-.notif-bell-btn {
-  position: relative;
-  width: 42px; height: 42px;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 12px; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 20px; transition: all 0.2s;
-}
-.notif-bell-btn:hover { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.22); }
-.notif-badge {
-  position: absolute; top: -5px; right: -5px;
-  width: 18px; height: 18px;
-  background: #ef4444; border-radius: 50%;
-  font-size: 10px; font-weight: 700; color: white;
-  display: flex; align-items: center; justify-content: center;
-  border: 2px solid var(--bg-base);
-  display: none;
-}
 .logout-topbtn {
   padding: 10px 18px;
   background: rgba(239,68,68,0.1);
@@ -755,52 +741,6 @@ button:active { transform: translateY(0); }
 }
 .logout-topbtn:hover { background: rgba(239,68,68,0.18); }
 
-/* ── Notification Panel ── */
-.notif-panel {
-  position: fixed; top: 0; right: -420px; bottom: 0;
-  width: 400px; background: var(--bg-surface);
-  border-left: 1px solid rgba(99,140,210,0.15);
-  z-index: 1000; transition: right 0.35s cubic-bezier(.4,0,.2,1);
-  display: flex; flex-direction: column;
-  box-shadow: -8px 0 40px rgba(0,0,0,0.5);
-}
-.notif-panel.open { right: 0; }
-.notif-panel-header {
-  padding: 24px 20px 18px;
-  border-bottom: 1px solid rgba(99,140,210,0.1);
-  display: flex; align-items: center; justify-content: space-between;
-}
-.notif-panel-title { font-size: 17px; font-weight: 700; }
-.notif-close-btn {
-  width: 32px; height: 32px; background: var(--bg-card);
-  border: 1px solid var(--border); border-radius: 8px;
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  font-size: 16px; color: var(--text-secondary); transition: all 0.2s;
-}
-.notif-close-btn:hover { color: var(--text-primary); }
-.notif-scroll { flex: 1; overflow-y: auto; padding: 12px 16px; }
-.notif-item-card {
-  background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: 14px; padding: 14px 16px; margin-bottom: 10px;
-  position: relative; cursor: pointer; transition: all 0.2s;
-}
-.notif-item-card:hover { border-color: var(--border-strong); }
-.notif-item-card.unread { border-left: 3px solid var(--accent-blue); }
-.notif-item-card.type-success { border-left-color: var(--accent-green); }
-.notif-item-card.type-warning { border-left-color: var(--accent-amber); }
-.notif-item-card.type-urgent { border-left-color: var(--accent-red); animation: pulse-border 1s ease infinite; }
-@keyframes pulse-border { 0%,100%{border-left-color:var(--accent-red)} 50%{border-left-color:#f87171} }
-.ni-title { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
-.ni-from { font-size: 11px; color: var(--accent-blue); font-weight: 600; margin-bottom: 6px; }
-.ni-msg { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
-.ni-time { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
-.notif-empty { text-align: center; padding: 60px 20px; color: var(--text-muted); }
-.notif-empty .ei { font-size: 40px; margin-bottom: 10px; }
-.notif-overlay {
-  display: none; position: fixed; inset: 0;
-  background: rgba(0,0,0,0.5); z-index: 999;
-}
-.notif-overlay.show { display: block; }
 .stats { grid-template-columns: repeat(2, 1fr); gap: 12px; }
 .stat-box h1 { font-size: 30px; }
 .notice-box, .tasks-box, .submissions-box, .attendance-box { padding: 24px 20px; }
@@ -1122,7 +1062,7 @@ button:active { transform: translateY(0); }
 [data-theme="light"] .coding-modal .cm-head{background:linear-gradient(135deg,#e8f0fe,#f0f4fb);}
 [data-theme="light"] body::before,[data-theme="light"] body::after{opacity:0.08;}
 [data-theme="light"] .stu-topbar{background:rgba(255,255,255,0.9);border-bottom-color:rgba(212,175,55,0.12);}
-[data-theme="light"] #notifPanel{background:#ffffff;}
+
 [data-theme="light"] .notif-item-card{background:#f8f9ff;border-color:rgba(212,175,55,0.12);}
 
 /* ════════════════════════════════
@@ -1507,8 +1447,20 @@ button:active { transform: translateY(0); }
   display: flex; align-items: center; justify-content: center;
   font-size: 12px; font-weight: 800; color: #D4AF37;
 }
+
+/* Premium members get a warmer, gold-lit portal — applied by
+   applyPremiumChrome() adding .is-premium to <body>. Scoped to that class so a
+   free-track student's portal is untouched. */
+body.is-premium { background-image:radial-gradient(1100px 520px at 50% -14%, rgba(212,175,55,0.10), transparent 62%); }
+body.is-premium .sec-card { border-color:rgba(212,175,55,0.22); }
+body.is-premium .sec-card:hover { border-color:rgba(212,175,55,0.55); box-shadow:0 10px 34px rgba(212,175,55,0.14); }
+body.is-premium .stu-nav-btn:hover { border-color:rgba(212,175,55,0.45); }
+body.is-premium #premiumCard { box-shadow:0 0 0 1px rgba(212,175,55,0.25), 0 14px 40px rgba(212,175,55,0.14); }
 </style>
   <link rel="stylesheet" href="/css/ten-brand.css">
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <script src="/push-client.js" defer></script>
 </head>
 
 <body>
@@ -1618,6 +1570,8 @@ button:active { transform: translateY(0); }
     <button class="stu-nav-btn" data-view="stu-view-guidelines" onclick="switchStudentView('stu-view-guidelines')"><span class="nav-icon">📋</span> Guidelines</button>
     <button class="stu-nav-btn" data-view="stu-view-leaderboard" onclick="switchStudentView('stu-view-leaderboard')"><span class="nav-icon">🏆</span> Leaderboard &amp; Badges</button>
     <!-- Section 9 — student feedback, shown once the internship is complete. -->
+    <button class="stu-nav-btn" onclick="window.location.href='/notifications'" style="background:linear-gradient(135deg,rgba(245,197,66,0.1),rgba(245,197,66,0.03));border:1px solid rgba(245,197,66,0.2);"><span class="nav-icon">🔔</span> Notifications <span id="stuNotifBadge" style="display:none;font-size:10px;background:#f5c542;color:#0a1222;padding:1px 6px;border-radius:999px;margin-left:4px;font-weight:800;">0</span></button>
+    <button class="stu-nav-btn" onclick="window.location.href='/messages'" style="background:linear-gradient(135deg,rgba(16,185,129,0.1),rgba(16,185,129,0.03));border:1px solid rgba(16,185,129,0.2);"><span class="nav-icon">💬</span> Messages <span id="stuDmBadge" style="display:none;font-size:10px;background:#10b981;color:#04121f;padding:1px 6px;border-radius:999px;margin-left:4px;font-weight:800;">0</span></button>
     <button class="stu-nav-btn" id="stuNavFeedback" data-view="stu-view-feedback" onclick="switchStudentView('stu-view-feedback')" style="display:none;"><span class="nav-icon">💌</span> Share Feedback</button>
     <!-- NEW FEATURE: Document Upload + Certificates nav links -->
     <button class="stu-nav-btn" onclick="window.location.href='my-documents.html'" style="background:linear-gradient(135deg,rgba(245,158,11,0.08),rgba(245,158,11,0.02));border:1px solid rgba(245,158,11,0.18);"><span class="nav-icon">📋</span> My Documents <span style="font-size:10px;background:rgba(245,158,11,0.2);color:#f59e0b;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
@@ -1625,7 +1579,7 @@ button:active { transform: translateY(0); }
     <button class="stu-nav-btn" onclick="window.location.href='my-certificates.html'" style="background:linear-gradient(135deg,rgba(139,92,246,0.08),rgba(139,92,246,0.02));border:1px solid rgba(139,92,246,0.18);"><span class="nav-icon">🏅</span> My Certificates <span style="font-size:10px;background:rgba(139,92,246,0.2);color:#c4b5fd;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
     <button class="stu-nav-btn" onclick="showPaymentComingSoon()" style="background:linear-gradient(135deg,rgba(16,185,129,0.08),rgba(16,185,129,0.02));border:1px solid rgba(16,185,129,0.2);"><span class="nav-icon">💳</span> Make Payment <span style="font-size:10px;background:rgba(16,185,129,0.2);color:#10b981;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
     <button class="stu-nav-btn" onclick="window.location.href='ten-network.html'" style="background:linear-gradient(135deg,rgba(212,175,55,0.12),rgba(212,175,55,0.04));border:1px solid rgba(212,175,55,0.25);"><span class="nav-icon">🌐</span> TEN Network <span style="font-size:10px;background:rgba(212,175,55,0.25);color:#D4AF37;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
-    <button class="stu-nav-btn" onclick="window.location.href='/assistant'" style="background:linear-gradient(135deg,rgba(212,175,55,0.12),rgba(212,175,55,0.04));border:1px solid rgba(212,175,55,0.25);"><span class="nav-icon">∞</span> TEN Assistant <span style="font-size:10px;background:rgba(212,175,55,0.25);color:#D4AF37;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
+    <button class="stu-nav-btn" id="assistantNavBtn" onclick="window.location.href='/assistant'" style="display:none;background:linear-gradient(135deg,rgba(212,175,55,0.12),rgba(212,175,55,0.04));border:1px solid rgba(212,175,55,0.25);"><span class="nav-icon">∞</span> TEN Assistant <span style="font-size:10px;background:rgba(212,175,55,0.25);color:#D4AF37;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">PREMIUM</span></button>
     <button class="stu-nav-btn" onclick="window.location.href='/academics'" style="background:linear-gradient(135deg,rgba(59,130,246,0.12),rgba(59,130,246,0.04));border:1px solid rgba(59,130,246,0.28);"><span class="nav-icon">&#127891;</span> Academics <span style="font-size:10px;background:rgba(59,130,246,0.25);color:#93c5fd;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
     <!-- FEATURE 2 — Logout button -->
     <button class="stu-nav-btn" onclick="tenLogout()" style="background:rgba(244,63,94,0.06);border:1px solid rgba(244,63,94,0.18);margin-top:8px;"><span class="nav-icon">🚪</span> Logout</button>
@@ -1653,27 +1607,11 @@ button:active { transform: translateY(0); }
     <button onclick="document.getElementById('docUploadBanner').style.display='none'" style="background:none;border:none;color:rgba(245,158,11,0.5);cursor:pointer;font-size:18px;padding:4px;line-height:1;">×</button>
   </div>
 
-  <!-- ── Notification Panel ── -->
-  <div class="notif-overlay" id="notifOverlay" onclick="closeNotifPanel()"></div>
-  <div class="notif-panel" id="notifPanel">
-    <div class="notif-panel-header">
-      <div class="notif-panel-title">🔔 Notifications</div>
-      <button class="notif-close-btn" onclick="closeNotifPanel()">✕</button>
-    </div>
-    <div class="notif-scroll" id="notifScroll">
-      <div class="notif-empty"><div class="ei">🔔</div><p>No notifications yet</p></div>
-    </div>
-  </div>
-
   <!-- ── TOPBAR ── -->
   <div class="stu-topbar">
     <button class="hamburger-btn" onclick="toggleSidebar()">☰</button>
     <div class="stu-topbar-title ten-shimmer">My Dashboard</div>
     <div class="stu-topbar-actions">
-      <button class="notif-bell-btn" onclick="toggleNotifPanel()" title="Notifications">
-        🔔
-        <span class="notif-badge" id="notifBadge2">0</span>
-      </button>
       <button id="domainToggleBtn2" onclick="toggleNextDomain()" title="Switch Domain"
         style="display:none;align-items:center;justify-content:center;padding:0 14px;height:42px;background:rgba(212,175,55,0.1);border:1px solid rgba(212,175,55,0.25);border-radius:12px;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:700;color:#D4AF37;transition:all 0.3s;gap:6px;"
         onmouseover="this.style.background='rgba(212,175,55,0.2)'" onmouseout="this.style.background='rgba(212,175,55,0.1)'">
@@ -1784,6 +1722,27 @@ button:active { transform: translateY(0); }
         <div class="sec-card-title">Extras &amp; Badges</div>
         <div class="sec-card-desc">Leaderboard, badges and achievements</div>
       </div>
+      <!-- Premium, inline in the portal itself. There is no separate premium
+           page: a member signs in here and their plan, badges, coordinator
+           notes and assigned projects are simply part of the portal. Hidden
+           entirely for everyone else — a free-track student is not shown a
+           locked box they cannot open. Filled by applyPremiumChrome(). -->
+      <div id="premiumPanel" style="display:none;grid-column:1/-1;border:1px solid rgba(212,175,55,0.35);border-radius:18px;padding:22px;margin-bottom:6px;background:linear-gradient(150deg,rgba(212,175,55,0.10),rgba(14,22,40,0.55));">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:22px;">✦</span>
+            <div>
+              <div id="pp_plan" style="font-size:17px;font-weight:800;color:#D4AF37;">Premium</div>
+              <div id="pp_since" style="font-size:11.5px;color:#8aa0bf;"></div>
+            </div>
+          </div>
+          <a href="/assistant" style="text-decoration:none;padding:9px 18px;border-radius:10px;background:#D4AF37;color:#05070e;font-weight:800;font-size:13px;">TEN Assistant →</a>
+        </div>
+        <div id="pp_badges" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;"></div>
+        <div id="pp_projects"></div>
+        <div id="pp_notes"></div>
+      </div>
+
       <!-- NEW FEATURE: V2 Task Journey card -->
       <div class="sec-card" onclick="window.location.href='v2-tasks.html'" style="border-color:rgba(212,175,55,0.3);background:linear-gradient(135deg,rgba(212,175,55,0.1),rgba(14,20,40,0.45));">
         <div class="sec-card-icon">🪙</div>
@@ -1808,10 +1767,11 @@ button:active { transform: translateY(0); }
         <div class="sec-card-title" style="color:#10b981;">Make Payment <span style="font-size:10px;background:rgba(16,185,129,0.2);color:#10b981;padding:1px 7px;border-radius:4px;margin-left:4px;font-weight:800;vertical-align:middle;">NEW</span></div>
         <div class="sec-card-desc">Pay fees securely via UPI — PhonePe, GPay, Paytm &amp; more</div>
       </div>
-      <!-- TEN Assistant card -->
-      <div class="sec-card" onclick="window.location.href='/assistant'" style="border-color:rgba(212,175,55,0.3);background:linear-gradient(135deg,rgba(212,175,55,0.08),rgba(212,175,55,0.02));">
+      <!-- TEN Assistant card. Paid tracks only — hidden entirely for the rest,
+           rather than shown and then refused at the door. -->
+      <div class="sec-card" id="assistantCard" onclick="window.location.href='/assistant'" style="display:none;border-color:rgba(212,175,55,0.3);background:linear-gradient(135deg,rgba(212,175,55,0.08),rgba(212,175,55,0.02));">
         <div class="sec-card-icon">∞</div>
-        <div class="sec-card-title" style="color:#D4AF37;">TEN Assistant <span style="font-size:10px;background:rgba(212,175,55,0.2);color:#D4AF37;padding:1px 7px;border-radius:4px;margin-left:4px;font-weight:800;vertical-align:middle;">NEW</span></div>
+        <div class="sec-card-title" style="color:#D4AF37;">TEN Assistant <span style="font-size:10px;background:rgba(212,175,55,0.2);color:#D4AF37;padding:1px 7px;border-radius:4px;margin-left:4px;font-weight:800;vertical-align:middle;">PREMIUM</span></div>
         <div class="sec-card-desc">Your week-by-week plan, coins &amp; deadlines — ask anything</div>
       </div>
       <!-- TEN Network card -->
@@ -1905,10 +1865,6 @@ button:active { transform: translateY(0); }
     </div>
     <div class="topbar-actions">
       <div id="employeeText">Employee ID</div>
-      <button class="notif-bell-btn" onclick="toggleNotifPanel()" title="Notifications">
-        🔔
-        <span class="notif-badge" id="notifBadge">0</span>
-      </button>
       <button id="domainToggleBtn" onclick="toggleNextDomain()" title="Switch Domain"
         style="display:none;align-items:center;justify-content:center;padding:0 14px;height:42px;background:rgba(212,175,55,0.1);border:1px solid rgba(212,175,55,0.25);border-radius:12px;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:700;color:#D4AF37;transition:all 0.3s;gap:6px;"
         onmouseover="this.style.background='rgba(212,175,55,0.2)'" onmouseout="this.style.background='rgba(212,175,55,0.1)'">
@@ -2257,7 +2213,7 @@ button:active { transform: translateY(0); }
           <div class="cm-actions">
             <button class="cm-btn cm-btn-run" onclick="runCode()">▶ Run Code</button>
             <button class="cm-btn cm-btn-submit" onclick="submitCode()">📤 Submit</button>
-            <button class="cm-btn" style="background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.3);" onclick="openInTerminal()">💻 Open in Terminal</button>
+            <button class="cm-btn" style="background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.3);" onclick="openInTerminal()">💻 Open console</button>
             <button class="cm-btn cm-btn-clear" onclick="document.getElementById('codeOutput').textContent='';">🧹 Clear Output</button>
             <span id="cmLangLabel" style="margin-left:auto;font-size:12px;color:#9aa4bf;">Mode: javascript</span>
           </div>
@@ -2271,7 +2227,7 @@ button:active { transform: translateY(0); }
           <!-- Terminal Pane -->
           <div id="cmTerminalPane">
             <div style="padding:8px 14px;font-size:12px;color:#9aa4bf;border-bottom:1px solid rgba(245,197,66,.10);background:#0a1020;">
-              💻 Interactive terminal · Edit <span id="termFileName">solution.js</span> · <span style="color:#f5c542;">bash submit.sh</span> to submit
+              💻 Run console · <span id="termFileName">solution.js</span> · output from <span style="color:#f5c542;">Run Code</span> appears here
             </div>
             <div id="xtermContainer"></div>
           </div>
@@ -2303,6 +2259,9 @@ button:active { transform: translateY(0); }
         <!-- How far into the programme the student is: "Day 12 of 45". -->
         <p id="attendanceDayProgress" style="display:none;font-size:12px;color:#8aa4c8;margin-top:4px;"></p>
         <p id="attendanceThreshold" style="font-size:12px;color:#f59e0b;margin-top:4px;"></p>
+        <!-- Only shown to students holding two domains: says which internship
+             these figures belong to, since the two are counted separately. -->
+        <p id="attendanceDomainNote" style="display:none;font-size:12px;color:#93c5fd;margin-top:6px;padding:8px 10px;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:8px;"></p>
       </div>
       <button type="button" onclick="resetTodayAttendanceTest()" style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); color: #cbd5e1; font-size: 11px; font-weight: 700; padding: 6px 14px; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;">
         🔄 Reset Today (Re-test Lock Flow)
@@ -3667,7 +3626,7 @@ async function refreshDashboard(){
     loadNotice(),
     loadStudentSubmissions(),
     loadCoordinatorTasks(),
-    loadNotifications(),
+    refreshNotifications(),
     loadAttendance(),
     loadCodingProblems(),
     loadV2TaskJourney()  // NEW FEATURE: coin + task journey widget
@@ -3924,6 +3883,7 @@ async function markSelfAttendance(){
   const todayKey = getTodayDateKey();
   const isCompleted = localStorage.getItem('gform_completed_' + todayKey) === 'true';
 
+
   if (!isCompleted) {
     return Swal.fire({
       icon: 'warning',
@@ -3941,7 +3901,11 @@ async function markSelfAttendance(){
     const r = await fetch("/attendance/self",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({ employeeId, gformVerified: true })
+      // The active domain travels with the mark. A student holding two
+      // domains is running two separate internships and marks each one
+      // independently; without this the server had to guess and every mark
+      // landed on the primary domain.
+      body:JSON.stringify({ employeeId, domain, gformVerified: true })
     });
     const d = await r.json();
     if(d.success){
@@ -4051,13 +4015,32 @@ async function loadAttendance(){
       }
     }
 
+    // Which domain these figures belong to. A student holding two domains has
+    // two independent attendance records and must mark each one, so the panel
+    // has to say which internship it is showing.
+    var domainNote = document.getElementById("attendanceDomainNote");
+    var multiDomain = Array.isArray(d.domains) && d.domains.length > 1;
+    if (domainNote) {
+      if (multiDomain) {
+        domainNote.innerHTML = "Showing <strong>" + _fbEscape(d.domain || domain) + "</strong>" +
+          " &nbsp;·&nbsp; attendance is counted separately for each domain — switch domains above to mark the other one.";
+        domainNote.style.display = "block";
+      } else {
+        domainNote.style.display = "none";
+      }
+    }
+
     const btn = document.getElementById("attendanceBtn");
     const statusEl = document.getElementById("attendanceStatus");
     if(d.markedToday){
       btn.setAttribute('data-already-marked', 'true');
-      btn.innerText = "Today's Attendance Marked ✅";
+      btn.innerText = multiDomain
+        ? "Marked for " + (d.domain || domain) + " ✅"
+        : "Today's Attendance Marked ✅";
       btn.disabled = true; btn.classList.add("attendance-disabled");
-      if(statusEl) statusEl.innerText = "You marked your attendance today. Come back tomorrow.";
+      if(statusEl) statusEl.innerText = multiDomain
+        ? "You marked " + (d.domain || domain) + " today. Switch to your other domain to mark that one."
+        : "You marked your attendance today. Come back tomorrow.";
       const step2Text = document.getElementById("step2StatusText");
       if(step2Text) {
         step2Text.textContent = "✅ Today's attendance is already recorded and saved in the system!";
@@ -4097,6 +4080,36 @@ function _fbEscape(s){
  * Show the Share Feedback nav item only once the internship is complete, and
  * render anything the student has already sent.
  */
+/** Unread portal notifications, shown on the Notifications nav item. */
+async function refreshNotifBadge(){
+  try {
+    const r = await fetch("/api/notifications/unread-count", { credentials: "same-origin" });
+    if (!r.ok) return;
+    const d = await r.json();
+    const el = document.getElementById("stuNotifBadge");
+    if (!el) return;
+    if (d.unread > 0){ el.textContent = d.unread > 99 ? "99+" : d.unread; el.style.display = "inline-block"; }
+    else { el.style.display = "none"; }
+  } catch (e) { /* the badge just stays hidden */ }
+}
+setInterval(refreshNotifBadge, 45000);
+document.addEventListener("DOMContentLoaded", refreshNotifBadge);
+
+/** Unread direct messages, shown on the Messages nav item. */
+async function refreshDmBadge(){
+  try {
+    const r = await fetch("/api/chat/unread", { credentials: "same-origin" });
+    if (!r.ok) return;
+    const d = await r.json();
+    const el = document.getElementById("stuDmBadge");
+    if (!el) return;
+    if (d.unread > 0){ el.textContent = d.unread > 99 ? "99+" : d.unread; el.style.display = "inline-block"; }
+    else { el.style.display = "none"; }
+  } catch (e) { /* the badge just stays hidden */ }
+}
+setInterval(refreshDmBadge, 45000);
+document.addEventListener("DOMContentLoaded", refreshDmBadge);
+
 async function initStudentFeedback(){
   try {
     const res = await fetch("/api/feedback/my-status", { credentials: "same-origin" });
@@ -4542,11 +4555,30 @@ async function loadCodingProblems(){
 // ─────────────────────────────────────────────
 //  PROCTORING — Camera & Anti-Cheat
 // ─────────────────────────────────────────────
+/*
+ * Why this was scoring a violation before the student had typed anything.
+ *
+ * It listened on window 'blur' AND on 'visibilitychange'. window 'blur' fires
+ * for *any* loss of window focus — and the very next line of startProctoring()
+ * called getUserMedia(), which opens the browser's camera-permission prompt,
+ * which blurs the window. So opening a problem reliably logged
+ * "Tab/Window switch detected · Violations: 1" against a student who had done
+ * nothing. Clicking a SweetAlert, a file dialog or the browser's own chrome did
+ * the same. And when someone did genuinely switch tabs, both listeners fired,
+ * so one switch counted as two.
+ *
+ * document.hidden is the accurate signal and the only one kept. On top of it:
+ * a short grace window after the modal opens (the permission prompt lives
+ * there), and a minimum gap between counts so one switch is one violation.
+ */
 let _procStream = null;
 let _procViolations = 0;
 let _procWarningTimer = null;
-let _procBlurHandler = null;
 let _procVisibilityHandler = null;
+let _procArmedAt = 0;
+let _procLastViolationAt = 0;
+const PROC_GRACE_MS = 3000;   // permission prompt + initial focus churn
+const PROC_DEBOUNCE_MS = 1200; // one tab switch is one violation
 
 async function startProctoring() {
   const video = document.getElementById('procVideo');
@@ -4558,10 +4590,11 @@ async function startProctoring() {
   const btnSubmit = document.querySelector("#codingModal .cm-btn-submit");
 
   _procViolations = 0;
+  _procLastViolationAt = 0;
+  _procArmedAt = Date.now();
   if (vcount) vcount.textContent = '0';
   if (warningBadge) warningBadge.style.display = 'none';
 
-  // Always enable buttons on start of proctoring, then disable if camera fails
   if (btnRun) btnRun.disabled = false;
   if (btnSubmit) btnSubmit.disabled = false;
   window._procCameraBlocked = false;
@@ -4578,18 +4611,25 @@ async function startProctoring() {
     statusDot.style.boxShadow = '0 0 6px #10b981';
     statusText.textContent = 'Camera: Active 🟢';
   } catch (err) {
-    statusDot.style.background = '#f43f5e';
-    statusText.textContent = 'Camera: Blocked ❌';
+    // No camera, or permission refused.
+    //
+    // This used to disable Run and Submit permanently, which made the whole
+    // coding section unusable on a desktop with no webcam or a college machine
+    // where the permission is blocked by policy — the student could read the
+    // problem and do nothing else. The attempt is recorded and travels with the
+    // submission as `proctored:false` instead, so a coordinator can see which
+    // submissions were unwatched without anyone being locked out of the work.
+    statusDot.style.background = '#f59e0b';
+    statusText.textContent = 'Camera: Off — submission will be flagged';
     window._procCameraBlocked = true;
-    if (btnRun) btnRun.disabled = true;
-    if (btnSubmit) btnSubmit.disabled = true;
-    
-    // Display a persistent warning requiring camera access
+    if (btnRun) btnRun.disabled = false;
+    if (btnSubmit) btnSubmit.disabled = false;
+
     if (warningBadge) {
       warningBadge.style.display = 'inline-flex';
       const warningText = document.getElementById('procWarningText');
       if (warningText) {
-        warningText.textContent = 'Camera access denied! Camera is strictly required to run or submit code.';
+        warningText.textContent = 'No camera. You can still solve and submit — this attempt is marked unproctored.';
       }
       if (_procWarningTimer) {
         clearTimeout(_procWarningTimer);
@@ -4598,12 +4638,10 @@ async function startProctoring() {
     }
   }
 
-  // Register tab/window switch listeners (always, even if camera denied)
-  _procBlurHandler = function() { _procRegisterViolation('Tab/Window switch detected'); };
+  // One listener, not two. See the note above _procStream.
   _procVisibilityHandler = function() {
-    if (document.hidden) _procRegisterViolation('Tab hidden / minimized');
+    if (document.hidden) _procRegisterViolation('Tab/Window switch detected');
   };
-  window.addEventListener('blur', _procBlurHandler);
   document.addEventListener('visibilitychange', _procVisibilityHandler);
 }
 
@@ -4621,12 +4659,20 @@ function stopProctoring() {
   if (statusDot) { statusDot.style.background = '#6b7280'; statusDot.style.boxShadow = 'none'; }
   if (statusText) statusText.textContent = 'Camera: Off';
 
-  if (_procBlurHandler) { window.removeEventListener('blur', _procBlurHandler); _procBlurHandler = null; }
   if (_procVisibilityHandler) { document.removeEventListener('visibilitychange', _procVisibilityHandler); _procVisibilityHandler = null; }
   if (_procWarningTimer) { clearTimeout(_procWarningTimer); _procWarningTimer = null; }
+  _procArmedAt = 0;
 }
 
 function _procRegisterViolation(reason) {
+  // Not armed (modal closed), still inside the grace window, or a repeat of the
+  // switch we just counted.
+  var now = Date.now();
+  if (!_procArmedAt) return;
+  if (now - _procArmedAt < PROC_GRACE_MS) return;
+  if (now - _procLastViolationAt < PROC_DEBOUNCE_MS) return;
+  _procLastViolationAt = now;
+
   _procViolations++;
   var vcount = document.getElementById('procVCount');
   if (vcount) vcount.textContent = String(_procViolations);
@@ -4647,13 +4693,12 @@ function _procShowWarning(text) {
   var warningText = document.getElementById('procWarningText');
   if (!badge || !warningText) return;
 
-  if (window._procCameraBlocked) {
-    warningText.textContent = 'Camera access denied! Camera is strictly required to run or submit code.';
-    badge.style.display = 'inline-flex';
-    return;
-  }
-
-  warningText.textContent = text;
+  // A real violation reports the violation. The camera state is already shown
+  // in the status line beside it; overwriting the reason with it meant a
+  // student who switched tabs was told about their camera instead.
+  warningText.textContent = window._procCameraBlocked
+    ? text + ' · attempt is unproctored'
+    : text;
   badge.style.display = 'inline-flex';
   if (_procWarningTimer) clearTimeout(_procWarningTimer);
   _procWarningTimer = setTimeout(function() {
@@ -4683,6 +4728,7 @@ async function openCodingProblem(qid){
 
     document.getElementById("codingModal").style.display = "flex";
     startProctoring();
+    checkRunnerAvailability();
 
     // Initialise CodeMirror lazily, the first time we open the modal.
     const langSel = document.getElementById("cmLang");
@@ -4750,6 +4796,31 @@ function setLanguage(lang){
 function _readCode(){
   if(_codingEditor) return _codingEditor.getValue();
   return document.getElementById("codeEditor").value;
+}
+
+/*
+ * The runner is switched off by default on the server (ENABLE_CODE_RUNNER),
+ * because it executes submitted source on the host. When it is off, Run and
+ * Submit both answer 503 — which the student only discovered after writing a
+ * whole solution. Ask once when the problem opens, and say so up front.
+ */
+async function checkRunnerAvailability(){
+  var out = document.getElementById("codeOutput");
+  var btnRun = document.querySelector("#codingModal .cm-btn-run");
+  var btnSubmit = document.querySelector("#codingModal .cm-btn-submit");
+  try{
+    var r = await fetch("/api/code-runner/status", { credentials:"same-origin" });
+    var d = await r.json();
+    if (d && d.enabled) return;
+    if (btnRun) btnRun.disabled = true;
+    if (btnSubmit) btnSubmit.disabled = true;
+    if (out){
+      out.classList.add("is-warn");
+      out.textContent = "The code runner is switched off on this server, so Run and Submit are "
+        + "unavailable right now. You can still read the problem and write your solution — "
+        + "nothing you have already submitted is affected.";
+    }
+  }catch(_){ /* leave the buttons alone; the run itself will report the error */ }
 }
 
 async function runCode(){
@@ -4821,8 +4892,31 @@ async function submitCode(){
   try{
     const r = await fetch("/code/submit",{
       method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ employeeId: empId, questionId: _currentCodingQuestion._id, language: lang, code: _readCode() })
+      // employeeId is no longer read from the body — the server takes it from
+      // the session — but it is still sent so older builds keep working.
+      body: JSON.stringify({
+        employeeId: empId,
+        questionId: _currentCodingQuestion._id,
+        language: lang,
+        code: _readCode(),
+        proctored: !window._procCameraBlocked,
+        violations: _procViolations
+      })
     });
+
+    if (r.status === 503) {
+      const d503 = await r.json().catch(function(){ return {}; });
+      out.classList.add("is-warn");
+      out.textContent = d503.message || "The code runner is turned off on this server.";
+      submitBtn.disabled = false;
+      return;
+    }
+    if (r.status === 401) {
+      out.classList.add("is-error");
+      out.textContent = "Your session has expired. Please sign in again.";
+      submitBtn.disabled = false;
+      return;
+    }
     const d = await r.json();
     const verdict = d.status || (d.success ? "Accepted" : "Failed");
     let lines = ["── Verdict: " + verdict + " ──",
@@ -4861,36 +4955,23 @@ async function submitCode(){
   }
 }
 
-async function openInTerminal(){
-  if(!_currentCodingQuestion) return;
-  const empId = (typeof employeeId !== "undefined" && employeeId) || (student && student.employeeId) || "";
-  if(!empId){ Swal.fire({icon:"error",title:"Not logged in",background:"#0c1220",color:"#f0eee8"}); return; }
-  const lang = document.getElementById("cmLang").value;
-  try {
-    const r = await fetch("/student/coding/open-terminal", {
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ employeeId: empId, questionId: _currentCodingQuestion._id, language: lang })
-    });
-    const d = await r.json();
-    if(d.success){
-      Swal.fire({
-        icon:"success", title:"Terminal Workspace Ready",
-        html: '<div style="text-align:left;font-size:14px;line-height:1.7;">' +
-          '<p style="margin-bottom:8px;"><b>Directory:</b></p>' +
-          '<code style="background:#0d1117;padding:6px 10px;border-radius:6px;display:block;margin-bottom:12px;word-break:break-all;">' + d.workDir + '</code>' +
-          '<p style="margin-bottom:8px;"><b>Instructions:</b></p>' +
-          '<ol style="padding-left:18px;"><li>Open a terminal</li><li>Run: <code>' + d.launchCmd + '</code></li><li>Edit the solution file</li><li>Run: <code>./submit.sh</code></li></ol>' +
-          '</div>' +
-          '<button onclick="navigator.clipboard.writeText(\'' + d.workDir + '\');this.textContent=\'Copied!\'" style="margin-top:12px;padding:8px 16px;background:rgba(59,130,246,0.15);color:#3b82f6;border:1px solid rgba(59,130,246,0.3);border-radius:8px;cursor:pointer;font-weight:600;">📋 Copy Path</button>',
-        showConfirmButton:true, confirmButtonText:"Got it",
-        background:"#0c1220", color:"#f0eee8", width:520
-      });
-    } else {
-      Swal.fire({icon:"error",title:"Failed",text:d.message||"Could not create workspace",background:"#0c1220",color:"#f0eee8"});
+/*
+ * "Open in Terminal" used to print a path on the SERVER's filesystem and tell
+ * the student to open a terminal, cd into it and run ./submit.sh. Nobody
+ * reading that page has a shell on the production host, so the instructions
+ * could not be followed by the person being given them — and printing an
+ * internal path to every student is a detail the outside does not need.
+ *
+ * The Terminal tab beside the editor already exists and already mirrors run
+ * output. The button now opens it, which is what a student wanted from it.
+ */
+function openInTerminal(){
+  switchCmTab('terminal');
+  setTimeout(function(){
+    if (_xtermInstance) {
+      _xtermInstance.writeln('\x1b[33mThis is the run console. Press "Run Code" in the Editor tab and the output appears here.\x1b[0m');
     }
-  } catch(e){
-    Swal.fire({icon:"error",title:"Network error",text:e.message||String(e),background:"#0c1220",color:"#f0eee8"});
-  }
+  }, 120);
 }
 
 // ════════════════════════════════════════════════
@@ -5038,99 +5119,26 @@ loadV2TaskJourney();    // NEW FEATURE: coin balance + task journey widget
 setupDomainToggle();     // initialize toggle if 2 domains
 
 
-// ── Notification System ──
-let notifOpen = false;
-let notifData = [];
-
-function toggleNotifPanel(){
-  notifOpen ? closeNotifPanel() : openNotifPanel();
+// ── Notifications ──
+//
+// One delegate, so the places that used to refresh the bell now refresh the orb
+// instead of calling a function that no longer exists.
+function refreshNotifications(live) {
+  if (!window.TenNotifyOrb) return Promise.resolve();
+  return live ? window.TenNotifyOrb.arrived() : window.TenNotifyOrb.refresh();
 }
-function openNotifPanel(){
-  notifOpen = true;
-  document.getElementById('notifPanel').classList.add('open');
-  document.getElementById('notifOverlay').classList.add('show');
-  // First load, then mark all read after a short delay so user sees them render
-  loadNotifications().then(() => {
-    setTimeout(markAllRead, 800);
-  });
-}
-
-async function markAllRead(){
-  try{
-    await fetch('/notifications/mark-all-read',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ readerId: student.employeeId })
-    });
-    // Clear badge
-    updateNotifBadge(0);
-    // Remove unread styling
-    document.querySelectorAll('.notif-item-card.unread')
-      .forEach(el => el.classList.remove('unread'));
-  }catch(e){}
-}
-function closeNotifPanel(){
-  notifOpen = false;
-  document.getElementById('notifPanel').classList.remove('open');
-  document.getElementById('notifOverlay').classList.remove('show');
-}
-
-async function loadNotifications(){
-  try{
-    const r = await fetch('/notifications/student/' + encodeURIComponent(student.employeeId));
-    const d = await r.json();
-    notifData = d.notifications || [];
-    updateNotifBadge(d.unread || 0);
-    renderNotifications();
-    return true;
-  }catch(e){ console.log(e); return false; }
-}
-
-function updateNotifBadge(count){
-  // There are TWO bells on this page — one in the sidebar (#notifBadge) and one
-  // in the top bar (#notifBadge2). Only the first was ever updated, so the
-  // topbar badge sat at 0 permanently no matter how many unread notifications
-  // a student had.
-  ['notifBadge', 'notifBadge2'].forEach(function(id){
-    const badge = document.getElementById(id);
-    if (!badge) return;
-    if (count > 0) { badge.style.display = 'flex'; badge.textContent = count > 99 ? '99+' : count; }
-    else { badge.style.display = 'none'; }
-  });
-}
-
-function renderNotifications(){
-  const scroll = document.getElementById('notifScroll');
-  if(!notifData.length){
-    scroll.innerHTML = '<div class="notif-empty"><div class="ei">🔔</div><p>No notifications yet</p></div>';
-    return;
-  }
-  scroll.innerHTML = notifData.map(n => {
-    const isUnread = !n.readBy.includes(student.employeeId);
-    const typeMap = {info:'type-info',success:'type-success',warning:'type-warning',urgent:'type-urgent'};
-    return `<div class="notif-item-card ${isUnread?'unread':''} ${typeMap[n.type]||''}" onclick="markRead('${n._id}',this)">
-      <div class="ni-from">From: ${n.from || 'System'}</div>
-      <div class="ni-title">${n.title}</div>
-      <div class="ni-msg">${n.message}</div>
-      <div class="ni-time">${new Date(n.createdAt).toLocaleString('en-IN')}</div>
-    </div>`;
-  }).join('');
-}
-
-async function markRead(id, el){
-  if(!el.classList.contains('unread')) return;
-  try{
-    await fetch('/notifications/mark-read',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({notifId:id,readerId:student.employeeId})
-    });
-    el.classList.remove('unread');
-    // Decrease the count on both bells.
-    const badge = document.getElementById('notifBadge');
-    const cur = parseInt(badge && badge.textContent) || 0;
-    updateNotifBadge(Math.max(0, cur - 1));
-  }catch(e){}
-}
+//
+// The bell and its slide-in panel used to live here. They were the SECOND
+// notification system on this page: the sidebar already links to
+// /notifications, which merges portal alerts with unread messages, while this
+// panel read a legacy endpoint that showed neither. Its "mark all read" posted
+// to /notifications/mark-all-read, a route that does not exist — it 404'd
+// inside an empty catch, so the badge cleared on screen and the count came
+// straight back on the next load.
+//
+// What replaces it is /notify-orb.js: a round badge that only appears when
+// something is actually waiting, buzzes when something arrives while the
+// portal is open, and takes one click to the right place.
 
 // ── Logout ──
 function doStudentLogout(){
@@ -5181,13 +5189,6 @@ window.addEventListener('popstate', function (e) {
     return;
   }
 
-  // 5. If notification panel is open, close it
-  var notifPanel = document.getElementById('notifPanel');
-  if (notifPanel && notifPanel.classList.contains('open')) {
-    closeNotifPanel();
-    return;
-  }
-
   // 6. If sidebar is open, close it
   var sidebar = document.querySelector('.stu-sidebar.open');
   if (sidebar) {
@@ -5235,7 +5236,8 @@ function startStudentSSE(){
             text: n.message,
             background:'#0d1629',color:'#edf2ff'
           });
-          loadNotifications();
+          // Live: the orb buzzes so a reader mid-page notices it arrive.
+          refreshNotifications(true);
           // BUG FIX 1: if the coordinator marked/updated this student's class
           // attendance, refresh the attendance widget immediately so the
           // student does not have to manually refresh the page.
@@ -5249,8 +5251,8 @@ function startStudentSSE(){
   }catch(e){}
 }
 
-// Load notification count on page load
-loadNotifications();
+// The orb loads its own count; this just makes the first paint immediate.
+refreshNotifications();
 startStudentSSE();
 
 </script>
@@ -5737,13 +5739,14 @@ setupDomainSwitcher();
 
 <div class="sidebar-overlay" onclick="closeSidebar()"></div>
 <script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', function () {
-      navigator.serviceWorker.register('/sw.js')
-        .then(function (reg) { console.log('SW registered'); })
-        .catch(function (err) { console.log('SW error:', err); });
-    });
-  }
+  // No service worker is registered here.
+  //
+  // These pages used to register '/sw.js', a file that has never existed in
+  // this repository, so every load 404'd and logged a SecurityError. Beyond
+  // the noise, a service worker on a portal that serves per-student data is a
+  // caching hazard — this project already lost a week to stale HTML being
+  // served from a cache — so the correct fix is to stop asking for one rather
+  // than to add an empty file that starts caching.
 </script>
 
 <!-- ══════ PROFILE MODAL (Student) ══════ -->
@@ -6141,22 +6144,37 @@ function wizardGoToStep3() {
   document.getElementById('wizardStep2').style.display = 'none';
   var dateInput = document.getElementById('wizardJoiningDateInput');
   if (dateInput) {
-    const today = new Date();
-    const minDate = new Date(today);
-    minDate.setDate(today.getDate() - 90);
+    var today = new Date();
     dateInput.max = today.toISOString().split('T')[0];
-    dateInput.min = minDate.toISOString().split('T')[0];
+
+    // The floor used to be today minus 90 days, which quietly made this card
+    // impossible for the very students it exists for: someone who attended
+    // through WhatsApp for four months before the portal existed for them
+    // could not enter their real start date at all, and the picker gave no
+    // reason. Eighteen months covers every tenure the programme offers while
+    // still refusing an obviously wrong year.
+    var floor = new Date(today);
+    floor.setMonth(floor.getMonth() - 18);
+    dateInput.min = floor.toISOString().split('T')[0];
   }
   document.getElementById('wizardStep3').style.display = 'block';
 }
 
 async function wizardConfirmJoiningDate() {
-  var dateVal = document.getElementById('wizardJoiningDateInput').value;
+  var dateEl  = document.getElementById('wizardJoiningDateInput');
+  var dateVal = dateEl.value;
   if (!dateVal) {
+    // A date input reports an EMPTY value when what is typed is outside
+    // min/max or not a real date, so "nothing selected" and "that date is not
+    // allowed" arrive here identically. Saying which it is matters: the field
+    // visibly shows a date while the page insists none was chosen.
+    var outOfRange = dateEl.validity && (dateEl.validity.rangeUnderflow || dateEl.validity.rangeOverflow || dateEl.validity.badInput);
     Swal.fire({
       icon: 'warning',
-      title: 'Date Required',
-      text: 'Please select your internship joining date.',
+      title: outOfRange ? 'That Date Cannot Be Used' : 'Date Required',
+      text: outOfRange
+        ? 'Please pick a date between ' + dateEl.min + ' and ' + dateEl.max + '.'
+        : 'Please select your internship joining date.',
       background: '#0d1124',
       color: '#f0eee8',
       confirmButtonColor: '#D4AF37'
@@ -6541,9 +6559,9 @@ function checkTenurePayment(isStatusCheckClick) {
         sessionStorage.setItem('tenure_paid_verified', 'true');
         localStorage.removeItem('ten_tenure_utr_pending');
         _tenureUtrAlreadySubmitted = false;
-        if (isStatusCheckClick && data.isPaid) {
-          Swal.fire({ icon: 'success', title: 'Unlocked! 🎉', text: 'Your payment has been approved. Welcome!', background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#10b981' });
-        }
+        // "Here is what you just unlocked". Shown once when the bundle lands,
+        // and on demand when the student presses check-status.
+        if (data.isPaid) showTenureUnlocked(data, isStatusCheckClick);
         if (typeof showWelcomeModalIfNeeded === 'function') {
           showWelcomeModalIfNeeded();
         }
@@ -6602,6 +6620,224 @@ function checkTenurePayment(isStatusCheckClick) {
     });
 }
 
+/**
+ * Show what the fee includes, not just what it costs.
+ *
+ * The figures come from the server (config/tenurePayment.js), which is also
+ * what services/tenureBenefits.js reads when it grants the bundle on approval —
+ * so this list and what actually arrives cannot drift apart. Nothing is
+ * hardcoded here, and a free-track student is never shown any of it because the
+ * server sends `benefits: null` for those.
+ */
+/**
+ * Tell the student what the fee actually bought, once.
+ *
+ * The old message was "Your payment has been approved. Welcome!" — true, but it
+ * never mentioned the coins or the certificate fee they had just been given, so
+ * the bundle they paid for was invisible the moment they got it. `grantedAt`
+ * keys the once-only flag, so a later re-grant would announce itself again but
+ * a page refresh will not.
+ */
+function showTenureUnlocked(data, force) {
+  var granted = data && data.granted;
+  var key = granted && granted.grantedAt ? 'ten_tenure_unlocked_' + granted.grantedAt : '';
+  var alreadySeen = key ? localStorage.getItem(key) === '1' : true;
+  if (!force && (!granted || alreadySeen)) return;
+  if (typeof Swal === 'undefined') return;
+
+  if (!granted) {
+    if (force) {
+      Swal.fire({ icon: 'success', title: 'Unlocked! 🎉', text: 'Your payment has been approved. Welcome!',
+        background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#10b981' });
+    }
+    return;
+  }
+
+  var esc = function (v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  };
+  var items = (granted.perks || []).map(function (p) {
+    return '<li style="padding:4px 0;">✓ ' + esc(p) + '</li>';
+  }).join('');
+
+  Swal.fire({
+    icon: 'success',
+    title: 'Your ' + esc(granted.plan || '') + ' track is unlocked 🎉',
+    html: '<div style="text-align:left;font-size:14px;line-height:1.6;">'
+        + '<p style="margin:0 0 10px;color:#c8baa0;">Already in your account:</p>'
+        + '<ul style="list-style:none;padding:0;margin:0 0 12px;">' + items + '</ul>'
+        + '<p style="margin:0;font-size:12.5px;color:#8aa4c8;">Your '
+        + esc(granted.certificateLabel || 'certificate')
+        + ' fee is covered — you still need to finish the programme to be issued one.</p>'
+        + '</div>',
+    background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#10b981',
+    confirmButtonText: 'Let\u2019s go'
+  });
+  if (key) { try { localStorage.setItem(key, '1'); } catch (e) { /* private mode */ } }
+}
+
+/**
+ * Turn the portal premium — inline, where the student already is.
+ *
+ * There is no separate premium page. A member signs in, and their plan, badges,
+ * coordinator notes and assigned projects are simply part of the portal; the
+ * panel is hidden outright for everyone else rather than shown as a locked box,
+ * because a free-track student has nothing to unlock and an unpaid student is
+ * already being asked for the fee by the payment wall.
+ *
+ * The server decides (utils/premium.js); this only reflects it. Everything
+ * starts hidden in the markup, so a failed call shows nothing rather than an
+ * empty promise.
+ */
+function pEsc(v){return String(v==null?'':v)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  .replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+
+function pDate(d){ if(!d) return ''; try{ return new Date(d).toLocaleDateString(undefined,
+  {day:'numeric',month:'short',year:'numeric'}); }catch(e){ return ''; } }
+
+async function applyPremiumChrome() {
+  var d;
+  try {
+    var res = await fetch('/api/v2/premium/me', { credentials: 'same-origin' });
+    if (!res.ok) return;
+    d = await res.json();
+  } catch (e) { return; }
+  if (!d || !d.success || !d.premium) return;
+
+  document.body.classList.add('is-premium');
+
+  // The assistant belongs to members only.
+  ['assistantCard', 'assistantNavBtn'].forEach(function (id) {
+    var el = document.getElementById(id); if (el) el.style.display = '';
+  });
+
+  var panel = document.getElementById('premiumPanel');
+  if (!panel) return;
+
+  document.getElementById('pp_plan').textContent = (d.plan || 'Premium') + ' member';
+  document.getElementById('pp_since').textContent = d.grantedAt ? ('Member since ' + pDate(d.grantedAt)) : '';
+
+  document.getElementById('pp_badges').innerHTML = (d.badges || []).map(function (b) {
+    return '<span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:10px;'
+      + 'background:rgba(5,7,14,0.5);border:1px solid rgba(212,175,55,0.22);font-size:12.5px;font-weight:700;">'
+      + '<span style="font-size:16px">' + pEsc(b.icon) + '</span>' + pEsc(b.name) + '</span>';
+  }).join('');
+
+  var all = d.assignments || [];
+  var projects = all.filter(function (a) { return a.kind === 'project'; });
+  var notes    = all.filter(function (a) { return a.kind === 'note'; });
+
+  document.getElementById('pp_projects').innerHTML = projects.length
+    ? '<div style="font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#D4AF37;font-weight:800;margin-bottom:9px;">Projects from your coordinator</div>'
+      + projects.map(premiumProjectHtml).join('')
+    : '';
+
+  document.getElementById('pp_notes').innerHTML = notes.length
+    ? '<div style="font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#D4AF37;font-weight:800;margin:16px 0 9px;">Notes from your coordinator</div>'
+      + notes.map(function (a) {
+          return '<div style="background:rgba(5,7,14,0.45);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:14px;margin-bottom:9px;">'
+            + '<div style="font-weight:700;font-size:14px;">' + pEsc(a.title) + '</div>'
+            + '<div style="font-size:11px;color:#8aa0bf;margin:3px 0 6px;">' + pEsc(a.from) + ' · ' + pEsc(pDate(a.createdAt)) + '</div>'
+            + (a.body ? '<div style="font-size:13px;line-height:1.6;color:#cfd8e6;white-space:pre-wrap;">' + pEsc(a.body) + '</div>' : '')
+            + '</div>';
+        }).join('')
+    : '';
+
+  if (!projects.length && !notes.length) {
+    document.getElementById('pp_notes').innerHTML =
+      '<div style="font-size:13px;color:#8aa0bf;">Your coordinator will post briefs and projects here.</div>';
+  }
+
+  panel.style.display = '';
+}
+
+function premiumProjectHtml(a) {
+  var colours = { assigned:'#fbbf24', submitted:'#60a5fa', approved:'#34d399', changes_requested:'#f87171', sent:'#8aa0bf' };
+  var c = colours[a.status] || '#8aa0bf';
+  var done = a.status === 'approved';
+  return '<div style="background:rgba(5,7,14,0.45);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:14px;margin-bottom:9px;">'
+    + '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">'
+      + '<span style="font-weight:700;font-size:14px;">' + pEsc(a.title) + '</span>'
+      + '<span style="font-size:10.5px;font-weight:800;letter-spacing:.5px;color:' + c + ';">'
+        + pEsc(a.status.replace('_', ' ')).toUpperCase() + '</span></div>'
+    + '<div style="font-size:11px;color:#8aa0bf;margin:3px 0 6px;">' + pEsc(a.from)
+      + (a.dueAt ? ' · due ' + pEsc(pDate(a.dueAt)) : '') + '</div>'
+    + (a.body ? '<div style="font-size:13px;line-height:1.6;color:#cfd8e6;white-space:pre-wrap;margin-bottom:8px;">' + pEsc(a.body) + '</div>' : '')
+    + (a.feedback ? '<div style="font-size:12.5px;color:#fecaca;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.22);border-radius:9px;padding:8px 11px;margin-bottom:8px;"><b>Coordinator:</b> ' + pEsc(a.feedback) + '</div>' : '')
+    + (done
+        ? '<div style="font-size:12.5px;color:#34d399;font-weight:700;">✓ Approved</div>'
+        : '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+          + '<input id="pp_u_' + pEsc(a.id) + '" value="' + pEsc(a.submissionUrl) + '" placeholder="https://github.com/you/project" '
+          + 'style="flex:1;min-width:190px;min-height:40px;padding:9px 12px;border-radius:9px;border:1px solid rgba(255,255,255,0.12);background:#070d19;color:#e8e4da;font-size:13px;">'
+          + '<button onclick="submitPremiumProject(\'' + pEsc(a.id) + '\')" '
+          + 'style="min-height:40px;padding:9px 18px;border-radius:9px;border:none;background:#D4AF37;color:#05070e;font-weight:800;font-size:13px;cursor:pointer;">'
+          + (a.submissionUrl ? 'Update' : 'Submit') + '</button></div>')
+    + '</div>';
+}
+
+async function submitPremiumProject(id) {
+  var input = document.getElementById('pp_u_' + id);
+  if (!input) return;
+  var url = input.value.trim();
+  if (!/^https?:\/\//i.test(url)) { alert('Give a link starting with http:// or https://'); return; }
+  try {
+    var r = await fetch('/api/v2/premium/projects/' + encodeURIComponent(id) + '/submit', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ submissionUrl: url })
+    });
+    var d = await r.json();
+    if (!d.success) { alert(d.message || 'Could not submit that.'); return; }
+    applyPremiumChrome();
+  } catch (e) { alert('Could not reach the server.'); }
+}
+document.addEventListener('DOMContentLoaded', applyPremiumChrome);
+
+function renderTenureValueStack(benefits) {
+  var box = document.getElementById('tenureValueStack');
+  if (!box) return;
+  if (!benefits || !benefits.perks || !benefits.perks.length) { box.style.display = 'none'; return; }
+
+  var esc = function (v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  };
+  var money = function (n) { return '₹' + Number(n || 0).toLocaleString('en-IN'); };
+
+  document.getElementById('tenurePlanName').textContent = benefits.name + ' track — what you get';
+  document.getElementById('tenurePlanTagline').textContent = benefits.tagline || '';
+
+  var badge = document.getElementById('tenurePlanBadge');
+  if (benefits.badge) { badge.textContent = benefits.badge; badge.style.display = ''; }
+  else { badge.style.display = 'none'; }
+
+  document.getElementById('tenurePerkList').innerHTML = benefits.perks.map(function (p) {
+    var worth = p.worth > 0
+      ? '<span style="color:#D4AF37;font-weight:700;white-space:nowrap;">' + money(p.worth) + '</span>'
+      : '<span style="color:#8aa4c8;white-space:nowrap;">included</span>';
+    return '<li style="display:flex;justify-content:space-between;gap:12px;padding:3px 0;">'
+      + '<span>✓ ' + esc(p.label) + '</span>' + worth + '</li>';
+  }).join('');
+
+  // Only ever shown when the bundle is genuinely worth more than the fee.
+  var strike = document.getElementById('tenureValueStrike');
+  var saving = document.getElementById('tenureSavingLine');
+  if (benefits.saving > 0) {
+    strike.textContent = money(benefits.valueTotal);
+    strike.style.display = '';
+    saving.textContent = 'You save ' + money(benefits.saving);
+    saving.style.display = '';
+  } else {
+    strike.style.display = 'none';
+    saving.style.display = 'none';
+  }
+  box.style.display = '';
+}
+
 function initiateTenurePaymentTimer(data) {
   currentTenureAmount = data.price || 1000;
   currentTenureUpiId = 'paytmqr5k0ods@ptys';
@@ -6627,12 +6863,17 @@ function initiateTenurePaymentTimer(data) {
     document.getElementById('tenureQrReasonText').textContent = (data.label || 'Short Course') + ' Fee';
   }
 
+  renderTenureValueStack(data.benefits);
+
   // Display dynamic UPI QR code with amount & details, falling back to static QR
   const upiUrl = `upi://pay?pa=${currentTenureUpiId}&pn=${encodeURIComponent(currentTenurePayee)}&am=${currentTenureAmount}&cu=INR&tn=${encodeURIComponent((data.label || 'Short Course') + ' Fee')}`;
   document.getElementById('tenureQrImg').src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiUrl)}`;
   document.getElementById('tenureQrImg').onerror = function() {
     this.onerror = null;
-    this.src = "/paytm-qr.jpeg";
+    // Generated locally. The old fallback was /paytm-qr.jpeg, which is corrupt
+    // in the repository and rendered as a broken image — i.e. no way to pay.
+    this.src = '/api/upi-qr?amount=' + encodeURIComponent(currentTenureAmount)
+      + '&note=' + encodeURIComponent((data.label || 'Short Course') + ' Fee');
   };
 
   if (tenureTimerInterval) clearInterval(tenureTimerInterval);
@@ -6792,16 +7033,31 @@ function submitTenureUtr() {
         Under the TEN Crash Course Internship Program (1 Week, 15 Days, or 1 Month), a fast-track training, administrative, and certification fee is required to activate your dashboard.
       </p>
 
-      <!-- Why make payment box -->
-      <div style="background:rgba(212,175,55,0.06);border:1px solid rgba(212,175,55,0.18);border-radius:12px;padding:14px 18px;margin-bottom:20px;text-align:left;font-size:12px;line-height:1.5;color:#c8baa0;">
-        <strong style="color:#D4AF37;display:block;margin-bottom:4px;">📋 Why do I make this payment?</strong>
-        This program fee offsets fast-track onboarding, premium developer tools, prioritized coordinator review, and immediate release of your LOR, certificate, and performance credits upon completion.
+      <!-- What the fee actually includes. Rendered from /api/tenure-payment/status,
+           which reads config/tenurePayment.js — the same definition the grant on
+           approval uses, so this list cannot promise something never handed over. -->
+      <div id="tenureValueStack" style="display:none;background:rgba(212,175,55,0.06);border:1px solid rgba(212,175,55,0.18);border-radius:12px;padding:16px 18px;margin-bottom:18px;text-align:left;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
+          <strong id="tenurePlanName" style="color:#D4AF37;font-size:13px;letter-spacing:0.6px;text-transform:uppercase;"></strong>
+          <span id="tenurePlanBadge" style="display:none;background:#D4AF37;color:#05070e;font-size:10px;font-weight:800;letter-spacing:0.8px;padding:3px 9px;border-radius:999px;"></span>
+        </div>
+        <p id="tenurePlanTagline" style="font-size:12.5px;color:#c8baa0;line-height:1.5;margin:0 0 12px;"></p>
+        <ul id="tenurePerkList" style="list-style:none;padding:0;margin:0 0 4px;font-size:12.5px;color:#e6e1d6;line-height:1.6;"></ul>
       </div>
 
       <!-- Amount Badge -->
-      <div style="background:#05070e;border:1px solid rgba(212,175,55,0.12);border-radius:16px;padding:14px;margin-bottom:20px;display:inline-block;width:100%;">
+      <div style="background:#05070e;border:1px solid rgba(212,175,55,0.12);border-radius:16px;padding:14px;margin-bottom:14px;display:inline-block;width:100%;">
         <span style="font-size:11px;text-transform:uppercase;color:#8aa4c8;letter-spacing:1px;display:block;margin-bottom:2px;">Fast-Track Internship Fee</span>
-        <strong style="font-size:24px;color:#D4AF37;" id="tenureAmountText">₹0.00</strong>
+        <div style="display:flex;align-items:baseline;justify-content:center;gap:10px;flex-wrap:wrap;">
+          <span id="tenureValueStrike" style="display:none;font-size:15px;color:#8aa4c8;text-decoration:line-through;"></span>
+          <strong style="font-size:24px;color:#D4AF37;" id="tenureAmountText">₹0.00</strong>
+        </div>
+        <div id="tenureSavingLine" style="display:none;font-size:12px;font-weight:700;color:#4ade80;margin-top:4px;"></div>
+      </div>
+
+      <!-- Risk reversal: the last objection before someone abandons the screen. -->
+      <div style="font-size:11.5px;color:#8aa4c8;line-height:1.5;margin-bottom:18px;">
+        🔒 Verified by an admin, usually within 24 hours. Not approved? Your payment is refunded in full.
       </div>
 
       <!-- QR Code Section -->
@@ -6810,7 +7066,7 @@ function submitTenureUtr() {
           ⏳ Session expires in: <span id="tenureTimerCount">02:00</span>
         </div>
         <div class="qr-pulse-active" style="background:#ffffff;border-radius:18px;padding:14px;display:inline-block;box-shadow:0 10px 30px rgba(212,175,55,0.25);border:2px solid rgba(212,175,55,0.35);margin-bottom:12px;">
-          <img id="tenureQrImg" src="/paytm-qr.jpeg" alt="Scan to Pay" style="width:200px;height:200px;display:block;border-radius:8px;object-fit:contain;">
+          <img id="tenureQrImg" src="/api/upi-qr" alt="Scan to Pay" style="width:200px;height:200px;display:block;border-radius:8px;object-fit:contain;">
         </div>
         <div style="font-size:12px;color:#9aa4bf;font-family:monospace;font-weight:600;" id="tenureUpiIdText">UPI ID: Loading...</div>
         <div style="margin-top: 14px; font-size: 13px; color: #D4AF37; font-weight: 700; line-height: 1.4; background: rgba(5,7,14,0.4); border-radius: 8px; padding: 6px 12px; display: inline-block;">
@@ -7229,6 +7485,7 @@ async function submitExtension(targetTenure) {
     }
 }
 </script>
+<script src="/notify-orb.js" defer></script>
 </body>
 </html>
 

@@ -82,7 +82,9 @@ body::after {
   background:linear-gradient(160deg, rgba(255,255,255,0.12), rgba(0,0,0,0.3)), color-mix(in srgb, var(--dc) 30%, #0b1222);
   border:1px solid color-mix(in srgb, var(--dc) 45%, transparent);
   box-shadow:inset 0 2px 3px rgba(255,255,255,0.15), 0 8px 20px rgba(0,0,0,0.4);
+  overflow:hidden;
 }
+.jglyph img { width:100%; height:100%; object-fit:cover; border-radius:14px; }
 .jname { font-family:'Outfit'; font-size:17px; font-weight:800; }
 .jmeta { font-size:12px; color:var(--text-secondary); margin-top:3px; }
 .jmeta b { color:var(--accent-gold); font-weight:700; }
@@ -130,6 +132,14 @@ body::after {
 
 @media (max-width:820px){ .grid { grid-template-columns:1fr; } }
 </style>
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
 </head>
 <body>
 
@@ -176,13 +186,19 @@ const JOURNEYS = [
   { n:"HR Management",          g:"👥", c:"#f472b6", w:["HR Fundamentals + Recruitment","JDs + Interviewing","Onboarding + Engagement","Performance + Analytics","Labour Law + Training","Policy + HR Manual"] },
 ];
 
+/* the 3D logo renders (same set as the landing), in JOURNEYS order */
+const LOGO_IMGS = ['python','java','web','mern','flutter','softeng','vibe','datasci','devops','cyber','space','business','venture','hr'];
+
 const grid = document.getElementById('grid');
-JOURNEYS.forEach(j => {
+
+/* Draw one card. Split out so the server list and the built-in fallback
+   render identically. */
+function drawJourney(j, ji) {
   const card = document.createElement('div');
   card.className = 'jcard'; card.style.setProperty('--dc', j.c);
   card.innerHTML = `
     <div class="jcard-top">
-      <div class="jglyph">${j.g}</div>
+      <div class="jglyph"><img src="assets/domains/logo/${LOGO_IMGS[ji] || 'web'}.jpg" alt="" onerror="this.parentNode.textContent='${j.g}'"></div>
       <div class="jflex">
         <div class="jname">${j.n}</div>
         <div class="jmeta"><b>6 modules</b> · quizzes · assignments · projects · certificate</div>
@@ -210,7 +226,51 @@ JOURNEYS.forEach(j => {
     card.classList.toggle('open');
   });
   grid.appendChild(card);
-});
+}
+
+/* The list comes from the server, which reads config/domains.js — the one
+   place a domain is defined.
+ *
+ * This page's own JOURNEYS array had drifted from it: it advertised Vibe
+ * Coding, Space Research, Business Analyst and HR Management, none of which a
+ * student can register for, and omitted Artificial Intelligence, Business
+ * Development, HR, Space Intern and Finance, which they can. Somebody reading
+ * it picked a domain that was not on the form.
+ *
+ * JOURNEYS survives only as a lookup for week titles and colours, and as the
+ * fallback when the endpoint cannot be reached. */
+const BY_NAME = {};
+JOURNEYS.forEach(j => { BY_NAME[j.n] = j; });
+
+const ALIAS = {
+  'Artificial Intelligence': 'Data Science',
+  'HR': 'HR Management',
+  'Space Intern': 'Space Research',
+  'Business Development': 'Business Analyst',
+  'Finance': 'Venture Capital'
+};
+
+fetch('/api/public/domains')
+  .then(r => r.json())
+  .then(d => {
+    const list = (d && d.domains) || [];
+    if (!list.length) throw new Error('empty');
+    grid.innerHTML = '';
+    list.forEach((dom, i) => {
+      const seed = BY_NAME[dom.name] || BY_NAME[ALIAS[dom.name]] || {};
+      drawJourney({
+        n: dom.name,
+        g: seed.g || '\u25C6',
+        c: seed.c || '#D4AF37',
+        w: (dom.weeks && dom.weeks.length ? dom.weeks : seed.w) || []
+      }, JOURNEYS.indexOf(seed));
+    });
+  })
+  .catch(() => {
+    // Offline or the endpoint is down — draw what we have rather than nothing.
+    grid.innerHTML = '';
+    JOURNEYS.forEach(drawJourney);
+  });
 
 if (new URLSearchParams(location.search).get('paid') === '1')
   document.getElementById('payBanner').classList.add('show');

@@ -17,6 +17,7 @@ const Attendance          = require("../models/Attendance");
 const StudentTaskProgress = require("../models/new/StudentTaskProgress");
 const { istDateKey, istDayStart, istDayEnd } = require("../utils/dateKey");
 const { isSunday, getEffectiveStartDate }    = require("../utils/attendanceUtils");
+const { studentDomains, domainKey }          = require("../utils/attendanceDomain");
 const { getInternshipEndDate }               = require("../utils/tenure");
 
 // ── Ensure output directories exist ──
@@ -26,7 +27,7 @@ try { fs.mkdirSync(offerLetterDir,  { recursive: true }); } catch (_) {}
 try { fs.mkdirSync(certificatesDir, { recursive: true }); } catch (_) {}
 
 // ── Mail helper ──
-const { createEmailTransporter } = require("../utils/mailer");
+const { createEmailTransporter, EMAIL_FROM, HR_NOTIFY_EMAIL, renderEmail, escapeHtml, PORTAL_URL } = require("../utils/mailer");
 function createTransporter() {
     return createEmailTransporter();
 }
@@ -215,7 +216,7 @@ function getStarGrade(stats) {
 // ════════════════════════════════════════════════════
 // LOC PDF GENERATOR
 // ════════════════════════════════════════════════════
-async function generateLOCPDF(student, stats, outputPath) {
+async function generateLOCPDF(student, stats, outputPath, documentNumber) {
     return new Promise((resolve, reject) => {
         try {
             const doc    = new PDFDocument({ size: "A4", margin: 0 });
@@ -246,6 +247,10 @@ async function generateLOCPDF(student, stats, outputPath) {
                 60, 156, { width: W - 120, align: "justify", lineGap: 5 }
             );
             doc.moveDown(0.8);
+            if (documentNumber) {
+                doc.text(`Document No.: ${documentNumber}`, 60, doc.y, { width: W - 120 });
+                doc.moveDown(0.4);
+            }
             doc.text(`Duration: ${student.tenure || "As per enrollment"} (${fmt(joining)} to ${fmt(endDate)})`, 60, doc.y, { width: W - 120 });
             doc.moveDown(0.6);
             doc.text(`Attendance: ${stats.attendance}%`, 60, doc.y, { width: W - 120 });
@@ -277,7 +282,7 @@ async function generateLOCPDF(student, stats, outputPath) {
 // ════════════════════════════════════════════════════
 // LOR PDF GENERATOR
 // ════════════════════════════════════════════════════
-async function generateLORPDF(student, stats, outputPath) {
+async function generateLORPDF(student, stats, outputPath, documentNumber) {
     return new Promise((resolve, reject) => {
         try {
             const doc    = new PDFDocument({ size: "A4", margin: 0 });
@@ -300,7 +305,7 @@ async function generateLORPDF(student, stats, outputPath) {
             doc.moveTo(80, 138).lineTo(W - 80, 138).lineWidth(1).strokeColor(gold).stroke();
 
             const today = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
-            doc.fillColor("#555").font("Helvetica").fontSize(9).text(`Date: ${today}`, 60, 152);
+            doc.fillColor("#555").font("Helvetica").fontSize(9).text(`Date: ${today}${documentNumber ? `   ·   Document No.: ${documentNumber}` : ""}`, 60, 152);
 
             doc.fillColor(dark).font("Helvetica").fontSize(11).text(
                 `To Whom It May Concern,`,
@@ -404,7 +409,8 @@ async function generateStarPDF(student, stats, starInfo, outputPath) {
             doc.fillColor(white).font("Helvetica-Bold").fontSize(9).text("Kamlesh Gupta", 100, 406);
             doc.fillColor("#888").font("Helvetica").fontSize(8).text("Director, TEN", 100, 418);
 
-            doc.fillColor("#555").font("Helvetica").fontSize(8).text(`Issued: ${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" })}  ·  Employee ID: ${student.employeeId || "N/A"}`, 0, H - 36, { width: W, align: "center" });
+            const starDocNo = starInfo && starInfo.documentNumber ? `  ·  Document No.: ${starInfo.documentNumber}` : "";
+            doc.fillColor("#555").font("Helvetica").fontSize(8).text(`Issued: ${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" })}  ·  Employee ID: ${student.employeeId || "N/A"}${starDocNo}`, 0, H - 36, { width: W, align: "center" });
 
             doc.end();
             stream.on("finish", () => resolve(outputPath));
@@ -431,7 +437,9 @@ async function autoGenerateOfferLetter(doc) {
 
         let docNum = student.documentNumber;
         if (!docNum) {
-            docNum = await generateDocumentNumber("OL");
+            // "OL" is not a key in the prefix map, so this minted TEN-DOC-…
+            // numbers for offer letters instead of TEN-OL-….
+            docNum = generateDocumentNumber("offer_letter");
             await Student.findByIdAndUpdate(student._id, { documentNumber: docNum });
         }
 
@@ -464,10 +472,21 @@ async function autoGenerateOfferLetter(doc) {
         try {
             const transporter = createTransporter();
             await transporter.sendMail({
-                from:    process.env.EMAIL_US,
+                from:    EMAIL_FROM,
                 to:      student.email,
                 subject: "Your Internship Offer Letter is Ready — TEN",
-                html:    `<p>Dear ${student.name || "Intern"},</p><p>Congratulations! Your offer letter for the <strong>${student.domain || ""}</strong> internship at The Entrepreneurship Network is ready. Please find it attached to this email.</p><p>Your Employee ID: <strong>${student.employeeId || "N/A"}</strong></p><p>You can also download it from the <a href="${process.env.BASE_URL || "https://virtualinternships.entrepreneurshipnetwork.net"}">TEN Student Portal</a>.</p><p>Best regards,<br/>HR Team, TEN</p>`,
+                html:    renderEmail({
+                    heading: "📄 Your Internship Offer Letter",
+                    name: student.name || "Intern",
+                    bodyHtml: `<p style="margin:0;">Congratulations — your offer letter for the
+                               <b style="color:#f5c542;">${escapeHtml(student.domain || "")}</b> internship is ready and attached to this email.</p>`,
+                    panel: {
+                        label: "YOUR DETAILS",
+                        html: `<b>Employee ID:</b> <span style="color:#f5c542;">${escapeHtml(student.employeeId || "N/A")}</span><br>`
+                            + `<b>Domain:</b> ${escapeHtml(student.domain || "—")}`
+                    },
+                    cta: { label: "Open my portal", url: PORTAL_URL + "/student-dashboard.html" }
+                }),
                 attachments: [{ filename: "Offer_Letter_TEN.pdf", path: outputPath }]
             });
         } catch (mailErr) {
@@ -490,6 +509,7 @@ async function autoGenerateOfferLetter(doc) {
         }, "automation");
 
         await Notification.notifyStudent(student, {
+            email: false,   // the offer letter was just emailed, attached
             title: "📄 Offer Letter Ready",
             message: `Congratulations ${student.name || "Intern"}! Your internship offer letter (${docNum}) is ready and has been emailed to ${student.email || "your registered email"}. You can also download it from the Student Portal.`,
             type: "success"
@@ -540,8 +560,8 @@ async function initiateCertificateApproval(student) {
         try {
             const transporter = createTransporter();
             await transporter.sendMail({
-                from:    process.env.EMAIL_US,
-                to:      process.env.EMAIL_US,
+                from:    EMAIL_FROM,
+                to:      HR_NOTIFY_EMAIL,
                 subject: `[TEN] Certificate Approval Required — ${student.name} (${student.domain})`,
                 html:    `<p>The internship for <strong>${student.name}</strong> (Employee ID: ${student.employeeId}, Domain: ${student.domain}) has ended.</p><p>Please review and approve the certificate request via the TEN HR Portal or the coordinator portal.</p><p>Request ID: ${req._id}</p><p>Deadline: 24 hours from now.</p>`
             });
@@ -632,34 +652,45 @@ async function autoGenerateCertificates(certReq) {
         const missedList  = [];
         const sentDocuments = [];
 
+        // The number each PDF prints and the number logged for verification
+        // must be the same value, generated before the PDF exists. This used
+        // to generate a FRESH number at logging time — after the PDF had
+        // already been rendered without one — so the paper and the
+        // DocumentHistory row never matched and none of these certificates
+        // could be verified.
+
         // Generate LOC
         if (eligibility.loc) {
-            const locPath = path.join(certificatesDir, `${student.employeeId || student._id}_loc.pdf`);
-            await generateLOCPDF(student, stats, locPath);
+            const locNumber = generateDocumentNumber("loc");
+            const locPath = path.join(certificatesDir, `${student.employeeId || student._id}_loc.pdf`.replace(/\//g, "-"));
+            await generateLOCPDF(student, stats, locPath, locNumber);
             attachments.push({ filename: "Letter_of_Completion.pdf", path: locPath });
             earnedList.push("Letter of Completion (LOC) — for maintaining 75%+ attendance");
-            sentDocuments.push({ documentType: "Letter of Completion", documentKey: "loc", documentNumber: generateDocumentNumber("loc") });
+            sentDocuments.push({ documentType: "Letter of Completion", documentKey: "loc", documentNumber: locNumber });
         } else {
             missedList.push(`Letter of Completion — requires 75% attendance (you have ${stats.attendance}%)`);
         }
 
         // Generate LOR
         if (eligibility.lor) {
-            const lorPath = path.join(certificatesDir, `${student.employeeId || student._id}_lor.pdf`);
-            await generateLORPDF(student, stats, lorPath);
+            const lorNumber = generateDocumentNumber("lor");
+            const lorPath = path.join(certificatesDir, `${student.employeeId || student._id}_lor.pdf`.replace(/\//g, "-"));
+            await generateLORPDF(student, stats, lorPath, lorNumber);
             attachments.push({ filename: "Letter_of_Recommendation.pdf", path: lorPath });
             earnedList.push("Letter of Recommendation (LOR) — for 75%+ attendance and 70%+ performance");
-            sentDocuments.push({ documentType: "Letter of Recommendation", documentKey: "lor", documentNumber: generateDocumentNumber("lor") });
+            sentDocuments.push({ documentType: "Letter of Recommendation", documentKey: "lor", documentNumber: lorNumber });
         } else {
             missedList.push(`Letter of Recommendation — requires 75% attendance and 70% performance`);
         }
 
         // Generate Star Performance
-        const starPath = path.join(certificatesDir, `${student.employeeId || student._id}_star.pdf`);
+        const starNumber = generateDocumentNumber("star");
+        starInfo.documentNumber = starNumber;
+        const starPath = path.join(certificatesDir, `${student.employeeId || student._id}_star.pdf`.replace(/\//g, "-"));
         await generateStarPDF(student, stats, starInfo, starPath);
         attachments.push({ filename: "Star_Performance_Certificate.pdf", path: starPath });
         earnedList.push(`Star Performance Certificate — ${starInfo.grade} ${starInfo.label}`);
-        sentDocuments.push({ documentType: "Star Performer Certificate", documentKey: "star", documentNumber: generateDocumentNumber("star") });
+        sentDocuments.push({ documentType: "Star Performer Certificate", documentKey: "star", documentNumber: starNumber });
 
         // Send consolidated email
         let certMailStatus = "sent";
@@ -668,10 +699,22 @@ async function autoGenerateCertificates(certReq) {
             const earnedHtml  = earnedList.map(e => `<li>✅ ${e}</li>`).join("");
             const missedHtml  = missedList.map(m => `<li>❌ ${m}</li>`).join("");
             await transporter.sendMail({
-                from:    process.env.EMAIL_US,
+                from:    EMAIL_FROM,
                 to:      student.email,
                 subject: "🏅 Your TEN Internship Certificates Are Ready!",
-                html:    `<p>Dear ${student.name || "Intern"},</p><p>Congratulations on completing your <strong>${student.domain || ""}</strong> internship at The Entrepreneurship Network!</p><h3>Certificates Earned:</h3><ul>${earnedHtml}</ul>${missedHtml ? `<h3>Not Earned:</h3><ul>${missedHtml}</ul>` : ""}<p>Please find your certificates attached. You can also view them in the <a href="${process.env.BASE_URL || "https://virtualinternships.entrepreneurshipnetwork.net"}/my-certificates.html">TEN Student Portal</a>.</p><p>Best regards,<br/>TEN Team</p>`,
+                html:    renderEmail({
+                    heading: "🏅 Your certificates are ready",
+                    name: student.name || "Intern",
+                    bodyHtml: `<p style="margin:0;">Congratulations on completing your
+                               <b style="color:#f5c542;">${escapeHtml(student.domain || "")}</b> internship. Your certificates are attached to this email.</p>`,
+                    panel: {
+                        label: "EARNED",
+                        html: `<ul style="margin:0;padding-left:18px;">${earnedHtml}</ul>`
+                            + (missedHtml ? `<div style="margin-top:12px;color:#8b8578;font-size:12px;letter-spacing:2px;font-weight:700;">NOT EARNED</div>`
+                                          + `<ul style="margin:6px 0 0;padding-left:18px;color:#8b8578;">${missedHtml}</ul>` : "")
+                    },
+                    cta: { label: "View my certificates", url: PORTAL_URL + "/my-certificates.html" }
+                }),
                 attachments
             });
         } catch (mailErr) {
@@ -697,6 +740,7 @@ async function autoGenerateCertificates(certReq) {
         }
 
         await Notification.notifyStudent(student, {
+            email: false,   // the certificates were just emailed, attached
             title: "🏅 Your Internship Certificates Are Ready!",
             message: `Congratulations ${student.name || "Intern"} on completing your ${student.domain || ""} internship! Earned: ${earnedList.join("; ")}.${missedList.length ? ` Not earned: ${missedList.join("; ")}.` : ""} The certificates have been emailed to you and are available in the Student Portal.`,
             type: "success"
@@ -777,7 +821,14 @@ async function autoMarkCoordinatorAttendance() {
                 ] },
                 { internshipCompleted: { $ne: true } }
             ]
-        }).lean();
+        }).select(
+            // Projected deliberately. Without it this loads every active
+            // student in full, and a Student document embeds up to five base64
+            // PDFs — the nightly job was pulling hundreds of megabytes into
+            // memory to read a handful of scalar fields.
+            'employeeId domain domains linkedDomains tenure v2DurationType ' +
+            'joinerType joiningDate internshipStartDate internshipEndDate lastActiveDate createdAt'
+        ).lean();
 
         let marked = 0;
         for (const student of students) {
@@ -792,13 +843,22 @@ async function autoMarkCoordinatorAttendance() {
                 // Never auto-mark a Sunday — it is not a working day.
                 if (isSunday(dayStart)) continue;
 
-                // Skip if a coordinator (or a previous run) already marked today
-                const existing = await Attendance.findOne({
+                // Every domain this student holds. Two domains are two
+                // separate internships, each with its own attendance, so the
+                // auto-mark has to run once per domain rather than once per
+                // student.
+                const domains = studentDomains(student);
+                const targetDomains = domains.length ? domains : [student.domain || ""];
+
+                // Domains a coordinator (or a previous run) has not marked yet.
+                const alreadyMarked = await Attendance.find({
                     employeeId: student.employeeId,
                     dateKey:    dateKey,
                     markedBy:   "coordinator"
-                });
-                if (existing) continue;
+                }).select('domain').lean();
+                const markedKeys = new Set(alreadyMarked.map(r => domainKey(r.domain)));
+                const pending = targetDomains.filter(d => !markedKeys.has(domainKey(d)));
+                if (!pending.length) continue;
 
                 // Was the student active today? Logged in, self-marked, or made
                 // progress on a task.
@@ -824,24 +884,27 @@ async function autoMarkCoordinatorAttendance() {
                 const wasActive = !!(taskActivity || selfMarked || loggedInToday);
 
                 if (wasActive) {
-                    // Auto-mark coordinator attendance for active student
-                    await Attendance.create({
-                        studentId:     student._id,
-                        employeeId:    student.employeeId,
-                        domain:        student.domain || "",
-                        date:          today,
-                        dateKey:       dateKey,
-                        status:        "Present",
-                        markedBy:      "coordinator",
-                        coordinatorId: "AUTO_SYSTEM"
-                    });
-                    marked++;
-                    console.log(`[AUTO-ATTEND] Auto-marked coordinator attendance for ${student.employeeId} (${dateKey})`);
+                    for (const dom of pending) {
+                        await Attendance.create({
+                            studentId:     student._id,
+                            employeeId:    student.employeeId,
+                            domain:        dom || "",
+                            date:          today,
+                            dateKey:       dateKey,
+                            status:        "Present",
+                            markedBy:      "coordinator",
+                            coordinatorId: "AUTO_SYSTEM",
+                            source:        "auto"
+                        });
+                        marked++;
+                        console.log(`[AUTO-ATTEND] Auto-marked coordinator attendance for ${student.employeeId} / ${dom || "(no domain)"} (${dateKey})`);
+                    }
                 }
             } catch (studentErr) {
                 // Duplicate key = already marked between the check and the
-                // insert. The unique index on {employeeId, dateKey, markedBy}
-                // is doing its job; no duplicate row is created.
+                // insert. The unique index on
+                // {employeeId, dateKey, markedBy, domain} is doing its job; no
+                // duplicate row is created.
                 if (studentErr.code !== 11000) {
                     console.error(`[AUTO-ATTEND] Error for ${student.employeeId}:`, studentErr.message);
                 }

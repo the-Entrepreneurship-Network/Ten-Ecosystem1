@@ -29,11 +29,14 @@ function resolveStudentDuration(student) {
 }
 
 /**
- * Assign all tasks for a student's domain + durationType.
- * Week 1 tasks → available, all other weeks → locked.
- * Idempotent — safe to call multiple times.
+ * The exact set of tasks a student is entitled to right now.
+ *
+ * Split out of assignTasksForStudent so resyncTasksForStudent can ask the same
+ * question — "what SHOULD this student have?" — without duplicating the domain
+ * aliasing and the short-duration remap, which is precisely the kind of second
+ * copy that let the five tenure tables drift apart.
  */
-async function assignTasksForStudent(student) {
+async function resolveTaskScope(student) {
     let domain = student.domain;
     if (domain === "HR") domain = "HR Management";
     if (domain === "Business Development") domain = "Business Analyst";
@@ -42,8 +45,7 @@ async function assignTasksForStudent(student) {
     if (domain === "Finance" || domain === "Finance and Accounts" || domain === "Finance & Accounts") domain = "Venture Capital";
 
     const durationType = resolveStudentDuration(student);
-
-    if (!domain || !durationType) return { assigned: 0 };
+    if (!domain || !durationType) return { domain: null, durationType, tasks: [] };
 
     let queryDurationType = durationType;
     let queryObj = { domain };
@@ -58,7 +60,17 @@ async function assignTasksForStudent(student) {
 
     queryObj.durationType = queryDurationType;
 
-    const allTasks = await DomainTask.find(queryObj).lean();
+    return { domain, durationType, tasks: await DomainTask.find(queryObj).lean() };
+}
+
+/**
+ * Assign all tasks for a student's domain + durationType.
+ * Week 1 tasks → available, all other weeks → locked.
+ * Idempotent — safe to call multiple times.
+ */
+async function assignTasksForStudent(student) {
+    const { domain, durationType, tasks: allTasks } = await resolveTaskScope(student);
+    if (!domain || !durationType) return { assigned: 0 };
     if (!allTasks.length) return { assigned: 0 };
 
     const ops = allTasks.map(task => ({
@@ -86,6 +98,62 @@ async function assignTasksForStudent(student) {
     );
 
     return { assigned: result.upsertedCount, total: allTasks.length };
+}
+
+/**
+ * Bring an existing student's task journey back in line with their record.
+ *
+ * assignTasksForStudent is upsert-only ($setOnInsert), which is right when a
+ * student is first enrolled but wrong when HR later edits them. Extending a
+ * tenure from 1 Month to 3 Months left the extra weeks unassigned, and
+ * shortening it — or moving the student to another domain — left the old
+ * weeks in place forever. The Task Journey therefore kept showing the tenure
+ * the student *used* to be on, which is the mismatch HR reported.
+ *
+ * Two rules govern removal, because a resync must never destroy real work:
+ *   - a row the student has not touched (still locked/available, nothing
+ *     submitted, no coins, no quiz attempt) is safe to drop;
+ *   - anything else is kept and reported, so a shortened tenure never deletes
+ *     an approved submission or the coins that came with it.
+ *
+ * Returns { added, removed, preserved, inScope } so the caller can tell the
+ * person who made the edit what actually happened.
+ */
+async function resyncTasksForStudent(student) {
+    const empty = { added: 0, removed: 0, preserved: 0, inScope: 0 };
+    if (!student || !student._id) return empty;
+
+    const { domain, durationType, tasks } = await resolveTaskScope(student);
+    if (!domain || !durationType) return empty;
+
+    // No task catalogue for this domain/duration yet. Removing the student's
+    // existing rows here would empty their journey on the strength of missing
+    // seed data, so leave everything alone.
+    if (!tasks.length) return empty;
+
+    const { assigned } = await assignTasksForStudent(student);
+
+    const inScopeIds = tasks.map(t => String(t._id));
+    const existing = await StudentTaskProgress.find({ studentId: student._id }).lean();
+    const outOfScope = existing.filter(p => !inScopeIds.includes(String(p.taskId)));
+
+    const untouched = outOfScope.filter(p =>
+        (p.status === "locked" || p.status === "available") &&
+        !p.submissionUrl &&
+        !p.coinsAwarded &&
+        !p.quiz_attempts
+    );
+
+    if (untouched.length) {
+        await StudentTaskProgress.deleteMany({ _id: { $in: untouched.map(p => p._id) } });
+    }
+
+    return {
+        added:     assigned || 0,
+        removed:   untouched.length,
+        preserved: outOfScope.length - untouched.length,
+        inScope:   tasks.length
+    };
 }
 
 // How many weeks of tasks each duration is entitled to. Short durations borrow
@@ -260,7 +328,40 @@ async function getStudentTasks(student) {
         return w;
     });
 
+    // Self-heal a stuck journey.
+    //
+    // Unlocking used to happen only at the moment a task was approved, and the
+    // quiz path — how most students actually finish — did not do it. Students
+    // were left looking at "Week 1: APPROVED" above "Complete Week 1 to
+    // unlock", with no action available to them and no way to report it except
+    // a screenshot.
+    //
+    // Repairing on read fixes everyone already stuck without a migration, and
+    // costs one write only in the rare case where a week is finished and the
+    // next is still shut.
+    weeks.sort((a, b) => a.week - b.week);
+    const stuck = [];
+    for (let i = 0; i < weeks.length - 1; i++) {
+        const next = weeks[i + 1];
+        if (weeks[i].allApproved && next.totalCount && !next.anyAvailable && !next.allApproved) {
+            stuck.push(next);
+        }
+    }
+    if (stuck.length) {
+        const ids = stuck.flatMap(w => w.tasks.filter(t => t.status === "locked").map(t => t._id));
+        if (ids.length) {
+            await StudentTaskProgress.updateMany(
+                { studentId: student._id, taskId: { $in: ids }, status: "locked" },
+                { $set: { status: "available" } }
+            );
+            for (const w of stuck) {
+                w.tasks.forEach(t => { if (t.status === "locked") t.status = "available"; });
+                w.anyAvailable = true;
+            }
+        }
+    }
+
     return { weeks, domain, durationType };
 }
 
-module.exports = { assignTasksForStudent, tryUnlockNextWeek, approveTask, getStudentTasks, tenureToDurationType, resolveStudentDuration };
+module.exports = { assignTasksForStudent, resyncTasksForStudent, resolveTaskScope, tryUnlockNextWeek, approveTask, getStudentTasks, tenureToDurationType, resolveStudentDuration };

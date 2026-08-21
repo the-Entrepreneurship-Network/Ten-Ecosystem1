@@ -40,7 +40,88 @@
             return d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
         } catch (e) { return ""; }
     }
+    /**
+     * Every id this reader's own messages may carry.
+     *
+     * Filled in from GET /api/chat/me at init. Staff appear in stored messages
+     * under both their username and their email depending on when and where a
+     * message was sent, so guessing one of them from sessionStorage put the
+     * reader's own messages on the left, as though somebody else had sent them.
+     * The local guess stays as a fallback for the moment before the fetch
+     * lands, and if the request fails.
+     */
+    var ownIds = [];
+
     function ownId() { return cfg.role === "student" ? cfg.employeeId : cfg.username; }
+
+    function isOwnMessage(m) {
+        if (!m || m.senderId == null) return false;
+        var candidates = ownIds.length ? ownIds : [ownId()];
+        var s = String(m.senderId).toLowerCase();
+        for (var i = 0; i < candidates.length; i++) {
+            if (String(candidates[i]).toLowerCase() === s) return true;
+        }
+        return false;
+    }
+
+    function loadOwnIds() {
+        return fetch("/api/chat/me", { credentials: "same-origin" })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) {
+                if (d && d.me && d.me.ids && d.me.ids.length) ownIds = d.me.ids;
+            })
+            .catch(function () { /* the local guess still works for most people */ });
+    }
+
+    /** Small JSON helper that surfaces the server's message rather than a status code. */
+    function postJSON(url, body) {
+        return fetch(url, {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body || {})
+        }).then(function (r) {
+            return r.json().catch(function () { return {}; }).then(function (d) {
+                if (!r.ok || d.success === false) throw new Error(d.message || ("Request failed (" + r.status + ")"));
+                return d;
+            });
+        });
+    }
+
+    /**
+     * Send without a socket.
+     *
+     * The room is still notified server-side, so everyone else sees it live;
+     * only this window has to draw its own copy, which appendMessage does when
+     * the response comes back.
+     */
+    function sendOverHttp(payload) {
+        postJSON("/chat/messages", payload)
+            .then(function (d) {
+                var win = openWin;
+                if (d && d.doc && win && win.el && win.el.dataset.currentRoom === d.doc.chatRoom) {
+                    appendMessage(win, d.doc);
+                }
+            })
+            .catch(function (e) { alert(e.message || "The message could not be sent. Please try again."); });
+    }
+
+    /**
+     * Open a private one-to-one conversation.
+     *
+     * The room name is derived on the server from both ids, sorted, so both
+     * people land in the same room whichever of them starts it.
+     */
+    function openDirectMessage(userId, userName) {
+        postJSON("/api/chat/dm/open", { userId: userId })
+            .then(function (d) {
+                toggleChat(d.room, "🔒 " + (userName || userId));
+            })
+            .catch(function (e) { alert(e.message); });
+    }
+    // Portals expose this so a "Message privately" button can live outside the
+    // widget — e.g. beside a student row in the HR portal.
+    window.TenChatDM = openDirectMessage;
 
     function chatsForRole(role) {
         var out = [];
@@ -88,6 +169,11 @@
             ".tc-time{color:#5a7299;font-size:10px;}",
             ".tc-del{margin-left:4px;border:none;background:transparent;color:#5a7299;cursor:pointer;font-size:12px;}",
             ".tc-del:hover{color:#f43f5e;}",
+            ".tc-dm,.tc-block,.tc-report{margin-left:2px;border:none;background:transparent;color:#5a7299;cursor:pointer;font-size:12px;padding:0 2px;}",
+            ".tc-dm:hover{color:#3b82f6;}",
+            ".tc-block:hover{color:#f59e0b;}",
+            ".tc-report:hover{color:#f43f5e;}",
+            ".tc-launcher{background:#101a2e;border:1px solid rgba(99,140,210,0.3);color:#cdd9ec;border-radius:20px;padding:8px 14px;font:600 12px \'Plus Jakarta Sans\',sans-serif;cursor:pointer;}",
             ".tc-form{display:flex;gap:8px;padding:10px 12px;border-top:1px solid rgba(245,197,66,0.12);background:#0c1220;}",
             ".tc-form input{flex:1;background:#101a2e;border:1px solid rgba(99,140,210,0.25);color:#e2eaf7;border-radius:10px;padding:9px 12px;outline:none;font:500 13px 'Plus Jakarta Sans','Outfit',sans-serif;}",
             ".tc-form input:focus{border-color:#f5c542;}",
@@ -270,7 +356,16 @@
                 payload.imageName = pendingImage.imageName;
                 payload.imageMime = pendingImage.imageMime;
             }
-            socket.emit("send_message", payload);
+            // Socket first; HTTP when there is no socket, so a network that
+            // blocks WebSockets does not silently swallow the message.
+            if (socket && socket.connected) {
+                socket.emit("send_message", payload, function (ack) {
+                    if (ack && ack.success === false && ack.message) alert(ack.message);
+                    else if (!ack || !ack.success) sendOverHttp(payload);
+                });
+            } else {
+                sendOverHttp(payload);
+            }
             inputEl.value = "";
             clearPendingImage();
         });
@@ -319,7 +414,7 @@
 
     function appendMessage(w, m) {
         maybeAppendDateDivider(w, m.timestamp);
-        var mine = (m.senderId === ownId() && m.senderRole === cfg.role);
+        var mine = isOwnMessage(m);
         var roleTag =
             m.senderRole === "student" ? "INTERN" :
             m.senderRole === "coordinator" ? "COORDINATOR" : "HR";
@@ -341,6 +436,14 @@
             ? '<button class="tc-del" title="Delete" data-id="' + escapeHtml(m._id) + '">🗑</button>'
             : "";
 
+        // Anyone can protect themselves from anyone else — including a student
+        // from a member of staff. These appear on other people's messages only:
+        // there is nothing to block or report about your own.
+        var safetyBtns = mine ? "" :
+            '<button class="tc-dm" title="Message privately">✉</button>' +
+            '<button class="tc-block" title="Block this person">🚫</button>' +
+            '<button class="tc-report" title="Report this message">⚑</button>';
+
         var row = document.createElement("div");
         row.className = "tc-row " + (mine ? "mine" : "theirs");
         row.dataset.id = m._id;
@@ -349,6 +452,7 @@
                 '<b>' + escapeHtml(m.senderName) + '</b>' +
                 '<span class="tc-tag" style="color:' + roleColor + ';border-color:' + roleColor + ';">' + roleTag + '</span>' +
                 '<span class="tc-time">' + escapeHtml(fmtTime(m.timestamp)) + '</span>' +
+                safetyBtns +
                 delBtn +
             '</div>' +
             '<div class="' + bubbleClass + '">' + bubbleBody(m) + '</div>';
@@ -359,6 +463,38 @@
                 if (!ack || !ack.success) alert("Delete failed: " + (ack && ack.message || "forbidden"));
             });
         });
+
+        var dmEl = row.querySelector(".tc-dm");
+        if (dmEl) dmEl.addEventListener("click", function () { openDirectMessage(m.senderId, m.senderName); });
+
+        var blockEl = row.querySelector(".tc-block");
+        if (blockEl) blockEl.addEventListener("click", function () {
+            if (!confirm("Block " + m.senderName + "?\n\nYou will not see their messages and they will not see yours. You can undo this at any time.")) return;
+            postJSON("/api/chat/block", { userId: m.senderId, userName: m.senderName, userRole: m.senderRole })
+                .then(function (d) {
+                    alert(d.message || "Blocked.");
+                    // Their messages must disappear now, not on next reload.
+                    Array.prototype.forEach.call(
+                        w.msgsEl.querySelectorAll('.tc-row'),
+                        function (r) { if (r.dataset.senderId === m.senderId) r.remove(); }
+                    );
+                })
+                .catch(function (e) { alert(e.message); });
+        });
+
+        var reportEl = row.querySelector(".tc-report");
+        if (reportEl) reportEl.addEventListener("click", function () {
+            var reason = prompt("Report this message to an admin.\n\nWhat is wrong with it?");
+            if (reason === null) return;
+            postJSON("/api/chat/report", {
+                userId: m.senderId, userName: m.senderName, userRole: m.senderRole,
+                messageId: m._id, room: w.room || m.chatRoom, reason: reason
+            })
+                .then(function (d) { alert(d.message || "Reported."); })
+                .catch(function (e) { alert(e.message); });
+        });
+
+        row.dataset.senderId = m.senderId;
         w.msgsEl.appendChild(row);
         w.msgsEl.scrollTop = w.msgsEl.scrollHeight;
     }
@@ -445,6 +581,26 @@
                 bumpBadge(m.chatRoom);
             }
         });
+        // A private message from someone whose conversation is not open yet.
+        // Without this the first DM anyone receives is invisible until they
+        // happen to look for it.
+        socket.on("dm_notice", function (p) {
+            if (!p || !p.room) return;
+            if (winsByRoom[p.room]) { bumpBadge(p.room); return; }
+            bumpBadge(p.room);
+            try {
+                var host = document.querySelector(".tc-launchers") || document.body;
+                if (host && !host.querySelector('[data-dm-room="' + cssEsc(p.room) + '"]')) {
+                    var b = document.createElement("button");
+                    b.className = "tc-launcher";
+                    b.dataset.dmRoom = p.room;
+                    b.textContent = "🔒 " + (p.from || "Private");
+                    b.addEventListener("click", function () { toggleChat(p.room, "🔒 " + (p.from || "Private")); });
+                    host.appendChild(b);
+                }
+            } catch (e) { /* the badge alone is enough */ }
+        });
+
         socket.on("message_deleted", function (p) {
             if (cfg.role === "hr" && (p.room === "general" || p.room === "doubts" || p.room === "feedback_support")) {
                 var w = winsByRoom["general"];
@@ -467,7 +623,9 @@
             cfg = config;
             chats = chatsForRole(cfg.role);
             render();
-            connectSocket();
+            // Ask the server which ids are ours before drawing any history, so
+            // our own messages land on the right side of the conversation.
+            loadOwnIds().then(connectSocket, connectSocket);
         }
     };
 })(window);

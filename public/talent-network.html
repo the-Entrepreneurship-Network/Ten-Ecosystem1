@@ -164,6 +164,15 @@
       animation: modalFadeIn 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
   </style>
+  <link rel="stylesheet" href="/css/mobile.css">
+  <script src="/mobile-nav.js" defer></script>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0e1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TEN">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <script src="/tailwind-guard.js" defer></script>
 </head>
 <body class="ocean-mesh min-h-screen text-slate-100 flex overflow-hidden">
 
@@ -809,62 +818,119 @@
       { id: 'not-2', text: 'Apurva Jaiswal matched to SaaS Pitch Sifu', type: 'system', time: '5m ofs' }
     ];
 
-    let localFeedLogs = [
-      { id: 'feed-1', title: 'Arjun Kumar (DevOps Scholar)', desc: 'joined DevOps with AWS program cohort', meta: 'VETTED TALENT', time: '10m ago' },
-      { id: 'feed-2', title: 'Radhika Sen (Product Sourced)', desc: 'cleared mentorship validation checkpoints', meta: 'SYSTEM SIGNAL', time: '20m ago' },
-      { id: 'feed-3', title: 'Suresh Iyer (VC Syndicate)', desc: 'listed new Pre-Seed Opportunity check sheets', meta: 'INVESTMENT ACTION', time: '1h ago' }
-    ];
+    let localFeedLogs = [];
 
-    let localTalents = [
-      { id: 'tal-1', name: 'Arjun Kumar', headline: 'Full-Stack Developer Specialization', skills: ['React', 'Node.js', 'MongoDB', 'AWS'], avail: 'immediately', role: 'internship', verified: true, cohort: 'TEN Summer Intern', community: '14 Posts', mentor: 'Rakesh S. (Senior Developer)', matchingVal: '96% Match' },
-      { id: 'tal-2', name: 'Nisha Sharma', headline: 'Data Engineering & Analytics Lead', skills: ['Python', 'SQL', 'TensorFlow', 'Java'], avail: '2weeks', role: 'fulltime', verified: true, cohort: 'Big Data bootcamp', community: '8 Posts', mentor: 'Dr. Vivek K. (Advisory Scientist)', matchingVal: '92% Match' },
-      { id: 'tal-3', name: 'Kabir Mehta', headline: 'Venture Architect & Product Manager', skills: ['Framer', 'Product Specs', 'Figma', 'Pitch Deck'], avail: 'immediately', role: 'internship', verified: false, cohort: 'Zero-to-One PM Track', community: '5 Posts', mentor: 'Aditi V. (Product Lead)', matchingVal: '89% Match' }
-    ];
+    let localTalents = [];
 
-    let localPrograms = [
-      { id: 'prog-1', title: 'TEN Summer Internship Program', desc: 'Accelerate skills through live venture development loops alongside senior engineers.', type: 'internship', dur: '3 Months', stip: '₹12,000 / mo', quota: '50 Seats', deadline: '2026-07-31', status: 'Active' },
-      { id: 'prog-2', title: 'Founder Accelerator Cohort', desc: 'Venture scale modules centering fundraising strategies, go-to-market plans, and pitch support.', type: 'fellowship', dur: '6 Weeks', stip: 'Equity-based support', quota: '12 Slots', deadline: '2026-08-15', status: 'Limited' },
-      { id: 'prog-3', title: 'High performance Devops Fellowship', desc: 'Secure enterprise cloud systems orchestration, automatic deployments, and scale checks.', type: 'bootcamp', dur: '2 Months', stip: '₹10,000 / mo', quota: '25 Seats', deadline: 'Rolling', status: 'Open' }
-    ];
+    let localPrograms = [];
 
-    let localMentorsList = [
-      { id: 'ment-1', name: 'Rakesh Singhal', specialty: 'Distributed Cloud Operations', company: 'Google Cloud Principal Architect', avatar: '👨‍💻', verified: true, alignment: 'EdTech / SaaS' },
-      { id: 'ment-2', name: 'Dr. Vivek Khare', specialty: 'Venture Capital Valuation Metrics', company: 'Partner at Horizon Syndicate', avatar: '📈', verified: true, alignment: 'FinTech / SaaS' },
-      { id: 'ment-3', name: 'Aditi Verma', specialty: 'Growth Loop Optimization', company: 'VP Sourcing at Growth Labs', avatar: '🚀', verified: false, alignment: 'SaaS / E-Commerce' }
-    ];
+    let localMentorsList = [];
 
-    let localInvestorsList = [
-      { id: 'inv-1', name: 'Astra Syndicate Fund', stageFocus: 'Pre-Seed / Seed', averageTicket: '₹15L - ₹50L', geoFocus: 'India / SE Asia', logo: '🌌', status: 'Actively investing', connections: '4 Founders' },
-      { id: 'inv-2', name: 'Pinnacle Capital Partners', stageFocus: 'Seed Phase', averageTicket: '₹40L - ₹1.5Cr', geoFocus: 'Global Remote', logo: '🏔️', status: 'Reviewing decks', connections: '12 Founders' },
-      { id: 'inv-3', name: 'Beacon Angel Syndicate', stageFocus: 'Ideation / Validation', averageTicket: '₹5L - ₹20L', geoFocus: 'Bengaluru / Hybrid', logo: '🗼', status: 'Venture mentor ties', connections: '8 Founders' }
-    ];
+    let localInvestorsList = [];
 
-    let localCommunityChats = {
-      founders: [
-        { id: 'c-1', user: 'Kabir (Mehta Dynamics)', msg: 'Hey guys! Setting up the TAM pitch spec values. Has anyone verified SaaS customer segment retention index checks yet?', time: '3m ago' },
-        { id: 'c-2', user: 'Rakesh S. (Mentor)', msg: 'Typically healthy seed stages require a minimum 82% 3-month retention threshold. Keep parameters local first.', time: '2m ago' }
-      ],
-      talent: [
-        { id: 'c-3', user: 'Arjun Kumar', msg: 'Just completed AWS security credentialing metrics challenge. Excited to match to early-stage SaaS setups.', time: '10m ago' }
-      ],
-      investor: [
-        { id: 'inv-chat-1', user: 'Horizon Partners', msg: 'Actively searching for early validation segment systems in AgriTech and HealthTech sectors.', time: '1h ago' }
-      ]
-    };
+    /* Was a scripted conversation between invented members. A channel with no
+       messages is the truth until somebody posts one. */
+    let localCommunityChats = { founders: [], talent: [], investor: [] };
 
     let activeChannelId = 'founders';
 
     // -----------------------------------------------------------------
     // ENVIRONMENT SETUP & ROUTING SYSTEM (PRESERVE CONTEXT ON CLICK)
     // -----------------------------------------------------------------
+
+    /* ── Real directories ──────────────────────────────────────────────────
+       These five lists used to be arrays of invented people written into this
+       file and mirrored to localStorage, so the page looked populated and
+       maintained while showing every visitor the same fiction. They are loaded
+       from the API now, and an empty list renders an empty state rather than a
+       sample. */
+    async function loadRealDirectories() {
+      const get = async (url) => {
+        try {
+          const res = await fetch(url, { credentials: 'same-origin' });
+          const data = await res.json();
+          return (data && (data.data || data.talent || data.mentors || data.investors)) || [];
+        } catch (e) {
+          return [];
+        }
+      };
+
+      const [talent, programs, mentors, investors] = await Promise.all([
+        get('/api/talent-network/featured'),
+        get('/api/programs'),
+        get('/api/founder-os/mentors'),
+        get('/api/founder-os/investor-directory')
+      ]);
+
+      localTalents = (talent || []).map((t) => ({
+        id: String(t._id || t.id || ''),
+        name: t.name || t.fullName || 'TEN member',
+        headline: t.headline || t.title || '',
+        skills: (t.skills || []).map((s) => (typeof s === 'string' ? s : s.name)).filter(Boolean),
+        avail: t.availability || '',
+        role: t.lookingFor || '',
+        verified: t.verificationStatus === 'approved',
+        cohort: t.cohort || '',
+        community: '',
+        mentor: '',
+        matchingVal: ''
+      }));
+
+      localPrograms = (programs || []).map((p) => ({
+        id: String(p.id || p._id || ''),
+        title: p.title || '',
+        desc: p.description || '',
+        type: p.type || 'internship',
+        dur: p.duration || '',
+        stip: p.stipend || '',
+        quota: p.seatsLeft === null || p.seatsLeft === undefined
+          ? (p.seats ? p.seats + ' seats' : '')
+          : p.seatsLeft + ' of ' + p.seats + ' seats left',
+        deadline: p.deadline ? String(p.deadline).slice(0, 10) : 'Rolling',
+        status: p.open ? 'Open' : 'Closed'
+      }));
+
+      localMentorsList = (mentors || []).map((m) => ({
+        id: String(m._id || m.id || ''),
+        name: m.name || m.fullName || 'Mentor',
+        specialty: m.expertise || m.specialty || '',
+        company: m.company || m.currentRole || '',
+        avatar: '🧭',
+        verified: m.verificationStatus === 'approved',
+        alignment: (m.sectorFocus || []).join(' / ')
+      }));
+
+      localInvestorsList = (investors || []).map((i) => ({
+        id: String(i._id || i.id || ''),
+        name: i.fundName || i.name || 'Investor',
+        stageFocus: (i.stagePreference || []).join(' / '),
+        averageTicket: i.investmentRange && i.investmentRange.max
+          ? '₹' + Number(i.investmentRange.min || 0).toLocaleString('en-IN') + ' – ₹' + Number(i.investmentRange.max).toLocaleString('en-IN')
+          : '',
+        geoFocus: (i.geographyFocus || []).join(' / '),
+        logo: '◆',
+        status: i.verificationStatus === 'approved' ? 'Verified' : 'Pending verification',
+        connections: ''
+      }));
+    }
+
     function bootUnifiedEnvironment() {
+      // Redraw whichever directories this page renders once real rows land.
+      loadRealDirectories().then(function () {
+        [
+          'renderTalentNetworkSourcing',
+          'renderAcceleratorsListings',
+          'renderEligibleMentorsWorkspace',
+          'renderApprovedInvestorsDeckPitch',
+          'renderActivityFeed'
+        ].forEach(function (fn) {
+          try { if (typeof window[fn] === 'function') window[fn](); } catch (e) {}
+        });
+      });
       // Hydrate custom state stores
       if (localStorage.getItem('founder_kanban')) localKanbanTasks = JSON.parse(localStorage.getItem('founder_kanban'));
       if (localStorage.getItem('founder_tasks')) localTasks = JSON.parse(localStorage.getItem('founder_tasks'));
       if (localStorage.getItem('founder_notif')) localNotificationsList = JSON.parse(localStorage.getItem('founder_notif'));
-      if (localStorage.getItem('founder_feed_logs')) localFeedLogs = JSON.parse(localStorage.getItem('founder_feed_logs'));
-      if (localStorage.getItem('founder_talents')) localTalents = JSON.parse(localStorage.getItem('founder_talents'));
-      if (localStorage.getItem('founder_cohorts')) localPrograms = JSON.parse(localStorage.getItem('founder_cohorts'));
 
       // Check current browser URL and dynamically set starting active tab
       const path = window.location.pathname;
@@ -1076,25 +1142,25 @@
         items = [
           { badge: 'PROGRAMS MATCH', title: 'Apply to Founder Accelerator Cohort', desc: 'Six-week cohort specialized in mapping zero-to-one architecture models.', action: `navigateToTab('programs')` },
           { badge: 'TALENT MATCH', title: 'Vetted Project Manager Kabir Mehta (Framer, PM Specs)', desc: '91% Sourcing alignment to structuralize your idea slide decks.', action: `navigateToTab('talent')` },
-          { badge: 'MENTOR SUGGESTION', title: 'Schedule 1-on-1 strategy with Aditi Verma', desc: 'VP at Growth Labs: Expert in product specs & early loops prioritization.', action: `navigateToTab('mentors')` }
+          { badge: 'MENTOR SUGGESTION', title: 'Schedule a 1-on-1 strategy session with a mentor', desc: 'Product specification and early prioritisation, from the mentor directory.', action: `navigateToTab('mentors')` }
         ];
       } else if (stage === 'validation') {
         items = [
           { badge: 'MARKET DISCOVERY', title: 'Conduct TAM Customer surveys', desc: 'Use Community hub to poll vetted scholar pools on feature requirements.', action: `navigateToTab('community')` },
-          { badge: 'MENTOR MATCH', title: 'Book VC rehearsal session with Dr. Vivek Khare', desc: 'Synthesize seed round valuations and financial deal models.', action: `navigateToTab('mentors')` },
+          { badge: 'MENTOR MATCH', title: 'Book a VC rehearsal session with a mentor', desc: 'Synthesize seed round valuations and financial deal models.', action: `navigateToTab('mentors')` },
           { badge: 'ACCELERATOR RECOM', title: 'Enroll in TEN Tech Venture fellowship', desc: 'Approved entries map journey validation requirements instantly.', action: `navigateToTab('programs')` }
         ];
       } else if (stage === 'mvp') {
         items = [
-          { badge: 'SCHOLAR MATCH', title: 'Sourcing Full-Stack Developer Arjun Kumar (Node, AWS, React)', desc: '96% Match level: Ready to deploy and maintain alpha testing servers.', action: `navigateToTab('talent')` },
-          { badge: 'INVESTOR MATCH', title: 'Submit pitch parameters to Astra Syndicate Fund', desc: 'Actively investing ticket sizes from ₹15L - ₹50L for regional SaaS setups.', action: `navigateToTab('investors')` },
+          { badge: 'SCHOLAR MATCH', title: 'Source a full-stack developer from the talent network', desc: 'Filter the talent network by stack and availability.', action: `navigateToTab('talent')` },
+          { badge: 'INVESTOR MATCH', title: 'Submit pitch parameters to the investor directory', desc: 'Investors on the network list their own stage and ticket size.', action: `navigateToTab('investors')` },
           { badge: 'COHORT TARGET', title: 'TEN Demo Day pitching cohort Summer Cohort', desc: 'Pitch direct to investor syndicates on August Demo Day.', action: `navigateToTab('programs')` }
         ];
       } else {
         items = [
-          { badge: 'SCALING TARGET', title: 'Launch Sourcing Matching triggers with Dr. Vivek Khare', desc: 'Accelerate team structures for growth scaling requirements.', action: `navigateToTab('mentors')` },
-          { badge: 'TALENT PIPELINE', title: 'Sourced Big Data Scholar Nisha Sharma (Tensorflow, Java)', desc: '92% Sourcing index: Ready to connect scale logs pipelines.', action: `navigateToTab('talent')` },
-          { badge: 'HIGH VENTURES', title: 'Syndicated funding check via Pinnacle Capital', desc: 'Average ticket size ₹40L - ₹1.5Cr for verified MVP systems growth.', action: `navigateToTab('investors')` }
+          { badge: 'SCALING TARGET', title: 'Set up sourcing and matching triggers with a mentor', desc: 'Accelerate team structures for growth scaling requirements.', action: `navigateToTab('mentors')` },
+          { badge: 'TALENT PIPELINE', title: 'Source a data engineer from the talent network', desc: 'Filter by skills to find people who can build your pipelines.', action: `navigateToTab('talent')` },
+          { badge: 'HIGH VENTURES', title: 'Run a syndicated funding check through the investor directory', desc: 'Investors publish their own ticket sizes on their profiles.', action: `navigateToTab('investors')` }
         ];
       }
 

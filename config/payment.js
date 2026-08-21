@@ -11,6 +11,12 @@ const BUSINESS_UPI = {
   phone: '8595986120'
 };
 
+// What a run of any portal costs, in rupees. The same figure for all of them
+// today; the paygate takes a per-portal data-amount if that ever changes, but
+// the shared QR encodes this one, so a portal priced differently needs its own
+// QR rather than just a different attribute.
+const PORTAL_ACCESS_PRICE = 200;
+
 const FINE_AMOUNTS = {
   low_attendance: 400
 };
@@ -32,6 +38,7 @@ module.exports = {
     PAYMENT_SETU_API_KEY: process.env.PAYMENTSETU_API_KEY || '',
     PAYMENTSETU_BASE_URL: process.env.PAYMENTSETU_BASE_URL || 'https://paymentsetu.com/api',
     BUSINESS_UPI,
+    PORTAL_ACCESS_PRICE,
     FINE_AMOUNTS
 };
 
