@@ -1337,7 +1337,25 @@ function deliveryHeader(path, command, band, packet) {
      bookkeeping, and printing them at a student never helped. */
   const lines = [`Band: ${band}`];
   if (packet) {
-    lines.push(`Estimated checker: ${packet.after.checker}/${packet.after.checkerMax} (before ${packet.before.checker}) · Recruiter-scan: ${packet.after.recruiter}/100 (before ${packet.before.recruiter})`);
+    /*
+     * Two numbers, because they answer two questions.
+     *
+     * The checker is scored out of 60 with no posting and out of 100 with
+     * one, 40 of those points being keyword overlap — so choosing a job made
+     * a student's resume appear to fall from 89 to 53 without a word
+     * changing. It had not got worse; a second, harder question had been
+     * silently folded into the same number.
+     *
+     * The page's own quality is reported on one scale that never moves, and
+     * how well it matches this particular posting is reported beside it as
+     * what it is: a fact about the fit, not a verdict on the resume.
+     */
+    const quality = scanResume(packet.resume, packet.target || '');
+    const kd = packet.detail && packet.detail.after.checker.keywordDetail;
+    lines.push(`Resume AI score: ${quality.score}/100 · recruiter-scan ${packet.after.recruiter}/100 (before ${packet.before.recruiter})`);
+    if (kd && kd.terms) {
+      lines.push(`Match for this posting: ${kd.overlap}% — ${kd.matched} of its ${kd.terms} hard terms are evidenced on your page. That is about the job, not about your resume.`);
+    }
     const c = packet.detail.after.checker;
     /* The Rezi-style second line, mapped onto measured components. */
     lines.push(`Keyword ${c.keywords === null ? 'N/A' : c.keywords + '/40'} · Format ${c.parse}/30 · Complete ${c.structure}/15 · Evidence ${c.evidence}/15`);
@@ -2047,13 +2065,51 @@ function deliver(res, session, packetOrBuilt, kindNote) {
     ? `Want a cover letter for ${session.pickedJob.title} at ${session.pickedJob.company}? Say "yes, write the letter".`
     : '';
 
+  /*
+   * The posting's skills go onto the page, with the plan to make them true.
+   *
+   * A tailored resume that ends "Missing keywords: linux, ci/cd, monitoring"
+   * tells a student what is wrong and nothing about what to do, at the exact
+   * moment they were expecting the finished thing. The point of the tool is
+   * to close that gap, not to name it — so the skills are added, marked as
+   * not yet true, and each one comes with what to do before the day they
+   * apply. The export stays shut until they say the work is done, which is
+   * what keeps this a plan rather than a lie.
+   */
+  /* The role is not a skill to learn. "Backend" turned up in the list beside
+     Kafka and Terraform — it is the job being applied for. */
+  const ROLE_WORDS = /^(backend|frontend|full[- ]?stack|software|senior|junior|lead|staff|principal|engineer|developer|analyst|scientist|manager|intern|devops|sre)$/i;
+  const wantedSkills = isPacket && Array.isArray(packetOrBuilt.notClaimed)
+    ? packetOrBuilt.notClaimed.filter((t) => !ROLE_WORDS.test(String(t).trim())).slice(0, 6)
+    : [];
+
+  if (wantedSkills.length && !/LEARNING \(/i.test(text)) {
+    text = skillPlan.withPlannedSkills(text, wantedSkills);
+    session.resumeText = text;
+    session.plannedSkills = wantedSkills;
+  }
+
+  const learnNote = wantedSkills.length
+    ? [
+      `Added to your page under LEARNING: ${wantedSkills.join(', ')} — marked as not yet true, because they are not yet true.`,
+      '',
+      '**Make them real before you send this.** The page will not export while anything is marked planned, and that is the point: these are on your resume the day you can walk through them, not before.',
+      ...wantedSkills.slice(0, 3).flatMap((s) => {
+        const p = skillPlan.learnPlan(s);
+        return ['', `**${s}** · ${p.hours}`, ...p.steps.map((x, i) => `${i + 1}. ${x}`), p.proof];
+      }),
+      '',
+      'When one is done, say "I built it" with what you actually made and I will move it into your real skills.',
+    ].join('\n')
+    : '';
+
   const gapOffer = isPacket && packetOrBuilt.notClaimed && packetOrBuilt.notClaimed.length
     ? `Those ${packetOrBuilt.notClaimed.length} not-claimed term${packetOrBuilt.notClaimed.length === 1 ? '' : 's'} are a to-do list, not a verdict. Say "how do I get these skills" and I will give you a project for each one — what to build, the steps in order, and the bullet it earns once it exists. Nothing goes on the page until you have built it.`
     : '';
 
   return res.json({
     ok: true, kind: 'build',
-    reply: [header, kindNote, updatedNote, coverOffer, gapOffer].filter(Boolean).join('\n\n'),
+    reply: [header, kindNote, updatedNote, learnNote, coverOffer].filter(Boolean).join('\n\n'),
     text,
     report: scanResume(text, session.target),
     missing: isPacket ? [] : packetOrBuilt.missing,
@@ -2201,6 +2257,31 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         : (session.pendingTailor && !session.asked) ? 'jobs-confirm'
           : commandOf(low, Boolean(req.file));
     if (command) {
+      /*
+       * A second run on the same resume is a second run, not a continuation.
+       *
+       * Asking to tailor once recorded the picks and the declines, and they
+       * stayed recorded — so asking again skipped every question and handed
+       * back the same page in silence. A student could not use their own
+       * resume twice, which is precisely what somebody does when they are
+       * applying to more than one job. Starting a tailor or a raise clears
+       * what was picked last time; the resume, the ledger and the history
+       * are untouched.
+       */
+      if ((command === 'tailor' || command === 'raise') && command !== session.command) {
+        session.tailorPicked = false;
+        session.raiseDelivered = false;
+        session.bulletsAsked = [];
+        session.toldExhausted = false;
+        session.plannedGuides = null;
+        session.plannedGuide = null;
+        delete session.details.leadProject;
+        delete session.details.leadSkill;
+        delete session.details.addProject;
+        session.declined = (session.declined || [])
+          .filter((f) => !['leadproject', 'leadskill', 'addproject'].includes(f));
+      }
+
       session.command = command;
       session.menuShown = false;
 

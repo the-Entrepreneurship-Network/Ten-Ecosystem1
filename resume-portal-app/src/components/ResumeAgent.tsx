@@ -332,26 +332,51 @@ function ChoiceList({ options, onPick, disabled }: {
   options: Options; onPick: (value: string) => void; disabled: boolean;
 }) {
   const [showAll, setShowAll] = useState(false);
+  /*
+   * Several answers, when the question asks for several.
+   *
+   * The server had been sending `multi: true` on the project and skill
+   * questions for a while and this ignored it — every chip submitted on the
+   * first click, so "pick as many as you want to build" accepted exactly one
+   * and the student watched the rest of the list disappear. Selected chips
+   * stay lit and nothing is sent until Done.
+   */
+  const [picked, setPicked] = useState<string[]>([]);
+  const multi = Boolean(options.multi);
+
   const groups = options.groups || (options.options ? [{ group: '', options: options.options }] : []);
   /* Long lists collapse: fifteen chips is a menu, ninety is a wall. */
   const LIMIT = 12;
   const total = groups.reduce((n, g) => n + g.options.length, 0);
   const collapsed = !showAll && total > LIMIT;
 
-  const chip = (c: Choice, key: string) => (
-    <button
-      key={key}
-      type="button"
-      disabled={disabled}
-      onClick={() => onPick(c.value || c.label)}
-      className="rounded-full border border-[#d9e0ea] bg-white px-3 py-1.5 text-left text-[12.5px] text-[#374151] transition hover:border-[#2563eb] hover:text-[#2563eb] disabled:opacity-50"
-    >
-      {c.label}
-      {/* The separator is a character, not only a margin: copied text and
-          screen readers both flatten the gap and ran the two together. */}
-      {c.note && <span className="ml-1.5 text-[11px] text-[#9ca3af]">· {c.note}</span>}
-    </button>
-  );
+  const chip = (c: Choice, key: string) => {
+    const value = c.value || c.label;
+    const on = picked.includes(value);
+    return (
+      <button
+        key={key}
+        type="button"
+        disabled={disabled}
+        onClick={() => {
+          if (!multi) return onPick(value);
+          setPicked((p) => (on ? p.filter((x) => x !== value) : [...p, value]));
+        }}
+        className={[
+          'rounded-full border px-3 py-1.5 text-left text-[12.5px] transition disabled:opacity-50',
+          on
+            ? 'border-[#2563eb] bg-[#eff4ff] text-[#1d4ed8]'
+            : 'border-[#d9e0ea] bg-white text-[#374151] hover:border-[#2563eb] hover:text-[#2563eb]',
+        ].join(' ')}
+      >
+        {multi && <span className="mr-1.5 text-[11px]">{on ? '☑' : '☐'}</span>}
+        {c.label}
+        {/* The separator is a character, not only a margin: copied text and
+            screen readers both flatten the gap and ran the two together. */}
+        {c.note && <span className="ml-1.5 text-[11px] text-[#9ca3af]">· {c.note}</span>}
+      </button>
+    );
+  };
 
   return (
     <div className="space-y-3">
@@ -366,6 +391,24 @@ function ChoiceList({ options, onPick, disabled }: {
         );
       })}
       <div className="flex flex-wrap items-center gap-2">
+        {multi && (
+          <>
+            <button
+              type="button"
+              disabled={disabled || !picked.length}
+              onClick={() => onPick(picked.join(', '))}
+              className="rounded-full bg-[#2563eb] px-4 py-1.5 text-[12px] font-semibold text-white transition hover:bg-[#1d4ed8] disabled:opacity-40"
+            >
+              {picked.length ? `Use these ${picked.length}` : 'Pick at least one'}
+            </button>
+            {picked.length > 0 && (
+              <button type="button" onClick={() => setPicked([])}
+                className="text-[12px] text-[#6b7280] hover:text-[#111827]">
+                Clear
+              </button>
+            )}
+          </>
+        )}
         {collapsed && (
           <button type="button" onClick={() => setShowAll(true)}
             className="text-[12px] font-semibold text-[#2563eb] hover:underline">
