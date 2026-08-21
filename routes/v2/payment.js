@@ -664,7 +664,7 @@ router.post('/utr-confirm', async (req, res) => {
 
       // Send confirmation email
       try {
-        const { createEmailTransporter } = require('../../utils/mailer');
+        const { createEmailTransporter, EMAIL_FROM, HR_NOTIFY_EMAIL } = require('../../utils/mailer');
         const transporter = createEmailTransporter();
         const sName = studentName || student.name || `${student.firstName} ${student.lastName}`;
         const empId = employeeId || student.employeeId;
@@ -672,8 +672,11 @@ router.post('/utr-confirm', async (req, res) => {
         const sEmail = email || student.email;
 
         transporter.sendMail({
-          from: process.env.EMAIL_USER || 'no-reply@entrepreneurshipnetwork.net',
-          to: 'growth@entrepreneurshipnetwork.net',
+          // EMAIL_FROM, not EMAIL_USER — the mailer accepts SMTP_USER too, and a
+          // bare address with no display name is the first thing a spam filter
+          // holds against a payment notice.
+          from: EMAIL_FROM,
+          to: HR_NOTIFY_EMAIL,
           subject: `Manual Payment Verification Required - ${payment.orderId}`,
           html: `<p>A manual UPI payment has been initiated by <strong>${sName}</strong> (${empId}, ${sDomain}).</p>
                  <p><strong>Order ID:</strong> ${payment.orderId}</p>
