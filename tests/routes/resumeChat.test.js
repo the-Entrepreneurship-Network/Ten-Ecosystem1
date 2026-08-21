@@ -266,38 +266,47 @@ describe('the conversation advances instead of repeating', () => {
     expect(prep.reply.split('\n').filter((l) => /^\d\./.test(l))).toHaveLength(5);
   });
 
-  it('confirms JD keywords with the person instead of adding them', async () => {
+  it('never adds a JD keyword the resume cannot prove', async () => {
+    /*
+     * This used to be enforced by asking — "the JD asks for Docker and your
+     * resume shows no evidence; have you actually used it? Name where." That
+     * is an essay question put to somebody who came here because writing the
+     * resume was the hard part, and a recording caught it demanding proof
+     * that a student had used "GOOGLE".
+     *
+     * The rule it protected still holds and is what this now checks: a term
+     * the page cannot prove never appears in the rewrite. It is reported as
+     * not claimed, and the only way it becomes evidence is the student doing
+     * the work.
+     */
     const a = app();
     let out = await turn(a, RESUME, null);
     out = await turn(a, 'tailor it', out.session, { jd: 'Backend: Java, Spring Boot, PostgreSQL and Docker required.' });
-    let sawConfirm = false;
-    for (let i = 0; i < 24 && out.kind === 'ask'; i++) {
-      if (out.session.asked === 'confirmkw') {
-        sawConfirm = true;
-        expect(out.reply).toMatch(/no evidence/i);
-        out = await turn(a, 'Docker — containerised the attendance service for deployment', out.session);
-      } else {
-        out = await turn(a, 'skip', out.session);
-      }
-    }
-    expect(sawConfirm).toBe(true);
+    for (let i = 0; i < 24 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
+
     expect(out.kind).toBe('build');
-    // The confirmed line is now evidence in the shipped text; the never-
-    // mentioned term stays not-claimed.
-    expect(out.text).toMatch(/containerised the attendance service/);
-    /* Listed as the posting spells them, so compare case-blind. */
+    /* Nothing was invented: the resume names Java and Spring Boot, not
+       PostgreSQL or Docker, and the shipped page still does not. */
+    expect(out.text).not.toMatch(/PostgreSQL/i);
+    expect(out.text).not.toMatch(/\bDocker\b/i);
+    /* Both unproven terms are reported as not claimed — listed as the
+       posting spells them, so compare case-blind. Nothing here was
+       confirmed by the student, so nothing here became evidence. */
     const notClaimed = out.packet.notClaimed.map((t) => t.toLowerCase());
-    expect(notClaimed).toContain('postgresql');
-    expect(notClaimed).not.toContain('docker');
+    expect(notClaimed).toEqual(expect.arrayContaining(['postgresql', 'docker']));
   });
 
-  it('a delivery opens with the path, command, band and the caveat', async () => {
+  it('a delivery opens with the band and the caveat, not with bookkeeping', async () => {
     const a = app();
     let out = await turn(a, RESUME, null);
     out = await turn(a, 'fix it', out.session);
     for (let i = 0; i < 24 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
     expect(out.kind).toBe('build');
-    expect(out.reply).toMatch(/Path: A · Command: tailor · Band:/);
+    /* The band says whether the page was weak, salvageable or strong, which
+       is worth knowing. "Path: A · Command: tailor" was bookkeeping printed
+       at a student. */
+    expect(out.reply).toMatch(/Band: \w+/);
+    expect(out.reply).not.toMatch(/Path: A|Command: tailor/);
     expect(out.reply).toMatch(/Greenhouse does not auto-score/);
     expect(out.reply).toMatch(/Keyword (N\/A|\d+\/40) · Format \d+\/30/);
   });

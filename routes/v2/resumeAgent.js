@@ -1332,7 +1332,10 @@ function commandOf(low, hasFile) {
  * finished job, with the caveat that is never omitted: scores are proxies.
  */
 function deliveryHeader(path, command, band, packet) {
-  const lines = [`Path: ${path} · Command: ${command} · Band: ${band}`];
+  /* The band is worth saying — it tells somebody whether their page was
+     weak, salvageable or strong. The path letter and the command name are
+     bookkeeping, and printing them at a student never helped. */
+  const lines = [`Band: ${band}`];
   if (packet) {
     lines.push(`Estimated checker: ${packet.after.checker}/${packet.after.checkerMax} (before ${packet.before.checker}) · Recruiter-scan: ${packet.after.recruiter}/100 (before ${packet.before.recruiter})`);
     const c = packet.detail.after.checker;
@@ -1607,8 +1610,24 @@ function consumeAnswer(session, field, msg) {
 
   /* Their pick of what to lead with. Both are lines already on the page, so
      recording one can never introduce a claim. */
-  if (field === 'leadproject') { session.details.leadProject = msg.trim(); return; }
-  if (field === 'leadskill') { session.details.leadSkill = msg.trim(); return; }
+  /*
+   * A pick keeps the command running.
+   *
+   * Answering "which work should lead?" cleared the pending question and left
+   * no command, so the next turn fell through to the catch-all and filed the
+   * answer as a new line of experience — the student picked two of their own
+   * bullets and the agent added them to the resume a second time.
+   */
+  if (field === 'leadproject') {
+    session.details.leadProject = msg.trim();
+    session.command = session.command || 'tailor';
+    return;
+  }
+  if (field === 'leadskill') {
+    session.details.leadSkill = msg.trim();
+    session.command = session.command || 'tailor';
+    return;
+  }
 
   /*
    * The project they chose to build next.
@@ -1645,6 +1664,7 @@ function consumeAnswer(session, field, msg) {
       if (!session.declined.includes('addproject')) session.declined.push('addproject');
     }
     session.planCache = null;
+    session.command = session.command || (session.pendingRaise ? 'raise' : 'tailor');
     return;
   }
 
@@ -2144,8 +2164,10 @@ router.post('/chat', upload.single('file'), async (req, res) => {
      */
     if (/\bfor\b/.test(low) && !session.asked) {
       const roleAt = low.match(/\bfor (?:the )?([a-z0-9][\w.& -]{2,44}?)\s+(?:role|position|job|opening)\b/);
+      /* "for the stripe backend engineer role" — the article is not the
+         employer, and capturing it named a company called "the". */
       const companyRole = low.match(
-        /\bfor ([a-z0-9][\w.&-]{2,30})(?:'s)?\s+((?:[a-z]+\s+){0,3}(?:engineer|developer|analyst|scientist|designer|manager|intern))\b/);
+        /\bfor (?:the\s+)?([a-z0-9][\w.&-]{2,30})(?:'s)?\s+((?:[a-z]+\s+){0,3}(?:engineer|developer|analyst|scientist|designer|manager|intern))\b/);
 
       if (companyRole) {
         const [, company, role] = companyRole;
@@ -2161,8 +2183,21 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       if (level && !session.details.level) session.details.level = level[1];
     }
 
-    const command = pastedResume ? 'check'
-      : looksLikePaste ? null
+    /*
+     * An answer to a pick is an answer, whatever words are in it.
+     *
+     * The options are the student's own bullets, so picking two of them sends
+     * back a sentence full of their numbers — "cutting deploy time from 40 to
+     * 6 minutes" — and a two-digit number anywhere in a message routed the
+     * whole turn to `raise`. The pick was discarded, the question was
+     * forgotten, and the answer was filed as new experience.
+     */
+    const PICK_FIELDS = ['leadproject', 'leadskill', 'addproject', 'confirmtailor', 'jobrole'];
+    const answeringPick = PICK_FIELDS.includes(session.asked);
+
+    const command = answeringPick ? null
+      : pastedResume ? 'check'
+        : looksLikePaste ? null
         : (session.pendingTailor && !session.asked) ? 'jobs-confirm'
           : commandOf(low, Boolean(req.file));
     if (command) {
@@ -2488,22 +2523,26 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         });
       }
 
-      const short = lengthLoss && words < 250 ? lengthLoss : null;
-      session.moreAsked = session.moreAsked || 0;
-      if (short && short.lost >= 2 && session.moreAsked < 4 &&
-          !(session.declined || []).includes('more')) {
-        session.moreAsked += 1;
-        const prompts = [
-          'The page is short for a full sheet, and length is the only thing left that formatting cannot fix — the words have to be yours. What else have you done? Another role, a freelance piece, a hackathon, a college project, coursework you built something for.',
-          'Anything else? A second project, an open-source contribution, a competition, a paper, a club you built something for.',
-          'One more if there is one — teaching, tutoring, a volunteer build, a tool you made for yourself that other people ended up using.',
-          'Last one. Anything you have built or run that is not on the page yet?',
-        ];
-        session.command = 'raise';
-        return ask('more', prompts[Math.min(session.moreAsked - 1, prompts.length - 1)],
-          `You asked for ${goal}. It is at ${out.report.score}/100 — ${short.lost} of the missing points are page length.`);
-      }
+      /*
+       * "What else have you done?" is gone, and so is the per-bullet metric
+       * question behind it.
+       *
+       * Both were essays. A student who could write the missing bullet would
+       * not have needed the agent, and being asked four times in a row for
+       * "another project, a hackathon, a paper" is the blank page again with
+       * a friendlier voice. Length is still the gap on a short page — the
+       * projects offered above are what close it, and they are picked, not
+       * written.
+       */
 
+      /*
+       * The per-bullet worklist is a report, never a question.
+       *
+       * It used to end each round by asking "what number belongs on this
+       * line?" — one bullet at a time, typed. It stays as a list of what is
+       * weak and what would fix it, because that is genuinely useful to read;
+       * it no longer asks anything.
+       */
       if (session.raiseRounds >= 2) {
         const audit = atsEngine.bulletAudit(out.text);
         /* Bullets already put to them, so the next round takes the next line
@@ -2526,23 +2565,17 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         const queue = [...audit.weak]
           .sort((a, b) => b.problems.length - a.problems.length)
           .slice(0, QUEUE);
-        const pending = queue.filter((r) => !session.bulletsAsked.includes(r.text));
-
-        if (pending.length) {
-          const target = pending[0];
-          session.bulletsAsked.push(target.text);
-          /* The table comes the first time the worklist is shown, whenever
-             that is — tying it to a round number meant a page that reached
-             the worklist late never saw which lines were weak, only which
-             one it was being asked about. */
-          const firstRound = session.bulletsAsked.length === 1;
+        if (queue.length && !session.bulletsAsked.length) {
+          session.bulletsAsked = queue.map((r) => r.text);
+          const target = queue[0];
+          const firstRound = true;
           return res.json({
             ok: true,
             kind: 'help',
             reply: [
               firstRound
                 ? `Checker ${out.report.score}/100 and formatting is spent — the rest of the points are in the lines themselves. ${audit.strong}/${audit.total} bullets already pull their weight. These are the ${queue.length} worth fixing first${audit.weak.length > queue.length ? `, out of ${audit.weak.length}` : ''}.`
-                : `Checker ${out.report.score}/100. Next one.`,
+                : `Checker ${out.report.score}/100.`,
               '',
               ...(firstRound ? [
                 '| Line | What is wrong | What fixes it |',
@@ -2551,20 +2584,10 @@ router.post('/chat', upload.single('file'), async (req, res) => {
                   `| ${r.text.replace(/\|/g, '\\|')} | ${r.problems.join('; ')} | ${(r.fix || '').replace(/\|/g, '\\|')} |`),
                 '',
               ] : []),
-              `**${target.text}**`,
-              target.problems.length ? `Wrong with it: ${target.problems.join('; ')}.` : '',
-              target.ask
-                ? target.ask.question
-                : `${target.fix} Give me the line as it should read and I will put it in.`,
+              /* A report, not a prompt: it shows what is weak and moves on. */
+              'Fixing any of those lines moves the number the same turn. Or say "make it 98" again and pick a project to build — that is the faster route from here.',
             ].filter(Boolean).join('\n'),
-            options: target.ask
-              ? {
-                multi: false,
-                options: target.ask.kinds.map((k) => ({ label: k.label, note: k.hint, value: k.label })),
-                other: { label: 'Something else — I will type it', value: '' },
-              }
-              : undefined,
-            session: Object.assign(session, { asked: 'metric', command: 'raise' }),
+            session: Object.assign(session, { asked: null, command: null }),
           });
         }
 
@@ -2589,14 +2612,15 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         }
       }
 
-      /* One question, the one worth the most points. */
-      if (out.needFact && !(session.declined || []).includes('raise-' + out.needFact.id)) {
-        session.declined = session.declined || [];
-        session.declined.push('raise-' + out.needFact.id);
-        session.pendingRaise = goal;
-        return ask('metric',
-          `You asked for ${goal}. It is at ${out.report.score}/100 and the formatting levers are spent — the next ${out.needFact.lost} points need ${out.needFact.ask}. Give me that and I will finish the climb to ${goal} — or say skip and I will ship this honestly at ${out.report.score}.`);
-      }
+      /*
+       * The last essay question, and it is gone too.
+       *
+       * "The next 9 points need one real number for your strongest bullet"
+       * is true, and it is still a blank page. What is missing is stated in
+       * the ceiling below, where it is information rather than homework — and
+       * the projects offered above are the route that does not require the
+       * student to write anything.
+       */
 
       /* Ceiling stated, exactly as the rule requires. */
       session.command = 'raise';
@@ -2644,7 +2668,9 @@ router.post('/chat', upload.single('file'), async (req, res) => {
      * so it becomes "here are three projects that would close it, pick one"
      * rather than a list of missing words.
      */
-    if (session.command === 'tailor' && session.pickedJob && !session.tailorPicked) {
+    /* Every tailor, not only one that came from a job row: the picks are what
+       replaced the essay questions, so they cannot depend on how you arrived. */
+    if (session.command === 'tailor' && session.resumeText.trim() && !session.tailorPicked) {
       const led = atsEngine.factLedger(session.resumeText || '');
       const mine = [
         ...led.projects.flatMap((p) => p.bullets || []),
@@ -2657,11 +2683,11 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         session.asked = 'leadproject';
         return res.json({
           ok: true, kind: 'ask',
-          reply: 'Which piece of your work should this version lead with? It goes first on the page, so pick the one you would most want to be asked about.',
+          reply: 'Which of your work should this version lead with? Pick the ones you would most want to be asked about — they go first on the page.',
           options: {
-            multi: false,
+            multi: true,
             options: mine.map((p) => ({ label: p.slice(0, 90), value: p })),
-            other: { label: 'Let me decide from the posting', value: 'skip' },
+            other: { label: 'Decide for me', value: 'skip' },
           },
           session,
         });
@@ -2671,11 +2697,13 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         session.asked = 'leadskill';
         return res.json({
           ok: true, kind: 'ask',
-          reply: 'And which skill should sit first on the skills line? The one you can defend in most detail.',
+          /* Several, in the order they pick them — a skills line is ordered,
+             and the first three are the ones a reader actually takes in. */
+          reply: 'Which skills should lead your skills line? Pick the ones you can defend in most detail — they go first.',
           options: {
-            multi: false,
+            multi: true,
             options: skills.map((s) => ({ label: s, value: s })),
-            other: { label: 'Let me decide from the posting', value: 'skip' },
+            other: { label: 'Decide for me', value: 'skip' },
           },
           session,
         });
@@ -2723,27 +2751,21 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         session.tailorAsked += 1;
         return ask(question.field, question.question);
       }
-      if (question && session.tailorAsked < 5 && ['email', 'phone', 'metric', 'dates'].includes(question.field)) {
-        session.tailorAsked += 1;
-        return ask(question.field, question.question);
-      }
-
-      /* The keyword confirm the Mega Agent spec takes from Rezi: before the
-         rewrite, JD terms with no evidence get one question — "is this real
-         in your experience?" — and only a named answer turns into evidence.
-         A skill is never added on the agent's initiative. */
-      if (session.jd && session.tailorAsked < 5 && !(session.declined || []).includes('confirmkw')) {
-        const probe = atsEngine.rewriteResume(
-          session.resumeText.trim() || Object.entries(session.details).map(([k, v]) => `${k}: ${v}`).join('\n'),
-          { target: session.target, jd: session.jd });
-        if (probe.notClaimed.length) {
-          session.tailorAsked += 1;
-          session.declined = session.declined || [];
-          session.declined.push('confirmkw'); /* asked once, never looped */
-          return ask('confirmkw',
-            `The JD asks for ${probe.notClaimed.slice(0, 5).join(', ')} and your resume shows no evidence of them. Have you actually used any? Name where — one line each, e.g. "Docker — containerised the billing service" — or say skip and they stay on the Not-claimed list.`);
-        }
-      }
+      /*
+       * Nothing here is typed. The tailor asks two things and both are lists.
+       *
+       * It used to ask for an email, a date range, a metric for a bullet, and
+       * then "the JD asks for X and your resume shows no evidence — have you
+       * actually used any? Name where, one line each." Every one of those is
+       * an essay question put to somebody who came here because writing the
+       * resume was the hard part. A recording caught the last one asking a
+       * student to prove they had used "GOOGLE".
+       *
+       * What the rewrite genuinely cannot decide for them is which work to
+       * lead with and which skills to put first — and both of those are picks
+       * from what is already on their page. Those are asked, below, as
+       * checkboxes. Nothing else is.
+       */
       const source = session.resumeText.trim() || Object.entries(session.details)
         .map(([k, v]) => `${k}: ${v}`).join('\n');
       const packet = atsEngine.rewriteResume(source, {
