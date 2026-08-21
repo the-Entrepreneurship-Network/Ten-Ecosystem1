@@ -466,7 +466,19 @@ function jdHardTerms(jd) {
    * told a student "this role asks for Spring" about a page that says Spring
    * Boot. A term wholly contained in a longer term is that term.
    */
-  const terms = [...found];
+  /*
+   * A company is not a skill.
+   *
+   * "Backend Engineer at Google" put GOOGLE on the required-terms list, and
+   * the agent asked a student to prove where they had used it. The employer
+   * named in a posting is who is hiring, never something to evidence.
+   */
+  const EMPLOYERS = new Set(['google', 'amazon', 'meta', 'microsoft', 'apple', 'netflix', 'stripe',
+    'uber', 'airbnb', 'linkedin', 'twitter', 'oracle', 'ibm', 'adobe', 'salesforce', 'nvidia',
+    'infosys', 'tcs', 'wipro', 'accenture', 'flipkart', 'swiggy', 'zomato', 'paytm', 'razorpay',
+    'zoho', 'freshworks', 'atlassian', 'shopify', 'spotify', 'figma', 'gitlab', 'github']);
+
+  const terms = [...found].filter((t) => !EMPLOYERS.has(String(t).toLowerCase()));
   return terms
     .filter((t) => !terms.some((other) => other !== t && other.length > t.length && hasWord(other, t)))
     .slice(0, 40);

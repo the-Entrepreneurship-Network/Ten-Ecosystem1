@@ -592,7 +592,19 @@ export function AgentChat() {
             {tabs.map((t) => (
               <button
                 key={t.id}
-                onClick={() => setTab(t.id)}
+                onClick={() => {
+                  setTab(t.id);
+                  /*
+                   * A tab starts its own work.
+                   *
+                   * Job Search opened on "Say 'find me jobs' and I will
+                   * search" — a screen telling you the magic words instead of
+                   * doing the thing you just clicked. The tab is the request.
+                   */
+                  if (busy) return;
+                  if (t.id === 'jobs' && !jobs.length) send('find me jobs');
+                  if (t.id === 'cover' && !letter) send('cover letter');
+                }}
                 className={[
                   'rounded-full px-3 py-1 text-[11.5px] font-semibold tracking-wide transition-colors',
                   tab === t.id ? 'bg-white text-[#111827] shadow-sm' : 'text-[#6b7280] hover:text-[#111827]',
