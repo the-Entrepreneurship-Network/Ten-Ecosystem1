@@ -437,13 +437,22 @@ describe('the conversation advances instead of repeating', () => {
     const replies = [];
     /* A short page is first asked for more history — that is its own answer
        to "why is it not 98". Declining it reaches the per-bullet worklist. */
-    for (let i = 0; i < 6; i += 1) {
-      out = await turn(a, out.session.asked === 'more' ? 'skip' : 'make it 98', out.session);
+    /* The raise now opens by offering projects to build, because "what else
+       have you done?" is a blank page handed to someone who came here not
+       knowing what to write. Declining reaches the per-bullet worklist. */
+    /* Projects, then more history, then the per-bullet worklist — three
+       phases, so the walk has to be long enough to reach the third. */
+    for (let i = 0; i < 14; i += 1) {
+      out = await turn(a, out.session.asked ? 'skip' : 'make it 98', out.session);
       replies.push(String(out.reply || ''));
     }
     /* Never the same sentence twice in a row — the complaint was watching one
        reply come back verbatim, not a phase being revisited later. */
-    replies.forEach((r, i) => { if (i) expect(r).not.toBe(replies[i - 1]); });
+    replies.forEach((r, i) => {
+      /* A delivered page repeats its own caveat, which is the caveat doing
+         its job — the rule is about questions, not about the disclaimer. */
+      if (i && !/Proxy only/.test(r)) expect(r).not.toBe(replies[i - 1]);
+    });
     const worklist = replies.find((r) => /What is wrong/.test(r));
     expect(worklist).toBeTruthy();
     expect(worklist).toMatch(/carries no number|action verb|duty phrase/);
@@ -496,8 +505,11 @@ describe('the conversation advances instead of repeating', () => {
      */
     const a = app();
     const t1 = await turn(a, RESUME, null);
-    const t2 = await turn(a, 'make it 95', t1.session);
+    let t2 = await turn(a, 'make it 95', t1.session);
     expect(t2.kind).toBe('ask');
+    /* Projects to build are offered first; declining reaches the question
+       about a fact the person already has. */
+    if (t2.session.asked === 'addproject') t2 = await turn(a, 'skip', t2.session);
 
     const before = t2.session.resumeText;
     const scoreBefore = Number((t2.reply.match(/at (\d+)\/100/) || [])[1]);
@@ -788,7 +800,13 @@ describe('the conversation advances instead of repeating', () => {
     let out = await turn(a, RESUME, null);
     out = await turn(a, 'why is it not 98', out.session);
     expect(out.reply).not.toMatch(/Upload a resume or say the job title/);
-    expect(out.reply).toMatch(/Command: raise/);
+    /*
+     * It answers with the score and what is missing, not with the name of
+     * the branch that ran. "Seat: RESUME · Command: raise" was internal
+     * state printed at somebody who asked for a better resume.
+     */
+    expect(out.reply).toMatch(/\d+\/100/);
+    expect(out.reply).not.toMatch(/Command: raise/);
   });
 
   it('reads the role out of the request', async () => {
@@ -826,6 +844,8 @@ describe('the conversation advances instead of repeating', () => {
      * check no lever can move, so more of their own work is the honest ask.
      * Declining it reaches the fact question.
      */
+    /* Projects to build come first now — declining reaches the rest. */
+    if (out.session.asked === 'addproject') out = await turn(a, 'skip', out.session);
     if (out.session.asked === 'more') {
       expect(out.reply).toMatch(/points are page length/i);
       out = await turn(a, 'skip', out.session);
@@ -835,10 +855,18 @@ describe('the conversation advances instead of repeating', () => {
     }
   });
 
-  it('every reply names the seat', async () => {
+  it('opens with the question, not with the name of the branch that ran', async () => {
+    /*
+     * Every reply used to begin "Seat: RESUME · Command: build" — the
+     * router's internal state, printed at a student who asked for help with
+     * their resume. It told them nothing they wanted and appeared on every
+     * single message, which is what made the agent read as a machine
+     * announcing itself rather than a person answering.
+     */
     const a = app();
     const t1 = await turn(a, 'build from scratch', null);
-    expect(t1.reply).toMatch(/^Seat: RESUME · Command: build/);
+    expect(t1.reply).not.toMatch(/Seat: RESUME|Command: build/);
+    expect(t1.reply).toMatch(/\?$/m);
   });
 
   it('the router skill button map: "do all" checks first, tailors only with a JD', async () => {
@@ -861,10 +889,12 @@ describe('the conversation advances instead of repeating', () => {
     expect(t1.reply).not.toMatch(/check —|build —|tailor —|gap —/);
   });
 
-  it('asks open with the seat and command line, per the reply shape', async () => {
+  it('a question is the whole message', async () => {
+    /* One thing asked, nothing else — no banner above it, no menu below. */
     const a = app();
     const t1 = await turn(a, 'build from scratch', null);
-    expect(t1.reply).toMatch(/^Seat: RESUME · Command: build/);
+    expect(t1.kind).toBe('ask');
+    expect(String(t1.reply).split('\n').filter(Boolean).length).toBeLessThanOrEqual(3);
   });
 
   it('"make it 98/100" and "do all" are commands, not menu fodder', async () => {

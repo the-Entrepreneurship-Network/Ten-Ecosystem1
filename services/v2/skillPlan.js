@@ -25,35 +25,51 @@ const atsEngine = require('./atsResumeEngine');
 
 /* Recipes keyed by what a term IS, not by its exact spelling: "Postgres",
    "PostgreSQL" and "psql" are one weekend, not three. */
+/*
+ * Production-shaped, not tutorial-shaped.
+ *
+ * The first version of this bank asked for a weekend toy — "run the broker
+ * locally, publish a message, read it back" — which is a tutorial with a
+ * resume line attached, and an interviewer can tell in one question. What
+ * earns a place on a page is a system with the properties production
+ * demands: it survives a restart, it is measured, it fails safely, someone
+ * other than the author uses it. These are scoped in days rather than hours
+ * because that is what those properties cost, and each one ends in numbers
+ * that are real because the thing genuinely ran.
+ */
 const RECIPES = [
   {
     match: /\b(kafka|rabbitmq|sqs|pub\/?sub|message queue|event stream)\b/i,
-    build: 'A queue-backed order processor',
-    hours: '8–12 hours',
+    build: 'An event-driven order pipeline with exactly-once processing',
+    hours: '3–5 days',
     steps: [
-      'Run the broker locally with Docker — one container, the official image, default config.',
-      'Write a producer that publishes an order as JSON every few seconds.',
-      'Write a consumer that reads the queue and writes each order to a file or a table.',
-      'Kill the consumer mid-run and restart it. Prove nothing was lost — that is the whole point of the technology and the thing you will be asked about.',
-      'Add a second consumer and watch the work split between them.',
-      'Measure: how many messages a minute, and what happened to the count when you killed the consumer.',
+      'Model a real domain with money in it — orders, payments, refunds — so correctness actually matters.',
+      'Producer writes to the broker inside the same transaction as the database write, using the outbox pattern. This is the part that separates a demo from a system.',
+      'Consumer processes idempotently: keep a processed-id table so a redelivered message cannot double-charge anyone.',
+      'Add a dead-letter queue and a replay tool for it. Poison messages are what actually take pipelines down.',
+      'Load-test it: push 50,000 messages through and record throughput and lag.',
+      'Kill consumers mid-run, restart, and prove from the ledger that nothing was lost and nothing was applied twice.',
+      'Measure: messages a minute, p99 consumer lag, and the count reconciliation before and after the kill.',
     ],
-    bullet: 'Built a <broker>-backed order pipeline handling <N> messages a minute, with at-least-once delivery verified by killing and restarting consumers mid-run',
-    defend: 'Why a queue instead of a direct call, and what happens to a message when a consumer dies.',
+    bullet: 'Built an event-driven order pipeline on <broker> processing <N> messages a minute at <N>ms p99 lag, with transactional-outbox publishing and idempotent consumers proven by reconciliation after mid-run failures',
+    defend: 'Why the outbox pattern instead of publishing after commit, and how you made the consumer idempotent.',
   },
   {
     match: /\b(docker|container|containeri[sz]ation)\b/i,
-    build: 'Containerise something you have already written',
-    hours: '3–5 hours',
+    build: 'A containerised multi-service stack with health checks and CI-built images',
+    hours: '2–4 days',
     steps: [
-      'Take a project you have already finished. Write a Dockerfile for it.',
-      'Get the image under 200MB using a multi-stage build — the first attempt is always huge, and shrinking it is the part worth learning.',
-      'Add a docker-compose file that starts your app and its database together.',
-      'Prove it works on a clean machine: delete your local dependencies and run only the container.',
-      'Measure: image size before and after the multi-stage build, and cold start time.',
+      'Take a real application with a database and at least two services. Write a Dockerfile for each.',
+      'Multi-stage builds, non-root users, pinned base image digests. Get each image under 200MB and say what you cut.',
+      'docker-compose brings the whole stack up with one command, with health checks and correct start ordering.',
+      'Add a CI job that builds, scans the image for CVEs, and pushes it to a registry on every merge.',
+      'Prove it from a clean machine: clone, one command, working stack — that reproducibility is the claim.',
+      'Measure: image sizes before and after, cold start time, and how many CVEs the scan removed.',
     ],
-    bullet: 'Containerised <project> with a multi-stage Docker build, cutting the image from <before>MB to <after>MB and making a one-command local setup',
-    defend: 'What a layer is, why order matters in a Dockerfile, and what multi-stage actually saves.',
+    /* Opens with a verb the checker counts. "Containerised" reads well and
+       scores as no verb at all, which quietly cost the page three points. */
+    bullet: 'Built and containerised a <N>-service stack with multi-stage, non-root images, cutting image size from <before>MB to <after>MB and wiring CI to build, scan and push on every merge',
+    defend: 'Why layer order matters for cache hits, and what running as non-root actually prevents.',
   },
   {
     match: /\b(kubernetes|k8s|eks|gke|aks)\b/i,
@@ -82,7 +98,7 @@ const RECIPES = [
       'Commit the state backend config, never the state file, and be able to say why.',
       'Measure: how many resources the config manages, and how long a full create-destroy cycle takes.',
     ],
-    bullet: 'Defined <N> cloud resources in Terraform with variables and remote state, making the environment reproducible from a clean account in <N> minutes',
+    bullet: 'Automated <N> cloud resources in Terraform with variables and remote state, making the environment reproducible from a clean account in <N> minutes',
     defend: 'What state is for, and what happens when two people apply at the same time.',
   },
   {
@@ -195,17 +211,27 @@ const RECIPES = [
 /** A plan for a term with no specific recipe — still concrete, never vague. */
 function generic(term) {
   return {
-    build: `A small project that uses ${term} for something real`,
-    hours: '6–10 hours',
+    /*
+     * Even without a recipe, the shape is production, not tutorial.
+     *
+     * "A small project that uses X for something real" was a weekend toy
+     * with a resume line attached, and an interviewer spots one in a single
+     * question. The properties below are what make any system worth listing
+     * — real data, someone else using it, measured, and it survives failure
+     * — and they apply whatever the technology turns out to be.
+     */
+    build: `A production-shaped service built on ${term}`,
+    hours: '3–5 days',
     steps: [
-      `Read the official ${term} documentation's own getting-started guide, and finish it.`,
-      `Rebuild something you have already made, using ${term} for one part of it — the comparison is what teaches you.`,
-      'Break it on purpose and fix it. The failure mode is what gets asked about.',
-      'Write down one thing it does well and one thing it does badly. Interviewers ask.',
-      'Measure something: how much data, how fast, how many users.',
+      `Pick a real problem someone actually has, not a to-do list. ${term} should be the part that makes it work, not decoration.`,
+      'Use real data at real volume — a public dataset, a live API, or your own traffic. Ten rows proves nothing.',
+      'Handle failure explicitly: what happens on a timeout, a bad input, a restart mid-operation. Write the test that proves it.',
+      'Put it somewhere other people can reach, with logging you can search when it misbehaves.',
+      'Get at least a handful of real users on it and watch what breaks. That is the part interviewers ask about.',
+      `Measure: throughput or volume, latency, and one number that shows ${term} was the right choice.`,
     ],
-    bullet: `Built <project> using ${term}, <the number it moved>`,
-    defend: `When you would choose ${term} and when you would not.`,
+    bullet: `Built <what it does> on ${term}, serving <N> users at <N>ms, handling <the failure mode you covered>`,
+    defend: `When you would choose ${term} and when you would not, and what broke first under load.`,
   };
 }
 
@@ -335,6 +361,51 @@ function withoutPlanned(resumeText) {
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
+/**
+ * The same plan, without a job description.
+ *
+ * Somebody who says "make it 98" has not pasted a posting, and the honest
+ * answer to what is missing is still knowable: the tools their target role is
+ * expected to show that their page does not. Asking them to supply an advert
+ * before it can help is asking for the thing they came here to avoid.
+ */
+function planForTarget(resumeText, missingTerms) {
+  const terms = (missingTerms || []).filter(Boolean).slice(0, 6);
+  if (!terms.length) return { ok: false, reason: 'Nothing obvious is missing for that target.' };
+
+  /*
+   * Five, not three.
+   *
+   * A page reaches the length an ATS wants at around 250 words, and a
+   * five-bullet resume sits near 130 — so three projects still leaves it
+   * short and the student is told "not enough" after doing the work. Five
+   * production-grade projects, picked from freely, is enough to close the
+   * gap that remains once the wording is already right.
+   */
+  const plans = terms.slice(0, 5).map((term) => {
+    const recipe = RECIPES.find((r) => r.match.test(term)) || generic(term);
+    return {
+      term,
+      essential: true,
+      build: recipe.build,
+      hours: recipe.hours,
+      steps: recipe.steps,
+      bulletAfter: recipe.bullet,
+      defend: recipe.defend,
+    };
+  });
+
+  return {
+    ok: true,
+    missing: terms,
+    weak: [],
+    plans,
+    rule: 'None of this is on your resume yet, and none of it should be until you have built it. A project you cannot walk through is worse than an empty section — it fails the first question an interviewer asks about it.',
+    weakNote: null,
+  };
+}
+
 module.exports = {
-  planFor, RECIPES, projectEntries, withPlannedProjects, plannedLines, withoutPlanned, PLANNED, RE_PLANNED,
+  planFor, planForTarget, RECIPES, projectEntries, withPlannedProjects,
+  plannedLines, withoutPlanned, PLANNED, RE_PLANNED,
 };

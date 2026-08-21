@@ -54,7 +54,9 @@ describe('it plans the gap instead of papering over it', () => {
     expect(kafka.steps.length).toBeGreaterThanOrEqual(4);
     /* Every step is an instruction, not a topic. */
     kafka.steps.forEach((s) => expect(s.split(/\s+/).length).toBeGreaterThan(5));
-    expect(kafka.hours).toMatch(/hours/);
+    /* Days, not hours: a weekend toy is a tutorial with a resume line
+       attached, and an interviewer spots one in a single question. */
+    expect(kafka.hours).toMatch(/hours|days/);
   });
 
   it('leaves the numbers blank, because they come from the thing they built', () => {
