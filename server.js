@@ -2301,12 +2301,13 @@ const upload = multer({
 
 // ================= MAIL =================
 
-const { createEmailTransporter, EMAIL_FROM } = require("./utils/mailer");
+const { createEmailTransporter, mailerReady, EMAIL_FROM } = require("./utils/mailer");
 const transporter = createEmailTransporter();
 
-const smtpUser = process.env.SMTP_USER || process.env.SES_SMTP_USER || process.env.EMAIL_USER || process.env.EMAIL_US;
-const smtpPass = process.env.SMTP_PASS || process.env.SES_SMTP_PASS || process.env.EMAIL_PASS;
-if (smtpUser && smtpPass) {
+// The third copy of the credential chain used to live here. It agreed with the
+// mailer, which is exactly why the one in routes/v2/certificates.js that did
+// NOT agree went unnoticed for so long.
+if (mailerReady()) {
     transporter.verify((error)=>{
         if(error){ console.log("SMTP verification status: OFFLINE —", error.message); }
         else{ console.log("Email Server Ready"); }

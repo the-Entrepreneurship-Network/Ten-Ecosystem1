@@ -1,10 +1,36 @@
 const nodemailer = require("nodemailer");
 
+/*
+ * Where the SMTP credentials come from — ONE definition.
+ *
+ * The chain existed here already, and then two other files wrote their own.
+ * routes/v2/certificates.js asked only for EMAIL_USER and EMAIL_PASS, so a
+ * server configured with SMTP_USER/SMTP_PASS — which this transporter is
+ * perfectly happy with — had every certificate email skipped with
+ * "[Email] EMAIL_USER or EMAIL_PASS not set", in bursts, while every other
+ * mail on the same box sent fine. Students got their certificate in the
+ * portal and no email, and the log said so hundreds of times without anyone
+ * reading it as a bug.
+ *
+ * Nobody re-derives this. Call mailerReady() and ask.
+ */
+function smtpCredentials() {
+    return {
+        user: process.env.SMTP_USER || process.env.SES_SMTP_USER || process.env.EMAIL_USER || process.env.EMAIL_US,
+        pass: process.env.SMTP_PASS || process.env.SES_SMTP_PASS || process.env.EMAIL_PASS,
+        host: process.env.SMTP_HOST || process.env.SES_SMTP_HOST || process.env.EMAIL_HOST || "smtp-relay.brevo.com",
+        port: parseInt(process.env.SMTP_PORT || process.env.SES_SMTP_PORT || process.env.EMAIL_PORT) || 587
+    };
+}
+
+/** True when this process can actually deliver mail. */
+function mailerReady() {
+    const { user, pass } = smtpCredentials();
+    return !!(user && pass);
+}
+
 function createEmailTransporter() {
-    const user = process.env.SMTP_USER || process.env.SES_SMTP_USER || process.env.EMAIL_USER || process.env.EMAIL_US;
-    const pass = process.env.SMTP_PASS || process.env.SES_SMTP_PASS || process.env.EMAIL_PASS;
-    const host = process.env.SMTP_HOST || process.env.SES_SMTP_HOST || process.env.EMAIL_HOST || "smtp-relay.brevo.com";
-    const port = parseInt(process.env.SMTP_PORT || process.env.SES_SMTP_PORT || process.env.EMAIL_PORT) || 587;
+    const { user, pass, host, port } = smtpCredentials();
     const service = process.env.SMTP_SERVICE || process.env.EMAIL_SERVICE || (user && user.includes("@gmail.com") ? "gmail" : undefined);
 
     // If credentials are not set, return a basic transporter that won't crash on init
@@ -46,5 +72,7 @@ const EMAIL_FROM =
 
 module.exports = {
     createEmailTransporter,
+    mailerReady,
+    smtpCredentials,
     EMAIL_FROM
 };

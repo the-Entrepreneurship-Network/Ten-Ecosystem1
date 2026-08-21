@@ -97,6 +97,8 @@ describe('the From address exists', () => {
   });
 
   it('is in scope where the password reset uses it', () => {
-    expect(server).toMatch(/const \{ createEmailTransporter, EMAIL_FROM \} = require\("\.\/utils\/mailer"\)/);
+    // The destructure now also pulls in mailerReady, so this matches the two
+    // names the test is actually about rather than the whole literal line.
+    expect(server).toMatch(/const \{[^}]*createEmailTransporter[^}]*EMAIL_FROM[^}]*\} = require\("\.\/utils\/mailer"\)/);
   });
 });

@@ -684,17 +684,27 @@ const PDFDocument         = require("pdfkit");
 const cron                = require("node-cron");
 
 // Find the existing transporter and make it fault-tolerant
-const { createEmailTransporter } = require("../../utils/mailer");
+const { createEmailTransporter, mailerReady, EMAIL_FROM } = require("../../utils/mailer");
 const transporter = createEmailTransporter();
 
 async function sendCertificateEmail(toEmail, studentName, certType, pdfBuffer) {
   try {
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      console.warn('[Email] EMAIL_USER or EMAIL_PASS not set — skipping email');
+    // Ask the mailer whether it can send. This used to check EMAIL_USER and
+    // EMAIL_PASS directly, which is only one of the four names the mailer
+    // accepts — so a server set up with SMTP_USER/SMTP_PASS skipped every
+    // certificate email while every other mail on the same box went out.
+    if (!mailerReady()) {
+      console.warn('[Email] SMTP credentials not set — certificate email skipped for ' + toEmail);
       return { sent: false, reason: 'Email not configured' };
     }
+    if (!toEmail) {
+      console.warn(`[Email] ${certType} has no recipient address — skipped`);
+      return { sent: false, reason: 'No recipient address' };
+    }
     await transporter.sendMail({
-      from:    `"TEN Internship" <${process.env.EMAIL_USER}>`,
+      // EMAIL_FROM, not EMAIL_USER: on an SMTP_USER-configured server that
+      // interpolated to the string "undefined" and the message was refused.
+      from:    EMAIL_FROM,
       to:      toEmail,
       subject: `🎓 Your ${certType} — TEN Internship Network`,
       html:    buildCertEmailHTML(studentName, certType),
@@ -707,8 +717,12 @@ async function sendCertificateEmail(toEmail, studentName, certType, pdfBuffer) {
     console.log(`[Email] ✓ ${certType} sent to ${toEmail}`);
     return { sent: true };
   } catch(e) {
-    console.log(`[Email] Info: Fallback simulation successful to ${toEmail} for ${certType}.`);
-    return { sent: true, simulated: true, reason: e.message };
+    // This used to log "Fallback simulation successful" and return sent:true.
+    // Nothing was simulated and nothing was sent: the DocumentHistory row was
+    // written as "sent", and the student was told their certificate had been
+    // emailed to them. A failure is reported as a failure.
+    console.error(`[Email] ✗ ${certType} to ${toEmail} failed: ${e.message}`);
+    return { sent: false, reason: e.message };
   }
 }
 
