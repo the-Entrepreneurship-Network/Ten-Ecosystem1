@@ -5,9 +5,7 @@
     "type":  "module",
     "scripts":  {
                     "dev":  "vite",
-                    "build":  "vite build",
-                    "dev:ai":  "vite --config vite.resumeai.config.ts",
-                    "build:ai":  "vite build --config vite.resumeai.config.ts"
+                    "build":  "vite build"
                 },
     "dependencies":  {
                          "framer-motion":  "^11.11.17",

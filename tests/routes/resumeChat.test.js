@@ -217,10 +217,21 @@ describe('the conversation advances instead of repeating', () => {
       asked.push(cov.session.asked);
       cov = await turn(a, 'skip', cov.session);
     }
-    /* The position and the market are the two the old flow never asked. */
+    /*
+     * The position and the employer, and then it writes.
+     *
+     * The letter briefly asked eleven things — level, market, work mode,
+     * links, pay, hours, availability, working window — which is a form, not
+     * a question, and none of it changes 150 words written from facts already
+     * on the page. Two questions and a lead is the whole letter.
+     */
     expect(asked).toContain('position');
     expect(asked).toContain('company');
-    expect(asked).toContain('country');
+    /* And the terms a letter exists to state: when they can start, how many
+       hours, how long. Not the links, pay bands and work mode that were
+       cut — none of those change 150 words. */
+    expect(asked).toEqual(expect.arrayContaining(['availablefrom', 'hours', 'commitlength']));
+    expect(asked.length).toBeLessThanOrEqual(7);
   });
 
   it('offers the answers to pick from when the answer comes from a known set', async () => {
@@ -677,11 +688,18 @@ describe('the conversation advances instead of repeating', () => {
     expect(t2.reply).toMatch(/Greenhouse does not auto-score/);
   });
 
-  it('job hunting hands off to the Job Portal instead of reprinting resume commands', async () => {
+  it('job hunting asks for the resume rather than sending them elsewhere', async () => {
+    /*
+     * It used to hand people to a different portal, which meant uploading the
+     * same resume a second time and losing the thread. Finding an opening and
+     * tailoring for it are one errand, so the hunt happens here — and with no
+     * resume on file the honest first move is to ask for one.
+     */
     const a = app();
-    const t1 = await turn(a, 'find me jobs and email hr', null);
-    expect(t1.reply).toMatch(/Command: jobs/);
-    expect(t1.reply).toMatch(/\/job-portal\//);
+    const t1 = await turn(a, 'find me jobs', null);
+    expect(t1.kind).toBe('ask');
+    expect(t1.session.asked).toBe('resume');
+    expect(t1.reply).toMatch(/what it can prove/i);
     expect(t1.reply).not.toMatch(/check —|build —/);
   });
 

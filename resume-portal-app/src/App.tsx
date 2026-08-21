@@ -8,16 +8,16 @@ import { navigateToRoute } from './shared';
 const ASSETS = '/assets/resume-portal';
 
 /*
- * Resume AI is its own app now, not a section of this page.
+ * The agent lives on this page again.
  *
- * The agent was one anchor on a marketing page, so everything it could do —
- * the score breakdown, the keyword map, what a parser extracts, saved
- * versions — was reachable only by typing the right sentence at a chat box.
- * It has a rail and ten pages of its own at /resume-ai/, and both buttons
- * that used to scroll to the anchor go there instead.
+ * It was pulled out into a ten-page app of its own, which put a rail, a
+ * dashboard and eight surfaces in front of a student who wanted to fix one
+ * resume. It does three things — build, find work, write the letter — and
+ * three things belong in the thread, not in a navigation tree.
  */
 const goToResumeAI = () => {
-  window.location.href = '/resume-ai/';
+  window.location.hash = 'agent';
+  document.getElementById('agent')?.scrollIntoView({ behavior: 'smooth' });
 };
 
 const inter = { fontFamily: "'Inter', sans-serif" };

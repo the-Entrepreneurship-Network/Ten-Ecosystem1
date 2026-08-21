@@ -150,13 +150,13 @@ const BANK = [
     when: (d) => !d.company,
   },
   {
-    field: 'level', uses: ['build', 'cover'], group: 'The target',
+    field: 'level', uses: ['build'], group: 'The target',
     question: 'At what level are you applying?',
     options: () => career.LEVELS.map((l) => ({ label: l.label, value: l.id })),
     when: (d) => !d.level,
   },
   {
-    field: 'country', uses: ['build', 'cover'], group: 'The target',
+    field: 'country', uses: ['build'], group: 'The target',
     question: 'Which country is the role in?',
     options: (d) => {
       const home = d.company ? career.companyCountry(d.company) : null;
@@ -166,7 +166,7 @@ const BANK = [
     when: (d) => !d.country,
   },
   {
-    field: 'workmode', uses: ['cover'], group: 'The target',
+    field: 'workmode', uses: [], group: 'The target',
     question: 'Remote, on-site or hybrid?',
     options: () => WORK_MODE,
     when: (d) => !d.workmode,
@@ -197,17 +197,17 @@ const BANK = [
     when: (d, l) => !d.phone && !(l && l.phone),
   },
   {
-    field: 'github', uses: ['build', 'raise', 'cover'], group: 'You',
+    field: 'github', uses: ['build', 'raise'], group: 'You',
     question: 'GitHub profile URL? Paste it, or skip if you do not have one.',
     when: (d) => !d.github,
   },
   {
-    field: 'linkedin', uses: ['build', 'raise', 'cover'], group: 'You',
+    field: 'linkedin', uses: ['build', 'raise'], group: 'You',
     question: 'LinkedIn profile URL?',
     when: (d) => !d.linkedin,
   },
   {
-    field: 'location', uses: ['build', 'cover'], group: 'You',
+    field: 'location', uses: ['build'], group: 'You',
     question: 'Which city are you based in?',
     options: (d) => {
       const cities = career.citiesIn(d.country || 'India');
@@ -333,7 +333,7 @@ const BANK = [
 
   /* — terms: availability, asked the way a person is asked it — */
   {
-    field: 'salary', uses: ['cover'], group: 'Terms',
+    field: 'salary', uses: [], group: 'Terms',
     question: 'What pay are you asking for? These are public ranges for your level and market, not offers — check the posting before you commit to a number.',
     options: (d) => salaryOptions(d),
     when: (d) => !d.salary,
@@ -349,6 +349,16 @@ const BANK = [
    * and every one of them is a list to pick from.
    */
   {
+    /*
+     * A letter states terms. A resume does not.
+     *
+     * These came off the letter while its interview was being cut from
+     * eleven questions to three, and they should not have: when somebody can
+     * start, how many hours they can give and how long they can commit are
+     * what a hiring manager reads a covering letter to find out. What was
+     * actually wrong was asking for links, pay bands and work mode, none of
+     * which change 150 words. All still skippable.
+     */
     field: 'availablefrom', uses: ['build', 'cover'], group: 'Availability',
     question: 'When are you available to start?',
     options: () => NOTICE.concat(MONTHS.map((m) => ({ label: `From ${m}`, value: `available from ${m}` }))),
@@ -367,7 +377,7 @@ const BANK = [
     when: (d) => !d.commitlength,
   },
   {
-    field: 'window', uses: ['cover'], group: 'Availability',
+    field: 'window', uses: [], group: 'Availability',
     question: 'Which part of the day can you work?',
     options: () => WORKING_WINDOW,
     when: (d) => !d.window,
