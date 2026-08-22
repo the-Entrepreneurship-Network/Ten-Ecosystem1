@@ -410,31 +410,55 @@ describe('what TEN gives', () => {
   });
 });
 
-describe('the film\'s sound button', () => {
-  it('no longer unmutes a video with no audio track', () => {
-    expect(page).not.toContain("v.muted=!v.muted");
-    expect(page).toContain('id="soundBtn"');
+describe('the opening sting', () => {
+  // Replaces the film's SOUND button and its synthesised drone. The button
+  // toggled that drone and nothing else, so it went with it — the intro now
+  // carries the audio moment instead of a control on the video below.
+  it('the dead button is gone', () => {
+    expect(page).not.toContain('id="soundBtn"');
+    expect(page).not.toContain('AMBIENT_URL');
+    expect(page).not.toContain('v.muted=!v.muted');
   });
 
-  it('synthesises the ambience rather than shipping a track', () => {
-    // No file, no licence, nothing to download.
+  it('is synthesised, so there is no file to serve or license', () => {
     expect(page).toContain('AudioContext || window.webkitAudioContext');
-    expect(page).toContain('createBiquadFilter');
     expect(page).toContain("o.type = 'sine'");
+    expect(page).toContain('createBufferSource');   // the strike transient
   });
 
-  it('fades rather than snapping on and off', () => {
-    expect(page).toContain('linearRampToValueAtTime');
+  it('is two hits, not one beep', () => {
+    const fn = page.slice(page.indexOf('function playIntroSting'));
+    const body = fn.slice(0, fn.indexOf('\n}'));
+    expect((body.match(/^\s*hit\(/gm) || []).length).toBe(2);
   });
 
-  it('never requests an optional file that is not there', () => {
-    // Probing for one logs a 404 in every visitor's console on every click.
-    expect(page).toContain("const AMBIENT_URL = '';");
-    expect(page).toContain('if (audio === null && AMBIENT_URL)');
+  it('is not the Netflix cue', () => {
+    // Their cue is a specific pair of pitches. Copying it is a trademark
+    // problem and a worse idea than having our own.
+    const fn = page.slice(page.indexOf('function playIntroSting'));
+    expect(fn.slice(0, 4000)).toMatch(/73\.42/);    // D2
+    expect(fn.slice(0, 4000)).toMatch(/116\.54/);   // A#2 — a minor sixth up
   });
 
-  it('says which state it is in, to a screen reader too', () => {
-    expect(page).toContain("btn.setAttribute('aria-pressed', String(on))");
+  it('lands with the letter, not before it', () => {
+    const finale = page.slice(page.indexOf('function finale()'));
+    const impact = finale.indexOf("crack.classList.add('on')");
+    const sting = finale.indexOf('playIntroSting()');
+    expect(sting).toBeGreaterThan(impact);
+  });
+
+  it('holds still for a reader who asked for less movement', () => {
+    const fn = page.slice(page.indexOf('function playIntroSting'));
+    expect(fn.slice(0, 400)).toContain("matchMedia('(prefers-reduced-motion: reduce)').matches");
+  });
+
+  it('never breaks the page when audio is unavailable', () => {
+    const fn = page.slice(page.indexOf('function playIntroSting'));
+    const body = fn.slice(0, fn.indexOf('\n}'));
+    expect(body).toContain('try {');
+    expect(body).toMatch(/catch \(e\)/);
+    // A blocked context is not something to fight; it is silence.
+    expect(body).toContain("ctx.state === 'suspended'");
   });
 });
 

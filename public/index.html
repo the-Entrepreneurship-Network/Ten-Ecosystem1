@@ -260,7 +260,6 @@
   /* ---------- video block ---------- */
   .film { position:relative; }
   .film video { width:100%; display:block; }
-  .film .sound { position:absolute; top:18px; left:50%; transform:translateX(-50%); background:#000; color:#fff; border:0; border-radius:999px; padding:8px 18px; font-size:11px; letter-spacing:.12em; cursor:pointer; }
   .film .cap { position:absolute; bottom:14px; left:22px; font-size:12px; color:#fff; text-shadow:0 1px 8px rgba(0,0,0,.8); }
 
   /* ---------- scroll words ---------- */
@@ -648,7 +647,6 @@
 <!-- film -->
 <section class="film">
   <video id="film" autoplay muted loop playsinline src="assets/student-portal/hero-walk.mp4"></video>
-  <button class="sound" id="soundBtn" aria-pressed="false">SOUND &#9702;</button>
   <p class="cap">a student, working — the ecosystem orbiting around her</p>
 </section>
 
@@ -926,7 +924,7 @@ const DOMAIN_IMGS = ['python.jpg','java.jpg','web.jpg','mern.jpg','flutter.jpg',
    finished word. Nobody came to the site to watch a logo, and the "50" read as
    a 50-second wait because it sat where a timer sits — so the counter now
    counts real seconds remaining, and there are few of them. */
-const INTRO_MS = 2000;
+const INTRO_MS = 1400;
 (() => {
   const count = document.getElementById('preCount');
   const slot = document.getElementById('preSlot');
@@ -1003,6 +1001,7 @@ const INTRO_MS = 2000;
       crack.classList.add('on');
       word.classList.add('pre-shake');
       pre.classList.add('pre-shake');
+      playIntroSting();   // the two hits land with the letter, not before it
     }, impactAt);
 
     /* TEN, whole, for a beat — then the site.
@@ -1549,106 +1548,65 @@ function marquee(viewport, track, pxPerSec) {
   orbit.addEventListener('mouseleave', hide);
 })();
 
-/* ---- the film's SOUND button ----
-   The video has no audio track, so unmuting it did nothing. Rather than ship
-   a music file — a licence to get wrong and 3MB to download — the ambience is
-   synthesised: two detuned sine drones a fifth apart under a lowpass, with a
-   slow tremolo. It fades in, fades out, and costs nothing to serve.
+/* ---- the opening sting ----
+   Two hits under the letter landing: a low boom you feel, and a brighter
+   metallic ring on top of it. Synthesised, so there is no audio file to serve
+   and no track to license.
 
-   To use a real track instead: put the file in public/assets/home/ and set
-   AMBIENT_URL to its path. Left empty on purpose — probing for an optional
-   file logs a 404 in every visitor's console on every click, and a constant
-   the owner edits once costs nobody anything. */
-const AMBIENT_URL = '';
-(() => {
-  const btn = document.getElementById('soundBtn');
-  if (!btn) return;
-  const ON = 'SOUND ●', OFF = 'SOUND ◦';
+   It is NOT the Netflix cue. That is a specific pair of pitches, and copying
+   it is both a trademark problem and a worse idea than having our own — this
+   is a minor sixth apart with a noise transient, which reads as the same KIND
+   of moment without being the same sound.
 
-  let audio = null, ctx = null, gain = null, nodes = [];
+   ponytail: browsers block audio until the visitor has interacted with the
+   page, so on a cold first load this is silent by design — it is a flourish,
+   not a feature, and fighting the autoplay policy is not worth it. Anyone who
+   has clicked once, or arrives from another page on the site, hears it. */
+function playIntroSting() {
+  try {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    const ctx = new AC();
+    if (ctx.state === 'suspended') { ctx.close(); return; }   // no gesture yet
 
-  const buildTones = () => {
-    ctx = new (window.AudioContext || window.webkitAudioContext)();
-    gain = ctx.createGain();
-    gain.gain.value = 0;
+    const master = ctx.createGain();
+    master.gain.value = 0.5;
+    master.connect(ctx.destination);
 
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = 620;      // takes the edge off; leaves warmth
-    filter.Q.value = 0.6;
-
-    // A perfect fifth, slightly detuned, is consonant enough to ignore and
-    // rich enough not to sound like a test tone.
-    [110, 164.81, 220].forEach((f, i) => {
+    /* One hit: a sine that drops in pitch (the body) plus a short filtered
+       noise burst (the strike). Together they read as percussive rather than
+       as a beep. */
+    const hit = (at, freq, level, ring) => {
       const o = ctx.createOscillator();
-      o.type = 'sine';
-      o.frequency.value = f;
-      o.detune.value = (i - 1) * 4;
       const g = ctx.createGain();
-      g.gain.value = [0.5, 0.34, 0.16][i];
-      o.connect(g).connect(filter);
-      o.start();
-      nodes.push(o);
-    });
+      o.type = 'sine';
+      o.frequency.setValueAtTime(freq * 1.6, at);
+      o.frequency.exponentialRampToValueAtTime(freq, at + 0.08);
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(level, at + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + ring);
+      o.connect(g).connect(master);
+      o.start(at); o.stop(at + ring + 0.05);
 
-    // Slow breathing, so it is not a flat pad.
-    const lfo = ctx.createOscillator();
-    const lfoGain = ctx.createGain();
-    lfo.frequency.value = 0.07;
-    lfoGain.gain.value = 0.035;
-    lfo.connect(lfoGain).connect(gain.gain);
-    lfo.start();
-    nodes.push(lfo);
+      const len = Math.floor(ctx.sampleRate * 0.05);
+      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+      const n = ctx.createBufferSource(); n.buffer = buf;
+      const nf = ctx.createBiquadFilter(); nf.type = 'bandpass';
+      nf.frequency.value = freq * 8; nf.Q.value = 0.8;
+      const ng = ctx.createGain(); ng.gain.value = level * 0.5;
+      n.connect(nf).connect(ng).connect(master);
+      n.start(at); n.stop(at + 0.06);
+    };
 
-    filter.connect(gain).connect(ctx.destination);
-  };
-
-  const fade = (to, secs) => {
     const t = ctx.currentTime;
-    gain.gain.cancelScheduledValues(t);
-    gain.gain.setValueAtTime(gain.gain.value, t);
-    gain.gain.linearRampToValueAtTime(to, t + secs);
-  };
-
-  let on = false;
-  const setLabel = () => { btn.textContent = on ? ON : OFF; btn.setAttribute('aria-pressed', String(on)); };
-
-  btn.addEventListener('click', async () => {
-    on = !on;
-    setLabel();
-
-    // A real track, if the owner has set one.
-    if (audio === null && AMBIENT_URL) {
-      audio = new Audio(AMBIENT_URL);
-      audio.loop = true;
-      audio.volume = 0;
-      audio.addEventListener('error', () => { audio = false; }, { once: true });
-    }
-    if (audio) {
-      try {
-        if (on) { await audio.play(); rampEl(audio, 0.35, 1400); }
-        else { rampEl(audio, 0, 900, () => audio.pause()); }
-        return;
-      } catch (e) { audio = false; }   // no file, or blocked — fall through
-    }
-
-    if (!ctx) buildTones();
-    if (ctx.state === 'suspended') await ctx.resume();
-    fade(on ? 0.09 : 0, on ? 2.2 : 1.2);
-  });
-
-  /** Fade an <audio> element, since it has no gain node. */
-  function rampEl(el, to, ms, done) {
-    const from = el.volume, t0 = performance.now();
-    (function step(t) {
-      const k = Math.min(1, (t - t0) / ms);
-      el.volume = from + (to - from) * k;
-      if (k < 1) requestAnimationFrame(step); else if (done) done();
-    })(t0);
-  }
-
-  setLabel();
-})();
+    hit(t,         73.42, 0.55, 0.42);   // D2  — the low one
+    hit(t + 0.20, 116.54, 0.42, 1.05);   // A#2 — a minor sixth up, longer tail
+    setTimeout(() => { try { ctx.close(); } catch (e) {} }, 2500);
+  } catch (e) { /* audio is a flourish; never let it break the page */ }
+}
 
 /* ---- the fourteen domains ----
    Was: a row per domain whose logo you had to CLICK to make it spin, steam or
