@@ -416,8 +416,9 @@ function withoutPlanned(resumeText) {
  * expected to show that their page does not. Asking them to supply an advert
  * before it can help is asking for the thing they came here to avoid.
  */
-function planForTarget(resumeText, missingTerms) {
-  const terms = (missingTerms || []).filter(Boolean).slice(0, 6);
+function planForTarget(resumeText, missingTerms, options = {}) {
+  const cap = Math.max(1, options.limit || 5);
+  const terms = (missingTerms || []).filter(Boolean).slice(0, cap + 1);
   if (!terms.length) return { ok: false, reason: 'Nothing obvious is missing for that target.' };
 
   /*
@@ -429,7 +430,7 @@ function planForTarget(resumeText, missingTerms) {
    * production-grade projects, picked from freely, is enough to close the
    * gap that remains once the wording is already right.
    */
-  const plans = terms.slice(0, 5).map((term) => {
+  const plans = terms.slice(0, cap).map((term) => {
     const recipe = RECIPES.find((r) => r.match.test(term)) || generic(term);
     return {
       term,
@@ -452,8 +453,144 @@ function planForTarget(resumeText, missingTerms) {
   };
 }
 
+/*
+ * The deep bench: everything a domain's engineers are expected to have touched.
+ *
+ * Five options is the right size when the gap is five tools wide. It is the
+ * wrong size when somebody is tailoring against Google — there the honest
+ * answer is that a dozen things are missing, and offering five of them and
+ * then declaring a ceiling reads as the agent giving up. These are the terms a
+ * catalogue is drawn from, so a student aiming high can see the whole bench
+ * and pick their way up it rather than being handed a short list and a no.
+ *
+ * The scoring keyword banks are deliberately NOT these. A score measured
+ * against forty terms would move every number on every page; these exist only
+ * to name work worth doing.
+ */
+const DEEP_BENCH = {
+  software: ['rest api', 'postgresql', 'redis', 'docker', 'kubernetes', 'kafka',
+    'ci/cd', 'terraform', 'aws', 'observability', 'load testing', 'caching',
+    'authentication', 'rate limiting', 'graphql', 'grpc', 'websockets',
+    'database indexing', 'message queue', 'feature flags', 'blue-green deploys',
+    'schema migrations', 'distributed tracing', 'circuit breakers', 'idempotency',
+    'pagination', 'search indexing', 'background jobs', 'webhooks', 'api versioning',
+    'connection pooling', 'query optimisation', 'sharding', 'replication',
+    'chaos testing', 'contract testing', 'canary releases', 'secrets management',
+    'audit logging', 'multi-tenancy'],
+  frontend: ['react', 'typescript', 'state management', 'accessibility',
+    'core web vitals', 'server-side rendering', 'code splitting', 'design systems',
+    'component testing', 'end-to-end testing', 'responsive layout', 'i18n',
+    'progressive enhancement', 'web sockets', 'service workers', 'bundle analysis',
+    'image optimisation', 'form validation', 'error boundaries', 'storybook'],
+  data: ['sql', 'python', 'pandas', 'etl', 'data modelling', 'airflow', 'dbt',
+    'warehouse design', 'incremental loads', 'data quality tests', 'dashboards',
+    'a/b testing', 'cohort analysis', 'statistics', 'forecasting', 'spark',
+    'streaming ingestion', 'partitioning', 'slowly changing dimensions',
+    'metric definitions', 'anomaly detection', 'experiment design'],
+  ml: ['python', 'pytorch', 'scikit-learn', 'feature engineering', 'model evaluation',
+    'cross-validation', 'hyperparameter tuning', 'model serving', 'mlflow',
+    'data drift monitoring', 'embeddings', 'vector search', 'fine-tuning',
+    'prompt evaluation', 'retrieval augmented generation', 'quantisation',
+    'batch inference', 'online inference', 'model registry', 'bias testing'],
+  devops: ['linux', 'docker', 'kubernetes', 'terraform', 'ci/cd', 'jenkins',
+    'monitoring', 'alerting', 'log aggregation', 'incident response', 'slo design',
+    'autoscaling', 'cost optimisation', 'secrets management', 'network policy',
+    'backup and restore', 'disaster recovery', 'gitops', 'image scanning',
+    'infrastructure testing', 'capacity planning', 'blue-green deploys'],
+  security: ['owasp top ten', 'threat modelling', 'penetration testing',
+    'static analysis', 'dependency scanning', 'secrets detection', 'siem',
+    'incident response', 'network segmentation', 'cryptography', 'iam policy',
+    'zero trust', 'log correlation', 'vulnerability triage', 'security headers',
+    'authentication hardening', 'forensics', 'red teaming'],
+  mobile: ['android', 'ios', 'offline sync', 'push notifications', 'app performance',
+    'crash reporting', 'ci for mobile', 'deep linking', 'accessibility',
+    'store release process', 'background tasks', 'local storage', 'ui testing'],
+  hardware: ['embedded c', 'rtos', 'schematic capture', 'pcb layout', 'signal integrity',
+    'firmware update', 'sensor calibration', 'power budgeting', 'hardware testing',
+    'verilog', 'timing analysis', 'bring-up', 'thermal design', 'emc testing'],
+  business: ['excel modelling', 'sql', 'dashboards', 'kpi definition',
+    'process mapping', 'requirements gathering', 'stakeholder interviews',
+    'cost benefit analysis', 'forecasting', 'market sizing', 'pricing analysis',
+    'scenario modelling', 'variance analysis', 'reporting automation'],
+  design: ['design systems', 'user research', 'usability testing', 'prototyping',
+    'information architecture', 'accessibility', 'interaction design',
+    'design tokens', 'handoff specs', 'content design', 'motion design'],
+};
+
+/* Which benches a title draws from, best-fit first. */
+const BENCH_FOR = [
+  [/front.?end|react|ui developer|web developer|interaction|visual design/i, ['frontend', 'software']],
+  [/design|ux|user research|content design/i, ['design', 'frontend']],
+  [/\bml\b|machine learning|deep learning|\bai\b|llm|nlp|vision|research engineer/i, ['ml', 'data', 'software']],
+  [/data (analyst|engineer|scientist)|analytics|business intelligence|warehouse|\betl\b/i, ['data', 'software']],
+  [/devops|\bsre\b|platform|reliability|cloud|infrastructure|release/i, ['devops', 'software']],
+  [/security|infosec|grc|forensic|threat|cryptograph|privacy/i, ['security', 'software']],
+  [/android|\bios\b|mobile|flutter|react native/i, ['mobile', 'software']],
+  [/embedded|firmware|vlsi|asic|\brf\b|hardware|electronic|mechatronic|avionic|controls/i, ['hardware', 'software']],
+  [/analyst|consultant|manager|product owner|operations|supply chain|finance|risk|actuar|marketing|recruit/i, ['business', 'data']],
+  [/./, ['software', 'data']],
+];
+
+/**
+ * A catalogue of projects worth building for a target, as deep as asked for.
+ *
+ * `exclude` is whatever the page already evidences — nobody should be told to
+ * build the thing they have already built. The order is bench order, which is
+ * roughly what a team would want in what order.
+ */
+/** Plans for a named list of terms, in the order given. */
+function plansFor(terms, exclude = [], limit = 50) {
+  const skip = new Set((exclude || []).map((s) => String(s).toLowerCase()));
+  const seen = new Set();
+  return (terms || [])
+    .filter((t) => {
+      const k = String(t || '').toLowerCase();
+      if (!k || seen.has(k) || skip.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .slice(0, Math.max(1, limit))
+    .map((term) => {
+      const recipe = RECIPES.find((r) => r.match.test(term)) || generic(term);
+      return {
+        term,
+        essential: true,
+        build: recipe.build,
+        hours: recipe.hours,
+        steps: recipe.steps,
+        bulletAfter: recipe.bullet,
+        defend: recipe.defend,
+      };
+    });
+}
+
+function catalogueFor(target, exclude = [], limit = 25) {
+  const skip = new Set((exclude || []).map((s) => String(s).toLowerCase()));
+  const benches = (BENCH_FOR.find(([re]) => re.test(String(target || ''))) || [, ['software']])[1];
+  const seen = new Set();
+  const terms = [];
+  benches.forEach((b) => (DEEP_BENCH[b] || []).forEach((t) => {
+    const k = t.toLowerCase();
+    if (seen.has(k) || skip.has(k)) return;
+    seen.add(k);
+    terms.push(t);
+  }));
+  return terms.slice(0, Math.max(1, limit)).map((term) => {
+    const recipe = RECIPES.find((r) => r.match.test(term)) || generic(term);
+    return {
+      term,
+      essential: true,
+      build: recipe.build,
+      hours: recipe.hours,
+      steps: recipe.steps,
+      bulletAfter: recipe.bullet,
+      defend: recipe.defend,
+    };
+  });
+}
+
 module.exports = {
   planFor, planForTarget, RECIPES, projectEntries, withPlannedProjects,
-  withPlannedSkills, learnPlan,
+  withPlannedSkills, learnPlan, catalogueFor, plansFor, DEEP_BENCH,
   plannedLines, withoutPlanned, PLANNED, RE_PLANNED,
 };

@@ -1,0 +1,255 @@
+'use strict';
+
+/**
+ * Tailoring for Google and tailoring for JPMorgan are not the same operation.
+ *
+ * They were. Both got the same domain bench, the same twenty-five projects,
+ * the same skills list — and a student who builds the wrong three projects has
+ * spent a month on the wrong month. Google's backend bar is distributed
+ * systems under load; a bank's is correctness, latency and an audit trail
+ * somebody can be asked about in a review; an IT-services firm's is
+ * integration and delivery against a client SLA.
+ *
+ * And the order of the errand matters as much as its content: openings first,
+ * then the large employers, then the page — built and tailored for whichever
+ * row they opened. A resume aimed at nothing in particular is what a student
+ * already has.
+ */
+
+const express = require('express');
+const request = require('supertest');
+const profiles = require('../../services/v2/companyProfiles');
+
+jest.setTimeout(5 * 60 * 1000);
+
+const PORTAL_JOBS = [
+  { title: 'Software Engineer', company: 'stripe', location: 'Bengaluru, India', directUrl: 'https://stripe.com/jobs/1', description: 'Java, Postgres.', tags: ['java'], fit5: 4 },
+  { title: 'Software Engineer, Platform', company: 'airbnb', location: 'Remote, EU', directUrl: 'https://careers.airbnb.com/2', description: 'AWS, Terraform.', tags: ['aws'], fit5: 3 },
+];
+
+let portal;
+let prevPort;
+
+beforeAll((done) => {
+  const p = express();
+  p.use(express.json());
+  p.post('/api/v2/jobs/search', (req, res) =>
+    res.json({ ok: true, profile: { role: req.body.role }, resumeText: req.body.text, jobs: PORTAL_JOBS, withheld: 0 }));
+  portal = p.listen(0, () => {
+    prevPort = process.env.PORT;
+    process.env.PORT = String(portal.address().port);
+    done();
+  });
+});
+
+afterAll((done) => {
+  if (prevPort === undefined) delete process.env.PORT;
+  else process.env.PORT = prevPort;
+  portal.close(done);
+});
+
+function agent() {
+  const a = express();
+  a.use(express.json());
+  a.use('/api/v2/resume', require('../../routes/v2/resumeAgent'));
+  return a;
+}
+
+const turn = (a, message, session) =>
+  request(a)
+    .post('/api/v2/resume/chat')
+    .field('message', message)
+    .field('session', session ? JSON.stringify(session) : '')
+    .then((r) => r.body);
+
+const choices = (out) => {
+  const o = out.options || {};
+  return [...(o.options || []), ...((o.groups || []).flatMap((g) => g.options || []))];
+};
+
+const walk = async (a, out, how = 'all', max = 30) => {
+  let cur = out;
+  for (let i = 0; i < max && cur.kind === 'ask'; i += 1) {
+    const all = choices(cur);
+    const answer = !all.length ? 'skip'
+      : how === 'first' ? all[0].value
+        : all.map((c) => c.value).join(', ');
+    // eslint-disable-next-line no-await-in-loop
+    cur = await turn(a, answer, cur.session);
+  }
+  return cur;
+};
+
+const RESUME = [
+  'BISHAL NAG', 'Backend Engineer',
+  'bishal@example.com | +91 90000 00000 | github.com/bishal',
+  '', 'EXPERIENCE', 'Backend Engineer | Northwind | Jan 2023 - Present',
+  '- Built REST APIs in Java serving 5,000 requests a day, cutting latency 30%',
+  '', 'SKILLS', 'Java, Spring Boot, SQL',
+  '', 'EDUCATION', 'B.Tech Computer Science, 2019 - 2023',
+].join('\n');
+
+/* ------------------------------------------------------------- THE PROFILE */
+
+describe('the profile knows one employer from another', () => {
+  it('gives Google systems-at-scale work and a bank an audit trail', () => {
+    const g = profiles.profileFor('Google', 'Backend Engineer');
+    const j = profiles.profileFor('JPMorgan Chase', 'Backend Engineer');
+    expect(g.projects).toEqual(expect.arrayContaining(['sharding']));
+    expect(j.projects).toEqual(expect.arrayContaining(['audit logging']));
+    expect(g.projects).not.toEqual(j.projects);
+    expect(g.note).not.toBe(j.note);
+  });
+
+  it('gives an IT-services firm migration and delivery work', () => {
+    const t = profiles.profileFor('Tata Consultancy Services', 'Software Engineer');
+    expect(t.projects).toEqual(expect.arrayContaining(['legacy migration']));
+    expect(t.skills).toEqual(expect.arrayContaining(['enterprise integration']));
+  });
+
+  it('gives an aerospace employer safety-critical work', () => {
+    const s = profiles.profileFor('SpaceX', 'Avionics Engineer');
+    expect(s.projects.join(' ')).toMatch(/rtos|redundancy|flight data/);
+  });
+
+  it('answers for a company it has never heard of, from its domain', () => {
+    /* An unknown bank is still a bank. Falling back to nothing would offer a
+       student the generic bench for the one case where the bar is specific. */
+    const unknown = profiles.profileFor('Some Regional Bank Ltd', 'Risk Analyst');
+    expect(unknown.known).toBe(false);
+    expect(unknown.projects.length).toBeGreaterThan(0);
+    expect(unknown.note).toBeTruthy();
+  });
+
+  it('names its bar in one line, for the reply', () => {
+    expect(profiles.noteFor('Netflix', 'Backend Engineer')).toMatch(/Netflix screens backend engineer on/i);
+  });
+});
+
+/* ---------------------------------------------------- THE TAILOR THAT USES IT */
+
+describe('the tailor is shaped by the employer, not only by the role', () => {
+  const tailorFor = async (company) => {
+    const a = agent();
+    let out = await turn(a, RESUME, null);
+    out.session.jobs = [{
+      title: 'Backend Engineer', company, location: 'Global', url: '',
+      aspirational: true, description: '', tags: [],
+    }];
+    out = await turn(a, 'tailor number 1', out.session);
+    return { a, out };
+  };
+
+  it('leads the project list with what that company screens on', async () => {
+    const { a, out } = await tailorFor('Netflix');
+    let cur = out;
+    let sawOffer = null;
+    for (let i = 0; i < 6 && cur.kind === 'ask'; i += 1) {
+      if (cur.session.asked === 'addproject') { sawOffer = cur; break; }
+      // eslint-disable-next-line no-await-in-loop
+      cur = await turn(a, choices(cur).map((c) => c.value).join(', ') || 'skip', cur.session);
+    }
+    expect(sawOffer).toBeTruthy();
+    expect(String(sawOffer.reply)).toMatch(/Netflix screens/i);
+    const terms = choices(sawOffer).map((c) => c.value.toLowerCase());
+    expect(terms.slice(0, 6).join(' ')).toMatch(/chaos|streaming|circuit|canary/);
+  });
+
+  it('offers a bank a different list than it offers Google', async () => {
+    const g = await tailorFor('Google');
+    const j = await tailorFor('JPMorgan Chase');
+    const first = async ({ a, out }) => {
+      let cur = out;
+      for (let i = 0; i < 6 && cur.kind === 'ask'; i += 1) {
+        if (cur.session.asked === 'addproject') return choices(cur).map((c) => c.value);
+        // eslint-disable-next-line no-await-in-loop
+        cur = await turn(a, choices(cur).map((c) => c.value).join(', ') || 'skip', cur.session);
+      }
+      return [];
+    };
+    const gTerms = await first(g);
+    const jTerms = await first(j);
+    expect(gTerms.length).toBeGreaterThan(0);
+    expect(jTerms.length).toBeGreaterThan(0);
+    expect(gTerms.slice(0, 4)).not.toEqual(jTerms.slice(0, 4));
+  });
+
+  it('goes deep for a target and stays sane for an ordinary posting', async () => {
+    const { a, out } = await tailorFor('Amazon');
+    let cur = out;
+    let offer = [];
+    for (let i = 0; i < 6 && cur.kind === 'ask'; i += 1) {
+      if (cur.session.asked === 'addproject') { offer = choices(cur); break; }
+      // eslint-disable-next-line no-await-in-loop
+      cur = await turn(a, choices(cur).map((c) => c.value).join(', ') || 'skip', cur.session);
+    }
+    /* A target has no advert behind it, only a bar — so the bench is the
+       whole thing rather than the four things one listing named. */
+    expect(offer.length).toBeGreaterThanOrEqual(12);
+  });
+
+  it('names the company\'s skills under LEARNING even with no advert to read', async () => {
+    /* A target has no posting behind it, so the not-claimed list is empty and
+       the block came out blank — for exactly the student who needs it most. */
+    const { a, out } = await tailorFor('Netflix');
+    const done = await walk(a, out);
+    expect(done.text).toMatch(/LEARNING/);
+    const learning = done.text.split(/LEARNING[^\n]*\n/)[1].split('\n')[0].toLowerCase();
+    expect(learning).toMatch(/resilience|observability|jvm/);
+  });
+
+  it('puts the company\'s skills on the page as learning, never as claims', async () => {
+    const { a, out } = await tailorFor('Netflix');
+    const done = await walk(a, out);
+    const after = await walk(a, await turn(a, 'make it 96', done.session));
+    expect(after.potentialScore).toBeGreaterThanOrEqual(96);
+    expect(after.text).toMatch(/LEARNING/);
+    /* Named as not yet true, and gated out of the PDF while it says so. */
+    expect(after.text).toMatch(/\[PLANNED/);
+    expect(after.report.score).toBeLessThan(after.potentialScore);
+  });
+});
+
+/* ------------------------------------------------- OPENINGS BEFORE THE PAGE */
+
+describe('a new user gets the openings before the blank page', () => {
+  const start = async () => {
+    const a = agent();
+    const out = await turn(a, 'build me a resume for a software engineer', null);
+    return { a, out };
+  };
+
+  it('searches the title they named instead of interviewing first', async () => {
+    const { out } = await start();
+    expect(Array.isArray(out.jobs)).toBe(true);
+    expect(out.jobs.some((j) => j.company === 'stripe')).toBe(true);
+    expect(out.reply).toMatch(/before we write a word/i);
+  });
+
+  it('lists the live openings first and the large employers after them', async () => {
+    const { out } = await start();
+    const firstTarget = out.jobs.findIndex((j) => j.aspirational);
+    const lastReal = out.jobs.map((j) => !!j.aspirational).lastIndexOf(false);
+    expect(firstTarget).toBeGreaterThan(lastReal);
+    expect(out.jobs.filter((j) => j.aspirational).length).toBeGreaterThanOrEqual(20);
+  });
+
+  it('builds the page against the row they open, tailored, in one motion', async () => {
+    const { a, out } = await start();
+    const picked = await turn(a, 'tailor number 1', out.session);
+    const done = await walk(a, picked, 'first');
+    expect(done.kind).toBe('build');
+    expect(done.session.pickedJob.company).toBe('stripe');
+    expect(String(done.reply)).toMatch(/stripe screens/i);
+  });
+
+  it('builds anyway when the boards are silent, rather than stranding them', async () => {
+    const prev = process.env.PORT;
+    process.env.PORT = '1';
+    const { out } = await start();
+    process.env.PORT = prev;
+    /* No page, no listings — the interview is the only useful next move. */
+    expect(out.kind).toBe('ask');
+    expect(String(out.reply)).toMatch(/build the page first/i);
+  });
+});

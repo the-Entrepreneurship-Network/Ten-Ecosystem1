@@ -424,11 +424,17 @@ function remainingFor(command, details, ledger, declined) {
     q.uses.includes(command) && !skipped.includes(q.field) && q.when(d, ledger));
 }
 
+/** The bank entry for a field, so a caller can ask what shape its answer is. */
+function entryFor(field) {
+  return BANK.find((q) => q.field === field) || null;
+}
+
 module.exports = {
   BANK,
   nextFor,
   remainingFor,
   optionsFor,
+  entryFor,
   salaryOptions,
   MONTHS,
 };

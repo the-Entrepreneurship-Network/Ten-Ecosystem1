@@ -45,6 +45,45 @@ const JDS = [
   ['a far miss', 'Backend Engineer at GitLab. Ruby, Go, GraphQL, Redis, Kafka, Elasticsearch, gRPC required.'],
 ];
 
+describe('the score is measured with one ruler all session', () => {
+  it('does not fall because the target changed', async () => {
+    /*
+     * The last and most confusing form of this bug. With no explicit target
+     * the scorer reads the keyword bank off the page's own title line — and
+     * tailoring rewrites that line to the job being aimed at. So a frontend
+     * engineer targeting a backend role had their page re-measured against
+     * backend keywords and shown 89 → 85: a true fact about the fit,
+     * displayed exactly where a verdict on their resume goes.
+     *
+     * The bank is pinned to what they actually are when the resume arrives,
+     * so the number stays about the page. How well it suits the job is the
+     * match line's job to say.
+     */
+    const express = require('express');
+    const request = require('supertest');
+    const app = express();
+    app.use(express.json());
+    app.use('/api/v2/resume', require('../../routes/v2/resumeAgent'));
+    const turn = (m, s) => request(app).post('/api/v2/resume/chat')
+      .field('message', m).field('session', s ? JSON.stringify(s) : '').then((r) => r.body);
+
+    const frontend = person('ROHAN', 'Frontend Engineer | React', 'React, TypeScript, CSS',
+      ['Built the dashboard in React used by 2,000 people a week']);
+
+    let out = await turn(frontend, null);
+    const before = out.report.score;
+    /* Aim it at a role they are not, which is what moved the ruler. */
+    out.session.jd = 'Backend Engineer. Must have: Java, Kafka, PostgreSQL.';
+    out = await turn('tailor my resume', out.session);
+    for (let i = 0; i < 8 && out.kind === 'ask'; i += 1) {
+      const o = out.options || {};
+      const choices = [...(o.options || []), ...((o.groups || []).flatMap((g) => g.options || []))];
+      out = await turn(choices.length ? choices.map((c) => c.value).join(', ') : 'skip', out.session);
+    }
+    expect(out.report.score).toBeGreaterThanOrEqual(before);
+  });
+});
+
 describe('the tailor never hands back a worse page', () => {
   CASES.forEach(([name, resume]) => {
     JDS.forEach(([label, jd]) => {

@@ -991,22 +991,35 @@ describe('the main website link', () => {
  * would silently break if the intro is ever shortened again.
  */
 describe('opening curtain', () => {
-  const introMs = Number(/const INTRO_MS = (\d+)/.exec(page)[1]);
+  const countdownMs = Number(/const COUNTDOWN_MS = (\d+)/.exec(page)[1]);
+  const holdMs = Number(/const HOLD_MS = (\d+)/.exec(page)[1]);
 
-  it('has one knob for the whole opening', () => {
-    expect(introMs).toBeGreaterThan(0);
-    // Everything is a fraction of it, so no phase can drift out of step.
-    expect(page).toContain('INTRO_MS * 0.55');
-    expect(page).toContain('const FINALE_MS = INTRO_MS - COUNT_MS');
+  it('has a knob for each half of the opening', () => {
+    /*
+     * One knob was right when both halves wanted the same thing — to be
+     * short. They no longer do: the countdown is a deliberate wait with the
+     * domain logos cycling through it, and the hold is a beat to see the
+     * finished word. Deriving one from the other meant lengthening the wait
+     * silently lengthened the beat too.
+     */
+    expect(countdownMs).toBeGreaterThan(0);
+    expect(holdMs).toBeGreaterThan(0);
+    expect(page).toContain('const COUNT_MS = COUNTDOWN_MS');
+    expect(page).toContain('const FINALE_MS = HOLD_MS');
   });
 
-  it('is short enough that nobody waits on it', () => {
-    expect(introMs).toBeLessThanOrEqual(3000);
+  it('waits fifty seconds and then holds three', () => {
+    expect(countdownMs).toBe(50000);
+    /* The word cracks into place and stays there long enough to be read,
+       rather than being glimpsed on the way out. */
+    expect(holdMs).toBe(3000);
   });
 
-  it('counts real seconds, not an abstract step count', () => {
-    expect(page).toMatch(/left\.toFixed\(1\) \+ 's'/);
-    // The old literal start value is gone; the count derives from the duration.
+  it('counts real seconds, one a second', () => {
+    /* A counter showing tenths and updating seventeen times a second reads
+       as a progress bar. Whole seconds, ticking once, read as a clock. */
+    expect(page).toMatch(/const TICK_MS = 1000/);
+    expect(page).toMatch(/Math\.round\(n \* TICK_MS \/ 1000\)/);
     expect(page).toMatch(/Math\.round\(COUNT_MS \/ TICK_MS\)/);
   });
 
