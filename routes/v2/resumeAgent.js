@@ -672,7 +672,20 @@ function buildResume(detailsInput) {
 
   const expItems = splitLines(d.experience);
   const projItems = splitLines(d.projects);
-  const eduItems = splitLines(d.education);
+  /*
+   * The degree, the college and the year make an education line even when
+   * nobody assembled one.
+   *
+   * d.education is composed as those three answers arrive, so the interview
+   * path was fine and every other caller was not: hand buildResume a degree,
+   * a college and a graduation year directly and the page came back with no
+   * EDUCATION section at all. A student's degree silently missing from their
+   * own resume is not a failure mode worth leaving to one code path getting
+   * it right.
+   */
+  const eduItems = splitLines(d.education).length
+    ? splitLines(d.education)
+    : [[d.degree, d.college, d.gradyear].filter(Boolean).join(', ')].filter(Boolean);
 
   const L = [];
   L.push(name.toUpperCase());
@@ -3214,7 +3227,16 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         /* v5.1 check, step 7: say the rebuild is coming, ask Block 1 Q1 only. */
         session.command = 'tailor';
         const q = nextQuestion(session).question;
-        const prompt = `This file would likely bounce (estimated checker ${packet.before.checker}/${packet.before.checkerMax}, recruiter-scan ${packet.before.recruiter}). Band: Weak — I will rebuild it rather than polish it. A few questions first.`;
+        /*
+         * One scale, everywhere, from the first number to the last.
+         *
+         * This said "estimated checker 45/60" — the first number a student
+         * ever sees — and every number after it was out of 100. Two scales in
+         * one conversation is how a page that went 45 to 94 reads as noise,
+         * and it is the same complaint as the header that quoted a different
+         * total from the report beside it.
+         */
+        const prompt = `Your resume scores ${scanResume(session.resumeText, session.scoreTarget).score}/100 as it stands. That is below what an ATS lets through, so I will rebuild it rather than polish it. A few questions first.`;
         if (q) return ask(q.field, q.question, prompt);
       }
 

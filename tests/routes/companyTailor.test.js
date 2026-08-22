@@ -182,6 +182,48 @@ describe('the profile knows one employer from another', () => {
   });
 });
 
+describe('one scale, and nothing quietly dropped', () => {
+  it('reports every score out of 100, including the very first one', async () => {
+    /*
+     * A weak upload opened with "estimated checker 45/60" — the first number
+     * a student ever sees — and every number after it was out of 100. Two
+     * scales in one conversation is how a page that went 45 to 94 reads as
+     * noise rather than progress.
+     */
+    const a = agent();
+    const weak = [
+      'BISHAL NAG', 'bishal@example.com', '+91 90000 00000', '',
+      'OBJECTIVE', 'Seeking a challenging position in a reputed organization.',
+      '', 'SKILLS', 'Java, HTML, CSS',
+      '', 'INTERNSHIP', 'Web Development Intern, Zeta Labs',
+      '- Responsible for developing web applications',
+    ].join('\n');
+    const out = await turn(a, weak, null);
+    const shown = String(out.reply || out.prompt || '');
+    expect(shown).toMatch(/\d+\/100/);
+    expect(shown).not.toMatch(/\/60\b/);
+  });
+
+  it('keeps the degree on the page however buildResume was called', () => {
+    /*
+     * The education line is composed as the three answers arrive, so the
+     * interview path was fine and every other caller was not: hand
+     * buildResume a degree, a college and a year directly and the page came
+     * back with no EDUCATION section at all.
+     */
+    const agentMod = require('../../routes/v2/resumeAgent');
+    const built = agentMod.buildResume({
+      name: 'Bishal Nag', role: 'Software Engineer', email: 'b@e.com', phone: '+91 90000 00000',
+      degree: 'B.Tech Computer Science',
+      college: 'Kalinga Institute of Industrial Technology (KIIT)',
+      gradyear: '2026', skills: 'Java, SQL',
+    });
+    expect(built.text).toMatch(/EDUCATION/);
+    expect(built.text).toMatch(/B\.Tech Computer Science/);
+    expect(built.text).toMatch(/Kalinga/);
+  });
+});
+
 describe('the row you opened is the row it tailors for', () => {
   it('tailors for OpenAI when OpenAI is the row, not for whoever is first', async () => {
     /*
