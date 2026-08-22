@@ -18,21 +18,29 @@
 const express = require('express');
 const request = require('supertest');
 
-/* The portal's search, stubbed: these tests are about parity between the two
-   seats, not about whether a board answered today. */
-function portalStub(jobs) {
-  const app = express();
-  app.use(express.json());
-  app.post('/api/v2/jobs/search', (req, res) => {
-    res.json({ ok: true, profile: { role: req.body.role }, resumeText: req.body.text, jobs, withheld: 0 });
-  });
-  return app;
-}
+/*
+ * The portal's search, stubbed at the function rather than over HTTP.
+ *
+ * These tests used to stand up a second server and point PORT at it, because
+ * the resume seat reached the search by POSTing to its own port. That hop was
+ * the bug: in production the server is not reachable at http://127.0.0.1:PORT
+ * — the hosting proxy listens elsewhere — so the request was refused and the
+ * board came back empty on every search. The seats now share the function,
+ * which is what parity meant all along, so the stub goes where the seam is.
+ */
+jest.mock('../../routes/v2/jobAgent', () => {
+  const actual = jest.requireActual('../../routes/v2/jobAgent');
+  const router = actual;
+  router.findJobs = jest.fn();
+  return router;
+});
+const jobAgent = require('../../routes/v2/jobAgent');
 
+/* Exactly what findJobs hands back — the portal's own rows, its own order. */
 const PORTAL_JOBS = [
-  { title: 'Senior Software Engineer, Backend', company: 'robinhood', location: 'Remote, US', directUrl: 'https://boards.greenhouse.io/robinhood/1', description: 'Java, Kafka, Postgres.', tags: ['java'], fit5: 4 },
-  { title: 'Backend Engineer, Developer Experience', company: 'stripe', location: 'Bengaluru, India', directUrl: 'https://stripe.com/jobs/2', description: 'Go, gRPC.', tags: ['go'], fit5: 4 },
-  { title: 'Staff Backend Engineer', company: 'airbnb', location: 'Remote, EU', directUrl: 'https://careers.airbnb.com/3', description: 'Scala, Kafka.', tags: ['scala'], fit5: 3 },
+  { title: 'Senior Software Engineer, Backend', company: 'robinhood', location: 'Remote, US', url: 'https://boards.greenhouse.io/robinhood/1', description: 'Java, Kafka, Postgres.', tags: ['java'], fit5: 4 },
+  { title: 'Backend Engineer, Developer Experience', company: 'stripe', location: 'Bengaluru, India', url: 'https://stripe.com/jobs/2', description: 'Go, gRPC.', tags: ['go'], fit5: 4 },
+  { title: 'Staff Backend Engineer', company: 'airbnb', location: 'Remote, EU', url: 'https://careers.airbnb.com/3', description: 'Scala, Kafka.', tags: ['scala'], fit5: 3 },
 ];
 
 const RESUME = [
@@ -51,23 +59,9 @@ const RESUME = [
   'B.Tech Computer Science, 2019 - 2023',
 ].join('\n');
 
-let server;
-let prevPort;
-
-beforeAll((done) => {
-  server = portalStub(PORTAL_JOBS).listen(0, () => {
-    prevPort = process.env.PORT;
-    /* The resume agent calls the portal on this port, so the stub answers
-       exactly where the real one would. */
-    process.env.PORT = String(server.address().port);
-    done();
-  });
-});
-
-afterAll((done) => {
-  if (prevPort === undefined) delete process.env.PORT;
-  else process.env.PORT = prevPort;
-  server.close(done);
+beforeEach(() => {
+  jobAgent.findJobs.mockReset();
+  jobAgent.findJobs.mockResolvedValue(PORTAL_JOBS);
 });
 
 function agent() {
@@ -151,12 +145,69 @@ describe('the seats differ in what they hand you, not in what they found', () =>
     expect(out.jobs[0].url).toMatch(/^https?:\/\//);
   });
 
-  it('says nothing was found rather than inventing rows when the portal is down', async () => {
-    const prev = process.env.PORT;
-    process.env.PORT = '1';           /* nothing listening */
+  it('says nothing was found rather than inventing rows when the boards are down', async () => {
+    jobAgent.findJobs.mockRejectedValue(new Error('every board timed out'));
     const out = await hunt();
-    process.env.PORT = prev;
     expect(out.reply).toMatch(/did not answer|not invent/i);
     expect(out.jobs === undefined || out.jobs.length === 0).toBe(true);
+  });
+
+  it('searches on a role named in the sentence, with no resume yet', async () => {
+    /*
+     * "find me jobs for a backend engineer" was answered with "attach your
+     * resume first" — a dead end put in front of somebody who had just named
+     * the role. A page makes the ranking better; it was never needed to run
+     * a search.
+     */
+    const a = agent();
+    const out = await turn(a, 'find me jobs for a backend engineer', null);
+    expect(out.session.jobRole).toBe('backend engineer');
+    expect(out.jobs.filter((j) => !j.aspirational).length).toBeGreaterThan(0);
+    expect(out.session.asked).toBeFalsy();
+  });
+
+  it('asks the position picker when no role was named, never for a document', async () => {
+    /* The one thing the search cannot know is which job they want, and that
+       is a list to choose from — not a file to go and find. */
+    const a = agent();
+    const out = await turn(a, 'find me jobs', null);
+    expect(out.kind).toBe('ask');
+    expect(out.session.asked).toBe('jobrole');
+    const opts = [...(out.options.options || []), ...((out.options.groups || []).flatMap((g) => g.options || []))];
+    expect(opts.length).toBeGreaterThan(20);
+  });
+
+  it('takes the title out of a typed answer instead of using the sentence', async () => {
+    /*
+     * Every list ends with "something else — I will type it", and what people
+     * type is a sentence. Stored whole, thirty target rows came back titled
+     * "find me jobs for a backend engineer at Verizon".
+     */
+    const a = agent();
+    let out = await turn(a, 'find me jobs', null);
+    expect(out.session.asked).toBe('jobrole');
+    out = await turn(a, 'find me jobs for a backend engineer', out.session);
+    expect(out.session.jobRole).toBe('backend engineer');
+    expect(out.jobs.find((j) => j.aspirational).title).toBe('backend engineer');
+  });
+
+  it('reaches the search in process, with no request to our own port', async () => {
+    /*
+     * The bug this file now guards. Reaching the search over
+     * http://127.0.0.1:${PORT} works on a laptop and fails behind the hosting
+     * proxy, where the server is not listening on that port — so the board
+     * came back empty in production while every test passed locally. The two
+     * seats are in one module graph; the call is a call.
+     */
+    const src = require('fs').readFileSync(
+      require('path').join(__dirname, '../../routes/v2/resumeAgent.js'), 'utf8',
+    );
+    expect(src).not.toMatch(/127\.0\.0\.1:\$\{port\}\/api\/v2\/jobs\/search/);
+    expect(src).toMatch(/jobAgent\.findJobs\(/);
+
+    await hunt();
+    expect(jobAgent.findJobs).toHaveBeenCalled();
+    const [, opts] = jobAgent.findJobs.mock.calls[0];
+    expect(opts.role).toBe('Backend Engineer');
   });
 });

@@ -110,19 +110,6 @@ function ageOf(posted: string): string {
   return `Posted ${Math.floor(days / 30)} month${days < 60 ? '' : 's'} ago`;
 }
 
-/*
- * The three things, offered as three sentences.
- *
- * Not a command palette and not a menu of eleven verbs — a student arriving
- * here wants one of three outcomes, and naming the outcome is a better
- * prompt than naming the command that produces it.
- */
-const START = [
-  { label: 'Fix my resume', note: 'Attach it, or answer a few questions and I will write one.', send: 'scan my resume' },
-  { label: 'Find me jobs', note: 'Real openings, matched to what your page can prove.', send: 'find me jobs' },
-  { label: 'Write a cover letter', note: 'For one role, from facts already on your resume.', send: 'write a cover letter' },
-];
-
 const QUICK = [
   { icon: '✦', label: 'IMPROVE MY ATS SCORE', send: 'make it 98' },
   { icon: '◎', label: 'TARGET MY RESUME', send: 'tailor my resume' },
@@ -784,7 +771,9 @@ export function AgentChat() {
                   </div>
                 ) : (
                   <p className="mt-10 text-center text-[12.5px] leading-relaxed text-[#9ca3af]">
-                    Say “find me jobs” and I will search from what your resume can prove.
+                    {busy
+                      ? 'Searching the boards…'
+                      : 'Attach your resume, or name the role you are after, and the openings land here.'}
                     <br />Every row opens a real listing, or it is not shown.
                   </p>
                 )
@@ -803,18 +792,22 @@ export function AgentChat() {
           {/* ── the conversation ── */}
           <div className="flex min-w-0 flex-1 flex-col lg:max-w-[430px]">
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
+              {/*
+                * No menu of three. This seat does one errand.
+                *
+                * "Fix my resume · Find me jobs · Write a cover letter" was a
+                * front door in front of a front door: the tabs already say
+                * which of those you are in, and the agent's whole purpose is
+                * those three things. Asking somebody to choose the thing they
+                * came for is a click that teaches them nothing. Attach a
+                * resume, or say what you want, and it starts.
+                */}
               {!started && (
-                <div className="pt-8">
-                  <h3 className="text-center text-[19px] font-semibold text-[#111827]">What are we doing today?</h3>
-                  <div className="mt-5 flex flex-col gap-2">
-                    {START.map((s) => (
-                      <button key={s.label} onClick={() => send(s.send)} disabled={busy}
-                        className="rounded-xl border border-[#e5e9f0] px-3.5 py-2.5 text-left text-[12.5px] transition-colors hover:border-[#c7d2fe] hover:bg-[#f5f7ff] disabled:opacity-50">
-                        <b className="block text-[13px] text-[#111827]">{s.label}</b>
-                        <span className="text-[11.5px] text-[#6b7280]">{s.note}</span>
-                      </button>
-                    ))}
-                  </div>
+                <div className="pt-10">
+                  <p className="text-center text-[13px] leading-relaxed text-[#6b7280]">
+                    Attach your resume and I will read it, find the openings for what
+                    it says you are, and rewrite it for whichever one you pick.
+                  </p>
                 </div>
               )}
 

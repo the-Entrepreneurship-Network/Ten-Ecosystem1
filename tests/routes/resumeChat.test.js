@@ -10,6 +10,23 @@
 const express = require('express');
 const request = require('supertest');
 
+/*
+ * The boards are silent for this file, on purpose.
+ *
+ * "Build me a resume for a data analyst" now opens with the openings for that
+ * title before the interview — which is the right product behaviour and the
+ * wrong thing for a unit test to do: these tests are about the conversation,
+ * and reaching four live job boards to prove a question is asked in the right
+ * order makes them slow and dependent on somebody else's uptime. With the
+ * search failing, the agent falls back to the interview, which is exactly the
+ * path this file exists to pin. The jobs-first order has its own tests.
+ */
+jest.mock('../../routes/v2/jobAgent', () => {
+  const router = jest.requireActual('../../routes/v2/jobAgent');
+  router.findJobs = jest.fn().mockRejectedValue(new Error('boards not reached in this suite'));
+  return router;
+});
+
 function app() {
   const a = express();
   a.use(express.json());
@@ -718,18 +735,23 @@ describe('the conversation advances instead of repeating', () => {
     expect(t2.reply).toMatch(/Greenhouse does not auto-score/);
   });
 
-  it('job hunting asks for the resume rather than sending them elsewhere', async () => {
+  it('job hunting asks which position, rather than sending them elsewhere', async () => {
     /*
      * It used to hand people to a different portal, which meant uploading the
      * same resume a second time and losing the thread. Finding an opening and
-     * tailoring for it are one errand, so the hunt happens here — and with no
-     * resume on file the honest first move is to ask for one.
+     * tailoring for it are one errand, so the hunt happens here.
+     *
+     * What it asks for changed. "Attach your resume first" was a dead end: a
+     * page makes the ranking better and was never needed to run a search, and
+     * somebody who has not written one yet is exactly who came here. The one
+     * thing the search cannot know is which job they want — and that is a
+     * list to pick from, not a document to go and find.
      */
     const a = app();
     const t1 = await turn(a, 'find me jobs', null);
     expect(t1.kind).toBe('ask');
-    expect(t1.session.asked).toBe('resume');
-    expect(t1.reply).toMatch(/what it can prove/i);
+    expect(t1.session.asked).toBe('jobrole');
+    expect(t1.reply).toMatch(/which position/i);
     expect(t1.reply).not.toMatch(/check —|build —/);
   });
 

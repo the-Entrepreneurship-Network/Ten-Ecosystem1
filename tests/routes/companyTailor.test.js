@@ -22,30 +22,23 @@ const profiles = require('../../services/v2/companyProfiles');
 
 jest.setTimeout(5 * 60 * 1000);
 
+/* Stubbed where the seats actually meet: one function, not a request to our
+   own port — that hop is what failed behind the hosting proxy. */
+jest.mock('../../routes/v2/jobAgent', () => {
+  const router = jest.requireActual('../../routes/v2/jobAgent');
+  router.findJobs = jest.fn();
+  return router;
+});
+const jobAgent = require('../../routes/v2/jobAgent');
+
 const PORTAL_JOBS = [
-  { title: 'Software Engineer', company: 'stripe', location: 'Bengaluru, India', directUrl: 'https://stripe.com/jobs/1', description: 'Java, Postgres.', tags: ['java'], fit5: 4 },
-  { title: 'Software Engineer, Platform', company: 'airbnb', location: 'Remote, EU', directUrl: 'https://careers.airbnb.com/2', description: 'AWS, Terraform.', tags: ['aws'], fit5: 3 },
+  { title: 'Software Engineer', company: 'stripe', location: 'Bengaluru, India', url: 'https://stripe.com/jobs/1', description: 'Java, Postgres.', tags: ['java'], fit5: 4 },
+  { title: 'Software Engineer, Platform', company: 'airbnb', location: 'Remote, EU', url: 'https://careers.airbnb.com/2', description: 'AWS, Terraform.', tags: ['aws'], fit5: 3 },
 ];
 
-let portal;
-let prevPort;
-
-beforeAll((done) => {
-  const p = express();
-  p.use(express.json());
-  p.post('/api/v2/jobs/search', (req, res) =>
-    res.json({ ok: true, profile: { role: req.body.role }, resumeText: req.body.text, jobs: PORTAL_JOBS, withheld: 0 }));
-  portal = p.listen(0, () => {
-    prevPort = process.env.PORT;
-    process.env.PORT = String(portal.address().port);
-    done();
-  });
-});
-
-afterAll((done) => {
-  if (prevPort === undefined) delete process.env.PORT;
-  else process.env.PORT = prevPort;
-  portal.close(done);
+beforeEach(() => {
+  jobAgent.findJobs.mockReset();
+  jobAgent.findJobs.mockResolvedValue(PORTAL_JOBS);
 });
 
 function agent() {
@@ -244,10 +237,8 @@ describe('a new user gets the openings before the blank page', () => {
   });
 
   it('builds anyway when the boards are silent, rather than stranding them', async () => {
-    const prev = process.env.PORT;
-    process.env.PORT = '1';
+    jobAgent.findJobs.mockRejectedValue(new Error('every board timed out'));
     const { out } = await start();
-    process.env.PORT = prev;
     /* No page, no listings — the interview is the only useful next move. */
     expect(out.kind).toBe('ask');
     expect(String(out.reply)).toMatch(/build the page first/i);
