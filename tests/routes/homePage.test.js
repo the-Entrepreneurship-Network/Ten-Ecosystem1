@@ -1008,11 +1008,19 @@ describe('opening curtain', () => {
     expect(page).toContain('const FINALE_MS = HOLD_MS');
   });
 
-  it('waits fifty seconds and then holds three', () => {
-    expect(countdownMs).toBe(50000);
-    /* The word cracks into place and stays there long enough to be read,
+  it('opens quickly rather than making somebody queue', () => {
+    /*
+     * It was fifty seconds. That is not an opening, it is a wait — nobody
+     * watches a homepage count down for the better part of a minute, they
+     * leave, and the effect they left before seeing was the whole point of
+     * building it. Under ten seconds lands it and gets out of the way.
+     */
+    expect(countdownMs).toBeLessThanOrEqual(10000);
+    expect(countdownMs).toBeGreaterThanOrEqual(4000);
+    /* The word still cracks into place and stays long enough to be read,
        rather than being glimpsed on the way out. */
-    expect(holdMs).toBe(3000);
+    expect(holdMs).toBeGreaterThanOrEqual(1000);
+    expect(holdMs).toBeLessThanOrEqual(2000);
   });
 
   it('counts real seconds, one a second', () => {
@@ -1040,7 +1048,43 @@ describe('opening curtain', () => {
     expect(unshake).toBeLessThan(lift);
   });
 
-  it('still swaps the domain logos however short it gets', () => {
-    expect(page).toMatch(/const swapEvery = Math\.max\(1, Math\.round\(startN \/ 5\)\)/);
+  it('shows every one of the fourteen domains, not five of them', () => {
+    /*
+     * The swap hung off the countdown tick a fixed five times, so nine
+     * domains were never shown at all — and across fifty seconds the five
+     * that were looked like one frozen image with a number beside it. The
+     * interval is divided out of the countdown, one slot per domain, so the
+     * whole set gets its turn and stays correct if the timing changes again.
+     */
+    expect(page).toMatch(/const LOGO_MS = Math\.max\(200, Math\.round\(COUNT_MS \/ DOMAIN_IMGS\.length\)\)/);
+    expect(page).toMatch(/setInterval\([\s\S]{0,400}?\}, LOGO_MS\)/);
+
+    /* Fast enough to read as a rotation: every domain inside the countdown,
+       and comfortably under a second each. */
+    const imgs = /const DOMAIN_IMGS = \[([^\]]*)\]/.exec(page)[1].split(',').length;
+    expect(imgs).toBe(14);
+    expect(Math.round(countdownMs / imgs)).toBeLessThan(1000);
+  });
+
+  it('finishes shaking before it lifts the curtain, with room to spare', () => {
+    /*
+     * The shake was fixed at .55s in the stylesheet. Against a short finale it
+     * ran from 660ms to 1210ms while the curtain lifts at 1200 — ten
+     * milliseconds of overlap, and an animation on transform beats the
+     * transition doing the lifting. It survived only because removing the
+     * class killed it mid-flight. Sized from the finale, it always ends first.
+     */
+    expect(page).toMatch(/const shakeMs = Math\.max\(120, Math\.round\(\(FINALE_MS - impactAt\) \* 0\.8\)\)/);
+    expect(page).toMatch(/pre\.style\.animationDuration = shakeMs \+ 'ms'/);
+
+    const impactAt = Math.round(holdMs * 0.55);
+    const shakeMs = Math.max(120, Math.round((holdMs - impactAt) * 0.8));
+    expect(impactAt + shakeMs).toBeLessThan(holdMs);
+  });
+
+  it('stops cycling logos when the countdown ends', () => {
+    /* Both clocks stop together — a swap still queued would drop a domain
+       back on top of the E that has just landed. */
+    expect(page).toMatch(/clearInterval\(tick\);[\s\S]{0,80}clearInterval\(cycle\)/);
   });
 });

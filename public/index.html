@@ -922,13 +922,24 @@ const DOMAIN_IMGS = ['python.jpg','java.jpg','web.jpg','mern.jpg','flutter.jpg',
    ONE knob for the whole opening: INTRO_MS. Everything below is a fraction of
    it, so changing this number changes the intro and nothing else drifts.
 
-   Two knobs, because the opening has two halves that are timed for different
-   reasons. COUNTDOWN_MS is the wait, and it is deliberately long enough to
-   watch the domain logos cycle. HOLD_MS is the beat after the word cracks
-   into place, before the curtain lifts — three seconds, so the finished TEN
-   is actually seen rather than glimpsed. */
-const COUNTDOWN_MS = 50000;
-const HOLD_MS = 3000;
+   Three knobs, because the opening has three things happening for three
+   different reasons.
+
+   COUNTDOWN_MS is the wait. It was fifty seconds and that is not an opening,
+   it is a queue: nobody watches a homepage count down for the better part of
+   a minute, they leave. Eight seconds is long enough to land the effect and
+   short enough that it never becomes something to sit through.
+
+   The domains cycle on their own clock, derived so that ALL FOURTEEN get
+   their turn inside the countdown — every one of them, every time, whatever
+   the countdown is set to. Tied to the seconds tick it swapped five times in
+   fifty seconds: one logo every ten seconds, nine domains never shown at all,
+   and what a visitor saw was a still image with a number beside it.
+
+   HOLD_MS is the beat after the word cracks into place, before the curtain
+   lifts — long enough that the finished TEN is seen rather than glimpsed. */
+const COUNTDOWN_MS = 8000;
+const HOLD_MS = 1200;
 const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
 (() => {
   const count = document.getElementById('preCount');
@@ -962,22 +973,33 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
     count.textContent = String(Math.max(0, Math.round(n * TICK_MS / 1000)));
   };
   showSeconds();
-  /* Swap the logo a fixed number of times however short the countdown is,
-     so shortening the intro never leaves a single frozen logo on screen. */
-  const swapEvery = Math.max(1, Math.round(startN / 5));
+
+  /*
+   * Every domain gets its turn, on its own clock.
+   *
+   * The swap used to hang off the countdown tick a fixed five times, so nine
+   * of the fourteen were never shown — and at fifty seconds the five that
+   * were looked like one frozen image. The interval is divided out of the
+   * countdown instead: one slot per domain, all fourteen, and it stays
+   * correct if the countdown is ever changed again.
+   */
+  const LOGO_MS = Math.max(200, Math.round(COUNT_MS / DOMAIN_IMGS.length));
+  const cycle = setInterval(() => {
+    if (finished) return;
+    slot.classList.add('swap');
+    setTimeout(() => {
+      gi = (gi + 1) % DOMAIN_IMGS.length;
+      setSlot();
+      slot.classList.remove('swap');
+    }, 60);
+  }, LOGO_MS);
+
   const tick = setInterval(() => {
     n--;
     showSeconds();
-    if (n > 0 && n % swapEvery === 0) {
-      slot.classList.add('swap');
-      setTimeout(() => {
-        gi = (gi + 1) % DOMAIN_IMGS.length;
-        setSlot();
-        slot.classList.remove('swap');
-      }, 60);
-    }
     if (n <= 0) {
       clearInterval(tick);
+      clearInterval(cycle);
       finale();
     }
   }, TICK_MS);
@@ -1005,9 +1027,18 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
     const impactAt = Math.round(FINALE_MS * 0.55);
     slot.style.animationDuration = impactAt + 'ms';
 
+    /* The shake is sized from what is left of the finale, for the same reason
+       the fly-in is. Fixed at .55s in the stylesheet it ran from 660ms to
+       1210ms while the curtain lifts at 1200 — ten milliseconds of overlap,
+       and an animation on transform beats the transition that does the
+       lifting. It only worked because removing the class kills it mid-flight.
+       Derived, it always finishes with room to spare. */
+    const shakeMs = Math.max(120, Math.round((FINALE_MS - impactAt) * 0.8));
     setTimeout(() => {
       flash.classList.add('on');
       crack.classList.add('on');
+      word.style.animationDuration = shakeMs + 'ms';
+      pre.style.animationDuration = shakeMs + 'ms';
       word.classList.add('pre-shake');
       pre.classList.add('pre-shake');
     }, impactAt);
@@ -1022,6 +1053,8 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
       count.textContent = '';
       pre.classList.remove('pre-shake');
       word.classList.remove('pre-shake');
+      pre.style.animationDuration = '';
+      word.style.animationDuration = '';
       pre.classList.add('done');
       document.body.classList.remove('locked');
     }, FINALE_MS);
