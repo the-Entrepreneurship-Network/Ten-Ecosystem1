@@ -95,8 +95,10 @@ describe('a wrong pick and a refused pick both still get there', () => {
       const all = picks(o);
       return all.length ? all[all.length - 1].value : 'skip';
     });
-    expect(out.potentialScore).toBeGreaterThanOrEqual(97);
-    expect(String(out.reply)).toMatch(/picks are first/i);
+    expect(out.report.score).toBeGreaterThanOrEqual(97);
+    /* Their pick goes on and the bench fills in behind it until the number
+       is met — said in one sentence now that the steps print themselves. */
+    expect(String(out.reply)).toMatch(/Your picks lead|This page scores \d+\/100/i);
   });
 
   it('takes them to the number even when they want none of the suggestions', async () => {
@@ -109,23 +111,34 @@ describe('a wrong pick and a refused pick both still get there', () => {
 });
 
 describe('the climb never claims anything', () => {
-  it('marks every added line and leaves today\'s score honest', async () => {
+  it('marks every added line, and the marker is what keeps it honest', async () => {
     const out = await raiseTo(98, (o) => picks(o).slice(0, 2).map((c) => c.value).join(', ') || 'skip');
     const planned = skillPlan.plannedLines(out.text);
     expect(planned.length).toBeGreaterThan(0);
 
-    /* Today's number is what the page is worth without the unbuilt work, and
-       it is strictly the smaller of the two. */
-    expect(out.report.score).toBeLessThan(out.potentialScore);
-    expect(String(out.reply)).toMatch(/Today, as it stands/i);
-
-    /* Stripping the planned block returns the page they actually have. */
+    /*
+     * One number, not two.
+     *
+     * The page used to be scored twice — once with the planned work cut out
+     * and once with it counted — and a student who picked the recommended
+     * projects watched the real number sit still. "What is the advantage of
+     * adding those skills and projects if it is not increasing the score?"
+     * had no good answer, and the feature was being ignored because of it.
+     *
+     * An ATS scores the document it is given and these lines are on the
+     * document. The honesty lives where it bites instead: every line stays
+     * marked, the reply lists what has to become true, and the PDF will not
+     * export while a marker is there.
+     */
+    expect(String(out.reply)).toMatch(/Before you attach this/i);
     expect(skillPlan.plannedLines(skillPlan.withoutPlanned(out.text))).toEqual([]);
   });
 
-  it('gives the build order, not a list of missing keywords', async () => {
+  it('gives the steps for each thing it added, not a list of missing keywords', async () => {
     const out = await raiseTo(95, () => 'skip');
-    expect(String(out.reply)).toMatch(/Build order:/);
-    expect(String(out.reply)).toMatch(/1\. \*\*/);
+    expect(String(out.reply)).toMatch(/Before you attach this: \d+ things?/);
+    /* Each one is a heading with its own steps under it, in points. */
+    expect(String(out.reply)).toMatch(/\n- \*\*[^*]+\*\* · /);
+    expect(String(out.reply)).toMatch(/\n {2}- /);
   });
 });

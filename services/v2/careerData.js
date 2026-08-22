@@ -32,11 +32,14 @@ const POSITION_GROUPS = [
   {
     group: 'Software engineering',
     roles: [
-      'Software Engineer', 'Backend Engineer', 'Frontend Engineer',
-      'Full-Stack Engineer', 'Mobile Engineer (Android)', 'Mobile Engineer (iOS)',
-      'Embedded Systems Engineer', 'Game Developer', 'Graphics Engineer',
+      'Software Engineer', 'Software Developer', 'Backend Engineer', 'Backend Developer',
+      'Frontend Engineer', 'Frontend Developer', 'Full-Stack Engineer', 'Full Stack Developer',
+      'Mobile Engineer (Android)', 'Mobile Engineer (iOS)', 'Mobile App Developer',
+      'Application Developer', 'Embedded Systems Engineer', 'Embedded Systems Developer',
+      'Game Developer', 'Video Game Designer', 'Graphics Engineer',
       'Systems Engineer', 'Compiler Engineer', 'Firmware Engineer',
-      'API Engineer', 'Web Developer', 'Software Engineer in Test',
+      'API Engineer', 'Web Developer', 'Webmaster', 'Computer Programmer',
+      'Computer Engineer', 'Software Engineer in Test',
     ],
   },
   {
@@ -44,6 +47,7 @@ const POSITION_GROUPS = [
     roles: [
       'Data Analyst', 'Data Scientist', 'Data Engineer', 'Analytics Engineer',
       'Machine Learning Engineer', 'MLOps Engineer', 'Research Scientist',
+      'AI Research Scientist', 'Knowledge Engineer',
       'Computer Vision Engineer', 'NLP Engineer', 'Applied Scientist',
       'Business Intelligence Analyst', 'Quantitative Analyst',
       'AI Engineer', 'Prompt Engineer', 'Data Architect',
@@ -54,7 +58,9 @@ const POSITION_GROUPS = [
     roles: [
       'DevOps Engineer', 'Site Reliability Engineer', 'Cloud Engineer',
       'Platform Engineer', 'Infrastructure Engineer', 'Network Engineer',
-      'Database Administrator', 'Security Engineer', 'Security Analyst',
+      'Computer Network Architect', 'Database Administrator',
+      'Security Engineer', 'Security Analyst', 'Cybersecurity Analyst',
+      'Information Security Analyst', 'Information Security Manager',
       'Penetration Tester', 'Cloud Security Engineer', 'Systems Administrator',
       'Solutions Architect', 'Cloud Architect',
     ],
@@ -62,19 +68,22 @@ const POSITION_GROUPS = [
   {
     group: 'Product and design',
     roles: [
-      'Product Manager', 'Associate Product Manager', 'Technical Program Manager',
-      'Product Designer', 'UX Designer', 'UI Designer', 'UX Researcher',
+      'Product Manager', 'Associate Product Manager', 'Project Manager',
+      'Technical Program Manager', 'Computer and Information Systems Manager',
+      'Product Designer', 'UX Designer', 'UI Designer', 'UI/UX Designer',
+      'UX Researcher', 'Animator',
       'Design Engineer', 'Product Analyst', 'Program Manager',
-      'Scrum Master', 'Business Analyst',
+      'Scrum Master', 'Business Analyst', 'Computer Systems Analyst',
     ],
   },
   {
     group: 'Quality and support',
     roles: [
       'QA Engineer', 'Automation Test Engineer', 'Manual Test Engineer',
+      'Manual Tester', 'Software Test Engineer',
       'Release Engineer', 'Technical Support Engineer', 'Solutions Engineer',
-      'Sales Engineer', 'Implementation Engineer', 'Customer Success Engineer',
-      'Technical Writer', 'Developer Advocate',
+      'IT Consultant', 'Sales Engineer', 'Implementation Engineer',
+      'Customer Success Engineer', 'Technical Writer', 'Developer Advocate',
     ],
   },
   {
@@ -82,8 +91,9 @@ const POSITION_GROUPS = [
     roles: [
       'Blockchain Developer', 'Smart Contract Engineer', 'AR/VR Engineer',
       'Robotics Engineer', 'Quantum Computing Researcher', 'Bioinformatics Engineer',
-      'Hardware Engineer', 'Simulation Engineer', 'Aerospace Software Engineer',
-      'Automotive Software Engineer', 'Fintech Engineer', 'Healthtech Engineer',
+      'Health Information Technician', 'Hardware Engineer', 'Simulation Engineer',
+      'Aerospace Software Engineer', 'Automotive Software Engineer',
+      'Fintech Engineer', 'Healthtech Engineer',
     ],
   },
 ];

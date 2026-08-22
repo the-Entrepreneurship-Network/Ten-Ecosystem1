@@ -149,7 +149,10 @@ describe('the conversation advances instead of repeating', () => {
     for (let i = 0; i < 4 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
     expect(out.kind).toBe('build');
     expect(out.packet).toBeTruthy();
-    expect(out.reply).toMatch(/checker \d+→\d+/);
+    /* The conversion deltas, the band, the component split and the match
+       percentage were six lines of measurement above a resume somebody asked
+       to read. The score is the news. */
+    expect(out.reply).toMatch(/^ATS score: \d+\/100/);
     expect(out.text).toContain('PRIYA NAIR');
   });
 
@@ -322,19 +325,23 @@ describe('the conversation advances instead of repeating', () => {
     expect(notClaimed).toEqual(expect.arrayContaining(['postgresql', 'docker']));
   });
 
-  it('a delivery opens with the band and the caveat, not with bookkeeping', async () => {
+  it('a delivery opens with the score and nothing else', async () => {
     const a = app();
     let out = await turn(a, RESUME, null);
     out = await turn(a, 'fix it', out.session);
     for (let i = 0; i < 24 && out.kind === 'ask'; i++) out = await turn(a, 'skip', out.session);
     expect(out.kind).toBe('build');
-    /* The band says whether the page was weak, salvageable or strong, which
-       is worth knowing. "Path: A · Command: tailor" was bookkeeping printed
-       at a student. */
-    expect(out.reply).toMatch(/Band: \w+/);
+    /*
+     * It opened with the band, then the score, then a match percentage, then
+     * a four-part component split, then a factual ceiling, then a caveat —
+     * six lines of measurement stacked on top of the resume. The brief is the
+     * resume, the score, and the work left to do; everything else is still
+     * computed and still one command away.
+     */
+    expect(out.reply.split('\n')[0]).toMatch(/^ATS score: \d+\/100$/);
     expect(out.reply).not.toMatch(/Path: A|Command: tailor/);
-    expect(out.reply).toMatch(/Greenhouse does not auto-score/);
-    expect(out.reply).toMatch(/Keyword (N\/A|\d+\/40) · Format \d+\/30/);
+    expect(out.reply).not.toMatch(/Keyword (N\/A|\d+\/40) · Format/);
+    expect(out.reply).not.toMatch(/Band: /);
   });
 
   it('match runs the Jobscan screen: score plus gap in one reply, with the band', async () => {
@@ -484,9 +491,12 @@ describe('the conversation advances instead of repeating', () => {
     /* Never the same sentence twice in a row — the complaint was watching one
        reply come back verbatim, not a phase being revisited later. */
     replies.forEach((r, i) => {
-      /* A delivered page repeats its own caveat, which is the caveat doing
-         its job — the rule is about questions, not about the disclaimer. */
-      if (i && !/Proxy only/.test(r)) expect(r).not.toBe(replies[i - 1]);
+      /* A delivered page repeats its own header, which is the header doing
+         its job — handing the same page over twice should say the same score
+         twice. The rule is about questions, not about the score line. */
+      if (i && !/Proxy only/.test(r) && !/^ATS score: /.test(r)) {
+        expect(r).not.toBe(replies[i - 1]);
+      }
     });
     const worklist = replies.find((r) => /What is wrong/.test(r));
     expect(worklist).toBeTruthy();
@@ -870,7 +880,8 @@ describe('the conversation advances instead of repeating', () => {
     // did not exist when this was written: declining the suggestions used to
     // end at the ceiling, which is a no to somebody who asked how.
     const reachedOrCeiling = /every parse, heading, verb and keyword lever spent/.test(out.reply)
-      || /With this work built, the page scores \d+\/100/.test(out.reply)
+      || /This page scores \d+\/100 with the work below on it/.test(out.reply)
+      || /is the honest top for this role/.test(out.reply)
       || /Ceiling: Checker \d+\/100/.test(out.reply);
     expect(reachedOrCeiling).toBe(true);
     if (/Ceiling/.test(out.reply)) expect(out.reply).toMatch(/I will not invent it|will not invent them/);

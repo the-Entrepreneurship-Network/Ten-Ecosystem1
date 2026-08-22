@@ -51,10 +51,6 @@
   #preSlot img { width:100%; height:100%; object-fit:cover; border-radius:14px; mix-blend-mode:screen; }
   #preSlot.swap { opacity:0; transform:scale(.6) rotate(-20deg); }
   #preCount { position:absolute; bottom:26px; left:50%; transform:translateX(-50%); font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:13px; letter-spacing:.2em; color:#fff; font-variant-numeric:tabular-nums; }
-  /* Bottom right, quiet, and out of the way of the word. Reachable without
-     hunting for it, and never mistaken for the countdown. */
-  #preSound { position:absolute; right:20px; bottom:20px; width:36px; height:36px; display:flex; align-items:center; justify-content:center; font-size:15px; line-height:1; background:transparent; border:1px solid rgba(255,255,255,.28); border-radius:50%; color:#fff; cursor:pointer; opacity:.55; transition:opacity .2s, border-color .2s; }
-  #preSound:hover, #preSound:focus-visible { opacity:1; border-color:rgba(255,255,255,.7); }
 
   /* ---------- the finale: E arrives spinning, breaks the screen, TEN holds ---------- */
   #preSlot.eletter { width:auto; height:auto; font-size:1em; }
@@ -483,9 +479,6 @@
 <div id="pre">
   <div class="pre-word" id="preWord">T<span id="preSlot">🐍</span>N</div>
   <div id="preCount">10</div>
-  <!-- Sound nobody asked for and cannot silence is what people close a tab
-       over. One click, remembered, and it never argues with the countdown. -->
-  <button id="preSound" type="button" aria-label="Turn intro sound off" aria-pressed="false">🔊</button>
   <!-- the impact of the E landing: fracture lines, then a white flash -->
   <svg id="preCrack" viewBox="0 0 1000 600" preserveAspectRatio="none" aria-hidden="true">
     <g stroke="#fff" stroke-width="1.6" fill="none">
@@ -975,19 +968,24 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
    * The hit fires on the same timer that fires the flash and the fracture, so
    * the sound and the picture land together at any INTRO_MS.
    *
-   * Two things a homepage that makes noise has to get right:
+   * It starts on its own, with nothing to press.
    *
-   * Autoplay is refused by every browser until somebody has interacted with
-   * the page, and refusing is CORRECT — a site that blares at you on load is
-   * hostile. So play() is attempted, and when it is rejected the first touch,
-   * click or keypress starts it from where the countdown has already reached,
-   * rather than restarting a bed for a countdown that is half over.
+   * There is no button, because a button is a thing to notice and decide
+   * about before the opening it belongs to has finished. play() is called the
+   * instant the script runs.
    *
-   * And it can be turned off, in one click, remembered. Sound nobody asked
-   * for and cannot silence is the thing people close the tab over.
+   * What no code can change: every browser refuses audio until the page has
+   * been interacted with, and typing a URL and pressing Enter is not an
+   * interaction WITH THE PAGE. Chrome relaxes it once a visitor has built up
+   * media engagement on the domain, and Safari and Firefox have their own
+   * versions of the same rule — so the same site is silent for one person and
+   * not for another, and neither is a bug on our side.
+   *
+   * So: attempt it immediately, and if the browser refuses, start on the very
+   * first thing the visitor does — a scroll, a tap, a key — from where the
+   * countdown has already reached, rather than restarting a bed for an
+   * opening that is half over. No prompt, no icon, nothing asked of them.
    */
-  const SOUND_KEY = 'ten:intro-sound';
-  const soundOff = () => localStorage.getItem(SOUND_KEY) === 'off';
   const bed = new Audio('assets/intro/intro-bed.mp3');
   const hit = new Audio('assets/intro/intro-impact.mp3');
   bed.loop = true;
@@ -999,7 +997,6 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
   const startedAt = Date.now();
   let armed = false;
   const playBed = () => {
-    if (soundOff()) return;
     /* From where the countdown actually is. A bed that starts at zero eight
        seconds in is a different opening from the one being watched. */
     const into = (Date.now() - startedAt) / 1000;
@@ -1007,9 +1004,11 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
     const p = bed.play();
     if (p && p.catch) p.catch(() => arm());
   };
-  /* One listener, removed the moment it has done its job. */
+  /* One listener, removed the moment it has done its job. Scroll and mouse
+     movement are in the list because on a page that opens with a countdown
+     they are the likeliest first thing a visitor does. */
   const wake = () => { disarm(); playBed(); };
-  const EVENTS = ['pointerdown', 'keydown', 'touchstart'];
+  const EVENTS = ['pointerdown', 'pointermove', 'keydown', 'touchstart', 'wheel', 'scroll'];
   function arm() {
     if (armed) return;
     armed = true;
@@ -1018,24 +1017,6 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
   function disarm() {
     armed = false;
     EVENTS.forEach((e) => window.removeEventListener(e, wake));
-  }
-  const stopSound = () => { disarm(); bed.pause(); };
-
-  const toggle = document.getElementById('preSound');
-  if (toggle) {
-    const paint = () => {
-      toggle.textContent = soundOff() ? '🔇' : '🔊';
-      toggle.setAttribute('aria-label', soundOff() ? 'Turn intro sound on' : 'Turn intro sound off');
-      toggle.setAttribute('aria-pressed', String(soundOff()));
-    };
-    paint();
-    toggle.addEventListener('click', (e) => {
-      /* Never let the toggle double as the gesture that starts the thing it
-         was just used to silence. */
-      e.stopPropagation();
-      if (soundOff()) { localStorage.removeItem(SOUND_KEY); paint(); playBed(); }
-      else { localStorage.setItem(SOUND_KEY, 'off'); paint(); stopSound(); }
-    });
   }
   playBed();
   /* Each half is set directly now rather than split from one total, so the
@@ -1146,11 +1127,9 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
        */
       bed.pause();
       disarm();
-      if (!soundOff()) {
-        hit.currentTime = 0;
-        const p = hit.play();
-        if (p && p.catch) p.catch(() => {});
-      }
+      hit.currentTime = 0;
+      const p = hit.play();
+      if (p && p.catch) p.catch(() => {});
     }, impactAt);
 
     /* TEN, whole, for a beat — then the site.

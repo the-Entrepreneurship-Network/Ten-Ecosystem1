@@ -1108,6 +1108,9 @@ describe('opening curtain', () => {
     /* And the bed stops on the same line: two takes of the same room
        overlapping is mud. */
     expect(finale.slice(flashAt, closes)).toMatch(/bed\.pause\(\)/);
+    /* The gesture listener comes off with it — a click after the crack must
+       not restart a bed for an opening that has finished. */
+    expect(finale.slice(flashAt, closes)).toMatch(/disarm\(\)/);
   });
 
   it('ships two audio files that actually contain audio', () => {
@@ -1138,30 +1141,43 @@ describe('opening curtain', () => {
     });
   });
 
-  it('never fights the browser over autoplay, and never nags', () => {
+  it('starts on its own, with nothing to press', () => {
     /*
-     * Autoplay is refused until somebody has interacted with the page, and
-     * refusing is correct — a site that blares at you on load is hostile. So
-     * the rejection is caught and the first gesture starts it instead, from
-     * where the countdown has already reached rather than from zero.
+     * There was a speaker button. A button is a thing to notice and decide
+     * about before the opening it belongs to has finished, so it is gone:
+     * play() is called the instant the script runs, and nothing is asked of
+     * the visitor.
+     */
+    expect(page).not.toMatch(/id="preSound"/);
+    expect(page).not.toMatch(/SOUND_KEY/);
+    expect(page).toMatch(/\n\s*playBed\(\);/);
+
+    /* And neither half checks a preference before playing. */
+    expect(page).toMatch(/const playBed = \(\) => \{\s*\/\*/);
+    expect(page).not.toMatch(/if \(soundOff\(\)\) return;/);
+  });
+
+  it('recovers silently when the browser refuses to autoplay', () => {
+    /*
+     * No code can change this: browsers refuse audio until the page has been
+     * interacted with, and typing a URL and pressing Enter is not an
+     * interaction with the page. Chrome relaxes it once a visitor has media
+     * engagement on the domain — so the same site is silent for one person
+     * and not another, and neither is a bug here.
+     *
+     * When it is refused, the first thing the visitor does starts it, from
+     * where the countdown has already reached rather than from zero. No
+     * prompt, no icon, nothing asked.
      */
     expect(page).toMatch(/p\.catch\(\(\) => arm\(\)\)/);
     expect(page).toMatch(/\{ once: true, passive: true \}/);
     expect(page).toMatch(/bed\.currentTime = into % bed\.duration/);
-  });
 
-  it('can be silenced in one click, and remembers', () => {
-    /* Sound nobody asked for and cannot silence is what people close a tab
-       over. The toggle is in the markup, not only in the script. */
-    expect(page).toMatch(/id="preSound"/);
-    expect(page).toMatch(/const SOUND_KEY = 'ten:intro-sound'/);
-    expect(page).toMatch(/localStorage\.setItem\(SOUND_KEY, 'off'\)/);
-    /* Silenced means silenced: neither half plays. */
-    expect(page).toMatch(/const playBed = \(\) => \{\s*if \(soundOff\(\)\) return;/);
-    expect(page).toMatch(/if \(!soundOff\(\)\) \{\s*hit\.currentTime = 0;/);
-    /* And the click that silences it must not also count as the gesture that
-       starts it. */
-    expect(page).toMatch(/e\.stopPropagation\(\);/);
+    /* Scroll and pointer movement count, because on a page that opens with a
+       countdown they are the likeliest first thing anybody does. */
+    const events = /const EVENTS = \[([^\]]+)\]/.exec(page)[1];
+    ['pointerdown', 'pointermove', 'keydown', 'touchstart', 'wheel', 'scroll']
+      .forEach((e) => expect(events).toContain(e));
   });
 
   it('stops cycling logos when the countdown ends', () => {

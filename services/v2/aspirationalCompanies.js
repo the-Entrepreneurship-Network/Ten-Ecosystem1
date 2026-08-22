@@ -123,6 +123,114 @@ const COMPANIES = [
   ['Wipro', 'itservices'], ['Tech Mahindra', 'itservices'],
   ['Cognizant', 'itservices'], ['Deloitte', 'consulting'],
   ['McKinsey & Company', 'consulting'], ['Boston Consulting Group', 'consulting'],
+
+  /* ==================================================================== *
+   * The engineering employers, by where the engineers actually are.
+   *
+   * The list above is built from the large-cap indices, which is the right
+   * frame for "who is a serious employer" and the wrong one for "who hires
+   * software engineers by the thousand". A student aiming at engineering
+   * needs LinkedIn, Atlassian, Cloudflare and GitLab on it, and none of them
+   * reach those indices at the size that gets you in. The startups are here
+   * for the same reason: for a lot of students the realistic offer is from a
+   * company that will never be in the Nifty 50.
+   * ==================================================================== */
+
+  /* ---- product and platform engineering ---- */
+  ['LinkedIn', 'software'], ['Slack', 'software'], ['Spotify', 'media'],
+  ['Dropbox', 'software'], ['Atlassian', 'software'], ['GitHub', 'software'],
+  ['GitLab', 'software'], ['Shopify', 'software'], ['Twilio', 'software'],
+  ['Zendesk', 'software'], ['HubSpot', 'software'], ['Asana', 'software'],
+  ['Monday.com', 'software'], ['Smartsheet', 'software'], ['Box', 'software'],
+  ['DocuSign', 'software'], ['Zoom', 'software'], ['RingCentral', 'software'],
+  ['Unity Software', 'software'], ['Roblox', 'software'],
+  ['Electronic Arts', 'media'], ['Nintendo', 'media'], ['Autodesk', 'software'],
+  ['Veeva Systems', 'software'], ['Splunk', 'software'], ['Elastic', 'software'],
+  ['Confluent', 'software'], ['Databricks', 'software'], ['Cloudera', 'software'],
+  ['MongoDB', 'software'], ['Datadog', 'software'], ['PagerDuty', 'software'],
+  ['New Relic', 'software'], ['Cloudflare', 'networking'], ['Fastly', 'networking'],
+  ['Akamai Technologies', 'networking'], ['DigitalOcean', 'software'],
+  ['VMware', 'software'], ['Red Hat', 'software'], ['Docker', 'software'],
+  ['HashiCorp', 'software'], ['JetBrains', 'software'], ['Figma', 'software'],
+  ['Notion', 'software'], ['Canva', 'software'], ['Grammarly', 'software'],
+  ['Duolingo', 'software'], ['Coursera', 'software'],
+
+  /* ---- marketplaces, delivery, mobility, travel ---- */
+  ['Lyft', 'software'], ['DoorDash', 'logistics'], ['Instacart', 'logistics'],
+  ['Deliveroo', 'logistics'], ['Flexport', 'logistics'], ['Samsara', 'industrial'],
+  ['Expedia Group', 'software'], ['Tripadvisor', 'software'], ['Yelp', 'software'],
+  ['eBay', 'retail'], ['Etsy', 'retail'], ['Wayfair', 'retail'],
+  ['Chewy', 'retail'], ['Zalando', 'retail'], ['MercadoLibre', 'retail'],
+  ['Coupang', 'retail'], ['Sea Limited', 'retail'], ['Grab', 'logistics'],
+
+  /* ---- fintech ---- */
+  ['Coinbase', 'fintech'], ['Robinhood', 'fintech'], ['Plaid', 'fintech'],
+  ['Revolut', 'fintech'], ['Wise', 'fintech'], ['Klarna', 'fintech'],
+  ['Adyen', 'fintech'], ['Fiserv', 'fintech'],
+  ['Fidelity National Information Services', 'fintech'],
+
+  /* ---- security ---- */
+  ['Palo Alto Networks', 'security'], ['CrowdStrike', 'security'],
+  ['Fortinet', 'security'], ['Zscaler', 'security'], ['Okta', 'security'],
+  ['SentinelOne', 'security'], ['Check Point Software', 'security'],
+  ['Rapid7', 'security'], ['Tenable', 'security'], ['CyberArk', 'security'],
+
+  /* ---- semiconductors and hardware, worldwide ---- */
+  ['TSMC', 'semiconductor'], ['Samsung', 'semiconductor'], ['SK Hynix', 'semiconductor'],
+  ['ASML', 'semiconductor'], ['Arm Holdings', 'semiconductor'],
+  ['MediaTek', 'semiconductor'], ['STMicroelectronics', 'semiconductor'],
+  ['Infineon', 'semiconductor'], ['Marvell Technology', 'semiconductor'],
+  ['Synopsys', 'semiconductor'], ['Cadence Design Systems', 'semiconductor'],
+  ['Tokyo Electron', 'semiconductor'], ['Advantest', 'semiconductor'],
+  ['Keysight', 'semiconductor'], ['ASE Group', 'semiconductor'],
+  ['United Microelectronics', 'semiconductor'], ['SMIC', 'semiconductor'],
+  ['Renesas Electronics', 'semiconductor'], ['Kioxia', 'semiconductor'],
+  ['Sony', 'hardware'], ['Panasonic', 'hardware'], ['Canon', 'hardware'],
+  ['Logitech', 'hardware'], ['Garmin', 'hardware'], ['Sandisk', 'hardware'],
+  ['Seagate Technology', 'hardware'], ['Western Digital', 'hardware'],
+  ['Supermicro', 'hardware'], ['Lenovo', 'hardware'], ['ASUS', 'hardware'],
+  ['HP', 'hardware'], ['Quanta Computer', 'hardware'], ['Foxconn', 'hardware'],
+  ['LG Electronics', 'hardware'], ['Arista Networks', 'networking'],
+  ['Juniper Networks', 'networking'], ['Ericsson', 'telecom'],
+  ['Nokia', 'telecom'], ['Equinix', 'infrastructure'],
+
+  /* ---- global internet ---- */
+  ['Tencent', 'software'], ['Alibaba', 'retail'], ['Baidu', 'software'],
+  ['ByteDance', 'media'], ['NetEase', 'media'], ['JD.com', 'retail'],
+  ['Meituan', 'logistics'], ['PDD Holdings', 'retail'], ['Xiaomi', 'hardware'],
+  ['Rakuten', 'retail'], ['Naver', 'software'], ['Kakao', 'software'],
+  ['Discord', 'software'], ['Reddit', 'media'], ['Pinterest', 'media'],
+  ['X', 'media'], ['Snap', 'media'], ['Twitch', 'media'],
+
+  /* ---- AI labs ---- */
+  ['Anthropic', 'software'], ['DeepMind', 'software'], ['Mistral AI', 'software'],
+  ['Cohere', 'software'], ['Hugging Face', 'software'], ['Scale AI', 'software'],
+  ['Perplexity AI', 'software'], ['xAI', 'software'], ['Anduril', 'aerospace'],
+  ['Waymo', 'automotive'], ['Blue Origin', 'aerospace'],
+
+  /* ---- Indian IT services and product ---- */
+  ['LTIMindtree', 'itservices'], ['Mphasis', 'itservices'],
+  ['Persistent Systems', 'itservices'], ['Coforge', 'itservices'],
+  ['Zoho', 'software'], ['Freshworks', 'software'], ['Postman', 'software'],
+  ['BrowserStack', 'software'], ['Chargebee', 'software'], ['Darwinbox', 'software'],
+  ['Whatfix', 'software'], ['InMobi', 'software'], ['Gupshup', 'software'],
+  ['Jio Platforms', 'telecom'],
+
+  /* ---- Indian startups and unicorns ---- */
+  ['Zerodha', 'fintech'], ['Razorpay', 'fintech'], ['Groww', 'fintech'],
+  ['PhonePe', 'fintech'], ['Paytm', 'fintech'], ['CRED', 'fintech'],
+  ['BharatPe', 'fintech'], ['Juspay', 'fintech'], ['KreditBee', 'fintech'],
+  ['ACKO', 'insurance'], ['Digit Insurance', 'insurance'], ['PolicyBazaar', 'fintech'],
+  ['Flipkart', 'retail'], ['Meesho', 'retail'], ['Myntra', 'retail'],
+  ['Nykaa', 'retail'], ['Lenskart', 'retail'], ['FirstCry', 'retail'],
+  ['Purplle', 'retail'], ['Udaan', 'retail'], ['BigBasket', 'retail'],
+  ['Swiggy', 'logistics'], ['Zomato', 'logistics'], ['Zepto', 'logistics'],
+  ['Delhivery', 'logistics'], ['Shadowfax', 'logistics'], ['Rebel Foods', 'retail'],
+  ['Ola', 'logistics'], ['Ola Electric', 'automotive'], ['Ather Energy', 'automotive'],
+  ['Cars24', 'retail'], ['Spinny', 'retail'], ['Urban Company', 'retail'],
+  ['OYO', 'retail'], ['Dream11', 'software'], ['ShareChat', 'media'],
+  ['Dailyhunt', 'media'], ['Unacademy', 'software'], ['Physics Wallah', 'software'],
+  ['Sarvam AI', 'software'], ['Skyroot Aerospace', 'aerospace'],
 ];
 
 /* Which domains a title plausibly belongs to. Order matters — the first match
