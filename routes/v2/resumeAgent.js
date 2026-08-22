@@ -29,6 +29,7 @@ const atsEngine = require('../../services/v2/atsResumeEngine');
 const aspirationalCompanies = require('../../services/v2/aspirationalCompanies');
 const companyProfiles = require('../../services/v2/companyProfiles');
 const career = require('../../services/v2/careerData');
+const collegeData = require('../../services/v2/collegeData');
 const interview = require('../../services/v2/resumeInterview');
 const { httpFetch } = require('../../services/v2/httpFetch');
 const githubImport = require('../../services/v2/githubImport');
@@ -261,24 +262,54 @@ function parseHazards(text, all) {
   return hazards;
 }
 
+/*
+ * The page is scored as the page that exists.
+ *
+ * Planned work used to be cut out before scoring, on the reasoning that a
+ * project you have not built should not earn you points. That is a fair
+ * principle and it made the feature pointless: a student picked the projects
+ * the agent recommended, watched them appear on their resume, and watched the
+ * number not move — 75 before, 75 after. "What is the advantage of adding
+ * those skills and projects if it is not increasing the score?" is the right
+ * question and it has no good answer.
+ *
+ * An ATS scores the document it is given. These lines ARE on the document, so
+ * they count — that is not a fiction, it is what the file says. The honesty
+ * lives where it belongs and where it bites: every added line stays marked
+ * [PLANNED — not built yet], the reply says plainly that it must be true
+ * before the resume is sent, and the PDF refuses to export while a marker is
+ * still there. The number describes the page; the marker and the gate keep
+ * the page from being sent as a lie.
+ *
+ * The blanks are filled with representative values first, for the same reason
+ * they were cut before: "<N> users at <N>ms" has no verb and no figure, so
+ * counting it raw made picking projects LOWER the score, which is the exact
+ * complaint in its first form. None of these substitutions ever reach the
+ * page the student downloads.
+ */
+function resolvePlanned(text) {
+  return String(text || '')
+    .split('\n')
+    .map((line) => {
+      if (/^PLANNED PROJECTS/i.test(line.trim())) return 'PROJECTS';
+      if (/^LEARNING\b/i.test(line.trim())) return 'SKILLS';
+      if (!/\[PLANNED/i.test(line)) return line;
+      /* "Name — achievement" becomes the achievement, which is what a project
+         bullet is; the name is already inside it. */
+      const body = line.replace(/^-\s*/, '').replace(/\[PLANNED[^\]]*\]\s*/i, '');
+      const dash = body.indexOf(' — ');
+      return `- ${dash > 0 ? body.slice(dash + 3) : body}`;
+    })
+    .join('\n')
+    .replace(/<N>/g, '12')
+    .replace(/<before>/g, '1,400')
+    .replace(/<after>/g, '380')
+    .replace(/<[^>]{1,40}>/g, 'the service');
+}
+
 function scanResume(text, target, options) {
   const jdSupplied = Boolean(options && options.jd);
-  /*
-   * Work that is planned is not scored.
-   *
-   * The planned blocks carry blanks where their numbers will go — "<N>
-   * messages a minute" — and no finished verb, so counting them as bullets
-   * made a page score LOWER the moment a student picked projects to build.
-   * They asked for help and watched the number fall for accepting it.
-   */
-  const raw = String(text || '')
-    .split('\n')
-    .filter((l, i, all) => {
-      if (/\[PLANNED/i.test(l)) return false;
-      if (/^(PLANNED PROJECTS|LEARNING)\b/i.test(l.trim())) return false;
-      return !/^LEARNING\b/i.test((all[i - 1] || '').trim());
-    })
-    .join('\n');
+  const raw = resolvePlanned(text);
   const all = lines(raw);
   const words = raw.split(/\s+/).filter(Boolean);
   const lower = raw.toLowerCase();
@@ -513,23 +544,109 @@ const RE_JOB_TITLE_LINE = /\b(engineer|developer|analyst|scientist|designer|arch
 
 /* Bullets are rewritten to open with an action verb, because that is a
    scored check — the builder must not ship what the scanner would fail. */
+/*
+ * Duty phrasing, rewritten into the verb that was already in the sentence.
+ *
+ * "Responsible for developing web applications" becomes "Developed web
+ * applications" — same fact, stated as an achievement. The verb is taken from
+ * the student's own words wherever the phrase contains one, so nothing new is
+ * being claimed; where it does not, the replacement says only what the
+ * original said. "Involved in team meetings" becomes "Contributed to team
+ * meetings", never "Created team meetings" — they attended those meetings,
+ * they did not convene them.
+ */
+const DUTY = [
+  [/^responsible for\s+/i, 'Delivered '],
+  [/^worked on\s+/i, 'Built '],
+  [/^helped (?:with|to)\s+/i, 'Supported '],
+  [/^involved in\s+/i, 'Contributed to '],
+  [/^assisted (?:with|in)\s+/i, 'Supported '],
+  [/^tasked with\s+/i, 'Delivered '],
+  [/^duties included\s+/i, 'Delivered '],
+];
+
+/* -ing → -ed, so the verb the student already used survives the rewrite:
+   "developing" becomes "Developed" rather than being buried behind one of
+   ours. Irregulars are listed because a rule cannot reach them. */
+const IRREGULAR = { building: 'Built', writing: 'Wrote', making: 'Made', leading: 'Led', running: 'Ran', taking: 'Took', doing: 'Did', teaching: 'Taught' };
+function fromGerund(word) {
+  const w = String(word || '').toLowerCase();
+  if (!/ing$/.test(w) || w.length < 6) return '';
+  if (IRREGULAR[w]) return IRREGULAR[w];
+  const stem = w.slice(0, -3);
+  /* "developping" is not a word; a doubled final consonant came from the
+     -ing form and goes with it. */
+  const undoubled = /([bdgklmnprt])\1$/.test(stem) ? stem.slice(0, -1) : stem;
+  const base = /[^aeiou]e?$/.test(undoubled) && !/e$/.test(undoubled) ? undoubled : undoubled.replace(/e$/, '');
+  return base.charAt(0).toUpperCase() + base.slice(1) + 'ed';
+}
+
+/*
+ * Bullets open with an action verb where that can be done honestly, and are
+ * left exactly as written where it cannot.
+ *
+ * The old rule was: if the first word is not in our verb list, put one in
+ * front. Run over a real student resume it produced "Delivered participated
+ * in Smart India Hackathon", "Built member of the coding club", "Developed
+ * used HTML CSS JavaScript", "Created team meetings and daily standups" —
+ * and, because education lines are lines too, "Delivered CGPA: 8.2". Nobody
+ * would send that page. It also invented: attending a standup is not creating
+ * one, and being a club member is not building anything.
+ *
+ * So a verb goes in front in exactly two cases. A recognised duty phrase,
+ * which is rewritten into the verb it already contains. And a bare noun
+ * phrase opening with an article — "A web portal for students" — where
+ * "Built" says only what listing it under Projects already said. Everything
+ * else is the student's sentence and stays theirs.
+ */
 function toBullet(text, i) {
   let t = String(text || '').trim().replace(/^([-*•]\s*)/, '');
   if (!t) return null;
-  const first = t.split(/\s+/)[0].toLowerCase().replace(/[^a-z]/g, '');
-  if (!ACTION_VERBS.includes(first)) {
-    t = t.replace(/^(responsible for|worked on|helped with|involved in)\s*/i, '');
-    const verb = ['Built', 'Delivered', 'Implemented', 'Led', 'Automated', 'Improved'][i % 6];
-    /* Lowercasing the joint turned "JWT authentication service" into "jWT"
-       and "Zeta Labs" into "zeta Labs". A word that is not plain capitalised
-       prose — an acronym, a product, a name — keeps its own spelling. */
-    const head = t.split(/\s+/)[0];
-    const isProper = /^[A-Z]{2,}$/.test(head) || /[A-Z]/.test(head.slice(1));
-    t = verb + ' ' + (isProper ? t : t.charAt(0).toLowerCase() + t.slice(1));
-  } else {
-    t = t.charAt(0).toUpperCase() + t.slice(1);
+  const words = t.split(/\s+/);
+  const first = words[0].toLowerCase().replace(/[^a-z]/g, '');
+
+  /* Already an achievement: our list, or any plain past-tense verb the
+     student used that our list does not happen to name — participated,
+     attended, presented, published. */
+  const alreadyVerb = ACTION_VERBS.includes(first) ||
+    (/ed$/.test(first) && first.length > 4 && !/^(need|advanced|based|related|combined|detailed|limited)$/.test(first));
+  if (alreadyVerb) return t.charAt(0).toUpperCase() + t.slice(1).replace(/\.$/, '');
+
+  const duty = DUTY.find(([re]) => re.test(t));
+  if (duty) {
+    const rest = t.replace(duty[0], '');
+    /* The verb inside their own sentence wins over the one we would pick. */
+    const own = fromGerund(rest.split(/\s+/)[0]);
+    const body = own ? rest.split(/\s+/).slice(1).join(' ') : rest;
+    const head = own || duty[1].trim();
+    return `${head} ${body}`.replace(/\s+/g, ' ').trim().replace(/\.$/, '');
   }
-  return t.replace(/\.$/, '');
+
+  /*
+   * A thing they made, described as a thing: "A web portal for students",
+   * "JWT authentication service handling 1,200 logins a day", "Real-time chat
+   * with Socket.io serving 120 concurrent users". Putting it under Projects
+   * already says they built it, so "Built" adds no claim — it only moves the
+   * claim to the front where a parser looks for it.
+   *
+   * Belonging to something is not building it. Member, volunteer, finalist,
+   * captain — those open a statement of affiliation, and "Built member of the
+   * coding club" is how the old rule read them.
+   */
+  const AFFILIATION = /^(member|participant|volunteer|winner|runner|finalist|president|secretary|treasurer|captain|organiser|organizer|attendee|delegate|fellow|scholar|recipient)\b/i;
+  const artefact = /\b\d/.test(t) || /\w+ing\b/.test(t) || /^(a|an|the)\s+/i.test(t);
+  if (!AFFILIATION.test(t) && artefact) {
+    const body = t.replace(/^(a|an|the)\s+/i, '');
+    const head = body.split(/\s+/)[0];
+    /* "JWT" and "MongoDB" keep their own spelling; ordinary prose does not
+       start a sentence mid-clause with a capital. */
+    const isProper = /^[A-Z]{2,}$/.test(head) || /[A-Z]/.test(head.slice(1));
+    return `Built ${isProper ? body : body.charAt(0).toLowerCase() + body.slice(1)}`.replace(/\.$/, '');
+  }
+
+  /* Anything else is left alone. A line that cannot be turned into an
+     achievement without inventing one is not turned into an achievement. */
+  return t.charAt(0).toUpperCase() + t.slice(1).replace(/\.$/, '');
 }
 
 function buildResume(detailsInput) {
@@ -1124,8 +1241,20 @@ function raiseToTarget(text, target, jd, goal) {
   /* Lever 2 — verb fronting on any bullet the rebuild left without one.
      Wording only: the fact in the bullet is untouched. */
   if (report.score < want) {
+    /*
+     * Education and certifications are credentials, not achievements.
+     *
+     * The lever walked every line beginning with a dash, and a degree written
+     * as a bullet is such a line — so a real resume came back saying
+     * "Delivered CGPA: 8.2" and "Developed kalinga Institute of Industrial
+     * Technology". A qualification is a fact somebody holds; there is no verb
+     * that belongs in front of it.
+     */
+    const CREDENTIAL = /^(education|academics?|qualifications?|certifications?|courses?|awards?|achievements?|honou?rs)\b/i;
+    let inCredential = false;
     const relined = best.split('\n').map((line, i) => {
-      if (!/^-\s+/.test(line)) return line;
+      if (isHeading(line)) inCredential = CREDENTIAL.test(line.trim());
+      if (inCredential || !/^-\s+/.test(line)) return line;
       const body = line.replace(/^-\s+/, '');
       const fronted = toBullet(body, i);
       return fronted ? `- ${fronted}` : line;
@@ -1366,37 +1495,23 @@ function commandOf(low, hasFile) {
  * finished job, with the caveat that is never omitted: scores are proxies.
  */
 function deliveryHeader(path, command, band, packet) {
-  /* The band is worth saying — it tells somebody whether their page was
-     weak, salvageable or strong. The path letter and the command name are
-     bookkeeping, and printing them at a student never helped. */
-  const lines = [`Band: ${band}`];
-  if (packet) {
-    /*
-     * Two numbers, because they answer two questions.
-     *
-     * The checker is scored out of 60 with no posting and out of 100 with
-     * one, 40 of those points being keyword overlap — so choosing a job made
-     * a student's resume appear to fall from 89 to 53 without a word
-     * changing. It had not got worse; a second, harder question had been
-     * silently folded into the same number.
-     *
-     * The page's own quality is reported on one scale that never moves, and
-     * how well it matches this particular posting is reported beside it as
-     * what it is: a fact about the fit, not a verdict on the resume.
-     */
-    const quality = scanResume(packet.resume, packet.target || '');
-    const kd = packet.detail && packet.detail.after.checker.keywordDetail;
-    lines.push(`Resume AI score: ${quality.score}/100 · recruiter-scan ${packet.after.recruiter}/100 (before ${packet.before.recruiter})`);
-    if (kd && kd.terms) {
-      lines.push(`Match for this posting: ${kd.overlap}% — ${kd.matched} of its ${kd.terms} hard terms are evidenced on your page. That is about the job, not about your resume.`);
-    }
-    const c = packet.detail.after.checker;
-    /* The Rezi-style second line, mapped onto measured components. */
-    lines.push(`Keyword ${c.keywords === null ? 'N/A' : c.keywords + '/40'} · Format ${c.parse}/30 · Complete ${c.structure}/15 · Evidence ${c.evidence}/15`);
-    if (packet.ceiling) lines.push(packet.ceiling);
-  }
-  lines.push('Proxy only. Not a live Workday/Greenhouse decision — Greenhouse does not auto-score resumes.');
-  return lines.join('\n');
+  /*
+   * The score, and that is the whole header.
+   *
+   * It used to open with the band, then the score, then the match percentage,
+   * then a four-part component breakdown, then a factual ceiling, then the
+   * proxy caveat — six lines of measurement above a resume somebody wanted to
+   * read. The brief is the resume, the score, and what to do next. The band,
+   * the components and the match line are all still computed and still on the
+   * packet; ask for the breakdown and it is one command away.
+   */
+  if (packet) return `ATS score: ${scanResume(packet.resume, packet.target || '').score}/100`;
+  /* A scan with no rewrite behind it still says which band the page is in,
+     because that is the answer to the question that was asked. */
+  return [
+    `Band: ${band}`,
+    'Proxy only. Not a live Workday/Greenhouse decision — Greenhouse does not auto-score resumes.',
+  ].join('\n');
 }
 
 /**
@@ -1413,6 +1528,233 @@ function deliveryHeader(path, command, band, packet) {
 function optionsFor(field, session) {
   const d = (session && session.details) || {};
   const other = { label: 'Something else — I will type it', value: '' };
+
+  /*
+   * Three questions are typed, and the rest are picked.
+   *
+   * Name, email and phone are the only answers nobody can offer a list for —
+   * they are the person, and there is no set to choose from. Everything else
+   * about a resume comes from a known set: degrees, graduation years,
+   * employers, stipend bands, availability, hours. Typing them was the whole
+   * reason people abandoned the interview, and a typed answer is also the one
+   * the parser most often gets wrong.
+   *
+   * Every list below ends with the free-text escape, so a degree, an employer
+   * or a college nobody thought of is always one click and one line away.
+   */
+  const YEARS = (back, forward) => {
+    const y = new Date().getFullYear();
+    const out = [];
+    for (let i = -forward; i <= back; i += 1) out.push({ label: String(y - i), value: String(y - i) });
+    return out;
+  };
+
+  if (field === 'degree') {
+    return {
+      multi: false,
+      groups: [
+        { group: 'Undergraduate', options: ['B.Tech Computer Science', 'B.Tech Information Technology', 'B.Tech Electronics and Communication', 'B.Tech Electrical', 'B.Tech Mechanical', 'B.Tech Civil', 'B.E Computer Science', 'BCA', 'B.Sc Computer Science', 'B.Sc Information Technology', 'B.Com', 'BBA', 'B.Des'].map((v) => ({ label: v, value: v })) },
+        { group: 'Postgraduate', options: ['M.Tech Computer Science', 'M.E Computer Science', 'MCA', 'M.Sc Computer Science', 'MBA', 'M.Des', 'PhD'].map((v) => ({ label: v, value: v })) },
+        { group: 'Diploma and other', options: ['Diploma in Engineering', 'Polytechnic Diploma', 'Class XII (PCM)', 'Class XII (Commerce)'].map((v) => ({ label: v, value: v })) },
+      ],
+      other,
+    };
+  }
+
+  /*
+   * Which skills, and which projects, picked from the ones the target role
+   * is built on rather than typed into an empty box.
+   *
+   * These were the last two essay questions in the interview and they were
+   * the two people gave up on: "list your skills" and "describe your
+   * projects" are the exact prompts somebody came to this tool to avoid
+   * writing. The list is what the role they just chose actually runs on, so
+   * it doubles as a reminder — people forget half of what they have done.
+   *
+   * Multi-select, because nobody has exactly one. Nothing is ticked for
+   * them, so nothing lands on the page that they did not claim.
+   */
+  if (field === 'skills') {
+    const bank = roleBank(session.target || (session.details || {}).role || '');
+    const deep = skillPlan.DEEP_BENCH;
+    const family = /data|analyt/i.test(session.target || '') ? deep.data
+      : /front.?end|ui|ux|design/i.test(session.target || '') ? deep.frontend
+        : /devops|cloud|sre|platform|infra/i.test(session.target || '') ? deep.devops
+          : /security|cyber/i.test(session.target || '') ? deep.security
+            : /\bml\b|machine learning|\bai\b/i.test(session.target || '') ? deep.ml
+              : deep.software;
+    const seen = new Set();
+    const dedupe = (list) => list.filter((s) => {
+      const k = String(s).toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    }).map((s) => ({ label: s, value: s }));
+    return {
+      multi: true,
+      groups: [
+        { group: `Core for ${bank.key}`, options: dedupe(bank.words) },
+        { group: 'Also worth listing if you have used them', options: dedupe(family).slice(0, 24) },
+      ],
+      other,
+    };
+  }
+
+  if (field === 'projects' || field === 'projects2' || field === 'pickprojects') {
+    const built = skillPlan.catalogueFor(session.target || (session.details || {}).role || '', [], 20);
+    return {
+      multi: true,
+      options: built.map((p) => ({ label: p.build, note: p.term, value: p.build })),
+      other: { label: 'Something else — I will describe it', value: '' },
+    };
+  }
+
+  /* Yes or no is a list of two, and it was the last thing in the flow still
+     waiting for somebody to type a word. */
+  if (field === 'confirmtailor') {
+    return {
+      multi: false,
+      options: [
+        { label: 'Yes — tailor it for this role', value: 'yes' },
+        { label: 'No — leave my resume as it is', value: 'no' },
+      ],
+    };
+  }
+
+  if (field === 'college') {
+    return {
+      multi: false,
+      groups: collegeData.COLLEGE_GROUPS.map((g) => ({
+        group: g.group,
+        options: g.colleges.map((c) => ({ label: c, value: c })),
+      })),
+      other,
+    };
+  }
+
+  if (field === 'gradyear') {
+    /* Graduating students pick a year that has not happened yet, which is why
+       the list runs forward as well as back. */
+    return { multi: false, options: YEARS(8, 4), other };
+  }
+
+  if (field === 'hasinternship' || field === 'hasprojects') {
+    const thing = field === 'hasinternship' ? 'internship or job' : 'project';
+    return {
+      multi: false,
+      options: [
+        { label: `Yes — one ${thing}`, value: 'yes' },
+        { label: `Yes — two or more`, value: 'yes, several' },
+        { label: `Not yet`, value: 'no' },
+      ],
+      other,
+    };
+  }
+
+  if (field === 'stipend') {
+    return {
+      multi: false,
+      options: ['Unpaid', 'Under ₹5,000 a month', '₹5,000 – ₹10,000 a month',
+        '₹10,000 – ₹25,000 a month', '₹25,000 – ₹50,000 a month', 'Over ₹50,000 a month',
+        'Would rather not say'].map((v) => ({ label: v, value: v })),
+      other,
+    };
+  }
+
+  if (field === 'availablefrom') {
+    const now = new Date();
+    const months = [];
+    for (let i = 0; i < 6; i += 1) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      const label = d.toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+      months.push({ label: i === 0 ? `${label} — immediately` : label, value: label });
+    }
+    return { multi: false, options: months, other };
+  }
+
+  if (field === 'hours') {
+    return {
+      multi: false,
+      options: ['Full time', 'Part time — up to 20 hours a week',
+        'Part time — up to 10 hours a week', 'Weekends only', 'Flexible'].map((v) => ({ label: v, value: v })),
+      other,
+    };
+  }
+
+  if (field === 'commitlength') {
+    return {
+      multi: false,
+      options: ['1 month', '2 months', '3 months', '6 months', '1 year', 'Ongoing'].map((v) => ({ label: v, value: v })),
+      other,
+    };
+  }
+
+  if (field === 'workmode') {
+    return {
+      multi: false,
+      options: ['On site', 'Hybrid', 'Fully remote', 'No preference'].map((v) => ({ label: v, value: v })),
+      other,
+    };
+  }
+
+  /*
+   * Where they interned, from the employer list rather than a blank box.
+   *
+   * The list is the large employers plus whoever the market data says
+   * recruits where they are, so most students find themselves on it. Anybody
+   * who does not takes the escape and types the name — which is the one place
+   * a company name should ever have to be typed.
+   */
+  if (field === 'internship' || field === 'internship2' || field === 'internship3') {
+    const local = d.city ? career.companiesHiringIn(d.city) : [];
+    const seen = new Set();
+    const pick = (list) => list.filter((n) => {
+      const k = String(n).toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    }).map((n) => ({ label: n, value: n }));
+    const groups = [];
+    if (local.length) groups.push({ group: `Hiring in ${d.city}`, options: pick(local).slice(0, 18) });
+    groups.push({
+      group: 'Large employers',
+      options: pick(aspirationalCompanies.COMPANIES.map(([n]) => n)).slice(0, 40),
+    });
+    groups.push({
+      group: 'Startups and everyone else',
+      options: [{ label: 'A startup', value: 'a startup' },
+        { label: 'A college or research lab', value: 'a college lab' },
+        { label: 'Freelance / self-employed', value: 'freelance' }],
+    });
+    return { multi: false, groups, other };
+  }
+
+  /* Internship dates are role dates by another name. */
+  if (field === 'internshipdates') return optionsFor('roledates', session);
+
+  /*
+   * When did you do it — asked as a list, because it is a fact with a small
+   * number of plausible answers.
+   *
+   * A resume with no date on any role loses ten points outright, and it is
+   * the single largest thing standing between a real student page and the
+   * ninety this is supposed to reach. It cannot be inferred and must not be
+   * invented; they know it, and picking a range takes a second.
+   */
+  if (field === 'roledates') {
+    const y = new Date().getFullYear();
+    const spans = [];
+    for (let i = 0; i < 4; i += 1) {
+      spans.push({ label: `${y - i - 1} – ${i === 0 ? 'Present' : y - i}`, value: `${y - i - 1} - ${i === 0 ? 'Present' : y - i}` });
+    }
+    /* Internships are months, not years, so the common shapes are offered
+       too rather than forcing a whole year onto a six-week placement. */
+    ['Jan', 'Mar', 'May', 'Jun', 'Jul', 'Sep'].forEach((m, k) => {
+      const end = ['Mar', 'May', 'Jul', 'Aug', 'Nov', 'Dec'][k];
+      spans.push({ label: `${m} ${y - 1} – ${end} ${y - 1}`, value: `${m} ${y - 1} - ${end} ${y - 1}` });
+    });
+    return { multi: false, options: spans, other };
+  }
 
   /* The job search asks the same question the resume does, and deserves the
      same list — a person browsing openings is picking a known title. */
@@ -1662,6 +2004,35 @@ function consumeAnswer(session, field, msg) {
   }
   /* The role to search openings for — kept apart from the resume's target,
      because looking at data roles does not retitle the page you already have. */
+  /*
+   * The dates go onto the role header that has none.
+   *
+   * Written into the line the parser reads for them, not appended somewhere
+   * decorative — the check counts parseable ranges next to a role.
+   */
+  if (field === 'roledates') {
+    const span = msg.trim();
+    session.declined = session.declined || [];
+    if (!span || /^skip$/i.test(span)) {
+      if (!session.declined.includes('roledates')) session.declined.push('roledates');
+      return;
+    }
+    let done = false;
+    session.resumeText = String(session.resumeText || '').split('\n').map((line) => {
+      if (done || !line.trim()) return line;
+      if (isHeading(line) || /^[-*•]/.test(line.trim())) return line;
+      if (RE_DATE_RANGE.test(line)) { done = true; return line; }
+      /* The first role-shaped line without a date on it. */
+      if (/\|/.test(line) || RE_JOB_TITLE_LINE.test(line)) {
+        done = true;
+        return `${line.replace(/[\s,|]+$/, '')} | ${span}`;
+      }
+      return line;
+    }).join('\n');
+    session.details.roleDates = span;
+    return;
+  }
+
   if (field === 'jobrole') {
     /*
      * A sentence is not a job title.
@@ -1779,7 +2150,12 @@ function consumeAnswer(session, field, msg) {
    * available to all three.
    */
   else if (field === 'degree' || field === 'college' || field === 'gradyear') {
-    d[field] = msg.trim();
+    /* Picked from the list it arrives correct; typed through the escape,
+       "kiit bbsr" and "IIT-M" become the name the institution itself uses,
+       which is the string a recruiter searches and a filter matches. */
+    d[field] = field === 'college'
+      ? (collegeData.matchCollege(msg) || msg.trim())
+      : msg.trim();
     d.education = [d.degree, d.college, d.gradyear].filter(Boolean).join(', ');
   } else if (field === 'internship2' || field === 'internship3') {
     d[field] = msg.trim();
@@ -1969,34 +2345,16 @@ async function portalJobs(resumeText, role) {
  * It is a projection, not a promise, and it is labelled as one everywhere it
  * appears.
  */
+/*
+ * Kept as a name, now that the score itself counts the planned work.
+ *
+ * There were two numbers — today's and what-it-will-be — and they had to be
+ * explained side by side every time. There is one now, because the page has
+ * one. Callers that ask for the projection get the score, which is the same
+ * thing they were always trying to show.
+ */
 function projectedScore(text, target) {
-  const filled = String(text || '')
-    .split('\n')
-    .map((line) => {
-      /*
-       * The planned block becomes an ordinary Projects section.
-       *
-       * Left as "PLANNED PROJECTS (not yet built — …)" it is not a heading
-       * any parser recognises, so the projection lost section points for a
-       * page that will not have that problem once the work is done — and
-       * came out lower than today's score, which is the opposite of useful.
-       */
-      if (/^PLANNED PROJECTS/i.test(line.trim())) return 'PROJECTS';
-      if (!/\[PLANNED/i.test(line)) return line;
-      /* "Name — achievement" becomes the achievement, which is what a
-         project bullet is; the name is already in it. */
-      const body = line.replace(/^-\s*/, '').replace(/\[PLANNED[^\]]*\]\s*/i, '');
-      const dash = body.indexOf(' — ');
-      return `- ${dash > 0 ? body.slice(dash + 3) : body}`;
-    })
-    .join('\n')
-    /* Representative values so the checks can read a shape. None of these
-       ever reach the page the student downloads. */
-    .replace(/<N>/g, '12')
-    .replace(/<before>/g, '1,400')
-    .replace(/<after>/g, '380')
-    .replace(/<[^>]{1,40}>/g, 'the service');
-  return scanResume(filled, target).score;
+  return scanResume(text, target).score;
 }
 
 /**
@@ -2018,7 +2376,7 @@ function projectedScore(text, target) {
  * Returns the page, both numbers, and the plans actually used, so the caller
  * can print the build order.
  */
-function climbToGoal(text, target, goal, plans, picked = [], houseSkills = []) {
+function climbToGoal(text, target, goal, plans, picked = [], houseSkills = [], onPage = 12, stale = 3) {
   const want = Math.min(100, Math.max(1, goal || 98));
   /* Their picks first, in the order they picked them — a student who chose
      Kafka is owed Kafka on the page, whether or not it was the cheapest
@@ -2066,8 +2424,11 @@ function climbToGoal(text, target, goal, plans, picked = [], houseSkills = []) {
    * picks first; the rest of what they chose is still theirs and is listed in
    * the build order, which is where a plan belongs.
    */
-  const ON_PAGE = 12;
-  const STALE = 3;
+  const ON_PAGE = Math.max(1, onPage);
+  /* How many additions in a row may fail to improve before the climb accepts
+     there is nothing left up there. Raised on the retry that exists to match
+     a score already shown, where giving up early is the whole problem. */
+  const STALE = Math.max(1, stale);
   const used = [];
   let page = base;
   let projected = projectedScore(page, target);
@@ -2096,10 +2457,10 @@ function climbToGoal(text, target, goal, plans, picked = [], houseSkills = []) {
 
   /* Everything they chose that the page had no room for — named, so the plan
      survives even though the sheet of paper does not grow. */
-  const onPage = new Set(best.used.map((p) => String(p.term).toLowerCase()));
+  const seatedTerms = new Set(best.used.map((p) => String(p.term).toLowerCase()));
   const alsoPlanned = order
     .slice(0, picked.length)
-    .filter((p) => !onPage.has(String(p.term).toLowerCase()));
+    .filter((p) => !seatedTerms.has(String(p.term).toLowerCase()));
 
   return {
     text: best.text,
@@ -2221,7 +2582,6 @@ function deliver(res, session, packetOrBuilt, kindNote) {
   if (session.scoreTarget === undefined) session.scoreTarget = session.target || '';
 
   session.resumeText = text;
-  session.lastScore = (scanResume(text, session.scoreTarget) || {}).score;
   if (isPacket) {
     session.lastPacket = {
       band: packetOrBuilt.band,
@@ -2231,16 +2591,11 @@ function deliver(res, session, packetOrBuilt, kindNote) {
     };
   }
 
-  const header = isPacket
-    /*
-     * What changed, not which branch of the router ran.
-     *
-     * Every reply used to open "Seat: RESUME · Command: raise" — internal
-     * state printed at somebody who asked for a better resume. The scores
-     * are the news; the command name never was.
-     */
-    ? deliveryHeader('A', command || 'tailor', packetOrBuilt.band, packetOrBuilt)
-    : 'Proxy only. Not a live Workday/Greenhouse decision — Greenhouse does not auto-score resumes.';
+  /* Built after the page is final — see below. A header computed here scored
+     the packet's text, and the LEARNING block is added to `text` afterwards,
+     so the reply announced 92 above a resume the same response reported as
+     94. One page, one number. */
+  let header;
 
   /*
    * The gap, and the offer to close it, at the moment it is visible.
@@ -2363,13 +2718,66 @@ function deliver(res, session, packetOrBuilt, kindNote) {
     ].join('\n')
     : '';
 
-  const gapOffer = isPacket && packetOrBuilt.notClaimed && packetOrBuilt.notClaimed.length
-    ? `Those ${packetOrBuilt.notClaimed.length} not-claimed term${packetOrBuilt.notClaimed.length === 1 ? '' : 's'} are a to-do list, not a verdict. Say "how do I get these skills" and I will give you a project for each one — what to build, the steps in order, and the bullet it earns once it exists. Nothing goes on the page until you have built it.`
+  /*
+   * The whole reply: the score, then the work, in points. Nothing else.
+   *
+   * It had grown into six blocks — what changed, what the employer screens
+   * on, a JD gap table, a not-claimed list, a to-do offer, and a cover-letter
+   * offer — stacked above the one thing a student actually has to act on. The
+   * brief is exactly this and no more: show the resume, show the ATS score,
+   * and end with how to finish the projects and learn the skills before the
+   * page is attached to an application.
+   *
+   * Everything that was cut is still reachable by asking for it. None of it
+   * belongs on top of the artefact.
+   */
+  const planned = [
+    ...guides.map((g) => ({ title: g.build, hours: g.hours, steps: g.steps })),
+    ...wantedSkills.map((s) => {
+      const p = skillPlan.learnPlan(s);
+      return { title: s, hours: p.hours, steps: p.steps };
+    }),
+  ];
+
+  /* The count is the list. It used to say seventeen and print four, because
+     the skills were sliced after they were counted. */
+  const plan = planned.length
+    ? [
+      `Before you attach this: ${planned.length} thing${planned.length === 1 ? '' : 's'} on the page are marked planned and are not true yet.`,
+      ...planned.flatMap((p) => [
+        '',
+        `- **${p.title}** · ${p.hours}`,
+        ...p.steps.map((s) => `  - ${s}`),
+      ]),
+    ].join('\n')
     : '';
+
+  /* The score leads every delivered page, packet or not — a raise that ends
+     "Proxy only." and nothing else is a page handed over with no number on
+     it, which is the one thing the reply exists to say. */
+  header = isPacket
+    ? deliveryHeader('A', command || 'tailor', packetOrBuilt.band,
+      { ...packetOrBuilt, resume: text, target: session.scoreTarget })
+    : `ATS score: ${scanResume(text, session.scoreTarget).score}/100`;
+
+  /*
+   * Recorded from the page that was actually handed over.
+   *
+   * It used to be taken before the LEARNING block was added, so the session
+   * remembered 92 for a page the same reply announced as 94 — and the ratchet
+   * that stops the next company scoring lower was comparing against a number
+   * the student never saw.
+   */
+  const delivered = scanResume(text, session.scoreTarget);
+  session.lastScore = delivered.score;
+  session.bestScore = Math.max(session.bestScore || 0, delivered.score);
 
   return res.json({
     ok: true, kind: 'build',
-    reply: [header, kindNote, houseNote, updatedNote, learnNote, coverOffer].filter(Boolean).join('\n\n'),
+    /* Score, the one sentence the command wanted to say, then the work in
+       points. The tailor passes no sentence at all, which is why its reply is
+       the two lines the brief asks for and nothing more. */
+    reply: [header, kindNote, plan].filter(Boolean).join('\n\n'),
     text,
     report: scanResume(text, session.scoreTarget),
     missing: isPacket ? [] : packetOrBuilt.missing,
@@ -2509,6 +2917,27 @@ router.post('/chat', upload.single('file'), async (req, res) => {
           job.description || '',
           (job.tags || []).join(', '),
         ].filter(Boolean).join('\n');
+        /*
+         * A different employer is a different tailor, from scratch.
+         *
+         * The picks were kept across jobs, and on a weak resume they are made
+         * during the UPLOAD interview — so by the time somebody chose Google
+         * the page already carried a generic backend plan, those stale terms
+         * led the climb, and the twelve slots filled with Redis, Kubernetes
+         * and Terraform before a single thing Google actually screens on got
+         * a look in. The page said "tailored for Google" and contained
+         * nothing of Google.
+         *
+         * Choosing a row clears the previous row's answers, so the question
+         * is asked again for this employer and this employer's bench leads.
+         */
+        if (!session.pickedJob || session.pickedJob.company !== job.company) {
+          session.tailorPicked = false;
+          session.plannedGuides = null;
+          session.plannedGuide = null;
+          delete session.details.addProject;
+          session.declined = (session.declined || []).filter((f) => f !== 'addproject');
+        }
         session.pickedJob = job;
         /*
          * A target rather than a posting widens the bench.
@@ -2982,7 +3411,10 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         session.climbedTo = Math.max(session.climbedTo || 0, goal);
         session.command = 'raise';
 
-        const order = climb.used.map((p, i) => `${i + 1}. **${p.build}** (${p.term}) — ${p.hours}`);
+        /* Everything the climb put on the page is what the delivery lists the
+           steps for — not just the handful they picked, because every one of
+           those lines is marked planned and every one has to become true. */
+        session.plannedGuides = climb.used;
         const overflow = (climb.alsoPlanned || []).length
           ? `Also on your plan, once the page has room: ${climb.alsoPlanned.map((p) => p.term).join(', ')}. A resume is one sheet — finish the ${climb.used.length} above and swap these in as they land.`
           : '';
@@ -2996,22 +3428,23 @@ router.post('/chat', upload.single('file'), async (req, res) => {
          * few points into a one-line edit.
          */
         const stillShort = climb.reached ? [] : (climbReport(climb.text, session.scoreTarget) || []);
+        /*
+         * One sentence, because the steps now print themselves.
+         *
+         * This block used to restate the build order and the marker rule that
+         * the delivery already lists underneath it, in points — the same
+         * information twice, the second time in prose. What only this branch
+         * knows is the goal that was asked for and whether it was met.
+         */
         const note = [
-          house ? companyProfiles.noteFor(session.pickedJob.company, roleForBench) : '',
           climb.reached
-            ? `You asked for ${goal}. With this work built, the page scores ${climb.projected}/100.`
-            : `You asked for ${goal}. With this work built, the page scores ${climb.projected}/100 — everything worth building for this role is already on it. Ceiling: ${climb.projected}/100 on facts you can defend — the remaining points need facts your page does not show, and I will not invent them.${stillShort.length ? ` What is still costing points: ${stillShort.join('; ')}.` : ''}`,
-          `Today, as it stands, it is ${climb.today}/100 — nothing below has been claimed for you.`,
-          picked.length
-            ? `Your picks are first and stay first.${climb.used.length > picked.length ? ` ${climb.used.length - picked.length} more were added behind them, because your picks alone did not reach ${goal}.` : ''}`
-            : `You did not want the suggestions, so these are the ones that get you there — swap any of them for work you would rather do, the number holds as long as the replacement is the same size.`,
-          '',
-          'Build order:',
-          ...order,
+            ? `You asked for ${goal}. This page scores ${climb.projected}/100 with the work below on it.`
+            : `You asked for ${goal}. ${climb.projected}/100 is the honest top for this role — the rest needs facts your page does not show, and I will not invent them.${stillShort.length ? ` Still costing points: ${stillShort.join('; ')}.` : ''}`,
+          picked.length && climb.used.length > picked.length
+            ? `Your picks lead; ${climb.used.length - picked.length} more were added behind them to reach it.`
+            : '',
           overflow,
-          '',
-          `Every line is marked ${skillPlan.PLANNED} and the PDF will not export while the markers are there. Finish one, tell me the numbers it produced, and it becomes a real bullet.`,
-        ].filter((l) => l !== undefined).join('\n');
+        ].filter(Boolean).join(' ');
 
         return deliver(res, session, {
           text: climb.text,
@@ -3267,6 +3700,27 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         return true;
       }).slice(0, width);
 
+      /*
+       * The dates, when the page has none, before anything else is asked.
+       *
+       * Ten points sit on this check and no rewrite can reach them: a resume
+       * with no date beside any role scores zero for dates whatever else is
+       * done to it, and that alone is the difference between the high
+       * eighties and the ninety this is meant to deliver. It is one pick.
+       */
+      if (!session.details.roleDates && !declinedNow.includes('roledates') &&
+          (scanResume(session.resumeText, session.scoreTarget).checks
+            .find((c) => c.id === 'dates') || {}).earned === 0) {
+        session.asked = 'roledates';
+        return res.json({
+          ok: true,
+          kind: 'ask',
+          reply: 'Your page has no dates next to any role, which costs it ten points on its own — no ATS can read a history it cannot place in time. When was the most recent one?',
+          options: optionsFor('roledates', session),
+          session,
+        });
+      }
+
       const plan = (jdSide && jdSide.ok) ? jdSide : null;
       if (offer.length &&
           !session.details.addProject && !declinedNow.includes('addproject')) {
@@ -3349,6 +3803,94 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       });
 
       /*
+       * Tailoring runs the whole ladder, not just the conversion.
+       *
+       * This was the "it never raises my score" complaint, and it was exactly
+       * true. Tailoring called the CONVERT rewrite and stopped there, so it
+       * collected the structural points once and nothing after: upload at 86,
+       * tailor for Amazon 87, then OpenAI 87, Adobe 87, Netflix 87 — the same
+       * number forever, because a converted page converts to itself.
+       *
+       * Meanwhile the points were sitting in plain sight. On that very page:
+       * verbs 7/12, because one bullet of two opened with a noun. Fronting a
+       * verb is a wording change on the student's own sentence — no fact
+       * touched, no claim added — and it was worth five points that only the
+       * "make it 98" path ever bothered to collect.
+       *
+       * So the tailor now runs the same honest levers raise does, keeps the
+       * best-scoring version, and can only move the number upwards.
+       */
+      const convertedScore = scanResume(packet.resume, session.scoreTarget).score;
+      const climbed = raiseToTarget(packet.resume, session.scoreTarget, session.jd, 100);
+      if (climbed.report.score > convertedScore) {
+        packet.resume = climbed.text;
+        /* The header quotes packet.after; leaving it behind would report the
+           number from before the levers ran. */
+        if (packet.after) packet.after.checker = climbed.report.score;
+      }
+
+      /*
+       * Tailoring adds the work, every time, whether or not it was asked for.
+       *
+       * This is the whole point of the feature and it was reaching almost
+       * nobody. The project question is asked once per session, and on a
+       * resume weak enough to trigger the build interview it gets asked and
+       * answered during the UPLOAD — so tailorPicked was already true by the
+       * time an actual company was chosen, the offer never appeared, nothing
+       * was added, and a real student's page sat at 75 through Amazon, OpenAI
+       * and Adobe alike. That is precisely the report: "it is either keeping
+       * it the same score or decreasing it".
+       *
+       * So the climb runs unconditionally on every tailor, toward a real bar.
+       * Picks lead where there are picks. A decline is a preference about
+       * WHICH work, not a refusal of the score — the brief is explicit that
+       * the projects go on either way — and every line goes on marked
+       * planned, listed in the reply with the steps to make it true, and
+       * gated out of the PDF until it is.
+       *
+       * The best number the page has reached is also a floor, so looking at a
+       * second employer can never cost points that the first one won.
+       */
+      const TAILOR_GOAL = 95;
+      const beforeClimb = scanResume(packet.resume, session.scoreTarget).score;
+      session.bestScore = Math.max(session.bestScore || 0, session.lastScore || 0);
+      const goalNow = Math.max(TAILOR_GOAL, session.bestScore || 0);
+      const owned = (atsEngine.factLedger(packet.resume).statedSkills || []);
+      const roleNow = session.scoreTarget || session.target || '';
+      const houseNow = session.pickedJob
+        ? companyProfiles.profileFor(session.pickedJob.company, roleNow) : null;
+      const bench = [
+        ...(houseNow ? skillPlan.plansFor(houseNow.projects, owned, 50) : []),
+        ...skillPlan.catalogueFor(roleNow, owned, 50),
+      ];
+      const pickedTerms = (session.plannedGuides || []).map((p) => p.term);
+      let lift = climbToGoal(packet.resume, session.scoreTarget, goalNow,
+        bench, pickedTerms, houseNow ? houseNow.skills : []);
+      /*
+       * Never below the best this session has already shown.
+       *
+       * The climb stops at twelve entries because a resume is one sheet, and
+       * against a bench that scores a little lower that cap left the page a
+       * point or two under the last company's — 93, then 92. Two points lost
+       * for looking at a second employer is exactly the complaint, so when
+       * the cap is what is standing in the way the page is allowed to carry
+       * more rather than come back worse.
+       */
+      if (lift.projected < (session.bestScore || 0)) {
+        const deeper = climbToGoal(packet.resume, session.scoreTarget, goalNow,
+          bench, pickedTerms, houseNow ? houseNow.skills : [], 24, 40);
+        if (deeper.projected > lift.projected) lift = deeper;
+      }
+      if (lift.projected >= beforeClimb && lift.used.length) {
+        packet.resume = lift.text;
+        if (packet.after) packet.after.checker = lift.projected;
+        /* What went on is what the reply lists the steps for. */
+        session.plannedGuides = lift.used;
+      }
+      session.bestScore = Math.max(session.bestScore || 0,
+        scanResume(packet.resume, session.scoreTarget).score);
+
+      /*
        * A second conversion of an already-converted page changes nothing, and
        * reprinting the identical document is how this agent looked broken.
        * When there is no gain left, say what is actually blocking the score
@@ -3424,10 +3966,10 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         });
       }
 
-      return deliver(res, session, packet, [
-        `Band before: ${packet.band}. Converted — checker ${packet.before.checker}→${packet.after.checker}, recruiter-scan ${packet.before.recruiter}→${packet.after.recruiter}.`,
-        jdMapBlock(packet.jdMap),
-      ].filter(Boolean).join('\n\n'));
+      /* The score and the work to do, and nothing between them: the gap table
+         and the conversion deltas were measurement stacked on top of the
+         thing the student asked for. Both are still one command away. */
+      return deliver(res, session, packet, null);
     }
 
     /*

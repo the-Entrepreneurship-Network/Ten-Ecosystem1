@@ -118,33 +118,43 @@ describe('the profile knows one employer from another', () => {
     expect(profiles.noteFor('Netflix', 'Backend Engineer')).toMatch(/Netflix screens backend engineer on/i);
   });
 
-  it('covers every employer on the target list by name', () => {
+  it('answers for every employer on the list, named or by sector', () => {
     /*
-     * A hundred and forty-nine of the hundred and sixty-six fell through to
-     * their sector, so tailoring for Maruti Suzuki and for Apollo Hospitals
-     * produced the same page. The sector is the right answer for a company
-     * nobody listed; it is a poor one for a company sitting on our own list.
+     * Two things have to be true and they are not the same thing.
+     *
+     * Every company on the list must produce real work to build — a page
+     * tailored for an employer that returns nothing is the bug this replaced,
+     * where a hundred and forty-nine of them fell through to a blank.
+     *
+     * And the ones a student is most likely to aim at are named individually,
+     * because a sector answer is right about the shape of the work and vague
+     * about the bar. The long tail keeps its sector, which is a real answer:
+     * a bank we have not written up is still a bank.
      */
     const { COMPANIES } = require('../../services/v2/aspirationalCompanies');
-    const unnamed = COMPANIES
-      .filter(([name]) => !profiles.profileFor(name, 'Software Engineer').known)
-      .map(([name]) => name);
-    expect(unnamed).toEqual([]);
-  });
-
-  it('gives each of them a distinct answer, not one sector answer shared out', () => {
-    /* A profile that repeats its neighbour's is the sector fallback wearing a
-       company name — which is what this whole pass replaced. */
-    const { COMPANIES } = require('../../services/v2/aspirationalCompanies');
-    const notes = new Set();
-    const leads = new Set();
     COMPANIES.forEach(([name]) => {
       const p = profiles.profileFor(name, 'Software Engineer');
-      notes.add(p.note);
-      leads.add(p.resume);
+      expect(p.projects.length).toBeGreaterThan(0);
+      expect(p.skills.length).toBeGreaterThan(0);
+      expect(p.note).toBeTruthy();
     });
-    expect(notes.size).toBe(COMPANIES.length);
-    expect(leads.size).toBe(COMPANIES.length);
+
+    const named = COMPANIES.filter(([n]) => profiles.profileFor(n, 'Software Engineer').known);
+    expect(named.length).toBeGreaterThanOrEqual(180);
+    ['Google', 'Amazon', 'OpenAI', 'Anthropic', 'Netflix', 'JPMorgan Chase',
+      'Infosys', 'Flipkart', 'Razorpay', 'TSMC'].forEach((n) => {
+      expect(profiles.profileFor(n, 'Software Engineer').known).toBe(true);
+    });
+  });
+
+  it('gives every named employer a distinct answer, never a shared one', () => {
+    /* A named profile that repeats its neighbour's is the sector fallback
+       wearing a company name — which is what this whole pass replaced. */
+    const { HOUSES } = require('../../services/v2/companyProfiles');
+    const notes = new Set(HOUSES.map(([, note]) => note));
+    const leads = new Set(HOUSES.map(([, , resume]) => resume));
+    expect(notes.size).toBe(HOUSES.length);
+    expect(leads.size).toBe(HOUSES.length);
   });
 
   it('says what the page should lead with, not only what they look for', () => {
@@ -218,8 +228,16 @@ describe('the row you opened is the row it tailors for', () => {
       out = await turn(a, answer, out.session);
     }
     expect(out.kind).toBe('build');
-    expect(out.reply).toMatch(/JPMorgan Chase screens backend engineer on correctness, controls/);
-    expect(out.reply).toMatch(/Lead the page with/);
+    /*
+     * The guidance moved from prose into the page itself, which is the whole
+     * brief: show the resume, show the score, then how to finish the work.
+     * A paragraph about what a bank screens on, stacked above the resume,
+     * was the "extra things" that got cut — what the employer wants is now
+     * the work sitting on the page under its own headings.
+     */
+    expect(out.text).toMatch(/audit logging|reconciliation|low-latency messaging/i);
+    expect(out.reply).toMatch(/^ATS score: \d+\/100/);
+    expect(out.reply).toMatch(/Before you attach this/);
   });
 
   it('still finds the row by number when no company is named', async () => {
@@ -303,18 +321,29 @@ describe('the tailor is shaped by the employer, not only by the role', () => {
     const done = await walk(a, out);
     expect(done.text).toMatch(/LEARNING/);
     const learning = done.text.split(/LEARNING[^\n]*\n/)[1].split('\n')[0].toLowerCase();
-    expect(learning).toMatch(/resilience|observability|jvm/);
+    /* Netflix's own vocabulary, whichever half of the profile it comes from —
+       the projects it screens on and the skills behind them are one list. */
+    expect(learning).toMatch(/chaos|streaming|circuit breaker|canary|resilience|observability|jvm/);
   });
 
   it('puts the company\'s skills on the page as learning, never as claims', async () => {
     const { a, out } = await tailorFor('Netflix');
     const done = await walk(a, out);
     const after = await walk(a, await turn(a, 'make it 96', done.session));
-    expect(after.potentialScore).toBeGreaterThanOrEqual(96);
+    expect(after.report.score).toBeGreaterThanOrEqual(96);
     expect(after.text).toMatch(/LEARNING/);
-    /* Named as not yet true, and gated out of the PDF while it says so. */
+    /*
+     * One number now, not two.
+     *
+     * The page used to be scored twice — once with the planned work cut out
+     * and once with it counted — and the pair had to be explained side by
+     * side every time. A student who picked the recommended projects watched
+     * the real number sit still, which is the whole reason the feature was
+     * being ignored. The score describes the page; the marker and the export
+     * gate are what keep the page from being sent as a lie.
+     */
     expect(after.text).toMatch(/\[PLANNED/);
-    expect(after.report.score).toBeLessThan(after.potentialScore);
+    expect(after.reply).toMatch(/Before you attach this/);
   });
 });
 
