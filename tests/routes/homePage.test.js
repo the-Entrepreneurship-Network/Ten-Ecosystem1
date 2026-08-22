@@ -1017,6 +1017,9 @@ describe('opening curtain', () => {
      */
     expect(countdownMs).toBeLessThanOrEqual(10000);
     expect(countdownMs).toBeGreaterThanOrEqual(4000);
+    /* And it is the length of the sound bed it runs under — a countdown that
+       outlasts the take by seconds ends in silence before the crack. */
+    expect(countdownMs).toBe(10000);
     /* The word still cracks into place and stays long enough to be read,
        rather than being glimpsed on the way out. */
     expect(holdMs).toBeGreaterThanOrEqual(1000);
@@ -1080,6 +1083,85 @@ describe('opening curtain', () => {
     const impactAt = Math.round(holdMs * 0.55);
     const shakeMs = Math.max(120, Math.round((holdMs - impactAt) * 0.8));
     expect(impactAt + shakeMs).toBeLessThan(holdMs);
+  });
+
+  it('runs a sound bed under the countdown and a hit on the crack', () => {
+    /*
+     * Both are cut from one take — the bed is its first nine seconds, the hit
+     * is the strike at 9.05s and the ring-out after it — so they are the same
+     * room rather than two stock effects that happen to be adjacent.
+     */
+    expect(page).toMatch(/new Audio\('assets\/intro\/intro-bed\.mp3'\)/);
+    expect(page).toMatch(/new Audio\('assets\/intro\/intro-impact\.mp3'\)/);
+    expect(page).toMatch(/bed\.loop = true/);
+
+    /* The hit fires on the same timer as the flash and the fracture, so the
+       sound and the picture land together at any INTRO_MS. */
+    const finale = page.slice(page.indexOf('function finale()'));
+    const flashAt = finale.indexOf("flash.classList.add('on')");
+    const hitAt = finale.indexOf('hit.play()');
+    const closes = finale.indexOf('}, impactAt);');
+    expect(flashAt).toBeGreaterThan(-1);
+    expect(hitAt).toBeGreaterThan(flashAt);
+    expect(hitAt).toBeLessThan(closes);
+
+    /* And the bed stops on the same line: two takes of the same room
+       overlapping is mud. */
+    expect(finale.slice(flashAt, closes)).toMatch(/bed\.pause\(\)/);
+  });
+
+  it('ships two audio files that actually contain audio', () => {
+    /*
+     * The first cut of the hit was 1.48 seconds of digital silence and looked
+     * completely healthy: right duration, right bitrate, right file size — a
+     * constant-bitrate MP3 of nothing weighs exactly what an MP3 of something
+     * weighs. (The cause was output seeking keeping the source timestamps, so
+     * the fade-out had already finished before the clip began.)
+     *
+     * Size proves nothing, so this looks at variety instead: encoded silence
+     * repeats one nearly identical frame body over and over, while real audio
+     * does not. Cheap, no decoder, and it catches exactly the failure that got
+     * through.
+     */
+    const fs = require('fs');
+    const path = require('path');
+    ['intro-bed.mp3', 'intro-impact.mp3'].forEach((name) => {
+      const file = path.join(__dirname, '../../public/assets/intro', name);
+      expect(fs.existsSync(file)).toBe(true);
+      const buf = fs.readFileSync(file);
+      expect(buf.length).toBeGreaterThan(20000);
+
+      const seen = new Set();
+      for (let i = 0; i + 32 <= buf.length; i += 32) seen.add(buf.toString('hex', i, i + 32));
+      const variety = seen.size / Math.floor(buf.length / 32);
+      expect(variety).toBeGreaterThan(0.5);
+    });
+  });
+
+  it('never fights the browser over autoplay, and never nags', () => {
+    /*
+     * Autoplay is refused until somebody has interacted with the page, and
+     * refusing is correct — a site that blares at you on load is hostile. So
+     * the rejection is caught and the first gesture starts it instead, from
+     * where the countdown has already reached rather than from zero.
+     */
+    expect(page).toMatch(/p\.catch\(\(\) => arm\(\)\)/);
+    expect(page).toMatch(/\{ once: true, passive: true \}/);
+    expect(page).toMatch(/bed\.currentTime = into % bed\.duration/);
+  });
+
+  it('can be silenced in one click, and remembers', () => {
+    /* Sound nobody asked for and cannot silence is what people close a tab
+       over. The toggle is in the markup, not only in the script. */
+    expect(page).toMatch(/id="preSound"/);
+    expect(page).toMatch(/const SOUND_KEY = 'ten:intro-sound'/);
+    expect(page).toMatch(/localStorage\.setItem\(SOUND_KEY, 'off'\)/);
+    /* Silenced means silenced: neither half plays. */
+    expect(page).toMatch(/const playBed = \(\) => \{\s*if \(soundOff\(\)\) return;/);
+    expect(page).toMatch(/if \(!soundOff\(\)\) \{\s*hit\.currentTime = 0;/);
+    /* And the click that silences it must not also count as the gesture that
+       starts it. */
+    expect(page).toMatch(/e\.stopPropagation\(\);/);
   });
 
   it('stops cycling logos when the countdown ends', () => {

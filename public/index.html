@@ -51,6 +51,10 @@
   #preSlot img { width:100%; height:100%; object-fit:cover; border-radius:14px; mix-blend-mode:screen; }
   #preSlot.swap { opacity:0; transform:scale(.6) rotate(-20deg); }
   #preCount { position:absolute; bottom:26px; left:50%; transform:translateX(-50%); font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:13px; letter-spacing:.2em; color:#fff; font-variant-numeric:tabular-nums; }
+  /* Bottom right, quiet, and out of the way of the word. Reachable without
+     hunting for it, and never mistaken for the countdown. */
+  #preSound { position:absolute; right:20px; bottom:20px; width:36px; height:36px; display:flex; align-items:center; justify-content:center; font-size:15px; line-height:1; background:transparent; border:1px solid rgba(255,255,255,.28); border-radius:50%; color:#fff; cursor:pointer; opacity:.55; transition:opacity .2s, border-color .2s; }
+  #preSound:hover, #preSound:focus-visible { opacity:1; border-color:rgba(255,255,255,.7); }
 
   /* ---------- the finale: E arrives spinning, breaks the screen, TEN holds ---------- */
   #preSlot.eletter { width:auto; height:auto; font-size:1em; }
@@ -478,7 +482,10 @@
 <!-- preloader -->
 <div id="pre">
   <div class="pre-word" id="preWord">T<span id="preSlot">🐍</span>N</div>
-  <div id="preCount">50</div>
+  <div id="preCount">10</div>
+  <!-- Sound nobody asked for and cannot silence is what people close a tab
+       over. One click, remembered, and it never argues with the countdown. -->
+  <button id="preSound" type="button" aria-label="Turn intro sound off" aria-pressed="false">🔊</button>
   <!-- the impact of the E landing: fracture lines, then a white flash -->
   <svg id="preCrack" viewBox="0 0 1000 600" preserveAspectRatio="none" aria-hidden="true">
     <g stroke="#fff" stroke-width="1.6" fill="none">
@@ -927,8 +934,9 @@ const DOMAIN_IMGS = ['python.jpg','java.jpg','web.jpg','mern.jpg','flutter.jpg',
 
    COUNTDOWN_MS is the wait. It was fifty seconds and that is not an opening,
    it is a queue: nobody watches a homepage count down for the better part of
-   a minute, they leave. Eight seconds is long enough to land the effect and
-   short enough that it never becomes something to sit through.
+   a minute, they leave. Ten seconds is long enough to land the effect, short
+   enough that it never becomes something to sit through, and it is the length
+   of the sound bed the countdown now runs under.
 
    The domains cycle on their own clock, derived so that ALL FOURTEEN get
    their turn inside the countdown — every one of them, every time, whatever
@@ -938,12 +946,98 @@ const DOMAIN_IMGS = ['python.jpg','java.jpg','web.jpg','mern.jpg','flutter.jpg',
 
    HOLD_MS is the beat after the word cracks into place, before the curtain
    lifts — long enough that the finished TEN is seen rather than glimpsed. */
-const COUNTDOWN_MS = 8000;
-const HOLD_MS = 1200;
+const COUNTDOWN_MS = 10000;
+const HOLD_MS = 1600;
 const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
 (() => {
   const count = document.getElementById('preCount');
   const slot = document.getElementById('preSlot');
+
+  /*
+   * The opening has a sound: a bed under the countdown, and the hit on the
+   * crack.
+   *
+   * Both are cut from one take — the bed is everything before the strike, the
+   * hit is the strike at 9.05s and the ring-out after it — so they are the
+   * same room and the same instrument rather than two stock effects that
+   * happen to be adjacent.
+   *
+   * The bed runs to the crack, not to the end of the countdown. Those are not
+   * the same instant: the countdown ends, the E spins in, and it lands almost
+   * a second later — so a bed cut to the countdown left the E flying through
+   * silence and the strike arriving out of nowhere. It is eleven seconds, and
+   * the take only had nine before its strike, so the difference is a lead-in
+   * taken from the take's own quietest stretch and crossfaded on the front.
+   * Looping the nine instead put an audible restart just before the crack,
+   * which is the one moment the sound must not draw attention to itself. It
+   * still loops, but only as insurance against a longer countdown.
+   *
+   * The hit fires on the same timer that fires the flash and the fracture, so
+   * the sound and the picture land together at any INTRO_MS.
+   *
+   * Two things a homepage that makes noise has to get right:
+   *
+   * Autoplay is refused by every browser until somebody has interacted with
+   * the page, and refusing is CORRECT — a site that blares at you on load is
+   * hostile. So play() is attempted, and when it is rejected the first touch,
+   * click or keypress starts it from where the countdown has already reached,
+   * rather than restarting a bed for a countdown that is half over.
+   *
+   * And it can be turned off, in one click, remembered. Sound nobody asked
+   * for and cannot silence is the thing people close the tab over.
+   */
+  const SOUND_KEY = 'ten:intro-sound';
+  const soundOff = () => localStorage.getItem(SOUND_KEY) === 'off';
+  const bed = new Audio('assets/intro/intro-bed.mp3');
+  const hit = new Audio('assets/intro/intro-impact.mp3');
+  bed.loop = true;
+  bed.preload = 'auto';
+  hit.preload = 'auto';
+  bed.volume = 0.55;
+  hit.volume = 0.85;
+
+  const startedAt = Date.now();
+  let armed = false;
+  const playBed = () => {
+    if (soundOff()) return;
+    /* From where the countdown actually is. A bed that starts at zero eight
+       seconds in is a different opening from the one being watched. */
+    const into = (Date.now() - startedAt) / 1000;
+    if (bed.duration) bed.currentTime = into % bed.duration;
+    const p = bed.play();
+    if (p && p.catch) p.catch(() => arm());
+  };
+  /* One listener, removed the moment it has done its job. */
+  const wake = () => { disarm(); playBed(); };
+  const EVENTS = ['pointerdown', 'keydown', 'touchstart'];
+  function arm() {
+    if (armed) return;
+    armed = true;
+    EVENTS.forEach((e) => window.addEventListener(e, wake, { once: true, passive: true }));
+  }
+  function disarm() {
+    armed = false;
+    EVENTS.forEach((e) => window.removeEventListener(e, wake));
+  }
+  const stopSound = () => { disarm(); bed.pause(); };
+
+  const toggle = document.getElementById('preSound');
+  if (toggle) {
+    const paint = () => {
+      toggle.textContent = soundOff() ? '🔇' : '🔊';
+      toggle.setAttribute('aria-label', soundOff() ? 'Turn intro sound on' : 'Turn intro sound off');
+      toggle.setAttribute('aria-pressed', String(soundOff()));
+    };
+    paint();
+    toggle.addEventListener('click', (e) => {
+      /* Never let the toggle double as the gesture that starts the thing it
+         was just used to silence. */
+      e.stopPropagation();
+      if (soundOff()) { localStorage.removeItem(SOUND_KEY); paint(); playBed(); }
+      else { localStorage.setItem(SOUND_KEY, 'off'); paint(); stopSound(); }
+    });
+  }
+  playBed();
   /* Each half is set directly now rather than split from one total, so the
      hold after the crack stays three seconds whatever the countdown is. */
   const COUNT_MS = COUNTDOWN_MS;
@@ -1041,6 +1135,22 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
       pre.style.animationDuration = shakeMs + 'ms';
       word.classList.add('pre-shake');
       pre.classList.add('pre-shake');
+      /*
+       * The hit, on the same timer as the flash and the fracture.
+       *
+       * The bed stops on the same line rather than a moment later: two takes
+       * of the same room overlapping is mud, and the strike is meant to be
+       * the only thing in the air when the screen breaks. Its ring-out runs
+       * past the curtain on purpose — the sound finishing after the picture
+       * does is what makes the page feel opened rather than cut to.
+       */
+      bed.pause();
+      disarm();
+      if (!soundOff()) {
+        hit.currentTime = 0;
+        const p = hit.play();
+        if (p && p.catch) p.catch(() => {});
+      }
     }, impactAt);
 
     /* TEN, whole, for a beat — then the site.
