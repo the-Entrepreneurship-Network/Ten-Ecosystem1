@@ -20,33 +20,26 @@ const request = require('supertest');
 
 jest.setTimeout(5 * 60 * 1000);
 
-/* The portal's search, stubbed — these journeys are about the agent, not
-   about whether a job board answered today. */
+/* The portal's search, stubbed at the function the resume seat now calls —
+   these journeys are about the agent, not about whether a board answered
+   today. It used to be stubbed over HTTP on our own port, which is exactly
+   the hop that failed in production. */
+jest.mock('../../routes/v2/jobAgent', () => {
+  const router = jest.requireActual('../../routes/v2/jobAgent');
+  router.findJobs = jest.fn();
+  return router;
+});
+const jobAgent = require('../../routes/v2/jobAgent');
+
 const PORTAL_JOBS = [
-  { title: 'Backend Engineer', company: 'stripe', location: 'Bengaluru, India', directUrl: 'https://stripe.com/jobs/1', description: 'Java, Kafka, Postgres, Docker.', tags: ['java'], fit5: 4 },
-  { title: 'Senior Backend Engineer', company: 'robinhood', location: 'Remote, US', directUrl: 'https://boards.greenhouse.io/robinhood/2', description: 'Go, gRPC, Kubernetes.', tags: ['go'], fit5: 3 },
-  { title: 'Platform Engineer', company: 'airbnb', location: 'Remote, EU', directUrl: 'https://careers.airbnb.com/3', description: 'Terraform, AWS, CI/CD.', tags: ['aws'], fit5: 3 },
+  { title: 'Backend Engineer', company: 'stripe', location: 'Bengaluru, India', url: 'https://stripe.com/jobs/1', description: 'Java, Kafka, Postgres, Docker.', tags: ['java'], fit5: 4 },
+  { title: 'Senior Backend Engineer', company: 'robinhood', location: 'Remote, US', url: 'https://boards.greenhouse.io/robinhood/2', description: 'Go, gRPC, Kubernetes.', tags: ['go'], fit5: 3 },
+  { title: 'Platform Engineer', company: 'airbnb', location: 'Remote, EU', url: 'https://careers.airbnb.com/3', description: 'Terraform, AWS, CI/CD.', tags: ['aws'], fit5: 3 },
 ];
 
-let portal;
-let prevPort;
-
-beforeAll((done) => {
-  const p = express();
-  p.use(express.json());
-  p.post('/api/v2/jobs/search', (req, res) =>
-    res.json({ ok: true, profile: { role: req.body.role }, resumeText: req.body.text, jobs: PORTAL_JOBS, withheld: 0 }));
-  portal = p.listen(0, () => {
-    prevPort = process.env.PORT;
-    process.env.PORT = String(portal.address().port);
-    done();
-  });
-});
-
-afterAll((done) => {
-  if (prevPort === undefined) delete process.env.PORT;
-  else process.env.PORT = prevPort;
-  portal.close(done);
+beforeEach(() => {
+  jobAgent.findJobs.mockReset();
+  jobAgent.findJobs.mockResolvedValue(PORTAL_JOBS);
 });
 
 function agent() {
@@ -293,11 +286,9 @@ describe('job search · ten journeys', () => {
     expect(out.reply).not.toMatch(/https?:\/\//);
   });
 
-  it('10 · a dead portal says so instead of inventing rows', async () => {
-    const prev = process.env.PORT;
-    process.env.PORT = '1';
+  it('10 · dead boards say so instead of inventing rows', async () => {
+    jobAgent.findJobs.mockRejectedValue(new Error('every board timed out'));
     const { out } = await hunt(BACKEND, 'Backend Engineer');
-    process.env.PORT = prev;
     expect(out.reply).toMatch(/did not answer|not invent|Nothing came back/i);
   });
 });

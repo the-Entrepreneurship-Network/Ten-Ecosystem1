@@ -1232,6 +1232,21 @@ const BUILD_INTENT = /\b(make|build|create|write|generate|draft)\s+(me\s+)?(a|an
  * The role named in the sentence: "resume of a software developer",
  * "cv for a data analyst", "resume as a devops engineer".
  */
+/**
+ * The role named in a hunt request.
+ *
+ * "find me jobs for a backend engineer", "any openings as a data analyst",
+ * "internships for a frontend developer". targetFromSentence only reads
+ * sentences built around the word resume, so a request for jobs carrying its
+ * own title fell through and was answered with "attach your resume first".
+ */
+function roleFromHunt(low) {
+  const m = String(low).match(
+    /\b(?:jobs?|openings?|roles?|positions?|internships?|vacanc(?:y|ies))\s+(?:for|as|in)\s+(?:an?\s+|the\s+)?([a-z][a-z0-9+#./ -]{2,40}?)(?=\s+(?:and|with|that|which|to|so|please|near|in|at|remote)\b|[,.]|$)/);
+  if (!m) return '';
+  return m[1].trim().replace(/\s+/g, ' ');
+}
+
 function targetFromSentence(low) {
   const m = String(low).match(
     /\b(?:resume|cv)\s+(?:of|for|as)\s+(?:an?\s+|the\s+)?([a-z][a-z0-9+#./ -]{2,40}?)(?=\s+(?:and|with|that|which|to|so|please|role|position|job)\b|[,.]|$)/);
@@ -1647,7 +1662,20 @@ function consumeAnswer(session, field, msg) {
   }
   /* The role to search openings for — kept apart from the resume's target,
      because looking at data roles does not retitle the page you already have. */
-  if (field === 'jobrole') { session.jobRole = msg.trim(); return; }
+  if (field === 'jobrole') {
+    /*
+     * A sentence is not a job title.
+     *
+     * Typed rather than picked, the answer arrives as whatever they wrote —
+     * and "find me jobs for a backend engineer" became the role, so thirty
+     * target rows came back titled "find me jobs for a backend engineer at
+     * Verizon". The title inside the sentence is the answer; the sentence is
+     * only how they said it.
+     */
+    const raw = msg.trim();
+    session.jobRole = roleFromHunt(raw.toLowerCase()) || targetFromSentence(raw.toLowerCase()) || raw;
+    return;
+  }
 
   /*
    * The answer to "should I tailor for this?".
@@ -1889,21 +1917,29 @@ function nextQuestion(session) {
  * hands over a link to apply through, and this shows the role to tailor for.
  */
 async function portalJobs(resumeText, role) {
-  const port = process.env.PORT || 3000;
-  const res = await httpFetch(`http://127.0.0.1:${port}/api/v2/jobs/search`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    /* The portal's own defaults: verified links, resolved to the employer,
-       direct openings only. Anything else would list a different set. */
-    body: JSON.stringify({ text: String(resumeText || ''), role: String(role || '') }),
-    timeout: 45000,
-  });
-  if (!res.ok) throw new Error(`job search replied ${res.status}`);
-  const data = await res.json();
-  if (!data || !data.ok || !Array.isArray(data.jobs)) throw new Error('job search returned nothing usable');
+  /*
+   * Called directly, not over a loopback HTTP request to ourselves.
+   *
+   * This used to POST to http://127.0.0.1:${PORT}/api/v2/jobs/search — a
+   * network round trip to reach a function in the same module graph, and one
+   * that only works if PORT happens to name the socket the server is actually
+   * listening on. Behind the hosting proxy in production it does not: the
+   * process is reached on a different port, or a pipe, or IPv6 loopback, so
+   * the request was refused and the board came back empty every time. The
+   * search on screen had nothing wrong with it; the seat could not reach it.
+   *
+   * findJobs IS the endpoint's body — same boards, same dedupe, same ranking,
+   * same order — so parity with the Job Portal is unchanged and there is no
+   * longer anything to misconfigure. Required here rather than at the top of
+   * the file because the two routers reference each other.
+   */
+  // eslint-disable-next-line global-require
+  const jobAgent = require('./jobAgent');
+  const jobs = await jobAgent.findJobs(String(resumeText || ''), { role: String(role || '') });
+  if (!Array.isArray(jobs)) throw new Error('job search returned nothing usable');
 
   /* Read, never re-sorted: the order IS the parity. */
-  return data.jobs.slice(0, 8).map((j) => ({
+  return jobs.slice(0, 8).map((j) => ({
     title: String(j.title || '').slice(0, 120),
     company: String(j.company || '').slice(0, 60),
     location: String(j.location || '').slice(0, 60),
@@ -3465,10 +3501,19 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         session.jobsShownForBuild = true;
         session.jobRole = session.jobRole || session.target;
       }
-      /* A title is enough to search with. Only somebody who has given neither
-         a page nor a role is being asked for the page. */
-      if (!source && !session.jobRole && !session.target) {
-        return ask('resume', 'Attach your resume first — the search is built from what it can prove.');
+      /*
+       * A title is enough to search with, and the title can be in the ask.
+       *
+       * "find me jobs for a backend engineer" came back with "attach your
+       * resume first" — a dead end put in front of somebody who had just
+       * named the role. A page makes the ranking better and was never
+       * required to run a search. So the sentence is read for a role, and if
+       * there is still none the position picker asks for it, which is a list
+       * to choose from rather than a document to go and find.
+       */
+      if (!session.jobRole) {
+        const spoken = roleFromHunt(low);
+        if (spoken) session.jobRole = spoken;
       }
 
       /* Which role, before searching for it. Guessing the target from the
