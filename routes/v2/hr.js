@@ -429,6 +429,82 @@ router.get("/document-history", requireHR, async (req, res) => {
   }
 });
 
+const TenureRequest = require("../../models/TenureRequest");
+
+router.get("/tenure-requests/pending", requireHR, async (req, res) => {
+  try {
+    const pending = await TenureRequest.find({ status: "Pending" })
+      .populate("studentId", "name employeeId email domain collegeName college joiningDate tenure")
+      .sort({ requestedAt: 1 })
+      .lean();
+    
+    const result = pending.map(p => {
+        const s = p.studentId || {};
+        return {
+            requestId: p._id,
+            studentName: s.name || s.email,
+            employeeId: s.employeeId,
+            currentTenure: p.currentTenure,
+            requestedTenure: p.requestedTenure,
+            reason: p.reason,
+            requestedAt: p.requestedAt,
+            status: p.status
+        };
+    });
+    
+    res.json({ success: true, count: result.length, requests: result });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+router.post("/tenure-requests/approve/:id", requireHR, async (req, res) => {
+  try {
+    const reqId = req.params.id;
+    const certReq = await TenureRequest.findById(reqId);
+    if (!certReq || certReq.status !== "Pending") {
+      return res.status(404).json({ success: false, message: "Request not found or not pending" });
+    }
+    
+    certReq.status = "Approved";
+    certReq.approvedAt = new Date();
+    await certReq.save();
+    
+    await Student.updateOne(
+        { _id: certReq.studentId },
+        { 
+            $set: { 
+                tenure: certReq.requestedTenure,
+                v2DurationType: certReq.requestedTenure
+            } 
+        }
+    );
+    
+    res.json({ success: true, message: "Tenure request approved successfully." });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+router.post("/tenure-requests/reject/:id", requireHR, async (req, res) => {
+  try {
+    const reqId = req.params.id;
+    const certReq = await TenureRequest.findById(reqId);
+    if (!certReq || certReq.status !== "Pending") {
+      return res.status(404).json({ success: false, message: "Request not found or not pending" });
+    }
+    
+    certReq.status = "Rejected";
+    certReq.rejectedAt = new Date();
+    certReq.rejectionReason = req.body.reason || "";
+    await certReq.save();
+    
+    res.json({ success: true, message: "Tenure request rejected successfully." });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Contributors — the "Built with" strip on the home page
 

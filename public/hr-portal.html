@@ -417,6 +417,7 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
     <button class="nav-btn" onclick="showView('submissions')" data-view="submissions"><span class="icon">📋</span> Submissions</button>
     <button class="nav-btn" onclick="showView('domains')" data-view="domains"><span class="icon">🏢</span> Domain Analytics</button>
     <button class="nav-btn" onclick="showView('attendance-monitor')" data-view="attendance-monitor"><span class="icon">🪪</span> Attendance Monitor</button>
+    <button class="nav-btn" onclick="showView('tenure-requests')" data-view="tenure-requests"><span class="icon">⏳</span> Tenure Requests</button>
     <div class="nav-divider"></div>
     <div class="nav-section-title">Certificates</div>
     <button class="nav-btn" onclick="showView('certificates')" data-view="certificates"><span class="icon">🎓</span> Certificate Approvals</button>
@@ -485,6 +486,34 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
         onmouseover="this.style.background='rgba(212,175,55,0.22)'" onmouseout="this.style.background='rgba(212,175,55,0.12)'">
         👤 Profile
       </button>
+    </div>
+  </div>
+
+  <!-- TENURE REQUESTS -->
+  <div class="view" id="view-tenure-requests">
+    <div class="topbar" style="margin-bottom: 20px;">
+      <h2 style="font-size:24px; font-weight:800;">Tenure Change Requests</h2>
+      <button onclick="loadTenureRequests()" style="padding:8px 16px; background:rgba(212,175,55,0.1); border:1px solid rgba(212,175,55,0.3); color:#D4AF37; border-radius:8px; cursor:pointer;">🔄 Refresh</button>
+    </div>
+    
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Student</th>
+            <th>Employee ID</th>
+            <th>Current Tenure</th>
+            <th>Requested Tenure</th>
+            <th>Reason</th>
+            <th>Requested At</th>
+            <th>Status</th>
+            <th style="text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="tenureRequestsBody">
+          <tr><td colspan="8" style="text-align:center; padding:30px; color:var(--muted);">Loading requests...</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
@@ -5927,6 +5956,107 @@ loadPendingDocsBadge();
       }
     });
   }
+    window.loadTenureRequests = async function() {
+      try {
+        const tbody = document.getElementById('tenureRequestsBody');
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px; color:var(--muted);">Loading requests...</td></tr>';
+        
+        const res = await fetch('/api/v2/hr/tenure-requests/pending', {
+          headers: { 'Authorization': localStorage.getItem('hrToken') }
+        });
+        const data = await res.json();
+        
+        if (!data.success) {
+          tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:30px; color:var(--red);">${data.message || 'Failed to load requests.'}</td></tr>`;
+          return;
+        }
+        
+        if (!data.requests || data.requests.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px; color:var(--muted);">No pending tenure change requests.</td></tr>';
+          return;
+        }
+        
+        tbody.innerHTML = data.requests.map(req => `
+          <tr>
+            <td><strong>${req.studentName}</strong></td>
+            <td style="font-family:'JetBrains Mono',monospace; color:var(--gold);">${req.employeeId || '—'}</td>
+            <td>${req.currentTenure}</td>
+            <td><strong>${req.requestedTenure}</strong></td>
+            <td style="color:var(--muted); font-size:12px;">${req.reason || '—'}</td>
+            <td style="font-size:12px;">${new Date(req.requestedAt).toLocaleDateString()}</td>
+            <td><span class="tag tag-pending">${req.status}</span></td>
+            <td style="text-align:right;">
+              <button onclick="approveTenureRequest('${req.requestId}')" class="btn-edit-hr" style="margin-right:4px;">Approve</button>
+              <button onclick="rejectTenureRequest('${req.requestId}')" class="btn-del-hr">Reject</button>
+            </td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        document.getElementById('tenureRequestsBody').innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px; color:var(--red);">Error loading requests.</td></tr>';
+      }
+    };
+    
+    window.approveTenureRequest = async function(id) {
+      if (!confirm("Are you sure you want to approve this tenure extension?")) return;
+      try {
+        const res = await fetch(`/api/v2/hr/tenure-requests/approve/${id}`, {
+          method: 'POST',
+          headers: { 'Authorization': localStorage.getItem('hrToken') }
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('Tenure request approved.');
+          loadTenureRequests();
+        } else {
+          alert('Error: ' + data.message);
+        }
+      } catch (err) {
+        alert('Network error.');
+      }
+    };
+    
+    window.rejectTenureRequest = async function(id) {
+      const reason = prompt("Optional: Enter reason for rejection");
+      if (reason === null) return;
+      try {
+        const res = await fetch(`/api/v2/hr/tenure-requests/reject/${id}`, {
+          method: 'POST',
+          headers: { 
+              'Authorization': localStorage.getItem('hrToken'),
+              'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ reason })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('Tenure request rejected.');
+          loadTenureRequests();
+        } else {
+          alert('Error: ' + data.message);
+        }
+      } catch (err) {
+        alert('Network error.');
+      }
+    };
+
+    // Override or hook into showView to load requests when the view is opened
+    const originalShowView = window.showView;
+    window.showView = function(viewId) {
+        if (originalShowView) originalShowView(viewId);
+        // Fallback for native view switching
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+        const targetView = document.getElementById('view-' + viewId);
+        if (targetView) targetView.classList.add('active');
+        const targetBtn = document.querySelector(`[data-view="${viewId}"]`);
+        if (targetBtn) targetBtn.classList.add('active');
+        
+        if (window.innerWidth <= 1024) toggleSidebar();
+        
+        if (viewId === 'tenure-requests') {
+            loadTenureRequests();
+        }
+    };
 })();
 </script>
 

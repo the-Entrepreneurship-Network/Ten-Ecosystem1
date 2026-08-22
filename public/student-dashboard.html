@@ -2445,6 +2445,20 @@ body.is-premium #premiumCard { box-shadow:0 0 0 1px rgba(212,175,55,0.25), 0 14p
 
 </div><!-- /page-wrapper -->
 
+<!-- ===== CONTINUATION / EXTENSION MODAL ===== -->
+<div class="modal" id="extensionModal">
+  <div class="modal-content" style="max-width: 400px; text-align: center;">
+    <h2 id="extensionModalTitle">🎉 Internship Completed!</h2>
+    <p style="font-size: 14px; color: #94a3b8; margin-bottom: 20px;" id="extensionModalMessage">
+      Your internship tenure has been completed.<br>Would you like to continue your internship?
+    </p>
+    <div id="extensionOptions" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+      <!-- Options injected by JS -->
+    </div>
+    <button class="close-btn" onclick="closeExtensionModal()" id="extensionCloseBtn">Close</button>
+  </div>
+</div>
+
 <!-- ── SUBMISSION MODAL ── -->
 <div class="modal" id="submissionModal">
   <div class="modal-content">
@@ -2540,6 +2554,9 @@ if(!student){
         }
         if (window.TenExtras2) {
           TenExtras2.injectStudent({ student: student, mountId: "ten-extras2-mount" });
+        }
+        if (typeof checkTenureExtensionEligibility === 'function') {
+          checkTenureExtensionEligibility();
         }
       })
       .catch(function(){});
@@ -7298,6 +7315,176 @@ document.addEventListener("DOMContentLoaded", function() {
 </script>
 
 <script src="ten-motion.js"></script>
+<script>
+// ── EXTENSION / CONTINUATION LOGIC ──
+function checkTenureExtensionEligibility() {
+    if (!student) return;
+    if (sessionStorage.getItem('extensionDismissed') === 'true') return;
+
+    const currentTenure = student.v2DurationType || student.tenure || '1month';
+    let currentDays = 30;
+    if (currentTenure === '1week') currentDays = 7;
+    else if (currentTenure === '15days') currentDays = 15;
+    else if (currentTenure === '1month') currentDays = 30;
+    else if (currentTenure === '45days') currentDays = 45;
+    else if (currentTenure === '3months') currentDays = 90;
+    else if (currentTenure === '6months') currentDays = 180;
+    
+    if (currentDays >= 180) return; // 6 months, no extension
+    
+    const joiningDateStr = student.joiningDate || student.createdAt;
+    if (!joiningDateStr) return;
+    
+    const startDate = new Date(joiningDateStr);
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + currentDays - 1);
+    endDate.setHours(23, 59, 59, 999);
+    
+    const now = new Date();
+    const isCompleted = now >= endDate;
+    
+    const isShortTenure = ['1week', '15days', '1month'].includes(currentTenure);
+    
+    if (isShortTenure) {
+        if (isCompleted) {
+            if (student.latestTenureRequest && student.latestTenureRequest.status === "Pending") {
+                renderPendingExtensionButton();
+            } else {
+                showExtensionModal(currentDays, true);
+            }
+        }
+    } else {
+        if (student.latestTenureRequest && student.latestTenureRequest.status === "Pending") {
+            renderPendingExtensionButton();
+        } else {
+            renderExtensionButton(currentDays);
+        }
+    }
+}
+
+function renderPendingExtensionButton() {
+    if (document.getElementById('btnExtendTenure')) return;
+    
+    const btn = document.createElement('button');
+    btn.id = 'btnExtendTenure';
+    btn.textContent = '⏳ Extension Pending HR Approval';
+    btn.style.cssText = 'margin-top: 10px; margin-bottom: 20px; margin-right: 10px; padding: 10px 20px; background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.5); color: #fbbf24; font-weight: 700; border-radius: 8px; cursor: not-allowed; font-size: 14px; display: inline-block;';
+    btn.disabled = true;
+    
+    const target1 = document.getElementById('employeeText');
+    if (target1 && target1.parentNode) {
+        const btnClone = btn.cloneNode(true);
+        target1.parentNode.insertBefore(btnClone, target1.nextSibling);
+    }
+    
+    const target2 = document.querySelector('.section-cards-sub');
+    if (target2 && target2.parentNode) {
+        target2.parentNode.insertBefore(btn, target2.nextSibling);
+    }
+}
+
+function getAvailableExtensionOptions(currentDays) {
+    const options = [];
+    if (currentDays < 15) options.push({ label: 'Extend to 15 Days', value: '15days' });
+    if (currentDays < 30) options.push({ label: 'Extend to 1 Month', value: '1month' });
+    if (currentDays < 45) options.push({ label: 'Extend to 45 Days', value: '45days' });
+    if (currentDays < 90) options.push({ label: 'Extend to 3 Months', value: '3months' });
+    if (currentDays < 180) options.push({ label: 'Extend to 6 Months', value: '6months' });
+    return options;
+}
+
+function showExtensionModal(currentDays, isPopup) {
+    const opts = getAvailableExtensionOptions(currentDays);
+    if (opts.length === 0) return;
+    
+    const container = document.getElementById('extensionOptions');
+    container.innerHTML = '';
+    
+    opts.forEach(opt => {
+        const btn = document.createElement('button');
+        btn.textContent = opt.label;
+        btn.style.cssText = 'padding: 12px; background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; transition: transform 0.2s;';
+        btn.onclick = () => submitExtension(opt.value);
+        container.appendChild(btn);
+    });
+    
+    document.getElementById('extensionModalTitle').innerText = isPopup ? '🎉 Internship Completed!' : 'Extend Internship';
+    document.getElementById('extensionModalMessage').innerHTML = isPopup 
+        ? 'Your internship tenure has been completed.<br>Would you like to continue your internship?' 
+        : 'Choose a duration to extend your internship.<br>Maximum total tenure is 6 months.';
+        
+    document.getElementById('extensionModal').style.display = 'flex';
+}
+
+function renderExtensionButton(currentDays) {
+    if (document.getElementById('btnExtendTenure')) return;
+    
+    const btn = document.createElement('button');
+    btn.id = 'btnExtendTenure';
+    btn.textContent = '🚀 Extend Internship';
+    btn.style.cssText = 'margin-top: 10px; margin-bottom: 20px; margin-right: 10px; padding: 10px 20px; background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.5); color: #93c5fd; font-weight: 700; border-radius: 8px; cursor: pointer; font-size: 14px; transition: background 0.3s; display: inline-block;';
+    btn.onmouseover = () => btn.style.background = 'rgba(59,130,246,0.3)';
+    btn.onmouseout = () => btn.style.background = 'rgba(59,130,246,0.15)';
+    
+    btn.onclick = () => showExtensionModal(currentDays, false);
+    
+    // Inject into legacy layout
+    const target1 = document.getElementById('employeeText');
+    if (target1 && target1.parentNode) {
+        const btnClone = btn.cloneNode(true);
+        btnClone.onclick = btn.onclick;
+        btnClone.onmouseover = btn.onmouseover;
+        btnClone.onmouseout = btn.onmouseout;
+        target1.parentNode.insertBefore(btnClone, target1.nextSibling);
+    }
+    
+    // Inject into new layout (under 'Select a section to get started')
+    const target2 = document.querySelector('.section-cards-sub');
+    if (target2 && target2.parentNode) {
+        target2.parentNode.insertBefore(btn, target2.nextSibling);
+    }
+}
+
+function closeExtensionModal() {
+    document.getElementById('extensionModal').style.display = 'none';
+    sessionStorage.setItem('extensionDismissed', 'true');
+}
+
+async function submitExtension(targetTenure) {
+    try {
+        const res = await fetch('/api/v2/student/extend', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-employee-id': student.employeeId },
+            body: JSON.stringify({ targetTenure })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+            Swal.fire({
+                icon: 'success',
+                title: 'Request Submitted!',
+                text: 'Your tenure extension request has been sent to HR for approval.',
+                background: '#101820',
+                color: '#ffffff'
+            }).then(() => {
+                sessionStorage.removeItem('extensionDismissed');
+                window.location.reload();
+            });
+        } else {
+            Swal.fire({
+                icon: 'error',
+                title: 'Extension Failed',
+                text: data.message || 'Something went wrong.',
+                background: '#101820',
+                color: '#ffffff'
+            });
+        }
+    } catch (err) {
+        console.error(err);
+        alert('Server connection error.');
+    }
+}
+</script>
 <script src="/notify-orb.js" defer></script>
 </body>
 </html>

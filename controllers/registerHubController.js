@@ -237,6 +237,31 @@ async function registerUser(req, res) {
       errors.role = 'Please choose what you are registering as.';
     }
 
+    if (Object.keys(errors).length > 0) {
+      return res.status(400).json({
+        success: false,
+        errors,
+        error: Object.values(errors)[0]
+      });
+    }
+
+    const trimmedEmail = email.toLowerCase().trim();
+
+    const [existingEco, existingStudent, existingHR, existingCoord] = await Promise.all([
+      EcosystemUser.findOne({ email: trimmedEmail }),
+      Student.findOne({ email: trimmedEmail }),
+      HR.findOne({ email: trimmedEmail }),
+      Coordinator.findOne({ email: trimmedEmail }),
+    ]);
+
+    if (existingEco || existingStudent || existingHR || existingCoord) {
+      return res.status(409).json({ 
+        success: false, 
+        message: 'Email already registered. Please login.',
+        error: 'Email already registered. Please login.' 
+      });
+    }
+
     // Student-specific required fields.
     let studentDomains = [];
     if (role === ROLES.STUDENT) {
@@ -304,44 +329,13 @@ async function registerUser(req, res) {
       if (!mobile || !/^\+?[0-9]{10,15}$/.test(mobile.replace(/[\s-]/g, ''))) {
         return res.status(400).json({ success: false, error: 'Valid 10+ digit mobile number is required.' });
       }
-      if (!roleSpecificData.country || !roleSpecificData.state || !roleSpecificData.city) {
-        return res.status(400).json({ success: false, error: 'Country, State, and City selection are mandatory.' });
-      }
-      if (!roleSpecificData.university || !roleSpecificData.degree || !roleSpecificData.academicYear) {
-        return res.status(400).json({ success: false, error: 'College/University, Degree, and Academic Year are mandatory.' });
-      }
-      if (!roleSpecificData.skills || (typeof roleSpecificData.skills === 'string' && !roleSpecificData.skills.trim())) {
-        return res.status(400).json({ success: false, error: 'At least one skill is required.' });
-      }
-      if (!roleSpecificData.portfolio || !/^https?:\/\/.+\..+/.test(roleSpecificData.portfolio.trim())) {
-        return res.status(400).json({ success: false, error: 'Valid Portfolio URL is mandatory (e.g. https://myportfolio.com).' });
-      }
-      if (!roleSpecificData.linkedin || !/^https?:\/\/(www\.)?linkedin\.com\/.+/.test(roleSpecificData.linkedin.trim())) {
-        return res.status(400).json({ success: false, error: 'Valid LinkedIn profile URL is mandatory.' });
-      }
+
       if (roleSpecificData.resume && typeof roleSpecificData.resume === 'string') {
         const resumePath = roleSpecificData.resume.toLowerCase();
         if (!resumePath.endsWith('.pdf') && !resumePath.includes('pdf')) {
           return res.status(400).json({ success: false, error: 'Resume must strictly be a PDF file.' });
         }
       }
-    }
-
-    const trimmedEmail = email.toLowerCase().trim();
-
-    const [existingEco, existingStudent, existingHR, existingCoord] = await Promise.all([
-      EcosystemUser.findOne({ email: trimmedEmail }),
-      Student.findOne({ email: trimmedEmail }),
-      HR.findOne({ email: trimmedEmail }),
-      Coordinator.findOne({ email: trimmedEmail }),
-    ]);
-
-    if (existingEco || existingStudent || existingHR || existingCoord) {
-      return res.status(409).json({ 
-        success: false, 
-        message: 'Email already registered. Please login.',
-        error: 'Email already registered. Please login.' 
-      });
     }
 
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
