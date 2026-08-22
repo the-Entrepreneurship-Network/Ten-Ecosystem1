@@ -117,6 +117,121 @@ describe('the profile knows one employer from another', () => {
   it('names its bar in one line, for the reply', () => {
     expect(profiles.noteFor('Netflix', 'Backend Engineer')).toMatch(/Netflix screens backend engineer on/i);
   });
+
+  it('covers every employer on the target list by name', () => {
+    /*
+     * A hundred and forty-nine of the hundred and sixty-six fell through to
+     * their sector, so tailoring for Maruti Suzuki and for Apollo Hospitals
+     * produced the same page. The sector is the right answer for a company
+     * nobody listed; it is a poor one for a company sitting on our own list.
+     */
+    const { COMPANIES } = require('../../services/v2/aspirationalCompanies');
+    const unnamed = COMPANIES
+      .filter(([name]) => !profiles.profileFor(name, 'Software Engineer').known)
+      .map(([name]) => name);
+    expect(unnamed).toEqual([]);
+  });
+
+  it('gives each of them a distinct answer, not one sector answer shared out', () => {
+    /* A profile that repeats its neighbour's is the sector fallback wearing a
+       company name — which is what this whole pass replaced. */
+    const { COMPANIES } = require('../../services/v2/aspirationalCompanies');
+    const notes = new Set();
+    const leads = new Set();
+    COMPANIES.forEach(([name]) => {
+      const p = profiles.profileFor(name, 'Software Engineer');
+      notes.add(p.note);
+      leads.add(p.resume);
+    });
+    expect(notes.size).toBe(COMPANIES.length);
+    expect(leads.size).toBe(COMPANIES.length);
+  });
+
+  it('says what the page should lead with, not only what they look for', () => {
+    /*
+     * "What does Google look for" is answered everywhere in adjectives. What
+     * a student cannot look up is which of their own true facts to put at the
+     * top for this employer — and it differs sharply between them.
+     */
+    const g = profiles.profileFor('Amazon', 'Backend Engineer').resume;
+    const t = profiles.profileFor('Infosys', 'Backend Engineer').resume;
+    expect(g).toBeTruthy();
+    expect(t).toBeTruthy();
+    expect(g).not.toBe(t);
+    expect(profiles.noteFor('Amazon', 'Backend Engineer')).toMatch(/Lead the page with/);
+  });
+
+  it('claims only what it can honestly claim about its source', () => {
+    /* It knows published postings and engineering writing. It does not know
+       anybody's internal shortlisting history, and must not imply it. */
+    const src = require('fs').readFileSync(
+      require('path').join(__dirname, '../../services/v2/companyProfiles.js'), 'utf8',
+    );
+    expect(src).toMatch(/PUBLISHED postings/);
+    expect(src).toMatch(/not anybody's internal shortlisting data/i);
+  });
+});
+
+describe('the row you opened is the row it tailors for', () => {
+  it('tailors for OpenAI when OpenAI is the row, not for whoever is first', async () => {
+    /*
+     * Every target row carries the SAME title — the role being aimed at — so
+     * matching on the title alone returned whichever came first in the list.
+     * Somebody opened OpenAI, pressed Tailor, and the page was rewritten for
+     * Google: the sentence said OpenAI, the lookup read "backend engineer",
+     * and Google was row one.
+     */
+    const a = agent();
+    const base = await turn(a, RESUME, null);
+    const jobs = ['Google', 'OpenAI', 'Netflix', 'JPMorgan Chase', 'Infosys'].map((company) => ({
+      title: 'Backend Engineer', company, location: 'Global', url: '',
+      aspirational: true, description: '', tags: [],
+    }));
+
+    for (const company of ['OpenAI', 'Netflix', 'JPMorgan Chase', 'Infosys', 'Google']) {
+      const session = { ...JSON.parse(JSON.stringify(base.session)), jobs };
+      // eslint-disable-next-line no-await-in-loop
+      const out = await turn(a, `I want to tailor my resume for the Backend Engineer role at ${company}`, session);
+      expect(out.session.pickedJob.company).toBe(company);
+    }
+  });
+
+  it('puts that employer\'s guidance on the finished page, not only on a question', async () => {
+    /*
+     * It was said once, on the question about which projects to build, and
+     * then never again — so the student who answered that question got the
+     * finished resume with no word about what this employer reads for. The
+     * advice belongs next to the artefact it applies to.
+     */
+    const a = agent();
+    const base = await turn(a, RESUME, null);
+    base.session.jobs = [{
+      title: 'Backend Engineer', company: 'JPMorgan Chase', location: 'Global', url: '',
+      aspirational: true, description: '', tags: [],
+    }];
+    let out = await turn(a, 'I want to tailor my resume for the Backend Engineer role at JPMorgan Chase', base.session);
+    for (let i = 0; i < 20 && out.kind === 'ask'; i += 1) {
+      const answer = out.session.asked === 'confirmtailor'
+        ? 'yes'
+        : (choices(out).slice(0, 3).map((c) => c.value).join(', ') || 'skip');
+      // eslint-disable-next-line no-await-in-loop
+      out = await turn(a, answer, out.session);
+    }
+    expect(out.kind).toBe('build');
+    expect(out.reply).toMatch(/JPMorgan Chase screens backend engineer on correctness, controls/);
+    expect(out.reply).toMatch(/Lead the page with/);
+  });
+
+  it('still finds the row by number when no company is named', async () => {
+    const a = agent();
+    const base = await turn(a, RESUME, null);
+    base.session.jobs = [
+      { title: 'Backend Engineer', company: 'stripe', location: 'Remote', url: 'https://x/1', description: 'Java.', tags: [] },
+      { title: 'Backend Engineer', company: 'airbnb', location: 'Remote', url: 'https://x/2', description: 'Go.', tags: [] },
+    ];
+    const out = await turn(a, 'tailor number 2', base.session);
+    expect(out.session.pickedJob.company).toBe('airbnb');
+  });
 });
 
 /* ---------------------------------------------------- THE TAILOR THAT USES IT */

@@ -2337,6 +2337,18 @@ function deliver(res, session, packetOrBuilt, kindNote) {
     session.plannedSkills = wantedSkills;
   }
 
+  /*
+   * What this employer reads for, on the page they are being handed.
+   *
+   * It was said once, on the question about which projects to build, and then
+   * never again — so the student who answered that question got the finished
+   * resume with no word about what Amazon leads with versus what a bank leads
+   * with. The advice belongs next to the artefact it applies to.
+   */
+  const houseNote = isPacket && session.pickedJob
+    ? companyProfiles.noteFor(session.pickedJob.company, session.target || session.scoreTarget || '')
+    : '';
+
   const learnNote = isPacket && wantedSkills.length
     ? [
       `Added to your page under LEARNING: ${wantedSkills.join(', ')} — marked as not yet true, because they are not yet true.`,
@@ -2357,7 +2369,7 @@ function deliver(res, session, packetOrBuilt, kindNote) {
 
   return res.json({
     ok: true, kind: 'build',
-    reply: [header, kindNote, updatedNote, learnNote, coverOffer].filter(Boolean).join('\n\n'),
+    reply: [header, kindNote, houseNote, updatedNote, learnNote, coverOffer].filter(Boolean).join('\n\n'),
     text,
     report: scanResume(text, session.scoreTarget),
     missing: isPacket ? [] : packetOrBuilt.missing,
@@ -2457,8 +2469,25 @@ router.post('/chat', upload.single('file'), async (req, res) => {
      */
     if (Array.isArray(session.jobs) && session.jobs.length && /(tailor|apply)/.test(low)) {
       const numbered = low.match(/\b(?:tailor|number|row|option|no\.?|#)\s*(\d{1,2})\b/) || low.match(/\b(\d{1,2})\b/);
-      const named = session.jobs.find((j) =>
-        j.title && low.includes(String(j.title).toLowerCase().slice(0, 24)));
+      /*
+       * The company decides which row, not the title.
+       *
+       * Every target row carries the SAME title — the role being aimed at —
+       * so matching on the title alone returned whichever came first in the
+       * list. Somebody opened OpenAI, pressed Tailor, and the page was
+       * rewritten for Google: the sentence said OpenAI, the lookup read
+       * "backend engineer", and Google was row one. The company is the only
+       * part of "the <role> role at <company>" that tells two rows apart, so
+       * it is matched first, and the title is the tie-break within a company
+       * that has several openings.
+       */
+      const hasCompany = (j) => j.company &&
+        low.includes(String(j.company).toLowerCase());
+      const hasTitle = (j) => j.title &&
+        low.includes(String(j.title).toLowerCase().slice(0, 24));
+      const named = session.jobs.find((j) => hasCompany(j) && hasTitle(j))
+        || session.jobs.find(hasCompany)
+        || session.jobs.find(hasTitle);
       const job = named || (numbered ? session.jobs[parseInt(numbered[1], 10) - 1] : null);
       if (job) {
         session.target = job.title;
