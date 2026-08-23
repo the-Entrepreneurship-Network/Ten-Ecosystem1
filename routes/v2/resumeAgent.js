@@ -2754,8 +2754,25 @@ function deliver(res, session, packetOrBuilt, kindNote) {
 
   /* The count is the list. It used to say seventeen and print four, because
      the skills were sliced after they were counted. */
+  /*
+   * One line when the page carries more than was chosen, and why.
+   *
+   * Adding work somebody did not pick is a decision made on their behalf. It
+   * is the right decision — a page below the bar is filtered before a person
+   * reads it, and "you chose these three and they were not enough" is what a
+   * good mentor says out loud — but it has to be said, not slipped in.
+   */
+  const ov = session.overruled;
+  const overruledNote = ov && ov.added && ov.added.length
+    ? (ov.declined
+      ? `You did not want to pick any, so I chose the ${ov.added.length} that get this page past the bar${ov.company ? ` for ${ov.company}` : ''}: ${ov.added.slice(0, 6).join(', ')}. Swap any of them for work you would rather do — the page holds as long as the replacement is the same size.`
+      : `Your picks are on the page and stay there. ${ov.added.length} more went on behind them, because your picks alone did not cover what ${ov.company || 'this employer'} screens this role on${ov.theirPriorities.length ? ` — specifically ${ov.theirPriorities.slice(0, 3).join(', ')}` : ''}.`)
+    : '';
+
   const plan = planned.length
     ? [
+      overruledNote,
+      overruledNote ? '' : null,
       `Before you attach this: ${planned.length} thing${planned.length === 1 ? '' : 's'} on the page are marked planned and are not true yet.`,
       ...planned.flatMap((p) => [
         '',
@@ -3939,6 +3956,37 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         if (packet.after) packet.after.checker = lift.projected;
         /* What went on is what the reply lists the steps for. */
         session.plannedGuides = lift.used;
+
+        /*
+         * Say when the picks were overruled, and why.
+         *
+         * A student picking from a list of thirty will sometimes pick the
+         * weakest three for the job they are aiming at, and declining the
+         * suggestions entirely is a click. Either way the page still has to
+         * clear the bar, so the strongest work for that employer and that
+         * role goes on regardless — and that is a decision made ON somebody's
+         * behalf, which they are owed an explanation for rather than a silent
+         * page with more on it than they chose.
+         *
+         * Their picks are never removed. This only names what was added past
+         * them, and which of the employer's own priorities it covers.
+         */
+        const chosen = new Set(pickedTerms.map((t) => String(t).toLowerCase()));
+        const addedPast = lift.used
+          .filter((p) => !chosen.has(String(p.term).toLowerCase()))
+          .map((p) => p.term);
+        const housePriority = new Set(
+          (houseNow ? houseNow.projects : []).slice(0, 8).map((t) => String(t).toLowerCase()),
+        );
+        session.overruled = {
+          picked: pickedTerms,
+          added: addedPast,
+          /* The ones the employer specifically screens on — the reason the
+             page was not left as chosen. */
+          theirPriorities: addedPast.filter((t) => housePriority.has(String(t).toLowerCase())),
+          declined: pickedTerms.length === 0,
+          company: session.pickedJob ? session.pickedJob.company : '',
+        };
       }
       session.bestScore = Math.max(session.bestScore || 0,
         scanResume(packet.resume, session.scoreTarget).score);

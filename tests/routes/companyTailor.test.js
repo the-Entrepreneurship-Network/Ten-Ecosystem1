@@ -182,6 +182,70 @@ describe('the profile knows one employer from another', () => {
   });
 });
 
+describe('a wrong pick is overruled, and the student is told so', () => {
+  const RESUME_B = RESUME;
+  const tailorWith = async (mode) => {
+    const a = agent();
+    let out = await turn(a, RESUME_B, null);
+    out.session.jobs = [{
+      title: 'Backend Engineer', company: 'Netflix', location: 'Global', url: '',
+      aspirational: true, description: '', tags: [],
+    }];
+    out = await turn(a, 'I want to tailor my resume for the Backend Engineer role at Netflix', out.session);
+    for (let i = 0; i < 30 && out.kind === 'ask'; i += 1) {
+      const opts = choices(out);
+      let answer;
+      if (out.session.asked === 'confirmtailor') answer = 'yes';
+      else if (!opts.length) answer = 'skip';
+      else if (out.session.asked === 'addproject') {
+        answer = mode === 'none' ? 'skip'
+          : mode === 'worst' ? opts[opts.length - 1].value
+            : opts.slice(0, 2).map((c) => c.value).join(', ');
+      } else answer = opts.slice(0, 2).map((c) => c.value).join(', ');
+      // eslint-disable-next-line no-await-in-loop
+      out = await turn(a, answer, out.session);
+    }
+    return out;
+  };
+
+  it('adds the right work anyway when the weakest option was chosen', async () => {
+    /*
+     * Somebody picking from a list of thirty will sometimes pick the weakest
+     * one for the job they are aiming at. Their pick is never removed — it is
+     * their plan and they may have a reason — but the page still has to clear
+     * the bar, so what the employer actually screens on goes on behind it.
+     */
+    const out = await tailorWith('worst');
+    expect(out.report.score).toBeGreaterThanOrEqual(92);
+    expect(out.reply).toMatch(/Your picks are on the page and stay there/);
+    expect(out.reply).toMatch(/what Netflix screens this role on/);
+  });
+
+  it('adds it anyway when they decline every suggestion, and says which', async () => {
+    /* Declining is a click. A page below the bar is filtered before a human
+       reads it, so the work goes on and the decision is stated out loud
+       rather than slipped in. */
+    const out = await tailorWith('none');
+    expect(out.report.score).toBeGreaterThanOrEqual(92);
+    expect(out.reply).toMatch(/You did not want to pick any, so I chose/);
+    expect(out.reply).toMatch(/chaos testing|circuit breakers|streaming/);
+  });
+
+  it('keeps good picks and is honest that more still went on', async () => {
+    /*
+     * Picking the two strongest options is not the same as picking enough:
+     * two projects rarely carry a page to the bar on their own. The note has
+     * to stay accurate rather than flattering — the picks are kept, and what
+     * went on behind them is named either way.
+     */
+    const out = await tailorWith('best');
+    expect(out.report.score).toBeGreaterThanOrEqual(92);
+    expect(out.reply).toMatch(/Your picks are on the page and stay there/);
+    /* And never the wording for somebody who picked nothing. */
+    expect(out.reply).not.toMatch(/You did not want to pick any/);
+  });
+});
+
 describe('the work depends on the company AND the role, never on one alone', () => {
   const COMPANIES = ['Google', 'Amazon', 'Netflix', 'JPMorgan Chase', 'Infosys', 'Razorpay', 'TSMC', 'Anthropic'];
   const ROLES = ['Software Engineer', 'Data Scientist', 'DevOps Engineer', 'UI/UX Designer', 'Cybersecurity Analyst'];
