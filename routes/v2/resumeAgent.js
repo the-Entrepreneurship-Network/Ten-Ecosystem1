@@ -1,4 +1,4 @@
-/*
+﻿/*
  * The Resume Portal agent — scores a resume the way an ATS does, and builds
  * one that survives the same scoring.
  *
@@ -2097,11 +2097,25 @@ function consumeAnswer(session, field, msg) {
       if (!session.declined.includes('roledates')) session.declined.push('roledates');
       return;
     }
+    /*
+     * Skip past a role that already has dates. Do not stop at it.
+     *
+     * The walk gave up the moment it saw any date range, so a page with two
+     * roles — one dated, one not — kept the undated one undated however many
+     * times this was answered, and sat at 5/10 for a check the student had
+     * just supplied the missing half of. It is the first role WITHOUT dates
+     * that the answer belongs to, wherever it sits.
+     *
+     * One role per answer, deliberately: the same span pasted onto every
+     * undated role would be inventing dates for jobs nobody asked about. If
+     * another role is still bare the question comes back for that one, and
+     * skipping ends it.
+     */
     let done = false;
     session.resumeText = String(session.resumeText || '').split('\n').map((line) => {
       if (done || !line.trim()) return line;
       if (isHeading(line) || /^[-*•]/.test(line.trim())) return line;
-      if (RE_DATE_RANGE.test(line)) { done = true; return line; }
+      if (RE_DATE_RANGE.test(line)) return line;
       /* The first role-shaped line without a date on it. */
       if (/\|/.test(line) || RE_JOB_TITLE_LINE.test(line)) {
         done = true;
@@ -2686,6 +2700,34 @@ function tailorClimb(packet, session) {
       everything, picked, house ? house.skills : [], 40, 200);
     if (forced.projected > lift.projected) lift = forced;
   }
+
+  /*
+   * The agent checks its own work before it hands it over.
+   *
+   * Everything above chooses what to add by projection. This re-reads the
+   * finished page as an ATS would, and if the result is still under the bar
+   * it goes back and adds more rather than shipping and hoping. It is the
+   * difference between a tool that produces a page and one that produces a
+   * page it has verified — and it is why a resume that came back instantly at
+   * 72 was never going to get anybody shortlisted.
+   *
+   * Bounded, because a loop that cannot fail to terminate is worth more than
+   * one that might: three passes, and the ceiling is reported honestly if the
+   * facts on the page genuinely cannot reach the bar.
+   */
+  for (let pass = 0; pass < 3; pass += 1) {
+    const check = scanResume(lift.text || packet.resume, session.scoreTarget).score;
+    if (check >= FLOOR) break;
+    const wider = [
+      ...bench,
+      ...skillPlan.plansFor(Object.values(skillPlan.DEEP_BENCH).flat(), owned, 200),
+    ];
+    const again = climbToGoal(packet.resume, session.scoreTarget, Math.max(goal, FLOOR),
+      wider, picked, house ? house.skills : [], 16 + pass * 8, 60 + pass * 60);
+    if (again.projected <= lift.projected) break;
+    lift = again;
+  }
+  session.verified = scanResume(lift.text || packet.resume, session.scoreTarget).score;
 
   const startedAt = scanResume(packet.resume, session.scoreTarget).score;
   if (lift.projected >= startedAt && lift.used.length) {
@@ -3943,14 +3985,39 @@ router.post('/chat', upload.single('file'), async (req, res) => {
        * done to it, and that alone is the difference between the high
        * eighties and the ninety this is meant to deliver. It is one pick.
        */
-      if (!session.details.roleDates && !declinedNow.includes('roledates') &&
-          (scanResume(session.resumeText, session.scoreTarget).checks
-            .find((c) => c.id === 'dates') || {}).earned === 0) {
+      /*
+       * Asked whenever the check is SHORT, not only when it is empty.
+       *
+       * The trigger was earned === 0, so a page with one dated role and one
+       * bare one sat at 5/10 and was never asked — five points lost on a fact
+       * the student had in their head, because the page was not quite bare
+       * enough to qualify. Ten points, or five, is the difference between the
+       * high eighties and the bar this is meant to clear.
+       */
+      const dateCheck = scanResume(session.resumeText, session.scoreTarget).checks
+        .find((c) => c.id === 'dates') || {};
+      /*
+       * Asked once per bare role, and never more than twice.
+       *
+       * Widening the trigger from "no dates at all" to "not enough dates"
+       * caught the five-point case and reintroduced the oldest bug in this
+       * file: an answer that does not fully close the gap leaves the
+       * condition true, so the identical sentence comes back on the next
+       * turn. Asked once, then never again: a second ask lands as the same
+       * sentence twice in a row, which is the thing this whole file has been
+       * fighting, and the remaining points are reported rather than demanded.
+       */
+      session.dateAsks = session.dateAsks || 0;
+      if (!declinedNow.includes('roledates') && dateCheck.earned < dateCheck.weight
+          && session.dateAsks < 1) {
+        session.dateAsks += 1;
         session.asked = 'roledates';
         return res.json({
           ok: true,
           kind: 'ask',
-          reply: 'Your page has no dates next to any role, which costs it ten points on its own — no ATS can read a history it cannot place in time. When was the most recent one?',
+          reply: dateCheck.earned === 0
+            ? 'Your page has no dates next to any role, which costs it ten points on its own — no ATS can read a history it cannot place in time. When was the most recent one?'
+            : 'One of your roles has no dates beside it, and that is five points an ATS takes off for a history it cannot place in time. When was it?',
           options: optionsFor('roledates', session),
           session,
         });
@@ -4056,136 +4123,16 @@ router.post('/chat', upload.single('file'), async (req, res) => {
        * best-scoring version, and can only move the number upwards.
        */
       const convertedScore = scanResume(packet.resume, session.scoreTarget).score;
-      const climbed = raiseToTarget(packet.resume, session.scoreTarget, session.jd, 100);
-      if (climbed.report.score > convertedScore) {
-        packet.resume = climbed.text;
-        /* The header quotes packet.after; leaving it behind would report the
-           number from before the levers ran. */
-        if (packet.after) packet.after.checker = climbed.report.score;
-      }
-
       /*
-       * Tailoring adds the work, every time, whether or not it was asked for.
+       * One implementation, called from both places.
        *
-       * This is the whole point of the feature and it was reaching almost
-       * nobody. The project question is asked once per session, and on a
-       * resume weak enough to trigger the build interview it gets asked and
-       * answered during the UPLOAD — so tailorPicked was already true by the
-       * time an actual company was chosen, the offer never appeared, nothing
-       * was added, and a real student's page sat at 75 through Amazon, OpenAI
-       * and Adobe alike. That is precisely the report: "it is either keeping
-       * it the same score or decreasing it".
-       *
-       * So the climb runs unconditionally on every tailor, toward a real bar.
-       * Picks lead where there are picks. A decline is a preference about
-       * WHICH work, not a refusal of the score — the brief is explicit that
-       * the projects go on either way — and every line goes on marked
-       * planned, listed in the reply with the steps to make it true, and
-       * gated out of the PDF until it is.
-       *
-       * The best number the page has reached is also a floor, so looking at a
-       * second employer can never cost points that the first one won.
+       * This block and the from-scratch branch were the same sequence
+       * written twice, which is how they drifted: the climb, the floor and
+       * the self-check lived here, and a resume built from scratch got none
+       * of them and shipped at 56. Whatever the agent does for an uploaded
+       * page it now does for a built one, because it is the same function.
        */
-      const TAILOR_GOAL = 95;
-      const beforeClimb = scanResume(packet.resume, session.scoreTarget).score;
-      session.bestScore = Math.max(session.bestScore || 0, session.lastScore || 0);
-      const goalNow = Math.max(TAILOR_GOAL, session.bestScore || 0);
-      const owned = (atsEngine.factLedger(packet.resume).statedSkills || []);
-      const roleNow = session.scoreTarget || session.target || '';
-      const houseNow = session.pickedJob
-        ? companyProfiles.profileFor(session.pickedJob.company, roleNow) : null;
-      const bench = [
-        ...(houseNow ? skillPlan.plansFor(houseNow.projects, owned, 50) : []),
-        ...skillPlan.catalogueFor(roleNow, owned, 50),
-      ];
-      const pickedTerms = (session.plannedGuides || []).map((p) => p.term);
-      let lift = climbToGoal(packet.resume, session.scoreTarget, goalNow,
-        bench, pickedTerms, houseNow ? houseNow.skills : []);
-      /*
-       * Never below the best this session has already shown.
-       *
-       * The climb stops at twelve entries because a resume is one sheet, and
-       * against a bench that scores a little lower that cap left the page a
-       * point or two under the last company's — 93, then 92. Two points lost
-       * for looking at a second employer is exactly the complaint, so when
-       * the cap is what is standing in the way the page is allowed to carry
-       * more rather than come back worse.
-       */
-      if (lift.projected < (session.bestScore || 0)) {
-        const deeper = climbToGoal(packet.resume, session.scoreTarget, goalNow,
-          bench, pickedTerms, houseNow ? houseNow.skills : [], 24, 40);
-        if (deeper.projected > lift.projected) lift = deeper;
-      }
-
-      /*
-       * The floor, and it is not negotiable.
-       *
-       * Ninety-two is where a tailored page starts. Below that an ATS filters
-       * it before a person reads a line of it, so a resume handed back at 72
-       * or 88 has not been tailored, it has been formatted — and handing one
-       * over is the tool failing quietly at the only job it has.
-       *
-       * The climb above stops early by design: twelve entries because a
-       * resume is one sheet, three stale rounds because a bench usually runs
-       * out of ideas before it runs out of entries. Both of those are the
-       * right default and neither is worth a page that gets filtered. When
-       * the floor is not met, the caps come off and the bench widens to every
-       * family — a backend engineer building an observability project or a
-       * data pipeline is doing real, defensible work, and the alternative is
-       * a page nobody reads.
-       */
-      const FLOOR = 92;
-      if (lift.projected < FLOOR) {
-        const everything = [
-          ...bench,
-          ...skillPlan.plansFor(
-            Object.values(skillPlan.DEEP_BENCH).flat(), owned, 200,
-          ),
-        ];
-        const forced = climbToGoal(packet.resume, session.scoreTarget,
-          Math.max(goalNow, FLOOR), everything, pickedTerms,
-          houseNow ? houseNow.skills : [], 40, 200);
-        if (forced.projected > lift.projected) lift = forced;
-      }
-      if (lift.projected >= beforeClimb && lift.used.length) {
-        packet.resume = lift.text;
-        if (packet.after) packet.after.checker = lift.projected;
-        /* What went on is what the reply lists the steps for. */
-        session.plannedGuides = lift.used;
-
-        /*
-         * Say when the picks were overruled, and why.
-         *
-         * A student picking from a list of thirty will sometimes pick the
-         * weakest three for the job they are aiming at, and declining the
-         * suggestions entirely is a click. Either way the page still has to
-         * clear the bar, so the strongest work for that employer and that
-         * role goes on regardless — and that is a decision made ON somebody's
-         * behalf, which they are owed an explanation for rather than a silent
-         * page with more on it than they chose.
-         *
-         * Their picks are never removed. This only names what was added past
-         * them, and which of the employer's own priorities it covers.
-         */
-        const chosen = new Set(pickedTerms.map((t) => String(t).toLowerCase()));
-        const addedPast = lift.used
-          .filter((p) => !chosen.has(String(p.term).toLowerCase()))
-          .map((p) => p.term);
-        const housePriority = new Set(
-          (houseNow ? houseNow.projects : []).slice(0, 8).map((t) => String(t).toLowerCase()),
-        );
-        session.overruled = {
-          picked: pickedTerms,
-          added: addedPast,
-          /* The ones the employer specifically screens on — the reason the
-             page was not left as chosen. */
-          theirPriorities: addedPast.filter((t) => housePriority.has(String(t).toLowerCase())),
-          declined: pickedTerms.length === 0,
-          company: session.pickedJob ? session.pickedJob.company : '',
-        };
-      }
-      session.bestScore = Math.max(session.bestScore || 0,
-        scanResume(packet.resume, session.scoreTarget).score);
+      tailorClimb(packet, session);
 
       /*
        * A second conversion of an already-converted page changes nothing, and

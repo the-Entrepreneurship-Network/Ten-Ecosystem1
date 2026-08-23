@@ -182,6 +182,72 @@ describe('the profile knows one employer from another', () => {
   });
 });
 
+describe('dates, and checking its own work before handing it over', () => {
+  /* One role dated, one bare — the case that scored 5/10 and was never asked
+     about, because the trigger only fired on a page with no dates at all. */
+  const HALF_DATED = [
+    'BISHAL NAG', 'Backend Engineer', 'b@e.com | +91 78639 92542 | github.com/b',
+    '', 'EXPERIENCE',
+    'Backend Engineer | Zeta | Jan 2023 - Present',
+    '- Built REST APIs in Java serving 5,000 requests a day, cutting latency 30%',
+    'Web Development Intern | Acme',
+    '- Built the reporting page used by 200 staff',
+    '', 'SKILLS', 'Java, SQL', '', 'EDUCATION', 'B.Tech CS, KIIT',
+  ].join('\n');
+
+  const tailor = async () => {
+    const a = agent();
+    let out = await turn(a, HALF_DATED, null);
+    out.session.jobs = [{
+      title: 'Backend Engineer', company: 'Google', location: 'Global', url: '',
+      aspirational: true, description: '', tags: [],
+    }];
+    out = await turn(a, 'I want to tailor my resume for the Backend Engineer role at Google', out.session);
+    const asked = [];
+    for (let i = 0; i < 30 && out.kind === 'ask'; i += 1) {
+      asked.push(out.session.asked);
+      const opts = choices(out);
+      // eslint-disable-next-line no-await-in-loop
+      out = await turn(a, out.session.asked === 'confirmtailor' ? 'yes' : (opts.length ? opts[0].value : 'skip'), out.session);
+    }
+    return { out, asked };
+  };
+
+  it('asks when the dates are short, not only when there are none', async () => {
+    const { asked } = await tailor();
+    expect(asked).toContain('roledates');
+  });
+
+  it('dates the role that is bare, skipping past the one already dated', async () => {
+    /*
+     * The walk stopped at the first date range it saw, so a page with one
+     * dated role and one bare one stayed bare however many times this was
+     * answered — 5/10 for a check the student had just supplied the missing
+     * half of.
+     */
+    const { out } = await tailor();
+    const dates = require('../../routes/v2/resumeAgent')
+      .scanResume(out.text, out.session.scoreTarget).checks.find((c) => c.id === 'dates');
+    expect(dates.earned).toBe(dates.weight);
+  });
+
+  it('asks once and never repeats the sentence', async () => {
+    const { asked } = await tailor();
+    expect(asked.filter((f) => f === 'roledates').length).toBe(1);
+  });
+
+  it('re-reads the finished page and records what it verified', async () => {
+    /*
+     * Everything before this chooses what to add by projection. This re-reads
+     * the result as an ATS would and goes back for more if it is short —
+     * bounded to three passes, so it cannot fail to terminate.
+     */
+    const { out } = await tailor();
+    expect(out.session.verified).toBeGreaterThanOrEqual(92);
+    expect(out.session.verified).toBe(out.report.score);
+  });
+});
+
 describe('a resume built from scratch clears the same bar as one uploaded', () => {
   const TYPED = {
     name: 'Bishal Nag',
