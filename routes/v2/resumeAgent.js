@@ -670,8 +670,26 @@ function buildResume(detailsInput) {
    */
   const skills = splitItems(d.skills);
 
-  const expItems = splitLines(d.experience);
-  const projItems = splitLines(d.projects);
+  /*
+   * The same answer twice is one thing, not two.
+   *
+   * "Which projects have you built?" and the follow-up are both lists, and
+   * picking the same entry in both is a click apart — so a page came back
+   * with "Built API somebody else could use" printed twice under PROJECTS.
+   * Duplicated lines are also the fastest way to look careless to the person
+   * reading the resume, and they cost length for nothing.
+   */
+  const unique = (list) => {
+    const seen = new Set();
+    return list.filter((x) => {
+      const k = String(x).trim().toLowerCase();
+      if (!k || seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  };
+  const expItems = unique(splitLines(d.experience));
+  const projItems = unique(splitLines(d.projects));
   /*
    * The degree, the college and the year make an education line even when
    * nobody assembled one.
@@ -1893,7 +1911,26 @@ function ledgerFromDetails(d) {
     phone: d.phone || null,
     link: d.linkedin || d.github || null,
     summaryLines: [],
-    roles: items(d.experience).map((e) => ({ header: '', hasDates: /\d{4}/.test(e), bullets: [e] })),
+    /*
+     * A heading is a heading and a bullet is a bullet.
+     *
+     * Every line of the experience block was mapped to a role whose single
+     * bullet was that line — so "Google | 2025 - Present" became an
+     * achievement, and a page listing three internships came back claiming
+     * "- Google" three times. Lines that carry an employer and dates open a
+     * role; lines marked as bullets belong to the role above them.
+     */
+    roles: items(d.experience).reduce((acc, line) => {
+      const t = String(line).trim();
+      if (/^[-*•]/.test(t)) {
+        const bullet = t.replace(/^[-*•]\s*/, '');
+        if (acc.length) acc[acc.length - 1].bullets.push(bullet);
+        else acc.push({ header: '', hasDates: false, bullets: [bullet] });
+        return acc;
+      }
+      acc.push({ header: t, hasDates: /\d{4}/.test(t), bullets: [] });
+      return acc;
+    }, []),
     projects: items(d.projects).map((p) => ({ name: '', bullets: [p] })),
     education: items(d.education),
     certifications: items(d.certifications),
@@ -1919,17 +1956,47 @@ function ledgerFromDetails(d) {
  */
 function rebuildExperience(d) {
   if (!d.internship) return;
-  /* Header line first so the dates parse, then the work beneath it — and the
-     work is what is LEFT after the header, not the whole answer, or the page
-     says the heading twice. */
-  const text = String(d.internship).trim();
-  const cut = text.search(/[.\n]/);
-  const first = cut > 0 ? text.slice(0, cut).trim() : text;
-  const rest = cut > 0 ? text.slice(cut + 1).trim() : '';
-  const header = [first, d.internshipdates].filter(Boolean).join(' | ');
-  const paid = d.stipend === 'paid' ? ' (paid internship)' : '';
-  d.experience = [header + paid, rest, d.internship2, d.internship3]
-    .filter(Boolean).join('\n');
+  /*
+   * Where they worked is a heading. It is not an achievement.
+   *
+   * The question became a list of employers, so the answer is now a company
+   * name rather than a paragraph — and the old assembly put the second and
+   * third internships in as loose lines under the first, where the ledger
+   * read them as bullets. A page came back with an EXPERIENCE section whose
+   * achievements were "- Google" and "- Google". Nobody claimed to have done
+   * Google.
+   *
+   * Each internship gets its own dated header, and anything the student
+   * actually typed past the company name stays as the work beneath it.
+   */
+  const paid = d.stipend && !/^unpaid$/i.test(d.stipend) ? ' (paid internship)' : '';
+  const one = (answer, dates, first) => {
+    const text = String(answer || '').trim();
+    if (!text) return [];
+    /* A typed answer may carry the work after the employer — "Zeta Labs.
+       Built the reporting service" — and that half is a bullet. */
+    const cut = text.search(/[.\n]/);
+    const employer = cut > 0 ? text.slice(0, cut).trim() : text;
+    const work = cut > 0 ? text.slice(cut + 1).trim() : '';
+    /*
+     * Always a pipe, so the line reads as a header rather than a claim.
+     *
+     * A header is recognised by its dates or its separator, and the second
+     * and third internships are never asked for dates — so "Google" arrived
+     * looking like prose and was verb-fronted into "- Built Google". The role
+     * word is what the student picked the employer for, and it is true of any
+     * internship, so it carries the line and the parser gets its separator.
+     */
+    const role = d.role || 'Intern';
+    const header = [employer, dates || role].filter(Boolean).join(' | ');
+    return [header + (first ? paid : ''), ...(work ? [`- ${work}`] : [])];
+  };
+
+  d.experience = [
+    ...one(d.internship, d.internshipdates, true),
+    ...one(d.internship2, ''),
+    ...one(d.internship3, ''),
+  ].filter(Boolean).join('\n');
 }
 
 /** Where each interview answer lands. */
@@ -2215,6 +2282,10 @@ function consumeAnswer(session, field, msg) {
        For confirmkw this is the Rezi-style confirmation: naming where a JD
        term was used is what makes it claimable. */
     d.experience = [d.experience, msg.trim()].filter(Boolean).join('\n');
+    /* And recorded under its own name, so the question knows it was answered.
+       These are derived from the ledger, and an answer that does not change
+       the ledger left the question asking itself forever. */
+    d[field] = msg.trim();
     /*
      * Added to the resume itself, not only to the interview answers.
      *
@@ -2281,9 +2352,22 @@ function nextQuestion(session) {
    */
   const OWNED_BY_BANK = ['name', 'email', 'phone', 'link', 'skills', 'projects', 'education'];
   iv.questions = iv.questions.filter((q) => !OWNED_BY_BANK.includes(q.field));
-  /* Declined questions stay answered — "skip" is an answer. */
+  /*
+   * Declined questions stay answered — "skip" is an answer. So do answered
+   * ones, which sounds obvious and was not true.
+   *
+   * The engine derives its questions from the ledger, so a question whose
+   * answer does not change the ledger comes back forever: "one real number
+   * for your strongest bullet" is asked when no bullet carries a number, and
+   * typing the number does not put it in a bullet, so it was asked again on
+   * the next turn, and the next. One walk-through collected seventeen of
+   * them. Anything already sitting in details has been answered, whatever it
+   * did or did not do to the page.
+   */
   const declined = session.declined || [];
-  const open = iv.questions.filter((q) => !declined.includes(q.field));
+  const answered = Object.keys(d).filter((k) => String(d[k] || '').trim());
+  const open = iv.questions.filter((q) =>
+    !declined.includes(q.field) && !answered.includes(q.field));
   return { iv, question: open[0] || null };
 }
 
@@ -2400,10 +2484,18 @@ function climbToGoal(text, target, goal, plans, picked = [], houseSkills = [], o
     ...plans.filter((p) => !picked.some((t) => String(t).toLowerCase() === String(p.term).toLowerCase())),
   ];
 
-  /* Both writers APPEND their block, so each round is composed from the
-     original page rather than from the previous round's output — building on
-     the output stacks a second PLANNED PROJECTS heading on every iteration. */
-  const base = String(text || '');
+  /*
+   * Both writers APPEND their block, so each round is composed from the
+   * original page rather than from the previous round's output — building on
+   * the output stacks a second PLANNED PROJECTS heading on every iteration.
+   *
+   * And the page arriving here may ALREADY carry planned work, because the
+   * interview offers projects too: composing on top of that produced a second
+   * heading and the same project listed twice with two identical sets of
+   * steps. The climb decides the whole block every time, so it starts from
+   * the page as the student's own facts leave it.
+   */
+  const base = skillPlan.withoutPlanned(String(text || ''));
   /*
    * The employer's named skills sit in LEARNING beside the ones the projects
    * carry. A student building Netflix's chaos-testing project should also see
@@ -2515,6 +2607,110 @@ function climbReport(text, target) {
     .sort((a, b) => (b.weight - b.earned) - (a.weight - a.earned))
     .slice(0, 3)
     .map((c) => `${c.id} (${c.detail || c.fix || 'incomplete'})`);
+}
+
+/**
+ * Take a converted page to the bar, and record what had to be added.
+ *
+ * The tailor branch has done this since the score complaint was fixed. The
+ * build-from-scratch branch never did — it converted the page and delivered
+ * it — so a student who answered every question and picked a job was handed
+ * 56/100 while an uploaded resume aimed at the same job came back at 96. Same
+ * errand, same employer, half the score, because the two paths deliver from
+ * different places in the router.
+ *
+ * Extracted so the from-scratch path runs the identical sequence: every
+ * honest wording lever first, then the work this employer and this role call
+ * for, then the floor.
+ */
+function tailorClimb(packet, session) {
+  const FLOOR = 92;
+  const TAILOR_GOAL = 95;
+  const before = scanResume(packet.resume, session.scoreTarget).score;
+  session.bestScore = Math.max(session.bestScore || 0, session.lastScore || 0);
+  const goal = Math.max(TAILOR_GOAL, session.bestScore || 0);
+
+  const climbed = raiseToTarget(packet.resume, session.scoreTarget, session.jd, 100);
+  if (climbed.report.score > before) {
+    packet.resume = climbed.text;
+    if (packet.after) packet.after.checker = climbed.report.score;
+  }
+
+  const owned = (atsEngine.factLedger(packet.resume).statedSkills || []);
+  const role = session.scoreTarget || session.target || '';
+  const house = session.pickedJob
+    ? companyProfiles.profileFor(session.pickedJob.company, role) : null;
+  /*
+   * One entry per project, however many lists it appears on.
+   *
+   * The employer's bench and the role's catalogue overlap by design — the
+   * sharpest work is on both — and concatenating them without deduping put
+   * the same project on the page twice: "An API somebody else could use"
+   * printed as two separate planned entries with two identical sets of
+   * steps. Each list dedupes internally; nothing was deduping between them.
+   */
+  const seenBench = new Set();
+  const bench = [
+    ...(house ? skillPlan.plansFor(house.projects, owned, 50) : []),
+    ...skillPlan.catalogueFor(role, owned, 50),
+  ].filter((p) => {
+    /*
+     * Deduped on the BUILD, not on the term.
+     *
+     * Several terms share one project — "rest api" and "api design" both
+     * produce "An API somebody else could use" — so keying on term-and-build
+     * let two entries through that render as the identical line, and the page
+     * carried it twice with two identical sets of steps. What the student
+     * sees is the build, so that is what has to be unique.
+     */
+    const k = String(p.build).toLowerCase();
+    if (seenBench.has(k)) return false;
+    seenBench.add(k);
+    return true;
+  });
+  const picked = (session.plannedGuides || []).map((p) => p.term);
+
+  let lift = climbToGoal(packet.resume, session.scoreTarget, goal, bench, picked,
+    house ? house.skills : []);
+  if (lift.projected < (session.bestScore || 0)) {
+    const deeper = climbToGoal(packet.resume, session.scoreTarget, goal, bench, picked,
+      house ? house.skills : [], 24, 40);
+    if (deeper.projected > lift.projected) lift = deeper;
+  }
+  if (lift.projected < FLOOR) {
+    const everything = [
+      ...bench,
+      ...skillPlan.plansFor(Object.values(skillPlan.DEEP_BENCH).flat(), owned, 200),
+    ];
+    const forced = climbToGoal(packet.resume, session.scoreTarget, Math.max(goal, FLOOR),
+      everything, picked, house ? house.skills : [], 40, 200);
+    if (forced.projected > lift.projected) lift = forced;
+  }
+
+  const startedAt = scanResume(packet.resume, session.scoreTarget).score;
+  if (lift.projected >= startedAt && lift.used.length) {
+    packet.resume = lift.text;
+    if (packet.after) packet.after.checker = lift.projected;
+    session.plannedGuides = lift.used;
+
+    const chosen = new Set(picked.map((t) => String(t).toLowerCase()));
+    const addedPast = lift.used
+      .filter((p) => !chosen.has(String(p.term).toLowerCase()))
+      .map((p) => p.term);
+    const priority = new Set(
+      (house ? house.projects : []).slice(0, 8).map((t) => String(t).toLowerCase()),
+    );
+    session.overruled = {
+      picked,
+      added: addedPast,
+      theirPriorities: addedPast.filter((t) => priority.has(String(t).toLowerCase())),
+      declined: picked.length === 0,
+      company: session.pickedJob ? session.pickedJob.company : '',
+    };
+  }
+  session.bestScore = Math.max(session.bestScore || 0,
+    scanResume(packet.resume, session.scoreTarget).score);
+  return packet;
 }
 
 /** The finished job, in one response the client already knows how to render. */
@@ -4033,11 +4229,20 @@ router.post('/chat', upload.single('file'), async (req, res) => {
          */
         session.convertedRepeats = (session.convertedRepeats || 0) + 1;
 
-        if (session.convertedRepeats === 2 && blocked.needFact) {
-          session.command = 'raise';
-          return ask('metric',
-            `Still ${blocked.report.score}/100, and formatting cannot add another point. Give me ${blocked.needFact.ask} and I will put it in — or say skip and this is the honest version.`);
-        }
+        /*
+         * The metric question is gone, and it took a loop with it.
+         *
+         * "Give me one real number for your strongest bullet" is a typed
+         * answer, which the brief does not allow, and it was the last one
+         * hiding in this branch. It also failed to terminate: a page that
+         * converts to itself re-enters here on every turn, so the question
+         * came back seventeen times in one walk-through — asked, answered,
+         * asked again, which is the repeat bug in its oldest costume.
+         *
+         * Nothing is lost by removing it. The ceiling below already names the
+         * three facts that would move the number, and the climb has already
+         * added every project and skill that can move it without one.
+         */
 
         if (session.convertedRepeats >= 3) {
           session.command = null;
@@ -5050,12 +5255,13 @@ router.post('/chat', upload.single('file'), async (req, res) => {
           mode: 'CONVERT',
         });
         session.command = 'tailor';
+        /* The same climb an uploaded resume gets — this branch used to
+           convert the page and stop, which is why building from scratch
+           delivered 56 where uploading delivered 96. */
+        tailorClimb(packet, session);
         session.resumeText = packet.resume || built.text;
-        return deliver(res, session, packet, [
-          `Built and tailored for ${j.title} at ${j.company}.`,
-          companyProfiles.noteFor(j.company, session.target || j.title),
-          'Say "make it 96" — or any number — and I will name the projects and skills that get it there.',
-        ].join(' '));
+        return deliver(res, session, packet,
+          `Built and tailored for ${j.title} at ${j.company}. ${companyProfiles.noteFor(j.company, session.target || j.title)}`);
       }
 
       return deliver(res, session, built, session.jobRole

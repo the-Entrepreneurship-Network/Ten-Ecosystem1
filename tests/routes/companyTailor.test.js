@@ -182,6 +182,72 @@ describe('the profile knows one employer from another', () => {
   });
 });
 
+describe('a resume built from scratch clears the same bar as one uploaded', () => {
+  const TYPED = {
+    name: 'Bishal Nag',
+    email: 'bishal.nag@gmail.com',
+    phone: '+91 78639 92542',
+    github: 'github.com/bishalnag',
+    linkedin: 'linkedin.com/in/bishalnag',
+  };
+
+  const buildFromScratch = async () => {
+    const a = agent();
+    let out = await turn(a, 'build me a resume', null);
+    for (let i = 0; i < 50; i += 1) {
+      if (out.kind === 'ask') {
+        const opts = choices(out);
+        const typed = TYPED[out.session.asked];
+        // eslint-disable-next-line no-await-in-loop
+        out = await turn(a, typed !== undefined ? typed : (opts.length ? opts[0].value : 'skip'), out.session);
+      } else if (out.jobs) {
+        // eslint-disable-next-line no-await-in-loop
+        out = await turn(a, `I want to tailor my resume for the ${out.jobs[0].title} role at ${out.jobs[0].company}`, out.session);
+      } else break;
+    }
+    return out;
+  };
+
+  it('reaches the bar instead of stopping at the conversion', async () => {
+    /*
+     * It stopped at 56 while an uploaded resume aimed at the same job came
+     * back at 96 — the two paths delivered from different places in the
+     * router and only one of them ran the climb. Same errand, same employer,
+     * half the score.
+     */
+    const out = await buildFromScratch();
+    expect(out.kind).toBe('build');
+    expect(out.report.score).toBeGreaterThanOrEqual(92);
+  });
+
+  it('never turns an employer into an achievement', async () => {
+    /*
+     * The internship question is a list of employers, so the answer is a
+     * company name — and it was being pasted in as work. A page came back
+     * with an EXPERIENCE section whose achievements read "- Google" and
+     * "- Google". Nobody claimed to have done Google.
+     */
+    const out = await buildFromScratch();
+    const bullets = out.text.split('\n').filter((l) => /^\s*-\s/.test(l));
+    bullets.forEach((b) => {
+      expect(b).not.toMatch(/^-\s*(Built|Delivered|Created|Developed)?\s*Google\s*(\(paid internship\))?\s*$/i);
+    });
+  });
+
+  it('never prints the same line twice', async () => {
+    /* Two list questions about projects, one entry picked in both. */
+    const out = await buildFromScratch();
+    /* Planned entries count too — the employer's bench and the role's
+       catalogue overlap by design, and concatenating them without deduping
+       put the same project on the page twice with two identical step lists. */
+    const lines = out.text.split('\n').map((l) => l.trim()).filter(Boolean);
+    const seen = new Map();
+    lines.forEach((l) => seen.set(l, (seen.get(l) || 0) + 1));
+    const repeated = [...seen.entries()].filter(([l, n]) => n > 1 && l.startsWith('-'));
+    expect(repeated).toEqual([]);
+  });
+});
+
 describe('a wrong pick is overruled, and the student is told so', () => {
   const RESUME_B = RESUME;
   const tailorWith = async (mode) => {

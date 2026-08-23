@@ -309,13 +309,24 @@ describe('v4.0: the interview asks only what is missing', () => {
     expect(iv.questions[0].block).toBe(1);
   });
 
-  it('asks for evidence when skills are stated but nothing shows them in use', () => {
-    const iv = interviewQuestions(factLedger(REJECTABLE), { target: 'backend developer', jd: JD });
-    expect(iv.questions.some((q) => q.field === 'evidence')).toBe(true);
-  });
-
-  it('asks for one real metric rather than inventing one', () => {
-    /* Bullets with no number and no stated scope — nothing to measure by. */
+  it('asks for no prose: not a metric, not evidence, not a description', () => {
+    /*
+     * Both of these used to be asked and both were typed answers — "one real
+     * number you will stand behind", "for each skill, what did you build with
+     * it?". The brief for this agent is that nothing is typed except a name,
+     * an email, a phone number and two profile links, and these were the last
+     * two holdouts. They were also the questions people abandoned the
+     * interview on, which is the same fact from the other side.
+     *
+     * The metric question additionally could not terminate: it is derived
+     * from the ledger, and typing a number does not put that number inside a
+     * bullet, so it asked itself again on every turn — seventeen times in one
+     * walk-through.
+     *
+     * Nothing is lost. The climb puts projects on the page carrying their own
+     * numbers, and the student fills the blanks in as they build them, which
+     * is when they will actually know what the number was.
+     */
     const scopeless = [
       'Ravi Kumar', 'ravi@example.com +91 90000 11111', '',
       'Experience',
@@ -324,11 +335,12 @@ describe('v4.0: the interview asks only what is missing', () => {
       '- Wrote the PostgreSQL reporting layer',
       '', 'Skills', 'Java, Spring Boot, PostgreSQL',
     ].join('\n');
-    const iv = interviewQuestions(factLedger(scopeless), { target: 'backend developer', jd: JD });
-    const metric = iv.questions.find((q) => q.field === 'metric');
-    expect(metric).toBeTruthy();
-    expect(metric.question).toMatch(/stand behind/);
-    expect(metric.question).toMatch(/it stays out/);
+    [REJECTABLE, scopeless].forEach((page) => {
+      const iv = interviewQuestions(factLedger(page), { target: 'backend developer', jd: JD });
+      const fields = iv.questions.map((q) => q.field);
+      expect(fields).not.toContain('metric');
+      expect(fields).not.toContain('evidence');
+    });
   });
 
   it('carries the stop rule so nobody waits for a perfect life story', () => {
