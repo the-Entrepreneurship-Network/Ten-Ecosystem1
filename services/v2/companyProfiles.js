@@ -874,10 +874,135 @@ const HOUSES = [
     'analysis that changed a decision, and what happened next',
     ['market sizing', 'scenario modelling', 'cost model', 'a/b testing'],
     ['structured problem solving', 'excel modelling', 'stakeholder interviews']],
+
+  /* ---- the engineering-heavy employers and the AI labs ---- */
+  ['Anthropic', 'safety and evaluation held ahead of capability',
+    'what you measured, what you refused to ship, and why',
+    ['prompt evaluation', 'retrieval augmented generation', 'model serving', 'data drift monitoring'],
+    ['evaluation design', 'python', 'red-teaming', 'writing design documents']],
+  ['DeepMind', 'research you can reproduce from the paper alone',
+    'a result somebody else could reproduce, with the code and the seed',
+    ['batch inference', 'model serving', 'prompt evaluation', 'data quality tests'],
+    ['statistics', 'python', 'experiment design', 'writing papers']],
+  ['LinkedIn', 'graphs, relevance and a feed that stays fast',
+    'ranking or graph work with the relevance metric attached',
+    ['recommendation ranking', 'search indexing', 'caching', 'a/b testing'],
+    ['data structures', 'experiment design', 'jvm tuning']],
+  ['Atlassian', 'developer tools where the workflow is the product',
+    'a tool other engineers actually adopted, with the adoption number',
+    ['api versioning', 'integration testing', 'webhooks', 'feature flags'],
+    ['api design', 'writing documentation', 'java']],
+  ['Cloudflare', 'the edge — every millisecond, everywhere at once',
+    'latency and network work with p99 across regions',
+    ['cdn caching', 'rate limiting', 'network monitoring', 'load testing'],
+    ['networking', 'rust or go', 'protocol analysis']],
+  ['Databricks', 'data at a scale where the query plan is the product',
+    'pipeline work with data volumes and query times',
+    ['warehouse design', 'partitioning', 'query optimisation', 'incremental loads'],
+    ['spark', 'sql', 'jvm tuning', 'cost optimisation']],
+  ['Palo Alto Networks', 'detection that fires on the attack, not on the noise',
+    'security work with false-positive rates and detection latency',
+    ['siem', 'anomaly detection', 'network policy', 'threat modelling'],
+    ['networking', 'incident response', 'detection engineering']],
+  ['CrowdStrike', 'endpoint telemetry at scale, and what you infer from it',
+    'detection engineering with precision and recall stated',
+    ['anomaly detection', 'high-throughput ingestion', 'siem', 'audit logging'],
+    ['detection engineering', 'statistics', 'operating system internals']],
+  ['Shopify', 'commerce that must not fall over on the busiest day of the year',
+    'peak-traffic work with the load numbers behind it',
+    ['load testing', 'caching', 'idempotency', 'schema migrations'],
+    ['ruby or go', 'system design', 'capacity planning']],
+  ['Spotify', 'recommendation and streaming, measured on what people play',
+    'ranking or audio work with an engagement number',
+    ['recommendation ranking', 'streaming pipeline', 'a/b testing', 'batch inference'],
+    ['experiment design', 'data structures', 'audio basics']],
+  ['TSMC', 'process yield measured in parts per million',
+    'yield, tolerance and test-coverage work with the statistics',
+    ['process simulation', 'anomaly detection', 'hardware testing', 'data quality tests'],
+    ['process control', 'statistics', 'semiconductor physics']],
+  ['Samsung', 'shipping hardware and software together, at volume',
+    'embedded work that shipped to a device, with the constraint you met',
+    ['firmware update', 'rtos', 'hardware testing', 'app performance'],
+    ['embedded c', 'android internals', 'power budgeting']],
+  ['ASML', 'physics at nanometre tolerances, in a machine that must not drift',
+    'precision and calibration work with the tolerance stated',
+    ['sensor calibration', 'process simulation', 'signal integrity', 'predictive maintenance'],
+    ['physics fundamentals', 'process control', 'c++']],
+  ['Arm Holdings', 'instruction sets and the power budget they run inside',
+    'low-level work with cycle counts or power figures',
+    ['verilog', 'timing analysis', 'profiling harness', 'firmware update'],
+    ['computer architecture', 'c', 'assembly']],
+  ['Sony', 'consumer hardware where latency and quality are felt, not measured',
+    'media or device work with a quality number a user would notice',
+    ['streaming pipeline', 'transcoding', 'app performance', 'sensor calibration'],
+    ['codecs', 'embedded c', 'signal processing']],
+  ['Zoho', 'building the whole stack in-house, cost-consciously',
+    'end-to-end ownership: something you built alone, all the way',
+    ['api versioning', 'schema migrations', 'reporting automation', 'integration testing'],
+    ['java', 'sql', 'writing documentation']],
+  ['Freshworks', 'SaaS that a small business can set up without a consultant',
+    'a feature real customers adopted, with the adoption number',
+    ['api versioning', 'webhooks', 'a/b testing', 'integration testing'],
+    ['api design', 'sql', 'writing documentation']],
+  ['Razorpay', 'payments that reconcile, under Indian regulation',
+    'transaction work with volumes and the controls around it',
+    ['idempotency', 'reconciliation', 'webhooks', 'fraud rules'],
+    ['api design', 'currency handling', 'regulatory reporting']],
+  ['Zerodha', 'trading systems where a millisecond and a rupee both matter',
+    'low-latency or ledger work with the numbers behind it',
+    ['low-latency messaging', 'reconciliation', 'time series storage', 'load testing'],
+    ['c++ or go', 'market data basics', 'regulatory reporting']],
+  ['Flipkart', 'sale-day traffic and a supply chain behind every order',
+    'peak-scale work with order volumes and latency',
+    ['load testing', 'inventory sync', 'caching', 'search indexing'],
+    ['system design', 'sql', 'capacity planning']],
+  ['Swiggy', 'real-time logistics where the customer is watching a map',
+    'live routing or dispatch work with delivery-time numbers',
+    ['route optimisation', 'tracking pipeline', 'high-throughput ingestion', 'forecasting'],
+    ['operations research basics', 'geospatial data', 'system design']],
+  ['Zomato', 'discovery and delivery in one product, at city scale',
+    'search, ranking or logistics work with a measured outcome',
+    ['search indexing', 'recommendation ranking', 'route optimisation', 'a/b testing'],
+    ['experiment design', 'geospatial data', 'sql']],
+  ['ByteDance', 'recommendation quality, measured relentlessly',
+    'ranking work with an engagement metric and an experiment behind it',
+    ['recommendation ranking', 'batch inference', 'a/b testing', 'high-throughput ingestion'],
+    ['experiment design', 'python', 'distributed training']],
+  ['Anduril', 'autonomy that has to work without a network',
+    'systems work with the failure mode handled and proven',
+    ['sensor fusion', 'rtos', 'redundancy design', 'hardware-in-the-loop testing'],
+    ['embedded c++', 'real-time design', 'failure analysis']],
+  ['Waymo', 'perception and safety cases you can argue line by line',
+    'perception or safety work with the validation evidence',
+    ['sensor fusion', 'batch inference', 'anomaly detection', 'hardware-in-the-loop testing'],
+    ['c++', 'probability', 'safety analysis']],
 ];
 
 const HOUSE = Object.fromEntries(HOUSES.map(([name, note, resume, projects, skills]) =>
   [name.toLowerCase(), { name, note, resume, projects, skills }]));
+
+/**
+ * The work a ROLE is built on, independent of who is hiring.
+ *
+ * Drawn from the same bench the project catalogue uses, so what a company
+ * profile recommends and what the role's own catalogue offers are the same
+ * vocabulary rather than two lists that happen to overlap.
+ */
+function benchFor(role) {
+  // eslint-disable-next-line global-require
+  const { DEEP_BENCH } = require('./skillPlan');
+  const t = String(role || '');
+  const pick = (...keys) => keys.flatMap((k) => DEEP_BENCH[k] || []);
+  if (/front.?end|\bui\b|\bux\b|design|interaction|visual/i.test(t)) return pick('frontend', 'design');
+  if (/\bml\b|machine learning|deep learning|\bai\b|llm|nlp|vision|research scientist/i.test(t)) return pick('ml', 'data');
+  if (/data (analyst|scientist|engineer)|analytics|business intelligence|warehouse|\betl\b|quant/i.test(t)) return pick('data');
+  if (/devops|\bsre\b|platform|reliability|cloud|infrastructure|systems admin|network/i.test(t)) return pick('devops');
+  if (/security|infosec|\bsoc\b|penetration|forensic|threat|cryptograph|privacy|grc/i.test(t)) return pick('security');
+  if (/android|\bios\b|mobile|flutter|react native/i.test(t)) return pick('mobile');
+  if (/embedded|firmware|vlsi|asic|\brf\b|hardware|electronic|robotics|iot/i.test(t)) return pick('hardware');
+  if (/analyst|consultant|manager|product owner|scrum|program|project/i.test(t)) return pick('business', 'data');
+  return pick('software');
+}
 
 /** The archetype for a company, by name if we know it, by domain otherwise. */
 function archetypeFor(company, role) {
@@ -904,6 +1029,30 @@ function profileFor(company, role) {
   const house = HOUSE[key] || null;
   const arch = archetypeFor(company, role);
   const dedupe = (list) => [...new Set(list.filter(Boolean).map((s) => String(s)))];
+
+  /*
+   * The company sets the bar. The ROLE decides which work clears it.
+   *
+   * A house profile is written from what an employer's postings emphasise,
+   * and those postings are mostly for engineers — so Google's list is
+   * sharding, distributed tracing and search indexing. Handing that to a data
+   * scientist applying to Google is wrong, and handing it to a UI/UX designer
+   * applying to Google is absurd: all four roles were being told to build the
+   * same four things, because the company was the only thing consulted.
+   *
+   * So the two are crossed. Work that is both the company's emphasis AND the
+   * role's own leads, because that is the sharpest thing a candidate can
+   * build. The rest of the role's bench follows, since a data scientist at
+   * Google is a data scientist first. The company's remaining terms come last
+   * rather than being dropped — they still say something true about the bar,
+   * and a scientist who ships one of them is better for it.
+   */
+  const roleBench = benchFor(role);
+  const inRole = new Set(roleBench.map((t) => t.toLowerCase()));
+  const houseProjects = house ? house.projects : [];
+  const shared = houseProjects.filter((t) => inRole.has(String(t).toLowerCase()));
+  const houseOnly = houseProjects.filter((t) => !inRole.has(String(t).toLowerCase()));
+
   return {
     company: company || '',
     known: Boolean(house),
@@ -911,7 +1060,26 @@ function profileFor(company, role) {
     /* What the PAGE should lead with. Only a named house has one — a sector
        can say what the work is, but not which of your facts goes first. */
     resume: house ? house.resume : '',
-    projects: dedupe([...(house ? house.projects : []), ...arch.projects]),
+    /*
+     * Role first, employer visible, in that order.
+     *
+     * Putting the role's bench in front and the company's leftovers behind it
+     * fixed the designer being told to build sharding and broke the other
+     * half: every company then produced the identical list for one role,
+     * because nothing of theirs was near the top. What actually distinguishes
+     * a data scientist at Google from one anywhere else is that theirs works
+     * at a scale the others do not — so the role's core leads, the company's
+     * own emphasis sits right behind it where it is unmissable, and the rest
+     * of the role's bench follows.
+     */
+    projects: dedupe([
+      ...shared,
+      ...roleBench.slice(0, 3),
+      ...houseOnly.slice(0, 3),
+      ...roleBench.slice(3),
+      ...houseOnly.slice(3),
+      ...arch.projects,
+    ]),
     skills: dedupe([...(house ? house.skills : []), ...arch.skills]),
   };
 }

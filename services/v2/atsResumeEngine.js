@@ -356,10 +356,24 @@ function factLedger(text) {
 
   /* Skills: stated on the skills line, versus evidenced by a bullet.
      The distinction drives half the rubric. */
+  /*
+   * "Languages:" is not a language.
+   *
+   * Skills sections are almost always written in labelled rows — "Languages:
+   * Java, Python, C", "Web: HTML, CSS", "Tools: Git, Docker" — and splitting
+   * on commas alone made the label part of the first skill. A real page came
+   * back listing "Languages: Java" as a skill, which then went into the
+   * summary and onto the rewritten SKILLS line: "HTML, CSS, Languages: Java,
+   * Python, C". The label is a heading for the row, so it comes off.
+   */
+  const ROW_LABEL = /^\s*(languages?|programming languages?|web|web technologies|tools?|technologies|tech(?: stack)?|frameworks?|libraries|databases?|db|platforms?|cloud|devops|testing|soft skills?|core competenc(?:y|ies)|others?|misc|concepts?|ide|os|operating systems?)\s*[:\-–]\s*/i;
   const statedSkills = bySection.skills
+    .map((l) => String(l).replace(ROW_LABEL, ''))
     .flatMap((l) => l.split(/[,;|/·•]+/))
     .map((s) => s.trim().replace(/[.:]$/, ''))
-    .filter((s) => s && s.length <= 30 && !/^(and|with|etc)$/i.test(s));
+    /* A fragment that is still a label — the row was "Tools:" on its own line
+       with the tools beneath it — is not a skill either. */
+    .filter((s) => s && s.length <= 30 && !/^(and|with|etc)$/i.test(s) && !ROW_LABEL.test(`${s}: x`));
 
   const proofText = [
     ...roles.flatMap((r) => [r.header, ...r.bullets]),

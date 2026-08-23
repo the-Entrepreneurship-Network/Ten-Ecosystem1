@@ -173,8 +173,9 @@ describe('resume seat · ten journeys', () => {
     const a = agent();
     let out = await turn(a, QA, null);
     out = await walk(a, await turn(a, 'make it 96', out.session));
-    expect(out.potentialScore).toBeGreaterThanOrEqual(96);
-    expect(out.reply).toMatch(/Build order:/);
+    expect(out.report.score).toBeGreaterThanOrEqual(96);
+    /* The steps for everything it added, in points, and nothing else. */
+    expect(out.reply).toMatch(/Before you attach this: \d+ things?/);
   });
 
   it('8 · what is missing is added to the page, not reported as missing', async () => {
@@ -186,12 +187,20 @@ describe('resume seat · ten journeys', () => {
     expect(out.text).toMatch(/PLANNED|LEARNING/);
   });
 
-  it('9 · planned work is never counted as done', async () => {
+  it('9 · planned work is marked, listed, and gated out of the PDF', async () => {
+    /*
+     * It used to be excluded from the score instead, which is a defensible
+     * principle that made the feature pointless — pick the recommended
+     * projects, watch them land on your resume, watch the number not move.
+     * The page is scored as the page that exists; what keeps it honest is
+     * that every added line says it is not true yet, the reply says what to
+     * do about it, and the export refuses while it says so.
+     */
     const a = agent();
     let out = await turn(a, QA, null);
     out = await walk(a, await turn(a, 'make it 98', out.session));
-    expect(out.report.score).toBeLessThan(out.potentialScore);
     expect(out.text).toMatch(/\[PLANNED/);
+    expect(out.reply).toMatch(/Before you attach this/);
   });
 
   it('10 · it never invents an employer, a date or a degree', async () => {
@@ -341,10 +350,18 @@ describe('cover letter · ten journeys', () => {
 
   const letter = async (a, session) => walk(a, await turn(a, 'write the cover letter', session));
 
-  it('1 · a letter is offered by name once the page is tailored', async () => {
+  it('1 · the tailored page knows which job the letter is for', async () => {
+    /*
+     * The offer used to be a line at the bottom of the tailored reply. The
+     * brief for that reply is the score and the work in points and nothing
+     * else, so it went with the rest of the extras — the letter has its own
+     * tab, and the job it would be about is on the session, which is what
+     * makes "write the cover letter" work without asking again.
+     */
     const { out } = await withJob(BACKEND);
-    expect(out.reply).toMatch(/cover letter/i);
-    expect(out.reply).toMatch(/stripe/i);
+    expect(out.session.pickedJob.company).toBe('stripe');
+    expect(out.reply).toMatch(/^ATS score: \d+\/100/);
+    expect(out.reply).not.toMatch(/cover letter/i);
   });
 
   it('2 · asking for it produces one', async () => {
