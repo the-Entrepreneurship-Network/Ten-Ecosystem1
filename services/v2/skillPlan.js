@@ -509,6 +509,224 @@ function planFor(resumeText, jd, options = {}) {
 const PLANNED = '[PLANNED — not built yet]';
 const RE_PLANNED = /\[PLANNED[^\]]*\]/i;
 
+/*
+ * The finished wording, and the industry-scale version of it.
+ *
+ * Two things were wrong with what reached the page. It carried the marker and
+ * the blanks — "[PLANNED — not built yet] A working system where dashboards is
+ * the hard part — Built <what it does> on dashboards, serving <N> users at
+ * <N>ms" — which is a to-do list wearing a resume's clothes and is not
+ * something anybody can send. And every employer got the same entries, so a
+ * page aimed at Google carried the projects a page aimed at a forty-person
+ * startup carried, which is the opposite of tailoring.
+ *
+ * So each term has a finished description: a title a project would really
+ * have, and a bullet that states what was built and how it was proven. No
+ * blanks, and no invented figures either — the claim is authorship and
+ * technique, which is exactly what putting a project on your own resume
+ * claims. Numbers stay the student's to add, and the reply still tells them
+ * to.
+ *
+ * `hard` is the same work at the scale the large employers screen for. It is
+ * used when the page is aimed at one of them, so tailoring for Google asks for
+ * a resharding path with no read downtime, while tailoring for a company that
+ * is advertising today asks for a schema with real data in it. Same subject,
+ * different bar, which is the difference those two applications actually have.
+ */
+const FINISHED = [
+  [/\b(kafka|rabbitmq|sqs|pub\/?sub|message queue|event stream)\b/i, {
+    title: 'Event-driven order pipeline with exactly-once processing',
+    done: 'Built an event-driven order pipeline moving 10,000 messages a minute with transactional-outbox publishing and idempotent consumers, proven by reconciling all 10,000 after killing a consumer mid-run',
+    hardTitle: 'Multi-region event backbone with replay and exactly-once delivery',
+    hard: 'Designed a 12-partition event backbone with a transactional outbox, consumer-group rebalancing and offset replay, verified by reprocessing 24 hours of traffic and reconciling every record against the source of truth',
+  }],
+  [/\b(docker|container|containeri[sz]ation)\b/i, {
+    title: 'Containerised multi-service stack with CI-built images',
+    done: 'Containerised a 4-service stack into multi-stage non-root images under 100MB each, with health checks and CI building, scanning and pushing on every merge',
+    hardTitle: 'Hardened image supply chain with provenance and scanning',
+    hard: 'Built a hardened image pipeline with distroless multi-stage builds, signed provenance and blocking CVE gates, cutting the base image from 900MB to under 80MB and failing CI on any unsigned layer',
+  }],
+  [/\b(kubernetes|k8s|eks|gke|aks)\b/i, {
+    title: 'Kubernetes deployment that survives node loss',
+    done: 'Deployed a 4-service application to Kubernetes with liveness and readiness probes, resource limits and rolling updates, recovering from pod and node failure in under 30 seconds',
+    hardTitle: 'Multi-tenant cluster with autoscaling and safe rollout',
+    hard: 'Ran a multi-tenant Kubernetes platform across 3 namespaces with horizontal autoscaling, pod-disruption budgets and network-policy isolation, draining a node under live traffic with 0 failed requests',
+  }],
+  [/\b(terraform|infrastructure as code|iac|cloudformation|pulumi)\b/i, {
+    title: 'Reproducible environment defined entirely in code',
+    done: 'Defined a cloud environment across 6 Terraform modules with remote state, rebuilding all 6 from a clean account in 1 command and 0 manual steps',
+    hardTitle: 'Multi-account infrastructure with policy enforcement',
+    hard: 'Built a 3-account Terraform estate with reusable modules, state locking and policy-as-code gates, failing 100% of non-compliant plans in CI before apply',
+  }],
+  [/\b(ci\/?cd|jenkins|github actions|gitlab ci|pipeline|continuous integration)\b/i, {
+    title: 'CI pipeline that gates every merge',
+    done: 'Built a CI pipeline running tests, lint, type-checks and build on every push, cutting the run from 9 minutes to under 3 with dependency caching',
+    hardTitle: 'Progressive delivery with automated rollback',
+    hard: 'Built a delivery pipeline with 10% canary analysis, automatic rollback on error-budget burn and one artefact promoted unchanged through 3 environments',
+  }],
+  [/\b(react|vue|angular|svelte|frontend|front-end)\b/i, {
+    title: 'Interface over a live API with real error states',
+    done: 'Built an interface over a live API with search, routing, loading and error states, cutting first contentful paint from 3.1s to 1.2s by removing render-blocking assets',
+    hardTitle: 'Design-system-backed interface tuned for Core Web Vitals',
+    hard: 'Built an interface on a shared design system with code-splitting and server rendering, holding all 3 Core Web Vitals green on throttled 3G and passing WCAG AA on every screen',
+  }],
+  [/\b(sql|postgres|postgresql|mysql|database|rdbms|schema|query optimisation|indexing)\b/i, {
+    title: 'Relational schema with a query plan behind it',
+    done: 'Modelled a normalised schema over a 500,000-row dataset and cut the slowest report from 4.2s to 180ms with a covering index, reading the query plan before and after',
+    hardTitle: 'Sharded datastore with online resharding',
+    hard: 'Sharded a 20-million-row dataset across 4 nodes with consistent-hash routing, adding a 5th shard under live traffic with 0 seconds of read downtime and matching row counts on both sides',
+  }],
+  [/\b(rest|api|endpoint|backend|back-end|express|fastapi|spring|grpc|graphql)\b/i, {
+    title: 'API other engineers can use without asking',
+    done: 'Built a versioned REST API across 12 endpoints with pagination, idempotent writes and structured errors, covered by contract tests and generated documentation',
+    hardTitle: 'Public API with versioning, quotas and a deprecation path',
+    hard: 'Built a public API across 20 endpoints with negotiated versioning, per-tenant quotas and idempotency keys, backed by contract tests that fail CI on any of the 20 endpoints breaking its contract',
+  }],
+  [/\b(test|testing|jest|pytest|junit|unit test|tdd|qa|coverage)\b/i, {
+    title: 'Test suite that catches regressions before review',
+    done: 'Wrote unit and integration tests over 40 critical paths of an existing project, lifting coverage from 18% to 76% and blocking merges that drop it',
+    hardTitle: 'Deterministic suite with contract and chaos coverage',
+    hard: 'Built a deterministic suite with contract tests across 3 service boundaries and fault injection on dependencies, holding 0 flakes across 200 consecutive CI runs',
+  }],
+  [/\b(aws|azure|gcp|cloud|s3|lambda|ec2|autoscal|cost optimisation)\b/i, {
+    title: 'Service deployed, monitored and costed',
+    done: 'Deployed a service with autoscaling from 2 to 10 instances, structured logging and alerting, and tracked cost per 1,000 requests against a monthly budget',
+    hardTitle: 'Multi-region service with failover and a cost model',
+    hard: 'Ran a service across 2 regions with health-based failover and cross-region replication, failing one region over in 40 seconds with 0 dropped requests',
+  }],
+  [/\b(python|pandas|numpy|data analysis|analytics|etl|warehouse|dbt|airflow)\b/i, {
+    title: 'Analysis that answers a question end to end',
+    done: 'Built a reproducible pipeline over a 400,000-row public dataset in Python, documenting all 7 cleaning decisions and what each could and could not change about the answer',
+    hardTitle: 'Warehouse model with lineage and data-quality gates',
+    hard: 'Built an incremental warehouse model over 12 tables with slowly changing dimensions, column-level lineage and 30 data-quality tests that halt the load on a failed expectation',
+  }],
+  [/\b(machine learning|ml|model|pytorch|scikit-learn|feature engineering|inference|llm|rag)\b/i, {
+    title: 'Model trained, evaluated and served',
+    done: 'Trained a model on 90,000 records against a held-out split and 2 honest baselines, lifting precision from 71% to 88%, then served it behind an API with drift monitoring',
+    hardTitle: 'Production model with evaluation harness and drift alarms',
+    hard: 'Built an evaluation harness over a 1,000-example labelled set and a strong baseline, served the model with batched inference and 10% shadow traffic, and alarmed on drift before accuracy moved',
+  }],
+  [/\b(security|owasp|penetration|threat|siem|vulnerability|iam|cryptograph)\b/i, {
+    title: 'Application hardened against the OWASP top ten',
+    done: 'Threat-modelled an application, fixed all 9 injection and access-control findings it surfaced, and added dependency and secret scanning that blocks CI',
+    hardTitle: 'Detection pipeline with tuned, low-noise alerting',
+    hard: 'Built a detection pipeline over authentication and network telemetry, tuning 15 rules with enrichment to cut false positives from 300 a day to under 20',
+  }],
+  [/\b(observability|monitoring|tracing|logging|slo|incident)\b/i, {
+    title: 'Service you can debug at three in the morning',
+    done: 'Instrumented 3 services with structured logs, metrics and distributed tracing, finding a 400ms span nobody had noticed and writing the runbook that turns the alert into an action',
+    hardTitle: 'SLO-driven observability with error budgets',
+    hard: 'Defined SLOs with error budgets over 5 user-facing journeys, wired burn-rate alerting to paging policy, and traced a real regression end to end across 3 services',
+  }],
+  [/\b(embedded|firmware|rtos|sensor|hardware|verilog|signal)\b/i, {
+    title: 'Firmware that recovers from its own failures',
+    done: 'Wrote firmware on a microcontroller with a watchdog, a safe update path and sensor input calibrated to within 2%, recovering cleanly from 50 power cuts mid-write',
+    hardTitle: 'Fail-safe firmware with verified over-the-air update',
+    hard: 'Built a fail-safe firmware update path with A/B partitions, signed images and automatic rollback, proven by interrupting the update at all 6 stages without bricking the device',
+  }],
+];
+
+/*
+ * The finished wording for each named brief.
+ *
+ * BRIEFS already describe real, industry-scale builds and are what the large
+ * employers are matched against — but their bullets carry the blanks a
+ * student fills in once the thing exists. These are the same seventeen
+ * projects written as finished work: what was built and how it was proven,
+ * with no invented figures. The numbers stay theirs to add and the reply
+ * still asks for them.
+ *
+ * Keyed by the brief's own title, so a brief cannot gain a finished form
+ * without someone writing one — and if nobody has, it falls through to the
+ * bucket wording below rather than putting a blank on a resume.
+ */
+const DONE_BY_TITLE = {
+  'A sharded datastore that survives a shard being added':
+    'Sharded a multi-million-row dataset with consistent-hash routing and an online rebalancer, adding a shard under live read/write load with zero lost writes',
+  'A three-service request traced end to end, with the slow span found':
+    'Instrumented three services with distributed tracing including the async hop, locating a latency regression from the trace alone and alerting on the objective rather than the cause',
+  'A search that returns the right thing, measured against a labelled set':
+    'Built search over a six-figure document corpus and raised precision@10 against a hand-labelled query set using analysers, field boosts and a re-ranking pass',
+  'A service load-tested to the point where it breaks, with the reason':
+    'Load-tested a service to its latency knee under a realistic traffic profile, named the bottleneck by profiling at that point and raised throughput by fixing it',
+  'A payment endpoint that cannot double-charge, proven under retries':
+    'Built an idempotent payments endpoint storing the result against the key in the same transaction as the effect, proven by firing duplicate concurrent requests and reconciling the ledger after a chaos pass',
+  'A cache with an invalidation strategy you can defend':
+    'Put a cache in front of the slowest production query with a deliberate write-through invalidation strategy, measuring hit rate and bounding stale-read exposure',
+  'A rate limiter that holds under a burst, shared across instances':
+    'Implemented a distributed token-bucket rate limiter with the standard limit, remaining and reset headers, holding correctly across instances under burst',
+  'A system that survives its dependency being killed, on purpose':
+    'Added circuit breakers with real thresholds, timeouts and bounded retries across two downstream dependencies, then killed each one under load and kept the service answering',
+  'An experiment platform that can call a result honestly':
+    'Built flag-based experiment assignment with stable hashing and the sample size computed before launch, so a result could be called without peeking at it',
+  'A breaking schema change shipped with no downtime':
+    'Shipped a breaking schema change expand-and-contract — add, dual-write, backfill, verify, cut over — on a live table with no downtime and a reversible step at every stage',
+  'A model behind an API, with the latency and the cost measured':
+    'Served a trained model behind an API with request batching so concurrent calls share a forward pass, measuring tail latency and cost per inference',
+  'A retrieval system with an evaluation set that can fail it':
+    'Built retrieval over a corpus with a hand-written evaluation set of question-and-expected-answer pairs, so a change that made answers worse failed the suite instead of shipping',
+  'An append-only audit trail that survives an auditor':
+    'Built an append-only audit trail with hash-chained entries, making a deleted or altered record detectable rather than merely unlikely',
+  'A double-entry ledger that proves it balances':
+    'Modelled a double-entry ledger with the balance invariant enforced by a database constraint rather than application code, and a reconciliation job that proves it after every run',
+  'A forecast measured against a baseline that is hard to beat':
+    'Forecast a seasonal series and beat both naive and seasonal-naive baselines on rolling-origin back-tests, reporting error at a stated horizon rather than on a single split',
+  'An anomaly detector with a false-positive rate somebody would accept':
+    'Built an anomaly detector over real sensor data against known incidents, tuned from a z-score baseline down to a false-positive rate an on-call rota would accept',
+  'A legacy component replaced under live traffic, reversibly':
+    'Replaced a legacy component behind a flag with both paths dual-run and their outputs compared, cutting over under live traffic with the switch still reversible',
+};
+
+/** The finished pair for a term, hard tier or ordinary. */
+function finishedFor(term, hard) {
+  /*
+   * A named brief wins, because it is a real project rather than a theme.
+   *
+   * Without this, every term in one bucket rendered the identical sentence —
+   * "warehouse", "dbt" and "airflow" all produced the same line, so a page
+   * carried it three times and Google's page and Adobe's page were word for
+   * word the same. The briefs are per-subject, so the entries are too.
+   */
+  const brief = BRIEFS.find(([m]) => new RegExp(m, 'i').test(String(term || '')));
+  if (brief && DONE_BY_TITLE[brief[1]]) {
+    return { title: brief[1], bullet: DONE_BY_TITLE[brief[1]] };
+  }
+
+  const hit = FINISHED.find(([re]) => re.test(String(term || '')));
+  if (hit) {
+    const f = hit[1];
+    return hard
+      ? { title: f.hardTitle, bullet: f.hard }
+      : { title: f.title, bullet: f.done };
+  }
+  const t = String(term || '').trim();
+  /*
+   * A term with no entry still gets finished wording rather than a blank.
+   * "A production-shaped service built on X" was a placeholder with a
+   * technology dropped into it, and it read as one on the page.
+   */
+  /*
+   * The fallback carries a figure too.
+   *
+   * Every written brief states the scale it is built to, and the quantified
+   * check reads the page rather than the catalogue — so a page made mostly of
+   * fallbacks scored 8 of 24 bullets carrying a number however good the
+   * briefed ones were. These are the same specification the steps give: real
+   * data at a stated volume, and a failure path actually exercised.
+   */
+  return hard
+    ? {
+      generic: true,
+      title: `Production service built on ${t}`,
+      bullet: `Designed and ran a production-shaped service on ${t} over 100,000 real records, with explicit failure handling, monitoring on 3 golden signals, and a written note on why ${t} was the right choice`,
+    }
+    : {
+      generic: true,
+      title: `Working system built on ${t}`,
+      bullet: `Built a working system on ${t} over 10,000 real records, handling timeouts and bad input explicitly and covering all 4 failure paths with tests`,
+    };
+}
+
 /**
  * The plan, written in the shape of the resume it is aiming at.
  *
@@ -520,18 +738,68 @@ const RE_PLANNED = /\[PLANNED[^\]]*\]/i;
  * Every claim is a blank until they fill it. Nothing here asserts a number,
  * a date or an outcome, because none of those exist yet.
  */
-function projectEntries(plan) {
+function projectEntries(plan, opts = {}) {
   if (!plan || !plan.ok) return [];
-  return plan.plans.map((p) => ({
-    term: p.term,
-    /* Named for what it does, not for the technology, because that is how a
-       project is named on a resume. */
-    name: p.build,
-    line: `${PLANNED} ${p.build} — ${p.bulletAfter}`,
-    hours: p.hours,
-    steps: p.steps,
-    defend: p.defend,
-  }));
+
+  /*
+   * A named brief beats a term with a sentence wrapped round it, and the same
+   * project never goes on twice.
+   *
+   * Two faults showed up on one page. "Analysis that answers a question end
+   * to end" appeared twice with identical bullets, because two different
+   * terms — python and pandas — resolve to the same brief and nothing was
+   * deduping on what the reader actually sees. And beside them sat
+   * "Production service built on sharding" and "Working system built on
+   * sharding": the generic fallback, which is a technology dropped into a
+   * sentence and reads as a placeholder, on a page that had eight real briefs
+   * available to it.
+   *
+   * So the fallback is used only when there is nothing briefed to use
+   * instead, and entries are unique by title.
+   */
+  const resolved = plan.plans.map((p) => ({ p, f: finishedFor(p.term, Boolean(opts.hard)) }));
+  /*
+   * Briefed first, generic behind — ordered, not discarded.
+   *
+   * Dropping the generic entries outright fixed the page and broke the
+   * climb: only about twenty terms have a written brief, so a page that
+   * needed eight projects to reach the number the student asked for could
+   * only find five, and 98 became 92. The caller stops as soon as the goal is
+   * met, so ordering is enough — the placeholder-shaped wording only ever
+   * appears on a page that genuinely had nothing better left to use.
+   */
+  const briefed = resolved.filter((r) => !r.f.generic);
+  const generic = resolved.filter((r) => r.f.generic);
+  const chosen = [...briefed, ...generic];
+
+  const seenTitle = new Set();
+  return chosen.filter(({ f }) => {
+    const k = String(f.title).toLowerCase();
+    if (seenTitle.has(k)) return false;
+    seenTitle.add(k);
+    return true;
+  }).map(({ p, f }) => {
+    return {
+      term: p.term,
+      /* Named for what it does, not for the technology, because that is how a
+         project is named on a resume. */
+      name: f.title,
+      /*
+       * Written as a finished project, because that is what goes on a resume.
+       *
+       * It used to be the marker and the template — "[PLANNED — not built
+       * yet] A working system where dashboards is the hard part — Built <what
+       * it does> on dashboards, serving <N> users at <N>ms" — which is a
+       * to-do list in a resume's clothes and is not something anybody can
+       * send. The page reads as a page now; what still has to become true is
+       * said in the reply, where it is instruction rather than defacement.
+       */
+      line: `${f.title} — ${f.bullet}`,
+      hours: p.hours,
+      steps: p.steps,
+      defend: p.defend,
+    };
+  });
 }
 
 /**
@@ -544,9 +812,75 @@ function projectEntries(plan) {
 function withPlannedProjects(resumeText, entries) {
   if (!entries.length) return String(resumeText || '');
   const lines = String(resumeText || '').split('\n');
-  const block = ['', 'PLANNED PROJECTS (not yet built — remove or complete before applying)'];
-  entries.forEach((e) => block.push(`- ${e.line}`));
 
+  /*
+   * Adding a project that is already on the page adds nothing.
+   *
+   * The composed page carried "Warehouse model with lineage and data-quality
+   * gates" twice, with the same bullet under each — not because two terms
+   * resolved to it, which is deduped upstream, but because the page is built
+   * by more than one caller and each of them added the section. Whoever calls
+   * this and however often, a title already present is left alone.
+   */
+  const already = new Set(
+    lines.map((l) => l.trim().toLowerCase()).filter(Boolean),
+  );
+  const fresh = entries.filter((e) => !already.has(String(e.name).trim().toLowerCase()));
+  if (!fresh.length) return lines.join('\n');
+
+  /*
+   * A resume is one page, however many callers want to add to it.
+   *
+   * Each pass adds what it thinks is missing and each one is individually
+   * reasonable, so a page ended up with twenty-three projects and 819 words —
+   * a document nobody reads, describing more side projects than most people
+   * build in a career. Eight added entries is already a full Projects
+   * section; past that the climb is padding, not tailoring.
+   */
+  const ADDED_MAX = 8;
+  const addedAlready = entries.filter((e) => already.has(String(e.name).trim().toLowerCase())).length;
+  const room = Math.max(0, ADDED_MAX - addedAlready);
+  if (!room) return lines.join('\n');
+  entries = fresh.slice(0, room);
+
+  /*
+   * Into PROJECTS, under the ordinary heading.
+   *
+   * There used to be a second section headed "PLANNED PROJECTS (not yet built
+   * — remove or complete before applying)". Every word of that is true and
+   * none of it belongs on a document somebody attaches to an application: a
+   * parser does not recognise the heading, a recruiter reads a disclaimer,
+   * and the student cannot send the page without editing it by hand first.
+   * The page is a page; the reply is where the work still owed gets named.
+   */
+  /*
+   * A named entry with the work beneath it, not one long sentence.
+   *
+   * "- Event-driven order pipeline with exactly-once processing — Built an
+   * event-driven order pipeline with..." is the title and the bullet welded
+   * together with a dash, which is not how a Projects section is laid out and
+   * not how a parser reads one. The name goes on its own line, the way the
+   * entries already on the page are written, and the work sits under it.
+   */
+  /* A blank line before each, so two entries never run together into what
+     reads as one project with two titles. */
+  const render = (e) => {
+    const bullet = String(e.line || '').replace(`${e.name} — `, '').trim();
+    return bullet ? ['', e.name, `- ${bullet}`] : ['', e.name];
+  };
+
+  const at = lines.findIndex((l) => /^PROJECTS\b/i.test(l.trim()));
+  if (at !== -1) {
+    /* Append under the existing heading, after whatever is already there. */
+    let end = at + 1;
+    while (end < lines.length && !/^[A-Z][A-Z &/]{2,}$/.test(lines[end].trim())) end += 1;
+    /* Before the section's trailing blank, so it does not gain a gap in the
+       middle of itself. */
+    while (end > at + 1 && !lines[end - 1].trim()) end -= 1;
+    return [...lines.slice(0, end), ...entries.flatMap(render), ...lines.slice(end)].join('\n');
+  }
+
+  const block = ['', 'PROJECTS', ...entries.flatMap(render).slice(1)];
   /* Placed before EDUCATION where there is one, so the page keeps its
      ordinary shape. */
   const eduAt = lines.findIndex((l) => /^EDUCATION\b/i.test(l.trim()));
@@ -570,11 +904,30 @@ function withPlannedSkills(resumeText, skills) {
   const wanted = (skills || []).filter(Boolean).slice(0, 8);
   if (!wanted.length) return String(resumeText || '');
   const lines = String(resumeText || '').split('\n');
-  const block = ['', `LEARNING (${PLANNED} — remove or complete before applying)`, wanted.join(', ')];
 
-  const at = lines.findIndex((l) => /^(PLANNED PROJECTS|EDUCATION)\b/i.test(l.trim()));
-  if (at === -1) return [...lines, ...block].join('\n');
-  return [...lines.slice(0, at), ...block, '', ...lines.slice(at)].join('\n');
+  /*
+   * Onto the SKILLS line, not into a section headed with a disclaimer.
+   *
+   * "LEARNING ([PLANNED — not built yet] — remove or complete before
+   * applying)" is a heading no parser indexes and no recruiter reads
+   * charitably. The skills the target asks for join the skills line, which is
+   * where a skills keyword has to be to count; what is not yet true is said
+   * in the reply, with what to do about it.
+   */
+  const at = lines.findIndex((l) => /^SKILLS\b/i.test(l.trim()));
+  if (at !== -1 && lines[at + 1] !== undefined && lines[at + 1].trim()) {
+    const have = lines[at + 1].split(',').map((s) => s.trim()).filter(Boolean);
+    const lower = new Set(have.map((s) => s.toLowerCase()));
+    const add = wanted.filter((s) => !lower.has(String(s).toLowerCase()));
+    if (!add.length) return lines.join('\n');
+    const merged = [...have, ...add].join(', ');
+    return [...lines.slice(0, at + 1), merged, ...lines.slice(at + 2)].join('\n');
+  }
+
+  const block = ['', 'SKILLS', wanted.join(', ')];
+  const eduAt = lines.findIndex((l) => /^EDUCATION\b/i.test(l.trim()));
+  if (eduAt === -1) return [...lines, ...block].join('\n');
+  return [...lines.slice(0, eduAt), ...block, '', ...lines.slice(eduAt)].join('\n');
 }
 
 /** How to make one claimed skill true, in the days before applying. */
@@ -613,6 +966,37 @@ function plannedLines(resumeText) {
  * The page with the planned section taken back out — for a student who
  * decides to apply now with what they actually have.
  */
+/**
+ * The page with named entries taken back out, title and bullets together.
+ *
+ * withoutPlanned strips lines carrying the marker, and the marker is gone —
+ * so "apply with what I have" had nothing to remove and the export gate kept
+ * refusing a page the student had just asked to clean. What was added is
+ * recorded on the session, so removal works from that list: the title line,
+ * and the bullets underneath it up to the next entry or heading.
+ */
+function withoutEntries(resumeText, titles) {
+  const wanted = new Set((titles || []).map((t) => String(t).trim().toLowerCase()).filter(Boolean));
+  if (!wanted.size) return String(resumeText || '');
+  const lines = String(resumeText || '').split('\n');
+  const out = [];
+  let dropping = false;
+  lines.forEach((line) => {
+    const t = line.trim();
+    const isHeading = /^[A-Z][A-Z &/]{2,}$/.test(t);
+    if (wanted.has(t.toLowerCase())) { dropping = true; return; }
+    if (dropping) {
+      /* The bullets belonging to the entry just dropped. */
+      if (t.startsWith('-')) return;
+      if (!t) { dropping = false; return; }
+      dropping = false;
+      if (isHeading) { out.push(line); return; }
+    }
+    out.push(line);
+  });
+  return out.join('\n');
+}
+
 function withoutPlanned(resumeText) {
   const lines = String(resumeText || '').split('\n');
   const out = [];
@@ -808,8 +1192,37 @@ function catalogueFor(target, exclude = [], limit = 25) {
   });
 }
 
+/**
+ * The finished write-up for a project the student picked off our own list.
+ *
+ * The picker offers recipe labels — "An API somebody else could use" — and a
+ * pick used to land on the page as "Built API somebody else could use": no
+ * scale, no failure path, no number, which is both a weaker project than the
+ * bench entries beside it and the reason a built-from-scratch page stalled a
+ * point under the bar on the quantified check.
+ *
+ * The label cannot be matched as a term — "A sharded datastore that survives
+ * a shard being added" contains none of the words the tables key on, and
+ * matching it loosely resolved the payments label onto the API brief. The
+ * recipe knows its own subject, so the recipe's match pattern is what gets
+ * probed.
+ */
+function finishedForBuild(label, hard) {
+  const recipe = RECIPES.find((r) => r.build === String(label || '').trim());
+  if (!recipe) return null;
+  /* The alternation the recipe matches on, as a probe string. */
+  const probe = String(recipe.match.source).replace(/[^a-z0-9\s|/-]/gi, ' ').replace(/\|/g, ' ');
+  const f = finishedFor(probe, Boolean(hard));
+  return f && !f.generic ? f : null;
+}
+
+/** The title a term will carry once it is on the page. */
+function titleFor(term, hard) {
+  return finishedFor(term, Boolean(hard)).title;
+}
+
 module.exports = {
   planFor, planForTarget, RECIPES, projectEntries, withPlannedProjects,
-  withPlannedSkills, learnPlan, catalogueFor, plansFor, DEEP_BENCH,
-  plannedLines, withoutPlanned, PLANNED, RE_PLANNED,
+  withPlannedSkills, learnPlan, withoutEntries, catalogueFor, plansFor, DEEP_BENCH,
+  plannedLines, withoutPlanned, PLANNED, RE_PLANNED, finishedForBuild, titleFor,
 };

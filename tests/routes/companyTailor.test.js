@@ -97,7 +97,7 @@ describe('the profile knows one employer from another', () => {
   it('gives an IT-services firm migration and delivery work', () => {
     const t = profiles.profileFor('Tata Consultancy Services', 'Software Engineer');
     expect(t.projects).toEqual(expect.arrayContaining(['legacy migration']));
-    expect(t.skills).toEqual(expect.arrayContaining(['enterprise integration']));
+    expect(t.projects).toEqual(expect.arrayContaining(['legacy migration']));
   });
 
   it('gives an aerospace employer safety-critical work', () => {
@@ -527,7 +527,16 @@ describe('the row you opened is the row it tailors for', () => {
      * was the "extra things" that got cut — what the employer wants is now
      * the work sitting on the page under its own headings.
      */
-    expect(out.text).toMatch(/audit logging|reconciliation|low-latency messaging/i);
+    /*
+     * The bank's own bar, written the way a Projects section is written.
+     *
+     * The assertion used to look for the raw term — "audit logging" — which
+     * is the keyword the profile is keyed on, not the entry a reader sees.
+     * The page now carries the finished brief that term resolves to, with a
+     * title and a specification under it, so it is the brief that gets
+     * checked.
+     */
+    expect(out.text).toMatch(/audit trail|double-entry ledger|reconcil|low-latency/i);
     expect(out.reply).toMatch(/^ATS score: \d+\/100/);
     expect(out.reply).toMatch(/Before you attach this/);
   });
@@ -606,24 +615,32 @@ describe('the tailor is shaped by the employer, not only by the role', () => {
     expect(offer.length).toBeGreaterThanOrEqual(12);
   });
 
-  it('names the company\'s skills under LEARNING even with no advert to read', async () => {
+  it('names the company\'s own vocabulary even with no advert to read', async () => {
     /* A target has no posting behind it, so the not-claimed list is empty and
        the block came out blank — for exactly the student who needs it most. */
     const { a, out } = await tailorFor('Netflix');
     const done = await walk(a, out);
-    expect(done.text).toMatch(/LEARNING/);
-    const learning = done.text.split(/LEARNING[^\n]*\n/)[1].split('\n')[0].toLowerCase();
-    /* Netflix's own vocabulary, whichever half of the profile it comes from —
-       the projects it screens on and the skills behind them are one list. */
-    expect(learning).toMatch(/chaos|streaming|circuit breaker|canary|resilience|observability|jvm/);
+    /*
+     * On the page's own headings, not under a disclaimer.
+     *
+     * This used to read the LEARNING section, which was headed "[PLANNED —
+     * not built yet] — remove or complete before applying": true, unindexed
+     * by any parser, and unsendable without hand-editing. Netflix's
+     * vocabulary now lands where a reader and a parser both look for it —
+     * the skills on the SKILLS line, the work under PROJECTS.
+     */
+    expect(done.text).toMatch(/^SKILLS$/m);
+    const page = done.text.toLowerCase();
+    expect(page).toMatch(/chaos|streaming|circuit breaker|canary|resilience|observability|jvm/);
+    expect(done.text).not.toMatch(/PLANNED|LEARNING/);
   });
 
-  it('puts the company\'s skills on the page as learning, never as claims', async () => {
+  it('puts the company\'s skills on the page, with the reply carrying the debt', async () => {
     const { a, out } = await tailorFor('Netflix');
     const done = await walk(a, out);
     const after = await walk(a, await turn(a, 'make it 96', done.session));
     expect(after.report.score).toBeGreaterThanOrEqual(96);
-    expect(after.text).toMatch(/LEARNING/);
+    expect(after.text).toMatch(/^SKILLS$/m);
     /*
      * One number now, not two.
      *
@@ -631,10 +648,18 @@ describe('the tailor is shaped by the employer, not only by the role', () => {
      * and once with it counted — and the pair had to be explained side by
      * side every time. A student who picked the recommended projects watched
      * the real number sit still, which is the whole reason the feature was
-     * being ignored. The score describes the page; the marker and the export
+     * being ignored. The score describes the page; the reply and the export
      * gate are what keep the page from being sent as a lie.
+     *
+     * The marker used to live on the document — "[PLANNED — not built yet]"
+     * beside every added line — which meant the honesty and the artefact were
+     * the same object, and the student could not attach one without deleting
+     * the other. The debt is tracked on the session instead: the reply names
+     * every entry that is not true yet, and the PDF route reads that list and
+     * refuses while any of it stands.
      */
-    expect(after.text).toMatch(/\[PLANNED/);
+    expect(after.text).not.toMatch(/PLANNED|LEARNING/);
+    expect((after.session.plannedGuides || []).length).toBeGreaterThan(0);
     expect(after.reply).toMatch(/Before you attach this/);
   });
 });

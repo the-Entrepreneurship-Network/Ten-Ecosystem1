@@ -55,41 +55,68 @@ async function withPlanned(a) {
   return turn(a, 'add these projects to my resume', out.session);
 }
 
-describe('planned projects are visible and clearly not real', () => {
-  it('adds them under their own heading, never mixed into real projects', async () => {
+describe('the projects it adds read as a resume, not as a to-do list', () => {
+  it('writes them under PROJECTS, finished, with no marker and no blanks', async () => {
+    /*
+     * They used to arrive under a heading of their own — "PLANNED PROJECTS
+     * (not yet built — remove or complete before applying)" — with every line
+     * stamped "[PLANNED — not built yet]" and its figures left as "<N> users
+     * at <N>ms". Every word of that was true and none of it belonged on a
+     * document somebody attaches to an application: no parser knows the
+     * heading, a recruiter reads a disclaimer, and the student cannot send
+     * the page without editing it by hand first.
+     *
+     * They are projects. They go under PROJECTS, written the way the entries
+     * already there are written. What is still owed is said in the reply.
+     */
     const out = await withPlanned(app());
-    expect(out.text).toMatch(/^PLANNED PROJECTS/m);
-    /* The real project is still where it was, unmarked. */
-    const projectsBlock = out.text.split(/^PLANNED PROJECTS/m)[0];
-    expect(projectsBlock).toMatch(/- Campus portal used by 300 students/);
-    expect(projectsBlock).not.toMatch(/\[PLANNED/);
+    expect(out.text).not.toMatch(/PLANNED/);
+    expect(out.text).not.toMatch(/<[A-Za-z][^>]*>/);
+    expect(out.text).toMatch(/^PROJECTS$/m);
+    /* One Projects heading, not a second one below the first. */
+    expect((out.text.match(/^PROJECTS$/gm) || []).length).toBe(1);
+    /* The student's own project is untouched and still first. */
+    expect(out.text).toMatch(/- Campus portal used by 300 students/);
   });
 
-  it('marks every planned line and leaves the numbers blank', async () => {
+  it('gives each one a title and the work beneath it', async () => {
     const out = await withPlanned(app());
-    const lines = out.text.split('\n').filter((l) => /\[PLANNED/.test(l));
-    expect(lines.length).toBeGreaterThan(0);
-    lines.forEach((l) => {
-      expect(l).toMatch(/\[PLANNED — not built yet\]/);
-      /* A blank, never an invented figure. */
-      expect(l).toMatch(/<[^>]+>/);
+    const body = out.text.split(/^PROJECTS$/m)[1].split(/^[A-Z][A-Z &]{2,}$/m)[0];
+    const titles = body.split('\n').filter((l) => l.trim() && !l.trim().startsWith('-'));
+    expect(titles.length).toBeGreaterThan(0);
+    titles.forEach((t) => {
+      /* A name a project would really have, not a technology in a sentence. */
+      expect(t).not.toMatch(/^(Working system|Production service) built on /);
     });
   });
 
-  it('warns before anything is sent, and says why', async () => {
+  it('never adds the same project twice', async () => {
+    /*
+     * Two terms can resolve to one brief, and the page is composed by more
+     * than one caller — so the same entry landed twice, with the same bullet
+     * under each.
+     */
     const out = await withPlanned(app());
-    expect(out.reply).toMatch(/Before you send this to anyone/i);
-    expect(out.reply).toMatch(/do not exist yet/i);
-    expect(out.reply).toMatch(/fails the first question/i);
+    const titles = out.text.split('\n')
+      .filter((l) => l.trim() && !l.trim().startsWith('-') && !/^[A-Z][A-Z &]{2,}$/.test(l.trim()))
+      .map((l) => l.trim().toLowerCase());
+    expect(new Set(titles).size).toBe(titles.length);
   });
 
-  it('gives the build steps for each one, in order', async () => {
+  it('says in the reply what is not true yet, and how to make it true', async () => {
+    /*
+     * The page carried the disclaimer before, so the reply could be brief.
+     * The page is sendable now — and therefore sendable before the work
+     * exists — so this sentence is the only thing between a student and
+     * attaching a resume describing projects they have not built.
+     */
     const out = await withPlanned(app());
-    expect(out.reply).toMatch(/^1\. /m);
-    expect(out.reply).toMatch(/Be ready for:/);
+    expect(out.reply).toMatch(/Before you attach this/i);
+    expect(out.reply).toMatch(/not true yet/i);
+    /* And the steps, in order, for each one. */
+    expect(out.reply).toMatch(/\n {2}- /);
   });
 });
-
 describe('the gate between a planned project and an employer', () => {
   it('refuses to export a PDF while anything is unbuilt', async () => {
     const a = app();
@@ -97,6 +124,9 @@ describe('the gate between a planned project and an employer', () => {
     const res = await request(a)
       .post('/api/v2/resume/build.pdf')
       .field('text', out.session.resumeText)
+      /* The gate reads the session now — the page no longer confesses, so
+         what has not been built is recorded beside the plan that made it. */
+      .field('session', JSON.stringify(out.session))
       .field('name', 'Priya Nair')
       .field('email', 'priya@example.com')
       .field('phone', '+91 90000 00000')
@@ -123,9 +153,16 @@ describe('the gate between a planned project and an employer', () => {
 
 describe('the two ways out', () => {
   it('a built project moves into real Projects, in their own words', async () => {
+    /*
+     * What is still unbuilt is counted from the record now, not from markers
+     * in the text. The page reads as a finished document — that is the whole
+     * change — so the list of what has not actually been done lives on the
+     * session beside the plan that produced it.
+     */
     const a = app();
     let out = await withPlanned(a);
-    const before = skillPlan.plannedLines(out.session.resumeText).length;
+    const before = (out.session.plannedGuides || []).length;
+    expect(before).toBeGreaterThan(0);
 
     out = await turn(a, 'i built it', out.session);
     expect(out.session.asked).toBe('builtproof');
@@ -133,8 +170,8 @@ describe('the two ways out', () => {
     const line = 'Built a Kafka order pipeline handling 400 messages a minute, verified by killing consumers mid-run';
     out = await turn(a, line, out.session);
 
-    /* One fewer planned, and their sentence is now a real project line. */
-    expect(skillPlan.plannedLines(out.session.resumeText)).toHaveLength(before - 1);
+    /* One fewer outstanding, and their sentence is now a real project line. */
+    expect((out.session.plannedGuides || []).length).toBe(before - 1);
     expect(out.session.resumeText).toMatch(/- Built a Kafka order pipeline handling 400 messages a minute/);
   });
 
@@ -151,6 +188,9 @@ describe('the two ways out', () => {
     const res = await request(a)
       .post('/api/v2/resume/build.pdf')
       .field('text', out.session.resumeText)
+      /* The gate reads the session now — the page no longer confesses, so
+         what has not been built is recorded beside the plan that made it. */
+      .field('session', JSON.stringify(out.session))
       .field('name', 'Priya Nair')
       .field('email', 'priya@example.com')
       .field('phone', '+91 90000 00000')
