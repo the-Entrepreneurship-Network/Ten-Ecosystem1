@@ -1019,17 +1019,21 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
    *
    * The opening ran on the ident alone and the thirty ticked away in silence,
    * which reads as a page that has not loaded rather than one that is about
-   * to start. The bed is the ten seconds of the source track from where the
-   * music comes in; the count needs about five of them, so it plays straight
-   * through with no loop seam to hear.
+   * to start. The bed is the source recording whole and untouched — twelve
+   * seconds, including the second of quiet near the top that the track opens
+   * with. Nothing is trimmed, levelled or faded into the file itself; what
+   * shapes it is set here, so the recording on disk stays the recording.
    *
-   * It sits well under the ident on purpose — this is the thing the visitor
-   * is meant to hear, and a bed still playing over it turns the strike into
-   * a mush. It ducks to nothing across the fracture.
+   * It runs longer than the opening does. The countdown and the finale come
+   * to about six seconds and the track is twelve, so it carries on under the
+   * page for the rest of its length and ends on its own. Cutting it at the
+   * curtain would stop the music mid-phrase, which is a worse edit than
+   * letting it finish.
    */
+  const BED_VOL = 0.34;
   const bed = new Audio('assets/intro/intro-bed.mp3');
   bed.preload = 'auto';
-  bed.volume = 0.34;
+  bed.volume = BED_VOL;
 
   /*
    * One listener, removed the moment it has done its job.
@@ -1061,23 +1065,45 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
     /* Into the track at the point the count has already reached, so a late
        unlock does not restart music the opening is halfway through. */
     const into = (Date.now() - startedAt) / 1000;
-    try { bed.currentTime = Math.min(into, Math.max(0, (bed.duration || 10) - 0.5)); } catch (e) { /* not seekable yet */ }
+    try { bed.currentTime = Math.min(into, Math.max(0, (bed.duration || 12) - 0.5)); } catch (e) { /* not seekable yet */ }
     const p = bed.play();
     if (p && p.then) p.then(() => { bedPlaying = true; }).catch(() => {});
     else bedPlaying = true;
   }
 
-  /* Fade rather than cut: a bed that stops dead is a hole in the sound, and
-     the hole is exactly where the word is supposed to land. */
-  function duckBed(ms) {
+  /*
+   * Out of the way for the word, then back.
+   *
+   * The ident is the thing the opening exists to deliver and a bed playing
+   * over it turns the strike into a mush, so the bed drops to a fifth of
+   * itself across the fracture. It comes back up once the word has rung out,
+   * because the track has half its length still to run and killing it at the
+   * break would end the music on a cut.
+   *
+   * Ramped rather than switched: a level that jumps is heard as a fault in
+   * the audio, and this one jumps twice.
+   */
+  function ramp(to, ms, then) {
     const from = bed.volume;
     const t0 = Date.now();
     const step = setInterval(() => {
       const k = Math.min(1, (Date.now() - t0) / ms);
-      bed.volume = Math.max(0, from * (1 - k));
-      if (k >= 1) { clearInterval(step); try { bed.pause(); } catch (e) { /* already gone */ } }
+      bed.volume = Math.max(0, Math.min(1, from + (to - from) * k));
+      if (k >= 1) { clearInterval(step); if (then) then(); }
     }, 30);
   }
+  const DUCK_VOL = BED_VOL * 0.2;
+  function duckBed(ms) {
+    ramp(DUCK_VOL, ms, () => setTimeout(() => ramp(BED_VOL, 700), 500));
+  }
+
+  /* And it ends on its own, on a fade rather than a stop — the file runs out
+     while the page is already showing, and a track that simply stops is heard
+     as something breaking. */
+  bed.addEventListener('timeupdate', () => {
+    const left = (bed.duration || 0) - bed.currentTime;
+    if (left > 0 && left < 0.9 && bed.volume > 0.02) bed.volume = Math.max(0, bed.volume * 0.86);
+  });
 
   arm();
   startBed();
