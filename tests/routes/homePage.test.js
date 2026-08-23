@@ -1234,15 +1234,45 @@ describe('opening curtain', () => {
      * where the opening is, not the top of a track it is already half through
      * and about to fade.
      */
-    expect(page).toMatch(/const wake = \(\) => \{ startBed\(\); disarm\(\); \};/);
+    /*
+     * The unlock survives a gesture that does not unlock anything.
+     *
+     * This is the bug that made the opening silent, and it was this code
+     * rather than the browser. Only some events grant audio permission — a
+     * pointer down, a key, a click, a touch ending. Moving a mouse does not,
+     * and neither does a wheel or a scroll.
+     *
+     * The old version listened for all of them with { once: true } and, on
+     * the first to fire, called play() and then removed every listener
+     * without ever checking whether play() had worked. The ordinary sequence
+     * — land, move the mouse, pointermove fires, play() refused, rejection
+     * swallowed — tore down the listeners for pointerdown and keydown, the
+     * two that would actually have worked. The page could not make a sound
+     * again, and the ident went with it.
+     *
+     * So the list is the events that genuinely grant activation, they are not
+     * once-only, and they come off only when a play() has resolved.
+     */
+    expect(page).toMatch(/const wake = \(\) => \{ startBed\(\); \};/);
+    expect(page).toMatch(/p\.then\(\(\) => \{ bedPlaying = true; disarm\(\); \}\)\.catch/);
+    const eventList = /const EVENTS = \[([^\]]+)\]/.exec(page)[1];
+    ['pointerdown', 'pointerup', 'mousedown', 'click', 'keydown', 'touchend']
+      .forEach((e) => expect(eventList).toContain(e));
+    /* Never these: they unlock nothing, and letting them run the unlock path
+       is what threw the real gestures away. */
+    ['pointermove', 'wheel', 'scroll'].forEach((e) => expect(eventList).not.toContain(e));
+    /* And the break does not disarm — doing so took away the bed's last
+       chance on any visit where nothing had unlocked audio yet. */
+    const finale = page.slice(page.indexOf('function finale()'));
+    expect(finale.slice(0, finale.indexOf('hit.play()'))).not.toMatch(/disarm\(\);/);
     expect(page).toMatch(/const into = \(Date\.now\(\) - startedAt\) \/ 1000;/);
     expect(page).toMatch(/bed\.currentTime = Math\.min\(into,/);
     /* And never over a page that has already finished opening. */
     expect(page).toMatch(/if \(bedPlaying \|\| finished\) return;/);
-    expect(page).toMatch(/\{ once: true, passive: true \}/);
-    const events = /const EVENTS = \[([^\]]+)\]/.exec(page)[1];
-    ['pointerdown', 'pointermove', 'keydown', 'touchstart', 'wheel', 'scroll']
-      .forEach((e) => expect(events).toContain(e));
+    /* Passive, but never once-only: a refused attempt must not consume the
+       listener that the next gesture needs. */
+    expect(page).toMatch(/addEventListener\(e, wake, \{ passive: true \}\)/);
+    expect(page).not.toMatch(/addEventListener\(e, wake, \{ once: true/);
   });
 
   it('stops cycling logos when the countdown ends', () => {
