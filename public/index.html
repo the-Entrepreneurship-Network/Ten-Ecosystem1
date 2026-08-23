@@ -1005,15 +1005,45 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
    * visitor thirty seconds to move a mouse, and the first movement unlocks
    * playback long before the strike is due.
    */
+  /* Declared here rather than beside the slot it also guards, because the
+     audio below reads it: a gesture that arrives after the opening has ended
+     must not start the bed over a page that is already showing. */
+  let finished = false;
+
   const hit = new Audio('assets/intro/intro-ten.mp3');
   hit.preload = 'auto';
   hit.volume = 0.95;
 
-  /* One listener, removed the moment it has done its job. Any gesture at all
-     unlocks audio for the page; nothing is played when it fires. */
+  /*
+   * The bed under the count, and the word on the break.
+   *
+   * The opening ran on the ident alone and the thirty ticked away in silence,
+   * which reads as a page that has not loaded rather than one that is about
+   * to start. The bed is the ten seconds of the source track from where the
+   * music comes in; the count needs about five of them, so it plays straight
+   * through with no loop seam to hear.
+   *
+   * It sits well under the ident on purpose — this is the thing the visitor
+   * is meant to hear, and a bed still playing over it turns the strike into
+   * a mush. It ducks to nothing across the fracture.
+   */
+  const bed = new Audio('assets/intro/intro-bed.mp3');
+  bed.preload = 'auto';
+  bed.volume = 0.34;
+
+  /*
+   * One listener, removed the moment it has done its job.
+   *
+   * Two jobs now, not one. Every browser refuses audio until the page has
+   * been interacted with, and the bed is due at the very first frame — before
+   * any visitor could have moved. So the bed is attempted immediately, and if
+   * that attempt is refused the first gesture starts it wherever the count
+   * has got to, rather than from the top of a track that is already half
+   * spent. The ident only ever needed the unlock.
+   */
   let armed = false;
   const EVENTS = ['pointerdown', 'pointermove', 'keydown', 'touchstart', 'wheel', 'scroll'];
-  const wake = () => disarm();
+  const wake = () => { startBed(); disarm(); };
   function arm() {
     if (armed) return;
     armed = true;
@@ -1023,7 +1053,34 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
     armed = false;
     EVENTS.forEach((e) => window.removeEventListener(e, wake));
   }
+
+  const startedAt = Date.now();
+  let bedPlaying = false;
+  function startBed() {
+    if (bedPlaying || finished) return;
+    /* Into the track at the point the count has already reached, so a late
+       unlock does not restart music the opening is halfway through. */
+    const into = (Date.now() - startedAt) / 1000;
+    try { bed.currentTime = Math.min(into, Math.max(0, (bed.duration || 10) - 0.5)); } catch (e) { /* not seekable yet */ }
+    const p = bed.play();
+    if (p && p.then) p.then(() => { bedPlaying = true; }).catch(() => {});
+    else bedPlaying = true;
+  }
+
+  /* Fade rather than cut: a bed that stops dead is a hole in the sound, and
+     the hole is exactly where the word is supposed to land. */
+  function duckBed(ms) {
+    const from = bed.volume;
+    const t0 = Date.now();
+    const step = setInterval(() => {
+      const k = Math.min(1, (Date.now() - t0) / ms);
+      bed.volume = Math.max(0, from * (1 - k));
+      if (k >= 1) { clearInterval(step); try { bed.pause(); } catch (e) { /* already gone */ } }
+    }, 30);
+  }
+
   arm();
+  startBed();
   /* Each half is set directly now rather than split from one total, so the
      hold after the crack stays three seconds whatever the countdown is. */
   const COUNT_MS = COUNTDOWN_MS;
@@ -1041,7 +1098,6 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
   probe.src = 'assets/domains/' + DOMAIN_IMGS[0];
   /* Once the E has landed the slot belongs to it — a swap still queued from
      the final tick would otherwise drop a domain logo back on top of it. */
-  let finished = false;
   const setSlot = () => {
     if (finished) return;
     if (useImgs) slot.innerHTML = `<img src="assets/domains/${DOMAIN_IMGS[gi]}" alt="">`;
@@ -1154,6 +1210,9 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
        * rather than cut to.
        */
       disarm();
+      /* The bed goes first, across the fracture, so the word lands in the
+         space it leaves rather than on top of it. */
+      duckBed(260);
       hit.currentTime = 0;
       const p = hit.play();
       if (p && p.catch) p.catch(() => {});

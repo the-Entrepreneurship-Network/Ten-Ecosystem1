@@ -1130,18 +1130,31 @@ describe('opening curtain', () => {
     expect(impactAt + shakeMs).toBeLessThan(holdMs);
   });
 
-  it('has one sound, and it is the ident on the break', () => {
+  it('runs a bed under the count and the ident on the break', () => {
     /*
-     * There was a bed running under the whole countdown. Thirty seconds of
-     * ambience is a thing to sit through rather than a thing to feel, and the
-     * note it was building towards landed softer for having had company. The
-     * opening is silent until the screen breaks — the way a studio ident
-     * works, where the mark and the sound arrive together and nothing
-     * precedes them.
+     * Two sounds, and they are not equals.
+     *
+     * The count ran in silence for a while, and silence over a number ticking
+     * down reads as a page that has not loaded rather than one about to
+     * start. The bed is the source track from where its music comes in; the
+     * ident is the word, and it is the thing the opening exists to deliver.
+     *
+     * So the bed sits well under it and gets out of the way: a bed still
+     * playing across the fracture turns the strike into a mush, which is what
+     * removing it entirely was reaching for the first time.
      */
     expect(page).toMatch(/new Audio\('assets\/intro\/intro-ten\.mp3'\)/);
-    expect(page).not.toMatch(/intro-bed\.mp3/);
-    expect(page).not.toMatch(/bed\.loop/);
+    expect(page).toMatch(/new Audio\('assets\/intro\/intro-bed\.mp3'\)/);
+
+    const bedVol = Number(/bed\.volume = ([\d.]+)/.exec(page)[1]);
+    const hitVol = Number(/hit\.volume = ([\d.]+)/.exec(page)[1]);
+    expect(bedVol).toBeLessThan(hitVol / 2);
+
+    /* The bed fades rather than stopping dead — a bed cut off is a hole in
+       the sound, and the hole is where the word is meant to land. */
+    expect(page).toMatch(/function duckBed\(/);
+    const finaleBlock = page.slice(page.indexOf('function finale()'));
+    expect(finaleBlock.indexOf('duckBed(')).toBeLessThan(finaleBlock.indexOf('hit.play()'));
 
     /* It fires on the same timer as the flash and the fracture, so the sound
        and the picture land together at any INTRO_MS. */
@@ -1190,15 +1203,25 @@ describe('opening curtain', () => {
     expect(page).not.toMatch(/playBed/);
   });
 
-  it('unlocks audio on the first gesture without playing anything', () => {
+  it('starts the bed on the first gesture, part-way in rather than from the top', () => {
     /*
      * Browsers refuse audio until the page has been interacted with, and
      * typing a URL and pressing Enter is not an interaction with the page.
-     * The listener exists only to satisfy that rule — it plays nothing when
-     * it fires. Thirty seconds of countdown is long enough that a visitor has
-     * almost certainly moved a mouse before the ident is due.
+     * The ident only ever needed that unlock, because it is not due until the
+     * break. The bed is due on the first frame, before anyone could have
+     * moved — so it is attempted immediately, and a refused attempt is
+     * retried on the first gesture.
+     *
+     * Retried at the point the count has reached, not from the beginning: a
+     * visitor who moves their mouse three seconds in should hear the bed
+     * where the opening is, not the top of a track it is already half through
+     * and about to fade.
      */
-    expect(page).toMatch(/const wake = \(\) => disarm\(\);/);
+    expect(page).toMatch(/const wake = \(\) => \{ startBed\(\); disarm\(\); \};/);
+    expect(page).toMatch(/const into = \(Date\.now\(\) - startedAt\) \/ 1000;/);
+    expect(page).toMatch(/bed\.currentTime = Math\.min\(into,/);
+    /* And never over a page that has already finished opening. */
+    expect(page).toMatch(/if \(bedPlaying \|\| finished\) return;/);
     expect(page).toMatch(/\{ once: true, passive: true \}/);
     const events = /const EVENTS = \[([^\]]+)\]/.exec(page)[1];
     ['pointerdown', 'pointermove', 'keydown', 'touchstart', 'wheel', 'scroll']
