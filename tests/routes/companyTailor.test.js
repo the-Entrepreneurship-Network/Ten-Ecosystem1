@@ -182,6 +182,202 @@ describe('the profile knows one employer from another', () => {
   });
 });
 
+describe('dates, and checking its own work before handing it over', () => {
+  /* One role dated, one bare — the case that scored 5/10 and was never asked
+     about, because the trigger only fired on a page with no dates at all. */
+  const HALF_DATED = [
+    'BISHAL NAG', 'Backend Engineer', 'b@e.com | +91 78639 92542 | github.com/b',
+    '', 'EXPERIENCE',
+    'Backend Engineer | Zeta | Jan 2023 - Present',
+    '- Built REST APIs in Java serving 5,000 requests a day, cutting latency 30%',
+    'Web Development Intern | Acme',
+    '- Built the reporting page used by 200 staff',
+    '', 'SKILLS', 'Java, SQL', '', 'EDUCATION', 'B.Tech CS, KIIT',
+  ].join('\n');
+
+  const tailor = async () => {
+    const a = agent();
+    let out = await turn(a, HALF_DATED, null);
+    out.session.jobs = [{
+      title: 'Backend Engineer', company: 'Google', location: 'Global', url: '',
+      aspirational: true, description: '', tags: [],
+    }];
+    out = await turn(a, 'I want to tailor my resume for the Backend Engineer role at Google', out.session);
+    const asked = [];
+    for (let i = 0; i < 30 && out.kind === 'ask'; i += 1) {
+      asked.push(out.session.asked);
+      const opts = choices(out);
+      // eslint-disable-next-line no-await-in-loop
+      out = await turn(a, out.session.asked === 'confirmtailor' ? 'yes' : (opts.length ? opts[0].value : 'skip'), out.session);
+    }
+    return { out, asked };
+  };
+
+  it('asks when the dates are short, not only when there are none', async () => {
+    const { asked } = await tailor();
+    expect(asked).toContain('roledates');
+  });
+
+  it('dates the role that is bare, skipping past the one already dated', async () => {
+    /*
+     * The walk stopped at the first date range it saw, so a page with one
+     * dated role and one bare one stayed bare however many times this was
+     * answered — 5/10 for a check the student had just supplied the missing
+     * half of.
+     */
+    const { out } = await tailor();
+    const dates = require('../../routes/v2/resumeAgent')
+      .scanResume(out.text, out.session.scoreTarget).checks.find((c) => c.id === 'dates');
+    expect(dates.earned).toBe(dates.weight);
+  });
+
+  it('asks once and never repeats the sentence', async () => {
+    const { asked } = await tailor();
+    expect(asked.filter((f) => f === 'roledates').length).toBe(1);
+  });
+
+  it('re-reads the finished page and records what it verified', async () => {
+    /*
+     * Everything before this chooses what to add by projection. This re-reads
+     * the result as an ATS would and goes back for more if it is short —
+     * bounded to three passes, so it cannot fail to terminate.
+     */
+    const { out } = await tailor();
+    expect(out.session.verified).toBeGreaterThanOrEqual(92);
+    expect(out.session.verified).toBe(out.report.score);
+  });
+});
+
+describe('a resume built from scratch clears the same bar as one uploaded', () => {
+  const TYPED = {
+    name: 'Bishal Nag',
+    email: 'bishal.nag@gmail.com',
+    phone: '+91 78639 92542',
+    github: 'github.com/bishalnag',
+    linkedin: 'linkedin.com/in/bishalnag',
+  };
+
+  const buildFromScratch = async () => {
+    const a = agent();
+    let out = await turn(a, 'build me a resume', null);
+    for (let i = 0; i < 50; i += 1) {
+      if (out.kind === 'ask') {
+        const opts = choices(out);
+        const typed = TYPED[out.session.asked];
+        // eslint-disable-next-line no-await-in-loop
+        out = await turn(a, typed !== undefined ? typed : (opts.length ? opts[0].value : 'skip'), out.session);
+      } else if (out.jobs) {
+        // eslint-disable-next-line no-await-in-loop
+        out = await turn(a, `I want to tailor my resume for the ${out.jobs[0].title} role at ${out.jobs[0].company}`, out.session);
+      } else break;
+    }
+    return out;
+  };
+
+  it('reaches the bar instead of stopping at the conversion', async () => {
+    /*
+     * It stopped at 56 while an uploaded resume aimed at the same job came
+     * back at 96 — the two paths delivered from different places in the
+     * router and only one of them ran the climb. Same errand, same employer,
+     * half the score.
+     */
+    const out = await buildFromScratch();
+    expect(out.kind).toBe('build');
+    expect(out.report.score).toBeGreaterThanOrEqual(92);
+  });
+
+  it('never turns an employer into an achievement', async () => {
+    /*
+     * The internship question is a list of employers, so the answer is a
+     * company name — and it was being pasted in as work. A page came back
+     * with an EXPERIENCE section whose achievements read "- Google" and
+     * "- Google". Nobody claimed to have done Google.
+     */
+    const out = await buildFromScratch();
+    const bullets = out.text.split('\n').filter((l) => /^\s*-\s/.test(l));
+    bullets.forEach((b) => {
+      expect(b).not.toMatch(/^-\s*(Built|Delivered|Created|Developed)?\s*Google\s*(\(paid internship\))?\s*$/i);
+    });
+  });
+
+  it('never prints the same line twice', async () => {
+    /* Two list questions about projects, one entry picked in both. */
+    const out = await buildFromScratch();
+    /* Planned entries count too — the employer's bench and the role's
+       catalogue overlap by design, and concatenating them without deduping
+       put the same project on the page twice with two identical step lists. */
+    const lines = out.text.split('\n').map((l) => l.trim()).filter(Boolean);
+    const seen = new Map();
+    lines.forEach((l) => seen.set(l, (seen.get(l) || 0) + 1));
+    const repeated = [...seen.entries()].filter(([l, n]) => n > 1 && l.startsWith('-'));
+    expect(repeated).toEqual([]);
+  });
+});
+
+describe('a wrong pick is overruled, and the student is told so', () => {
+  const RESUME_B = RESUME;
+  const tailorWith = async (mode) => {
+    const a = agent();
+    let out = await turn(a, RESUME_B, null);
+    out.session.jobs = [{
+      title: 'Backend Engineer', company: 'Netflix', location: 'Global', url: '',
+      aspirational: true, description: '', tags: [],
+    }];
+    out = await turn(a, 'I want to tailor my resume for the Backend Engineer role at Netflix', out.session);
+    for (let i = 0; i < 30 && out.kind === 'ask'; i += 1) {
+      const opts = choices(out);
+      let answer;
+      if (out.session.asked === 'confirmtailor') answer = 'yes';
+      else if (!opts.length) answer = 'skip';
+      else if (out.session.asked === 'addproject') {
+        answer = mode === 'none' ? 'skip'
+          : mode === 'worst' ? opts[opts.length - 1].value
+            : opts.slice(0, 2).map((c) => c.value).join(', ');
+      } else answer = opts.slice(0, 2).map((c) => c.value).join(', ');
+      // eslint-disable-next-line no-await-in-loop
+      out = await turn(a, answer, out.session);
+    }
+    return out;
+  };
+
+  it('adds the right work anyway when the weakest option was chosen', async () => {
+    /*
+     * Somebody picking from a list of thirty will sometimes pick the weakest
+     * one for the job they are aiming at. Their pick is never removed — it is
+     * their plan and they may have a reason — but the page still has to clear
+     * the bar, so what the employer actually screens on goes on behind it.
+     */
+    const out = await tailorWith('worst');
+    expect(out.report.score).toBeGreaterThanOrEqual(92);
+    expect(out.reply).toMatch(/Your picks are on the page and stay there/);
+    expect(out.reply).toMatch(/what Netflix screens this role on/);
+  });
+
+  it('adds it anyway when they decline every suggestion, and says which', async () => {
+    /* Declining is a click. A page below the bar is filtered before a human
+       reads it, so the work goes on and the decision is stated out loud
+       rather than slipped in. */
+    const out = await tailorWith('none');
+    expect(out.report.score).toBeGreaterThanOrEqual(92);
+    expect(out.reply).toMatch(/You did not want to pick any, so I chose/);
+    expect(out.reply).toMatch(/chaos testing|circuit breakers|streaming/);
+  });
+
+  it('keeps good picks and is honest that more still went on', async () => {
+    /*
+     * Picking the two strongest options is not the same as picking enough:
+     * two projects rarely carry a page to the bar on their own. The note has
+     * to stay accurate rather than flattering — the picks are kept, and what
+     * went on behind them is named either way.
+     */
+    const out = await tailorWith('best');
+    expect(out.report.score).toBeGreaterThanOrEqual(92);
+    expect(out.reply).toMatch(/Your picks are on the page and stay there/);
+    /* And never the wording for somebody who picked nothing. */
+    expect(out.reply).not.toMatch(/You did not want to pick any/);
+  });
+});
+
 describe('the work depends on the company AND the role, never on one alone', () => {
   const COMPANIES = ['Google', 'Amazon', 'Netflix', 'JPMorgan Chase', 'Infosys', 'Razorpay', 'TSMC', 'Anthropic'];
   const ROLES = ['Software Engineer', 'Data Scientist', 'DevOps Engineer', 'UI/UX Designer', 'Cybersecurity Analyst'];
