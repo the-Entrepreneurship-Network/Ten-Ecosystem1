@@ -1033,15 +1033,22 @@ function interviewQuestions(ledger, opts) {
   /* Block 3 — skills. Only tools they can defend. */
   if (!ledger.statedSkills.length) {
     ask(3, 'skills', 'List the tools and methods you have actually used — only ones you could defend in an interview.');
-  } else if (!ledger.evidencedSkills.length && !ledger.impliedSkills.length) {
-    ask(3, 'evidence', `Your skills line names ${ledger.statedSkills.slice(0, 4).join(', ')} but no bullet shows them in use. For each, what did you build or do with it?`);
   }
 
-  /* Block 4 — experience: the one real number, never invented for them. */
-  const scopedBullets = ledger.roles.flatMap((r) => r.bullets).filter(hasScope);
-  if (ledger.roles.length && !scopedBullets.length) {
-    ask(4, 'metric', 'One real number you will stand behind for your strongest bullet — users, time saved, records, team size, frequency. If none exists, say so and it stays out.');
-  }
+  /*
+   * The metric question is gone, and the evidence question with it.
+   *
+   * Both asked for prose — "one real number you will stand behind", "for each
+   * skill, what did you build with it?" — and the brief for this agent is
+   * that nothing is typed except a name, an email, a phone number and two
+   * profile links. They were also the two questions people abandoned the
+   * interview on, which is the same fact from the other side.
+   *
+   * Neither is lost work. The climb puts projects on the page that carry
+   * their own numbers and their own evidence, and the student fills the
+   * blanks in as they build them — which is when they will actually know
+   * what the number was.
+   */
   /*
    * The dates question is gone.
    *
