@@ -1136,8 +1136,10 @@ describe('opening curtain', () => {
      *
      * The count ran in silence for a while, and silence over a number ticking
      * down reads as a page that has not loaded rather than one about to
-     * start. The bed is the source track from where its music comes in; the
-     * ident is the word, and it is the thing the opening exists to deliver.
+     * start. The bed is the source recording whole — nothing trimmed,
+     * levelled or faded into the file, so what is on disk is what was
+     * recorded and everything shaping it is set on the page. The ident is the
+     * word, and it is the thing the opening exists to deliver.
      *
      * So the bed sits well under it and gets out of the way: a bed still
      * playing across the fracture turns the strike into a mush, which is what
@@ -1146,13 +1148,28 @@ describe('opening curtain', () => {
     expect(page).toMatch(/new Audio\('assets\/intro\/intro-ten\.mp3'\)/);
     expect(page).toMatch(/new Audio\('assets\/intro\/intro-bed\.mp3'\)/);
 
-    const bedVol = Number(/bed\.volume = ([\d.]+)/.exec(page)[1]);
+    const bedVol = Number(/const BED_VOL = ([\d.]+)/.exec(page)[1]);
     const hitVol = Number(/hit\.volume = ([\d.]+)/.exec(page)[1]);
     expect(bedVol).toBeLessThan(hitVol / 2);
 
-    /* The bed fades rather than stopping dead — a bed cut off is a hole in
-       the sound, and the hole is where the word is meant to land. */
-    expect(page).toMatch(/function duckBed\(/);
+    /*
+     * The bed gets out of the way for the word and then comes back.
+     *
+     * It used to duck to nothing and stay there, which was right when the bed
+     * was cut to the length of the opening. The bed is the whole recording
+     * now and runs about twice as long as the countdown and finale together,
+     * so stopping it at the break would end the music mid-phrase while the
+     * page is still arriving.
+     */
+    expect(page).toMatch(/const DUCK_VOL = BED_VOL \* 0\.2;/);
+    expect(page).toMatch(/ramp\(DUCK_VOL, ms, \(\) => setTimeout\(\(\) => ramp\(BED_VOL, \d+\), \d+\)\);/);
+    /* Ramped, never switched: a level that jumps is heard as a fault, and
+       this one jumps twice. */
+    expect(page).toMatch(/function ramp\(to, ms, then\)/);
+    /* And it ends on a fade of its own, because the file runs out while the
+       page is already showing. */
+    expect(page).toMatch(/bed\.addEventListener\('timeupdate'/);
+
     const finaleBlock = page.slice(page.indexOf('function finale()'));
     expect(finaleBlock.indexOf('duckBed(')).toBeLessThan(finaleBlock.indexOf('hit.play()'));
 
