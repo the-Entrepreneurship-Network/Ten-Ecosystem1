@@ -390,22 +390,38 @@ describe('the conversation advances instead of repeating', () => {
     expect(out.kind).toBe('build');
   });
 
-  it('takes the name and contact from a resume already uploaded', async () => {
+  it('treats "build me a resume" as a new person, whatever came before it', async () => {
     /*
-     * Someone uploaded their resume, watched it score, then asked for a
-     * resume aimed at a different role — and was told "it would go out
-     * saying your name is missing" about a document whose first line is
-     * their name. BUILD read only the interview answers, and an upload was
-     * not one of them.
+     * This used to carry the uploaded resume forward, on the reasoning that
+     * somebody asking for a different role is still the same person and
+     * should not have to retype their own name.
+     *
+     * One chat is one browser tab, not one applicant. A student uploaded a
+     * CV, got it tailored, and a friend beside them said build me a resume —
+     * and the session still held the first person's page, so the interview
+     * skipped every question it already had answers for and handed the
+     * second student the first one's document with their own name nowhere on
+     * it. Asking to build is the one command that means start again, so it is
+     * the one command allowed to throw everything away.
      */
     const a = app();
     let out = await turn(a, RESUME, null);
-    out = await turn(a, 'Build a Full-Stack Developer resume from scratch', out.session);
-    for (let i = 0; i < 24 && out.kind === 'ask'; i += 1) {
-      expect(out.reply || '').not.toMatch(/your name is missing/i);
+    expect(out.report.score).toBeGreaterThan(0);
+
+    out = await turn(a, 'build me a resume', out.session);
+    expect(String(out.session.resumeText || '').trim()).toBe('');
+    expect(out.session.details).toEqual({});
+
+    /* And it asks, rather than assuming: the position first. */
+    expect(out.kind).toBe('ask');
+    expect(out.session.asked).toBe('target');
+
+    for (let i = 0; i < 30 && out.kind === 'ask'; i += 1) {
+      // eslint-disable-next-line no-await-in-loop
       out = await turn(a, 'skip', out.session);
     }
-    expect(out.text).toMatch(/PRIYA NAIR/);
+    /* Nothing of the first person survives into the second one's page. */
+    expect(out.text || '').not.toMatch(/PRIYA NAIR/);
   });
 
   it('works to the score the person asked for, not always 98', async () => {

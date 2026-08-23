@@ -2422,11 +2422,23 @@ async function portalJobs(resumeText, role) {
    */
   // eslint-disable-next-line global-require
   const jobAgent = require('./jobAgent');
-  const jobs = await jobAgent.findJobs(String(resumeText || ''), { role: String(role || '') });
+  /*
+   * Every opening the boards return, not the first eight.
+   *
+   * The portal listed twenty-seven for a resume and this seat showed two of
+   * them, which reads as a broken search rather than as a cap. Both numbers
+   * were ours: findJobs defaults to eight, and this sliced to eight again
+   * afterwards. The student asked what is out there — the answer is what is
+   * out there, and the roster of employers goes underneath it.
+   */
+  const jobs = await jobAgent.findJobs(String(resumeText || ''), {
+    role: String(role || ''),
+    limit: 60,
+  });
   if (!Array.isArray(jobs)) throw new Error('job search returned nothing usable');
 
   /* Read, never re-sorted: the order IS the parity. */
-  return jobs.slice(0, 8).map((j) => ({
+  return jobs.map((j) => ({
     title: String(j.title || '').slice(0, 120),
     company: String(j.company || '').slice(0, 60),
     location: String(j.location || '').slice(0, 60),
@@ -3040,6 +3052,17 @@ function deliver(res, session, packetOrBuilt, kindNote) {
   session.lastScore = delivered.score;
   session.bestScore = Math.max(session.bestScore || 0, delivered.score);
 
+  /*
+   * Verified against the page actually being handed over.
+   *
+   * tailorClimb records the number it checked, and then this function adds
+   * the LEARNING block on top — so the recorded figure described a page that
+   * no longer existed by the time anybody saw it: verified 83, delivered 81.
+   * A self-check that runs before the last edit is not a self-check.
+   */
+  const finalReport = scanResume(text, session.scoreTarget);
+  session.verified = finalReport.score;
+
   return res.json({
     ok: true, kind: 'build',
     /* Score, the one sentence the command wanted to say, then the work in
@@ -3047,7 +3070,7 @@ function deliver(res, session, packetOrBuilt, kindNote) {
        the two lines the brief asks for and nothing more. */
     reply: [header, kindNote, plan].filter(Boolean).join('\n\n'),
     text,
-    report: scanResume(text, session.scoreTarget),
+    report: finalReport,
     missing: isPacket ? [] : packetOrBuilt.missing,
     potentialScore: isPacket ? undefined : packetOrBuilt.potentialScore,
     details: session.details,
@@ -3310,6 +3333,45 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         delete session.details.addProject;
         session.declined = (session.declined || [])
           .filter((f) => !['leadproject', 'leadskill', 'addproject'].includes(f));
+      }
+
+      /*
+       * "Build me a resume" is a new person, whatever came before it.
+       *
+       * One chat is one browser tab, not one applicant: somebody uploads a
+       * CV, gets it tailored, and then a friend sitting beside them says
+       * build me one. The session still held the first person's resume, so
+       * the interview skipped every question it already had answers for and
+       * the second student was handed the first one's page with their own
+       * name nowhere on it.
+       *
+       * A build request clears the person — the resume, the ledger, the
+       * answers, the picks, the score history — and keeps nothing but the
+       * conversation. It is the one command that means "start again", so it
+       * is the one command that is allowed to throw everything away.
+       */
+      if (command === 'build' && !pastedResume) {
+        session.resumeText = '';
+        session.details = {};
+        session.declined = [];
+        session.shipped = null;
+        session.lastPacket = null;
+        session.jobs = null;
+        session.pickedJob = null;
+        session.pendingTailor = null;
+        session.jd = '';
+        session.target = session.target || '';
+        session.scoreTarget = undefined;
+        session.bestScore = 0;
+        session.verified = undefined;
+        session.seededFromResume = false;
+        session.buildAsked = 0;
+        session.tailorAsked = 0;
+        session.dateAsks = 0;
+        session.jobsShownForBuild = false;
+        session.plannedGuides = null;
+        session.overruled = null;
+        session.interview = null;
       }
 
       session.command = command;
