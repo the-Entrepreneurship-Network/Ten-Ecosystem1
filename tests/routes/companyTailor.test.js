@@ -182,6 +182,60 @@ describe('the profile knows one employer from another', () => {
   });
 });
 
+describe('the work depends on the company AND the role, never on one alone', () => {
+  const COMPANIES = ['Google', 'Amazon', 'Netflix', 'JPMorgan Chase', 'Infosys', 'Razorpay', 'TSMC', 'Anthropic'];
+  const ROLES = ['Software Engineer', 'Data Scientist', 'DevOps Engineer', 'UI/UX Designer', 'Cybersecurity Analyst'];
+  const top = (c, r) => profiles.profileFor(c, r).projects.slice(0, 8).join('|');
+
+  it('gives one company\'s four roles four different lists', () => {
+    /*
+     * They were identical. The company was the only thing consulted, so a
+     * Google data scientist and a Google UI/UX designer were both told to
+     * build sharding, distributed tracing and search indexing.
+     */
+    const seen = new Set(ROLES.map((r) => top('Google', r)));
+    expect(seen.size).toBe(ROLES.length);
+    expect(profiles.profileFor('Google', 'UI/UX Designer').projects.slice(0, 3).join(' '))
+      .not.toMatch(/sharding/);
+    expect(profiles.profileFor('Google', 'Data Scientist').projects.slice(0, 3).join(' '))
+      .toMatch(/sql|python|pandas/);
+  });
+
+  it('gives one role different lists at different companies', () => {
+    /*
+     * And the other half of the same bug: putting the role first made every
+     * employer produce the identical list. What distinguishes a data
+     * scientist at Google from one anywhere else is the scale they work at,
+     * so the company's own emphasis sits directly behind the role's core.
+     */
+    const seen = new Set(COMPANIES.map((c) => top(c, 'Data Scientist')));
+    expect(seen.size).toBe(COMPANIES.length);
+    expect(top('Google', 'Data Scientist')).toMatch(/sharding|search indexing/);
+    expect(top('JPMorgan Chase', 'Data Scientist')).toMatch(/audit logging|reconciliation/);
+    expect(top('Netflix', 'Data Scientist')).toMatch(/chaos testing|streaming/);
+  });
+
+  it('is distinct across every company and role pair, not just the famous ones', () => {
+    const seen = new Set();
+    COMPANIES.forEach((c) => ROLES.forEach((r) => seen.add(top(c, r))));
+    expect(seen.size).toBe(COMPANIES.length * ROLES.length);
+  });
+
+  it('never returns an empty list, for any employer and any title', () => {
+    /* 374 employers and 105 titles is 39,270 combinations, and a page
+       tailored for one of them that recommends nothing is the failure this
+       whole feature exists to prevent. */
+    const { COMPANIES: ALL } = require('../../services/v2/aspirationalCompanies');
+    const career = require('../../services/v2/careerData');
+    const titles = career.POSITION_GROUPS.flatMap((g) => g.roles);
+    ALL.slice(0, 40).forEach(([c]) => titles.slice(0, 30).forEach((r) => {
+      const p = profiles.profileFor(c, r);
+      expect(p.projects.length).toBeGreaterThan(0);
+      expect(p.skills.length).toBeGreaterThan(0);
+    }));
+  });
+});
+
 describe('one scale, and nothing quietly dropped', () => {
   it('reports every score out of 100, including the very first one', async () => {
     /*

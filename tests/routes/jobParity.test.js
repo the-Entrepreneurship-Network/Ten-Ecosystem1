@@ -100,6 +100,21 @@ describe('both seats show the same openings', () => {
     );
   });
 
+  it('appends the whole roster, not the first thirty', async () => {
+    /*
+     * The cap was thirty, and it cut by how well each employer fitted the
+     * title — so a backend engineer never saw the banks, the semiconductor
+     * firms or the Indian product companies at all. Every employer on the
+     * list appears after the live openings; the ordering decides what is near
+     * the top, not what exists.
+     */
+    const { COMPANIES } = require('../../services/v2/aspirationalCompanies');
+    const out = await hunt();
+    const targets = out.jobs.filter((j) => j.aspirational);
+    expect(targets.length).toBe(COMPANIES.length);
+    expect(new Set(targets.map((j) => j.company)).size).toBe(targets.length);
+  });
+
   it('appends the big names as targets, never as openings', () => {
     return hunt().then((out) => {
       const aspirational = out.jobs.filter((j) => j.aspirational);

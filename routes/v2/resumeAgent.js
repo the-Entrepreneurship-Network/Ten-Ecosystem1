@@ -3903,6 +3903,37 @@ router.post('/chat', upload.single('file'), async (req, res) => {
           bench, pickedTerms, houseNow ? houseNow.skills : [], 24, 40);
         if (deeper.projected > lift.projected) lift = deeper;
       }
+
+      /*
+       * The floor, and it is not negotiable.
+       *
+       * Ninety-two is where a tailored page starts. Below that an ATS filters
+       * it before a person reads a line of it, so a resume handed back at 72
+       * or 88 has not been tailored, it has been formatted — and handing one
+       * over is the tool failing quietly at the only job it has.
+       *
+       * The climb above stops early by design: twelve entries because a
+       * resume is one sheet, three stale rounds because a bench usually runs
+       * out of ideas before it runs out of entries. Both of those are the
+       * right default and neither is worth a page that gets filtered. When
+       * the floor is not met, the caps come off and the bench widens to every
+       * family — a backend engineer building an observability project or a
+       * data pipeline is doing real, defensible work, and the alternative is
+       * a page nobody reads.
+       */
+      const FLOOR = 92;
+      if (lift.projected < FLOOR) {
+        const everything = [
+          ...bench,
+          ...skillPlan.plansFor(
+            Object.values(skillPlan.DEEP_BENCH).flat(), owned, 200,
+          ),
+        ];
+        const forced = climbToGoal(packet.resume, session.scoreTarget,
+          Math.max(goalNow, FLOOR), everything, pickedTerms,
+          houseNow ? houseNow.skills : [], 40, 200);
+        if (forced.projected > lift.projected) lift = forced;
+      }
       if (lift.projected >= beforeClimb && lift.used.length) {
         packet.resume = lift.text;
         if (packet.after) packet.after.checker = lift.projected;
@@ -4187,7 +4218,20 @@ router.post('/chat', upload.single('file'), async (req, res) => {
        * one click away.
        */
       const role = session.jobRole || session.target || 'Engineer';
-      const aspirational = aspirationalCompanies.aspirationalFor(role, 30).map(({ name: company }) => ({
+      /*
+       * All of them, not the first thirty.
+       *
+       * The cap was thirty because a long list reads badly, and it meant the
+       * roster stopped at the sectors nearest the student's title — so a
+       * backend engineer never saw the banks, the semiconductor firms or the
+       * Indian product companies at all. Whoever is advertising today is the
+       * top of the list and the whole roster follows it, ordered by how well
+       * each employer fits the role. It is a list to scroll, and scrolling is
+       * cheaper than an employer being invisible.
+       */
+      const aspirational = aspirationalCompanies
+        .aspirationalFor(role, aspirationalCompanies.COMPANIES.length)
+        .map(({ name: company }) => ({
         title: role,
         company,
         location: 'Global · wherever they hire this role',

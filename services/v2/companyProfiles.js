@@ -981,6 +981,29 @@ const HOUSES = [
 const HOUSE = Object.fromEntries(HOUSES.map(([name, note, resume, projects, skills]) =>
   [name.toLowerCase(), { name, note, resume, projects, skills }]));
 
+/**
+ * The work a ROLE is built on, independent of who is hiring.
+ *
+ * Drawn from the same bench the project catalogue uses, so what a company
+ * profile recommends and what the role's own catalogue offers are the same
+ * vocabulary rather than two lists that happen to overlap.
+ */
+function benchFor(role) {
+  // eslint-disable-next-line global-require
+  const { DEEP_BENCH } = require('./skillPlan');
+  const t = String(role || '');
+  const pick = (...keys) => keys.flatMap((k) => DEEP_BENCH[k] || []);
+  if (/front.?end|\bui\b|\bux\b|design|interaction|visual/i.test(t)) return pick('frontend', 'design');
+  if (/\bml\b|machine learning|deep learning|\bai\b|llm|nlp|vision|research scientist/i.test(t)) return pick('ml', 'data');
+  if (/data (analyst|scientist|engineer)|analytics|business intelligence|warehouse|\betl\b|quant/i.test(t)) return pick('data');
+  if (/devops|\bsre\b|platform|reliability|cloud|infrastructure|systems admin|network/i.test(t)) return pick('devops');
+  if (/security|infosec|\bsoc\b|penetration|forensic|threat|cryptograph|privacy|grc/i.test(t)) return pick('security');
+  if (/android|\bios\b|mobile|flutter|react native/i.test(t)) return pick('mobile');
+  if (/embedded|firmware|vlsi|asic|\brf\b|hardware|electronic|robotics|iot/i.test(t)) return pick('hardware');
+  if (/analyst|consultant|manager|product owner|scrum|program|project/i.test(t)) return pick('business', 'data');
+  return pick('software');
+}
+
 /** The archetype for a company, by name if we know it, by domain otherwise. */
 function archetypeFor(company, role) {
   const { COMPANIES } = require('./aspirationalCompanies');
@@ -1006,6 +1029,30 @@ function profileFor(company, role) {
   const house = HOUSE[key] || null;
   const arch = archetypeFor(company, role);
   const dedupe = (list) => [...new Set(list.filter(Boolean).map((s) => String(s)))];
+
+  /*
+   * The company sets the bar. The ROLE decides which work clears it.
+   *
+   * A house profile is written from what an employer's postings emphasise,
+   * and those postings are mostly for engineers — so Google's list is
+   * sharding, distributed tracing and search indexing. Handing that to a data
+   * scientist applying to Google is wrong, and handing it to a UI/UX designer
+   * applying to Google is absurd: all four roles were being told to build the
+   * same four things, because the company was the only thing consulted.
+   *
+   * So the two are crossed. Work that is both the company's emphasis AND the
+   * role's own leads, because that is the sharpest thing a candidate can
+   * build. The rest of the role's bench follows, since a data scientist at
+   * Google is a data scientist first. The company's remaining terms come last
+   * rather than being dropped — they still say something true about the bar,
+   * and a scientist who ships one of them is better for it.
+   */
+  const roleBench = benchFor(role);
+  const inRole = new Set(roleBench.map((t) => t.toLowerCase()));
+  const houseProjects = house ? house.projects : [];
+  const shared = houseProjects.filter((t) => inRole.has(String(t).toLowerCase()));
+  const houseOnly = houseProjects.filter((t) => !inRole.has(String(t).toLowerCase()));
+
   return {
     company: company || '',
     known: Boolean(house),
@@ -1013,7 +1060,26 @@ function profileFor(company, role) {
     /* What the PAGE should lead with. Only a named house has one — a sector
        can say what the work is, but not which of your facts goes first. */
     resume: house ? house.resume : '',
-    projects: dedupe([...(house ? house.projects : []), ...arch.projects]),
+    /*
+     * Role first, employer visible, in that order.
+     *
+     * Putting the role's bench in front and the company's leftovers behind it
+     * fixed the designer being told to build sharding and broke the other
+     * half: every company then produced the identical list for one role,
+     * because nothing of theirs was near the top. What actually distinguishes
+     * a data scientist at Google from one anywhere else is that theirs works
+     * at a scale the others do not — so the role's core leads, the company's
+     * own emphasis sits right behind it where it is unmissable, and the rest
+     * of the role's bench follows.
+     */
+    projects: dedupe([
+      ...shared,
+      ...roleBench.slice(0, 3),
+      ...houseOnly.slice(0, 3),
+      ...roleBench.slice(3),
+      ...houseOnly.slice(3),
+      ...arch.projects,
+    ]),
     skills: dedupe([...(house ? house.skills : []), ...arch.skills]),
   };
 }
