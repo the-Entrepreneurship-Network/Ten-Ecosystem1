@@ -46,8 +46,16 @@
      away, and until it has it still sits over the hero and eats every click —
      START MY JOURNEY did nothing for anyone who reached for it early. */
   #pre.done { transform:translateY(-101%); pointer-events:none; }
-  .pre-word { display:flex; align-items:center; gap:2vw; font-size:clamp(90px,18vw,260px); font-weight:900; letter-spacing:-0.04em; }
-  #preSlot { width:1.05em; height:1.05em; display:flex; align-items:center; justify-content:center; font-size:.62em; transition:opacity .18s, transform .18s; }
+  /*
+   * T and N arrive touching, then move apart to make the gap the domains
+   * appear in. The gap is the flex gap plus the slot's own width, so both are
+   * animated together — collapsing only the slot leaves the two letters a
+   * gutter apart and the split reads as a nudge rather than as an opening.
+   */
+  .pre-word { display:flex; align-items:center; gap:2vw; font-size:clamp(90px,18vw,260px); font-weight:900; letter-spacing:-0.04em; transition:gap var(--split,1.5s) cubic-bezier(.76,0,.24,1); }
+  .pre-word.closed { gap:0; }
+  #preSlot { width:1.05em; height:1.05em; display:flex; align-items:center; justify-content:center; font-size:.62em; transition:opacity .18s, transform .18s, width var(--split,1.5s) cubic-bezier(.76,0,.24,1); }
+  .pre-word.closed #preSlot { width:0; opacity:0; }
   #preSlot img { width:100%; height:100%; object-fit:cover; border-radius:14px; mix-blend-mode:screen; }
   #preSlot.swap { opacity:0; transform:scale(.6) rotate(-20deg); }
   #preCount { position:absolute; bottom:26px; left:50%; transform:translateX(-50%); font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:13px; letter-spacing:.2em; color:#fff; font-variant-numeric:tabular-nums; }
@@ -260,7 +268,6 @@
   /* ---------- video block ---------- */
   .film { position:relative; }
   .film video { width:100%; display:block; }
-  .film .sound { position:absolute; top:18px; left:50%; transform:translateX(-50%); background:#000; color:#fff; border:0; border-radius:999px; padding:8px 18px; font-size:11px; letter-spacing:.12em; cursor:pointer; }
   .film .cap { position:absolute; bottom:14px; left:22px; font-size:12px; color:#fff; text-shadow:0 1px 8px rgba(0,0,0,.8); }
 
   /* ---------- scroll words ---------- */
@@ -648,7 +655,6 @@
 <!-- film -->
 <section class="film">
   <video id="film" autoplay muted loop playsinline src="assets/student-portal/hero-walk.mp4"></video>
-  <button class="sound" id="soundBtn" aria-pressed="false">SOUND &#9702;</button>
   <p class="cap">a student, working — the ecosystem orbiting around her</p>
 </section>
 
@@ -939,8 +945,11 @@ const DOMAIN_IMGS = ['python.jpg','java.jpg','web.jpg','mern.jpg','flutter.jpg',
 
    HOLD_MS is the beat after the word cracks into place, before the curtain
    lifts — long enough that the finished TEN is seen rather than glimpsed. */
-const COUNTDOWN_MS = 10000;
+const COUNTDOWN_MS = 30000;
 const HOLD_MS = 1600;
+/* The letters arrive together and then move apart, which is the beat the
+   domains need in order to have somewhere to appear. */
+const SPLIT_MS = 1500;
 const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
 (() => {
   const count = document.getElementById('preCount');
@@ -957,58 +966,39 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
    *
    * The bed runs to the crack, not to the end of the countdown. Those are not
    * the same instant: the countdown ends, the E spins in, and it lands almost
-   * a second later — so a bed cut to the countdown left the E flying through
-   * silence and the strike arriving out of nowhere. It is eleven seconds, and
-   * the take only had nine before its strike, so the difference is a lead-in
-   * taken from the take's own quietest stretch and crossfaded on the front.
-   * Looping the nine instead put an audible restart just before the crack,
-   * which is the one moment the sound must not draw attention to itself. It
-   * still loops, but only as insurance against a longer countdown.
+   * Silence, and then one sound.
    *
-   * The hit fires on the same timer that fires the flash and the fracture, so
-   * the sound and the picture land together at any INTRO_MS.
+   * There was a bed running under the whole countdown. Thirty seconds of
+   * ambience is a thing to sit through rather than a thing to feel, and the
+   * strike it was building towards landed softer for having had company. The
+   * opening is silent now: the letters split, the domains cycle, and the only
+   * sound in it is the one that fires when the screen breaks — the way a
+   * studio ident works, where the mark and the note arrive together and
+   * nothing precedes them.
    *
-   * It starts on its own, with nothing to press.
+   * It fires on the same timer as the flash and the fracture, so the sound and
+   * the picture land together at any INTRO_MS.
    *
-   * There is no button, because a button is a thing to notice and decide
-   * about before the opening it belongs to has finished. play() is called the
-   * instant the script runs.
+   * Nothing to press, and no icon. What no code can change: every browser
+   * refuses audio until the page has been interacted with, and typing a URL
+   * and pressing Enter is not an interaction WITH THE PAGE. Chrome relaxes it
+   * once a visitor has built up media engagement on the domain, and Safari and
+   * Firefox have their own versions of the same rule — so the same site is
+   * silent for one person and not for another, and neither is a bug here.
    *
-   * What no code can change: every browser refuses audio until the page has
-   * been interacted with, and typing a URL and pressing Enter is not an
-   * interaction WITH THE PAGE. Chrome relaxes it once a visitor has built up
-   * media engagement on the domain, and Safari and Firefox have their own
-   * versions of the same rule — so the same site is silent for one person and
-   * not for another, and neither is a bug on our side.
-   *
-   * So: attempt it immediately, and if the browser refuses, start on the very
-   * first thing the visitor does — a scroll, a tap, a key — from where the
-   * countdown has already reached, rather than restarting a bed for an
-   * opening that is half over. No prompt, no icon, nothing asked of them.
+   * A single ident is easier to land than a bed was: the countdown gives the
+   * visitor thirty seconds to move a mouse, and the first movement unlocks
+   * playback long before the strike is due.
    */
-  const bed = new Audio('assets/intro/intro-bed.mp3');
-  const hit = new Audio('assets/intro/intro-impact.mp3');
-  bed.loop = true;
-  bed.preload = 'auto';
+  const hit = new Audio('assets/intro/intro-ten.mp3');
   hit.preload = 'auto';
-  bed.volume = 0.55;
-  hit.volume = 0.85;
+  hit.volume = 0.95;
 
-  const startedAt = Date.now();
+  /* One listener, removed the moment it has done its job. Any gesture at all
+     unlocks audio for the page; nothing is played when it fires. */
   let armed = false;
-  const playBed = () => {
-    /* From where the countdown actually is. A bed that starts at zero eight
-       seconds in is a different opening from the one being watched. */
-    const into = (Date.now() - startedAt) / 1000;
-    if (bed.duration) bed.currentTime = into % bed.duration;
-    const p = bed.play();
-    if (p && p.catch) p.catch(() => arm());
-  };
-  /* One listener, removed the moment it has done its job. Scroll and mouse
-     movement are in the list because on a page that opens with a countdown
-     they are the likeliest first thing a visitor does. */
-  const wake = () => { disarm(); playBed(); };
   const EVENTS = ['pointerdown', 'pointermove', 'keydown', 'touchstart', 'wheel', 'scroll'];
+  const wake = () => disarm();
   function arm() {
     if (armed) return;
     armed = true;
@@ -1018,7 +1008,7 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
     armed = false;
     EVENTS.forEach((e) => window.removeEventListener(e, wake));
   }
-  playBed();
+  arm();
   /* Each half is set directly now rather than split from one total, so the
      hold after the crack stays three seconds whatever the countdown is. */
   const COUNT_MS = COUNTDOWN_MS;
@@ -1058,16 +1048,39 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
    * countdown instead: one slot per domain, all fourteen, and it stays
    * correct if the countdown is ever changed again.
    */
-  const LOGO_MS = Math.max(200, Math.round(COUNT_MS / DOMAIN_IMGS.length));
-  const cycle = setInterval(() => {
-    if (finished) return;
-    slot.classList.add('swap');
-    setTimeout(() => {
-      gi = (gi + 1) % DOMAIN_IMGS.length;
-      setSlot();
-      slot.classList.remove('swap');
-    }, 60);
-  }, LOGO_MS);
+  /*
+   * The letters open first, and the domains use the gap they leave.
+   *
+   * T and N start touching — "TN", a word with a letter missing rather than a
+   * frame with a hole in it — and move apart on their own beat before
+   * anything is put between them. Starting them apart made the first domain
+   * appear out of nothing; starting them closed makes the same image look
+   * like it was let in.
+   *
+   * The cycle is measured from the moment the split finishes, so every domain
+   * still gets its turn inside the countdown however long the split takes.
+   */
+  const word = document.getElementById('preWord');
+  word.style.setProperty('--split', SPLIT_MS + 'ms');
+  word.classList.add('closed');
+  /* Two frames, so the browser has painted the closed state before the class
+     comes off — set in the same frame, there is nothing to transition from. */
+  requestAnimationFrame(() => requestAnimationFrame(() => word.classList.remove('closed')));
+
+  const CYCLE_MS = Math.max(0, COUNT_MS - SPLIT_MS);
+  const LOGO_MS = Math.max(200, Math.round(CYCLE_MS / DOMAIN_IMGS.length));
+  let cycle = null;
+  setTimeout(() => {
+    cycle = setInterval(() => {
+      if (finished) return;
+      slot.classList.add('swap');
+      setTimeout(() => {
+        gi = (gi + 1) % DOMAIN_IMGS.length;
+        setSlot();
+        slot.classList.remove('swap');
+      }, 60);
+    }, LOGO_MS);
+  }, SPLIT_MS);
 
   const tick = setInterval(() => {
     n--;
@@ -1086,7 +1099,6 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
    */
   function finale() {
     const pre = document.getElementById('pre');
-    const word = document.getElementById('preWord');
     const crack = document.getElementById('preCrack');
     const flash = document.getElementById('preFlash');
 
@@ -1117,15 +1129,13 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
       word.classList.add('pre-shake');
       pre.classList.add('pre-shake');
       /*
-       * The hit, on the same timer as the flash and the fracture.
+       * The ident, on the same timer as the flash and the fracture.
        *
-       * The bed stops on the same line rather than a moment later: two takes
-       * of the same room overlapping is mud, and the strike is meant to be
-       * the only thing in the air when the screen breaks. Its ring-out runs
-       * past the curtain on purpose — the sound finishing after the picture
-       * does is what makes the page feel opened rather than cut to.
+       * The only sound in the opening, and it arrives with the break rather
+       * than after it. Its ring-out runs past the curtain on purpose — a note
+       * finishing after the picture has gone is what makes a page feel opened
+       * rather than cut to.
        */
-      bed.pause();
       disarm();
       hit.currentTime = 0;
       const p = hit.play();
@@ -1678,107 +1688,14 @@ function marquee(viewport, track, pxPerSec) {
   orbit.addEventListener('mouseleave', hide);
 })();
 
-/* ---- the film's SOUND button ----
-   The video has no audio track, so unmuting it did nothing. Rather than ship
-   a music file — a licence to get wrong and 3MB to download — the ambience is
-   synthesised: two detuned sine drones a fifth apart under a lowpass, with a
-   slow tremolo. It fades in, fades out, and costs nothing to serve.
+/* The film's SOUND button is gone, and so is the ambience behind it.
 
-   To use a real track instead: put the file in public/assets/home/ and set
-   AMBIENT_URL to its path. Left empty on purpose — probing for an optional
-   file logs a 404 in every visitor's console on every click, and a constant
-   the owner edits once costs nobody anything. */
-const AMBIENT_URL = '';
-(() => {
-  const btn = document.getElementById('soundBtn');
-  if (!btn) return;
-  const ON = 'SOUND ●', OFF = 'SOUND ◦';
-
-  let audio = null, ctx = null, gain = null, nodes = [];
-
-  const buildTones = () => {
-    ctx = new (window.AudioContext || window.webkitAudioContext)();
-    gain = ctx.createGain();
-    gain.gain.value = 0;
-
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = 620;      // takes the edge off; leaves warmth
-    filter.Q.value = 0.6;
-
-    // A perfect fifth, slightly detuned, is consonant enough to ignore and
-    // rich enough not to sound like a test tone.
-    [110, 164.81, 220].forEach((f, i) => {
-      const o = ctx.createOscillator();
-      o.type = 'sine';
-      o.frequency.value = f;
-      o.detune.value = (i - 1) * 4;
-      const g = ctx.createGain();
-      g.gain.value = [0.5, 0.34, 0.16][i];
-      o.connect(g).connect(filter);
-      o.start();
-      nodes.push(o);
-    });
-
-    // Slow breathing, so it is not a flat pad.
-    const lfo = ctx.createOscillator();
-    const lfoGain = ctx.createGain();
-    lfo.frequency.value = 0.07;
-    lfoGain.gain.value = 0.035;
-    lfo.connect(lfoGain).connect(gain.gain);
-    lfo.start();
-    nodes.push(lfo);
-
-    filter.connect(gain).connect(ctx.destination);
-  };
-
-  const fade = (to, secs) => {
-    const t = ctx.currentTime;
-    gain.gain.cancelScheduledValues(t);
-    gain.gain.setValueAtTime(gain.gain.value, t);
-    gain.gain.linearRampToValueAtTime(to, t + secs);
-  };
-
-  let on = false;
-  const setLabel = () => { btn.textContent = on ? ON : OFF; btn.setAttribute('aria-pressed', String(on)); };
-
-  btn.addEventListener('click', async () => {
-    on = !on;
-    setLabel();
-
-    // A real track, if the owner has set one.
-    if (audio === null && AMBIENT_URL) {
-      audio = new Audio(AMBIENT_URL);
-      audio.loop = true;
-      audio.volume = 0;
-      audio.addEventListener('error', () => { audio = false; }, { once: true });
-    }
-    if (audio) {
-      try {
-        if (on) { await audio.play(); rampEl(audio, 0.35, 1400); }
-        else { rampEl(audio, 0, 900, () => audio.pause()); }
-        return;
-      } catch (e) { audio = false; }   // no file, or blocked — fall through
-    }
-
-    if (!ctx) buildTones();
-    if (ctx.state === 'suspended') await ctx.resume();
-    fade(on ? 0.09 : 0, on ? 2.2 : 1.2);
-  });
-
-  /** Fade an <audio> element, since it has no gain node. */
-  function rampEl(el, to, ms, done) {
-    const from = el.volume, t0 = performance.now();
-    (function step(t) {
-      const k = Math.min(1, (t - t0) / ms);
-      el.volume = from + (to - from) * k;
-      if (k < 1) requestAnimationFrame(step); else if (done) done();
-    })(t0);
-  }
-
-  setLabel();
-})();
-
+   Two sounds on one page, both asking to be switched on, is a page that
+   argues with itself. The opening now has exactly one sound — the ident that
+   fires when the screen breaks — and it is built in rather than offered: no
+   control to find, nothing to press, nothing to decide before the thing it
+   belongs to has finished. The film below stays silent, which is what a
+   muted autoplaying video is for. */
 /* ---- the fourteen domains ----
    Was: a row per domain whose logo you had to CLICK to make it spin, steam or
    launch. "CLICK THE LOGO" was printed beside every heading. It is a company

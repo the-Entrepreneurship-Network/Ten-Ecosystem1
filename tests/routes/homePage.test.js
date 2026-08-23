@@ -410,31 +410,24 @@ describe('what TEN gives', () => {
   });
 });
 
-describe('the film\'s sound button', () => {
-  it('no longer unmutes a video with no audio track', () => {
-    expect(page).not.toContain("v.muted=!v.muted");
-    expect(page).toContain('id="soundBtn"');
+describe('the film has no sound control, and neither does anything else', () => {
+  /*
+   * The film used to carry a SOUND button that faded a synthesised drone in
+   * and out — a reasonable answer to "the video has no audio track", and one
+   * more thing on the page asking to be switched on. The opening has exactly
+   * one sound now, built in and fired by the break, so every other control
+   * and everything behind them came out.
+   */
+  it('ships no sound button and no ambience engine', () => {
+    expect(page).not.toContain('id="soundBtn"');
+    expect(page).not.toContain('AMBIENT_URL');
+    expect(page).not.toContain('linearRampToValueAtTime');
+    expect(page).not.toMatch(/\.film \.sound \{/);
   });
 
-  it('synthesises the ambience rather than shipping a track', () => {
-    // No file, no licence, nothing to download.
-    expect(page).toContain('AudioContext || window.webkitAudioContext');
-    expect(page).toContain('createBiquadFilter');
-    expect(page).toContain("o.type = 'sine'");
-  });
-
-  it('fades rather than snapping on and off', () => {
-    expect(page).toContain('linearRampToValueAtTime');
-  });
-
-  it('never requests an optional file that is not there', () => {
-    // Probing for one logs a 404 in every visitor's console on every click.
-    expect(page).toContain("const AMBIENT_URL = '';");
-    expect(page).toContain('if (audio === null && AMBIENT_URL)');
-  });
-
-  it('says which state it is in, to a screen reader too', () => {
-    expect(page).toContain("btn.setAttribute('aria-pressed', String(on))");
+  it('leaves the film muted, which is what an autoplaying video is for', () => {
+    expect(page).not.toContain('v.muted=!v.muted');
+    expect(page).toMatch(/<video id="film"[^>]*\bmuted\b/);
   });
 });
 
@@ -1008,18 +1001,14 @@ describe('opening curtain', () => {
     expect(page).toContain('const FINALE_MS = HOLD_MS');
   });
 
-  it('opens quickly rather than making somebody queue', () => {
+  it('runs for the thirty seconds the opening was designed around', () => {
     /*
-     * It was fifty seconds. That is not an opening, it is a wait — nobody
-     * watches a homepage count down for the better part of a minute, they
-     * leave, and the effect they left before seeing was the whole point of
-     * building it. Under ten seconds lands it and gets out of the way.
+     * Fifty was a queue and ten was a glimpse. Thirty is what the sequence
+     * actually needs: the letters arrive touching, take a beat to move apart,
+     * and then every one of the fourteen domains gets long enough in the gap
+     * to be looked at rather than flicked past.
      */
-    expect(countdownMs).toBeLessThanOrEqual(10000);
-    expect(countdownMs).toBeGreaterThanOrEqual(4000);
-    /* And it is the length of the sound bed it runs under — a countdown that
-       outlasts the take by seconds ends in silence before the crack. */
-    expect(countdownMs).toBe(10000);
+    expect(countdownMs).toBe(30000);
     /* The word still cracks into place and stays long enough to be read,
        rather than being glimpsed on the way out. */
     expect(holdMs).toBeGreaterThanOrEqual(1000);
@@ -1059,14 +1048,43 @@ describe('opening curtain', () => {
      * interval is divided out of the countdown, one slot per domain, so the
      * whole set gets its turn and stays correct if the timing changes again.
      */
-    expect(page).toMatch(/const LOGO_MS = Math\.max\(200, Math\.round\(COUNT_MS \/ DOMAIN_IMGS\.length\)\)/);
+    expect(page).toMatch(/const LOGO_MS = Math\.max\(200, Math\.round\(CYCLE_MS \/ DOMAIN_IMGS\.length\)\)/);
     expect(page).toMatch(/setInterval\([\s\S]{0,400}?\}, LOGO_MS\)/);
 
-    /* Fast enough to read as a rotation: every domain inside the countdown,
-       and comfortably under a second each. */
+    /* Measured from the moment the letters finish separating, so the split
+       cannot eat a domain's turn. */
+    expect(page).toMatch(/const CYCLE_MS = Math\.max\(0, COUNT_MS - SPLIT_MS\)/);
+
     const imgs = /const DOMAIN_IMGS = \[([^\]]*)\]/.exec(page)[1].split(',').length;
+    const splitMs = Number(/const SPLIT_MS = (\d+)/.exec(page)[1]);
     expect(imgs).toBe(14);
-    expect(Math.round(countdownMs / imgs)).toBeLessThan(1000);
+    /* Long enough to look at, short enough to still be a rotation. */
+    const each = Math.round((countdownMs - splitMs) / imgs);
+    expect(each).toBeGreaterThan(800);
+    expect(each).toBeLessThan(3000);
+  });
+
+  it('starts with the letters touching, then opens the gap', () => {
+    /*
+     * T and N arrive as "TN" — a word with a letter missing rather than a
+     * frame with a hole in it — and move apart on their own beat before
+     * anything is put between them. Starting them apart made the first domain
+     * appear out of nothing; starting them closed makes the same image look
+     * like it was let in.
+     *
+     * Both the flex gap and the slot's width animate, because collapsing only
+     * the slot leaves the letters a gutter apart and the split reads as a
+     * nudge rather than as an opening.
+     */
+    expect(page).toMatch(/\.pre-word\.closed \{ gap:0; \}/);
+    expect(page).toMatch(/\.pre-word\.closed #preSlot \{ width:0; opacity:0; \}/);
+    expect(page).toMatch(/transition:gap var\(--split/);
+    expect(page).toMatch(/word\.classList\.add\('closed'\)/);
+    /* Two frames, so the closed state is painted before the class comes off —
+       set in one frame there is nothing to transition from. */
+    expect(page).toMatch(/requestAnimationFrame\(\(\) => requestAnimationFrame\(\(\) => word\.classList\.remove\('closed'\)\)\)/);
+    /* And the domains wait for the gap to exist. */
+    expect(page).toMatch(/\}, SPLIT_MS\);/);
   });
 
   it('finishes shaking before it lifts the curtain, with room to spare', () => {
@@ -1085,18 +1103,21 @@ describe('opening curtain', () => {
     expect(impactAt + shakeMs).toBeLessThan(holdMs);
   });
 
-  it('runs a sound bed under the countdown and a hit on the crack', () => {
+  it('has one sound, and it is the ident on the break', () => {
     /*
-     * Both are cut from one take — the bed is its first nine seconds, the hit
-     * is the strike at 9.05s and the ring-out after it — so they are the same
-     * room rather than two stock effects that happen to be adjacent.
+     * There was a bed running under the whole countdown. Thirty seconds of
+     * ambience is a thing to sit through rather than a thing to feel, and the
+     * note it was building towards landed softer for having had company. The
+     * opening is silent until the screen breaks — the way a studio ident
+     * works, where the mark and the sound arrive together and nothing
+     * precedes them.
      */
-    expect(page).toMatch(/new Audio\('assets\/intro\/intro-bed\.mp3'\)/);
-    expect(page).toMatch(/new Audio\('assets\/intro\/intro-impact\.mp3'\)/);
-    expect(page).toMatch(/bed\.loop = true/);
+    expect(page).toMatch(/new Audio\('assets\/intro\/intro-ten\.mp3'\)/);
+    expect(page).not.toMatch(/intro-bed\.mp3/);
+    expect(page).not.toMatch(/bed\.loop/);
 
-    /* The hit fires on the same timer as the flash and the fracture, so the
-       sound and the picture land together at any INTRO_MS. */
+    /* It fires on the same timer as the flash and the fracture, so the sound
+       and the picture land together at any INTRO_MS. */
     const finale = page.slice(page.indexOf('function finale()'));
     const flashAt = finale.indexOf("flash.classList.add('on')");
     const hitAt = finale.indexOf('hit.play()');
@@ -1104,77 +1125,54 @@ describe('opening curtain', () => {
     expect(flashAt).toBeGreaterThan(-1);
     expect(hitAt).toBeGreaterThan(flashAt);
     expect(hitAt).toBeLessThan(closes);
-
-    /* And the bed stops on the same line: two takes of the same room
-       overlapping is mud. */
-    expect(finale.slice(flashAt, closes)).toMatch(/bed\.pause\(\)/);
-    /* The gesture listener comes off with it — a click after the crack must
-       not restart a bed for an opening that has finished. */
-    expect(finale.slice(flashAt, closes)).toMatch(/disarm\(\)/);
   });
 
-  it('ships two audio files that actually contain audio', () => {
+  it('ships an ident that actually contains audio', () => {
     /*
-     * The first cut of the hit was 1.48 seconds of digital silence and looked
-     * completely healthy: right duration, right bitrate, right file size — a
-     * constant-bitrate MP3 of nothing weighs exactly what an MP3 of something
-     * weighs. (The cause was output seeking keeping the source timestamps, so
-     * the fade-out had already finished before the clip began.)
+     * An earlier cut was 0.59 seconds of digital silence and looked entirely
+     * healthy: right duration, right bitrate, right file size — a
+     * constant-bitrate MP3 of nothing weighs what an MP3 of something weighs.
      *
-     * Size proves nothing, so this looks at variety instead: encoded silence
-     * repeats one nearly identical frame body over and over, while real audio
-     * does not. Cheap, no decoder, and it catches exactly the failure that got
-     * through.
+     * Size proves nothing, so this measures variety: encoded silence repeats
+     * one nearly identical frame body, real audio does not.
      */
     const fs = require('fs');
     const path = require('path');
-    ['intro-bed.mp3', 'intro-impact.mp3'].forEach((name) => {
-      const file = path.join(__dirname, '../../public/assets/intro', name);
-      expect(fs.existsSync(file)).toBe(true);
-      const buf = fs.readFileSync(file);
-      expect(buf.length).toBeGreaterThan(20000);
+    const file = path.join(__dirname, '../../public/assets/intro/intro-ten.mp3');
+    expect(fs.existsSync(file)).toBe(true);
+    const buf = fs.readFileSync(file);
+    expect(buf.length).toBeGreaterThan(5000);
 
-      const seen = new Set();
-      for (let i = 0; i + 32 <= buf.length; i += 32) seen.add(buf.toString('hex', i, i + 32));
-      const variety = seen.size / Math.floor(buf.length / 32);
-      expect(variety).toBeGreaterThan(0.5);
-    });
+    const seen = new Set();
+    for (let i = 0; i + 32 <= buf.length; i += 32) seen.add(buf.toString('hex', i, i + 32));
+    expect(seen.size / Math.floor(buf.length / 32)).toBeGreaterThan(0.5);
   });
 
-  it('starts on its own, with nothing to press', () => {
+  it('has no sound control anywhere on the page', () => {
     /*
-     * There was a speaker button. A button is a thing to notice and decide
-     * about before the opening it belongs to has finished, so it is gone:
-     * play() is called the instant the script runs, and nothing is asked of
-     * the visitor.
+     * Two sounds both asking to be switched on is a page arguing with itself.
+     * The intro speaker went first; the film's SOUND button and the
+     * synthesised ambience behind it went with it. Nothing to find, nothing
+     * to press, nothing to decide before the thing it belongs to has
+     * finished.
      */
     expect(page).not.toMatch(/id="preSound"/);
+    expect(page).not.toMatch(/id="soundBtn"/);
     expect(page).not.toMatch(/SOUND_KEY/);
-    expect(page).toMatch(/\n\s*playBed\(\);/);
-
-    /* And neither half checks a preference before playing. */
-    expect(page).toMatch(/const playBed = \(\) => \{\s*\/\*/);
-    expect(page).not.toMatch(/if \(soundOff\(\)\) return;/);
+    expect(page).not.toMatch(/AMBIENT_URL/);
+    expect(page).not.toMatch(/playBed/);
   });
 
-  it('recovers silently when the browser refuses to autoplay', () => {
+  it('unlocks audio on the first gesture without playing anything', () => {
     /*
-     * No code can change this: browsers refuse audio until the page has been
-     * interacted with, and typing a URL and pressing Enter is not an
-     * interaction with the page. Chrome relaxes it once a visitor has media
-     * engagement on the domain — so the same site is silent for one person
-     * and not another, and neither is a bug here.
-     *
-     * When it is refused, the first thing the visitor does starts it, from
-     * where the countdown has already reached rather than from zero. No
-     * prompt, no icon, nothing asked.
+     * Browsers refuse audio until the page has been interacted with, and
+     * typing a URL and pressing Enter is not an interaction with the page.
+     * The listener exists only to satisfy that rule — it plays nothing when
+     * it fires. Thirty seconds of countdown is long enough that a visitor has
+     * almost certainly moved a mouse before the ident is due.
      */
-    expect(page).toMatch(/p\.catch\(\(\) => arm\(\)\)/);
+    expect(page).toMatch(/const wake = \(\) => disarm\(\);/);
     expect(page).toMatch(/\{ once: true, passive: true \}/);
-    expect(page).toMatch(/bed\.currentTime = into % bed\.duration/);
-
-    /* Scroll and pointer movement count, because on a page that opens with a
-       countdown they are the likeliest first thing anybody does. */
     const events = /const EVENTS = \[([^\]]+)\]/.exec(page)[1];
     ['pointerdown', 'pointermove', 'keydown', 'touchstart', 'wheel', 'scroll']
       .forEach((e) => expect(events).toContain(e));
