@@ -373,7 +373,7 @@ describe('the playful bits are gone', () => {
     // the point of this test was never the count. What matters is that it
     // always ends: the interval is cleared and the body unlocks, so nothing
     // can leave the page stuck behind the curtain.
-    expect(page).toMatch(/let n = Math\.max\(/);
+    expect(page).toMatch(/let n = COUNT_FROM/);
     expect(page).toMatch(/clearInterval\(tick\)/);
     expect(page).toMatch(/document\.body\.classList\.remove\('locked'\)/);
   });
@@ -1001,26 +1001,47 @@ describe('opening curtain', () => {
     expect(page).toContain('const FINALE_MS = HOLD_MS');
   });
 
-  it('runs for the thirty seconds the opening was designed around', () => {
+  it('is over in six seconds, counting thirty at speed', () => {
     /*
-     * Fifty was a queue and ten was a glimpse. Thirty is what the sequence
-     * actually needs: the letters arrive touching, take a beat to move apart,
-     * and then every one of the fourteen domains gets long enough in the gap
-     * to be looked at rather than flicked past.
+     * Fifty seconds was a queue, ten was still a wait, and thirty seconds of
+     * wall clock was worse than either — somebody arriving because they need
+     * a resume in a hurry does not sit through half a minute of branding.
+     *
+     * The number is thirty and the clock is four and a half seconds: it falls
+     * a third of a count every fiftieth of a second, which reads as something
+     * loading at speed rather than as a countdown being endured.
      */
-    expect(countdownMs).toBe(30000);
+    expect(countdownMs).toBe(4500);
+    expect(Number(/const COUNT_FROM = (\d+)/.exec(page)[1])).toBe(30);
+    /* Fast enough to be motion, slow enough that the digits are not a blur. */
+    const tickMs = Number(/const COUNT_TICK_MS = (\d+)/.exec(page)[1]);
+    expect(tickMs).toBeLessThanOrEqual(60);
+    expect(tickMs).toBeGreaterThanOrEqual(30);
     /* The word still cracks into place and stays long enough to be read,
        rather than being glimpsed on the way out. */
     expect(holdMs).toBeGreaterThanOrEqual(1000);
     expect(holdMs).toBeLessThanOrEqual(2000);
   });
 
-  it('counts real seconds, one a second', () => {
-    /* A counter showing tenths and updating seventeen times a second reads
-       as a progress bar. Whole seconds, ticking once, read as a clock. */
-    expect(page).toMatch(/const TICK_MS = 1000/);
-    expect(page).toMatch(/Math\.round\(n \* TICK_MS \/ 1000\)/);
-    expect(page).toMatch(/Math\.round\(COUNT_MS \/ TICK_MS\)/);
+  it('lands the counter on zero exactly when the countdown ends', () => {
+    /*
+     * The step is derived rather than fixed at one, so the number reaches
+     * zero as the countdown finishes however either constant is set. A
+     * counter still reading 07 when the E lands is the seam this arithmetic
+     * exists to prevent, and it is what happens the moment somebody changes
+     * one number without the other.
+     */
+    expect(page).toMatch(/const TICK_MS = COUNT_TICK_MS/);
+    expect(page).toMatch(/const STEP = COUNT_FROM \/ Math\.max\(1, Math\.round\(COUNT_MS \/ TICK_MS\)\)/);
+    expect(page).toMatch(/n -= STEP;/);
+    /* Zero-padded, so the width does not jump as it falls. */
+    expect(page).toMatch(/padStart\(2, '0'\)/);
+
+    const cd = Number(/const COUNTDOWN_MS = (\d+)/.exec(page)[1]);
+    const from = Number(/const COUNT_FROM = (\d+)/.exec(page)[1]);
+    const tick = Number(/const COUNT_TICK_MS = (\d+)/.exec(page)[1]);
+    const ticks = Math.round(cd / tick);
+    expect(Math.round(from - (from / ticks) * ticks)).toBe(0);
   });
 
   it('lands the E exactly when the impact fires', () => {
@@ -1048,7 +1069,7 @@ describe('opening curtain', () => {
      * interval is divided out of the countdown, one slot per domain, so the
      * whole set gets its turn and stays correct if the timing changes again.
      */
-    expect(page).toMatch(/const LOGO_MS = Math\.max\(200, Math\.round\(CYCLE_MS \/ DOMAIN_IMGS\.length\)\)/);
+    expect(page).toMatch(/const LOGO_MS = Math\.max\(120, Math\.round\(CYCLE_MS \/ DOMAIN_IMGS\.length\)\)/);
     expect(page).toMatch(/setInterval\([\s\S]{0,400}?\}, LOGO_MS\)/);
 
     /* Measured from the moment the letters finish separating, so the split
@@ -1059,9 +1080,15 @@ describe('opening curtain', () => {
     const splitMs = Number(/const SPLIT_MS = (\d+)/.exec(page)[1]);
     expect(imgs).toBe(14);
     /* Long enough to look at, short enough to still be a rotation. */
+    /*
+     * Fast enough to read as a flicker of domains rather than a slideshow,
+     * and not so fast a logo is gone before the eye lands on it. At a four
+     * and a half second countdown that is a shade over a quarter second each,
+     * which is the speed the reference opens at.
+     */
     const each = Math.round((countdownMs - splitMs) / imgs);
-    expect(each).toBeGreaterThan(800);
-    expect(each).toBeLessThan(3000);
+    expect(each).toBeGreaterThanOrEqual(150);
+    expect(each).toBeLessThan(700);
   });
 
   it('starts with the letters touching, then opens the gap', () => {
