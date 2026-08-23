@@ -1036,24 +1036,43 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
   bed.volume = BED_VOL;
 
   /*
-   * One listener, removed the moment it has done its job.
+   * The listener stays until sound is actually coming out.
    *
-   * Two jobs now, not one. Every browser refuses audio until the page has
-   * been interacted with, and the bed is due at the very first frame — before
-   * any visitor could have moved. So the bed is attempted immediately, and if
-   * that attempt is refused the first gesture starts it wherever the count
-   * has got to, rather than from the top of a track that is already half
-   * spent. The ident only ever needed the unlock.
+   * This is why the opening was silent, and it was not the browser being
+   * awkward — it was this code throwing the unlock away.
+   *
+   * Every browser refuses audio until the page has been interacted WITH, and
+   * only some events count: a pointer going down, a key, a touch ending, a
+   * click. Moving a mouse does not count. Neither does a wheel or a scroll.
+   *
+   * The old version listened for all of them with { once: true } and, on the
+   * first one to fire, called play() and then removed every listener —
+   * unconditionally, without ever looking at whether play() had worked. So
+   * the ordinary sequence was: visitor lands, moves the mouse, pointermove
+   * fires, play() is refused because a mouse move grants nothing, the
+   * rejection is swallowed by an empty catch, and the listeners for
+   * pointerdown and keydown — the two events that would actually have worked
+   * — are torn down. The page could then never make a sound again, and the
+   * ident at the break failed with it.
+   *
+   * So: the events that genuinely grant activation are listened for, they are
+   * not { once: true }, and they are removed only once a play() has resolved.
+   * A refused attempt costs nothing and leaves everything armed for the next
+   * gesture.
    */
   let armed = false;
-  const EVENTS = ['pointerdown', 'pointermove', 'keydown', 'touchstart', 'wheel', 'scroll'];
-  const wake = () => { startBed(); disarm(); };
+  /* Every one of these grants activation. pointermove, wheel and scroll are
+     deliberately absent: they never unlock audio, and letting them run the
+     unlock path is what removed the listeners that would have. */
+  const EVENTS = ['pointerdown', 'pointerup', 'mousedown', 'click', 'keydown', 'touchstart', 'touchend'];
+  const wake = () => { startBed(); };
   function arm() {
     if (armed) return;
     armed = true;
-    EVENTS.forEach((e) => window.addEventListener(e, wake, { once: true, passive: true }));
+    EVENTS.forEach((e) => window.addEventListener(e, wake, { passive: true }));
   }
   function disarm() {
+    if (!armed) return;
     armed = false;
     EVENTS.forEach((e) => window.removeEventListener(e, wake));
   }
@@ -1067,8 +1086,10 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
     const into = (Date.now() - startedAt) / 1000;
     try { bed.currentTime = Math.min(into, Math.max(0, (bed.duration || 12) - 0.5)); } catch (e) { /* not seekable yet */ }
     const p = bed.play();
-    if (p && p.then) p.then(() => { bedPlaying = true; }).catch(() => {});
-    else bedPlaying = true;
+    /* Disarm on success only. A rejection means the gesture did not carry
+       activation, and the next one still has to be able to try. */
+    if (p && p.then) p.then(() => { bedPlaying = true; disarm(); }).catch(() => {});
+    else { bedPlaying = true; disarm(); }
   }
 
   /*
@@ -1230,12 +1251,14 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
       /*
        * The ident, on the same timer as the flash and the fracture.
        *
-       * The only sound in the opening, and it arrives with the break rather
-       * than after it. Its ring-out runs past the curtain on purpose — a note
-       * finishing after the picture has gone is what makes a page feel opened
-       * rather than cut to.
+       * It arrives with the break rather than after it. Its ring-out runs
+       * past the curtain on purpose — a note finishing after the picture has
+       * gone is what makes a page feel opened rather than cut to.
+       *
+       * The unlock listeners are deliberately left alone here. Tearing them
+       * down at the break is what the old code did, and it took away the bed's
+       * last chance on any visit where nothing had unlocked audio yet.
        */
-      disarm();
       /* The bed goes first, across the fracture, so the word lands in the
          space it leaves rather than on top of it. */
       duckBed(260);
@@ -1258,6 +1281,10 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
       word.style.animationDuration = '';
       pre.classList.add('done');
       document.body.classList.remove('locked');
+      /* The opening is over, so the unlock has nothing left to unlock. This
+         is the one place it is safe to take the listeners off, because
+         nothing after this wants to start a sound. */
+      disarm();
     }, FINALE_MS);
   }
 })();
