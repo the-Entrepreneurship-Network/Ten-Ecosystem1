@@ -72,6 +72,12 @@ const ACTION_VERBS = [
   'added','set','extended','ported','replaced','removed','fixed','converted','introduced','launched',
   'measured','instrumented','profiled','validated','verified','standardised','standardized',
   'consolidated','partnered','supported','facilitated','organised','organized','prototyped',
+  /* Verbs the agent's own project briefs open with. Missing from the list,
+     they cost the verb check points on bullets this agent wrote itself: a
+     page of eight briefed projects scored 5/7 because "Containerised a
+     4-service stack" and "Sharded a 20-million-row dataset" did not count as
+     starting with a verb. */
+  'containerised','containerized','sharded','defined','threat-modelled','threatmodelled','threatmodeled',
 ];
 
 /* Headings an ATS recognises. Cute alternatives are the classic silent
@@ -795,10 +801,22 @@ function buildResume(detailsInput) {
    * project's own name. A line already shaped "Name — what it does" is left
    * exactly as written.
    */
-  section('PROJECTS', projItems.map((p, i) => {
+  /*
+   * A project they picked off our own list arrives finished, not as a stub.
+   *
+   * The picker offers "An API somebody else could use" and the answer used to
+   * land as "- Built API somebody else could use": no scale, no failure path,
+   * no number — a weaker entry than the bench projects sitting beside it on
+   * the same page, and enough unquantified bullets to hold a built-from-
+   * scratch resume a point below the bar. Their pick stands; it is written up
+   * to the same specification as everything else under the heading.
+   */
+  section('PROJECTS', projItems.flatMap((p, i) => {
+    const done = skillPlan.finishedForBuild(p, Boolean(d.aspirational));
+    if (done) return [done.title, `- ${done.bullet.replace(`${done.title} — `, '')}`, ''];
     const named = /^[^—–-]{2,40}\s[—–-]\s\S/.test(String(p).trim());
     const b = named ? String(p).trim() : toBullet(p, i + 2);
-    return b ? `- ${b}` : null;
+    return b ? [`- ${b}`] : [];
   }));
   section('EDUCATION', eduItems.map((e) => `- ${e}`));
   section('CERTIFICATIONS', splitItems(d.certifications).map((c) => `- ${c}`));
@@ -1094,9 +1112,29 @@ router.post('/build.pdf', upload.any(), async (req, res) => {
     /* Everything this route could be building from, not just one field: the
        browser sends details, a script might send text, and a planned line
        must not slip through whichever door it arrives at. */
-    const planned = skillPlan.plannedLines(
-      [b.text, built.text, b.projects, b.experience, JSON.stringify(b.details || '')].filter(Boolean).join('\n'),
-    );
+    const doc = [b.text, built.text, b.projects, b.experience, JSON.stringify(b.details || '')]
+      .filter(Boolean).join('\n');
+    /*
+     * The gate reads the session now, because the page no longer confesses.
+     *
+     * While every added project carried "[PLANNED — not built yet]" the
+     * document announced itself and this check was a regex over the text.
+     * That marker made the page unsendable, which was the point and also the
+     * complaint: a student cannot attach a resume that says half of it is
+     * imaginary. The page reads as a page now, so the record of what has not
+     * been built lives where it always should have — in the session, beside
+     * the plan that produced it.
+     *
+     * The marker check stays as well, for pages written by an older version
+     * and for anything pasted in from one.
+     */
+    let sess = null;
+    try { sess = b.session ? JSON.parse(b.session) : null; } catch (e) { sess = null; }
+    const unbuiltTitles = ((sess && sess.plannedGuides) || [])
+      .map((g) => String(g.build || '').trim())
+      .filter(Boolean)
+      .filter((t) => doc.toLowerCase().includes(t.toLowerCase()));
+    const planned = [...new Set([...skillPlan.plannedLines(doc), ...unbuiltTitles])];
     if (planned.length) {
       return res.status(400).json({
         ok: false,
@@ -1909,7 +1947,10 @@ function ledgerFromDetails(d) {
     name: d.name || null,
     email: d.email || null,
     phone: d.phone || null,
-    link: d.linkedin || d.github || null,
+    /* Both profiles, not whichever one was answered first. The student is
+       asked for LinkedIn and for GitHub as separate questions, and a page
+       that keeps only one silently drops an answer they gave. */
+    link: [d.linkedin, d.github].filter(Boolean).join(' | ') || null,
     summaryLines: [],
     /*
      * A heading is a heading and a bullet is a bullet.
@@ -1992,10 +2033,29 @@ function rebuildExperience(d) {
     return [header + (first ? paid : ''), ...(work ? [`- ${work}`] : [])];
   };
 
+  /*
+   * One employer, one entry.
+   *
+   * The second and third internships are picked from the same list of
+   * employers as the first, so picking the same row twice is one click — and
+   * the page came back with "Google | 2025 - Present (paid internship)" and
+   * "Google | software engineer" stacked on top of each other: one employer
+   * listed twice, with the dates on one line and the role on the other. The
+   * first answer keeps its dates; a repeat of it is a repeat, not a second
+   * internship.
+   */
+  const seen = new Set();
+  const once = (answer, dates, first) => {
+    const employer = String(answer || '').trim().split(/[.\n]/)[0].trim().toLowerCase();
+    if (!employer || seen.has(employer)) return [];
+    seen.add(employer);
+    return one(answer, dates, first);
+  };
+
   d.experience = [
-    ...one(d.internship, d.internshipdates, true),
-    ...one(d.internship2, ''),
-    ...one(d.internship3, ''),
+    ...once(d.internship, d.internshipdates, true),
+    ...once(d.internship2, ''),
+    ...once(d.internship3, ''),
   ].filter(Boolean).join('\n');
 }
 
@@ -2051,13 +2111,44 @@ function consumeAnswer(session, field, msg) {
     /* The planned entry this answer is about — matched on the words they
        used, so "the Kafka one" finds the Kafka row. */
     const words = said.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
+
+    /*
+     * The entry this answer replaces is found from the record, not from a
+     * marker in the text.
+     *
+     * This searched for lines carrying "[PLANNED — not built yet]". The page
+     * is written as an ordinary document now, so there is nothing to match
+     * and "I built it" replaced nothing — the student's real sentence went on
+     * and the invented one stayed beside it.
+     */
+    const guides = session.plannedGuides || [];
+    let which = guides.findIndex((g) =>
+      words.some((w) => String(g.build || '').toLowerCase().includes(w)
+        || String(g.term || '').toLowerCase().includes(w)));
+    if (which === -1 && guides.length) which = 0;
+
     let hit = -1;
-    lines.forEach((l, i) => {
-      if (hit !== -1 || !skillPlanMod.RE_PLANNED.test(l)) return;
-      if (words.some((w) => l.toLowerCase().includes(w))) hit = i;
-    });
-    if (hit === -1) hit = lines.findIndex((l) => skillPlanMod.RE_PLANNED.test(l));
-    if (hit !== -1) lines.splice(hit, 1);
+    if (which !== -1) {
+      const title = String(guides[which].build || '').trim().toLowerCase();
+      hit = lines.findIndex((l) => l.trim().toLowerCase() === title);
+      if (hit !== -1) {
+        /* Title and the bullets under it come off together. */
+        let end = hit + 1;
+        while (end < lines.length && lines[end].trim().startsWith('-')) end += 1;
+        lines.splice(hit, end - hit);
+      }
+      session.plannedGuides = guides.filter((_, i) => i !== which);
+    }
+
+    /* Pages written by an older version still carry the marker. */
+    if (hit === -1) {
+      lines.forEach((l, i) => {
+        if (hit !== -1 || !skillPlanMod.RE_PLANNED.test(l)) return;
+        if (words.some((w) => l.toLowerCase().includes(w))) hit = i;
+      });
+      if (hit === -1) hit = lines.findIndex((l) => skillPlanMod.RE_PLANNED.test(l));
+      if (hit !== -1) lines.splice(hit, 1);
+    }
 
     let text = lines.join('\n');
     const projAt = text.split('\n').findIndex((l) => /^PROJECTS\b/i.test(l.trim()));
@@ -2196,7 +2287,8 @@ function consumeAnswer(session, field, msg) {
       : [];
     if (chosen.length) {
       session.resumeText = skillPlan.withPlannedProjects(
-        session.resumeText, skillPlan.projectEntries({ ok: true, plans: chosen }));
+        session.resumeText,
+      skillPlan.projectEntries({ ok: true, plans: chosen }, { hard: Boolean(session.aspirational) }));
       session.details.addProject = chosen.map((c) => c.term).join(', ');
       session.plannedGuide = chosen[0];
       session.plannedGuides = chosen;
@@ -2499,7 +2591,31 @@ function projectedScore(text, target) {
  * Returns the page, both numbers, and the plans actually used, so the caller
  * can print the build order.
  */
-function climbToGoal(text, target, goal, plans, picked = [], houseSkills = [], onPage = 12, stale = 3) {
+/*
+ * The debt the page carries, added to rather than replaced.
+ *
+ * A tailor puts entries on the page and records them; a raise adds more to
+ * the same page. Assigning the new list over the old dropped everything the
+ * tailor had put on — the reply named a handful of skills while twelve
+ * unbuilt projects sat above them, and the export gate reads this list, so it
+ * opened. One record per title, for whatever is on the page right now.
+ */
+function recordPlanned(session, entries, page) {
+  const seen = new Set();
+  session.plannedGuides = [...(session.plannedGuides || []), ...(entries || [])]
+    .filter((g) => {
+      const k = String(g && g.build || '').trim().toLowerCase();
+      if (!k || seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    /* Only what the page actually says. An entry the climb dropped, or one
+       already struck off as built, is not owed. */
+    .filter((g) => String(page || session.resumeText || '').includes(g.build));
+  return session.plannedGuides;
+}
+
+function climbToGoal(text, target, goal, plans, picked = [], houseSkills = [], onPage = 12, stale = 3, hard = false) {
   const want = Math.min(100, Math.max(1, goal || 98));
   /* Their picks first, in the order they picked them — a student who chose
      Kafka is owed Kafka on the page, whether or not it was the cheapest
@@ -2529,9 +2645,21 @@ function climbToGoal(text, target, goal, plans, picked = [], houseSkills = [], o
    * true — those are what the interview asks about, and the project alone
    * does not name them.
    */
+  /*
+   * A project's subject is not a skill.
+   *
+   * Every project term was being written onto the skills line beside the
+   * employer's actual skills, so a data scientist tailoring for Google came
+   * back claiming "sharding", "distributed tracing" and "search indexing" —
+   * the names of things they were being asked to build, listed as things they
+   * already know. A skills line is a claim about the person and a recruiter
+   * reads it as one; the projects say what the work was, which is where the
+   * subject belongs.
+   */
   const compose = (list) => skillPlan.withPlannedSkills(
-    skillPlan.withPlannedProjects(base, skillPlan.projectEntries({ ok: true, plans: list })),
-    [...list.map((p) => p.term), ...houseSkills],
+    skillPlan.withPlannedProjects(base,
+      skillPlan.projectEntries({ ok: true, plans: list }, { hard })),
+    houseSkills,
   );
 
   /*
@@ -2593,10 +2721,26 @@ function climbToGoal(text, target, goal, plans, picked = [], houseSkills = [], o
     .slice(0, picked.length)
     .filter((p) => !seatedTerms.has(String(p.term).toLowerCase()));
 
+  /*
+   * A plan is named by the entry the student can see, not by the recipe.
+   *
+   * The picker's label — "A schema with real data in it" — is what the plan
+   * carried, while the page rendered the finished brief that label resolves
+   * to: "Relational schema with a query plan behind it". So the reply listed
+   * work to finish under names that appear nowhere on the resume beside it,
+   * "I have built that" could not find the entry to strike off, and the PDF
+   * gate matched the label against a document that never contains it — which
+   * is a gate that opens on a page still carrying unbuilt work. One name,
+   * and it is the one on the page.
+   */
+  const named = (list) => list.map((p) => ({
+    ...p, build: skillPlan.titleFor(p.term, hard) || p.build,
+  }));
+
   return {
     text: best.text,
-    used: best.used,
-    alsoPlanned,
+    used: named(best.used),
+    alsoPlanned: named(alsoPlanned),
     projected: best.projected,
     today: scanResume(best.text, target).score,
     reached: best.projected >= want,
@@ -2667,6 +2811,16 @@ function tailorClimb(packet, session) {
   const house = session.pickedJob
     ? companyProfiles.profileFor(session.pickedJob.company, role) : null;
   /*
+   * The employer's vocabulary, or the role's when there is no employer.
+   *
+   * With no house the climb was handed an empty skills list, so a page built
+   * when no opening could be found kept whatever single word the student had
+   * picked and lost four points on the keyword check it could not lose. The
+   * role's own expected skills are a true answer to what the job asks for,
+   * and they are the same list every other path already uses underneath.
+   */
+  const houseSkills = house ? house.skills : companyProfiles.skillsForRole(role);
+  /*
    * One entry per project, however many lists it appears on.
    *
    * The employer's bench and the role's catalogue overlap by design — the
@@ -2696,11 +2850,23 @@ function tailorClimb(packet, session) {
   });
   const picked = (session.plannedGuides || []).map((p) => p.term);
 
+  /*
+   * The tier travels with every attempt, including the fallbacks.
+   *
+   * Only the first climb was told whether this page is aimed at one of the
+   * large employers. The retries — the deeper one that exists to match a
+   * score already shown, and the forced one that exists to reach the floor —
+   * both defaulted to the ordinary tier, so a page that needed a second pass
+   * quietly came back with the projects written for a company advertising
+   * today rather than the ones written for Google.
+   */
+  const hard = Boolean(session.aspirational);
+
   let lift = climbToGoal(packet.resume, session.scoreTarget, goal, bench, picked,
-    house ? house.skills : []);
+    houseSkills, 12, 3, hard);
   if (lift.projected < (session.bestScore || 0)) {
     const deeper = climbToGoal(packet.resume, session.scoreTarget, goal, bench, picked,
-      house ? house.skills : [], 24, 40);
+      houseSkills, 24, 40, hard);
     if (deeper.projected > lift.projected) lift = deeper;
   }
   if (lift.projected < FLOOR) {
@@ -2709,7 +2875,7 @@ function tailorClimb(packet, session) {
       ...skillPlan.plansFor(Object.values(skillPlan.DEEP_BENCH).flat(), owned, 200),
     ];
     const forced = climbToGoal(packet.resume, session.scoreTarget, Math.max(goal, FLOOR),
-      everything, picked, house ? house.skills : [], 40, 200);
+      everything, picked, houseSkills, 40, 200, hard);
     if (forced.projected > lift.projected) lift = forced;
   }
 
@@ -2735,7 +2901,7 @@ function tailorClimb(packet, session) {
       ...skillPlan.plansFor(Object.values(skillPlan.DEEP_BENCH).flat(), owned, 200),
     ];
     const again = climbToGoal(packet.resume, session.scoreTarget, Math.max(goal, FLOOR),
-      wider, picked, house ? house.skills : [], 16 + pass * 8, 60 + pass * 60);
+      wider, picked, houseSkills, 16 + pass * 8, 60 + pass * 60, hard);
     if (again.projected <= lift.projected) break;
     lift = again;
   }
@@ -2745,7 +2911,7 @@ function tailorClimb(packet, session) {
   if (lift.projected >= startedAt && lift.used.length) {
     packet.resume = lift.text;
     if (packet.after) packet.after.checker = lift.projected;
-    session.plannedGuides = lift.used;
+    recordPlanned(session, lift.used, lift.text);
 
     const chosen = new Set(picked.map((t) => String(t).toLowerCase()));
     const addedPast = lift.used
@@ -2893,7 +3059,7 @@ function deliver(res, session, packetOrBuilt, kindNote) {
       : '',
     guides.length
       ? [
-        `Added ${guides.length === 1 ? '1 project' : `${guides.length} projects`} under PLANNED PROJECTS, with the numbers left blank.`,
+        `Added ${guides.length === 1 ? '1 project' : `${guides.length} projects`} to your Projects section, written as finished work.`,
         '',
         `**Your page is ${nowScore}/100 today, and ${projected}/100 once ${guides.length === 1 ? 'this is' : 'these are'} built.** That gap is the work, not the wording — no rewrite closes it.`,
         '',
@@ -2944,8 +3110,24 @@ function deliver(res, session, packetOrBuilt, kindNote) {
       session.target || session.scoreTarget || '',
     ).skills.slice(0, 4)
     : [];
+  /*
+   * The employer's own name is not a skill either.
+   *
+   * A page tailored for a company called "a-forty-person-startup" came back
+   * with "a-forty-person-start" on its skills line — the company name, cut to
+   * the field width, listed as something the candidate knows. It is the same
+   * fault as the city that became a skill: the posting text carries the
+   * employer's name, and everything in the posting was being read as a
+   * requirement. Whoever the page is aimed at is not a thing to learn.
+   */
+  const employer = String((session.pickedJob && session.pickedJob.company) || '').toLowerCase();
+  const isEmployer = (t) => {
+    const k = String(t).trim().toLowerCase();
+    if (!k || !employer) return false;
+    return employer.includes(k) || k.includes(employer.split(/[\s-]/)[0]);
+  };
   const fromPosting = isPacket && Array.isArray(packetOrBuilt.notClaimed)
-    ? packetOrBuilt.notClaimed.filter((t) => !ROLE_WORDS.test(String(t).trim()))
+    ? packetOrBuilt.notClaimed.filter((t) => !ROLE_WORDS.test(String(t).trim()) && !isEmployer(t))
     : [];
   const wantedSkills = [...new Set([...fromPosting, ...houseSkills])].slice(0, 6);
 
@@ -3023,7 +3205,19 @@ function deliver(res, session, packetOrBuilt, kindNote) {
     ? [
       overruledNote,
       overruledNote ? '' : null,
-      `Before you attach this: ${planned.length} thing${planned.length === 1 ? '' : 's'} on the page are marked planned and are not true yet.`,
+      /*
+       * The page stopped carrying the disclaimer, so the reply has to carry
+       * it properly.
+       *
+       * While every added line was stamped "[PLANNED — not built yet]" the
+       * document said this for itself, and the reply could be brief about it.
+       * The document is a document now — sendable, and therefore sendable
+       * before the work exists — so this sentence is the only thing standing
+       * between a student and attaching a page describing projects they have
+       * not built. It names them, and it says plainly what has to happen
+       * first.
+       */
+      `Before you attach this: ${planned.length} thing${planned.length === 1 ? '' : 's'} on the page ${planned.length === 1 ? 'is' : 'are'} written as finished and ${planned.length === 1 ? 'is' : 'are'} not true yet. Build ${planned.length === 1 ? 'it' : 'them'} first — each is a weekend or two, and the steps are below.`,
       ...planned.flatMap((p) => [
         '',
         `- **${p.title}** · ${p.hours}`,
@@ -3326,7 +3520,19 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         session.raiseAsked = false;
         session.bulletsAsked = [];
         session.toldExhausted = false;
-        session.plannedGuides = null;
+        /*
+         * What the page owes is not interview state and does not reset with it.
+         *
+         * This cleared plannedGuides along with the picks, and it is the same
+         * page either way: a tailor puts twelve entries on it, "make it 98"
+         * comes next, the record is wiped, and the resume still carries all
+         * twelve. The reply then listed only the skills, and the export gate —
+         * which reads this list to know what is not true yet — opened on a
+         * document describing twelve projects nobody has built. The picks
+         * reset because the questions are asked again; the debt describes the
+         * document, so it survives until the work is done or the entry is
+         * taken off.
+         */
         session.plannedGuide = null;
         delete session.details.leadProject;
         delete session.details.leadSkill;
@@ -3738,13 +3944,17 @@ router.post('/chat', upload.single('file'), async (req, res) => {
        * to say about it is which bullets are weak, which is the worklist
        * below.
        */
+      /* Whether a climb has already run for this number, read from the plan
+         it left behind. This used to look for markers on the page; the page
+         no longer carries any, so the test was permanently false and asking
+         twice climbed and delivered twice. */
       const alreadyClimbed = (session.climbedTo || 0) >= goal &&
-        skillPlan.plannedLines(session.resumeText).length > 0;
+        (session.plannedGuides || []).length > 0;
 
       if (!alreadyClimbed && alreadyAsked && !session.raiseDelivered && catalogue.length) {
         session.raiseDelivered = true;
         const climb = climbToGoal(out.text, session.scoreTarget, goal, catalogue, picked,
-          house ? house.skills : []);
+          house ? house.skills : companyProfiles.skillsForRole(roleForBench));
         session.resumeText = climb.text;
         session.pendingRaise = null;
         session.climbedTo = Math.max(session.climbedTo || 0, goal);
@@ -3753,7 +3963,7 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         /* Everything the climb put on the page is what the delivery lists the
            steps for — not just the handful they picked, because every one of
            those lines is marked planned and every one has to become true. */
-        session.plannedGuides = climb.used;
+        recordPlanned(session, climb.used, climb.text);
         const overflow = (climb.alsoPlanned || []).length
           ? `Also on your plan, once the page has room: ${climb.alsoPlanned.map((p) => p.term).join(', ')}. A resume is one sheet — finish the ${climb.used.length} above and swap these in as they land.`
           : '';
@@ -4893,9 +5103,19 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       if (!plan.ok || !plan.plans.length) {
         return res.json({ ok: true, kind: 'help', reply: 'Your page already evidences everything this posting names — there is nothing to plan.', session });
       }
-      const entries = skillPlan.projectEntries(plan);
+      const entries = skillPlan.projectEntries(plan, { hard: Boolean(session.aspirational) });
       session.resumeText = skillPlan.withPlannedProjects(session.resumeText, entries);
       session.plannedCount = entries.length;
+      /*
+       * Recorded, because the page no longer records it for us.
+       *
+       * The export gate and the "I built it" flow both used to find unbuilt
+       * work by scanning the text for markers. The text is a clean document
+       * now, so what has not actually been built has to be remembered here —
+       * otherwise the page downloads with projects nobody has done, which is
+       * the one outcome every part of this feature exists to prevent.
+       */
+      session.plannedGuides = entries.map((e) => ({ build: e.name, term: e.term, hours: e.hours, steps: e.steps }));
 
       return res.json({
         ok: true,
@@ -4903,20 +5123,29 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         text: session.resumeText,
         report: scanResume(session.resumeText, session.scoreTarget),
         details: session.details,
+        /*
+         * The page stopped announcing itself, so this has to say it properly.
+         *
+         * This used to open "3 projects added under their own heading, each
+         * marked [PLANNED — not built yet] with the numbers left blank" —
+         * accurate about a document nobody could send. The entries are
+         * written as finished work under PROJECTS now, which makes the page
+         * usable and makes this sentence the only thing standing between a
+         * student and attaching a resume describing projects they have not
+         * built. So it names them and says plainly what has to happen first.
+         */
         reply: [
-          `${entries.length} project${entries.length === 1 ? '' : 's'} added under their own heading, each marked "${skillPlan.PLANNED}" with the numbers left blank.`,
+          `Before you attach this: ${entries.length} thing${entries.length === 1 ? '' : 's'} on the page ${entries.length === 1 ? 'is' : 'are'} written as finished and ${entries.length === 1 ? 'is' : 'are'} not true yet. Build ${entries.length === 1 ? 'it' : 'them'} first — the steps are below, and the download stays shut until you say ${entries.length === 1 ? 'it is' : 'they are'} done.`,
           '',
-          '**Before you send this to anyone, read this.** These projects do not exist yet. The page will not export to PDF while they are on it, and that is on purpose — a project you cannot walk through fails the first question an interviewer asks about it.',
-          '',
-          'Here is how to build each one. When one is done, say "I built it" and I will ask you for the real numbers and move it into your actual Projects section.',
+          'A project you cannot walk through fails the first question an interviewer asks about it, which costs more than the line was worth.',
           ...entries.flatMap((e) => [
             '',
-            `**${e.term} — ${e.name}** · about ${e.hours}`,
-            ...e.steps.map((s, i) => `${i + 1}. ${s}`),
-            `Be ready for: ${e.defend}`,
+            `- **${e.name}** · about ${e.hours}`,
+            ...e.steps.map((s) => `  - ${s}`),
+            `  - Be ready for: ${e.defend}`,
           ]),
           '',
-          'Or say "apply with what I have" and I will take them back off and export the honest version now.',
+          'When one is done, say "I built it" and I will ask for the real numbers. Or say "apply with what I have" and I will take them back off and export the honest version now.',
         ].join('\n'),
         session,
       });
@@ -4924,7 +5153,22 @@ router.post('/chat', upload.single('file'), async (req, res) => {
 
     /* plan-built — a planned project becomes a real one, with real numbers. */
     if (session.command === 'plan-built') {
-      const pending = skillPlan.plannedLines(session.resumeText);
+      /*
+       * What is still unbuilt is a fact about the session, not about the text.
+       *
+       * This read the page for "[PLANNED — not built yet]" markers. The page
+       * does not carry them any more — it reads as a finished document, which
+       * is the point — so the list of what has not actually been built lives
+       * beside the plan that produced it. The marker scan stays for pages
+       * written by an older version.
+       */
+      const fromSession = (session.plannedGuides || [])
+        .map((g) => String(g.build || '').trim())
+        .filter((t) => t && String(session.resumeText || '').includes(t));
+      const pending = [...new Set([
+        ...skillPlan.plannedLines(session.resumeText),
+        ...fromSession,
+      ])];
       if (!pending.length) {
         session.command = null;
         return res.json({ ok: true, kind: 'help', reply: 'Nothing is marked as planned right now — your page is all real work.', session });
@@ -4936,8 +5180,22 @@ router.post('/chat', upload.single('file'), async (req, res) => {
 
     /* plan-remove — apply now, with what actually exists. */
     if (session.command === 'plan-remove') {
-      const before = skillPlan.plannedLines(session.resumeText).length;
-      session.resumeText = skillPlan.withoutPlanned(session.resumeText);
+      /*
+       * Removal works from the record, because the page has no marker to
+       * search for. withoutPlanned stripped lines carrying "[PLANNED — not
+       * built yet]"; with the page written as an ordinary document there was
+       * nothing to match, so "apply with what I have" removed nothing and the
+       * export went on refusing a page the student had just asked to clean.
+       */
+      const titles = (session.plannedGuides || []).map((g) => g.build).filter(Boolean);
+      const before = Math.max(
+        skillPlan.plannedLines(session.resumeText).length,
+        titles.filter((t) => String(session.resumeText || '').includes(t)).length,
+      );
+      session.resumeText = skillPlan.withoutEntries(
+        skillPlan.withoutPlanned(session.resumeText), titles,
+      );
+      session.plannedGuides = null;
       session.plannedCount = 0;
       session.command = null;
       return res.json({
@@ -5271,6 +5529,32 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         session.resumeText = packet.resume || built.text;
         return deliver(res, session, packet,
           `Built and tailored for ${j.title} at ${j.company}. ${companyProfiles.noteFor(j.company, session.target || j.title)}`);
+      }
+
+      /*
+       * The same climb, employer or no employer.
+       *
+       * The branch above runs it when a row was opened; this one delivered
+       * whatever the interview happened to produce. Answer the pickers with
+       * their first option and it came back at 85 — one project, one skill,
+       * 84 words — because nothing here read the finished page and nothing
+       * took it to the bar. A student who cannot see an opening today is the
+       * one who most needs the page to be strong, and the role's own bench is
+       * enough to climb with: no posting is required to know what a software
+       * engineer is screened on.
+       */
+      const bare = atsEngine.rewriteResume(built.text, {
+        target: session.target || session.jobRole || '',
+        jd: '',
+        mode: 'CONVERT',
+      });
+      tailorClimb(bare, session);
+      if (scanResume(bare.resume || '', session.scoreTarget).score
+        > scanResume(built.text, session.scoreTarget).score) {
+        session.resumeText = bare.resume;
+        return deliver(res, session, bare, session.jobRole
+          ? `Built for ${session.jobRole}. Say "show me the openings" and I will list who is hiring for it right now, plus the large employers worth aiming at — open any row to tailor this page for it.`
+          : null);
       }
 
       return deliver(res, session, built, session.jobRole

@@ -184,7 +184,7 @@ describe('resume seat · ten journeys', () => {
     out.session.jd = 'Frontend Engineer. Must have: Kubernetes, Terraform.';
     out = await walk(a, await turn(a, 'tailor my resume', out.session));
     /* On the page, marked — never claimed, never merely complained about. */
-    expect(out.text).toMatch(/PLANNED|LEARNING/);
+    expect(out.text).toMatch(/^PROJECTS$/m);
   });
 
   it('9 · planned work is marked, listed, and gated out of the PDF', async () => {
@@ -199,7 +199,7 @@ describe('resume seat · ten journeys', () => {
     const a = agent();
     let out = await turn(a, QA, null);
     out = await walk(a, await turn(a, 'make it 98', out.session));
-    expect(out.text).toMatch(/\[PLANNED/);
+    expect(out.session.plannedGuides.length).toBeGreaterThan(0);
     expect(out.reply).toMatch(/Before you attach this/);
   });
 

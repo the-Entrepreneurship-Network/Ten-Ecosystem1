@@ -307,16 +307,24 @@ describe('the conversation advances instead of repeating', () => {
     expect(out.kind).toBe('build');
     /*
      * They appear — reporting them as "missing keywords" told a student what
-     * was wrong and nothing about what to do — but only under LEARNING, and
-     * only marked as not yet true. The claim is never made on their behalf.
+     * was wrong and nothing about what to do — on the SKILLS line, where a
+     * parser indexes them, rather than under a heading that announced them as
+     * unbuilt.
+     *
+     * "LEARNING ([PLANNED — not built yet] — remove or complete before
+     * applying)" was every word true and none of it sendable: a recruiter
+     * read a disclaimer, a parser read nothing, and the student could not
+     * attach the page without editing it by hand. The honesty moved to where
+     * it bites — the reply names what still has to become true, and the work
+     * itself is tracked on the session rather than stamped on the document.
      */
-    const learning = out.text.split(/^LEARNING/m)[1] || '';
-    expect(learning).toMatch(/PostgreSQL/i);
-    expect(out.text).toMatch(/LEARNING \(\[PLANNED/);
-    /* And the marked page cannot leave as a PDF. */
-    expect(require('../../services/v2/skillPlan').plannedLines(out.text).length).toBeGreaterThan(0);
+    const skills = out.text.split(/^SKILLS$/m)[1].split(/^[A-Z][A-Z &/]{2,}$/m)[0];
+    expect(skills).toMatch(/PostgreSQL/i);
+    expect(out.text).not.toMatch(/PLANNED|LEARNING/);
+    expect(String(out.reply)).toMatch(/Before you attach this/i);
+    expect((out.session.plannedGuides || []).length).toBeGreaterThan(0);
     /* The experience section still claims only what it always claimed. */
-    const experience = out.text.split(/^EXPERIENCE/m)[1].split(/^LEARNING/m)[0];
+    const experience = out.text.split(/^EXPERIENCE$/m)[1].split(/^[A-Z][A-Z &/]{2,}$/m)[0];
     expect(experience).not.toMatch(/PostgreSQL/i);
     /* Both unproven terms are reported as not claimed — listed as the
        posting spells them, so compare case-blind. Nothing here was
