@@ -945,11 +945,26 @@ const DOMAIN_IMGS = ['python.jpg','java.jpg','web.jpg','mern.jpg','flutter.jpg',
 
    HOLD_MS is the beat after the word cracks into place, before the curtain
    lifts — long enough that the finished TEN is seen rather than glimpsed. */
-const COUNTDOWN_MS = 30000;
-const HOLD_MS = 1600;
+const COUNTDOWN_MS = 4500;
+const HOLD_MS = 1400;
 /* The letters arrive together and then move apart, which is the beat the
    domains need in order to have somewhere to appear. */
-const SPLIT_MS = 1500;
+const SPLIT_MS = 700;
+/*
+ * The counter counts thirty, and it moves like something loading.
+ *
+ * It ticked whole seconds, once a second, because a number that means seconds
+ * should behave like one. That is correct and it is the wrong effect: "10, 9,
+ * 8" is a wait being measured, and a wait being measured is a wait. Thirty
+ * seconds of it was worse again — somebody arriving because they need a
+ * resume in a hurry does not sit through half a minute of branding.
+ *
+ * Thirty falling in four and a half seconds reads as motion instead. Nobody
+ * reads the number; they read the speed, and the whole opening is over before
+ * anybody has decided to be annoyed by it.
+ */
+const COUNT_FROM = 30;
+const COUNT_TICK_MS = 50;
 const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
 (() => {
   const count = document.getElementById('preCount');
@@ -1013,11 +1028,13 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
      hold after the crack stays three seconds whatever the countdown is. */
   const COUNT_MS = COUNTDOWN_MS;
   const FINALE_MS = HOLD_MS;
-  /* A tick a second: the counter shows real seconds, so it should move once
-     a second rather than seventeen times. */
-  const TICK_MS = 1000;
-  let n = Math.max(6, Math.round(COUNT_MS / TICK_MS)), gi = 0, useImgs = true;
+  const TICK_MS = COUNT_TICK_MS;
+  let n = COUNT_FROM, gi = 0, useImgs = true;
   const startN = n;
+  /* Derived rather than fixed at one, so the number reaches zero exactly as
+     the countdown ends however either constant is set. A counter still
+     reading 07 when the E lands is the seam this prevents. */
+  const STEP = COUNT_FROM / Math.max(1, Math.round(COUNT_MS / TICK_MS));
   DOMAIN_IMGS.forEach(f => { const im = new Image(); im.src = 'assets/domains/' + f; }); /* pre-warm */
   const probe = new Image();
   probe.onerror = () => { useImgs = false; };
@@ -1031,11 +1048,9 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
     else slot.textContent = DOMAINS[gi][1];
   };
   setSlot();
-  /* Honest clock: seconds still to wait, not an abstract step count. */
+  /* Zero-padded, so the width does not jump as the number falls. */
   const showSeconds = () => {
-    /* Whole seconds of countdown left. The three-second hold is the finale,
-       not part of the wait, so it is not counted here. */
-    count.textContent = String(Math.max(0, Math.round(n * TICK_MS / 1000)));
+    count.textContent = String(Math.max(0, Math.round(n))).padStart(2, '0');
   };
   showSeconds();
 
@@ -1068,7 +1083,9 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
   requestAnimationFrame(() => requestAnimationFrame(() => word.classList.remove('closed')));
 
   const CYCLE_MS = Math.max(0, COUNT_MS - SPLIT_MS);
-  const LOGO_MS = Math.max(200, Math.round(CYCLE_MS / DOMAIN_IMGS.length));
+  /* Floor of 120ms rather than 200: at this speed the swap is meant to read
+     as a flicker of domains, not as a slideshow. */
+  const LOGO_MS = Math.max(120, Math.round(CYCLE_MS / DOMAIN_IMGS.length));
   let cycle = null;
   setTimeout(() => {
     cycle = setInterval(() => {
@@ -1083,7 +1100,7 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
   }, SPLIT_MS);
 
   const tick = setInterval(() => {
-    n--;
+    n -= STEP;
     showSeconds();
     if (n <= 0) {
       clearInterval(tick);
