@@ -100,6 +100,30 @@ describe('both seats show the same openings', () => {
     );
   });
 
+  it('lists every opening the boards returned, not the first eight', async () => {
+    /*
+     * The portal listed twenty-seven for a resume and this seat showed two of
+     * them, which reads as a broken search rather than as a cap. Both numbers
+     * were ours: findJobs defaults to eight and this sliced to eight again
+     * afterwards. Somebody asking what is out there is owed what is out there.
+     */
+    const many = Array.from({ length: 27 }, (_, i) => ({
+      title: `Backend Engineer ${i + 1}`,
+      company: `company-${i + 1}`,
+      location: 'Remote',
+      url: `https://boards.greenhouse.io/c${i + 1}`,
+      description: 'Java, Kafka.',
+      tags: ['java'],
+      fit5: 3,
+    }));
+    jobAgent.findJobs.mockResolvedValue(many);
+    const out = await hunt();
+    expect(out.jobs.filter((j) => !j.aspirational).length).toBe(27);
+    /* And it asked the search for more than eight in the first place. */
+    const [, opts] = jobAgent.findJobs.mock.calls[0];
+    expect(opts.limit).toBeGreaterThanOrEqual(30);
+  });
+
   it('appends the whole roster, not the first thirty', async () => {
     /*
      * The cap was thirty, and it cut by how well each employer fitted the
