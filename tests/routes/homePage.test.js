@@ -418,36 +418,96 @@ describe('the film has no sound control, and neither does anything else', () => 
    * one sound now, built in and fired by the break, so every other control
    * and everything behind them came out.
    */
+  // Just the film's audio block — `btn` is a name several scripts on this page
+  // use, so an assertion about listeners has to be scoped to this one.
+  const audioBlock = page.slice(
+    page.indexOf("const film = document.getElementById('filmSection');"),
+    page.indexOf("film.addEventListener('click', toggle);") + 60
+  );
+
   it('the film carries its own sound, on a click', () => {
-    /*
-     * There is no separate button: the film IS the control. Click once it
-     * plays, click again it stops.
-     *
-     * A clickable section that a keyboard cannot reach is a section half the
-     * visitors cannot use, so it carries role, tabindex and a live
-     * aria-pressed rather than just a click handler.
-     */
-    expect(page).toMatch(/<section class="film" id="filmSection"[\s\S]{0,160}role="button"/);
-    expect(page).toMatch(/tabindex="0"/);
-    expect(page).toMatch(/aria-pressed="false"/);
-    expect(page).toMatch(/film\.addEventListener\('click', toggle\)/);
-    // Enter and Space, because that is what a role="button" promises.
-    expect(page).toMatch(/e\.key === 'Enter' \|\| e\.key === ' '/);
-    // Toggling, not just starting.
+    // One handler, on the section, so the whole film is the control. The
+    // button's click bubbles into it — a second listener on the button would
+    // fire both and cancel itself out.
+    expect(audioBlock).toContain("film.addEventListener('click', toggle);");
+    expect(audioBlock).not.toMatch(/btn\.addEventListener\('click'/);
     expect(page).toMatch(/on = !on;/);
-    expect(page).toMatch(/film\.setAttribute\('aria-pressed', String\(on\)\)/);
     // Synthesised: nothing to serve, nothing to license.
     expect(page).not.toContain('AMBIENT_URL');
-    expect(page).toMatch(/lfo\.frequency\.value = 0\.07/);   // the slow breath
+    expect(audioBlock).toMatch(/lfo\.frequency\.value = 0\.07/);   // the slow breath
     // Faded, never switched: a level that jumps is heard as a fault.
-    expect(page).toMatch(/const fade = \(to, secs\)/);
+    expect(audioBlock).toMatch(/const fade = \(to, secs\)/);
   });
 
-  it('has no separate sound button anywhere', () => {
-    // The old control and the drone it toggled are gone; the film replaced it.
+  /*
+   * Why it could not be switched off.
+   *
+   * The tremolo LFO was connected straight to `master.gain`. An AudioParam
+   * that has an input connected is worth its own value PLUS that input, so the
+   * LFO's ±0.03 rode on top of master no matter what master was set to, and
+   * fading the intrinsic value to silence left a third of the level still
+   * swinging — for ever. Measured in Chromium before the fix: 0.109 while
+   * playing, 0.030 after "off". On its own gain stage it multiplies instead of
+   * adding, so master alone decides the level. After: 0.00009.
+   */
+  it('routes the tremolo through its own stage, not through master.gain', () => {
+    expect(audioBlock).not.toContain('lfoGain).connect(master.gain)');
+    expect(audioBlock).toMatch(/lfo\.connect\(lfoGain\)\.connect\(trem\.gain\)/);
+    expect(audioBlock).toMatch(/lp\.connect\(trem\)\.connect\(master\)\.connect\(ctx\.destination\)/);
+  });
+
+  it('stops the clock once the fade has landed, not just the level', () => {
+    // Inaudible is not the same as stopped, and an oscillator nobody can hear
+    // still costs a phone battery.
+    expect(audioBlock).toMatch(/if \(!on\) offTimer = setTimeout\(\(\) => \{ if \(!on\) ctx\.suspend\(\); \}/);
+    // A toggle back on during that wait must cancel the pending suspend.
+    expect(audioBlock).toMatch(/clearTimeout\(offTimer\)/);
+  });
+
+  it('carries none of the old sound machinery', () => {
     expect(page).not.toContain('id="soundBtn"');
-    expect(page).not.toMatch(/\.film \.sound \{/);
     expect(page).not.toMatch(/\bbuildTones\b/);
+  });
+
+  describe('the sound control', () => {
+    const markup = page.slice(page.indexOf('<section class="film"'), page.indexOf('<!-- scroll words -->'));
+
+    it('is a real button, so a keyboard and a screen reader can both use it', () => {
+      expect(markup).toMatch(/<button type="button" class="sound-toggle" id="filmSound"/);
+      expect(markup).toContain('aria-pressed="false"');
+      expect(audioBlock).toMatch(/btn\.setAttribute\('aria-pressed', String\(on\)\)/);
+    });
+
+    // A <button> inside a role="button" is invalid, and the button now
+    // provides the keyboard route the section's tabindex used to.
+    it('leaves the section itself a plain section', () => {
+      const openTag = markup.slice(0, markup.indexOf('>') + 1);
+      expect(openTag).not.toContain('role="button"');
+      expect(openTag).not.toContain('tabindex');
+      expect(page).not.toMatch(/e\.key === 'Enter' \|\| e\.key === ' '/);
+    });
+
+    it('shows the state in the meter, not only in the wording', () => {
+      expect(page).toContain('<span class="eq" aria-hidden="true">');
+      expect(page).toMatch(/\.film\.sounding \.eq i \{ opacity:1; animation:eqbar/);
+      expect(page).toMatch(/@keyframes eqbar/);
+      // The bars only move while it is playing.
+      expect(page).not.toMatch(/\n\s*\.eq i \{[^}]*animation:eqbar/);
+    });
+
+    it('is big enough to hit with a thumb', () => {
+      expect(page).toMatch(/\.sound-toggle \{[\s\S]{0,400}min-height:44px/);
+    });
+
+    it('says how to stop it, which is the half that was missing', () => {
+      expect(page).toContain("hint.textContent = on ? 'sound on — click to stop' : 'click for sound'");
+    });
+
+    it('holds still for anyone who asked for less motion', () => {
+      const rm = page.slice(page.indexOf('@media (prefers-reduced-motion:reduce) {\n    .sound-toggle'));
+      expect(rm.slice(0, 320)).toContain('.film.sounding .eq i { animation:none;');
+      expect(rm.slice(0, 320)).toContain('.film.sounding .sound-toggle::after { animation:none;');
+    });
   });
 
   it('leaves the film muted, which is what an autoplaying video is for', () => {
