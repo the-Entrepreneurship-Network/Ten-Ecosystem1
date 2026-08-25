@@ -268,6 +268,14 @@
   /* ---------- video block ---------- */
   .film { position:relative; }
   .film video { width:100%; display:block; }
+  .film { cursor:pointer; }
+  .film-hint { position:absolute; top:18px; left:50%; transform:translateX(-50%);
+    background:rgba(0,0,0,.55); color:#e8e2d4; border:1px solid rgba(212,175,55,.35);
+    border-radius:999px; padding:7px 16px; font-size:11px; letter-spacing:.14em;
+    text-transform:uppercase; pointer-events:none; transition:opacity .4s, color .4s; }
+  .film.sounding .film-hint { color:#f5c542; border-color:rgba(245,197,66,.6); }
+  @media (prefers-reduced-motion:reduce) { .film-hint { transition:none; } }
+
   .film .cap { position:absolute; bottom:14px; left:22px; font-size:12px; color:#fff; text-shadow:0 1px 8px rgba(0,0,0,.8); }
 
   /* ---------- scroll words ---------- */
@@ -653,8 +661,10 @@
 </section>
 
 <!-- film -->
-<section class="film">
+<section class="film" id="filmSection" role="button" tabindex="0"
+         aria-pressed="false" aria-label="Play the ambient sound for this film">
   <video id="film" autoplay muted loop playsinline src="assets/student-portal/hero-walk.mp4"></video>
+  <span class="film-hint" id="filmHint">click for sound</span>
   <p class="cap">a student, working — the ecosystem orbiting around her</p>
 </section>
 
@@ -1052,63 +1062,182 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
    *
    * @param {number} riseSeconds how long the letter takes to arrive
    */
-  function playIntroSting(riseSeconds) {
+  /*
+   * The opening's sound, in three layers across the whole five seconds.
+   *
+   * It was one chord struck at the impact, which is an event with no approach
+   * and reads as an alarm. Then it was a rise into a landing, which was better
+   * but still only started when the letter began flying.
+   *
+   * Now it runs from the first frame and arrives in three:
+   *
+   *   1  the bed        from t=0, almost inaudible, creeping up across the
+   *                     whole countdown. A fifth — C3 and G3 — plus a slow
+   *                     detune beat so it breathes instead of sitting still.
+   *                     It ends about a fifth as loud as the final chord.
+   *
+   *   2  the approach   as the E starts its flight. A DIFFERENT voice on
+   *                     purpose: triangle rather than sine, and a pitch that
+   *                     glides upward, so the ear hears something new coming
+   *                     rather than the bed getting louder.
+   *
+   *   3  the landing    as the E embeds. The full major chord with a low
+   *                     octave under it, and the bed ducking away beneath so
+   *                     the chord has the room to itself. This is the last
+   *                     sound; everything before it was approach.
+   *
+   * All three are scheduled on the audio clock in one call, so they cannot
+   * drift from each other the way three setTimeouts would.
+   *
+   * Deliberately not the Netflix cue: theirs is two struck notes, this is a
+   * three-stage swell into a sustained chord.
+   *
+   * @param {number} countdownSec  how long before the letter starts flying
+   * @param {number} flyInSec      how long the letter is in flight
+   */
+  function playIntroSting(countdownSec, flyInSec) {
     try {
       if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
       const ctx = new AC();
-      if (ctx.state === 'suspended') { ctx.close(); return; }   // no gesture yet
+      const bed = Math.max(0.4, Number(countdownSec) || 3.6);
+      const fly = Math.max(0.2, Number(flyInSec) || 0.77);
 
+      /*
+       * At the first frame the context is ALWAYS suspended — every browser
+       * refuses audio until the page has been interacted with, and typing a
+       * URL is not an interaction. The previous version got away with
+       * checking the state because it built its context late, most of the way
+       * through the opening; a soundtrack that has to start at t=0 cannot.
+       *
+       * So: try to resume, and arm the events that genuinely grant activation
+       * for the ones that do not. pointermove, wheel and scroll never unlock
+       * audio, and treating them as if they do is how a previous attempt threw
+       * away the listeners that would have worked.
+       *
+       * A suspended context's clock does not advance, so scheduling now and
+       * resuming later would play the whole thing late and out of step with
+       * the picture. Everything is therefore scheduled from the moment sound
+       * is actually allowed, against the wall clock — layers already past are
+       * skipped rather than fired at the wrong time.
+       */
+      const startedAt = Date.now();
+      const EVENTS = ['pointerdown', 'pointerup', 'mousedown', 'click', 'keydown', 'touchstart', 'touchend'];
+      let scheduled = false;
+
+      const go = () => {
+        if (scheduled || ctx.state !== 'running') return;
+        scheduled = true;
+        EVENTS.forEach((e) => window.removeEventListener(e, wake));
+        schedule((Date.now() - startedAt) / 1000);
+      };
+      const wake = () => { ctx.resume().then(go).catch(() => {}); };
+
+      function schedule(elapsed) {
       const t = ctx.currentTime;
-      const rise = Math.max(0.25, Number(riseSeconds) || 0.75);
+      const approachAt = t + Math.max(0, bed - elapsed);        // the E starts moving
+      const landAt = t + Math.max(0, bed + fly - elapsed);      // the E is embedded
 
-      /* One lowpass across everything. Sine partials are already soft, but the
-         corner takes the glassiness off the top of the chord and is most of
-         what separates "sweet" from "electronic". */
+      /* One lowpass over everything, opening as the piece builds. A closed
+         filter early is what makes the bed feel distant rather than quiet. */
       const tone = ctx.createBiquadFilter();
       tone.type = 'lowpass';
-      tone.frequency.setValueAtTime(900, t);
-      tone.frequency.linearRampToValueAtTime(2600, t + rise);   // opens as it swells
       tone.Q.value = 0.4;
+      tone.frequency.setValueAtTime(420, t);
+      tone.frequency.linearRampToValueAtTime(1100, Math.max(t + 0.05, approachAt));
+      tone.frequency.linearRampToValueAtTime(3200, Math.max(t + 0.1, landAt));
       tone.connect(ctx.destination);
 
-      /** A sine voice: level curve in, hold, long fade. */
-      const voice = (freq, peak, startAt, attack, hold, release, type) => {
+      /** A voice with its own gain envelope, connected through the filter. */
+      const voice = (type, freq, detune, at, curve) => {
         const o = ctx.createOscillator();
         const g = ctx.createGain();
-        o.type = type || 'sine';
+        o.type = type;
         o.frequency.value = freq;
-        g.gain.setValueAtTime(0.0001, startAt);
-        g.gain.exponentialRampToValueAtTime(peak, startAt + attack);
-        g.gain.setValueAtTime(peak, startAt + attack + hold);
-        g.gain.exponentialRampToValueAtTime(0.0001, startAt + attack + hold + release);
+        if (detune) o.detune.value = detune;
+        g.gain.setValueAtTime(0.0001, at);
+        curve(g.gain, at, o.frequency);
         o.connect(g).connect(tone);
-        o.start(startAt);
-        o.stop(startAt + attack + hold + release + 0.05);
+        o.start(at);
+        return { osc: o, gain: g };
       };
 
-      /* THE RISE — C4 and G4, quiet, swelling the whole way in. The whole
-         point is that it never gets loud: it is the approach, not the event. */
-      voice(261.63, 0.05, t, rise * 0.95, 0, 0.25);   // C4
-      voice(392.00, 0.035, t, rise * 0.95, 0, 0.25);  // G4
+      /* 1 — THE BED. Starts at effectively nothing and creeps up over the
+         whole countdown. Two detuned pairs beat slowly against each other,
+         which is what stops a held pad sounding like a test tone. */
+      const bedGains = [];
+      [[130.81, 0], [130.81, 7], [196.00, 0], [196.00, -6]].forEach(([f, d], i) => {
+        const peak = i < 2 ? 0.055 : 0.038;
+        const left = Math.max(0.2, bed - elapsed);   // what is left of the countdown
+        const v = voice('sine', f, d, t, (gain, at) => {
+          gain.exponentialRampToValueAtTime(peak * 0.06, at + left * 0.12);  // barely there
+          gain.exponentialRampToValueAtTime(peak * 0.35, at + left * 0.55);
+          gain.exponentialRampToValueAtTime(peak, at + left);                // still soft
+        });
+        bedGains.push(v.gain.gain);   // the AudioParam, not the node
+        v.osc.stop(landAt + 1.2);
+      });
 
-      /* THE LANDING — C major with a C3 underneath for weight, on the frame
-         the letter stops. 60ms of attack, not 12: enough to have arrived
-         without the transient that reads as a beep. */
-      const land = t + rise;
-      voice(130.81, 0.30, land, 0.06, 0.12, 2.6);   // C3 — the body
-      voice(261.63, 0.26, land, 0.06, 0.12, 2.8);   // C4
-      voice(329.63, 0.18, land, 0.07, 0.10, 2.6);   // E4 — the sweetness
-      voice(392.00, 0.13, land, 0.07, 0.10, 2.4);   // G4
-      voice(523.25, 0.06, land, 0.09, 0.06, 2.0);   // C5 — a little air on top
+      /* 2 — THE APPROACH. A different timbre, gliding up as the letter flies,
+         so this reads as a new sound rather than more of the bed. */
+      const app = voice('triangle', 261.63, 0, approachAt, (gain, at, freq) => {
+        gain.exponentialRampToValueAtTime(0.09, at + fly * 0.75);
+        gain.exponentialRampToValueAtTime(0.0001, at + fly + 0.35);
+        freq.setValueAtTime(261.63, at);
+        freq.exponentialRampToValueAtTime(392.00, at + fly);          // C4 -> G4
+      });
+      app.osc.stop(approachAt + fly + 0.5);
 
-      setTimeout(() => { try { ctx.close(); } catch (e) {} }, (rise + 3.2) * 1000 + 400);
-    } catch (e) { /* audio is a flourish; never let it break the page */ }
+      /* The bed steps back under the chord, so the landing has the room. */
+      bedGains.forEach((g) => {
+        g.cancelScheduledValues(landAt);
+        g.setValueAtTime(Math.max(0.0001, g.value), landAt);
+        g.exponentialRampToValueAtTime(0.0001, landAt + 0.9);
+      });
+
+      /* 3 — THE LANDING. C major with a low octave for weight. 70ms of attack,
+         not 12: enough to have arrived without the click of a buzzer. */
+      [[130.81, 0.30, 2.8], [261.63, 0.26, 3.0], [329.63, 0.18, 2.8],
+       [392.00, 0.13, 2.6], [523.25, 0.06, 2.2]].forEach(([f, peak, rel]) => {
+        const v = voice('sine', f, 0, landAt, (gain, at) => {
+          gain.exponentialRampToValueAtTime(peak, at + 0.07);
+          gain.setValueAtTime(peak, at + 0.19);
+          gain.exponentialRampToValueAtTime(0.0001, at + 0.19 + rel);
+        });
+        v.osc.stop(landAt + 0.19 + rel + 0.1);
+      });
+
+      setTimeout(() => { try { ctx.close(); } catch (e) {} },
+                 (bed + fly + 3.4) * 1000 + 400);
+      }   // end schedule()
+
+      if (ctx.state === 'running') { go(); return; }
+      ctx.resume().then(go).catch(() => {});
+      EVENTS.forEach((e) => window.addEventListener(e, wake, { passive: true }));
+      /* If nothing has been touched by the time the opening is over, there is
+         nothing left to play in time with. Stop listening rather than firing a
+         chord at some unrelated later moment. */
+      setTimeout(() => {
+        if (!scheduled) {
+          EVENTS.forEach((e) => window.removeEventListener(e, wake));
+          try { ctx.close(); } catch (e) {}
+        }
+      }, (bed + fly) * 1000);
+    } catch (e) {
+      /* A flourish must never break the page — but silence here once hid a
+         TypeError that cost the whole landing chord, so it says so. */
+      console.warn('[intro] sound failed:', e && e.message);
+    }
   }
 
   /* Each half is set directly now rather than split from one total, so the
      hold after the crack stays three seconds whatever the countdown is. */
+  /* The whole soundtrack is scheduled here, at the first frame, because layer
+     one has to run underneath the countdown. Both stage times are derived from
+     the same constants the animation uses, so picture and sound cannot drift. */
+  playIntroSting(COUNTDOWN_MS / 1000, (HOLD_MS * 0.55) / 1000);
+
   const COUNT_MS = COUNTDOWN_MS;
   const FINALE_MS = HOLD_MS;
   const TICK_MS = COUNT_TICK_MS;
@@ -1213,10 +1342,6 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
     const impactAt = Math.round(FINALE_MS * 0.55);
     slot.style.animationDuration = impactAt + 'ms';
 
-    /* Started here, not at the impact, because the rise has to happen DURING
-       the fly-in. The landing tone is scheduled on the audio clock for the
-       same instant the flash fires, which is steadier than a second timer. */
-    playIntroSting(impactAt / 1000);
 
     /* The shake is sized from what is left of the finale, for the same reason
        the fly-in is. Fixed at .55s in the stylesheet it ran from 660ms to
@@ -1788,6 +1913,81 @@ function marquee(viewport, track, pxPerSec) {
    control to find, nothing to press, nothing to decide before the thing it
    belongs to has finished. The film below stays silent, which is what a
    muted autoplaying video is for. */
+/* ---- the film's ambience, on a click ----
+   Click once it plays, click again it stops. No button of its own: the film is
+   the control, which is why it carries role="button" and a tabindex — a
+   clickable section that a keyboard cannot reach is a section half the visitors
+   cannot use.
+
+   Synthesised rather than a file: nothing to serve, nothing to license. Two
+   detuned fifths under a lowpass with a slow tremolo — consonant enough to
+   ignore while reading, which is the whole job of an ambience.
+
+   It fades rather than switching. A level that jumps is heard as a fault. */
+(() => {
+  const film = document.getElementById('filmSection');
+  const hint = document.getElementById('filmHint');
+  if (!film) return;
+
+  let ctx = null, master = null, nodes = [], on = false;
+
+  const build = () => {
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    master = ctx.createGain();
+    master.gain.value = 0.0001;
+
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 640;
+    lp.Q.value = 0.6;
+
+    [[110, 0.5, 0], [164.81, 0.34, 5], [220, 0.16, -4]].forEach(([f, lvl, det]) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = f; o.detune.value = det;
+      g.gain.value = lvl;
+      o.connect(g).connect(lp);
+      o.start();
+      nodes.push(o);
+    });
+
+    /* Slow breathing, so it is not a flat pad. */
+    const lfo = ctx.createOscillator();
+    const lfoGain = ctx.createGain();
+    lfo.frequency.value = 0.07;
+    lfoGain.gain.value = 0.03;
+    lfo.connect(lfoGain).connect(master.gain);
+    lfo.start();
+    nodes.push(lfo);
+
+    lp.connect(master).connect(ctx.destination);
+  };
+
+  const fade = (to, secs) => {
+    const now = ctx.currentTime;
+    master.gain.cancelScheduledValues(now);
+    master.gain.setValueAtTime(Math.max(0.0001, master.gain.value), now);
+    master.gain.exponentialRampToValueAtTime(Math.max(0.0001, to), now + secs);
+  };
+
+  const toggle = async () => {
+    try {
+      if (!ctx) build();
+      if (ctx.state === 'suspended') await ctx.resume();
+      on = !on;
+      fade(on ? 0.09 : 0.0001, on ? 1.8 : 1.0);
+      film.classList.toggle('sounding', on);
+      film.setAttribute('aria-pressed', String(on));
+      if (hint) hint.textContent = on ? 'sound on — click to stop' : 'click for sound';
+    } catch (e) { /* audio is a flourish; never let it break the page */ }
+  };
+
+  film.addEventListener('click', toggle);
+  film.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+  });
+})();
+
 /* ---- the fourteen domains ----
    Was: a row per domain whose logo you had to CLICK to make it spin, steam or
    launch. "CLICK THE LOGO" was printed beside every heading. It is a company
