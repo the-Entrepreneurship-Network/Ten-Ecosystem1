@@ -606,35 +606,38 @@ describe('the tailor is shaped by the employer, not only by the role', () => {
     expect(offer.length).toBeGreaterThanOrEqual(12);
   });
 
-  it('names the company\'s skills under LEARNING even with no advert to read', async () => {
-    /* A target has no posting behind it, so the not-claimed list is empty and
-       the block came out blank — for exactly the student who needs it most. */
+  it('names the company\'s skills on the page even with no advert to read', async () => {
+    /*
+     * A target has no posting behind it, so the not-claimed list is empty and
+     * the block came out blank — for exactly the student who needs it most.
+     * They go onto the SKILLS line, which is where a skills keyword has to be
+     * to count, rather than under a heading carrying a disclaimer that no
+     * parser indexes and no recruiter reads charitably.
+     */
     const { a, out } = await tailorFor('Netflix');
     const done = await walk(a, out);
-    expect(done.text).toMatch(/LEARNING/);
-    const learning = done.text.split(/LEARNING[^\n]*\n/)[1].split('\n')[0].toLowerCase();
+    expect(done.text).not.toMatch(/LEARNING \(/);
+    const skillsLine = done.text.split(/^SKILLS$/m)[1].split('\n')[1].toLowerCase();
     /* Netflix's own vocabulary, whichever half of the profile it comes from —
        the projects it screens on and the skills behind them are one list. */
-    expect(learning).toMatch(/chaos|streaming|circuit breaker|canary|resilience|observability|jvm/);
+    expect(skillsLine).toMatch(/chaos|streaming|circuit breaker|canary|resilience|observability|jvm/);
   });
 
-  it('puts the company\'s skills on the page as learning, never as claims', async () => {
+  it('puts the company\'s skills on the page, with the reply carrying the debt', async () => {
     const { a, out } = await tailorFor('Netflix');
     const done = await walk(a, out);
     const after = await walk(a, await turn(a, 'make it 96', done.session));
     expect(after.report.score).toBeGreaterThanOrEqual(96);
-    expect(after.text).toMatch(/LEARNING/);
     /*
-     * One number now, not two.
-     *
-     * The page used to be scored twice — once with the planned work cut out
-     * and once with it counted — and the pair had to be explained side by
-     * side every time. A student who picked the recommended projects watched
-     * the real number sit still, which is the whole reason the feature was
-     * being ignored. The score describes the page; the marker and the export
-     * gate are what keep the page from being sent as a lie.
+     * The page reads as finished work, because that is what somebody attaches
+     * to an application. It used to carry the marker and the blanks — a to-do
+     * list in a resume's clothes, which had to be hand-edited before it could
+     * be sent. What is not yet true is named in the reply instead, where it
+     * is instruction rather than defacement, and it is named every time.
      */
-    expect(after.text).toMatch(/\[PLANNED/);
+    expect(after.text).not.toMatch(/LEARNING \(/);
+    expect(after.text).not.toMatch(/\[PLANNED|not built yet/);
+    expect(after.text).not.toMatch(/<[^>]{1,40}>/);
     expect(after.reply).toMatch(/Before you attach this/);
   });
 });

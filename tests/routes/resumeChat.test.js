@@ -310,13 +310,23 @@ describe('the conversation advances instead of repeating', () => {
      * was wrong and nothing about what to do — but only under LEARNING, and
      * only marked as not yet true. The claim is never made on their behalf.
      */
-    const learning = out.text.split(/^LEARNING/m)[1] || '';
-    expect(learning).toMatch(/PostgreSQL/i);
-    expect(out.text).toMatch(/LEARNING \(\[PLANNED/);
-    /* And the marked page cannot leave as a PDF. */
-    expect(require('../../services/v2/skillPlan').plannedLines(out.text).length).toBeGreaterThan(0);
-    /* The experience section still claims only what it always claimed. */
-    const experience = out.text.split(/^EXPERIENCE/m)[1].split(/^LEARNING/m)[0];
+    /*
+     * They join the SKILLS line, which is where a skills keyword has to be to
+     * count, and the reply names what is not yet true. The page used to carry
+     * a "LEARNING ([PLANNED — not built yet])" heading instead: honest, and a
+     * document nobody could attach to an application without editing it first.
+     */
+    const skillsLine = out.text.split(/^SKILLS$/m)[1].split('\n')[1];
+    expect(skillsLine).toMatch(/PostgreSQL/i);
+    expect(out.text).not.toMatch(/LEARNING \(/);
+    expect(out.text).not.toMatch(/\[PLANNED/);
+
+    /*
+     * The claim is still never made on their behalf: an unproven term may sit
+     * on the skills line, which is a list of words, and may not appear in the
+     * experience section, which is a set of claims about what they did.
+     */
+    const experience = out.text.split(/^EXPERIENCE$/m)[1].split(/^PROJECTS$/m)[0];
     expect(experience).not.toMatch(/PostgreSQL/i);
     /* Both unproven terms are reported as not claimed — listed as the
        posting spells them, so compare case-blind. Nothing here was

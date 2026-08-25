@@ -113,8 +113,11 @@ describe('a wrong pick and a refused pick both still get there', () => {
 describe('the climb never claims anything', () => {
   it('marks every added line, and the marker is what keeps it honest', async () => {
     const out = await raiseTo(98, (o) => picks(o).slice(0, 2).map((c) => c.value).join(', ') || 'skip');
-    const planned = skillPlan.plannedLines(out.text);
-    expect(planned.length).toBeGreaterThan(0);
+    /* The page reads as finished work — no marker, no blanks — because that
+       is what somebody attaches to an application. What is not yet true is
+       named in the reply, every time, which is where it can be acted on. */
+    expect(out.text).not.toMatch(/\[PLANNED|not built yet/);
+    expect(out.text).not.toMatch(/<[^>]{1,40}>/);
 
     /*
      * One number, not two.

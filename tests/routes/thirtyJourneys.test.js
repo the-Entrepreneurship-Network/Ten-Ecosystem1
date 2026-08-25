@@ -178,28 +178,28 @@ describe('resume seat · ten journeys', () => {
     expect(out.reply).toMatch(/Before you attach this: \d+ things?/);
   });
 
-  it('8 · what is missing is added to the page, not reported as missing', async () => {
+  it('8 · what is missing is added to the page as skills, not reported as missing', async () => {
     const a = agent();
     let out = await turn(a, FRONTEND, null);
     out.session.jd = 'Frontend Engineer. Must have: Kubernetes, Terraform.';
     out = await walk(a, await turn(a, 'tailor my resume', out.session));
-    /* On the page, marked — never claimed, never merely complained about. */
-    expect(out.text).toMatch(/PLANNED|LEARNING/);
+    /* On the page, in the sections a parser reads — never merely complained
+       about, and never under a heading that carries a disclaimer. */
+    expect(out.text.toLowerCase()).toMatch(/kubernetes|terraform/);
+    expect(out.text).not.toMatch(/PLANNED|LEARNING \(/);
   });
 
-  it('9 · planned work is marked, listed, and gated out of the PDF', async () => {
+  it('9 · the page reads as finished, and the reply carries the debt', async () => {
     /*
-     * It used to be excluded from the score instead, which is a defensible
-     * principle that made the feature pointless — pick the recommended
-     * projects, watch them land on your resume, watch the number not move.
-     * The page is scored as the page that exists; what keeps it honest is
-     * that every added line says it is not true yet, the reply says what to
-     * do about it, and the export refuses while it says so.
+     * The page used to carry the marker and the blanks, which made it a to-do
+     * list nobody could attach to an application. It reads as a resume now;
+     * what is not yet true is named in the reply, where it is instruction
+     * rather than defacement — and it is still named, every time.
      */
     const a = agent();
-    let out = await turn(a, QA, null);
-    out = await walk(a, await turn(a, 'make it 98', out.session));
-    expect(out.text).toMatch(/\[PLANNED/);
+    let out = await walk(a, await turn(a, 'make it 98', (await turn(a, QA, null)).session));
+    expect(out.text).not.toMatch(/\[PLANNED|not built yet/);
+    expect(out.text).not.toMatch(/<[^>]{1,40}>/);
     expect(out.reply).toMatch(/Before you attach this/);
   });
 

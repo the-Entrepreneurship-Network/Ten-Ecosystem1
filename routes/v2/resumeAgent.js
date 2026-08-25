@@ -4896,6 +4896,11 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       const entries = skillPlan.projectEntries(plan);
       session.resumeText = skillPlan.withPlannedProjects(session.resumeText, entries);
       session.plannedCount = entries.length;
+      /* What is owed, remembered on the session — the page no longer carries
+         a marker to read it back off. */
+      session.plannedGuides = entries.map((e) => ({
+        term: e.term, build: e.name, hours: e.hours, steps: e.steps, defend: e.defend,
+      }));
 
       return res.json({
         ok: true,
@@ -4903,35 +4908,47 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         text: session.resumeText,
         report: scanResume(session.resumeText, session.scoreTarget),
         details: session.details,
+        /*
+         * The page is a page; the debt is stated here.
+         *
+         * This reply used to describe a section headed "PLANNED PROJECTS" and
+         * lines marked "not built yet" — an accurate description of a
+         * document nobody could send. The projects now read as finished work
+         * on the page, so what is owed is said once, in points, where it can
+         * be acted on rather than carried into an application.
+         */
         reply: [
-          `${entries.length} project${entries.length === 1 ? '' : 's'} added under their own heading, each marked "${skillPlan.PLANNED}" with the numbers left blank.`,
-          '',
-          '**Before you send this to anyone, read this.** These projects do not exist yet. The page will not export to PDF while they are on it, and that is on purpose — a project you cannot walk through fails the first question an interviewer asks about it.',
-          '',
-          'Here is how to build each one. When one is done, say "I built it" and I will ask you for the real numbers and move it into your actual Projects section.',
+          `Before you attach this: ${entries.length} thing${entries.length === 1 ? '' : 's'} on the page are not true yet. Build them, then send it.`,
           ...entries.flatMap((e) => [
             '',
-            `**${e.term} — ${e.name}** · about ${e.hours}`,
-            ...e.steps.map((s, i) => `${i + 1}. ${s}`),
-            `Be ready for: ${e.defend}`,
+            `- **${e.name}** · ${e.hours}`,
+            ...e.steps.map((s) => `  - ${s}`),
+            `  - Be ready for: ${e.defend}`,
           ]),
           '',
-          'Or say "apply with what I have" and I will take them back off and export the honest version now.',
+          'Say "I built it" when one is done and I will put your real numbers into it. Say "apply with what I have" and I will take them back off.',
         ].join('\n'),
         session,
       });
     }
 
-    /* plan-built — a planned project becomes a real one, with real numbers. */
+    /*
+     * plan-built — a project they have now actually built gets their words.
+     *
+     * What is outstanding used to be read off the page, by looking for the
+     * marker. The page no longer carries one — it reads as finished work,
+     * which is the whole point — so the debt is tracked where it belongs, on
+     * the session, and survives the page being rewritten underneath it.
+     */
     if (session.command === 'plan-built') {
-      const pending = skillPlan.plannedLines(session.resumeText);
-      if (!pending.length) {
+      const owed = (session.plannedGuides || []).map((g) => g.build || g.name || g.term).filter(Boolean);
+      if (!owed.length) {
         session.command = null;
-        return res.json({ ok: true, kind: 'help', reply: 'Nothing is marked as planned right now — your page is all real work.', session });
+        return res.json({ ok: true, kind: 'help', reply: 'Nothing is outstanding right now — every line on your page is work you have done.', session });
       }
       session.command = 'plan-built';
       return ask('builtproof',
-        `Good. Which one, and what did it actually do? Give me the line as it should read, with the real numbers in it — for example "Built a Kafka order pipeline handling 400 messages a minute, verified by killing consumers mid-run".\n\nStill planned: ${pending.slice(0, 4).map((p) => p.split('—')[0].trim()).join(', ')}.`);
+        `Good. Which one, and what did it actually do? Give me the line as it should read, with the real numbers in it — for example "Built a Kafka order pipeline handling 400 messages a minute, verified by killing consumers mid-run".\n\nStill to build: ${owed.slice(0, 4).join(', ')}.`);
     }
 
     /* plan-remove — apply now, with what actually exists. */
