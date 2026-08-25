@@ -981,6 +981,48 @@ const HOUSES = [
 const HOUSE = Object.fromEntries(HOUSES.map(([name, note, resume, projects, skills]) =>
   [name.toLowerCase(), { name, note, resume, projects, skills }]));
 
+/*
+ * What each DISCIPLINE is expected to be able to do.
+ *
+ * The archetypes are written per industry — what a bank screens on, what an
+ * IT-services firm screens on — which is the right frame for a company and no
+ * frame at all for a job. Every role at Google resolved to the software
+ * archetype, so a data scientist, a designer and a security analyst were all
+ * handed "data structures, concurrency, profiling" as the skills to put on
+ * their page. A skills line is a claim about the person; a term from another
+ * discipline is a keyword a recruiter will ask about and they cannot answer.
+ *
+ * Keyed by the same families benchFor uses, so the projects a role is offered
+ * and the skills it is credited with come from one idea of what the job is.
+ */
+const ROLE_SKILLS = {
+  software: ['data structures', 'system design', 'concurrency', 'profiling', 'code review', 'testing'],
+  frontend: ['accessibility', 'core web vitals', 'component testing', 'responsive layout', 'design systems', 'browser debugging'],
+  design: ['user research', 'usability testing', 'prototyping', 'information architecture', 'accessibility', 'design systems'],
+  data: ['sql', 'statistics', 'data modelling', 'experiment design', 'dashboarding', 'python'],
+  ml: ['statistics', 'model evaluation', 'feature engineering', 'experiment design', 'python', 'inference optimisation'],
+  devops: ['linux', 'networking', 'infrastructure as code', 'observability', 'incident response', 'capacity planning'],
+  security: ['threat modelling', 'incident response', 'network fundamentals', 'secure coding', 'log analysis', 'vulnerability triage'],
+  mobile: ['platform guidelines', 'app performance', 'offline behaviour', 'release management', 'crash triage', 'accessibility'],
+  hardware: ['embedded c', 'debugging with instruments', 'timing analysis', 'power budgeting', 'schematic reading', 'lab testing'],
+  business: ['excel modelling', 'sql', 'stakeholder interviews', 'process mapping', 'forecasting', 'requirements writing'],
+};
+
+/** The discipline a title belongs to, by the same rules the bench uses. */
+function familyFor(role) {
+  const t = String(role || '');
+  if (/front.?end|\bui\b|react|web developer/i.test(t)) return 'frontend';
+  if (/design|\bux\b|user research|interaction|visual|content design/i.test(t)) return 'design';
+  if (/\bml\b|machine learning|deep learning|\bai\b|llm|nlp|vision|research scientist/i.test(t)) return 'ml';
+  if (/data (analyst|scientist|engineer)|analytics|business intelligence|warehouse|\betl\b|quant/i.test(t)) return 'data';
+  if (/devops|\bsre\b|platform|reliability|cloud|infrastructure|systems admin|network/i.test(t)) return 'devops';
+  if (/security|infosec|\bsoc\b|penetration|forensic|threat|cryptograph|privacy|grc/i.test(t)) return 'security';
+  if (/android|\bios\b|mobile|flutter|react native/i.test(t)) return 'mobile';
+  if (/embedded|firmware|vlsi|asic|\brf\b|hardware|electronic|robotics|iot/i.test(t)) return 'hardware';
+  if (/analyst|consultant|manager|product owner|scrum|program|project/i.test(t)) return 'business';
+  return 'software';
+}
+
 /**
  * The work a ROLE is built on, independent of who is hiring.
  *
@@ -1038,7 +1080,17 @@ function archetypeFor(company, role) {
    * how that kind of business screens. A bank we have never heard of is still
    * a bank, and a student tailoring for one should get the bank's bench.
    */
-  const domain = hit ? hit[1] : domainsFor(role)[0];
+  /*
+   * The company's domain says what kind of business it is. The ROLE's domain
+   * says what the person does, and for skills that is the one that matters:
+   * every role at Google resolved to the software archetype, so a designer
+   * and a data scientist were both handed "data structures, concurrency,
+   * profiling". Where the two disagree, the role wins for skills and the
+   * company still colours the projects.
+   */
+  const companyDomain = hit ? hit[1] : null;
+  const roleDomain = domainsFor(role)[0];
+  const domain = ARCHETYPES[roleDomain] ? roleDomain : (companyDomain || roleDomain);
   return ARCHETYPES[domain] || ARCHETYPES.software;
 }
 
@@ -1177,31 +1229,40 @@ function profileFor(company, role) {
       ...arch.projects,
     ]),
     /*
-     * The employer's vocabulary, then the title's own, then the sector's.
+     * The employer's skills, minus the ones that belong to a different job.
      *
-     * This list is what gets merged onto the SKILLS line, and it used to be
-     * the employer's words followed by the sector's — with nothing in it that
-     * knew what job was being applied for. So a UX Researcher tailoring for
-     * Google was offered "distributed systems" and "Go", which is Google's
-     * vocabulary and not the vocabulary of the posting they are answering.
+     * A data scientist tailoring for Google came back with "sharding" and
+     * "c++ or go" on their skills line, because the house list is written
+     * from postings that are mostly for engineers. A skills line is a claim
+     * about the person, so a term that belongs to another discipline is worse
+     * there than on a project list: it is a keyword a recruiter will ask
+     * about and the candidate cannot answer.
+     *
+     * Anything the role's own bench recognises stays; the rest of the house
+     * list is dropped rather than reordered, and the archetype fills in.
      */
     skills: dedupe([
+      ...(house ? house.skills : []).filter((s) => {
+        const k = String(s).toLowerCase();
+        if (inRole.has(k)) return true;
+        /* Judgement and communication travel between disciplines; specific
+           technologies do not. */
+        return /writing|documentation|review|practice|thinking|estimation|metrics|interviews/.test(k);
+      }),
       /*
-       * Crossed the same way the projects are, and for the same reason.
+       * This title's own skills, ahead of its family's.
        *
-       * Putting the employer first read as "this is what Google wants" and
-       * was true of Google's engineers only: a UX Researcher aiming there
-       * was shown "data structures, complexity analysis, system design, C++
-       * or Go" ahead of a single word of their own discipline. What both
-       * lists name leads, because that is the sharpest thing to claim; the
-       * title's own follows, because a researcher at Google is a researcher
-       * first; the employer's remainder sits behind rather than being
-       * dropped, since it still says something true about the bar.
+       * The family list is right and blunt: every engineering title shares
+       * "data structures, system design, concurrency", so a Payments
+       * Engineer and a Compiler Engineer were credited with the same six
+       * words. Each listed position carries its own — ISO 20022 and PCI DSS
+       * for one, intermediate representation and register allocation for the
+       * other — and those are the words the posting will actually name.
        */
-      ...(house ? house.skills.filter((s) => new Set((roleSkills || [])
-        .map((x) => String(x).toLowerCase())).has(String(s).toLowerCase())) : []),
       ...(roleSkills || []),
-      ...(house ? house.skills : []),
+      /* The discipline's own skills, ahead of the industry's — the person is
+         a data scientist first and a Google employee second. */
+      ...(ROLE_SKILLS[familyFor(role)] || ROLE_SKILLS.software),
       ...arch.skills,
     ]),
   };
@@ -1221,4 +1282,30 @@ function noteFor(company, role) {
   return p.resume ? `${first} Lead the page with ${p.resume}.` : first;
 }
 
-module.exports = { profileFor, noteFor, ARCHETYPES, HOUSE, HOUSES };
+/**
+ * The skills a role is screened on, with no employer in the question.
+ *
+ * A page built from scratch when no opening could be found has no house to
+ * take its vocabulary from, so its SKILLS line stayed at whatever the student
+ * picked — one word, on a page aimed at a role with a dozen expected ones.
+ * The role's own list is a true answer to "what does this job ask for".
+ */
+function skillsForRole(role) {
+  /* The title's own list where there is one, the family's behind it — same
+     order the profile uses, so a page built with no employer and a page
+     tailored for one name the same skills in the same priority. */
+  // eslint-disable-next-line global-require
+  const { lensFor } = require('./projectMatrix');
+  const own = lensFor(role);
+  const family = ROLE_SKILLS[familyFor(role)] || ROLE_SKILLS.software;
+  if (!own) return family;
+  const seen = new Set();
+  return [...own.skills, ...family].filter((s) => {
+    const k = String(s).toLowerCase();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+module.exports = { profileFor, noteFor, skillsForRole, ARCHETYPES, HOUSE, HOUSES };

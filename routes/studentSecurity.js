@@ -144,7 +144,11 @@ router.post("/password", requireStudentSession, async (req, res) => {
                 message: "Choose a password you have not just been using." });
         }
 
-        student.password = await bcrypt.hash(newPassword, 10);
+        /* Through the shared helper — see utils/passwordStore.js. An email
+           sign-in is checked against EcosystemUser, not this row. */
+        const { setStudentPassword } = require('../utils/passwordStore');
+        const { hash } = await setStudentPassword(student.email, newPassword);
+        student.password = hash;
         student.mustChangePassword = false;
         // A reset link issued before this must stop working.
         student.passwordResetToken = null;

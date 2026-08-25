@@ -418,11 +418,96 @@ describe('the film has no sound control, and neither does anything else', () => 
    * one sound now, built in and fired by the break, so every other control
    * and everything behind them came out.
    */
-  it('ships no sound button and no ambience engine', () => {
-    expect(page).not.toContain('id="soundBtn"');
+  // Just the film's audio block — `btn` is a name several scripts on this page
+  // use, so an assertion about listeners has to be scoped to this one.
+  const audioBlock = page.slice(
+    page.indexOf("const film = document.getElementById('filmSection');"),
+    page.indexOf("film.addEventListener('click', toggle);") + 60
+  );
+
+  it('the film carries its own sound, on a click', () => {
+    // One handler, on the section, so the whole film is the control. The
+    // button's click bubbles into it — a second listener on the button would
+    // fire both and cancel itself out.
+    expect(audioBlock).toContain("film.addEventListener('click', toggle);");
+    expect(audioBlock).not.toMatch(/btn\.addEventListener\('click'/);
+    expect(page).toMatch(/on = !on;/);
+    // Synthesised: nothing to serve, nothing to license.
     expect(page).not.toContain('AMBIENT_URL');
-    expect(page).not.toContain('linearRampToValueAtTime');
-    expect(page).not.toMatch(/\.film \.sound \{/);
+    expect(audioBlock).toMatch(/lfo\.frequency\.value = 0\.07/);   // the slow breath
+    // Faded, never switched: a level that jumps is heard as a fault.
+    expect(audioBlock).toMatch(/const fade = \(to, secs\)/);
+  });
+
+  /*
+   * Why it could not be switched off.
+   *
+   * The tremolo LFO was connected straight to `master.gain`. An AudioParam
+   * that has an input connected is worth its own value PLUS that input, so the
+   * LFO's ±0.03 rode on top of master no matter what master was set to, and
+   * fading the intrinsic value to silence left a third of the level still
+   * swinging — for ever. Measured in Chromium before the fix: 0.109 while
+   * playing, 0.030 after "off". On its own gain stage it multiplies instead of
+   * adding, so master alone decides the level. After: 0.00009.
+   */
+  it('routes the tremolo through its own stage, not through master.gain', () => {
+    expect(audioBlock).not.toContain('lfoGain).connect(master.gain)');
+    expect(audioBlock).toMatch(/lfo\.connect\(lfoGain\)\.connect\(trem\.gain\)/);
+    expect(audioBlock).toMatch(/lp\.connect\(trem\)\.connect\(master\)\.connect\(ctx\.destination\)/);
+  });
+
+  it('stops the clock once the fade has landed, not just the level', () => {
+    // Inaudible is not the same as stopped, and an oscillator nobody can hear
+    // still costs a phone battery.
+    expect(audioBlock).toMatch(/if \(!on\) offTimer = setTimeout\(\(\) => \{ if \(!on\) ctx\.suspend\(\); \}/);
+    // A toggle back on during that wait must cancel the pending suspend.
+    expect(audioBlock).toMatch(/clearTimeout\(offTimer\)/);
+  });
+
+  it('carries none of the old sound machinery', () => {
+    expect(page).not.toContain('id="soundBtn"');
+    expect(page).not.toMatch(/\bbuildTones\b/);
+  });
+
+  describe('the sound control', () => {
+    const markup = page.slice(page.indexOf('<section class="film"'), page.indexOf('<!-- scroll words -->'));
+
+    it('is a real button, so a keyboard and a screen reader can both use it', () => {
+      expect(markup).toMatch(/<button type="button" class="sound-toggle" id="filmSound"/);
+      expect(markup).toContain('aria-pressed="false"');
+      expect(audioBlock).toMatch(/btn\.setAttribute\('aria-pressed', String\(on\)\)/);
+    });
+
+    // A <button> inside a role="button" is invalid, and the button now
+    // provides the keyboard route the section's tabindex used to.
+    it('leaves the section itself a plain section', () => {
+      const openTag = markup.slice(0, markup.indexOf('>') + 1);
+      expect(openTag).not.toContain('role="button"');
+      expect(openTag).not.toContain('tabindex');
+      expect(page).not.toMatch(/e\.key === 'Enter' \|\| e\.key === ' '/);
+    });
+
+    it('shows the state in the meter, not only in the wording', () => {
+      expect(page).toContain('<span class="eq" aria-hidden="true">');
+      expect(page).toMatch(/\.film\.sounding \.eq i \{ opacity:1; animation:eqbar/);
+      expect(page).toMatch(/@keyframes eqbar/);
+      // The bars only move while it is playing.
+      expect(page).not.toMatch(/\n\s*\.eq i \{[^}]*animation:eqbar/);
+    });
+
+    it('is big enough to hit with a thumb', () => {
+      expect(page).toMatch(/\.sound-toggle \{[\s\S]{0,400}min-height:44px/);
+    });
+
+    it('says how to stop it, which is the half that was missing', () => {
+      expect(page).toContain("hint.textContent = on ? 'sound on — click to stop' : 'click for sound'");
+    });
+
+    it('holds still for anyone who asked for less motion', () => {
+      const rm = page.slice(page.indexOf('@media (prefers-reduced-motion:reduce) {\n    .sound-toggle'));
+      expect(rm.slice(0, 320)).toContain('.film.sounding .eq i { animation:none;');
+      expect(rm.slice(0, 320)).toContain('.film.sounding .sound-toggle::after { animation:none;');
+    });
   });
 
   it('leaves the film muted, which is what an autoplaying video is for', () => {
@@ -1001,7 +1086,7 @@ describe('opening curtain', () => {
     expect(page).toContain('const FINALE_MS = HOLD_MS');
   });
 
-  it('is over in six seconds, counting thirty at speed', () => {
+  it('is over in five seconds, counting thirty at speed', () => {
     /*
      * Fifty seconds was a queue, ten was still a wait, and thirty seconds of
      * wall clock was worse than either — somebody arriving because they need
@@ -1011,7 +1096,7 @@ describe('opening curtain', () => {
      * a third of a count every fiftieth of a second, which reads as something
      * loading at speed rather than as a countdown being endured.
      */
-    expect(countdownMs).toBe(4500);
+    expect(countdownMs).toBe(3600);   // 3600 + 1400 hold = 5s
     expect(Number(/const COUNT_FROM = (\d+)/.exec(page)[1])).toBe(30);
     /* Fast enough to be motion, slow enough that the digits are not a blur. */
     const tickMs = Number(/const COUNT_TICK_MS = (\d+)/.exec(page)[1]);
@@ -1130,79 +1215,191 @@ describe('opening curtain', () => {
     expect(impactAt + shakeMs).toBeLessThan(holdMs);
   });
 
-  it('has one sound, and it is the ident on the break', () => {
+  it('is three layers, not one sound at the impact', () => {
     /*
-     * There was a bed running under the whole countdown. Thirty seconds of
-     * ambience is a thing to sit through rather than a thing to feel, and the
-     * note it was building towards landed softer for having had company. The
-     * opening is silent until the screen breaks — the way a studio ident
-     * works, where the mark and the sound arrive together and nothing
-     * precedes them.
+     * It began as four bells struck together at the impact — an event with no
+     * approach, which is the shape of an alarm and sounded like one. Then a
+     * rise into a landing, better but still starting only as the letter flew.
+     *
+     * Now it runs from the first frame: a bed almost inaudible under the
+     * countdown, a DIFFERENT timbre as the letter starts moving, and the full
+     * chord as it embeds.
      */
-    expect(page).toMatch(/new Audio\('assets\/intro\/intro-ten\.mp3'\)/);
-    expect(page).not.toMatch(/intro-bed\.mp3/);
-    expect(page).not.toMatch(/bed\.loop/);
+    const fn = page.slice(page.indexOf('function playIntroSting'));
+    const body = fn.slice(0, fn.indexOf('\n  }'));
 
-    /* It fires on the same timer as the flash and the fracture, so the sound
-       and the picture land together at any INTRO_MS. */
-    const finale = page.slice(page.indexOf('function finale()'));
-    const flashAt = finale.indexOf("flash.classList.add('on')");
-    const hitAt = finale.indexOf('hit.play()');
-    const closes = finale.indexOf('}, impactAt);');
-    expect(flashAt).toBeGreaterThan(-1);
-    expect(hitAt).toBeGreaterThan(flashAt);
-    expect(hitAt).toBeLessThan(closes);
+    // 1 — the bed: a fifth, detuned so it beats slowly instead of sitting still.
+    expect(body).toMatch(/\[130\.81, 0\], \[130\.81, 7\], \[196\.00, 0\], \[196\.00, -6\]/);
+    expect(body).toMatch(/peak \* 0\.06/);          // barely there at the start
+    // 2 — the approach: a different wave, and it glides, so it reads as new.
+    expect(body).toMatch(/voice\('triangle'/);
+    expect(body).toMatch(/exponentialRampToValueAtTime\(392\.00, at \+ fly\)/);
+    // 3 — the landing: the chord with a low octave under it.
+    expect(body).toMatch(/\[130\.81, 0\.30/);
+    expect(body).toMatch(/at \+ 0\.07/);             // real attack, not a click
+    // The bed steps back so the chord has the room.
+    expect(body).toMatch(/bedGains\.forEach/);
+
+    expect(body).toMatch(/type = 'lowpass'/);
+    expect(body).not.toContain('createBufferSource');   // no noise burst
+
+    // Nothing recorded, nothing under the count from a file.
+    expect(page).not.toContain("assets/intro/intro-ten.mp3");
+    expect(page).not.toContain("assets/intro/intro-bed.mp3");
+    expect(page).not.toMatch(/const BED_VOL/);
   });
 
-  it('ships an ident that actually contains audio', () => {
+  it('ducks the bed through its AudioParam, not the node', () => {
     /*
-     * An earlier cut was 0.59 seconds of digital silence and looked entirely
-     * healthy: right duration, right bitrate, right file size — a
-     * constant-bitrate MP3 of nothing weighs what an MP3 of something weighs.
-     *
-     * Size proves nothing, so this measures variety: encoded silence repeats
-     * one nearly identical frame body, real audio does not.
+     * bedGains held GainNodes, and cancelScheduledValues lives on the param.
+     * The TypeError was swallowed by the catch, so the bed and the approach
+     * played and the landing chord silently never existed — audible as a
+     * build-up that goes nowhere, which is very hard to read as a crash.
      */
-    const fs = require('fs');
-    const path = require('path');
-    const file = path.join(__dirname, '../../public/assets/intro/intro-ten.mp3');
-    expect(fs.existsSync(file)).toBe(true);
-    const buf = fs.readFileSync(file);
-    expect(buf.length).toBeGreaterThan(5000);
+    const fn = page.slice(page.indexOf('function playIntroSting'));
+    const body = fn.slice(0, fn.indexOf('\n  }'));
+    expect(body).toMatch(/bedGains\.push\(v\.gain\.gain\)/);
+    expect(body).not.toMatch(/bedGains\.push\(v\.gain\)\s*;/);
+    // And the swallow now says something, so the next one is not invisible.
+    expect(body).toMatch(/console\.warn\('\[intro\] sound failed:'/);
+  });
 
-    const seen = new Set();
-    for (let i = 0; i + 32 <= buf.length; i += 32) seen.add(buf.toString('hex', i, i + 32));
-    expect(seen.size / Math.floor(buf.length / 32)).toBeGreaterThan(0.5);
+  it('schedules from the moment sound is allowed, not from a suspended clock', () => {
+    /*
+     * At the first frame the context is ALWAYS suspended — no browser allows
+     * audio before the page has been interacted with. A suspended context's
+     * clock does not advance, so scheduling then resuming later would play
+     * the whole thing late and out of step with the picture.
+     */
+    const fn = page.slice(page.indexOf('function playIntroSting'));
+    const body = fn.slice(0, fn.indexOf('\n  }'));
+    expect(body).toMatch(/function schedule\(elapsed\)/);
+    expect(body).toMatch(/schedule\(\(Date\.now\(\) - startedAt\) \/ 1000\)/);
+    expect(body).toMatch(/Math\.max\(0, bed - elapsed\)/);
+    // Only events that genuinely grant activation; a move or a scroll never does.
+    const events = /const EVENTS = \[([^\]]+)\]/.exec(body)[1];
+    ['pointerdown', 'keydown', 'touchend'].forEach((e) => expect(events).toContain(e));
+    ['pointermove', 'wheel', 'scroll'].forEach((e) => expect(events).not.toContain(e));
+    // And it gives up rather than firing a chord at some unrelated later moment.
+    expect(body).toMatch(/if \(!scheduled\)/);
+  });
+
+  it('starts the soundtrack at the first frame, not in the finale', () => {
+    // Layer one has to run underneath the countdown, so it cannot wait for
+    // finale(). Both stage times come from the constants the animation uses.
+    expect(page).toMatch(/playIntroSting\(COUNTDOWN_MS \/ 1000, \(HOLD_MS \* 0\.55\) \/ 1000\)/);
+    const finale = page.slice(page.indexOf('function finale()'));
+    expect(finale).not.toMatch(/playIntroSting\(/);
+  });
+
+  it('takes the shake off before lifting the curtain', () => {
+    // pre-shake animates transform on #pre, and a running animation beats the
+    // transition that slides the curtain away. At three seconds' distance it
+    // had always finished on its own; at this speed it has not.
+    const finale = page.slice(page.indexOf('function finale()'));
+    const lift = finale.indexOf("pre.classList.add('done')");
+    const unshake = finale.indexOf("pre.classList.remove('pre-shake')");
+    expect(unshake).toBeGreaterThan(-1);
+    expect(unshake).toBeLessThan(lift);
+  });
+
+  it('shows every one of the fourteen domains, not five of them', () => {
+    /*
+     * The swap hung off the countdown tick a fixed five times, so nine
+     * domains were never shown at all — and across fifty seconds the five
+     * that were looked like one frozen image with a number beside it. The
+     * interval is divided out of the countdown, one slot per domain, so the
+     * whole set gets its turn and stays correct if the timing changes again.
+     */
+    expect(page).toMatch(/const LOGO_MS = Math\.max\(120, Math\.round\(CYCLE_MS \/ DOMAIN_IMGS\.length\)\)/);
+    expect(page).toMatch(/setInterval\([\s\S]{0,400}?\}, LOGO_MS\)/);
+
+    /* Measured from the moment the letters finish separating, so the split
+       cannot eat a domain's turn. */
+    expect(page).toMatch(/const CYCLE_MS = Math\.max\(0, COUNT_MS - SPLIT_MS\)/);
+
+    const imgs = /const DOMAIN_IMGS = \[([^\]]*)\]/.exec(page)[1].split(',').length;
+    const splitMs = Number(/const SPLIT_MS = (\d+)/.exec(page)[1]);
+    expect(imgs).toBe(14);
+    /* Long enough to look at, short enough to still be a rotation. */
+    /*
+     * Fast enough to read as a flicker of domains rather than a slideshow,
+     * and not so fast a logo is gone before the eye lands on it. At a four
+     * and a half second countdown that is a shade over a quarter second each,
+     * which is the speed the reference opens at.
+     */
+    const each = Math.round((countdownMs - splitMs) / imgs);
+    expect(each).toBeGreaterThanOrEqual(150);
+    expect(each).toBeLessThan(700);
+  });
+
+  it('starts with the letters touching, then opens the gap', () => {
+    /*
+     * T and N arrive as "TN" — a word with a letter missing rather than a
+     * frame with a hole in it — and move apart on their own beat before
+     * anything is put between them. Starting them apart made the first domain
+     * appear out of nothing; starting them closed makes the same image look
+     * like it was let in.
+     *
+     * Both the flex gap and the slot's width animate, because collapsing only
+     * the slot leaves the letters a gutter apart and the split reads as a
+     * nudge rather than as an opening.
+     */
+    expect(page).toMatch(/\.pre-word\.closed \{ gap:0; \}/);
+    expect(page).toMatch(/\.pre-word\.closed #preSlot \{ width:0; opacity:0; \}/);
+    expect(page).toMatch(/transition:gap var\(--split/);
+    expect(page).toMatch(/word\.classList\.add\('closed'\)/);
+    /* Two frames, so the closed state is painted before the class comes off —
+       set in one frame there is nothing to transition from. */
+    expect(page).toMatch(/requestAnimationFrame\(\(\) => requestAnimationFrame\(\(\) => word\.classList\.remove\('closed'\)\)\)/);
+    /* And the domains wait for the gap to exist. */
+    expect(page).toMatch(/\}, SPLIT_MS\);/);
+  });
+
+  it('finishes shaking before it lifts the curtain, with room to spare', () => {
+    /*
+     * The shake was fixed at .55s in the stylesheet. Against a short finale it
+     * ran from 660ms to 1210ms while the curtain lifts at 1200 — ten
+     * milliseconds of overlap, and an animation on transform beats the
+     * transition doing the lifting. It survived only because removing the
+     * class killed it mid-flight. Sized from the finale, it always ends first.
+     */
+    expect(page).toMatch(/const shakeMs = Math\.max\(120, Math\.round\(\(FINALE_MS - impactAt\) \* 0\.8\)\)/);
+    expect(page).toMatch(/pre\.style\.animationDuration = shakeMs \+ 'ms'/);
+
+    const impactAt = Math.round(holdMs * 0.55);
+    const shakeMs = Math.max(120, Math.round((holdMs - impactAt) * 0.8));
+    expect(impactAt + shakeMs).toBeLessThan(holdMs);
+  });
+
+  it('never breaks the page when audio is blocked', () => {
+    /*
+     * Browsers refuse audio until the page has been interacted with, and
+     * typing a URL is not an interaction. On a cold load the chime is silent
+     * by design — a flourish, not a feature — and a blocked context must not
+     * throw. This is why it checks the state and wraps the whole thing.
+     */
+    const fn = page.slice(page.indexOf('function playIntroSting'));
+    const body = fn.slice(0, fn.indexOf('\n  }'));
+    // It no longer gives up on a suspended context — it waits for a gesture —
+    // but it must still only schedule once sound is actually allowed.
+    expect(body).toContain("ctx.state !== 'running'");
+    expect(body).toContain('try {');
+    expect(body).toMatch(/catch \(e\)/);
+    expect(body).toContain("matchMedia('(prefers-reduced-motion: reduce)').matches");
   });
 
   it('has no sound control anywhere on the page', () => {
     /*
      * Two sounds both asking to be switched on is a page arguing with itself.
-     * The intro speaker went first; the film's SOUND button and the
-     * synthesised ambience behind it went with it. Nothing to find, nothing
-     * to press, nothing to decide before the thing it belongs to has
-     * finished.
+     * The intro carries the only sound, and it needs no control — nothing to
+     * find, nothing to press, nothing to decide.
      */
     expect(page).not.toMatch(/id="preSound"/);
     expect(page).not.toMatch(/id="soundBtn"/);
     expect(page).not.toMatch(/SOUND_KEY/);
     expect(page).not.toMatch(/AMBIENT_URL/);
     expect(page).not.toMatch(/playBed/);
-  });
-
-  it('unlocks audio on the first gesture without playing anything', () => {
-    /*
-     * Browsers refuse audio until the page has been interacted with, and
-     * typing a URL and pressing Enter is not an interaction with the page.
-     * The listener exists only to satisfy that rule — it plays nothing when
-     * it fires. Thirty seconds of countdown is long enough that a visitor has
-     * almost certainly moved a mouse before the ident is due.
-     */
-    expect(page).toMatch(/const wake = \(\) => disarm\(\);/);
-    expect(page).toMatch(/\{ once: true, passive: true \}/);
-    const events = /const EVENTS = \[([^\]]+)\]/.exec(page)[1];
-    ['pointerdown', 'pointermove', 'keydown', 'touchstart', 'wheel', 'scroll']
-      .forEach((e) => expect(events).toContain(e));
   });
 
   it('stops cycling logos when the countdown ends', () => {

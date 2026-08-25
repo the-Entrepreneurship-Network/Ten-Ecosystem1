@@ -111,13 +111,24 @@ describe('a wrong pick and a refused pick both still get there', () => {
 });
 
 describe('the climb never claims anything', () => {
-  it('marks every added line, and the marker is what keeps it honest', async () => {
+  it('tracks every added line, and the reply is what keeps it honest', async () => {
     const out = await raiseTo(98, (o) => picks(o).slice(0, 2).map((c) => c.value).join(', ') || 'skip');
-    /* The page reads as finished work — no marker, no blanks — because that
-       is what somebody attaches to an application. What is not yet true is
-       named in the reply, every time, which is where it can be acted on. */
-    expect(out.text).not.toMatch(/\[PLANNED|not built yet/);
-    expect(out.text).not.toMatch(/<[^>]{1,40}>/);
+    /*
+     * The debt is on the session, not stamped across the document.
+     *
+     * Every added line used to carry "[PLANNED — not built yet]" and the page
+     * grew a LEARNING heading above them. All of it was true and none of it
+     * was sendable: a parser indexes neither, a recruiter reads a disclaimer,
+     * and the student had to hand-edit the page before attaching it — so the
+     * marker got deleted and the honesty went with it. The list moved to
+     * where it cannot be quietly removed: the reply names each entry, and the
+     * PDF route reads the same list and refuses while any of it stands.
+     */
+    const planned = out.session.plannedGuides || [];
+    expect(planned.length).toBeGreaterThan(0);
+    expect(out.text).not.toMatch(/PLANNED|LEARNING/);
+    /* And each one it lists is genuinely on the page it is talking about. */
+    planned.forEach((g) => expect(out.text).toContain(g.build));
 
     /*
      * One number, not two.
@@ -129,12 +140,16 @@ describe('the climb never claims anything', () => {
      * had no good answer, and the feature was being ignored because of it.
      *
      * An ATS scores the document it is given and these lines are on the
-     * document. The honesty lives where it bites instead: every line stays
-     * marked, the reply lists what has to become true, and the PDF will not
-     * export while a marker is there.
+     * document. The honesty lives where it bites instead: the reply lists
+     * what has to become true, and the PDF will not export while any of it
+     * is still owed.
      */
     expect(String(out.reply)).toMatch(/Before you attach this/i);
-    expect(skillPlan.plannedLines(skillPlan.withoutPlanned(out.text))).toEqual([]);
+    /* Naming a title as built removes it from what is owed, and removing an
+       entry takes its lines off the page. */
+    expect(skillPlan.plannedLines(out.text)).toEqual([]);
+    expect(skillPlan.withoutEntries(out.text, [planned[0].build]))
+      .not.toContain(planned[0].build);
   });
 
   it('gives the steps for each thing it added, not a list of missing keywords', async () => {

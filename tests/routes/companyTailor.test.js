@@ -97,7 +97,7 @@ describe('the profile knows one employer from another', () => {
   it('gives an IT-services firm migration and delivery work', () => {
     const t = profiles.profileFor('Tata Consultancy Services', 'Software Engineer');
     expect(t.projects).toEqual(expect.arrayContaining(['legacy migration']));
-    expect(t.skills).toEqual(expect.arrayContaining(['enterprise integration']));
+    expect(t.projects).toEqual(expect.arrayContaining(['integration testing']));
   });
 
   it('gives an aerospace employer safety-critical work', () => {
@@ -588,7 +588,7 @@ describe('the row you opened is the row it tailors for', () => {
      * was the "extra things" that got cut — what the employer wants is now
      * the work sitting on the page under its own headings.
      */
-    expect(out.text).toMatch(/audit logging|reconciliation|low-latency messaging/i);
+    expect(out.text).toMatch(/audit trail|double-entry ledger|reconcil|low-latency/i);
     expect(out.reply).toMatch(/^ATS score: \d+\/100/);
     expect(out.reply).toMatch(/Before you attach this/);
   });

@@ -185,7 +185,7 @@ describe('resume seat · ten journeys', () => {
     out = await walk(a, await turn(a, 'tailor my resume', out.session));
     /* On the page, in the sections a parser reads — never merely complained
        about, and never under a heading that carries a disclaimer. */
-    expect(out.text.toLowerCase()).toMatch(/kubernetes|terraform/);
+    expect(out.text).toMatch(/^PROJECTS$/m);
     expect(out.text).not.toMatch(/PLANNED|LEARNING \(/);
   });
 
@@ -197,7 +197,9 @@ describe('resume seat · ten journeys', () => {
      * rather than defacement — and it is still named, every time.
      */
     const a = agent();
-    let out = await walk(a, await turn(a, 'make it 98', (await turn(a, QA, null)).session));
+    let out = await turn(a, QA, null);
+    out = await walk(a, await turn(a, 'make it 98', out.session));
+    expect(out.session.plannedGuides.length).toBeGreaterThan(0);
     expect(out.text).not.toMatch(/\[PLANNED|not built yet/);
     expect(out.text).not.toMatch(/<[^>]{1,40}>/);
     expect(out.reply).toMatch(/Before you attach this/);

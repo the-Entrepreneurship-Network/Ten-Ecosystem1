@@ -418,7 +418,15 @@ function factLedger(text) {
     title,
     email: (raw.match(RE_EMAIL) || [])[0] || null,
     phone: (raw.match(RE_PHONE) || [])[0] || null,
-    link: (raw.match(RE_LINK) || [])[0] || null,
+    /*
+     * Every profile on the page, not the first one found.
+     *
+     * A student is asked for LinkedIn and for GitHub as two separate
+     * questions, answers both, and the contact line came back carrying one:
+     * the header is recomposed from this ledger, so whichever URL appeared
+     * second was silently dropped from the resume they downloaded.
+     */
+    link: [...new Set(raw.match(new RegExp(RE_LINK.source, 'gi')) || [])].join(' | ') || null,
     location: null, /* not reliably recoverable from free text; never guessed */
     summaryLines: bySection.summary,
     roles,

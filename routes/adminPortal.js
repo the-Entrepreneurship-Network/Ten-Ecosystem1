@@ -843,7 +843,13 @@ async function resetStudentCredentials(req, res) {
     const changed = [];
 
     if (newPassword) {
-      student.password = await bcrypt.hash(newPassword, 10);
+      /* Through the shared helper: the password lives in EcosystemUser too —
+         which is what an email sign-in is checked against — and a two-domain
+         student has a second Student row. Writing only this document leaves
+         the account on the old password everywhere else. */
+      const { setStudentPassword } = require('../utils/passwordStore');
+      const { hash } = await setStudentPassword(student.email, newPassword);
+      student.password = hash;   // keep the in-memory doc in step for the save below
       student.mustChangePassword = requireChange;
       changed.push('password');
     }
