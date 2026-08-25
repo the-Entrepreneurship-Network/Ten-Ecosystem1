@@ -21,7 +21,7 @@ const express = require('express');
 const request = require('supertest');
 const bcrypt = require('bcryptjs');
 
-const mockState = { student: null, others: [], audit: [] };
+const mockState = { student: null, others: [], audit: [], ecoUpdates: [] };
 
 function mockQ(result) {
   const o = {
@@ -57,6 +57,17 @@ function makeStudent(overrides) {
 }
 
 jest.mock('../../models/Student', () => ({
+  updateMany: async (filter, update) => {
+    // Apply it, so the assertions below see what a real write would leave.
+    const set = (update && update.$set) || {};
+    const unset = (update && update.$unset) || {};
+    const rx = filter && filter.email;
+    if (mockState.student && (!rx || rx.test(mockState.student.email))) {
+      Object.assign(mockState.student, set);
+      Object.keys(unset).forEach((k) => { mockState.student[k] = null; });
+    }
+    return { modifiedCount: 1 };
+  },
   findById: (id) => mockQ(mockState.student && mockState.student._id === id ? mockState.student : null),
   findOne: (filter) => {
     if (filter && filter.employeeId) {
@@ -71,6 +82,19 @@ jest.mock('../../models/Student', () => ({
     return mockQ(null);
   }
 }));
+
+/*
+ * utils/passwordStore.js writes the password to EVERY document that holds it —
+ * the Student rows AND EcosystemUser, which is what an email sign-in is
+ * compared against. This double only spoke findOne/findById, so the helper
+ * threw and the route answered 500. The gap was here, not in the route.
+ */
+jest.mock('../../models/EcosystemUser', () => ({
+  updateMany: async (filter) => {
+    mockState.ecoUpdates.push(filter);
+    return { modifiedCount: 1 };
+  }
+}), { virtual: false });
 
 jest.mock('../../models/AuditLog', () => ({
   create: async (entry) => { mockState.audit.push(entry); return entry; }
@@ -108,6 +132,7 @@ beforeEach(() => {
   mockState.student = makeStudent();
   mockState.others = [];
   mockState.audit = [];
+  mockState.ecoUpdates = [];
 });
 
 describe('the admin sets a working password', () => {
