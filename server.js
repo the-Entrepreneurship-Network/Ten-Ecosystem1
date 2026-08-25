@@ -8458,10 +8458,21 @@ app.post("/auth/reset-password", async(req,res)=>{
         // Every role stores a bcrypt hash. Students used to be the exception —
         // the reset wrote the new password in cleartext into `password` AND
         // kept a second cleartext copy in `plainPassword`.
-        user.password = await bcrypt.hash(newPassword, 12);
-        user.passwordResetToken = null;
-        user.passwordResetExpiry = null;
-        await user.save();
+        //
+        // A student's password is kept in more than one document, and writing
+        // only the one we are holding is why "I reset my password and now I
+        // cannot log in" happens: /login compares an EMAIL sign-in against
+        // EcosystemUser, which this never touched, and a two-domain student
+        // has a second Student row that stayed on the old hash as well.
+        if (role === "student" && user.email) {
+            const { setStudentPassword } = require("./utils/passwordStore");
+            await setStudentPassword(user.email, newPassword);
+        } else {
+            user.password = await bcrypt.hash(newPassword, 12);
+            user.passwordResetToken = null;
+            user.passwordResetExpiry = null;
+            await user.save();
+        }
         res.json({ success:true, message:"Password updated! Please log in with your new password." });
     }catch(e){ console.log(e); res.status(500).json({ success:false, message:"Server error" }); }
 });
