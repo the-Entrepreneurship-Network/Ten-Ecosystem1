@@ -445,6 +445,39 @@ describe('the work depends on the company AND the role, never on one alone', () 
     expect(seen.size).toBe(COMPANIES.length * ROLES.length);
   });
 
+  it('crosses the whole roster without two pages coming out the same', () => {
+    /*
+     * The claim this feature makes, checked at something like its real size.
+     *
+     * 374 employers by 120 positions is 44,880 pages, and the two ways it
+     * used to fail are opposite: consult only the company and a data
+     * scientist gets the backend engineer's projects; consult only the role
+     * and every employer gets one page. Every sixth employer against every
+     * third position is 2,520 pages and runs in about a second, which is
+     * cheap enough to keep in the suite. The full cross is a script.
+     */
+    const skillPlan = require('../../services/v2/skillPlan');
+    const { COMPANIES: ALL } = require('../../services/v2/aspirationalCompanies');
+    const career = require('../../services/v2/careerData');
+
+    const employers = ALL.map(([n]) => n).filter((_, i) => i % 6 === 0);
+    const titles = career.POSITIONS.filter((_, i) => i % 3 === 0);
+
+    const seen = new Map();
+    const clashes = [];
+    employers.forEach((c) => titles.forEach((r) => {
+      const terms = profiles.profileFor(c, r).projects.slice(0, 12);
+      const plan = { ok: true, plans: skillPlan.plansFor(terms, [], 12) };
+      const key = skillPlan.projectEntries(plan, { company: c, role: r, hard: true })
+        .slice(0, 6).map((e) => e.line).join('|');
+      if (seen.has(key)) clashes.push(`${seen.get(key)}  ==  ${c} / ${r}`);
+      else seen.set(key, `${c} / ${r}`);
+    }));
+
+    expect(clashes).toEqual([]);
+    expect(seen.size).toBe(employers.length * titles.length);
+  }, 60000);
+
   it('never returns an empty list, for any employer and any title', () => {
     /* 374 employers and 105 titles is 39,270 combinations, and a page
        tailored for one of them that recommends nothing is the failure this
