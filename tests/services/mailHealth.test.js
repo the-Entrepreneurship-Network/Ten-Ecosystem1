@@ -150,3 +150,49 @@ describe('mail health thresholds, run for real', () => {
         expect(r.error).toBe('no connection');   // caught, cron survives
     });
 });
+
+
+/**
+ * Asking by hand.
+ *
+ * checkMailHealth assumes the connection the server process already holds.
+ * Run standalone it has none, so the query buffers and dies after ten seconds
+ * with "Operation `mailhistories.countDocuments()` buffering timed out" —
+ * which reads as a broken check rather than a missing connection, and is
+ * exactly what a documented `node -e` one-liner produced.
+ *
+ * scripts/check-mail-health.js owns the connection instead, the same split as
+ * scripts/check-email.js.
+ */
+describe('the by-hand check', () => {
+    const script = fs.readFileSync(path.join(root, 'scripts/check-mail-health.js'), 'utf8');
+    /* The script quotes the buffering error in its own doc comment, so an
+       offset search over the raw text finds the prose before the code. */
+    const scriptCode = script
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
+
+    it('connects before it queries anything', () => {
+        const connectAt = scriptCode.indexOf('await mongoose.connect');
+        const modelAt = scriptCode.indexOf("require('../models/MailHistory')");
+        const queryAt = scriptCode.indexOf('MailHistory.countDocuments');
+        expect(connectAt).toBeGreaterThan(-1);
+        expect(connectAt).toBeLessThan(modelAt);
+        expect(connectAt).toBeLessThan(queryAt);
+    });
+
+    it('refuses to run without a database URI rather than hanging', () => {
+        expect(script).toMatch(/if \(!process\.env\.MONGODB_URI\)/);
+    });
+
+    it('reads only — the 08:00 job is what alerts', () => {
+        // A hand-run that also fired an alert would train everyone to ignore
+        // the alert.
+        expect(scriptCode).not.toMatch(/sendMail/);
+    });
+
+    it('the cron function no longer advertises a node -e that cannot work', () => {
+        expect(src).not.toMatch(/node -e "require\('\.\/services\/automationCron'\)/);
+        expect(src).toMatch(/scripts\/check-mail-health\.js/);
+    });
+});

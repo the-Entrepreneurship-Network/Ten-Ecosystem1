@@ -967,9 +967,11 @@ async function checkMailHealth() {
             reasons.set(key, (reasons.get(key) || 0) + 1);
         }
         const top = [...reasons.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
-        // Returned, not just mailed: `node -e "require('./services/automationCron')
-        // .checkMailHealth().then(console.log)"` then answers the question
-        // without waiting for 08:00 or opening an inbox.
+        // Returned, not just mailed, so a caller inside this process can act on
+        // it. NOT runnable from a bare `node -e`: this function assumes the
+        // connection the server already holds, and calling it standalone
+        // buffers the query and dies after ten seconds. To ask by hand, use
+        // scripts/check-mail-health.js, which owns its own connection.
         const summary = top.map(([reason, n]) => ({ reason, count: n }));
 
         console.error(`[MAIL-HEALTH] ${failed}/${total} failed in 24h (${pct}%) — alerting.`);
