@@ -23,7 +23,89 @@ const ContractorProfile   = require('../models/ContractorProfile');
 const StartupProfile      = require('../models/StartupProfile');
 const CommunityProfile    = require('../models/CommunityProfile');
 
+const MailHistory   = require('../models/MailHistory');
+const {
+  createEmailTransporter, mailerReady, isSendableAddress,
+  renderEmail, escapeHtml, PORTAL_URL, EMAIL_FROM
+} = require('../utils/mailer');
+
 const { ALL_ROLES, ROLES } = require('../config/roles');
+
+/**
+ * Welcome the person who just signed up here.
+ *
+ * public/register.html posts to /api/register-hub/register, which is this
+ * controller — NOT the /register route in server.js. That route has sent a
+ * welcome email all along; this one never has. So every account created
+ * through the live form was made in silence: no email, no MailHistory row, no
+ * log line, nothing to notice. 790 students registered that way.
+ *
+ * Not the same letter as server.js sends. That one exists to deliver a
+ * generated password, because that flow invents one. Here the person chose
+ * their own password and typed it twice — mailing it back to them would be
+ * handing out a credential over plain SMTP for no reason. This confirms the
+ * account and points at the door.
+ *
+ * Never throws. An account that was created successfully must not be reported
+ * as failed because the confirmation could not be sent.
+ */
+async function sendRegistrationWelcome({ name, email, role, memberId, employeeId, domain, studentId }) {
+  const subject = 'Welcome to The Entrepreneurship Network';
+  let status = 'sent';
+  let errorMessage = '';
+  try {
+    if (!mailerReady()) {
+      status = 'failed';
+      errorMessage = 'Email not configured';
+      console.warn(`[Email] \u2717 Welcome mail to ${email} skipped \u2014 SMTP not configured`);
+    } else if (!isSendableAddress(email)) {
+      status = 'failed';
+      errorMessage = 'No usable recipient address';
+      console.warn(`[Email] \u2717 Welcome mail skipped \u2014 unusable address: ${email}`);
+    } else {
+      const rows = [];
+      if (employeeId) rows.push(`<div><b>Employee ID:</b> ${escapeHtml(employeeId)}</div>`);
+      if (domain)     rows.push(`<div><b>Domain:</b> ${escapeHtml(domain)}</div>`);
+      if (memberId)   rows.push(`<div><b>Member ID:</b> ${escapeHtml(memberId)}</div>`);
+      rows.push(`<div><b>Email:</b> ${escapeHtml(email)}</div>`);
+
+      await createEmailTransporter().sendMail({
+        from: EMAIL_FROM,
+        to: email,
+        subject,
+        html: renderEmail({
+          heading: 'Your account is ready',
+          name,
+          bodyHtml: `<p>Welcome to The Entrepreneurship Network. Your ${escapeHtml(role)}
+                     account is set up and you can sign in now with this email address
+                     and the password you chose.</p>`,
+          panel: rows.join(''),
+          cta: { label: 'Sign in to the portal', url: `${PORTAL_URL}/student-login` },
+          note: 'Keep this email — your Employee ID is the quickest way for us to find your account.'
+        }),
+        text: `Welcome to The Entrepreneurship Network.\n\n`
+            + (employeeId ? `Employee ID: ${employeeId}\n` : '')
+            + (domain ? `Domain: ${domain}\n` : '')
+            + `\nSign in with this email address and the password you chose:\n`
+            + `${PORTAL_URL}/student-login\n`
+      });
+      console.log(`[Email] \u2713 Welcome mail sent to ${email}`);
+    }
+  } catch (err) {
+    status = 'failed';
+    errorMessage = (err && err.message) || 'unknown';
+    console.error(`[Email] \u2717 Welcome mail to ${email} failed: ${errorMessage}`);
+  }
+
+  // Recorded either way, so scripts/check-mail-health.js can see this path at
+  // all. Its absence is why nobody knew it was silent.
+  try {
+    await MailHistory.create({
+      recipientEmail: email, recipientName: name || '', studentId: studentId || null,
+      subject, mailType: 'welcome', sentAt: new Date(), status, errorMessage
+    });
+  } catch (_) { /* the mail matters more than the record of it */ }
+}
 
 const SALT_ROUNDS     = 10;
 const ECOSYSTEM_ROLES = [ROLES.FOUNDER, ROLES.MENTOR, ROLES.INVESTOR, ROLES.CONTRACTOR, ROLES.STUDENT];
@@ -357,6 +439,11 @@ async function registerUser(req, res) {
     });
 
     let genMemberId = '';
+    /* Filled in by the student branch below and read by the welcome mail at the
+       end of this function, which is outside that branch's scope. */
+    let studentEmployeeId = '';
+    let studentDomainName = '';
+    let studentDocId = null;
     // Generate sequential Member IDs for Ecosystem Profiles
     if (role === ROLES.STUDENT) {
       const studentCount = await StudentProfile.countDocuments();
@@ -407,7 +494,9 @@ async function registerUser(req, res) {
       const domain = parsedDomains[0];
       const employeeId = await generateEmployeeId(domain);
       const tenureValue = getTenureLabel(roleSpecificData.tenure);
-      await Student.create({
+      studentEmployeeId = employeeId;
+      studentDomainName = domain;
+      const legacyStudent = await Student.create({
         firstName: name.trim().split(' ')[0] || name.trim(),
         lastName: name.trim().split(' ').slice(1).join(' ') || "",
         name: name.trim(),
@@ -422,6 +511,7 @@ async function registerUser(req, res) {
         tenure: tenureValue,
         joiningDate: new Date().toISOString().split('T')[0]
       });
+      studentDocId = legacyStudent && legacyStudent._id;
 
       // Automatically create Talent Profile for students
       await TalentProfile.create({
@@ -601,6 +691,16 @@ async function registerUser(req, res) {
       }]
     });
 
+    await sendRegistrationWelcome({
+      name: name.trim(),
+      email: trimmedEmail,
+      role,
+      memberId: genMemberId,
+      employeeId: studentEmployeeId,
+      domain: studentDomainName,
+      studentId: studentDocId
+    });
+
     return res.status(201).json({ 
       success: true, 
       message: `${role.charAt(0).toUpperCase() + role.slice(1)} account created successfully.`, 
@@ -622,5 +722,5 @@ async function registerUser(req, res) {
   }
 }
 
-module.exports = { getHub, getRoleConfig, registerUser };
+module.exports = { getHub, getRoleConfig, registerUser, sendRegistrationWelcome };
 
