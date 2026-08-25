@@ -3404,6 +3404,12 @@ try{
                     html,
                     text: `Hello ${firstName||""}, your Internship Registration is Successful.\n\nEmployee ID: ${employeeId}\nPassword: ${password}\nDomain: ${domain}\n\nLogin: ${host || ""}/login.html`
                 });
+                // Symmetric with the failure line below, and with the ✓ the
+                // certificate mailer already prints. Only logging failures
+                // means a healthy log and a silent log look identical, so the
+                // only way to answer "did the student get it?" was to send a
+                // test mail and check an inbox.
+                console.log(`[Email] ✓ Welcome mail sent to ${emailLc}`);
             } catch (err) {
                 mailStatus = "failed";
                 mailError = err && err.message ? String(err.message) : "";
