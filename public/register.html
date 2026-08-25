@@ -168,6 +168,7 @@
   <meta name="apple-mobile-web-app-title" content="TEN">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <script src="/tailwind-guard.js" defer></script>
+  <script src="/js/resume-upload.js"></script>
 </head>
 <body class="min-h-screen text-slate-100 flex items-center justify-center p-4 md:p-8 relative overflow-x-hidden">
 
@@ -1461,69 +1462,59 @@
       document.getElementById('selected_domains').value = selectedDomains.join(',');
     }
 
-    // Resume PDF Upload
+    // Resume PDF Upload — validation, retries and error wording all live in
+    // /js/resume-upload.js, shared with the coordinator form.
     async function uploadResumeFile(input) {
       const file = input.files[0];
       if (!file) return;
-
-      if (!file.name.toLowerCase().endsWith('.pdf') || file.type !== 'application/pdf') {
-        Swal.fire({
-          icon: 'error',
-          title: 'PDF Format Required',
-          text: 'Registration strictly accepts PDF files only. (JPG, PNG, DOCX, ZIP formats are rejected).',
-          background: '#0e1428',
-          color: '#F0EEE8',
-          confirmButtonColor: '#D4AF37'
-        });
-        input.value = '';
-        return;
-      }
-
-      if (file.size > 5 * 1024 * 1024) {
-        Swal.fire({
-          icon: 'error',
-          title: 'File Too Large',
-          text: 'Maximum allowed resume size is 5MB.',
-          background: '#0e1428',
-          color: '#F0EEE8',
-          confirmButtonColor: '#D4AF37'
-        });
-        input.value = '';
-        return;
-      }
 
       const uploadStatusText = document.getElementById('uploadStatusText');
       const uploadPdfIcon = document.getElementById('uploadPdfIcon');
       const container = document.getElementById('resumeUploadContainer');
 
-      uploadStatusText.textContent = 'Uploading resume PDF...';
-      uploadStatusText.className = 'text-sm font-semibold text-amber-400 animate-pulse';
-      uploadPdfIcon.className = 'fa-solid fa-spinner fa-spin text-3xl text-[#D4AF37] mb-2';
-
-      const formData = new FormData();
-      formData.append('resume', file);
-
-      try {
-        const res = await fetch('/api/v2/upload-resume', {
-          method: 'POST',
-          body: formData
-        });
-        const data = await res.json();
-        if (data.success) {
-          document.getElementById('stu_resume').value = data.filePath;
-          document.getElementById('uploadedFileNameDisplay').textContent = file.name;
-          document.getElementById('resumeUploadedPreview').classList.remove('hidden');
-          container.classList.add('hidden');
-        } else {
-          throw new Error(data.message || 'Upload failed');
-        }
-      } catch (err) {
-        console.error(err);
-        uploadStatusText.textContent = 'Upload failed. Tap to retry.';
+      function fail(message) {
+        uploadStatusText.textContent = message;
         uploadStatusText.className = 'text-sm font-semibold text-red-500';
         uploadPdfIcon.className = 'fa-solid fa-circle-exclamation text-3xl text-red-500 mb-2';
         input.value = '';
       }
+
+      const invalid = TENResumeUpload.validate(file);
+      if (invalid) {
+        // The box first, the popup second. SweetAlert comes from a CDN, and a
+        // network that cannot reach it would otherwise throw here and leave the
+        // student with a form that reacted to their file by doing nothing.
+        fail(invalid);
+        try {
+          Swal.fire({
+            icon: 'error',
+            title: 'Resume Not Accepted',
+            text: invalid,
+            background: '#0e1428',
+            color: '#F0EEE8',
+            confirmButtonColor: '#D4AF37'
+          });
+        } catch (_) {}
+        return;
+      }
+
+      uploadStatusText.textContent = 'Uploading resume PDF...';
+      uploadStatusText.className = 'text-sm font-semibold text-amber-400 animate-pulse';
+      uploadPdfIcon.className = 'fa-solid fa-spinner fa-spin text-3xl text-[#D4AF37] mb-2';
+
+      const result = await TENResumeUpload.upload(file);
+      if (!result.ok) {
+        // The reason, not the word "failed" — the student can only act on a
+        // message that says which of the several failures this one was.
+        console.error('[resume] upload failed:', result);
+        fail(result.message);
+        return;
+      }
+
+      document.getElementById('stu_resume').value = result.filePath;
+      document.getElementById('uploadedFileNameDisplay').textContent = file.name;
+      document.getElementById('resumeUploadedPreview').classList.remove('hidden');
+      container.classList.add('hidden');
     }
 
     function replaceUploadedResume() {
