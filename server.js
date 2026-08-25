@@ -10162,12 +10162,32 @@ const resumeStorage = multer.diskStorage({
         cb(null, 'resume-' + uniqueSuffix + '.pdf');
     }
 });
+/*
+ * Is the browser offering us a PDF?
+ *
+ * The extension decides, not the mimetype. `file.mimetype` is copied straight
+ * from the multipart part header, which is whatever the phone's file picker
+ * chose to write — and Android hands over `application/octet-stream`, or an
+ * empty string, for any PDF that arrived through WhatsApp, Drive or Gmail.
+ * Rejecting on that label turned away real resumes from real students, which is
+ * why the upload box kept saying "Upload failed" to people holding a valid PDF.
+ *
+ * Nothing is lost by relaxing it, because the label was never evidence in the
+ * first place — anyone can send `application/pdf` with a shell script. The file
+ * is checked against its actual leading bytes once it is on disk, below.
+ */
+function looksLikePdfUpload(file) {
+    if (!/\.pdf$/i.test(file.originalname || '')) return false;
+    const type = (file.mimetype || '').toLowerCase();
+    return !type || type === 'application/pdf' || type === 'application/octet-stream' || type === 'binary/octet-stream';
+}
+
 const resumeUpload = multer({
     storage: resumeStorage,
     limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB
     fileFilter: function (req, file, cb) {
-        if (file.mimetype !== 'application/pdf') {
-            return cb(new Error('Only PDF files are allowed!'), false);
+        if (!looksLikePdfUpload(file)) {
+            return cb(new Error('Only PDF files are allowed. Export your resume as a .pdf and upload it again.'), false);
         }
         cb(null, true);
     }
@@ -10177,14 +10197,43 @@ app.post('/api/v2/upload-resume', function (req, res) {
     resumeUpload.single('resume')(req, res, function (err) {
         if (err) {
             if (err.code === 'LIMIT_FILE_SIZE') {
+                console.warn('[Resume] rejected: over 25MB');
                 return res.status(413).json({ success: false, message: 'File is too large! Maximum limit is 25MB.' });
             }
+            console.warn('[Resume] rejected:', err.message);
             return res.status(400).json({ success: false, message: err.message });
         }
         if (!req.file) {
+            console.warn('[Resume] rejected: no file in the request');
             return res.status(400).json({ success: false, message: 'Please upload a PDF resume file.' });
         }
+
+        // The only claim about this file that cannot be forged: every PDF begins
+        // "%PDF-". Checking it here is what lets the mimetype above be lenient.
+        try {
+            const head = Buffer.alloc(5);
+            const fd = fs.openSync(req.file.path, 'r');
+            const read = fs.readSync(fd, head, 0, 5, 0);
+            fs.closeSync(fd);
+            if (read < 5 || head.toString('latin1') !== '%PDF-') {
+                fs.unlink(req.file.path, function () {});
+                console.warn('[Resume] rejected: not a PDF inside —', req.file.originalname);
+                return res.status(400).json({
+                    success: false,
+                    message: 'That file is not a real PDF. Export your resume as a PDF and upload it again.'
+                });
+            }
+        } catch (readErr) {
+            console.error('[Resume] could not verify the saved file:', readErr.message);
+            return res.status(500).json({ success: false, message: 'The server could not save your file. Please try again.' });
+        }
+
         const filePath = '/uploads/documents/' + req.file.filename;
+        // Logged so a failure can be told apart from a request that never
+        // arrived: no line here for an upload the student says they made means
+        // it was stopped in front of the app (nginx client_max_body_size), not
+        // by this route.
+        console.log('[Resume] ✓ saved', req.file.filename, '(' + Math.round(req.file.size / 1024) + 'KB)');
         return res.json({ success: true, filePath: filePath });
     });
 });

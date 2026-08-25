@@ -351,6 +351,7 @@ input:-webkit-autofill:active {
 </style>
   <link rel="stylesheet" href="/css/mobile.css">
   <script src="/mobile-nav.js" defer></script>
+  <script src="/js/resume-upload.js"></script>
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#0e1628">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -792,67 +793,55 @@ async function uploadResumeFile(input) {
   const file = input.files[0];
   if (!file) return;
 
-  if (!file.name.toLowerCase().endsWith('.pdf')) {
-    Swal.fire({
-      icon: 'error',
-      title: 'Format Rejected',
-      text: 'The resume must be a PDF document.',
-      background: '#0e1428',
-      color: '#F0EEE8',
-      confirmButtonColor: '#D4AF37'
-    });
-    input.value = '';
-    return;
-  }
-
-  if (file.size > 25 * 1024 * 1024) {
-    Swal.fire({
-      icon: 'error',
-      title: 'File Too Large',
-      text: 'The maximum allowed file size is 25MB.',
-      background: '#0e1428',
-      color: '#F0EEE8',
-      confirmButtonColor: '#D4AF37'
-    });
-    input.value = '';
-    return;
-  }
-
   const uploadStatusText = document.getElementById('uploadStatusText');
   const uploadPdfIcon = document.getElementById('uploadPdfIcon');
   const container = document.getElementById('resumeUploadContainer');
 
-  uploadStatusText.textContent = 'Uploading resume PDF...';
-  uploadStatusText.className = 'text-amber-400 animate-pulse';
-  uploadPdfIcon.className = 'fa-solid fa-spinner fa-spin text-3xl text-[#D4AF37] mb-2';
-
-  const formData = new FormData();
-  formData.append('resume', file);
-
-  try {
-    const res = await fetch('/api/v2/upload-resume', {
-      method: 'POST',
-      body: formData
-    });
-    const data = await res.json();
-    if (data.success) {
-      document.getElementById('coord_resume_path').value = data.filePath;
-      uploadStatusText.textContent = `Uploaded: ${file.name}`;
-      uploadStatusText.className = 'text-green-400 font-bold';
-      uploadPdfIcon.className = 'fa-solid fa-circle-check text-3xl text-emerald-400 mb-2';
-      container.style.borderColor = '#10b981';
-      container.style.background = 'rgba(16,185,129,0.03)';
-    } else {
-      throw new Error(data.message || 'Upload failed');
-    }
-  } catch (err) {
-    console.error(err);
-    uploadStatusText.textContent = 'Upload failed. Tap to retry.';
+  function fail(message) {
+    uploadStatusText.textContent = message;
     uploadStatusText.className = 'text-red-500 font-bold';
     uploadPdfIcon.className = 'fa-solid fa-circle-exclamation text-3xl text-red-500 mb-2';
     container.style.borderColor = '#ef4444';
     input.value = '';
   }
+
+  // Same uploader as the student form — /js/resume-upload.js. This page had its
+  // own copy, and so had its own copy of the same two bugs.
+  const invalid = TENResumeUpload.validate(file);
+  if (invalid) {
+    // The box first, the popup second — SweetAlert is a CDN script, and a
+    // network that cannot reach it must not swallow the reason.
+    fail(invalid);
+    try {
+      Swal.fire({
+        icon: 'error',
+        title: 'Resume Not Accepted',
+        text: invalid,
+        background: '#0e1428',
+        color: '#F0EEE8',
+        confirmButtonColor: '#D4AF37'
+      });
+    } catch (_) {}
+    return;
+  }
+
+  uploadStatusText.textContent = 'Uploading resume PDF...';
+  uploadStatusText.className = 'text-amber-400 animate-pulse';
+  uploadPdfIcon.className = 'fa-solid fa-spinner fa-spin text-3xl text-[#D4AF37] mb-2';
+
+  const result = await TENResumeUpload.upload(file);
+  if (!result.ok) {
+    console.error('[resume] upload failed:', result);
+    fail(result.message);
+    return;
+  }
+
+  document.getElementById('coord_resume_path').value = result.filePath;
+  uploadStatusText.textContent = `Uploaded: ${file.name}`;
+  uploadStatusText.className = 'text-green-400 font-bold';
+  uploadPdfIcon.className = 'fa-solid fa-circle-check text-3xl text-emerald-400 mb-2';
+  container.style.borderColor = '#10b981';
+  container.style.background = 'rgba(16,185,129,0.03)';
 }
 
 async function submitCoordinatorApplication() {
