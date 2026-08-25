@@ -992,7 +992,32 @@ function benchFor(role) {
   // eslint-disable-next-line global-require
   const { DEEP_BENCH } = require('./skillPlan');
   const t = String(role || '');
-  const pick = (...keys) => keys.flatMap((k) => DEEP_BENCH[k] || []);
+
+  /*
+   * The title's own bench, when we hold one, ahead of the family bucket.
+   *
+   * Nine buckets covered a hundred and twenty titles, so "Software Engineer",
+   * "Backend Engineer", "Full-Stack Engineer", "Payments Engineer" and
+   * "Compiler Engineer" all resolved to the same forty terms in the same
+   * order — which meant the same projects, in the same order, on five pages
+   * aimed at five different jobs at the same employer. A Data Analyst and a
+   * Data Scientist were likewise one bucket, and a Technical Writer got the
+   * software bench because nothing else claimed them.
+   *
+   * Each listed position now carries its own ordered terms, most central
+   * first, so the projects a page leads with are the ones that title is
+   * actually judged on. The family bucket follows behind rather than being
+   * dropped: it is still the right vocabulary, just not the right order, and
+   * the climb needs the depth when a student asks for a high number.
+   */
+  // eslint-disable-next-line global-require
+  const { lensFor } = require('./projectMatrix');
+  const own = lensFor(t);
+
+  const pick = (...keys) => {
+    const rest = keys.flatMap((k) => DEEP_BENCH[k] || []);
+    return own ? [...own.terms, ...rest] : rest;
+  };
   if (/front.?end|\bui\b|\bux\b|design|interaction|visual/i.test(t)) return pick('frontend', 'design');
   if (/\bml\b|machine learning|deep learning|\bai\b|llm|nlp|vision|research scientist/i.test(t)) return pick('ml', 'data');
   if (/data (analyst|scientist|engineer)|analytics|business intelligence|warehouse|\betl\b|quant/i.test(t)) return pick('data');
@@ -1028,7 +1053,18 @@ function profileFor(company, role) {
   const key = String(company || '').toLowerCase();
   const house = HOUSE[key] || null;
   const arch = archetypeFor(company, role);
-  const dedupe = (list) => [...new Set(list.filter(Boolean).map((s) => String(s)))];
+  /* Case-blind, first spelling kept: the house lists write "java" and the
+     title's list writes "Java", and a SKILLS line carrying both looks like a
+     page assembled by a machine, which it is and must not read as. */
+  const dedupe = (list) => {
+    const seen = new Set();
+    return list.filter(Boolean).map((s) => String(s)).filter((s) => {
+      const k = s.toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  };
 
   /*
    * The company sets the bar. The ROLE decides which work clears it.
@@ -1048,10 +1084,43 @@ function profileFor(company, role) {
    * and a scientist who ships one of them is better for it.
    */
   const roleBench = benchFor(role);
-  const inRole = new Set(roleBench.map((t) => t.toLowerCase()));
+  // eslint-disable-next-line global-require
+  const { lensFor } = require('./projectMatrix');
+  const own = lensFor(role);
+  const roleSkills = own ? own.skills : [];
+  /*
+   * "Shared" means shared with the POSITION, not with its family.
+   *
+   * The role bench is the position's own terms followed by its family bucket,
+   * and testing the house against the whole of it made almost everything
+   * shared: Google's sharding is in the software bucket, so a Software
+   * Engineer in Test and an Automation Test Engineer at Google both led with
+   * sharding, tracing and search indexing and their first six projects came
+   * out identical. Crossing against the position's own list keeps the promise
+   * the crossing was written to make — the employer's emphasis leads only
+   * where it is genuinely this job's work as well.
+   */
+  const inRole = new Set((own ? own.terms : roleBench).map((t) => t.toLowerCase()));
   const houseProjects = house ? house.projects : [];
   const shared = houseProjects.filter((t) => inRole.has(String(t).toLowerCase()));
-  const houseOnly = houseProjects.filter((t) => !inRole.has(String(t).toLowerCase()));
+
+  /*
+   * The employer's remaining terms, split by whether this job could plausibly
+   * do them at all.
+   *
+   * Interleaving the employer's list with the role's put Google's sharding
+   * second on a page for a UI/UX Designer — which is the original fault in a
+   * new costume: a designer does not ship a resharding path, and being told
+   * to is worse than being told nothing. The family bench is the test. Work
+   * inside it belongs to this kind of job even when it is not the first thing
+   * this title does, so it interleaves; work outside it stays on the list,
+   * behind everything, where somebody deliberately reaching for it can still
+   * find it.
+   */
+  const inFamily = new Set(roleBench.map((t) => t.toLowerCase()));
+  const rest = houseProjects.filter((t) => !inRole.has(String(t).toLowerCase()));
+  const houseOnly = rest.filter((t) => inFamily.has(String(t).toLowerCase()));
+  const houseFar = rest.filter((t) => !inFamily.has(String(t).toLowerCase()));
 
   return {
     company: company || '',
@@ -1072,15 +1141,69 @@ function profileFor(company, role) {
      * own emphasis sits right behind it where it is unmissable, and the rest
      * of the role's bench follows.
      */
+    /*
+     * Interleaved, because only the first three or four ever reach a page.
+     *
+     * Role-block-then-employer-block was right about precedence and wrong
+     * about arithmetic: a one-page resume fits three or four projects, so the
+     * employer's block never arrived. A page tailored for JPMorgan Chase came
+     * back with no audit trail and no reconciliation on it — the two things
+     * that employer's own engineering writing is about — because they sat at
+     * positions five and six of a list that stopped at three.
+     *
+     * So they alternate. What both want still leads; after that the student
+     * gets one of theirs, one of the employer's, one of theirs, and whatever
+     * the page has room for is a mix rather than a prefix.
+     */
     projects: dedupe([
       ...shared,
-      ...roleBench.slice(0, 3),
-      ...houseOnly.slice(0, 3),
-      ...roleBench.slice(3),
-      ...houseOnly.slice(3),
+      ...[0, 1, 2, 3].flatMap((i) => [roleBench[i], houseOnly[i]]).filter(Boolean),
+      ...roleBench.slice(4, 7),
+      /*
+       * Still on the list, just not in front of the work.
+       *
+       * Dropping the employer's foreign terms to the very bottom fixed the
+       * designer and broke the other half: for most employers nothing of
+       * theirs is inside a given family, so the top of every list became the
+       * role's own terms and eight companies produced one page. They sit
+       * here instead — past the three or four a page has room for, ahead of
+       * the generic bench — so a designer is never told to shard a datastore
+       * and a student deliberately reaching for what Google is known for can
+       * still find it.
+       */
+      ...houseFar,
+      ...roleBench.slice(7),
+      ...houseOnly.slice(4),
       ...arch.projects,
     ]),
-    skills: dedupe([...(house ? house.skills : []), ...arch.skills]),
+    /*
+     * The employer's vocabulary, then the title's own, then the sector's.
+     *
+     * This list is what gets merged onto the SKILLS line, and it used to be
+     * the employer's words followed by the sector's — with nothing in it that
+     * knew what job was being applied for. So a UX Researcher tailoring for
+     * Google was offered "distributed systems" and "Go", which is Google's
+     * vocabulary and not the vocabulary of the posting they are answering.
+     */
+    skills: dedupe([
+      /*
+       * Crossed the same way the projects are, and for the same reason.
+       *
+       * Putting the employer first read as "this is what Google wants" and
+       * was true of Google's engineers only: a UX Researcher aiming there
+       * was shown "data structures, complexity analysis, system design, C++
+       * or Go" ahead of a single word of their own discipline. What both
+       * lists name leads, because that is the sharpest thing to claim; the
+       * title's own follows, because a researcher at Google is a researcher
+       * first; the employer's remainder sits behind rather than being
+       * dropped, since it still says something true about the bar.
+       */
+      ...(house ? house.skills.filter((s) => new Set((roleSkills || [])
+        .map((x) => String(x).toLowerCase())).has(String(s).toLowerCase())) : []),
+      ...(roleSkills || []),
+      ...(house ? house.skills : []),
+      ...arch.skills,
+    ]),
   };
 }
 

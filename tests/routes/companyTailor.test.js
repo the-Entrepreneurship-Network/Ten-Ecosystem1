@@ -382,6 +382,14 @@ describe('the work depends on the company AND the role, never on one alone', () 
   const COMPANIES = ['Google', 'Amazon', 'Netflix', 'JPMorgan Chase', 'Infosys', 'Razorpay', 'TSMC', 'Anthropic'];
   const ROLES = ['Software Engineer', 'Data Scientist', 'DevOps Engineer', 'UI/UX Designer', 'Cybersecurity Analyst'];
   const top = (c, r) => profiles.profileFor(c, r).projects.slice(0, 8).join('|');
+  /* What the student actually reads: the project lines this pair produces. */
+  const page = (c, r) => {
+    const skillPlan = require('../../services/v2/skillPlan');
+    const terms = profiles.profileFor(c, r).projects.slice(0, 12);
+    const plan = { ok: true, plans: skillPlan.plansFor(terms, [], 12) };
+    return skillPlan.projectEntries(plan, { company: c, role: r, hard: true })
+      .slice(0, 6).map((e) => e.line).join('|');
+  };
 
   it('gives one company\'s four roles four different lists', () => {
     /*
@@ -393,8 +401,19 @@ describe('the work depends on the company AND the role, never on one alone', () 
     expect(seen.size).toBe(ROLES.length);
     expect(profiles.profileFor('Google', 'UI/UX Designer').projects.slice(0, 3).join(' '))
       .not.toMatch(/sharding/);
-    expect(profiles.profileFor('Google', 'Data Scientist').projects.slice(0, 3).join(' '))
-      .toMatch(/sql|python|pandas/);
+    /*
+     * And the head of the list is the discipline, not the family's toolbox.
+     *
+     * This used to assert "sql|python|pandas", which is what the shared data
+     * bucket opened with — true of the job and not what the job IS. Every
+     * title now carries its own ordered terms, so a data scientist leads on
+     * the work a data scientist is hired for, and the tools sit behind it
+     * where a skills line can still pick them up.
+     */
+    const ds = profiles.profileFor('Google', 'Data Scientist').projects.slice(0, 3).join(' ');
+    expect(ds).toMatch(/statistic|hypothesis|experiment|model|feature engineering/i);
+    const swe = profiles.profileFor('Google', 'Software Engineer').projects.slice(0, 3).join(' ');
+    expect(swe).not.toBe(ds);
   });
 
   it('gives one role different lists at different companies', () => {
@@ -404,7 +423,16 @@ describe('the work depends on the company AND the role, never on one alone', () 
      * scientist at Google from one anywhere else is the scale they work at,
      * so the company's own emphasis sits directly behind the role's core.
      */
-    const seen = new Set(COMPANIES.map((c) => top(c, 'Data Scientist')));
+    /*
+     * Measured on the projects, not on the terms behind them.
+     *
+     * A term list is an input. Two employers in one sector with no named
+     * profile can legitimately share several — both banks want reconciliation
+     * — and what the student is handed is still different, because the
+     * project is written over that employer's own data. Asserting on terms
+     * was asserting on the intermediate value; this asserts on the artefact.
+     */
+    const seen = new Set(COMPANIES.map((c) => page(c, 'Data Scientist')));
     expect(seen.size).toBe(COMPANIES.length);
     expect(top('Google', 'Data Scientist')).toMatch(/sharding|search indexing/);
     expect(top('JPMorgan Chase', 'Data Scientist')).toMatch(/audit logging|reconciliation/);
@@ -413,7 +441,7 @@ describe('the work depends on the company AND the role, never on one alone', () 
 
   it('is distinct across every company and role pair, not just the famous ones', () => {
     const seen = new Set();
-    COMPANIES.forEach((c) => ROLES.forEach((r) => seen.add(top(c, r))));
+    COMPANIES.forEach((c) => ROLES.forEach((r) => seen.add(page(c, r))));
     expect(seen.size).toBe(COMPANIES.length * ROLES.length);
   });
 

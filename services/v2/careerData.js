@@ -40,6 +40,20 @@ const POSITION_GROUPS = [
       'Systems Engineer', 'Compiler Engineer', 'Firmware Engineer',
       'API Engineer', 'Web Developer', 'Webmaster', 'Computer Programmer',
       'Computer Engineer', 'Software Engineer in Test',
+      /*
+       * The titles a large employer advertises that the generic list misses.
+       *
+       * "Backend Engineer" covers the work at a company of thirty. Past a
+       * certain size the same team advertises for a Search Engineer, a
+       * Payments Engineer and a Distributed Systems Engineer separately,
+       * because those are different jobs with different interview loops — and
+       * a student who picks "Backend Engineer" when the posting says "Search
+       * Engineer" is tailoring against the wrong bench.
+       */
+      'Distributed Systems Engineer', 'Search Engineer',
+      'Recommendation Systems Engineer', 'Payments Engineer',
+      'Performance Engineer', 'Integration Engineer',
+      'Developer Experience Engineer',
     ],
   },
   {
@@ -51,6 +65,7 @@ const POSITION_GROUPS = [
       'Computer Vision Engineer', 'NLP Engineer', 'Applied Scientist',
       'Business Intelligence Analyst', 'Quantitative Analyst',
       'AI Engineer', 'Prompt Engineer', 'Data Architect',
+      'ETL Developer', 'Streaming Data Engineer',
     ],
   },
   {
@@ -63,6 +78,8 @@ const POSITION_GROUPS = [
       'Information Security Analyst', 'Information Security Manager',
       'Penetration Tester', 'Cloud Security Engineer', 'Systems Administrator',
       'Solutions Architect', 'Cloud Architect',
+      'Observability Engineer', 'Cloud FinOps Engineer',
+      'Identity and Access Management Engineer', 'Data Privacy Engineer',
     ],
   },
   {
@@ -94,6 +111,7 @@ const POSITION_GROUPS = [
       'Health Information Technician', 'Hardware Engineer', 'Simulation Engineer',
       'Aerospace Software Engineer', 'Automotive Software Engineer',
       'Fintech Engineer', 'Healthtech Engineer',
+      'Salesforce Developer', 'SAP Consultant',
     ],
   },
 ];
