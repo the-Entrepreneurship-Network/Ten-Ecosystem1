@@ -311,13 +311,37 @@ describe('no resume at all · the same errand from the other end', () => {
    * document, and no next move — when the openings for the exact title they
    * had just named were one search away.
    */
+  /*
+   * Eight single-answer questions stand between the request and the list.
+   *
+   * Three come off a list and five are the person — name, email, phone,
+   * GitHub, LinkedIn — and none of them is an essay. They come first because
+   * four hundred rows is not the next thing somebody can act on when the
+   * agent does not yet know their name.
+   */
+  const CORE = ['college', 'degree', 'gradyear', 'name', 'email', 'phone', 'github', 'linkedin'];
+  const TYPED = {
+    name: 'Ananya Rao',
+    email: 'ananya@example.com',
+    phone: '+91 98765 43210',
+    github: 'ananyarao',
+    linkedin: 'linkedin.com/in/ananyarao',
+    link: 'linkedin.com/in/ananyarao',
+  };
+
   const listing = async () => {
     const a = agent();
-    const out = await turn(a, 'build me a resume for a software engineer', null);
+    let out = await turn(a, 'build me a resume for a software engineer', null);
+    for (let i = 0; i < 12 && out.kind === 'ask' && CORE.includes(out.session.asked); i += 1) {
+      const field = out.session.asked;
+      const opts = choices(out);
+      // eslint-disable-next-line no-await-in-loop
+      out = await turn(a, TYPED[field] || (opts.length ? opts[0].value : 'skip'), out.session);
+    }
     return { a, out };
   };
 
-  it('shows the openings for that title before writing a word', async () => {
+  it('shows the openings for that title, once it knows who is asking', async () => {
     const { out } = await listing();
     expect(out.kind).not.toBe('ask');
     expect(Array.isArray(out.jobs)).toBe(true);

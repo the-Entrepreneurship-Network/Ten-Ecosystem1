@@ -1022,7 +1022,15 @@ function withPlannedProjects(resumeText, entries) {
  * still work, and the deadline is the day they apply.
  */
 function withPlannedSkills(resumeText, skills) {
-  const wanted = (skills || []).filter(Boolean).slice(0, 8);
+  /* Deduped before the cap, not after: two spellings of one skill used up two
+     of the eight slots and then printed on the line twice. */
+  const seenWanted = new Set();
+  const wanted = (skills || []).filter(Boolean).filter((s) => {
+    const k = String(s).toLowerCase().trim();
+    if (seenWanted.has(k)) return false;
+    seenWanted.add(k);
+    return true;
+  }).slice(0, 8);
   if (!wanted.length) return String(resumeText || '');
   const lines = String(resumeText || '').split('\n');
 
@@ -1363,12 +1371,12 @@ function catalogueFor(target, exclude = [], limit = 25) {
  * recipe knows its own subject, so the recipe's match pattern is what gets
  * probed.
  */
-function finishedForBuild(label, hard) {
+function finishedForBuild(label, hard, ctx) {
   const recipe = RECIPES.find((r) => r.build === String(label || '').trim());
   if (!recipe) return null;
   /* The alternation the recipe matches on, as a probe string. */
   const probe = String(recipe.match.source).replace(/[^a-z0-9\s|/-]/gi, ' ').replace(/\|/g, ' ');
-  const f = finishedFor(probe, Boolean(hard));
+  const f = finishedFor(probe, Boolean(hard), ctx);
   return f && !f.generic ? f : null;
 }
 

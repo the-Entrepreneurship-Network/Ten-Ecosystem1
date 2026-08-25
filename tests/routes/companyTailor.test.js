@@ -672,22 +672,83 @@ describe('the tailor is shaped by the employer, not only by the role', () => {
 
 /* ------------------------------------------------- OPENINGS BEFORE THE PAGE */
 
-describe('a new user gets the openings before the blank page', () => {
-  const start = async () => {
-    const a = agent();
-    const out = await turn(a, 'build me a resume for a software engineer', null);
-    return { a, out };
+describe('a new user answers eight things, then gets the openings', () => {
+  /*
+   * The openings did come first, and the order is now the other way round.
+   *
+   * The reasoning for openings-first still holds — somebody who says "build
+   * me a resume" wants a job, and the page is the means — and it put four
+   * hundred rows in front of a person the agent could not yet name. They
+   * scroll, pick one, and are then asked for their university, so the list
+   * they were reading is three screens back by the time a page exists.
+   *
+   * Eight single-answer questions come first: three off a list, and the five
+   * nobody can offer a list for. Then the openings, for the title they named
+   * rather than for whatever the last upload implied.
+   */
+  const TYPED = {
+    name: 'Ananya Rao',
+    email: 'ananya@example.com',
+    phone: '+91 98765 43210',
+    github: 'ananyarao',
+    linkedin: 'linkedin.com/in/ananyarao',
+    link: 'linkedin.com/in/ananyarao',
   };
 
-  it('searches the title they named instead of interviewing first', async () => {
-    const { out } = await start();
+  const CORE = ['college', 'degree', 'gradyear', 'name', 'email', 'phone', 'github', 'linkedin'];
+
+  /*
+   * Answer the eight and stop. Not "answer until something other than a
+   * question comes back" — when the boards are down the reply that says so
+   * arrives with the next question attached, and a loop that keeps answering
+   * walks straight past the sentence under test.
+   */
+  const toJobs = async (a, first) => {
+    let out = first;
+    const asked = [];
+    for (let i = 0; i < 20 && out.kind === 'ask' && CORE.includes(out.session.asked); i += 1) {
+      const field = out.session.asked;
+      asked.push(field);
+      const opts = choices(out);
+      // eslint-disable-next-line no-await-in-loop
+      out = await turn(a, TYPED[field] || (opts.length ? opts[0].value : 'skip'), out.session);
+    }
+    return { out, asked };
+  };
+
+  const start = async () => {
+    const a = agent();
+    const first = await turn(a, 'build me a resume for a software engineer', null);
+    return { a, first };
+  };
+
+  it('asks the eight, and only the eight, before searching', async () => {
+    const { a, first } = await start();
+    const { out, asked } = await toJobs(a, first);
+    /* The title was in the sentence, so it is not asked for again. */
+    expect(asked).toEqual(['college', 'degree', 'gradyear', 'name', 'email', 'phone', 'github', 'linkedin']);
     expect(Array.isArray(out.jobs)).toBe(true);
     expect(out.jobs.some((j) => j.company === 'stripe')).toBe(true);
     expect(out.reply).toMatch(/before we write a word/i);
   });
 
+  it('types nothing but the five that are the person', async () => {
+    const { a, first } = await start();
+    let out = first;
+    const typed = [];
+    for (let i = 0; i < 20 && out.kind === 'ask'; i += 1) {
+      const field = out.session.asked;
+      const opts = choices(out);
+      if (!opts.length) typed.push(field);
+      // eslint-disable-next-line no-await-in-loop
+      out = await turn(a, TYPED[field] || (opts.length ? opts[0].value : 'skip'), out.session);
+    }
+    expect(typed).toEqual(['name', 'email', 'phone', 'github', 'linkedin']);
+  });
+
   it('lists the live openings first and the large employers after them', async () => {
-    const { out } = await start();
+    const { a, first } = await start();
+    const { out } = await toJobs(a, first);
     const firstTarget = out.jobs.findIndex((j) => j.aspirational);
     const lastReal = out.jobs.map((j) => !!j.aspirational).lastIndexOf(false);
     expect(firstTarget).toBeGreaterThan(lastReal);
@@ -695,7 +756,8 @@ describe('a new user gets the openings before the blank page', () => {
   });
 
   it('builds the page against the row they open, tailored, in one motion', async () => {
-    const { a, out } = await start();
+    const { a, first } = await start();
+    const { out } = await toJobs(a, first);
     const picked = await turn(a, 'tailor number 1', out.session);
     const done = await walk(a, picked, 'first');
     expect(done.kind).toBe('build');
@@ -705,7 +767,8 @@ describe('a new user gets the openings before the blank page', () => {
 
   it('builds anyway when the boards are silent, rather than stranding them', async () => {
     jobAgent.findJobs.mockRejectedValue(new Error('every board timed out'));
-    const { out } = await start();
+    const { a, first } = await start();
+    const { out } = await toJobs(a, first);
     /* No page, no listings — the interview is the only useful next move. */
     expect(out.kind).toBe('ask');
     expect(String(out.reply)).toMatch(/build the page first/i);

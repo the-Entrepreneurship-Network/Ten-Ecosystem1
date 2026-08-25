@@ -504,6 +504,17 @@ function parseDetails(input) {
  * "- • B.Tech CSE" on the shipped page — two bullets, one line, and a parser
  * reading a stray glyph as content.
  */
+/** The same entry once, first spelling kept, case ignored. */
+function uniqueItems(list) {
+  const seen = new Set();
+  return (list || []).filter((x) => {
+    const k = String(x).trim().toLowerCase();
+    if (!k || seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
 const splitItems = (v) => String(v || '')
   .split(/[;|]|\s*\n\s*/)
   .map((s) => s.trim().replace(/^[-*•▪◦‣·]+\s*/, '').trim())
@@ -669,7 +680,12 @@ function buildResume(detailsInput) {
    * stated, on a page they could download and send. A resume is a set of
    * claims; the agent does not get to make them.
    */
-  const skills = splitItems(d.skills);
+  /* One skill, once. The picker offers the position's own list and the family
+     list, the sharp ones are on both, and ticking a skill in each group put it
+     on the page twice — which reads as carelessness on the one line a reader
+     scans fastest. `unique` is defined just below; this is hoisted past it
+     deliberately so the declaration order can stay readable. */
+  const skills = uniqueItems(splitItems(d.skills));
 
   /*
    * The same answer twice is one thing, not two.
@@ -796,10 +812,22 @@ function buildResume(detailsInput) {
    * project's own name. A line already shaped "Name — what it does" is left
    * exactly as written.
    */
-  section('PROJECTS', projItems.map((p, i) => {
-    const named = /^[^—–-]{2,40}\s[—–-]\s\S/.test(String(p).trim());
-    const b = named ? String(p).trim() : toBullet(p, i + 2);
-    return b ? `- ${b}` : null;
+  /*
+   * A named project is written as its own heading, not as one long bullet.
+   *
+   * "Search-index multi-region event backbone with offset replay — Designed a
+   * partitioned event backbone…" was emitted as a single bullet, and the
+   * rewrite pass that runs afterwards saw a bullet not opening with a verb and
+   * bolted one on: "Built search-index multi-region event backbone with offset
+   * replay — Designed…". Split over two lines it matches every other project
+   * on the page — title, then what was built — and there is nothing for the
+   * rewriter to correct.
+   */
+  section('PROJECTS', projItems.flatMap((p, i) => {
+    const m = String(p).trim().match(/^(.{2,90}?)\s—\s(\S[\s\S]*)$/);
+    if (m) return [m[1], `- ${m[2]}`, ''];
+    const b = toBullet(p, i + 2);
+    return b ? [`- ${b}`] : [];
   }));
   section('EDUCATION', eduItems.map((e) => `- ${e}`));
   section('CERTIFICATIONS', splitItems(d.certifications).map((c) => `- ${c}`));
@@ -2298,12 +2326,31 @@ function consumeAnswer(session, field, msg) {
   } else if (field === 'internship2' || field === 'internship3') {
     d[field] = msg.trim();
     rebuildExperience(d);
-  } else if (field === 'projects2') {
-    /* The flag is set as well as the text: appending only to `projects` left
-       the question's own condition true, so it asked for a second project
-       twelve times in a row. */
-    d.projects2 = msg.trim();
-    d.projects = [d.projects, msg.trim()].filter(Boolean).join('\n');
+  } else if (field === 'projects' || field === 'projects2') {
+    /*
+     * A project picked off our own list arrives as the list's label.
+     *
+     * "An event-driven order pipeline with exactly-once processing" is a
+     * prompt, not a resume line, and the builder verb-fronted it into "-
+     * Built event-driven order pipeline with exactly-once processing" — a
+     * bullet with no title, no evidence and no scale, sitting under a heading
+     * where every other entry had all three. The catalogue knows the finished
+     * form of everything it offers, so a pick lands in the same shape as the
+     * work the climb adds.
+     */
+    const written = String(msg).split(/\s*[,;\n]\s*/).map((s) => s.trim()).filter(Boolean)
+      .map((label) => {
+        const f = skillPlan.finishedForBuild(label, Boolean(session.aspirational), {
+          company: (session.pickedJob && session.pickedJob.company) || '',
+          role: session.scoreTarget || session.target || '',
+        });
+        return f ? `${f.title} — ${f.bullet}` : label;
+      });
+    d.projects = [d.projects, ...written].filter(Boolean).join('\n');
+    /* The flag as well as the text. Appending only to `projects` left the
+       follow-up's own condition true, so it asked for a second project twelve
+       times in a row. */
+    if (field === 'projects2') d.projects2 = written.join('\n') || msg.trim();
   } else if (field === 'internship' || field === 'internshipdates' || field === 'stipend') {
     d[field] = msg.trim();
     rebuildExperience(d);
@@ -4546,6 +4593,79 @@ router.post('/chat', upload.single('file'), async (req, res) => {
      * just named are one search away, so they come first — and the row they
      * open is what the page is then built and tailored against.
      */
+    /*
+     * Who they are first, then the openings.
+     *
+     * The openings did come first, and the reasoning still holds — a page
+     * aimed at nothing in particular is not what anybody came here for. What
+     * it got wrong is that a list of four hundred rows is not the next thing
+     * a person can act on when the agent does not yet know their name. They
+     * scroll it, pick one, and are then asked for their university, so the
+     * list they were reading is three screens back by the time the page
+     * exists.
+     *
+     * These are the facts a resume cannot be written without, and every one
+     * of them is a single answer: three come off a list, and the five that
+     * cannot — name, email, phone, GitHub, LinkedIn — are the five nobody can
+     * offer a list for, because they are the person. Nothing here is an essay
+     * question. Any of them can still be skipped, and a skip is an answer.
+     */
+    const BUILD_CORE = [
+      ['college', 'Which university or college?'],
+      ['degree', 'Which degree?'],
+      ['gradyear', 'Which year do you graduate?'],
+      ['name', 'What name goes at the top of the page?'],
+      ['email', 'Which email address should recruiters use?'],
+      ['phone', 'And a phone number they can reach you on?'],
+      ['github', 'Your GitHub username or profile URL? I will read your public repositories and offer them back as projects, so you do not have to describe them.'],
+      ['linkedin', 'Your LinkedIn URL?'],
+    ];
+    const coreNext = () => BUILD_CORE.find(([f]) =>
+      !String((session.details || {})[f] || '').trim() && !(session.declined || []).includes(f));
+
+    if (session.command === 'build' && !session.resumeText.trim()
+        && Boolean(session.target) && !session.jobsShownForBuild) {
+      /*
+       * Their own repositories, read back to them, before anything is asked
+       * about projects. The handle is one of the eight above, so by the time
+       * the list of openings appears the projects are already theirs to pick
+       * from rather than something to compose in a chat box.
+       */
+      if (session.details.github && !session.githubImported && !session.details.projects) {
+        session.githubImported = true;
+        const gh = await githubImport.importProfile(session.details.github, { limit: 8 });
+        if (gh.ok && gh.projects.length) {
+          session.githubProjects = gh.projects.map((p) => p.bullet);
+          if (gh.languages.length && !session.details.skills) {
+            session.details.githubLanguages = gh.languages.join(', ');
+          }
+          session.asked = 'pickprojects';
+          return res.json({
+            ok: true,
+            kind: 'ask',
+            reply: [
+              `I read ${gh.username}'s public GitHub — ${gh.publicRepos} repositories, ${gh.projects.length} that look like real projects rather than forks or scaffolds${gh.skipped ? ` (${gh.skipped} skipped)` : ''}.`,
+              '',
+              'Which of these should go on the resume? Pick one, or say "all", or skip and describe your own.',
+            ].join('\n'),
+            options: {
+              multi: true,
+              options: gh.projects.map((p) => ({
+                label: p.name,
+                note: [p.language, p.stars >= 5 ? `${p.stars}★` : null].filter(Boolean).join(' · '),
+                value: p.bullet,
+              })),
+              other: { label: 'Something else — I will describe it', value: '' },
+            },
+            session,
+          });
+        }
+      }
+
+      const next = coreNext();
+      if (next) return ask(next[0], next[1]);
+    }
+
     const buildNeedsJobs = session.command === 'build' &&
       !session.resumeText.trim() && !session.pickedJob &&
       Boolean(session.target) && !session.jobsShownForBuild;
