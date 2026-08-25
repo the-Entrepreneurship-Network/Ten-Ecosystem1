@@ -1029,6 +1029,29 @@ function initAutomation() {
         console.warn("[AUTO-CRON] initAutomation() called twice; ignoring the second call.");
         return;
     }
+
+    /*
+     * A second deployment must not run these against the same database.
+     *
+     * A staging copy was running from /home/ec2-user/ten-portal-staging with
+     * the SAME MONGODB_URI as production, so every job below fired twice: two
+     * processes issuing offer letters, generating certificates and auto-marking
+     * attendance for the same real students. It surfaced as 31 mail rows
+     * reading "Email not configured" — staging has no SMTP credentials — which
+     * is a small symptom of a large problem, and the only reason anyone noticed.
+     *
+     * Opt-OUT rather than opt-in on purpose: an opt-in gate would silently stop
+     * production the moment somebody forgot to set it, and these jobs failing
+     * silently is exactly the class of bug this codebase has been full of. A
+     * deployment that should not run them says so.
+     *
+     *     DISABLE_CRON_JOBS=true      in the staging .env
+     */
+    if (String(process.env.DISABLE_CRON_JOBS || "").toLowerCase() === "true") {
+        console.log("[AUTO-CRON] DISABLE_CRON_JOBS=true — automation is off for this deployment.");
+        return;
+    }
+
     automationStarted = true;
 
     const options = { timezone: "Asia/Kolkata" };

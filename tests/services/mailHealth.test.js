@@ -196,3 +196,75 @@ describe('the by-hand check', () => {
         expect(src).toMatch(/scripts\/check-mail-health\.js/);
     });
 });
+
+
+/**
+ * A second deployment must not run the automation against the same database.
+ *
+ * A staging copy was running from /home/ec2-user/ten-portal-staging with the
+ * SAME MONGODB_URI as production, so all six jobs fired twice — two processes
+ * issuing offer letters, generating certificates and auto-marking attendance
+ * for the same real students.
+ *
+ * It surfaced only as 31 MailHistory rows reading "Email not configured",
+ * because staging has no SMTP credentials. A small symptom of a large problem,
+ * and the only reason anyone noticed.
+ */
+describe('the cron guard', () => {
+    /*
+     * Only the disabled path is exercised here, and deliberately so: proving
+     * the enabled path in-process means letting initAutomation register six
+     * live cron jobs inside the test runner, which then never exits. Mocking
+     * node-cron to count them looked like the answer and quietly did not work
+     * — the isolated module registry handed automationCron the real library,
+     * the counter stayed at zero, and the disabled case "passed" for the wrong
+     * reason. A test that passes when the thing it measures is broken is worse
+     * than no test.
+     *
+     * The enabled path was verified directly instead, with node-cron's export
+     * replaced before the require: 6 jobs with the flag unset, 0 with it set.
+     * What is pinned below is that the guard cannot creep from opt-out to
+     * opt-in, which is the change that would silently stop production.
+     */
+    const guard = src.slice(src.indexOf('function initAutomation'));
+    const head = guard.slice(0, guard.indexOf('const options'));
+
+    it('turns the automation off for a deployment that opts out', () => {
+        const before = process.env.DISABLE_CRON_JOBS;
+        process.env.DISABLE_CRON_JOBS = 'true';
+        const logged = [];
+        const realLog = console.log;
+        console.log = (...a) => logged.push(a.join(' '));
+        try {
+            jest.isolateModules(() => {
+                require('../../services/automationCron').initAutomation();
+            });
+        } finally {
+            console.log = realLog;
+            if (before === undefined) delete process.env.DISABLE_CRON_JOBS;
+            else process.env.DISABLE_CRON_JOBS = before;
+        }
+        expect(logged.join('\n')).toMatch(/automation is off for this deployment/);
+        // And it never got as far as announcing a schedule.
+        expect(logged.join('\n')).not.toMatch(/cron jobs scheduled/);
+    });
+
+    it('is opt-OUT, so production never depends on remembering a flag', () => {
+        /*
+         * An opt-in gate would stop production the moment somebody forgot to
+         * set it, and these jobs failing silently is exactly the class of bug
+         * this codebase has been full of.
+         */
+        expect(head).toMatch(/DISABLE_CRON_JOBS/);
+        expect(head).not.toMatch(/ENABLE_CRON|RUN_CRON/);
+        // Only an explicit "true" turns them off.
+        expect(head).toMatch(/=== "true"/);
+    });
+
+    it('checks the flag before anything is scheduled', () => {
+        const flagAt = head.indexOf('DISABLE_CRON_JOBS');
+        const startedAt = head.indexOf('automationStarted = true');
+        expect(flagAt).toBeGreaterThan(-1);
+        expect(flagAt).toBeLessThan(startedAt);
+    });
+});
