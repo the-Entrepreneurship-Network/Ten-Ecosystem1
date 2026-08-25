@@ -918,6 +918,93 @@ async function autoMarkCoordinatorAttendance() {
     }
 }
 
+/**
+ * Tell somebody when the mail stops working.
+ *
+ * This is the job whose absence is the real story. Every individual mail bug
+ * was small and each one failed quietly: credentials unset, a From address on
+ * a domain the relay would not send for, a typo'd env var, a catch that
+ * reported failure as success. Any one of them would have been a ten-minute
+ * fix on the day it started. Instead 790 students registered over months and
+ * not one welcome email ever arrived, because nothing anywhere was watching.
+ *
+ * MailHistory already records every send with a status. Nobody read it. This
+ * reads it once a day and sends one message when the failure rate is bad
+ * enough to act on.
+ *
+ * Deliberately quiet: it says nothing on a good day. An alert that arrives
+ * every morning stops being an alert by the end of the week.
+ */
+const MAIL_HEALTH_MIN_SAMPLE = 5;    // below this, a single bounce is not a trend
+const MAIL_HEALTH_FAIL_PCT   = 25;   // a quarter failing is broken, not unlucky
+
+async function checkMailHealth() {
+    try {
+        const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const [total, failed] = await Promise.all([
+            MailHistory.countDocuments({ sentAt: { $gte: since } }),
+            MailHistory.countDocuments({ sentAt: { $gte: since }, status: "failed" })
+        ]);
+
+        if (total < MAIL_HEALTH_MIN_SAMPLE) {
+            console.log(`[MAIL-HEALTH] ${total} send(s) in 24h — too few to judge.`);
+            return { total, failed, alerted: false };
+        }
+
+        const pct = Math.round((failed / total) * 100);
+        if (pct < MAIL_HEALTH_FAIL_PCT) {
+            console.log(`[MAIL-HEALTH] ${failed}/${total} failed in 24h (${pct}%) — healthy.`);
+            return { total, failed, pct, alerted: false };
+        }
+
+        // The reasons matter more than the count: "suspended" and "Invalid
+        // login" need completely different things done about them.
+        const recent = await MailHistory.find({ sentAt: { $gte: since }, status: "failed" })
+            .select("errorMessage").limit(200).lean();
+        const reasons = new Map();
+        for (const r of recent) {
+            const key = String(r.errorMessage || "unknown").slice(0, 120);
+            reasons.set(key, (reasons.get(key) || 0) + 1);
+        }
+        const top = [...reasons.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+        // Returned, not just mailed: `node -e "require('./services/automationCron')
+        // .checkMailHealth().then(console.log)"` then answers the question
+        // without waiting for 08:00 or opening an inbox.
+        const summary = top.map(([reason, n]) => ({ reason, count: n }));
+
+        console.error(`[MAIL-HEALTH] ${failed}/${total} failed in 24h (${pct}%) — alerting.`);
+        top.forEach(([reason, n]) => console.error(`[MAIL-HEALTH]   ${n}x  ${reason}`));
+
+        try {
+            await createTransporter().sendMail({
+                from: EMAIL_FROM,
+                to: HR_NOTIFY_EMAIL,
+                subject: `[TEN] Email delivery is failing — ${pct}% of sends in the last 24h`,
+                html: renderEmail({
+                    heading: "Email delivery needs attention",
+                    bodyHtml: `<p><b>${failed}</b> of <b>${total}</b> messages failed in the last 24 hours
+                               (<b>${pct}%</b>). Students are not receiving what the portal
+                               believes it has sent.</p>
+                               <p>Run <code>node scripts/check-email.js --to you@example.com</code>
+                               on the server — it reports whether the credentials, the login or the
+                               delivery is the part that is broken.</p>`,
+                    panel: top.map(([reason, n]) =>
+                        `<div><b>${n}&times;</b> ${escapeHtml(reason)}</div>`).join(""),
+                    cta: { label: "Open the portal", url: PORTAL_URL },
+                    note: "Sent once a day, and only when the failure rate is above " + MAIL_HEALTH_FAIL_PCT + "%."
+                })
+            });
+        } catch (mailErr) {
+            // If the alert itself cannot send, the log line above is the alert.
+            console.error("[MAIL-HEALTH] Could not send the alert:", mailErr.message);
+        }
+        return { total, failed, pct, alerted: true, reasons: summary };
+    } catch (err) {
+        console.error("[MAIL-HEALTH] check failed:", err.message);
+        return { error: err.message };
+    }
+}
+
 // ════════════════════════════════════════════════════
 // INIT — Register all cron jobs
 // ════════════════════════════════════════════════════
@@ -960,12 +1047,17 @@ function initAutomation() {
     // present when their coordinator did not get to them (section 3).
     cron.schedule("55 23 * * *", autoMarkCoordinatorAttendance, options);
 
-    console.log("[AUTO-CRON] 5 automation cron jobs scheduled (Asia/Kolkata):");
+    // 08:00 IST — before the working day, so a broken mailer is known about
+    // before the day's registrations and approvals pile up behind it.
+    cron.schedule("0 8 * * *", checkMailHealth, options);
+
+    console.log("[AUTO-CRON] 6 automation cron jobs scheduled (Asia/Kolkata):");
     console.log("  */30 * * * *  overdue offer letters");
     console.log("  0 9 * * *     completed-internship detection");
     console.log("  */30 * * * *  overdue coordinator approvals");
     console.log("  */30 * * * *  overdue HR approvals");
     console.log("  55 23 * * *   auto-mark coordinator attendance");
+    console.log("  0 8 * * *     email delivery health check");
 }
 
 module.exports = {
@@ -978,5 +1070,6 @@ module.exports = {
     generateStarPDF,
     autoGenerateOfferLetter,
     autoGenerateCertificates,
-    initiateCertificateApproval
+    initiateCertificateApproval,
+    checkMailHealth
 };
