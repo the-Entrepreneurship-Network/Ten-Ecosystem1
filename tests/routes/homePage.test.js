@@ -1001,7 +1001,7 @@ describe('opening curtain', () => {
     expect(page).toContain('const FINALE_MS = HOLD_MS');
   });
 
-  it('is over in six seconds, counting thirty at speed', () => {
+  it('is over in five seconds, counting thirty at speed', () => {
     /*
      * Fifty seconds was a queue, ten was still a wait, and thirty seconds of
      * wall clock was worse than either — somebody arriving because they need
@@ -1011,7 +1011,7 @@ describe('opening curtain', () => {
      * a third of a count every fiftieth of a second, which reads as something
      * loading at speed rather than as a countdown being endured.
      */
-    expect(countdownMs).toBe(4500);
+    expect(countdownMs).toBe(3600);   // 3600 + 1400 hold = 5s
     expect(Number(/const COUNT_FROM = (\d+)/.exec(page)[1])).toBe(30);
     /* Fast enough to be motion, slow enough that the digits are not a blur. */
     const tickMs = Number(/const COUNT_TICK_MS = (\d+)/.exec(page)[1]);
@@ -1130,149 +1130,65 @@ describe('opening curtain', () => {
     expect(impactAt + shakeMs).toBeLessThan(holdMs);
   });
 
-  it('runs a bed under the count and the ident on the break', () => {
+  it('plays one sweet synth chime on the break — no bed, no file', () => {
     /*
-     * Two sounds, and they are not equals.
-     *
-     * The count ran in silence for a while, and silence over a number ticking
-     * down reads as a page that has not loaded rather than one about to
-     * start. The bed is the source recording whole — nothing trimmed,
-     * levelled or faded into the file, so what is on disk is what was
-     * recorded and everything shaping it is set on the page. The ident is the
-     * word, and it is the thing the opening exists to deliver.
-     *
-     * So the bed sits well under it and gets out of the way: a bed still
-     * playing across the fracture turns the strike into a mush, which is what
-     * removing it entirely was reaching for the first time.
+     * Was a recorded bed under the whole countdown plus a recorded hit on the
+     * crack. The brief became one sweet note when the E lands and nothing
+     * before it, so both recordings and the bed machinery are gone and the
+     * sound is synthesised: a warm C-major bell, soft swell, long fade.
      */
-    expect(page).toMatch(/new Audio\('assets\/intro\/intro-ten\.mp3'\)/);
-    expect(page).toMatch(/new Audio\('assets\/intro\/intro-bed\.mp3'\)/);
-
-    const bedVol = Number(/const BED_VOL = ([\d.]+)/.exec(page)[1]);
-    const hitVol = Number(/hit\.volume = ([\d.]+)/.exec(page)[1]);
-    expect(bedVol).toBeLessThan(hitVol / 2);
-
-    /*
-     * The bed gets out of the way for the word and then comes back.
-     *
-     * It used to duck to nothing and stay there, which was right when the bed
-     * was cut to the length of the opening. The bed is the whole recording
-     * now and runs about twice as long as the countdown and finale together,
-     * so stopping it at the break would end the music mid-phrase while the
-     * page is still arriving.
-     */
-    expect(page).toMatch(/const DUCK_VOL = BED_VOL \* 0\.2;/);
-    expect(page).toMatch(/ramp\(DUCK_VOL, ms, \(\) => setTimeout\(\(\) => ramp\(BED_VOL, \d+\), \d+\)\);/);
-    /* Ramped, never switched: a level that jumps is heard as a fault, and
-       this one jumps twice. */
-    expect(page).toMatch(/function ramp\(to, ms, then\)/);
-    /* And it ends on a fade of its own, because the file runs out while the
-       page is already showing. */
-    expect(page).toMatch(/bed\.addEventListener\('timeupdate'/);
-
-    const finaleBlock = page.slice(page.indexOf('function finale()'));
-    expect(finaleBlock.indexOf('duckBed(')).toBeLessThan(finaleBlock.indexOf('hit.play()'));
-
-    /* It fires on the same timer as the flash and the fracture, so the sound
-       and the picture land together at any INTRO_MS. */
-    const finale = page.slice(page.indexOf('function finale()'));
-    const flashAt = finale.indexOf("flash.classList.add('on')");
-    const hitAt = finale.indexOf('hit.play()');
-    const closes = finale.indexOf('}, impactAt);');
-    expect(flashAt).toBeGreaterThan(-1);
-    expect(hitAt).toBeGreaterThan(flashAt);
-    expect(hitAt).toBeLessThan(closes);
+    const fn = page.slice(page.indexOf('function playIntroSting'));
+    const body = fn.slice(0, fn.indexOf('\n  }'));
+    // A chord of pure sines — the sweetness — and NO noise burst.
+    expect((body.match(/^\s*bell\(/gm) || []).length).toBeGreaterThanOrEqual(3);
+    expect(body).toMatch(/523\.25/);   // C5
+    expect(body).toMatch(/659\.25/);   // E5 — the third, the sweetness
+    expect(body).toMatch(/783\.99/);   // G5 — the fifth
+    expect(body).not.toContain('createBufferSource');   // not a strike
+    // Nothing recorded, nothing under the count.
+    expect(page).not.toContain("assets/intro/intro-ten.mp3");
+    expect(page).not.toContain("assets/intro/intro-bed.mp3");
+    expect(page).not.toMatch(/\bstartBed\b/);
+    expect(page).not.toMatch(/\bduckBed\b/);
+    expect(page).not.toMatch(/const BED_VOL/);
   });
 
-  it('ships an ident that actually contains audio', () => {
-    /*
-     * An earlier cut was 0.59 seconds of digital silence and looked entirely
-     * healthy: right duration, right bitrate, right file size — a
-     * constant-bitrate MP3 of nothing weighs what an MP3 of something weighs.
-     *
-     * Size proves nothing, so this measures variety: encoded silence repeats
-     * one nearly identical frame body, real audio does not.
-     */
-    const fs = require('fs');
-    const path = require('path');
-    const file = path.join(__dirname, '../../public/assets/intro/intro-ten.mp3');
-    expect(fs.existsSync(file)).toBe(true);
-    const buf = fs.readFileSync(file);
-    expect(buf.length).toBeGreaterThan(5000);
+  it('fires the chime on the same timer as the flash and fracture', () => {
+    const finale = page.slice(page.indexOf('function finale()'));
+    const flashAt = finale.indexOf("flash.classList.add('on')");
+    const stingAt = finale.indexOf('playIntroSting()');
+    const closes = finale.indexOf('}, impactAt);');
+    expect(flashAt).toBeGreaterThan(-1);
+    expect(stingAt).toBeGreaterThan(flashAt);
+    expect(stingAt).toBeLessThan(closes);
+  });
 
-    const seen = new Set();
-    for (let i = 0; i + 32 <= buf.length; i += 32) seen.add(buf.toString('hex', i, i + 32));
-    expect(seen.size / Math.floor(buf.length / 32)).toBeGreaterThan(0.5);
+  it('never breaks the page when audio is blocked', () => {
+    /*
+     * Browsers refuse audio until the page has been interacted with, and
+     * typing a URL is not an interaction. On a cold load the chime is silent
+     * by design — a flourish, not a feature — and a blocked context must not
+     * throw. This is why it checks the state and wraps the whole thing.
+     */
+    const fn = page.slice(page.indexOf('function playIntroSting'));
+    const body = fn.slice(0, fn.indexOf('\n  }'));
+    expect(body).toContain("ctx.state === 'suspended'");
+    expect(body).toContain('try {');
+    expect(body).toMatch(/catch \(e\)/);
+    expect(body).toContain("matchMedia('(prefers-reduced-motion: reduce)').matches");
   });
 
   it('has no sound control anywhere on the page', () => {
     /*
      * Two sounds both asking to be switched on is a page arguing with itself.
-     * The intro speaker went first; the film's SOUND button and the
-     * synthesised ambience behind it went with it. Nothing to find, nothing
-     * to press, nothing to decide before the thing it belongs to has
-     * finished.
+     * The intro carries the only sound, and it needs no control — nothing to
+     * find, nothing to press, nothing to decide.
      */
     expect(page).not.toMatch(/id="preSound"/);
     expect(page).not.toMatch(/id="soundBtn"/);
     expect(page).not.toMatch(/SOUND_KEY/);
     expect(page).not.toMatch(/AMBIENT_URL/);
     expect(page).not.toMatch(/playBed/);
-  });
-
-  it('starts the bed on the first gesture, part-way in rather than from the top', () => {
-    /*
-     * Browsers refuse audio until the page has been interacted with, and
-     * typing a URL and pressing Enter is not an interaction with the page.
-     * The ident only ever needed that unlock, because it is not due until the
-     * break. The bed is due on the first frame, before anyone could have
-     * moved — so it is attempted immediately, and a refused attempt is
-     * retried on the first gesture.
-     *
-     * Retried at the point the count has reached, not from the beginning: a
-     * visitor who moves their mouse three seconds in should hear the bed
-     * where the opening is, not the top of a track it is already half through
-     * and about to fade.
-     */
-    /*
-     * The unlock survives a gesture that does not unlock anything.
-     *
-     * This is the bug that made the opening silent, and it was this code
-     * rather than the browser. Only some events grant audio permission — a
-     * pointer down, a key, a click, a touch ending. Moving a mouse does not,
-     * and neither does a wheel or a scroll.
-     *
-     * The old version listened for all of them with { once: true } and, on
-     * the first to fire, called play() and then removed every listener
-     * without ever checking whether play() had worked. The ordinary sequence
-     * — land, move the mouse, pointermove fires, play() refused, rejection
-     * swallowed — tore down the listeners for pointerdown and keydown, the
-     * two that would actually have worked. The page could not make a sound
-     * again, and the ident went with it.
-     *
-     * So the list is the events that genuinely grant activation, they are not
-     * once-only, and they come off only when a play() has resolved.
-     */
-    expect(page).toMatch(/const wake = \(\) => \{ startBed\(\); \};/);
-    expect(page).toMatch(/p\.then\(\(\) => \{ bedPlaying = true; disarm\(\); \}\)\.catch/);
-    const eventList = /const EVENTS = \[([^\]]+)\]/.exec(page)[1];
-    ['pointerdown', 'pointerup', 'mousedown', 'click', 'keydown', 'touchend']
-      .forEach((e) => expect(eventList).toContain(e));
-    /* Never these: they unlock nothing, and letting them run the unlock path
-       is what threw the real gestures away. */
-    ['pointermove', 'wheel', 'scroll'].forEach((e) => expect(eventList).not.toContain(e));
-    /* And the break does not disarm — doing so took away the bed's last
-       chance on any visit where nothing had unlocked audio yet. */
-    const finale = page.slice(page.indexOf('function finale()'));
-    expect(finale.slice(0, finale.indexOf('hit.play()'))).not.toMatch(/disarm\(\);/);
-    expect(page).toMatch(/const into = \(Date\.now\(\) - startedAt\) \/ 1000;/);
-    expect(page).toMatch(/bed\.currentTime = Math\.min\(into,/);
-    /* And never over a page that has already finished opening. */
-    expect(page).toMatch(/if \(bedPlaying \|\| finished\) return;/);
-    /* Passive, but never once-only: a refused attempt must not consume the
-       listener that the next gesture needs. */
-    expect(page).toMatch(/addEventListener\(e, wake, \{ passive: true \}\)/);
-    expect(page).not.toMatch(/addEventListener\(e, wake, \{ once: true/);
   });
 
   it('stops cycling logos when the countdown ends', () => {

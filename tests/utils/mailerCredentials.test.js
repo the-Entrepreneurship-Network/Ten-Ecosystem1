@@ -132,6 +132,20 @@ describe('the From address is never hardcoded', () => {
         }
     });
 
+    it('a sent welcome mail is logged too, so a quiet log means quiet', () => {
+        // Logging only failures makes a healthy log and a silent log look the
+        // same, which is why "did the student get it?" could only be answered
+        // by sending a test mail and opening an inbox. The certificate mailer
+        // already prints a ✓; this is the same line for the welcome path.
+        const src = read('server.js');
+        expect(src).toMatch(/\[Email\] ✓ Welcome mail sent to/);
+        const ok = src.indexOf('✓ Welcome mail sent to');
+        const fail = src.indexOf('✗ Welcome mail to');
+        // The ✓ sits in the try, before the catch that owns the ✗.
+        expect(ok).toBeGreaterThan(-1);
+        expect(ok).toBeLessThan(fail);
+    });
+
     it('a failed welcome mail is logged, not just recorded', () => {
         // A MailHistory row with status "failed" is not something anyone reads.
         const src = read('server.js');
