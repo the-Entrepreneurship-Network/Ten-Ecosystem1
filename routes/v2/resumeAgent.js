@@ -4812,11 +4812,18 @@ router.post('/chat', upload.single('file'), async (req, res) => {
 
     if (session.command === 'build' && !session.resumeText.trim()
         && Boolean(session.target) && !session.jobsShownForBuild) {
+      const next = coreNext();
+      if (next) return ask(next[0], next[1]);
+
       /*
-       * Their own repositories, read back to them, before anything is asked
-       * about projects. The handle is one of the eight above, so by the time
-       * the list of openings appears the projects are already theirs to pick
-       * from rather than something to compose in a chat box.
+       * Their own repositories, read back to them, once the eight are done.
+       *
+       * This fired the moment the handle arrived, which put a list of repos
+       * between "your GitHub?" and "your LinkedIn?" — the interview
+       * interrupting itself one question short of the end. The eight are a
+       * block; the repos are what happens after it, and before the openings,
+       * so by the time the list of jobs appears the projects are already
+       * theirs to pick from rather than something to compose in a chat box.
        */
       if (session.details.github && !session.githubImported && !session.details.projects) {
         session.githubImported = true;
@@ -4848,9 +4855,6 @@ router.post('/chat', upload.single('file'), async (req, res) => {
           });
         }
       }
-
-      const next = coreNext();
-      if (next) return ask(next[0], next[1]);
     }
 
     const buildNeedsJobs = session.command === 'build' &&

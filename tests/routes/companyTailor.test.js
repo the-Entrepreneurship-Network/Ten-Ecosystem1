@@ -31,6 +31,43 @@ jest.mock('../../routes/v2/jobAgent', () => {
 });
 const jobAgent = require('../../routes/v2/jobAgent');
 
+/*
+ * The student's GitHub, stubbed — because CI has one and this laptop does not.
+ *
+ * These journeys reached api.github.com for real. From a developer machine it
+ * answers 403 (unauthenticated requests are rate-limited by IP), so the import
+ * returned nothing and the interview ran straight through; from a GitHub
+ * runner it answers properly, so the repos came back and the flow gained a
+ * question the assertions had never seen. Six tests that passed here failed
+ * there, and neither result was about the agent.
+ *
+ * The default is a handle with nothing public behind it. A test that wants
+ * repositories says so.
+ */
+jest.mock('../../services/v2/githubImport', () => ({
+  ...jest.requireActual('../../services/v2/githubImport'),
+  importProfile: jest.fn(async () => ({ ok: false })),
+}));
+const githubImport = require('../../services/v2/githubImport');
+
+const WITH_REPOS = {
+  ok: true,
+  username: 'ananyarao',
+  publicRepos: 4,
+  skipped: 1,
+  languages: ['Java', 'Python'],
+  projects: [
+    { name: 'ledger-api', language: 'Java', stars: 7, bullet: 'Ledger API with double-entry postings. Built with Java' },
+    { name: 'quiz-engine', language: 'Python', stars: 0, bullet: 'Quiz engine with spaced repetition. Built with Python' },
+    { name: 'route-planner', language: 'Go', stars: 2, bullet: 'Route planner over public transit data. Built with Go' },
+  ],
+};
+
+beforeEach(() => {
+  githubImport.importProfile.mockReset();
+  githubImport.importProfile.mockResolvedValue({ ok: false });
+});
+
 const PORTAL_JOBS = [
   { title: 'Software Engineer', company: 'stripe', location: 'Bengaluru, India', url: 'https://stripe.com/jobs/1', description: 'Java, Postgres.', tags: ['java'], fit5: 4 },
   { title: 'Software Engineer, Platform', company: 'airbnb', location: 'Remote, EU', url: 'https://careers.airbnb.com/2', description: 'AWS, Terraform.', tags: ['aws'], fit5: 3 },
@@ -777,6 +814,29 @@ describe('a new user answers eight things, then gets the openings', () => {
       out = await turn(a, TYPED[field] || (opts.length ? opts[0].value : 'skip'), out.session);
     }
     expect(typed).toEqual(['name', 'email', 'phone', 'github', 'linkedin']);
+  });
+
+  it('reads their repositories after the eight, not in the middle of them', async () => {
+    /*
+     * The import fired the moment the handle arrived, which put a list of
+     * repositories between "your GitHub?" and "your LinkedIn?" — the
+     * interview interrupting itself one question short of the end. The eight
+     * are a block. The repos come after it and before the openings, so the
+     * projects are already theirs to pick from by the time the jobs appear.
+     */
+    githubImport.importProfile.mockResolvedValue(WITH_REPOS);
+    const { a, first } = await start();
+    const { out, asked } = await toJobs(a, first);
+
+    expect(asked).toEqual(['college', 'degree', 'gradyear', 'name', 'email', 'phone', 'github', 'linkedin']);
+    expect(out.kind).toBe('ask');
+    expect(out.session.asked).toBe('pickprojects');
+    expect(String(out.reply)).toMatch(/4 repositories, 3 that look like real projects/);
+    expect(choices(out).map((c) => c.label)).toEqual(['ledger-api', 'quiz-engine', 'route-planner']);
+
+    /* Picking one puts their own words on the page; the openings follow. */
+    const after = await turn(a, choices(out)[0].value, out.session);
+    expect(after.session.details.projects).toMatch(/Ledger API with double-entry postings/);
   });
 
   it('lists the live openings first and the large employers after them', async () => {

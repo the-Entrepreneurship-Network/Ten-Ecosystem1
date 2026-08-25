@@ -31,6 +31,15 @@ jest.mock('../../routes/v2/jobAgent', () => {
 });
 const jobAgent = require('../../routes/v2/jobAgent');
 
+/* And the student's GitHub, for the same reason: unauthenticated calls to
+   api.github.com are rate-limited by IP, so this journey read one result on a
+   runner and another on a laptop. Whether a handle has public repositories
+   behind it is not what these thirty are about. */
+jest.mock('../../services/v2/githubImport', () => ({
+  ...jest.requireActual('../../services/v2/githubImport'),
+  importProfile: jest.fn(async () => ({ ok: false })),
+}));
+
 const PORTAL_JOBS = [
   { title: 'Backend Engineer', company: 'stripe', location: 'Bengaluru, India', url: 'https://stripe.com/jobs/1', description: 'Java, Kafka, Postgres, Docker.', tags: ['java'], fit5: 4 },
   { title: 'Senior Backend Engineer', company: 'robinhood', location: 'Remote, US', url: 'https://boards.greenhouse.io/robinhood/2', description: 'Go, gRPC, Kubernetes.', tags: ['go'], fit5: 3 },
