@@ -1023,36 +1023,87 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
    * not a feature. The five-second countdown gives a click or a key plenty of
    * time to land, and a context created after one plays; fighting the autoplay
    * policy is not worth the code. */
-  function playIntroSting() {
+  /*
+   * The opening's sound: a slow sweet rise while the E flies in, and one
+   * fuller tone as it lands.
+   *
+   * It was four bells struck together at the moment of impact, which starts
+   * at nothing and is at full volume twelve hundredths of a second later.
+   * That is the shape of an alarm — no approach, just an event — and it read
+   * as one.
+   *
+   * So it is two parts scheduled against the animation rather than one sound
+   * fired at an instant:
+   *
+   *   the rise      a quiet pad, a fifth, swelling across the whole fly-in.
+   *                 It is barely there at the start and still soft at the
+   *                 end; its job is to make the landing feel arrived at
+   *                 rather than sprung.
+   *
+   *   the landing   a warm major chord with an octave below it for weight,
+   *                 on the frame the letter stops. Bigger than the rise, but
+   *                 with a 60ms attack and a lowpass over it, so it has body
+   *                 without the click that makes a tone sound like a buzzer.
+   *
+   * Deliberately not the Netflix cue. Theirs is two struck notes a specific
+   * interval apart; this is a swell into a sustained major chord. The same
+   * KIND of moment, arrived at differently — and copying theirs would be a
+   * trademark problem as well as a worse idea than having our own.
+   *
+   * @param {number} riseSeconds how long the letter takes to arrive
+   */
+  function playIntroSting(riseSeconds) {
     try {
       if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
       const ctx = new AC();
       if (ctx.state === 'suspended') { ctx.close(); return; }   // no gesture yet
-      const master = ctx.createGain();
-      master.gain.value = 0.0001;
-      master.connect(ctx.destination);
+
       const t = ctx.currentTime;
-      const bell = (freq, level, decay) => {
+      const rise = Math.max(0.25, Number(riseSeconds) || 0.75);
+
+      /* One lowpass across everything. Sine partials are already soft, but the
+         corner takes the glassiness off the top of the chord and is most of
+         what separates "sweet" from "electronic". */
+      const tone = ctx.createBiquadFilter();
+      tone.type = 'lowpass';
+      tone.frequency.setValueAtTime(900, t);
+      tone.frequency.linearRampToValueAtTime(2600, t + rise);   // opens as it swells
+      tone.Q.value = 0.4;
+      tone.connect(ctx.destination);
+
+      /** A sine voice: level curve in, hold, long fade. */
+      const voice = (freq, peak, startAt, attack, hold, release, type) => {
         const o = ctx.createOscillator();
         const g = ctx.createGain();
-        o.type = 'sine';
+        o.type = type || 'sine';
         o.frequency.value = freq;
-        g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(level, t + 0.18);   // sweet swell in
-        g.gain.exponentialRampToValueAtTime(0.0001, t + decay); // long soft fade
-        o.connect(g).connect(master);
-        o.start(t); o.stop(t + decay + 0.1);
+        g.gain.setValueAtTime(0.0001, startAt);
+        g.gain.exponentialRampToValueAtTime(peak, startAt + attack);
+        g.gain.setValueAtTime(peak, startAt + attack + hold);
+        g.gain.exponentialRampToValueAtTime(0.0001, startAt + attack + hold + release);
+        o.connect(g).connect(tone);
+        o.start(startAt);
+        o.stop(startAt + attack + hold + release + 0.05);
       };
-      bell(523.25, 0.32, 3.2);   // C5  — root
-      bell(659.25, 0.26, 3.6);   // E5  — the sweetness
-      bell(783.99, 0.20, 3.0);   // G5  — fifth
-      bell(1046.5, 0.10, 2.4);   // C6  — a touch of shimmer on top
-      master.gain.setValueAtTime(0.0001, t);
-      master.gain.exponentialRampToValueAtTime(0.7, t + 0.12);
-      master.gain.exponentialRampToValueAtTime(0.0001, t + 3.6);
-      setTimeout(() => { try { ctx.close(); } catch (e) {} }, 4200);
+
+      /* THE RISE — C4 and G4, quiet, swelling the whole way in. The whole
+         point is that it never gets loud: it is the approach, not the event. */
+      voice(261.63, 0.05, t, rise * 0.95, 0, 0.25);   // C4
+      voice(392.00, 0.035, t, rise * 0.95, 0, 0.25);  // G4
+
+      /* THE LANDING — C major with a C3 underneath for weight, on the frame
+         the letter stops. 60ms of attack, not 12: enough to have arrived
+         without the transient that reads as a beep. */
+      const land = t + rise;
+      voice(130.81, 0.30, land, 0.06, 0.12, 2.6);   // C3 — the body
+      voice(261.63, 0.26, land, 0.06, 0.12, 2.8);   // C4
+      voice(329.63, 0.18, land, 0.07, 0.10, 2.6);   // E4 — the sweetness
+      voice(392.00, 0.13, land, 0.07, 0.10, 2.4);   // G4
+      voice(523.25, 0.06, land, 0.09, 0.06, 2.0);   // C5 — a little air on top
+
+      setTimeout(() => { try { ctx.close(); } catch (e) {} }, (rise + 3.2) * 1000 + 400);
     } catch (e) { /* audio is a flourish; never let it break the page */ }
   }
 
@@ -1162,6 +1213,11 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
     const impactAt = Math.round(FINALE_MS * 0.55);
     slot.style.animationDuration = impactAt + 'ms';
 
+    /* Started here, not at the impact, because the rise has to happen DURING
+       the fly-in. The landing tone is scheduled on the audio clock for the
+       same instant the flash fires, which is steadier than a second timer. */
+    playIntroSting(impactAt / 1000);
+
     /* The shake is sized from what is left of the finale, for the same reason
        the fly-in is. Fixed at .55s in the stylesheet it ran from 660ms to
        1210ms while the curtain lifts at 1200 — ten milliseconds of overlap,
@@ -1176,18 +1232,6 @@ const INTRO_MS = COUNTDOWN_MS + HOLD_MS;
       pre.style.animationDuration = shakeMs + 'ms';
       word.classList.add('pre-shake');
       pre.classList.add('pre-shake');
-      /*
-       * The ident, on the same timer as the flash and the fracture.
-       *
-       * It arrives with the break rather than after it. Its ring-out runs
-       * past the curtain on purpose — a note finishing after the picture has
-       * gone is what makes a page feel opened rather than cut to.
-       *
-       * The unlock listeners are deliberately left alone here. Tearing them
-       * down at the break is what the old code did, and it took away the bed's
-       * last chance on any visit where nothing had unlocked audio yet.
-       */
-      playIntroSting();   // one sweet chime, landing with the letter
     }, impactAt);
 
     /* TEN, whole, for a beat — then the site.

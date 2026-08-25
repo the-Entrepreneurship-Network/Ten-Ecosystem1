@@ -419,10 +419,18 @@ describe('the film has no sound control, and neither does anything else', () => 
    * and everything behind them came out.
    */
   it('ships no sound button and no ambience engine', () => {
+    /*
+     * The markers are the control and the drone it toggled — not a Web Audio
+     * method. This used to forbid linearRampToValueAtTime, which the intro
+     * chime uses to open its filter as it swells; every synth uses it, so it
+     * said nothing about whether an ambience engine was present.
+     */
     expect(page).not.toContain('id="soundBtn"');
     expect(page).not.toContain('AMBIENT_URL');
-    expect(page).not.toContain('linearRampToValueAtTime');
     expect(page).not.toMatch(/\.film \.sound \{/);
+    // The drone was three detuned oscillators under a lowpass, kept running.
+    expect(page).not.toMatch(/\bbuildTones\b/);
+    expect(page).not.toMatch(/\bsetLabel\b/);
   });
 
   it('leaves the film muted, which is what an autoplaying video is for', () => {
@@ -1130,21 +1138,28 @@ describe('opening curtain', () => {
     expect(impactAt + shakeMs).toBeLessThan(holdMs);
   });
 
-  it('plays one sweet synth chime on the break — no bed, no file', () => {
+  it('rises into the landing rather than arriving all at once', () => {
     /*
-     * Was a recorded bed under the whole countdown plus a recorded hit on the
-     * crack. The brief became one sweet note when the E lands and nothing
-     * before it, so both recordings and the bed machinery are gone and the
-     * sound is synthesised: a warm C-major bell, soft swell, long fade.
+     * Four bells struck together at the impact went from nothing to full
+     * volume in twelve hundredths of a second. That is the shape of an alarm
+     * — no approach, just an event — and it sounded like one.
+     *
+     * Now it is a quiet pad swelling across the whole fly-in, then a fuller
+     * chord on the frame the letter stops.
      */
     const fn = page.slice(page.indexOf('function playIntroSting'));
     const body = fn.slice(0, fn.indexOf('\n  }'));
-    // A chord of pure sines — the sweetness — and NO noise burst.
-    expect((body.match(/^\s*bell\(/gm) || []).length).toBeGreaterThanOrEqual(3);
-    expect(body).toMatch(/523\.25/);   // C5
-    expect(body).toMatch(/659\.25/);   // E5 — the third, the sweetness
-    expect(body).toMatch(/783\.99/);   // G5 — the fifth
-    expect(body).not.toContain('createBufferSource');   // not a strike
+
+    // The rise is quiet and long; the landing is bigger and later.
+    expect(body).toMatch(/voice\(261\.63, 0\.05, t, rise/);      // C4, faint, swelling
+    expect(body).toMatch(/const land = t \+ rise/);
+    expect(body).toMatch(/voice\(130\.81, 0\.3\d*, land/);      // C3 — the body of it
+    // A landing with real attack, not a click: 60ms, not 12.
+    expect(body).toMatch(/land, 0\.06/);
+    // Softened, which is most of what separates sweet from electronic.
+    expect(body).toMatch(/type = 'lowpass'/);
+    expect(body).not.toContain('createBufferSource');   // no noise burst
+
     // Nothing recorded, nothing under the count.
     expect(page).not.toContain("assets/intro/intro-ten.mp3");
     expect(page).not.toContain("assets/intro/intro-bed.mp3");
@@ -1153,14 +1168,20 @@ describe('opening curtain', () => {
     expect(page).not.toMatch(/const BED_VOL/);
   });
 
-  it('fires the chime on the same timer as the flash and fracture', () => {
+  it('starts the sound before the impact, and lands it on the audio clock', () => {
+    /*
+     * It used to fire inside the impact timer, which is the only place a
+     * single instantaneous sound could go. The rise has to happen DURING the
+     * fly-in, so it now starts when the finale does and schedules the landing
+     * itself — steadier than a second setTimeout, and it cannot drift from
+     * the animation.
+     */
     const finale = page.slice(page.indexOf('function finale()'));
+    const flyIn = finale.indexOf("slot.style.animationDuration");
+    const stingAt = finale.indexOf('playIntroSting(impactAt / 1000)');
     const flashAt = finale.indexOf("flash.classList.add('on')");
-    const stingAt = finale.indexOf('playIntroSting()');
-    const closes = finale.indexOf('}, impactAt);');
-    expect(flashAt).toBeGreaterThan(-1);
-    expect(stingAt).toBeGreaterThan(flashAt);
-    expect(stingAt).toBeLessThan(closes);
+    expect(stingAt).toBeGreaterThan(flyIn);     // after the fly-in length is known
+    expect(stingAt).toBeLessThan(flashAt);      // and before the impact fires
   });
 
   it('never breaks the page when audio is blocked', () => {
