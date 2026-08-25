@@ -266,15 +266,64 @@
   .im-domains { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:10px; padding:20px; font-size:34px; background:#161215; }
 
   /* ---------- video block ---------- */
-  .film { position:relative; }
+  .film { position:relative; cursor:pointer; }
   .film video { width:100%; display:block; }
-  .film { cursor:pointer; }
-  .film-hint { position:absolute; top:18px; left:50%; transform:translateX(-50%);
-    background:rgba(0,0,0,.55); color:#e8e2d4; border:1px solid rgba(212,175,55,.35);
-    border-radius:999px; padding:7px 16px; font-size:11px; letter-spacing:.14em;
-    text-transform:uppercase; pointer-events:none; transition:opacity .4s, color .4s; }
-  .film.sounding .film-hint { color:#f5c542; border-color:rgba(245,197,66,.6); }
-  @media (prefers-reduced-motion:reduce) { .film-hint { transition:none; } }
+
+  /* The sound control.
+     A real <button>, so it is reachable by keyboard and announced as a toggle.
+     The whole film stays clickable because the button's click bubbles to the
+     one handler on the section — no second listener, no double toggle. */
+  .sound-toggle { position:absolute; top:20px; left:50%; transform:translateX(-50%);
+    display:inline-flex; align-items:center; gap:12px; cursor:pointer;
+    padding:10px 22px 10px 17px; border-radius:999px; min-height:44px; box-sizing:border-box;
+    font-family:inherit; font-size:11px; font-weight:700; letter-spacing:.16em;
+    text-transform:uppercase; color:#cfc7b4;
+    background:rgba(8,8,10,.55);
+    -webkit-backdrop-filter:blur(14px) saturate(1.4);
+    backdrop-filter:blur(14px) saturate(1.4);
+    border:1px solid rgba(212,175,55,.3);
+    box-shadow:0 6px 26px rgba(0,0,0,.45);
+    transition:color .45s, background .45s, border-color .45s, box-shadow .45s, transform .22s; }
+  .sound-toggle:hover { transform:translateX(-50%) translateY(-2px); border-color:rgba(212,175,55,.6); color:#e8dcbc; }
+  .sound-toggle:active { transform:translateX(-50%) scale(.97); }
+  .sound-toggle:focus-visible { outline:2px solid #f5c542; outline-offset:3px; }
+  .sound-toggle .lbl { white-space:nowrap; }
+
+  /* Five bars that stand up while it plays and lie flat while it does not, so
+     the state is visible from across the room and not only in the wording.
+     scaleY, not height — it is the transform the compositor can animate. */
+  .eq { display:flex; align-items:flex-end; gap:3px; height:15px; }
+  .eq i { width:3px; height:15px; border-radius:2px; background:currentColor;
+    opacity:.45; transform:scaleY(.22); transform-origin:50% 100%;
+    transition:transform .5s cubic-bezier(.3,1.4,.5,1), opacity .5s; }
+
+  .film.sounding .sound-toggle { color:#f7d774; background:rgba(24,16,2,.6);
+    border-color:rgba(245,197,66,.72);
+    box-shadow:0 0 0 1px rgba(245,197,66,.16), 0 12px 38px rgba(245,197,66,.2), 0 6px 26px rgba(0,0,0,.5); }
+  .film.sounding .eq i { opacity:1; animation:eqbar .95s ease-in-out infinite; }
+  .film.sounding .eq i:nth-child(1) { animation-duration:.78s; animation-delay:-.35s; }
+  .film.sounding .eq i:nth-child(2) { animation-duration:1.12s; animation-delay:-.6s; }
+  .film.sounding .eq i:nth-child(3) { animation-duration:.66s; }
+  .film.sounding .eq i:nth-child(4) { animation-duration:1.02s; animation-delay:-.2s; }
+  .film.sounding .eq i:nth-child(5) { animation-duration:.86s; animation-delay:-.5s; }
+  @keyframes eqbar { 0%,100% { transform:scaleY(.18); } 50% { transform:scaleY(1); } }
+
+  /* One slow ring leaving the pill while it plays — the tell that something is
+     live, at a rate too slow to pull the eye off the film. */
+  .film.sounding .sound-toggle::after { content:''; position:absolute; inset:-1px;
+    border-radius:999px; border:1px solid rgba(245,197,66,.5); pointer-events:none;
+    animation:soundpulse 2.8s ease-out infinite; }
+  @keyframes soundpulse { 0% { transform:scale(1); opacity:.55; } 100% { transform:scale(1.14); opacity:0; } }
+
+  @media (max-width:560px) {
+    .sound-toggle { top:12px; gap:9px; padding:8px 16px 8px 12px; font-size:9.5px; letter-spacing:.12em; }
+    .eq { height:12px; } .eq i { height:12px; width:2.5px; }
+  }
+  @media (prefers-reduced-motion:reduce) {
+    .sound-toggle, .eq i { transition:none; }
+    .film.sounding .eq i { animation:none; transform:scaleY(.75); }
+    .film.sounding .sound-toggle::after { animation:none; opacity:0; }
+  }
 
   .film .cap { position:absolute; bottom:14px; left:22px; font-size:12px; color:#fff; text-shadow:0 1px 8px rgba(0,0,0,.8); }
 
@@ -661,10 +710,13 @@
 </section>
 
 <!-- film -->
-<section class="film" id="filmSection" role="button" tabindex="0"
-         aria-pressed="false" aria-label="Play the ambient sound for this film">
+<section class="film" id="filmSection">
   <video id="film" autoplay muted loop playsinline src="assets/student-portal/hero-walk.mp4"></video>
-  <span class="film-hint" id="filmHint">click for sound</span>
+  <button type="button" class="sound-toggle" id="filmSound" aria-pressed="false"
+          aria-label="Ambient sound for this film">
+    <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+    <span class="lbl" id="filmHint">click for sound</span>
+  </button>
   <p class="cap">a student, working — the ecosystem orbiting around her</p>
 </section>
 
@@ -1926,10 +1978,11 @@ function marquee(viewport, track, pxPerSec) {
    It fades rather than switching. A level that jumps is heard as a fault. */
 (() => {
   const film = document.getElementById('filmSection');
+  const btn  = document.getElementById('filmSound');
   const hint = document.getElementById('filmHint');
   if (!film) return;
 
-  let ctx = null, master = null, nodes = [], on = false;
+  let ctx = null, master = null, on = false, offTimer = null;
 
   const build = () => {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1948,19 +2001,30 @@ function marquee(viewport, track, pxPerSec) {
       g.gain.value = lvl;
       o.connect(g).connect(lp);
       o.start();
-      nodes.push(o);
     });
 
-    /* Slow breathing, so it is not a flat pad. */
+    /*
+     * Slow breathing, so it is not a flat pad — on its own gain stage, NOT on
+     * master.gain.
+     *
+     * This is why the sound could not be switched off. An AudioParam with an
+     * input connected is worth its own value PLUS that input, so the LFO's
+     * ±0.03 sat on top of master whatever master itself was set to: fading the
+     * intrinsic value to silence left a third of the level still swinging, for
+     * ever. Measured before the change — 0.109 playing, 0.030 after "off".
+     * As a stage of its own it multiplies instead of adding, so master is the
+     * only thing deciding the level and 0.0001 really is silence.
+     */
+    const trem = ctx.createGain();
+    trem.gain.value = 0.85;
     const lfo = ctx.createOscillator();
     const lfoGain = ctx.createGain();
     lfo.frequency.value = 0.07;
     lfoGain.gain.value = 0.03;
-    lfo.connect(lfoGain).connect(master.gain);
+    lfo.connect(lfoGain).connect(trem.gain);
     lfo.start();
-    nodes.push(lfo);
 
-    lp.connect(master).connect(ctx.destination);
+    lp.connect(trem).connect(master).connect(ctx.destination);
   };
 
   const fade = (to, secs) => {
@@ -1973,19 +2037,23 @@ function marquee(viewport, track, pxPerSec) {
   const toggle = async () => {
     try {
       if (!ctx) build();
+      clearTimeout(offTimer);
       if (ctx.state === 'suspended') await ctx.resume();
       on = !on;
       fade(on ? 0.09 : 0.0001, on ? 1.8 : 1.0);
       film.classList.toggle('sounding', on);
-      film.setAttribute('aria-pressed', String(on));
+      if (btn) btn.setAttribute('aria-pressed', String(on));
       if (hint) hint.textContent = on ? 'sound on — click to stop' : 'click for sound';
+      /* Once the fade has landed, stop the clock as well. Inaudible is not the
+         same as stopped, and an oscillator nobody can hear still costs a phone
+         battery. */
+      if (!on) offTimer = setTimeout(() => { if (!on) ctx.suspend(); }, 1200);
     } catch (e) { /* audio is a flourish; never let it break the page */ }
   };
 
+  /* One listener, on the section. A click on the button bubbles here, so the
+     button needs none of its own — two would cancel each other out. */
   film.addEventListener('click', toggle);
-  film.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
-  });
 })();
 
 /* ---- the fourteen domains ----
