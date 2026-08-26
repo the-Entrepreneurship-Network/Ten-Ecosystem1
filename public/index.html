@@ -240,6 +240,35 @@
      should appear once, not four times. */
   .mq.mq-fits > * { margin:0 auto; }
 
+  /* ---------- marquee arrows ----------
+     The strip drifts on its own and can be dragged, and neither helps a
+     visitor who wants the card that has just gone past. A plain mouse wheel
+     does nothing sideways, so without these the only way back is to wait for
+     the loop to come round again.
+
+     Built by marquee(), so every sideways strip on the page gets them from one
+     place, and only the strips that actually overflow. */
+  .mq-host { position:relative; }
+  .mq-arrow { position:absolute; top:50%; z-index:6;
+    transform:translateY(calc(-50% + var(--mq-arrow-shift, 0px)));
+    width:46px; height:46px; border-radius:50%; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    font-family:inherit; font-size:26px; line-height:1; padding:0 0 3px;
+    color:#e8e2d4; background:rgba(8,8,10,.66);
+    -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
+    border:1px solid rgba(212,175,55,.32);
+    transition:background .25s, border-color .25s, color .25s, box-shadow .25s; }
+  .mq-arrow:hover { background:rgba(22,17,4,.86); border-color:rgba(212,175,55,.72);
+    color:#f5c542; box-shadow:0 8px 26px rgba(212,175,55,.18); }
+  .mq-arrow:active { transform:translateY(calc(-50% + var(--mq-arrow-shift, 0px))) scale(.92); }
+  .mq-arrow:focus-visible { outline:2px solid #f5c542; outline-offset:3px; }
+  .mq-arrow-prev { left:12px; }
+  .mq-arrow-next { right:12px; }
+  @media (max-width:560px) {
+    .mq-arrow { width:36px; height:36px; font-size:20px; }
+    .mq-arrow-prev { left:6px; } .mq-arrow-next { right:6px; }
+  }
+
   .cards-vp { padding:0 0 60px; -webkit-mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent); mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent); }
   .cards { display:flex; gap:14px; width:max-content; }
   @media (prefers-reduced-motion:reduce) {
@@ -1878,6 +1907,79 @@ function marquee(viewport, track, pxPerSec) {
   viewport.addEventListener('click', (e) => {
     if (moved > DRAG_SLOP) { e.preventDefault(); e.stopPropagation(); moved = 0; }
   }, true);
+
+  /* ── Rule 4. There is a way back. ──────────────────────────────────────
+     One arrow each side, on the strips that overflow and only those.
+
+     They move it the way the drift does — setScroll and wrap, on a tween of
+     our own — not with native smooth scrolling. Native smooth is cancelled
+     the moment wrap() writes scrollLeft at the loop point, so an arrow press
+     that crossed the seam would stop dead halfway. The tween applies a
+     DIFFERENCE each frame rather than an absolute target, so a wrap in the
+     middle of it is invisible instead of a jump back. */
+  const host = wrapOnce(viewport);
+  if (host) {
+    // Centred on the cards, not on the box: these viewports carry bottom
+    // padding, and half of it is how far off-centre an arrow would sit.
+    const padBottom = parseFloat(getComputedStyle(viewport).paddingBottom) || 0;
+    host.style.setProperty('--mq-arrow-shift', (-padBottom / 2) + 'px');
+
+    let tween = 0;
+    const glide = (delta) => {
+      still();
+      cancelAnimationFrame(tween);
+      if (quiet.matches) { setScroll(viewport.scrollLeft + delta); wrap(); return; }
+      const t0 = performance.now(), DUR = 360;
+      const ease = (p) => 1 - Math.pow(1 - p, 3);
+      let applied = 0;
+      const step = (now) => {
+        const p = Math.min(1, (now - t0) / DUR);
+        const want = delta * ease(p);
+        setScroll(viewport.scrollLeft + (want - applied));
+        applied = want;
+        wrap();
+        still();                       // the drift stays out of the way until it lands
+        if (p < 1) tween = requestAnimationFrame(step);
+      };
+      tween = requestAnimationFrame(step);
+    };
+
+    [-1, 1].forEach((dir) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'mq-arrow mq-arrow-' + (dir < 0 ? 'prev' : 'next');
+      b.setAttribute('data-mq-arrow', '');
+      b.setAttribute('aria-label', dir < 0 ? 'Show previous cards' : 'Show next cards');
+      b.textContent = dir < 0 ? '\u2039' : '\u203A';
+      b.addEventListener('click', () => {
+        // Most of a screenful, so something you were reading stays on screen.
+        glide(dir * Math.max(240, viewport.clientWidth * 0.8));
+      });
+      host.appendChild(b);
+    });
+  }
+}
+
+/**
+ * The positioned box an arrow can be pinned to.
+ *
+ * A viewport is a scroll container, so anything absolutely positioned INSIDE
+ * it scrolls away with the cards. It gets a wrapper instead — made once, and
+ * reused on every later rebuild, because these strips are re-marqueed when
+ * their fetch lands and a wrapper per rebuild would nest for ever.
+ */
+function wrapOnce(viewport) {
+  const parent = viewport.parentElement;
+  if (!parent) return null;
+  if (parent.classList.contains('mq-host')) {
+    parent.querySelectorAll('[data-mq-arrow]').forEach(n => n.remove());
+    return parent;
+  }
+  const host = document.createElement('div');
+  host.className = 'mq-host';
+  parent.insertBefore(host, viewport);
+  host.appendChild(viewport);
+  return host;
 }
 
 /* ---- what TEN gives ---- */
