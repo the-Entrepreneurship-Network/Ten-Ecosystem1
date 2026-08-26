@@ -110,9 +110,17 @@ describe('premium lives inside the portal, not in a section of its own', () => {
     expect(serverJs).toMatch(/app\.use\('\/api\/v2\/premium'/);
   });
 
+  /*
+   * The panel is gone too, now — it was still a premium *box* on an otherwise
+   * ordinary portal. A paid student's whole portal is premium
+   * (public/css/premium-theme.css), and the two things the panel actually
+   * carried, coordinator projects and coordinator notes, are ordinary cards in
+   * the grid like every other part of the product they use.
+   */
   it('the dashboard renders it inline, hidden until the server says premium', () => {
-    expect(dashboard).toContain('id="premiumPanel"');
-    expect(dashboard).toMatch(/id="premiumPanel"[^>]*style="display:none/);
+    expect(dashboard).not.toContain('id="premiumPanel"');
+    expect(dashboard).toContain('id="premiumWork"');
+    expect(dashboard).toMatch(/id="premiumWork"[^>]*style="display:none/);
     expect(dashboard).toContain('applyPremiumChrome');
     // nothing links out to a page that no longer exists
     expect(dashboard).not.toMatch(/href='\/premium'|href="\/premium"|location\.href='\/premium'/);
@@ -122,6 +130,9 @@ describe('premium lives inside the portal, not in a section of its own', () => {
     const fn = dashboard.slice(dashboard.indexOf('async function applyPremiumChrome'),
                                dashboard.indexOf('function premiumProjectHtml'));
     expect(fn).toMatch(/if \(!d \|\| !d\.success \|\| !d\.premium\) return;/);
+    // And a member with nothing assigned sees nothing either — an empty
+    // "your coordinator will post here" box is the same locked box.
+    expect(fn).toContain("host.style.display = html ? '' : 'none';");
   });
 
   it('GET /me still answers 200 for a non-member rather than erroring', () => {
@@ -136,8 +147,13 @@ describe('premium lives inside the portal, not in a section of its own', () => {
   });
 
   it('the premium look is scoped to members only', () => {
-    expect(dashboard).toMatch(/body\.is-premium/);
-    expect(dashboard).toMatch(/classList\.add\('is-premium'\)/);
+    // The look now reaches every student page, so it lives in one stylesheet
+    // and one script rather than inline on the dashboard alone.
+    const theme  = fs.readFileSync(path.join(root, 'public/css/premium-theme.css'), 'utf8');
+    const chrome = fs.readFileSync(path.join(root, 'public/js/premium-chrome.js'), 'utf8');
+    expect(theme).toMatch(/body\.is-premium/);
+    expect(chrome).toMatch(/classList\.add\('is-premium'\)/);
+    expect(dashboard).toContain('href="/css/premium-theme.css"');
   });
 
   it('a badge is awarded for the plan, and it exists in the catalog', () => {

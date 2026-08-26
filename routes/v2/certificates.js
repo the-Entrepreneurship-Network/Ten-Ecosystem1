@@ -276,6 +276,20 @@ async function handleMyCerts(req, res) {
         nano_degree: getCertificatePrice("nano_degree", student.tenure),
         fellowship:  getCertificatePrice("fellowship", student.tenure)
       };
+
+      // Whose fee is already settled, and how. A paid track waives one of these
+      // (services/tenureBenefits.js) and the screen had no way to know, so it
+      // went on quoting the full price for a certificate the student had
+      // already been given. Never fatal: a lookup failure leaves the cards
+      // exactly as they were before this existed.
+      try {
+        payload.feeSettled = await require("../../services/certificateEntitlement").feeSettledAll(student);
+        const premium = require("../../utils/premium").getPremiumStatus(student);
+        payload.planName = premium.premium ? premium.plan : "";
+      } catch (feeErr) {
+        console.error("[My-Certs] fee entitlement lookup failed for " +
+          student.employeeId + ":", feeErr.message);
+      }
     } catch (courseErr) {
       // The document half is the half a student is usually here for. A failure
       // computing course progress must not take it down with it.
@@ -429,20 +443,23 @@ router.post("/certificates/claim/:type", requireStudent, async (req, res) => {
             return res.status(403).json({ success: false, message: "You have not yet unlocked this certificate" });
         }
 
-        // Check if student has already paid for this certificate upgrade via marketplace
-        const CoinRedemption = require('../../models/new/CoinRedemption');
-        const redemption = await CoinRedemption.findOne({
-            employeeId: student.employeeId,
-            itemType: 'certificate',
-            itemKey: type === 'expert' ? 'cert_expert' : type === 'nano_degree' ? 'cert_nano' : 'cert_fellowship',
-            status: 'completed'
-        });
-
-        if (redemption) {
+        /*
+         * Has the fee already been settled — bought, waived with a paid track,
+         * or redeemed with coins?
+         *
+         * This used to ask about the coin redemption only, so the waiver a paid
+         * track writes was never read and a student sold a "Fellowship fee
+         * included" was still sent to Razorpay for the full ₹2,500.
+         */
+        const settled = await require("../../services/certificateEntitlement").feeSettled(student, type);
+        if (settled.covered) {
             return res.json({
                 success: true,
                 status: "payment_bypassed",
-                message: "Subsidized payment verified! Generating certificate..."
+                via: settled.via,
+                message: settled.via === 'bundle'
+                    ? "Included with your paid track — generating your certificate..."
+                    : "Payment verified! Generating certificate..."
             });
         }
 

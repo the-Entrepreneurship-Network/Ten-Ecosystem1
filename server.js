@@ -2385,33 +2385,84 @@ async function sendActivityMail(student, studentName, mailType){
     await AutoMailLog.create({ studentName, studentEmail: email, employeeId: student.employeeId || "", mailType });
 }
 
+/*
+ * One activity mail per student per week — counted per PERSON, not per row.
+ *
+ * The schedule below already said Monday 09:00, and students were still getting
+ * these several times a week. The schedule was never the problem; the loop was.
+ * `Student.find()` returns ROWS, and a student holding two domains has two of
+ * them under the same address — so they got two mails every Monday. On top of
+ * that, any second process pointed at this database (a staging deployment, say)
+ * runs its own copy of this cron against the same students, and every one of
+ * those passes mails everybody again.
+ *
+ * So the schedule is not what decides the cadence — this is. One lookup of who
+ * has already been written to in the last six days, and nobody in it is written
+ * to again, whichever row, process or re-run asks. Four or five a month, which
+ * is the ceiling, and never more.
+ */
+const ACTIVITY_MAIL_COOLDOWN_DAYS = 6;
+
+async function recentActivityMailRecipients() {
+    const since = new Date(Date.now() - ACTIVITY_MAIL_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
+    const rows = await AutoMailLog.find({
+        mailType: { $in: Object.keys(ACTIVITY_MAILS) },
+        sentAt: { $gte: since }
+    }).select('studentEmail').lean();
+    return new Set(rows.map(r => String(r.studentEmail || '').trim().toLowerCase()).filter(Boolean));
+}
+
 async function runActivityMailer(){
     try{
         if (!checkMongoStatus()) {
             console.warn('[ACTIVITY-MAILER] Mongoose is not connected. Skipping.');
             return;
         }
+        let alreadyMailed;
+        try {
+            alreadyMailed = await recentActivityMailRecipients();
+        } catch (err) {
+            // Fail CLOSED. Sending nothing this week is a missed nudge; sending
+            // because the cooldown could not be read is the complaint itself.
+            console.error('[ACTIVITY-MAILER] cooldown lookup failed, skipping this run:', err.message);
+            return;
+        }
+
         const students = await Student.find();
         const now = new Date();
         const sevenDaysAgo = new Date(now);
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         const fourteenDaysAgo = new Date(now);
         fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+        let sent = 0, skipped = 0;
         for(const student of students){
             try{
                 const email = student.email;
                 if(!email) continue;
+                const key = String(email).trim().toLowerCase();
+                if (alreadyMailed.has(key)) { skipped++; continue; }
+
                 const lastActive = student.lastActiveDate ? new Date(student.lastActiveDate) : null;
                 const studentName = (student.name || ((student.firstName||"") + " " + (student.lastName||"")).trim()).trim();
+                let mailType = null;
                 if(lastActive && lastActive >= sevenDaysAgo){
-                    await sendActivityMail(student, studentName, "active-appreciation");
+                    mailType = "active-appreciation";
                 } else if(!lastActive || lastActive < fourteenDaysAgo){
-                    await sendActivityMail(student, studentName, "inactive-reengagement");
+                    mailType = "inactive-reengagement";
                 }
+                if (!mailType) continue;
+
+                // Claimed before the send, not after: the second row for this
+                // student is in the same loop, and an await in between is all
+                // the room it needs to slip through.
+                alreadyMailed.add(key);
+                await sendActivityMail(student, studentName, mailType);
+                sent++;
             }catch(error){
                 console.log(error);
             }
         }
+        console.log(`[ACTIVITY-MAILER] ${sent} sent, ${skipped} skipped (mailed within ${ACTIVITY_MAIL_COOLDOWN_DAYS} days)`);
     }catch(error){
         console.log(error);
     }

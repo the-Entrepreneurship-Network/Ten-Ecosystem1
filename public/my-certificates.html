@@ -102,6 +102,9 @@ body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans
 
 .cert-action-btn{width:100%;padding:13px;border:none;border-radius:12px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;transition:all 0.2s;}
 .cert-action-btn.locked{background:rgba(255,255,255,0.04);border:1px solid var(--border);color:var(--muted);cursor:not-allowed;}
+/* Already paid for, not yet earned. Gold, not grey — the student owns this one. */
+.cert-action-btn.locked.reserved{background:rgba(212,175,55,0.08);border-color:rgba(212,175,55,0.35);color:#e2c766;}
+.cert-owned{margin:0 14px 10px;padding:8px 12px;border-radius:9px;background:rgba(212,175,55,0.10);border:1px solid rgba(212,175,55,0.32);color:#e2c766;font-size:12px;font-weight:700;text-align:center;}
 .cert-action-btn.claim-btn{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#0a0600;}
 .cert-action-btn.claim-btn:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(212,175,55,0.3);}
 .cert-action-btn.claimed-btn{background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);color:var(--green);}
@@ -139,6 +142,8 @@ body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans
   <meta name="apple-mobile-web-app-title" content="TEN">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <script src="/push-client.js" defer></script>
+  <link rel="stylesheet" href="/css/premium-theme.css">
+  <script src="/js/premium-chrome.js" defer></script>
 </head>
 <body>
 
@@ -302,6 +307,20 @@ function renderCerts(d) {
     const threshold= type === 'expert' ? 30 : type === 'nano_degree' ? 70 : 10;
     const record   = certInfo?.record;
     const price    = d.prices?.[type] || 0;
+    /*
+     * Two different questions, which this screen used to answer with one word.
+     *
+     *   paid      is the fee settled — bought, waived by a paid track, or
+     *             redeemed with coins
+     *   unlocked  has the student earned it — completion, cohort rank
+     *
+     * A paid track includes a certificate fee, so those students are "paid"
+     * long before they are "unlocked". Saying "Locked" and nothing else read
+     * as though the thing they had bought was not there.
+     */
+    const paid     = certInfo?.feeSettled?.covered || d.feeSettled?.[type]?.covered || false;
+    const paidVia  = certInfo?.feeSettled?.via || d.feeSettled?.[type]?.via || null;
+    const planName = d.planName || '';
 
     // Preview area
     let previewHtml = '';
@@ -310,19 +329,35 @@ function renderCerts(d) {
     } else {
       previewHtml = `
         <div class="cert-blur">THE ENTREPRENEURSHIP NETWORK<br>Certificate of Excellence<br>This certifies that<br>[Your Name]<br>has completed the program</div>
-        <div class="cert-overlay-text"><div class="overlay-main">"This is waiting for you. Keep going."</div></div>`;
+        <div class="cert-overlay-text"><div class="overlay-main">${paid
+          ? '"This one is already yours. Finish the requirement and open it."'
+          : '"This is waiting for you. Keep going."'}</div></div>`;
+    }
+
+    // The banner above the card: what the student already owns.
+    let ownedHtml = '';
+    if (paid) {
+      const via = paidVia === 'bundle'
+        ? (planName ? `Included in your ${planName} plan` : 'Included with your paid track')
+        : paidVia === 'coins' ? 'Paid with your coins' : 'Fee paid';
+      ownedHtml = `<div class="cert-owned">✓ ${via} — no payment needed</div>`;
     }
 
     // Action button
     let actionBtn = '';
     if (!unlocked) {
-      if (type === 'fellowship') {
-        actionBtn = `<button class="cert-action-btn locked">🔒 Locked — Top 10% ranking needed (Current rank: Top ${rankPct}%)</button>`;
-      } else {
-        actionBtn = `<button class="cert-action-btn locked">🔒 Locked — ${threshold}% completion needed (${Math.min(100,pct)}% done)</button>`;
-      }
+      // Not earned yet. When the fee is already settled the wording says so —
+      // the certificate is theirs, waiting on the requirement, not on money.
+      const need = type === 'fellowship'
+        ? `Top 10% ranking needed (currently Top ${rankPct}%)`
+        : `${threshold}% completion needed (${Math.min(100,pct)}% done)`;
+      actionBtn = paid
+        ? `<button class="cert-action-btn locked reserved">🔓 Reserved for you — ${need}</button>`
+        : `<button class="cert-action-btn locked">🔒 Locked — ${need}</button>`;
     } else if (record?.pdfUrl) {
       actionBtn = `<button class="cert-action-btn claimed-btn" onclick="downloadCert('${record.pdfUrl}','${type}')">⬇ Download Certificate</button>`;
+    } else if (paid) {
+      actionBtn = `<button class="cert-action-btn claim-btn" onclick="claimCert('${type}')">🎉 Claim It — already paid</button>`;
     } else {
       const payLabel = d.paymentEnabled ? `Claim It → ₹${price}` : `Claim It (Payment coming soon)`;
       actionBtn = `<button class="cert-action-btn claim-btn" onclick="claimCert('${type}')">🎉 ${payLabel}</button>`;
@@ -343,8 +378,9 @@ function renderCerts(d) {
     html += `
     <div class="cert-card ${type}">
       <div class="cert-card-header">
-        <div class="cert-tier-badge">TIER ${type === 'expert' ? 1 : type === 'nano_degree' ? 2 : 3} — ₹${price}</div>
+        <div class="cert-tier-badge">TIER ${type === 'expert' ? 1 : type === 'nano_degree' ? 2 : 3}${paid ? '' : ` — ₹${price}`}</div>
       </div>
+      ${ownedHtml}
       <div class="cert-preview-area">
         <div class="cert-preview-bg">${previewHtml}</div>
       </div>
