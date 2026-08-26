@@ -38,7 +38,7 @@ export default function StudentFaceSection() {
         </FadeIn>
         <FadeIn delay={0.45} y={20}>
           <a
-            href="/student-journeys.html"
+            href="/domains"
             className="liquid-glass rounded-full px-8 py-3 text-sm font-medium uppercase tracking-wider text-white transition-colors hover:bg-white/5"
           >
             Start your journey

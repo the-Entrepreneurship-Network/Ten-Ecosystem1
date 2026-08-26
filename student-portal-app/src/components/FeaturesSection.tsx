@@ -100,7 +100,7 @@ export default function FeaturesSection() {
           className="mt-16 flex flex-col items-center gap-4 text-center"
         >
           <a
-            href="/student-journeys.html"
+            href="/domains"
             className="rounded-full bg-white px-10 py-4 text-sm font-semibold text-black transition-transform hover:scale-105"
           >
             Start your journey →

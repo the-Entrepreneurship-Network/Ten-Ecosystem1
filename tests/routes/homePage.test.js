@@ -824,7 +824,6 @@ describe('founder registration is open', () => {
 
 describe('the Domains link goes somewhere public, and the list is one list', () => {
   const domainsPage = fs.readFileSync(path.join(root, 'public/domains.html'), 'utf8');
-  const journeys = fs.readFileSync(path.join(root, 'public/student-journeys.html'), 'utf8');
   const { DOMAINS } = require('../../config/domains');
 
   it('the home page points at /domains, not at a funnel step', () => {
@@ -863,9 +862,27 @@ describe('the Domains link goes somewhere public, and the list is one list', () 
     expect(source.slice(at, at + 2600)).toMatch(/catch[\s\S]{0,400}selectable/);
   });
 
-  it('the funnel page reads the same list instead of its own', () => {
-    expect(journeys).toContain('/api/public/domains');
-    expect(journeys).toContain('drawJourney');
+  /*
+   * The funnel page is gone. student-journeys.html was "Step 2 of 3" with a
+   * payment banner and its own hardcoded list of fourteen domains that had
+   * already drifted from the real one; /domains reads config/domains.js and is
+   * a page a visitor can land on cold.
+   *
+   * Its URL is in bookmarks, in search results and inside a built bundle whose
+   * cache we do not control, so it redirects rather than 404s.
+   */
+  it('the old funnel page is gone, and its URL still lands somewhere', () => {
+    expect(fs.existsSync(path.join(root, 'public/student-journeys.html'))).toBe(false);
+    expect(source).toContain("app.get(['/student-journeys', '/student-journeys.html']");
+    expect(source).toMatch(/res\.redirect\(301, '\/domains'\)/);
+  });
+
+  it('nothing still links to it', () => {
+    const live = ['public/index.html', 'public/student-portal.html', 'public/academics.html',
+                  'public/student-dashboard.html', 'public/student-portal/index.html'];
+    live.forEach((f) => {
+      expect(fs.readFileSync(path.join(root, f), 'utf8')).not.toContain('student-journeys');
+    });
   });
 
   it('respects a reader who asked for less movement', () => {

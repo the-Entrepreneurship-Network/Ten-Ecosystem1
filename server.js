@@ -2058,11 +2058,10 @@ app.get(/.*ten-logo\.png$/, (req, res) => {
 /*
  * The Studio paywall, in FRONT of the static handler.
  *
- * /job-portal, /resume-portal and student-journeys.html are files in public/,
- * so the line below hands them to anybody who types the URL. Three products
- * with prices on them were a bookmark away from free. Registered here because
- * whichever handler comes first wins, so the file is never read for someone
- * who has not bought it.
+ * /job-portal and /resume-portal are files in public/, so the line below hands
+ * them to anybody who types the URL. Two products with prices on them were a
+ * bookmark away from free. Registered here because whichever handler comes
+ * first wins, so the file is never read for someone who has not bought it.
  *
  * The overview at /student-portal/ is deliberately NOT covered: it is the shop
  * window, and a visitor has to see what the money buys.
@@ -10125,6 +10124,22 @@ app.set('clearContributorCache', () => { _contribCache = { at: 0, body: null }; 
 
 app.get('/domains', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'domains.html'));
+});
+
+/*
+ * student-journeys.html is gone; /domains replaced it.
+ *
+ * It was "Step 2 of 3" with a payment banner and its own hardcoded list of
+ * fourteen domains, which had already drifted from the real one. /domains
+ * reads the list from config/domains.js and is a page a visitor can land on
+ * cold.
+ *
+ * A permanent redirect rather than a deletion, because the old URL is in
+ * bookmarks, in search results, and inside a built bundle we do not control
+ * the cache of. 301, so anything that remembers it stops asking.
+ */
+app.get(['/student-journeys', '/student-journeys.html'], (req, res) => {
+    res.redirect(301, '/domains');
 });
 
 app.get('/verify-document', (req, res) => {

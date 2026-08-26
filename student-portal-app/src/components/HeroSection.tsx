@@ -68,7 +68,7 @@ export default function HeroSection() {
             </p>
 
             <a
-              href="/student-journeys.html"
+              href="/domains"
               className="liquid-glass inline-block rounded-full px-8 py-3 text-sm font-medium text-white transition-colors hover:bg-white/5"
             >
               Choose your domain
