@@ -516,6 +516,99 @@ describe('the film has no sound control, and neither does anything else', () => 
   });
 });
 
+describe('every sideways strip has a way back', () => {
+  /*
+   * The strip drifts on its own and can be dragged. Neither helps a visitor
+   * who wants the card that has just gone past: a plain mouse wheel does
+   * nothing sideways, so the only way back was to wait for the loop.
+   *
+   * Built inside marquee(), so all three strips on this page get arrows from
+   * one place instead of three copies that drift apart.
+   */
+  it('builds the arrows in the shared helper, not per strip', () => {
+    const fn = page.slice(page.indexOf('function marquee(viewport, track, pxPerSec)'),
+                          page.indexOf('function wrapOnce(viewport)'));
+    expect(fn).toContain("b.className = 'mq-arrow mq-arrow-'");
+    expect(fn).toMatch(/aria-label', dir < 0 \? 'Show previous cards' : 'Show next cards'/);
+    // Only strips that actually overflow: everything after the mq-fits return.
+    expect(fn.indexOf('mq-fits')).toBeLessThan(fn.indexOf('mq-arrow'));
+  });
+
+  // Anything absolutely positioned INSIDE a scroll container scrolls away with
+  // the content, so the viewport gets a positioned wrapper of its own.
+  it('pins them to a wrapper, not inside the scroller', () => {
+    expect(page).toContain('function wrapOnce(viewport)');
+    expect(page).toMatch(/\.mq-host \{ position:relative; \}/);
+    expect(page).toMatch(/\.mq-arrow \{ position:absolute/);
+  });
+
+  // These strips are re-marqueed when their fetch lands. A wrapper per rebuild
+  // would nest for ever, and arrows per rebuild would stack up.
+  it('wraps once, however many times the strip is rebuilt', () => {
+    const fn = page.slice(page.indexOf('function wrapOnce(viewport)'));
+    expect(fn.slice(0, 700)).toContain("if (parent.classList.contains('mq-host'))");
+    expect(fn.slice(0, 700)).toContain("parent.querySelectorAll('[data-mq-arrow]').forEach(n => n.remove())");
+  });
+
+  /*
+   * Native smooth scrolling is cancelled the moment wrap() writes scrollLeft
+   * at the loop point, so an arrow press that crossed the seam would stop dead
+   * halfway. The tween applies a DIFFERENCE each frame rather than an absolute
+   * target, so a wrap in the middle of it is invisible instead of a jump back.
+   */
+  it('moves it the way the drift does, not with native smooth scroll', () => {
+    const fn = page.slice(page.indexOf('const glide = (delta)'), page.indexOf('[-1, 1].forEach'));
+    expect(fn).not.toMatch(/behavior:\s*'smooth'/);
+    expect(fn).toContain('setScroll(viewport.scrollLeft + (want - applied))');
+    expect(fn).toContain('wrap();');
+  });
+
+  it('holds still for anyone who asked for less motion', () => {
+    const fn = page.slice(page.indexOf('const glide = (delta)'), page.indexOf('[-1, 1].forEach'));
+    expect(fn).toContain('if (quiet.matches) { setScroll(viewport.scrollLeft + delta); wrap(); return; }');
+  });
+
+  // The viewports carry bottom padding, and half of it is how far off-centre
+  // an arrow would otherwise sit.
+  it('centres them on the cards, not on the padded box', () => {
+    expect(page).toContain("host.style.setProperty('--mq-arrow-shift', (-padBottom / 2) + 'px')");
+    expect(page).toMatch(/transform:translateY\(calc\(-50% \+ var\(--mq-arrow-shift, 0px\)\)\)/);
+  });
+
+  it('is a real button, reachable by keyboard', () => {
+    const fn = page.slice(page.indexOf('[-1, 1].forEach'), page.indexOf('function wrapOnce'));
+    expect(fn).toContain("b.type = 'button'");
+    expect(page).toContain('.mq-arrow:focus-visible');
+  });
+});
+
+describe('the way in to Academics', () => {
+  const dash = fs.readFileSync(path.join(__dirname, '../../public/student-dashboard.html'), 'utf8');
+  const academics = fs.readFileSync(path.join(__dirname, '../../public/academics.html'), 'utf8');
+
+  /*
+   * It used to take three pages to start learning: the portal, then the
+   * cinematic Academics preview, then START LEARNING to the studio. The
+   * preview is good marketing for a visitor and a wall for a student who has
+   * already signed in.
+   */
+  it('a signed-in student reaches the studio in one hop', () => {
+    expect(dash).not.toContain("window.location.href='/academics'");
+    expect(dash).toContain("window.location.href='/student-portal/'");
+  });
+
+  it('a visitor still gets the cinematic preview from the home page', () => {
+    expect(page).toContain('<a class="wcard" href="academics.html">');
+  });
+
+  // payment.html is a bare amount box with nothing on it saying what the money
+  // buys. The tracks come first.
+  it('PAY & UNLOCK shows the tracks instead of a bare amount box', () => {
+    expect(academics).not.toContain('href="payment.html"');
+    expect(academics).toContain('<a class="nh-pill" href="/domains">PAY &amp; UNLOCK');
+  });
+});
+
 describe('the fourteen-domain circle', () => {
   it('brings the hovered domain to the middle', () => {
     expect(page).toContain('class="orbit-zoom" id="orbitZoom"');
