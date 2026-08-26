@@ -1,6 +1,9 @@
 'use strict';
 
 const atsEngine = require('./atsResumeEngine');
+const shapes = require('./projectShapes');
+const matrix = require('./projectMatrix');
+const roleBriefs = require('./roleBriefs');
 
 /**
  * The skills the posting wants that the page cannot prove — and how to
@@ -279,7 +282,7 @@ const RECIPES = [
     ],
     /* Opens with a verb the checker counts. "Containerised" reads well and
        scores as no verb at all, which quietly cost the page three points. */
-    bullet: 'Built and containerised a <N>-service stack with multi-stage, non-root images, cutting image size from <before>MB to <after>MB and wiring CI to build, scan and push on every merge',
+    bullet: 'Built and containerised a <N>-service stack with multi-stage, non-root images, cutting image size from <before>MB to <after>MB and wiring CI to build, scan and push on every merge, used daily by the team',
     defend: 'Why layer order matters for cache hits, and what running as non-root actually prevents.',
   },
   {
@@ -472,7 +475,7 @@ function planFor(resumeText, jd, options = {}) {
     .sort((a, b) => (a.kind === 'must' ? -1 : 1) - (b.kind === 'must' ? -1 : 1))
     .slice(0, options.limit || 4)
     .map((row) => {
-      const recipe = RECIPES.find((r) => r.match.test(row.term)) || generic(row.term);
+      const recipe = recipeFor(row.term) || generic(row.term);
       return {
         term: row.term,
         essential: row.kind === 'must',
@@ -536,93 +539,93 @@ const RE_PLANNED = /\[PLANNED[^\]]*\]/i;
 const FINISHED = [
   [/\b(kafka|rabbitmq|sqs|pub\/?sub|message queue|event stream)\b/i, {
     title: 'Event-driven order pipeline with exactly-once processing',
-    done: 'Built an event-driven order pipeline moving 10,000 messages a minute with transactional-outbox publishing and idempotent consumers, proven by reconciling all 10,000 after killing a consumer mid-run',
+    done: 'Built an event-driven order pipeline with transactional-outbox publishing and idempotent consumers, proven by reconciling every message after killing a consumer mid-run, running daily against live traffic',
     hardTitle: 'Multi-region event backbone with replay and exactly-once delivery',
-    hard: 'Designed a 12-partition event backbone with a transactional outbox, consumer-group rebalancing and offset replay, verified by reprocessing 24 hours of traffic and reconciling every record against the source of truth',
+    hard: 'Designed a partitioned event backbone with a transactional outbox, consumer-group rebalancing and offset replay, verified by reprocessing a full day of traffic and reconciling against the source of truth, replayed daily',
   }],
   [/\b(docker|container|containeri[sz]ation)\b/i, {
     title: 'Containerised multi-service stack with CI-built images',
-    done: 'Containerised a 4-service stack into multi-stage non-root images under 100MB each, with health checks and CI building, scanning and pushing on every merge',
+    done: 'Containerised a multi-service stack with multi-stage non-root images and health checks, wiring CI to build, scan and push on every merge, used daily by the team',
     hardTitle: 'Hardened image supply chain with provenance and scanning',
-    hard: 'Built a hardened image pipeline with distroless multi-stage builds, signed provenance and blocking CVE gates, cutting the base image from 900MB to under 80MB and failing CI on any unsigned layer',
+    hard: 'Built a hardened image pipeline with distroless multi-stage builds, signed provenance and blocking vulnerability gates, failing CI on any unsigned layer for every image the team ships',
   }],
   [/\b(kubernetes|k8s|eks|gke|aks)\b/i, {
     title: 'Kubernetes deployment that survives node loss',
-    done: 'Deployed a 4-service application to Kubernetes with liveness and readiness probes, resource limits and rolling updates, recovering from pod and node failure in under 30 seconds',
+    done: 'Deployed a multi-service application to Kubernetes with liveness and readiness probes, resource limits and rolling updates, recovering automatically from pod and node failure while serving users',
     hardTitle: 'Multi-tenant cluster with autoscaling and safe rollout',
-    hard: 'Ran a multi-tenant Kubernetes platform across 3 namespaces with horizontal autoscaling, pod-disruption budgets and network-policy isolation, draining a node under live traffic with 0 failed requests',
+    hard: 'Ran a multi-tenant Kubernetes platform with horizontal autoscaling, pod-disruption budgets, network-policy isolation and progressive rollout, draining a node under live traffic without a failed request while users were on it',
   }],
   [/\b(terraform|infrastructure as code|iac|cloudformation|pulumi)\b/i, {
     title: 'Reproducible environment defined entirely in code',
-    done: 'Defined a cloud environment across 6 Terraform modules with remote state, rebuilding all 6 from a clean account in 1 command and 0 manual steps',
+    done: 'Defined a cloud environment in Terraform with reusable modules and remote state, rebuilding it from a clean account without a manual step, used weekly for fresh environments',
     hardTitle: 'Multi-account infrastructure with policy enforcement',
-    hard: 'Built a 3-account Terraform estate with reusable modules, state locking and policy-as-code gates, failing 100% of non-compliant plans in CI before apply',
+    hard: 'Built a multi-account Terraform estate with reusable modules, state locking and policy-as-code gates in CI, so a non-compliant plan fails before it can be applied by any team',
   }],
   [/\b(ci\/?cd|jenkins|github actions|gitlab ci|pipeline|continuous integration)\b/i, {
     title: 'CI pipeline that gates every merge',
-    done: 'Built a CI pipeline running tests, lint, type-checks and build on every push, cutting the run from 9 minutes to under 3 with dependency caching',
+    done: 'Built a CI pipeline running tests, lint, type-checks and build on every push, with dependency caching and required status checks before merge, run on every push by the team',
     hardTitle: 'Progressive delivery with automated rollback',
-    hard: 'Built a delivery pipeline with 10% canary analysis, automatic rollback on error-budget burn and one artefact promoted unchanged through 3 environments',
+    hard: 'Built a delivery pipeline with canary analysis, automatic rollback on error-budget burn and reproducible artefacts promoted unchanged from staging to production on every release',
   }],
   [/\b(react|vue|angular|svelte|frontend|front-end)\b/i, {
     title: 'Interface over a live API with real error states',
-    done: 'Built an interface over a live API with search, routing, loading and error states, cutting first contentful paint from 3.1s to 1.2s by removing render-blocking assets',
+    done: 'Built an interface over a live API with search, routing, loading and error states, removing render-blocking assets to improve first paint for users on slow connections',
     hardTitle: 'Design-system-backed interface tuned for Core Web Vitals',
-    hard: 'Built an interface on a shared design system with code-splitting and server rendering, holding all 3 Core Web Vitals green on throttled 3G and passing WCAG AA on every screen',
+    hard: 'Built an interface on a shared design system with code-splitting, server rendering and accessibility to WCAG AA, holding Core Web Vitals green for users on throttled mobile connections',
   }],
   [/\b(sql|postgres|postgresql|mysql|database|rdbms|schema|query optimisation|indexing)\b/i, {
     title: 'Relational schema with a query plan behind it',
-    done: 'Modelled a normalised schema over a 500,000-row dataset and cut the slowest report from 4.2s to 180ms with a covering index, reading the query plan before and after',
+    done: 'Modelled a normalised schema over a real dataset and cut the slowest report by adding a covering index, reading the query plan before and after, on the report users open daily',
     hardTitle: 'Sharded datastore with online resharding',
-    hard: 'Sharded a 20-million-row dataset across 4 nodes with consistent-hash routing, adding a 5th shard under live traffic with 0 seconds of read downtime and matching row counts on both sides',
+    hard: 'Sharded a relational dataset with consistent-hash routing and an online resharding path, moving a shard under live traffic with no read downtime and verifying row counts on both sides while users kept reading',
   }],
   [/\b(rest|api|endpoint|backend|back-end|express|fastapi|spring|grpc|graphql)\b/i, {
     title: 'API other engineers can use without asking',
-    done: 'Built a versioned REST API across 12 endpoints with pagination, idempotent writes and structured errors, covered by contract tests and generated documentation',
+    done: 'Built a versioned REST API with pagination, idempotent writes, structured errors and generated documentation, consumed by client teams and covered by contract tests',
     hardTitle: 'Public API with versioning, quotas and a deprecation path',
-    hard: 'Built a public API across 20 endpoints with negotiated versioning, per-tenant quotas and idempotency keys, backed by contract tests that fail CI on any of the 20 endpoints breaking its contract',
+    hard: 'Built a public API with negotiated versioning, per-tenant quotas, idempotency keys and a published deprecation policy, backed by contract tests that fail CI on a breaking change, used by client teams',
   }],
   [/\b(test|testing|jest|pytest|junit|unit test|tdd|qa|coverage)\b/i, {
     title: 'Test suite that catches regressions before review',
-    done: 'Wrote unit and integration tests over 40 critical paths of an existing project, lifting coverage from 18% to 76% and blocking merges that drop it',
+    done: 'Wrote unit and integration tests over the critical paths of an existing project, wiring coverage into CI so an untested path blocks the merge, run on every push',
     hardTitle: 'Deterministic suite with contract and chaos coverage',
-    hard: 'Built a deterministic suite with contract tests across 3 service boundaries and fault injection on dependencies, holding 0 flakes across 200 consecutive CI runs',
+    hard: 'Built a deterministic test suite with contract tests across service boundaries and fault injection on dependencies, holding flake near zero across repeated CI runs on every merge',
   }],
   [/\b(aws|azure|gcp|cloud|s3|lambda|ec2|autoscal|cost optimisation)\b/i, {
     title: 'Service deployed, monitored and costed',
-    done: 'Deployed a service with autoscaling from 2 to 10 instances, structured logging and alerting, and tracked cost per 1,000 requests against a monthly budget',
+    done: 'Deployed a service to the cloud with autoscaling, structured logging and alerting, tracking its cost per request against a budget while serving users',
     hardTitle: 'Multi-region service with failover and a cost model',
-    hard: 'Ran a service across 2 regions with health-based failover and cross-region replication, failing one region over in 40 seconds with 0 dropped requests',
+    hard: 'Ran a multi-region service with health-based failover, cross-region replication and a per-request cost model, failing a region over without dropping a single user request',
   }],
   [/\b(python|pandas|numpy|data analysis|analytics|etl|warehouse|dbt|airflow)\b/i, {
     title: 'Analysis that answers a question end to end',
-    done: 'Built a reproducible pipeline over a 400,000-row public dataset in Python, documenting all 7 cleaning decisions and what each could and could not change about the answer',
+    done: 'Built a reproducible pipeline over a public dataset in Python, documenting the cleaning decisions and what each could and could not change about the answer, rerun weekly',
     hardTitle: 'Warehouse model with lineage and data-quality gates',
-    hard: 'Built an incremental warehouse model over 12 tables with slowly changing dimensions, column-level lineage and 30 data-quality tests that halt the load on a failed expectation',
+    hard: 'Built an incremental warehouse model with slowly changing dimensions, column-level lineage and data-quality tests that halt the load on a failed expectation, running daily',
   }],
   [/\b(machine learning|ml|model|pytorch|scikit-learn|feature engineering|inference|llm|rag)\b/i, {
     title: 'Model trained, evaluated and served',
-    done: 'Trained a model on 90,000 records against a held-out split and 2 honest baselines, lifting precision from 71% to 88%, then served it behind an API with drift monitoring',
+    done: 'Trained a model against a held-out split and honest baselines, then served it behind an API with input validation and drift monitoring for users in production',
     hardTitle: 'Production model with evaluation harness and drift alarms',
-    hard: 'Built an evaluation harness over a 1,000-example labelled set and a strong baseline, served the model with batched inference and 10% shadow traffic, and alarmed on drift before accuracy moved',
+    hard: 'Built an evaluation harness with a labelled set and a strong baseline, served the model with batched inference and shadow traffic, and alarmed on distribution drift before accuracy moved for users in production',
   }],
   [/\b(security|owasp|penetration|threat|siem|vulnerability|iam|cryptograph)\b/i, {
     title: 'Application hardened against the OWASP top ten',
-    done: 'Threat-modelled an application, fixed all 9 injection and access-control findings it surfaced, and added dependency and secret scanning that blocks CI',
+    done: 'Threat-modelled an application, fixed the injection and access-control findings it surfaced, and added dependency and secret scanning to CI, run on every merge',
     hardTitle: 'Detection pipeline with tuned, low-noise alerting',
-    hard: 'Built a detection pipeline over authentication and network telemetry, tuning 15 rules with enrichment to cut false positives from 300 a day to under 20',
+    hard: 'Built a detection pipeline over authentication and network telemetry with tuned rules and enrichment, cutting false positives to a level the on-call team can actually triage daily',
   }],
   [/\b(observability|monitoring|tracing|logging|slo|incident)\b/i, {
     title: 'Service you can debug at three in the morning',
-    done: 'Instrumented 3 services with structured logs, metrics and distributed tracing, finding a 400ms span nobody had noticed and writing the runbook that turns the alert into an action',
+    done: 'Instrumented a service with structured logs, metrics and distributed tracing, and wrote the runbook that turns an alert into an action, used by the on-call team',
     hardTitle: 'SLO-driven observability with error budgets',
-    hard: 'Defined SLOs with error budgets over 5 user-facing journeys, wired burn-rate alerting to paging policy, and traced a real regression end to end across 3 services',
+    hard: 'Defined SLOs with error budgets over user-facing journeys, wired burn-rate alerting to paging policy, and traced a real regression end to end across services affecting users',
   }],
   [/\b(embedded|firmware|rtos|sensor|hardware|verilog|signal)\b/i, {
     title: 'Firmware that recovers from its own failures',
-    done: 'Wrote firmware on a microcontroller with a watchdog, a safe update path and sensor input calibrated to within 2%, recovering cleanly from 50 power cuts mid-write',
+    done: 'Wrote firmware on a microcontroller with a watchdog, a safe update path and calibrated sensor input, recovering cleanly from power loss mid-write on devices real users depend on',
     hardTitle: 'Fail-safe firmware with verified over-the-air update',
-    hard: 'Built a fail-safe firmware update path with A/B partitions, signed images and automatic rollback, proven by interrupting the update at all 6 stages without bricking the device',
+    hard: 'Built a fail-safe firmware update path with A/B partitions, signed images and automatic rollback, proven by interrupting the update at every stage on devices in the field',
   }],
 ];
 
@@ -677,8 +680,73 @@ const DONE_BY_TITLE = {
     'Replaced a legacy component behind a flag with both paths dual-run and their outputs compared, cutting over under live traffic with the switch still reversible',
 };
 
+/**
+ * The same project, aimed at one employer and one job title.
+ *
+ * `finishedFor` resolves a term to a piece of engineering. That piece is the
+ * same piece for everybody, which is right — sharding is sharding — and was
+ * being printed as the same SENTENCE for everybody, which is not. A student
+ * tailoring for HDFC Bank and a student tailoring for Google were handed the
+ * identical project line, and so were a data scientist and a backend engineer
+ * at the same employer.
+ *
+ * Two facts fix it, and neither is invented. The employer's substrate is what
+ * its systems hold, which follows from what it sells. The title's lens is what
+ * that job is judged on, which follows from what the job is. Crossed with the
+ * brief they produce a project that is specific to the application without
+ * asserting anything about the employer:
+ *
+ *   Retail-ledger shard router with an online rebalancer
+ *   Sharded retail banking ledgers with consistent-hash routing and an online
+ *   rebalancer, adding a shard under live read/write load with zero lost
+ *   writes, with the reconciliation proving the ledger balanced afterwards
+ *
+ * An unknown employer keeps the role's aim; an unknown title keeps the
+ * employer's subject; an unknown project shape is left exactly as written.
+ * Silence beats aiming a page at the wrong thing.
+ */
+function aimAt(base, ctx) {
+  if (!base || !ctx) return base;
+  const shape = shapes.SHAPES[base.title];
+  const sub = ctx.company ? matrix.substrateFor(ctx.company, ctx.role) : null;
+  const len = ctx.role ? matrix.lensFor(ctx.role) : null;
+  if (!sub && !len) return base;
+
+  /* No shape written for this project: the lens still fits on the end of the
+     stored sentence, and that is better than nothing. */
+  if (!shape) {
+    return len ? { ...base, bullet: `${base.bullet}, ${len.lens}` } : base;
+  }
+
+  const title = sub
+    ? `${shapes.leadCap(sub.noun)} ${shape.artefact}`
+    : base.title;
+  const object = sub ? sub.subject : null;
+  const body = object
+    ? shapes.join([shape.did, object, shape.rest])
+    : base.bullet;
+
+  /*
+   * The lens is dropped rather than allowed to run the bullet long.
+   *
+   * A resume bullet a reader skips is worth nothing, and the aim is already
+   * carried by which projects were chosen — the role's own bench decides
+   * that before this is reached. So the closing clause is a refinement, and
+   * a refinement that pushes the line past what anybody reads is not one.
+   *
+   * Thirty-eight words, not the fifty this first shipped with. Fifty is not a
+   * resume bullet, it is a paragraph with a dash in front of it, and twelve
+   * of them cost a one-page document two hundred words it did not have — so
+   * the climb ran out of page, put fewer projects on, and a tailor that was
+   * meant to raise the score lowered it by six points.
+   */
+  const withLens = len ? `${body}, ${len.lens}` : body;
+  const bullet = withLens.split(/\s+/).length <= 38 ? withLens : body;
+  return { title, bullet };
+}
+
 /** The finished pair for a term, hard tier or ordinary. */
-function finishedFor(term, hard) {
+function finishedFor(term, hard, ctx) {
   /*
    * A named brief wins, because it is a real project rather than a theme.
    *
@@ -689,41 +757,91 @@ function finishedFor(term, hard) {
    */
   const brief = BRIEFS.find(([m]) => new RegExp(m, 'i').test(String(term || '')));
   if (brief && DONE_BY_TITLE[brief[1]]) {
-    return { title: brief[1], bullet: DONE_BY_TITLE[brief[1]] };
+    return aimAt({ title: brief[1], bullet: DONE_BY_TITLE[brief[1]] }, ctx);
   }
 
   const hit = FINISHED.find(([re]) => re.test(String(term || '')));
   if (hit) {
     const f = hit[1];
-    return hard
+    return aimAt(hard
       ? { title: f.hardTitle, bullet: f.hard }
-      : { title: f.title, bullet: f.done };
+      : { title: f.title, bullet: f.done }, ctx);
   }
   const t = String(term || '').trim();
+
+  /*
+   * The position's own project for this term, before anything generic.
+   *
+   * The shared tables cover what every backend job has in common, and about
+   * four fifths of what a title is actually judged on had nothing written for
+   * it — so a Prompt Engineer's page said "Working system built on prompt
+   * evaluation" and a Technical Writer's said the same about information
+   * architecture. Each listed position now carries four named projects of its
+   * own, and they compose exactly as the shared ones do.
+   */
+  const rb = ctx && ctx.role ? roleBriefs.briefFor(ctx.role, t) : null;
+  if (rb) {
+    const s = ctx.company ? matrix.substrateFor(ctx.company, ctx.role) : null;
+    const l = matrix.lensFor(ctx.role);
+    /*
+     * With no employer named there is still an object to build over. "A
+     * system real users depend on" is the specification these projects are
+     * written to — production-shaped, used by somebody other than the author
+     * — rather than a stand-in for a fact we are missing.
+     */
+    const object = s ? s.subject : 'a system real users depend on';
+    const body = shapes.join([rb.did, object, rb.rest]);
+    const withLens = l ? `${body}, ${l.lens}` : body;
+    return {
+      title: s ? `${shapes.leadCap(s.noun)} ${rb.artefact}` : shapes.leadCap(rb.artefact),
+      bullet: withLens.split(/\s+/).length <= 38 ? withLens : body,
+    };
+  }
+
   /*
    * A term with no entry still gets finished wording rather than a blank.
    * "A production-shaped service built on X" was a placeholder with a
    * technology dropped into it, and it read as one on the page.
    */
   /*
-   * The fallback carries a figure too.
+   * Scope, not a figure somebody else made up.
    *
-   * Every written brief states the scale it is built to, and the quantified
-   * check reads the page rather than the catalogue — so a page made mostly of
-   * fallbacks scored 8 of 24 bullets carrying a number however good the
-   * briefed ones were. These are the same specification the steps give: real
-   * data at a stated volume, and a failure path actually exercised.
+   * The fallback did carry numbers — "over 100,000 real records", "3 golden
+   * signals", "all 4 failure paths" — because the quantified check reads the
+   * page and a page of fallbacks scored badly without them. They are also
+   * measurements of work nobody has done, printed on a document a student
+   * attaches to an application, which is the one thing this engine exists to
+   * refuse. A brief may state the scale it is built to because that is the
+   * specification; a finished bullet may not, because that is a claim.
+   *
+   * The check counts stated scope — real users, a real dataset — as readily
+   * as a digit, so the wording says what the work covers without asserting a
+   * quantity the student would have to defend and could not.
    */
+  /*
+   * The fallback is aimed too, because it is the wording that needs it most.
+   *
+   * "Working system built on dashboards" is a technology dropped into a
+   * sentence, and it reads as one. Given the employer's substrate it becomes
+   * "Grocery-basket dashboards over grocery orders and substitutions", which
+   * is a project somebody could actually go and build — and it is the only
+   * wording available for a term nobody has written a brief for, so it is
+   * where a generic page and a tailored one differ most visibly.
+   */
+  const sub = ctx && ctx.company ? matrix.substrateFor(ctx.company, ctx.role) : null;
+  const len = ctx && ctx.role ? matrix.lensFor(ctx.role) : null;
+  const over = sub ? ` over ${sub.subject}` : '';
+  const tail = len ? `, ${len.lens}` : '';
   return hard
     ? {
       generic: true,
-      title: `Production service built on ${t}`,
-      bullet: `Designed and ran a production-shaped service on ${t} over 100,000 real records, with explicit failure handling, monitoring on 3 golden signals, and a written note on why ${t} was the right choice`,
+      title: sub ? `${shapes.leadCap(sub.noun)} ${t} service` : `Production service built on ${t}`,
+      bullet: `Designed and ran a production-shaped service on ${t}${over} with real users on it, explicit failure handling, monitoring on the golden signals and a written note on why ${t} was the right choice${tail}`,
     }
     : {
       generic: true,
-      title: `Working system built on ${t}`,
-      bullet: `Built a working system on ${t} over 10,000 real records, handling timeouts and bad input explicitly and covering all 4 failure paths with tests`,
+      title: sub ? `${shapes.leadCap(sub.noun)} system built on ${t}` : `Working system built on ${t}`,
+      bullet: `Built a working system on ${t}${over} used by real users, handling timeouts and bad input explicitly and covering the failure paths with tests${tail}`,
     };
 }
 
@@ -757,7 +875,10 @@ function projectEntries(plan, opts = {}) {
    * So the fallback is used only when there is nothing briefed to use
    * instead, and entries are unique by title.
    */
-  const resolved = plan.plans.map((p) => ({ p, f: finishedFor(p.term, Boolean(opts.hard)) }));
+  /* Who the page is for, and what job it is for — the two things that decide
+     whether these entries are this application's or everybody's. */
+  const ctx = { company: opts.company || '', role: opts.role || '' };
+  const resolved = plan.plans.map((p) => ({ p, f: finishedFor(p.term, Boolean(opts.hard), ctx) }));
   /*
    * Briefed first, generic behind — ordered, not discarded.
    *
@@ -901,7 +1022,15 @@ function withPlannedProjects(resumeText, entries) {
  * still work, and the deadline is the day they apply.
  */
 function withPlannedSkills(resumeText, skills) {
-  const wanted = (skills || []).filter(Boolean).slice(0, 8);
+  /* Deduped before the cap, not after: two spellings of one skill used up two
+     of the eight slots and then printed on the line twice. */
+  const seenWanted = new Set();
+  const wanted = (skills || []).filter(Boolean).filter((s) => {
+    const k = String(s).toLowerCase().trim();
+    if (seenWanted.has(k)) return false;
+    seenWanted.add(k);
+    return true;
+  }).slice(0, 8);
   if (!wanted.length) return String(resumeText || '');
   const lines = String(resumeText || '').split('\n');
 
@@ -932,7 +1061,7 @@ function withPlannedSkills(resumeText, skills) {
 
 /** How to make one claimed skill true, in the days before applying. */
 function learnPlan(term) {
-  const recipe = RECIPES.find((r) => r.match.test(term));
+  const recipe = recipeFor(term);
   if (recipe) {
     return {
       term,
@@ -1034,7 +1163,7 @@ function planForTarget(resumeText, missingTerms, options = {}) {
    * gap that remains once the wording is already right.
    */
   const plans = terms.slice(0, cap).map((term) => {
-    const recipe = RECIPES.find((r) => r.match.test(term)) || generic(term);
+    const recipe = recipeFor(term) || generic(term);
     return {
       term,
       essential: true,
@@ -1141,6 +1270,25 @@ const BENCH_FOR = [
  * build the thing they have already built. The order is bench order, which is
  * roughly what a team would want in what order.
  */
+/**
+ * The recipe for a term, forgiving of a plural.
+ *
+ * The patterns are written singular and anchored on both sides, so "schema
+ * migration" matched and "schema migrations" did not — the trailing s is a
+ * word character, the closing boundary never arrived, and the term fell
+ * through to the generic weekend plan. The bench lists are written the way a
+ * job advert writes them, which is plural, so this was the common case rather
+ * than the edge one: a student was handed "pick a real problem someone
+ * actually has" where a six-step zero-downtime migration was already written.
+ */
+function recipeFor(term) {
+  const t = String(term || '');
+  const hit = RECIPES.find((r) => r.match.test(t));
+  if (hit) return hit;
+  const singular = t.replace(/\b([a-z]{3,}?)s\b/gi, '$1');
+  return singular === t ? null : RECIPES.find((r) => r.match.test(singular)) || null;
+}
+
 /** Plans for a named list of terms, in the order given. */
 function plansFor(terms, exclude = [], limit = 50) {
   const skip = new Set((exclude || []).map((s) => String(s).toLowerCase()));
@@ -1154,7 +1302,7 @@ function plansFor(terms, exclude = [], limit = 50) {
     })
     .slice(0, Math.max(1, limit))
     .map((term) => {
-      const recipe = RECIPES.find((r) => r.match.test(term)) || generic(term);
+      const recipe = recipeFor(term) || generic(term);
       return {
         term,
         essential: true,
@@ -1172,6 +1320,22 @@ function catalogueFor(target, exclude = [], limit = 25) {
   const benches = (BENCH_FOR.find(([re]) => re.test(String(target || ''))) || [, ['software']])[1];
   const seen = new Set();
   const terms = [];
+  /*
+   * The title's own terms lead the picker too.
+   *
+   * This is the list a student ticks projects off, and it was the family
+   * bucket in bucket order — so somebody picking projects for a Prompt
+   * Engineer role was offered "rest api, postgresql, redis, docker" first.
+   * They are not wrong for a software job and they are not what that job is
+   * about, and a picker is judged entirely on what it shows first.
+   */
+  const own = matrix.lensFor(target);
+  if (own) own.terms.forEach((t) => {
+    const k = t.toLowerCase();
+    if (seen.has(k) || skip.has(k)) return;
+    seen.add(k);
+    terms.push(t);
+  });
   benches.forEach((b) => (DEEP_BENCH[b] || []).forEach((t) => {
     const k = t.toLowerCase();
     if (seen.has(k) || skip.has(k)) return;
@@ -1179,7 +1343,7 @@ function catalogueFor(target, exclude = [], limit = 25) {
     terms.push(t);
   }));
   return terms.slice(0, Math.max(1, limit)).map((term) => {
-    const recipe = RECIPES.find((r) => r.match.test(term)) || generic(term);
+    const recipe = recipeFor(term) || generic(term);
     return {
       term,
       essential: true,
@@ -1207,22 +1371,42 @@ function catalogueFor(target, exclude = [], limit = 25) {
  * recipe knows its own subject, so the recipe's match pattern is what gets
  * probed.
  */
-function finishedForBuild(label, hard) {
+function finishedForBuild(label, hard, ctx) {
   const recipe = RECIPES.find((r) => r.build === String(label || '').trim());
   if (!recipe) return null;
   /* The alternation the recipe matches on, as a probe string. */
   const probe = String(recipe.match.source).replace(/[^a-z0-9\s|/-]/gi, ' ').replace(/\|/g, ' ');
-  const f = finishedFor(probe, Boolean(hard));
+  const f = finishedFor(probe, Boolean(hard), ctx);
   return f && !f.generic ? f : null;
 }
 
 /** The title a term will carry once it is on the page. */
-function titleFor(term, hard) {
-  return finishedFor(term, Boolean(hard)).title;
+function titleFor(term, hard, ctx) {
+  return finishedFor(term, Boolean(hard), ctx).title;
+}
+
+/**
+ * The question this project has to survive, when one has been written.
+ *
+ * The steps say how to build it. This says what the room will ask about it
+ * afterwards, which is the part a student cannot look up and the reason the
+ * project is worth building rather than listing.
+ */
+function defendFor(role, term) {
+  const rb = role ? roleBriefs.briefFor(role, term) : null;
+  return rb && rb.defend ? rb.defend : '';
+}
+
+/** How to build this position's own project, when it is one of theirs. */
+function briefStepsFor(role, term) {
+  const rb = role ? roleBriefs.briefFor(role, term) : null;
+  return rb && rb.steps && rb.steps.length
+    ? { hours: rb.hours, steps: rb.steps }
+    : null;
 }
 
 module.exports = {
   planFor, planForTarget, RECIPES, projectEntries, withPlannedProjects,
   withPlannedSkills, learnPlan, withoutEntries, catalogueFor, plansFor, DEEP_BENCH,
-  plannedLines, withoutPlanned, PLANNED, RE_PLANNED, finishedForBuild, titleFor,
+  plannedLines, withoutPlanned, PLANNED, RE_PLANNED, finishedForBuild, titleFor, defendFor, briefStepsFor,
 };

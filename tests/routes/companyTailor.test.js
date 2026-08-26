@@ -31,6 +31,43 @@ jest.mock('../../routes/v2/jobAgent', () => {
 });
 const jobAgent = require('../../routes/v2/jobAgent');
 
+/*
+ * The student's GitHub, stubbed — because CI has one and this laptop does not.
+ *
+ * These journeys reached api.github.com for real. From a developer machine it
+ * answers 403 (unauthenticated requests are rate-limited by IP), so the import
+ * returned nothing and the interview ran straight through; from a GitHub
+ * runner it answers properly, so the repos came back and the flow gained a
+ * question the assertions had never seen. Six tests that passed here failed
+ * there, and neither result was about the agent.
+ *
+ * The default is a handle with nothing public behind it. A test that wants
+ * repositories says so.
+ */
+jest.mock('../../services/v2/githubImport', () => ({
+  ...jest.requireActual('../../services/v2/githubImport'),
+  importProfile: jest.fn(async () => ({ ok: false })),
+}));
+const githubImport = require('../../services/v2/githubImport');
+
+const WITH_REPOS = {
+  ok: true,
+  username: 'ananyarao',
+  publicRepos: 4,
+  skipped: 1,
+  languages: ['Java', 'Python'],
+  projects: [
+    { name: 'ledger-api', language: 'Java', stars: 7, bullet: 'Ledger API with double-entry postings. Built with Java' },
+    { name: 'quiz-engine', language: 'Python', stars: 0, bullet: 'Quiz engine with spaced repetition. Built with Python' },
+    { name: 'route-planner', language: 'Go', stars: 2, bullet: 'Route planner over public transit data. Built with Go' },
+  ],
+};
+
+beforeEach(() => {
+  githubImport.importProfile.mockReset();
+  githubImport.importProfile.mockResolvedValue({ ok: false });
+});
+
 const PORTAL_JOBS = [
   { title: 'Software Engineer', company: 'stripe', location: 'Bengaluru, India', url: 'https://stripe.com/jobs/1', description: 'Java, Postgres.', tags: ['java'], fit5: 4 },
   { title: 'Software Engineer, Platform', company: 'airbnb', location: 'Remote, EU', url: 'https://careers.airbnb.com/2', description: 'AWS, Terraform.', tags: ['aws'], fit5: 3 },
@@ -97,7 +134,7 @@ describe('the profile knows one employer from another', () => {
   it('gives an IT-services firm migration and delivery work', () => {
     const t = profiles.profileFor('Tata Consultancy Services', 'Software Engineer');
     expect(t.projects).toEqual(expect.arrayContaining(['legacy migration']));
-    expect(t.projects).toEqual(expect.arrayContaining(['legacy migration']));
+    expect(t.projects).toEqual(expect.arrayContaining(['integration testing']));
   });
 
   it('gives an aerospace employer safety-critical work', () => {
@@ -382,6 +419,14 @@ describe('the work depends on the company AND the role, never on one alone', () 
   const COMPANIES = ['Google', 'Amazon', 'Netflix', 'JPMorgan Chase', 'Infosys', 'Razorpay', 'TSMC', 'Anthropic'];
   const ROLES = ['Software Engineer', 'Data Scientist', 'DevOps Engineer', 'UI/UX Designer', 'Cybersecurity Analyst'];
   const top = (c, r) => profiles.profileFor(c, r).projects.slice(0, 8).join('|');
+  /* What the student actually reads: the project lines this pair produces. */
+  const page = (c, r) => {
+    const skillPlan = require('../../services/v2/skillPlan');
+    const terms = profiles.profileFor(c, r).projects.slice(0, 12);
+    const plan = { ok: true, plans: skillPlan.plansFor(terms, [], 12) };
+    return skillPlan.projectEntries(plan, { company: c, role: r, hard: true })
+      .slice(0, 6).map((e) => e.line).join('|');
+  };
 
   it('gives one company\'s four roles four different lists', () => {
     /*
@@ -393,8 +438,19 @@ describe('the work depends on the company AND the role, never on one alone', () 
     expect(seen.size).toBe(ROLES.length);
     expect(profiles.profileFor('Google', 'UI/UX Designer').projects.slice(0, 3).join(' '))
       .not.toMatch(/sharding/);
-    expect(profiles.profileFor('Google', 'Data Scientist').projects.slice(0, 3).join(' '))
-      .toMatch(/sql|python|pandas/);
+    /*
+     * And the head of the list is the discipline, not the family's toolbox.
+     *
+     * This used to assert "sql|python|pandas", which is what the shared data
+     * bucket opened with — true of the job and not what the job IS. Every
+     * title now carries its own ordered terms, so a data scientist leads on
+     * the work a data scientist is hired for, and the tools sit behind it
+     * where a skills line can still pick them up.
+     */
+    const ds = profiles.profileFor('Google', 'Data Scientist').projects.slice(0, 3).join(' ');
+    expect(ds).toMatch(/statistic|hypothesis|experiment|model|feature engineering/i);
+    const swe = profiles.profileFor('Google', 'Software Engineer').projects.slice(0, 3).join(' ');
+    expect(swe).not.toBe(ds);
   });
 
   it('gives one role different lists at different companies', () => {
@@ -404,7 +460,16 @@ describe('the work depends on the company AND the role, never on one alone', () 
      * scientist at Google from one anywhere else is the scale they work at,
      * so the company's own emphasis sits directly behind the role's core.
      */
-    const seen = new Set(COMPANIES.map((c) => top(c, 'Data Scientist')));
+    /*
+     * Measured on the projects, not on the terms behind them.
+     *
+     * A term list is an input. Two employers in one sector with no named
+     * profile can legitimately share several — both banks want reconciliation
+     * — and what the student is handed is still different, because the
+     * project is written over that employer's own data. Asserting on terms
+     * was asserting on the intermediate value; this asserts on the artefact.
+     */
+    const seen = new Set(COMPANIES.map((c) => page(c, 'Data Scientist')));
     expect(seen.size).toBe(COMPANIES.length);
     expect(top('Google', 'Data Scientist')).toMatch(/sharding|search indexing/);
     expect(top('JPMorgan Chase', 'Data Scientist')).toMatch(/audit logging|reconciliation/);
@@ -413,9 +478,42 @@ describe('the work depends on the company AND the role, never on one alone', () 
 
   it('is distinct across every company and role pair, not just the famous ones', () => {
     const seen = new Set();
-    COMPANIES.forEach((c) => ROLES.forEach((r) => seen.add(top(c, r))));
+    COMPANIES.forEach((c) => ROLES.forEach((r) => seen.add(page(c, r))));
     expect(seen.size).toBe(COMPANIES.length * ROLES.length);
   });
+
+  it('crosses the whole roster without two pages coming out the same', () => {
+    /*
+     * The claim this feature makes, checked at something like its real size.
+     *
+     * 374 employers by 120 positions is 44,880 pages, and the two ways it
+     * used to fail are opposite: consult only the company and a data
+     * scientist gets the backend engineer's projects; consult only the role
+     * and every employer gets one page. Every sixth employer against every
+     * third position is 2,520 pages and runs in about a second, which is
+     * cheap enough to keep in the suite. The full cross is a script.
+     */
+    const skillPlan = require('../../services/v2/skillPlan');
+    const { COMPANIES: ALL } = require('../../services/v2/aspirationalCompanies');
+    const career = require('../../services/v2/careerData');
+
+    const employers = ALL.map(([n]) => n).filter((_, i) => i % 6 === 0);
+    const titles = career.POSITIONS.filter((_, i) => i % 3 === 0);
+
+    const seen = new Map();
+    const clashes = [];
+    employers.forEach((c) => titles.forEach((r) => {
+      const terms = profiles.profileFor(c, r).projects.slice(0, 12);
+      const plan = { ok: true, plans: skillPlan.plansFor(terms, [], 12) };
+      const key = skillPlan.projectEntries(plan, { company: c, role: r, hard: true })
+        .slice(0, 6).map((e) => e.line).join('|');
+      if (seen.has(key)) clashes.push(`${seen.get(key)}  ==  ${c} / ${r}`);
+      else seen.set(key, `${c} / ${r}`);
+    }));
+
+    expect(clashes).toEqual([]);
+    expect(seen.size).toBe(employers.length * titles.length);
+  }, 60000);
 
   it('never returns an empty list, for any employer and any title', () => {
     /* 374 employers and 105 titles is 39,270 combinations, and a page
@@ -527,15 +625,6 @@ describe('the row you opened is the row it tailors for', () => {
      * was the "extra things" that got cut — what the employer wants is now
      * the work sitting on the page under its own headings.
      */
-    /*
-     * The bank's own bar, written the way a Projects section is written.
-     *
-     * The assertion used to look for the raw term — "audit logging" — which
-     * is the keyword the profile is keyed on, not the entry a reader sees.
-     * The page now carries the finished brief that term resolves to, with a
-     * title and a specification under it, so it is the brief that gets
-     * checked.
-     */
     expect(out.text).toMatch(/audit trail|double-entry ledger|reconcil|low-latency/i);
     expect(out.reply).toMatch(/^ATS score: \d+\/100/);
     expect(out.reply).toMatch(/Before you attach this/);
@@ -615,24 +704,21 @@ describe('the tailor is shaped by the employer, not only by the role', () => {
     expect(offer.length).toBeGreaterThanOrEqual(12);
   });
 
-  it('names the company\'s own vocabulary even with no advert to read', async () => {
-    /* A target has no posting behind it, so the not-claimed list is empty and
-       the block came out blank — for exactly the student who needs it most. */
+  it('names the company\'s skills on the page even with no advert to read', async () => {
+    /*
+     * A target has no posting behind it, so the not-claimed list is empty and
+     * the block came out blank — for exactly the student who needs it most.
+     * They go onto the SKILLS line, which is where a skills keyword has to be
+     * to count, rather than under a heading carrying a disclaimer that no
+     * parser indexes and no recruiter reads charitably.
+     */
     const { a, out } = await tailorFor('Netflix');
     const done = await walk(a, out);
-    /*
-     * On the page's own headings, not under a disclaimer.
-     *
-     * This used to read the LEARNING section, which was headed "[PLANNED —
-     * not built yet] — remove or complete before applying": true, unindexed
-     * by any parser, and unsendable without hand-editing. Netflix's
-     * vocabulary now lands where a reader and a parser both look for it —
-     * the skills on the SKILLS line, the work under PROJECTS.
-     */
-    expect(done.text).toMatch(/^SKILLS$/m);
-    const page = done.text.toLowerCase();
-    expect(page).toMatch(/chaos|streaming|circuit breaker|canary|resilience|observability|jvm/);
-    expect(done.text).not.toMatch(/PLANNED|LEARNING/);
+    expect(done.text).not.toMatch(/LEARNING \(/);
+    const skillsLine = done.text.split(/^SKILLS$/m)[1].split('\n')[1].toLowerCase();
+    /* Netflix's own vocabulary, whichever half of the profile it comes from —
+       the projects it screens on and the skills behind them are one list. */
+    expect(skillsLine).toMatch(/chaos|streaming|circuit breaker|canary|resilience|observability|jvm/);
   });
 
   it('puts the company\'s skills on the page, with the reply carrying the debt', async () => {
@@ -640,48 +726,122 @@ describe('the tailor is shaped by the employer, not only by the role', () => {
     const done = await walk(a, out);
     const after = await walk(a, await turn(a, 'make it 96', done.session));
     expect(after.report.score).toBeGreaterThanOrEqual(96);
-    expect(after.text).toMatch(/^SKILLS$/m);
     /*
-     * One number now, not two.
-     *
-     * The page used to be scored twice — once with the planned work cut out
-     * and once with it counted — and the pair had to be explained side by
-     * side every time. A student who picked the recommended projects watched
-     * the real number sit still, which is the whole reason the feature was
-     * being ignored. The score describes the page; the reply and the export
-     * gate are what keep the page from being sent as a lie.
-     *
-     * The marker used to live on the document — "[PLANNED — not built yet]"
-     * beside every added line — which meant the honesty and the artefact were
-     * the same object, and the student could not attach one without deleting
-     * the other. The debt is tracked on the session instead: the reply names
-     * every entry that is not true yet, and the PDF route reads that list and
-     * refuses while any of it stands.
+     * The page reads as finished work, because that is what somebody attaches
+     * to an application. It used to carry the marker and the blanks — a to-do
+     * list in a resume's clothes, which had to be hand-edited before it could
+     * be sent. What is not yet true is named in the reply instead, where it
+     * is instruction rather than defacement, and it is named every time.
      */
-    expect(after.text).not.toMatch(/PLANNED|LEARNING/);
-    expect((after.session.plannedGuides || []).length).toBeGreaterThan(0);
+    expect(after.text).not.toMatch(/LEARNING \(/);
+    expect(after.text).not.toMatch(/\[PLANNED|not built yet/);
+    expect(after.text).not.toMatch(/<[^>]{1,40}>/);
     expect(after.reply).toMatch(/Before you attach this/);
   });
 });
 
 /* ------------------------------------------------- OPENINGS BEFORE THE PAGE */
 
-describe('a new user gets the openings before the blank page', () => {
-  const start = async () => {
-    const a = agent();
-    const out = await turn(a, 'build me a resume for a software engineer', null);
-    return { a, out };
+describe('a new user answers eight things, then gets the openings', () => {
+  /*
+   * The openings did come first, and the order is now the other way round.
+   *
+   * The reasoning for openings-first still holds — somebody who says "build
+   * me a resume" wants a job, and the page is the means — and it put four
+   * hundred rows in front of a person the agent could not yet name. They
+   * scroll, pick one, and are then asked for their university, so the list
+   * they were reading is three screens back by the time a page exists.
+   *
+   * Eight single-answer questions come first: three off a list, and the five
+   * nobody can offer a list for. Then the openings, for the title they named
+   * rather than for whatever the last upload implied.
+   */
+  const TYPED = {
+    name: 'Ananya Rao',
+    email: 'ananya@example.com',
+    phone: '+91 98765 43210',
+    github: 'ananyarao',
+    linkedin: 'linkedin.com/in/ananyarao',
+    link: 'linkedin.com/in/ananyarao',
   };
 
-  it('searches the title they named instead of interviewing first', async () => {
-    const { out } = await start();
+  const CORE = ['college', 'degree', 'gradyear', 'name', 'email', 'phone', 'github', 'linkedin'];
+
+  /*
+   * Answer the eight and stop. Not "answer until something other than a
+   * question comes back" — when the boards are down the reply that says so
+   * arrives with the next question attached, and a loop that keeps answering
+   * walks straight past the sentence under test.
+   */
+  const toJobs = async (a, first) => {
+    let out = first;
+    const asked = [];
+    for (let i = 0; i < 20 && out.kind === 'ask' && CORE.includes(out.session.asked); i += 1) {
+      const field = out.session.asked;
+      asked.push(field);
+      const opts = choices(out);
+      // eslint-disable-next-line no-await-in-loop
+      out = await turn(a, TYPED[field] || (opts.length ? opts[0].value : 'skip'), out.session);
+    }
+    return { out, asked };
+  };
+
+  const start = async () => {
+    const a = agent();
+    const first = await turn(a, 'build me a resume for a software engineer', null);
+    return { a, first };
+  };
+
+  it('asks the eight, and only the eight, before searching', async () => {
+    const { a, first } = await start();
+    const { out, asked } = await toJobs(a, first);
+    /* The title was in the sentence, so it is not asked for again. */
+    expect(asked).toEqual(['college', 'degree', 'gradyear', 'name', 'email', 'phone', 'github', 'linkedin']);
     expect(Array.isArray(out.jobs)).toBe(true);
     expect(out.jobs.some((j) => j.company === 'stripe')).toBe(true);
     expect(out.reply).toMatch(/before we write a word/i);
   });
 
+  it('types nothing but the five that are the person', async () => {
+    const { a, first } = await start();
+    let out = first;
+    const typed = [];
+    for (let i = 0; i < 20 && out.kind === 'ask'; i += 1) {
+      const field = out.session.asked;
+      const opts = choices(out);
+      if (!opts.length) typed.push(field);
+      // eslint-disable-next-line no-await-in-loop
+      out = await turn(a, TYPED[field] || (opts.length ? opts[0].value : 'skip'), out.session);
+    }
+    expect(typed).toEqual(['name', 'email', 'phone', 'github', 'linkedin']);
+  });
+
+  it('reads their repositories after the eight, not in the middle of them', async () => {
+    /*
+     * The import fired the moment the handle arrived, which put a list of
+     * repositories between "your GitHub?" and "your LinkedIn?" — the
+     * interview interrupting itself one question short of the end. The eight
+     * are a block. The repos come after it and before the openings, so the
+     * projects are already theirs to pick from by the time the jobs appear.
+     */
+    githubImport.importProfile.mockResolvedValue(WITH_REPOS);
+    const { a, first } = await start();
+    const { out, asked } = await toJobs(a, first);
+
+    expect(asked).toEqual(['college', 'degree', 'gradyear', 'name', 'email', 'phone', 'github', 'linkedin']);
+    expect(out.kind).toBe('ask');
+    expect(out.session.asked).toBe('pickprojects');
+    expect(String(out.reply)).toMatch(/4 repositories, 3 that look like real projects/);
+    expect(choices(out).map((c) => c.label)).toEqual(['ledger-api', 'quiz-engine', 'route-planner']);
+
+    /* Picking one puts their own words on the page; the openings follow. */
+    const after = await turn(a, choices(out)[0].value, out.session);
+    expect(after.session.details.projects).toMatch(/Ledger API with double-entry postings/);
+  });
+
   it('lists the live openings first and the large employers after them', async () => {
-    const { out } = await start();
+    const { a, first } = await start();
+    const { out } = await toJobs(a, first);
     const firstTarget = out.jobs.findIndex((j) => j.aspirational);
     const lastReal = out.jobs.map((j) => !!j.aspirational).lastIndexOf(false);
     expect(firstTarget).toBeGreaterThan(lastReal);
@@ -689,7 +849,8 @@ describe('a new user gets the openings before the blank page', () => {
   });
 
   it('builds the page against the row they open, tailored, in one motion', async () => {
-    const { a, out } = await start();
+    const { a, first } = await start();
+    const { out } = await toJobs(a, first);
     const picked = await turn(a, 'tailor number 1', out.session);
     const done = await walk(a, picked, 'first');
     expect(done.kind).toBe('build');
@@ -699,7 +860,8 @@ describe('a new user gets the openings before the blank page', () => {
 
   it('builds anyway when the boards are silent, rather than stranding them', async () => {
     jobAgent.findJobs.mockRejectedValue(new Error('every board timed out'));
-    const { out } = await start();
+    const { a, first } = await start();
+    const { out } = await toJobs(a, first);
     /* No page, no listings — the interview is the only useful next move. */
     expect(out.kind).toBe('ask');
     expect(String(out.reply)).toMatch(/build the page first/i);

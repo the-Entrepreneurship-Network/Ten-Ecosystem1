@@ -31,6 +31,15 @@ jest.mock('../../routes/v2/jobAgent', () => {
 });
 const jobAgent = require('../../routes/v2/jobAgent');
 
+/* And the student's GitHub, for the same reason: unauthenticated calls to
+   api.github.com are rate-limited by IP, so this journey read one result on a
+   runner and another on a laptop. Whether a handle has public repositories
+   behind it is not what these thirty are about. */
+jest.mock('../../services/v2/githubImport', () => ({
+  ...jest.requireActual('../../services/v2/githubImport'),
+  importProfile: jest.fn(async () => ({ ok: false })),
+}));
+
 const PORTAL_JOBS = [
   { title: 'Backend Engineer', company: 'stripe', location: 'Bengaluru, India', url: 'https://stripe.com/jobs/1', description: 'Java, Kafka, Postgres, Docker.', tags: ['java'], fit5: 4 },
   { title: 'Senior Backend Engineer', company: 'robinhood', location: 'Remote, US', url: 'https://boards.greenhouse.io/robinhood/2', description: 'Go, gRPC, Kubernetes.', tags: ['go'], fit5: 3 },
@@ -178,28 +187,30 @@ describe('resume seat · ten journeys', () => {
     expect(out.reply).toMatch(/Before you attach this: \d+ things?/);
   });
 
-  it('8 · what is missing is added to the page, not reported as missing', async () => {
+  it('8 · what is missing is added to the page as skills, not reported as missing', async () => {
     const a = agent();
     let out = await turn(a, FRONTEND, null);
     out.session.jd = 'Frontend Engineer. Must have: Kubernetes, Terraform.';
     out = await walk(a, await turn(a, 'tailor my resume', out.session));
-    /* On the page, marked — never claimed, never merely complained about. */
+    /* On the page, in the sections a parser reads — never merely complained
+       about, and never under a heading that carries a disclaimer. */
     expect(out.text).toMatch(/^PROJECTS$/m);
+    expect(out.text).not.toMatch(/PLANNED|LEARNING \(/);
   });
 
-  it('9 · planned work is marked, listed, and gated out of the PDF', async () => {
+  it('9 · the page reads as finished, and the reply carries the debt', async () => {
     /*
-     * It used to be excluded from the score instead, which is a defensible
-     * principle that made the feature pointless — pick the recommended
-     * projects, watch them land on your resume, watch the number not move.
-     * The page is scored as the page that exists; what keeps it honest is
-     * that every added line says it is not true yet, the reply says what to
-     * do about it, and the export refuses while it says so.
+     * The page used to carry the marker and the blanks, which made it a to-do
+     * list nobody could attach to an application. It reads as a resume now;
+     * what is not yet true is named in the reply, where it is instruction
+     * rather than defacement — and it is still named, every time.
      */
     const a = agent();
     let out = await turn(a, QA, null);
     out = await walk(a, await turn(a, 'make it 98', out.session));
     expect(out.session.plannedGuides.length).toBeGreaterThan(0);
+    expect(out.text).not.toMatch(/\[PLANNED|not built yet/);
+    expect(out.text).not.toMatch(/<[^>]{1,40}>/);
     expect(out.reply).toMatch(/Before you attach this/);
   });
 
@@ -311,13 +322,37 @@ describe('no resume at all · the same errand from the other end', () => {
    * document, and no next move — when the openings for the exact title they
    * had just named were one search away.
    */
+  /*
+   * Eight single-answer questions stand between the request and the list.
+   *
+   * Three come off a list and five are the person — name, email, phone,
+   * GitHub, LinkedIn — and none of them is an essay. They come first because
+   * four hundred rows is not the next thing somebody can act on when the
+   * agent does not yet know their name.
+   */
+  const CORE = ['college', 'degree', 'gradyear', 'name', 'email', 'phone', 'github', 'linkedin'];
+  const TYPED = {
+    name: 'Ananya Rao',
+    email: 'ananya@example.com',
+    phone: '+91 98765 43210',
+    github: 'ananyarao',
+    linkedin: 'linkedin.com/in/ananyarao',
+    link: 'linkedin.com/in/ananyarao',
+  };
+
   const listing = async () => {
     const a = agent();
-    const out = await turn(a, 'build me a resume for a software engineer', null);
+    let out = await turn(a, 'build me a resume for a software engineer', null);
+    for (let i = 0; i < 12 && out.kind === 'ask' && CORE.includes(out.session.asked); i += 1) {
+      const field = out.session.asked;
+      const opts = choices(out);
+      // eslint-disable-next-line no-await-in-loop
+      out = await turn(a, TYPED[field] || (opts.length ? opts[0].value : 'skip'), out.session);
+    }
     return { a, out };
   };
 
-  it('shows the openings for that title before writing a word', async () => {
+  it('shows the openings for that title, once it knows who is asking', async () => {
     const { out } = await listing();
     expect(out.kind).not.toBe('ask');
     expect(Array.isArray(out.jobs)).toBe(true);

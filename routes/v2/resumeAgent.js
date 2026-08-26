@@ -1,4 +1,4 @@
-﻿/*
+/*
  * The Resume Portal agent — scores a resume the way an ATS does, and builds
  * one that survives the same scoring.
  *
@@ -30,6 +30,7 @@ const aspirationalCompanies = require('../../services/v2/aspirationalCompanies')
 const companyProfiles = require('../../services/v2/companyProfiles');
 const career = require('../../services/v2/careerData');
 const collegeData = require('../../services/v2/collegeData');
+const projectMatrix = require('../../services/v2/projectMatrix');
 const interview = require('../../services/v2/resumeInterview');
 const { httpFetch } = require('../../services/v2/httpFetch');
 const githubImport = require('../../services/v2/githubImport');
@@ -509,6 +510,17 @@ function parseDetails(input) {
  * "- • B.Tech CSE" on the shipped page — two bullets, one line, and a parser
  * reading a stray glyph as content.
  */
+/** The same entry once, first spelling kept, case ignored. */
+function uniqueItems(list) {
+  const seen = new Set();
+  return (list || []).filter((x) => {
+    const k = String(x).trim().toLowerCase();
+    if (!k || seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
 const splitItems = (v) => String(v || '')
   .split(/[;|]|\s*\n\s*/)
   .map((s) => s.trim().replace(/^[-*•▪◦‣·]+\s*/, '').trim())
@@ -674,7 +686,12 @@ function buildResume(detailsInput) {
    * stated, on a page they could download and send. A resume is a set of
    * claims; the agent does not get to make them.
    */
-  const skills = splitItems(d.skills);
+  /* One skill, once. The picker offers the position's own list and the family
+     list, the sharp ones are on both, and ticking a skill in each group put it
+     on the page twice — which reads as carelessness on the one line a reader
+     scans fastest. `unique` is defined just below; this is hoisted past it
+     deliberately so the declaration order can stay readable. */
+  const skills = uniqueItems(splitItems(d.skills));
 
   /*
    * The same answer twice is one thing, not two.
@@ -802,20 +819,24 @@ function buildResume(detailsInput) {
    * exactly as written.
    */
   /*
-   * A project they picked off our own list arrives finished, not as a stub.
+   * A named project is written as its own heading, not as one long bullet.
    *
-   * The picker offers "An API somebody else could use" and the answer used to
-   * land as "- Built API somebody else could use": no scale, no failure path,
-   * no number — a weaker entry than the bench projects sitting beside it on
-   * the same page, and enough unquantified bullets to hold a built-from-
-   * scratch resume a point below the bar. Their pick stands; it is written up
-   * to the same specification as everything else under the heading.
+   * Two ways a project arrives already named. The picker offers "An API
+   * somebody else could use" and the catalogue knows the finished write-up for
+   * it, so a pick lands with the scale and the failure path the bench entries
+   * beside it carry rather than as "- Built API somebody else could use". And
+   * the climb writes "Title — what it does", which the rewrite pass running
+   * afterwards read as a bullet not opening with a verb and bolted one onto:
+   * "Built search-index multi-region event backbone with offset replay —
+   * Designed…". Split over two lines both match every other project on the
+   * page, and there is nothing left for the rewriter to correct.
    */
   section('PROJECTS', projItems.flatMap((p, i) => {
     const done = skillPlan.finishedForBuild(p, Boolean(d.aspirational));
     if (done) return [done.title, `- ${done.bullet.replace(`${done.title} — `, '')}`, ''];
-    const named = /^[^—–-]{2,40}\s[—–-]\s\S/.test(String(p).trim());
-    const b = named ? String(p).trim() : toBullet(p, i + 2);
+    const m = String(p).trim().match(/^(.{2,90}?)\s—\s(\S[\s\S]*)$/);
+    if (m) return [m[1], `- ${m[2]}`, ''];
+    const b = toBullet(p, i + 2);
     return b ? [`- ${b}`] : [];
   }));
   section('EDUCATION', eduItems.map((e) => `- ${e}`));
@@ -1448,8 +1469,28 @@ function roleFromHunt(low) {
 function targetFromSentence(low) {
   const m = String(low).match(
     /\b(?:resume|cv)\s+(?:of|for|as)\s+(?:an?\s+|the\s+)?([a-z][a-z0-9+#./ -]{2,40}?)(?=\s+(?:and|with|that|which|to|so|please|role|position|job)\b|[,.]|$)/);
-  if (!m) return '';
-  return m[1].trim().replace(/\s+/g, ' ');
+  if (m) return m[1].trim().replace(/\s+/g, ' ');
+
+  /*
+   * "Build me a software engineer resume" — the title in front of the noun.
+   *
+   * Only the "resume FOR a software engineer" order was read, and the other
+   * order is the one people actually type. So the role was missed, the aim
+   * came out empty, and somebody who had already named the job in their first
+   * sentence was asked to pick it off a list — after being told, correctly,
+   * that the list exists because nobody should have to type the title.
+   *
+   * The capture is checked against the known positions rather than trusted:
+   * this pattern will happily match "one page" out of "build me a one page
+   * resume", and a target is not a thing to guess at.
+   */
+  const adj = String(low).match(
+    /\b(?:make|build|create|write|generate|draft|need|want)\s+(?:me\s+)?(?:an?\s+|my\s+|the\s+)?([a-z][a-z0-9+#./ -]{2,40}?)\s+(?:resume|cv)\b/);
+  if (!adj) return '';
+  const said = adj[1].trim().replace(/\s+/g, ' ');
+  /* The listed spelling wins, so "backend dev" and "Backend Developer" are one
+     answer and the keyword bank they score against is the same one. */
+  return career.matchPosition(said) || '';
 }
 
 /**
@@ -1646,6 +1687,17 @@ function optionsFor(field, session) {
   if (field === 'skills') {
     const bank = roleBank(session.target || (session.details || {}).role || '');
     const deep = skillPlan.DEEP_BENCH;
+    /*
+     * The listed position's own skills lead, because they are the ones the
+     * posting will name.
+     *
+     * The keyword bank is per-family — one list for every engineering title —
+     * so a Prompt Engineer and a Compiler Engineer were offered the same
+     * fourteen words to tick, and neither list was theirs. A student ticking
+     * boxes is being reminded of what they have done; reminding them of
+     * somebody else's stack is worse than asking nothing.
+     */
+    const own = projectMatrix.lensFor(session.target || (session.details || {}).role || '');
     const family = /data|analyt/i.test(session.target || '') ? deep.data
       : /front.?end|ui|ux|design/i.test(session.target || '') ? deep.frontend
         : /devops|cloud|sre|platform|infra/i.test(session.target || '') ? deep.devops
@@ -1662,9 +1714,10 @@ function optionsFor(field, session) {
     return {
       multi: true,
       groups: [
-        { group: `Core for ${bank.key}`, options: dedupe(bank.words) },
+        ...(own ? [{ group: `Core for ${own.role}`, options: dedupe(own.skills) }] : []),
+        { group: own ? `Also asked for across ${bank.key}` : `Core for ${bank.key}`, options: dedupe(bank.words) },
         { group: 'Also worth listing if you have used them', options: dedupe(family).slice(0, 24) },
-      ],
+      ].filter((g) => g.options.length),
       other,
     };
   }
@@ -2080,6 +2133,32 @@ function consumeAnswer(session, field, msg) {
       .find((part) => values.some((v) => v.toLowerCase() === part.toLowerCase()));
     if (first) msg = first;
   }
+  /*
+   * "No" is an answer to a yes-or-no question, not a refusal to answer it.
+   *
+   * The generic decline below catches "no", "none" and "skip" and returns
+   * before any field gets to read them — which is right for "what is your
+   * phone number" and wrong for "should I tailor this for Netflix?", where no
+   * IS the answer. The confirmation kept its pending posting, the router saw
+   * it again on the next turn, and asked the identical question for as long
+   * as the visitor kept declining: forty-five times in one recorded run.
+   */
+  if (field === 'confirmtailor') {
+    const job = session.pendingTailor;
+    session.pendingTailor = null;
+    /*
+     * Only a refusal refuses. Everything else proceeds, including a skip.
+     *
+     * They opened a posting and asked for it to be tailored — the question is
+     * a courtesy before a rewrite, not a gate. Requiring an explicit yes meant
+     * a visitor who skipped past it got "left as it is" about the one thing
+     * they had asked for by name.
+     */
+    session.tailorConfirmed = !/^(no|nope|nah|don'?t|do not|cancel|leave it|leave my resume)\b/i.test(msg.trim());
+    if (session.tailorConfirmed && job) session.pickedJob = job;
+    return;
+  }
+
   const skip = /^(skip|no|none|nothing|na|n\/a|not now)\.?$/i.test(msg.trim());
   /* A declined question is settled, not pending. Without this, "skip" left
      the fact absent, the ledger regenerated the same question, and the agent
@@ -2233,21 +2312,6 @@ function consumeAnswer(session, field, msg) {
     return;
   }
 
-  /*
-   * The answer to "should I tailor for this?".
-   *
-   * Consumed here, where every other answer is consumed, so the pending
-   * posting is cleared before the router runs again — leaving it set made
-   * the confirmation re-ask itself on the yes that was meant to end it.
-   */
-  if (field === 'confirmtailor') {
-    const job = session.pendingTailor;
-    session.pendingTailor = null;
-    session.tailorConfirmed = /\b(yes|yeah|yep|sure|ok|okay|go|do it|please|tailor)\b/i.test(msg);
-    if (session.tailorConfirmed && job) session.pickedJob = job;
-    return;
-  }
-
   /* Their pick of what to lead with. Both are lines already on the page, so
      recording one can never introduce a claim. */
   /*
@@ -2287,8 +2351,7 @@ function consumeAnswer(session, field, msg) {
       : [];
     if (chosen.length) {
       session.resumeText = skillPlan.withPlannedProjects(
-        session.resumeText,
-      skillPlan.projectEntries({ ok: true, plans: chosen }, { hard: Boolean(session.aspirational) }));
+        session.resumeText, skillPlan.projectEntries({ ok: true, plans: chosen }, aimOf(session)));
       session.details.addProject = chosen.map((c) => c.term).join(', ');
       session.plannedGuide = chosen[0];
       session.plannedGuides = chosen;
@@ -2346,12 +2409,31 @@ function consumeAnswer(session, field, msg) {
   } else if (field === 'internship2' || field === 'internship3') {
     d[field] = msg.trim();
     rebuildExperience(d);
-  } else if (field === 'projects2') {
-    /* The flag is set as well as the text: appending only to `projects` left
-       the question's own condition true, so it asked for a second project
-       twelve times in a row. */
-    d.projects2 = msg.trim();
-    d.projects = [d.projects, msg.trim()].filter(Boolean).join('\n');
+  } else if (field === 'projects' || field === 'projects2') {
+    /*
+     * A project picked off our own list arrives as the list's label.
+     *
+     * "An event-driven order pipeline with exactly-once processing" is a
+     * prompt, not a resume line, and the builder verb-fronted it into "-
+     * Built event-driven order pipeline with exactly-once processing" — a
+     * bullet with no title, no evidence and no scale, sitting under a heading
+     * where every other entry had all three. The catalogue knows the finished
+     * form of everything it offers, so a pick lands in the same shape as the
+     * work the climb adds.
+     */
+    const written = String(msg).split(/\s*[,;\n]\s*/).map((s) => s.trim()).filter(Boolean)
+      .map((label) => {
+        const f = skillPlan.finishedForBuild(label, Boolean(session.aspirational), {
+          company: (session.pickedJob && session.pickedJob.company) || '',
+          role: session.scoreTarget || session.target || '',
+        });
+        return f ? `${f.title} — ${f.bullet}` : label;
+      });
+    d.projects = [d.projects, ...written].filter(Boolean).join('\n');
+    /* The flag as well as the text. Appending only to `projects` left the
+       follow-up's own condition true, so it asked for a second project twelve
+       times in a row. */
+    if (field === 'projects2') d.projects2 = written.join('\n') || msg.trim();
   } else if (field === 'internship' || field === 'internshipdates' || field === 'stipend') {
     d[field] = msg.trim();
     rebuildExperience(d);
@@ -2591,6 +2673,23 @@ function projectedScore(text, target) {
  * Returns the page, both numbers, and the plans actually used, so the caller
  * can print the build order.
  */
+/**
+ * The employer and the title this page is currently aimed at.
+ *
+ * Every path that writes a project onto a page needs the same two facts, and
+ * they were being read off the session in four different ways — so a project
+ * added by the interview came out generic while the identical project added by
+ * the climb came out tailored, on the same document.
+ */
+function aimOf(session) {
+  return {
+    company: (session.pickedJob && session.pickedJob.company)
+      || (session.details && session.details.company) || '',
+    role: session.scoreTarget || session.target || (session.details && session.details.role) || '',
+    hard: Boolean(session.aspirational),
+  };
+}
+
 /*
  * The debt the page carries, added to rather than replaced.
  *
@@ -2615,7 +2714,7 @@ function recordPlanned(session, entries, page) {
   return session.plannedGuides;
 }
 
-function climbToGoal(text, target, goal, plans, picked = [], houseSkills = [], onPage = 12, stale = 3, hard = false) {
+function climbToGoal(text, target, goal, plans, picked = [], houseSkills = [], onPage = 12, stale = 3, aim = {}) {
   const want = Math.min(100, Math.max(1, goal || 98));
   /* Their picks first, in the order they picked them — a student who chose
      Kafka is owed Kafka on the page, whether or not it was the cheapest
@@ -2657,8 +2756,7 @@ function climbToGoal(text, target, goal, plans, picked = [], houseSkills = [], o
    * subject belongs.
    */
   const compose = (list) => skillPlan.withPlannedSkills(
-    skillPlan.withPlannedProjects(base,
-      skillPlan.projectEntries({ ok: true, plans: list }, { hard })),
+    skillPlan.withPlannedProjects(base, skillPlan.projectEntries({ ok: true, plans: list }, aim)),
     houseSkills,
   );
 
@@ -2732,9 +2830,15 @@ function climbToGoal(text, target, goal, plans, picked = [], houseSkills = [], o
    * gate matched the label against a document that never contains it — which
    * is a gate that opens on a page still carrying unbuilt work. One name,
    * and it is the one on the page.
+   *
+   * The name is resolved through the same aim the page was written with, or
+   * the employer's substrate is missing from it — the record would say "A
+   * sharded datastore that survives a shard being added" about a line reading
+   * "Retail-ledger shard router with an online rebalancer", and the gate that
+   * matches one against the other would open.
    */
   const named = (list) => list.map((p) => ({
-    ...p, build: skillPlan.titleFor(p.term, hard) || p.build,
+    ...p, build: skillPlan.titleFor(p.term, Boolean(aim.hard), aim) || p.build,
   }));
 
   return {
@@ -2859,14 +2963,20 @@ function tailorClimb(packet, session) {
    * both defaulted to the ordinary tier, so a page that needed a second pass
    * quietly came back with the projects written for a company advertising
    * today rather than the ones written for Google.
+   *
+   * It travels inside the aim, which carries the employer and the title along
+   * with it: the tier decides how hard the work is, and those two decide what
+   * the work is about. Without them the ladder wrote the same sentences on
+   * every page it built, so tailoring for Google and for a forty-person
+   * startup differed in the ordering and in nothing a reader would notice.
    */
-  const hard = Boolean(session.aspirational);
+  const aim = { ...aimOf(session), role };
 
   let lift = climbToGoal(packet.resume, session.scoreTarget, goal, bench, picked,
-    houseSkills, 12, 3, hard);
+    houseSkills, 12, 3, aim);
   if (lift.projected < (session.bestScore || 0)) {
     const deeper = climbToGoal(packet.resume, session.scoreTarget, goal, bench, picked,
-      houseSkills, 24, 40, hard);
+      houseSkills, 24, 40, aim);
     if (deeper.projected > lift.projected) lift = deeper;
   }
   if (lift.projected < FLOOR) {
@@ -2875,7 +2985,7 @@ function tailorClimb(packet, session) {
       ...skillPlan.plansFor(Object.values(skillPlan.DEEP_BENCH).flat(), owned, 200),
     ];
     const forced = climbToGoal(packet.resume, session.scoreTarget, Math.max(goal, FLOOR),
-      everything, picked, houseSkills, 40, 200, hard);
+      everything, picked, houseSkills, 40, 200, aim);
     if (forced.projected > lift.projected) lift = forced;
   }
 
@@ -2901,7 +3011,7 @@ function tailorClimb(packet, session) {
       ...skillPlan.plansFor(Object.values(skillPlan.DEEP_BENCH).flat(), owned, 200),
     ];
     const again = climbToGoal(packet.resume, session.scoreTarget, Math.max(goal, FLOOR),
-      wider, picked, houseSkills, 16 + pass * 8, 60 + pass * 60, hard);
+      wider, picked, houseSkills, 16 + pass * 8, 60 + pass * 60, aim);
     if (again.projected <= lift.projected) break;
     lift = again;
   }
@@ -2953,7 +3063,7 @@ function deliver(res, session, packetOrBuilt, kindNote) {
   if (session.plannedGuide && !/PLANNED PROJECTS/i.test(text)) {
     text = skillPlan.withPlannedProjects(text, skillPlan.projectEntries({
       ok: true, plans: [session.plannedGuide],
-    }));
+    }, aimOf(session)));
     session.resumeText = text;
   }
 
@@ -3176,8 +3286,42 @@ function deliver(res, session, packetOrBuilt, kindNote) {
    * Everything that was cut is still reachable by asking for it. None of it
    * belongs on top of the artefact.
    */
+  /*
+   * Named as the page names them, and closed with the question they answer.
+   *
+   * The guidance used the recipe's own label — "A working system where schema
+   * migrations is the hard part" — while the page above it said "Trade
+   * expand-and-contract migration on a live table". Same project, two names,
+   * and a student reading the two together cannot tell that. The title comes
+   * from the same call the page used, so the list underneath the resume is a
+   * list of the things on the resume.
+   *
+   * The last point is what an interviewer will ask about the finished thing.
+   * It is the part that cannot be looked up, and it is why the project is
+   * worth building rather than listing.
+   */
+  const guideAim = aimOf(session);
   const planned = [
-    ...guides.map((g) => ({ title: g.build, hours: g.hours, steps: g.steps })),
+    ...guides.map((g) => {
+      /*
+       * The project's own instructions when it has them.
+       *
+       * The shared recipes are keyed by technology, so a project the position
+       * itself supplied fell through to the weekend template: "pick a real
+       * problem someone actually has, distributed systems should be the part
+       * that makes it work". Under a heading that said "replicated store with
+       * a partition drill". Each position's projects carry their own six
+       * steps, and those steps are about the thing being built.
+       */
+      const brief = skillPlan.briefStepsFor(guideAim.role, g.term);
+      const defend = skillPlan.defendFor(guideAim.role, g.term);
+      const steps = brief && brief.steps.length ? brief.steps : g.steps;
+      return {
+        title: skillPlan.titleFor(g.term, guideAim.hard, guideAim) || g.build,
+        hours: (brief && brief.hours) || g.hours,
+        steps: defend ? [...steps, `Be ready for: ${defend}`] : steps,
+      };
+    }),
     ...wantedSkills.map((s) => {
       const p = skillPlan.learnPlan(s);
       return { title: s, hours: p.hours, steps: p.steps };
@@ -3397,10 +3541,39 @@ router.post('/chat', upload.single('file'), async (req, res) => {
          * belongs; what it asks for is the title, the description and the
          * tags.
          */
+        /*
+         * And an employer is not a skill either — the same fault as the city,
+         * one line further along.
+         *
+         * "Backend Engineer at JPMorgan Chase." was the whole job description
+         * for a target with no posting behind it, so the keyword pass read
+         * "JPMorgan" and "Chase" as terms the page had to evidence. They went
+         * onto the SKILLS line, and the plan offered to walk the student
+         * through the official JPMorgan getting-started guide. Who is hiring
+         * is carried on the session and shapes the page through their
+         * profile; it is not a requirement to be matched against.
+         */
+        /*
+         * A target with no posting still needs something to tailor against.
+         *
+         * Taking the employer's name out left "Backend Engineer." as the
+         * entire job description for the roster half of the list, so the
+         * rewrite had nothing to work with: the second employer in a row
+         * produced a byte-identical page and the agent correctly reported
+         * that nothing had changed. What that employer screens this role on
+         * is the requirement — it is a list of engineering terms, not a
+         * company name, so it drives the rewrite without ever becoming a
+         * skill the page is asked to prove it has.
+         */
+        const aim = job.aspirational && !job.description
+          ? companyProfiles.profileFor(job.company, job.title)
+          : null;
         session.jd = [
-          `${job.title} at ${job.company}.`,
+          `${job.title}.`,
           job.description || '',
           (job.tags || []).join(', '),
+          aim ? `Requirements: ${aim.projects.slice(0, 10).join(', ')}.` : '',
+          aim ? `Tools: ${aim.skills.slice(0, 10).join(', ')}.` : '',
         ].filter(Boolean).join('\n');
         /*
          * A different employer is a different tailor, from scratch.
@@ -3566,7 +3739,27 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         session.pickedJob = null;
         session.pendingTailor = null;
         session.jd = '';
-        session.target = session.target || '';
+        /*
+         * The aim is cleared too, and that is the whole point of the reset.
+         *
+         * It used to be kept — `session.target || ''` — on the reasoning that
+         * a title already known saves a question. What it actually saved was
+         * the LAST person's title. A student uploaded a DevOps CV, then said
+         * "build me a resume": the reset threw away their name, their
+         * education and their history, kept "DevOps Engineer", skipped the
+         * one question that mattered, and searched the boards for DevOps
+         * openings on behalf of somebody who had never said the word.
+         *
+         * A resume is aimed at a job. Whoever is starting one gets asked
+         * which, from the list, before anything else is asked at all — and
+         * the ask cannot be suppressed by a decline the previous person made.
+         */
+        session.target = '';
+        session.jobRole = '';
+        session.declined = (session.declined || [])
+          .filter((f) => !['target', 'position', 'jobrole'].includes(f));
+        session.githubImported = false;
+        session.githubProjects = null;
         session.scoreTarget = undefined;
         session.bestScore = 0;
         session.verified = undefined;
@@ -3954,7 +4147,7 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       if (!alreadyClimbed && alreadyAsked && !session.raiseDelivered && catalogue.length) {
         session.raiseDelivered = true;
         const climb = climbToGoal(out.text, session.scoreTarget, goal, catalogue, picked,
-          house ? house.skills : companyProfiles.skillsForRole(roleForBench));
+          house ? house.skills : companyProfiles.skillsForRole(roleForBench), 12, 3, aimOf(session));
         session.resumeText = climb.text;
         session.pendingRaise = null;
         session.climbedTo = Math.max(session.climbedTo || 0, goal);
@@ -4587,6 +4780,83 @@ router.post('/chat', upload.single('file'), async (req, res) => {
      * just named are one search away, so they come first — and the row they
      * open is what the page is then built and tailored against.
      */
+    /*
+     * Who they are first, then the openings.
+     *
+     * The openings did come first, and the reasoning still holds — a page
+     * aimed at nothing in particular is not what anybody came here for. What
+     * it got wrong is that a list of four hundred rows is not the next thing
+     * a person can act on when the agent does not yet know their name. They
+     * scroll it, pick one, and are then asked for their university, so the
+     * list they were reading is three screens back by the time the page
+     * exists.
+     *
+     * These are the facts a resume cannot be written without, and every one
+     * of them is a single answer: three come off a list, and the five that
+     * cannot — name, email, phone, GitHub, LinkedIn — are the five nobody can
+     * offer a list for, because they are the person. Nothing here is an essay
+     * question. Any of them can still be skipped, and a skip is an answer.
+     */
+    const BUILD_CORE = [
+      ['college', 'Which university or college?'],
+      ['degree', 'Which degree?'],
+      ['gradyear', 'Which year do you graduate?'],
+      ['name', 'What name goes at the top of the page?'],
+      ['email', 'Which email address should recruiters use?'],
+      ['phone', 'And a phone number they can reach you on?'],
+      ['github', 'Your GitHub username or profile URL? I will read your public repositories and offer them back as projects, so you do not have to describe them.'],
+      ['linkedin', 'Your LinkedIn URL?'],
+    ];
+    const coreNext = () => BUILD_CORE.find(([f]) =>
+      !String((session.details || {})[f] || '').trim() && !(session.declined || []).includes(f));
+
+    if (session.command === 'build' && !session.resumeText.trim()
+        && Boolean(session.target) && !session.jobsShownForBuild) {
+      const next = coreNext();
+      if (next) return ask(next[0], next[1]);
+
+      /*
+       * Their own repositories, read back to them, once the eight are done.
+       *
+       * This fired the moment the handle arrived, which put a list of repos
+       * between "your GitHub?" and "your LinkedIn?" — the interview
+       * interrupting itself one question short of the end. The eight are a
+       * block; the repos are what happens after it, and before the openings,
+       * so by the time the list of jobs appears the projects are already
+       * theirs to pick from rather than something to compose in a chat box.
+       */
+      if (session.details.github && !session.githubImported && !session.details.projects) {
+        session.githubImported = true;
+        const gh = await githubImport.importProfile(session.details.github, { limit: 8 });
+        if (gh.ok && gh.projects.length) {
+          session.githubProjects = gh.projects.map((p) => p.bullet);
+          if (gh.languages.length && !session.details.skills) {
+            session.details.githubLanguages = gh.languages.join(', ');
+          }
+          session.asked = 'pickprojects';
+          return res.json({
+            ok: true,
+            kind: 'ask',
+            reply: [
+              `I read ${gh.username}'s public GitHub — ${gh.publicRepos} repositories, ${gh.projects.length} that look like real projects rather than forks or scaffolds${gh.skipped ? ` (${gh.skipped} skipped)` : ''}.`,
+              '',
+              'Which of these should go on the resume? Pick one, or say "all", or skip and describe your own.',
+            ].join('\n'),
+            options: {
+              multi: true,
+              options: gh.projects.map((p) => ({
+                label: p.name,
+                note: [p.language, p.stars >= 5 ? `${p.stars}★` : null].filter(Boolean).join(' · '),
+                value: p.bullet,
+              })),
+              other: { label: 'Something else — I will describe it', value: '' },
+            },
+            session,
+          });
+        }
+      }
+    }
+
     const buildNeedsJobs = session.command === 'build' &&
       !session.resumeText.trim() && !session.pickedJob &&
       Boolean(session.target) && !session.jobsShownForBuild;
@@ -5103,7 +5373,7 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       if (!plan.ok || !plan.plans.length) {
         return res.json({ ok: true, kind: 'help', reply: 'Your page already evidences everything this posting names — there is nothing to plan.', session });
       }
-      const entries = skillPlan.projectEntries(plan, { hard: Boolean(session.aspirational) });
+      const entries = skillPlan.projectEntries(plan, aimOf(session));
       session.resumeText = skillPlan.withPlannedProjects(session.resumeText, entries);
       session.plannedCount = entries.length;
       /*
@@ -5115,7 +5385,9 @@ router.post('/chat', upload.single('file'), async (req, res) => {
        * otherwise the page downloads with projects nobody has done, which is
        * the one outcome every part of this feature exists to prevent.
        */
-      session.plannedGuides = entries.map((e) => ({ build: e.name, term: e.term, hours: e.hours, steps: e.steps }));
+      session.plannedGuides = entries.map((e) => ({
+        build: e.name, term: e.term, hours: e.hours, steps: e.steps, defend: e.defend,
+      }));
 
       return res.json({
         ok: true,
@@ -5151,7 +5423,14 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       });
     }
 
-    /* plan-built — a planned project becomes a real one, with real numbers. */
+    /*
+     * plan-built — a project they have now actually built gets their words.
+     *
+     * What is outstanding used to be read off the page, by looking for the
+     * marker. The page no longer carries one — it reads as finished work,
+     * which is the whole point — so the debt is tracked where it belongs, on
+     * the session, and survives the page being rewritten underneath it.
+     */
     if (session.command === 'plan-built') {
       /*
        * What is still unbuilt is a fact about the session, not about the text.
@@ -5165,17 +5444,17 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       const fromSession = (session.plannedGuides || [])
         .map((g) => String(g.build || '').trim())
         .filter((t) => t && String(session.resumeText || '').includes(t));
-      const pending = [...new Set([
+      const owed = [...new Set([
         ...skillPlan.plannedLines(session.resumeText),
         ...fromSession,
       ])];
-      if (!pending.length) {
+      if (!owed.length) {
         session.command = null;
-        return res.json({ ok: true, kind: 'help', reply: 'Nothing is marked as planned right now — your page is all real work.', session });
+        return res.json({ ok: true, kind: 'help', reply: 'Nothing is outstanding right now — every line on your page is work you have done.', session });
       }
       session.command = 'plan-built';
       return ask('builtproof',
-        `Good. Which one, and what did it actually do? Give me the line as it should read, with the real numbers in it — for example "Built a Kafka order pipeline handling 400 messages a minute, verified by killing consumers mid-run".\n\nStill planned: ${pending.slice(0, 4).map((p) => p.split('—')[0].trim()).join(', ')}.`);
+        `Good. Which one, and what did it actually do? Give me the line as it should read, with the real numbers in it — for example "Built a Kafka order pipeline handling 400 messages a minute, verified by killing consumers mid-run".\n\nStill to build: ${owed.slice(0, 4).join(', ')}.`);
     }
 
     /* plan-remove — apply now, with what actually exists. */
