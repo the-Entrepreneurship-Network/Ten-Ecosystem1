@@ -86,8 +86,12 @@ function escapeHtml(value) {
  * @param {{label: string, url: string}} [opts.cta]
  * @param {{label: string, html: string}} [opts.panel]  a boxed detail block
  * @param {string} [opts.note]    small print under the button
+ * @param {string} [opts.footerWhy] why this person is receiving it. The default
+ *        speaks of "your TEN internship account", which is true of every mail
+ *        that goes to a student and false of one that goes to somebody who has
+ *        only ever typed their address into a box.
  */
-function renderEmail({ heading, name, bodyHtml, cta, panel, note } = {}) {
+function renderEmail({ heading, name, bodyHtml, cta, panel, note, footerWhy } = {}) {
     const button = cta && cta.url ? `
       <table cellspacing="0" cellpadding="0" style="margin:24px 0 4px;"><tr><td
         style="background:linear-gradient(135deg,#f5c542,#d9a520);border-radius:10px;">
@@ -122,7 +126,7 @@ function renderEmail({ heading, name, bodyHtml, cta, panel, note } = {}) {
     <tr><td style="padding:18px 34px 26px;border-top:1px solid rgba(245,197,66,0.12);">
       <p style="margin:0;font-size:11px;line-height:1.6;color:#8b8578;">
         The Entrepreneurship Network · <a href="${PORTAL_URL}" style="color:#cdb24a;">${PORTAL_URL.replace(/^https?:\/\//, '')}</a><br>
-        You are receiving this because of activity on your TEN internship account.
+        ${escapeHtml(footerWhy || 'You are receiving this because of activity on your TEN internship account.')}
       </p>
     </td></tr>
   </table>

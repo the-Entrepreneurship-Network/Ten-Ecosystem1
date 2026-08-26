@@ -194,4 +194,36 @@ router.post('/submit-utr', requireStudent(async (req, res, student) => {
         message: 'Thank you. Your payment is with our team — access opens as soon as it is approved.' });
 }));
 
+/**
+ * POST /api/v2/studio/lead  { email }
+ *
+ * The box on the Career Studio page. Public and unauthenticated by necessity —
+ * the whole point is that the person filling it in does not have an account
+ * yet.
+ *
+ * Two things follow from that. The reply never says whether the address was
+ * new, so it cannot be used to ask "is this person signed up?" about anybody.
+ * And it is rate limited by the /api limiter already in front of every route
+ * here, on top of the one-mail-per-address rule in the service, so it cannot
+ * be turned into a way to send mail at somebody repeatedly.
+ */
+router.post('/lead', async (req, res) => {
+    try {
+        const result = await require('../../services/studioLead').captureLead(
+            req.body && req.body.email,
+            { source: 'student-portal', referrer: req.get('referer') || '' }
+        );
+        if (!result.ok) {
+            return res.status(400).json({ success: false, message: 'That does not look like an email address.' });
+        }
+        return res.json({
+            success: true,
+            message: 'Check your inbox — we have sent you everything the Studio opens up.'
+        });
+    } catch (err) {
+        console.error('[studio] lead:', err.message);
+        return res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
+    }
+});
+
 module.exports = router;
