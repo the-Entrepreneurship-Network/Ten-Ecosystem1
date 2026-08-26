@@ -1,4 +1,5 @@
 import AboutSection from './components/AboutSection';
+import EcosystemSection from './components/EcosystemSection';
 import FeaturedVideoSection from './components/FeaturedVideoSection';
 import FeaturesSection from './components/FeaturesSection';
 import HeroSection from './components/HeroSection';
@@ -10,6 +11,8 @@ export default function App() {
     <main>
       <HeroSection />
       <StudentFaceSection />
+      {/* The point of the page: the four products, joined up, priced, gated. */}
+      <EcosystemSection />
       <AboutSection />
       <FeaturedVideoSection />
       <PhilosophySection />

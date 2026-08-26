@@ -195,6 +195,19 @@ router.post('/submit-utr', requireStudent(async (req, res, student) => {
 }));
 
 /**
+ * GET /api/v2/studio/pricing
+ *
+ * The price list, public. The overview page shows figures to visitors who have
+ * no account yet, and the alternative is that page carrying its own copy of
+ * the numbers — which is how two screens end up quoting two prices. Prices are
+ * not a secret; the /status route stays authenticated because it says what a
+ * PERSON owns, and this says only what the SHOP charges.
+ */
+router.get('/pricing', (req, res) => {
+    res.json({ success: true, pricing: studioPricing.getPricingTable() });
+});
+
+/**
  * POST /api/v2/studio/lead  { email }
  *
  * The box on the Career Studio page. Public and unauthenticated by necessity —
