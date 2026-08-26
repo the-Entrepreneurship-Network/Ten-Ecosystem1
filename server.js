@@ -2055,6 +2055,25 @@ app.get(/.*ten-logo\.png$/, (req, res) => {
 // stylesheet or an image going a week out of date is cosmetic, so those keep
 // the long max-age. None of these filenames are content-hashed, which is what
 // would otherwise let them be cached indefinitely and safely.
+/*
+ * The Studio paywall, in FRONT of the static handler.
+ *
+ * /job-portal, /resume-portal and student-journeys.html are files in public/,
+ * so the line below hands them to anybody who types the URL. Three products
+ * with prices on them were a bookmark away from free. Registered here because
+ * whichever handler comes first wins, so the file is never read for someone
+ * who has not bought it.
+ *
+ * The overview at /student-portal/ is deliberately NOT covered: it is the shop
+ * window, and a visitor has to see what the money buys.
+ */
+try {
+    app.use(require('./middleware/studioGate').studioGate);
+    console.log('[Studio] paywall active on the Job, Resume and course pages');
+} catch (e) {
+    console.error('[Studio] paywall failed to load:', e.message);
+}
+
 app.use(express.static("public", {
     maxAge: '7d',
     etag: true,
@@ -10758,6 +10777,7 @@ try { app.use("/api/payment/setu", require("./routes/paymentSetuRoutes")); } cat
  * a PAID transaction, so the paygate no longer takes the browser's word for it.
  */
 try { app.use("/api/v2/portal-access", require("./routes/v2/portalAccess")); } catch(e) { console.error("[Routes] portalAccess:", e.message); }
+try { app.use("/api/v2/studio", require("./routes/v2/studio")); } catch(e) { console.error("[Routes] studio:", e.message); }
 
 /*
  * Job application outreach through Instantly. Preparing and sending are

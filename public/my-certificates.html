@@ -321,6 +321,9 @@ function renderCerts(d) {
     const paid     = certInfo?.feeSettled?.covered || d.feeSettled?.[type]?.covered || false;
     const paidVia  = certInfo?.feeSettled?.via || d.feeSettled?.[type]?.via || null;
     const planName = d.planName || '';
+    /* A Studio fee the student chose to pay after completion. Said on the card
+       rather than sprung on them at the download button. */
+    const studioDue = d.studioFeeDue || null;
 
     // Preview area
     let previewHtml = '';
@@ -356,6 +359,9 @@ function renderCerts(d) {
         : `<button class="cert-action-btn locked">🔒 Locked — ${need}</button>`;
     } else if (record?.pdfUrl) {
       actionBtn = `<button class="cert-action-btn claimed-btn" onclick="downloadCert('${record.pdfUrl}','${type}')">⬇ Download Certificate</button>`;
+    } else if (studioDue) {
+      // Earned, and waiting only on the fee they chose to defer.
+      actionBtn = `<button class="cert-action-btn locked reserved" onclick="location.href='/studio.html'">💳 Settle ₹${studioDue.amount} to release this</button>`;
     } else if (paid) {
       actionBtn = `<button class="cert-action-btn claim-btn" onclick="claimCert('${type}')">🎉 Claim It — already paid</button>`;
     } else {

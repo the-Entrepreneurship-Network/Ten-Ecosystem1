@@ -223,7 +223,20 @@ const PURPOSE_LABELS = {
   // Fallback keys with spaces (in case purpose was stored before normalisation)
   'tenure_1 week':  '1 Week Course Fee — ₹2,000',
   'tenure_15 days': '15 Days Course Fee — ₹1,500',
-  'tenure_1 month': '1 Month Course Fee — ₹1,000'
+  'tenure_1 month': '1 Month Course Fee — ₹1,000',
+  /*
+   * Career Studio products, built from config/studioPricing.js rather than
+   * typed out. A label that repeats a price is a label that will one day quote
+   * a different one from the screen that took the money.
+   *
+   * Approving one needs no grant of its own: services/studioAccess.js reads
+   * the Payment row, so flipping it to success IS the unlock.
+   */
+  ...(() => {
+    const studio = require('../config/studioPricing');
+    return Object.fromEntries(Object.values(studio.PRODUCTS).map((p) =>
+      [studio.purposeFor(p.key), `${p.name} — ₹${p.price.toLocaleString('en-IN')}`]));
+  })()
 };
 
 router.post('/payments/verify/:paymentId', requireAdminAPI, async (req, res) => {

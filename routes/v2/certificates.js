@@ -286,6 +286,10 @@ async function handleMyCerts(req, res) {
         payload.feeSettled = await require("../../services/certificateEntitlement").feeSettledAll(student);
         const premium = require("../../utils/premium").getPremiumStatus(student);
         payload.planName = premium.premium ? premium.plan : "";
+        /* "Learn now, pay when you finish" is the offer. The certificate is
+           what waits for the money — said here rather than sprung on them at
+           the download button. */
+        payload.studioFeeDue = (await require("../../services/studioAccess").getStudioAccess(student)).feeDue;
       } catch (feeErr) {
         console.error("[My-Certs] fee entitlement lookup failed for " +
           student.employeeId + ":", feeErr.message);
@@ -451,6 +455,24 @@ router.post("/certificates/claim/:type", requireStudent, async (req, res) => {
          * track writes was never read and a student sold a "Fellowship fee
          * included" was still sent to Razorpay for the full ₹2,500.
          */
+        /*
+         * A Studio fee the student chose to pay after completion.
+         *
+         * They were given the portals on the promise of settling up at the
+         * end, and this is the end. Checked after eligibility so a student who
+         * has not earned it is told that first — a bill for something you
+         * cannot have yet is the wrong answer to the wrong question.
+         */
+        const studio = await require("../../services/studioAccess").getStudioAccess(student);
+        if (studio.feeDue) {
+            return res.status(402).json({
+                success: false,
+                studioFeeDue: studio.feeDue,
+                message: `You chose to pay after completion. Settle ${studio.feeDue.name} `
+                    + `(₹${studio.feeDue.amount}) and your certificate is released straight away.`
+            });
+        }
+
         const settled = await require("../../services/certificateEntitlement").feeSettled(student, type);
         if (settled.covered) {
             return res.json({

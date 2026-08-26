@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TEN Career Studio — unlock your access</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/mobile.css">
+<style>
+/* Same token set as the internship-fee screen, deliberately: a student who has
+   paid once here should recognise the second screen instantly. */
+:root{
+  --bg:#05070e; --surface:#090d1a; --card:#0e1428;
+  --gold:#D4AF37; --gold-soft:rgba(212,175,55,.12);
+  --text:#F0EEE8; --muted:#9a9080; --dim:#4E4840;
+  --green:#10b981; --red:#ef4444;
+  --border:rgba(212,175,55,.14); --border-strong:rgba(212,175,55,.34);
+  --radius:18px;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;padding:28px 20px 70px;}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;
+  background:radial-gradient(900px 460px at 50% -12%,rgba(212,175,55,.10),transparent 62%);}
+.wrap{position:relative;max-width:1080px;margin:0 auto;}
+.back{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--dim);text-decoration:none;margin-bottom:26px;transition:color .2s;}
+.back:hover{color:var(--muted);}
+h1{font-family:'Outfit',sans-serif;font-size:clamp(28px,5vw,44px);font-weight:900;letter-spacing:-.02em;line-height:1.08;}
+.sub{color:var(--muted);font-size:15px;line-height:1.6;margin-top:12px;max-width:640px;}
+
+.note{margin-top:22px;padding:14px 18px;border-radius:13px;font-size:14px;line-height:1.55;
+  background:var(--gold-soft);border:1px solid var(--border-strong);color:#e8d9a8;}
+.note.good{background:rgba(16,185,129,.08);border-color:rgba(16,185,129,.32);color:#a7f3d0;}
+.note.bad{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.32);color:#fecaca;}
+
+.grid{display:grid;gap:16px;margin-top:30px;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));}
+.plan{position:relative;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+  padding:24px 22px;display:flex;flex-direction:column;gap:12px;transition:border-color .25s,transform .25s,box-shadow .25s;}
+.plan:hover{border-color:var(--border-strong);transform:translateY(-3px);}
+.plan.combo{border-color:var(--border-strong);
+  background:linear-gradient(155deg,rgba(212,175,55,.10),var(--card) 58%);
+  box-shadow:0 14px 42px rgba(212,175,55,.12);grid-column:1/-1;}
+.badge{position:absolute;top:-11px;left:22px;padding:4px 12px;border-radius:999px;
+  background:var(--gold);color:#05070e;font-size:10px;font-weight:900;letter-spacing:.12em;}
+.plan h3{font-family:'Outfit',sans-serif;font-size:19px;font-weight:800;}
+.plan .blurb{font-size:13px;color:var(--muted);line-height:1.55;flex:1;}
+.price{font-family:'Outfit',sans-serif;font-size:34px;font-weight:900;letter-spacing:-.02em;}
+.price .was{font-size:15px;font-weight:600;color:var(--dim);text-decoration:line-through;margin-left:9px;}
+.saving{font-size:12px;font-weight:800;color:var(--green);letter-spacing:.02em;}
+.owned{font-size:12px;font-weight:800;color:var(--green);}
+
+.btns{display:flex;gap:9px;flex-wrap:wrap;margin-top:4px;}
+button{font-family:inherit;cursor:pointer;border-radius:11px;border:1px solid transparent;
+  font-weight:800;font-size:13px;padding:11px 16px;min-height:44px;transition:all .2s;}
+.pay-now{background:var(--gold);color:#05070e;flex:1;min-width:132px;}
+.pay-now:hover{filter:brightness(1.08);}
+.pay-later{background:transparent;border-color:var(--border-strong);color:#e2c766;flex:1;min-width:132px;}
+.pay-later:hover{background:var(--gold-soft);}
+button:disabled{opacity:.45;cursor:not-allowed;}
+button:focus-visible{outline:2px solid var(--gold);outline-offset:3px;}
+
+/* pay modal */
+.sheet{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;padding:20px;
+  background:rgba(0,0,0,.82);-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);}
+.sheet.on{display:flex;}
+.sheet-in{background:var(--card);border:1px solid var(--border-strong);border-radius:22px;
+  padding:28px;width:100%;max-width:430px;max-height:92vh;overflow-y:auto;text-align:center;}
+.sheet-in h2{font-family:'Outfit',sans-serif;font-size:21px;font-weight:800;margin-bottom:6px;}
+.qr-box{background:#fff;border-radius:14px;padding:12px;display:inline-block;margin:18px 0 10px;}
+.qr-box img{width:210px;height:210px;display:block;}
+.upi{font-size:13px;color:var(--muted);}
+.upi code{color:var(--gold);font-weight:700;font-family:'DM Mono',monospace;}
+input[type=text]{width:100%;margin-top:14px;padding:13px 14px;border-radius:11px;min-height:46px;
+  background:#0b1222;border:1px solid var(--border);color:var(--text);font-size:15px;font-family:inherit;}
+input[type=text]:focus{outline:none;border-color:var(--border-strong);}
+.tiny{font-size:11.5px;color:var(--dim);margin-top:7px;line-height:1.5;}
+.close{background:none;border:none;color:var(--dim);font-size:13px;margin-top:14px;}
+@media (max-width:560px){ body{padding:20px 14px 60px;} .plan{padding:20px 18px;} }
+@media (prefers-reduced-motion:reduce){ .plan{transition:none;} .plan:hover{transform:none;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="/student-dashboard.html">&larr; Back to my portal</a>
+  <h1>TEN Career Studio</h1>
+  <p class="sub">The course, the resume forge and the job agent. Take all three together, or
+     only the one you need — and pay now, or after you finish.</p>
+
+  <div id="notice"></div>
+  <div class="grid" id="plans"></div>
+</div>
+
+<!-- Pay sheet. Same UPI identity, same QR endpoint and the same "type your
+     transaction id" step as the internship fee, so a student who has paid once
+     already knows this screen. -->
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <div class="sheet-in">
+    <h2 id="sheetTitle">Scan and pay</h2>
+    <div class="upi" id="sheetAmount"></div>
+    <div class="qr-box"><img id="sheetQr" src="" alt="UPI QR code for this payment"></div>
+    <div class="upi">UPI ID: <code id="sheetUpi">paytmqr5k0ods@ptys</code>
+      <button id="copyUpi" style="background:none;border:1px solid var(--border-strong);color:var(--gold);font-size:10px;padding:3px 9px;border-radius:5px;margin-left:6px;min-height:0;">Copy</button>
+    </div>
+    <label for="utr" class="tiny" style="display:block;text-align:left;margin-top:16px;">Transaction / UTR number from your UPI app</label>
+    <input type="text" id="utr" inputmode="latin" autocomplete="off" placeholder="e.g. 412345678901">
+    <div class="tiny" id="sheetMsg">Find it in your UPI app under payment history.</div>
+    <button class="pay-now" id="sendUtr" style="width:100%;margin-top:16px;">I have paid — submit</button>
+    <button class="close" id="closeSheet">Cancel</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+const params  = new URLSearchParams(location.search);
+const WANT    = params.get('want') || '';
+const NEXT    = params.get('next') || '';
+const esc = (v) => String(v == null ? '' : v)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+const money = (n) => '₹' + Number(n || 0).toLocaleString('en-IN');
+const PORTAL_NAMES = { course:'the course', resume:'the Resume Portal', job:'the Job Portal' };
+
+let state = null;
+
+async function load() {
+  let d;
+  try {
+    const r = await fetch('/api/v2/studio/status', { credentials:'same-origin' });
+    if (r.status === 401) { location.href = '/login.html?next=' + encodeURIComponent(location.pathname + location.search); return; }
+    d = await r.json();
+  } catch (e) { d = null; }
+  if (!d || !d.success) {
+    document.getElementById('notice').innerHTML =
+      '<div class="note bad">Could not load the Studio right now. Refresh and try again.</div>';
+    return;
+  }
+  state = d;
+  document.getElementById('sheetUpi').textContent = d.upiId;
+  render();
+}
+
+function noticeHtml(d) {
+  if (params.get('error')) {
+    return '<div class="note bad">We could not check your access just now. Please try again in a moment.</div>';
+  }
+  if (d.includedWithTrack) {
+    return '<div class="note good">Your paid internship track already includes all of this — nothing to buy. '
+      + 'Open it from your portal.</div>';
+  }
+  if (d.awaitingApproval) {
+    return '<div class="note">Your payment of ' + money(d.awaitingApproval.amount)
+      + ' is with our team. Access opens as soon as it is approved — usually within a day.</div>';
+  }
+  if (d.feeDue) {
+    // With a way to settle it. A debt the student is told about but cannot pay
+    // is a dead end, and this one stands between them and their certificate.
+    return '<div class="note">You chose to pay after completion. ' + esc(d.feeDue.name) + ' — '
+      + money(d.feeDue.amount) + ' is due, and your certificate is held until it is paid.'
+      + '<div class="btns" style="margin-top:12px;"><button class="pay-now" data-settle="'
+      + esc(d.feeDue.product) + '" style="flex:0 0 auto;">Settle now — ' + money(d.feeDue.amount)
+      + '</button></div></div>';
+  }
+  if (WANT && PORTAL_NAMES[WANT]) {
+    return '<div class="note">You need access to ' + PORTAL_NAMES[WANT] + ' to open that page. '
+      + 'Pick a plan below.</div>';
+  }
+  return '';
+}
+
+function planHtml(p, opts) {
+  const owned = (p.unlocks || []).every((k) => state.portals[k] && state.portals[k].granted);
+  const combo = opts && opts.combo;
+  return '<div class="plan' + (combo ? ' combo' : '') + '">'
+    + (p.badge ? '<span class="badge">' + esc(p.badge) + '</span>' : '')
+    + '<h3>' + esc(p.name) + '</h3>'
+    + '<div class="price">' + money(p.price)
+      + (combo && p.insteadOf ? '<span class="was">' + money(p.insteadOf) + '</span>' : '') + '</div>'
+    + (combo && p.saving ? '<div class="saving">You save ' + money(p.saving) + '</div>' : '')
+    + '<p class="blurb">' + esc(p.blurb) + '</p>'
+    + (owned
+        ? '<div class="owned">✓ You already have this</div>'
+        : '<div class="btns">'
+          + '<button class="pay-now"   data-buy="' + esc(p.key) + '" data-mode="now">Pay now</button>'
+          + '<button class="pay-later" data-buy="' + esc(p.key) + '" data-mode="after">Pay after completion</button>'
+          + '</div>')
+    + '</div>';
+}
+
+function render() {
+  document.getElementById('notice').innerHTML = noticeHtml(state);
+  const t = state.pricing;
+  // Every plan is drawn, always. A student whose track already includes them
+  // sees them marked as owned rather than hidden — knowing what you have is
+  // the point of the screen.
+  document.getElementById('plans').innerHTML =
+    planHtml(t.combo, { combo:true }) + t.singles.map((p) => planHtml(p, {})).join('');
+
+  document.querySelectorAll('[data-buy]').forEach((b) => {
+    b.addEventListener('click', () => choose(b.dataset.buy, b.dataset.mode, b));
+  });
+  const settle = document.querySelector('[data-settle]');
+  if (settle) settle.addEventListener('click', () => payDeferred(settle.dataset.settle, settle));
+}
+
+async function choose(product, payMode, btn) {
+  btn.disabled = true;
+  let d;
+  try {
+    const r = await fetch('/api/v2/studio/choose', {
+      method:'POST', credentials:'same-origin',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ product, payMode })
+    });
+    d = await r.json();
+  } catch (e) { d = null; }
+  btn.disabled = false;
+
+  if (!d || !d.success) {
+    document.getElementById('notice').innerHTML =
+      '<div class="note bad">' + esc((d && d.message) || 'Could not start that. Please try again.') + '</div>';
+    return;
+  }
+  if (d.alreadyOwned) { await load(); return; }
+
+  // Pay later: the portals are open already, so go straight where they wanted.
+  if (d.opensNow) {
+    location.href = NEXT || '/student-dashboard.html';
+    return;
+  }
+  openSheet(d);
+}
+
+/*
+ * Settling a "pay after completion" fee.
+ *
+ * The order already exists — it was written the moment they chose to defer —
+ * so /choose hands the same one back rather than opening a second. That is why
+ * it can go straight to the QR.
+ */
+async function payDeferred(product, btn) {
+  btn.disabled = true;
+  let d;
+  try {
+    const r = await fetch('/api/v2/studio/choose', {
+      method:'POST', credentials:'same-origin',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ product, payMode:'now' })
+    });
+    d = await r.json();
+  } catch (e) { d = null; }
+  btn.disabled = false;
+  if (!d || !d.success || !d.orderId) {
+    document.getElementById('notice').innerHTML =
+      '<div class="note bad">Could not open the payment just now. Please try again.</div>';
+    return;
+  }
+  const p = state.pricing;
+  const plan = p.combo.key === product ? p.combo : p.singles.filter((x) => x.key === product)[0];
+  openSheet({ orderId: d.orderId, amount: (plan && plan.price) || d.amount, name: (plan && plan.name) || d.name });
+}
+
+let order = null;
+function openSheet(d) {
+  order = d;
+  document.getElementById('sheetTitle').textContent = 'Pay ' + money(d.amount);
+  document.getElementById('sheetAmount').textContent = d.name;
+  document.getElementById('sheetQr').src =
+    '/api/upi-qr?amount=' + encodeURIComponent(d.amount) + '&note=' + encodeURIComponent(d.name);
+  document.getElementById('utr').value = '';
+  document.getElementById('sheetMsg').textContent = 'Find it in your UPI app under payment history.';
+  document.getElementById('sheet').classList.add('on');
+  document.getElementById('utr').focus();
+}
+
+document.getElementById('closeSheet').addEventListener('click', () => {
+  document.getElementById('sheet').classList.remove('on');
+});
+document.getElementById('copyUpi').addEventListener('click', function () {
+  const id = document.getElementById('sheetUpi').textContent;
+  navigator.clipboard.writeText(id).then(() => { this.textContent = 'Copied'; }).catch(() => {});
+});
+document.getElementById('sendUtr').addEventListener('click', async function () {
+  const utr = document.getElementById('utr').value.trim();
+  const msg = document.getElementById('sheetMsg');
+  if (!/^[A-Za-z0-9]{6,25}$/.test(utr)) {
+    msg.textContent = 'That does not look like a transaction id — 6 to 25 letters and numbers.';
+    return;
+  }
+  this.disabled = true;
+  let d;
+  try {
+    const r = await fetch('/api/v2/studio/submit-utr', {
+      method:'POST', credentials:'same-origin',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ orderId: order.orderId, utr })
+    });
+    d = await r.json();
+  } catch (e) { d = null; }
+  this.disabled = false;
+  if (!d || !d.success) { msg.textContent = (d && d.message) || 'Could not submit that. Try again.'; return; }
+  document.getElementById('sheet').classList.remove('on');
+  await load();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') document.getElementById('sheet').classList.remove('on');
+});
+
+load();
+</script>
+</body>
+</html>
