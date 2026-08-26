@@ -2,6 +2,7 @@ import { type FormEvent, useState } from 'react';
 import { ArrowRight, Globe, Instagram, Twitter } from 'lucide-react';
 import { HERO_VIDEO, INSTRUMENT_SERIF } from '../constants';
 import FadingVideo from './FadingVideo';
+import GalaxyCanvas from './GalaxyCanvas';
 import Navbar from './Navbar';
 
 export default function HeroSection() {
@@ -49,6 +50,10 @@ export default function HeroSection() {
           src={HERO_VIDEO}
           className="h-full w-full object-cover"
         />
+        {/* Real WebGL on top of the film: a golden particle galaxy that leans
+            toward the pointer. Loaded after first paint; absent entirely on
+            reduced-motion, data-saver or no-WebGL devices. */}
+        <GalaxyCanvas />
       </div>
 
       <div className="relative z-10 flex min-h-screen flex-col">
