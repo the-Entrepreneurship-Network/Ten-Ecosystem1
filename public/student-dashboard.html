@@ -1458,8 +1458,10 @@ body.is-premium .stu-nav-btn:hover { border-color:rgba(212,175,55,0.45); }
 body.is-premium #premiumCard { box-shadow:0 0 0 1px rgba(212,175,55,0.25), 0 14px 40px rgba(212,175,55,0.14); }
 </style>
   <link rel="stylesheet" href="/css/ten-brand.css">
+  <link rel="stylesheet" href="/css/premium-theme.css">
   <link rel="stylesheet" href="/css/mobile.css">
   <script src="/mobile-nav.js" defer></script>
+  <script src="/js/premium-chrome.js" defer></script>
   <script src="/push-client.js" defer></script>
 </head>
 
@@ -1722,26 +1724,14 @@ body.is-premium #premiumCard { box-shadow:0 0 0 1px rgba(212,175,55,0.25), 0 14p
         <div class="sec-card-title">Extras &amp; Badges</div>
         <div class="sec-card-desc">Leaderboard, badges and achievements</div>
       </div>
-      <!-- Premium, inline in the portal itself. There is no separate premium
-           page: a member signs in here and their plan, badges, coordinator
-           notes and assigned projects are simply part of the portal. Hidden
-           entirely for everyone else — a free-track student is not shown a
-           locked box they cannot open. Filled by applyPremiumChrome(). -->
-      <div id="premiumPanel" style="display:none;grid-column:1/-1;border:1px solid rgba(212,175,55,0.35);border-radius:18px;padding:22px;margin-bottom:6px;background:linear-gradient(150deg,rgba(212,175,55,0.10),rgba(14,22,40,0.55));">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
-          <div style="display:flex;align-items:center;gap:10px;">
-            <span style="font-size:22px;">✦</span>
-            <div>
-              <div id="pp_plan" style="font-size:17px;font-weight:800;color:#D4AF37;">Premium</div>
-              <div id="pp_since" style="font-size:11.5px;color:#8aa0bf;"></div>
-            </div>
-          </div>
-          <a href="/assistant" style="text-decoration:none;padding:9px 18px;border-radius:10px;background:#D4AF37;color:#05070e;font-weight:800;font-size:13px;">TEN Assistant →</a>
-        </div>
-        <div id="pp_badges" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;"></div>
-        <div id="pp_projects"></div>
-        <div id="pp_notes"></div>
-      </div>
+      <!-- What the premium panel used to hold.
+           There is no premium section any more: a paid student's WHOLE portal
+           is gold (/css/premium-theme.css), their plan sits beside their name,
+           and the two things the panel actually carried — coordinator projects
+           and coordinator notes — are ordinary cards in this grid like
+           everything else they use. A student should not have to visit a
+           special box to find work assigned to them. -->
+      <div id="premiumWork" style="display:none;grid-column:1/-1;"></div>
 
       <!-- NEW FEATURE: V2 Task Journey card -->
       <div class="sec-card" onclick="window.location.href='v2-tasks.html'" style="border-color:rgba(212,175,55,0.3);background:linear-gradient(135deg,rgba(212,175,55,0.1),rgba(14,20,40,0.45));">
@@ -6690,51 +6680,50 @@ async function applyPremiumChrome() {
   } catch (e) { return; }
   if (!d || !d.success || !d.premium) return;
 
-  document.body.classList.add('is-premium');
-
-  // The assistant belongs to members only.
-  ['assistantCard', 'assistantNavBtn'].forEach(function (id) {
-    var el = document.getElementById(id); if (el) el.style.display = '';
-  });
-
-  var panel = document.getElementById('premiumPanel');
-  if (!panel) return;
-
-  document.getElementById('pp_plan').textContent = (d.plan || 'Premium') + ' member';
-  document.getElementById('pp_since').textContent = d.grantedAt ? ('Member since ' + pDate(d.grantedAt)) : '';
-
-  document.getElementById('pp_badges').innerHTML = (d.badges || []).map(function (b) {
-    return '<span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:10px;'
-      + 'background:rgba(5,7,14,0.5);border:1px solid rgba(212,175,55,0.22);font-size:12.5px;font-weight:700;">'
-      + '<span style="font-size:16px">' + pEsc(b.icon) + '</span>' + pEsc(b.name) + '</span>';
-  }).join('');
+  /*
+   * The gold portal, the plan beside the name and the members-only cards are
+   * all done by /js/premium-chrome.js, which every student page loads. What is
+   * left here is the one thing only this page has: the work a coordinator
+   * assigned, rendered into the card grid rather than into a panel of its own.
+   */
+  var host = document.getElementById('premiumWork');
+  if (!host) return;
 
   var all = d.assignments || [];
   var projects = all.filter(function (a) { return a.kind === 'project'; });
   var notes    = all.filter(function (a) { return a.kind === 'note'; });
+  var badges   = d.badges || [];
 
-  document.getElementById('pp_projects').innerHTML = projects.length
-    ? '<div style="font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#D4AF37;font-weight:800;margin-bottom:9px;">Projects from your coordinator</div>'
-      + projects.map(premiumProjectHtml).join('')
-    : '';
+  var html = '';
 
-  document.getElementById('pp_notes').innerHTML = notes.length
-    ? '<div style="font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#D4AF37;font-weight:800;margin:16px 0 9px;">Notes from your coordinator</div>'
-      + notes.map(function (a) {
-          return '<div style="background:rgba(5,7,14,0.45);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:14px;margin-bottom:9px;">'
-            + '<div style="font-weight:700;font-size:14px;">' + pEsc(a.title) + '</div>'
-            + '<div style="font-size:11px;color:#8aa0bf;margin:3px 0 6px;">' + pEsc(a.from) + ' · ' + pEsc(pDate(a.createdAt)) + '</div>'
-            + (a.body ? '<div style="font-size:13px;line-height:1.6;color:#cfd8e6;white-space:pre-wrap;">' + pEsc(a.body) + '</div>' : '')
-            + '</div>';
+  if (badges.length) {
+    html += '<div class="premium-badges" style="margin-bottom:14px;">'
+      + badges.map(function (b) {
+          return '<span class="pb"><span>' + pEsc(b.icon) + '</span>' + pEsc(b.name) + '</span>';
         }).join('')
-    : '';
-
-  if (!projects.length && !notes.length) {
-    document.getElementById('pp_notes').innerHTML =
-      '<div style="font-size:13px;color:#8aa0bf;">Your coordinator will post briefs and projects here.</div>';
+      + '</div>';
   }
 
-  panel.style.display = '';
+  if (projects.length) {
+    html += '<div style="font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#D4AF37;font-weight:800;margin-bottom:9px;">Projects from your coordinator</div>'
+      + projects.map(premiumProjectHtml).join('');
+  }
+
+  if (notes.length) {
+    html += '<div style="font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#D4AF37;font-weight:800;margin:16px 0 9px;">Notes from your coordinator</div>'
+      + notes.map(function (a) {
+          return '<div style="background:rgba(5,7,14,0.45);border:1px solid rgba(212,175,55,0.14);border-radius:12px;padding:14px;margin-bottom:9px;">'
+            + '<div style="font-weight:700;font-size:14px;">' + pEsc(a.title) + '</div>'
+            + '<div style="font-size:11px;color:#a8946a;margin:3px 0 6px;">' + pEsc(a.from) + ' · ' + pEsc(pDate(a.createdAt)) + '</div>'
+            + (a.body ? '<div style="font-size:13px;line-height:1.6;color:#e6dcc8;white-space:pre-wrap;">' + pEsc(a.body) + '</div>' : '')
+            + '</div>';
+        }).join('');
+  }
+
+  // Nothing assigned is nothing to show. An empty "your coordinator will post
+  // here" box is the locked-box pattern this change exists to remove.
+  host.innerHTML = html;
+  host.style.display = html ? '' : 'none';
 }
 
 function premiumProjectHtml(a) {

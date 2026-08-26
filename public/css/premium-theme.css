@@ -1,0 +1,117 @@
+/* ===========================================================================
+   The paid-track portal.
+   ---------------------------------------------------------------------------
+   A student on 1 Week, 15 Days or 1 Month does not get a premium *section* —
+   they get a premium *portal*. Every page they open is gold on black instead of
+   navy on black, and there is no locked box anywhere telling them what they
+   might have had.
+
+   Written almost entirely as custom-property overrides, because the student
+   pages already draw themselves from variables. Two naming families exist —
+   student-dashboard/v2-tasks/academics use --bg-base/--bg-card/--text-primary,
+   my-certificates/my-documents use --bg/--card/--text — so both are redefined
+   here and one file re-skins all of them. Fighting the same battle selector by
+   selector across six pages is how a theme rots.
+
+   Applied by /js/premium-chrome.js adding .is-premium to <body>. Everything is
+   scoped to that class: a free-track student's portal is byte-for-byte what it
+   was.
+   ========================================================================= */
+
+body.is-premium {
+  /* ── family A: dashboard, tasks, academics ── */
+  --bg-base:        #08060a;
+  --bg-surface:     #100c08;
+  --bg-card:        rgba(44, 34, 12, 0.62);
+  --bg-card-hover:  rgba(60, 46, 16, 0.72);
+  --bg-input:       #14100a;
+  --border:         rgba(212, 175, 55, 0.28);
+  --border-strong:  rgba(212, 175, 55, 0.42);
+  --text-primary:   #F6EFDD;
+  --text-secondary: #c3ad78;
+  --text-muted:     #8a7549;
+  --shadow-card:    0 10px 34px rgba(0, 0, 0, 0.5);
+  --shadow-glow:    0 0 44px rgba(212, 175, 55, 0.16);
+
+  /* ── family B: certificates, documents ── */
+  --bg:      #08060a;
+  --surface: #100c08;
+  --card:    #1c1409;
+  --text:    #F6EFDD;
+  --muted:   #a8946a;
+
+  /* Gold is the accent on both. */
+  --accent-gold: #D4AF37;
+  --gold:        #D4AF37;
+
+  background-color: #08060a;
+  background-image:
+    radial-gradient(1200px 560px at 50% -16%, rgba(212, 175, 55, 0.16), transparent 64%),
+    radial-gradient(900px 500px at 100% 100%, rgba(184, 149, 46, 0.07), transparent 62%);
+  background-attachment: fixed;
+}
+
+/* The rail. One line at the top of every page, so a member knows which portal
+   they are in before they have read a word of it. */
+body.is-premium::before {
+  content: '';
+  position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 99999;
+  background: linear-gradient(90deg, #6b551a, #D4AF37 22%, #f5e2a0 50%, #D4AF37 78%, #6b551a);
+  pointer-events: none;
+}
+
+/* Cards lift in gold rather than blue. */
+body.is-premium .sec-card,
+body.is-premium .cert-card,
+body.is-premium .top-card {
+  border-color: rgba(212, 175, 55, 0.34);
+  background-image: linear-gradient(150deg, rgba(212, 175, 55, 0.07), transparent 58%);
+}
+body.is-premium .sec-card:hover,
+body.is-premium .cert-card:hover {
+  border-color: rgba(212, 175, 55, 0.55);
+  box-shadow: 0 12px 38px rgba(212, 175, 55, 0.16);
+}
+body.is-premium .stu-nav-btn:hover { border-color: rgba(212, 175, 55, 0.45); }
+body.is-premium .stu-nav-btn.active {
+  border-color: rgba(212, 175, 55, 0.6);
+  background: rgba(212, 175, 55, 0.10);
+}
+body.is-premium #premiumCard {
+  box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.25), 0 14px 40px rgba(212, 175, 55, 0.14);
+}
+
+/* Headings carry the gold; body copy stays readable rather than fashionable. */
+body.is-premium h1,
+body.is-premium h2,
+body.is-premium .section-cards-heading { color: #F3DFA6; }
+
+/* The member's mark, beside their name in the header. Filled by
+   /js/premium-chrome.js; absent, it takes up no room. */
+.premium-mark {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 5px 13px; margin-left: 10px;
+  border-radius: 999px; vertical-align: middle;
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.20), rgba(212, 175, 55, 0.07));
+  border: 1px solid rgba(212, 175, 55, 0.5);
+  color: #F3DFA6; font-size: 11.5px; font-weight: 800;
+  letter-spacing: 0.10em; text-transform: uppercase; white-space: nowrap;
+}
+.premium-mark .pm-star { font-size: 13px; line-height: 1; }
+
+/* Badges, which used to live inside the panel that is now gone. */
+.premium-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.premium-badges .pb {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 10px;
+  background: rgba(5, 7, 14, 0.5); border: 1px solid rgba(212, 175, 55, 0.22);
+  font-size: 12.5px; font-weight: 700; color: #e6d3a0;
+}
+.premium-badges .pb span:first-child { font-size: 16px; }
+
+@media (max-width: 560px) {
+  .premium-mark { margin-left: 0; margin-top: 8px; font-size: 10.5px; padding: 4px 11px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.is-premium .sec-card, body.is-premium .cert-card { transition: none; }
+}
