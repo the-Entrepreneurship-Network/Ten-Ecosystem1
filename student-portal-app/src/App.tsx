@@ -1,4 +1,5 @@
 import AboutSection from './components/AboutSection';
+import AccountGate from './components/AccountGate';
 import EcosystemSection from './components/EcosystemSection';
 import FeaturedVideoSection from './components/FeaturedVideoSection';
 import FeaturesSection from './components/FeaturesSection';
@@ -9,6 +10,8 @@ import StudentFaceSection from './components/StudentFaceSection';
 export default function App() {
   return (
     <main>
+      {/* Asked once, of signed-out visitors only. */}
+      <AccountGate />
       <HeroSection />
       <StudentFaceSection />
       {/* The point of the page: the four products, joined up, priced, gated. */}

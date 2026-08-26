@@ -129,3 +129,77 @@ describe('the four doors are joined up on the page that sells them', () => {
     expect(ECO).toContain('href="/studio.html"');
   });
 });
+
+describe('the navbar sends nobody at a locked door', () => {
+  const NAV = read('student-portal-app/src/components/Navbar.tsx');
+
+  /*
+   * JOB, RESUME and HACK sat in the navbar as links straight into the portals.
+   * Since middleware/studioGate.js started turning those URLs away, each pill
+   * was a door into a bounce. The four products are reached from the ecosystem
+   * ring, which routes through the pay screen the way it is meant to.
+   */
+  it('has dropped the pills that pointed into the gated portals', () => {
+    expect(NAV).not.toContain('/job-portal/');
+    expect(NAV).not.toContain('/resume-portal/');
+    expect(NAV).not.toContain('/hackathon-portal/');
+  });
+
+  it('keeps STUDENT, which is the portal you are standing in', () => {
+    expect(NAV).toContain('STUDENT');
+  });
+});
+
+describe('the first question the Studio asks', () => {
+  const GATE = read('student-portal-app/src/components/AccountGate.tsx');
+  const GATE_CODE = strip(GATE);
+
+  it('is on the page', () => {
+    expect(APP).toContain('<AccountGate />');
+  });
+
+  /*
+   * The two answers lead to different products, and getting it wrong costs
+   * real time: a returning student sent through registration makes a second
+   * account, a newcomer sent to the pay screen is asked for money before
+   * picking a domain.
+   */
+  it('sends an existing account to pay, and a newcomer to pick a domain', () => {
+    expect(GATE).toContain('href="/studio.html"');
+    expect(GATE).toContain('href="/domains"');
+  });
+
+  // They answered it by being signed in; asking anyway is how a product feels
+  // stupid. 401 from the status route is the signed-out signal.
+  it('is never asked of somebody already signed in', () => {
+    expect(GATE_CODE).toContain("fetch('/api/v2/studio/status'");
+    expect(GATE_CODE).toContain('if (cancelled || r.ok) return;');
+  });
+
+  it('is asked once per browser, not on every visit', () => {
+    expect(GATE_CODE).toContain("const ASKED_KEY = 'ten-studio-asked';");
+    expect(GATE_CODE).toContain('if (localStorage.getItem(ASKED_KEY)) return;');
+    // and answering counts as having been asked
+    expect(GATE).toContain('onClick={remember}');
+  });
+
+  it('is never a trap', () => {
+    expect(GATE_CODE).toContain("if (e.key === 'Escape') dismiss();");
+    expect(GATE_CODE).toContain('if (e.target === e.currentTarget) dismiss();');
+    expect(GATE).toContain("I&apos;m just looking");
+  });
+
+  it('announces itself as a dialog and takes focus', () => {
+    expect(GATE).toContain('role="dialog"');
+    expect(GATE).toContain('aria-modal="true"');
+    expect(GATE).toContain('aria-labelledby="account-gate-title"');
+    expect(GATE_CODE).toContain('first.current?.focus();');
+  });
+
+  // A private window throws on localStorage; the question is worth more than
+  // the memory of having asked it.
+  it('still asks when the browser will not remember', () => {
+    expect(GATE_CODE).toMatch(/try \{[\s\S]{0,120}localStorage\.getItem\(ASKED_KEY\)[\s\S]{0,60}\} catch/);
+    expect(GATE_CODE).toMatch(/\.catch\(\(\) => \{[\s\S]{0,200}setOpen\(true\)/);
+  });
+});
