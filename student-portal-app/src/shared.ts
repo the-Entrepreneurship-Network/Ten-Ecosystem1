@@ -4,7 +4,7 @@ const ROUTE_TARGETS: Record<string, string> = {
   '': '#hero',
   features: '#features',
   about: '#about',
-  pricing: '/student-journeys.html',
+  pricing: '/domains',
   manifesto: '#face',
   contact: '/student-login.html',
 };

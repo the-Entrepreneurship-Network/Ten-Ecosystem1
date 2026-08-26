@@ -4,9 +4,9 @@
  * Nothing in the Studio is reachable by URL alone.
  *
  * `app.use(express.static("public"))` serves /job-portal and /resume-portal to
- * anybody who types them, and student-journeys.html the same way. Three
- * products with prices on them were a bookmark away from free, and a paywall
- * that only exists as a button on a page is not a paywall.
+ * anybody who types them. Two products with prices on them were a bookmark
+ * away from free, and a paywall that only exists as a button on a page is not
+ * a paywall.
  *
  * This sits in FRONT of the static handler — whichever is registered first
  * wins — so the file is never read for someone who has not bought it.
@@ -18,12 +18,19 @@
 
 const studioAccess = require('../services/studioAccess');
 
-/** URL prefix → the portal it belongs to. Longest match wins. */
+/**
+ * URL prefix → the portal it belongs to.
+ *
+ * The course has no entry here on purpose. It used to guard
+ * student-journeys.html, which is gone — /domains replaced it, and /domains is
+ * the public list a visitor picks a track from, so gating it would put a
+ * paywall in front of the menu. The course product is still sold and still
+ * granted; there is simply no course page behind the chooser yet to stand in
+ * front of. Add one here when there is.
+ */
 const GUARDED = Object.freeze([
-    ['/job-portal',              'job'],
-    ['/resume-portal',           'resume'],
-    ['/student-journeys.html',   'course'],
-    ['/student-journeys',        'course']
+    ['/job-portal',    'job'],
+    ['/resume-portal', 'resume']
 ]);
 
 /** Which portal does this path belong to, if any? */

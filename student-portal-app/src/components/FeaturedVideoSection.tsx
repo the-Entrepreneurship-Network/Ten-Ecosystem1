@@ -33,7 +33,7 @@ export default function FeaturedVideoSection() {
             </p>
           </div>
           <motion.a
-            href="/student-journeys.html"
+            href="/domains"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             className="liquid-glass shrink-0 self-start rounded-full px-8 py-3 text-sm font-medium text-white md:self-auto"

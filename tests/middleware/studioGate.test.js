@@ -4,9 +4,9 @@
  * The Studio paywall.
  *
  * `express.static("public")` serves /job-portal and /resume-portal to anybody
- * who types the URL, and student-journeys.html the same way — three products
- * with prices on them were a bookmark away from free. A paywall that only
- * exists as a button on a page is not a paywall.
+ * who types the URL — two products with prices on them were a bookmark away
+ * from free. A paywall that only exists as a button on a page is not a
+ * paywall.
  */
 
 jest.mock('../../services/studioAccess', () => ({ canOpen: jest.fn() }));
@@ -37,8 +37,7 @@ describe('what it stands in front of', () => {
     ['/job-portal', 'job'],
     ['/job-portal/', 'job'],
     ['/job-portal/assets/index.js', 'job'],
-    ['/resume-portal/', 'resume'],
-    ['/student-journeys.html', 'course']
+    ['/resume-portal/', 'resume']
   ])('%s belongs to the %s portal', (path, portal) => {
     expect(portalFor(path)).toBe(portal);
   });
@@ -48,7 +47,14 @@ describe('what it stands in front of', () => {
    * money buys, or nobody buys it — and the whole reason the flow was rebuilt
    * is "first they get the overview, then they pay".
    */
-  it('leaves the overview at /student-portal/ open to everyone', () => {
+  /*
+   * /domains is the list a visitor picks a track from, and student-journeys
+   * — which the course used to be guarded by — is gone. Gating the chooser
+   * would put a paywall in front of the menu.
+   */
+  it('leaves the overview and the domain chooser open to everyone', () => {
+    expect(portalFor('/domains')).toBeNull();
+    expect(portalFor('/student-journeys.html')).toBeNull();
     expect(portalFor('/student-portal/')).toBeNull();
     expect(portalFor('/index.html')).toBeNull();
     expect(portalFor('/studio.html')).toBeNull();
