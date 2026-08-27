@@ -26,6 +26,19 @@ const studioAccess = require('../../services/studioAccess');
 /** The signed-in student, or null. Same resolution the rest of the app uses. */
 async function currentStudent(req) {
     const Student = require('../../models/Student');
+
+    /*
+     * A learner — an Academic Portal account with no Student row — can buy
+     * here too: the registration page collects their payment through these
+     * same routes. Their EcosystemUser id plays the studentId role on the
+     * Payment row, which is exactly the id /learn checks access with.
+     */
+    const learner = req.session && req.session.learner;
+    if (learner && !(req.session && req.session.student)) {
+        return { _id: learner.id, employeeId: null, tenure: null,
+                 name: learner.name, email: learner.email, isLearner: true };
+    }
+
     const s = (req.session && req.session.student) || null;
     const who = req.headers['x-employee-id'] || (s && (s.employeeId || s._id || s.id)) || '';
     if (!who) return null;
@@ -70,6 +83,11 @@ router.get('/status', requireStudent(async (req, res, student) => {
 
     return res.json({
         success: true,
+        // Who is signed in, so the screen can say so — "show their details,
+        // then the upgrade" is the flow for an existing account.
+        student: { name: student.name || '', employeeId: student.employeeId || '',
+                   domain: student.domain || '', tenure: student.tenure || '',
+                   email: student.email || '', isLearner: !!student.isLearner },
         pricing: studioPricing.getPricingTable(),
         portals: access.portals,
         feeDue: access.feeDue,

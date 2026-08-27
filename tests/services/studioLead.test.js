@@ -21,7 +21,7 @@ jest.mock('../../utils/mailer', () => {
 
 const StudioLead = require('../../models/StudioLead');
 const mailer = require('../../utils/mailer');
-const { captureLead, sendEligibilityMail, WHAT_YOU_GET, STUDIO_URL } = require('../../services/studioLead');
+const { captureLead, sendEligibilityMail, WHAT_YOU_GET, OVERVIEW_URL } = require('../../services/studioLead');
 
 const noLead = () => StudioLead.findOne.mockReturnValue({ select: () => ({ lean: () => Promise.resolve(null) }) });
 const hasLead = () => StudioLead.findOne.mockReturnValue({ select: () => ({ lean: () => Promise.resolve({ _id: 'l1' }) }) });
@@ -61,10 +61,15 @@ describe('a new address', () => {
     expect(StudioLead.create.mock.calls[0][0].email).toBe('mixed@example.com');
   });
 
-  it('is sent a link back to the Studio, which is the front door to all of it', async () => {
+  /*
+   * The mail is a sign-up confirmation, and the page after a sign-up should
+   * explain, not re-sell — so its one link lands on the overview walkthrough,
+   * which ends at the registration.
+   */
+  it('is sent to the overview page, where the journey is explained', async () => {
     await captureLead('a@example.com');
-    expect(STUDIO_URL).toMatch(/\/student-portal\/$/);
-    expect(sent()[0].html).toContain(STUDIO_URL);
+    expect(OVERVIEW_URL).toMatch(/\/overview$/);
+    expect(sent()[0].html).toContain(OVERVIEW_URL);
   });
 
   it('is told what is actually inside, not a slogan', async () => {

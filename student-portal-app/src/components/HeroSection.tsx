@@ -86,14 +86,14 @@ export default function HeroSection() {
                     name="email"
                     required
                     disabled={status === 'sending'}
-                    placeholder="Enter your email"
+                    placeholder="Enter your email to sign up"
                     className="min-w-0 flex-1 border-none bg-transparent text-base text-white placeholder:text-white/40 outline-none disabled:opacity-60"
                   />
                   <button
                     type="submit"
                     disabled={status === 'sending'}
                     className="rounded-full bg-white p-3 text-black transition-transform hover:translate-x-0.5 disabled:opacity-60"
-                    aria-label="Send me what the Studio opens up"
+                    aria-label="Sign up for the Academic Portal"
                   >
                     <ArrowRight className="h-5 w-5" />
                   </button>
@@ -107,15 +107,15 @@ export default function HeroSection() {
             )}
 
             <p className="px-4 text-sm leading-relaxed text-white">
-              Courses, modules, assignments, quizzes and real projects across fourteen
-              domains — one journey from your first module to job-ready.
+              This is your sign-up for the TEN Academic Portal. Drop your email and the full
+              journey — every module, mentor and exam — arrives in your inbox with your next step.
             </p>
 
             <a
-              href="/domains"
+              href="/overview"
               className="liquid-glass inline-block rounded-full px-8 py-3 text-sm font-medium text-white transition-colors hover:bg-white/5"
             >
-              Choose your domain
+              See the full journey first
             </a>
           </div>
         </div>

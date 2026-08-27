@@ -44,7 +44,10 @@ describe('the choice step', () => {
   });
 
   it('sends the course answer to TEN Career Studio', () => {
-    expect(domains).toContain('setAttribute("href", "/student-portal/")');
+    // The course choice leads into the academic registration now — the
+    // overview page sells, /academic-register signs up and takes payment.
+    expect(domains).toContain('setAttribute("href",');
+    expect(domains).toContain('"/academic-register"');
   });
 
   it('carries the chosen domain into the registration form', () => {
@@ -108,10 +111,11 @@ describe('the paid course area has a name of its own', () => {
   });
 
   it('keeps its URL, so every existing link still works', () => {
-    // The name changed. The address did not — it is printed in emails and was
-    // given as the destination for the course answer above.
-    expect(domains).toContain('/student-portal/');
+    // The name changed. The address did not — the home page still links it;
+    // the domains page's course answer now leads into /academic-register
+    // instead, which is the flow's next step rather than a broken link.
     expect(home).toContain('href="student-portal/"');
+    expect(domains).toContain('/academic-register');
   });
 
   it('is called that on the pages that link to it', () => {

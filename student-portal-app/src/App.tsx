@@ -1,6 +1,5 @@
 import AboutSection from './components/AboutSection';
-import AccountGate from './components/AccountGate';
-import EcosystemSection from './components/EcosystemSection';
+import BenefitsSection from './components/BenefitsSection';
 import FeaturedVideoSection from './components/FeaturedVideoSection';
 import FeaturesSection from './components/FeaturesSection';
 import HeroSection from './components/HeroSection';
@@ -10,12 +9,15 @@ import StudentFaceSection from './components/StudentFaceSection';
 export default function App() {
   return (
     <main>
-      {/* Asked once, of signed-out visitors only. */}
-      <AccountGate />
+      {/* The "already have an account?" ask moved to /academic-register — the
+          moment of registration is where the fork belongs, and a popup here
+          asked the same question a page earlier. */}
       <HeroSection />
       <StudentFaceSection />
-      {/* The point of the page: the four products, joined up, priced, gated. */}
-      <EcosystemSection />
+      {/* The page's one job: benefits, student voices, and back to the email
+          sign-up. The priced product tour lives on /overview, where the
+          sign-up mail sends people. */}
+      <BenefitsSection />
       <AboutSection />
       <FeaturedVideoSection />
       <PhilosophySection />

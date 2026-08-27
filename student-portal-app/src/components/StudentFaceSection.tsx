@@ -27,24 +27,9 @@ export default function StudentFaceSection() {
         </FadeIn>
       </Magnet>
 
-      <div className="relative z-20 mt-auto flex items-end justify-between px-6 pb-7 sm:px-8 sm:pb-8 md:px-10 md:pb-10">
-        <FadeIn delay={0.3} y={20}>
-          <p
-            className="max-w-[160px] font-light uppercase leading-snug tracking-wide text-mist sm:max-w-[220px] md:max-w-[260px]"
-            style={{ fontSize: 'clamp(0.75rem, 1.4vw, 1.5rem)' }}
-          >
-            a portal driven by courses, projects and proof
-          </p>
-        </FadeIn>
-        <FadeIn delay={0.45} y={20}>
-          <a
-            href="/domains"
-            className="liquid-glass rounded-full px-8 py-3 text-sm font-medium uppercase tracking-wider text-white transition-colors hover:bg-white/5"
-          >
-            Start your journey
-          </a>
-        </FadeIn>
-      </div>
+      {/* The bottom bar — caption plus a "Start your journey" button that led
+          away to /domains — is gone: every start on this page is the email
+          sign-up in the hero, and the portrait speaks for itself. */}
     </section>
   );
 }

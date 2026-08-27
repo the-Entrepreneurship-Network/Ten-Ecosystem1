@@ -76,6 +76,32 @@ jest.mock('../../models/new/PsychologyTrigger', () => ({ find: () => mockQ([]), 
 jest.mock('../../models/new/StudentDocument', () => ({ findOne: () => mockQ(null) }), { virtual: true });
 jest.mock('../../models/DocumentHistory', () => ({ create: async () => ({}), logSend: async () => ({}) }));
 jest.mock('../../models/MailHistory', () => ({ create: async () => ({}) }));
+/*
+ * The route now reports an outstanding Studio fee (services/studioAccess).
+ * Unmocked, its Payment.find buffers against a database these tests never
+ * start — ~10 seconds per request, which is where this suite's mystery
+ * timeouts under load were coming from.
+ */
+// Same reason as studioAccess below: its Payment/CoinRedemption lookups
+// buffer against a database these tests never start.
+jest.mock('../../services/certificateEntitlement', () => ({
+  feeSettled: async () => ({ covered: false, via: null }),
+  feeSettledAll: async () => ({
+    expert: { covered: false, via: null },
+    nano_degree: { covered: false, via: null },
+    fellowship: { covered: false, via: null }
+  }),
+  CERT_KEYS: {}
+}));
+jest.mock('../../services/studioAccess', () => ({
+  getStudioAccess: async () => ({
+    portals: { course: { granted: false, via: null },
+               resume: { granted: false, via: null },
+               job: { granted: false, via: null } },
+    feeDue: null, premium: false
+  }),
+  canOpen: async () => false
+}));
 jest.mock('../../models/Notification', () => ({ create: async () => ({}) }));
 // Requiring the router schedules three hourly cron jobs at module load, whose
 // timers keep the Jest worker alive after the tests finish. Stubbed so the

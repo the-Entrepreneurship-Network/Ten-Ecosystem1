@@ -62,6 +62,33 @@ function accessSubject(who) {
     return { _id: who.id, employeeId: null, tenure: null, email: who.email, name: who.name };
 }
 
+/**
+ * Course access for whoever is signed in — checked against BOTH identities the
+ * same person can hold.
+ *
+ * An intern who upgrades buys through the Studio while signed into the intern
+ * portal, so their Payment row carries their Student id; when they later sign
+ * into the Academic Portal, the session carries their EcosystemUser id. Same
+ * person, two ids — matched here by email, or the upgrade they paid for would
+ * open nothing. A paid internship track rides in the same way, because the
+ * Student row is what carries the tenure.
+ */
+async function courseAccessFor(who) {
+    const direct = await studioAccess.getStudioAccess(accessSubject(who));
+    if (direct.portals.course.granted) return direct;
+    try {
+        const Student = require('../../models/Student');
+        const twin = await Student.findOne({ email: String(who.email || '').toLowerCase() }).lean();
+        if (twin) {
+            const viaStudent = await studioAccess.getStudioAccess(twin);
+            if (viaStudent.portals.course.granted) return viaStudent;
+        }
+    } catch (err) {
+        console.error('[learn] twin-account lookup failed:', err.message);
+    }
+    return direct;
+}
+
 // ── accounts ────────────────────────────────────────────────────────────────
 
 router.post('/signup', async (req, res) => {
@@ -130,7 +157,7 @@ router.post('/logout', (req, res) => {
 });
 
 router.get('/me', requireLearner(async (req, res, who) => {
-    const access = await studioAccess.getStudioAccess(accessSubject(who));
+    const access = await courseAccessFor(who);
     res.json({
         success: true, name: who.name, email: who.email,
         courseOpen: access.portals.course.granted,
@@ -166,7 +193,7 @@ function firstUnsettled(mod, progress) {
 }
 
 router.get('/curriculum', requireLearner(async (req, res, who) => {
-    const access = await studioAccess.getStudioAccess(accessSubject(who));
+    const access = await courseAccessFor(who);
     const mine = await LearnProgress().find({ userId: who.id }).lean();
     const bySlug = Object.fromEntries(mine.map((p) => [p.domainSlug, p]));
 
@@ -193,7 +220,7 @@ router.get('/module/:slug', requireLearner(async (req, res, who) => {
     const mod = curriculum.getModule(req.params.slug);
     if (!mod || !mod.ready) return res.status(404).json({ success: false, message: 'No such module.' });
 
-    const access = await studioAccess.getStudioAccess(accessSubject(who));
+    const access = await courseAccessFor(who);
     if (!access.portals.course.granted) {
         return res.status(402).json({ success: false, payRequired: true,
             message: 'The course is not unlocked yet.' });
@@ -234,7 +261,7 @@ router.get('/module/:slug/topic/:n', requireLearner(async (req, res, who) => {
     const topic = mod && mod.topics[n - 1];
     if (!topic) return res.status(404).json({ success: false, message: 'No such topic.' });
 
-    const access = await studioAccess.getStudioAccess(accessSubject(who));
+    const access = await courseAccessFor(who);
     if (!access.portals.course.granted) {
         return res.status(402).json({ success: false, payRequired: true, message: 'The course is not unlocked yet.' });
     }
@@ -320,7 +347,7 @@ router.post('/exam/start', requireLearner(async (req, res, who) => {
     }
     const isFinal = topicN === 0;
 
-    const access = await studioAccess.getStudioAccess(accessSubject(who));
+    const access = await courseAccessFor(who);
     if (!access.portals.course.granted) {
         return res.status(402).json({ success: false, payRequired: true, message: 'The course is not unlocked yet.' });
     }
@@ -636,7 +663,7 @@ router.get('/module/:slug/certificate', requireLearner(async (req, res, who) => 
             message: 'The certificate opens when every topic is settled, the final is passed and the project is done or skipped.' });
     }
 
-    const access = await studioAccess.getStudioAccess(accessSubject(who));
+    const access = await courseAccessFor(who);
     if (access.feeDue) {
         return res.status(402).json({ success: false, feeDue: access.feeDue,
             message: `You chose to pay after completion — this is completion. Settle ₹${access.feeDue.amount} and the certificate downloads immediately.` });

@@ -18,7 +18,10 @@ const {
     renderEmail, escapeHtml, PORTAL_URL, EMAIL_FROM
 } = require('../utils/mailer');
 
-const STUDIO_URL = PORTAL_URL.replace(/\/+$/, '') + '/student-portal/';
+/* The mail's one link. It lands on the overview page — the full walkthrough of
+ * what each part does for an intern — because the mail is a sign-up
+ * confirmation, and the page after a sign-up should explain, not re-sell. */
+const OVERVIEW_URL = PORTAL_URL.replace(/\/+$/, '') + '/overview';
 
 /** What the Studio actually contains, in the order it is worth reading. */
 const WHAT_YOU_GET = [
@@ -53,10 +56,11 @@ async function sendEligibilityMail(email) {
     const html = renderEmail({
         heading: "You're eligible",
         bodyHtml:
-            `<p style="margin:0 0 14px;">You asked about the TEN Career Studio, so here is the whole of it —
-             not a brochure, the actual list of what opens up.</p>`,
+            `<p style="margin:0 0 14px;">Your sign-up for the TEN Academic Portal is in. Here is the whole of
+             what opens up — and the button below walks you through every piece,
+             then takes you to your registration.</p>`,
         panel: { label: 'WHAT IS INSIDE', html: eligibilityHtml() },
-        cta: { label: 'See it for yourself →', url: STUDIO_URL },
+        cta: { label: 'See your full journey →', url: OVERVIEW_URL },
         note: 'One place, one login. Nothing here needs a different account.',
         // They have no account — the default line would be a lie to a stranger.
         footerWhy: 'You are receiving this because you asked about the TEN Career Studio.'
@@ -129,4 +133,4 @@ async function captureLead(rawEmail, meta = {}) {
     return { ok: true, fresh: true, mail: result.status };
 }
 
-module.exports = { captureLead, sendEligibilityMail, WHAT_YOU_GET, STUDIO_URL };
+module.exports = { captureLead, sendEligibilityMail, WHAT_YOU_GET, OVERVIEW_URL };
