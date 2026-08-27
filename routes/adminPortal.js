@@ -297,6 +297,36 @@ router.post('/payments/verify/:paymentId', requireAdminAPI, async (req, res) => 
         console.error('Cert generation error after payment approval:', certErr);
       }
 
+      /*
+       * A Studio purchase needs no grant — services/studioAccess.js reads the
+       * Payment row, so the approval IS the unlock. What it does need is the
+       * promised mail: "approved, you can log in now". Without it the learner
+       * sits refreshing a pending screen.
+       */
+      if (payment.purpose && payment.purpose.startsWith('studio_') && payment.customerEmail) {
+        try {
+          const { createEmailTransporter, mailerReady, renderEmail, EMAIL_FROM, PORTAL_URL } = require('../utils/mailer');
+          if (mailerReady()) {
+            await createEmailTransporter().sendMail({
+              from: EMAIL_FROM,
+              to: payment.customerEmail,
+              subject: 'Approved — your TEN Academic Portal is open',
+              html: renderEmail({
+                heading: 'You are in',
+                name: payment.customerName || '',
+                bodyHtml: `<p>Your payment of ₹${payment.amountRupees || payment.amount} for
+                  <b>${payment.description || 'the TEN Career Studio'}</b> is approved. Sign in with the
+                  email and password you registered, and everything you paid for is open.</p>`,
+                cta: { label: 'Open the Academic Portal →', url: PORTAL_URL + '/learn' },
+                footerWhy: 'You are receiving this because your TEN payment was approved.'
+              })
+            });
+          }
+        } catch (mailErr) {
+          console.error('[admin] studio approval mail failed:', mailErr.message);
+        }
+      }
+
       // If this is a tenure payment, unlock student access AND hand over the
       // bundle the payment screen sold (coins + certificate fee waived).
       if (payment.purpose && payment.purpose.startsWith('tenure_')) {

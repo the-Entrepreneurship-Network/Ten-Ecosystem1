@@ -10148,6 +10148,18 @@ app.get('/learn', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'learn.html'));
 });
 
+/* The overview the sign-up mail links to: what every part of the Studio does
+ * for an intern, ending at the registration. */
+app.get('/overview', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'overview.html'));
+});
+
+/* Academic registration: the "already registered?" fork, then learner sign-up
+ * with payment for the rest. */
+app.get('/academic-register', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'academic-register.html'));
+});
+
 app.get('/verify-document', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'verify.html'));
 });

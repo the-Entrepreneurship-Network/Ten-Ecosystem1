@@ -1,4 +1,5 @@
 import { motion, useInView } from 'framer-motion';
+import { goToSignup } from '../signup';
 import { ArrowUpRight, Check } from 'lucide-react';
 import { useRef } from 'react';
 import { FEATURES, SERVICE_IMAGES } from '../constants';
@@ -99,12 +100,13 @@ export default function FeaturesSection() {
           transition={{ duration: 0.8, delay: 0.45 }}
           className="mt-16 flex flex-col items-center gap-4 text-center"
         >
-          <a
-            href="/domains"
+          <button
+            type="button"
+            onClick={goToSignup}
             className="rounded-full bg-white px-10 py-4 text-sm font-semibold text-black transition-transform hover:scale-105"
           >
-            Start your journey →
-          </a>
+            Start your journey — sign up above →
+          </button>
           <p className="text-xs text-white/40">
             Fourteen domains · one certificate · resume and jobs on the other side
           </p>

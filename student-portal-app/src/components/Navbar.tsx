@@ -2,9 +2,11 @@ import type { MouseEvent } from 'react';
 import { GraduationCap } from 'lucide-react';
 import { navigateToRoute, routeHref } from '../shared';
 
+/* Domains left the bar with the STUDENT pill: a visitor's one path is the
+ * email sign-up in the hero, then the mail, then the overview — a nav shortcut
+ * around that path just skips the explanation that sells it. */
 const NAV_ITEMS = [
   { label: 'Features', route: 'features' },
-  { label: 'Domains', route: 'pricing' },
   { label: 'About', route: 'about' },
 ] as const;
 
@@ -27,17 +29,6 @@ export default function Navbar() {
             <GraduationCap className="h-6 w-6" aria-hidden />
             TEN Career Studio
           </a>
-          {/* STUDENT alone.
-              JOB, RESUME and HACK used to sit here as links straight into the
-              portals — which is now a door into a paywall: middleware/studioGate.js
-              turns those URLs away, so the pills led a visitor to a bounce. The
-              four products are reached from the ecosystem ring further down the
-              page, which routes through the pay screen the way it is meant to. */}
-          <div className="flex items-center gap-2">
-            <span className="rounded-full bg-white px-4 py-1.5 text-xs font-bold text-black">
-              STUDENT
-            </span>
-          </div>
           <div className="hidden items-center gap-8 md:flex">
             {NAV_ITEMS.map((link) => (
               <a
@@ -51,13 +42,8 @@ export default function Navbar() {
             ))}
           </div>
         </div>
+        {/* No Sign Up link: the email box in the hero IS the sign-up. */}
         <div className="flex items-center gap-4">
-          <a
-            href="/register.html"
-            className="text-sm font-medium text-white transition-colors hover:text-white/90"
-          >
-            Sign Up
-          </a>
           <a
             href="/student-login.html"
             className="liquid-glass rounded-full px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-white/5"

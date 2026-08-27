@@ -7,8 +7,6 @@ const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$
 
 const GALAXY = read('student-portal-app/src/components/GalaxyCanvas.tsx');
 const GALAXY_CODE = strip(GALAXY);
-const ECO = read('student-portal-app/src/components/EcosystemSection.tsx');
-const ECO_CODE = strip(ECO);
 const APP = read('student-portal-app/src/App.tsx');
 const HERO = read('student-portal-app/src/components/HeroSection.tsx');
 const ROUTE = strip(read('routes/v2/studio.js'));
@@ -61,72 +59,103 @@ describe('the WebGL galaxy can only ever add to the page', () => {
   });
 });
 
-describe('the four doors are joined up on the page that sells them', () => {
-  it('is on the page, right after the opening', () => {
-    expect(APP).toContain('<EcosystemSection />');
+describe('the hub page persuades; the overview page explains', () => {
+  const APP2 = read('student-portal-app/src/App.tsx');
+  const BEN = read('student-portal-app/src/components/BenefitsSection.tsx');
+  const HERO2 = read('student-portal-app/src/components/HeroSection.tsx');
+  const FACE = read('student-portal-app/src/components/StudentFaceSection.tsx');
+  const FEAT = read('student-portal-app/src/components/FeaturesSection.tsx');
+  const OVW = read('public/overview.html');
+  const path2 = require('path');
+
+  it('the four-doors ring is gone, benefits and voices replace it', () => {
+    expect(fs.existsSync(path2.join(__dirname, '../../student-portal-app/src/components/EcosystemSection.tsx'))).toBe(false);
+    expect(APP2).toContain('<BenefitsSection />');
+    expect(BEN).toMatch(/What you get/);
+    expect(BEN).toMatch(/Students, after/);
+    // six voices, first-name + domain only — nothing impersonates a real person
+    expect((BEN.match(/blockquote/g) || []).length).toBeGreaterThanOrEqual(2);
+    expect(BEN).toContain('replace with real ones');
+  });
+
+  it('the email box is the sign-up, for the academic portal', () => {
+    expect(HERO2).toContain('Enter your email to sign up');
+    expect(HERO2).toContain('sign-up for the TEN Academic Portal');
+    // and the secondary link explains before selling
+    expect(HERO2).toContain('href="/overview"');
+    expect(HERO2).not.toContain('href="/domains"');
   });
 
   /*
-   * The ring is CSS preserve-3d rather than WebGL on purpose: these are links
-   * that must stay clickable, focusable and readable by a screen reader, which
-   * DOM gives for free and textured quads never will.
+   * Every "start" is the email box now. A button that led away to /domains
+   * skipped the sign-up this page exists to collect.
    */
-  it('keeps the doors as real links, not textured quads', () => {
-    expect(ECO).toContain("transformStyle: 'preserve-3d'");
-    expect(ECO).toMatch(/<a\s+href=\{door\.href\}/);
-    ['course', 'resume', 'job', 'hackathon'].forEach((k) =>
-      expect(ECO).toContain(`key: '${k}'`));
+  it('every start-your-journey leads to the sign-up box', () => {
+    expect(FEAT).toContain('onClick={goToSignup}');
+    expect(read('student-portal-app/src/signup.ts')).toContain("getElementById('hero')");
+    // comment-stripped: the words may live on in the comment explaining the
+    // removal, never in rendered JSX
+    expect(strip(FACE)).not.toContain('Start your journey');
   });
 
-  it('routes every paid door through the pay screen, never straight in', () => {
-    expect(ECO).toContain("href: '/studio.html?want=course'");
-    expect(ECO).toContain("href: '/studio.html?want=resume'");
-    expect(ECO).toContain("href: '/studio.html?want=job'");
-    // the hackathon takes its fee at registration, inside its own portal
-    expect(ECO).toContain("href: '/hackathon-portal/'");
-    expect(ECO).not.toContain("href: '/job-portal");
-    expect(ECO).not.toContain("href: '/resume-portal");
+  it('the overview page walks all six engines and ends at the registration', () => {
+    ['01 · LEARN', '02 · INTERN', '03 · BE GUIDED', '04 · BE READY', '05 · GET HIRED', '06 · COMPETE']
+      .forEach((k) => expect(OVW).toContain(k));
+    expect(OVW).toMatch(/Mentorship, on call/);
+    expect(OVW).toContain('href="/domains"');
+    expect(OVW).toContain('/student-login.html?next=%2Fstudio.html');
+    // the 3D backdrop is real projection math, not a static image
+    expect(OVW).toContain('(x1 / z2) * scale');
+    expect(OVW).toContain('prefers-reduced-motion');
+  });
+
+  it('the mail, the overview and the domains page form one path', () => {
+    const lead = read('services/studioLead.js');
+    expect(lead).toContain("+ '/overview'");
+    const domains = read('public/domains.html');
+    expect(domains).toContain('"/academic-register"');
+    expect(read('server.js')).toContain("app.get('/overview'");
+    expect(read('server.js')).toContain("app.get('/academic-register'");
+  });
+
+  it('the registration asks the fork question first', () => {
+    const reg = read('public/academic-register.html');
+    expect(reg).toContain('Are you already registered in the TEN portal');
+    expect(reg).toContain('/student-login.html?next=%2Fstudio.html');
+    expect(reg).toContain("api('/api/v2/learn/signup'");
+    // pay-after is offered for the course alone; the combo is pay-now only
+    expect(reg).toContain('data-mode="after"');
+    expect(reg).not.toMatch(/value="combo"[^>]*data-mode="after"/);
+  });
+
+  it('an existing account sees their details before the upgrade', () => {
+    expect(read('routes/v2/studio.js')).toContain('student: { name: student.name');
+    expect(read('public/studio.html')).toContain('function whoHtml(d)');
   });
 
   /*
-   * The figures on screen are an echo of config/studioPricing.js, fetched from
-   * a public endpoint — the page carrying its own copy of the numbers is how
-   * two screens end up quoting two prices. The fallback exists because a
-   * static page must render without a server, and it must match the config.
+   * The same person holds two ids: their Student row (used when they bought as
+   * an intern) and their EcosystemUser row (used when they sign into /learn).
+   * Access must match by email across them, or a paid upgrade opens nothing.
    */
-  it('echoes the one price list instead of owning a second', () => {
-    expect(ECO_CODE).toContain("fetch('/api/v2/studio/pricing')");
-    expect(ROUTE).toContain("router.get('/pricing', (req, res)");
-    expect(ROUTE).toContain('studioPricing.getPricingTable()');
-
-    const pricing = require('../../config/studioPricing');
-    const t = pricing.getPricingTable();
-    expect(ECO).toContain(`price: '₹${t.singles.find((s) => s.key === 'course').price}'`);
-    expect(ECO).toContain(`price: '₹${t.singles.find((s) => s.key === 'resume').price}'`);
-    expect(ECO).toContain(`price: '₹${t.singles.find((s) => s.key === 'job').price}'`);
-    expect(ECO).toContain(`COMBO_FALLBACK = { price: ${t.combo.price}, insteadOf: ${t.combo.insteadOf}, saving: ${t.combo.saving} }`);
+  it('an intern who upgraded can open the academic portal', () => {
+    const learn = strip(read('routes/v2/learn.js'));
+    expect(learn).toContain('async function courseAccessFor(who)');
+    expect(learn).toMatch(/Student\.findOne\(\{ email: String\(who\.email/);
+    // exactly one direct call survives — the one inside the helper itself
+    expect((learn.match(/getStudioAccess\(accessSubject\(who\)\)/g) || []).length).toBe(1);
   });
 
-  it('turns by itself until it is touched, then it is theirs', () => {
-    expect(ECO_CODE).toContain('if (flat || still) return;');
-    expect(ECO_CODE).toContain('setStill(true)');
+  it('approval sends the promised mail, then the portal opens on login', () => {
+    const admin = read('routes/adminPortal.js');
+    expect(admin).toContain("payment.purpose.startsWith('studio_') && payment.customerEmail");
+    expect(admin).toContain('Approved — your TEN Academic Portal is open');
   });
 
-  // Jumping three doors clockwise when one anticlockwise would do reads as a
-  // spin cycle, not a choice.
-  it('turns the short way round to a chosen door', () => {
-    expect(ECO_CODE).toContain('const shortestTurn = (from, i) =>'.replace('(from, i)', '(from: number, i: number)'));
-    expect(ECO_CODE).toContain('if (diff > 180) diff -= 360;');
-  });
-
-  it('stands still as a flat grid for anyone who asked for less motion', () => {
-    expect(ECO_CODE).toContain("window.matchMedia('(prefers-reduced-motion: reduce)').matches");
-    expect(ECO).toMatch(/flat \? \(/);
-  });
-
-  it('sells the combo with the saving the config actually gives', () => {
-    expect(ECO).toContain('save ₹{combo.saving}');
-    expect(ECO).toContain('href="/studio.html"');
+  it('a learner session can buy through the studio routes', () => {
+    const studio = strip(read('routes/v2/studio.js'));
+    expect(studio).toContain('req.session.learner');
+    expect(studio).toContain('isLearner: true');
   });
 });
 
@@ -145,62 +174,25 @@ describe('the navbar sends nobody at a locked door', () => {
     expect(NAV).not.toContain('/hackathon-portal/');
   });
 
-  it('keeps STUDENT, which is the portal you are standing in', () => {
-    expect(NAV).toContain('STUDENT');
+  // The email box is the sign-up and the overview is the path to domains, so
+  // the bar keeps only what does not shortcut that: Features, About, Login.
+  it('has dropped Sign Up, STUDENT and Domains too', () => {
+    const nav = strip(NAV);
+    expect(nav).not.toContain('/register.html');
+    expect(nav).not.toContain('>Sign Up<');
+    expect(nav).not.toContain('STUDENT');
+    expect(nav).not.toContain("route: 'pricing'");
+    expect(nav).toContain('/student-login.html');
   });
 });
 
-describe('the first question the Studio asks', () => {
-  const GATE = read('student-portal-app/src/components/AccountGate.tsx');
-  const GATE_CODE = strip(GATE);
-
-  it('is on the page', () => {
-    expect(APP).toContain('<AccountGate />');
-  });
-
-  /*
-   * The two answers lead to different products, and getting it wrong costs
-   * real time: a returning student sent through registration makes a second
-   * account, a newcomer sent to the pay screen is asked for money before
-   * picking a domain.
-   */
-  it('sends an existing account to pay, and a newcomer to pick a domain', () => {
-    expect(GATE).toContain('href="/studio.html"');
-    expect(GATE).toContain('href="/domains"');
-  });
-
-  // They answered it by being signed in; asking anyway is how a product feels
-  // stupid. 401 from the status route is the signed-out signal.
-  it('is never asked of somebody already signed in', () => {
-    expect(GATE_CODE).toContain("fetch('/api/v2/studio/status'");
-    expect(GATE_CODE).toContain('if (cancelled || r.ok) return;');
-  });
-
-  it('is asked once per browser, not on every visit', () => {
-    expect(GATE_CODE).toContain("const ASKED_KEY = 'ten-studio-asked';");
-    expect(GATE_CODE).toContain('if (localStorage.getItem(ASKED_KEY)) return;');
-    // and answering counts as having been asked
-    expect(GATE).toContain('onClick={remember}');
-  });
-
-  it('is never a trap', () => {
-    expect(GATE_CODE).toContain("if (e.key === 'Escape') dismiss();");
-    expect(GATE_CODE).toContain('if (e.target === e.currentTarget) dismiss();');
-    expect(GATE).toContain("I&apos;m just looking");
-  });
-
-  it('announces itself as a dialog and takes focus', () => {
-    expect(GATE).toContain('role="dialog"');
-    expect(GATE).toContain('aria-modal="true"');
-    expect(GATE).toContain('aria-labelledby="account-gate-title"');
-    expect(GATE_CODE).toContain('first.current?.focus();');
-  });
-
-  // A private window throws on localStorage; the question is worth more than
-  // the memory of having asked it.
-  it('still asks when the browser will not remember', () => {
-    expect(GATE_CODE).toMatch(/try \{[\s\S]{0,120}localStorage\.getItem\(ASKED_KEY\)[\s\S]{0,60}\} catch/);
-    expect(GATE_CODE).toMatch(/\.catch\(\(\) => \{[\s\S]{0,200}setOpen\(true\)/);
+describe('the account question moved to the registration page', () => {
+  // The popup asked it a page early, then /academic-register asked it again.
+  it('the popup is gone from the hub', () => {
+    const path2 = require('path');
+    expect(fs.existsSync(path2.join(__dirname,
+      '../../student-portal-app/src/components/AccountGate.tsx'))).toBe(false);
+    expect(read('student-portal-app/src/App.tsx')).not.toContain('<AccountGate />');
   });
 });
 

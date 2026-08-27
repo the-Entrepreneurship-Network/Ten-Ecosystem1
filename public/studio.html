@@ -88,6 +88,7 @@ input[type=text]:focus{outline:none;border-color:var(--border-strong);}
   <p class="sub">The course, the resume forge and the job agent. Take all three together, or
      only the one you need — and pay now, or after you finish.</p>
 
+  <div id="whoCard"></div>
   <div id="notice"></div>
   <div class="grid" id="plans"></div>
 </div>
@@ -196,7 +197,25 @@ function planHtml(p, opts) {
     + '</div>';
 }
 
+/* "Show their details first, then the upgrade" — an existing account arriving
+   here sees who the portal thinks they are before any money is discussed. */
+function whoHtml(d) {
+  const s = d.student;
+  if (!s || !s.name) return '';
+  const bits = [s.employeeId, s.domain, s.tenure].filter(Boolean).map(esc).join(' · ');
+  return '<div style="margin-top:22px;padding:16px 20px;border-radius:14px;background:var(--card);'
+    + 'border:1px solid var(--border-strong);display:flex;justify-content:space-between;'
+    + 'gap:12px;flex-wrap:wrap;align-items:center;">'
+    + '<div><div style="font-size:11px;letter-spacing:.16em;color:var(--gold);font-weight:800;">'
+    + (s.isLearner ? 'YOUR LEARNING ACCOUNT' : 'SIGNED IN AS') + '</div>'
+    + '<div style="font-family:Outfit,sans-serif;font-weight:800;font-size:17px;margin-top:4px;">'
+    + esc(s.name) + '</div>'
+    + (bits ? '<div style="font-size:12.5px;color:var(--muted);margin-top:3px;">' + bits + '</div>' : '')
+    + '</div><div style="font-size:12px;color:var(--muted);">Upgrade below — pay only for what you add.</div></div>';
+}
+
 function render() {
+  document.getElementById('whoCard').innerHTML = whoHtml(state);
   document.getElementById('notice').innerHTML = noticeHtml(state);
   const t = state.pricing;
   // Every plan is drawn, always. A student whose track already includes them

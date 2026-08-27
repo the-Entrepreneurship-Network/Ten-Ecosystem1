@@ -250,7 +250,7 @@ a{color:inherit;}
         <span class="cta">Register as an intern &rarr;</span>
       </a>
 
-      <a class="pick" id="pickCourse" href="/student-portal/">
+      <a class="pick" id="pickCourse" href="/academic-register">
         <span class="tag">Course first</span>
         <h4>Teach me first</h4>
         <p>Learn the domain in TEN Career Studio, then shift into the internship.</p>
@@ -361,9 +361,10 @@ function openChoice(domain){
 
   var q = domain ? "?role=student&domain=" + encodeURIComponent(domain) : "";
   document.getElementById("pickIntern").setAttribute("href", "/register.html" + q);
-  // The Career Studio is a separate application; it takes no domain param,
-  // so the link stays exactly the address it was given.
-  document.getElementById("pickCourse").setAttribute("href", "/student-portal/");
+  // Course learners register on the academic page, carrying the domain they
+  // just chose so the form does not ask twice.
+  document.getElementById("pickCourse").setAttribute("href",
+    "/academic-register" + (domain ? "?domain=" + encodeURIComponent(domain) : ""));
 
   SHEET.classList.add("on");
   document.body.style.overflow = "hidden";

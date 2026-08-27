@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TEN — your full journey, explained</title>
+<meta name="description" content="What every part of the TEN Career Studio does for an intern — learning, mentorship, job hunting, resume, hackathons — and where to register.">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/mobile.css">
+<style>
+:root{--bg:#05070e;--card:#0e1428;--gold:#D4AF37;--gold-hi:#f5e2a0;--text:#F0EEE8;--muted:#9a9080;
+  --dim:#4E4840;--green:#10b981;--border:rgba(212,175,55,.15);--border-strong:rgba(212,175,55,.4);}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;overflow-x:hidden;}
+
+/* the 3D starfield lives behind everything */
+#stars{position:fixed;inset:0;z-index:0;}
+.wrap{position:relative;z-index:1;}
+
+/* ── hero ── */
+.hero{min-height:92vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:60px 20px;position:relative;}
+.kicker{font-size:12px;font-weight:800;letter-spacing:.34em;text-transform:uppercase;color:var(--gold);
+  animation:rise .9s ease both;}
+h1{font-family:'Outfit',sans-serif;font-weight:900;letter-spacing:-.03em;line-height:1.04;
+  font-size:clamp(38px,7vw,76px);margin-top:18px;animation:rise .9s .12s ease both;}
+h1 .g{background:linear-gradient(120deg,var(--gold),var(--gold-hi),var(--gold));-webkit-background-clip:text;
+  background-clip:text;color:transparent;background-size:200% 100%;animation:shine 5s linear infinite;}
+.hero p{max-width:620px;margin-top:20px;color:var(--muted);font-size:16px;line-height:1.7;
+  animation:rise .9s .24s ease both;}
+.hero .down{position:absolute;bottom:26px;color:var(--dim);font-size:22px;animation:bob 2.2s ease-in-out infinite;}
+@keyframes rise{from{opacity:0;transform:translateY(26px);}to{opacity:1;transform:none;}}
+@keyframes shine{to{background-position:200% 0;}}
+@keyframes bob{0%,100%{transform:translateY(0);}50%{transform:translateY(8px);}}
+
+/* ── the journey sections ── */
+.journey{max-width:1060px;margin:0 auto;padding:20px 20px 60px;perspective:1400px;}
+.step{display:grid;grid-template-columns:64px 1fr;gap:22px;margin-bottom:34px;
+  opacity:0;transform:translateY(44px) rotateX(9deg);transform-origin:50% 100%;
+  transition:opacity .8s ease,transform .8s cubic-bezier(.22,1,.36,1);}
+.step.in{opacity:1;transform:none;}
+.rail{display:flex;flex-direction:column;align-items:center;}
+.orb{width:52px;height:52px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+  font-size:22px;background:radial-gradient(circle at 32% 28%,rgba(245,226,160,.35),rgba(212,175,55,.12) 60%,transparent);
+  border:1px solid var(--border-strong);box-shadow:0 0 26px rgba(212,175,55,.22);}
+.line{flex:1;width:1px;margin-top:10px;background:linear-gradient(180deg,var(--border-strong),transparent);}
+.panel{background:linear-gradient(160deg,rgba(212,175,55,.07),var(--card) 55%);
+  border:1px solid var(--border);border-radius:20px;padding:26px 28px;
+  transform-style:preserve-3d;transition:transform .35s ease,border-color .35s,box-shadow .35s;will-change:transform;}
+.panel:hover{border-color:var(--border-strong);box-shadow:0 22px 54px rgba(212,175,55,.13);}
+.num{font-size:11px;font-weight:800;letter-spacing:.3em;color:var(--gold);}
+.panel h2{font-family:'Outfit',sans-serif;font-size:clamp(21px,3vw,28px);font-weight:800;margin:8px 0 12px;}
+.panel .what{color:#ded6c4;font-size:15px;line-height:1.75;}
+.panel .how{margin-top:14px;padding:14px 17px;border-radius:13px;background:rgba(5,7,14,.5);
+  border:1px solid rgba(212,175,55,.12);font-size:13.5px;line-height:1.7;color:var(--muted);}
+.panel .how b{color:var(--gold-hi);font-weight:700;}
+
+/* ── the close ── */
+.close{max-width:760px;margin:0 auto;padding:30px 20px 110px;text-align:center;}
+.close h2{font-family:'Outfit',sans-serif;font-size:clamp(28px,5vw,44px);font-weight:900;letter-spacing:-.02em;}
+.close p{color:var(--muted);margin-top:14px;font-size:15px;line-height:1.7;}
+.cta{display:inline-block;margin-top:28px;padding:17px 38px;border-radius:999px;text-decoration:none;
+  font-weight:800;font-size:15px;color:#05070e;background:linear-gradient(120deg,var(--gold),var(--gold-hi));
+  box-shadow:0 12px 40px rgba(212,175,55,.3);transition:transform .25s,box-shadow .25s;}
+.cta:hover{transform:translateY(-3px);box-shadow:0 18px 54px rgba(212,175,55,.42);}
+.alt{display:block;margin-top:18px;color:var(--muted);font-size:13px;}
+.alt a{color:var(--gold);font-weight:700;}
+@media (max-width:600px){.step{grid-template-columns:44px 1fr;gap:13px;}.orb{width:40px;height:40px;font-size:17px;}
+  .panel{padding:20px 18px;}}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important;}
+  .step{opacity:1;transform:none;}
+}
+</style>
+</head>
+<body>
+<canvas id="stars" aria-hidden="true"></canvas>
+<div class="wrap">
+
+<section class="hero">
+  <div class="kicker">You signed up · here is everything</div>
+  <h1>One journey,<br><span class="g">six engines behind it</span></h1>
+  <p>This is the page your sign-up mail promised: what each part of TEN actually does for an
+     intern, in plain words — and at the end, your registration.</p>
+  <div class="down">↓</div>
+</section>
+
+<div class="journey" id="journey">
+
+  <div class="step"><div class="rail"><div class="orb">📚</div><div class="line"></div></div>
+    <div class="panel">
+      <div class="num">01 · LEARN</div>
+      <h2>The Academic Portal</h2>
+      <div class="what">One module for your domain — 21 topics that start gentle and climb to hard.
+        Every topic is written twice: the technical explanation for depth, then the simple one so it
+        actually lands. After each topic comes a video, then a proctored exam — ten written answers
+        marked by AI with feedback on every one, ten multiple choice. Pass, and the next topic opens.
+        At the end: a two-hour final, an optional big project, and a certificate anyone can verify online.</div>
+      <div class="how"><b>How it helps you as an intern:</b> your internship tasks stop being guesswork —
+        the module teaches exactly the domain your tasks come from, and the certificate is proof that
+        survives any interview's "so what do you actually know?"</div>
+    </div>
+  </div>
+
+  <div class="step"><div class="rail"><div class="orb">🧑‍💻</div><div class="line"></div></div>
+    <div class="panel">
+      <div class="num">02 · INTERN</div>
+      <h2>A real internship</h2>
+      <div class="what">A coordinator, weekly tasks, attendance that counts, and work that is reviewed —
+        not busywork. Your task journey runs through the same portal, week by week, with coins for
+        everything you finish and a record every reviewer can see.</div>
+      <div class="how"><b>How it helps you:</b> "fresher, no experience" stops being true. You leave with
+        reviewed work, a coordinator who can vouch for you, and documents — offer letter, completion,
+        recommendation — generated from what you actually did.</div>
+    </div>
+  </div>
+
+  <div class="step"><div class="rail"><div class="orb">🧭</div><div class="line"></div></div>
+    <div class="panel">
+      <div class="num">03 · BE GUIDED</div>
+      <h2>Mentorship, on call</h2>
+      <div class="what">One-to-one sessions with people who already do the job you are aiming at.
+        Book a slot, bring the thing you are stuck on — a project decision, an interview coming up,
+        a career fork — and leave with a plan. Domain coordinators also stay on call through
+        hackathon nights.</div>
+      <div class="how"><b>How it helps you:</b> the difference between six months of wandering and six
+        weeks of aimed effort is usually one person who has already walked it. That is what a mentor
+        session is for.</div>
+    </div>
+  </div>
+
+  <div class="step"><div class="rail"><div class="orb">📄</div><div class="line"></div></div>
+    <div class="panel">
+      <div class="num">04 · BE READY</div>
+      <h2>The Resume Portal</h2>
+      <div class="what">Your resume rebuilt to pass the software that reads it before any human does —
+        then checked line by line against the actual job description you want. Export it, reuse it,
+        keep it current as your internship adds real work to it.</div>
+      <div class="how"><b>How it helps you:</b> most resumes die in the ATS filter, unread. Yours goes
+        through, carrying the reviewed projects and certificate the rest of the Studio just gave you.</div>
+    </div>
+  </div>
+
+  <div class="step"><div class="rail"><div class="orb">💼</div><div class="line"></div></div>
+    <div class="panel">
+      <div class="num">05 · GET HIRED</div>
+      <h2>The Job Portal</h2>
+      <div class="what">An agent that hunts live openings across the web, matched to your domain and
+        level, and applies on your behalf — every application tracked in one place instead of
+        seventeen tabs and a spreadsheet.</div>
+      <div class="how"><b>How it helps you:</b> the job hunt becomes a pipeline you watch, not a second
+        job you do. You spend the hours preparing for interviews; the agent spends them applying.</div>
+    </div>
+  </div>
+
+  <div class="step"><div class="rail"><div class="orb">⚡</div></div>
+    <div class="panel">
+      <div class="num">06 · COMPETE</div>
+      <h2>Hackathons &amp; ideathons</h2>
+      <div class="what">48 hours, one repo, a demo that has to run. Enter solo and get matched into a
+        team by stack and timezone, or bring your own. Judged on working code by a published rubric;
+        every finisher leaves with a verifiable certificate and a public repo.</div>
+      <div class="how"><b>How it helps you:</b> one weekend produces the strongest line on a fresher's
+        resume — a shipped thing, with teammates and a deadline, that a recruiter can actually click.</div>
+    </div>
+  </div>
+
+</div>
+
+<section class="close">
+  <h2>Ready? Pick your domain.</h2>
+  <p>Registration takes two minutes: choose your domain, create your account, pay — the course alone
+     even lets you pay after you complete it. Once your payment is approved you get a mail, and the
+     Academic Portal opens with your login.</p>
+  <a class="cta" href="/domains">Choose my domain →</a>
+  <span class="alt">Already registered in the portal?
+    <a href="/student-login.html?next=%2Fstudio.html">Sign in and upgrade instead →</a></span>
+</section>
+
+</div>
+<script>
+'use strict';
+/* ── a real 3D starfield ─────────────────────────────────────────────────
+   Points in a 3D golden ring, projected with genuine perspective (x/z, y/z),
+   orbiting slowly and leaning toward the pointer. Hand-rolled because ~70
+   lines of projection math needs no library, and a fixed canvas behind the
+   page costs one draw loop that stops when the tab hides.
+   ponytail: 900 points and a 2D canvas — swap for the WebGL galaxy chunk if
+   this page ever needs more than a backdrop. */
+(function () {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  var cv = document.getElementById('stars'), ctx = cv.getContext('2d');
+  if (!ctx) return;
+  var W, H, DPR = Math.min(devicePixelRatio || 1, 2);
+  function size(){ W = innerWidth; H = innerHeight; cv.width = W * DPR; cv.height = H * DPR;
+    cv.style.width = W + 'px'; cv.style.height = H + 'px'; ctx.setTransform(DPR, 0, 0, DPR, 0, 0); }
+  size(); addEventListener('resize', size);
+
+  var N = innerWidth < 640 ? 420 : 900, pts = [];
+  for (var i = 0; i < N; i++) {
+    var a = Math.random() * Math.PI * 2, r = 1.1 + Math.pow(Math.random(), 1.5) * 2.2;
+    pts.push({ a: a, r: r, y: (Math.random() - .5) * .5 * (1.3 - r / 3.3),
+               s: .4 + Math.random() * .8, gold: Math.random() < .74 });
+  }
+  var rot = 0, tx = 0, ty = 0, px = 0, py = 0, run = true;
+  addEventListener('pointermove', function (e) {
+    tx = (e.clientX / W - .5) * .5; ty = (e.clientY / H - .5) * .3;
+  }, { passive: true });
+  document.addEventListener('visibilitychange', function () {
+    run = !document.hidden; if (run) requestAnimationFrame(frame);
+  });
+
+  function frame() {
+    if (!run) return;
+    rot += .0016; px += (tx - px) * .04; py += (ty - py) * .04;
+    ctx.clearRect(0, 0, W, H);
+    var cx = W / 2, cy = H * .42, scale = Math.min(W, H) * .62;
+    var cosY = Math.cos(px), sinY = Math.sin(px), cosX = Math.cos(.5 + py), sinX = Math.sin(.5 + py);
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[i], a = p.a + rot;
+      var x = Math.cos(a) * p.r, z0 = Math.sin(a) * p.r, y = p.y;
+      /* lean with the pointer: rotate about Y, then X */
+      var x1 = x * cosY + z0 * sinY, z1 = -x * sinY + z0 * cosY;
+      var y1 = y * cosX - z1 * sinX, z2 = y * sinX + z1 * cosX + 4.2;
+      if (z2 < .4) continue;
+      var sx = cx + (x1 / z2) * scale, sy = cy + (y1 / z2) * scale;
+      var d = p.s * (2.6 / z2);
+      ctx.globalAlpha = Math.min(.9, 1.6 / z2);
+      ctx.fillStyle = p.gold ? '#e8c766' : '#9db4e8';
+      ctx.fillRect(sx, sy, d, d);
+    }
+    ctx.globalAlpha = 1;
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+
+/* the journey panels rise in as they arrive, and tilt with the pointer */
+(function () {
+  var steps = [].slice.call(document.querySelectorAll('.step'));
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+    }, { threshold: .18 });
+    steps.forEach(function (s) { io.observe(s); });
+  } else steps.forEach(function (s) { s.classList.add('in'); });
+
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  steps.forEach(function (s) {
+    var panel = s.querySelector('.panel');
+    panel.addEventListener('pointermove', function (e) {
+      var r = panel.getBoundingClientRect();
+      var rx = ((e.clientY - r.top) / r.height - .5) * -5;
+      var ry = ((e.clientX - r.left) / r.width - .5) * 6;
+      panel.style.transform = 'rotateX(' + rx + 'deg) rotateY(' + ry + 'deg) translateZ(6px)';
+    });
+    panel.addEventListener('pointerleave', function () { panel.style.transform = ''; });
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TEN — register for the Academic Portal</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/mobile.css">
+<style>
+:root{--bg:#05070e;--card:#0e1428;--gold:#D4AF37;--text:#F0EEE8;--muted:#9a9080;--dim:#4E4840;
+  --green:#10b981;--red:#ef4444;--border:rgba(212,175,55,.15);--border-strong:rgba(212,175,55,.38);}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;
+  display:flex;align-items:flex-start;justify-content:center;padding:34px 18px 70px;}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;
+  background:radial-gradient(800px 420px at 50% -10%,rgba(212,175,55,.1),transparent 60%);}
+.card{position:relative;width:100%;max-width:470px;background:var(--card);border:1px solid var(--border-strong);
+  border-radius:22px;padding:32px;}
+h1{font-family:'Outfit',sans-serif;font-size:24px;font-weight:900;letter-spacing:-.01em;}
+.sub{color:var(--muted);font-size:13.5px;line-height:1.65;margin-top:9px;}
+label{display:block;font-size:12px;color:var(--muted);font-weight:700;margin:14px 0 5px;}
+input{width:100%;padding:12px 14px;border-radius:11px;min-height:46px;background:#0b1222;
+  border:1px solid var(--border);color:var(--text);font-size:15px;font-family:inherit;}
+input:focus{outline:none;border-color:var(--border-strong);}
+button,.btn{font-family:inherit;font-weight:800;font-size:13.5px;border-radius:11px;cursor:pointer;
+  padding:12px 18px;min-height:46px;border:1px solid transparent;transition:all .2s;text-decoration:none;
+  display:block;width:100%;text-align:center;}
+.pri{background:var(--gold);color:#05070e;}
+.pri:hover{filter:brightness(1.08);}
+.sec{background:transparent;border-color:var(--border-strong);color:#e2c766;}
+.sec:hover{background:rgba(212,175,55,.09);}
+.ghost{background:none;border:none;color:var(--muted);font-weight:600;min-height:auto;padding:8px 0 0;}
+button:disabled{opacity:.45;cursor:not-allowed;}
+button:focus-visible,a:focus-visible{outline:2px solid var(--gold);outline-offset:3px;}
+.note{padding:12px 15px;border-radius:11px;font-size:13px;line-height:1.55;margin-top:14px;
+  background:rgba(212,175,55,.09);border:1px solid var(--border-strong);color:#e8d9a8;}
+.note.bad{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.3);color:#fecaca;}
+.note.good{background:rgba(16,185,129,.08);border-color:rgba(16,185,129,.3);color:#a7f3d0;}
+.plan{border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:12px;cursor:pointer;
+  display:block;transition:border-color .2s;}
+.plan:hover,.plan.on{border-color:var(--border-strong);}
+.plan input{width:auto;min-height:auto;margin-right:9px;}
+.plan .nm{font-weight:800;font-size:14.5px;}
+.plan .pr{float:right;font-family:'Outfit',sans-serif;font-weight:800;color:var(--gold);}
+.plan .ds{font-size:12px;color:var(--muted);margin-top:5px;line-height:1.55;}
+.paybox{text-align:center;margin-top:16px;}
+.qr{background:#fff;border-radius:13px;padding:10px;display:inline-block;}
+.qr img{width:200px;height:200px;display:block;}
+.upi{font-size:12.5px;color:var(--muted);margin-top:9px;}
+.upi code{color:var(--gold);font-weight:700;}
+.tiny{font-size:11.5px;color:var(--dim);margin-top:6px;line-height:1.5;}
+.stepdots{display:flex;gap:6px;margin-bottom:18px;}
+.stepdots i{height:4px;flex:1;border-radius:2px;background:rgba(255,255,255,.09);}
+.stepdots i.on{background:var(--gold);}
+.hidden{display:none!important;}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="stepdots" aria-hidden="true"><i id="d1" class="on"></i><i id="d2"></i><i id="d3"></i></div>
+  <div id="view"></div>
+</div>
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const view = $('view');
+const esc = (v) => String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+  .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+const money = (n) => '₹' + Number(n || 0).toLocaleString('en-IN');
+const DOMAIN = new URLSearchParams(location.search).get('domain') || '';
+const api = async (path, body) => {
+  const r = await fetch(path, { method: body ? 'POST' : 'GET', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  let d = null; try { d = await r.json(); } catch (e) {}
+  return { ok: r.ok, status: r.status, d: d || {} };
+};
+const dots = (n) => [1,2,3].forEach((k) => $('d'+k).classList.toggle('on', k <= n));
+
+/* ── step 1: the fork ──────────────────────────────────────────────────── */
+function fork() {
+  dots(1);
+  view.innerHTML = `
+    <h1>Before we register you</h1>
+    <p class="sub">Are you already registered in the TEN portal — as an intern or a student?</p>
+    <div style="margin-top:20px;display:flex;flex-direction:column;gap:10px;">
+      <a class="btn pri" href="/student-login.html?next=%2Fstudio.html">
+        Yes — sign me in to upgrade</a>
+      <button class="sec" id="new">No — I'm new, register me</button>
+    </div>
+    <p class="tiny" style="margin-top:14px;">Signing in shows your existing details and an upgrade
+      button — you pay only for what you add. New here? Registration takes two minutes.</p>`;
+  $('new').onclick = signup;
+}
+
+/* ── step 2: the account ───────────────────────────────────────────────── */
+function signup() {
+  dots(2);
+  view.innerHTML = `
+    <h1>Create your account</h1>
+    <p class="sub">${DOMAIN ? 'Registering for <b style="color:var(--gold)">' + esc(DOMAIN) + '</b>. '
+      : ''}This is your Academic Portal login — keep the password safe.</p>
+    <div id="msg"></div>
+    <label for="nm">Your name</label><input id="nm" autocomplete="name">
+    <label for="em">Email</label><input id="em" type="email" autocomplete="email">
+    <label for="pw">Password <span style="color:var(--dim);font-weight:400;">(8+ characters)</span></label>
+    <input id="pw" type="password" autocomplete="new-password">
+    <button class="pri" id="go" style="margin-top:18px;">Create account →</button>
+    <button class="ghost" id="back">← Back</button>`;
+  $('back').onclick = fork;
+  $('go').onclick = async () => {
+    $('go').disabled = true;
+    const { ok, d } = await api('/api/v2/learn/signup',
+      { name: $('nm').value.trim(), email: $('em').value.trim(), password: $('pw').value });
+    $('go').disabled = false;
+    if (!ok) { $('msg').innerHTML = '<div class="note bad">' + esc(d.message || 'That did not work.') + '</div>'; return; }
+    plans();
+  };
+}
+
+/* ── step 3: pay ───────────────────────────────────────────────────────── */
+let pricing = null;
+async function plans() {
+  dots(3);
+  if (!pricing) {
+    const { d } = await api('/api/v2/studio/pricing');
+    pricing = (d && d.pricing) || null;
+  }
+  const course = pricing ? pricing.singles.find((s) => s.key === 'course') : { price: 300 };
+  const combo = pricing ? pricing.combo : { price: 500, saving: 150 };
+  view.innerHTML = `
+    <h1>Choose how you start</h1>
+    <p class="sub">Account created. Pick a plan — access opens the moment your payment is approved,
+      and you get a mail the minute it is.</p>
+    <div id="msg"></div>
+    <label class="plan on"><input type="radio" name="p" value="course" data-mode="now" checked>
+      <span class="nm">Course only — pay now</span><span class="pr">${money(course.price)}</span>
+      <div class="ds">The full Academic Portal: every domain module, proctored exams, the certificate.</div></label>
+    <label class="plan"><input type="radio" name="p" value="course" data-mode="after">
+      <span class="nm">Course only — pay after completion</span><span class="pr">${money(course.price)} later</span>
+      <div class="ds">Start learning today, pay when you finish. Your certificate waits for the fee — nothing else does.</div></label>
+    <label class="plan"><input type="radio" name="p" value="combo" data-mode="now">
+      <span class="nm">Everything — course + resume + job</span><span class="pr">${money(combo.price)}</span>
+      <div class="ds">The whole Studio, pay now only. Saves ${money(combo.saving)} against buying separately.</div></label>
+    <button class="pri" id="go" style="margin-top:16px;">Continue →</button>
+    <p class="tiny">Pay-after-completion exists for the course only — the Resume and Job portals are
+      used up as you use them, so they are pay-first.</p>`;
+  view.querySelectorAll('.plan input').forEach((r) => {
+    r.onchange = () => view.querySelectorAll('.plan').forEach((pl) =>
+      pl.classList.toggle('on', pl.contains(r) && r.checked));
+  });
+  $('go').onclick = async () => {
+    const pick = view.querySelector('.plan input:checked');
+    $('go').disabled = true;
+    const { ok, d } = await api('/api/v2/studio/choose',
+      { product: pick.value, payMode: pick.dataset.mode });
+    $('go').disabled = false;
+    if (!ok || !d.success) { $('msg').innerHTML = '<div class="note bad">' + esc(d.message || 'Could not start that.') + '</div>'; return; }
+    if (d.opensNow) { done(true); return; }
+    pay(d);
+  };
+}
+
+function pay(order) {
+  view.innerHTML = `
+    <h1>Pay ${money(order.amount)}</h1>
+    <p class="sub">${esc(order.name)} — scan with any UPI app, then enter the transaction id below.</p>
+    <div class="paybox">
+      <div class="qr"><img alt="UPI QR code for this payment"
+        src="/api/upi-qr?amount=${encodeURIComponent(order.amount)}&note=${encodeURIComponent(order.name)}"></div>
+      <div class="upi">UPI ID: <code>paytmqr5k0ods@ptys</code></div>
+    </div>
+    <label for="utr">Transaction / UTR number</label>
+    <input id="utr" inputmode="latin" autocomplete="off" placeholder="e.g. 412345678901">
+    <div class="tiny" id="msg">Find it in your UPI app under payment history.</div>
+    <button class="pri" id="go" style="margin-top:16px;">I have paid — submit</button>
+    <button class="ghost" id="back">← Choose a different plan</button>`;
+  $('back').onclick = plans;
+  $('go').onclick = async () => {
+    const utr = $('utr').value.trim();
+    if (!/^[A-Za-z0-9]{6,25}$/.test(utr)) {
+      $('msg').textContent = 'That does not look like a transaction id — 6 to 25 letters and numbers.'; return;
+    }
+    $('go').disabled = true;
+    const { ok, d } = await api('/api/v2/studio/submit-utr', { orderId: order.orderId, utr });
+    $('go').disabled = false;
+    if (!ok || !d.success) { $('msg').textContent = d.message || 'Could not submit that.'; return; }
+    done(false);
+  };
+}
+
+function done(deferred) {
+  view.innerHTML = `
+    <h1>${deferred ? 'You are in' : 'Payment submitted'}</h1>
+    <div class="note ${deferred ? 'good' : ''}">${deferred
+      ? 'You chose pay after completion — the Academic Portal is open for you right now. Your certificate is what waits for the fee.'
+      : 'Our team verifies UPI payments by hand — usually within a day. The moment yours is approved you will get a mail, and your login will open the Academic Portal.'}</div>
+    <a class="btn pri" style="margin-top:16px;" href="/learn">${deferred ? 'Start learning →' : 'Go to the Academic Portal'}</a>
+    <p class="tiny" style="margin-top:12px;">Sign in there with the email and password you just created.</p>`;
+}
+
+fork();
+</script>
+</body>
+</html>
