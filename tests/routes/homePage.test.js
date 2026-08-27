@@ -601,11 +601,16 @@ describe('the way in to Academics', () => {
     expect(page).toContain('<a class="wcard" href="academics.html">');
   });
 
-  // payment.html is a bare amount box with nothing on it saying what the money
-  // buys. The tracks come first.
-  it('PAY & UNLOCK shows the tracks instead of a bare amount box', () => {
+  /*
+   * One button. "Pay & unlock" sat beside "Start learning" sending people into
+   * the same funnel under a second name, asking for money before the page had
+   * said what the money buys — and payment.html, the bare amount box it once
+   * pointed at, stays gone.
+   */
+  it('leads with the one button, and never at a bare amount box', () => {
     expect(academics).not.toContain('href="payment.html"');
-    expect(academics).toContain('<a class="nh-pill" href="/domains">PAY &amp; UNLOCK');
+    expect(academics).not.toContain('PAY &amp; UNLOCK');
+    expect(academics).toContain('<a class="nh-pill" href="student-portal/">START LEARNING');
   });
 });
 

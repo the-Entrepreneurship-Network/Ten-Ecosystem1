@@ -143,7 +143,13 @@ describe('proctoring', () => {
 
   it('tells HR, in the portal and by email', () => {
     expect(ROUTE).toContain('Proctoring limit crossed — decision needed');
-    expect(ROUTE).toContain('HR_NOTIFY_EMAIL');
+    // Both halves live in the one helper the fee-deferral queue also uses.
+    expect(ROUTE).toContain("require('../../services/hrAlert').alertHR");
+    const alert = read('services/hrAlert.js');
+    expect(alert).toContain('EcosystemNotification.insertMany');
+    expect(alert).toContain('HR_NOTIFY_EMAIL');
+    // Neither half may take the request down with it.
+    expect((alert.match(/catch \(err\)/g) || []).length).toBe(2);
   });
 
   it('holds every exam in that module until HR decides', () => {

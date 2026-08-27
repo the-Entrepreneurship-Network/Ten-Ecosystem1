@@ -1775,6 +1775,10 @@ body.is-premium #premiumCard { box-shadow:0 0 0 1px rgba(212,175,55,0.25), 0 14p
         <div class="sec-card-title" style="color:#60a5fa;">Academics <span style="font-size:10px;background:rgba(59,130,246,0.2);color:#60a5fa;padding:1px 7px;border-radius:4px;margin-left:4px;font-weight:800;vertical-align:middle;">NEW</span></div>
         <div class="sec-card-desc">Courses, study material and academic resources</div>
       </div>
+      <!-- What this student actually owns in the Career Studio, filled in by
+           loadStudioCards(). A paid internship track includes all three, so most
+           of the time these appear without anybody buying anything — and until
+           now there was no door to them from inside the portal at all. -->
     </div>
   </div>
 
@@ -7288,6 +7292,77 @@ document.addEventListener("DOMContentLoaded", function() {
 
 <script src="ten-motion.js"></script>
 <script src="/notify-orb.js" defer></script>
+
+<script>
+/*
+ * The Career Studio sections a student can actually open, as cards in their own
+ * portal.
+ *
+ * A paid internship track already includes the course, the Resume Portal and
+ * the Job Portal — but nothing in this portal ever said so, so students who had
+ * all three were being sent to a pricing page to buy what they owned. Anyone
+ * who pays for a section separately gets the same card the moment an admin
+ * approves it, because both answers come from the same access check.
+ */
+(function studioCards() {
+  // By class, not by id: #sectionCardGrid is already taken by the wrapper this
+  // grid sits inside, and getElementById would hand back that one.
+  var GRID = document.querySelector('.section-card-grid');
+  if (!GRID) return;
+  var empId = (typeof student !== 'undefined' && student && student.employeeId)
+    || localStorage.getItem('employeeId') || '';
+  if (!empId) return;
+
+  var CARDS = {
+    course: { icon: '🧠', title: 'Academic Portal', colour: '#a78bfa',
+              desc: 'Your modules, proctored exams and certificate', href: '/learn' },
+    resume: { icon: '📄', title: 'Resume Builder', colour: '#34d399',
+              desc: 'Build an ATS-proof resume and check it against a job', href: '/resume-portal/' },
+    job:    { icon: '💼', title: 'Job Portal', colour: '#f5c542',
+              desc: 'An agent that hunts openings and applies for you', href: '/job-portal/' }
+  };
+
+  function card(c, sub) {
+    var d = document.createElement('div');
+    d.className = 'sec-card';
+    d.style.borderColor = 'rgba(212,175,55,0.35)';
+    d.onclick = function () { window.location.href = c.href; };
+    d.innerHTML = '<div class="sec-card-icon">' + c.icon + '</div>'
+      + '<div class="sec-card-title" style="color:' + c.colour + ';">' + c.title + '</div>'
+      + '<div class="sec-card-desc">' + (sub || c.desc) + '</div>';
+    return d;
+  }
+
+  fetch('/api/v2/studio/status', { headers: { 'x-employee-id': empId }, credentials: 'same-origin' })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      if (!d || !d.success) return;
+      Object.keys(CARDS).forEach(function (key) {
+        var got = d.portals && d.portals[key];
+        if (!got || !got.granted) return;
+        var sub = CARDS[key].desc
+          + (got.via === 'tenure' ? ' &nbsp;·&nbsp; <b style="color:#10b981;">included with your internship</b>'
+             : got.via === 'deferred' ? ' &nbsp;·&nbsp; <b style="color:#f5c542;">pay when you finish</b>'
+             : '');
+        GRID.appendChild(card(CARDS[key], sub));
+      });
+      // Something asked for and not yet decided still deserves to be visible —
+      // a request that leaves no trace reads as a request that never sent.
+      if (d.deferralPending) {
+        var w = document.createElement('div');
+        w.className = 'sec-card';
+        w.style.borderColor = 'rgba(245,197,66,0.3)';
+        w.style.cursor = 'default';
+        w.innerHTML = '<div class="sec-card-icon">🕒</div>'
+          + '<div class="sec-card-title" style="color:#f5c542;">Waiting on HR</div>'
+          + '<div class="sec-card-desc">Your request to pay after completion is being reviewed. '
+          + 'You will get an email with the decision.</div>';
+        GRID.appendChild(w);
+      }
+    })
+    .catch(function () { /* the rest of the portal does not depend on this */ });
+})();
+</script>
 </body>
 </html>
 

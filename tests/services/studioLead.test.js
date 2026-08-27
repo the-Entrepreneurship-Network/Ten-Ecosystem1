@@ -97,18 +97,27 @@ describe('the same address twice', () => {
   });
 
   /*
-   * The reply is the same whether the address is new or known. This endpoint is
-   * public and unauthenticated, so an answer that differed would turn it into a
-   * way to ask "is this person signed up?" about anybody.
+   * A second attempt is told the mail already went. Answering "check your inbox"
+   * when no second mail is coming reads as a form that silently dropped it —
+   * which is what people were seeing. The cost is that this endpoint now says
+   * whether an address is on a marketing lead list; the note in the route says
+   * so, and where to put the distinction if that ever stops being acceptable.
    */
-  it('cannot be used to find out who is already on the list', async () => {
+  it('says it has already been sent rather than promising a second one', async () => {
     noLead();  const fresh = await captureLead('new@example.com');
     hasLead(); const known = await captureLead('old@example.com');
-    expect(fresh.ok).toBe(known.ok);
-    // `fresh` is for the caller's logging, not for the wire — the route sends
-    // one fixed message either way.
+    expect(fresh).toMatchObject({ ok: true, fresh: true });
+    expect(known).toMatchObject({ ok: true, fresh: false, mail: 'already' });
     const route = require('fs').readFileSync(require('path').join(__dirname, '../../routes/v2/studio.js'), 'utf8');
-    expect(route).not.toMatch(/result\.fresh/);
+    expect(route).toContain('already: !result.fresh');
+    expect(route).toContain('We have already sent it to that address');
+  });
+
+  // Still exactly one mail per address, however many times the box is used.
+  it('never sends a second mail to an address already on the list', async () => {
+    hasLead();
+    await captureLead('old@example.com');
+    expect(mailer.createEmailTransporter).not.toHaveBeenCalled();
   });
 });
 

@@ -84,20 +84,30 @@ function escapeHtml(value) {
  * @param {string} [opts.name]    who it is addressed to
  * @param {string} opts.bodyHtml  trusted HTML for the body — callers escape their own values
  * @param {{label: string, url: string}} [opts.cta]
- * @param {{label: string, html: string}} [opts.panel]  a boxed detail block
+ * @param {{label: string, html: string}|string} [opts.panel]  a boxed detail block
  * @param {string} [opts.note]    small print under the button
  * @param {string} [opts.footerWhy] why this person is receiving it. The default
  *        speaks of "your TEN internship account", which is true of every mail
  *        that goes to a student and false of one that goes to somebody who has
  *        only ever typed their address into a box.
  */
-function renderEmail({ heading, name, bodyHtml, cta, panel, note, footerWhy } = {}) {
+function renderEmail({ heading, name, bodyHtml, cta, panel, note, footerWhy } = {}) {  // eslint-disable-line no-param-reassign
     const button = cta && cta.url ? `
       <table cellspacing="0" cellpadding="0" style="margin:24px 0 4px;"><tr><td
         style="background:linear-gradient(135deg,#f5c542,#d9a520);border-radius:10px;">
         <a href="${escapeHtml(cta.url)}" style="display:inline-block;padding:13px 30px;color:#1a1208;
            text-decoration:none;font-weight:700;font-size:14px;">${escapeHtml(cta.label || 'Open my portal')}</a>
       </td></tr></table>` : '';
+
+    /*
+     * Three call sites pass a plain HTML string here instead of {label, html}:
+     * the registration confirmation, the account-recovery mail and the mail
+     * health alert. Each rendered an EMPTY BOX — the detail block those mails
+     * exist to carry silently vanished, and the health alert in particular was
+     * arriving with nothing in it but "run a script on the server". Accepting
+     * the string is the fix for all three at once.
+     */
+    if (typeof panel === 'string') panel = { label: '', html: panel };
 
     const panelBlock = panel ? `
       <table width="100%" cellspacing="0" cellpadding="0" style="background:#0c1220;
@@ -140,7 +150,12 @@ function mailerReady() {
     return !!(user && pass);
 }
 
-function createEmailTransporter() {
+/**
+ * @param {{pool?: boolean}} [opts] pool:true reuses ONE connection and throttles.
+ *        Use it for a long-running process; a script that ends should not, or
+ *        the open sockets keep it alive after its work is done.
+ */
+function createEmailTransporter(opts = {}) {
     const { user, pass, host, port } = smtpCredentials();
     const service = process.env.SMTP_SERVICE || process.env.EMAIL_SERVICE || (user && user.includes("@gmail.com") ? "gmail" : undefined);
 
@@ -160,6 +175,23 @@ function createEmailTransporter() {
         config.host = host;
         config.port = port;
         config.secure = port === 465 || process.env.EMAIL_SECURE === "true";
+    }
+
+    if (opts.pool) {
+        /*
+         * The weekly cohort mailer sends 150+ messages in a tight loop. Without
+         * a pool every one of those is a fresh TCP connection AND a fresh SMTP
+         * login, and a provider answers a burst of logins with "Too many login
+         * attempts, please try again later" — which is a whole cohort of mail
+         * failing at once while a single alert sent later goes through fine.
+         *
+         * ponytail: one connection at five messages a second. If volume ever
+         * outgrows that, raise maxConnections before reaching for a queue.
+         */
+        Object.assign(config, {
+            pool: true, maxConnections: 1, maxMessages: 100,
+            rateDelta: 1000, rateLimit: 5
+        });
     }
 
     return nodemailer.createTransport(config);

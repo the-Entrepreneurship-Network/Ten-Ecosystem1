@@ -81,8 +81,12 @@ describe('the hub page persuades; the overview page explains', () => {
   it('the email box is the sign-up, for the academic portal', () => {
     expect(HERO2).toContain('Enter your email to sign up');
     expect(HERO2).toContain('sign-up for the TEN Academic Portal');
-    // and the secondary link explains before selling
-    expect(HERO2).toContain('href="/overview"');
+    /*
+     * And nothing beside it. The overview is what the mail links to — a button
+     * offering it here let people take the tour without ever signing up, which
+     * is the one thing this section exists to collect.
+     */
+    expect(HERO2).not.toContain('href="/overview"');
     expect(HERO2).not.toContain('href="/domains"');
   });
 
@@ -141,15 +145,41 @@ describe('the hub page persuades; the overview page explains', () => {
   it('an intern who upgraded can open the academic portal', () => {
     const learn = strip(read('routes/v2/learn.js'));
     expect(learn).toContain('async function courseAccessFor(who)');
-    expect(learn).toMatch(/Student\.findOne\(\{ email: String\(who\.email/);
-    // exactly one direct call survives — the one inside the helper itself
-    expect((learn.match(/getStudioAccess\(accessSubject\(who\)\)/g) || []).length).toBe(1);
+    // The matching lives in the access service, so the middleware in front of
+    // the Resume and Job portals answers it exactly the same way.
+    expect(learn).toContain("studioAccess.getStudioAccessForEither(accessSubject(who), 'course')");
+    const svc = strip(read('services/studioAccess.js'));
+    expect(svc).toMatch(/Student\.findOne\(\{ email \}\)/);
+    expect(strip(read('middleware/studioGate.js'))).toContain('req.session.learner');
   });
 
-  it('approval sends the promised mail, then the portal opens on login', () => {
+  it('approval sends the promised mail, naming what was added', () => {
     const admin = read('routes/adminPortal.js');
-    expect(admin).toContain("payment.purpose.startsWith('studio_') && payment.customerEmail");
-    expect(admin).toContain('Approved — your TEN Academic Portal is open');
+    expect(admin).toContain('if (isStudio && payment.customerEmail)');
+    expect(admin).toContain('It is in your portal');
+    // Each unlocked section, with the link that opens it.
+    expect(admin).toContain("course: ['The Academic Portal");
+    expect(admin).toContain("'/resume-portal/'");
+    expect(admin).toContain("'/job-portal/'");
+    // A learner has no Student row; refusing those made their payments
+    // impossible to approve at all.
+    expect(admin).toContain('if (!student && !isStudio)');
+  });
+
+  /*
+   * A paid internship track includes all three. Until now nothing inside the
+   * intern's own portal said so, so students who owned everything were being
+   * sent to a pricing page to buy it again.
+   */
+  it('shows a student the sections they already have, in their own portal', () => {
+    const dash = read('public/student-dashboard.html');
+    expect(dash).toContain("fetch('/api/v2/studio/status'");
+    expect(dash).toContain("href: '/learn'");
+    expect(dash).toContain("href: '/resume-portal/'");
+    expect(dash).toContain("href: '/job-portal/'");
+    expect(dash).toContain('included with your internship');
+    // A request still with HR is visible too, or it reads as never sent.
+    expect(dash).toContain('Waiting on HR');
   });
 
   it('a learner session can buy through the studio routes', () => {

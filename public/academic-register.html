@@ -136,8 +136,9 @@ async function plans() {
       <span class="nm">Course only — pay now</span><span class="pr">${money(course.price)}</span>
       <div class="ds">The full Academic Portal: every domain module, proctored exams, the certificate.</div></label>
     <label class="plan"><input type="radio" name="p" value="course" data-mode="after">
-      <span class="nm">Course only — pay after completion</span><span class="pr">${money(course.price)} later</span>
-      <div class="ds">Start learning today, pay when you finish. Your certificate waits for the fee — nothing else does.</div></label>
+      <span class="nm">Course only — pay after completion</span><span class="pr">${money(course.deferredPrice || course.price)} later</span>
+      <div class="ds">Start learning today, pay when you finish. Your certificate waits for the fee — nothing else does.
+        Waiting costs ${money((course.deferredPrice || course.price) - course.price)} more, and HR reads your request first.</div></label>
     <label class="plan"><input type="radio" name="p" value="combo" data-mode="now">
       <span class="nm">Everything — course + resume + job</span><span class="pr">${money(combo.price)}</span>
       <div class="ds">The whole Studio, pay now only. Saves ${money(combo.saving)} against buying separately.</div></label>
@@ -150,14 +151,79 @@ async function plans() {
   });
   $('go').onclick = async () => {
     const pick = view.querySelector('.plan input:checked');
+    // "Pay after completion" never reaches a QR. It asks HR first, and asking
+    // needs a reason, so that plan goes to the request screen instead.
+    if (pick.dataset.mode === 'after') { deferAsk(pick.value); return; }
     $('go').disabled = true;
     const { ok, d } = await api('/api/v2/studio/choose',
-      { product: pick.value, payMode: pick.dataset.mode });
+      { product: pick.value, payMode: 'now' });
     $('go').disabled = false;
     if (!ok || !d.success) { $('msg').innerHTML = '<div class="note bad">' + esc(d.message || 'Could not start that.') + '</div>'; return; }
-    if (d.opensNow) { done(true); return; }
+    // Somebody on a paid internship track already owns all of this. Sending
+    // them to a QR was how this page came to say "Pay ₹0".
+    if (d.alreadyOwned) { owned(d.message); return; }
+    if (d.requested) { requested(d); return; }
     pay(d);
   };
+}
+
+/* ── step 3b: the pay-after request ────────────────────────────────────────
+   No QR here by design. What HR needs is the reason, and what the student
+   needs is one honest look at the cheaper option before they commit. */
+function deferAsk(productKey) {
+  const course = pricing ? pricing.singles.find((s) => s.key === productKey) : { price: 300, deferredPrice: 400 };
+  const extra = (course.deferredPrice || course.price) - course.price;
+  view.innerHTML = `
+    <h1>Tell us why</h1>
+    <p class="sub">You are asking to start now and pay ${money(course.deferredPrice || course.price)} when you
+      finish. HR reads this and decides — your portal opens the moment they approve it.</p>
+    <div class="note">Paying ${money(course.price)} right now is the better deal: it is
+      ${money(extra)} cheaper, it opens straight away, and nobody has to approve anything.</div>
+    <div id="msg"></div>
+    <label for="why">Why can you not pay right now?</label>
+    <textarea id="why" rows="4" placeholder="A line or two is enough — HR reads every one of these."
+      style="width:100%;padding:12px 14px;border-radius:11px;background:#0b1222;border:1px solid var(--border);
+             color:var(--text);font:inherit;font-size:14px;line-height:1.6;resize:vertical;"></textarea>
+    <button class="pri" id="go" style="margin-top:16px;">Send my request →</button>
+    <button class="ghost" id="paynow">Actually, I will pay ${money(course.price)} now</button>
+    <button class="ghost" id="back">← Choose a different plan</button>`;
+  $('back').onclick = plans;
+  $('paynow').onclick = async () => {
+    const { ok, d } = await api('/api/v2/studio/choose', { product: productKey, payMode: 'now' });
+    if (!ok || !d.success) { $('msg').innerHTML = '<div class="note bad">' + esc(d.message || 'Could not start that.') + '</div>'; return; }
+    if (d.alreadyOwned) { owned(d.message); return; }
+    pay(d);
+  };
+  $('go').onclick = async () => {
+    const reason = $('why').value.trim();
+    if (reason.length < 15) {
+      $('msg').innerHTML = '<div class="note bad">A line or two, please — HR needs something to go on.</div>'; return;
+    }
+    $('go').disabled = true;
+    const { ok, d } = await api('/api/v2/studio/choose',
+      { product: productKey, payMode: 'after', reason });
+    $('go').disabled = false;
+    if (!ok || !d.success) { $('msg').innerHTML = '<div class="note bad">' + esc(d.message || 'Could not send that.') + '</div>'; return; }
+    if (d.alreadyOwned) { owned(d.message); return; }
+    requested(d);
+  };
+}
+
+function requested(d) {
+  view.innerHTML = `
+    <h1>Sent to HR</h1>
+    <div class="note">Your request to pay ${money(d.amount)} after completion is with HR. They read these
+      by hand — you will get an email with their decision, and the moment it is approved the Academic
+      Portal is open in your account. Nothing opens before that.</div>
+    <p class="tiny" style="margin-top:12px;">Changed your mind? Paying up front is cheaper and opens
+      immediately — sign in and pick it from your portal.</p>`;
+}
+
+function owned(message) {
+  view.innerHTML = `
+    <h1>You already have this</h1>
+    <div class="note good">${esc(message || 'Your internship track already includes all of this — there is nothing to buy.')}</div>
+    <a class="btn pri" style="margin-top:16px;" href="/learn">Open the Academic Portal →</a>`;
 }
 
 function pay(order) {
@@ -184,17 +250,17 @@ function pay(order) {
     const { ok, d } = await api('/api/v2/studio/submit-utr', { orderId: order.orderId, utr });
     $('go').disabled = false;
     if (!ok || !d.success) { $('msg').textContent = d.message || 'Could not submit that.'; return; }
-    done(false);
+    done();
   };
 }
 
-function done(deferred) {
+function done() {
   view.innerHTML = `
-    <h1>${deferred ? 'You are in' : 'Payment submitted'}</h1>
-    <div class="note ${deferred ? 'good' : ''}">${deferred
-      ? 'You chose pay after completion — the Academic Portal is open for you right now. Your certificate is what waits for the fee.'
-      : 'Our team verifies UPI payments by hand — usually within a day. The moment yours is approved you will get a mail, and your login will open the Academic Portal.'}</div>
-    <a class="btn pri" style="margin-top:16px;" href="/learn">${deferred ? 'Start learning →' : 'Go to the Academic Portal'}</a>
+    <h1>Payment submitted</h1>
+    <div class="note">Our team verifies UPI payments by hand — usually within a day. The moment yours is
+      approved you will get a mail naming exactly what has been added to your portal, and your login
+      will open it.</div>
+    <a class="btn pri" style="margin-top:16px;" href="/learn">Go to the Academic Portal</a>
     <p class="tiny" style="margin-top:12px;">Sign in there with the email and password you just created.</p>`;
 }
 

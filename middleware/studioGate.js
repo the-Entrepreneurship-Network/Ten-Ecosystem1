@@ -57,6 +57,19 @@ async function studioGate(req, res, next) {
 
     try {
         const who = sessionStudentId(req);
+        /*
+         * An Academic Portal learner can buy the combo, which contains these two
+         * portals. They have no Student row at all, so checking only for one
+         * would bounce them off something they had just paid for.
+         */
+        const learner = (req.session && req.session.learner) || null;
+        if (!who && learner) {
+            const subject = { _id: learner.id, employeeId: null, tenure: null,
+                              email: learner.email, name: learner.name };
+            if (await studioAccess.canOpen(subject, portal)) return next();
+            return res.redirect(302, '/studio.html?want=' + encodeURIComponent(portal)
+                + '&next=' + encodeURIComponent(req.originalUrl));
+        }
         if (!who) {
             // Signed out. Send them to sign in and back here afterwards rather
             // than to a paywall for something they may already own.

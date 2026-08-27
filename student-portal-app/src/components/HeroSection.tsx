@@ -110,13 +110,6 @@ export default function HeroSection() {
               This is your sign-up for the TEN Academic Portal. Drop your email and the full
               journey — every module, mentor and exam — arrives in your inbox with your next step.
             </p>
-
-            <a
-              href="/overview"
-              className="liquid-glass inline-block rounded-full px-8 py-3 text-sm font-medium text-white transition-colors hover:bg-white/5"
-            >
-              See the full journey first
-            </a>
           </div>
         </div>
 

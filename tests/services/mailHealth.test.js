@@ -73,6 +73,43 @@ describe('mail health check', () => {
         expect(body).toMatch(/reasons/);
     });
 
+    /*
+     * The alert arrived with an EMPTY BOX where the reasons should have been.
+     * renderEmail takes {label, html} and this passed a bare string, so both
+     * fields read undefined and the one diagnostic the mail exists to carry
+     * rendered as nothing — leaving "run a script on the server" as the entire
+     * message. Two other mails were losing their detail block the same way.
+     */
+    it('the reasons actually render in the mail', () => {
+        const { renderEmail } = require('../../utils/mailer');
+        const rendered = renderEmail({
+            heading: 'Email delivery needs attention',
+            bodyHtml: '<p>x</p>',
+            panel: { label: 'WHAT THE MAIL SERVER SAID', html: '<div><b>150&times;</b> Too many login attempts</div>' }
+        });
+        expect(rendered).toContain('Too many login attempts');
+        expect(rendered).toContain('WHAT THE MAIL SERVER SAID');
+        // and a caller that hands over a bare string is no longer silently dropped
+        expect(renderEmail({ heading: 'h', panel: '<div>detail</div>' })).toContain('<div>detail</div>');
+        expect(src).toContain('label: "WHAT THE MAIL SERVER SAID"');
+    });
+
+    /*
+     * The weekly cohort mailer sends 150+ messages in one loop. On an unpooled
+     * transport that is 150 TCP connections and 150 SMTP logins in a burst, and
+     * a provider answers a burst of logins by refusing them — a whole cohort
+     * failing at once while a single alert sent later goes through fine.
+     */
+    it('the process that sends in bulk reuses one throttled connection', () => {
+        const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
+        expect(server).toContain('const transporter = createEmailTransporter({ pool: true });');
+        const mailer = fs.readFileSync(path.join(root, 'utils/mailer.js'), 'utf8');
+        expect(mailer).toMatch(/pool: true, maxConnections: 1/);
+        expect(mailer).toMatch(/rateDelta: 1000, rateLimit: 5/);
+        // Opt-in only: a script that ends must not be held open by live sockets.
+        expect(mailer).toContain('if (opts.pool) {');
+    });
+
     it('never lets a failed alert take down the cron', () => {
         // If the alert itself cannot send, the log line is the alert.
         const fn = src.slice(src.indexOf('async function checkMailHealth'));
