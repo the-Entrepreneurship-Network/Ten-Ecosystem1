@@ -76,6 +76,22 @@ const PRODUCTS = Object.freeze({
     }
 });
 
+/**
+ * What paying later costs on top.
+ *
+ * Paying at the end is worth something to the student and costs us the risk of
+ * never being paid at all, so it is priced: ₹300 now, ₹400 when you finish.
+ * The screen says both numbers next to each other, which is the whole point —
+ * a nudge that hides the cheaper option is not a nudge, it is a trick.
+ */
+const DEFER_SURCHARGE = 100;
+
+/** What this product costs if the fee waits until completion. */
+function deferredPriceFor(productKey) {
+    const p = PRODUCTS[productKey];
+    return p && p.deferrable ? p.price + DEFER_SURCHARGE : null;
+}
+
 /** How the fee is settled. Both are offered on the pricing screen. */
 const PAY_MODES = Object.freeze({
     /** Pay before you start. Access opens when an admin approves the UTR. */
@@ -121,12 +137,14 @@ function unlocksFor(key) {
  * combo with the saving it actually represents.
  */
 function getPricingTable() {
-    const singles = ['course', 'resume', 'job'].map((k) => ({ ...PRODUCTS[k] }));
+    const singles = ['course', 'resume', 'job'].map((k) =>
+        ({ ...PRODUCTS[k], deferredPrice: deferredPriceFor(k) }));
     const singlesTotal = singles.reduce((sum, p) => sum + p.price, 0);
     return {
         singles,
         combo: { ...PRODUCTS.combo, insteadOf: singlesTotal, saving: singlesTotal - PRODUCTS.combo.price },
-        payModes: PAY_MODES
+        payModes: PAY_MODES,
+        deferSurcharge: DEFER_SURCHARGE
     };
 }
 
@@ -134,6 +152,8 @@ module.exports = {
     PORTALS,
     PRODUCTS,
     PAY_MODES,
+    DEFER_SURCHARGE,
+    deferredPriceFor,
     purposeFor,
     allPurposes,
     productKeyFromPurpose,

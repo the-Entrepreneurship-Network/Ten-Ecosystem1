@@ -990,8 +990,11 @@ async function checkMailHealth() {
                                <p>Run <code>node scripts/check-email.js --to you@example.com</code>
                                on the server — it reports whether the credentials, the login or the
                                delivery is the part that is broken.</p>`,
-                    panel: top.map(([reason, n]) =>
-                        `<div><b>${n}&times;</b> ${escapeHtml(reason)}</div>`).join(""),
+                    panel: {
+                        label: "WHAT THE MAIL SERVER SAID",
+                        html: top.map(([reason, n]) =>
+                            `<div><b>${n}&times;</b> ${escapeHtml(reason)}</div>`).join("")
+                    },
                     cta: { label: "Open the portal", url: PORTAL_URL },
                     note: "Sent once a day, and only when the failure rate is above " + MAIL_HEALTH_FAIL_PCT + "%."
                 })

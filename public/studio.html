@@ -150,6 +150,11 @@ function noticeHtml(d) {
     return '<div class="note good">Your paid internship track already includes all of this — nothing to buy. '
       + 'Open it from your portal.</div>';
   }
+  if (d.deferralPending) {
+    return '<div class="note">Your request to pay ' + money(d.deferralPending.amount)
+      + ' after completion is with HR. They read these by hand — you will get an email with their '
+      + 'decision, and the portal opens the moment it is approved. Nothing opens before that.</div>';
+  }
   if (d.awaitingApproval) {
     return '<div class="note">Your payment of ' + money(d.awaitingApproval.amount)
       + ' is with our team. Access opens as soon as it is approved — usually within a day.</div>';
@@ -191,7 +196,8 @@ function planHtml(p, opts) {
           // Only the course carries a completion to pay at; everything else is
           // consumed as it is used, so it is pay-first.
           + (p.deferrable
-              ? '<button class="pay-later" data-buy="' + esc(p.key) + '" data-mode="after">Pay after completion</button>'
+              ? '<button class="pay-later" data-buy="' + esc(p.key) + '" data-mode="after">Pay after completion'
+                + (p.deferredPrice ? ' — ' + money(p.deferredPrice) : '') + '</button>'
               : '')
           + '</div>')
     + '</div>';
@@ -232,6 +238,9 @@ function render() {
 }
 
 async function choose(product, payMode, btn) {
+  // Pay-after is a request, not a purchase: HR reads why, and nothing opens
+  // until they approve. So it never reaches the QR sheet.
+  if (payMode === 'after') { askDefer(product); return; }
   btn.disabled = true;
   let d;
   try {
@@ -250,13 +259,52 @@ async function choose(product, payMode, btn) {
     return;
   }
   if (d.alreadyOwned) { await load(); return; }
-
-  // Pay later: the portals are open already, so go straight where they wanted.
-  if (d.opensNow) {
-    location.href = NEXT || '/student-dashboard.html';
-    return;
-  }
+  if (d.requested) { await load(); return; }
   openSheet(d);
+}
+
+/*
+ * The pay-after request. One screen, two honest options: write the reason and
+ * wait for HR, or pay the lower price now and start immediately.
+ */
+function askDefer(product) {
+  const p = state.pricing;
+  const plan = (p.singles || []).filter((x) => x.key === product)[0] || { price: 300 };
+  const later = plan.deferredPrice || plan.price;
+  const notice = document.getElementById('notice');
+  notice.innerHTML =
+    '<div class="note"><b>Ask to pay after completion</b><br>'
+    + 'You would owe ' + money(later) + ' when you finish. Paying ' + money(plan.price)
+    + ' now is ' + money(later - plan.price) + ' cheaper and opens straight away — no approval needed.'
+    + '<textarea id="deferWhy" rows="3" placeholder="Why can you not pay right now? HR reads this."'
+    + ' style="width:100%;margin-top:12px;padding:11px 13px;border-radius:10px;background:rgba(0,0,0,.25);'
+    + 'border:1px solid rgba(212,175,55,.25);color:inherit;font:inherit;font-size:14px;line-height:1.6;'
+    + 'resize:vertical;"></textarea>'
+    + '<div class="btns" style="margin-top:12px;">'
+    + '<button class="pay-later" id="deferSend" style="flex:0 0 auto;">Send my request</button>'
+    + '<button class="pay-now" id="deferPayNow" style="flex:0 0 auto;">Pay ' + money(plan.price) + ' now instead</button>'
+    + '</div><div id="deferMsg" style="margin-top:9px;"></div></div>';
+  notice.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  document.getElementById('deferPayNow').addEventListener('click', (e) => choose(product, 'now', e.currentTarget));
+  document.getElementById('deferSend').addEventListener('click', async (e) => {
+    const reason = document.getElementById('deferWhy').value.trim();
+    const msg = document.getElementById('deferMsg');
+    if (reason.length < 15) { msg.textContent = 'A line or two, please — HR needs something to go on.'; return; }
+    e.currentTarget.disabled = true;
+    let d;
+    try {
+      const r = await fetch('/api/v2/studio/choose', {
+        method:'POST', credentials:'same-origin',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ product, payMode:'after', reason })
+      });
+      d = await r.json();
+    } catch (err) { d = null; }
+    e.currentTarget.disabled = false;
+    if (!d || !d.success) { msg.textContent = (d && d.message) || 'Could not send that. Please try again.'; return; }
+    await load();
+  });
 }
 
 /*
@@ -285,7 +333,9 @@ async function payDeferred(product, btn) {
   }
   const p = state.pricing;
   const plan = p.combo.key === product ? p.combo : p.singles.filter((x) => x.key === product)[0];
-  openSheet({ orderId: d.orderId, amount: (plan && plan.price) || d.amount, name: (plan && plan.name) || d.name });
+  // d.amount is what the row actually says is owed — for a deferral that is the
+  // deferred price, and quoting the up-front one here would undercharge it.
+  openSheet({ orderId: d.orderId, amount: d.amount || (plan && plan.price), name: (plan && plan.name) || d.name });
 }
 
 let order = null;

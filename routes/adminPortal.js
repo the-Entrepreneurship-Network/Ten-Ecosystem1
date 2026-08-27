@@ -248,8 +248,15 @@ router.post('/payments/verify/:paymentId', requireAdminAPI, async (req, res) => 
     if (payment.status === 'success') return res.status(400).json({ error: 'Already approved — cannot re-process' });
     if (payment.status === 'failed') return res.status(400).json({ error: 'Already rejected — cannot re-process' });
 
+    /*
+     * A Career Studio payment can belong to a learner — an Academic Portal
+     * account with no Student row at all — because the registration page sells
+     * to people before they are interns. Refusing those here made every one of
+     * their payments impossible to approve.
+     */
+    const isStudio = !!(payment.purpose && payment.purpose.startsWith('studio_'));
     const student = await Student.findById(payment.studentId);
-    if (!student) return res.status(404).json({ error: 'Student not found' });
+    if (!student && !isStudio) return res.status(404).json({ error: 'Student not found' });
 
     payment.verifiedBy = req.session.adminUser.username;
     payment.verifiedAt = new Date();
@@ -260,7 +267,7 @@ router.post('/payments/verify/:paymentId', requireAdminAPI, async (req, res) => 
 
       // Handle cert generation
       try {
-        if (['cert_expert', 'cert_nano_degree', 'cert_fellowship'].includes(payment.purpose)) {
+        if (student && ['cert_expert', 'cert_nano_degree', 'cert_fellowship'].includes(payment.purpose)) {
           const typeMap = {
             cert_expert: 'expert',
             cert_nano_degree: 'nano_degree',
@@ -284,7 +291,7 @@ router.post('/payments/verify/:paymentId', requireAdminAPI, async (req, res) => 
           }, 'manual');
         }
 
-        if (payment.purpose === 'fine_low_attendance') {
+        if (student && payment.purpose === 'fine_low_attendance') {
           const fine = student.pendingFines && student.pendingFines.find(f => f.fineType === 'low_attendance' && !f.paid);
           if (fine) {
             fine.paid = true;
@@ -303,21 +310,43 @@ router.post('/payments/verify/:paymentId', requireAdminAPI, async (req, res) => 
        * promised mail: "approved, you can log in now". Without it the learner
        * sits refreshing a pending screen.
        */
-      if (payment.purpose && payment.purpose.startsWith('studio_') && payment.customerEmail) {
+      if (isStudio && payment.customerEmail) {
         try {
           const { createEmailTransporter, mailerReady, renderEmail, EMAIL_FROM, PORTAL_URL } = require('../utils/mailer');
+          const studio = require('../config/studioPricing');
+          /*
+           * Name the sections. "Your payment is approved" leaves a student
+           * guessing which of the three they just bought and where it now is —
+           * so the mail lists each one with the link that opens it.
+           */
+          const OPENS = {
+            course: ['The Academic Portal — modules, exams and your certificate', '/learn'],
+            resume: ['The Resume Portal — build it, then check it against a real job', '/resume-portal/'],
+            job:    ['The Job Portal — an agent that hunts openings and applies for you', '/job-portal/']
+          };
+          const unlocked = studio.unlocksFor(studio.productKeyFromPurpose(payment.purpose) || '');
+          const list = unlocked.map((k) => OPENS[k]).filter(Boolean);
           if (mailerReady()) {
             await createEmailTransporter().sendMail({
               from: EMAIL_FROM,
               to: payment.customerEmail,
-              subject: 'Approved — your TEN Academic Portal is open',
+              subject: list.length === 1
+                ? `Added to your portal — ${payment.description || 'your TEN purchase'}`
+                : 'Added to your portal — the whole TEN Career Studio',
               html: renderEmail({
-                heading: 'You are in',
+                heading: 'It is in your portal',
                 name: payment.customerName || '',
                 bodyHtml: `<p>Your payment of ₹${payment.amountRupees || payment.amount} for
-                  <b>${payment.description || 'the TEN Career Studio'}</b> is approved. Sign in with the
-                  email and password you registered, and everything you paid for is open.</p>`,
-                cta: { label: 'Open the Academic Portal →', url: PORTAL_URL + '/learn' },
+                  <b>${payment.description || 'the TEN Career Studio'}</b> is approved, and
+                  ${list.length === 1 ? 'this section has' : 'these sections have'} been added to your
+                  portal:</p>`
+                  + '<ul style="margin:12px 0 0;padding-left:18px;color:#e8e5dd;line-height:1.7;">'
+                  + list.map(([label, path]) =>
+                      `<li><a href="${PORTAL_URL + path}" style="color:#f5c542;">${label}</a></li>`).join('')
+                  + '</ul>'
+                  + '<p style="margin-top:14px;">Sign in with the email and password you registered — '
+                  + 'everything you paid for is waiting there.</p>',
+                cta: { label: 'Sign in and open it →', url: PORTAL_URL + (list[0] ? list[0][1] : '/learn') },
                 footerWhy: 'You are receiving this because your TEN payment was approved.'
               })
             });
@@ -366,6 +395,10 @@ router.post('/payments/verify/:paymentId', requireAdminAPI, async (req, res) => 
         }
       }
 
+      // A learner has no Student row to notify or audit against; the mail above
+      // is how they hear about it.
+      if (!student) return res.json({ success: true, message: 'Payment approved and processed' });
+
       await Notification.notifyStudent(student, {
         title: 'Payment Approved ✓',
         message: `Your payment for ${PURPOSE_LABELS[payment.purpose] || payment.purpose} has been approved and processed.`,
@@ -402,6 +435,8 @@ router.post('/payments/verify/:paymentId', requireAdminAPI, async (req, res) => 
           console.error('[Admin] Error resetting tenure student on reject:', e.message);
         }
       }
+
+      if (!student) return res.json({ success: true, message: 'Payment rejected' });
 
       await Notification.notifyStudent(student, {
         title: 'Payment Rejected',

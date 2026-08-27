@@ -14,10 +14,14 @@
  *   bought       a settled Payment for a product whose bundle covers it
  *   included     the student is on a paid internship track — those already
  *                cost ₹1,000–₹2,000 and include the whole ₹500 Studio
- *   deferred     they chose "pay after completion": the portal opens now and
- *                the fee is recorded as due. The CERTIFICATE is what waits,
- *                not the learning
+ *   deferred     they chose "pay after completion", wrote to HR explaining why,
+ *                and HR approved it: the portal opens and the fee is recorded
+ *                as due. The CERTIFICATE is what waits, not the learning
  *   otherwise    no
+ *
+ * A deferral that HR has not decided yet grants nothing. The request is the
+ * whole point of the queue — if the portal opened on the click, approving it
+ * would be paperwork over a door already open.
  *
  * Nothing here reads the request. Access belongs to a student record, so a
  * cleared browser, a second device or a copied URL cannot change the answer.
@@ -71,7 +75,8 @@ async function getStudioAccess(student) {
         const key = studioPricing.productKeyFromPurpose(row.purpose);
         if (!key) continue;
         const deferred = row.status === 'pending' &&
-            row.metadata && row.metadata.payMode === studioPricing.PAY_MODES.AFTER;
+            row.metadata && row.metadata.payMode === studioPricing.PAY_MODES.AFTER &&
+            !!row.metadata.deferApprovedAt;
         if (!SETTLED.includes(row.status) && !deferred) continue;
 
         studioPricing.unlocksFor(key).forEach((portal) => {
@@ -83,7 +88,11 @@ async function getStudioAccess(student) {
 
         if (deferred) {
             const product = studioPricing.getProduct(key);
-            feeDue = { product: key, name: product.name, amount: product.price, since: row.createdAt };
+            // What they owe is the deferred price — the ₹100 is the cost of
+            // waiting, and the certificate screen must collect the real figure.
+            feeDue = { product: key, name: product.name,
+                amount: row.amount || studioPricing.deferredPriceFor(key) || product.price,
+                since: row.createdAt };
         }
     }
 
@@ -93,10 +102,46 @@ async function getStudioAccess(student) {
     return { portals, feeDue, premium: premium.premium };
 }
 
+/**
+ * The same answer, for a person who may hold TWO ids.
+ *
+ * An intern who upgrades buys through the Studio while signed into the intern
+ * portal, so their Payment row carries their Student id; when they sign into
+ * the Academic Portal, the session carries their EcosystemUser id. Same person,
+ * two ids — matched here by email, or the thing they paid for opens nothing. A
+ * paid internship track rides in the same way, because the Student row is what
+ * carries the tenure.
+ *
+ * @param {object} subject anything with _id and email
+ * @param {string} [portal] the portal that decides whether the twin is worth
+ *                 checking; omit to check for any grant at all
+ */
+async function getStudioAccessForEither(subject, portal) {
+    const direct = await getStudioAccess(subject);
+    const has = (a) => portal
+        ? Boolean(a.portals[portal] && a.portals[portal].granted)
+        : studioPricing.PORTALS.some((p) => a.portals[p] && a.portals[p].granted);
+    if (has(direct)) return direct;
+
+    const email = String((subject && subject.email) || '').toLowerCase();
+    if (!email) return direct;
+    try {
+        const Student = require('../models/Student');
+        const twin = await Student.findOne({ email }).lean();
+        if (twin && String(twin._id) !== String(subject._id)) {
+            const viaStudent = await getStudioAccess(twin);
+            if (has(viaStudent)) return viaStudent;
+        }
+    } catch (err) {
+        console.error('[studio] twin-account lookup failed:', err.message);
+    }
+    return direct;
+}
+
 /** One portal, for the middleware, which only ever asks about one. */
 async function canOpen(student, portal) {
-    const { portals } = await getStudioAccess(student);
+    const { portals } = await getStudioAccessForEither(student, portal);
     return Boolean(portals[portal] && portals[portal].granted);
 }
 
-module.exports = { getStudioAccess, canOpen };
+module.exports = { getStudioAccess, getStudioAccessForEither, canOpen };

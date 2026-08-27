@@ -98,20 +98,34 @@ describe('a paid internship track', () => {
 });
 
 describe('pay after completion', () => {
+  // Approved by HR. The request on its own grants nothing — that is the case
+  // directly below, and the whole reason the queue exists.
   const deferred = [{ purpose: 'studio_combo', status: 'pending',
-                      metadata: { payMode: 'after' }, createdAt: new Date('2026-08-01') }];
+                      metadata: { payMode: 'after', deferApprovedAt: new Date('2026-08-02') },
+                      amount: 600, createdAt: new Date('2026-08-01') }];
 
-  it('opens the portals straight away — the learning is not what waits', async () => {
+  it('opens the portals once HR approves — the learning is not what waits', async () => {
     rows(deferred);
     const { portals } = await getStudioAccess(student());
     studioPricing.PORTALS.forEach((p) => expect(portals[p].granted).toBe(true));
     expect(portals.course.via).toBe('deferred');
   });
 
+  // The request is with HR. Opening the portal on the click would make the
+  // approval a rubber stamp on a door already open.
+  it('opens nothing while the request is still waiting on HR', async () => {
+    rows([{ purpose: 'studio_combo', status: 'pending',
+            metadata: { payMode: 'after', reason: 'stipend comes next month' } }]);
+    const { portals, feeDue } = await getStudioAccess(student());
+    studioPricing.PORTALS.forEach((p) => expect(portals[p].granted).toBe(false));
+    expect(feeDue).toBeNull();
+  });
+
   it('records what is owed, so the certificate can be held', async () => {
     rows(deferred);
     const { feeDue } = await getStudioAccess(student());
-    expect(feeDue).toMatchObject({ product: 'combo', amount: 500 });
+    // What the row says, which for a deferral is the deferred price.
+    expect(feeDue).toMatchObject({ product: 'combo', amount: 600 });
   });
 
   // A pending row WITHOUT the deferred flag is just an abandoned checkout.

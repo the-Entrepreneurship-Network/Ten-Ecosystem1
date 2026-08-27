@@ -2320,7 +2320,9 @@ const upload = multer({
 // ================= MAIL =================
 
 const { createEmailTransporter, mailerReady, isSendableAddress, renderEmail, PORTAL_URL, EMAIL_FROM } = require("./utils/mailer");
-const transporter = createEmailTransporter();
+// Pooled: this process sends the weekly cohort mail in one loop, and 150
+// separate logins in a row is what a provider throttles.
+const transporter = createEmailTransporter({ pool: true });
 
 // The third copy of the credential chain used to live here. It agreed with the
 // mailer, which is exactly why the one in routes/v2/certificates.js that did

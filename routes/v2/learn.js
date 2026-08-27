@@ -64,29 +64,11 @@ function accessSubject(who) {
 
 /**
  * Course access for whoever is signed in — checked against BOTH identities the
- * same person can hold.
- *
- * An intern who upgrades buys through the Studio while signed into the intern
- * portal, so their Payment row carries their Student id; when they later sign
- * into the Academic Portal, the session carries their EcosystemUser id. Same
- * person, two ids — matched here by email, or the upgrade they paid for would
- * open nothing. A paid internship track rides in the same way, because the
- * Student row is what carries the tenure.
+ * same person can hold. The matching lives in the access service so that the
+ * middleware in front of the Resume and Job portals answers it the same way.
  */
 async function courseAccessFor(who) {
-    const direct = await studioAccess.getStudioAccess(accessSubject(who));
-    if (direct.portals.course.granted) return direct;
-    try {
-        const Student = require('../../models/Student');
-        const twin = await Student.findOne({ email: String(who.email || '').toLowerCase() }).lean();
-        if (twin) {
-            const viaStudent = await studioAccess.getStudioAccess(twin);
-            if (viaStudent.portals.course.granted) return viaStudent;
-        }
-    } catch (err) {
-        console.error('[learn] twin-account lookup failed:', err.message);
-    }
-    return direct;
+    return studioAccess.getStudioAccessForEither(accessSubject(who), 'course');
 }
 
 // ── accounts ────────────────────────────────────────────────────────────────
@@ -447,35 +429,17 @@ router.post('/exam/:id/warning', requireLearner(async (req, res, who) => {
         warnings: [{ at: new Date(), reason }]
     });
 
-    // Tell HR, in the portal and by mail. Neither may sink the response.
-    try {
-        const HR = require('../../models/HR');
-        const EcosystemNotification = require('../../models/EcosystemNotification');
-        const hrUsers = await HR.find({}).select('_id').lean();
-        if (hrUsers.length) {
-            await EcosystemNotification.insertMany(hrUsers.map((h) => ({
-                userId: h._id, type: 'system_announcement',
-                title: 'Proctoring limit crossed — decision needed',
-                message: `${who.name} (${who.email}) crossed ${WARN_LIMIT} camera warnings in the ${attempt.domainSlug} exam. Approve a retake or close the topic.`,
-                link: '/hr-proctor.html', data: { incidentId: String(incident._id) }
-            })));
-        }
-    } catch (err) { console.error('[learn] HR notify failed:', err.message); }
-    try {
-        const { createEmailTransporter, mailerReady, renderEmail, EMAIL_FROM, HR_NOTIFY_EMAIL, PORTAL_URL } = require('../../utils/mailer');
-        if (mailerReady()) {
-            await createEmailTransporter().sendMail({
-                from: EMAIL_FROM, to: HR_NOTIFY_EMAIL,
-                subject: `[TEN] Proctoring review needed — ${who.name}`,
-                html: renderEmail({
-                    heading: 'Proctoring review needed',
-                    bodyHtml: `<p>${who.name} (${who.email}) crossed ${WARN_LIMIT} camera warnings during the <b>${attempt.domainSlug}</b> exam (topic ${attempt.topicN || 'final'}). Their exams are on hold until a decision.</p>`,
-                    cta: { label: 'Open the review queue', url: PORTAL_URL + '/hr-proctor.html' },
-                    footerWhy: 'You are receiving this because you are on the TEN HR notification list.'
-                })
-            });
-        }
-    } catch (err) { console.error('[learn] HR mail failed:', err.message); }
+    // Tell HR, in the portal and by mail — the same way the fee-deferral queue
+    // does, through the one helper that owns both halves and swallows neither.
+    await require('../../services/hrAlert').alertHR({
+        title: 'Proctoring limit crossed — decision needed',
+        message: `${who.name} (${who.email}) crossed ${WARN_LIMIT} camera warnings in the ${attempt.domainSlug} exam. Approve a retake or close the topic.`,
+        link: '/hr-proctor.html',
+        data: { incidentId: String(incident._id) },
+        subject: `[TEN] Proctoring review needed — ${who.name}`,
+        bodyHtml: `<p>${who.name} (${who.email}) crossed ${WARN_LIMIT} camera warnings during the <b>${attempt.domainSlug}</b> exam (topic ${attempt.topicN || 'final'}). Their exams are on hold until a decision.</p>`,
+        ctaLabel: 'Open the review queue'
+    });
 
     res.json({ success: true, warningCount: attempt.warningCount, voided: true,
         message: 'Three warnings — this attempt is void and HR has been asked to review.' });
