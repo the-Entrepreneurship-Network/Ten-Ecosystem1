@@ -10142,6 +10142,12 @@ app.get(['/student-journeys', '/student-journeys.html'], (req, res) => {
     res.redirect(301, '/domains');
 });
 
+/* The LLM portal. The page is public — it carries its own sign-in — and every
+ * API behind it checks the learner session and the course fee itself. */
+app.get('/learn', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'learn.html'));
+});
+
 app.get('/verify-document', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'verify.html'));
 });
@@ -10793,6 +10799,7 @@ try { app.use("/api/payment/setu", require("./routes/paymentSetuRoutes")); } cat
  */
 try { app.use("/api/v2/portal-access", require("./routes/v2/portalAccess")); } catch(e) { console.error("[Routes] portalAccess:", e.message); }
 try { app.use("/api/v2/studio", require("./routes/v2/studio")); } catch(e) { console.error("[Routes] studio:", e.message); }
+try { app.use("/api/v2/learn", require("./routes/v2/learn")); } catch(e) { console.error("[Routes] learn:", e.message); }
 
 /*
  * Job application outreach through Instantly. Preparing and sending are

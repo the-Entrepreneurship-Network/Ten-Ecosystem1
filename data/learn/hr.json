@@ -1,0 +1,152 @@
+{
+ "note": "Edit this file to change the module; the server reads it at boot.",
+ "topics": [
+  {
+   "title": "What HR really does",
+   "technical": "Human resources builds the workforce a strategy needs: hiring, developing, retaining and supporting people, and shaping culture. Modern HR is a business partner, not a paperwork department — its work shows up in performance and retention.",
+   "simple": "Building and looking after the people a company needs to succeed.",
+   "videoSearch": "what is human resources",
+   "difficulty": 1
+  },
+  {
+   "title": "The employee lifecycle",
+   "technical": "From attraction and hiring through onboarding, development, retention and exit, HR touches every stage; each transition is a chance to build or lose engagement. Seeing the whole arc prevents fixing one stage while breaking another.",
+   "simple": "The full journey of an employee — and HR's role at every step.",
+   "videoSearch": "employee lifecycle explained",
+   "difficulty": 1
+  },
+  {
+   "title": "Recruitment and sourcing",
+   "technical": "Sourcing finds candidates through job boards, referrals and outreach; a clear role definition and scorecard keep it objective. Hiring the wrong person is among the most expensive mistakes a team makes.",
+   "simple": "Finding the right candidates — and defining 'right' before you start.",
+   "videoSearch": "recruitment sourcing strategies",
+   "difficulty": 1
+  },
+  {
+   "title": "Writing job descriptions",
+   "technical": "A good description states responsibilities, required skills and success criteria honestly, attracting fit and repelling mismatch. Vague postings flood you with wrong applicants and hide the right ones.",
+   "simple": "Describing a role clearly so the right people apply and the wrong ones don't.",
+   "videoSearch": "how to write job description",
+   "difficulty": 1
+  },
+  {
+   "title": "Screening and interviewing",
+   "technical": "Structured interviews with consistent questions and scoring reduce bias and predict performance better than gut feel. Behavioural questions — 'tell me about a time' — surface evidence over rehearsed answers.",
+   "simple": "Asking every candidate the same fair questions and judging on evidence.",
+   "videoSearch": "structured interview techniques",
+   "difficulty": 1
+  },
+  {
+   "title": "Selection and bias",
+   "technical": "Cognitive biases — halo, similarity, first impressions — corrupt hiring; structured scoring and diverse panels counter them. Fair selection is both an ethical duty and a performance advantage.",
+   "simple": "Spotting the mental shortcuts that lead to unfair, worse hiring decisions.",
+   "videoSearch": "hiring bias reduction",
+   "difficulty": 2
+  },
+  {
+   "title": "Onboarding",
+   "technical": "Structured onboarding — paperwork, tools, introductions, early goals — turns a new hire productive and committed faster; a chaotic first week predicts early exits. Retention starts on day one.",
+   "simple": "Setting new hires up to succeed and stay from their very first week.",
+   "videoSearch": "employee onboarding best practices",
+   "difficulty": 2
+  },
+  {
+   "title": "Employment law basics",
+   "technical": "Contracts, working hours, leave, anti-discrimination and termination rules bound what HR may do; getting them wrong is legally and financially costly. HR is where policy meets the law.",
+   "simple": "The legal rules HR must follow — because breaking them is expensive.",
+   "videoSearch": "employment law basics",
+   "difficulty": 2
+  },
+  {
+   "title": "Compensation and benefits",
+   "technical": "Pay structures, benefits and equity attract and retain talent; internal fairness and market benchmarking keep them defensible. Compensation is a message about what an organisation values.",
+   "simple": "Designing pay and benefits that are fair inside and competitive outside.",
+   "videoSearch": "compensation benefits fundamentals",
+   "difficulty": 2
+  },
+  {
+   "title": "Performance management",
+   "technical": "Goal-setting, ongoing feedback and reviews align individual work with organisational aims; continuous feedback beats the dreaded annual surprise. The aim is growth, not judgment.",
+   "simple": "Helping people know what's expected and how they're doing — all year, not once.",
+   "videoSearch": "performance management process",
+   "difficulty": 3
+  },
+  {
+   "title": "Feedback and difficult conversations",
+   "technical": "Specific, timely, behaviour-focused feedback improves performance; avoiding hard conversations lets small problems become big ones. Doing this well is a defining HR and management skill.",
+   "simple": "Giving honest feedback — including the uncomfortable kind — in a way that helps.",
+   "videoSearch": "giving difficult feedback",
+   "difficulty": 3
+  },
+  {
+   "title": "Learning and development",
+   "technical": "Training, mentoring and career paths grow capability and retention; people leave stagnation as readily as bad pay. Development is an investment with measurable returns in performance and loyalty.",
+   "simple": "Growing people's skills and careers so they perform better and stay.",
+   "videoSearch": "learning development strategy",
+   "difficulty": 3
+  },
+  {
+   "title": "Engagement and motivation",
+   "technical": "Engaged employees produce more and quit less; autonomy, purpose and recognition drive engagement more reliably than perks. Surveys measure it; managers move it.",
+   "simple": "What actually makes people care about their work — and how to measure it.",
+   "videoSearch": "employee engagement drivers",
+   "difficulty": 3
+  },
+  {
+   "title": "Culture and values",
+   "technical": "Culture is the behaviour a company actually rewards, not the poster on the wall; HR shapes it through hiring, promotion and what leaders tolerate. Culture eats strategy when the two conflict.",
+   "simple": "The real, lived 'how we do things here' — and HR's hand in shaping it.",
+   "videoSearch": "company culture explained",
+   "difficulty": 4
+  },
+  {
+   "title": "Conflict resolution",
+   "technical": "Workplace conflict is inevitable; mediation, active listening and fair process resolve it before it poisons teams. Ignored conflict costs performance and good people.",
+   "simple": "Settling disputes fairly before they damage the team.",
+   "videoSearch": "workplace conflict resolution",
+   "difficulty": 4
+  },
+  {
+   "title": "Diversity, equity and inclusion",
+   "technical": "Diverse teams outperform when included; DEI means fair access, belonging and removing systemic barriers, not quotas alone. It is both a moral and a business case, backed by evidence.",
+   "simple": "Building teams where different people are fairly included and can thrive.",
+   "videoSearch": "diversity equity inclusion workplace",
+   "difficulty": 4
+  },
+  {
+   "title": "HR analytics",
+   "technical": "People data — turnover, time-to-hire, engagement, absence — turns HR from anecdote to evidence. Metrics reveal problems and prove the impact of interventions to a numbers-driven leadership.",
+   "simple": "Using data to understand and improve how people are hired, kept and grown.",
+   "videoSearch": "hr analytics metrics",
+   "difficulty": 4
+  },
+  {
+   "title": "HR technology and systems",
+   "technical": "HRIS and applicant-tracking systems automate records, hiring and workflows, freeing HR for judgment work. The tool serves the process; a bad process automated is just faster chaos.",
+   "simple": "The software that handles HR's records and workflows so people focus on people.",
+   "videoSearch": "hris systems explained",
+   "difficulty": 5
+  },
+  {
+   "title": "Offboarding and exits",
+   "technical": "Respectful exits — handover, exit interviews, alumni goodwill — protect reputation and surface honest feedback. How people leave shapes how those who stay feel and what the world hears.",
+   "simple": "Ending employment well — because how people leave matters as much as how they arrive.",
+   "videoSearch": "offboarding exit interview",
+   "difficulty": 5
+  },
+  {
+   "title": "HR strategy",
+   "technical": "Strategic HR aligns workforce planning, capability and culture with business goals, earning a seat at the leadership table. HR that only reacts stays a cost centre; HR that plans becomes a partner.",
+   "simple": "Connecting people decisions to the company's actual goals.",
+   "videoSearch": "strategic human resource management",
+   "difficulty": 5
+  },
+  {
+   "title": "The capstone",
+   "technical": "Design a complete people plan for a growing team: hiring process, onboarding, performance and development approach, engagement measures and key metrics. A concrete plan demonstrates the whole discipline.",
+   "simple": "One full plan to hire, grow and keep a team — proof you can do HR.",
+   "videoSearch": "hr strategy plan example",
+   "difficulty": 5
+  }
+ ]
+}

@@ -1,0 +1,152 @@
+{
+ "note": "Edit this file to change the module; the server reads it at boot.",
+ "topics": [
+  {
+   "title": "Engineering vs coding",
+   "technical": "Software engineering is building software that survives change, scale and teams — not just making it run once. Requirements, design, testing, maintenance and communication surround the code, and most cost lives after the first release.",
+   "simple": "Writing code that a team can keep running and changing for years, not just today.",
+   "videoSearch": "what is software engineering",
+   "difficulty": 1
+  },
+  {
+   "title": "The software development lifecycle",
+   "technical": "From requirements through design, implementation, testing, deployment and maintenance, the SDLC frames the work; Agile iterates it in short loops with feedback, replacing big-bang plans that meet reality too late.",
+   "simple": "The full journey of software — and why building it in small, feedback-driven loops beats one giant plan.",
+   "videoSearch": "software development lifecycle agile",
+   "difficulty": 1
+  },
+  {
+   "title": "Version control and collaboration",
+   "technical": "Git tracks history and enables parallel work through branches and pull requests; trunk-based or feature-branch flows structure teams. Clean history and reviewed changes are how many people edit one codebase without chaos.",
+   "simple": "How a whole team edits the same code without overwriting each other.",
+   "videoSearch": "git workflow team tutorial",
+   "difficulty": 1
+  },
+  {
+   "title": "Requirements and specifications",
+   "technical": "Vague requirements produce wrong software efficiently. User stories, acceptance criteria and edge cases turn wishes into buildable, testable statements — clarifying before coding is the cheapest fix there is.",
+   "simple": "Pinning down exactly what to build before building the wrong thing well.",
+   "videoSearch": "requirements engineering user stories",
+   "difficulty": 1
+  },
+  {
+   "title": "Data structures",
+   "technical": "Arrays, lists, stacks, queues, hash maps and trees each trade time against space for particular operations; choosing the right one is often the difference between fast and unusable. This is the shared vocabulary of the field.",
+   "simple": "The containers that hold data — each fast at different jobs, and choosing well is half of performance.",
+   "videoSearch": "data structures explained",
+   "difficulty": 1
+  },
+  {
+   "title": "Algorithms and complexity",
+   "technical": "Big-O describes how work grows with input; sorting, searching and graph traversal are the recurring patterns. You rarely invent algorithms, but you constantly choose and combine them — and recognise the O(n^2) that will not scale.",
+   "simple": "How to tell fast code from code that dies as data grows.",
+   "videoSearch": "big o notation algorithms",
+   "difficulty": 2
+  },
+  {
+   "title": "Object-oriented design",
+   "technical": "Classes bundle state and behaviour; encapsulation, inheritance and polymorphism organise larger systems. Modelling the domain in objects — and hiding what callers should not touch — keeps growth manageable.",
+   "simple": "Organising code into things that own their data and behaviour, so systems can grow.",
+   "videoSearch": "object oriented design principles",
+   "difficulty": 2
+  },
+  {
+   "title": "SOLID and design principles",
+   "technical": "SOLID — single responsibility, open/closed, Liskov, interface segregation, dependency inversion — plus DRY and YAGNI guide code toward change-tolerance. They are heuristics, not laws, but ignoring them compounds interest.",
+   "simple": "A handful of guidelines that keep code flexible instead of brittle as it grows.",
+   "videoSearch": "solid principles explained",
+   "difficulty": 2
+  },
+  {
+   "title": "Design patterns",
+   "technical": "Patterns name recurring solutions — factory, strategy, observer, adapter — giving teams shared vocabulary. The skill is recognising when a pattern fits, and resisting forcing one where plain code would do.",
+   "simple": "Named, reusable solutions to problems that keep coming up — used sparingly.",
+   "videoSearch": "design patterns explained",
+   "difficulty": 2
+  },
+  {
+   "title": "Clean code",
+   "technical": "Readable names, small functions, honest comments and low nesting make code a team can change. Code is read far more than written; optimising for the reader is optimising for cost.",
+   "simple": "Writing code the next person — often you — can understand and safely change.",
+   "videoSearch": "clean code principles",
+   "difficulty": 3
+  },
+  {
+   "title": "Testing strategy",
+   "technical": "Unit, integration and end-to-end tests form a pyramid: many fast unit tests, fewer slow broad ones. Tests document behaviour and let you refactor without fear; TDD writes them first.",
+   "simple": "A layered safety net that lets you change code without breaking it silently.",
+   "videoSearch": "testing pyramid explained",
+   "difficulty": 3
+  },
+  {
+   "title": "Debugging systematically",
+   "technical": "Debugging is science: reproduce, hypothesise, isolate with a bisection, fix the cause not the symptom, and add a test so it never returns. Guessing scales worse than the bug.",
+   "simple": "Finding the real cause of a bug by narrowing it down, not by guessing.",
+   "videoSearch": "systematic debugging techniques",
+   "difficulty": 3
+  },
+  {
+   "title": "Databases and data modelling",
+   "technical": "Relational schemas, normalisation, keys and indexes shape how data is stored and queried; the model outlives the code on top of it. A wrong data model taxes every feature forever.",
+   "simple": "Designing how data is stored so every future feature stays easy.",
+   "videoSearch": "database design tutorial",
+   "difficulty": 3
+  },
+  {
+   "title": "APIs and interfaces",
+   "technical": "Well-designed interfaces hide implementation and stay stable while insides change; REST, versioning and clear contracts let components and teams evolve independently. The boundary is the product.",
+   "simple": "The agreed-upon boundaries that let parts of a system change without breaking each other.",
+   "videoSearch": "api design best practices",
+   "difficulty": 4
+  },
+  {
+   "title": "Concurrency and performance",
+   "technical": "Parallelism speeds work but invites races and deadlocks; measure before optimising, because intuition about bottlenecks is usually wrong. Correct-then-fast beats fast-then-debugged.",
+   "simple": "Doing many things at once safely — and speeding up only what measurement proves is slow.",
+   "videoSearch": "concurrency basics explained",
+   "difficulty": 4
+  },
+  {
+   "title": "System design fundamentals",
+   "technical": "Larger systems balance load balancers, caches, queues, databases and services against scale, latency and failure. Trade-offs — consistency vs availability, cost vs speed — are the substance of senior work.",
+   "simple": "How the big pieces fit so a system stays fast and up as users multiply.",
+   "videoSearch": "system design basics",
+   "difficulty": 4
+  },
+  {
+   "title": "Architecture patterns",
+   "technical": "Monolith, microservices and event-driven designs each suit different scales and teams; premature microservices are a common self-inflicted wound. Architecture follows the organisation and the load, not fashion.",
+   "simple": "The overall shapes systems take — and choosing one for real reasons, not hype.",
+   "videoSearch": "software architecture patterns",
+   "difficulty": 4
+  },
+  {
+   "title": "CI/CD and delivery",
+   "technical": "Automated build, test and deploy pipelines ship changes safely and often; small frequent releases lower risk versus rare big ones. Delivery is an engineering capability, not an afterthought.",
+   "simple": "Automating the path from commit to production so releases are boring and frequent.",
+   "videoSearch": "ci cd pipeline explained",
+   "difficulty": 5
+  },
+  {
+   "title": "Documentation and communication",
+   "technical": "Code says how; docs and design records say why. READMEs, architecture notes and decision logs carry the context that keeps a codebase understandable as people come and go.",
+   "simple": "Writing down the why, so the next engineer inherits understanding, not a mystery.",
+   "videoSearch": "technical documentation best practices",
+   "difficulty": 5
+  },
+  {
+   "title": "Working on a team",
+   "technical": "Estimation, code review, standups and handling disagreement are the human protocols of shipping software. Most projects fail on coordination, not on code — these skills are load-bearing.",
+   "simple": "The human side of shipping — reviews, estimates, and disagreeing well.",
+   "videoSearch": "software engineering teamwork",
+   "difficulty": 5
+  },
+  {
+   "title": "The capstone",
+   "technical": "Design and build a non-trivial application with clean architecture, tests, CI, documentation and a git history a reviewer can read. It demonstrates engineering judgment, not just working code.",
+   "simple": "One well-built, well-documented project that shows you engineer, not just code.",
+   "videoSearch": "software engineering portfolio project",
+   "difficulty": 5
+  }
+ ]
+}

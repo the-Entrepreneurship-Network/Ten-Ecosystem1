@@ -298,6 +298,51 @@ function showConvo(){ setPane("convo"); }
 function showProfile(){ if (current) { setPane("profile"); loadProfile(current.withId); } }
 
 /* ── conversations ───────────────────────────────────────────────────── */
+
+/*
+ * Move a conversation to the top from the message we were just handed.
+ *
+ * Every arriving message used to trigger a full /threads fetch — and
+ * dm_notice fired a second one for the same message. A lively conversation
+ * therefore spent one or two HTTP round-trips PER MESSAGE re-downloading a
+ * list that had changed by one line. The socket already carries everything
+ * that line needs, so the list is updated in place and the network is left
+ * alone.
+ *
+ * Returns false when the room is unknown — a brand new conversation — which is
+ * the only case that still needs the server.
+ */
+function bumpThread(m, unread){
+  var room = m.chatRoom || m.room;
+  var i = -1;
+  for (var k = 0; k < threads.length; k++) { if (threads[k].room === room) { i = k; break; } }
+  if (i === -1) return false;
+
+  var t = threads[i];
+  if (m.message !== undefined) t.lastMessage = m.message;
+  else if (m.lastMessage !== undefined) t.lastMessage = m.lastMessage;
+  t.at = m.timestamp || m.at || new Date().toISOString();
+  if (unread) t.unread = (t.unread || 0) + 1;
+
+  // Newest first, which is the only order an inbox may be in.
+  threads.splice(i, 1);
+  threads.unshift(t);
+  renderThreads();
+  return true;
+}
+
+/*
+ * A real fetch, at most once a second.
+ *
+ * Bursts — five people replying at once, a reconnect replaying notices —
+ * collapse into one request instead of five.
+ */
+var refreshTimer = null;
+function refreshThreads(){
+  if (refreshTimer) return;
+  refreshTimer = setTimeout(function(){ refreshTimer = null; loadThreads(); }, 1000);
+}
+
 async function loadThreads(){
   try {
     var d = await json("/api/chat/dm/threads");
@@ -320,8 +365,17 @@ function renderThreads(){
   });
   var box = document.getElementById("threadList");
   if (!list.length){
-    box.innerHTML = '<div class="empty" style="height:auto;padding:40px 20px;"><div class="big">📭</div>' +
-      "<div>" + (q ? "Nothing matches that." : "No conversations yet. Press ✎ to start one.") + "</div></div>";
+    // An empty inbox should offer the next step, not just report emptiness.
+    box.innerHTML = q
+      ? '<div class="empty" style="height:auto;padding:40px 20px;"><div class="big">🔍</div>'
+        + '<div>Nothing matches “' + esc(q) + '”.</div></div>'
+      : '<div class="empty" style="height:auto;padding:36px 22px;"><div class="big">💬</div>'
+        + '<div style="font-weight:700;color:#dbe4f2;margin-bottom:5px;">No conversations yet</div>'
+        + '<div style="font-size:12.5px;line-height:1.65;">Message your coordinator, a mentor, or anyone '
+        + 'on your team — search them by name or Employee ID.</div>'
+        + '<button onclick="openPicker()" style="margin-top:16px;padding:10px 18px;min-height:44px;'
+        + 'border-radius:10px;border:none;background:#f5c542;color:#0b1020;font:inherit;font-weight:800;'
+        + 'font-size:13px;cursor:pointer;">Start a conversation</button></div>';
     return;
   }
   box.innerHTML = list.map(function(t){
@@ -667,7 +721,13 @@ function connect(){
   // thing that actually proves who is connecting.
   socket = io({ withCredentials: true });
 
-  socket.on("connect", function(){ liveNotice(false); });
+  socket.on("connect", function(){
+    liveNotice(false);
+    // Messages may have arrived while the socket was down; this is the
+    // one moment the list is genuinely worth re-fetching.
+    refreshThreads();
+    if (current) socket.emit("join_room", { room: current.room });
+  });
   socket.on("disconnect", function(){ liveNotice(true); });
   socket.on("connect_error", function(){ liveNotice(true); });
 
@@ -675,12 +735,17 @@ function connect(){
     if (current && m.chatRoom === current.room){
       addBubble(m);
       post("/api/chat/dm/read", { room: current.room }).catch(function(){});
+      bumpThread(m, false);
+    } else {
+      bumpThread(m, true);
     }
-    loadThreads();
   });
 
   // A message in a conversation that is not open. The inbox is what shows it.
-  socket.on("dm_notice", function(){ loadThreads(); });
+  socket.on("dm_notice", function(d){
+    if (d && d.chatRoom && bumpThread(d, true)) return;
+    refreshThreads();
+  });
 
   socket.on("typing", function(d){
     if (current && d && d.room === current.room) showTyping(!!d.typing);

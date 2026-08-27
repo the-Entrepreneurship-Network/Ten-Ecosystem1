@@ -8,11 +8,17 @@ import EventBoard from './components/EventBoard';
 const ASSETS = '/assets/hackathon';
 const inter = { fontFamily: "'Inter', sans-serif" };
 
+/*
+ * JOB and RESUME used to link straight into those portals, which the Studio
+ * paywall (middleware/studioGate.js) now turns away — two links to a bounce.
+ * The nav points at the pages a visitor can actually open, and the sections
+ * they need on this one.
+ */
 const NAV = [
   { label: 'STUDENT', href: '/student-portal/' },
-  { label: 'JOB', href: '/job-portal/' },
-  { label: 'RESUME', href: '/resume-portal/' },
   { label: 'HACK', href: '#top', active: true },
+  { label: 'HOW IT WORKS', href: '#how' },
+  { label: 'EVENTS', href: '#events' },
   { label: 'MY TEAM', href: '#team' },
 ];
 
@@ -191,6 +197,75 @@ function Tracks() {
   );
 }
 
+/* ---------- 03b · how it actually works ----------
+   The page had atmosphere and no answer to the only question a first-timer
+   actually has: what do I do, what do I need, and what does it cost? Six
+   numbered steps, in order, in plain words. */
+
+const STEPS: [string, string, string][] = [
+  ['01', 'Pick an event', 'Every open hackathon is listed below with its theme, dates, prize and entry fee. Read the brief before you commit — they are not all the same shape.'],
+  ['02', 'Register', 'Fill in the form on the event. You pay the entry fee at registration; your place is held the moment it clears.'],
+  ['03', 'Get a team — or bring one', 'Up to four per team. Come with your own, or enter solo and we pair you by stack and timezone before the brief drops.'],
+  ['04', 'Build for 48 hours', 'The brief lands Friday evening. Mentors are on call through the night. Commit as you go — the repo history is part of what is judged.'],
+  ['05', 'Demo on Sunday', 'Submit a repo that runs and a short demo. Working code beats a beautiful slide about code you did not write.'],
+  ['06', 'Get judged, get the certificate', 'Three judges, one published rubric. Every finisher leaves with a verifiable TEN certificate and a public repo.'],
+];
+
+const NEED: [string, string][] = [
+  ['A laptop and internet', 'That is genuinely the hardware list.'],
+  ['A GitHub account', 'The repo is the submission. Make it public before the deadline.'],
+  ['Any skill level', 'No code yet? Enter the ideathon track and pitch instead.'],
+  ['The entry fee', 'Shown on each event, paid at registration. Nothing else to buy.'],
+];
+
+function HowItWorks() {
+  return (
+    <div id="how" className="bg-[#04070a] px-5 py-24 sm:px-10">
+      <FadeIn>
+        <p className="mono mb-3 text-[12px] tracking-[0.3em] text-emerald-300/80">&gt; HOW IT WORKS</p>
+        <h2 className="display-font mb-4 text-white" style={{ fontSize: 'clamp(32px, 5vw, 62px)' }}>
+          Six steps, start to certificate
+        </h2>
+        <p className="mb-14 max-w-2xl text-[14.5px] leading-relaxed text-white/55" style={inter}>
+          First hackathon? This is the whole of it. No prior competition, no team and no finished
+          idea required before you sign up.
+        </p>
+      </FadeIn>
+
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3" style={{ maxWidth: '1200px' }}>
+        {STEPS.map(([n, title, body], i) => (
+          <FadeIn key={n} delay={i * 0.05}>
+            <div className="h-full rounded-2xl border border-emerald-400/15 bg-emerald-400/[0.03] p-6">
+              <span className="mono text-[13px] font-bold tracking-[0.2em] text-emerald-300/90">{n}</span>
+              <p className="mb-2 mt-3 text-[16px] font-bold text-white" style={inter}>{title}</p>
+              <p className="text-[13.5px] leading-relaxed text-white/60" style={inter}>{body}</p>
+            </div>
+          </FadeIn>
+        ))}
+      </div>
+
+      <FadeIn delay={0.1}>
+        <div className="mt-12 rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.04] p-7" style={{ maxWidth: '1200px' }}>
+          <p className="mono mb-5 text-[12px] tracking-[0.28em] text-emerald-300/80">&gt; WHAT YOU NEED</p>
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {NEED.map(([title, body]) => (
+              <div key={title}>
+                <p className="mb-1 text-[14.5px] font-bold text-white" style={inter}>{title}</p>
+                <p className="text-[13px] leading-relaxed text-white/55" style={inter}>{body}</p>
+              </div>
+            ))}
+          </div>
+          <a href="#events"
+             className="mt-7 inline-block rounded-full bg-emerald-400 px-8 py-3.5 text-[13.5px] font-bold text-[#04070a] transition-colors hover:bg-emerald-300"
+             style={inter}>
+            See the open events →
+          </a>
+        </div>
+      </FadeIn>
+    </div>
+  );
+}
+
 /* ---------- 04 · the arena ---------- */
 
 function Arena() {
@@ -245,6 +320,7 @@ export default function App() {
       <RainHero />
       <GlitterSection />
       <Tracks />
+      <HowItWorks />
       <EventBoard />
       <Arena />
     </main>

@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TEN LLM Portal — learn, prove it, get certified</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/mobile.css">
+<style>
+:root{--bg:#05070e;--surface:#090d1a;--card:#0e1428;--gold:#D4AF37;--gold-soft:rgba(212,175,55,.1);
+  --text:#F0EEE8;--muted:#9a9080;--dim:#4E4840;--green:#10b981;--red:#ef4444;--blue:#3b82f6;
+  --border:rgba(212,175,55,.14);--border-strong:rgba(212,175,55,.34);--radius:16px;}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(900px 460px at 50% -12%,rgba(212,175,55,.09),transparent 62%);}
+.wrap{position:relative;z-index:1;max-width:1080px;margin:0 auto;padding:26px 20px 80px;}
+h1{font-family:'Outfit',sans-serif;font-size:clamp(26px,4.6vw,40px);font-weight:900;letter-spacing:-.02em;}
+h2{font-family:'Outfit',sans-serif;font-size:22px;font-weight:800;margin-bottom:4px;}
+.sub{color:var(--muted);font-size:14.5px;line-height:1.6;margin-top:10px;}
+.top{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:26px;}
+.brand{display:flex;align-items:center;gap:10px;font-family:'Outfit',sans-serif;font-weight:800;font-size:15px;letter-spacing:.04em;}
+.brand span{color:var(--gold);}
+.who{font-size:13px;color:var(--muted);}
+button,.btn{font-family:inherit;font-weight:800;font-size:13.5px;border-radius:11px;cursor:pointer;
+  padding:11px 18px;min-height:44px;border:1px solid transparent;transition:all .2s;text-decoration:none;display:inline-block;}
+.pri{background:var(--gold);color:#05070e;}
+.pri:hover{filter:brightness(1.08);}
+.sec{background:transparent;border-color:var(--border-strong);color:#e2c766;}
+.sec:hover{background:var(--gold-soft);}
+.ghost{background:none;border:none;color:var(--muted);font-weight:600;min-height:auto;padding:6px 2px;}
+button:disabled{opacity:.45;cursor:not-allowed;}
+button:focus-visible,a:focus-visible{outline:2px solid var(--gold);outline-offset:3px;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:22px;}
+.note{padding:13px 16px;border-radius:12px;font-size:13.5px;line-height:1.55;margin:14px 0;
+  background:var(--gold-soft);border:1px solid var(--border-strong);color:#e8d9a8;}
+.note.bad{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.3);color:#fecaca;}
+.note.good{background:rgba(16,185,129,.08);border-color:rgba(16,185,129,.3);color:#a7f3d0;}
+input,textarea{width:100%;padding:12px 14px;border-radius:11px;min-height:46px;background:#0b1222;
+  border:1px solid var(--border);color:var(--text);font-size:15px;font-family:inherit;}
+textarea{min-height:110px;resize:vertical;line-height:1.6;}
+input:focus,textarea:focus{outline:none;border-color:var(--border-strong);}
+label{display:block;font-size:12.5px;color:var(--muted);margin:12px 0 5px;font-weight:700;}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));margin-top:20px;}
+.mod{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;cursor:pointer;
+  transition:border-color .2s,transform .2s;text-align:left;width:100%;min-height:auto;font-weight:400;}
+.mod:hover{border-color:var(--border-strong);transform:translateY(-2px);}
+.mod h3{font-family:'Outfit',sans-serif;font-size:16px;font-weight:800;margin-bottom:6px;}
+.mod .meta{font-size:11.5px;color:var(--dim);letter-spacing:.06em;text-transform:uppercase;}
+.bar{height:5px;border-radius:3px;background:rgba(255,255,255,.07);margin-top:11px;overflow:hidden;}
+.bar i{display:block;height:100%;background:var(--gold);border-radius:3px;}
+.tlist{margin-top:18px;display:flex;flex-direction:column;gap:8px;}
+.t{display:flex;align-items:center;gap:12px;padding:13px 15px;border-radius:12px;background:var(--card);
+  border:1px solid var(--border);text-align:left;width:100%;font-weight:400;min-height:auto;}
+.t:disabled{opacity:.42;}
+.t .n{flex:0 0 30px;height:30px;border-radius:8px;background:var(--gold-soft);color:var(--gold);
+  display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;}
+.t .ti{flex:1;font-size:14.5px;font-weight:600;}
+.t .st{font-size:11px;letter-spacing:.05em;text-transform:uppercase;font-weight:800;}
+.t.done .st{color:var(--green);} .t.shut .st{color:var(--red);} .t.now{border-color:var(--border-strong);}
+.diff{font-size:10px;color:var(--dim);letter-spacing:.1em;}
+.prose{line-height:1.75;font-size:15px;color:#ded6c4;white-space:pre-wrap;}
+.tag{display:inline-block;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:800;
+  color:var(--gold);margin-bottom:8px;}
+.vid{aspect-ratio:16/9;width:100%;border-radius:12px;border:1px solid var(--border);margin-top:8px;background:#000;}
+.q{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:17px;margin-bottom:12px;}
+.q .qp{font-size:14.5px;line-height:1.6;margin-bottom:11px;font-weight:600;}
+.opt{display:flex;gap:10px;align-items:flex-start;padding:9px 11px;border-radius:9px;cursor:pointer;font-size:14px;line-height:1.5;}
+.opt:hover{background:rgba(255,255,255,.03);}
+.opt input{width:auto;min-height:auto;margin-top:3px;}
+.cam{position:fixed;right:16px;bottom:16px;z-index:50;width:190px;border-radius:13px;overflow:hidden;
+  border:2px solid var(--border-strong);background:#000;box-shadow:0 10px 34px rgba(0,0,0,.6);}
+.cam video{width:100%;display:block;}
+.cam .lbl{font-size:10.5px;padding:5px 9px;background:rgba(0,0,0,.75);color:var(--muted);
+  display:flex;justify-content:space-between;gap:6px;}
+.cam.warn{border-color:var(--red);}
+.timer{font-family:'Outfit',sans-serif;font-weight:800;font-size:19px;color:var(--gold);}
+.timer.low{color:var(--red);}
+.hd{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
+.hidden{display:none!important;}
+@media (max-width:560px){.wrap{padding:18px 14px 70px;}.cam{width:128px;right:10px;bottom:10px;}}
+@media (prefers-reduced-motion:reduce){.mod{transition:none;}.mod:hover{transform:none;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="brand">TEN <span>LLM PORTAL</span></div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <span class="who" id="who"></span>
+      <button class="ghost hidden" id="signOut">Sign out</button>
+    </div>
+  </div>
+  <div id="view"></div>
+</div>
+
+<!-- The proctor. Mounted only while an exam is open. -->
+<div class="cam hidden" id="cam">
+  <video id="camVideo" autoplay muted playsinline></video>
+  <div class="lbl"><span>Proctored</span><span id="camState">watching</span></div>
+</div>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const view = $('view');
+const esc = (v) => String(v == null ? '' : v)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+const api = async (path, opts) => {
+  const r = await fetch('/api/v2/learn' + path, Object.assign({
+    credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }
+  }, opts || {}));
+  let d = null; try { d = await r.json(); } catch (e) {}
+  return { ok: r.ok, status: r.status, d: d || {} };
+};
+let me = null;
+
+/* ── sign in / sign up ─────────────────────────────────────────────────── */
+function authScreen(mode) {
+  const up = mode === 'up';
+  view.innerHTML = `
+    <h1>${up ? 'Create your learning account' : 'Sign in to the LLM Portal'}</h1>
+    <p class="sub">The LLM Portal has its own account, separate from the internship portal.
+       ${up ? 'Sign up, unlock the course, and every domain module opens.' : ''}</p>
+    <div class="card" style="max-width:440px;margin-top:22px;">
+      <div id="authMsg"></div>
+      ${up ? '<label for="nm">Your name</label><input id="nm" autocomplete="name">' : ''}
+      <label for="em">Email</label><input id="em" type="email" autocomplete="email">
+      <label for="pw">Password</label>
+      <input id="pw" type="password" autocomplete="${up ? 'new-password' : 'current-password'}">
+      ${up ? '<div style="font-size:11.5px;color:var(--dim);margin-top:6px;">At least 8 characters.</div>' : ''}
+      <button class="pri" id="go" style="width:100%;margin-top:18px;">${up ? 'Create account' : 'Sign in'}</button>
+      <button class="ghost" id="swap" style="width:100%;margin-top:12px;">
+        ${up ? 'I already have an account — sign in' : 'New here? Create an account'}</button>
+    </div>`;
+  $('swap').onclick = () => authScreen(up ? 'in' : 'up');
+  const submit = async () => {
+    const btn = $('go'); btn.disabled = true;
+    const body = { email: $('em').value.trim(), password: $('pw').value };
+    if (up) body.name = $('nm').value.trim();
+    const { ok, d } = await api(up ? '/signup' : '/login', { method: 'POST', body: JSON.stringify(body) });
+    btn.disabled = false;
+    if (!ok) { $('authMsg').innerHTML = '<div class="note bad">' + esc(d.message || 'That did not work.') + '</div>'; return; }
+    me = d; boot();
+  };
+  $('go').onclick = submit;
+  ['em','pw','nm'].forEach((id) => { const el = $(id); if (el) el.onkeydown = (e) => { if (e.key === 'Enter') submit(); }; });
+}
+
+/* ── the module list ───────────────────────────────────────────────────── */
+async function home() {
+  const { d } = await api('/curriculum');
+  const locked = !d.courseOpen;
+  view.innerHTML = `
+    <h1>Your modules</h1>
+    <p class="sub">One module per domain — 21 topics each, getting harder as you go.
+       Read, watch, then sit a proctored exam. Pass every topic to reach the two-hour final.</p>
+    ${locked ? `<div class="note">The course is not unlocked yet.
+        <a href="/studio.html?want=course" class="btn pri" style="margin-left:10px;">See what it includes →</a></div>`
+      : d.via === 'deferred'
+        ? `<div class="note">You chose to pay after completion — everything is open.
+             Your certificate waits for the fee, nothing else does.</div>`
+        : `<div class="note good">Unlocked${d.via === 'tenure' ? ' with your paid internship track' : ''} — every module is open.</div>`}
+    <div class="grid">${d.modules.map((m) => `
+      <button class="mod" data-slug="${esc(m.slug)}" ${!m.ready ? 'disabled' : ''}>
+        <div class="meta">${esc(m.shortCode || '')}${m.ready ? '' : ' · coming soon'}</div>
+        <h3>${esc(m.name)}</h3>
+        <div class="meta" style="color:var(--muted);text-transform:none;letter-spacing:0;font-size:12.5px;">
+          ${m.settled}/${m.topicCount} topics${m.finalPassed ? ' · final passed' : ''}${m.certificateId ? ' · certified' : ''}</div>
+        <div class="bar"><i style="width:${m.topicCount ? Math.round(m.settled / m.topicCount * 100) : 0}%"></i></div>
+      </button>`).join('')}</div>`;
+  view.querySelectorAll('[data-slug]').forEach((b) => { b.onclick = () => moduleScreen(b.dataset.slug); });
+}
+
+/* ── one module ────────────────────────────────────────────────────────── */
+async function moduleScreen(slug) {
+  const { ok, status, d } = await api('/module/' + encodeURIComponent(slug));
+  if (status === 402) { home(); return; }
+  if (!ok) { view.innerHTML = '<div class="note bad">Could not open that module.</div>'; return; }
+
+  const settled = d.topics.filter((t) => t.passedAt || t.closedByHR).length;
+  view.innerHTML = `
+    <button class="ghost" id="back">← All modules</button>
+    <div class="hd" style="margin-top:8px;">
+      <div><h1>${esc(d.name)}</h1>
+        <p class="sub">${settled} of ${d.topics.length} topics settled.</p></div>
+    </div>
+    ${d.proctorHold ? `<div class="note bad">Your exams in this module are on hold —
+       HR is reviewing the camera warnings from topic ${d.proctorHold.topicN || 'final'}.
+       You will get an email with the decision.</div>` : ''}
+    <div class="tlist">${d.topics.map((t) => `
+      <button class="t ${t.passedAt ? 'done' : ''} ${t.closedByHR ? 'shut' : ''} ${t.open && !t.passedAt && !t.closedByHR ? 'now' : ''}"
+              data-n="${t.n}" ${t.open ? '' : 'disabled'}>
+        <span class="n">${t.n}</span>
+        <span class="ti">${esc(t.title)}<br><span class="diff">DIFFICULTY ${t.difficulty}/5</span></span>
+        <span class="st">${t.passedAt ? 'passed' : t.closedByHR ? 'closed' : t.open ? 'open' : 'locked'}</span>
+      </button>`).join('')}</div>
+    <div class="card" style="margin-top:22px;">
+      <h2>Final exam</h2>
+      <p class="sub">Two hours, every topic, ${d.finalPassed ? '' : 'opens when all topics are settled.'}</p>
+      ${d.finalPassed ? '<div class="note good">Final passed.</div>'
+        : `<button class="pri" id="final" style="margin-top:12px;" ${d.finalOpen ? '' : 'disabled'}>Start the final</button>`}
+    </div>
+    ${d.finalPassed ? `<div class="card" style="margin-top:14px;">
+      <h2>Your big project</h2>
+      <p class="sub">Optional — build something real with what you learned, or skip straight to the certificate.</p>
+      ${d.project && (d.project.doneAt || d.project.skippedAt)
+        ? `<div class="note good">${d.project.doneAt ? 'Project submitted.' : 'Project skipped.'}</div>`
+        : `<label for="purl">Link to your project</label><input id="purl" placeholder="https://github.com/you/project">
+           <label for="pnote">Anything we should know</label><textarea id="pnote"></textarea>
+           <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
+             <button class="pri" id="psub">Submit project</button>
+             <button class="sec" id="pskip">Skip the project</button></div>`}
+      <div style="margin-top:18px;border-top:1px solid var(--border);padding-top:18px;">
+        <h2>Certificate</h2>
+        <div id="certMsg"></div>
+        <button class="pri" id="cert" style="margin-top:10px;">Download my certificate</button>
+      </div></div>` : ''}`;
+
+  $('back').onclick = home;
+  view.querySelectorAll('[data-n]').forEach((b) => { b.onclick = () => topicScreen(slug, +b.dataset.n); });
+  if ($('final')) $('final').onclick = () => startExam(slug, 0);
+  if ($('psub')) $('psub').onclick = async () => {
+    const r = await api('/module/' + slug + '/project', { method: 'POST',
+      body: JSON.stringify({ url: $('purl').value.trim(), note: $('pnote').value }) });
+    if (!r.ok) { alert(r.d.message || 'Could not submit that.'); return; }
+    moduleScreen(slug);
+  };
+  if ($('pskip')) $('pskip').onclick = async () => {
+    await api('/module/' + slug + '/project', { method: 'POST', body: JSON.stringify({ skip: true }) });
+    moduleScreen(slug);
+  };
+  if ($('cert')) $('cert').onclick = async () => {
+    const r = await fetch('/api/v2/learn/module/' + slug + '/certificate', { credentials: 'same-origin' });
+    if (r.ok) { window.location = '/api/v2/learn/module/' + slug + '/certificate'; return; }
+    let msg = 'Not ready yet.'; try { msg = (await r.json()).message || msg; } catch (e) {}
+    $('certMsg').innerHTML = '<div class="note">' + esc(msg)
+      + (r.status === 402 ? ' <a class="btn sec" href="/studio.html" style="margin-left:8px;">Settle it →</a>' : '') + '</div>';
+  };
+}
+
+/* ── one topic: read, watch, then the exam ─────────────────────────────── */
+async function topicScreen(slug, n) {
+  const { ok, d } = await api('/module/' + encodeURIComponent(slug) + '/topic/' + n);
+  if (!ok) { view.innerHTML = '<div class="note bad">' + esc(d.message || 'Locked.') + '</div>'; return; }
+  const t = d.topic;
+  const src = t.videoId
+    ? 'https://www.youtube.com/embed/' + encodeURIComponent(t.videoId)
+    : 'https://www.youtube.com/embed?listType=search&list=' + encodeURIComponent(t.videoSearch || t.title);
+
+  view.innerHTML = `
+    <button class="ghost" id="back">← ${esc(slug)}</button>
+    <h1 style="margin-top:8px;">${t.n}. ${esc(t.title)}</h1>
+    <p class="sub">Difficulty ${t.difficulty} of 5</p>
+    <div class="card" style="margin-top:18px;">
+      <div class="tag">The technical explanation</div>
+      <div class="prose">${esc(t.technical)}</div>
+    </div>
+    <div class="card" style="margin-top:14px;">
+      <div class="tag">In simple terms</div>
+      <div class="prose">${esc(t.simple)}</div>
+    </div>
+    <div class="card" style="margin-top:14px;">
+      <div class="tag">Watch this before the exam</div>
+      <iframe class="vid" src="${esc(src)}" title="Video for ${esc(t.title)}"
+        allow="accelerometer; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+      ${d.videoDoneAt ? '<div class="note good">Video marked as watched.</div>'
+        : `<div class="note">The exam unlocks once you have watched it through.</div>
+           <button class="sec" id="vdone">I have watched the whole video</button>`}
+    </div>
+    <div class="card" style="margin-top:14px;">
+      <h2>Topic exam</h2>
+      <p class="sub">Section 1 — 10 written answers marked by AI. Section 2 — 10 multiple choice.
+         Camera on throughout; three warnings and it stops.</p>
+      ${d.passedAt ? '<div class="note good">Passed.</div>'
+        : d.closedByHR ? '<div class="note bad">Closed by HR. Carry on to the next topic.</div>'
+        : `<button class="pri" id="exam" style="margin-top:12px;" ${d.videoDoneAt ? '' : 'disabled'}>Start the exam</button>`}
+    </div>`;
+  $('back').onclick = () => moduleScreen(slug);
+  if ($('vdone')) $('vdone').onclick = async () => {
+    // The player is cross-origin so its true position is unreadable; the claim
+    // plus a minimum dwell is the honest ceiling here.
+    await api('/module/' + slug + '/topic/' + n + '/video-done',
+      { method: 'POST', body: JSON.stringify({ playedSeconds: 999 }) });
+    topicScreen(slug, n);
+  };
+  if ($('exam')) $('exam').onclick = () => startExam(slug, n);
+}
+
+/* ── the proctor ───────────────────────────────────────────────────────── *
+ * The camera must be live for the exam to run. Warnings fire when the face
+ * leaves the frame, the tab is hidden, or the stream stops — three and the
+ * attempt is void and HR is asked to review.
+ * ponytail: brightness-variance heuristic, not face recognition — it catches
+ * an empty seat and a covered lens. Swap in FaceDetector where supported if
+ * false positives ever bite.
+ */
+let proctor = null;
+async function startProctor(attemptId, onVoid) {
+  const cam = $('cam'), video = $('camVideo'), state = $('camState');
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 }, audio: false });
+  } catch (e) { return null; }
+  video.srcObject = stream;
+  cam.classList.remove('hidden');
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 64; canvas.height = 48;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  let warnings = 0, cooling = 0, dead = false;
+
+  const warn = async (reason) => {
+    if (dead || Date.now() < cooling) return;
+    cooling = Date.now() + 6000;   // one warning per six seconds, not per frame
+    cam.classList.add('warn');
+    const { d } = await api('/exam/' + attemptId + '/warning', { method: 'POST', body: JSON.stringify({ reason }) });
+    warnings = d.warningCount || warnings + 1;
+    state.textContent = 'warning ' + warnings + ' of 3';
+    setTimeout(() => cam.classList.remove('warn'), 2500);
+    if (d.voided) { dead = true; stopProctor(); onVoid(d.message); }
+  };
+
+  const tick = setInterval(() => {
+    if (dead) return;
+    if (document.hidden) { warn('left the exam tab'); return; }
+    if (!stream.active || !video.videoWidth) { warn('camera stopped'); return; }
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const px = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let sum = 0, sq = 0, n = 0;
+    for (let i = 0; i < px.length; i += 16) { const v = px[i]; sum += v; sq += v * v; n++; }
+    const mean = sum / n, variance = sq / n - mean * mean;
+    // A covered lens or an empty, flat scene: almost no variation in the frame.
+    if (variance < 60) warn('nobody visible in frame');
+    else state.textContent = warnings ? 'warning ' + warnings + ' of 3' : 'watching';
+  }, 3000);
+
+  proctor = { stop: () => { clearInterval(tick); stream.getTracks().forEach((t) => t.stop());
+                            cam.classList.add('hidden'); proctor = null; } };
+  return proctor;
+}
+function stopProctor() { if (proctor) proctor.stop(); }
+
+/* ── sitting an exam ───────────────────────────────────────────────────── */
+async function startExam(slug, topicN) {
+  view.innerHTML = '<div class="note">Setting your paper…</div>';
+  const { ok, status, d } = await api('/exam/start',
+    { method: 'POST', body: JSON.stringify({ slug, topicN }) });
+  if (!ok) {
+    view.innerHTML = '<div class="note ' + (status === 423 ? 'bad' : '') + '">' + esc(d.message || 'Could not start.') + '</div>'
+      + '<button class="sec" id="back" style="margin-top:14px;">← Back</button>';
+    $('back').onclick = () => moduleScreen(slug);
+    return;
+  }
+
+  const started = await startProctor(d.attemptId, (msg) => {
+    view.innerHTML = '<div class="note bad">' + esc(msg) + '</div>'
+      + '<p class="sub">HR has been notified and will email you the decision.</p>'
+      + '<button class="sec" id="back" style="margin-top:14px;">← Back to the module</button>';
+    $('back').onclick = () => moduleScreen(slug);
+  });
+  if (!started) {
+    stopProctor();
+    view.innerHTML = '<div class="note bad">This exam is camera-proctored — allow camera access and start again.</div>'
+      + '<button class="sec" id="back" style="margin-top:14px;">← Back</button>';
+    $('back').onclick = () => moduleScreen(slug);
+    return;
+  }
+
+  const written = d.questions.filter((q) => q.kind === 'written');
+  const mcq = d.questions.filter((q) => q.kind === 'mcq');
+  view.innerHTML = `
+    <div class="hd">
+      <div><h1>${topicN === 0 ? 'Final exam' : 'Topic ' + topicN + ' exam'}</h1>
+        <p class="sub">Section 1 · ${written.length} written · Section 2 · ${mcq.length} multiple choice</p></div>
+      <div style="text-align:right;"><div class="timer" id="clock">--:--</div>
+        <div style="font-size:11px;color:var(--dim);">time remaining</div></div>
+    </div>
+    <div id="examMsg"></div>
+    <h2 style="margin-top:20px;">Section 1 — explain in your own words</h2>
+    ${written.map((q) => `<div class="q"><div class="qp">${q.i + 1}. ${esc(q.prompt)}</div>
+      <textarea data-a="${q.i}" placeholder="Your answer"></textarea></div>`).join('')}
+    <h2 style="margin-top:24px;">Section 2 — choose one</h2>
+    ${mcq.map((q) => `<div class="q"><div class="qp">${q.i + 1}. ${esc(q.prompt)}</div>
+      ${q.options.map((o, k) => `<label class="opt"><input type="radio" name="q${q.i}" value="${k}">
+        <span>${esc(o)}</span></label>`).join('')}</div>`).join('')}
+    <button class="pri" id="submit" style="width:100%;margin-top:18px;">Submit my paper</button>`;
+
+  const deadline = new Date(d.deadlineAt).getTime();
+  const clock = setInterval(() => {
+    const left = Math.max(0, deadline - Date.now());
+    const m = Math.floor(left / 60000), s = Math.floor(left % 60000 / 1000);
+    const el = $('clock'); if (!el) { clearInterval(clock); return; }
+    el.textContent = m + ':' + String(s).padStart(2, '0');
+    if (left < 5 * 60000) el.classList.add('low');
+    if (left === 0) { clearInterval(clock); submit(true); }
+  }, 1000);
+
+  async function submit(auto) {
+    const btn = $('submit'); if (btn) btn.disabled = true;
+    const answers = {};
+    view.querySelectorAll('[data-a]').forEach((t) => { answers[t.dataset.a] = t.value; });
+    view.querySelectorAll('input[type=radio]:checked').forEach((r) => {
+      answers[r.name.slice(1)] = Number(r.value);
+    });
+    const r = await api('/exam/' + d.attemptId + '/submit', { method: 'POST', body: JSON.stringify({ answers }) });
+    if (!r.ok) {
+      if (btn) btn.disabled = false;
+      $('examMsg').innerHTML = '<div class="note bad">' + esc(r.d.message || 'Could not submit.') + '</div>';
+      return;
+    }
+    clearInterval(clock); stopProctor();
+    showResult(slug, topicN, r.d, auto);
+  }
+  $('submit').onclick = () => submit(false);
+}
+
+function showResult(slug, topicN, r, auto) {
+  view.innerHTML = `
+    <h1>${r.passed ? 'Passed' : 'Not this time'}</h1>
+    <div class="note ${r.passed ? 'good' : 'bad'}">
+      Written ${r.writtenScore}/${r.writtenTotal} · Multiple choice ${r.mcqScore}/${r.mcqTotal}
+      ${auto ? ' · submitted automatically when time ran out' : ''}</div>
+    <p class="sub">${r.passed
+      ? 'The next topic is open.'
+      : 'Take it again when you are ready — you will get a completely new set of questions.'}</p>
+    ${r.review.filter((q) => q.kind === 'written').map((q) => `<div class="q">
+       <div class="qp">${esc(q.prompt)}</div>
+       <div style="font-size:13.5px;color:var(--muted);line-height:1.6;">Your answer: ${esc(q.given || '(blank)')}</div>
+       <div style="margin-top:9px;font-size:13px;font-weight:700;color:${q.correct ? 'var(--green)' : 'var(--red)'};">
+         ${q.correct ? '✓ Accepted' : '✗ Not accepted'} — ${esc(q.feedback || '')}</div></div>`).join('')}
+    <button class="pri" id="back" style="margin-top:18px;">← Back to the module</button>`;
+  $('back').onclick = () => moduleScreen(slug);
+}
+
+/* ── boot ──────────────────────────────────────────────────────────────── */
+async function boot() {
+  const { ok, d } = await api('/me');
+  if (!ok) { $('who').textContent = ''; $('signOut').classList.add('hidden'); authScreen('in'); return; }
+  me = d;
+  $('who').textContent = d.name;
+  $('signOut').classList.remove('hidden');
+  $('signOut').onclick = async () => { await api('/logout', { method: 'POST' }); me = null; boot(); };
+  home();
+}
+window.addEventListener('beforeunload', stopProctor);
+boot();
+</script>
+</body>
+</html>

@@ -42,7 +42,10 @@ h1{font-family:'Outfit',sans-serif;font-size:clamp(28px,5vw,44px);font-weight:90
 .badge{position:absolute;top:-11px;left:22px;padding:4px 12px;border-radius:999px;
   background:var(--gold);color:#05070e;font-size:10px;font-weight:900;letter-spacing:.12em;}
 .plan h3{font-family:'Outfit',sans-serif;font-size:19px;font-weight:800;}
-.plan .blurb{font-size:13px;color:var(--muted);line-height:1.55;flex:1;}
+.plan .blurb{font-size:13px;color:var(--muted);line-height:1.55;}
+.plan .incl{list-style:none;margin:2px 0 4px;padding:0;flex:1;}
+.plan .incl li{position:relative;padding:3px 0 3px 20px;font-size:12.5px;line-height:1.5;color:#cfc7b4;}
+.plan .incl li::before{content:'✓';position:absolute;left:2px;color:var(--gold);font-weight:800;}
 .price{font-family:'Outfit',sans-serif;font-size:34px;font-weight:900;letter-spacing:-.02em;}
 .price .was{font-size:15px;font-weight:600;color:var(--dim);text-decoration:line-through;margin-left:9px;}
 .saving{font-size:12px;font-weight:800;color:var(--green);letter-spacing:.02em;}
@@ -176,11 +179,19 @@ function planHtml(p, opts) {
       + (combo && p.insteadOf ? '<span class="was">' + money(p.insteadOf) + '</span>' : '') + '</div>'
     + (combo && p.saving ? '<div class="saving">You save ' + money(p.saving) + '</div>' : '')
     + '<p class="blurb">' + esc(p.blurb) + '</p>'
+    // What the money buys, in full, BEFORE it is asked for.
+    + ((p.includes || []).length
+        ? '<ul class="incl">' + p.includes.map((line) => '<li>' + esc(line) + '</li>').join('') + '</ul>'
+        : '')
     + (owned
         ? '<div class="owned">✓ You already have this</div>'
         : '<div class="btns">'
           + '<button class="pay-now"   data-buy="' + esc(p.key) + '" data-mode="now">Pay now</button>'
-          + '<button class="pay-later" data-buy="' + esc(p.key) + '" data-mode="after">Pay after completion</button>'
+          // Only the course carries a completion to pay at; everything else is
+          // consumed as it is used, so it is pay-first.
+          + (p.deferrable
+              ? '<button class="pay-later" data-buy="' + esc(p.key) + '" data-mode="after">Pay after completion</button>'
+              : '')
           + '</div>')
     + '</div>';
 }

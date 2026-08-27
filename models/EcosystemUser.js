@@ -4,7 +4,9 @@ const bcrypt = require("bcryptjs");
 const EcosystemUserSchema = new mongoose.Schema({
   role: {
     type: String,
-    enum: ["founder", "mentor", "investor", "contractor", "student"],
+    // "learner" is an LLM-portal account: a paying course-taker who is not
+    // an intern — no employee id, no tenure, no attendance.
+    enum: ["founder", "mentor", "investor", "contractor", "student", "learner"],
     required: true
   },
   fullName: { type: String, required: true, trim: true },

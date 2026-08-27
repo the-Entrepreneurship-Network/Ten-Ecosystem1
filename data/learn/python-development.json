@@ -1,0 +1,152 @@
+{
+ "note": "Edit this file to change the module; the server reads it at boot.",
+ "topics": [
+  {
+   "title": "Why Python and how it runs",
+   "technical": "Python is an interpreted, dynamically typed language whose design optimises for readability and development speed. CPython compiles source to bytecode and executes it on a virtual machine; that indirection costs raw speed but buys portability and an ecosystem — pip and PyPI — unmatched in breadth.",
+   "simple": "Python trades a little machine speed for a lot of human speed: code that reads like English and a library for almost everything.",
+   "videoId": "rfscVS0vtbw",
+   "difficulty": 1
+  },
+  {
+   "title": "Variables, types and numbers",
+   "technical": "Names in Python are references bound to objects, not boxes holding values; types live on the objects. Integers are arbitrary precision, floats are IEEE-754 doubles with the usual 0.1+0.2 surprises, and type() and isinstance() interrogate what a name currently points at.",
+   "simple": "A variable is a label stuck on a value. Numbers can grow as big as memory allows, but decimal fractions carry tiny rounding quirks.",
+   "videoId": "rfscVS0vtbw",
+   "difficulty": 1
+  },
+  {
+   "title": "Strings and text work",
+   "technical": "Strings are immutable sequences of Unicode characters supporting slicing, rich methods (split, join, strip, replace) and f-string interpolation. Because they are immutable, every transformation returns a new string — building large text with repeated + is quadratic; ''.join(parts) is the idiom.",
+   "simple": "Text comes with batteries: cut it, search it, glue it, and format values into it with f'...' templates.",
+   "videoId": "rfscVS0vtbw",
+   "difficulty": 1
+  },
+  {
+   "title": "Lists, tuples and slicing",
+   "technical": "Lists are mutable ordered sequences; tuples are their immutable cousins, usable as dictionary keys. Slicing views any subsequence with [start:stop:step], and comprehension syntax builds new lists in one declarative line — the most Pythonic construct in the language.",
+   "simple": "Lists hold things in order and can change; tuples are lists that promise never to change. Slices grab any stretch of either.",
+   "videoId": "rfscVS0vtbw",
+   "difficulty": 1
+  },
+  {
+   "title": "Dictionaries and sets",
+   "technical": "Dicts map hashable keys to values with O(1) average lookup and preserve insertion order; sets hold unique hashable items with the same speed and support union, intersection and difference. Most real Python programs are dictionaries wearing different hats.",
+   "simple": "A dict is a phone book — look up by name, not position. A set is a bag that silently refuses duplicates.",
+   "videoId": "rfscVS0vtbw",
+   "difficulty": 1
+  },
+  {
+   "title": "Control flow",
+   "technical": "if/elif/else branch on truthiness, for iterates any iterable, while loops on a condition, and break/continue/else refine both. range() generates arithmetic sequences lazily, and enumerate() and zip() are the loop companions that eliminate manual index bookkeeping.",
+   "simple": "Programs decide and repeat: if chooses a path, loops walk through collections, and helpers keep you from counting on your fingers.",
+   "videoId": "rfscVS0vtbw",
+   "difficulty": 2
+  },
+  {
+   "title": "Functions and scope",
+   "technical": "def binds a callable with positional, keyword, default, *args and **kwargs parameters; functions are first-class objects passed and returned like any value. Scope follows LEGB — local, enclosing, global, builtin — and default arguments are evaluated once, the classic mutable-default trap.",
+   "simple": "A function is a named recipe with ingredients. In Python, recipes are things too: you can hand one to another function.",
+   "videoId": "rfscVS0vtbw",
+   "difficulty": 2
+  },
+  {
+   "title": "Errors and exceptions",
+   "technical": "Python signals failure by raising exceptions that unwind the stack until caught by try/except; finally runs regardless and with-statements guarantee cleanup via context managers. Catch what you can handle, let the rest travel, and never write a bare except that swallows evidence.",
+   "simple": "When something goes wrong, Python throws a flare. You catch the ones you can fix and let real emergencies reach the surface.",
+   "videoId": "rfscVS0vtbw",
+   "difficulty": 2
+  },
+  {
+   "title": "Files and paths",
+   "technical": "open() reads and writes files as text or bytes, and with-blocks close them even on error. pathlib.Path treats paths as objects — joining, globbing, reading in one call — and the csv and json modules turn the two commonest file formats into Python structures directly.",
+   "simple": "Reading and writing files is a with-block away, and Path makes folder work feel like handling objects instead of gluing strings.",
+   "videoId": "rfscVS0vtbw",
+   "difficulty": 2
+  },
+  {
+   "title": "Modules, packages and pip",
+   "technical": "import loads a module once and caches it; packages are folders of modules with __init__.py. Virtual environments give every project its own interpreter and site-packages, and pip installs pinned dependencies from requirements.txt — reproducibility as a habit, not an accident.",
+   "simple": "Split code into files, borrow the world's libraries with pip, and give each project its own sealed toolbox so versions never fight.",
+   "videoId": "rfscVS0vtbw",
+   "difficulty": 3
+  },
+  {
+   "title": "Object-oriented Python",
+   "technical": "class bundles state and behaviour; __init__ constructs instances, self names the instance, and inheritance plus super() share and extend behaviour. Dunder methods (__repr__, __eq__, __len__) plug your types into the language's own syntax — the real point of OOP in Python.",
+   "simple": "Classes let you define your own kinds of things: what they remember, what they can do, and how they print and compare.",
+   "videoId": "rfscVS0vtbw",
+   "difficulty": 3
+  },
+  {
+   "title": "Iterators, generators and lazy work",
+   "technical": "The iterator protocol (__iter__/__next__) powers every for-loop; generators write iterators as functions that yield, keeping state between calls and computing values on demand. Lazy pipelines process gigabytes in constant memory — yield is Python's quiet superpower.",
+   "simple": "Generators hand you one item at a time, only when asked — so you can stream through huge data without loading it all.",
+   "videoId": "rfscVS0vtbw",
+   "difficulty": 3
+  },
+  {
+   "title": "Decorators and closures",
+   "technical": "A closure captures variables from its enclosing scope; a decorator is a callable that takes a function and returns a replacement, applied with @syntax. Logging, caching (functools.lru_cache), and access control wrap behaviour around functions without editing them.",
+   "simple": "A decorator gift-wraps a function with extra behaviour — timing it, caching it — without touching its insides.",
+   "videoId": "rfscVS0vtbw",
+   "difficulty": 3
+  },
+  {
+   "title": "Testing with pytest",
+   "technical": "pytest discovers test_*.py files, runs plain assert statements with rich failure output, and parametrizes cases across inputs. Fixtures inject setup, monkeypatch fakes the environment, and a failing test written before the fix is the cheapest bug insurance ever invented.",
+   "simple": "Tests are small programs that check your program. Write one per behaviour, run them constantly, and refactor without fear.",
+   "videoSearch": "pytest tutorial",
+   "difficulty": 4
+  },
+  {
+   "title": "HTTP and consuming APIs",
+   "technical": "The requests library speaks HTTP: GET and POST with params, JSON bodies, headers, timeouts and status codes. Real integrations respect rate limits, retry idempotent calls with backoff, and never trust a payload without checking status and shape first.",
+   "simple": "Most data lives behind web APIs. requests fetches it, JSON decodes it, and good code plans for the server having a bad day.",
+   "videoSearch": "python requests api tutorial",
+   "difficulty": 4
+  },
+  {
+   "title": "Working with data: csv, json and pandas",
+   "technical": "csv and json cover interchange; pandas loads tables into DataFrames for filtering, grouping, joining and aggregation with vectorised speed. The skill is thinking in columns instead of loops — describe the transformation, let the library iterate.",
+   "simple": "pandas turns files of rows into a smart spreadsheet you command with code: filter, group, join, summarise.",
+   "videoSearch": "pandas tutorial for beginners",
+   "difficulty": 4
+  },
+  {
+   "title": "Building a web API with Flask",
+   "technical": "Flask maps URLs to functions with decorators, parses request bodies, and returns JSON; blueprints organise routes and the app factory pattern keeps configuration testable. It is the fastest path from Python function to HTTP endpoint that other programs can call.",
+   "simple": "Flask turns your functions into web addresses: a phone number other programs can call to use your code.",
+   "videoSearch": "flask rest api tutorial",
+   "difficulty": 4
+  },
+  {
+   "title": "Databases and SQL from Python",
+   "technical": "Relational data lives in tables joined by keys; SQL declares what you want and the engine finds it. sqlite3 ships in the standard library, parameterised queries stop injection, and ORMs like SQLAlchemy map rows to objects when projects grow past raw strings.",
+   "simple": "Databases remember your data properly. SQL asks for it, and Python's libraries carry the answers into your program.",
+   "videoId": "HXV3zeQKqGY",
+   "difficulty": 5
+  },
+  {
+   "title": "Concurrency: threads and asyncio",
+   "technical": "The GIL means threads interleave rather than parallelise CPU work, but they excel at waiting on I/O; asyncio schedules thousands of awaiting coroutines on one thread, and multiprocessing sidesteps the GIL for CPU-bound loads. Choose by what dominates: waiting or computing.",
+   "simple": "Python can juggle many slow conversations at once (async), or split heavy math across CPU cores (processes) — pick the tool for the bottleneck.",
+   "videoSearch": "python asyncio explained",
+   "difficulty": 5
+  },
+  {
+   "title": "Packaging and shipping",
+   "technical": "pyproject.toml declares metadata and dependencies; build produces wheels; twine publishes to PyPI. Entry points turn packages into commands, and pinned lockfiles make deployments reproducible — software is not finished until someone else can install it.",
+   "simple": "Turn your project into a thing others can pip install, with its needs written down so it works on machines that are not yours.",
+   "videoSearch": "python packaging pyproject tutorial",
+   "difficulty": 5
+  },
+  {
+   "title": "The final project",
+   "technical": "Build and ship a complete application: a REST API with persistent storage, tests, packaging, and a README that lets a stranger run it in five minutes. Scope small, finish completely — a finished small thing beats an abandoned big one in every interview.",
+   "simple": "Put the whole course into one real, finished, installable project — the thing you will actually show people.",
+   "videoSearch": "python portfolio project ideas",
+   "difficulty": 5
+  }
+ ]
+}

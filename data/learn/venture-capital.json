@@ -1,0 +1,152 @@
+{
+ "note": "Edit this file to change the module; the server reads it at boot.",
+ "topics": [
+  {
+   "title": "What venture capital is",
+   "technical": "VC funds high-risk, high-growth startups in exchange for equity, betting a fund on a few outsized winners paying for many losses. It is an asset class with its own power-law logic, distinct from ordinary investing.",
+   "simple": "Investing in risky young startups, expecting a few huge wins to cover many failures.",
+   "videoSearch": "what is venture capital",
+   "difficulty": 1
+  },
+  {
+   "title": "The startup funding lifecycle",
+   "technical": "From pre-seed and seed through Series A, B and beyond to exit, each stage funds a different risk: idea, product, growth, scale. Knowing the ladder frames every valuation and expectation.",
+   "simple": "The stages of raising money — each buying down a different startup risk.",
+   "videoSearch": "startup funding stages explained",
+   "difficulty": 1
+  },
+  {
+   "title": "How VC funds work",
+   "technical": "A fund pools limited partners' capital, deploys it over years, and returns gains after fees and carry. The 2-and-20 structure and the ten-year clock shape every incentive in the business.",
+   "simple": "How the money is pooled, invested, and shared between investors and fund managers.",
+   "videoSearch": "how vc funds work",
+   "difficulty": 1
+  },
+  {
+   "title": "Sourcing deals",
+   "technical": "Deal flow comes from networks, referrals, accelerators and outreach; seeing many companies is prerequisite to picking well. Proprietary flow is a real edge — the best deals are often not advertised.",
+   "simple": "Finding promising startups to invest in — the more you see, the better you choose.",
+   "videoSearch": "vc deal sourcing",
+   "difficulty": 1
+  },
+  {
+   "title": "Evaluating founders and teams",
+   "technical": "Early-stage bets are bets on people: coachability, resilience, insight and complementary teams predict more than the plan, which will change. VCs back founders who navigate uncertainty, not just present well.",
+   "simple": "Judging the people, because at the start the team matters more than the plan.",
+   "videoSearch": "evaluating startup founders",
+   "difficulty": 1
+  },
+  {
+   "title": "Market sizing and opportunity",
+   "technical": "VCs need markets big enough for outsized returns: TAM/SAM/SOM, growth rate and timing separate a lifestyle business from a venture-scale one. A great team in a tiny market still cannot return a fund.",
+   "simple": "Checking the opportunity is huge enough for a startup to become enormous.",
+   "videoSearch": "market sizing tam sam som",
+   "difficulty": 2
+  },
+  {
+   "title": "Business models and unit economics",
+   "technical": "CAC, LTV, margins and payback reveal whether growth creates or destroys value; a model that loses more per customer as it scales is a trap. Unit economics is where hype meets arithmetic.",
+   "simple": "Does the company make money per customer, or lose more the bigger it gets?",
+   "videoSearch": "unit economics startup",
+   "difficulty": 2
+  },
+  {
+   "title": "Reading pitch decks",
+   "technical": "A deck signals clarity of thought: problem, solution, market, traction, team, ask. VCs read for substance and honesty behind the polish, and for what is conspicuously missing.",
+   "simple": "What investors actually look for behind a startup's pitch slides.",
+   "videoSearch": "how vcs read pitch decks",
+   "difficulty": 2
+  },
+  {
+   "title": "Traction and metrics",
+   "technical": "Growth, retention, engagement and revenue quality show whether a product works; vanity metrics flatter while cohort and retention data tell the truth. Traction de-risks the bet more than any story.",
+   "simple": "The real numbers that prove a startup is working, not just talking.",
+   "videoSearch": "startup traction metrics",
+   "difficulty": 2
+  },
+  {
+   "title": "Valuation basics",
+   "technical": "Early-stage valuation blends comparables, ownership targets and negotiation more than DCF; pre- and post-money math determines who owns what. Price is a negotiated bet on the future, not a calculated fact.",
+   "simple": "How startups get a price tag before profits — mostly negotiation and comparison.",
+   "videoSearch": "startup valuation basics",
+   "difficulty": 3
+  },
+  {
+   "title": "Term sheets",
+   "technical": "Term sheets set valuation, liquidation preferences, board seats, option pools and protective provisions — control and economics both. The headline number matters less than the terms beneath it.",
+   "simple": "The deal's real terms — who controls what and who gets paid first.",
+   "videoSearch": "term sheet explained",
+   "difficulty": 3
+  },
+  {
+   "title": "Cap tables and dilution",
+   "technical": "A cap table tracks ownership across rounds; each raise dilutes existing holders, and option pools and preferences reshape who actually profits at exit. Founders and investors alike live or die by this math.",
+   "simple": "Who owns how much — and how each new investment shrinks everyone's slice.",
+   "videoSearch": "cap table dilution explained",
+   "difficulty": 3
+  },
+  {
+   "title": "Due diligence",
+   "technical": "Before investing, VCs verify the team, market, tech, financials and legals; diligence catches the gap between pitch and reality. Skipping it is how avoidable disasters get funded.",
+   "simple": "Checking a startup's claims are true before writing the cheque.",
+   "videoSearch": "startup due diligence",
+   "difficulty": 3
+  },
+  {
+   "title": "Portfolio strategy",
+   "technical": "VCs build portfolios expecting most to fail and few to return the fund; diversification, reserves for follow-on, and ownership targets manage the power law. One winner can pay for everything.",
+   "simple": "Spreading bets knowing most lose, because one giant win covers all.",
+   "videoSearch": "vc portfolio strategy",
+   "difficulty": 4
+  },
+  {
+   "title": "Supporting portfolio companies",
+   "technical": "Beyond capital, VCs help with hiring, introductions, strategy and follow-on funding; the best add real value between rounds. Money is a commodity; help is the differentiator.",
+   "simple": "What good investors do after investing — hiring, intros, advice, more money.",
+   "videoSearch": "how vcs help startups",
+   "difficulty": 4
+  },
+  {
+   "title": "Exits: IPOs and acquisitions",
+   "technical": "Returns come only at exit — acquisition or IPO — so VCs think about the buyer from the start. Timing, market conditions and preferences decide who profits and how much.",
+   "simple": "How investors finally cash out — being bought or going public.",
+   "videoSearch": "startup exit ipo acquisition",
+   "difficulty": 4
+  },
+  {
+   "title": "Risk and failure",
+   "technical": "Most startups fail; VCs manage risk through portfolio construction, staged funding and honest post-mortems, not by avoiding failure. Understanding failure modes improves the next bet.",
+   "simple": "Failure is normal — good investors plan for it and learn from it.",
+   "videoSearch": "why startups fail",
+   "difficulty": 4
+  },
+  {
+   "title": "The founder's perspective",
+   "technical": "Understanding fundraising from the founder's side — dilution fear, control, the fundraising grind — makes for better, more aligned investors. The relationship is a long marriage, not a transaction.",
+   "simple": "Seeing the deal through the founder's eyes makes for a better partner.",
+   "videoSearch": "founder fundraising perspective",
+   "difficulty": 5
+  },
+  {
+   "title": "Emerging trends",
+   "technical": "Sectors, geographies and models shift; AI, climate and new fund structures reshape where capital flows. Reading trends early is part of the edge, though hype must be discounted.",
+   "simple": "Spotting where the next wave of startups and money is heading.",
+   "videoSearch": "venture capital trends",
+   "difficulty": 5
+  },
+  {
+   "title": "Ethics and the ecosystem",
+   "technical": "VC shapes which futures get built and funded; access, bias and incentive misalignment are real problems the industry wrestles with. Capital allocation is a form of power with consequences.",
+   "simple": "The responsibility that comes with deciding which ideas get funded.",
+   "videoSearch": "venture capital ethics",
+   "difficulty": 5
+  },
+  {
+   "title": "The capstone",
+   "technical": "Evaluate a real startup as an investor: market, team, model, traction, valuation and a reasoned invest/pass memo with terms. An investment memo demonstrates the whole analytical discipline.",
+   "simple": "Write a full invest-or-pass analysis of a real startup — the VC's core deliverable.",
+   "videoSearch": "investment memo example",
+   "difficulty": 5
+  }
+ ]
+}

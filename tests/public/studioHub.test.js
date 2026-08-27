@@ -203,3 +203,68 @@ describe('the first question the Studio asks', () => {
     expect(GATE_CODE).toMatch(/\.catch\(\(\) => \{[\s\S]{0,200}setOpen\(true\)/);
   });
 });
+
+describe('the smaller fixes', () => {
+  const DOMAINS = read('public/domains.html');
+  const MSG = read('public/messages.html');
+  const HACK = read('hackathon-portal-app/src/App.tsx');
+
+  it('the domains page has no notification orb', () => {
+    expect(DOMAINS).not.toContain('notify-orb.js');
+  });
+
+  /*
+   * "← TEN" always went to the marketing home page, throwing out anybody who
+   * arrived from inside the product. The referrer decides now, and only when
+   * it is same-site — a search result or pasted link still gets the home page.
+   */
+  it('the domains back link returns where the visitor came from', () => {
+    expect(DOMAINS).toContain('id="backLink"');
+    expect(DOMAINS).toContain('new URL(ref).origin === location.origin');
+  });
+
+  /*
+   * Every arriving message triggered a full /threads fetch, and dm_notice
+   * fired a second for the same message — one or two HTTP round-trips PER
+   * MESSAGE to re-download a list that changed by one line.
+   */
+  it('messages updates the inbox in place instead of refetching it', () => {
+    expect(MSG).toContain('function bumpThread(m, unread)');
+    const handler = MSG.slice(MSG.indexOf('socket.on("receive_message"'), MSG.indexOf('socket.on("typing"'));
+    expect(handler).not.toContain('loadThreads()');
+    expect(handler).toContain('bumpThread(');
+  });
+
+  it('collapses a burst of notices into one request', () => {
+    expect(MSG).toContain('function refreshThreads()');
+    expect(MSG).toContain('if (refreshTimer) return;');
+  });
+
+  // A socket that dropped may have missed messages; that is the one moment a
+  // real fetch earns itself.
+  it('catches up after a reconnect, and rejoins the open room', () => {
+    const conn = MSG.slice(MSG.indexOf('socket.on("connect"'), MSG.indexOf('socket.on("disconnect"'));
+    expect(conn).toContain('refreshThreads();');
+    expect(conn).toContain('join_room');
+  });
+
+  it('offers a next step on an empty inbox instead of only reporting emptiness', () => {
+    expect(MSG).toContain('Start a conversation');
+    expect(MSG).toContain('onclick="openPicker()"');
+    expect(MSG).toContain('function openPicker()');
+  });
+
+  it('the hackathon page explains how to take part', () => {
+    expect(HACK).toContain('function HowItWorks()');
+    expect(HACK).toContain('<HowItWorks />');
+    expect(HACK).toContain("'Six steps, start to certificate'".replace(/'/g, ''));
+    expect(HACK).toContain('WHAT YOU NEED');
+  });
+
+  it('the hackathon nav no longer links into the gated portals', () => {
+    const nav = HACK.slice(HACK.indexOf('const NAV = ['), HACK.indexOf('];', HACK.indexOf('const NAV = [')));
+    expect(nav).not.toContain('/job-portal/');
+    expect(nav).not.toContain('/resume-portal/');
+    expect(nav).toContain("href: '#how'");
+  });
+});

@@ -1,0 +1,152 @@
+{
+ "note": "Edit this file to change the module; the server reads it at boot.",
+ "topics": [
+  {
+   "title": "The MERN map",
+   "technical": "MERN chains MongoDB, Express, React and Node into one JavaScript stack: React renders in the browser, Express routes HTTP on a Node server, MongoDB persists documents, and JSON is the lingua franca at every seam. One language end to end is the whole pitch.",
+   "simple": "Four tools, one language: React for the screen, Node and Express for the server, MongoDB for the data — JavaScript everywhere.",
+   "videoId": "Oe421EPjeBE",
+   "difficulty": 1
+  },
+  {
+   "title": "Node.js: JavaScript off the page",
+   "technical": "Node runs V8 outside the browser with an event loop and non-blocking I/O, which is why one process serves thousands of connections. npm manages packages via package.json, and require/import split code into modules — the server side of the stack starts here.",
+   "simple": "Node lets JavaScript run servers: one juggler handling thousands of slow conversations instead of one thread each.",
+   "videoId": "Oe421EPjeBE",
+   "difficulty": 1
+  },
+  {
+   "title": "npm and the module ecosystem",
+   "technical": "package.json declares dependencies, scripts and metadata; the lockfile pins the whole tree for reproducibility. Semantic versioning communicates risk in numbers, npx runs tools without installing, and node_modules is disposable output, never a thing to commit.",
+   "simple": "npm is the world's largest library shelf. Your project lists what it borrows, and the lockfile ensures everyone borrows identical copies.",
+   "videoId": "Oe421EPjeBE",
+   "difficulty": 1
+  },
+  {
+   "title": "Express: routing HTTP",
+   "technical": "Express maps method+path to handler functions: app.get('/users/:id') captures params, req and res carry the conversation, and app.listen binds the port. It is the thinnest useful layer over Node's http module, which is exactly its value.",
+   "simple": "Express is a receptionist for your server: each address and verb goes to the function you assigned it.",
+   "videoId": "Oe421EPjeBE",
+   "difficulty": 1
+  },
+  {
+   "title": "Middleware",
+   "technical": "Middleware functions run in order on every request — parsing JSON bodies, logging, checking auth — each calling next() or ending the response. Error-handling middleware (four arguments) catches what routes throw; the pipeline IS Express's architecture.",
+   "simple": "Requests pass through a series of checkpoints before your handler — each can inspect, change, reject or wave through.",
+   "videoId": "Oe421EPjeBE",
+   "difficulty": 1
+  },
+  {
+   "title": "REST API design",
+   "technical": "REST models resources as URLs and actions as verbs: GET reads, POST creates, PUT/PATCH update, DELETE removes, with status codes telling the truth (201, 400, 404, 500). Consistent nouns, plural collections and predictable errors are what make an API learnable.",
+   "simple": "Design your API like a tidy filing cabinet: predictable addresses, standard verbs, honest status codes.",
+   "videoId": "Oe421EPjeBE",
+   "difficulty": 2
+  },
+  {
+   "title": "MongoDB: documents, not tables",
+   "technical": "MongoDB stores JSON-like documents in schemaless collections, queried by shape: find({domain:'MERN'}), updated with atomic operators ($set, $inc, $push). It matches JavaScript objects one-to-one, which is why it slots into this stack without an impedance mismatch.",
+   "simple": "MongoDB stores data the same shape your code already uses — objects — and finds them by matching patterns.",
+   "videoId": "Oe421EPjeBE",
+   "difficulty": 2
+  },
+  {
+   "title": "Mongoose: schemas over freedom",
+   "technical": "Mongoose adds declared schemas, validation, defaults, middleware hooks and typed models over MongoDB's freedom. Models expose find/create/updateOne returning promises; populate joins references; indexes make the difference between a query and a crawl.",
+   "simple": "Mongoose gives the free-form database rules: what fields exist, what is required, what happens before saving.",
+   "videoId": "Oe421EPjeBE",
+   "difficulty": 2
+  },
+  {
+   "title": "Building the CRUD API",
+   "technical": "A resource earns five routes — list, read, create, update, delete — each validating input, calling the model, and answering with the right status and JSON shape. Async handlers wrap errors to the error middleware; this API is the trunk every MERN feature branches from.",
+   "simple": "Create, read, update, delete: the four verbs of every app, wired from URL to database and back.",
+   "videoId": "Oe421EPjeBE",
+   "difficulty": 2
+  },
+  {
+   "title": "Validation and error handling",
+   "technical": "Never trust a request: validate types, ranges and presence at the boundary (express-validator or hand-rolled), return 400 with specifics, and shape all failures through one error middleware so clients see a consistent envelope. Silent bad data is the costliest bug class.",
+   "simple": "Check everything the outside world sends before touching it, and fail with messages a client can act on.",
+   "videoId": "Oe421EPjeBE",
+   "difficulty": 3
+  },
+  {
+   "title": "Authentication: passwords and JWTs",
+   "technical": "Store only bcrypt hashes; on login, compare and issue a signed JWT the client returns in the Authorization header. Middleware verifies the signature and stamps req.user; expiry bounds theft damage. Secrets live in environment variables, never the repository.",
+   "simple": "Passwords are stored scrambled beyond recovery, and a signed token becomes the wristband that gets users past the door.",
+   "videoId": "Oe421EPjeBE",
+   "difficulty": 3
+  },
+  {
+   "title": "Authorization and ownership",
+   "technical": "Authentication says who; authorization says may they: role checks gate admin routes, and ownership checks compare the resource's userId against the token before any write. Every mutating route must ask both questions — most real-world API holes are missing the second.",
+   "simple": "Logging in is not the same as being allowed: every change must check the actor owns the thing they are changing.",
+   "videoId": "Oe421EPjeBE",
+   "difficulty": 3
+  },
+  {
+   "title": "File uploads and static serving",
+   "technical": "multer parses multipart forms, filters types by real content, caps sizes, and lands files where express.static or object storage serves them. Uploaded filenames are attacker-controlled input — regenerate names and validate bytes, not extensions alone.",
+   "simple": "Accepting files means checking they really are what they claim, renaming them yourself, and capping their size.",
+   "videoId": "Oe421EPjeBE",
+   "difficulty": 3
+  },
+  {
+   "title": "React meets the API",
+   "technical": "The front end consumes your API with fetch in effects or a data library: loading, error and success states modelled explicitly, forms POSTing JSON, and the JWT attached per request. CORS on the server names the origins allowed to call — the seam of the stack.",
+   "simple": "The React app phones your own API for everything, shows spinners honestly, and carries its wristband on each call.",
+   "videoId": "bMknfKXIFA8",
+   "difficulty": 4
+  },
+  {
+   "title": "State across the app",
+   "technical": "Server data and UI state are different problems: lift shared state up, hand it down with context, and keep server truth in one fetching layer rather than copied into components. Most Redux appetite dissolves once server state stops being duplicated by hand.",
+   "simple": "Keep one source of truth for data from the server, share app-wide facts through context, and resist copying state around.",
+   "videoId": "bMknfKXIFA8",
+   "difficulty": 4
+  },
+  {
+   "title": "Real-time with WebSockets",
+   "technical": "HTTP asks; WebSockets keep the line open so the server can speak first. socket.io adds rooms, reconnection and fallbacks — chat, presence and live dashboards ride on emitted events both directions over one persistent connection.",
+   "simple": "For live features, the server and browser keep a phone call open instead of exchanging letters.",
+   "videoSearch": "socket.io chat tutorial",
+   "difficulty": 4
+  },
+  {
+   "title": "Testing the stack",
+   "technical": "Supertest drives Express routes in-process against a test database, asserting status and payload; React Testing Library renders components and asserts what users see. Test the seams — API contracts and critical flows — before chasing coverage numbers.",
+   "simple": "Robots press your API's buttons and read your screens, so refactors cannot silently break either.",
+   "videoSearch": "supertest express testing tutorial",
+   "difficulty": 4
+  },
+  {
+   "title": "Environment and configuration",
+   "technical": "dotenv loads .env into process.env for local work; production sets real variables. Ports, database URLs, secrets and origins all externalise — the same image runs in every environment with different configuration, and the .env file never enters git.",
+   "simple": "Code is the same everywhere; the differences — passwords, addresses — live outside it, per environment.",
+   "videoId": "Oe421EPjeBE",
+   "difficulty": 5
+  },
+  {
+   "title": "Deployment",
+   "technical": "Build the React bundle, serve it from Express or a CDN, run Node under a process manager, put MongoDB in a managed cluster (Atlas), and front everything with HTTPS. Health endpoints, logs and restart policies turn a demo into a service.",
+   "simple": "Shipping means the API, the pages and the database all running on real infrastructure with HTTPS and automatic restarts.",
+   "videoSearch": "deploy mern stack app tutorial",
+   "difficulty": 5
+  },
+  {
+   "title": "Performance and security hardening",
+   "technical": "Add indexes where queries filter, paginate lists, cache hot reads, compress responses; rate-limit auth routes, set helmet's headers, sanitise inputs against injection, and keep dependencies patched. The checklist is boring precisely because attackers rely on it being skipped.",
+   "simple": "Fast and safe are checklists, not magic: index, paginate, cache; limit, sanitise, patch.",
+   "videoId": "Oe421EPjeBE",
+   "difficulty": 5
+  },
+  {
+   "title": "The capstone",
+   "technical": "Ship a full MERN product: authenticated users, owned resources, uploads, one real-time feature, tests on the critical paths, deployed with a public URL and a README that gets a stranger running in minutes. Scope tight, finish completely — this is the artifact that gets calls back.",
+   "simple": "Everything in one shipped app — accounts, data, live updates — running on the internet with your name on it.",
+   "videoId": "Oe421EPjeBE",
+   "difficulty": 5
+  }
+ ]
+}

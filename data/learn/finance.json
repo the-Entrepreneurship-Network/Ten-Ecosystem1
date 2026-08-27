@@ -1,0 +1,152 @@
+{
+ "note": "Edit this file to change the module; the server reads it at boot.",
+ "topics": [
+  {
+   "title": "What finance is",
+   "technical": "Finance is the management of money over time under uncertainty: how individuals, companies and markets allocate capital, price risk and make decisions today about uncertain tomorrows. Its core question is always value.",
+   "simple": "Managing money over time — deciding today with an uncertain future in mind.",
+   "videoSearch": "what is finance",
+   "difficulty": 1
+  },
+  {
+   "title": "Time value of money",
+   "technical": "A rupee today is worth more than a rupee tomorrow; present and future value, discounting and compounding formalise this. It underlies every valuation, loan and investment decision in finance.",
+   "simple": "Money now beats money later — the single idea behind almost all of finance.",
+   "videoSearch": "time value of money explained",
+   "difficulty": 1
+  },
+  {
+   "title": "Interest and compounding",
+   "technical": "Simple and compound interest, and the frequency of compounding, drive how money grows or debt balloons. Compounding is the quiet engine behind both wealth and ruinous debt.",
+   "simple": "How money grows on itself — the force behind both savings and crushing debt.",
+   "videoSearch": "compound interest explained",
+   "difficulty": 1
+  },
+  {
+   "title": "Financial statements",
+   "technical": "The income statement, balance sheet and cash flow statement together describe a company's performance, position and liquidity. Reading all three — and how they connect — is financial literacy's core.",
+   "simple": "The three reports that tell you how a company is really doing.",
+   "videoSearch": "financial statements explained",
+   "difficulty": 1
+  },
+  {
+   "title": "Reading the balance sheet",
+   "technical": "Assets equal liabilities plus equity; the balance sheet is a snapshot of what a company owns and owes. Its structure reveals solvency and how the business is financed.",
+   "simple": "A snapshot of what a company owns, owes, and is worth right now.",
+   "videoSearch": "balance sheet explained",
+   "difficulty": 1
+  },
+  {
+   "title": "Income and cash flow",
+   "technical": "Profit is an opinion; cash is a fact. The income statement shows earnings while the cash flow statement shows the money actually moving — profitable companies still fail when cash runs out.",
+   "simple": "Earnings can be dressed up; cash flow shows the money that truly moved.",
+   "videoSearch": "income statement cash flow",
+   "difficulty": 2
+  },
+  {
+   "title": "Financial ratios",
+   "technical": "Liquidity, profitability, leverage and efficiency ratios turn statements into comparable signals; trends and peer comparison matter more than any single number. Ratios are questions, not verdicts.",
+   "simple": "Quick measures that turn financial reports into comparable health signals.",
+   "videoSearch": "financial ratio analysis",
+   "difficulty": 2
+  },
+  {
+   "title": "Risk and return",
+   "technical": "Higher expected return demands higher risk; measuring risk (volatility, downside) and pricing it is finance's central bargain. Free lunches do not survive in efficient markets.",
+   "simple": "You cannot get more reward without accepting more risk — finance's basic trade.",
+   "videoSearch": "risk and return explained",
+   "difficulty": 2
+  },
+  {
+   "title": "Diversification and portfolios",
+   "technical": "Combining uncorrelated assets reduces risk without proportionally cutting return — the one genuinely free lunch. Portfolio thinking beats betting everything on a single conviction.",
+   "simple": "Not putting all your eggs in one basket — the closest thing to free safety.",
+   "videoSearch": "portfolio diversification explained",
+   "difficulty": 2
+  },
+  {
+   "title": "Stocks and equity markets",
+   "technical": "Shares represent ownership; markets price them continuously on expectations of future cash flows. Understanding what a share is, and what moves its price, is investing's foundation.",
+   "simple": "Owning slices of companies — and what makes their prices move.",
+   "videoSearch": "stock market basics",
+   "difficulty": 3
+  },
+  {
+   "title": "Bonds and fixed income",
+   "technical": "Bonds are loans with fixed payments; price moves inversely to interest rates, and credit risk sets yield. Fixed income anchors portfolios and reveals the market's view of risk and rates.",
+   "simple": "Lending money for steady interest — and why bond prices fall when rates rise.",
+   "videoSearch": "bonds fixed income explained",
+   "difficulty": 3
+  },
+  {
+   "title": "Valuation fundamentals",
+   "technical": "Value is the present value of future cash flows; DCF, multiples and comparables estimate it under uncertainty. Every price is an implicit forecast — valuation makes the forecast explicit.",
+   "simple": "What is something really worth — the discounted value of the cash it will make.",
+   "videoSearch": "valuation dcf basics",
+   "difficulty": 3
+  },
+  {
+   "title": "Corporate finance",
+   "technical": "Companies decide how to raise capital (debt vs equity), which projects to fund, and how to return cash. Capital structure and investment decisions shape value and risk.",
+   "simple": "How companies decide where to get money and where to spend it.",
+   "videoSearch": "corporate finance basics",
+   "difficulty": 3
+  },
+  {
+   "title": "Capital budgeting",
+   "technical": "NPV, IRR and payback evaluate whether projects create value; positive-NPV decisions grow the firm, and the discount rate encodes risk. It is time value of money applied to real decisions.",
+   "simple": "Deciding which projects are worth doing by whether they add value.",
+   "videoSearch": "capital budgeting npv irr",
+   "difficulty": 4
+  },
+  {
+   "title": "Financial markets and instruments",
+   "technical": "Equities, bonds, derivatives and currencies trade in interconnected markets that price and transfer risk. Understanding the instruments and who uses them maps how capital actually flows.",
+   "simple": "The different things that trade — and how markets move risk around.",
+   "videoSearch": "financial markets instruments overview",
+   "difficulty": 4
+  },
+  {
+   "title": "Derivatives basics",
+   "technical": "Options, futures and swaps derive value from underlying assets and let users hedge or speculate on risk. Powerful and dangerous, they amplify both protection and mistakes.",
+   "simple": "Contracts that let you bet on or protect against price moves — powerful and risky.",
+   "videoSearch": "derivatives explained",
+   "difficulty": 4
+  },
+  {
+   "title": "Personal finance",
+   "technical": "Budgeting, saving, debt management, insurance and long-term investing apply finance to a life; compounding and discipline beat cleverness. The principles that build institutional wealth build personal wealth too.",
+   "simple": "Using finance to manage your own money — budget, save, invest, protect.",
+   "videoSearch": "personal finance basics",
+   "difficulty": 4
+  },
+  {
+   "title": "Behavioral finance",
+   "technical": "People are not rational: biases like loss aversion, herding and overconfidence move markets and wreck individual decisions. Knowing your own wiring is part of investing well.",
+   "simple": "Why people — and markets — make predictably irrational money choices.",
+   "videoSearch": "behavioral finance explained",
+   "difficulty": 5
+  },
+  {
+   "title": "Financial modelling",
+   "technical": "Spreadsheet models project statements, value companies and test scenarios; clean structure and honest assumptions separate insight from garbage. A model is only as good as its inputs and logic.",
+   "simple": "Building spreadsheets that forecast and value — only as smart as their assumptions.",
+   "videoSearch": "financial modelling basics",
+   "difficulty": 5
+  },
+  {
+   "title": "Ethics and regulation",
+   "technical": "Finance runs on trust: disclosure, fiduciary duty and regulation exist because the incentives to cheat are enormous. Ethical lapses in finance scale into crises.",
+   "simple": "Finance depends on trust — and the rules that exist because money tempts.",
+   "videoSearch": "finance ethics regulation",
+   "difficulty": 5
+  },
+  {
+   "title": "The capstone",
+   "technical": "Analyse a real company end to end: read its statements, compute ratios, value it, and write an investment view with the reasoning. A full analysis demonstrates financial literacy applied.",
+   "simple": "Fully analyse and value a real company — proof you can do finance.",
+   "videoSearch": "company financial analysis project",
+   "difficulty": 5
+  }
+ ]
+}
