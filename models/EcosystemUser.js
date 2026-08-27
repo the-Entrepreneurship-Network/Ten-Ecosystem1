@@ -24,6 +24,14 @@ const EcosystemUserSchema = new mongoose.Schema({
   isLockedOut: { type: Boolean, default: false },
   activeSessionToken: { type: String, default: null },
   lastLoginAt: { type: Date, default: null },
+  /*
+   * The one domain a learner is taking in the LLM portal.
+   *
+   * The portal used to show all fifteen modules to everybody, which is fifteen
+   * doors for a person who bought one course. They pick once; after that the
+   * portal is that domain and nothing else. Empty means "not chosen yet".
+   */
+  learnDomain: { type: String, default: "" },
   createdAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 

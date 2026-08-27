@@ -144,7 +144,8 @@ router.get('/me', requireLearner(async (req, res, who) => {
         success: true, name: who.name, email: who.email,
         courseOpen: access.portals.course.granted,
         via: access.portals.course.via,
-        feeDue: access.feeDue
+        feeDue: access.feeDue,
+        domain: await chosenDomain(who)
     });
 }));
 
@@ -174,33 +175,151 @@ function firstUnsettled(mod, progress) {
     return mod.topics.length + 1;   // everything settled → the final is open
 }
 
+/**
+ * The one domain this learner is taking.
+ *
+ * Stored on their account, not inferred from progress rows: a row exists the
+ * moment a module screen is opened, so progress cannot tell "mine" from
+ * "looked at". Empty string means they have not chosen yet.
+ */
+async function chosenDomain(who) {
+    const EcosystemUser = require('../../models/EcosystemUser');
+    const u = await EcosystemUser.findById(who.id).select('learnDomain').lean();
+    const slug = (u && u.learnDomain) || '';
+    // A domain whose module was withdrawn must not lock them out of the portal.
+    return slug && curriculum.getModule(slug) ? slug : '';
+}
+
+/** The intern's own domain, if this learner is also a Student. Suggested on
+ *  the chooser, never forced — the course they bought may not be their job. */
+async function suggestedDomain(who) {
+    try {
+        const Student = require('../../models/Student');
+        const twin = await Student.findOne({ email: String(who.email || '').toLowerCase() })
+            .select('domain').lean();
+        if (!twin || !twin.domain) return '';
+        const slug = curriculum.slugify(twin.domain);
+        return curriculum.getModule(slug) ? slug : '';
+    } catch (err) {
+        console.error('[learn] suggested domain lookup failed:', err.message);
+        return '';
+    }
+}
+
+/** How much of this module is already behind them. */
+function settledCount(p) {
+    return p ? p.topics.filter((t) => t.passedAt || t.closedByHRAt).length : 0;
+}
+
+/**
+ * POST /api/v2/learn/domain  { slug }
+ *
+ * Choosing, and re-choosing while nothing has been earned yet. Once a topic is
+ * passed the choice is fixed: the certificate names a domain, and a portal
+ * that let you carry progress into a different one would be issuing it for a
+ * course nobody sat.
+ */
+router.post('/domain', requireLearner(async (req, res, who) => {
+    const slug = String((req.body && req.body.slug) || '').trim();
+    const mod = curriculum.getModule(slug);
+    if (!mod || !mod.ready) return res.status(400).json({ success: false, message: 'Pick a domain from the list.' });
+
+    const current = await chosenDomain(who);
+    if (current && current !== slug) {
+        const p = await LearnProgress().findOne({ userId: who.id, domainSlug: current }).lean();
+        if (settledCount(p) > 0 || (p && p.finalExam && p.finalExam.passedAt)) {
+            return res.status(409).json({ success: false,
+                message: 'You have already started this domain. Ask HR if you need to switch.' });
+        }
+    }
+
+    const EcosystemUser = require('../../models/EcosystemUser');
+    await EcosystemUser.updateOne({ _id: who.id }, { $set: { learnDomain: slug } });
+    res.json({ success: true, slug, name: mod.name });
+}));
+
 router.get('/curriculum', requireLearner(async (req, res, who) => {
     const access = await courseAccessFor(who);
-    const mine = await LearnProgress().find({ userId: who.id }).lean();
-    const bySlug = Object.fromEntries(mine.map((p) => [p.domainSlug, p]));
+    const chosen = await chosenDomain(who);
+
+    const card = async (m) => {
+        const p = await LearnProgress().findOne({ userId: who.id, domainSlug: m.slug }).lean();
+        return {
+            slug: m.slug, name: m.name, shortCode: m.shortCode,
+            ready: m.ready, topicCount: m.topics.length,
+            settled: settledCount(p),
+            finalPassed: !!(p && p.finalExam && p.finalExam.passedAt),
+            certificateId: (p && p.certificateId) || null
+        };
+    };
+
+    /* Chosen: the portal IS that module. The other fourteen are not "locked",
+       they are simply not this person's course.
+       ?choose=1 asks for the full list again — the "change domain" link — and is
+       refused once anything has been earned, same rule as POST /domain. */
+    if (chosen && !(req.query && req.query.choose === '1')) {
+        const mine = await card(curriculum.getModule(chosen));
+        return res.json({
+            success: true,
+            courseOpen: access.portals.course.granted,
+            via: access.portals.course.via,
+            feeDue: access.feeDue,
+            chosen,
+            // Still switchable while nothing has been earned.
+            canSwitch: mine.settled === 0 && !mine.finalPassed,
+            modules: [mine]
+        });
+    }
+
+    if (chosen) {
+        const p = await LearnProgress().findOne({ userId: who.id, domainSlug: chosen }).lean();
+        if (settledCount(p) > 0 || (p && p.finalExam && p.finalExam.passedAt)) {
+            return res.status(409).json({ success: false, chosen,
+                message: 'You have already started this domain. Ask HR if you need to switch.' });
+        }
+    }
 
     res.json({
         success: true,
         courseOpen: access.portals.course.granted,
         via: access.portals.course.via,
         feeDue: access.feeDue,
-        modules: curriculum.getModules().map((m) => {
-            const p = bySlug[m.slug];
-            const settled = p ? p.topics.filter((t) => t.passedAt || t.closedByHRAt).length : 0;
-            return {
-                slug: m.slug, name: m.name, shortCode: m.shortCode,
-                ready: m.ready, topicCount: m.topics.length,
-                settled,
-                finalPassed: !!(p && p.finalExam && p.finalExam.passedAt),
-                certificateId: (p && p.certificateId) || null
-            };
-        })
+        chosen: '',
+        canSwitch: true,
+        // What they are on now, so the chooser opens on it rather than at one end.
+        suggested: chosen || await suggestedDomain(who),
+        modules: curriculum.getModules().map((m) => ({
+            slug: m.slug, name: m.name, shortCode: m.shortCode,
+            ready: m.ready, topicCount: m.topics.length,
+            settled: 0, finalPassed: false, certificateId: null
+        }))
     });
 }));
+
+/**
+ * Their module, or nothing. Without this the domain choice would be a filter on
+ * a screen — every other module still one typed URL away, which is not what
+ * "only their domain" means.
+ */
+async function requireOwnDomain(who, slug, res) {
+    const chosen = await chosenDomain(who);
+    if (!chosen) {
+        res.status(409).json({ success: false, chooseDomain: true,
+            message: 'Choose your domain first.' });
+        return false;
+    }
+    if (chosen !== slug) {
+        res.status(403).json({ success: false, chosen,
+            message: 'That is not the domain you are enrolled in.' });
+        return false;
+    }
+    return true;
+}
 
 router.get('/module/:slug', requireLearner(async (req, res, who) => {
     const mod = curriculum.getModule(req.params.slug);
     if (!mod || !mod.ready) return res.status(404).json({ success: false, message: 'No such module.' });
+    if (!await requireOwnDomain(who, mod.slug, res)) return;
 
     const access = await courseAccessFor(who);
     if (!access.portals.course.granted) {
@@ -242,6 +361,7 @@ router.get('/module/:slug/topic/:n', requireLearner(async (req, res, who) => {
     const n = parseInt(req.params.n, 10);
     const topic = mod && mod.topics[n - 1];
     if (!topic) return res.status(404).json({ success: false, message: 'No such topic.' });
+    if (!await requireOwnDomain(who, mod.slug, res)) return;
 
     const access = await courseAccessFor(who);
     if (!access.portals.course.granted) {
@@ -265,6 +385,8 @@ router.get('/module/:slug/topic/:n', requireLearner(async (req, res, who) => {
     const st = topicState(await progressFor(who, mod.slug), n);
     res.json({
         success: true,
+        // So the way back can say the module's name rather than its url slug.
+        moduleName: mod.name,
         topic: {
             n, title: topic.title, difficulty: topic.difficulty,
             technical: topic.technical, simple: topic.simple,
@@ -288,6 +410,7 @@ router.post('/module/:slug/topic/:n/video-done', requireLearner(async (req, res,
     const mod = curriculum.getModule(req.params.slug);
     const n = parseInt(req.params.n, 10);
     if (!mod || !mod.topics[n - 1]) return res.status(404).json({ success: false });
+    if (!await requireOwnDomain(who, mod.slug, res)) return;
     const playedSeconds = Number((req.body && req.body.playedSeconds) || 0);
     if (playedSeconds < 60) {
         return res.status(400).json({ success: false, message: 'Watch the video through before moving on.' });
@@ -327,6 +450,7 @@ router.post('/exam/start', requireLearner(async (req, res, who) => {
     if (!mod || Number.isNaN(topicN) || topicN < 0 || topicN > mod.topics.length) {
         return res.status(400).json({ success: false, message: 'Unknown exam.' });
     }
+    if (!await requireOwnDomain(who, mod.slug, res)) return;
     const isFinal = topicN === 0;
 
     const access = await courseAccessFor(who);
@@ -601,6 +725,7 @@ router.post('/module/:slug/project', requireLearner(async (req, res, who) => {
     if (!skip && !/^https?:\/\/.+\..+/.test(url)) {
         return res.status(400).json({ success: false, message: 'Give a link to the project, or choose to skip it.' });
     }
+    if (!await requireOwnDomain(who, String(req.params.slug), res)) return;
     const progress = await progressFor(who, req.params.slug);
     await LearnProgress().updateOne({ _id: progress._id }, {
         $set: skip ? { 'project.skippedAt': new Date() }
@@ -618,6 +743,7 @@ router.post('/module/:slug/project', requireLearner(async (req, res, who) => {
 router.get('/module/:slug/certificate', requireLearner(async (req, res, who) => {
     const mod = curriculum.getModule(req.params.slug);
     if (!mod) return res.status(404).json({ success: false });
+    if (!await requireOwnDomain(who, mod.slug, res)) return;
     const progress = await progressFor(who, mod.slug);
 
     const allSettled = firstUnsettled(mod, progress) > mod.topics.length;
