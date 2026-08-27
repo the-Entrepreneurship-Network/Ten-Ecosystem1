@@ -1,0 +1,152 @@
+{
+ "note": "Edit this file to change the module; the server reads it at boot.",
+ "topics": [
+  {
+   "title": "What business development is",
+   "technical": "Business development creates long-term value through customers, markets and relationships — the overlap of sales, marketing, strategy and partnerships. It is finding and building the ways a company grows, not just closing this week's deal.",
+   "simple": "Finding and building the paths a company grows along — partners, markets, deals.",
+   "videoSearch": "what is business development",
+   "difficulty": 1
+  },
+  {
+   "title": "Understanding your market",
+   "technical": "Market research sizes the opportunity (TAM/SAM/SOM), maps segments and studies competitors. Building for a market you have not understood is the commonest and most expensive mistake.",
+   "simple": "Learning who might buy, how many there are, and who else is selling to them.",
+   "videoSearch": "market research fundamentals",
+   "difficulty": 1
+  },
+  {
+   "title": "The customer and their problem",
+   "technical": "Value starts from a real customer pain, discovered through interviews and observation, not assumed. Selling a solution to a problem nobody has is the graveyard of good products.",
+   "simple": "Finding the genuine pain people will pay to remove — by asking, not guessing.",
+   "videoSearch": "customer discovery interviews",
+   "difficulty": 1
+  },
+  {
+   "title": "Value proposition",
+   "technical": "A value proposition states who you help, what problem you solve, and why you over alternatives. Sharp positioning makes selling easy; fuzzy positioning makes even good products hard to move.",
+   "simple": "One clear sentence: who you help, how, and why you beat the alternatives.",
+   "videoSearch": "value proposition canvas",
+   "difficulty": 1
+  },
+  {
+   "title": "Lead generation",
+   "technical": "Filling the pipeline uses inbound (content, SEO, referrals) and outbound (targeted outreach) channels. Quantity without qualification wastes effort; the goal is the right prospects, not the most.",
+   "simple": "Getting a steady stream of the right potential customers to talk to.",
+   "videoSearch": "lead generation strategies",
+   "difficulty": 1
+  },
+  {
+   "title": "Qualifying prospects",
+   "technical": "Frameworks like BANT (budget, authority, need, timeline) separate real opportunities from time-sinks. Disciplined qualification is what keeps a pipeline honest and a calendar productive.",
+   "simple": "Spotting early which prospects are real so you don't chase dead ends.",
+   "videoSearch": "sales qualification bant",
+   "difficulty": 2
+  },
+  {
+   "title": "The sales process",
+   "technical": "Deals move through stages — prospect, discover, present, handle objections, close, follow up — and tracking that flow reveals where they stall. A named process turns lucky wins into repeatable ones.",
+   "simple": "The repeatable steps from first contact to signed deal.",
+   "videoSearch": "sales process stages",
+   "difficulty": 2
+  },
+  {
+   "title": "Communication and discovery calls",
+   "technical": "Discovery is listening: open questions, active listening and understanding needs before pitching. The best salespeople talk least and diagnose most.",
+   "simple": "Winning by understanding the customer first, then talking.",
+   "videoSearch": "discovery call techniques",
+   "difficulty": 2
+  },
+  {
+   "title": "Negotiation",
+   "technical": "Negotiation seeks value for both sides: knowing your BATNA, anchoring thoughtfully, and trading concessions rather than caving. Win-lose deals cost the relationship that business development exists to build.",
+   "simple": "Reaching a deal both sides are glad to sign — without giving everything away.",
+   "videoSearch": "negotiation skills business",
+   "difficulty": 2
+  },
+  {
+   "title": "Building relationships",
+   "technical": "Trust compounds: consistent follow-through, genuine help and long horizons turn contacts into partners and referrers. Relationship capital is the asset that outlasts any single deal.",
+   "simple": "Turning contacts into lasting partnerships by being reliably useful.",
+   "videoSearch": "relationship building business",
+   "difficulty": 3
+  },
+  {
+   "title": "Partnerships and alliances",
+   "technical": "Strategic partnerships extend reach through others' customers and capabilities; clear mutual value and defined terms keep them alive. A good partnership multiplies effort; a vague one drains it.",
+   "simple": "Growing by teaming up with others who reach customers you cannot.",
+   "videoSearch": "strategic partnerships explained",
+   "difficulty": 3
+  },
+  {
+   "title": "Pricing strategy",
+   "technical": "Price signals value and shapes demand: cost-plus, value-based and competitive models each fit different situations, and underpricing can hurt as much as overpricing. Price is a positioning decision.",
+   "simple": "Setting a price that reflects value and shapes who buys.",
+   "videoSearch": "pricing strategy fundamentals",
+   "difficulty": 3
+  },
+  {
+   "title": "Marketing fundamentals",
+   "technical": "The 4Ps — product, price, place, promotion — and the funnel from awareness to purchase frame how demand is created. Business development and marketing feed each other or starve together.",
+   "simple": "How companies create and capture demand — the levers behind every sale.",
+   "videoSearch": "marketing fundamentals 4ps",
+   "difficulty": 3
+  },
+  {
+   "title": "Digital channels",
+   "technical": "Content, social, email and SEO reach modern buyers where they research; each channel has its own economics and metrics. Choosing a few channels well beats spreading thin across all.",
+   "simple": "Reaching buyers online where they already look — through content, search and email.",
+   "videoSearch": "digital marketing channels",
+   "difficulty": 4
+  },
+  {
+   "title": "Metrics and analytics",
+   "technical": "CAC, LTV, conversion and pipeline velocity turn activity into a scoreboard; decisions guided by numbers beat decisions guided by opinions. What you do not measure, you cannot improve.",
+   "simple": "The numbers that show whether growth efforts are actually working.",
+   "videoSearch": "business development metrics kpis",
+   "difficulty": 4
+  },
+  {
+   "title": "CRM and pipeline management",
+   "technical": "A CRM records every contact, deal and next step so nothing falls through cracks; a clean pipeline forecasts revenue honestly. The tool is only as good as the discipline behind it.",
+   "simple": "One system that tracks every deal and reminds you what's next.",
+   "videoSearch": "crm pipeline management",
+   "difficulty": 4
+  },
+  {
+   "title": "Proposals and closing",
+   "technical": "Proposals restate value, scope and price clearly; closing asks for the decision directly and handles the final objection. Deals die in ambiguity — clarity and a clear ask move them.",
+   "simple": "Putting the offer in writing and confidently asking for the yes.",
+   "videoSearch": "how to close sales deals",
+   "difficulty": 4
+  },
+  {
+   "title": "Account management and retention",
+   "technical": "Keeping customers costs less than winning them: onboarding, ongoing value and upselling grow accounts over time. Churn quietly undoes all acquisition; retention is where profit lives.",
+   "simple": "Keeping and growing customers you already won — cheaper than finding new ones.",
+   "videoSearch": "account management retention",
+   "difficulty": 5
+  },
+  {
+   "title": "Business models",
+   "technical": "Subscription, marketplace, freemium and transactional models shape unit economics and growth. Understanding the model reveals which metrics matter and where the business actually makes money.",
+   "simple": "How a business actually makes money — and why the model changes everything.",
+   "videoSearch": "business model types explained",
+   "difficulty": 5
+  },
+  {
+   "title": "Strategy and planning",
+   "technical": "Strategy chooses where to play and how to win with limited resources; goals, priorities and honest review turn ambition into direction. A plan nobody revisits is decoration.",
+   "simple": "Deciding where to focus, and reviewing honestly whether it worked.",
+   "videoSearch": "business strategy fundamentals",
+   "difficulty": 5
+  },
+  {
+   "title": "The capstone",
+   "technical": "Build a go-to-market plan for a real product: market and customer analysis, value proposition, pricing, channels, metrics and a 90-day action plan. A concrete plan is what demonstrates the skill.",
+   "simple": "One realistic plan to take a product to market — the proof you can do the job.",
+   "videoSearch": "go to market plan template",
+   "difficulty": 5
+  }
+ ]
+}

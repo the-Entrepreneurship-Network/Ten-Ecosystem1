@@ -1,0 +1,152 @@
+{
+ "note": "Edit this file to change the module; the server reads it at boot.",
+ "topics": [
+  {
+   "title": "What DevOps actually is",
+   "technical": "DevOps is the practice of unifying software development and IT operations so that building, testing and releasing software happens continuously and reliably. It replaces the old wall between 'writes the code' and 'runs the code' with shared ownership, automation, and fast feedback loops measured by deployment frequency and mean time to recovery.",
+   "simple": "Instead of developers throwing code over a wall to an ops team, one team builds it, ships it and keeps it running — with robots doing the repetitive parts.",
+   "videoSearch": "what is devops explained",
+   "difficulty": 1
+  },
+  {
+   "title": "The Linux terminal",
+   "technical": "Nearly every server you will ever touch runs Linux, administered over SSH with no graphical interface. The shell (bash) interprets commands like ls, cd, cp, mv and rm, composes programs with pipes, and records everything in scripts that can be replayed — which is the seed of all automation.",
+   "simple": "Linux is the operating system of the internet's servers, and the terminal is how you talk to it — typed commands instead of clicks.",
+   "videoId": "sWbUDq4S6Y8",
+   "difficulty": 1
+  },
+  {
+   "title": "Files, permissions and processes",
+   "technical": "Unix treats almost everything as a file, and every file carries an owner, a group and a permission triplet (read/write/execute) that chmod and chown manage. Processes are running programs with ids, signals and exit codes; ps, top and kill let you inspect and control them.",
+   "simple": "Every file says who may read, change or run it, and every running program is a process you can watch or stop.",
+   "videoId": "sWbUDq4S6Y8",
+   "difficulty": 1
+  },
+  {
+   "title": "Shell scripting",
+   "technical": "A shell script is commands in a file with variables, conditionals, loops and functions, executed top to bottom. Set -e stops on the first error, exit codes signal success to callers, and cron runs scripts on a schedule — the cheapest automation there is.",
+   "simple": "If you type the same commands twice, put them in a script and let the computer type them the third time.",
+   "videoId": "sWbUDq4S6Y8",
+   "difficulty": 1
+  },
+  {
+   "title": "Git: history that cannot be lost",
+   "technical": "Git records snapshots of a project as commits linked into a history you can branch, merge and rewind. Every clone is a full copy of that history, which makes collaboration a matter of exchanging commits — push and pull — rather than mailing files.",
+   "simple": "Git is a time machine for code: save points you can go back to, and copies everyone can work on at once without overwriting each other.",
+   "videoId": "RGOj5yH7evk",
+   "difficulty": 1
+  },
+  {
+   "title": "Branching, merging and pull requests",
+   "technical": "A branch is a movable pointer at a commit, so features grow in isolation and merge back when ready. A pull request wraps that merge in review: diffs, comments and required checks before the change lands on the main branch — the social contract of modern teams.",
+   "simple": "You build on your own copy of the timeline, then ask teammates to review and accept your changes into the shared one.",
+   "videoId": "RGOj5yH7evk",
+   "difficulty": 2
+  },
+  {
+   "title": "CI: building on every push",
+   "technical": "Continuous Integration runs your build and tests automatically on every push, in a clean machine, so 'works on my laptop' dies early. Pipelines are declared in files (GitHub Actions YAML), live beside the code, and fail loudly — a red pipeline blocks the merge.",
+   "simple": "Every time anyone saves code to the shared repo, robots build and test it immediately, so breakage is caught in minutes not weeks.",
+   "videoSearch": "github actions ci tutorial",
+   "difficulty": 2
+  },
+  {
+   "title": "Networking for operators",
+   "technical": "IP addresses locate machines, ports locate services on them, DNS names both, and HTTP rides on TCP between them. An operator reads this stack daily: curl to probe endpoints, dig for DNS, netstat for listening ports, and status codes to tell a dead service from a misrouted one.",
+   "simple": "Knowing how computers find and talk to each other — addresses, ports, and names — is how you debug 'the site is down'.",
+   "videoSearch": "networking fundamentals for devops",
+   "difficulty": 2
+  },
+  {
+   "title": "Docker: the shipping container for software",
+   "technical": "A container packages an application with its exact dependencies and runs it isolated on a shared kernel, so it behaves identically on a laptop and in production. Images are built in layers from a Dockerfile, stored in registries, and started in milliseconds — the unit of modern deployment.",
+   "simple": "Docker wraps your app and everything it needs into one sealed box that runs the same everywhere.",
+   "videoId": "fqMOX6JJhGo",
+   "difficulty": 2
+  },
+  {
+   "title": "Dockerfiles and images done well",
+   "technical": "A good Dockerfile orders layers from least to most volatile so caches hit, pins base image versions, runs as a non-root user, and keeps the final image minimal with multi-stage builds. Small images pull faster, patch faster, and expose less to attackers.",
+   "simple": "The recipe file that builds your container should be written so rebuilds are fast, images are small, and the app does not run as the all-powerful root user.",
+   "videoId": "fqMOX6JJhGo",
+   "difficulty": 3
+  },
+  {
+   "title": "Compose: many containers, one file",
+   "technical": "Real systems are several containers — app, database, cache — and docker-compose.yml declares them together with their networks, volumes and environment. One command brings the whole stack up in the same shape on every machine, which is how local development mirrors production.",
+   "simple": "Compose is a single file that starts your whole app — server, database and all — with one command.",
+   "videoId": "fqMOX6JJhGo",
+   "difficulty": 3
+  },
+  {
+   "title": "The cloud and AWS's map of it",
+   "technical": "AWS rents computing by the hour across regions and availability zones: EC2 for virtual machines, S3 for object storage, VPC for private networks, RDS for managed databases. The skill is mapping a need to the right managed service instead of rebuilding it on raw VMs.",
+   "simple": "AWS is a menu of ready-made building blocks — machines, storage, networks, databases — that you rent instead of buying servers.",
+   "videoId": "ulprqHHWlng",
+   "difficulty": 3
+  },
+  {
+   "title": "IAM: who may do what",
+   "technical": "Every AWS action is checked against IAM: users, roles and policies written as JSON allow or deny API calls. The discipline is least privilege — machines assume narrow roles rather than holding keys, and nobody uses the root account for daily work. Most cloud breaches are IAM mistakes, not exotic exploits.",
+   "simple": "IAM is the permission system of the cloud: exactly who, and which robot, is allowed to do exactly what.",
+   "videoId": "ulprqHHWlng",
+   "difficulty": 3
+  },
+  {
+   "title": "S3 and storage classes",
+   "technical": "S3 stores objects in buckets with eleven nines of durability, versioning, lifecycle rules that migrate cold data to cheaper classes, and bucket policies that decide who reads what. Half of the internet's static files live here; a public-bucket mistake is the classic cloud leak.",
+   "simple": "S3 is a bottomless, extremely durable file store in the cloud — cheap for what you rarely touch, and dangerous only when left open to the world.",
+   "videoId": "ulprqHHWlng",
+   "difficulty": 4
+  },
+  {
+   "title": "EC2, load balancers and auto scaling",
+   "technical": "EC2 instances are resizable virtual machines launched from images into your VPC. Put an Application Load Balancer in front, an Auto Scaling group behind, and healthy instances are added or replaced as traffic and failures demand — capacity as a policy rather than a purchase.",
+   "simple": "Rent machines, put a traffic director in front, and let the platform add or replace machines automatically as load changes.",
+   "videoId": "ulprqHHWlng",
+   "difficulty": 4
+  },
+  {
+   "title": "Infrastructure as Code with Terraform",
+   "technical": "Terraform describes infrastructure in declarative files: you state the resources that should exist, it computes a plan against real state, and apply makes reality match. Infrastructure becomes reviewable, versioned and reproducible — clicked-together consoles cannot be code-reviewed or rolled back.",
+   "simple": "Write your servers and networks down as code, so they can be reviewed, repeated in another region, and rebuilt after a disaster.",
+   "videoSearch": "terraform tutorial for beginners",
+   "difficulty": 4
+  },
+  {
+   "title": "CD: from green pipeline to production",
+   "technical": "Continuous Delivery extends CI to deployment: a green pipeline produces an artifact that is promoted through staging to production, with rollout strategies — rolling, blue-green, canary — bounding the blast radius of a bad release. Rollback must be one action, planned before it is needed.",
+   "simple": "Once the tests pass, the same pipeline ships the release in stages, watching for trouble, with an undo button always ready.",
+   "videoSearch": "blue green deployment canary explained",
+   "difficulty": 4
+  },
+  {
+   "title": "Kubernetes: the container orchestra",
+   "technical": "Kubernetes schedules containers across a cluster from declarative manifests: Deployments keep the desired number of Pods alive, Services give them stable addresses, and the control loop heals drift automatically. It is the industry's shared operating layer, and its concepts transfer to every managed flavour.",
+   "simple": "Kubernetes runs herds of containers for you — restarting the dead, spreading the load, and matching what runs to what you declared.",
+   "videoId": "X48VuDVv0do",
+   "difficulty": 5
+  },
+  {
+   "title": "Monitoring, logs and alerts",
+   "technical": "Observability is metrics (numbers over time), logs (events with context) and traces (a request's path across services). Dashboards answer 'is it healthy', alerts page a human only on symptoms users feel, and structured logs make incidents searchable instead of anecdotal.",
+   "simple": "You cannot fix what you cannot see: collect the numbers and the logs, graph them, and get woken only when users are actually hurting.",
+   "videoSearch": "prometheus grafana monitoring tutorial",
+   "difficulty": 5
+  },
+  {
+   "title": "Security through the pipeline",
+   "technical": "Shift security left: scan dependencies and images in CI, keep secrets in a manager rather than the repo, patch bases continuously, and give pipelines the same least-privilege roles as people. The pipeline is an attack surface — whoever controls it controls production.",
+   "simple": "Bake safety checks into the same robots that build and ship: scan for known holes, keep passwords out of code, update constantly.",
+   "videoSearch": "devsecops pipeline explained",
+   "difficulty": 5
+  },
+  {
+   "title": "The final mini project",
+   "technical": "Ship a small web service end to end: repository with CI, containerised build, infrastructure declared in Terraform, deployed behind a load balancer with auto scaling, metrics and one alert. Document the architecture and the rollback path — the artifact that interviews are built around.",
+   "simple": "Take everything above and ship one real service to the cloud, with automation from git push to running, monitored production.",
+   "videoSearch": "deploy dockerized app to aws project",
+   "difficulty": 5
+  }
+ ]
+}

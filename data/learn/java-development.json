@@ -1,0 +1,152 @@
+{
+ "note": "Edit this file to change the module; the server reads it at boot.",
+ "topics": [
+  {
+   "title": "The JVM and your first class",
+   "technical": "Java compiles source to bytecode that the Java Virtual Machine executes with just-in-time compilation, giving one artifact that runs anywhere a JVM exists. Every program starts at public static void main inside a class — Java admits no code outside classes.",
+   "simple": "Write once, run anywhere: Java code becomes bytecode, and the JVM on any machine runs it fast. Everything lives inside classes.",
+   "videoId": "GoXwIVyNvX0",
+   "difficulty": 1
+  },
+  {
+   "title": "Variables and primitive types",
+   "technical": "Java is statically typed: every variable declares its type at compile time. Eight primitives (int, long, double, boolean, char among them) hold raw values on the stack; everything else is an object reference. The compiler rejects type mismatches before the program ever runs.",
+   "simple": "You must say what kind of thing each variable holds, and the compiler checks your promises before the program runs.",
+   "videoId": "GoXwIVyNvX0",
+   "difficulty": 1
+  },
+  {
+   "title": "Operators and control flow",
+   "technical": "Arithmetic, comparison and logical operators combine into expressions; if/else, switch (now with arrow syntax), while and for direct execution. Integer division truncates, && and || short-circuit, and switch fall-through remains the classic beginner trap.",
+   "simple": "The usual maths and decisions, with a compiler strict enough to catch most slips before they become bugs.",
+   "videoId": "GoXwIVyNvX0",
+   "difficulty": 1
+  },
+  {
+   "title": "Methods and overloading",
+   "technical": "Methods declare a return type, parameters, and possibly static (belonging to the class, not an instance). Overloading lets one name serve several parameter lists resolved at compile time; arguments pass by value — for objects, the value is the reference.",
+   "simple": "Methods are named actions. The same name can accept different ingredient lists, and Java picks the right one by what you pass.",
+   "videoId": "GoXwIVyNvX0",
+   "difficulty": 1
+  },
+  {
+   "title": "Classes, objects and constructors",
+   "technical": "A class is a blueprint; new invokes a constructor to allocate an instance whose fields hold its state. this names the current object, encapsulation hides fields behind methods, and getters/setters (or records, later) control every touch of the data.",
+   "simple": "Classes are cookie cutters, objects are cookies. Constructors bake them, and private fields keep other code's fingers out.",
+   "videoId": "GoXwIVyNvX0",
+   "difficulty": 1
+  },
+  {
+   "title": "Inheritance and polymorphism",
+   "technical": "extends derives a subclass that inherits and can override behaviour; @Override-marked methods dispatch dynamically by the object's real type at runtime. super reaches the parent, and every class descends from Object — equals, hashCode and toString come from there.",
+   "simple": "Child classes reuse and specialise parents, and the program calls the right version automatically based on what the object really is.",
+   "videoId": "GoXwIVyNvX0",
+   "difficulty": 2
+  },
+  {
+   "title": "Interfaces and abstraction",
+   "technical": "An interface declares capability without implementation; classes implement any number of them, and default methods add shared behaviour. Programming to interfaces — List, not ArrayList — decouples callers from implementations and is the backbone of testable Java design.",
+   "simple": "An interface is a contract: anything that signs it promises certain abilities, and code can depend on the promise instead of the maker.",
+   "videoId": "GoXwIVyNvX0",
+   "difficulty": 2
+  },
+  {
+   "title": "Exceptions done properly",
+   "technical": "Java splits throwables into checked exceptions (declared or handled, for recoverable conditions) and unchecked RuntimeExceptions (bugs). try/catch/finally and try-with-resources manage failure and cleanup; wrapping causes preserves the stack trace that debugging depends on.",
+   "simple": "Java makes some failures impossible to ignore: you either handle them or declare them, and resources close themselves.",
+   "videoId": "GoXwIVyNvX0",
+   "difficulty": 2
+  },
+  {
+   "title": "Collections: List, Set, Map",
+   "technical": "The Collections Framework supplies ArrayList and LinkedList, HashSet and TreeSet, HashMap and TreeMap behind common interfaces, each with distinct complexity guarantees. hashCode/equals contracts decide identity in hashed structures — break them and elements vanish.",
+   "simple": "Ready-made containers for every shape of data: ordered lists, duplicate-free sets, and key-value maps, each fast at different things.",
+   "videoId": "GoXwIVyNvX0",
+   "difficulty": 2
+  },
+  {
+   "title": "Generics",
+   "technical": "Generics parameterise types — List<String> — moving whole categories of ClassCastException from runtime to compile time. Bounded wildcards (? extends, ? super) express variance, and type erasure explains why generic type information is invisible at runtime.",
+   "simple": "Generics let containers declare what they contain, so the compiler stops you putting a fish in the bicycle rack.",
+   "videoId": "GoXwIVyNvX0",
+   "difficulty": 3
+  },
+  {
+   "title": "Lambdas and functional interfaces",
+   "technical": "A lambda is an inline implementation of a single-method interface: (a, b) -> a + b. Function, Predicate, Consumer and Supplier form the standard vocabulary, method references compress further, and behaviour becomes a value you pass to libraries.",
+   "simple": "Lambdas are tiny unnamed functions you hand to other code — the recipe card without the cookbook.",
+   "videoId": "GoXwIVyNvX0",
+   "difficulty": 3
+  },
+  {
+   "title": "The Streams API",
+   "technical": "Streams pipeline collection processing: filter, map, sorted, collect, reduce — declarative, lazily evaluated, and parallelisable with one method call. The terminal operation triggers the work; Collectors builds lists, maps and groupings from the flow.",
+   "simple": "Describe what should happen to the whole collection — keep these, transform to that, gather here — and Java does the looping.",
+   "videoId": "GoXwIVyNvX0",
+   "difficulty": 3
+  },
+  {
+   "title": "Strings, records and immutability",
+   "technical": "String is immutable and pooled; StringBuilder exists for heavy assembly. Records declare immutable data carriers in one line — constructor, accessors, equals, hashCode, toString generated. Immutability removes whole classes of shared-state bugs before they start.",
+   "simple": "Things that cannot change cannot be corrupted. Records give you such value-objects in a single line.",
+   "videoId": "GoXwIVyNvX0",
+   "difficulty": 3
+  },
+  {
+   "title": "Input, output and files",
+   "technical": "java.nio.file's Path and Files read, write, copy and walk directory trees in single calls; streams of lines process large files lazily. Character encodings are explicit — UTF-8 by choice, not by luck — and try-with-resources guarantees handles close.",
+   "simple": "Modern Java file work is one-liners: read all lines, write a list, walk a folder — with files that close themselves.",
+   "videoId": "GoXwIVyNvX0",
+   "difficulty": 4
+  },
+  {
+   "title": "Concurrency fundamentals",
+   "technical": "Threads share memory, so visibility and atomicity rule everything: synchronized and volatile establish ordering, ExecutorService pools threads properly, and java.util.concurrent's queues and atomics replace hand-rolled locking. Never start bare Threads in real code.",
+   "simple": "Many hands make light work and subtle bugs: Java gives managed thread pools and safe containers so the hands do not collide.",
+   "videoId": "GoXwIVyNvX0",
+   "difficulty": 4
+  },
+  {
+   "title": "JDBC and databases",
+   "technical": "JDBC standardises database access: DriverManager or a DataSource yields Connections, PreparedStatements bind parameters (and kill SQL injection), ResultSets iterate rows, and transactions group statements atomically. Every Java persistence framework stands on this floor.",
+   "simple": "Java talks to databases through one standard doorway: ask with placeholders, read rows back, commit together or not at all.",
+   "videoId": "HXV3zeQKqGY",
+   "difficulty": 4
+  },
+  {
+   "title": "Build tools: Maven and Gradle",
+   "technical": "Maven and Gradle resolve dependencies from central repositories, standardise project layout, and script the compile-test-package lifecycle. The pom.xml or build.gradle IS the project definition; the wrapper pins the build tool version for every machine.",
+   "simple": "One file lists your libraries and how to build; the tool fetches, compiles, tests and packages identically everywhere.",
+   "videoSearch": "maven tutorial for beginners",
+   "difficulty": 4
+  },
+  {
+   "title": "Unit testing with JUnit",
+   "technical": "JUnit 5 runs @Test methods with assertions, lifecycle hooks and parameterised cases; Mockito fakes collaborators so units test in isolation. Tests document intent, gate refactoring, and run in CI on every push — untested Java is legacy on arrival.",
+   "simple": "Every class gets a shadow class that proves it works, run automatically forever after.",
+   "videoSearch": "junit 5 tutorial",
+   "difficulty": 5
+  },
+  {
+   "title": "Spring Boot: the working web service",
+   "technical": "Spring Boot auto-configures an embedded server, dependency injection and JSON handling; @RestController maps HTTP to methods, @Service and @Repository layer the logic, and application.properties externalises configuration. It is how most of the industry ships Java.",
+   "simple": "Spring Boot turns a Java project into a running web service with almost no plumbing — annotations declare, the framework wires.",
+   "videoSearch": "spring boot tutorial for beginners",
+   "difficulty": 5
+  },
+  {
+   "title": "Spring Data and persistence",
+   "technical": "Spring Data JPA maps entities to tables and derives queries from repository method names — findByEmailAndActiveTrue writes itself. Transactions demarcate with @Transactional, and the H2 in-memory database makes persistence testable without infrastructure.",
+   "simple": "Declare what your data looks like and what you want to find; the framework writes the SQL and manages the safety.",
+   "videoSearch": "spring data jpa tutorial",
+   "difficulty": 5
+  },
+  {
+   "title": "The final project",
+   "technical": "Ship a Spring Boot REST service with layered architecture, JPA persistence, validation, error handling, tests, and a Maven build producing one runnable jar. Document endpoints and setup; deploy it in a container. This artifact is the Java interview, materialised.",
+   "simple": "Everything above becomes one deployable, tested, documented web service — your proof of the whole journey.",
+   "videoSearch": "spring boot project full course",
+   "difficulty": 5
+  }
+ ]
+}

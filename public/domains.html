@@ -198,7 +198,10 @@ a{color:inherit;}
 <body>
 
 <nav class="bar">
-  <a class="back" href="/">&larr; TEN</a>
+  <!-- Back to where they came from, not always the marketing home page:
+       a student sent here from their portal was being thrown out to the
+       front door. Falls back to the home page for a cold landing. -->
+  <a class="back" href="/" id="backLink">&larr; Back</a>
   <span class="spacer"></span>
   <a class="join" href="/register.html">Join as an intern</a>
 </nav>
@@ -265,7 +268,6 @@ a{color:inherit;}
   </div>
 </div>
 
-<script src="/notify-orb.js" defer></script>
 <script>
 /* ═══════════════════════════════════════════════════════════════════════
    The domain list comes from the server, never from this file.
@@ -389,6 +391,26 @@ fetch("/api/public/domains")
     document.getElementById("grid").innerHTML =
       '<div class="empty">Could not load the domain list. <a href="/register.html" style="color:#f5c542">Open the registration form</a> to see every option.</div>';
   });
+</script>
+<script>
+/* Where "Back" actually goes.
+   The referrer decides: same-site means they came from somewhere real inside
+   the product and that is where Back belongs. Anything else — a search
+   result, a pasted link, a cold visit — keeps the home page. */
+(function () {
+  var link = document.getElementById('backLink');
+  if (!link) return;
+  try {
+    var ref = document.referrer;
+    if (ref && new URL(ref).origin === location.origin
+        && new URL(ref).pathname !== location.pathname) {
+      link.setAttribute('href', ref);
+      link.innerHTML = '&larr; Back';
+      return;
+    }
+  } catch (e) { /* an unparseable referrer is no referrer */ }
+  link.innerHTML = '&larr; TEN';
+})();
 </script>
 </body>
 </html>

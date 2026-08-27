@@ -1,0 +1,152 @@
+{
+ "note": "Edit this file to change the module; the server reads it at boot.",
+ "topics": [
+  {
+   "title": "The security mindset",
+   "technical": "Security is thinking about how systems fail on purpose: assets, threats, attack surface and trust boundaries. The defender must cover everything; the attacker needs one gap — which is why systematic thinking beats ad-hoc patching.",
+   "simple": "Learning to see the ways things can be broken, so you can guard them.",
+   "videoSearch": "cybersecurity mindset introduction",
+   "difficulty": 1
+  },
+  {
+   "title": "The CIA triad",
+   "technical": "Confidentiality, Integrity and Availability define what security protects: keeping secrets, preventing tampering, and staying up. Every control maps to one or more; every incident violates one or more.",
+   "simple": "The three things security defends: secrecy, correctness, and being online.",
+   "videoSearch": "cia triad explained",
+   "difficulty": 1
+  },
+  {
+   "title": "Networking for security",
+   "technical": "Attacks travel over IP, ports, DNS and TCP/HTTP; reading packets, ports and status codes separates a probe from noise. You cannot defend a network you cannot picture.",
+   "simple": "Understanding how data moves so you can spot when something moves wrong.",
+   "videoSearch": "networking for cybersecurity",
+   "difficulty": 1
+  },
+  {
+   "title": "Linux and the command line",
+   "technical": "Most security tooling and most servers are Linux: file permissions, processes, logs and shell scripting are the daily surface for both attacker and defender. The terminal is the arena.",
+   "simple": "The command line is where both attackers and defenders actually work.",
+   "videoSearch": "linux for cybersecurity",
+   "difficulty": 1
+  },
+  {
+   "title": "Cryptography basics",
+   "technical": "Symmetric and asymmetric encryption, hashing and digital signatures provide confidentiality, integrity and authenticity. Using primitives correctly matters more than understanding their internals — rolling your own is the classic fatal error.",
+   "simple": "The math that keeps secrets and proves identity — and why you must never invent your own.",
+   "videoSearch": "cryptography basics explained",
+   "difficulty": 1
+  },
+  {
+   "title": "Authentication and passwords",
+   "technical": "Systems verify identity with passwords, tokens and multi-factor auth; passwords must be salted and hashed with slow functions, never stored or logged. Credential handling is where most breaches begin.",
+   "simple": "Proving who you are, and storing passwords so a stolen database is useless.",
+   "videoSearch": "password hashing bcrypt explained",
+   "difficulty": 2
+  },
+  {
+   "title": "Access control",
+   "technical": "Authorisation decides what an authenticated user may do: least privilege, role-based access, and ownership checks on every action. Missing authorisation — not broken crypto — is the commonest serious flaw.",
+   "simple": "Being logged in is not permission for everything — each action must be checked.",
+   "videoSearch": "access control explained",
+   "difficulty": 2
+  },
+  {
+   "title": "Web vulnerabilities: the OWASP Top 10",
+   "technical": "Injection, broken auth, XSS, insecure deserialisation and access-control flaws recur across the web. Knowing the top ten by name lets you find and fix the bugs attackers look for first.",
+   "simple": "The ten mistakes attackers try first on every website.",
+   "videoSearch": "owasp top 10 explained",
+   "difficulty": 2
+  },
+  {
+   "title": "SQL injection",
+   "technical": "Untrusted input concatenated into queries lets attackers rewrite them, reading or destroying data. Parameterised queries — never string-building — close it entirely; this single lesson prevents a whole disaster class.",
+   "simple": "Letting user input become part of a database command — and the one-line fix.",
+   "videoSearch": "sql injection explained",
+   "difficulty": 2
+  },
+  {
+   "title": "Cross-site scripting",
+   "technical": "XSS injects attacker script into pages other users view, stealing sessions and acting as them. Output encoding and Content-Security-Policy are the defences; every unescaped user string is a candidate.",
+   "simple": "Sneaking malicious code into a page so it runs in a victim's browser.",
+   "videoSearch": "xss cross site scripting explained",
+   "difficulty": 3
+  },
+  {
+   "title": "Secure coding practices",
+   "technical": "Validate input at trust boundaries, encode output, handle errors without leaking, keep secrets out of code, and patch dependencies. Security is a property of ordinary code written carefully, not a bolt-on.",
+   "simple": "Writing everyday code in the careful way that leaves fewer holes.",
+   "videoSearch": "secure coding practices",
+   "difficulty": 3
+  },
+  {
+   "title": "Network security",
+   "technical": "Firewalls, segmentation, VPNs and TLS control who reaches what and protect data in transit. Defence in depth assumes any single layer will fail and plans for it.",
+   "simple": "Controlling who can reach which machines, and encrypting what travels between them.",
+   "videoSearch": "network security fundamentals",
+   "difficulty": 3
+  },
+  {
+   "title": "Reconnaissance and scanning",
+   "technical": "Attackers map targets with nmap, banner grabbing and OSINT before striking; defenders run the same tools to find their own exposed surface first. You cannot defend what you did not know was reachable.",
+   "simple": "Mapping a target's exposed doors and windows — done by both sides.",
+   "videoSearch": "nmap tutorial",
+   "difficulty": 3
+  },
+  {
+   "title": "Vulnerability assessment",
+   "technical": "Scanners and manual review find known weaknesses; CVSS scores severity, and prioritisation by real exposure beats patching alphabetically. Finding is easy; fixing what matters first is the skill.",
+   "simple": "Finding the weak spots and fixing the dangerous ones before the trivial ones.",
+   "videoSearch": "vulnerability assessment tutorial",
+   "difficulty": 4
+  },
+  {
+   "title": "Penetration testing basics",
+   "technical": "Ethical hacking probes systems with permission through recon, exploitation and reporting, proving impact rather than listing theory. Authorisation and scope are the line between a pentest and a crime.",
+   "simple": "Breaking in on purpose, with permission, to prove what a real attacker could do.",
+   "videoSearch": "penetration testing basics",
+   "difficulty": 4
+  },
+  {
+   "title": "Malware and defence",
+   "technical": "Viruses, worms, ransomware and trojans spread and persist by known mechanisms; endpoint protection, least privilege and backups blunt them. Offline backups are the one control ransomware cannot encrypt.",
+   "simple": "How malicious software spreads — and why offline backups beat ransomware.",
+   "videoSearch": "malware types explained",
+   "difficulty": 4
+  },
+  {
+   "title": "Incident response",
+   "technical": "When defence fails, response limits damage: detect, contain, eradicate, recover, and learn. A rehearsed plan and good logs turn a breach into an incident instead of a catastrophe.",
+   "simple": "A calm, practised plan for when something gets in — contain first, blame never.",
+   "videoSearch": "incident response process",
+   "difficulty": 4
+  },
+  {
+   "title": "Logging and monitoring",
+   "technical": "Security visibility is logs, alerts and SIEM correlation; you cannot investigate what you did not record. Alerts must fire on real signals, not drown responders in noise.",
+   "simple": "You cannot catch what you never logged — record, watch, and alert on what matters.",
+   "videoSearch": "security logging monitoring siem",
+   "difficulty": 5
+  },
+  {
+   "title": "Social engineering",
+   "technical": "The human is the softest target: phishing, pretexting and baiting bypass technical controls entirely. Awareness, verification habits and least privilege limit the blast radius of a fooled employee.",
+   "simple": "Attacking the person, not the computer — and why training is a real control.",
+   "videoSearch": "social engineering explained",
+   "difficulty": 5
+  },
+  {
+   "title": "Governance, risk and compliance",
+   "technical": "Security operates under policy and law: risk assessment, standards like ISO 27001, and regulations shape what must be done. GRC turns security from heroics into a repeatable, auditable programme.",
+   "simple": "The rules, standards and paperwork that make security a programme, not luck.",
+   "videoSearch": "grc cybersecurity explained",
+   "difficulty": 5
+  },
+  {
+   "title": "The capstone",
+   "technical": "Assess a deliberately vulnerable application end to end: recon, find flaws, prove impact safely, and write a professional report with prioritised fixes. The report is the deliverable that gets security people hired.",
+   "simple": "One full security assessment, from finding holes to a report that gets them fixed.",
+   "videoSearch": "capture the flag beginner tutorial",
+   "difficulty": 5
+  }
+ ]
+}

@@ -99,6 +99,13 @@ router.post('/choose', requireStudent(async (req, res, student) => {
     if (payMode !== studioPricing.PAY_MODES.NOW && payMode !== studioPricing.PAY_MODES.AFTER) {
         return res.status(400).json({ success: false, message: 'Unknown payment option.' });
     }
+    // Pay-after-completion exists only where a completion exists to pay at —
+    // the course. Job and Resume are consumed as they are used, so they are
+    // pay-first, and the combo contains them, so it is too.
+    if (payMode === studioPricing.PAY_MODES.AFTER && !product.deferrable) {
+        return res.status(400).json({ success: false,
+            message: `${product.name} is pay-first. Only the course offers pay after completion.` });
+    }
 
     const access = await studioAccess.getStudioAccess(student);
     if (access.premium) {

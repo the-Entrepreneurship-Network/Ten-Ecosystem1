@@ -23,23 +23,44 @@ const PRODUCTS = Object.freeze({
     course: {
         key: 'course',
         name: 'Courses & Modules',
-        blurb: 'Six-week curriculum in your domain — videos, quizzes, assignments and a final project.',
+        blurb: 'The LLM portal: 20+ topics per domain, proctored AI-marked exams, a two-hour final and a verifiable certificate.',
         price: 300,
-        unlocks: ['course']
+        unlocks: ['course'],
+        includes: [
+            'One module per domain — 20+ topics each, difficulty rising as you go',
+            'Human-written lessons: the technical explanation, then the simple one',
+            'A video per topic, and a proctored exam after it — AI-set, AI-marked',
+            'A two-hour CBT-style final, a big project (optional), a verifiable certificate'
+        ],
+        // The ONLY product that may be paid after completion: the certificate
+        // is what waits for the money. Job and Resume are pay-first — their
+        // value is consumed the moment they are used, so there is no
+        // completion moment left to collect at.
+        deferrable: true
     },
     resume: {
         key: 'resume',
         name: 'Resume Portal',
         blurb: 'Build an ATS-proof resume, and have it checked against a real job description.',
         price: 150,
-        unlocks: ['resume']
+        unlocks: ['resume'],
+        includes: [
+            'An ATS-proof resume built from your real work',
+            'Checked line by line against a job description you choose',
+            'Export and reuse for every application'
+        ]
     },
     job: {
         key: 'job',
         name: 'Job Portal',
         blurb: 'An agent hunts live openings across the web and applies on your behalf.',
         price: 200,
-        unlocks: ['job']
+        unlocks: ['job'],
+        includes: [
+            'An agent that hunts live openings across the web',
+            'Applications sent on your behalf, tracked in one place',
+            'Openings matched to your domain and level'
+        ]
     },
     combo: {
         key: 'combo',
@@ -47,7 +68,11 @@ const PRODUCTS = Object.freeze({
         blurb: 'Course, resume and job hunting together. Everything the Studio does, one price.',
         price: 500,
         badge: 'BEST VALUE',
-        unlocks: ['course', 'resume', 'job']
+        unlocks: ['course', 'resume', 'job'],
+        includes: [
+            'Everything in the course, the Resume Portal and the Job Portal',
+            'One payment, one login — ₹150 less than buying them separately'
+        ]
     }
 });
 

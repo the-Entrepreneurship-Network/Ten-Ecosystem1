@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TEN HR — proctoring reviews</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/mobile.css">
+<style>
+:root{--bg:#05070e;--card:#0e1428;--gold:#D4AF37;--text:#F0EEE8;--muted:#9a9080;--dim:#4E4840;
+  --green:#10b981;--red:#ef4444;--border:rgba(212,175,55,.14);--border-strong:rgba(212,175,55,.32);}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;padding:26px 20px 70px;}
+.wrap{max-width:900px;margin:0 auto;}
+h1{font-family:'Outfit',sans-serif;font-size:30px;font-weight:900;letter-spacing:-.02em;}
+.sub{color:var(--muted);font-size:14px;line-height:1.6;margin-top:9px;}
+.case{background:var(--card);border:1px solid var(--border);border-radius:15px;padding:20px;margin-top:14px;}
+.case.pending{border-color:var(--border-strong);}
+.hd{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start;}
+.nm{font-family:'Outfit',sans-serif;font-size:17px;font-weight:800;}
+.meta{font-size:12.5px;color:var(--muted);margin-top:4px;line-height:1.6;}
+.pill{font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;padding:5px 11px;border-radius:999px;}
+.pill.pending{background:rgba(212,175,55,.14);color:var(--gold);}
+.pill.approved{background:rgba(16,185,129,.14);color:var(--green);}
+.pill.rejected{background:rgba(239,68,68,.14);color:#fca5a5;}
+textarea{width:100%;margin-top:13px;padding:11px 13px;border-radius:10px;min-height:74px;background:#0b1222;
+  border:1px solid var(--border);color:var(--text);font:inherit;font-size:14px;line-height:1.6;resize:vertical;}
+textarea:focus{outline:none;border-color:var(--border-strong);}
+.row{display:flex;gap:10px;margin-top:13px;flex-wrap:wrap;align-items:center;}
+button{font:inherit;font-weight:800;font-size:13px;padding:10px 17px;min-height:44px;border-radius:10px;
+  border:1px solid transparent;cursor:pointer;transition:all .2s;}
+.ok{background:var(--green);color:#04120c;} .no{background:transparent;border-color:rgba(239,68,68,.45);color:#fca5a5;}
+.no:hover{background:rgba(239,68,68,.1);} button:disabled{opacity:.45;cursor:not-allowed;}
+button:focus-visible{outline:2px solid var(--gold);outline-offset:3px;}
+label.chk{display:flex;gap:7px;align-items:center;font-size:12.5px;color:var(--muted);cursor:pointer;}
+.note{padding:13px 16px;border-radius:11px;background:rgba(212,175,55,.09);border:1px solid var(--border-strong);
+  color:#e8d9a8;font-size:13.5px;margin-top:16px;line-height:1.6;}
+.decided{font-size:12.5px;color:var(--dim);margin-top:11px;line-height:1.6;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Proctoring reviews</h1>
+  <p class="sub">A learner crossed three camera warnings during an exam. Their exams in that module
+     are on hold until you decide. <b>Approve</b> lets them sit it again; <b>reject</b> closes that
+     topic's exam for good and their course continues at the next topic.</p>
+  <div id="list"><div class="note">Loading…</div></div>
+</div>
+<script>
+'use strict';
+const esc = (v) => String(v == null ? '' : v)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+const when = (d) => d ? new Date(d).toLocaleString() : '';
+
+async function load() {
+  const list = document.getElementById('list');
+  let r;
+  try { r = await fetch('/api/v2/learn/hr/incidents', { credentials: 'same-origin' }); }
+  catch (e) { list.innerHTML = '<div class="note">Could not reach the server.</div>'; return; }
+  if (r.status === 401) {
+    list.innerHTML = '<div class="note">Sign in to the HR portal first. <a href="/hr-login" style="color:var(--gold);">Sign in →</a></div>';
+    return;
+  }
+  const d = await r.json().catch(() => null);
+  if (!d || !d.success) { list.innerHTML = '<div class="note">Could not load the queue.</div>'; return; }
+  if (!d.incidents.length) { list.innerHTML = '<div class="note">Nothing to review. Everybody is behaving.</div>'; return; }
+
+  list.innerHTML = d.incidents.map((c) => `
+    <div class="case ${c.status === 'pending' ? 'pending' : ''}">
+      <div class="hd">
+        <div>
+          <div class="nm">${esc(c.learnerName || 'Learner')}</div>
+          <div class="meta">${esc(c.learnerEmail)}<br>
+            ${esc(c.domainSlug)} · ${c.topicN === 0 ? 'final exam' : 'topic ' + c.topicN} · ${when(c.createdAt)}<br>
+            ${(c.warnings || []).length} warning${(c.warnings || []).length === 1 ? '' : 's'}:
+            ${esc((c.warnings || []).map((w) => w.reason).join('; '))}</div>
+        </div>
+        <span class="pill ${esc(c.status)}">${esc(c.status)}</span>
+      </div>
+      ${c.status === 'pending' ? `
+        <textarea id="n_${c._id}" placeholder="A note for the learner (optional — sent with the email)"></textarea>
+        <div class="row">
+          <button class="ok" data-act="approve" data-id="${c._id}">Approve a retake</button>
+          <button class="no" data-act="reject"  data-id="${c._id}">Reject — close this exam</button>
+          <label class="chk"><input type="checkbox" id="m_${c._id}" checked> Email the learner</label>
+        </div>`
+      : `<div class="decided">${esc(c.status)} by ${esc(c.decidedBy || 'HR')} · ${when(c.decidedAt)}
+          ${c.hrNote ? '<br>Note: ' + esc(c.hrNote) : ''}</div>`}
+    </div>`).join('');
+
+  list.querySelectorAll('[data-act]').forEach((b) => {
+    b.onclick = async () => {
+      const id = b.dataset.id;
+      list.querySelectorAll('[data-id="' + id + '"]').forEach((x) => { x.disabled = true; });
+      const note = (document.getElementById('n_' + id) || {}).value || '';
+      const mailStudent = !!(document.getElementById('m_' + id) || {}).checked;
+      const res = await fetch('/api/v2/learn/hr/incidents/' + id + '/decide', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: b.dataset.act, note, mailStudent })
+      });
+      if (!res.ok) {
+        list.querySelectorAll('[data-id="' + id + '"]').forEach((x) => { x.disabled = false; });
+        alert('Could not save that decision.');
+        return;
+      }
+      load();
+    };
+  });
+}
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,152 @@
+{
+ "note": "Edit this file to change the module; the server reads it at boot.",
+ "topics": [
+  {
+   "title": "What data science is",
+   "technical": "Data science extracts decisions from data by combining statistics, programming and domain knowledge: framing a question, gathering and cleaning data, modelling it, and communicating a result someone acts on. It is a pipeline, and every stage can sink the answer.",
+   "simple": "Turning messy real-world data into decisions someone can trust and act on.",
+   "videoSearch": "what is data science",
+   "difficulty": 1
+  },
+  {
+   "title": "Python and the data stack",
+   "technical": "NumPy vectorises numeric arrays, pandas handles labelled tables, and Jupyter notebooks host the experiment-first workflow. Vectorised thinking — operate on whole columns, not element loops — is the productivity unlock.",
+   "simple": "The daily tools: fast arrays, smart tables, and notebooks where code and charts sit together.",
+   "videoSearch": "python data science tutorial",
+   "difficulty": 1
+  },
+  {
+   "title": "Loading and cleaning data",
+   "technical": "Real data arrives dirty: missing values, wrong types, duplicates, inconsistent categories. pandas reads CSV/JSON/SQL, and cleaning — imputation, type coercion, deduplication — typically consumes most of a project's hours.",
+   "simple": "Most of the job is scrubbing data into a state you can actually analyse.",
+   "videoSearch": "pandas data cleaning tutorial",
+   "difficulty": 1
+  },
+  {
+   "title": "Exploratory data analysis",
+   "technical": "EDA interrogates data before modelling: distributions, correlations, outliers and group differences, seen through summaries and plots. Its purpose is to form hypotheses and catch problems the numbers alone hide.",
+   "simple": "Look at the data from every angle first — its shape tells you what to ask.",
+   "videoSearch": "exploratory data analysis python",
+   "difficulty": 1
+  },
+  {
+   "title": "Descriptive statistics",
+   "technical": "Mean, median, variance and quantiles summarise a distribution; each hides something, so you report several. Skew, spread and outliers change which summary is honest — the average income of ten people and a billionaire is a lie.",
+   "simple": "Numbers that describe a pile of data — and knowing when the average deceives.",
+   "videoSearch": "descriptive statistics explained",
+   "difficulty": 1
+  },
+  {
+   "title": "Data visualisation",
+   "technical": "matplotlib and seaborn turn numbers into charts chosen to fit the question: distributions, relationships, comparisons, trends. The chart's job is to make the reader's conclusion inevitable and honest.",
+   "simple": "Pick the right chart so the reader sees the truth at a glance.",
+   "videoSearch": "data visualization python seaborn",
+   "difficulty": 2
+  },
+  {
+   "title": "Probability foundations",
+   "technical": "Probability quantifies uncertainty: distributions, independence, conditional probability and Bayes' rule. It underlies every model's claim and every A/B test's verdict.",
+   "simple": "The math of chance — how likely, given what we already know.",
+   "videoSearch": "probability for data science",
+   "difficulty": 2
+  },
+  {
+   "title": "Statistical inference",
+   "technical": "Inference reasons from a sample to a population: confidence intervals bound estimates, hypothesis tests weigh evidence, and p-values are misread more than any number in science. Effect size matters more than significance.",
+   "simple": "Drawing careful conclusions about everyone from data about some.",
+   "videoSearch": "statistical inference explained",
+   "difficulty": 2
+  },
+  {
+   "title": "Hypothesis testing and A/B tests",
+   "technical": "A/B testing compares variants with a test statistic and a pre-registered threshold; peeking, multiple comparisons and underpowered samples are the classic ways to fool yourself. Randomisation is what licenses the causal claim.",
+   "simple": "The disciplined way to decide if a change actually helped, not just looked like it did.",
+   "videoSearch": "ab testing explained",
+   "difficulty": 2
+  },
+  {
+   "title": "SQL for analysis",
+   "technical": "Most data lives in relational databases; SQL selects, filters, joins, groups and windows it at the source, before it ever reaches Python. An analyst who cannot join tables is stranded.",
+   "simple": "Ask databases precise questions and get exactly the rows you need.",
+   "videoSearch": "sql for data analysis",
+   "difficulty": 3
+  },
+  {
+   "title": "Feature engineering",
+   "technical": "Models see features, not reality: encode categories, scale numerics, extract time components, and combine variables that interact. Good features routinely beat fancier algorithms on tabular data.",
+   "simple": "Translating raw facts into the signals a model can actually learn from.",
+   "videoSearch": "feature engineering tutorial",
+   "difficulty": 3
+  },
+  {
+   "title": "Regression modelling",
+   "technical": "Linear and regularised regression predict numbers and, crucially, explain them through coefficients. Assumptions — linearity, independence, constant variance — decide whether the explanation is real.",
+   "simple": "Predicting a number and reading which inputs drive it.",
+   "videoSearch": "linear regression python",
+   "difficulty": 3
+  },
+  {
+   "title": "Classification modelling",
+   "technical": "Logistic regression, trees and ensembles predict categories; precision, recall and the confusion matrix measure them honestly under imbalance. The threshold is a business decision.",
+   "simple": "Sorting records into classes, and measuring it without fooling yourself.",
+   "videoSearch": "classification machine learning python",
+   "difficulty": 3
+  },
+  {
+   "title": "Model validation",
+   "technical": "Train/validation/test splits and cross-validation estimate performance on unseen data; leakage and overfitting are the twin enemies. You tune on validation and touch test exactly once.",
+   "simple": "Proving a model works on data it has never seen — the only score that counts.",
+   "videoSearch": "cross validation explained",
+   "difficulty": 4
+  },
+  {
+   "title": "Clustering and dimensionality",
+   "technical": "k-means and hierarchical clustering find groups; PCA compresses many correlated features into a few informative ones. Both explore and simplify rather than predict.",
+   "simple": "Finding natural groups and shrinking wide data down to what matters.",
+   "videoSearch": "kmeans pca tutorial",
+   "difficulty": 4
+  },
+  {
+   "title": "Time series",
+   "technical": "Temporal data breaks the independence assumption: trend, seasonality and autocorrelation demand their own methods, and you must never shuffle the past into the future when validating.",
+   "simple": "Data that arrives in order — where yesterday predicts tomorrow and you must not peek ahead.",
+   "videoSearch": "time series analysis python",
+   "difficulty": 4
+  },
+  {
+   "title": "Machine learning pipelines",
+   "technical": "scikit-learn Pipelines chain preprocessing and models into one fitted object, so the same transforms apply to train and production alike — the antidote to leakage and to 'works in the notebook only'.",
+   "simple": "Wrapping cleaning and modelling into one repeatable unit that behaves the same everywhere.",
+   "videoSearch": "sklearn pipeline tutorial",
+   "difficulty": 4
+  },
+  {
+   "title": "Communicating results",
+   "technical": "A result nobody understands changes nothing: dashboards, clear visuals and a narrative that states the decision, the confidence and the caveats turn analysis into action. This is the half that gets analysts promoted.",
+   "simple": "Telling the story of what the data means so someone actually acts on it.",
+   "videoSearch": "data storytelling",
+   "difficulty": 5
+  },
+  {
+   "title": "Ethics and pitfalls",
+   "technical": "Correlation is not causation, samples carry bias, and Simpson's paradox flips conclusions on aggregation. Privacy law and fairness constrain what you may collect and conclude — mistakes here are expensive.",
+   "simple": "The traps that turn confident analysis into confident nonsense — and the duty to avoid them.",
+   "videoSearch": "data science ethics pitfalls",
+   "difficulty": 5
+  },
+  {
+   "title": "Reproducibility and tooling",
+   "technical": "Version data, code and environment; notebooks that only you can run are not results. Git, environments and documented steps let a colleague rerun and trust your work.",
+   "simple": "Making your analysis something another person can rerun and believe.",
+   "videoSearch": "reproducible data science",
+   "difficulty": 5
+  },
+  {
+   "title": "The capstone",
+   "technical": "Take one real dataset end to end: question, clean, explore, model with honest validation, and present a decision with its uncertainty. A finished, documented analysis is the portfolio piece.",
+   "simple": "One complete project — question to defended conclusion — that you can show.",
+   "videoSearch": "data science portfolio project",
+   "difficulty": 5
+  }
+ ]
+}

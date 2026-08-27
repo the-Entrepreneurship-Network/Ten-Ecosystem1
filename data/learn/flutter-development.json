@@ -1,0 +1,152 @@
+{
+ "note": "Edit this file to change the module; the server reads it at boot.",
+ "topics": [
+  {
+   "title": "Flutter and Dart",
+   "technical": "Flutter builds native apps for mobile, web and desktop from one Dart codebase, rendering its own widgets for consistent pixels everywhere. Dart is a typed, familiar language compiled ahead-of-time for release speed.",
+   "simple": "One codebase, real apps on every device — written in an approachable typed language.",
+   "videoSearch": "flutter dart introduction",
+   "difficulty": 1
+  },
+  {
+   "title": "Dart fundamentals",
+   "technical": "Variables, types, functions, null safety, classes and async/await form Dart's core; sound null safety moves a whole bug class to compile time. Comfort here makes the framework above it click.",
+   "simple": "The language basics — with a type system that refuses most crashes before they happen.",
+   "videoSearch": "dart programming tutorial",
+   "difficulty": 1
+  },
+  {
+   "title": "Everything is a widget",
+   "technical": "Flutter's UI is a tree of widgets — structural, layout and styling — that you compose and nest. Stateless widgets are pure functions of their inputs; stateful ones hold changing data. Composition replaces inheritance.",
+   "simple": "You build screens by nesting small building blocks called widgets.",
+   "videoSearch": "flutter widgets explained",
+   "difficulty": 1
+  },
+  {
+   "title": "Layout widgets",
+   "technical": "Row, Column, Stack, Container, Padding and Expanded arrange the tree; constraints flow down and sizes flow up. Understanding Flutter's constraint model is the difference between fluent layout and fighting overflow errors.",
+   "simple": "Arranging widgets in rows, columns and stacks — once you grasp how sizing flows.",
+   "videoSearch": "flutter layout tutorial",
+   "difficulty": 1
+  },
+  {
+   "title": "Styling and theming",
+   "technical": "Themes centralise colours, typography and shapes so a whole app restyles from one place; Material and Cupertino give platform-idiomatic components. Consistent theming is what separates polished apps from prototypes.",
+   "simple": "Setting your app's look once so every screen matches.",
+   "videoSearch": "flutter theming tutorial",
+   "difficulty": 1
+  },
+  {
+   "title": "Handling user input",
+   "technical": "Buttons, text fields, gestures and forms capture interaction; controllers read field values and form validation guards submission. Responsive, validated input is the backbone of any real app.",
+   "simple": "Buttons, taps and text fields — how the app listens to the user.",
+   "videoSearch": "flutter forms input tutorial",
+   "difficulty": 2
+  },
+  {
+   "title": "State management basics",
+   "technical": "setState rebuilds a stateful widget when its data changes — the starting point every Flutter dev learns before reaching for bigger tools. Knowing when a rebuild happens is core to correctness and speed.",
+   "simple": "Telling Flutter 'this changed, redraw it' — the foundation of interactivity.",
+   "videoSearch": "flutter setstate tutorial",
+   "difficulty": 2
+  },
+  {
+   "title": "Navigation and routing",
+   "technical": "Navigator pushes and pops screens as a stack; named routes and arguments pass data between them. Deep links and back-button behaviour turn a demo into an app people can actually use.",
+   "simple": "Moving between screens and carrying data along.",
+   "videoSearch": "flutter navigation tutorial",
+   "difficulty": 2
+  },
+  {
+   "title": "Lists and scrolling",
+   "technical": "ListView and GridView render long, scrollable collections lazily, building only visible items; builders keep large lists smooth. Most app screens are lists, so this pattern recurs everywhere.",
+   "simple": "Showing long scrollable lists without loading everything at once.",
+   "videoSearch": "flutter listview tutorial",
+   "difficulty": 2
+  },
+  {
+   "title": "Async and futures",
+   "technical": "Network and disk work returns Futures consumed with async/await; FutureBuilder and StreamBuilder render loading, error and data states declaratively. Modelling those three states honestly is what makes apps feel solid.",
+   "simple": "Fetching data in the background and showing loading, error or result cleanly.",
+   "videoSearch": "flutter async futurebuilder tutorial",
+   "difficulty": 3
+  },
+  {
+   "title": "Calling REST APIs",
+   "technical": "The http package sends requests and decodes JSON into Dart objects; real code checks status, handles failure, and separates networking from UI. The API contract is the seam between app and server.",
+   "simple": "Your app phones a server for data and turns the JSON reply into something it can show.",
+   "videoSearch": "flutter rest api tutorial",
+   "difficulty": 3
+  },
+  {
+   "title": "Advanced state management",
+   "technical": "As apps grow, Provider or Riverpod share state across the tree without prop-drilling, separating business logic from widgets. Choosing and applying one consistently keeps large apps maintainable.",
+   "simple": "Sharing data across many screens cleanly once setState is not enough.",
+   "videoSearch": "flutter provider riverpod tutorial",
+   "difficulty": 3
+  },
+  {
+   "title": "Local storage",
+   "technical": "shared_preferences stores small key-value data; sqflite or Hive persist structured data offline. Deciding what to cache and when to sync is what makes apps usable without signal.",
+   "simple": "Saving data on the device so the app works offline and remembers settings.",
+   "videoSearch": "flutter local storage tutorial",
+   "difficulty": 3
+  },
+  {
+   "title": "Firebase integration",
+   "technical": "Firebase supplies auth, Firestore, storage and messaging with little backend code; real-time listeners update the UI as data changes server-side. It is the fastest path from idea to backed app.",
+   "simple": "A ready-made backend — logins, database, notifications — with almost no server code.",
+   "videoSearch": "flutter firebase tutorial",
+   "difficulty": 4
+  },
+  {
+   "title": "Animations",
+   "technical": "Implicit animations tween properties automatically; explicit ones use controllers for fine control; Hero animations bridge screens. Motion, used with restraint, is what makes an app feel alive rather than clever.",
+   "simple": "Smooth movement and transitions that make the app feel polished.",
+   "videoSearch": "flutter animation tutorial",
+   "difficulty": 4
+  },
+  {
+   "title": "Responsive and adaptive UI",
+   "technical": "LayoutBuilder and MediaQuery adapt to screen size and orientation; adaptive widgets match platform conventions. One codebase must look right from a small phone to a tablet.",
+   "simple": "Making one app look right on every screen size and shape.",
+   "videoSearch": "flutter responsive design tutorial",
+   "difficulty": 4
+  },
+  {
+   "title": "Platform features",
+   "technical": "Plugins reach the camera, location, notifications and sensors; permissions must be requested and handled gracefully. Native capability is where apps become more than styled websites.",
+   "simple": "Using the phone's real powers — camera, GPS, notifications — through plugins.",
+   "videoSearch": "flutter platform plugins tutorial",
+   "difficulty": 4
+  },
+  {
+   "title": "Testing Flutter apps",
+   "technical": "Unit tests check logic, widget tests render and interact with UI, integration tests drive whole flows. Tests let you refactor a growing app without breaking screens silently.",
+   "simple": "Robots that press your app's buttons to prove screens still work.",
+   "videoSearch": "flutter testing tutorial",
+   "difficulty": 5
+  },
+  {
+   "title": "Performance and debugging",
+   "technical": "Flutter DevTools profiles rebuilds, frames and memory; const widgets and keys cut needless work. Smooth 60fps is engineered by measurement, not hoped for.",
+   "simple": "Finding and fixing the jank so the app stays buttery smooth.",
+   "videoSearch": "flutter performance devtools",
+   "difficulty": 5
+  },
+  {
+   "title": "Building and releasing",
+   "technical": "Release builds, signing, app icons and store submission ship the app; flavors separate dev from production. An app in a store, updatable, is the definition of done.",
+   "simple": "Turning your project into an installable app on the real app stores.",
+   "videoSearch": "flutter build release tutorial",
+   "difficulty": 5
+  },
+  {
+   "title": "The capstone",
+   "technical": "Ship a complete app: multiple screens, state management, a REST or Firebase backend, local persistence, animations, tests, and a release build. It is the portfolio artifact that demonstrates the whole journey.",
+   "simple": "One finished, installable app that uses everything above.",
+   "videoSearch": "flutter app project tutorial",
+   "difficulty": 5
+  }
+ ]
+}
