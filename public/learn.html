@@ -22,7 +22,10 @@ h2{font-family:'Outfit',sans-serif;font-size:22px;font-weight:800;margin-bottom:
 .brand{display:flex;align-items:center;gap:10px;font-family:'Outfit',sans-serif;font-weight:800;font-size:15px;letter-spacing:.04em;}
 .brand span{color:var(--gold);}
 .who{font-size:13px;color:var(--muted);}
-button,.btn{font-family:inherit;font-weight:800;font-size:13.5px;border-radius:11px;cursor:pointer;
+/* color:inherit, because a <button> does NOT inherit it — it takes the UA's
+   `buttontext`, which is black. The module cards and topic rows are buttons, so
+   every title on this page was rendering black on a black card. */
+button,.btn{font-family:inherit;color:inherit;font-weight:800;font-size:13.5px;border-radius:11px;cursor:pointer;
   padding:11px 18px;min-height:44px;border:1px solid transparent;transition:all .2s;text-decoration:none;display:inline-block;}
 .pri{background:var(--gold);color:#05070e;}
 .pri:hover{filter:brightness(1.08);}
@@ -41,12 +44,6 @@ input,textarea{width:100%;padding:12px 14px;border-radius:11px;min-height:46px;b
 textarea{min-height:110px;resize:vertical;line-height:1.6;}
 input:focus,textarea:focus{outline:none;border-color:var(--border-strong);}
 label{display:block;font-size:12.5px;color:var(--muted);margin:12px 0 5px;font-weight:700;}
-.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));margin-top:20px;}
-.mod{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;cursor:pointer;
-  transition:border-color .2s,transform .2s;text-align:left;width:100%;min-height:auto;font-weight:400;}
-.mod:hover{border-color:var(--border-strong);transform:translateY(-2px);}
-.mod h3{font-family:'Outfit',sans-serif;font-size:16px;font-weight:800;margin-bottom:6px;}
-.mod .meta{font-size:11.5px;color:var(--dim);letter-spacing:.06em;text-transform:uppercase;}
 .bar{height:5px;border-radius:3px;background:rgba(255,255,255,.07);margin-top:11px;overflow:hidden;}
 .bar i{display:block;height:100%;background:var(--gold);border-radius:3px;}
 .tlist{margin-top:18px;display:flex;flex-direction:column;gap:8px;}
@@ -78,11 +75,74 @@ label{display:block;font-size:12.5px;color:var(--muted);margin:12px 0 5px;font-w
 .timer.low{color:var(--red);}
 .hd{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
 .hidden{display:none!important;}
-@media (max-width:560px){.wrap{padding:18px 14px 70px;}.cam{width:128px;right:10px;bottom:10px;}}
-@media (prefers-reduced-motion:reduce){.mod{transition:none;}.mod:hover{transform:none;}}
+
+/* ══ the 3D layer ═════════════════════════════════════════════════════════
+   Hand-rolled, because a backdrop and a ring of cards do not need a library.
+   The field is a canvas with real perspective (x/z, y/z); the chooser is CSS
+   preserve-3d, which keeps every card a real, clickable, focusable button —
+   the thing a canvas would have taken away. */
+#fx{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.55;}
+.wrap{position:relative;z-index:1;}
+
+/* ── the domain chooser: a coverflow, not a carousel of one ── */
+.pickwrap{margin-top:26px;}
+.stage{position:relative;height:310px;perspective:1200px;perspective-origin:50% 45%;
+  touch-action:pan-y;user-select:none;overflow:hidden;}
+/* Half the card's own width, computed from the same expression — min() of two
+   negatives picks the MORE negative, so `min(-130px,-36vw)` pushed the whole
+   coverflow 460px off-centre on a desktop. */
+.dcard{position:absolute;top:50%;left:50%;width:min(260px,72vw);
+  margin:-125px 0 0 calc(min(260px,72vw) * -0.5);
+  height:250px;padding:22px 20px;border-radius:20px;text-align:left;font-weight:400;
+  background:linear-gradient(160deg,#131c36,#0a1024);border:1px solid var(--border);
+  transform-style:preserve-3d;transition:transform .55s cubic-bezier(.22,.9,.28,1),opacity .45s,border-color .3s;
+  box-shadow:0 26px 60px rgba(0,0,0,.55);display:flex;flex-direction:column;justify-content:space-between;}
+.dcard.on{border-color:var(--border-strong);box-shadow:0 30px 70px rgba(212,175,55,.16),0 24px 60px rgba(0,0,0,.6);}
+.dcard.off{opacity:0;pointer-events:none;}
+.dcard .code{font-family:'Outfit',sans-serif;font-size:11px;letter-spacing:.22em;color:var(--gold);font-weight:800;}
+.dcard .nm{font-family:'Outfit',sans-serif;font-size:23px;font-weight:900;line-height:1.15;letter-spacing:-.02em;}
+.dcard .cnt{font-size:12.5px;color:var(--muted);}
+.dcard .yours{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:800;color:var(--green);}
+.dcard .soon{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:800;color:var(--dim);}
+.glow{position:absolute;inset:auto 0 -30px 0;height:120px;pointer-events:none;
+  background:radial-gradient(60% 100% at 50% 0,rgba(212,175,55,.18),transparent 70%);}
+.picknav{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:6px;}
+.picknav .arrow{width:44px;height:44px;border-radius:50%;border:1px solid var(--border-strong);
+  background:rgba(212,175,55,.06);color:var(--gold);font-size:17px;line-height:1;padding:0;}
+.dots{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;max-width:280px;}
+.dots i{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.16);transition:all .3s;}
+.dots i.on{background:var(--gold);width:20px;border-radius:3px;}
+
+/* ── the module screen: the run in 3D ── */
+.pathbox{position:relative;margin-top:20px;border-radius:18px;overflow:hidden;
+  border:1px solid var(--border);background:linear-gradient(170deg,#0a1024,#070b16);}
+#path{display:block;width:100%;height:190px;}
+.pathlabel{position:absolute;left:18px;top:14px;font-size:10.5px;letter-spacing:.18em;
+  text-transform:uppercase;font-weight:800;color:var(--dim);}
+.pct{position:absolute;right:18px;top:12px;text-align:right;}
+.pct b{font-family:'Outfit',sans-serif;font-size:30px;font-weight:900;color:var(--gold);line-height:1;}
+.pct span{display:block;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);margin-top:3px;}
+
+/* ── motion: everything arrives, nothing jumps ── */
+.rise{opacity:0;transform:translateY(14px);animation:rise .5s cubic-bezier(.2,.8,.3,1) forwards;}
+@keyframes rise{to{opacity:1;transform:none;}}
+.bar i{transition:width .9s cubic-bezier(.2,.8,.3,1);}
+.t{transition:border-color .2s,transform .2s,background .2s;}
+.t:not(:disabled):hover{transform:translateX(3px);border-color:var(--border-strong);}
+.t.now{box-shadow:0 0 0 1px var(--border-strong),0 10px 30px rgba(212,175,55,.09);}
+.t.now .n{animation:beat 2.4s ease-in-out infinite;}
+@keyframes beat{0%,100%{box-shadow:0 0 0 0 rgba(212,175,55,.35);}50%{box-shadow:0 0 0 7px rgba(212,175,55,0);}}
+
+@media (max-width:560px){.wrap{padding:18px 14px 70px;}.cam{width:128px;right:10px;bottom:10px;}
+  .stage{height:280px;} .dcard{height:228px;margin-top:-114px;}}
+@media (prefers-reduced-motion:reduce){
+  .t,.dcard{transition:none;} .t:hover{transform:none;}
+  .rise{opacity:1;transform:none;animation:none;} .bar i{transition:none;}
+  .t.now .n{animation:none;} #fx{display:none;}}
 </style>
 </head>
 <body>
+<canvas id="fx" aria-hidden="true"></canvas>
 <div class="wrap">
   <div class="top">
     <div class="brand">TEN <span>LLM PORTAL</span></div>
@@ -148,49 +208,179 @@ function authScreen(mode) {
   ['em','pw','nm'].forEach((id) => { const el = $(id); if (el) el.onkeydown = (e) => { if (e.key === 'Enter') submit(); }; });
 }
 
-/* ── the module list ───────────────────────────────────────────────────── */
+/* ── where you land ────────────────────────────────────────────────────────
+   Not a menu of fifteen. A learner buys ONE course: either they have picked
+   their domain, in which case the portal IS that module, or they have not, and
+   the only thing to do here is pick it. */
 async function home() {
   const { d } = await api('/curriculum');
-  const locked = !d.courseOpen;
-  view.innerHTML = `
-    <h1>Your modules</h1>
-    <p class="sub">One module per domain — 21 topics each, getting harder as you go.
-       Read, watch, then sit a proctored exam. Pass every topic to reach the two-hour final.</p>
-    ${locked ? `<div class="note">The course is not unlocked yet.
-        <a href="/studio.html?want=course" class="btn pri" style="margin-left:10px;">See what it includes →</a></div>`
-      : d.via === 'deferred'
-        ? `<div class="note">You chose to pay after completion — everything is open.
-             Your certificate waits for the fee, nothing else does.</div>`
-        : `<div class="note good">Unlocked${d.via === 'tenure' ? ' with your paid internship track' : ''} — every module is open.</div>`}
-    <div class="grid">${d.modules.map((m) => `
-      <button class="mod" data-slug="${esc(m.slug)}" ${!m.ready ? 'disabled' : ''}>
-        <div class="meta">${esc(m.shortCode || '')}${m.ready ? '' : ' · coming soon'}</div>
-        <h3>${esc(m.name)}</h3>
-        <div class="meta" style="color:var(--muted);text-transform:none;letter-spacing:0;font-size:12.5px;">
-          ${m.settled}/${m.topicCount} topics${m.finalPassed ? ' · final passed' : ''}${m.certificateId ? ' · certified' : ''}</div>
-        <div class="bar"><i style="width:${m.topicCount ? Math.round(m.settled / m.topicCount * 100) : 0}%"></i></div>
-      </button>`).join('')}</div>`;
-  view.querySelectorAll('[data-slug]').forEach((b) => { b.onclick = () => moduleScreen(b.dataset.slug); });
+  if (!d.courseOpen) { lockedScreen(d); return; }
+  if (d.chosen) { moduleScreen(d.chosen, d); return; }
+  chooseScreen(d);
 }
 
-/* ── one module ────────────────────────────────────────────────────────── */
-async function moduleScreen(slug) {
+function accessNote(d) {
+  return d.via === 'deferred'
+    ? `<div class="note">You chose to pay after completion — everything below is open.
+         Your certificate waits for the fee, nothing else does.</div>`
+    : d.via === 'tenure'
+      ? `<div class="note good">Open with your paid internship track.</div>`
+      : `<div class="note good">Unlocked — this is yours.</div>`;
+}
+
+function lockedScreen(d) {
+  view.innerHTML = `
+    <h1 class="rise">The Academic Portal</h1>
+    <p class="sub rise" style="animation-delay:.06s">Twenty-one topics in your domain, a proctored exam after
+       every one of them, a two-hour final, and a certificate that can be verified.</p>
+    <div class="note rise" style="animation-delay:.12s">This is not unlocked on your account yet.
+      <a href="/studio.html?want=course" class="btn pri" style="margin-left:10px;">See what it includes →</a></div>`;
+}
+
+/* ── choosing your domain ──────────────────────────────────────────────────
+   A coverflow rather than a ring: fifteen cards on a circle need a radius no
+   phone has. Here the chosen card faces you, its neighbours turn away in real
+   3D, and every one of them stays a focusable button — which is exactly what a
+   canvas version would have cost. */
+let pick = { list: [], i: 0 };
+
+function chooseScreen(d) {
+  const ready = d.modules.filter((m) => m.ready);
+  const rest = d.modules.filter((m) => !m.ready);
+  pick.list = ready.concat(rest);
+  pick.i = Math.max(0, pick.list.findIndex((m) => m.slug === d.suggested));
+  if (pick.i < 0) pick.i = 0;
+
+  view.innerHTML = `
+    <h1 class="rise">Choose your domain</h1>
+    <p class="sub rise" style="animation-delay:.06s">One domain, one module, twenty-one topics. This is the
+       course you will be examined on and the domain your certificate will name, so pick the one you
+       actually want${d.suggested ? ' — we have started you on your internship domain' : ''}.</p>
+    ${accessNote(d)}
+    <div class="pickwrap rise" style="animation-delay:.12s">
+      <div class="stage" id="stage">${pick.list.map((m, i) => `
+        <button class="dcard" data-i="${i}" ${m.ready ? '' : 'disabled'}>
+          <div>
+            <div class="code">${esc(m.shortCode || '')}</div>
+            ${m.slug === d.suggested ? '<div class="yours" style="margin-top:6px;">YOUR INTERNSHIP DOMAIN</div>' : ''}
+          </div>
+          <div>
+            <div class="nm">${esc(m.name)}</div>
+            <div class="cnt" style="margin-top:8px;">${m.topicCount} topics · exam after each</div>
+            ${m.ready ? '' : '<div class="soon" style="margin-top:8px;">CONTENT COMING</div>'}
+          </div>
+        </button>`).join('')}
+        <div class="glow"></div>
+      </div>
+      <div class="picknav">
+        <button class="arrow" id="prev" aria-label="Previous domain">‹</button>
+        <div class="dots" id="dots">${pick.list.map(() => '<i></i>').join('')}</div>
+        <button class="arrow" id="next" aria-label="Next domain">›</button>
+      </div>
+      <div id="pickMsg"></div>
+      <button class="pri" id="take" style="width:100%;margin-top:16px;">Start this domain</button>
+      <p class="sub" style="font-size:12.5px;">You can change this while you have not passed a topic yet.
+         After that it is fixed — the certificate names it.</p>
+    </div>`;
+
+  const stage = $('stage');
+  layoutPick();
+  $('prev').onclick = () => movePick(-1);
+  $('next').onclick = () => movePick(1);
+  stage.querySelectorAll('[data-i]').forEach((b) => {
+    b.onclick = () => { const i = +b.dataset.i; if (i === pick.i) takeDomain(); else { pick.i = i; layoutPick(); } };
+  });
+  document.onkeydown = (e) => {
+    if (e.key === 'ArrowLeft') movePick(-1);
+    else if (e.key === 'ArrowRight') movePick(1);
+  };
+  // Swipe. A coverflow you cannot drag on a phone is a coverflow with two arrows.
+  let x0 = null;
+  stage.addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; }, { passive: true });
+  stage.addEventListener('touchend', (e) => {
+    if (x0 == null) return;
+    const dx = e.changedTouches[0].clientX - x0;
+    if (Math.abs(dx) > 40) movePick(dx < 0 ? 1 : -1);
+    x0 = null;
+  });
+  $('take').onclick = takeDomain;
+}
+
+function movePick(step) {
+  pick.i = Math.min(pick.list.length - 1, Math.max(0, pick.i + step));
+  layoutPick();
+}
+
+/** Position every card relative to the active one. Depth is real: cards behind
+ *  are further away and turned, not merely smaller. */
+function layoutPick() {
+  const cards = view.querySelectorAll('.dcard');
+  cards.forEach((c, i) => {
+    const o = i - pick.i;
+    const a = Math.abs(o);
+    c.classList.toggle('on', o === 0);
+    c.classList.toggle('off', a > 2);
+    c.setAttribute('aria-hidden', a > 2 ? 'true' : 'false');
+    c.tabIndex = a > 2 ? -1 : 0;
+    const x = o * 84, z = -a * 230, ry = -o * 40, sc = 1 - a * 0.16;
+    c.style.transform = `translateX(${x}%) translateZ(${z}px) rotateY(${ry}deg) scale(${sc})`;
+    c.style.zIndex = String(50 - a);
+    c.style.opacity = a > 2 ? '0' : String(1 - a * 0.55);
+    // Depth of field. Without it the cards behind read their titles straight
+    // across the front one at the same size — worse than no 3D at all.
+    c.style.filter = a === 0 ? 'none' : `blur(${a * 3}px) brightness(${1 - a * 0.5})`;
+  });
+  const dots = $('dots');
+  if (dots) dots.querySelectorAll('i').forEach((n, i) => n.classList.toggle('on', i === pick.i));
+  const take = $('take');
+  const m = pick.list[pick.i];
+  if (take && m) {
+    take.disabled = !m.ready;
+    take.textContent = m.ready ? 'Start ' + m.name : m.name + ' is not ready yet';
+  }
+}
+
+async function takeDomain() {
+  const m = pick.list[pick.i];
+  if (!m || !m.ready) return;
+  $('take').disabled = true;
+  const { ok, d } = await api('/domain', { method: 'POST', body: JSON.stringify({ slug: m.slug }) });
+  $('take').disabled = false;
+  if (!ok) { $('pickMsg').innerHTML = '<div class="note bad">' + esc(d.message || 'Could not set that.') + '</div>'; return; }
+  document.onkeydown = null;
+  moduleScreen(m.slug);
+}
+
+/* ── your module ───────────────────────────────────────────────────────────
+   There is no "all modules" any more: this IS the portal for whoever is signed
+   in. The only way back is switching domain, and only while nothing has been
+   passed. */
+async function moduleScreen(slug, cur) {
   const { ok, status, d } = await api('/module/' + encodeURIComponent(slug));
   if (status === 402) { home(); return; }
-  if (!ok) { view.innerHTML = '<div class="note bad">Could not open that module.</div>'; return; }
+  if (status === 409 || status === 403) { home(); return; }
+  if (!ok) { view.innerHTML = '<div class="note bad">Could not open your module.</div>'; return; }
 
   const settled = d.topics.filter((t) => t.passedAt || t.closedByHR).length;
+  const pct = d.topics.length ? Math.round(settled / d.topics.length * 100) : 0;
+  const canSwitch = cur ? cur.canSwitch : settled === 0 && !d.finalPassed;
   view.innerHTML = `
-    <button class="ghost" id="back">← All modules</button>
-    <div class="hd" style="margin-top:8px;">
-      <div><h1>${esc(d.name)}</h1>
-        <p class="sub">${settled} of ${d.topics.length} topics settled.</p></div>
+    <div class="hd rise">
+      <div><span class="tag">YOUR DOMAIN</span><h1>${esc(d.name)}</h1>
+        <p class="sub">${settled} of ${d.topics.length} topics settled${d.finalPassed ? ' · final passed' : ''}.</p></div>
+      ${canSwitch ? '<button class="ghost" id="switch">Change domain</button>' : ''}
     </div>
-    ${d.proctorHold ? `<div class="note bad">Your exams in this module are on hold —
+    <div class="pathbox rise" style="animation-delay:.06s">
+      <canvas id="path" aria-hidden="true"></canvas>
+      <div class="pathlabel">Your run</div>
+      <div class="pct"><b id="pctN">0%</b><span>settled</span></div>
+    </div>
+    ${d.proctorHold ? `<div class="note bad">Your exams are on hold —
        HR is reviewing the camera warnings from topic ${d.proctorHold.topicN || 'final'}.
        You will get an email with the decision.</div>` : ''}
     <div class="tlist">${d.topics.map((t) => `
-      <button class="t ${t.passedAt ? 'done' : ''} ${t.closedByHR ? 'shut' : ''} ${t.open && !t.passedAt && !t.closedByHR ? 'now' : ''}"
+      <button class="t rise ${t.passedAt ? 'done' : ''} ${t.closedByHR ? 'shut' : ''} ${t.open && !t.passedAt && !t.closedByHR ? 'now' : ''}"
+              style="animation-delay:${Math.min(0.5, 0.1 + t.n * 0.022)}s"
               data-n="${t.n}" ${t.open ? '' : 'disabled'}>
         <span class="n">${t.n}</span>
         <span class="ti">${esc(t.title)}<br><span class="diff">DIFFICULTY ${t.difficulty}/5</span></span>
@@ -218,7 +408,16 @@ async function moduleScreen(slug) {
         <button class="pri" id="cert" style="margin-top:10px;">Download my certificate</button>
       </div></div>` : ''}`;
 
-  $('back').onclick = home;
+  document.onkeydown = null;      // the chooser's arrow keys leave with it
+  drawPath(d.topics);
+  countUp($('pctN'), pct);
+  if ($('switch')) $('switch').onclick = async () => {
+    // ?choose=1 asks for the whole list back. The server refuses it once a topic
+    // has been passed, which is the same rule the button is shown under.
+    const { ok, d: cd } = await api('/curriculum?choose=1');
+    if (!ok) { alert(cd.message || 'You have already started this domain.'); return; }
+    chooseScreen(cd);
+  };
   view.querySelectorAll('[data-n]').forEach((b) => { b.onclick = () => topicScreen(slug, +b.dataset.n); });
   if ($('final')) $('final').onclick = () => startExam(slug, 0);
   if ($('psub')) $('psub').onclick = async () => {
@@ -240,6 +439,150 @@ async function moduleScreen(slug) {
   };
 }
 
+/* ── your run, in perspective ──────────────────────────────────────────────
+   Twenty-one topics on a curve receding into the screen: projected with real
+   perspective (x/z, y/z), not a flat row scaled down. Gold behind you, a
+   pulsing ring where you are, dim ahead.
+
+   ponytail: a picture, not a control — the list below it is what you click.
+   Hit-testing a canvas would be a second set of buttons to keep in step with
+   the first, for nothing the list does not already do. */
+function drawPath(topics) {
+  const cv = $('path');
+  if (!cv || !topics.length) return;
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const ctx = cv.getContext('2d');
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  let w = 0, h = 0, t0 = null, raf = 0;
+
+  function size() {
+    w = cv.clientWidth; h = cv.clientHeight;
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function frame(now) {
+    if (t0 === null) t0 = now;
+    const t = (now - t0) / 1000;
+    ctx.clearRect(0, 0, w, h);
+    const n = topics.length;
+    const pts = [];
+    for (let i = 0; i < n; i++) {
+      const u = i / (n - 1 || 1);
+      // A gentle S through space, drifting so the run feels alive.
+      const x3 = (u - 0.5) * 3.15;
+      const y3 = Math.sin(u * Math.PI * 1.6 + (still ? 0 : t * 0.35)) * 0.26;
+      const z3 = 2.6 - Math.cos(u * Math.PI * 1.15) * 0.72;
+      const k = 1 / z3;                       // the projection, in one character
+      // 0.54, not 0.5: the curve rises before it falls, so a true centre line
+      // pushes the whole run into the top half and leaves dead space below.
+      pts.push({ x: w / 2 + x3 * k * w * 0.52, y: h * 0.54 - y3 * k * h * 0.95, k, t: topics[i] });
+    }
+    // The thread first, so the nodes sit on top of it.
+    ctx.lineWidth = 1.4;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i];
+      const done = a.t.passedAt || a.t.closedByHR;
+      ctx.strokeStyle = done ? 'rgba(212,175,55,.55)' : 'rgba(255,255,255,.09)';
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+    for (const p of pts) {
+      const done = p.t.passedAt, shut = p.t.closedByHR;
+      const here = p.t.open && !done && !shut;
+      const r = Math.max(2.2, p.k * 6.4);
+      if (here && !still) {
+        const pulse = (Math.sin(t * 2.6) + 1) / 2;
+        ctx.beginPath(); ctx.arc(p.x, p.y, r + 4 + pulse * 7, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(212,175,55,' + (0.20 - pulse * 0.15).toFixed(3) + ')';
+        ctx.fill();
+      }
+      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = done ? '#D4AF37' : shut ? 'rgba(239,68,68,.75)'
+        : here ? '#F0EEE8' : 'rgba(255,255,255,.16)';
+      ctx.fill();
+    }
+    if (!still) raf = requestAnimationFrame(frame);
+  }
+
+  size();
+  if (still) { frame(0); } else { raf = requestAnimationFrame(frame); }
+  const onResize = () => { size(); if (still) frame(0); };
+  window.addEventListener('resize', onResize);
+  // The canvas dies with the screen it belongs to; nothing else holds a
+  // reference, so stopping when it leaves the document is enough.
+  const stop = setInterval(() => {
+    if (document.body.contains(cv)) return;
+    cancelAnimationFrame(raf); window.removeEventListener('resize', onResize); clearInterval(stop);
+  }, 2000);
+}
+
+/** A number that arrives rather than appears. */
+function countUp(el, to) {
+  if (!el) return;
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { el.textContent = to + '%'; return; }
+  const start = performance.now(), ms = 900;
+  const step = (now) => {
+    const k = Math.min(1, (now - start) / ms);
+    el.textContent = Math.round(to * (1 - Math.pow(1 - k, 3))) + '%';
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+/* ── the field behind everything ───────────────────────────────────────────
+   Points on a slowly turning cylinder, projected the same honest way. Costs
+   about forty lines and no dependency; absent entirely under reduced-motion. */
+(function field() {
+  const cv = $('fx');
+  if (!cv || matchMedia('(prefers-reduced-motion: reduce)').matches) { if (cv) cv.remove(); return; }
+  const ctx = cv.getContext('2d');
+  const dpr = Math.min(1.5, window.devicePixelRatio || 1);
+  const N = window.innerWidth < 560 ? 130 : 260;
+  const pts = [];
+  for (let i = 0; i < N; i++) {
+    pts.push({ a: Math.random() * Math.PI * 2, r: 0.6 + Math.random() * 0.9,
+               y: Math.random() * 2 - 1, s: 0.6 + Math.random() * 0.7 });
+  }
+  let w = 0, h = 0, raf = 0, lean = 0, leanTo = 0;
+
+  function size() {
+    w = window.innerWidth; h = window.innerHeight;
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    cv.style.width = w + 'px'; cv.style.height = h + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function frame(now) {
+    const t = now / 1000;
+    lean += (leanTo - lean) * 0.05;
+    ctx.clearRect(0, 0, w, h);
+    for (const p of pts) {
+      const a = p.a + t * 0.055 * p.s + lean;
+      const x3 = Math.cos(a) * p.r, z3 = Math.sin(a) * p.r + 2.6;
+      if (z3 < 0.35) continue;
+      const k = 1 / z3;
+      const x = w / 2 + x3 * k * w * 0.62;
+      const y = h / 2 + p.y * k * h * 0.62;
+      const r = k * 1.7;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(212,175,55,' + Math.min(0.5, k * 0.34).toFixed(3) + ')';
+      ctx.fill();
+    }
+    raf = requestAnimationFrame(frame);
+  }
+
+  size();
+  window.addEventListener('resize', size);
+  window.addEventListener('pointermove', (e) => { leanTo = (e.clientX / window.innerWidth - 0.5) * 0.5; });
+  // A background that keeps painting in a hidden tab is a background that eats
+  // a battery for no one to see.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { cancelAnimationFrame(raf); raf = 0; }
+    else if (!raf) raf = requestAnimationFrame(frame);
+  });
+  raf = requestAnimationFrame(frame);
+})();
+
 /* ── one topic: read, watch, then the exam ─────────────────────────────── */
 async function topicScreen(slug, n) {
   const { ok, d } = await api('/module/' + encodeURIComponent(slug) + '/topic/' + n);
@@ -250,8 +593,8 @@ async function topicScreen(slug, n) {
     : 'https://www.youtube.com/embed?listType=search&list=' + encodeURIComponent(t.videoSearch || t.title);
 
   view.innerHTML = `
-    <button class="ghost" id="back">← ${esc(slug)}</button>
-    <h1 style="margin-top:8px;">${t.n}. ${esc(t.title)}</h1>
+    <button class="ghost" id="back">← ${esc(d.moduleName || slug)}</button>
+    <h1 class="rise" style="margin-top:8px;">${t.n}. ${esc(t.title)}</h1>
     <p class="sub">Difficulty ${t.difficulty} of 5</p>
     <div class="card" style="margin-top:18px;">
       <div class="tag">The technical explanation</div>

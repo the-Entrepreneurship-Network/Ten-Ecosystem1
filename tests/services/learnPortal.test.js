@@ -251,3 +251,118 @@ describe('learner accounts', () => {
     expect(ROUTE).toContain('if (!access.portals.course.granted)');
   });
 });
+
+/*
+ * A learner buys ONE course. The portal used to open on all fifteen modules,
+ * which is fourteen doors that are not theirs and one that is.
+ */
+describe('one domain, chosen once', () => {
+  const PAGESRC = strip(PAGE);
+
+  it('is stored on the account, not guessed from progress', () => {
+    // A progress row exists the moment a module screen is opened, so progress
+    // cannot tell "mine" from "looked at once".
+    expect(read('models/EcosystemUser.js')).toContain('learnDomain');
+    expect(ROUTE).toContain('async function chosenDomain(who)');
+    expect(ROUTE).toContain("router.post('/domain'");
+  });
+
+  it('a withdrawn module cannot lock somebody out of the portal', () => {
+    const fn = ROUTE.slice(ROUTE.indexOf('async function chosenDomain'));
+    expect(fn.slice(0, 400)).toContain('curriculum.getModule(slug)');
+  });
+
+  /*
+   * The choice has to be a rule, not a filter. Every route that names a module
+   * asks the same question, or the other fourteen are one typed URL away.
+   */
+  it('every module-scoped route refuses another domain', () => {
+    expect(ROUTE).toContain('async function requireOwnDomain(who, slug, res)');
+    const guarded = [
+      "router.get('/module/:slug'",
+      "router.get('/module/:slug/topic/:n'",
+      "router.post('/module/:slug/topic/:n/video-done'",
+      "router.post('/exam/start'",
+      "router.post('/module/:slug/project'",
+      "router.get('/module/:slug/certificate'"
+    ];
+    for (const route of guarded) {
+      const at = ROUTE.indexOf(route);
+      expect(at).toBeGreaterThan(-1);
+      const body = ROUTE.slice(at, at + 1200);
+      expect(body).toContain('requireOwnDomain(who');
+    }
+    // The exam is the one that matters most: it is reached by body, not by URL.
+    const exam = ROUTE.slice(ROUTE.indexOf("router.post('/exam/start'"));
+    expect(exam.indexOf('requireOwnDomain')).toBeLessThan(exam.indexOf('isFinal ?'));
+  });
+
+  it('the curriculum returns their module alone once they have chosen', () => {
+    expect(ROUTE).toContain('modules: [mine]');
+    expect(ROUTE).toContain("req.query.choose === '1'");
+  });
+
+  /*
+   * Switchable until something is earned, fixed after. The certificate names a
+   * domain; carrying progress into another one would issue it for a course
+   * nobody sat.
+   */
+  it('locks the choice once a topic has been passed', () => {
+    const fn = ROUTE.slice(ROUTE.indexOf("router.post('/domain'"));
+    const body = fn.slice(0, fn.indexOf('\n}));'));
+    expect(body).toContain('settledCount(p) > 0');
+    expect(body).toMatch(/status\(409\)/);
+  });
+
+  it('the portal opens on the module, and the chooser only when there is none', () => {
+    expect(PAGESRC).toContain('if (d.chosen) { moduleScreen(d.chosen, d); return; }');
+    expect(PAGESRC).toContain('chooseScreen(d)');
+    // and there is no "all modules" way back any more
+    expect(PAGESRC).not.toContain('All modules');
+    // and the fifteen-card grid it used to be went with it
+    expect(PAGE).not.toContain('.mod{');
+  });
+});
+
+describe('the portal earns its price', () => {
+  const PAGESRC = strip(PAGE);
+
+  /*
+   * A <button> does not inherit color — it takes the UA's `buttontext`, which
+   * is black. The module cards and every topic row are buttons, so their titles
+   * were rendering black on a black card.
+   */
+  it('buttons take the page colour, not the browser default', () => {
+    expect(PAGE).toMatch(/button,\.btn\{font-family:inherit;color:inherit/);
+  });
+
+  it('the domain chooser is real 3D, and still made of buttons', () => {
+    expect(PAGE).toContain('perspective:1200px');
+    expect(PAGE).toContain('transform-style:preserve-3d');
+    expect(PAGESRC).toContain('rotateY(${ry}deg)');
+    // Clickable, focusable, keyboard- and swipe-driven — what a canvas would cost.
+    expect(PAGESRC).toContain('<button class="dcard"');
+    expect(PAGESRC).toContain("e.key === 'ArrowLeft'");
+    expect(PAGESRC).toContain("stage.addEventListener('touchend'");
+    // Cards behind the front one are out of the tab order, not merely faded.
+    expect(PAGESRC).toContain('c.tabIndex = a > 2 ? -1 : 0;');
+  });
+
+  it('the run is drawn with real perspective, not a scaled row', () => {
+    const fn = PAGESRC.slice(PAGESRC.indexOf('function drawPath'));
+    expect(fn).toContain('const k = 1 / z3;');
+    expect(fn).toContain('x3 * k');
+    expect(fn).toContain('y3 * k');
+  });
+
+  it('none of it punishes a phone or a battery', () => {
+    expect(PAGESRC).toContain("matchMedia('(prefers-reduced-motion: reduce)')");
+    expect(PAGE).toContain('@media (prefers-reduced-motion:reduce)');
+    // The field is removed outright, not merely stilled.
+    expect(PAGESRC).toContain('cv.remove()');
+    // DPR is clamped, and a hidden tab stops painting.
+    expect(PAGESRC).toMatch(/Math\.min\(1\.5, window\.devicePixelRatio/);
+    expect(PAGESRC).toContain("document.addEventListener('visibilitychange'");
+    expect(PAGESRC).toContain('cancelAnimationFrame(raf)');
+  });
+});
