@@ -14,6 +14,14 @@ const HRSchema = new mongoose.Schema({
     role:     { type: String, default: "hr" },
     employeeId: { type: String, default: "" },
     promotedFrom: { type: String, default: "" },  // e.g. "coordinator"
+    /*
+     * 1–8, matching HR_ROSTER in server.js: Jr HR Associate through Vice
+     * President. /hr-login already reads `dbHR.level` and the portal already
+     * switches on it — but the field was never on this schema, so every
+     * DB-backed HR account (a promoted coordinator) came back as level 1 and
+     * could not open anything gated above it.
+     */
+    level:    { type: Number, default: 1, min: 1, max: 8 },
     failedLoginAttempts: { type: Number, default: 0 },
     // When the most recent failure was, so the attempt counter decays.
     // Without it, failures accumulated forever between successful logins.

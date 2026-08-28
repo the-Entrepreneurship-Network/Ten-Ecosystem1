@@ -2520,6 +2520,27 @@ if(!student){
         if (s.hasSeenOnboarding !== undefined) stored.hasSeenOnboarding = s.hasSeenOnboarding;
         localStorage.setItem('student', JSON.stringify(stored));
         student = stored;
+
+        /*
+         * The server has the last word on whether the joining questions have
+         * been answered.
+         *
+         * The gate below reads localStorage, and localStorage says "answered"
+         * forever. So when HR reopens a student's joiner choice — because they
+         * tapped "WhatsApp joiner" by mistake and back-dated their whole
+         * internship — the reset reached the database and nothing else. This
+         * is the line that lets it reach the student: the flags have just come
+         * from the server, so if they say unanswered, ask again.
+         */
+        var reopened = (s.onboardingPopupSeen === false || s.hasSeenOnboarding === false);
+        var wizard = document.getElementById('onboardingWizardModal');
+        var welcome = document.getElementById('welcomePortalModal');
+        var alreadyOpen = (wizard && wizard.style.display === 'flex')
+                       || (welcome && welcome.style.display === 'flex');
+        if (reopened && !alreadyOpen && typeof showWelcomeModalIfNeeded === 'function') {
+          showWelcomeModalIfNeeded();
+        }
+
         if (typeof recalculateDomains === 'function') {
           recalculateDomains();
         }
@@ -5984,8 +6005,15 @@ function showJoinerTypeModalIfNeeded() {
     var empId = stu.employeeId || stu.employee_id || localStorage.getItem('employeeId') || '';
     if (!empId) return;
 
-    // Check if onboarding is completely finished (database or local storage status)
-    if (stu.onboardingPopupSeen === true || stu.hasSeenOnboarding === true) {
+    /*
+     * Both flags, not either.
+     *
+     * `||` meant one stale `true` in a cache was enough to keep the wizard
+     * shut for good — and an HR reset clears both, so a half-refreshed cache
+     * would have swallowed it. A student is past this only when nothing says
+     * otherwise.
+     */
+    if (stu.onboardingPopupSeen === true && stu.hasSeenOnboarding !== false) {
       applyJoinerTypeUI(stu.joinerType);
       updateGoogleLinksVisibility();
       return;

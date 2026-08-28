@@ -2656,6 +2656,7 @@ function renderStudents(list){
         <button class="btn-view-hr" onclick="openSidePanel('${s._id}')">👁 Details</button>
         <button class="btn-edit-hr" onclick="openEditStudent('${s._id}')">✏️ Edit</button>
         <button class="btn-lor-hr" onclick="generateLOR('${s._id}','${safeN}')">📄 LOR</button>
+        <button class="btn-edit-hr" onclick="openJoinerReset('${s.employeeId||''}','${safeN}')">🔁 Joiner</button>
         <button class="btn-del-hr" onclick="confirmDelStudent('${s._id}','${safeN}')">🗑 Delete</button>
       </div></td>
     </tr>`;
@@ -3093,6 +3094,79 @@ async function generateLOR(studentId, studentName, force = false) {
     showHRToast('❌ LOR generation failed.', 'error');
   }
 }
+/* ── the joiner wizard, undone ────────────────────────────────────────────
+ *
+ * A student who tapped "WhatsApp joiner" by mistake back-dated their whole
+ * internship and was credited attendance they never marked — and there is no
+ * button on their side that undoes it. This is the one that does, and it is
+ * HR level 3 and up: the associates below that see students, they do not
+ * rewrite start dates.
+ */
+async function openJoinerReset(employeeId, name){
+  if(!employeeId){ Swal.fire({icon:'info',title:'No employee ID',text:'This student has no employee ID to look up yet.',background:'#0d1124',color:'#f0eee8'}); return; }
+  let d = null;
+  try{
+    // ?employeeId=, not a path segment: these ids carry slashes.
+    const r = await fetch('/api/v2/hr/onboarding?employeeId=' + encodeURIComponent(employeeId),
+      { credentials:'same-origin' });
+    d = await r.json();
+    if(!r.ok || !d.success) throw new Error((d && d.message) || 'Could not load that student.');
+  }catch(e){
+    Swal.fire({icon:'error',title:'Could not load',text:e.message,background:'#0d1124',color:'#f0eee8',confirmButtonColor:'#f43f5e'});
+    return;
+  }
+  const st = d.student;
+  const fmt = (v) => v ? new Date(v).toLocaleDateString() : '—';
+  const answer = st.answered ? (st.joinerType === 'whatsapp' ? 'WhatsApp joiner' : st.joinerType === 'new' ? 'New joiner' : 'answered')
+                             : 'not answered yet';
+  const history = (st.resets || []).map(rr =>
+      '<div style="font-size:12px;color:#8aa4c8;margin-top:4px;">'
+    + new Date(rr.at).toLocaleString() + ' — ' + (rr.by || 'HR')
+    + (rr.reason ? ': ' + String(rr.reason).replace(/</g,'&lt;') : '') + '</div>').join('');
+
+  const body =
+      '<div style="text-align:left;font-size:13.5px;line-height:1.7;">'
+    + '<div><b>Answered:</b> ' + answer + '</div>'
+    + '<div><b>Internship start on file:</b> ' + fmt(st.internshipStartDate) + '</div>'
+    + '<div><b>Portal registration:</b> ' + fmt(st.portalRegistered) + '</div>'
+    + '<div><b>Attendance credited:</b> ' + (st.calculatedAttendance == null ? '—' : st.calculatedAttendance + ' days') + '</div>'
+    + (st.resets && st.resets.length ? '<div style="margin-top:10px;"><b>Reset before:</b>' + history + '</div>' : '')
+    + '<div style="margin-top:12px;padding:10px 12px;border-radius:8px;background:rgba(245,197,66,0.08);'
+    + 'border:1px solid rgba(245,197,66,0.25);font-size:12.5px;">'
+    + 'Resetting reopens the joining questions on their next visit and puts the internship start back to their '
+    + 'portal registration date, so any credit the wrong answer created is removed. '
+    + '<b>Their tasks, submissions, coins, certificates and marked attendance are untouched.</b></div>'
+    + '</div>';
+
+  if(!d.canReset){
+    Swal.fire({ title:(name||employeeId), html: body + '<div style="margin-top:12px;color:#fda4af;font-size:12.5px;">'
+      + 'Resetting needs HR level ' + d.minLevel + ' or above.</div>',
+      background:'#0d1124', color:'#f0eee8', confirmButtonColor:'#3b82f6', confirmButtonText:'Close' });
+    return;
+  }
+
+  const res = await Swal.fire({
+    title:(name||employeeId), html: body,
+    input:'text', inputPlaceholder:'Why are you resetting this? (optional, kept on the record)',
+    showCancelButton:true, confirmButtonText:'Reset the joining questions',
+    background:'#0d1124', color:'#f0eee8', confirmButtonColor:'#f5c542', cancelButtonColor:'#374151'
+  });
+  if(!res.isConfirmed) return;
+
+  try{
+    const r = await fetch('/api/v2/hr/onboarding/reset', {
+      method:'POST', credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ employeeId: employeeId, reason: res.value || '' })
+    });
+    const out = await r.json();
+    if(!r.ok || !out.success) throw new Error((out && out.message) || 'Could not reset that.');
+    Swal.fire({icon:'success',title:'Reset',text:out.message,background:'#0d1124',color:'#f0eee8',confirmButtonColor:'#10b981'});
+  }catch(e){
+    Swal.fire({icon:'error',title:'Could not reset',text:e.message,background:'#0d1124',color:'#f0eee8',confirmButtonColor:'#f43f5e'});
+  }
+}
+
 function confirmDelStudent(id,name){
   pendingDelId=id;
   document.getElementById('confirmDelMsg').textContent='Delete "'+name.trim()+'"? This cannot be undone.';
