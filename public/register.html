@@ -1020,6 +1020,30 @@
   <script>
     let activeRole = '';
     let currentStep = 1;
+    /*
+     * Three roles share the short shape: identity, their own section, review.
+     *
+     * Module scope, not inside changeWizardStep: renderWizardStep is a sibling
+     * function and reads it too, and a const declared in one of them is a
+     * ReferenceError in the other — which throws on the first Next click and
+     * strands every role on step 1.
+     */
+    const SHORT = ['founder', 'investor', 'contractor'];
+
+    /*
+     * How many steps this role's wizard has.
+     *
+     * One function, because this expression was written out three times and
+     * two of the copies still read `activeRole === 'founder' ? 3 : 6`. For an
+     * investor or a contractor that made step 3 not the last step, so the
+     * review summary never ran and the Submit button never appeared — the
+     * wizard simply ended, with no way out of it — and the submit path
+     * validated against the student's step 6.
+     */
+    function stepsFor(role) {
+      if (role === 'mentor') return 5;
+      return SHORT.includes(role) ? 3 : 6;
+    }
     let selectedDomains = [];
     let selectedSkillsList = [];
 
@@ -1671,9 +1695,7 @@
       if (delta > 0 && !validateStep(currentStep)) {
         return;
       }
-      // Three roles share the short shape: identity, their own section, review.
-      const SHORT = ['founder', 'investor', 'contractor'];
-      const maxSteps = activeRole === 'mentor' ? 5 : SHORT.includes(activeRole) ? 3 : 6;
+      const maxSteps = stepsFor(activeRole);
       if (targetStep < 1 || targetStep > maxSteps) return;
 
       currentStep = targetStep;
@@ -1910,7 +1932,7 @@
     }
 
     function renderWizardStep() {
-      const maxSteps = activeRole === 'mentor' ? 5 : activeRole === 'founder' ? 3 : 6;
+      const maxSteps = stepsFor(activeRole);
       document.getElementById('wizardStepNumber').textContent = currentStep;
       if (document.getElementById('wizardTotalSteps')) {
         document.getElementById('wizardTotalSteps').textContent = maxSteps;
@@ -2170,7 +2192,7 @@
     document.getElementById("unifiedRegForm").addEventListener("submit", async (e) => {
       e.preventDefault();
 
-      const maxSteps = activeRole === 'mentor' ? 5 : activeRole === 'founder' ? 3 : 6;
+      const maxSteps = stepsFor(activeRole);
       if (!validateStep(maxSteps)) return;
 
       const formData = new FormData(e.target);

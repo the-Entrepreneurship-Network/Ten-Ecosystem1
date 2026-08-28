@@ -805,9 +805,35 @@ describe('founder registration is open', () => {
     expect(reg).toContain('class="fnd-goal accent-amber-500"');
   });
 
+  /*
+   * maxSteps was written out three times and two copies said
+   * `activeRole === 'founder' ? 3 : 6`. For an investor or a contractor that
+   * made step 3 not the last step: the review summary never ran, the Submit
+   * button never appeared, and the submit path validated against the student's
+   * step 6. The wizard simply ended with no way out of it.
+   */
+  it('knows how many steps each role has, in one place', () => {
+    expect(reg).toContain('function stepsFor(role)');
+    expect(reg).not.toContain("activeRole === 'mentor' ? 5 : activeRole === 'founder' ? 3 : 6");
+    expect((reg.match(/stepsFor\(activeRole\)/g) || []).length).toBe(3);
+  });
+
+  /*
+   * SHORT was a const inside changeWizardStep while renderWizardStep — a
+   * sibling function — read it too, so the first Next click threw a
+   * ReferenceError and stranded every role on step 1.
+   */
+  it('declares SHORT where both wizard functions can see it', () => {
+    const decl = reg.indexOf("const SHORT = ['founder', 'investor', 'contractor'];");
+    const render = reg.indexOf('function renderWizardStep');
+    const change = reg.indexOf('function changeWizardStep');
+    expect(decl).toBeGreaterThan(-1);
+    expect(decl).toBeLessThan(Math.min(render, change));
+  });
+
   it('is three steps for all three, not the student\'s six', () => {
     expect(reg).toContain("const SHORT = ['founder', 'investor', 'contractor'];");
-    expect(reg).toContain("SHORT.includes(activeRole) ? 3 : 6");
+    expect(reg).toContain("SHORT.includes(role) ? 3 : 6");
     // One panel map for the three, keyed off the role — the founder-only
     // literal it replaced had to be copied twice to open the other two.
     expect(reg).toContain("2: activeRole + 'Step2'");
