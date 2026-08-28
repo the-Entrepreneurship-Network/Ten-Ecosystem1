@@ -82,7 +82,43 @@ function getTopic(slug, n) {
     return mod.topics[Number(n) - 1] || null;
 }
 
+/**
+ * Videos that can stand in for a topic's own.
+ *
+ * Two thirds of the topics carry a `videoSearch` string rather than an id,
+ * and the embed built from one — `youtube.com/embed?listType=search&list=…` —
+ * is a form YouTube withdrew: it answers "Error 153, video player
+ * configuration error" every time. So a topic with no id of its own gets the
+ * other videos from ITS OWN module, which are at least the same course, and
+ * the page offers a search link for the exact topic beside them.
+ *
+ * ponytail: same-module videos, not a search API. Put real per-topic ids in
+ * data/learn/<slug>.json — one line each — and they take precedence here.
+ */
+function videoPoolFor(slug, topicN) {
+    const mod = getModule(slug);
+    if (!mod) return [];
+    const own = mod.topics[topicN - 1];
+    const seen = new Set();
+    const out = [];
+    const push = (id) => {
+        const v = String(id || '').trim();
+        if (v && !seen.has(v)) { seen.add(v); out.push(v); }
+    };
+    if (own) {
+        push(own.videoId);
+        (own.videoIds || []).forEach(push);
+    }
+    // Nearest first: the topics either side of this one are the closest thing
+    // to "related" that needs no network call to find.
+    const byDistance = mod.topics
+        .map((t, i) => ({ t, d: Math.abs((i + 1) - topicN) }))
+        .sort((a, b) => a.d - b.d);
+    for (const { t } of byDistance) push(t.videoId);
+    return out.slice(0, 6);
+}
+
 /** Test hook: forget the cache so a suite can point DATA_DIR at fixtures. */
 function _reload() { CACHE = null; }
 
-module.exports = { getModules, getModule, getTopic, slugify, _reload, DATA_DIR };
+module.exports = { getModules, getModule, getTopic, videoPoolFor, slugify, _reload, DATA_DIR };

@@ -390,7 +390,15 @@ router.get('/module/:slug/topic/:n', requireLearner(async (req, res, who) => {
         topic: {
             n, title: topic.title, difficulty: topic.difficulty,
             technical: topic.technical, simple: topic.simple,
-            videoId: topic.videoId, videoSearch: topic.videoSearch
+            /*
+             * A LIST, nearest-first, not a single id. Two thirds of the topics
+             * have no id of their own and the search-embed built for them is a
+             * form YouTube withdrew — it answered "Error 153" every time. The
+             * page plays the first that works and the learner can step to the
+             * next one.
+             */
+            videoIds: curriculum.videoPoolFor(mod.slug, n),
+            videoSearch: topic.videoSearch || (topic.title + ' ' + mod.name + ' tutorial')
         },
         videoDoneAt: st && st.videoDoneAt,
         passedAt: st && st.passedAt,
@@ -493,16 +501,31 @@ router.post('/exam/start', requireLearner(async (req, res, who) => {
     }
 
     if (!learnExam.ready()) {
-        return res.status(503).json({ success: false,
+        // The learner gets a sentence; the log gets the reason, which names an
+        // environment variable and is nobody else's business.
+        console.error('[learn] examiner unavailable:', learnExam.diagnose().detail);
+        return res.status(503).json({ success: false, reason: 'examiner-offline',
             message: 'The examiner is offline just now. Try again in a few minutes.' });
     }
 
-    let paper;
-    try {
-        paper = await learnExam.generatePaper(mod, topicN);
-    } catch (err) {
-        console.error('[learn] paper generation failed:', err.message);
-        return res.status(503).json({ success: false, message: 'Could not set the paper. Try again in a few minutes.' });
+    /*
+     * One retry. Paper generation is a single call to a model that occasionally
+     * returns a malformed or short paper, and a learner sitting in front of a
+     * "try again later" for a hiccup that would have passed on the next attempt
+     * is the difference between "the exam works" and "the exam is broken".
+     */
+    let paper = null, lastErr = null;
+    for (let attemptNo = 0; attemptNo < 2 && !paper; attemptNo++) {
+        try {
+            paper = await learnExam.generatePaper(mod, topicN);
+        } catch (err) {
+            lastErr = err;
+            console.error('[learn] paper generation failed (try ' + (attemptNo + 1) + '):', err.message);
+        }
+    }
+    if (!paper) {
+        return res.status(503).json({ success: false, reason: 'paper-failed',
+            message: 'Could not set the paper just now. Please try again in a minute — nothing has been counted against you.' });
     }
 
     const minutes = isFinal ? learnExam.FINAL_MINUTES : learnExam.TOPIC_MINUTES;
@@ -642,6 +665,19 @@ router.post('/exam/:id/submit', requireLearner(async (req, res, who) => {
             correct: q.correct, feedback: q.feedback || undefined
         }))
     });
+}));
+
+/**
+ * GET /api/v2/learn/hr/examiner
+ *
+ * Is the examiner actually working? "The exam is broken" and "no key on this
+ * box" look identical from the outside, and the only way anybody found out was
+ * a learner reporting it. This makes one real call and says which it is.
+ */
+router.get('/hr/examiner', requireHR(async (req, res) => {
+    const live = String((req.query && req.query.live) || '') === '1';
+    const result = live ? await learnExam.selfTest() : learnExam.diagnose();
+    res.json({ success: true, ...result });
 }));
 
 // ── the HR review queue ─────────────────────────────────────────────────────

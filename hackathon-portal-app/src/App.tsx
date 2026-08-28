@@ -40,7 +40,10 @@ function RainHero() {
         <img
           src={`${ASSETS}/hooded-coder.jpg`}
           alt=""
-          className="h-[78vh] w-auto max-w-none object-contain"
+          /* 78vh of a phone screen is 658px tall, and at this image's ratio
+             that is 636px wide on a 390px viewport — a quarter of the coder
+             off each side. Sized to the screen first, then released. */
+          className="h-[46vh] w-auto max-w-[150%] object-contain sm:h-[78vh] sm:max-w-none"
           style={{
             mixBlendMode: 'screen',
             animation: 'coderFloat 7s ease-in-out infinite, screenFlicker 5.5s linear infinite',
@@ -52,9 +55,11 @@ function RainHero() {
       {/* readability, without hiding the rain */}
       <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(ellipse 70% 60% at 50% 55%, transparent 20%, rgba(4,7,10,0.72) 78%), linear-gradient(180deg, rgba(4,7,10,0.85) 0%, transparent 26%, transparent 62%, #04070a 100%)' }} />
 
-      <nav className="relative z-20 flex items-center justify-between px-4 py-5 sm:px-8">
+      {/* flex-wrap: the pill row measured 465px on a 390px phone, so the last
+          two links were simply off the side of the screen. */}
+      <nav className="relative z-20 flex flex-wrap items-center justify-between gap-y-3 px-4 py-5 sm:px-8">
         <span className="display-font text-lg text-emerald-300 glow-green">TEN</span>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {NAV.map((n) => (
             <a
               key={n.label}

@@ -31,14 +31,50 @@ const FINAL_MINUTES = 120;  // two hours, as specified
 const PASS_WRITTEN = 0.6;   // 6 of 10 written answers accepted
 const PASS_MCQ     = 0.6;
 
+/**
+ * The key, under whichever name this deployment set it.
+ *
+ * The exam was answering "the examiner is offline" on a server that had a
+ * working Gemini key — under a different one of these three names. Reading one
+ * name and calling the feature broken is a support ticket, not a check.
+ */
+function apiKey() {
+    return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GEMINI_KEY || '';
+}
+
 function ready() {
-    return !!process.env.GEMINI_API_KEY;
+    return !!apiKey();
+}
+
+/**
+ * Why the examiner is unavailable, in words a person can act on. Returned to
+ * HR and the admin, never to the learner — it names environment variables.
+ */
+function diagnose() {
+    if (!apiKey()) {
+        return { ok: false, reason: 'no-key',
+                 detail: 'No Gemini key on this server. Set GEMINI_API_KEY (or GOOGLE_API_KEY) and restart.' };
+    }
+    return { ok: true, reason: 'ready', detail: 'A key is present. Run the live check to confirm the model answers.' };
+}
+
+/** One real round trip, so "it should work" can be replaced with "it does". */
+async function selfTest() {
+    if (!ready()) return diagnose();
+    const { Type } = require('@google/genai');
+    try {
+        const out = await gemini('Reply with {"ok":true}. Nothing else.',
+            { type: Type.OBJECT, properties: { ok: { type: Type.BOOLEAN } }, required: ['ok'] });
+        return { ok: !!(out && out.ok), reason: 'live', detail: 'The model answered.' };
+    } catch (err) {
+        return { ok: false, reason: 'call-failed', detail: String((err && err.message) || err).slice(0, 300) };
+    }
 }
 
 async function gemini(prompt, schema) {
     const { GoogleGenAI } = require('@google/genai');
     const ai = new GoogleGenAI({
-        apiKey: process.env.GEMINI_API_KEY,
+        apiKey: apiKey(),
         httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
     });
     const res = await ai.models.generateContent({
@@ -164,7 +200,7 @@ ${pairs.map((p, i) => `Q${i + 1}: ${p.prompt}\nA${i + 1}: ${String(p.answer || '
 }
 
 module.exports = {
-    ready, generatePaper, gradeWritten,
+    ready, diagnose, selfTest, generatePaper, gradeWritten,
     TOPIC_WRITTEN, TOPIC_MCQ, FINAL_WRITTEN, FINAL_MCQ,
     TOPIC_MINUTES, FINAL_MINUTES, PASS_WRITTEN, PASS_MCQ
 };

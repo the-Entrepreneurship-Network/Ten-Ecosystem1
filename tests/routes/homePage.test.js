@@ -398,8 +398,18 @@ describe('what TEN gives', () => {
   it('gives every card somewhere to go', () => {
     const track = page.slice(page.indexOf('id="giveTrack"'), page.indexOf('</section>', page.indexOf('id="giveTrack"')));
     const cards = track.match(/<a class="wcard[^>]*>/g) || [];
-    expect(cards.length).toBeGreaterThanOrEqual(12);
+    expect(cards.length).toBeGreaterThanOrEqual(10);
     cards.forEach((c) => expect(c).toMatch(/href="[^"]+"/));
+  });
+
+  /*
+   * The Job and Resume portals are sold inside the Career Studio, and the gate
+   * in front of them sends anyone who clicks straight to a paywall. A front
+   * page should not advertise a locked door.
+   */
+  it('does not send a visitor at the two portals they cannot open', () => {
+    expect(page).not.toContain('href="job-portal/"');
+    expect(page).not.toContain('href="resume-portal/"');
   });
 
   it('stops moving for a reader who asked for less movement', () => {

@@ -127,7 +127,9 @@ describe('proctoring', () => {
 
   it('needs the camera before the paper appears', () => {
     expect(PAGE).toContain('navigator.mediaDevices.getUserMedia');
-    expect(PAGE).toContain('This exam is camera-proctored');
+    expect(PAGE).toContain('The camera has to be on');
+    // And the refusal says how to fix it, not merely that it happened.
+    expect(PAGE).toContain('Allow camera access in your');
   });
 
   it('warns on an empty frame and on leaving the tab', () => {
@@ -366,3 +368,98 @@ describe('the portal earns its price', () => {
     expect(PAGESRC).toContain('cancelAnimationFrame(raf)');
   });
 });
+
+/*
+ * "Error 153 — video player configuration error", on two thirds of the topics.
+ * `youtube.com/embed?listType=search&list=…` is a form YouTube withdrew; only
+ * 101 of the 315 topics carry an id, and the other 214 were all rendering that
+ * dead embed.
+ */
+describe('the video actually plays', () => {
+  const PAGESRC = strip(PAGE);
+
+  it('never builds the embed YouTube withdrew', () => {
+    expect(PAGESRC).not.toContain('listType=search');
+    expect(PAGESRC).toContain('youtube-nocookie.com/embed/');
+  });
+
+  it('a topic with no id of its own still gets videos from its own module', () => {
+    const pool = curriculum.videoPoolFor('devops-with-aws', 1);
+    expect(pool.length).toBeGreaterThan(1);
+    pool.forEach((id) => expect(id).toMatch(/^[A-Za-z0-9_-]{6,20}$/));
+    // Nearest first: topic 14's pool starts somewhere different from topic 1's.
+    expect(curriculum.videoPoolFor('devops-with-aws', 14)[0])
+      .not.toBe(curriculum.videoPoolFor('devops-with-aws', 1)[0]);
+  });
+
+  it('the route hands over the list, not one id', () => {
+    expect(ROUTE).toContain('videoIds: curriculum.videoPoolFor(mod.slug, n)');
+  });
+
+  // "there should be a button that if any video is unavailable ... a related video"
+  it('offers another video, and a search when there is none to offer', () => {
+    expect(PAGESRC).toContain("id=\"vnext\"");
+    expect(PAGESRC).toContain('vidAt = (vidAt + 1) % vids.length;');
+    expect(PAGESRC).toContain('youtube.com/results?search_query=');
+    // A module with no ids at all stages no player it cannot fill.
+    expect(PAGESRC).toContain('No video is pinned to this topic yet');
+  });
+});
+
+describe('the exam works, and looks like it', () => {
+  const PAGESRC = strip(PAGE);
+
+  /*
+   * "The examiner is offline" on a server that had a working key — under one
+   * of the other two names it can be set under.
+   */
+  it('finds the key whatever this deployment calls it', () => {
+    const src = read('services/learnExam.js');
+    expect(src).toContain('process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GEMINI_KEY');
+    expect(typeof learnExam.diagnose).toBe('function');
+    expect(learnExam.diagnose().detail).toMatch(/GEMINI_API_KEY/);
+  });
+
+  it('can be asked whether it is up, by the people who can fix it', () => {
+    expect(ROUTE).toContain("router.get('/hr/examiner'");
+    expect(ROUTE).toContain('learnExam.selfTest()');
+    // The learner never sees an environment variable named at them.
+    expect(ROUTE).toContain("reason: 'examiner-offline'");
+  });
+
+  // A single model hiccup should not read as "the exam is broken".
+  it('retries a failed paper once before giving up', () => {
+    expect(ROUTE).toContain('attemptNo < 2 && !paper');
+    expect(ROUTE).toContain('nothing has been counted against you');
+  });
+
+  it('every stop says what happened and what to do next', () => {
+    expect(PAGESRC).toContain('function examStop(slug,');
+    expect(PAGESRC).toContain('The examiner is busy');
+    expect(PAGESRC).toContain('The camera has to be on');
+    expect(PAGESRC).toContain('This attempt has been stopped');
+  });
+
+  it('shows progress and keeps the clock and the button reachable', () => {
+    expect(PAGE).toContain('.exambar{position:sticky');
+    expect(PAGE).toContain('.submitbar{position:sticky');
+    expect(PAGE).toContain('env(safe-area-inset-bottom)');
+    expect(PAGESRC).toContain('function tally()');
+    expect(PAGESRC).toContain('still blank. Submit anyway?');
+  });
+
+  /*
+   * Deterrents, and only deterrents. What actually holds is on the server: the
+   * answer key never leaves it, the deadline is its clock, the warnings are
+   * counted there.
+   */
+  it('makes the lazy routes inconvenient without pretending that is security', () => {
+    expect(PAGESRC).toContain("el.addEventListener('copy', (e) => e.preventDefault())");
+    expect(PAGESRC).toContain("ta.addEventListener('paste'");
+    expect(PAGESRC).toContain('spellcheck="false"');
+    expect(PAGE).toContain('.qp{user-select:none');
+    // and the honesty about it survives in the source
+    expect(PAGE).toContain('Client-side deterrents, and only that');
+  });
+});
+
