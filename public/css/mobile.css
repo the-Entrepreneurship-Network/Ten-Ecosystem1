@@ -340,3 +340,34 @@ td, th, p, li, dd, dt, h1, h2, h3, h4 {
     padding: 10px 4px;
   }
 }
+
+@media (pointer: coarse) {
+  /*
+   * Everything else that is a control but not a .btn.
+   *
+   * A sweep of every page at 390px found the same defect on nearly all of
+   * them: the back links, the footer strip, the "Register here" under a login
+   * form and the section links in the header all measure 14–31px tall. They
+   * are hit with the pad of a thumb, which is about 44px across, so every one
+   * of them is a miss waiting to happen.
+   *
+   * Grown with real height rather than an invisible pseudo-element: the
+   * pseudo-element version was silently covered by a later sibling on two of
+   * the five pages tested — a hit area you cannot see is a hit area you cannot
+   * tell is broken. A few pixels of extra row height on a phone is a fair
+   * price, and mostly reads as breathing room.
+   */
+  nav a, header a, footer a,
+  .hero-strip a, .nh-credits a,
+  .back, .back-btn, .ghost, .linky,
+  a.linky, a.back, button.ghost {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  /* Rows of them need the room the taller links now take. */
+  .hero-strip, .nh-credits, footer nav {
+    row-gap: 2px;
+  }
+}

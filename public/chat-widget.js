@@ -156,6 +156,9 @@
             ".tc-h .x{background:transparent;border:none;color:#9aa4bf;font-size:20px;cursor:pointer;padding:0 6px;line-height:1;}",
             ".tc-h .x:hover{color:#f43f5e;}",
             ".tc-msgs{flex:1;min-height:0;overflow-y:auto;padding:14px 14px 6px;display:flex;flex-direction:column;gap:8px;background:#080d1a;}",
+            // Bubbles sit against the composer, not under the header with a
+            // screen of nothing beneath them.
+            ".tc-msgs::before{content:'';margin-top:auto;}",
             ".tc-row{display:flex;flex-direction:column;max-width:78%;}",
             ".tc-row.mine{align-self:flex-end;align-items:flex-end;}",
             ".tc-row.theirs{align-self:flex-start;align-items:flex-start;}",
@@ -192,7 +195,15 @@
             ".tc-preview{position:relative;padding:8px 12px 0;background:#0c1220;}",
             ".tc-preview img{max-height:70px;border-radius:8px;border:1px solid rgba(245,197,66,0.25);}",
             ".tc-preview-x{position:absolute;top:4px;left:66px;background:#0c1220;color:#f43f5e;border:1px solid rgba(244,63,94,0.4);border-radius:99px;width:20px;height:20px;line-height:1;cursor:pointer;font-weight:700;}",
-            "@media (max-width:600px){.tc-win{right:0;left:0;bottom:0;width:100%;height:90vh;border-radius:14px 14px 0 0;}#tc-dock{right:10px;bottom:10px;}.tc-btn{padding:8px 12px;font-size:12px;}}"
+            /*
+             * dvh, not vh: with the Android keyboard open `vh` still measures
+             * the whole screen, so the box being typed into sat underneath the
+             * keyboard on every portal that carries this widget. And the safe
+             * area, or the home indicator covers the send button.
+             */
+            "@media (max-width:600px){.tc-win{right:0;left:0;bottom:0;width:100%;height:90dvh;max-height:90dvh;"
+              + "border-radius:14px 14px 0 0;padding-bottom:env(safe-area-inset-bottom);}"
+              + "#tc-dock{right:10px;bottom:calc(10px + env(safe-area-inset-bottom));}.tc-btn{padding:8px 12px;font-size:12px;}}"
         ].join("\n");
         var s = document.createElement("style");
         s.id = "tc-styles"; s.textContent = css;

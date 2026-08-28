@@ -60,6 +60,8 @@ label{display:block;font-size:12.5px;color:var(--muted);margin:12px 0 5px;font-w
 .tag{display:inline-block;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:800;
   color:var(--gold);margin-bottom:8px;}
 .vid{aspect-ratio:16/9;width:100%;border-radius:12px;border:1px solid var(--border);margin-top:8px;background:#000;}
+.vrow{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:11px;}
+.vcount{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:800;color:var(--dim);}
 .q{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:17px;margin-bottom:12px;}
 .q .qp{font-size:14.5px;line-height:1.6;margin-bottom:11px;font-weight:600;}
 .opt{display:flex;gap:10px;align-items:flex-start;padding:9px 11px;border-radius:9px;cursor:pointer;font-size:14px;line-height:1.5;}
@@ -74,6 +76,31 @@ label{display:block;font-size:12.5px;color:var(--muted);margin:12px 0 5px;font-w
 .timer{font-family:'Outfit',sans-serif;font-weight:800;font-size:19px;color:var(--gold);}
 .timer.low{color:var(--red);}
 .hd{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
+
+/* ── sitting a paper ─────────────────────────────────────────────────────
+   The timer has to be visible from any question, and on a phone the submit
+   button was a scroll away at the bottom of thirty questions. */
+.exambar{position:sticky;top:0;z-index:20;display:flex;align-items:flex-start;justify-content:space-between;
+  gap:12px;flex-wrap:wrap;padding:14px 16px 18px;margin:-8px -4px 0;border-radius:0 0 16px 16px;
+  background:rgba(9,13,26,.94);backdrop-filter:blur(10px);border:1px solid var(--border);border-top:none;}
+.exam-t{font-family:'Outfit',sans-serif;font-size:17px;font-weight:900;}
+.exam-s{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);font-weight:700;}
+.exam-p{flex:1 0 100%;height:4px;border-radius:2px;background:rgba(255,255,255,.07);overflow:hidden;}
+.exam-p i{display:block;height:100%;background:var(--gold);transition:width .35s;}
+.q.answered{border-color:rgba(16,185,129,.32);}
+.qp{user-select:none;-webkit-user-select:none;}
+.submitbar{position:sticky;bottom:0;z-index:20;display:flex;align-items:center;justify-content:space-between;
+  gap:12px;flex-wrap:wrap;margin-top:20px;padding:14px 16px calc(14px + env(safe-area-inset-bottom));
+  background:rgba(9,13,26,.94);backdrop-filter:blur(10px);border:1px solid var(--border);border-radius:16px 16px 0 0;}
+.submitbar .pri{flex:1 1 200px;}
+body.sitting #fx{display:none;}     /* nothing moving behind an exam */
+
+/* ── a stop, explained ── */
+.stop{margin-top:22px;text-align:center;}
+.stop.bad{border-color:rgba(239,68,68,.28);}
+.stop-i{font-size:38px;line-height:1;margin-bottom:12px;}
+.stop .vrow{justify-content:center;}
+
 .hidden{display:none!important;}
 
 /* ══ the 3D layer ═════════════════════════════════════════════════════════
@@ -588,9 +615,19 @@ async function topicScreen(slug, n) {
   const { ok, d } = await api('/module/' + encodeURIComponent(slug) + '/topic/' + n);
   if (!ok) { view.innerHTML = '<div class="note bad">' + esc(d.message || 'Locked.') + '</div>'; return; }
   const t = d.topic;
-  const src = t.videoId
-    ? 'https://www.youtube.com/embed/' + encodeURIComponent(t.videoId)
-    : 'https://www.youtube.com/embed?listType=search&list=' + encodeURIComponent(t.videoSearch || t.title);
+  /*
+   * `youtube.com/embed?listType=search&list=…` is a form YouTube withdrew: it
+   * answers "Error 153 — video player configuration error", which is what two
+   * thirds of these topics were showing. Only ids are ever embedded now, and
+   * when there is no id at all the page says so and hands over a search rather
+   * than staging a player that cannot work.
+   */
+  const vids = Array.isArray(t.videoIds) ? t.videoIds : (t.videoId ? [t.videoId] : []);
+  let vidAt = 0;
+  const searchUrl = 'https://www.youtube.com/results?search_query='
+    + encodeURIComponent(t.videoSearch || t.title);
+  const embed = (id) => 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id)
+    + '?rel=0&modestbranding=1';
 
   view.innerHTML = `
     <button class="ghost" id="back">← ${esc(d.moduleName || slug)}</button>
@@ -606,8 +643,20 @@ async function topicScreen(slug, n) {
     </div>
     <div class="card" style="margin-top:14px;">
       <div class="tag">Watch this before the exam</div>
-      <iframe class="vid" src="${esc(src)}" title="Video for ${esc(t.title)}"
-        allow="accelerometer; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+      ${vids.length ? `
+        <iframe class="vid" id="vframe" src="${esc(embed(vids[0]))}" title="Video for ${esc(t.title)}"
+          allow="accelerometer; encrypted-media; picture-in-picture" allowfullscreen
+          referrerpolicy="strict-origin-when-cross-origin"></iframe>
+        <div class="vrow">
+          <span class="vcount" id="vcount">Video 1 of ${vids.length}</span>
+          ${vids.length > 1 ? '<button class="sec" id="vnext">Not playing? Show another →</button>' : ''}
+          <a class="sec btn" href="${esc(searchUrl)}" target="_blank" rel="noopener">Search YouTube for this topic ↗</a>
+        </div>`
+      : `<div class="note">No video is pinned to this topic yet. Open a search for it — any one of the
+           results counts, and the reading above is the part the exam is set from.</div>
+         <div class="vrow">
+           <a class="pri btn" href="${esc(searchUrl)}" target="_blank" rel="noopener">Find a video for this topic ↗</a>
+         </div>`}
       ${d.videoDoneAt ? '<div class="note good">Video marked as watched.</div>'
         : `<div class="note">The exam unlocks once you have watched it through.</div>
            <button class="sec" id="vdone">I have watched the whole video</button>`}
@@ -621,6 +670,13 @@ async function topicScreen(slug, n) {
         : `<button class="pri" id="exam" style="margin-top:12px;" ${d.videoDoneAt ? '' : 'disabled'}>Start the exam</button>`}
     </div>`;
   $('back').onclick = () => moduleScreen(slug);
+  // "Show another" steps through the pool and wraps, so a learner who is not
+  // being served by one video is never stuck with it.
+  if ($('vnext')) $('vnext').onclick = () => {
+    vidAt = (vidAt + 1) % vids.length;
+    $('vframe').src = embed(vids[vidAt]);
+    $('vcount').textContent = 'Video ' + (vidAt + 1) + ' of ' + vids.length;
+  };
   if ($('vdone')) $('vdone').onclick = async () => {
     // The player is cross-origin so its true position is unreadable; the claim
     // plus a minimum dwell is the honest ceiling here.
@@ -686,49 +742,143 @@ async function startProctor(attemptId, onVoid) {
 function stopProctor() { if (proctor) proctor.stop(); }
 
 /* ── sitting an exam ───────────────────────────────────────────────────── */
+
+/**
+ * A stop, explained.
+ *
+ * Every one of these used to be one bare sentence on an otherwise empty black
+ * page — no heading, no way on, nothing saying whether it was the learner's
+ * fault or ours. Same three parts every time now: what happened, what it means
+ * for them, and the button that does the next thing.
+ */
+function examStop(slug, { icon, title, body, retry, bad }) {
+  view.innerHTML = `
+    <div class="card stop rise ${bad ? 'bad' : ''}">
+      <div class="stop-i" aria-hidden="true">${icon}</div>
+      <h1>${esc(title)}</h1>
+      <p class="sub">${body}</p>
+      <div class="vrow" style="margin-top:18px;">
+        ${retry ? '<button class="pri" id="retry">Try again</button>' : ''}
+        <button class="sec" id="back">← Back to my module</button>
+      </div>
+    </div>`;
+  $('back').onclick = () => moduleScreen(slug);
+  if ($('retry')) $('retry').onclick = retry;
+}
+
 async function startExam(slug, topicN) {
-  view.innerHTML = '<div class="note">Setting your paper…</div>';
+  view.innerHTML = '<div class="card rise"><h1>Setting your paper…</h1>'
+    + '<p class="sub">Your questions are written fresh for this attempt, so no two sittings are the same. '
+    + 'This takes a few seconds.</p></div>';
   const { ok, status, d } = await api('/exam/start',
     { method: 'POST', body: JSON.stringify({ slug, topicN }) });
   if (!ok) {
-    view.innerHTML = '<div class="note ' + (status === 423 ? 'bad' : '') + '">' + esc(d.message || 'Could not start.') + '</div>'
-      + '<button class="sec" id="back" style="margin-top:14px;">← Back</button>';
-    $('back').onclick = () => moduleScreen(slug);
+    const offline = status === 503;
+    examStop(slug, {
+      icon: status === 423 ? '⏸' : offline ? '⏳' : '✕',
+      bad: !offline,
+      title: status === 423 ? 'Your exams are on hold'
+        : offline ? 'The examiner is busy' : 'Could not start the exam',
+      body: esc(d.message || 'Could not start.')
+        + (offline ? ' <br><br>Nothing has been counted against you and no attempt has been used — '
+                     + 'the paper simply was not written. Try again, and tell your coordinator if it keeps happening.' : ''),
+      retry: offline ? () => startExam(slug, topicN) : null
+    });
     return;
   }
 
   const started = await startProctor(d.attemptId, (msg) => {
-    view.innerHTML = '<div class="note bad">' + esc(msg) + '</div>'
-      + '<p class="sub">HR has been notified and will email you the decision.</p>'
-      + '<button class="sec" id="back" style="margin-top:14px;">← Back to the module</button>';
-    $('back').onclick = () => moduleScreen(slug);
+    examStop(slug, { icon: '⛔', bad: true, title: 'This attempt has been stopped',
+      body: esc(msg) + '<br><br>HR has been notified and will email you the decision. '
+        + 'If they approve it you can sit the exam again; if not, your course carries on at the next topic.' });
   });
   if (!started) {
     stopProctor();
-    view.innerHTML = '<div class="note bad">This exam is camera-proctored — allow camera access and start again.</div>'
-      + '<button class="sec" id="back" style="margin-top:14px;">← Back</button>';
-    $('back').onclick = () => moduleScreen(slug);
+    examStop(slug, { icon: '📷', bad: true, title: 'The camera has to be on',
+      body: 'This exam is proctored, so it cannot start without the camera. Allow camera access in your '
+        + 'browser — the padlock beside the address bar — then try again. Nothing is recorded or stored: '
+        + 'the frame is checked on your own device and only the warnings are sent.',
+      retry: () => startExam(slug, topicN) });
     return;
   }
 
   const written = d.questions.filter((q) => q.kind === 'written');
   const mcq = d.questions.filter((q) => q.kind === 'mcq');
+  const total = d.questions.length;
+  document.body.classList.add('sitting');
   view.innerHTML = `
-    <div class="hd">
-      <div><h1>${topicN === 0 ? 'Final exam' : 'Topic ' + topicN + ' exam'}</h1>
-        <p class="sub">Section 1 · ${written.length} written · Section 2 · ${mcq.length} multiple choice</p></div>
-      <div style="text-align:right;"><div class="timer" id="clock">--:--</div>
-        <div style="font-size:11px;color:var(--dim);">time remaining</div></div>
+    <div class="exambar">
+      <div>
+        <div class="exam-t">${topicN === 0 ? 'Final exam' : 'Topic ' + topicN + ' exam'}</div>
+        <div class="exam-s"><span id="answered">0</span> of ${total} answered</div>
+      </div>
+      <div style="text-align:right;">
+        <div class="timer" id="clock">--:--</div>
+        <div class="exam-s">time remaining</div>
+      </div>
+      <div class="exam-p"><i id="pbar" style="width:0%"></i></div>
     </div>
     <div id="examMsg"></div>
+    <div class="note" style="margin-top:16px;">Answer in your own words. Copying the question, pasting from
+      elsewhere and leaving this tab are all recorded — the camera is on for the whole paper.</div>
     <h2 style="margin-top:20px;">Section 1 — explain in your own words</h2>
-    ${written.map((q) => `<div class="q"><div class="qp">${q.i + 1}. ${esc(q.prompt)}</div>
-      <textarea data-a="${q.i}" placeholder="Your answer"></textarea></div>`).join('')}
+    ${written.map((q) => `<div class="q" data-q="${q.i}"><div class="qp">${q.i + 1}. ${esc(q.prompt)}</div>
+      <textarea data-a="${q.i}" placeholder="Your answer"
+        autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea></div>`).join('')}
     <h2 style="margin-top:24px;">Section 2 — choose one</h2>
-    ${mcq.map((q) => `<div class="q"><div class="qp">${q.i + 1}. ${esc(q.prompt)}</div>
+    ${mcq.map((q) => `<div class="q" data-q="${q.i}"><div class="qp">${q.i + 1}. ${esc(q.prompt)}</div>
       ${q.options.map((o, k) => `<label class="opt"><input type="radio" name="q${q.i}" value="${k}">
         <span>${esc(o)}</span></label>`).join('')}</div>`).join('')}
-    <button class="pri" id="submit" style="width:100%;margin-top:18px;">Submit my paper</button>`;
+    <div class="submitbar">
+      <span class="exam-s" id="leftnote"></span>
+      <button class="pri" id="submit">Submit my paper</button>
+    </div>`;
+
+  /*
+   * Client-side deterrents, and only that. The paper cannot be marked in the
+   * browser — the answer key never leaves the server, the deadline is the
+   * server's clock and the camera warnings are counted server-side — so this
+   * layer only has to make the lazy routes inconvenient.
+   *
+   * ponytail: a determined learner with devtools gets past all of it. The
+   * things that actually hold are already on the server; do not add more here
+   * believing otherwise.
+   */
+  const paper = view;
+  paper.querySelectorAll('.qp').forEach((el) => {
+    el.addEventListener('copy', (e) => e.preventDefault());
+    el.addEventListener('cut', (e) => e.preventDefault());
+    el.addEventListener('contextmenu', (e) => e.preventDefault());
+  });
+  paper.querySelectorAll('textarea[data-a]').forEach((ta) => {
+    ta.addEventListener('paste', (e) => {
+      e.preventDefault();
+      $('examMsg').innerHTML = '<div class="note bad">Pasting is off in this exam — '
+        + 'section one is marked on whether the explanation is yours.</div>';
+      setTimeout(() => { const m = $('examMsg'); if (m) m.innerHTML = ''; }, 4000);
+    });
+    ta.addEventListener('drop', (e) => e.preventDefault());
+  });
+
+  /** How far through they are — and the bar that shows it. */
+  function tally() {
+    let n = 0;
+    paper.querySelectorAll('textarea[data-a]').forEach((t) => { if (t.value.trim().length > 1) n++; });
+    n += paper.querySelectorAll('input[type=radio]:checked').length;
+    const a = $('answered'), b = $('pbar'), note = $('leftnote');
+    if (a) a.textContent = String(n);
+    if (b) b.style.width = Math.round(n / total * 100) + '%';
+    if (note) note.textContent = n === total ? 'Every question answered.' : (total - n) + ' still blank';
+    paper.querySelectorAll('[data-q]').forEach((box) => {
+      const t = box.querySelector('textarea[data-a]');
+      const done = t ? t.value.trim().length > 1 : !!box.querySelector('input:checked');
+      box.classList.toggle('answered', done);
+    });
+    return n;
+  }
+  paper.addEventListener('input', tally);
+  paper.addEventListener('change', tally);
+  tally();
 
   const deadline = new Date(d.deadlineAt).getTime();
   const clock = setInterval(() => {
@@ -754,9 +904,17 @@ async function startExam(slug, topicN) {
       return;
     }
     clearInterval(clock); stopProctor();
+    document.body.classList.remove('sitting');
     showResult(slug, topicN, r.d, auto);
   }
-  $('submit').onclick = () => submit(false);
+  $('submit').onclick = () => {
+    const n = tally();
+    // Submitting nine of twenty by accident is a wasted attempt, and attempts
+    // are what stand between a learner and their certificate.
+    if (n < total && !confirm((total - n) + ' question' + (total - n === 1 ? ' is' : 's are')
+        + ' still blank. Submit anyway?')) return;
+    submit(false);
+  };
 }
 
 function showResult(slug, topicN, r, auto) {
