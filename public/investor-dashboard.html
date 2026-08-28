@@ -120,6 +120,12 @@
         <a href="founder-directory.html" class="flex items-center gap-3 px-3 py-2 rounded-xl text-[11px] font-bold text-blue-400 hover:text-blue-300 transition">
           <i class="fa-solid fa-circle-nodes"></i> Browse Founder Directory
         </a>
+        <a href="/messages" class="flex items-center gap-3 px-3 py-2 rounded-xl text-[11px] font-bold text-slate-400 hover:text-slate-200 transition">
+          <i class="fa-solid fa-comment-dots"></i> Messages
+        </a>
+        <a href="/notifications" class="flex items-center gap-3 px-3 py-2 rounded-xl text-[11px] font-bold text-slate-400 hover:text-slate-200 transition">
+          <i class="fa-regular fa-bell"></i> Notifications
+        </a>
       </nav>
     </div>
 
@@ -150,20 +156,23 @@
           <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500 text-xs">
             <i class="fa-solid fa-magnifying-glass"></i>
           </span>
-          <input type="text" placeholder="Search startup / rounds..." class="w-full bg-slate-900 border border-slate-800/80 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-yellow-500 transition">
+          <input type="text" id="startupSearch" placeholder="Search startups by name, sector or stage" class="w-full bg-slate-900 border border-slate-800/80 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-yellow-500 transition">
         </div>
 
-        <!-- Alert center -->
-        <div class="relative p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-100 transition cursor-pointer">
+        <!-- Alert center. This was a div with a permanently pulsing dot: it
+             was not clickable and the dot did not mean anything. -->
+        <a href="/notifications" aria-label="Notifications" class="relative p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-100 transition block">
           <i class="fa-solid fa-bell text-sm"></i>
-          <span class="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-yellow-400 animate-pulse border-2 border-slate-900"></span>
-        </div>
+          <span id="bellDot" class="hidden absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-yellow-400 border-2 border-slate-900"></span>
+        </a>
 
         <!-- Desktop user info -->
         <div class="hidden md:flex items-center gap-3 pl-2 border-l border-white/5">
           <div class="text-right">
             <div id="investorName" class="text-xs font-black text-slate-200">Venture Partner</div>
-            <span class="text-[9px] text-yellow-400 font-extrabold tracking-widest uppercase">Verified Angel</span>
+            <!-- Read "Verified Angel" for everyone, including accounts HR had
+                 not looked at yet. It now says what the account actually is. -->
+            <span id="verifyBadge" class="text-[9px] text-slate-500 font-extrabold tracking-widest uppercase">Investor</span>
           </div>
         </div>
       </div>
@@ -194,21 +203,23 @@
           </div>
         </div>
 
-        <!-- Port status metrics -->
+        <!-- Filled from /overview's totals. These read "8", "1 Row" and
+             "Pre-Fund" in the markup — the same three figures for every
+             investor who ever signed in, none of them their own. -->
         <div class="flex items-center gap-8 text-center bg-slate-950/40 p-4 rounded-xl border border-white/[0.02]">
           <div>
-            <span class="text-slate-500 text-[10px] uppercase font-bold tracking-wider block">Hot Deals</span>
-            <span class="text-lg font-black text-slate-100">8</span>
+            <span class="text-slate-500 text-[10px] uppercase font-bold tracking-wider block">Approaches made</span>
+            <span id="statInterests" class="text-lg font-black text-slate-100">&mdash;</span>
           </div>
           <div class="w-px h-8 bg-white/5"></div>
           <div>
-            <span class="text-slate-500 text-[10px] uppercase font-bold tracking-wider block">Pitch Discussion</span>
-            <span class="text-lg font-black text-yellow-400">1 Row</span>
+            <span class="text-slate-500 text-[10px] uppercase font-bold tracking-wider block">Awaiting a founder</span>
+            <span id="statPending" class="text-lg font-black text-yellow-400">&mdash;</span>
           </div>
           <div class="w-px h-8 bg-white/5"></div>
           <div>
-            <span class="text-slate-500 text-[10px] uppercase font-bold tracking-wider block">Total Capital Logged</span>
-            <span class="text-lg font-black text-blue-400">Pre-Fund</span>
+            <span class="text-slate-500 text-[10px] uppercase font-bold tracking-wider block">Capital deployed</span>
+            <span id="statDeployed" class="text-lg font-black text-blue-400">&mdash;</span>
           </div>
         </div>
       </div>
@@ -302,7 +313,10 @@
       const initials = parts.length > 1 ? (parts[0][0] + parts[1][0]).toUpperCase() : parts[0].slice(0, 2).toUpperCase();
       document.getElementById('sidebarInitials').textContent = initials;
       
-      document.getElementById('profileThesis').textContent = `Evaluating SaaS, GreenTech, Fintech, and AI systems under TEN Portfolio standards.`;
+      // The thesis is filled from the investor's own answers once /overview
+      // lands. It used to be this sentence, printed to everybody:
+      //   "Evaluating SaaS, GreenTech, Fintech, and AI systems…"
+      document.getElementById('profileThesis').textContent = 'Loading your profile…';
     }
 
     function logout() {
@@ -337,6 +351,18 @@
 
     const API = '/api/v2/investor-desk';
     let desk = { interests: [], holdings: [], totals: {} };
+    let allStartups = [];
+
+    /* The search box above the grid was markup: typing in it did nothing at
+       all. It filters the list it sits over. */
+    function filterStartups() {
+      const box = document.getElementById('startupSearch');
+      const q = (box ? box.value : '').trim().toLowerCase();
+      if (!q) return allStartups;
+      return allStartups.filter((s) =>
+        [s.name, s.industry, s.stage, s.description]
+          .some((v) => String(v || '').toLowerCase().includes(q)));
+    }
 
     function money(n) { return '₹' + Number(n || 0).toLocaleString('en-IN'); }
 
@@ -345,6 +371,55 @@
       if (className) node.className = className;
       if (text !== undefined && text !== null) node.textContent = String(text);
       return node;
+    }
+
+    const TYPE_LABEL = {
+      angel: 'Angel investor', vc: 'Venture fund', family_office: 'Family office',
+      corporate: 'Corporate investor', accelerator: 'Accelerator',
+      govt_fund: 'Government fund', individual: 'Individual investor'
+    };
+    const STAGE_LABEL = { pre_seed: 'Pre-seed', seed: 'Seed', series_a: 'Series A', series_b: 'Series B' };
+
+    /** The hero, from this investor's own row rather than from the markup. */
+    function renderHeader() {
+      const t = desk.totals || {};
+      const p = desk.profile || null;
+
+      const set = (id, v) => { const n = document.getElementById(id); if (n) n.textContent = v; };
+      set('statInterests', t.interests || 0);
+      set('statPending', t.pendingInterests || 0);
+      set('statDeployed', t.deployed ? money(t.deployed) : '₹0');
+
+      if (p && p.fundName) set('firmName', p.fundName);
+
+      /*
+       * A pending account can sign in and look around, and saying "Verified"
+       * over it is the one thing the badge must not do — HR has not looked at
+       * it yet.
+       */
+      const badge = document.getElementById('verifyBadge');
+      if (badge && p) {
+        const state = p.verificationStatus;
+        badge.textContent = state === 'approved'
+          ? 'Verified ' + (TYPE_LABEL[p.investorType] || 'investor')
+          : state === 'rejected' ? 'Not approved' : 'Awaiting TEN review';
+        badge.className = 'text-[9px] font-extrabold tracking-widest uppercase ' +
+          (state === 'approved' ? 'text-yellow-400' : state === 'rejected' ? 'text-rose-400' : 'text-slate-400');
+      }
+
+      const thesis = document.getElementById('profileThesis');
+      if (thesis && p) {
+        const bits = [];
+        if (p.sectorFocus && p.sectorFocus.length) bits.push(p.sectorFocus.join(', '));
+        if (p.stagePreference && p.stagePreference.length) {
+          bits.push('at ' + p.stagePreference.map((v) => STAGE_LABEL[v] || v).join(', '));
+        }
+        const r = p.investmentRange || {};
+        if (r.min || r.max) bits.push('· ' + money(r.min) + ' – ' + money(r.max) + ' a cheque');
+        thesis.textContent = p.thesis || (bits.length
+          ? 'Investing in ' + bits.join(' ')
+          : 'Add your sectors and stages so founders can find you.');
+      }
     }
 
     function renderInterests() {
@@ -471,13 +546,15 @@
         const data = await res.json();
         if (!data.success) throw new Error(data.message || 'Could not load your desk.');
         desk = data;
+        renderHeader();
         renderInterests();
         renderHoldings();
 
         const startups = await fetch(API + '/startups', { credentials: 'same-origin' })
           .then((r) => r.json())
           .catch(() => ({ startups: [] }));
-        renderStartups(startups.startups || []);
+        allStartups = startups.startups || [];
+        renderStartups(filterStartups());
       } catch (err) {
         const list = document.getElementById('discussionsList');
         if (list) {
@@ -592,6 +669,21 @@
       });
     }
 
+    const searchBox = document.getElementById('startupSearch');
+    if (searchBox) {
+      searchBox.addEventListener('input', () => renderStartups(filterStartups()));
+    }
+
+    /* The bell carried a dot that pulsed whether or not anything was waiting.
+       It now shows only when something is. */
+    fetch('/api/notifications/unread-count', { credentials: 'same-origin' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const dot = document.getElementById('bellDot');
+        if (dot && d && Number(d.count || d.unread || 0) > 0) dot.classList.remove('hidden');
+      })
+      .catch(() => {});
+
     loadDesk();
 
     // Toggle Mobile Sidebar
@@ -603,5 +695,9 @@
       });
     }
   </script>
+<!-- The notification orb, as on every other signed-in portal page. It was
+     missing here, so an investor had no way of knowing a founder had answered
+     them without opening the desk and looking. -->
+<script src="/notify-orb.js" defer></script>
 </body>
 </html>

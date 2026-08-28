@@ -433,6 +433,12 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
     <button class="nav-btn" onclick="window.location.href='/hr-deferrals.html'"><span class="icon">🕒</span> Pay-After Requests</button>
     <button class="nav-btn" onclick="window.location.href='/hr-proctor.html'"><span class="icon">🎥</span> Proctoring Reviews</button>
     <div class="nav-divider"></div>
+    <!-- Assignment is the start of the contractor desk: with no project a
+         contractor can submit no deliverable and log no time, so their whole
+         dashboard was empty by construction until this screen existed. -->
+    <div class="nav-section-title">Ecosystem</div>
+    <button class="nav-btn" onclick="window.location.href='/hr-contractors.html'"><span class="icon">🔧</span> Contractor Desk</button>
+    <div class="nav-divider"></div>
     <div class="nav-section-title">Promotions</div>
     <button class="nav-btn" onclick="showView('promotions')" data-view="promotions"><span class="icon">🚀</span> Promotions</button>
     <div class="nav-divider"></div>
@@ -4200,6 +4206,51 @@ function _diEsc(v){
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+/*
+ * The two dates that will print, and the only two things on a generated
+ * document HR may retype. Everything else on it is a fact the portal measured.
+ *
+ * Shown whether or not they are editable: an HR who cannot change them still
+ * needs to see what the document is about to say, and a derived end date is
+ * marked as derived so nobody reads it as one somebody entered.
+ */
+function _diDates(dates){
+  if(!dates) return '';
+  const SRC = {
+    joining:    'from the portal joining date',
+    internship: 'from the internship start date',
+    stored:     'stored on the record',
+    derived:    'worked out from the start date and tenure',
+    hr:         'set by hand'
+  };
+  const locked = !dates.editable;
+  const field = (id, label, value, note) =>
+    '<div style="flex:1;min-width:170px;">' +
+      '<label style="display:block;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;' +
+        'color:var(--muted);margin-bottom:5px;">' + label + '</label>' +
+      '<input type="date" id="' + id + '" value="' + _diEsc(value) + '"' + (locked ? ' disabled' : '') +
+        ' style="width:100%;padding:9px 11px;border-radius:8px;border:1px solid rgba(245,197,66,.16);' +
+        'background:rgba(0,0,0,.3);color:#e8e6df;font-family:inherit;font-size:13px;' +
+        (locked ? 'opacity:.55;cursor:not-allowed;' : '') + '">' +
+      '<div style="font-size:11px;color:var(--muted);margin-top:4px;">' + _diEsc(note) + '</div>' +
+    '</div>';
+
+  return '<div style="margin-top:16px;padding:14px 16px;border-radius:10px;' +
+      'background:rgba(255,255,255,.02);border:1px solid rgba(245,197,66,.14);">' +
+    '<div style="font-size:12.5px;font-weight:800;color:var(--gold);margin-bottom:3px;">Dates on this document</div>' +
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6;">' +
+      (locked
+        ? 'Level ' + (dates.minLevel || 3) + ' and above can correct these. Yours cannot, so they are shown as they will print.'
+        : 'Change these only when the student\'s real internship ran differently. They apply to this document alone.') +
+      (dates.overriddenBy ? ' Last set by ' + _diEsc(dates.overriddenBy) + '.' : '') +
+    '</div>' +
+    '<div style="display:flex;gap:14px;flex-wrap:wrap;">' +
+      field('directStartDate', 'Start', dates.start, SRC[(dates.source||{}).start] || '') +
+      field('directEndDate',   'End',   dates.end,   SRC[(dates.source||{}).end] || '') +
+    '</div>' +
+  '</div>';
+}
+
 async function directIssueCheck(){
   const empId = (document.getElementById('directEmpId').value || '').trim();
   const type  = document.getElementById('directCertType').value;
@@ -4248,6 +4299,7 @@ async function directIssueCheck(){
               (d.failedChecks||[]).map(c => '<li>' + _diEsc(c) + '</li>').join('') +
             '</ul></div>') +
         already +
+        _diDates(d.dates) +
         '<textarea id="directReason" rows="2" placeholder="Reason (recorded in the admin portal)" ' +
           'style="width:100%;margin-top:14px;padding:10px;border-radius:8px;border:1px solid rgba(245,197,66,.16);' +
           'background:rgba(0,0,0,.3);color:#e8e6df;font-family:inherit;font-size:13px;"></textarea>' +
@@ -4284,13 +4336,22 @@ async function directIssueConfirm(employeeId, certType, meets){
 
   const reason = (document.getElementById('directReason') || {}).value || '';
   const box = document.getElementById('directIssueResult');
+
+  // Only send a date HR actually changed. Echoing the derived value back would
+  // freeze it as a hand-set override on a document nobody meant to correct.
+  const sEl = document.getElementById('directStartDate');
+  const eEl = document.getElementById('directEndDate');
+  const payload = { employeeId, certType, acknowledged: true, reason };
+  if (sEl && !sEl.disabled && sEl.value && sEl.value !== sEl.defaultValue) payload.startDate = sEl.value;
+  if (eEl && !eEl.disabled && eEl.value && eEl.value !== eEl.defaultValue) payload.endDate = eEl.value;
+
   box.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
 
   try{
     const r = await fetch('/api/v2/certificates/hr-issue', {
       method:'POST', credentials:'same-origin',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ employeeId, certType, acknowledged: true, reason })
+      body: JSON.stringify(payload)
     });
     const d = await r.json();
     if(!d.success){

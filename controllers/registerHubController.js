@@ -69,25 +69,60 @@ async function sendRegistrationWelcome({ name, email, role, memberId, employeeId
       if (memberId)   rows.push(`<div><b>Member ID:</b> ${escapeHtml(memberId)}</div>`);
       rows.push(`<div><b>Email:</b> ${escapeHtml(email)}</div>`);
 
+      /*
+       * The door that belongs to THIS role.
+       *
+       * Every welcome mail sent every role to /student-login — so a founder,
+       * mentor, investor or contractor was mailed a link to a sign-in form
+       * that is not theirs, on the one message they are most likely to click.
+       */
+      const DOOR = {
+        founder:     ['Sign in to the Founder OS',    '/founder-login'],
+        investor:    ['Sign in to the Deal Room',     '/investor-login'],
+        contractor:  ['Sign in to the Contractor Desk', '/contractor-login'],
+        mentor:      ['Sign in to the portal',        '/login.html?role=mentor'],
+        coordinator: ['Sign in to the portal',        '/coordinator-login']
+      };
+      const [ctaLabel, ctaPath] = DOOR[role] || ['Sign in to the portal', '/student-login'];
+
+      /* What waits on the other side, so the mail says what they signed up for
+         rather than "your account is set up". */
+      const WAITS = {
+        founder:    'Post roles, search TEN interns by their real work record, run a hiring pipeline, track a raise and book mentors.',
+        investor:   'See the startups raising now, register your interest with the founder, and keep a private portfolio.',
+        contractor: 'Your assigned projects, milestone submissions and timesheets — approved by TEN and paid.',
+        mentor:     'Session requests from founders and interns, and the profile they choose you from.',
+        student:    'Your task journey, attendance, submissions and the certificate at the end of it.'
+      };
+      const REVIEWED = ['founder', 'investor', 'contractor', 'mentor'].includes(role);
+
       await createEmailTransporter().sendMail({
         from: EMAIL_FROM,
         to: email,
         subject,
         html: renderEmail({
-          heading: 'Your account is ready',
+          heading: REVIEWED ? 'Your application is in' : 'Your account is ready',
           name,
           bodyHtml: `<p>Welcome to The Entrepreneurship Network. Your ${escapeHtml(role)}
-                     account is set up and you can sign in now with this email address
-                     and the password you chose.</p>`,
+                     account has been created.</p>`
+                   + (WAITS[role] ? `<p style="margin-top:10px;">${escapeHtml(WAITS[role])}</p>` : '')
+                   + (REVIEWED
+                       ? `<p style="margin-top:10px;">Our team reviews ${escapeHtml(role)} accounts before
+                          they open — usually within a day. You will get a second email the moment yours is
+                          approved, and that is when the button below starts working.</p>`
+                       : `<p style="margin-top:10px;">You can sign in now with this email address and the
+                          password you chose.</p>`),
           panel: rows.join(''),
-          cta: { label: 'Sign in to the portal', url: `${PORTAL_URL}/student-login` },
-          note: 'Keep this email — your Employee ID is the quickest way for us to find your account.'
+          cta: { label: ctaLabel, url: `${PORTAL_URL}${ctaPath}` },
+          note: 'Keep this email — your member ID is the quickest way for us to find your account.'
         }),
         text: `Welcome to The Entrepreneurship Network.\n\n`
             + (employeeId ? `Employee ID: ${employeeId}\n` : '')
             + (domain ? `Domain: ${domain}\n` : '')
-            + `\nSign in with this email address and the password you chose:\n`
-            + `${PORTAL_URL}/student-login\n`
+            + (REVIEWED
+                ? `\nOur team reviews ${role} accounts before they open. You will be emailed when yours is approved.\n`
+                : `\nSign in with this email address and the password you chose:\n`)
+            + `${PORTAL_URL}${ctaPath}\n`
       });
       console.log(`[Email] \u2713 Welcome mail sent to ${email}`);
     }
@@ -435,7 +470,9 @@ async function registerUser(req, res) {
       password: hashedPassword,
       role:     role,
       phone:    roleSpecificData.mobile || "",
-      isVerified: role === ROLES.MENTOR ? false : true
+      // Reviewed roles are unverified until a human says otherwise. Students
+      // are not reviewed; they are verified by having an internship.
+      isVerified: ![ROLES.MENTOR, ROLES.FOUNDER, ROLES.INVESTOR, ROLES.CONTRACTOR].includes(role)
     });
 
     let genMemberId = '';
@@ -579,7 +616,18 @@ async function registerUser(req, res) {
         description: roleSpecificData.description || "",
         location: "",
         lookingFor: chosenLookingFor,
-        verificationStatus: 'approved'
+        /*
+         * PENDING, not approved.
+         *
+         * This wrote 'approved' at signup while the wizard and the success page
+         * both told the applicant HR would review them — so the verification
+         * queue that controllers/verificationController.js and the HR console
+         * were built to service was permanently empty, and nobody was ever
+         * actually checked. Accounts created before this change are stamped
+         * `grandfathered` by scripts/grandfather-ecosystem-profiles.js so HR can
+         * tell "reviewed" from "was never reviewable".
+         */
+        verificationStatus: 'pending'
       });
 
       // Create startup_profiles
@@ -626,13 +674,52 @@ async function registerUser(req, res) {
 
     else if (role === ROLES.INVESTOR) {
       // Create investor_profiles
+      /*
+       * The investor's answers used to land almost nowhere. investorType was
+       * hardcoded 'vc' whoever signed up, so every card in the directory read
+       * "VC" — angels included. stagePreference and sectorFocus were never
+       * written at all, which is why no card carried a stage or sector badge
+       * and the directory's stage filter matched nobody. The stage and the
+       * industry were pasted into a thesis sentence instead: readable, and
+       * unqueryable. Each answer now goes in the field the directory reads.
+       */
+      const STAGES = ['pre_seed', 'seed', 'series_a', 'series_b'];
+      const investorStages = String(roleSpecificData.investmentStages || '')
+        .split(',').map((v) => v.trim()).filter((v) => STAGES.includes(v));
+      const sectorFocus = String(roleSpecificData.industryFocus || '')
+        .split(',').map((v) => v.trim()).filter(Boolean).slice(0, 12);
+      const TYPES = ['angel', 'vc', 'family_office', 'corporate', 'accelerator', 'govt_fund', 'individual'];
+      const investorType = TYPES.includes(roleSpecificData.investorType)
+        ? roleSpecificData.investorType : 'individual';
+
       await InvestorProfile.create({
         userId: user._id,
         memberId: genMemberId,
         fundName: roleSpecificData.firmName || "",
-        investorType: 'vc',
-        thesis: `Investing in ${roleSpecificData.industryFocus || "tech startups"} at ${roleSpecificData.investmentStage || "seed"} stage.`,
-        verificationStatus: 'approved',
+        investorType,
+        stagePreference: investorStages,
+        sectorFocus,
+        investmentRange: {
+            min: Math.max(0, Number(roleSpecificData.ticketMin) || 0),
+            max: Math.max(0, Number(roleSpecificData.ticketMax) || 0),
+            currency: 'INR'
+        },
+        contactEmail: trimmedEmail,
+        thesis: sectorFocus.length
+            ? `Investing in ${sectorFocus.join(', ')}${investorStages.length ? ` at ${investorStages.map((v) => v.replace('_', ' ')).join(', ')}` : ''}.`
+            : '',
+        /*
+         * PENDING, not approved.
+         *
+         * This wrote 'approved' at signup while the wizard and the success page
+         * both told the applicant HR would review them — so the verification
+         * queue that controllers/verificationController.js and the HR console
+         * were built to service was permanently empty, and nobody was ever
+         * actually checked. Accounts created before this change are stamped
+         * `grandfathered` by scripts/grandfather-ecosystem-profiles.js so HR can
+         * tell "reviewed" from "was never reviewable".
+         */
+        verificationStatus: 'pending',
         website: roleSpecificData.website || ""
       });
     }
@@ -650,7 +737,18 @@ async function registerUser(req, res) {
         portfolio: roleSpecificData.portfolio || "",
         hourlyRate: roleSpecificData.hourlyRate || 0,
         availability: roleSpecificData.availability || "Immediately",
-        verificationStatus: 'approved'
+        /*
+         * PENDING, not approved.
+         *
+         * This wrote 'approved' at signup while the wizard and the success page
+         * both told the applicant HR would review them — so the verification
+         * queue that controllers/verificationController.js and the HR console
+         * were built to service was permanently empty, and nobody was ever
+         * actually checked. Accounts created before this change are stamped
+         * `grandfathered` by scripts/grandfather-ecosystem-profiles.js so HR can
+         * tell "reviewed" from "was never reviewable".
+         */
+        verificationStatus: 'pending'
       });
 
       // Automatically create Talent Profile for contractors

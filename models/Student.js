@@ -137,6 +137,29 @@ const studentsSchema = new mongoose.Schema({
         }
     }],
 
+    /*
+     * The two dates HR corrected on a generated document, per document type.
+     *
+     * Per type on purpose: a Letter of Completion and an Offer Letter describe
+     * different spans, and one shared pair would make correcting either one
+     * silently rewrite the other. Anything not overridden is derived — see
+     * services/certificateDates.js, which is the only thing that reads this.
+     *
+     * Only the dates. Everything else on a generated document is a fact the
+     * portal measured, and is not HR's to retype.
+     */
+    certificateDates: {
+        type: Map,
+        of: new mongoose.Schema({
+            start:      { type: Date,   default: null },
+            end:        { type: Date,   default: null },
+            setBy:      { type: String, default: "" },
+            setByLevel: { type: Number, default: null },
+            at:         { type: Date,   default: Date.now }
+        }, { _id: false }),
+        default: undefined
+    },
+
     employeeIdOverride:  { type: String, default: null },
 
     // For a WhatsApp joiner this is deliberately EARLIER than joiningDate:

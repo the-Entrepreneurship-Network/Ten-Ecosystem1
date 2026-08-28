@@ -80,18 +80,48 @@ describe('middleware/roleGuard', () => {
     });
 
     it('attaches the ecosystem user from the session', () => {
-      const req = { headers: {}, session: { ecosystemUserId: 'sess-user' } };
+      const req = { headers: {}, session: { ecosystemUserId: 'sess-user', ecosystemUserRole: ROLES.FOUNDER } };
       const next = jest.fn();
       attachEcosystemUser(req, mockRes(), next);
 
-      expect(req.user._id).toBe('sess-user');
+      expect(req.user).toEqual({ _id: 'sess-user', role: ROLES.FOUNDER });
       expect(next).toHaveBeenCalled();
     });
 
-    it('defaults an ecosystem session with no stored role to FOUNDER', () => {
+    /*
+     * This used to default to FOUNDER, so a session carrying an id and no role
+     * became a founder — a privilege grant handed out by a missing field. The
+     * login writes the pair together; half a pair is a broken session, not a
+     * founder.
+     */
+    it('refuses to invent a role for a session that carries only an id', () => {
       const req = { headers: {}, session: { ecosystemUserId: 'user456' } };
-      attachEcosystemUser(req, mockRes(), jest.fn());
-      expect(req.user.role).toBe(ROLES.FOUNDER);
+      const next = jest.fn();
+      attachEcosystemUser(req, mockRes(), next);
+      expect(req.user).toBeUndefined();
+      expect(next).toHaveBeenCalled();      // it declines to identify, it does not blow up
+    });
+
+    /*
+     * THE line that made four portals reachable. attachEcosystemUser reads this
+     * key and requireRole reads what it sets — and nothing outside these tests
+     * ever wrote it, so every founder, investor and contractor route answered
+     * 401 to a correctly signed-in account.
+     */
+    it('is written by the login that creates the session', () => {
+      const server = require('fs').readFileSync(
+        require('path').join(__dirname, '../../server.js'), 'utf8');
+      expect(server).toContain('req.session.ecosystemUserId = String(user._id);');
+      expect(server).toContain('req.session.ecosystemUserRole = user.role;');
+      // and survives an admin signing in inside the same browser
+      const admin = require('fs').readFileSync(
+        require('path').join(__dirname, '../../routes/adminPortal.js'), 'utf8');
+      expect(admin).toContain("'ecosystemUserId', 'ecosystemUserRole', 'ecosystemUserEmail', 'ecosystemUserName'");
+      // The mentor endpoints scope by email, and chatIdentity identifies these
+      // accounts by email and name. Without the email a signed-in mentor
+      // resolves to '' and is 403'd on their own profile.
+      expect(server).toContain('req.session.ecosystemUserEmail = user.email;');
+      expect(server).toContain("req.session.ecosystemUserName = user.fullName || '';");
     });
 
     it.each([

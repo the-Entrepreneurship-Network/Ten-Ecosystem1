@@ -27,6 +27,18 @@ const path = require('path');
 
 const root = path.join(__dirname, '../..');
 const certRoutes = fs.readFileSync(path.join(root, 'routes/v2/certificates.js'), 'utf8');
+
+/*
+ * The whole /hr-issue handler, not a fixed byte count from its start. This
+ * used to be `slice(at, at + 3200)`, so adding a block to the route silently
+ * pushed CertificateOverride.create out of the window and failed assertions
+ * about code that was still there and still correct.
+ */
+function hrIssueRoute() {
+  const at = certRoutes.indexOf('router.post("/hr-issue"');
+  const next = certRoutes.indexOf('\nrouter.', at + 1);
+  return certRoutes.slice(at, next === -1 ? undefined : next);
+}
 const adminRoutes = fs.readFileSync(path.join(root, 'routes/adminPortal.js'), 'utf8');
 const hrPage = fs.readFileSync(path.join(root, 'public/hr-portal.html'), 'utf8');
 const adminPage = fs.readFileSync(path.join(root, 'public/ten-admin.html'), 'utf8');
@@ -103,8 +115,7 @@ describe('the HR endpoints', () => {
   it('answer 409 when the student falls short and nobody has confirmed', () => {
     // 409 rather than 400: the request is well formed, it is unconfirmed. The
     // portal turns exactly this into the one warning popup.
-    const at = certRoutes.indexOf('router.post("/hr-issue"');
-    const block = certRoutes.slice(at, at + 3200);
+    const block = hrIssueRoute();
     expect(block).toContain('if (!metRequirements && !acknowledged)');
     expect(block).toContain('res.status(409)');
     expect(block).toContain('requiresConfirmation: true');
@@ -114,8 +125,7 @@ describe('the HR endpoints', () => {
   it('generate the certificate without consulting eligibility first', () => {
     // The whole point. describeShortfall() runs to DESCRIBE, and its answer
     // gates nothing except the confirmation.
-    const at = certRoutes.indexOf('router.post("/hr-issue"');
-    const block = certRoutes.slice(at, at + 3200);
+    const block = hrIssueRoute();
     const gen = block.indexOf('generateAndSaveCert');
     const confirm = block.indexOf('requiresConfirmation');
     expect(gen).toBeGreaterThan(confirm);
@@ -125,8 +135,7 @@ describe('the HR endpoints', () => {
   });
 
   it('write an override row for every issue, met or not', () => {
-    const at = certRoutes.indexOf('router.post("/hr-issue"');
-    const block = certRoutes.slice(at, at + 3200);
+    const block = hrIssueRoute();
     expect(block).toContain('CertificateOverride.create');
     // Not inside an `if (!metRequirements)` — an issue that met the bar is
     // still an issue that bypassed the application queue.
@@ -136,8 +145,7 @@ describe('the HR endpoints', () => {
   });
 
   it('set the student flag so the portal can say who issued it', () => {
-    const at = certRoutes.indexOf('router.post("/hr-issue"');
-    const block = certRoutes.slice(at, at + 3200);
+    const block = hrIssueRoute();
     expect(block).toContain('OVERRIDE_FIELDS[type].flag');
   });
 });

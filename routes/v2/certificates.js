@@ -796,13 +796,30 @@ async function buildCertPDF(student, certType) {
     return dateObj.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
   };
 
+  /*
+   * The two dates, from one place.
+   *
+   * This used to read `student.startDate || student.joiningDate` and
+   * `student.endDate || student.completionDate || student.internshipEndDate`.
+   * Three of those five names are not fields on the Student schema, so the
+   * first expression was always joiningDate and the second always
+   * internshipEndDate — and joiningDate is when the portal account was made,
+   * not when the internship began, which is why correcting a start date in the
+   * admin portal never changed the certificate. internshipEndDate is null on
+   * many students, and the PDF templates fall back to the literal string "End
+   * Date", so those documents printed the words "End Date" where a date
+   * belongs. certificateDates derives both and lets HR override either.
+   */
+  const certDates = require("../../services/certificateDates");
+  const dates = certDates.datesFor(student, certType);
+
   const mapData = {
     studentName: student.name || student.fullName || "Student Name",
     collegeName: student.collegeName || student.college || "College Name",
     employeeId: student.employeeId || "TEN/HR/00000",
     domain: student.domain || student.role || "Intern",
-    startDate: fmtDate(student.startDate || student.joiningDate),
-    endDate: fmtDate(student.endDate || student.completionDate || student.internshipEndDate),
+    startDate: fmtDate(dates.start),
+    endDate: fmtDate(dates.end),
     gender: student.gender || "Not Provided",
     durationText: student.internshipDuration || student.duration || "45 Days",
     degreeCourse: student.degreeCourse || student.course || "Course / Degree",
@@ -1180,7 +1197,25 @@ router.get("/hr-issue/precheck", requireStaff, async (req, res) => {
             metRequirements,
             failedChecks: failed,
             snapshot,
-            alreadyIssued: !!student[{ LOC:"locPdfBase64", LOR:"lorPdfBase64", STAR:"starPdfBase64", OFFER:"offerPdfBase64", LOP:"lopPdfBase64" }[type]]
+            alreadyIssued: !!student[{ LOC:"locPdfBase64", LOR:"lorPdfBase64", STAR:"starPdfBase64", OFFER:"offerPdfBase64", LOP:"lopPdfBase64" }[type]],
+            /*
+             * The dates that will actually print, so HR sees them before the
+             * document exists rather than after. `iso` for the date inputs,
+             * `source` so a derived end date is visibly not a stored one.
+             */
+            dates: (() => {
+                const certDates = require("../../services/certificateDates");
+                const d = certDates.datesFor(student, type);
+                const iso = (v) => (v ? new Date(v).toISOString().slice(0, 10) : "");
+                return {
+                    start: iso(d.start),
+                    end: iso(d.end),
+                    source: d.source,
+                    overriddenBy: d.override ? d.override.setBy : "",
+                    editable: certDates.mayEditDates(req.session),
+                    minLevel: certDates.DATE_EDIT_MIN_LEVEL
+                };
+            })()
         });
     } catch (e) {
         console.error("[HR-Issue precheck]", e.message);
@@ -1189,14 +1224,14 @@ router.get("/hr-issue/precheck", requireStaff, async (req, res) => {
 });
 
 // POST /api/v2/certificates/hr-issue
-// { employeeId, certType, acknowledged, reason }
+// { employeeId, certType, acknowledged, reason, startDate?, endDate? }
 //
 // Generates the certificate outright. No eligibility call gates this — that is
 // the point of it. `acknowledged` is required only when the student falls
 // short, so the warning cannot be skipped by a script that never asked for it.
 router.post("/hr-issue", requireStaff, async (req, res) => {
     try {
-        const { employeeId, certType, acknowledged, reason } = req.body || {};
+        const { employeeId, certType, acknowledged, reason, startDate, endDate } = req.body || {};
         const type = String(certType || "").toUpperCase();
         if (!OVERRIDE_FIELDS[type]) {
             return res.status(400).json({ success: false, message: "Unknown certificate type: " + certType });
@@ -1221,6 +1256,47 @@ router.post("/hr-issue", requireStaff, async (req, res) => {
 
         const issuer = issuerFrom(req.session);
 
+        /*
+         * The one thing on a generated document HR may retype.
+         *
+         * Stored before generation, because buildCertPDF reads it: a document
+         * that printed one pair of dates while the record held another would be
+         * unverifiable, which is the whole point of storing the document.
+         * Per certificate type — a Letter of Completion and an Offer Letter
+         * describe different spans.
+         */
+        const certDates = require("../../services/certificateDates");
+        let dateNote = "";
+        if (startDate || endDate) {
+            if (!certDates.mayEditDates(req.session)) {
+                return res.status(403).json({
+                    success: false,
+                    message: `Editing the dates on a document needs HR level ${certDates.DATE_EDIT_MIN_LEVEL} or above.`
+                });
+            }
+            const check = certDates.validateOverride({ startDate, endDate }, student, type);
+            if (!check.ok) return res.status(400).json({ success: false, message: check.message });
+
+            const existing = certDates.overrideFor(student, type) || {};
+            const row = {
+                start: check.start || existing.start || null,
+                end: check.end || existing.end || null,
+                setBy: issuer.name,
+                setByLevel: (req.session && req.session.hr && req.session.hr.level) || null,
+                at: new Date()
+            };
+            await Student.updateOne({ _id: student._id }, { $set: { [`certificateDates.${type}`]: row } });
+
+            // The in-memory copy is what generateAndSaveCert hands to
+            // buildCertPDF, so it has to carry the override too.
+            student.certificateDates = student.certificateDates || {};
+            if (typeof student.certificateDates.set === 'function') student.certificateDates.set(type, row);
+            else student.certificateDates[type] = row;
+
+            const fmt = (d) => (d ? new Date(d).toLocaleDateString('en-GB') : '—');
+            dateNote = ` Dates set by hand: ${fmt(row.start)} to ${fmt(row.end)}.`;
+        }
+
         // Generate. generateAndSaveCert writes the PDF, sets the status to
         // 'issued', writes the file, emails it and updates StudentDocument —
         // which is what puts it in the student's My Documents.
@@ -1242,7 +1318,10 @@ router.post("/hr-issue", requireStaff, async (req, res) => {
             metRequirements,
             failedChecks: failed,
             snapshot,
-            reason: String(reason || "").slice(0, 1000)
+            // The date change belongs in the audit trail beside the reason: a
+            // document whose dates were retyped is exactly the one somebody
+            // will later want to ask about.
+            reason: (String(reason || "") + dateNote).slice(0, 1000)
         });
 
         console.log(`[HR-Issue] ${type} issued to ${student.employeeId} by ${issuer.name} ` +
@@ -1250,7 +1329,8 @@ router.post("/hr-issue", requireStaff, async (req, res) => {
 
         res.json({
             success: true,
-            message: `${OVERRIDE_FIELDS[type].label} issued to ${student.employeeId}. It is now in their My Documents.`,
+            message: `${OVERRIDE_FIELDS[type].label} issued to ${student.employeeId}. It is now in their My Documents.`
+                + dateNote,
             overrideId: record._id,
             metRequirements,
             failedChecks: failed

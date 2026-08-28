@@ -17,6 +17,13 @@ const ecosystemNotificationSchema = new mongoose.Schema({
       'payment_confirmed','payment_failed',
       'mentor_request','mentor_approved',
       'founder_approved','investor_approved',
+      // An investor asking about a startup, and the founder's answer. These
+      // were both filed as 'system_announcement', which is also what every
+      // unrelated broadcast uses, so neither could be filtered or counted.
+      'investor_interest','investor_response',
+      // Contractor work: assigned a project, and a reviewed milestone or
+      // timesheet.
+      'project_assigned','work_reviewed',
       'new_message','system_announcement'
     ],
     required: true

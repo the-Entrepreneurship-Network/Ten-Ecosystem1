@@ -706,17 +706,17 @@
         <div class="im" style="background-image:url('assets/hackathon/hooded-coder.jpg')"></div>
         <div class="bd"><h3>Hackathons &amp; Ideathons</h3><p>Wanna make a team and win? 48 hours, one repo, a demo that has to actually run.</p><span class="tag">COMPETE &rarr;</span></div>
       </a>
-      <a class="wcard" href="/founder-os">
+      <a class="wcard" href="register.html?role=founder">
         <div class="im" style="background-image:url('assets/home/job-catch.jpg')"></div>
-        <div class="bd"><h3>Hire from TEN</h3><p>Founders: post a role, search interns by their actual work record, run a pipeline.</p><span class="tag">FOUNDER OS &rarr;</span></div>
+        <div class="bd"><h3>Hire from TEN</h3><p>Founders: post a role, search interns by their actual work record, run a pipeline.</p><span class="tag">REGISTER &rarr;</span></div>
       </a>
       <a class="wcard" href="register.html?role=mentor">
         <div class="im" style="background-image:url('assets/home/student-desk.jpg')"></div>
         <div class="bd"><h3>Become a Mentor</h3><p>Give an hour. Guide a founder or an intern through the thing you already solved.</p><span class="tag">APPLY &rarr;</span></div>
       </a>
-      <a class="wcard" href="register.html">
+      <a class="wcard" href="register.html?role=contractor">
         <div class="im" style="background-image:url('img/textures/wool.webp')"></div>
-        <div class="bd"><h3>Become a Contractor</h3><p>Take paid project work from startups inside the ecosystem.</p><span class="tag">COMING SOON &rarr;</span></div>
+        <div class="bd"><h3>Become a Contractor</h3><p>Take paid project work from startups inside the ecosystem. Milestones and timesheets, approved and paid.</p><span class="tag">APPLY &rarr;</span></div>
       </a>
       <a class="wcard" href="verify.html">
         <div class="im" style="background-image:url('img/textures/balloon.webp')"></div>
@@ -836,7 +836,11 @@
       <p style="font-size:13.5px; color:#999; line-height:1.6;">Every TEN intern finishes with graded submissions, an attendance record and a verifiable certificate. Browse the ones open to work.</p>
     </div>
     <div style="display:flex; gap:10px; flex-wrap:wrap;">
-      <a href="/founder-os" style="background:#fff; color:#000; border-radius:12px; padding:14px 26px; font-weight:900; font-size:14px; text-decoration:none;">Browse talent &rarr;</a>
+      <!-- Registration, not the signed-in workspace. All three employer CTAs
+           pointed at /founder-os, which answers a logged-out visitor with a
+           login form — a sign-in wall as the first thing an employer sees. -->
+      <a href="register.html?role=founder" style="background:#fff; color:#000; border-radius:12px; padding:14px 26px; font-weight:900; font-size:14px; text-decoration:none;">Hire our interns &rarr;</a>
+      <a href="/founder-os" style="background:#141414; color:#fff; border:1px solid #2a2a2a; border-radius:12px; padding:14px 26px; font-weight:700; font-size:14px; text-decoration:none;">I already have an account</a>
       <a href="#verifyInput" onclick="document.getElementById('verifyInput').focus()" style="background:#141414; color:#fff; border:1px solid #2a2a2a; border-radius:12px; padding:14px 26px; font-weight:700; font-size:14px; text-decoration:none;">Verify a certificate</a>
     </div>
   </div>
@@ -892,7 +896,7 @@
     </div>
     <div>
       <p style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.2em; color:#777; margin-bottom:12px;">FOR EMPLOYERS</p>
-      <p style="line-height:2.1; font-size:13.5px;"><a href="verify.html" style="color:#ccc; text-decoration:none;">Verify a certificate</a><br><a href="/founder-os" style="color:#ccc; text-decoration:none;">Hire our interns</a></p>
+      <p style="line-height:2.1; font-size:13.5px;"><a href="verify.html" style="color:#ccc; text-decoration:none;">Verify a certificate</a><br><a href="register.html?role=founder" style="color:#ccc; text-decoration:none;">Hire our interns</a></p>
     </div>
     <div>
       <p style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.2em; color:#777; margin-bottom:12px;">CONTACT</p>

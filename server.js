@@ -3220,7 +3220,6 @@ app.get("/hr-portal", (req,res)=>{ res.sendFile(path.join(__dirname,"public","hr
 app.get("/hr-control-center", (req,res)=>{ res.sendFile(path.join(__dirname,"public","hr-portal.html")); });
 app.get("/hr-login", (req,res)=>{ res.sendFile(path.join(__dirname,"public","hr-login.html")); });
 app.get("/register", (req,res)=>{ res.sendFile(path.join(__dirname,"public","register.html")); });
-app.get("/coming-soon", (req,res)=>{ res.sendFile(path.join(__dirname,"public","coming-soon.html")); });
 
 // ── Phase 2 page routes ─────────────────────────────────────────────────────
 app.get("/registration-success", (req,res)=>{ res.sendFile(path.join(__dirname,"public","registration-success.html")); });
@@ -3760,6 +3759,31 @@ try{
                 // session store on every login.
                 establishStudentSession(req, studentPayload);
             }
+
+            /*
+             * THE line that made four portals reachable.
+             *
+             * middleware/roleGuard.js:attachEcosystemUser builds req.user from
+             * session.ecosystemUserId, and requireRole() reads req.user. This
+             * key was written NOWHERE outside the tests — so every founder,
+             * investor and contractor route answered 401 to a correctly
+             * signed-in account, their dashboards read the 401 as "signed out"
+             * and bounced to the login page, and the login page sent them
+             * straight back. A loop, on three portals that were fully built.
+             *
+             * The founder-OS suite passed throughout because it injects req.user
+             * directly, testing around the exact wiring that was missing.
+             *
+             * Id and role together: roleGuard reads the role from the session
+             * when it is there and only falls back to a database round trip when
+             * it is not.
+             */
+            req.session.ecosystemUserId = String(user._id);
+            req.session.ecosystemUserRole = user.role;
+            // The mentor endpoints scope by email, not by id; chat and the
+            // notification feed identify this account by email and name.
+            req.session.ecosystemUserEmail = user.email;
+            req.session.ecosystemUserName = user.fullName || '';
             req.session.sessionToken = sessionToken;
 
             return res.json({
@@ -4039,9 +4063,27 @@ async function verifySingleSession(req, res, next) {
 
 app.use('/api', verifySingleSession);
 
-// ================= TEN ECOSYSTEM ADMIN CONTROLLER APIs =================
+/*
+ * ════════════════════════════════════════════════════════════════════════════
+ * TEN ECOSYSTEM ADMIN CONTROLLER APIs
+ *
+ * Every route below reads or rewrites an ecosystem account: approving a
+ * founder, rejecting an investor, suspending, editing, deleting. All seven had
+ * NO authentication guard whatsoever — an unauthenticated request from
+ * anywhere on the internet could approve any account, or delete one, and the
+ * only thing standing in front of them was that nobody had noticed.
+ *
+ * requireHROrAdminAPI is the same guard the rest of the staff surface uses.
+ *
+ * ponytail: this closes "anyone" down to "any signed-in staff session". It does
+ * NOT close cross-site request forgery — there is no CSRF token anywhere in
+ * this application and every portal shares one cookie, so a page an
+ * authenticated admin visits can still drive these. The token is the next
+ * change, not this one; do not read this guard as more than it is.
+ * ════════════════════════════════════════════════════════════════════════════
+ */
 
-app.get("/api/ecosystem/stats", async(req, res) => {
+app.get("/api/ecosystem/stats", requireHROrAdminAPI, async(req, res) => {
   try {
     const EcosystemUser = require("./models/EcosystemUser");
     const StudentProfile = require("./models/StudentProfile");
@@ -4089,7 +4131,7 @@ app.get("/api/ecosystem/stats", async(req, res) => {
   }
 });
 
-app.get("/api/ecosystem/users", async(req, res) => {
+app.get("/api/ecosystem/users", requireHROrAdminAPI, async(req, res) => {
   try {
     const EcosystemUser     = require("./models/EcosystemUser");
     const StudentProfile     = require("./models/StudentProfile");
@@ -4126,7 +4168,7 @@ app.get("/api/ecosystem/users", async(req, res) => {
   }
 });
 
-app.post("/api/ecosystem/users/:id/approve", async(req, res) => {
+app.post("/api/ecosystem/users/:id/approve", requireHROrAdminAPI, async(req, res) => {
   try {
     const EcosystemUser     = require("./models/EcosystemUser");
     const StudentProfile     = require("./models/StudentProfile");
@@ -4153,7 +4195,7 @@ app.post("/api/ecosystem/users/:id/approve", async(req, res) => {
   }
 });
 
-app.post("/api/ecosystem/users/:id/reject", async(req, res) => {
+app.post("/api/ecosystem/users/:id/reject", requireHROrAdminAPI, async(req, res) => {
   try {
     const EcosystemUser     = require("./models/EcosystemUser");
     const StudentProfile     = require("./models/StudentProfile");
@@ -4179,7 +4221,7 @@ app.post("/api/ecosystem/users/:id/reject", async(req, res) => {
   }
 });
 
-app.post("/api/ecosystem/users/:id/suspend", async(req, res) => {
+app.post("/api/ecosystem/users/:id/suspend", requireHROrAdminAPI, async(req, res) => {
   try {
     const EcosystemUser = require("./models/EcosystemUser");
     const user = await EcosystemUser.findById(req.params.id);
@@ -4195,7 +4237,7 @@ app.post("/api/ecosystem/users/:id/suspend", async(req, res) => {
   }
 });
 
-app.put("/api/ecosystem/users/:id", async(req, res) => {
+app.put("/api/ecosystem/users/:id", requireHROrAdminAPI, async(req, res) => {
   try {
     const EcosystemUser     = require("./models/EcosystemUser");
     const StudentProfile     = require("./models/StudentProfile");
@@ -4267,7 +4309,7 @@ app.put("/api/ecosystem/users/:id", async(req, res) => {
   }
 });
 
-app.delete("/api/ecosystem/users/:id", async(req, res) => {
+app.delete("/api/ecosystem/users/:id", requireHROrAdminAPI, async(req, res) => {
   try {
     const EcosystemUser     = require("./models/EcosystemUser");
     const StudentProfile     = require("./models/StudentProfile");
@@ -10778,10 +10820,13 @@ try {
 }
 
 // Additional Ecosystem Feature API Routes from Gimini Project
-try { app.use("/api/founder",    require("./routes/founderRoutes"));       } catch(e) { console.error("[Routes] founderRoutes:", e.message); }
-try { app.use("/api/mentor",     require("./routes/mentorRoutes"));        } catch(e) { console.error("[Routes] mentorRoutes:", e.message); }
-try { app.use("/api/investor",   require("./routes/investorRoutes"));      } catch(e) { console.error("[Routes] investorRoutes:", e.message); }
-try { app.use("/api/contractor", require("./routes/contractorRoutes"));    } catch(e) { console.error("[Routes] contractorRoutes:", e.message); }
+/*
+ * The four /api/<role>/dashboard stubs that used to mount here answered
+ * "Founder OS coming soon" from a live endpoint, long after the founder,
+ * investor, contractor and mentor dashboards were built and shipped. Nothing
+ * called them; the real dashboards read /api/v2/*. Deleted along with their
+ * controllers rather than left to contradict the portals they described.
+ */
 try { app.use("/api/hr-dashboard", require("./routes/hrDashboardRoutes")); } catch(e) { console.error("[Routes] hrDashboardRoutes:", e.message); }
 try { app.use("/api/talent-network", require("./routes/talentNetwork"));   } catch(e) { console.error("[Routes] talentNetwork:", e.message); }
 try { app.use("/api/talent-profile", require("./routes/talentProfile"));   } catch(e) { console.error("[Routes] talentProfile:", e.message); }
@@ -11416,12 +11461,66 @@ app.post("/api/v2/coordinator/assign-mentor", async (req, res) => {
     }
 });
 
-app.get("/api/v2/mentor/assigned-sessions", async (req, res) => {
+/*
+ * ════════════════════════════════════════════════════════════════════════════
+ * MENTOR API — who is asking
+ *
+ * These five endpoints identified their caller by an email in the QUERY
+ * STRING, with no session check of any kind: anybody who knew a mentor's
+ * address was that mentor, and could read their sessions, their profile, a
+ * student's full record, and mark work complete. It was the most exposed
+ * surface in the product.
+ *
+ * The mentor's identity now comes from the session, which only a successful
+ * login writes. Staff (HR, coordinator, admin) may still pass ?email= — that
+ * is oversight, and it is what the mentor-assignment screens use.
+ * ════════════════════════════════════════════════════════════════════════════
+ */
+function isStaffSession(req) {
+    return !!(req.session && (req.session.hr || req.session.coordinator || req.session.adminUser));
+}
+
+/** The signed-in mentor's email, or '' when the session is not a mentor. */
+function sessionMentorEmail(req) {
+    const s = req.session;
+    if (!s) return '';
+    if (s.ecosystemUserId && s.ecosystemUserRole === 'mentor' && s.ecosystemUserEmail) {
+        return String(s.ecosystemUserEmail).toLowerCase().trim();
+    }
+    return '';
+}
+
+/**
+ * Which mentor this request may act as.
+ * A mentor is always themselves. Staff are whoever they asked about.
+ * @returns {string} the email, or '' when the caller may act as nobody
+ */
+function mentorScope(req) {
+    const mine = sessionMentorEmail(req);
+    if (mine) return mine;
+    if (isStaffSession(req)) {
+        const asked = (req.query && req.query.email) || (req.body && req.body.email) || '';
+        return String(asked).toLowerCase().trim();
+    }
+    return '';
+}
+
+function requireMentorOrStaff(req, res, next) {
+    if (sessionMentorEmail(req) || isStaffSession(req)) return next();
+    res.set('X-Session-Expired', '1');
+    return res.status(401).json({ success: false, message: 'Mentor sign-in required.' });
+}
+
+app.get("/api/v2/mentor/assigned-sessions", requireMentorOrStaff, async (req, res) => {
     try {
-        const { email } = req.query || {};
+        // Their own sessions. A mentor cannot ask for somebody else's by
+        // changing a query parameter any more.
+        const email = mentorScope(req);
         const query = { itemType: 'mentorship' };
         if (email) {
-            query.mentorEmail = email.toLowerCase().trim();
+            query.mentorEmail = email;
+        } else if (!isStaffSession(req)) {
+            return res.status(403).json({ success: false, message: 'Not your sessions.' });
         }
         const sessions = await CoinRedemption.find(query).sort({ createdAt: -1 });
         return res.json({ success: true, sessions });
@@ -11430,11 +11529,11 @@ app.get("/api/v2/mentor/assigned-sessions", async (req, res) => {
     }
 });
 
-app.get("/api/v2/mentor/profile", async (req, res) => {
+app.get("/api/v2/mentor/profile", requireMentorOrStaff, async (req, res) => {
     try {
-        const { email } = req.query || {};
+        const email = mentorScope(req);
         if (!email) {
-            return res.json({ success: false, message: "Email is required" });
+            return res.status(403).json({ success: false, message: "Not your profile." });
         }
         
         const EcosystemUser = require("./models/EcosystemUser");
@@ -11470,7 +11569,7 @@ app.get("/api/v2/student/my-bookings", async (req, res) => {
     }
 });
 
-app.post("/api/v2/mentor/complete-session", async (req, res) => {
+app.post("/api/v2/mentor/complete-session", requireMentorOrStaff, async (req, res) => {
     try {
         const { bookingId } = req.body || {};
         if (!bookingId) {
@@ -11494,7 +11593,7 @@ app.post("/api/v2/mentor/complete-session", async (req, res) => {
     }
 });
 
-app.get("/api/v2/mentor/student-profile", async (req, res) => {
+app.get("/api/v2/mentor/student-profile", requireMentorOrStaff, async (req, res) => {
     try {
         const { employeeId } = req.query || {};
         if (!employeeId) {
@@ -11537,7 +11636,7 @@ app.get("/api/v2/mentor/student-profile", async (req, res) => {
     }
 });
 
-app.post("/api/v2/mentor/launch-session", async (req, res) => {
+app.post("/api/v2/mentor/launch-session", requireMentorOrStaff, async (req, res) => {
     try {
         const { bookingId, meetUrl } = req.body || {};
         

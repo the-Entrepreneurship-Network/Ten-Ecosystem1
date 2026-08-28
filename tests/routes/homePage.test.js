@@ -790,9 +790,11 @@ describe('contributors', () => {
 describe('founder registration is open', () => {
   const reg = fs.readFileSync(path.join(root, 'public/register.html'), 'utf8');
 
-  it('no longer blocks the founder card', () => {
-    expect(reg).toContain("if (['investor', 'contractor'].includes(role)) {");
-    expect(reg).not.toContain("if (['founder', 'investor', 'contractor'].includes(role)) {");
+  it('no longer blocks any of the three cards', () => {
+    // The gate used to return early for every non-student role, so clicking
+    // Founder, Investor or Contractor did nothing at all.
+    expect(reg).not.toContain("includes(role)) {\n          return;");
+    expect(reg).not.toContain('Coming Soon');
   });
 
   it('has a real form behind it', () => {
@@ -803,9 +805,39 @@ describe('founder registration is open', () => {
     expect(reg).toContain('class="fnd-goal accent-amber-500"');
   });
 
-  it('is three steps, not the student\'s six', () => {
-    expect(reg).toContain("activeRole === 'founder' ? 3 : 6");
-    expect(reg).toContain("{ 1: 'wizardStep1', 2: 'founderStep2', 3: 'founderStep3' }");
+  /*
+   * maxSteps was written out three times and two copies said
+   * `activeRole === 'founder' ? 3 : 6`. For an investor or a contractor that
+   * made step 3 not the last step: the review summary never ran, the Submit
+   * button never appeared, and the submit path validated against the student's
+   * step 6. The wizard simply ended with no way out of it.
+   */
+  it('knows how many steps each role has, in one place', () => {
+    expect(reg).toContain('function stepsFor(role)');
+    expect(reg).not.toContain("activeRole === 'mentor' ? 5 : activeRole === 'founder' ? 3 : 6");
+    expect((reg.match(/stepsFor\(activeRole\)/g) || []).length).toBe(3);
+  });
+
+  /*
+   * SHORT was a const inside changeWizardStep while renderWizardStep — a
+   * sibling function — read it too, so the first Next click threw a
+   * ReferenceError and stranded every role on step 1.
+   */
+  it('declares SHORT where both wizard functions can see it', () => {
+    const decl = reg.indexOf("const SHORT = ['founder', 'investor', 'contractor'];");
+    const render = reg.indexOf('function renderWizardStep');
+    const change = reg.indexOf('function changeWizardStep');
+    expect(decl).toBeGreaterThan(-1);
+    expect(decl).toBeLessThan(Math.min(render, change));
+  });
+
+  it('is three steps for all three, not the student\'s six', () => {
+    expect(reg).toContain("const SHORT = ['founder', 'investor', 'contractor'];");
+    expect(reg).toContain("SHORT.includes(role) ? 3 : 6");
+    // One panel map for the three, keyed off the role — the founder-only
+    // literal it replaced had to be copied twice to open the other two.
+    expect(reg).toContain("2: activeRole + 'Step2'");
+    expect(reg).toContain("3: activeRole + 'Step3'");
   });
 
   it('will not submit an empty startup', () => {
@@ -828,12 +860,31 @@ describe('founder registration is open', () => {
     expect(block).toContain(".join(',')");
   });
 
-  it('leaves investor and contractor closed', () => {
-    // Their portals do not exist; a door to an empty room is worse than a badge.
-    const investor = reg.slice(reg.indexOf("selectRole('investor')"), reg.indexOf("selectRole('contractor')"));
-    expect(investor).toContain('Coming Soon');
-    const contractor = reg.slice(reg.indexOf("selectRole('contractor')"));
-    expect(contractor.slice(0, 1200)).toContain('Coming Soon');
+  it('opens investor and contractor too, with real forms behind them', () => {
+    // Both portals were fully built and unreachable: the badge said "coming
+    // soon" over three finished dashboards.
+    ['investorStep2', 'investorStep3', 'contractorStep2', 'contractorStep3']
+      .forEach((id) => expect(reg).toContain('id="' + id + '"'));
+    ['inv_firmName', 'inv_investorType', 'inv_industryFocus', 'inv_ticketMin', 'inv_ticketMax']
+      .forEach((id) => expect(reg).toContain('id="' + id + '"'));
+    // Stages are the four the schema stores, as checkboxes: the old single
+    // select offered "Growth", which is not one of them, so choosing it saved
+    // nothing and hid the investor from every stage filter.
+    ['pre_seed', 'seed', 'series_a', 'series_b']
+      .forEach((v) => expect(reg).toContain('class="inv-stage accent-amber-500" value="' + v + '"'));
+    ['con_skills', 'con_experience', 'con_hourlyRate', 'con_availability']
+      .forEach((id) => expect(reg).toContain('id="' + id + '"'));
+    expect(reg).toContain("} else if (activeRole === 'investor') {");
+    expect(reg).toContain("} else if (activeRole === 'contractor') {");
+  });
+
+  it('a ?role= link lands on the role it names', () => {
+    // prefillFromQuery used to bail out for every role but student, so the
+    // home page's "Hire our interns" link opened the student wizard.
+    expect(reg).toContain("var KNOWN = ['student', 'founder', 'mentor', 'investor', 'contractor'];");
+    // Comments quote the old guard, so match on live code only.
+    const code = reg.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(code).not.toContain("if (role !== 'student' && !domain) return;");
   });
 });
 

@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TEN HR — contractor desk</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/mobile.css">
+<style>
+:root{--bg:#05070e;--card:#0e1428;--card-2:#0b1222;--gold:#D4AF37;--text:#F0EEE8;--muted:#9a9080;--dim:#4E4840;
+  --green:#10b981;--red:#ef4444;--blue:#60a5fa;--border:rgba(212,175,55,.14);--border-strong:rgba(212,175,55,.32);}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;padding:26px 20px 70px;}
+.wrap{max-width:980px;margin:0 auto;}
+h1{font-family:'Outfit',sans-serif;font-size:30px;font-weight:900;letter-spacing:-.02em;}
+h2{font-family:'Outfit',sans-serif;font-size:19px;font-weight:800;letter-spacing:-.01em;}
+.sub{color:var(--muted);font-size:14px;line-height:1.6;margin-top:9px;}
+.tabs{display:flex;gap:8px;margin:22px 0 4px;flex-wrap:wrap;}
+.tab{background:transparent;border:1px solid var(--border);color:var(--muted);padding:9px 16px;border-radius:999px;
+  font-weight:800;font-size:12.5px;cursor:pointer;min-height:44px;}
+.tab.on{background:rgba(212,175,55,.13);border-color:var(--border-strong);color:var(--gold);}
+.panel{display:none;} .panel.on{display:block;}
+.case{background:var(--card);border:1px solid var(--border);border-radius:15px;padding:20px;margin-top:14px;}
+.case.waiting{border-color:var(--border-strong);}
+.hd{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start;}
+.nm{font-family:'Outfit',sans-serif;font-size:17px;font-weight:800;}
+.meta{font-size:12.5px;color:var(--muted);margin-top:4px;line-height:1.6;}
+.pill{font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;padding:5px 11px;border-radius:999px;
+  white-space:nowrap;}
+.pill.waiting,.pill.submitted,.pill.logged,.pill.under_review,.pill.pending{background:rgba(212,175,55,.14);color:var(--gold);}
+.pill.approved,.pill.paid,.pill.yes{background:rgba(16,185,129,.14);color:var(--green);}
+.pill.rejected,.pill.changes_requested,.pill.no{background:rgba(239,68,68,.14);color:#fca5a5;}
+.pill.grey{background:rgba(255,255,255,.06);color:var(--muted);}
+.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}
+.tag{font-size:11px;font-weight:700;padding:4px 9px;border-radius:7px;background:rgba(255,255,255,.05);color:#c9c2b4;}
+label{display:block;font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.07em;margin-bottom:6px;}
+input,select,textarea{width:100%;padding:11px 13px;border-radius:10px;background:var(--card-2);
+  border:1px solid var(--border);color:var(--text);font:inherit;font-size:14px;line-height:1.5;}
+textarea{min-height:74px;resize:vertical;}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--border-strong);}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:13px;}
+@media (max-width:640px){.grid2{grid-template-columns:1fr;}}
+.field{margin-top:13px;}
+.row{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;align-items:center;}
+button{font:inherit;font-weight:800;font-size:13px;padding:10px 17px;min-height:44px;border-radius:10px;
+  border:1px solid transparent;cursor:pointer;transition:all .2s;}
+.ok{background:var(--green);color:#04120c;}
+.gold{background:var(--gold);color:#1a1405;}
+.no{background:transparent;border-color:rgba(239,68,68,.45);color:#fca5a5;}
+.no:hover{background:rgba(239,68,68,.1);}
+.ghost{background:transparent;border-color:var(--border);color:var(--muted);}
+.ghost:hover{border-color:var(--border-strong);color:var(--text);}
+button:disabled{opacity:.45;cursor:not-allowed;}
+button:focus-visible{outline:2px solid var(--gold);outline-offset:3px;}
+.note{padding:13px 16px;border-radius:11px;background:rgba(212,175,55,.09);border:1px solid var(--border-strong);
+  color:#e8d9a8;font-size:13.5px;margin-top:16px;line-height:1.6;}
+.decided{font-size:12.5px;color:var(--dim);margin-top:11px;line-height:1.6;}
+a{color:var(--gold);}
+.money{font-variant-numeric:tabular-nums;}
+.tot{display:flex;gap:22px;flex-wrap:wrap;margin-top:14px;padding:15px 18px;background:var(--card);
+  border:1px solid var(--border);border-radius:13px;}
+.tot div span{display:block;font-size:10.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);}
+.tot div b{font-family:'Outfit',sans-serif;font-size:20px;font-weight:900;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Contractor desk</h1>
+  <p class="sub">Assign work, then review what comes back. A contractor with no project can submit no
+     deliverable and log no time, so <b>assignment is where every other screen on their dashboard starts</b>.</p>
+
+  <div class="tabs">
+    <button class="tab on" data-p="assign">Assign work</button>
+    <button class="tab" data-p="review">Review queue <span id="qCount"></span></button>
+  </div>
+
+  <!-- ── ASSIGN ──────────────────────────────────────────────────────────── -->
+  <div class="panel on" id="p-assign">
+    <div class="case">
+      <h2>New project</h2>
+      <p class="meta">The contractor is told the moment you save this.</p>
+      <div class="field">
+        <label for="f_contractor">Contractor</label>
+        <select id="f_contractor"><option value="">Loading…</option></select>
+      </div>
+      <div class="grid2">
+        <div class="field"><label for="f_title">Project title</label>
+          <input id="f_title" placeholder="Rebuild the attendance export"></div>
+        <div class="field"><label for="f_client">Client</label>
+          <input id="f_client" placeholder="TEN internal, or a client name"></div>
+      </div>
+      <div class="field"><label for="f_desc">What the work is</label>
+        <textarea id="f_desc" placeholder="Scope, what done looks like, and anything they need access to."></textarea></div>
+      <div class="grid2">
+        <div class="field"><label for="f_tech">Stack</label>
+          <input id="f_tech" placeholder="Node, React"></div>
+        <div class="field"><label for="f_budget">Budget (₹)</label>
+          <input id="f_budget" type="number" min="0" placeholder="Leave blank to bill hourly"></div>
+      </div>
+      <div class="field"><label for="f_due">Due</label><input id="f_due" type="date"></div>
+      <div class="row"><button class="gold" id="assignBtn">Assign this project</button>
+        <span id="assignMsg" class="meta"></span></div>
+    </div>
+
+    <h2 style="margin-top:26px;">Who is available</h2>
+    <div id="roster"><div class="note">Loading…</div></div>
+  </div>
+
+  <!-- ── REVIEW ──────────────────────────────────────────────────────────── -->
+  <div class="panel" id="p-review">
+    <div id="queue"><div class="note">Loading…</div></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const API = '/api/v2/contractor';
+const esc = (v) => String(v == null ? '' : v)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+const when  = (d) => d ? new Date(d).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—';
+const money = (n) => '₹' + Number(n || 0).toLocaleString('en-IN');
+
+/* A safe href. The deliverable URL is validated as http(s) when it is stored,
+   but this page also renders rows that predate that check. */
+const safeHref = (u) => /^https?:\/\//i.test(String(u || '')) ? String(u) : '';
+
+let ROSTER = [];
+
+async function call(path, opts) {
+  const res = await fetch(API + path, Object.assign({
+    credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }
+  }, opts || {}));
+  if (res.status === 401 || res.status === 403) return { denied: true };
+  return res.json().catch(() => ({ success: false, message: 'The server sent something unreadable.' }));
+}
+
+const signIn = '<div class="note">Sign in to the HR portal first. ' +
+               '<a href="/hr-login">Sign in →</a></div>';
+
+/* ── the roster ───────────────────────────────────────────────────────────── */
+
+async function loadRoster() {
+  const box = document.getElementById('roster');
+  const d = await call('/hr/contractors');
+  if (d.denied) { box.innerHTML = signIn; return; }
+  if (!d.success) { box.innerHTML = '<div class="note">Could not load the roster.</div>'; return; }
+
+  ROSTER = d.contractors || [];
+  const sel = document.getElementById('f_contractor');
+  sel.innerHTML = '<option value="">Choose a contractor…</option>' + ROSTER.map((c) =>
+    '<option value="' + esc(c.id) + '">' + esc(c.name || c.email) +
+    (c.verified ? '' : ' — awaiting review') + '</option>').join('');
+
+  if (!ROSTER.length) {
+    box.innerHTML = '<div class="note">No contractors have registered yet.</div>';
+    return;
+  }
+
+  box.innerHTML = ROSTER.map((c) =>
+    '<div class="case">' +
+      '<div class="hd">' +
+        '<div>' +
+          '<div class="nm">' + esc(c.name || 'Contractor') + '</div>' +
+          '<div class="meta">' + esc(c.email) +
+            (c.hourlyRate ? ' · ' + money(c.hourlyRate) + ' / hour' : ' · no rate set') +
+            (c.availability ? ' · available ' + esc(c.availability) : '') +
+            '<br>' + c.openProjects + ' project' + (c.openProjects === 1 ? '' : 's') + ' open' +
+          '</div>' +
+        '</div>' +
+        '<span class="pill ' + (c.verified ? 'yes' : 'pending') + '">' +
+          (c.verified ? 'Verified' : esc(c.verificationStatus)) + '</span>' +
+      '</div>' +
+      (c.skills.length ? '<div class="tags">' + c.skills.slice(0, 10).map((s) =>
+        '<span class="tag">' + esc(s) + '</span>').join('') + '</div>' : '') +
+    '</div>').join('');
+}
+
+document.getElementById('assignBtn').onclick = async function () {
+  const btn = this;
+  const msg = document.getElementById('assignMsg');
+  const val = (id) => document.getElementById(id).value.trim();
+
+  if (!val('f_contractor')) { msg.textContent = 'Choose a contractor.'; return; }
+  if (!val('f_title'))      { msg.textContent = 'Give the project a title.'; return; }
+
+  btn.disabled = true;
+  msg.textContent = 'Assigning…';
+  const d = await call('/projects', { method: 'POST', body: JSON.stringify({
+    contractorId: val('f_contractor'),
+    title: val('f_title'),
+    client: val('f_client'),
+    description: val('f_desc'),
+    tech: val('f_tech'),
+    budget: val('f_budget'),
+    dueAt: val('f_due') || null
+  }) });
+  btn.disabled = false;
+
+  if (d.denied)   { msg.textContent = 'Sign in to the HR portal first.'; return; }
+  if (!d.success) { msg.textContent = d.message || 'Could not assign that.'; return; }
+
+  msg.textContent = 'Assigned. They have been notified.';
+  ['f_title','f_client','f_desc','f_tech','f_budget','f_due']
+    .forEach((id) => { document.getElementById(id).value = ''; });
+  loadRoster();
+};
+
+/* ── the review queue ─────────────────────────────────────────────────────── */
+
+async function loadQueue() {
+  const box = document.getElementById('queue');
+  const d = await call('/hr/queue');
+  if (d.denied) { box.innerHTML = signIn; return; }
+  if (!d.success) { box.innerHTML = '<div class="note">Could not load the queue.</div>'; return; }
+
+  const ms = d.milestones || [], ts = d.timesheets || [];
+  document.getElementById('qCount').textContent = (ms.length + ts.length) ? '· ' + (ms.length + ts.length) : '';
+
+  if (!ms.length && !ts.length) {
+    box.innerHTML = '<div class="note">Nothing is waiting on you.</div>';
+    return;
+  }
+
+  box.innerHTML =
+    '<div class="tot">' +
+      '<div><span>Deliverables</span><b>' + ms.length + '</b></div>' +
+      '<div><span>Time entries</span><b>' + ts.length + '</b></div>' +
+      '<div><span>Unapproved value</span><b class="money">' + money(d.pendingValue) + '</b></div>' +
+    '</div>' +
+    (ms.length ? '<h2 style="margin-top:26px;">Deliverables</h2>' + ms.map(function (m) {
+      const href = safeHref(m.deliverableUrl);
+      return '<div class="case waiting">' +
+        '<div class="hd">' +
+          '<div>' +
+            '<div class="nm">' + esc(m.projectTitle || 'Project') + '</div>' +
+            '<div class="meta">' + esc(m.contractorName || 'Contractor') + ' · submitted ' + when(m.submittedAt) + '</div>' +
+          '</div>' +
+          '<span class="pill ' + esc(m.status) + '">' + esc(String(m.status).replace('_', ' ')) + '</span>' +
+        '</div>' +
+        (href ? '<div class="meta" style="margin-top:11px;">Deliverable: ' +
+          '<a href="' + esc(href) + '" target="_blank" rel="noopener noreferrer">' + esc(href) + '</a></div>'
+              : '<div class="meta" style="margin-top:11px;">No usable link on this submission.</div>') +
+        (m.notes ? '<div class="note" style="margin-top:12px;">' + esc(m.notes) + '</div>' : '') +
+        '<div class="field"><label for="mn_' + esc(m._id) + '">Note back to the contractor</label>' +
+          '<textarea id="mn_' + esc(m._id) + '" placeholder="What is right, or what needs changing. They see this."></textarea></div>' +
+        '<div class="row">' +
+          '<button class="ok"    data-kind="m" data-act="approved"          data-id="' + esc(m._id) + '">Approve</button>' +
+          '<button class="no"    data-kind="m" data-act="changes_requested" data-id="' + esc(m._id) + '">Request changes</button>' +
+          '<button class="ghost" data-kind="m" data-act="under_review"      data-id="' + esc(m._id) + '">Mark as reading</button>' +
+        '</div>' +
+      '</div>';
+    }).join('') : '') +
+    (ts.length ? '<h2 style="margin-top:26px;">Time entries</h2>' + ts.map(function (t) {
+      return '<div class="case waiting">' +
+        '<div class="hd">' +
+          '<div>' +
+            '<div class="nm">' + esc(t.title) + '</div>' +
+            '<div class="meta">' + esc(t.contractorName || 'Contractor') +
+              (t.projectTitle ? ' · ' + esc(t.projectTitle) : '') + ' · ' + when(t.workedOn) + '<br>' +
+              t.hours + ' hour' + (t.hours === 1 ? '' : 's') + ' at ' + money(t.hourlyRate) +
+              ' = <b class="money">' + money(t.amount) + '</b></div>' +
+          '</div>' +
+          '<span class="pill ' + esc(t.status) + '">' + esc(t.status) + '</span>' +
+        '</div>' +
+        '<div class="field"><label for="tn_' + esc(t._id) + '">Payout note</label>' +
+          '<textarea id="tn_' + esc(t._id) + '" placeholder="Reference, or why this was not approved."></textarea></div>' +
+        '<div class="row">' +
+          '<button class="ok"    data-kind="t" data-act="approved" data-id="' + esc(t._id) + '">Approve</button>' +
+          '<button class="gold"  data-kind="t" data-act="paid"     data-id="' + esc(t._id) + '">Mark paid</button>' +
+          '<button class="no"    data-kind="t" data-act="rejected" data-id="' + esc(t._id) + '">Reject</button>' +
+        '</div>' +
+      '</div>';
+    }).join('') : '');
+
+  box.querySelectorAll('[data-act]').forEach(function (b) {
+    b.onclick = async function () {
+      const id = b.dataset.id, kind = b.dataset.kind;
+      box.querySelectorAll('[data-id="' + id + '"]').forEach((x) => { x.disabled = true; });
+
+      const note = (document.getElementById((kind === 'm' ? 'mn_' : 'tn_') + id) || {}).value || '';
+      const body = kind === 'm'
+        ? { status: b.dataset.act, reviewNote: note }
+        : { status: b.dataset.act, payoutNote: note };
+
+      const d2 = await call('/hr/' + (kind === 'm' ? 'milestones/' : 'timesheets/') + id,
+                            { method: 'PATCH', body: JSON.stringify(body) });
+      if (!d2.success) {
+        box.querySelectorAll('[data-id="' + id + '"]').forEach((x) => { x.disabled = false; });
+        alert(d2.message || 'Could not save that decision.');
+        return;
+      }
+      loadQueue();
+    };
+  });
+}
+
+/* ── tabs ─────────────────────────────────────────────────────────────────── */
+
+document.querySelectorAll('.tab').forEach(function (t) {
+  t.onclick = function () {
+    document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('on', x === t));
+    document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('on', p.id === 'p-' + t.dataset.p));
+  };
+});
+
+loadRoster();
+loadQueue();
+</script>
+</body>
+</html>

@@ -16,6 +16,14 @@ const ContractorProfileSchema = new mongoose.Schema({
   portfolio: { type: String, default: "" },
   hourlyRate: { type: Number, default: 0 },
   availability: { type: String, default: "" },
+  /*
+   * True for a profile that was marked approved by the old signup code, which
+   * approved everyone the moment they registered. Those accounts were never
+   * actually reviewed by anybody, and without this flag they are
+   * indistinguishable from ones HR has since looked at. Set in bulk, once, by
+   * scripts/grandfather-ecosystem-profiles.js.
+   */
+  grandfathered: { type: Boolean, default: false },
   verificationStatus: {
     type: String,
     enum: ["pending", "approved", "rejected"],

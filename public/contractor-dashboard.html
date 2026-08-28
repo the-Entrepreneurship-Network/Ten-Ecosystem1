@@ -116,9 +116,12 @@
         <button onclick="switchTab('timesheet')" class="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-white/5 transition text-left" id="tab-timesheet">
           <i class="fa-solid fa-business-time text-blue-400"></i> Timesheet & Invoicing
         </button>
-        <button onclick="switchTab('feedback')" class="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-white/5 transition text-left" id="tab-feedback">
-          <i class="fa-solid fa-award text-indigo-400"></i> Performance Ratings
+        <button onclick="switchTab('deliverables')" class="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-white/5 transition text-left" id="tab-deliverables">
+          <i class="fa-solid fa-paper-plane text-indigo-400"></i> Submitted Work
         </button>
+        <a href="/messages" class="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-white/5 transition text-left">
+          <i class="fa-solid fa-comment-dots text-slate-400"></i> Messages
+        </a>
 
         <p class="text-[9px] uppercase tracking-widest text-slate-500 font-bold px-3 pt-6 mb-2">Contract settings</p>
         <div class="px-3 py-1 space-y-3">
@@ -130,6 +133,8 @@
             <select id="availDrop" class="w-full bg-slate-950 border border-slate-800 text-[11px] font-bold p-2 rounded-lg text-slate-300 focus:outline-none focus:border-yellow-400" onchange="updateAvailabilityDirect()">
               <option value="Immediately">Available Immediately</option>
               <option value="In 2 weeks">In 2 Weeks</option>
+              <option value="In 1 month">In 1 Month</option>
+              <option value="Not available">Not Available</option>
             </select>
           </div>
         </div>
@@ -276,34 +281,20 @@
         </div>
       </div>
 
-      <!-- Feedback Tab -->
-      <div id="content-feedback" class="tab-content hidden space-y-6">
+      <!-- Submitted work.
+           This tab was "System Ratings & Growth Audits": a 5.0/5.0 score, "12
+           Milestones Vetted" and a five-star testimonial from "AgroVedic
+           Systems Founders" — all of it markup, shown identically to every
+           contractor, and none of it backed by a ratings feature that exists.
+           A deliverable submitted through this page had nowhere to appear, so
+           this is the screen that shows it and what HR said back. -->
+      <div id="content-deliverables" class="tab-content hidden space-y-6">
         <div class="space-y-1">
-          <h3 class="text-lg font-black text-white">System Ratings & Growth Audits</h3>
-          <p class="text-xs text-slate-400">Regular audits and reviews left of assigned founders</p>
+          <h3 class="text-lg font-black text-white">Submitted Work</h3>
+          <p class="text-xs text-slate-400">Every deliverable you have sent for review, and what came back.</p>
         </div>
-
-        <div class="glass-card rounded-3xl p-6 space-y-6 border border-white/[0.04]">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6 border-b border-white/5">
-            <div>
-              <span class="text-xs text-slate-500 font-bold block mb-1">PLATFORM QUALITY RATING</span>
-              <h4 class="text-3xl font-black text-yellow-400">5.0 <span class="text-xs text-slate-500 font-normal">/ 5.0 absolute</span></h4>
-            </div>
-            <div>
-              <span class="text-xs text-slate-500 font-bold block mb-1">COMPLETED PROJECT SHRINKS</span>
-              <h4 class="text-2xl font-black text-slate-200">12 Milestones Vetted</h4>
-            </div>
-          </div>
-
-          <div class="space-y-4">
-            <div class="p-4 rounded-xl bg-slate-900/50 border border-white/[0.02] space-y-2">
-              <div class="flex justify-between items-center">
-                <span class="font-black text-slate-200 text-xs">AgroVedic Systems Founders</span>
-                <span class="text-xs text-yellow-400">★★★★★</span>
-              </div>
-              <p class="text-xs text-slate-400 italic">"Pristine layouts, elegant whiteboards rendering logic and robust system modules. Kept deliverable schedules perfectly on-point!"</p>
-            </div>
-          </div>
+        <div class="space-y-4" id="milestoneList">
+          <p class="text-xs text-slate-500">Loading&hellip;</p>
         </div>
       </div>
 
@@ -370,17 +361,37 @@
       document.getElementById('sidebarEcos').classList.add('-translate-x-full');
     }
 
-    function updateAvailabilityDirect() {
-      const selected = document.getElementById('availDrop').value;
-      Swal.fire({
-        icon: 'success',
-        title: 'Availability Preference Updated',
-        text: `Your billing availability preference status is now synced to: ${selected.toUpperCase()}`,
-        background: '#0a0f1f',
-        color: '#F0EEE8',
-        confirmButtonColor: '#FFD700',
-        confirmButtonText: 'Confirm Preference'
-      });
+    /*
+     * This popped "Availability Preference Updated" and saved nothing, so HR
+     * assigning work read whatever the contractor typed at signup, forever.
+     */
+    async function updateAvailabilityDirect() {
+      const drop = document.getElementById('availDrop');
+      const selected = drop.value;
+      drop.disabled = true;
+      try {
+        const res = await fetch(API + '/profile', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ availability: selected })
+        });
+        const data = await res.json().catch(() => ({ success: false }));
+        if (!res.ok || !data.success) throw new Error(data.message || 'That did not save.');
+        Swal.fire({
+          icon: 'success',
+          title: 'Saved',
+          text: 'HR sees "' + selected + '" when they are choosing who to assign work to.',
+          background: '#0a0f1f', color: '#F0EEE8', confirmButtonColor: '#FFD700'
+        });
+      } catch (err) {
+        Swal.fire({
+          icon: 'error', title: 'Not saved', text: err.message,
+          background: '#0a0f1f', color: '#F0EEE8', confirmButtonColor: '#FFD700'
+        });
+      } finally {
+        drop.disabled = false;
+      }
     }
 
     /* ── Real data ────────────────────────────────────────────────────────
@@ -462,6 +473,74 @@
       });
     }
 
+    const MILESTONE_STYLE = {
+      submitted:         ['bg-yellow-400/10 border-yellow-400/20 text-yellow-500', 'Awaiting review'],
+      under_review:      ['bg-sky-500/10 border-sky-500/20 text-sky-400',          'Being reviewed'],
+      approved:          ['bg-emerald-500/10 border-emerald-500/20 text-emerald-400', 'Approved'],
+      changes_requested: ['bg-rose-500/10 border-rose-500/20 text-rose-400',       'Changes requested']
+    };
+
+    /*
+     * Deliverables had nowhere to go. Submitting one said "stored and now in
+     * the HR review queue" and then the contractor could not see it, its state,
+     * or a word of the review — including "changes requested", which is the one
+     * message they need most.
+     */
+    function renderMilestones() {
+      const list = document.getElementById('milestoneList');
+      if (!list) return;
+      list.innerHTML = '';
+
+      const rows = overview.milestones || [];
+      if (!rows.length) {
+        list.appendChild(el('p', 'text-xs text-slate-500',
+          'Nothing submitted yet. Open a project and send your first deliverable.'));
+        return;
+      }
+
+      rows.forEach((m) => {
+        const card = el('div', 'glass-card rounded-2xl p-5 space-y-3 border border-white/[0.03]');
+
+        const head = el('div', 'flex justify-between items-start gap-3');
+        const left = el('div', 'space-y-1');
+        left.appendChild(el('h4', 'font-black text-slate-200 text-sm', m.projectTitle || 'Project'));
+        left.appendChild(el('p', 'text-[11px] text-slate-500',
+          'Submitted ' + new Date(m.submittedAt).toLocaleDateString('en-IN',
+            { day: 'numeric', month: 'short', year: 'numeric' })));
+        head.appendChild(left);
+
+        const style = MILESTONE_STYLE[m.status] || MILESTONE_STYLE.submitted;
+        head.appendChild(el(
+          'span',
+          'px-2.5 py-1 rounded-lg border text-[10px] font-extrabold tracking-wider uppercase shrink-0 ' + style[0],
+          style[1]
+        ));
+        card.appendChild(head);
+
+        // The link is validated as http(s) when stored; rows predating that
+        // check are rendered as text rather than as a clickable unknown scheme.
+        if (/^https?:\/\//i.test(String(m.deliverableUrl || ''))) {
+          const a = el('a', 'text-[11px] text-yellow-400 hover:text-yellow-500 break-all block', m.deliverableUrl);
+          a.href = m.deliverableUrl;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          card.appendChild(a);
+        }
+
+        if (m.notes) card.appendChild(el('p', 'text-xs text-slate-400 leading-relaxed', m.notes));
+
+        if (m.reviewNote) {
+          const box = el('div', 'p-3 rounded-xl bg-slate-900/60 border-l-2 ' +
+            (m.status === 'changes_requested' ? 'border-rose-400' : 'border-emerald-400'));
+          box.appendChild(el('span', 'block text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1', 'HR review'));
+          box.appendChild(el('p', 'text-xs text-slate-300 leading-relaxed', m.reviewNote));
+          card.appendChild(box);
+        }
+
+        list.appendChild(card);
+      });
+    }
+
     function renderTimesheets() {
       const list = document.getElementById('timesheetLogs');
       if (!list) return;
@@ -520,6 +599,13 @@
               ? 'Contractor Service Rate: ' + money(rate) + ' / hr'
               : 'Contractor Service Rate: not set — ask HR to set it before logging time';
           }
+          // The dropdown opened on "Immediately" whatever was stored, so the
+          // first change event could silently overwrite a real answer.
+          const drop = document.getElementById('availDrop');
+          if (drop && data.profile.availability) {
+            const has = Array.from(drop.options).some((o) => o.value === data.profile.availability);
+            if (has) drop.value = data.profile.availability;
+          }
           const tags = document.getElementById('skillTags');
           if (tags && Array.isArray(data.profile.skills) && data.profile.skills.length) {
             tags.innerHTML = '';
@@ -530,6 +616,7 @@
         }
 
         renderProjects();
+        renderMilestones();
         renderTimesheets();
       } catch (err) {
         const grid = document.getElementById('projectsGrid');
@@ -674,5 +761,8 @@
       });
     }
   </script>
+<!-- The notification orb, as on every other signed-in portal page. HR
+     decisions on this desk now reach the contractor through it. -->
+<script src="/notify-orb.js" defer></script>
 </body>
 </html>
