@@ -259,13 +259,6 @@ body {
     </div>
 
     <form id="loginForm" class="ten-fade-up ten-d3">
-      <!-- COMING SOON WARNING BANNER -->
-      <div id="comingSoonBanner" style="display:none; background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25); border-radius:10px; padding:12px; margin-bottom:18px; text-align:center;">
-        <div style="font-size:18px; margin-bottom:4px;">🚧</div>
-        <div id="comingSoonTitle" style="color:#fbbf24; font-weight:700; font-size:13px; text-transform:uppercase; letter-spacing:1px;">Coming Soon</div>
-        <div style="color:#94a3b8; font-size:11px; margin-top:2px;">This portal is under development. Student login is available under the "Student" tab.</div>
-      </div>
-
       <div class="field-group">
         <label class="field-label" id="fieldLabel">Email Address or Employee ID</label>
         <input class="field-input" type="text" id="loginId" placeholder="Enter your Email or Employee ID" required>
@@ -317,44 +310,28 @@ function setLoginRole(role) {
   const loginIdInput = document.getElementById('loginId');
   const passwordInput = document.getElementById('password');
   const submitBtn = document.querySelector('.login-btn');
-  const comingSoonBanner = document.getElementById('comingSoonBanner');
-  const comingSoonTitle = document.getElementById('comingSoonTitle');
-
   if (fieldLabel) fieldLabel.textContent = role.toUpperCase() + ' Email Address or ID';
   
-  const isActive = ['student', 'mentor', 'coordinator'].includes(role);
-
+  /*
+   * Every role this page offers a tab for can sign in.
+   *
+   * Founder, investor and contractor were disabled here behind a "coming soon"
+   * banner while their portals were fully built on the other side — and
+   * /founder-login, /investor-login and /contractor-login were live, unlinked
+   * pages posting to this very endpoint, so the gate was a curtain in front of
+   * an open door. What actually kept them out was a missing session key, and
+   * that is fixed. The disabled states and the banner have gone with it.
+   */
   if (loginIdInput) {
     loginIdInput.placeholder = 'Enter your ' + role.charAt(0).toUpperCase() + role.slice(1) + ' Email or ID';
-    loginIdInput.disabled = !isActive;
-    loginIdInput.style.opacity = isActive ? '1' : '0.5';
-    loginIdInput.style.cursor = isActive ? 'text' : 'not-allowed';
   }
 
   if (passwordInput) {
     passwordInput.placeholder = 'Enter your password';
-    passwordInput.disabled = !isActive;
-    passwordInput.style.opacity = isActive ? '1' : '0.5';
-    passwordInput.style.cursor = isActive ? 'text' : 'not-allowed';
   }
 
   if (submitBtn) {
-    submitBtn.disabled = !isActive;
-    submitBtn.style.opacity = isActive ? '1' : '0.5';
-    submitBtn.style.cursor = isActive ? 'pointer' : 'not-allowed';
     submitBtn.textContent = 'Sign In to ' + role.charAt(0).toUpperCase() + role.slice(1) + ' Workspace';
-  }
-
-  if (comingSoonBanner) {
-    if (!isActive) {
-      comingSoonBanner.style.display = 'block';
-      const descDiv = comingSoonBanner.querySelector('div:last-child');
-      if (descDiv) {
-        descDiv.textContent = 'This portal is currently under construction. Please use the Student, Mentor, or Coordinator portals.';
-      }
-    } else {
-      comingSoonBanner.style.display = 'none';
-    }
   }
 
   if (window.TenForgotPassword) {

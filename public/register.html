@@ -239,26 +239,24 @@
           </button>
 
           <!-- Investor Card -->
-          <button onclick="selectRole('investor')" class="role-card text-left p-5 rounded-xl border border-slate-800/80 bg-slate-950/40 flex items-start gap-4 relative overflow-hidden transition duration-300" style="opacity: 0.65; cursor: not-allowed;">
-            <span class="absolute top-2 right-2 bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">🚧 Coming Soon</span>
+          <button onclick="selectRole('investor')" class="role-card text-left p-5 rounded-xl border border-slate-800/80 bg-slate-950/40 hover:border-[#D4AF37]/60 flex items-start gap-4 relative overflow-hidden transition duration-300" style="cursor: pointer;">
             <div class="flex-shrink-0 w-12 h-12 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center">
               <i class="fa-solid fa-hand-holding-dollar text-xl"></i>
             </div>
             <div>
               <h3 class="text-base font-bold text-slate-100">Investor</h3>
-              <p class="text-slate-400 text-xs mt-1 leading-relaxed">Access clean deal rooms, explore startup growth metrics, and fund high-potential ventures.</p>
+              <p class="text-slate-400 text-xs mt-1 leading-relaxed">See the startups raising now, register your interest with the founder, and keep a private portfolio.</p>
             </div>
           </button>
 
           <!-- Contractor Card -->
-          <button onclick="selectRole('contractor')" class="role-card text-left p-5 rounded-xl border border-slate-800/80 bg-slate-950/40 flex items-start gap-4 relative overflow-hidden transition duration-300" style="opacity: 0.65; cursor: not-allowed;">
-            <span class="absolute top-2 right-2 bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">🚧 Coming Soon</span>
+          <button onclick="selectRole('contractor')" class="role-card text-left p-5 rounded-xl border border-slate-800/80 bg-slate-950/40 hover:border-[#D4AF37]/60 flex items-start gap-4 relative overflow-hidden transition duration-300" style="cursor: pointer;">
             <div class="flex-shrink-0 w-12 h-12 rounded-lg bg-orange-500/10 text-orange-400 border border-orange-500/20 flex items-center justify-center">
               <i class="fa-solid fa-screwdriver-wrench text-xl"></i>
             </div>
             <div>
               <h3 class="text-base font-bold text-slate-100">Contractor</h3>
-              <p class="text-slate-400 text-xs mt-1 leading-relaxed font-normal">Apply premium engineering, programming, or operations skills as a freelancer.</p>
+              <p class="text-slate-400 text-xs mt-1 leading-relaxed font-normal">Take on TEN projects, submit milestones and log timesheets that get approved and paid.</p>
             </div>
           </button>
 
@@ -827,6 +825,118 @@
               HR reviews founder accounts before they open. You will be emailed when yours is approved,
               and you land in the <strong class="text-slate-300">Founder OS</strong> &mdash; job posts, a hiring
               pipeline over TEN&rsquo;s interns, fundraising, a data room and mentor booking.
+            </p>
+          </div>
+
+          <!-- INVESTOR STEP 2 — the fund.
+               Field names match ROLE_CONFIG[investor] in controllers/registerHubController.js,
+               which is what the server reads off roleSpecificData. -->
+          <div id="investorStep2" class="wizard-section hidden space-y-4">
+            <h3 class="text-xs font-bold text-[#D4AF37] uppercase tracking-widest border-b border-slate-800/80 pb-2">Section 2 &mdash; How you invest</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Mobile <span class="text-red-400">*</span></label>
+                <input type="text" id="inv_mobile" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none" placeholder="+91 ...">
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Firm name / individual <span class="text-red-400">*</span></label>
+                <input type="text" id="inv_firmName" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none" placeholder="Kite Capital, or your own name">
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Fund size <span class="text-red-400">*</span></label>
+                <input type="text" id="inv_fundSize" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none" placeholder="e.g. ₹5 Crore, or N/A">
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Stage preference <span class="text-red-400">*</span></label>
+                <select id="inv_investmentStage" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none"><option value="">Select one</option><option>Pre-seed</option><option>Seed</option><option>Series A</option><option>Series B</option><option>Growth</option></select>
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Industry focus <span class="text-red-400">*</span></label>
+                <input type="text" id="inv_industryFocus" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none" placeholder="SaaS, FinTech, AI">
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Website</label>
+                <input type="url" id="inv_website" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none" placeholder="https://">
+              </div>
+            </div>
+            <p class="text-[11px] text-slate-500 leading-relaxed">Your thesis and focus are what founders
+              see in the directory. Nothing about your portfolio is ever public &mdash; holdings you record
+              in the deal room are visible only to you.</p>
+          </div>
+
+          <!-- INVESTOR STEP 3 — review -->
+          <div id="investorStep3" class="wizard-section hidden space-y-4">
+            <h3 class="text-xs font-bold text-[#D4AF37] uppercase tracking-widest border-b border-slate-800/80 pb-2">Review &amp; Submit</h3>
+            <div class="bg-slate-950/30 border border-slate-800 rounded-xl p-5 space-y-3">
+              <table class="w-full text-xs text-left border-collapse">
+                <tbody>
+                  <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400 w-1/3">Full Name</th><td id="inv_sumName" class="py-2 text-slate-200 font-semibold">-</td></tr>
+                  <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400">Email</th><td id="inv_sumEmail" class="py-2 text-slate-200 font-semibold">-</td></tr>
+                  <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400">Firm</th><td id="inv_sumFirm" class="py-2 text-slate-200 font-semibold">-</td></tr>
+                  <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400">Stage &amp; fund</th><td id="inv_sumStage" class="py-2 text-slate-200 font-semibold">-</td></tr>
+                  <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400">Focus</th><td id="inv_sumFocus" class="py-2 text-slate-200 font-semibold">-</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="text-[11px] text-slate-500 leading-relaxed">
+              HR reviews investor accounts before the deal room opens. You will be emailed when yours is
+              approved, and you land in the <strong class="text-slate-300">Deal Room</strong> &mdash; startups
+              raising now, a way to register interest with the founder, and a private portfolio.
+            </p>
+          </div>
+
+          <!-- CONTRACTOR STEP 2 — the work -->
+          <div id="contractorStep2" class="wizard-section hidden space-y-4">
+            <h3 class="text-xs font-bold text-[#D4AF37] uppercase tracking-widest border-b border-slate-800/80 pb-2">Section 2 &mdash; What you do</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Mobile <span class="text-red-400">*</span></label>
+                <input type="text" id="con_mobile" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none" placeholder="+91 ...">
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Skills <span class="text-red-400">*</span></label>
+                <input type="text" id="con_skills" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none" placeholder="React, Node, Web3">
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Experience <span class="text-red-400">*</span></label>
+                <input type="text" id="con_experience" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none" placeholder="e.g. 4 years freelancing">
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Hourly rate (₹) <span class="text-red-400">*</span></label>
+                <input type="number" id="con_hourlyRate" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none" placeholder="1200">
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Availability <span class="text-red-400">*</span></label>
+                <select id="con_availability" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none"><option value="">Select one</option><option>Immediately</option><option>In 2 weeks</option><option>In 1 month</option></select>
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Portfolio URL</label>
+                <input type="url" id="con_portfolio" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none" placeholder="https://">
+              </div>
+            </div>
+            <p class="text-[11px] text-slate-500 leading-relaxed">Your rate is used to price the timesheets
+              you log. TEN assigns you to projects; you submit milestones and hours against them, and HR
+              approves each one.</p>
+          </div>
+
+          <!-- CONTRACTOR STEP 3 — review -->
+          <div id="contractorStep3" class="wizard-section hidden space-y-4">
+            <h3 class="text-xs font-bold text-[#D4AF37] uppercase tracking-widest border-b border-slate-800/80 pb-2">Review &amp; Submit</h3>
+            <div class="bg-slate-950/30 border border-slate-800 rounded-xl p-5 space-y-3">
+              <table class="w-full text-xs text-left border-collapse">
+                <tbody>
+                  <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400 w-1/3">Full Name</th><td id="con_sumName" class="py-2 text-slate-200 font-semibold">-</td></tr>
+                  <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400">Email</th><td id="con_sumEmail" class="py-2 text-slate-200 font-semibold">-</td></tr>
+                  <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400">Skills</th><td id="con_sumSkills" class="py-2 text-slate-200 font-semibold">-</td></tr>
+                  <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400">Rate</th><td id="con_sumRate" class="py-2 text-slate-200 font-semibold">-</td></tr>
+                  <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400">Available</th><td id="con_sumAvail" class="py-2 text-slate-200 font-semibold">-</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="text-[11px] text-slate-500 leading-relaxed">
+              HR reviews contractor accounts before the desk opens. You will be emailed when yours is
+              approved, and you land in the <strong class="text-slate-300">Contractor Desk</strong> &mdash;
+              your assigned projects, milestone submissions and timesheets.
             </p>
           </div>
 
@@ -1534,7 +1644,9 @@
       if (delta > 0 && !validateStep(currentStep)) {
         return;
       }
-      const maxSteps = activeRole === 'mentor' ? 5 : activeRole === 'founder' ? 3 : 6;
+      // Three roles share the short shape: identity, their own section, review.
+      const SHORT = ['founder', 'investor', 'contractor'];
+      const maxSteps = activeRole === 'mentor' ? 5 : SHORT.includes(activeRole) ? 3 : 6;
       if (targetStep < 1 || targetStep > maxSteps) return;
 
       currentStep = targetStep;
@@ -1742,17 +1854,29 @@
         if (roleIconBadge) roleIconBadge.textContent = '🚀';
         if (roleFormTitle) roleFormTitle.textContent = 'FOUNDER ONBOARDING WIZARD';
         if (topSubtitle) topSubtitle.textContent = 'Tell us about your startup. You land in the Founder OS once HR approves.';
+      } else if (activeRole === 'investor') {
+        if (roleIconBadge) roleIconBadge.textContent = '💰';
+        if (roleFormTitle) roleFormTitle.textContent = 'INVESTOR ONBOARDING WIZARD';
+        if (topSubtitle) topSubtitle.textContent = 'Tell us how you invest. You land in the Deal Room once HR approves.';
+      } else if (activeRole === 'contractor') {
+        if (roleIconBadge) roleIconBadge.textContent = '🔧';
+        if (roleFormTitle) roleFormTitle.textContent = 'CONTRACTOR ONBOARDING WIZARD';
+        if (topSubtitle) topSubtitle.textContent = 'Tell us what you do. You land in the Contractor Desk once HR approves.';
       } else {
         if (roleIconBadge) roleIconBadge.textContent = '🎓';
         if (roleFormTitle) roleFormTitle.textContent = 'STUDENT ONBOARDING WIZARD';
         if (topSubtitle) topSubtitle.textContent = 'Complete your registration wizard to set up your ecosystem workspace.';
       }
 
+      const SHORT_PILLS = {
+        founder:    ["1. Personal", "2. Your startup",  "3. Review", "", "", ""],
+        investor:   ["1. Personal", "2. How you invest", "3. Review", "", "", ""],
+        contractor: ["1. Personal", "2. What you do",    "3. Review", "", "", ""]
+      };
       const pillNames = activeRole === 'mentor'
         ? ["1. Personal", "2. Professional", "3. Expertise", "4. Resume PDF", "5. Review", ""]
-        : activeRole === 'founder'
-        ? ["1. Personal", "2. Your startup", "3. Review", "", "", ""]
-        : ["1. Personal", "2. Education", "3. Tenure", "4. Skills & Links", "5. Resume PDF", "6. Domain"];
+        : SHORT_PILLS[activeRole]
+        || ["1. Personal", "2. Education", "3. Tenure", "4. Skills & Links", "5. Resume PDF", "6. Domain"];
 
       for (let i = 1; i <= 6; i++) {
         const pill = document.getElementById(`stepPill${i}`);
@@ -1773,7 +1897,9 @@
       const allPanels = [
         'wizardStep1', 'wizardStep2', 'wizardStep3', 'wizardStep4', 'wizardStep5', 'wizardStep6',
         'mentorStep2', 'mentorStep3', 'mentorStep6',
-        'founderStep2', 'founderStep3'
+        'founderStep2', 'founderStep3',
+        'investorStep2', 'investorStep3',
+        'contractorStep2', 'contractorStep3'
       ];
       allPanels.forEach(pid => {
         const el = document.getElementById(pid);
@@ -1791,8 +1917,11 @@
           5: 'mentorStep6'
         };
         currentPanelId = mentorPanelMap[currentStep];
-      } else if (activeRole === 'founder') {
-        currentPanelId = { 1: 'wizardStep1', 2: 'founderStep2', 3: 'founderStep3' }[currentStep];
+      } else if (SHORT.includes(activeRole)) {
+        // identity → their own section → review, for all three.
+        currentPanelId = { 1: 'wizardStep1',
+                           2: activeRole + 'Step2',
+                           3: activeRole + 'Step3' }[currentStep];
       } else {
         currentPanelId = `wizardStep${currentStep}`;
       }
@@ -1818,6 +1947,10 @@
           populateMentorSummary();
         } else if (activeRole === 'founder') {
           populateFounderSummary();
+        } else if (activeRole === 'investor') {
+          populateInvestorSummary();
+        } else if (activeRole === 'contractor') {
+          populateContractorSummary();
         } else {
           populateSummary();
         }
@@ -1838,6 +1971,25 @@
       document.getElementById('fnd_sumGoals').textContent =
         Array.from(document.querySelectorAll('.fnd-goal:checked'))
           .map(c => c.parentNode.textContent.trim()).join(', ') || '-';
+    }
+
+    function populateInvestorSummary() {
+      const v = (id) => (document.getElementById(id).value || '-').trim() || '-';
+      document.getElementById('inv_sumName').textContent = v('reg_fullName');
+      document.getElementById('inv_sumEmail').textContent = v('reg_email');
+      document.getElementById('inv_sumFirm').textContent = v('inv_firmName');
+      document.getElementById('inv_sumStage').textContent = v('inv_investmentStage') + ' \u00b7 ' + v('inv_fundSize');
+      document.getElementById('inv_sumFocus').textContent = v('inv_industryFocus');
+    }
+
+    function populateContractorSummary() {
+      const v = (id) => (document.getElementById(id).value || '-').trim() || '-';
+      document.getElementById('con_sumName').textContent = v('reg_fullName');
+      document.getElementById('con_sumEmail').textContent = v('reg_email');
+      document.getElementById('con_sumSkills').textContent = v('con_skills');
+      const rate = document.getElementById('con_hourlyRate').value;
+      document.getElementById('con_sumRate').textContent = rate ? '\u20b9' + rate + ' / hour' : '-';
+      document.getElementById('con_sumAvail').textContent = v('con_availability');
     }
 
     function populateSummary() {
@@ -1861,21 +2013,12 @@
       document.getElementById('mentor_sumDomains').textContent = checkedDomains.join(', ') || 'None';
     }
 
+    /* Every role on this screen is open. Investor and contractor were blocked
+       here while their portals were described as "under construction" — but the
+       deal room and the contractor desk were already built, and the server has
+       accepted both registrations all along. The block was a curtain in front
+       of a working door. */
     function selectRole(role) {
-      // Founder is open: the wizard below has its steps and the backend has
-      // created FounderProfile + StartupProfile from them since Phase 2.
-      // Investor and contractor have no portal on the other side yet.
-      if (['investor', 'contractor'].includes(role)) {
-        Swal.fire({
-          icon: 'info',
-          title: '🚧 Portal Under Construction',
-          text: 'This registration flow is currently under development. Active roles include Student, Mentor, and Coordinator.',
-          background: '#0e1428',
-          color: '#F0EEE8',
-          confirmButtonColor: '#D4AF37'
-        });
-        return;
-      }
       activeRole = role;
       document.getElementById("selectedRoleInput").value = role;
       document.getElementById("roleSelectionScreen").classList.add('hidden');
@@ -1906,7 +2049,18 @@
       var q = new URLSearchParams(window.location.search);
       var role = q.get('role');
       var domain = q.get('domain');
-      if (role !== 'student' && !domain) return;
+
+      /*
+       * Every role this page can register, not just student.
+       *
+       * This used to read `if (role !== 'student' && !domain) return;` — so
+       * /register?role=founder silently dropped the visitor on the role chooser
+       * with nothing selected. The home page's "Become a Mentor" link had been
+       * broken by it for as long as it has existed, and it would have broken
+       * "Hire our interns" the same way.
+       */
+      var KNOWN = ['student', 'founder', 'mentor', 'investor', 'contractor'];
+      if (KNOWN.indexOf(role) === -1 && !domain) return;
 
       function applyDomain() {
         if (!domain) return;
@@ -1914,8 +2068,8 @@
         if (card) selectDomainCard(domain);
       }
 
-      if (role === 'student') {
-        selectRole('student');
+      if (KNOWN.indexOf(role) !== -1) {
+        selectRole(role);
         // renderWizardStep() has just drawn step 1; the domain cards live on a
         // later step but are present in the DOM throughout, so this is safe.
         applyDomain();
@@ -1987,6 +2141,41 @@
             goals: Array.from(document.querySelectorAll('.fnd-goal:checked')).map(c => c.value).join(',')
           }
         };
+      } else if (activeRole === 'investor') {
+        // Keys match ROLE_CONFIG[investor] in controllers/registerHubController.js.
+        payload = {
+          fullName: flatData.fullName,
+          email: flatData.email,
+          password: flatData.password,
+          confirmPassword: flatData.confirmPassword,
+          phone: document.getElementById('inv_mobile').value.trim(),
+          role: 'investor',
+          roleSpecificData: {
+            mobile: document.getElementById('inv_mobile').value.trim(),
+            firmName: document.getElementById('inv_firmName').value.trim(),
+            fundSize: document.getElementById('inv_fundSize').value.trim(),
+            investmentStage: document.getElementById('inv_investmentStage').value,
+            industryFocus: document.getElementById('inv_industryFocus').value.trim(),
+            website: document.getElementById('inv_website').value.trim()
+          }
+        };
+      } else if (activeRole === 'contractor') {
+        payload = {
+          fullName: flatData.fullName,
+          email: flatData.email,
+          password: flatData.password,
+          confirmPassword: flatData.confirmPassword,
+          phone: document.getElementById('con_mobile').value.trim(),
+          role: 'contractor',
+          roleSpecificData: {
+            mobile: document.getElementById('con_mobile').value.trim(),
+            skills: document.getElementById('con_skills').value.trim(),
+            experience: document.getElementById('con_experience').value.trim(),
+            portfolio: document.getElementById('con_portfolio').value.trim(),
+            hourlyRate: Number(document.getElementById('con_hourlyRate').value) || 0,
+            availability: document.getElementById('con_availability').value
+          }
+        };
       } else if (activeRole === 'mentor') {
         const checkedDomains = Array.from(document.querySelectorAll('.mentor-domain-check:checked')).map(el => el.value);
         payload = {
@@ -2033,9 +2222,11 @@
       }
 
       Swal.fire({
-        title: activeRole === 'mentor' ? 'Filing Mentor Application...'
-              : activeRole === 'founder' ? 'Filing Founder Application...'
-              : 'Filing Student Registration...',
+        title: ({ mentor: 'Filing Mentor Application...',
+                  founder: 'Filing Founder Application...',
+                  investor: 'Filing Investor Application...',
+                  contractor: 'Filing Contractor Application...' })[activeRole]
+              || 'Filing Student Registration...',
         html: 'Creating account & registering details...',
         allowOutsideClick: false,
         didOpen: () => { Swal.showLoading(); },

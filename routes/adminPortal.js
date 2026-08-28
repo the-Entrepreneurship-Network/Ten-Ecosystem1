@@ -62,6 +62,15 @@ router.post('/login', adminLoginLimiter, async (req, res) => {
       for (const role of ['student', 'hr', 'coordinator']) {
         if (req.session && req.session[role]) carried[role] = req.session[role];
       }
+      /*
+       * The ecosystem identity is two scalars rather than an object, so it
+       * needs carrying by name. Without this an admin signing in inside a
+       * founder's browser silently signs the founder out of their own portal —
+       * the same class of bug the loop above exists to prevent.
+       */
+      for (const key of ['ecosystemUserId', 'ecosystemUserRole', 'ecosystemUserEmail']) {
+        if (req.session && req.session[key]) carried[key] = req.session[key];
+      }
 
       const grant = () => {
         Object.assign(req.session, carried);

@@ -60,11 +60,17 @@ function attachEcosystemUser(req, res, next) {
   if (!session) return next();
 
   if (session.ecosystemUserId) {
-    req.user = {
-      _id: session.ecosystemUserId,
-      role: session.ecosystemUserRole || ROLES.FOUNDER
-    };
-    return next();
+    /*
+     * Both, or neither. The role used to default to FOUNDER when it was
+     * absent, so any session carrying an id and no role became a founder —
+     * a privilege grant handed out by a missing field. The login writes the
+     * pair together; a session with only half of it is broken, not a founder.
+     */
+    if (session.ecosystemUserRole) {
+      req.user = { _id: session.ecosystemUserId, role: session.ecosystemUserRole };
+      return next();
+    }
+    console.warn('[auth] session has ecosystemUserId with no role — ignoring it');
   }
 
   if (session.adminUser) {
