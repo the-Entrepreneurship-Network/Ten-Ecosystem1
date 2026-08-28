@@ -566,4 +566,131 @@ router.delete("/contributors/:id", requireHR, async (req, res) => {
   }
 });
 
+/* ── the joiner wizard, undone ────────────────────────────────────────────
+ *
+ * The wizard asks "new joiner or WhatsApp joiner?" and shows once. The WhatsApp
+ * answer back-dates the internship and credits every day before the student had
+ * a portal account as attended — so a mistaken tap hands out attendance nobody
+ * earned, and the student has no way back. This is the way back.
+ *
+ * Level 3 and up: Jr HR Manager and above, per the HR_ROSTER hierarchy. The
+ * associates below that see the students; they do not rewrite their start
+ * dates.
+ */
+const RESET_MIN_LEVEL = 3;
+
+function requireHRLevel(min) {
+  return (req, res, next) => {
+    // An admin is above the hierarchy, not inside it.
+    if (req.hrUser && req.hrUser.role === "admin") return next();
+    if (req.session && req.session.adminUser) return next();
+    const level = Number((req.hrUser && req.hrUser.level) || 0);
+    if (level >= min) return next();
+    return res.status(403).json({
+      success: false,
+      yourLevel: level || null,
+      message: `This needs HR level ${min} or above. Your account is level ${level || "unknown"}.`
+    });
+  };
+}
+
+/*
+ * The employee id travels as a QUERY value, never as a path segment.
+ * They look like TEN/DEVOPS/1003 — three slashes — and an id in the path means
+ * relying on %2F surviving every proxy in front of this app. nginx normalises
+ * it by default, which would turn this route into a 404 in production and work
+ * perfectly on a laptop.
+ */
+function wantedEmployeeId(req) {
+  return String((req.query && req.query.employeeId) || (req.body && req.body.employeeId) || "").trim();
+}
+
+/**
+ * GET /api/v2/hr/onboarding?employeeId=…
+ * What the student answered, and every time it has been reset. Readable by any
+ * HR — seeing the answer is not changing it.
+ */
+router.get("/onboarding", requireHR, async (req, res) => {
+  try {
+    const employeeId = wantedEmployeeId(req);
+    if (!employeeId) return res.status(400).json({ success: false, message: "Which student?" });
+    const student = await Student.findOne({ employeeId })
+      .select("name employeeId domain joinerType joinerTypeSelected onboardingPopupSeen "
+             + "internshipStartDate joiningDate calculatedAttendance onboardingResets createdAt")
+      .lean();
+    if (!student) return res.status(404).json({ success: false, message: "No student with that employee ID." });
+
+    res.json({
+      success: true,
+      canReset: Number((req.hrUser && req.hrUser.level) || 0) >= RESET_MIN_LEVEL
+                || !!(req.session && req.session.adminUser),
+      minLevel: RESET_MIN_LEVEL,
+      student: {
+        name: student.name, employeeId: student.employeeId, domain: student.domain,
+        joinerType: student.joinerType,
+        answered: !!student.joinerTypeSelected || !!student.onboardingPopupSeen,
+        internshipStartDate: student.internshipStartDate,
+        portalRegistered: student.joiningDate || student.createdAt,
+        calculatedAttendance: student.calculatedAttendance,
+        resets: (student.onboardingResets || []).slice(-10).reverse()
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+/**
+ * POST /api/v2/hr/onboarding/reset   { employeeId, reason }
+ *
+ * Only the joiner section goes back. Tasks, submissions, coins, certificates,
+ * documents and the attendance records themselves are untouched — a student who
+ * has done a month of work keeps every bit of it.
+ */
+router.post("/onboarding/reset", requireHR, requireHRLevel(RESET_MIN_LEVEL), async (req, res) => {
+  try {
+    const employeeId = wantedEmployeeId(req);
+    if (!employeeId) return res.status(400).json({ success: false, message: "Which student?" });
+    const student = await Student.findOne({ employeeId });
+    if (!student) return res.status(404).json({ success: false, message: "No student with that employee ID." });
+
+    const hr = req.hrUser || {};
+    const result = await require("../../services/onboardingReset").resetOnboarding(student, {
+      by: hr.name || hr.email || hr.username || "HR",
+      byLevel: hr.level || null,
+      reason: (req.body && req.body.reason) || ""
+    });
+    if (!result.ok) return res.status(400).json({ success: false, message: result.message });
+
+    /* Tell them. A student who is silently sent back to a wizard they finished
+       last week has no idea why it reappeared. */
+    try {
+      const EcosystemNotification = require("../../models/EcosystemNotification");
+      await EcosystemNotification.create({
+        userId: student._id,
+        type: "system_announcement",
+        title: "Your joining details need re-confirming",
+        message: "HR has reopened the joining questions on your portal. Open it and answer them once more — "
+               + "your tasks, submissions and marked attendance are all exactly as you left them.",
+        link: "/student-dashboard.html"
+      });
+    } catch (err) { console.error("[hr] onboarding reset notice failed:", err.message); }
+
+    res.json({
+      success: true,
+      message: `${student.name || student.employeeId} will see the joining questions again on their next visit.`,
+      previous: result.previous,
+      student: {
+        employeeId: result.student.employeeId,
+        joinerType: result.student.joinerType,
+        internshipStartDate: result.student.internshipStartDate,
+        calculatedAttendance: result.student.calculatedAttendance,
+        resets: (result.student.onboardingResets || []).length
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 module.exports = router;

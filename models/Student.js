@@ -116,6 +116,27 @@ const studentsSchema = new mongoose.Schema({
     joinerTypeSelected:   { type: Boolean, default: false },
     joinerType:           { type: String, enum: ['new', 'whatsapp', null], default: null },
 
+    /*
+     * Every time HR has sent this student back through the joiner wizard.
+     *
+     * A student who picks "WhatsApp joiner" by mistake cannot undo it — the
+     * choice back-dates their internship and credits attendance they did not
+     * mark. HR (level 3 and up) resets it, the wizard shows once more, and
+     * this row says who did it and what the wrong answer had been. Kept as
+     * history rather than a flag so a second reset is simply a second row.
+     */
+    onboardingResets: [{
+        at:       { type: Date, default: Date.now },
+        by:       { type: String, default: "" },   // HR name or email
+        byLevel:  { type: Number, default: null },
+        reason:   { type: String, default: "" },
+        previous: {
+            joinerType:          { type: String, default: null },
+            internshipStartDate: { type: Date,   default: null },
+            calculatedAttendance:{ type: Number, default: null }
+        }
+    }],
+
     employeeIdOverride:  { type: String, default: null },
 
     // For a WhatsApp joiner this is deliberately EARLIER than joiningDate:
