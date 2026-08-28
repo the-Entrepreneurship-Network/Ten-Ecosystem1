@@ -674,12 +674,40 @@ async function registerUser(req, res) {
 
     else if (role === ROLES.INVESTOR) {
       // Create investor_profiles
+      /*
+       * The investor's answers used to land almost nowhere. investorType was
+       * hardcoded 'vc' whoever signed up, so every card in the directory read
+       * "VC" — angels included. stagePreference and sectorFocus were never
+       * written at all, which is why no card carried a stage or sector badge
+       * and the directory's stage filter matched nobody. The stage and the
+       * industry were pasted into a thesis sentence instead: readable, and
+       * unqueryable. Each answer now goes in the field the directory reads.
+       */
+      const STAGES = ['pre_seed', 'seed', 'series_a', 'series_b'];
+      const investorStages = String(roleSpecificData.investmentStages || '')
+        .split(',').map((v) => v.trim()).filter((v) => STAGES.includes(v));
+      const sectorFocus = String(roleSpecificData.industryFocus || '')
+        .split(',').map((v) => v.trim()).filter(Boolean).slice(0, 12);
+      const TYPES = ['angel', 'vc', 'family_office', 'corporate', 'accelerator', 'govt_fund', 'individual'];
+      const investorType = TYPES.includes(roleSpecificData.investorType)
+        ? roleSpecificData.investorType : 'individual';
+
       await InvestorProfile.create({
         userId: user._id,
         memberId: genMemberId,
         fundName: roleSpecificData.firmName || "",
-        investorType: 'vc',
-        thesis: `Investing in ${roleSpecificData.industryFocus || "tech startups"} at ${roleSpecificData.investmentStage || "seed"} stage.`,
+        investorType,
+        stagePreference: investorStages,
+        sectorFocus,
+        investmentRange: {
+            min: Math.max(0, Number(roleSpecificData.ticketMin) || 0),
+            max: Math.max(0, Number(roleSpecificData.ticketMax) || 0),
+            currency: 'INR'
+        },
+        contactEmail: trimmedEmail,
+        thesis: sectorFocus.length
+            ? `Investing in ${sectorFocus.join(', ')}${investorStages.length ? ` at ${investorStages.map((v) => v.replace('_', ' ')).join(', ')}` : ''}.`
+            : '',
         /*
          * PENDING, not approved.
          *

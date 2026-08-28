@@ -241,3 +241,95 @@ describe('an inbox is your own conversations, not everyone\'s', () => {
     expect(source).toContain('router.get("/admin/rooms"');
   });
 });
+
+describe('the four ecosystem roles have an identity at all', () => {
+  const ci = require('../../services/chatIdentity');
+  const fs = require('fs');
+  const path = require('path');
+
+  const SESSION = {
+    ecosystemUserId: '65f1c0ffee0000000000abcd',
+    ecosystemUserRole: 'founder',
+    ecosystemUserEmail: 'A.Founder@Acme.com',
+    ecosystemUserName: 'A Founder'
+  };
+
+  /*
+   * identityFromSession returned null for founders, investors, contractors and
+   * mentors, so everything reading through it — the notification orb, the
+   * notification feed, the chat inbox, every message route — answered 401 to a
+   * correctly signed-in account. All four portals carry a Messages link.
+   */
+  it.each(['founder', 'investor', 'contractor', 'mentor'])('identifies a signed-in %s', (role) => {
+    const me = ci.identityFromSession(Object.assign({}, SESSION, { ecosystemUserRole: role }));
+    expect(me).not.toBeNull();
+    expect(me.role).toBe(role);
+    expect(me.id).toBe('A.Founder@Acme.com');
+  });
+
+  it('matches the same person under either spelling', () => {
+    const me = ci.identityFromSession(SESSION);
+    // Conversations and message rows may carry either the email or the id.
+    expect(ci.aliasSet(me).has('a.founder@acme.com')).toBe(true);
+    expect(ci.aliasSet(me).has('65f1c0ffee0000000000abcd')).toBe(true);
+  });
+
+  it('an admin session still outranks an ecosystem one on the same browser', () => {
+    const me = ci.identityFromSession(Object.assign({ adminUser: { username: 'tenadmin' } }, SESSION));
+    expect(me.role).toBe('admin');
+  });
+
+  it('declines a half-written session rather than inventing an identity', () => {
+    expect(ci.identityFromSession({ ecosystemUserId: 'x' })).toBeNull();
+    expect(ci.identityFromSession({ ecosystemUserRole: 'founder' })).toBeNull();
+  });
+
+  it('a message from one of them passes model validation', () => {
+    // senderRole is a required enum; without these four the first message any
+    // of them sent was rejected.
+    const src = fs.readFileSync(path.join(__dirname, '../../models/Message.js'), 'utf8');
+    ['founder', 'investor', 'contractor', 'mentor']
+      .forEach((r) => expect(src).toContain('"' + r + '"'));
+  });
+});
+
+describe('notifications are filed under a type that exists', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const root = path.join(__dirname, '../..');
+  const enumSrc = fs.readFileSync(path.join(root, 'models/EcosystemNotification.js'), 'utf8');
+
+  /** Every type literal near an EcosystemNotification.create, either quoting. */
+  const typesUsedIn = (rel) => {
+    const src = fs.readFileSync(path.join(root, rel), 'utf8');
+    const out = [];
+    for (let i = src.indexOf('EcosystemNotification.create'); i > -1;
+         i = src.indexOf('EcosystemNotification.create', i + 1)) {
+      const m = /type:\s*["']([a-z_]+)["']/.exec(src.slice(i, i + 600));
+      if (m) out.push(m[1]);
+    }
+    return out;
+  };
+
+  /*
+   * routes/founderOS.js sent the mentor booking notification as type 'info',
+   * which is not in the enum. Every one of them threw ValidationError into a
+   * catch, so no mentor was ever told about a booking while the founder was
+   * shown "Request sent".
+   */
+  it.each([
+    ['routes/founderOS.js'],
+    ['routes/v2/investorDesk.js'],
+    ['routes/v2/hr.js']
+  ])('%s only sends types the schema admits', (rel) => {
+    const used = typesUsedIn(rel);
+    expect(used.length).toBeGreaterThan(0);
+    used.forEach((t) => expect(enumSrc).toContain("'" + t + "'"));
+  });
+
+  it('the mentor is actually told about a booking', () => {
+    const src = fs.readFileSync(path.join(root, 'routes/founderOS.js'), 'utf8');
+    expect(src).toContain("type: 'mentor_request'");
+    expect(src).not.toContain("type: 'info'");
+  });
+});

@@ -216,6 +216,7 @@ tr:last-child td{border-bottom:0;}
 
     <div class="grp">Capital</div>
     <button data-v="fundraising"><span class="ic">&#9650;</span> Fundraising <span class="cnt" id="cntRounds">0</span></button>
+    <button data-v="investors"><span class="ic">&#9679;</span> Investor interest <span class="cnt" id="cntInterest">0</span></button>
     <button data-v="dataroom"><span class="ic">&#9707;</span> Data room <span class="cnt" id="cntDocs">0</span></button>
 
     <div class="grp">Support</div>
@@ -366,6 +367,18 @@ tr:last-child td{border-bottom:0;}
       <div id="roundsList"></div>
     </section>
 
+    <!-- ── INVESTOR INTEREST ────────────────────────────────────────────── -->
+    <section class="view" id="v-investors">
+      <div class="panel">
+        <h2>Who has asked about you</h2>
+        <p class="lead">
+          An investor who backs your stage found your startup and asked to talk. They are waiting on
+          your answer, and until you give one they cannot see whether you read it.
+        </p>
+        <div id="interestList"><p class="empty">Loading&hellip;</p></div>
+      </div>
+    </section>
+
     <!-- ── DATA ROOM ────────────────────────────────────────────────────── -->
     <section class="view" id="v-dataroom">
       <div class="panel-head">
@@ -423,7 +436,7 @@ tr:last-child td{border-bottom:0;}
 "use strict";
 
 var API = '/api/founder-os';
-var DATA = { jobs: [], apps: [], rounds: [], docs: [], team: [], mentors: [], bookings: [], stages: [] };
+var DATA = { jobs: [], apps: [], rounds: [], docs: [], team: [], mentors: [], bookings: [], stages: [], interest: [] };
 var ME = null;
 
 /* ── plumbing ──────────────────────────────────────────────────────────── */
@@ -464,7 +477,10 @@ function toast(msg, kind){
  * leaving a screen of empty panels with no explanation.
  */
 async function api(path, opts){
-  var res = await fetch(API + path, Object.assign({
+  // A path that already starts with /api/ is a whole URL — the investor desk
+  // lives at /api/v2/investor-desk and would otherwise be prefixed into a 404.
+  var url = path.indexOf('/api/') === 0 ? path : API + path;
+  var res = await fetch(url, Object.assign({
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' }
   }, opts || {}));
@@ -488,6 +504,7 @@ var TITLES = {
   pipeline:    ['Hiring pipeline', 'Candidates, stage by stage'],
   talent:      ['Talent search', "Every intern on TEN"],
   fundraising: ['Fundraising', 'Rounds and the investors in them'],
+  investors:   ['Investor interest', 'Investors who asked to talk to you'],
   dataroom:    ['Data room', 'Documents, private until you share them'],
   team:        ['Team', 'Who is building this'],
   mentors:     ['Mentors', 'Book time with an approved mentor']
@@ -512,7 +529,8 @@ function go(v){
   var loaders = {
     overview: loadOverview, profile: loadProfile, jobs: loadJobs,
     pipeline: loadPipeline, talent: function(){ if(!LOADED.talent) loadTalent(1); },
-    fundraising: loadRounds, dataroom: loadDocs, team: loadTeam, mentors: loadMentors
+    fundraising: loadRounds, investors: loadInterest,
+    dataroom: loadDocs, team: loadTeam, mentors: loadMentors
   };
   if (loaders[v]) { loaders[v](); LOADED[v] = true; }
 }
@@ -1296,6 +1314,149 @@ async function loadMentors(){
         '</div>';
       }).join('') + '</div>'
     : '<div class="panel"><p class="empty"><span class="ic">&#9734;</span>No approved mentors are available right now.</p></div>';
+}
+
+/* ── investor interest ─────────────────────────────────────────────────── */
+
+var INTEREST_API = '/api/v2/investor-desk';
+
+var STAGE_LABEL = { pre_seed:'Pre-seed', seed:'Seed', series_a:'Series A', series_b:'Series B' };
+var TYPE_LABEL  = {
+  angel:'Angel', vc:'Venture fund', family_office:'Family office', corporate:'Corporate',
+  accelerator:'Accelerator', govt_fund:'Government fund', individual:'Individual'
+};
+
+function ticketLine(t){
+  if (!t || (!t.min && !t.max)) return '';
+  if (t.min && t.max) return money(t.min) + ' – ' + money(t.max) + ' a cheque';
+  return 'Up to ' + money(t.max || t.min) + ' a cheque';
+}
+
+/**
+ * The founder's side of investor interest.
+ *
+ * Both halves of this existed on the server and neither had a caller: an
+ * investor could register interest, the founder got a notification, clicked it,
+ * landed here — and found no screen showing the request and no way to answer
+ * it. The investor saw "pending" forever.
+ */
+async function loadInterest(){
+  var d = await api(INTEREST_API + '/inbound');
+  if (!d || !d.success) return;
+
+  DATA.interest = d.interests || [];
+  var waiting = DATA.interest.filter(function(i){ return i.status === 'pending'; });
+  document.getElementById('cntInterest').textContent = waiting.length;
+
+  if (!DATA.interest.length) {
+    document.getElementById('interestList').innerHTML =
+      '<p class="empty">No investor has asked about you yet. A complete startup profile is what they ' +
+      'search on — the fuller it is, the more often you turn up.</p>';
+    return;
+  }
+
+  document.getElementById('interestList').innerHTML = DATA.interest.map(function(i){
+    var inv = i.investor || {};
+    var pill = { pending:'gold', accepted:'green', declined:'red', meeting_scheduled:'blue', closed:'grey' }[i.status] || 'grey';
+    var badges = []
+      .concat(inv.investorType ? ['<span class="pill grey">' + esc(TYPE_LABEL[inv.investorType] || inv.investorType) + '</span>'] : [])
+      .concat((inv.stagePreference || []).map(function(v){
+        return '<span class="pill violet">' + esc(STAGE_LABEL[v] || v) + '</span>'; }))
+      .concat((inv.sectorFocus || []).slice(0, 3).map(function(v){
+        return '<span class="pill blue">' + esc(v) + '</span>'; }));
+
+    var links = []
+      .concat(inv.website ? ['<a href="' + esc(inv.website) + '" target="_blank" rel="noopener" style="color:var(--gold)">Website</a>'] : [])
+      .concat(inv.linkedinUrl ? ['<a href="' + esc(inv.linkedinUrl) + '" target="_blank" rel="noopener" style="color:var(--gold)">LinkedIn</a>'] : []);
+
+    return '<div class="card" style="margin-bottom:14px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">' +
+        '<div>' +
+          '<div style="font-size:15px;font-weight:800;">' +
+            esc(inv.fundName || i.investorName || 'An investor') +
+            (inv.verified ? ' <span class="pill green" style="vertical-align:middle;">Verified</span>' : '') +
+          '</div>' +
+          '<div style="font-size:12px;color:var(--muted);margin-top:3px;">' +
+            'Asked about <b>' + esc(i.startupName) + '</b> · ' + when(i.createdAt) + '</div>' +
+        '</div>' +
+        '<span class="pill ' + pill + '">' + esc(String(i.status).replace('_', ' ')) + '</span>' +
+      '</div>' +
+      (badges.length ? '<div style="margin-top:11px;display:flex;gap:6px;flex-wrap:wrap;">' + badges.join('') + '</div>' : '') +
+      (ticketLine(inv.ticket) ? '<div style="margin-top:9px;font-size:12px;color:var(--muted);">' + esc(ticketLine(inv.ticket)) + '</div>' : '') +
+      (i.message ? '<div style="margin-top:11px;font-size:12.5px;line-height:1.55;border-left:2px solid var(--gold);padding-left:11px;">' + esc(i.message) + '</div>' : '') +
+      (links.length ? '<div style="margin-top:10px;font-size:11.5px;display:flex;gap:14px;">' + links.join('') + '</div>' : '') +
+      (i.founderNote ? '<div style="margin-top:11px;font-size:11.5px;color:var(--muted);"><b>Your note:</b> ' + esc(i.founderNote) + '</div>' : '') +
+      (i.meetingAt ? '<div style="margin-top:6px;font-size:11.5px;color:var(--blue);">Meeting: ' + when(i.meetingAt) + '</div>' : '') +
+      '<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;">' +
+        (i.status === 'pending'
+          ? '<button class="btn sm" onclick="answerInterest(\'' + i._id + '\',\'accepted\')">Interested</button>' +
+            '<button class="btn sm ghost" onclick="scheduleInterest(\'' + i._id + '\')">Propose a meeting</button>' +
+            '<button class="btn sm ghost danger" onclick="answerInterest(\'' + i._id + '\',\'declined\')">Not now</button>'
+          : i.status === 'closed' ? ''
+          : '<button class="btn sm ghost" onclick="answerInterest(\'' + i._id + '\',\'closed\')">Close this thread</button>') +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+async function patchInterest(id, body, done){
+  var d = await api(INTEREST_API + '/interests/' + id, { method:'PATCH', body: JSON.stringify(body) });
+  if (d && d.success) { toast(done); loadInterest(); return true; }
+  return false;
+}
+
+function answerInterest(id, status){
+  // Declining is the one answer worth a sentence — an investor told only "no"
+  // learns nothing, and a reason is what gets the next conversation started.
+  if (status === 'accepted') {
+    sheet('Tell them you are interested',
+      '<div class="field"><label>A note back (optional)</label>' +
+      '<textarea name="founderNote" placeholder="What you are raising, and what you would want from them."></textarea></div>',
+      [
+        { label:'Cancel', ghost:true, fn: closeSheet },
+        { label:'Send', fn: async function(){
+          var v = sheetValues();
+          if (await patchInterest(id, { status:'accepted', founderNote: v.founderNote }, 'They have been told.')) closeSheet();
+        } }
+      ]);
+    return;
+  }
+  if (status === 'declined') {
+    sheet('Decline this approach',
+      '<div class="field"><label>Reason (optional, they will see it)</label>' +
+      '<textarea name="founderNote" placeholder="Not raising right now — worth talking in Q3."></textarea></div>',
+      [
+        { label:'Cancel', ghost:true, fn: closeSheet },
+        { label:'Decline', danger:true, fn: async function(){
+          var v = sheetValues();
+          if (await patchInterest(id, { status:'declined', founderNote: v.founderNote }, 'Declined.')) closeSheet();
+        } }
+      ]);
+    return;
+  }
+  patchInterest(id, { status: status }, 'Updated.');
+}
+
+function scheduleInterest(id){
+  // datetime-local wants LOCAL "YYYY-MM-DDTHH:mm"; toISOString() would shift
+  // the default by the UTC offset.
+  var t = new Date(Date.now() + 3 * 24 * 3600 * 1000);
+  var pad = function(n){ return String(n).padStart(2, '0'); };
+  var local = t.getFullYear() + '-' + pad(t.getMonth()+1) + '-' + pad(t.getDate()) +
+              'T' + pad(t.getHours()) + ':' + pad(t.getMinutes());
+
+  sheet('Propose a meeting',
+    '<div class="field"><label>When *</label><input name="meetingAt" type="datetime-local" value="' + local + '"></div>' +
+    '<div class="field"><label>Note</label><textarea name="founderNote" placeholder="A call link, or what you would like to cover."></textarea></div>',
+    [
+      { label:'Cancel', ghost:true, fn: closeSheet },
+      { label:'Propose', fn: async function(){
+        var v = sheetValues();
+        if (!v.meetingAt) { toast('Pick a date and time.', 'err'); return; }
+        if (await patchInterest(id, { status:'meeting_scheduled', meetingAt: v.meetingAt, founderNote: v.founderNote },
+                                'Meeting proposed.')) closeSheet();
+      } }
+    ]);
 }
 
 function openBooking(mentorId, mentorName){

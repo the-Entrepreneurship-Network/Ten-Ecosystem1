@@ -843,20 +843,47 @@
                 <input type="text" id="inv_firmName" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none" placeholder="Kite Capital, or your own name">
               </div>
               <div>
-                <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Fund size <span class="text-red-400">*</span></label>
-                <input type="text" id="inv_fundSize" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none" placeholder="e.g. ₹5 Crore, or N/A">
-              </div>
-              <div>
-                <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Stage preference <span class="text-red-400">*</span></label>
-                <select id="inv_investmentStage" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none"><option value="">Select one</option><option>Pre-seed</option><option>Seed</option><option>Series A</option><option>Series B</option><option>Growth</option></select>
+                <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">You invest as <span class="text-red-400">*</span></label>
+                <select id="inv_investorType" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none">
+                  <option value="">Select one</option>
+                  <option value="angel">Angel investor</option>
+                  <option value="vc">Venture fund</option>
+                  <option value="family_office">Family office</option>
+                  <option value="corporate">Corporate / strategic</option>
+                  <option value="accelerator">Accelerator</option>
+                  <option value="govt_fund">Government fund</option>
+                  <option value="individual">Individual</option>
+                </select>
               </div>
               <div>
                 <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Industry focus <span class="text-red-400">*</span></label>
                 <input type="text" id="inv_industryFocus" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none" placeholder="SaaS, FinTech, AI">
               </div>
               <div>
+                <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Typical cheque &mdash; from (&#8377;)</label>
+                <input type="number" min="0" id="inv_ticketMin" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none" placeholder="500000">
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Typical cheque &mdash; up to (&#8377;)</label>
+                <input type="number" min="0" id="inv_ticketMax" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none" placeholder="5000000">
+              </div>
+              <div class="md:col-span-2">
                 <label class="block text-[11px] font-semibold text-slate-400 mb-1.5">Website</label>
                 <input type="url" id="inv_website" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2.5 text-sm text-slate-100 focus:border-[#D4AF37] outline-none" placeholder="https://">
+              </div>
+            </div>
+            <!-- Stages are a set, not a choice: an investor who writes seed
+                 cheques usually writes pre-seed ones too. This used to be a
+                 single select offering "Growth", which is not one of the four
+                 stages the schema stores or the directory filters on, so
+                 picking it saved nothing at all. -->
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-400 mb-2">Stages you invest at <span class="text-red-400">*</span></label>
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <label class="flex items-center gap-2 text-xs text-slate-300 bg-slate-950/40 border border-slate-800 rounded-lg px-3 py-2.5 cursor-pointer hover:border-[#D4AF37]/50 transition"><input type="checkbox" class="inv-stage accent-amber-500" value="pre_seed"> Pre-seed</label>
+                <label class="flex items-center gap-2 text-xs text-slate-300 bg-slate-950/40 border border-slate-800 rounded-lg px-3 py-2.5 cursor-pointer hover:border-[#D4AF37]/50 transition"><input type="checkbox" class="inv-stage accent-amber-500" value="seed"> Seed</label>
+                <label class="flex items-center gap-2 text-xs text-slate-300 bg-slate-950/40 border border-slate-800 rounded-lg px-3 py-2.5 cursor-pointer hover:border-[#D4AF37]/50 transition"><input type="checkbox" class="inv-stage accent-amber-500" value="series_a"> Series A</label>
+                <label class="flex items-center gap-2 text-xs text-slate-300 bg-slate-950/40 border border-slate-800 rounded-lg px-3 py-2.5 cursor-pointer hover:border-[#D4AF37]/50 transition"><input type="checkbox" class="inv-stage accent-amber-500" value="series_b"> Series B</label>
               </div>
             </div>
             <p class="text-[11px] text-slate-500 leading-relaxed">Your thesis and focus are what founders
@@ -873,7 +900,7 @@
                   <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400 w-1/3">Full Name</th><td id="inv_sumName" class="py-2 text-slate-200 font-semibold">-</td></tr>
                   <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400">Email</th><td id="inv_sumEmail" class="py-2 text-slate-200 font-semibold">-</td></tr>
                   <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400">Firm</th><td id="inv_sumFirm" class="py-2 text-slate-200 font-semibold">-</td></tr>
-                  <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400">Stage &amp; fund</th><td id="inv_sumStage" class="py-2 text-slate-200 font-semibold">-</td></tr>
+                  <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400">Stages &amp; cheque</th><td id="inv_sumStage" class="py-2 text-slate-200 font-semibold">-</td></tr>
                   <tr class="border-b border-slate-800/50"><th class="py-2 text-slate-400">Focus</th><td id="inv_sumFocus" class="py-2 text-slate-200 font-semibold">-</td></tr>
                 </tbody>
               </table>
@@ -1701,6 +1728,53 @@
         return true;
       }
 
+      /*
+       * Without these two the wizard falls through to the student education
+       * checks below and stops an investor at step 2 with "Location Missing" —
+       * a screen with no country field on it. Opening the two roles without
+       * this is opening a door onto a wall.
+       */
+      if (activeRole === 'investor') {
+        if (step === 2) {
+          const need = [['inv_mobile','Mobile'],['inv_firmName','Firm name'],
+                        ['inv_investorType','Investor type'],['inv_industryFocus','Industry focus']];
+          for (const [id, label] of need) {
+            if (!document.getElementById(id).value.trim()) {
+              showError(label + ' required', 'Please fill in the ' + label.toLowerCase() + '.');
+              return false;
+            }
+          }
+          if (!document.querySelectorAll('.inv-stage:checked').length) {
+            showError('Pick at least one stage', 'Founders filter the directory by stage, so an empty answer hides you from all of them.');
+            return false;
+          }
+          const lo = Number(document.getElementById('inv_ticketMin').value) || 0;
+          const hi = Number(document.getElementById('inv_ticketMax').value) || 0;
+          if (lo && hi && hi < lo) {
+            showError('Check the cheque size', 'The upper figure is smaller than the lower one.');
+            return false;
+          }
+        }
+        return true;
+      }
+
+      if (activeRole === 'contractor') {
+        if (step === 2) {
+          const need = [['con_mobile','Mobile'],['con_skills','Skills'],['con_experience','Experience']];
+          for (const [id, label] of need) {
+            if (!document.getElementById(id).value.trim()) {
+              showError(label + ' required', 'Please fill in the ' + label.toLowerCase() + '.');
+              return false;
+            }
+          }
+          if (!document.getElementById('con_availability').value) {
+            showError('Availability required', 'Tell us when you can start.');
+            return false;
+          }
+        }
+        return true;
+      }
+
       if (activeRole === 'mentor') {
         if (step === 2) {
           const company = document.getElementById('mentor_company').value.trim();
@@ -1978,7 +2052,15 @@
       document.getElementById('inv_sumName').textContent = v('reg_fullName');
       document.getElementById('inv_sumEmail').textContent = v('reg_email');
       document.getElementById('inv_sumFirm').textContent = v('inv_firmName');
-      document.getElementById('inv_sumStage').textContent = v('inv_investmentStage') + ' \u00b7 ' + v('inv_fundSize');
+      const invStages = Array.from(document.querySelectorAll('.inv-stage:checked'))
+        .map(el => el.parentNode.textContent.trim());
+      const lo = Number(document.getElementById('inv_ticketMin').value) || 0;
+      const hi = Number(document.getElementById('inv_ticketMax').value) || 0;
+      const cheque = (lo || hi)
+        ? '\u20b9' + lo.toLocaleString('en-IN') + ' \u2013 \u20b9' + hi.toLocaleString('en-IN')
+        : 'Not stated';
+      document.getElementById('inv_sumStage').textContent =
+        (invStages.length ? invStages.join(', ') : '-') + ' \u00b7 ' + cheque;
       document.getElementById('inv_sumFocus').textContent = v('inv_industryFocus');
     }
 
@@ -2153,9 +2235,12 @@
           roleSpecificData: {
             mobile: document.getElementById('inv_mobile').value.trim(),
             firmName: document.getElementById('inv_firmName').value.trim(),
-            fundSize: document.getElementById('inv_fundSize').value.trim(),
-            investmentStage: document.getElementById('inv_investmentStage').value,
+            investorType: document.getElementById('inv_investorType').value,
+            // A set, sent as a comma list the way the mentor form sends domains.
+            investmentStages: Array.from(document.querySelectorAll('.inv-stage:checked')).map(el => el.value).join(','),
             industryFocus: document.getElementById('inv_industryFocus').value.trim(),
+            ticketMin: Number(document.getElementById('inv_ticketMin').value) || 0,
+            ticketMax: Number(document.getElementById('inv_ticketMax').value) || 0,
             website: document.getElementById('inv_website').value.trim()
           }
         };

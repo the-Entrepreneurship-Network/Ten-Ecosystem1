@@ -674,11 +674,18 @@ router.post('/bookings', founderOnly, h(async (req, res) => {
   // Tell the mentor. A booking nobody is told about is a calendar entry for one.
   try {
     const EcosystemNotification = require('../models/EcosystemNotification');
+    /*
+     * 'info' is not one of EcosystemNotification's types, so every one of
+     * these throw ValidationError, got swallowed by the catch below, and the
+     * mentor was never told about a single booking. The founder saw
+     * "Request sent"; nothing had been sent.
+     */
     await EcosystemNotification.create({
       userId: b.mentorId,
+      type: 'mentor_request',
       title: 'New session request',
       message: `A founder has requested a ${booking.durationMins}-minute session: "${booking.topic}".`,
-      type: 'info'
+      link: '/mentor-dashboard.html'
     });
   } catch (err) {
     console.error('[founderOS] mentor notification failed:', err.message);

@@ -122,6 +122,32 @@ function identityFromSession(session) {
         };
     }
 
+    /*
+     * Founder, investor, contractor and mentor.
+     *
+     * This branch did not exist, so identityFromSession returned null for all
+     * four — and everything that reads through it answered 401 to a correctly
+     * signed-in account: the notification orb, the notification feed, the chat
+     * inbox and every message route. Four portals with a Messages link in the
+     * sidebar and no way for any of them to open it.
+     *
+     * The email is canonical, matching the HR and coordinator branches above,
+     * with the user id as an alias. There is no legacy spelling to preserve
+     * here precisely because none of these accounts could ever send a message.
+     */
+    if (s.ecosystemUserId && s.ecosystemUserRole) {
+        const email = normalize(s.ecosystemUserEmail);
+        const id = email || normalize(s.ecosystemUserId);
+        if (!id) return null;
+        return {
+            role: normalize(s.ecosystemUserRole),
+            id,
+            aliases: uniq([email, normalize(s.ecosystemUserId)]),
+            name: normalize(s.ecosystemUserName) || email || id,
+            domain: ""
+        };
+    }
+
     if (s.student) {
         const employeeId = normalize(s.student.employeeId);
         if (!employeeId) return null;

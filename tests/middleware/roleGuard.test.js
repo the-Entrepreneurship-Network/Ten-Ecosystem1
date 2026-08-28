@@ -116,10 +116,12 @@ describe('middleware/roleGuard', () => {
       // and survives an admin signing in inside the same browser
       const admin = require('fs').readFileSync(
         require('path').join(__dirname, '../../routes/adminPortal.js'), 'utf8');
-      expect(admin).toContain("for (const key of ['ecosystemUserId', 'ecosystemUserRole', 'ecosystemUserEmail'])");
-      // The mentor endpoints scope by email; without this a signed-in mentor
+      expect(admin).toContain("'ecosystemUserId', 'ecosystemUserRole', 'ecosystemUserEmail', 'ecosystemUserName'");
+      // The mentor endpoints scope by email, and chatIdentity identifies these
+      // accounts by email and name. Without the email a signed-in mentor
       // resolves to '' and is 403'd on their own profile.
       expect(server).toContain('req.session.ecosystemUserEmail = user.email;');
+      expect(server).toContain("req.session.ecosystemUserName = user.fullName || '';");
     });
 
     it.each([

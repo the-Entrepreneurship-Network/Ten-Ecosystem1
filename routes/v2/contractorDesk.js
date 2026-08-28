@@ -86,6 +86,30 @@ async function notifyHR(title, message, link, data) {
     }
 }
 
+/**
+ * Tell the contractor. Never fatal.
+ *
+ * Every HR decision on this desk was silent: a project was assigned, a
+ * milestone approved, a timesheet marked paid — and the contractor found out by
+ * opening the dashboard and noticing. The one direction that was wired ran the
+ * other way, to HR.
+ */
+async function notifyContractor(userId, type, title, message, data) {
+    if (!userId) return;
+    try {
+        await EcosystemNotification.create({
+            userId,
+            type,
+            title,
+            message,
+            link: '/contractor-dashboard.html',
+            data: data || {}
+        });
+    } catch (err) {
+        console.error('[contractor] contractor notification failed:', err.message);
+    }
+}
+
 // ── Contractor side ─────────────────────────────────────────────────────────
 
 /**
@@ -134,6 +158,54 @@ router.get('/overview', onlyContractor, async (req, res) => {
     } catch (err) {
         console.error('[contractor] overview failed:', err.message);
         res.status(500).json({ success: false, message: 'Could not load your workspace.' });
+    }
+});
+
+/**
+ * PATCH /api/v2/contractor/profile — the two things a contractor keeps current.
+ *
+ * The dashboard's availability dropdown popped "Availability Preference
+ * Updated" and wrote nothing, so HR assigning work saw whatever was typed at
+ * signup forever. The rate is deliberately NOT settable here: it is what TEN
+ * pays, agreed with HR, and a contractor who could raise their own rate between
+ * logging hours and having them approved would be billing against a number
+ * nobody agreed to.
+ */
+router.patch('/profile', onlyContractor, async (req, res) => {
+    try {
+        const body = req.body || {};
+        const updates = {};
+
+        if (body.availability !== undefined) {
+            const AVAILABILITY = ['Immediately', 'In 2 weeks', 'In 1 month', 'Not available'];
+            const value = String(body.availability || '').trim();
+            if (!AVAILABILITY.includes(value)) {
+                return res.status(400).json({ success: false, message: 'Pick one of the listed availabilities.' });
+            }
+            updates.availability = value;
+        }
+
+        if (body.skills !== undefined) {
+            updates.skills = String(body.skills || '')
+                .split(',').map((v) => v.trim()).filter(Boolean).slice(0, 30);
+        }
+
+        if (!Object.keys(updates).length) {
+            return res.status(400).json({ success: false, message: 'Nothing to change.' });
+        }
+
+        const profile = await ContractorProfile.findOneAndUpdate(
+            { userId: req.user._id }, { $set: updates }, { new: true }
+        ).lean();
+        if (!profile) return res.status(404).json({ success: false, message: 'No contractor profile found.' });
+
+        res.json({
+            success: true,
+            profile: { availability: profile.availability, skills: profile.skills || [] }
+        });
+    } catch (err) {
+        console.error('[contractor] profile update failed:', err.message);
+        res.status(500).json({ success: false, message: 'Could not save that.' });
     }
 });
 
@@ -271,10 +343,65 @@ router.post('/projects', staffOnly, async (req, res) => {
             createdBy: String((req.user && req.user._id) || '')
         });
 
+        await notifyContractor(
+            project.contractorId,
+            'project_assigned',
+            'A project has been assigned to you',
+            `${project.title}${project.client ? ' for ' + project.client : ''}`
+                + `${project.dueAt ? ' — due ' + project.dueAt.toDateString() : ''}.`,
+            { projectId: String(project._id) }
+        );
+
         res.json({ success: true, project });
     } catch (err) {
         console.error('[contractor] project create failed:', err.message);
         res.status(500).json({ success: false, message: 'Could not create that project.' });
+    }
+});
+
+/**
+ * GET /api/v2/contractor/hr/contractors — who HR can assign work to.
+ *
+ * Without this the assignment form had no list to choose from, so no project
+ * could be created — and a contractor with no project can submit no milestone
+ * and log no time. Every screen on the contractor desk was empty by
+ * construction, and would have stayed that way however many contractors signed
+ * up.
+ */
+router.get('/hr/contractors', staffOnly, async (req, res) => {
+    try {
+        const rows = await ContractorProfile.find({})
+            .select('userId name email skills hourlyRate availability verificationStatus')
+            .sort({ verificationStatus: 1, name: 1 })
+            .limit(300)
+            .lean();
+
+        const ids = rows.map((r) => r.userId).filter(Boolean);
+        const open = ids.length
+            ? await ContractorProject.aggregate([
+                { $match: { contractorId: { $in: ids }, status: { $in: ['active', 'pending_review', 'on_hold'] } } },
+                { $group: { _id: '$contractorId', n: { $sum: 1 } } }
+            ])
+            : [];
+        const openBy = new Map(open.map((o) => [String(o._id), o.n]));
+
+        res.json({
+            success: true,
+            contractors: rows.map((r) => ({
+                id: String(r.userId),
+                name: r.name || '',
+                email: r.email || '',
+                skills: r.skills || [],
+                hourlyRate: r.hourlyRate || 0,
+                availability: r.availability || '',
+                verified: r.verificationStatus === 'approved',
+                verificationStatus: r.verificationStatus || 'pending',
+                openProjects: openBy.get(String(r.userId)) || 0
+            }))
+        });
+    } catch (err) {
+        console.error('[contractor] roster failed:', err.message);
+        res.status(500).json({ success: false, message: 'Could not load the contractor roster.' });
     }
 });
 
@@ -325,6 +452,19 @@ router.patch('/hr/milestones/:id', staffOnly, async (req, res) => {
             await ContractorProject.findByIdAndUpdate(milestone.projectId, { status: 'active' });
         }
 
+        if (status !== 'under_review') {
+            await notifyContractor(
+                milestone.contractorId,
+                'work_reviewed',
+                status === 'approved' ? 'Your deliverable was approved' : 'Changes requested on your deliverable',
+                milestone.reviewNote
+                    || (status === 'approved'
+                        ? 'HR has accepted the work on this project.'
+                        : 'HR has asked for changes before this can be accepted.'),
+                { milestoneId: String(milestone._id) }
+            );
+        }
+
         res.json({ success: true, milestone });
     } catch (err) {
         console.error('[contractor] milestone review failed:', err.message);
@@ -351,6 +491,21 @@ router.patch('/hr/timesheets/:id', staffOnly, async (req, res) => {
             { new: true }
         );
         if (!entry) return res.status(404).json({ success: false, message: 'Timesheet entry not found.' });
+
+        const TITLE = {
+            approved: 'Your hours were approved',
+            rejected: 'Your hours were not approved',
+            paid:     'You have been paid'
+        };
+        await notifyContractor(
+            entry.contractorId,
+            'work_reviewed',
+            TITLE[status],
+            entry.payoutNote
+                || `${entry.hours} hour${entry.hours === 1 ? '' : 's'} on ${new Date(entry.workedOn).toDateString()}`
+                   + ` — \u20b9${Number(entry.amount || 0).toLocaleString('en-IN')}.`,
+            { timesheetId: String(entry._id) }
+        );
 
         res.json({ success: true, entry });
     } catch (err) {

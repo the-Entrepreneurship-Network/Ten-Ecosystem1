@@ -3220,7 +3220,6 @@ app.get("/hr-portal", (req,res)=>{ res.sendFile(path.join(__dirname,"public","hr
 app.get("/hr-control-center", (req,res)=>{ res.sendFile(path.join(__dirname,"public","hr-portal.html")); });
 app.get("/hr-login", (req,res)=>{ res.sendFile(path.join(__dirname,"public","hr-login.html")); });
 app.get("/register", (req,res)=>{ res.sendFile(path.join(__dirname,"public","register.html")); });
-app.get("/coming-soon", (req,res)=>{ res.sendFile(path.join(__dirname,"public","coming-soon.html")); });
 
 // ── Phase 2 page routes ─────────────────────────────────────────────────────
 app.get("/registration-success", (req,res)=>{ res.sendFile(path.join(__dirname,"public","registration-success.html")); });
@@ -3781,8 +3780,10 @@ try{
              */
             req.session.ecosystemUserId = String(user._id);
             req.session.ecosystemUserRole = user.role;
-            // The mentor endpoints scope by email, not by id.
+            // The mentor endpoints scope by email, not by id; chat and the
+            // notification feed identify this account by email and name.
             req.session.ecosystemUserEmail = user.email;
+            req.session.ecosystemUserName = user.fullName || '';
             req.session.sessionToken = sessionToken;
 
             return res.json({
@@ -10819,10 +10820,13 @@ try {
 }
 
 // Additional Ecosystem Feature API Routes from Gimini Project
-try { app.use("/api/founder",    require("./routes/founderRoutes"));       } catch(e) { console.error("[Routes] founderRoutes:", e.message); }
-try { app.use("/api/mentor",     require("./routes/mentorRoutes"));        } catch(e) { console.error("[Routes] mentorRoutes:", e.message); }
-try { app.use("/api/investor",   require("./routes/investorRoutes"));      } catch(e) { console.error("[Routes] investorRoutes:", e.message); }
-try { app.use("/api/contractor", require("./routes/contractorRoutes"));    } catch(e) { console.error("[Routes] contractorRoutes:", e.message); }
+/*
+ * The four /api/<role>/dashboard stubs that used to mount here answered
+ * "Founder OS coming soon" from a live endpoint, long after the founder,
+ * investor, contractor and mentor dashboards were built and shipped. Nothing
+ * called them; the real dashboards read /api/v2/*. Deleted along with their
+ * controllers rather than left to contradict the portals they described.
+ */
 try { app.use("/api/hr-dashboard", require("./routes/hrDashboardRoutes")); } catch(e) { console.error("[Routes] hrDashboardRoutes:", e.message); }
 try { app.use("/api/talent-network", require("./routes/talentNetwork"));   } catch(e) { console.error("[Routes] talentNetwork:", e.message); }
 try { app.use("/api/talent-profile", require("./routes/talentProfile"));   } catch(e) { console.error("[Routes] talentProfile:", e.message); }

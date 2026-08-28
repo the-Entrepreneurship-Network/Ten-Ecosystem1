@@ -72,6 +72,12 @@ router.get('/overview', onlyInvestor, async (req, res) => {
                 fundName: profile.fundName || '',
                 investorType: profile.investorType || '',
                 stagePreference: profile.stagePreference || [],
+                // The dashboard printed a fixed thesis — "Evaluating SaaS,
+                // GreenTech, Fintech, and AI systems" — to every investor who
+                // signed in, whatever they had actually said. It reads these.
+                sectorFocus: profile.sectorFocus || [],
+                investmentRange: profile.investmentRange || null,
+                thesis: profile.thesis || '',
                 verificationStatus: profile.verificationStatus
             } : null,
             interests,
@@ -182,7 +188,7 @@ router.post('/interests', onlyInvestor, interestLimiter, async (req, res) => {
             try {
                 await EcosystemNotification.create({
                     userId: interest.founderId,
-                    type: 'system_announcement',
+                    type: 'investor_interest',
                     title: 'An investor registered interest',
                     message: `${interest.investorName || 'An investor'} expressed interest in ${interest.startupName}.`,
                     link: '/founder-os.html#investors',
@@ -295,7 +301,7 @@ router.patch('/interests/:id', investorOrFounder, async (req, res) => {
         try {
             await EcosystemNotification.create({
                 userId: interest.investorId,
-                type: 'system_announcement',
+                type: 'investor_response',
                 title: `${interest.startupName} responded`,
                 message: `Your interest in ${interest.startupName} is now "${status.replace('_', ' ')}".`,
                 link: '/investor-dashboard.html',
@@ -312,14 +318,49 @@ router.patch('/interests/:id', investorOrFounder, async (req, res) => {
     }
 });
 
-/** GET /api/v2/investor-desk/inbound — interest in the founder's startups. */
+/**
+ * GET /api/v2/investor-desk/inbound — interest in the founder's startups.
+ *
+ * The row alone carries only a name. A founder deciding whether to take a
+ * meeting wants to know who is asking — what they invest as, at what stage, in
+ * what, and for how much — so the investor's public profile is joined on here
+ * rather than leaving the founder to go and look it up.
+ *
+ * Public fields only. Holdings are the investor's own ledger and never appear.
+ */
 router.get('/inbound', requireRole(ROLES.FOUNDER), async (req, res) => {
     try {
         const rows = await InvestorInterest.find({ founderId: req.user._id })
             .sort({ createdAt: -1 })
             .limit(200)
             .lean();
-        res.json({ success: true, interests: rows });
+
+        const ids = [...new Set(rows.map((r) => String(r.investorId)))];
+        const profiles = ids.length
+            ? await InvestorProfile.find({ userId: { $in: ids } })
+                .select('userId fundName investorType stagePreference sectorFocus investmentRange website linkedinUrl verificationStatus')
+                .lean()
+            : [];
+        const byUser = new Map(profiles.map((p) => [String(p.userId), p]));
+
+        res.json({
+            success: true,
+            interests: rows.map((r) => {
+                const p = byUser.get(String(r.investorId)) || null;
+                return Object.assign({}, r, {
+                    investor: p ? {
+                        fundName: p.fundName || '',
+                        investorType: p.investorType || '',
+                        stagePreference: p.stagePreference || [],
+                        sectorFocus: p.sectorFocus || [],
+                        ticket: p.investmentRange || null,
+                        website: p.website || '',
+                        linkedinUrl: p.linkedinUrl || '',
+                        verified: p.verificationStatus === 'approved'
+                    } : null
+                });
+            })
+        });
     } catch (err) {
         console.error('[investor] inbound failed:', err.message);
         res.status(500).json({ success: false, message: 'Could not load investor interest.' });

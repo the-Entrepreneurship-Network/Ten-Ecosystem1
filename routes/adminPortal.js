@@ -68,7 +68,7 @@ router.post('/login', adminLoginLimiter, async (req, res) => {
        * founder's browser silently signs the founder out of their own portal —
        * the same class of bug the loop above exists to prevent.
        */
-      for (const key of ['ecosystemUserId', 'ecosystemUserRole', 'ecosystemUserEmail']) {
+      for (const key of ['ecosystemUserId', 'ecosystemUserRole', 'ecosystemUserEmail', 'ecosystemUserName']) {
         if (req.session && req.session[key]) carried[key] = req.session[key];
       }
 

@@ -839,8 +839,13 @@ describe('founder registration is open', () => {
     // soon" over three finished dashboards.
     ['investorStep2', 'investorStep3', 'contractorStep2', 'contractorStep3']
       .forEach((id) => expect(reg).toContain('id="' + id + '"'));
-    ['inv_firmName', 'inv_fundSize', 'inv_investmentStage', 'inv_industryFocus']
+    ['inv_firmName', 'inv_investorType', 'inv_industryFocus', 'inv_ticketMin', 'inv_ticketMax']
       .forEach((id) => expect(reg).toContain('id="' + id + '"'));
+    // Stages are the four the schema stores, as checkboxes: the old single
+    // select offered "Growth", which is not one of them, so choosing it saved
+    // nothing and hid the investor from every stage filter.
+    ['pre_seed', 'seed', 'series_a', 'series_b']
+      .forEach((v) => expect(reg).toContain('class="inv-stage accent-amber-500" value="' + v + '"'));
     ['con_skills', 'con_experience', 'con_hourlyRate', 'con_availability']
       .forEach((id) => expect(reg).toContain('id="' + id + '"'));
     expect(reg).toContain("} else if (activeRole === 'investor') {");
