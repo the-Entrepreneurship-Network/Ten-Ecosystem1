@@ -5958,7 +5958,7 @@ document.addEventListener('keydown', function(e) {
     <div id="wizardStep3" style="display:none;">
       <div style="font-size:40px;margin-bottom:18px;text-align:center;">📅</div>
       <h2 style="font-size:22px;font-weight:800;color:#D4AF37;margin-bottom:12px;text-align:center;">Internship Joining Date</h2>
-      <p style="font-size:14px;color:#a2b1c6;margin-bottom:24px;line-height:1.6;text-align:center;">Please pick your original internship joining date. Note that future dates are not allowed.</p>
+      <p style="font-size:14px;color:#a2b1c6;margin-bottom:24px;line-height:1.6;text-align:center;">Please pick the day your internship actually began &mdash; not the day you got this portal. Future dates are not allowed.</p>
       
       <div style="text-align:left;margin-bottom:28px;">
         <label style="font-size:11px;font-weight:700;color:#8aa4c8;text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:8px;">Pick Date</label>
@@ -6152,15 +6152,22 @@ function wizardGoToStep3() {
     var today = new Date();
     dateInput.max = today.toISOString().split('T')[0];
 
-    // The floor used to be today minus 90 days, which quietly made this card
-    // impossible for the very students it exists for: someone who attended
-    // through WhatsApp for four months before the portal existed for them
-    // could not enter their real start date at all, and the picker gave no
-    // reason. Eighteen months covers every tenure the programme offers while
-    // still refusing an obviously wrong year.
-    var floor = new Date(today);
-    floor.setMonth(floor.getMonth() - 18);
-    dateInput.min = floor.toISOString().split('T')[0];
+    /*
+     * No floor on the field.
+     *
+     * It was today minus 90 days once, which made this card impossible for the
+     * very students it exists for, and eighteen months after that. Either way a
+     * date input silently reports an EMPTY value for anything below `min`, so
+     * the student saw the date they had typed and the page insisted none was
+     * chosen — a dead end on the last card of onboarding.
+     *
+     * A genuinely old start date is not refused any more. It is accepted, and
+     * the days before the account existed simply wait for HR to confirm them
+     * (utils/attendanceUtils claimNeedsReview). The one hard rule left is "not
+     * in the future", and the server enforces it too — this attribute is a
+     * convenience, never the check.
+     */
+    dateInput.removeAttribute('min');
   }
   document.getElementById('wizardStep3').style.display = 'block';
 }
@@ -6232,24 +6239,40 @@ async function wizardConfirmJoiningDate() {
        localStorage.setItem('employeeId', data.student.employeeId);
     }
 
-    // Show days — not percentage
-    var presentCount  = data.student.presentCount || 0;
-    var daysMore      = (data.student.daysNeededToAttendMore !== undefined) ? data.student.daysNeededToAttendMore : 0;
-    var totalTenure   = data.student.totalTenureDays || 30;
-    var requiredTotal = Math.ceil(totalTenure * 0.75);
+    /*
+     * The numbers the server actually judges them by.
+     *
+     * This screen used to work out its own requirement: 75% of the CALENDAR
+     * tenure. Attendance skips Sundays, so a 90-day tenure holds 77 working
+     * days and the card was demanding 68 of them — near-perfect — measured
+     * against the whole tenure instead of the days that had passed. A student
+     * one month in was told to attend 61 more days when the real figure was 12.
+     * Nothing else in the portal counted it that way.
+     */
+    var presentCount = data.student.presentCount || 0;
+    var daysMore     = (data.student.daysNeededToAttendMore !== undefined) ? data.student.daysNeededToAttendMore : 0;
+    var p            = data.student.progress || {};
 
-    // wizardStep3ResultPct now shows PRESENT DAYS (not a percentage)
     document.getElementById('wizardStep3ResultPct').textContent = presentCount;
-
-    // wizardStep3ResultDays shows HOW MANY MORE DAYS NEEDED
     document.getElementById('wizardStep3ResultDays').textContent = daysMore;
 
-    // Detail message
     var detailMsg;
-    if (daysMore <= 0) {
-      detailMsg = '✅ You have already met the 75% attendance requirement! (' + presentCount + ' of ' + requiredTotal + ' required days attended.)';
+    if (p.creditHeldForReview) {
+      // Not a refusal. The date is saved; the days before their account
+      // existed are simply not counted until somebody checks them.
+      detailMsg = 'That start date is far enough back that it would cover your whole attendance '
+                + 'requirement on its own, so HR will confirm it before those days are counted. '
+                + 'Your date is saved and your internship starts now — nothing is blocked.';
+    } else if (daysMore <= 0) {
+      detailMsg = '✅ You are meeting the 75% requirement. ' + presentCount + ' of the '
+                + (p.workingDaysElapsed || 0) + ' working days so far, and you need '
+                + (p.requiredSoFar || 0) + '.';
     } else {
-      detailMsg = 'Your tenure is ' + totalTenure + ' days. You must attend at least ' + requiredTotal + ' days (75%). You have attended ' + presentCount + ' days so far. Attend ' + daysMore + ' more days to meet the requirement.';
+      detailMsg = 'Attendance is counted on working days — Sundays do not count. '
+                + (p.workingDaysElapsed || 0) + ' working days have passed since your start date, so you need '
+                + (p.requiredSoFar || 0) + ' of them to be at 75%. You have ' + presentCount + '. '
+                + 'Attend ' + daysMore + ' more to catch up.'
+                + (p.totalWorkingDays ? ' Your full tenure is ' + p.totalWorkingDays + ' working days.' : '');
     }
     document.getElementById('wizardStep3ResultDaysDetail').textContent = detailMsg;
 

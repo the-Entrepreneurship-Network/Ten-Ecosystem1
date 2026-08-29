@@ -616,7 +616,9 @@ router.get("/onboarding", requireHR, async (req, res) => {
     if (!employeeId) return res.status(400).json({ success: false, message: "Which student?" });
     const student = await Student.findOne({ employeeId })
       .select("name employeeId domain joinerType joinerTypeSelected onboardingPopupSeen "
-             + "internshipStartDate joiningDate calculatedAttendance onboardingResets createdAt")
+             + "internshipStartDate joiningDate calculatedAttendance onboardingResets createdAt "
+             + "tenure v2DurationType preportalAbsentDays "
+             + "preportalCreditNeedsReview preportalCreditConfirmedAt preportalCreditConfirmedBy")
       .lean();
     if (!student) return res.status(404).json({ success: false, message: "No student with that employee ID." });
 
@@ -632,9 +634,124 @@ router.get("/onboarding", requireHR, async (req, res) => {
         internshipStartDate: student.internshipStartDate,
         portalRegistered: student.joiningDate || student.createdAt,
         calculatedAttendance: student.calculatedAttendance,
-        resets: (student.onboardingResets || []).slice(-10).reverse()
+        resets: (student.onboardingResets || []).slice(-10).reverse(),
+        /*
+         * The pre-portal claim, if there is one worth looking at.
+         *
+         * A WhatsApp joiner is credited for the working days between the start
+         * date they typed and the day their account existed. Nobody can check
+         * those days — there is no record of them, which is the whole reason
+         * they are credited. When the claim is large enough to satisfy the 75%
+         * requirement on its own, the student needs to attend nothing at all,
+         * so it waits here instead of counting itself.
+         */
+        preportalClaim: preportalClaim(student)
       }
     });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+/** What the student claimed for the days before their account existed. */
+function preportalClaim(student) {
+  const {
+    getPreportalCreditedDays, getAccountAnchorDate, claimNeedsReview
+  } = require("../../utils/attendanceUtils");
+
+  if (!student || student.joinerType !== "whatsapp") return null;
+  const anchor = getAccountAnchorDate(student);
+  if (!anchor || !student.internshipStartDate) return null;
+
+  const held = !!student.preportalCreditNeedsReview && !student.preportalCreditConfirmedAt;
+  // What it is worth if confirmed, which is the number HR is deciding about.
+  const asConfirmed = getPreportalCreditedDays(
+    Object.assign({}, student.toObject ? student.toObject() : student,
+                  { preportalCreditNeedsReview: false })
+  );
+
+  return {
+    claimedStart: student.internshipStartDate,
+    accountExistedFrom: anchor,
+    days: asConfirmed,
+    absentAdjustment: Number(student.preportalAbsentDays) || 0,
+    needsReview: claimNeedsReview(student.internshipStartDate, student),
+    held,
+    confirmedAt: student.preportalCreditConfirmedAt || null,
+    confirmedBy: student.preportalCreditConfirmedBy || ""
+  };
+}
+
+/**
+ * POST /api/v2/hr/onboarding/preportal   { employeeId, action, absentDays }
+ *
+ * Confirm, decline or correct a held pre-portal claim.
+ *
+ * The same level that can reopen the joiner questions: both decide how many
+ * days a student is credited for without a record of them.
+ */
+router.post("/onboarding/preportal", requireHR, requireHRLevel(RESET_MIN_LEVEL), async (req, res) => {
+  try {
+    const employeeId = wantedEmployeeId(req);
+    if (!employeeId) return res.status(400).json({ success: false, message: "Which student?" });
+
+    const action = String((req.body && req.body.action) || "");
+    if (!["confirm", "decline", "adjust"].includes(action)) {
+      return res.status(400).json({ success: false, message: "Unknown action." });
+    }
+
+    const student = await Student.findOne({ employeeId });
+    if (!student) return res.status(404).json({ success: false, message: "No student with that employee ID." });
+    if (student.joinerType !== "whatsapp") {
+      return res.status(400).json({ success: false, message: "This student made no pre-portal claim." });
+    }
+
+    const who = (req.hrUser && (req.hrUser.name || req.hrUser.email || req.hrUser.username))
+             || (req.session && req.session.adminUser && req.session.adminUser.username)
+             || "HR";
+    const updates = {};
+
+    if (action === "confirm") {
+      updates.preportalCreditConfirmedAt = new Date();
+      updates.preportalCreditConfirmedBy = String(who).slice(0, 120);
+    } else if (action === "decline") {
+      // Held for good: the claim stays on the record, worth nothing.
+      updates.preportalCreditNeedsReview = true;
+      updates.preportalCreditConfirmedAt = null;
+      updates.preportalCreditConfirmedBy = "";
+    } else {
+      // Part of it is real. Confirm it, and subtract the days that are not.
+      const absent = Number(req.body && req.body.absentDays);
+      if (!Number.isFinite(absent) || absent < 0) {
+        return res.status(400).json({ success: false, message: "How many of those days were they absent?" });
+      }
+      updates.preportalAbsentDays = Math.round(absent);
+      updates.preportalCreditConfirmedAt = new Date();
+      updates.preportalCreditConfirmedBy = String(who).slice(0, 120);
+    }
+
+    const updated = await Student.findOneAndUpdate({ _id: student._id }, { $set: updates }, { new: true });
+
+    // The figure on their dashboard has just changed; recompute it now rather
+    // than leaving it stale until something else happens to touch the record.
+    try {
+      const Attendance = require("../../models/Attendance");
+      const { getAttendanceSummary } = require("../../utils/attendanceUtils");
+      const rows = await Attendance.find({ employeeId: updated.employeeId });
+      const summary = getAttendanceSummary(rows, updated);
+      await Student.updateOne({ _id: updated._id }, {
+        $set: {
+          calculatedAttendance: summary.daysPresent,
+          calculatedAttendancePercentage: summary.percentage,
+          attendancePercentage: summary.percentage,
+          attendanceLastCalculated: new Date()
+        }
+      });
+      return res.json({ success: true, claim: preportalClaim(updated), attendance: summary.percentage });
+    } catch (err) {
+      console.error("[hr] preportal recount failed:", err.message);
+      return res.json({ success: true, claim: preportalClaim(updated) });
+    }
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

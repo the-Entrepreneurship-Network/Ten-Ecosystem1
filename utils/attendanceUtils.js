@@ -154,6 +154,144 @@ function getElapsedWorkingDays(internshipStartDate, tenure) {
 }
 
 /**
+ * The day the student's account came into existence — the anchor that cannot be
+ * edited.
+ *
+ * `joiningDate` is a plain string field: an admin can set it, an old version of
+ * the onboarding wizard used to overwrite it with the back-dated value, and it
+ * is the field a bad start date corrupts first. `createdAt` is written by
+ * Mongoose and never touched again.
+ *
+ * The LATER of the two is the honest floor. If joiningDate has been dragged
+ * backwards, createdAt wins and the back-date is ignored. If joiningDate is
+ * legitimately later than the row's creation — an account made in advance of a
+ * real start — that later date wins, and no credit is given for the gap.
+ */
+function getAccountAnchorDate(student) {
+  if (!student) return null;
+  const created = student.createdAt ? new Date(student.createdAt) : null;
+  const joining = student.joiningDate ? new Date(student.joiningDate) : null;
+  const valid = [created, joining].filter((d) => d && !Number.isNaN(d.getTime()));
+  if (!valid.length) return null;
+  return new Date(Math.max(...valid.map((d) => d.getTime())));
+}
+
+/**
+ * The last start date whose pre-portal claim the student can be trusted on
+ * alone — one day later than the earliest date that would hand them the whole
+ * attendance requirement for nothing.
+ *
+ * Used only to draw the picker's guidance. The decision itself is
+ * claimNeedsReview(), which measures the claim rather than the date.
+ *
+ * @returns {Date|null} null when there is nothing to anchor against
+ */
+function getEarliestUnreviewedStartDate(student) {
+  const anchor = getAccountAnchorDate(student);
+  if (!anchor) return null;
+
+  /*
+   * Walk back one day at a time and ask claimNeedsReview itself, rather than
+   * recomputing the same arithmetic here. Two copies of that sum drift: the
+   * first version of this walker counted working days its own way and landed a
+   * day early whenever the boundary fell on a Sunday, so the date it reported
+   * as safe was in fact already over the line.
+   *
+   * Bounded by the tenure, so this is a few hundred iterations at most.
+   */
+  const tenure = toDurationType(student && (student.tenure || student.v2DurationType));
+  const bound = getTenureDays(tenure) * 2 + 14;
+
+  const cursor = startOfDay(anchor);
+  let last = new Date(cursor);
+  for (let i = 0; i < bound; i++) {
+    cursor.setDate(cursor.getDate() - 1);
+    if (claimNeedsReview(cursor, student)) break;
+    last = new Date(cursor);
+  }
+  return last;
+}
+
+/**
+ * Would this claim, on its own, satisfy the attendance requirement?
+ *
+ * This is the line worth drawing, and it is the portal's own line rather than a
+ * number somebody picked: 75% of the working days in the tenure. Below it the
+ * student still has to turn up for real days, and an inflated claim only
+ * flatters a figure they cannot finish on. At or above it they need attend
+ * nothing at all, which is not a claim anybody should be able to make about
+ * themselves unchecked.
+ */
+function claimNeedsReview(startDate, student) {
+  const start = startDate ? startOfDay(startDate) : null;
+  if (!start || Number.isNaN(start.getTime())) return false;
+
+  const anchor = getAccountAnchorDate(student);
+  if (!anchor) return false;
+  if (start >= startOfDay(anchor)) return false;      // no pre-portal gap at all
+
+  /*
+   * Ask the question directly: with no attendance rows at all, would this claim
+   * on its own make them eligible?
+   *
+   * An earlier version worked the sum out separately and compared against the
+   * working days in the WHOLE tenure, while eligibility is measured against the
+   * working days ELAPSED. Those are different numbers whenever the tenure is
+   * still running, and at the boundary the two disagreed — a claim was waved
+   * through that did make the student eligible on its own. One computation, so
+   * there is nothing left to disagree with.
+   */
+  const asIfCounted = Object.assign(
+    {}, student.toObject ? student.toObject() : student,
+    {
+      joinerType: 'whatsapp',
+      internshipStartDate: start,
+      preportalCreditNeedsReview: false,
+      preportalCreditConfirmedAt: null,
+      preportalAbsentDays: 0
+    }
+  );
+  return getAttendanceSummary([], asIfCounted).isEligible;
+}
+
+/**
+ * Classify a start date the student has typed. It does not block them.
+ *
+ * Only two things are actually refused: a date that is not a date, and a date
+ * in the future. Everything else is accepted, deliberately — the floor on this
+ * field used to be "today minus 90 days", and it made the card a dead end for
+ * the very students it exists for. Recreating a floor recreates that dead end.
+ *
+ * What the classification decides instead is whether the pre-portal credit
+ * counts on the student's word alone — see claimNeedsReview. A claim that would
+ * satisfy the whole attendance requirement by itself goes to HR with the credit
+ * held at zero, rather than being refused at a screen with nothing else on it.
+ *
+ * @returns {{ok: boolean, reason?: string, needsReview: boolean,
+ *            earliest: Date|null, latest: Date}}
+ */
+function checkStartDate(candidate, student) {
+  const today = startOfDay(new Date());
+  const earliest = getEarliestUnreviewedStartDate(student);
+
+  const d = candidate ? new Date(candidate) : null;
+  if (!d || Number.isNaN(d.getTime())) {
+    return { ok: false, reason: 'That is not a date.', needsReview: false, earliest, latest: today };
+  }
+
+  const picked = startOfDay(d);
+  if (picked > today) {
+    return {
+      ok: false,
+      reason: 'Your start date cannot be in the future.',
+      needsReview: false, earliest, latest: today
+    };
+  }
+
+  return { ok: true, needsReview: claimNeedsReview(picked, student), earliest, latest: today };
+}
+
+/**
  * How many working days a WhatsApp joiner completed before the portal existed
  * for them. Zero for everyone else.
  *
@@ -164,6 +302,22 @@ function getElapsedWorkingDays(internshipStartDate, tenure) {
  */
 function getPreportalCreditedDays(student) {
   if (!student || student.joinerType !== 'whatsapp') return 0;
+
+  /*
+   * Held pending a human.
+   *
+   * Nothing in the portal can verify a day the student says they worked before
+   * they had an account — there is no record to check it against. For an
+   * ordinary claim that is fine: the days sit inside a running internship and
+   * an obviously wrong one is visible. For a claim that reaches back past the
+   * whole tenure it is not fine, because the credit alone fills the attendance
+   * requirement and the student needs to attend nothing at all.
+   *
+   * So that claim is accepted, stored, and worth zero until HR confirms it.
+   * Refusing it instead would strand a real four-month WhatsApp joiner on a
+   * three-month tenure at a card with no other button.
+   */
+  if (student.preportalCreditNeedsReview && !student.preportalCreditConfirmedAt) return 0;
 
   const effectiveStart = getEffectiveStartDate(student);
   const portalStart = getPortalStartDate(student);
@@ -179,7 +333,16 @@ function getPreportalCreditedDays(student) {
 
   const credited = countWorkingDays(start, dayBefore);
   const adjustment = Number(student.preportalAbsentDays) || 0;
-  return Math.max(0, credited - adjustment);
+
+  /*
+   * Never more days than the internship itself contains. checkStartDate keeps
+   * impossible dates out at the door, but rows written before that guard
+   * existed are still in the database — and an uncapped figure here reads as a
+   * real number on every screen that shows it.
+   */
+  const tenure = toDurationType(student.tenure || student.v2DurationType);
+  const ceiling = getTotalWorkingDaysForTenure(start, tenure);
+  return Math.max(0, Math.min(credited, ceiling) - adjustment);
 }
 
 /**
@@ -398,6 +561,10 @@ module.exports = {
   countWorkingDays,
   getEffectiveStartDate,
   getPortalStartDate,
+  getAccountAnchorDate,
+  getEarliestUnreviewedStartDate,
+  claimNeedsReview,
+  checkStartDate,
   getTenureEndDate,
   getTotalWorkingDaysForTenure,
   getElapsedWorkingDays,

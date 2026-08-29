@@ -492,11 +492,37 @@ router.post("/student/complete-onboarding", requireStudent, async (req, res) => 
         const student = req.student;
         const { joinerType, updatedEmployeeId, joiningDate } = req.body;
 
+        /*
+         * Once, and once more each time HR resets. That rule used to live
+         * ENTIRELY in the browser — four flags on the student's own record,
+         * read by their own page. Nothing here checked anything, so the request
+         * could simply be sent again: a student could re-pick their start date,
+         * and change the employee ID every Attendance row is keyed to, as many
+         * times as they liked, without HR resetting anything.
+         *
+         * v2Onboarded, not joinerTypeSelected. joinerTypeSelected means only
+         * "answered the first question" — and the wizard keeps joinerType in a
+         * page-level variable, so a reload between the two cards arrives here
+         * with the flag already set and only a date in the body. Guarding on it
+         * would lock that student out of the last card and discard the date
+         * they had just picked: the exact dead end this endpoint has been fixed
+         * for twice already. v2Onboarded is written at the end of this handler
+         * and cleared by services/onboardingReset.js, so it means finished.
+         */
+        if (student.v2Onboarded) {
+            return res.status(409).json({
+                success: false,
+                alreadyCompleted: true,
+                message: "You have already completed these questions. Ask HR if you need them reopened."
+            });
+        }
+
         const updates = {};
         
         let presentCount = 0;
         let totalTenureDays = 30;
         let daysNeededToAttendMore = 0;
+        let progress = null;
 
         if (joinerType) {
             updates.joinerType = joinerType;
@@ -514,6 +540,25 @@ router.post("/student/complete-onboarding", requireStudent, async (req, res) => 
             if (joiningDate) {
                 const startDate = new Date(joiningDate);
                 if (!isNaN(startDate.getTime())) {
+                    /*
+                     * One rule, in utils/attendanceUtils, so the picker and the
+                     * server cannot disagree. It refuses only what is genuinely
+                     * impossible — the browser's own floor is not a check, it
+                     * is a hint, and this endpoint used to accept any past date
+                     * at all from anyone who sent the request by hand.
+                     */
+                    const { checkStartDate } = require("../../utils/attendanceUtils");
+                    const verdict = checkStartDate(startDate, student);
+                    if (!verdict.ok) {
+                        return res.status(400).json({ success: false, message: verdict.reason });
+                    }
+                    // A claim that would satisfy the whole attendance
+                    // requirement on its own is stored and worth zero until a
+                    // human confirms it. The student is not blocked.
+                    updates.preportalCreditNeedsReview = verdict.needsReview;
+                    updates.preportalCreditConfirmedAt = null;
+                    updates.preportalCreditConfirmedBy = "";
+
                     // Only internshipStartDate moves. This used to overwrite
                     // joiningDate with the same value, which silently defeated
                     // the whole feature: the pre-portal credit is the gap
@@ -525,12 +570,6 @@ router.post("/student/complete-onboarding", requireStudent, async (req, res) => 
                     // Keep a portal-registration date to measure that gap from.
                     if (!student.joiningDate) {
                         updates.joiningDate = (student.createdAt || new Date()).toISOString().slice(0, 10);
-                    }
-
-                    // A future start date is refused — that is the one rule the
-                    // card actually states, and it cannot be a real start.
-                    if (startDate > new Date()) {
-                        return res.status(400).json({ success: false, message: "Your start date cannot be in the future." });
                     }
 
                     // A date AFTER the portal registration used to be refused
@@ -598,9 +637,47 @@ router.post("/student/complete-onboarding", requireStudent, async (req, res) => 
                 updates.attendancePercentage = summary.percentage;
                 updates.attendanceLastCalculated = new Date();
 
+                /*
+                 * The end date follows the start date.
+                 *
+                 * Nothing recomputed it here, so a student who set their start
+                 * date kept an end date derived from the old one — or none at
+                 * all. That is now also the date printed on their certificate.
+                 */
+                const { getTenureEndDate } = require("../../utils/attendanceUtils");
+                const derivedEnd = getTenureEndDate(
+                    updates.internshipStartDate || student.internshipStartDate,
+                    student.tenure || student.v2DurationType
+                );
+                if (derivedEnd) updates.internshipEndDate = derivedEnd;
+
+                /*
+                 * The figures the screen shows are the figures the student is
+                 * judged by.
+                 *
+                 * This used to print 75% of the CALENDAR tenure — "you must
+                 * attend at least 68 days" on a 90-day tenure — while every
+                 * other part of the portal measures 75% of the WORKING days
+                 * elapsed so far. A 90-day tenure holds only 77 working days,
+                 * so the card demanded near-perfect attendance, and it counted
+                 * against the whole tenure rather than the part that had
+                 * actually happened. A real student one month in was told to
+                 * attend 61 more days when the true figure was 12.
+                 *
+                 * getAttendanceSummary already returns both. Nothing else in
+                 * the codebase computed it the other way.
+                 */
                 totalTenureDays = getTenureDays(student.tenure || student.v2DurationType);
-                const requiredDays = Math.ceil(totalTenureDays * 0.75);
-                daysNeededToAttendMore = Math.max(0, requiredDays - summary.daysPresent);
+                daysNeededToAttendMore = summary.stillNeeds;
+                progress = {
+                    workingDaysElapsed: summary.workingDaysElapsed,
+                    totalWorkingDays: summary.totalWorkingDays,
+                    requiredSoFar: summary.requiredDays,
+                    percentage: summary.percentage,
+                    preportalCreditedDays: summary.preportalCreditedDays,
+                    trackedDaysPresent: summary.trackedDaysPresent,
+                    creditHeldForReview: !!updates.preportalCreditNeedsReview
+                };
             }
         } else {
             updates.calculatedAttendance = 0;
@@ -652,7 +729,8 @@ router.post("/student/complete-onboarding", requireStudent, async (req, res) => 
                 attendancePercentage: updatedStudent.attendancePercentage,
                 presentCount,
                 totalTenureDays,
-                daysNeededToAttendMore
+                daysNeededToAttendMore,
+                progress
             }
         });
     } catch (err) {

@@ -174,6 +174,17 @@ const studentsSchema = new mongoose.Schema({
     // deducted from the credited total.
     preportalAbsentDays: { type: Number, default: 0 },
 
+    /*
+     * A pre-portal claim that reaches back past the whole tenure — the
+     * internship would have finished before the account existed. Possible in
+     * real life, and also what somebody types to be handed a full attendance
+     * record for nothing. The claim is stored and counts for zero until HR
+     * confirms it; see services/attendanceUtils getPreportalCreditedDays.
+     */
+    preportalCreditNeedsReview:  { type: Boolean, default: false },
+    preportalCreditConfirmedAt:  { type: Date,   default: null },
+    preportalCreditConfirmedBy:  { type: String, default: "" },
+
     // Last day of the internship, derived from internshipStartDate/joiningDate
     // and tenure. Kept on the document so the admin panel can extend a tenure
     // and so scheduled jobs can query it — the auto-mark cron queried an

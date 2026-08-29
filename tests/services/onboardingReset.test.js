@@ -28,7 +28,20 @@ jest.mock('../../models/Student', () => ({
 }));
 jest.mock('../../models/Attendance', () => ({ find: async () => mockRows }));
 jest.mock('../../utils/attendanceUtils', () => ({
-  getAttendanceSummary: () => ({ daysPresent: 4, percentage: 13 })
+  getAttendanceSummary: () => ({ daysPresent: 4, percentage: 13 }),
+  // The reset anchors to the later of createdAt and joiningDate, and moves the
+  // end date with the start date. Both come from here.
+  getAccountAnchorDate: (s) => {
+    const dates = [s && s.createdAt, s && s.joiningDate]
+      .map((v) => (v ? new Date(v) : null))
+      .filter((d) => d && !isNaN(d.getTime()));
+    return dates.length ? new Date(Math.max(...dates.map((d) => d.getTime()))) : null;
+  },
+  getTenureEndDate: (start) => {
+    const d = new Date(start);
+    d.setDate(d.getDate() + 29);
+    return d;
+  }
 }));
 const FAKE = {
   _id: 'abc', employeeId: 'TEN/DEVOPS/1003', name: 'Test',
