@@ -32,13 +32,25 @@
 
 const Student = require('../models/Student');
 
-/** The day this student's portal account began — the honest start line. */
+/**
+ * The day this student's portal account began — the honest start line.
+ *
+ * This read `joiningDate` first, and that quietly defeated the reset for the
+ * students who most needed it. `joiningDate` is a plain string field: an admin
+ * can set it, and an older version of the onboarding wizard used to overwrite
+ * it with the back-dated value the reset exists to withdraw. So for exactly
+ * those records the reset "restored" the start date to the wrong date it was
+ * meant to remove, and the unearned days came straight back the moment the
+ * student redid the wizard.
+ *
+ * getAccountAnchorDate takes the LATER of createdAt and joiningDate. createdAt
+ * is written by Mongoose and never edited, so a joiningDate dragged backwards
+ * loses to it; a joiningDate legitimately later than the row's creation still
+ * wins, and no credit is given for a gap that is not real.
+ */
 function portalRegistrationDate(student) {
-    if (student.joiningDate) {
-        const d = new Date(student.joiningDate);
-        if (!isNaN(d.getTime())) return d;
-    }
-    return student.createdAt ? new Date(student.createdAt) : new Date();
+    const { getAccountAnchorDate } = require('../utils/attendanceUtils');
+    return getAccountAnchorDate(student) || new Date();
 }
 
 /**
@@ -55,6 +67,19 @@ async function resetOnboarding(student, who = {}) {
         calculatedAttendance: (student.calculatedAttendance == null ? null : student.calculatedAttendance)
     };
 
+    /*
+     * A joiningDate earlier than the row's own creation cannot be a portal
+     * registration date — the account did not exist yet. It is the fingerprint
+     * of the old wizard overwriting it, and it is worth saying out loud rather
+     * than silently working around.
+     */
+    const created = student.createdAt ? new Date(student.createdAt) : null;
+    const joined = student.joiningDate ? new Date(student.joiningDate) : null;
+    if (created && joined && !isNaN(joined.getTime()) && joined < created) {
+        console.warn(`[onboardingReset] ${student.employeeId}: joiningDate ${joined.toISOString().slice(0, 10)}`
+            + ` predates the account (${created.toISOString().slice(0, 10)}) — anchoring to the account date.`);
+    }
+
     const updates = {
         // The wizard opens again, once.
         onboardingPopupSeen: false,
@@ -65,9 +90,30 @@ async function resetOnboarding(student, who = {}) {
         // The welcome card runs ahead of the wizard, so it has to come back too
         // or the wizard is reached by a path the student never sees.
         hasSeenWelcome: false,
-        // The pre-portal credit goes with the answer that created it.
+        // The pre-portal credit goes with the answer that created it — and so
+        // does any HR confirmation of it. A confirmation belongs to one claim;
+        // leaving it in place would silently pre-approve the next one.
+        preportalCreditNeedsReview: false,
+        preportalCreditConfirmedAt: null,
+        preportalCreditConfirmedBy: '',
         internshipStartDate: portalRegistrationDate(student)
     };
+
+    /*
+     * The end date follows the start date. Nothing used to recompute it here,
+     * so a reset moved the start and left an end date derived from the
+     * withdrawn one — which is now also the date printed on the certificate.
+     */
+    try {
+        const { getTenureEndDate } = require('../utils/attendanceUtils');
+        const end = getTenureEndDate(
+            updates.internshipStartDate,
+            student.tenure || student.v2DurationType
+        );
+        if (end) updates.internshipEndDate = end;
+    } catch (err) {
+        console.error('[onboardingReset] end date recompute failed:', err.message);
+    }
 
     /*
      * Recount from what is actually recorded. Leaving the old figure would keep

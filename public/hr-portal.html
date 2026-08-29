@@ -3108,6 +3108,72 @@ async function generateLOR(studentId, studentName, force = false) {
  * HR level 3 and up: the associates below that see students, they do not
  * rewrite start dates.
  */
+/*
+ * The pre-portal claim, and whether it is waiting on you.
+ *
+ * A WhatsApp joiner is credited for the working days between the start date
+ * they typed and the day their account existed. Nobody can check those days —
+ * there is no record of them, which is exactly why they are credited. When the
+ * claim is big enough to satisfy the whole 75% requirement by itself, the
+ * student needs to attend nothing at all, so it waits for a human instead of
+ * counting itself.
+ */
+function _preportalPanel(claim){
+  if(!claim) return '';
+  const fmtd = (v) => v ? new Date(v).toLocaleDateString() : '—';
+  const span = 'They say they started <b>' + fmtd(claim.claimedStart) + '</b>, and their account exists from <b>'
+             + fmtd(claim.accountExistedFrom) + '</b> — a claim of <b>' + claim.days + ' working day'
+             + (claim.days === 1 ? '' : 's') + '</b> with no record behind them.';
+
+  if(claim.held){
+    return '<div style="margin-top:12px;padding:11px 13px;border-radius:8px;background:rgba(244,63,94,0.09);'
+         + 'border:1px solid rgba(244,63,94,0.3);font-size:12.5px;line-height:1.65;">'
+         + '<b style="color:#fda4af;">Waiting on you — these days are counting as zero.</b><br>' + span
+         + '<br>On its own that would meet their whole attendance requirement, so it is held until you say. '
+         + 'Use the buttons below the reset.</div>';
+  }
+  if(claim.confirmedAt){
+    return '<div style="margin-top:12px;font-size:12.5px;color:#8aa4c8;line-height:1.65;">'
+         + span + '<br>Confirmed by ' + String(claim.confirmedBy || 'HR').replace(/</g,'&lt;') + ' on '
+         + fmtd(claim.confirmedAt)
+         + (claim.absentAdjustment ? ', less ' + claim.absentAdjustment + ' day(s) marked absent' : '') + '.</div>';
+  }
+  return '<div style="margin-top:12px;font-size:12.5px;color:#8aa4c8;line-height:1.65;">' + span
+       + '<br>Counted automatically — on its own it does not reach the 75% requirement, so they still have to '
+       + 'turn up for real days.</div>';
+}
+
+/** Confirm, decline or correct a held pre-portal claim. */
+async function decidePreportal(employeeId, action){
+  let absentDays;
+  if(action === 'adjust'){
+    const ask = await Swal.fire({
+      title:'How many of those days were they absent?',
+      input:'number', inputAttributes:{min:0, step:1},
+      text:'The rest are credited. Use this when part of the claim is real.',
+      showCancelButton:true, confirmButtonText:'Save',
+      background:'#0d1124', color:'#f0eee8', confirmButtonColor:'#f5c542', cancelButtonColor:'#374151'
+    });
+    if(!ask.isConfirmed) return;
+    absentDays = Number(ask.value || 0);
+  }
+  try{
+    const r = await fetch('/api/v2/hr/onboarding/preportal', {
+      method:'POST', credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ employeeId, action, absentDays })
+    });
+    const d = await r.json();
+    if(!r.ok || !d.success) throw new Error((d && d.message) || 'Could not save that.');
+    Swal.fire({icon:'success', title:'Saved',
+      text: d.attendance != null ? 'Their attendance is now ' + d.attendance + '%.' : 'Saved.',
+      background:'#0d1124', color:'#f0eee8', confirmButtonColor:'#D4AF37'});
+  }catch(e){
+    Swal.fire({icon:'error', title:'Not saved', text:e.message,
+      background:'#0d1124', color:'#f0eee8', confirmButtonColor:'#f43f5e'});
+  }
+}
+
 async function openJoinerReset(employeeId, name){
   if(!employeeId){ Swal.fire({icon:'info',title:'No employee ID',text:'This student has no employee ID to look up yet.',background:'#0d1124',color:'#f0eee8'}); return; }
   let d = null;
@@ -3137,6 +3203,7 @@ async function openJoinerReset(employeeId, name){
     + '<div><b>Portal registration:</b> ' + fmt(st.portalRegistered) + '</div>'
     + '<div><b>Attendance credited:</b> ' + (st.calculatedAttendance == null ? '—' : st.calculatedAttendance + ' days') + '</div>'
     + (st.resets && st.resets.length ? '<div style="margin-top:10px;"><b>Reset before:</b>' + history + '</div>' : '')
+    + _preportalPanel(st.preportalClaim)
     + '<div style="margin-top:12px;padding:10px 12px;border-radius:8px;background:rgba(245,197,66,0.08);'
     + 'border:1px solid rgba(245,197,66,0.25);font-size:12.5px;">'
     + 'Resetting reopens the joining questions on their next visit and puts the internship start back to their '
@@ -3148,6 +3215,24 @@ async function openJoinerReset(employeeId, name){
     Swal.fire({ title:(name||employeeId), html: body + '<div style="margin-top:12px;color:#fda4af;font-size:12.5px;">'
       + 'Resetting needs HR level ' + d.minLevel + ' or above.</div>',
       background:'#0d1124', color:'#f0eee8', confirmButtonColor:'#3b82f6', confirmButtonText:'Close' });
+    return;
+  }
+
+  // A held claim is the more urgent decision, so it is asked first — and it is
+  // a different decision from reopening the questions.
+  if(st.preportalClaim && st.preportalClaim.held){
+    const ask = await Swal.fire({
+      title:(name||employeeId), html: body,
+      showDenyButton:true, showCancelButton:true,
+      confirmButtonText:'Confirm the ' + st.preportalClaim.days + ' days',
+      denyButtonText:'Credit none of them',
+      cancelButtonText:'Only part of it…',
+      background:'#0d1124', color:'#f0eee8',
+      confirmButtonColor:'#10b981', denyButtonColor:'#f43f5e', cancelButtonColor:'#374151'
+    });
+    if(ask.isConfirmed) { await decidePreportal(employeeId, 'confirm'); return; }
+    if(ask.isDenied)    { await decidePreportal(employeeId, 'decline'); return; }
+    if(ask.dismiss === Swal.DismissReason.cancel) { await decidePreportal(employeeId, 'adjust'); return; }
     return;
   }
 

@@ -160,17 +160,70 @@ describe('the card proceeds', () => {
 
 describe('the WhatsApp attendance figure', () => {
   it('credits the pre-portal stretch instead of reporting zero', async () => {
-    // The heart of the feature. A student who started on WhatsApp 60 days
-    // before registering has NO attendance rows for those days — no account
-    // existed — so counting only rows gives 0 and tells them they have
-    // attended nothing.
+    // The heart of the feature. A student who started on WhatsApp before
+    // registering has NO attendance rows for those days — no account existed —
+    // so counting only rows gives 0 and tells them they have attended nothing.
+    mockState.student = studentRegistered(10);
+    mockState.attendance = [];
+
+    const res = await post({ joinerType: 'whatsapp', joiningDate: iso(Date.now() - 30 * DAY) });
+    expect(res.status).toBe(200);
+    expect(res.body.student.presentCount).toBeGreaterThan(0);
+    expect(res.body.student.calculatedAttendance).toBe(res.body.student.presentCount);
+    expect(res.body.student.progress.creditHeldForReview).toBe(false);
+  });
+
+  /*
+   * The same feature, one step too far.
+   *
+   * Nobody can check a day the student says they worked before they had an
+   * account — there is no record to check it against. For an ordinary claim
+   * that is fine. For a claim big enough to satisfy the whole 75% requirement
+   * by itself, the student need attend nothing at all, and a student typing a
+   * date into a box should not be able to decide that about themselves.
+   *
+   * It is held, not refused: a real four-month WhatsApp joiner exists, and
+   * refusing would strand them on the last card of onboarding with nothing
+   * else to press.
+   */
+  it('holds a claim that would meet the whole requirement on its own', async () => {
     mockState.student = studentRegistered(10);
     mockState.attendance = [];
 
     const res = await post({ joinerType: 'whatsapp', joiningDate: iso(Date.now() - 70 * DAY) });
     expect(res.status).toBe(200);
-    expect(res.body.student.presentCount).toBeGreaterThan(0);
-    expect(res.body.student.calculatedAttendance).toBe(res.body.student.presentCount);
+    expect(res.body.success).toBe(true);              // accepted, not refused
+    expect(res.body.student.progress.creditHeldForReview).toBe(true);
+    expect(res.body.student.presentCount).toBe(0);    // worth nothing until HR says
+    expect(mockState.saved.preportalCreditNeedsReview).toBe(true);
+    expect(mockState.saved.internshipStartDate).toBeInstanceOf(Date);
+  });
+
+  it('refuses a start date in the future, and nothing else', async () => {
+    const future = await post({ joinerType: 'whatsapp', joiningDate: iso(Date.now() + 5 * DAY) });
+    expect(future.status).toBe(400);
+    expect(future.body.message).toMatch(/future/i);
+
+    // Two years back is accepted — held, but accepted.
+    const ancient = await post({ joinerType: 'whatsapp', joiningDate: iso(Date.now() - 730 * DAY) });
+    expect(ancient.status).toBe(200);
+    expect(ancient.body.success).toBe(true);
+  });
+
+  it('will not be answered twice without an HR reset', async () => {
+    // The "asked once" rule used to live only in the browser: the request could
+    // simply be sent again, re-picking the start date and changing the employee
+    // ID every Attendance row is keyed to.
+    mockState.student = studentRegistered(10, { v2Onboarded: true });
+    const res = await post({ joinerType: 'whatsapp', joiningDate: iso(Date.now() - 20 * DAY) });
+    expect(res.status).toBe(409);
+    expect(res.body.alreadyCompleted).toBe(true);
+  });
+
+  it('moves the end date with the start date', async () => {
+    mockState.student = studentRegistered(10);
+    await post({ joinerType: 'whatsapp', joiningDate: iso(Date.now() - 30 * DAY) });
+    expect(mockState.saved.internshipEndDate).toBeInstanceOf(Date);
   });
 
   it('reports presentCount rather than a hardcoded 0', async () => {
@@ -197,11 +250,13 @@ describe('the WhatsApp attendance figure', () => {
 
   it('honours a coordinator’s absence correction', async () => {
     mockState.student = studentRegistered(10, { preportalAbsentDays: 5 });
-    const withCorrection = await post({ joinerType: 'whatsapp', joiningDate: iso(Date.now() - 70 * DAY) });
+    const withCorrection = await post({ joinerType: 'whatsapp', joiningDate: iso(Date.now() - 30 * DAY) });
 
     mockState.student = studentRegistered(10, { preportalAbsentDays: 0 });
     mockState.saved = null;
-    const without = await post({ joinerType: 'whatsapp', joiningDate: iso(Date.now() - 70 * DAY) });
+    // The SAME date on both sides — otherwise the difference is the date, not
+    // the correction.
+    const without = await post({ joinerType: 'whatsapp', joiningDate: iso(Date.now() - 30 * DAY) });
 
     expect(withCorrection.body.student.presentCount)
       .toBe(without.body.student.presentCount - 5);
