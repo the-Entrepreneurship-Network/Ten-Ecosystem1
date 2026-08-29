@@ -6218,6 +6218,28 @@ async function wizardConfirmJoiningDate() {
     });
     
     var data = await res.json();
+
+    /*
+     * Already answered — the server says so, and the way out is forward.
+     *
+     * public/ is served with a long max-age, so a browser can hold week-old
+     * markup and reopen this wizard for a student who finished it days ago.
+     * Showing them "Form Submission Failed" over a modal with no close button
+     * leaves them stuck on the dashboard: the same dead end as being refused
+     * for picking a date, arrived at from the other side.
+     */
+    if (res.status === 409 && data.alreadyCompleted) {
+      document.getElementById('onboardingWizardModal').style.display = 'none';
+      document.body.style.overflow = '';
+      Swal.fire({
+        icon: 'info',
+        title: 'Already done',
+        text: data.message || 'You have already answered these questions.',
+        background: '#0d1124', color: '#f0eee8', confirmButtonColor: '#D4AF37'
+      });
+      return;
+    }
+
     if (!data.success) {
       btn.disabled = false;
       btn.textContent = 'Confirm & Proceed →';

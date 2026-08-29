@@ -214,10 +214,52 @@ describe('the WhatsApp attendance figure', () => {
     // The "asked once" rule used to live only in the browser: the request could
     // simply be sent again, re-picking the start date and changing the employee
     // ID every Attendance row is keyed to.
-    mockState.student = studentRegistered(10, { v2Onboarded: true });
+    mockState.student = studentRegistered(10, { joinerWizardCompletedAt: new Date() });
     const res = await post({ joinerType: 'whatsapp', joiningDate: iso(Date.now() - 20 * DAY) });
     expect(res.status).toBe(409);
     expect(res.body.alreadyCompleted).toBe(true);
+  });
+
+  /*
+   * THE REGRESSION, and the reason this file now tests the sequence rather than
+   * a fixture.
+   *
+   * The guard was written against v2Onboarded, which reads like "onboarding is
+   * done" and is not: ensureOnboarded() sets it on GET /student/status, which
+   * the dashboard calls on EVERY page load. So it was already true before any
+   * student reached the joining-date card, every one of them got a 409, and
+   * "Confirm & Proceed" did nothing at all.
+   *
+   * The unit test missed it because it set the flag by hand to prove the guard
+   * fired, while the happy-path fixture carried none of the flags a real
+   * student always arrives with.
+   */
+  it.each([
+    ['v2Onboarded — set by GET /student/status on every page load', { v2Onboarded: true }],
+    ['joinerTypeSelected — set by the previous card', { joinerTypeSelected: true, joinerType: 'whatsapp' }],
+    ['onboardingPopupSeen — set by mark-onboarding-seen', { onboardingPopupSeen: true }],
+    ['hasSeenWelcome — set by mark-welcome-seen', { hasSeenWelcome: true }],
+    ['every one of them at once', {
+      v2Onboarded: true, joinerTypeSelected: true, joinerType: 'whatsapp',
+      onboardingPopupSeen: true, hasSeenOnboarding: true, hasSeenWelcome: true
+    }]
+  ])('still proceeds for a student carrying %s', async (_label, flags) => {
+    mockState.student = studentRegistered(10, flags);
+    const res = await post({ joinerType: 'whatsapp', joiningDate: iso(Date.now() - 28 * DAY) });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(mockState.saved.internshipStartDate).toBeInstanceOf(Date);
+    expect(mockState.saved.joinerWizardCompletedAt).toBeInstanceOf(Date);
+  });
+
+  it('the exact date from the report — 1 Aug, four weeks back — goes through', async () => {
+    // Reported from a phone: the card would not proceed on this date.
+    mockState.student = studentRegistered(10, {
+      v2Onboarded: true, joinerTypeSelected: true, joinerType: 'whatsapp'
+    });
+    const res = await post({ joinerType: 'whatsapp', joiningDate: iso(Date.now() - 28 * DAY) });
+    expect(res.status).toBe(200);
+    expect(res.body.student.progress.creditHeldForReview).toBe(false);
   });
 
   it('moves the end date with the start date', async () => {

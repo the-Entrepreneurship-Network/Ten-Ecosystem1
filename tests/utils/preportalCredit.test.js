@@ -190,10 +190,15 @@ describe('the wizard endpoint', () => {
    * resetting anything.
    */
   it('refuses a second submission', () => {
-    // v2Onboarded, not joinerTypeSelected: that one means only "answered the
-    // first question", and a reload between the two cards arrives with it
-    // already set — guarding on it would strand the student on the last card.
-    expect(src).toContain('if (student.v2Onboarded) {');
+    /*
+     * On a field this wizard owns. Every other onboarding flag belongs to some
+     * other feature as well, and each one strands the student on the last card:
+     * v2Onboarded is set by GET /student/status on every page load (that guard
+     * shipped, and blocked every student), joinerTypeSelected by the previous
+     * card, onboardingPopupSeen by /mark-onboarding-seen.
+     */
+    expect(src).toContain('if (student.joinerWizardCompletedAt) {');
+    expect(src).toContain('updates.joinerWizardCompletedAt = new Date();');
     expect(src).toContain('alreadyCompleted: true');
     expect(src).toContain('res.status(409)');
   });
@@ -258,6 +263,37 @@ describe('HR can see and settle a held claim', () => {
   });
 });
 
+describe('nothing writes the joiner fields around the back', () => {
+  const server = strip(fs.readFileSync(path.join(root, 'server.js'), 'utf8'));
+
+  /*
+   * Three endpoints took the student from `req.body.employeeId ||
+   * req.headers['x-employee-id']` with no session check at all. /save-start-date
+   * was the joining-date card with none of its rules: no authentication, no
+   * future-date check, no pre-portal review, no end-date recompute, no
+   * attendance recount — on the field that drives attendance crediting and every
+   * date printed on a certificate. All three had zero callers.
+   */
+  it.each(['/save-start-date', '/save-joiner-type', '/mark-onboarding-seen'])(
+    'POST %s is gone', (route) => {
+      expect(server).not.toContain('app.post(["' + route + '"');
+    });
+
+  it('the one that is still called takes its identity from the session', () => {
+    const at = server.indexOf('app.post(["/mark-welcome-seen"');
+    expect(at).toBeGreaterThan(-1);
+    const block = server.slice(at, at + 700);
+    expect(block).toContain('req.session && req.session.student && req.session.student.employeeId');
+    expect(block).not.toContain("req.headers['x-employee-id']");
+  });
+
+  it('the internship start date is written by exactly one route', () => {
+    // Two ways to set it is how one of them ends up without the rules.
+    const writers = (server.match(/internshipStartDate:\s*startDate/g) || []).length;
+    expect(writers).toBe(0);
+  });
+});
+
 describe('the reset withdraws what the wrong answer created', () => {
   const { portalRegistrationDate } = require('../../services/onboardingReset');
   const src = strip(fs.readFileSync(path.join(root, 'services/onboardingReset.js'), 'utf8'));
@@ -275,6 +311,11 @@ describe('the reset withdraws what the wrong answer created', () => {
     ['a legitimately later one',{ joiningDate: '2026-08-05', createdAt: new Date('2026-07-20') }, '2026-08-05']
   ])('anchors %s correctly', (_label, student, expected) => {
     expect(iso(portalRegistrationDate(student))).toBe(expected);
+  });
+
+  it('reopens the wizard on the server, not only in the browser', () => {
+    // Without this the reset reopens the cards and the last one answers 409.
+    expect(src).toContain('joinerWizardCompletedAt: null');
   });
 
   it('clears any confirmation with the claim it belonged to', () => {

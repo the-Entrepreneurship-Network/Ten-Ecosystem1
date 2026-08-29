@@ -90,6 +90,9 @@ async function resetOnboarding(student, who = {}) {
         // The welcome card runs ahead of the wizard, so it has to come back too
         // or the wizard is reached by a path the student never sees.
         hasSeenWelcome: false,
+        // The one flag that reopens the wizard on the server. Without clearing
+        // it the reset would reopen the cards and the last one would 409.
+        joinerWizardCompletedAt: null,
         // The pre-portal credit goes with the answer that created it — and so
         // does any HR confirmation of it. A confirmation belongs to one claim;
         // leaving it in place would silently pre-approve the next one.
