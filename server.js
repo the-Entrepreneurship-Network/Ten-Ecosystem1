@@ -5788,43 +5788,33 @@ app.post("/get-my-password", (req, res) => {
   });
 });
 
-app.post(["/mark-onboarding-seen", "/api/v2/student/mark-onboarding-seen"], async (req, res) => {
-  try {
-    const employeeId = req.body.employeeId || req.headers['x-employee-id'] || req.headers['employeeid'];
-    await Student.findOneAndUpdate(
-      { employeeId },
-      { hasSeenOnboarding: true, onboardingPopupSeen: true },
-      { new: true }
-    );
-    res.json({ success: true });
-  } catch (err) {
-    res.json({ success: false });
-  }
-});
+/*
+ * Three onboarding endpoints used to live here, and all three took the student
+ * from `req.body.employeeId || req.headers['x-employee-id']` with no session
+ * check of any kind:
+ *
+ *   POST /mark-onboarding-seen   dismissed any student's onboarding
+ *   POST /save-joiner-type       set any student's joiner type
+ *   POST /save-start-date        set any student's internship start date, to
+ *                                any value including a future one
+ *
+ * That last one is the whole joining-date card with none of its rules — no
+ * authentication, no future-date check, no pre-portal review, no end-date
+ * recompute, no attendance recount — and the start date drives attendance
+ * crediting and the dates printed on every certificate.
+ *
+ * All three had zero callers: the portal uses the authenticated
+ * /api/v2/student/* routes. They were an unlocked back door onto the same
+ * fields, so they are gone rather than guarded.
+ */
 
 app.post(["/mark-welcome-seen", "/api/v2/student/mark-welcome-seen"], async (req, res) => {
   try {
-    const employeeId = req.body.employeeId || req.headers['x-employee-id'] || req.headers['employeeid'];
-    await Student.findOneAndUpdate(
-      { employeeId },
-      { hasSeenWelcome: true },
-      { new: true }
-    );
-    res.json({ success: true });
-  } catch (err) {
-    res.json({ success: false });
-  }
-});
-
-app.post(["/save-joiner-type", "/api/v2/student/set-joiner-type"], async (req, res) => {
-  try {
-    const employeeId = req.body.employeeId || req.headers['x-employee-id'] || req.headers['employeeid'];
-    const { joinerType } = req.body;
-    await Student.findOneAndUpdate(
-      { employeeId },
-      { joinerType, joinerTypeSelected: true },
-      { new: true }
-    );
+    // Identity from the SESSION only — this read the employee ID out of the
+    // request body, like the three routes deleted above it.
+    const employeeId = req.session && req.session.student && req.session.student.employeeId;
+    if (!employeeId) return res.status(401).json({ success: false, message: "Please sign in to continue." });
+    await Student.updateOne({ employeeId }, { $set: { hasSeenWelcome: true } });
     res.json({ success: true });
   } catch (err) {
     res.json({ success: false });
@@ -5899,38 +5889,6 @@ app.post(["/save-employee-id-override", "/api/v2/student/save-employee-id-overri
   } catch (err) {
     console.error("[save-employee-id-override]", err.message);
     res.json({ success: false, message: "Could not update the Employee ID right now." });
-  }
-});
-
-app.post(["/save-start-date", "/api/v2/student/save-start-date"], async (req, res) => {
-  try {
-    const employeeId = req.body.employeeId || req.headers['x-employee-id'] || req.headers['employeeid'];
-    const { internshipStartDate } = req.body;
-    if (!internshipStartDate) {
-      return res.json({
-        success: false,
-        message: "Please provide a start date"
-      });
-    }
-    const startDate = new Date(internshipStartDate);
-    if (isNaN(startDate.getTime())) {
-      return res.json({
-        success: false,
-        message: "Invalid date format"
-      });
-    }
-    await Student.findOneAndUpdate(
-      { employeeId },
-      {
-        internshipStartDate: startDate,
-        hasSeenOnboarding: true,
-        onboardingPopupSeen: true
-      },
-      { new: true }
-    );
-    res.json({ success: true });
-  } catch (err) {
-    res.json({ success: false });
   }
 });
 

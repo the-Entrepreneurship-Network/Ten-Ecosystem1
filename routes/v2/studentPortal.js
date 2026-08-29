@@ -500,16 +500,28 @@ router.post("/student/complete-onboarding", requireStudent, async (req, res) => 
          * and change the employee ID every Attendance row is keyed to, as many
          * times as they liked, without HR resetting anything.
          *
-         * v2Onboarded, not joinerTypeSelected. joinerTypeSelected means only
-         * "answered the first question" — and the wizard keeps joinerType in a
-         * page-level variable, so a reload between the two cards arrives here
-         * with the flag already set and only a date in the body. Guarding on it
-         * would lock that student out of the last card and discard the date
-         * they had just picked: the exact dead end this endpoint has been fixed
-         * for twice already. v2Onboarded is written at the end of this handler
-         * and cleared by services/onboardingReset.js, so it means finished.
+         * joinerWizardCompletedAt, and nothing else, because every other
+         * onboarding flag on this record belongs to some other feature too:
+         *
+         *   v2Onboarded         ensureOnboarded() sets it on GET
+         *                       /student/status, which the dashboard calls on
+         *                       EVERY page load — so it is already true before
+         *                       any student reaches this card. Guarding on it
+         *                       refused all of them, which is the bug this
+         *                       comment replaced.
+         *   joinerTypeSelected  set by the previous card. The wizard keeps
+         *                       joinerType in a page variable, so a reload
+         *                       between the two cards arrives here with the
+         *                       flag set and only a date in the body.
+         *   onboardingPopupSeen POST /student/mark-onboarding-seen sets it on
+         *                       its own.
+         *
+         * Three chances to strand a student on the last card of onboarding with
+         * nothing else to press. This field is written on the line below that
+         * finishes the wizard and cleared by services/onboardingReset.js, and
+         * nothing else touches it.
          */
-        if (student.v2Onboarded) {
+        if (student.joinerWizardCompletedAt) {
             return res.status(409).json({
                 success: false,
                 alreadyCompleted: true,
@@ -690,6 +702,9 @@ router.post("/student/complete-onboarding", requireStudent, async (req, res) => 
         // The WhatsApp path never set this, while POST /student/onboard did, so
         // a WhatsApp joiner who finished the wizard could be shown it again.
         updates.v2Onboarded = true;
+        // The one field that means "this wizard is finished". See the guard at
+        // the top of this handler for why none of the others can say it.
+        updates.joinerWizardCompletedAt = new Date();
 
         const updatedStudent = await Student.findOneAndUpdate(
             { _id: student._id },

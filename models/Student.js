@@ -181,6 +181,18 @@ const studentsSchema = new mongoose.Schema({
      * record for nothing. The claim is stored and counts for zero until HR
      * confirms it; see services/attendanceUtils getPreportalCreditedDays.
      */
+    /*
+     * When the joiner wizard was finished — the ONE field that means that.
+     *
+     * The guard on this endpoint used to read v2Onboarded, and v2Onboarded
+     * belongs to a different feature: ensureOnboarded() sets it on
+     * GET /student/status, which the dashboard calls on every page load. So it
+     * was already true by the time any student reached the joining-date card,
+     * and the guard refused all of them. Nothing else writes this one, and
+     * services/onboardingReset.js clears it.
+     */
+    joinerWizardCompletedAt: { type: Date, default: null },
+
     preportalCreditNeedsReview:  { type: Boolean, default: false },
     preportalCreditConfirmedAt:  { type: Date,   default: null },
     preportalCreditConfirmedBy:  { type: String, default: "" },
