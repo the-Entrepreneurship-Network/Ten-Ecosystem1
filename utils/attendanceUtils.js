@@ -231,15 +231,21 @@ function claimNeedsReview(startDate, student) {
   if (start >= startOfDay(anchor)) return false;      // no pre-portal gap at all
 
   /*
-   * Ask the question directly: with no attendance rows at all, would this claim
-   * on its own make them eligible?
+   * Would this claim, alone, satisfy the requirement for the WHOLE internship?
    *
-   * An earlier version worked the sum out separately and compared against the
-   * working days in the WHOLE tenure, while eligibility is measured against the
-   * working days ELAPSED. Those are different numbers whenever the tenure is
-   * still running, and at the boundary the two disagreed — a claim was waved
-   * through that did make the student eligible on its own. One computation, so
-   * there is nothing left to disagree with.
+   * Against the tenure's finish line, not against the days elapsed so far.
+   * Measuring it against elapsed days sent the ordinary case to HR: a one-month
+   * student who did five days on WhatsApp and then registered has six working
+   * days elapsed on their first day, so five of them "satisfies 75%" on a
+   * technicality — and the five-day WhatsApp joiner is precisely who this
+   * feature exists for. It also made the verdict drift: the elapsed denominator
+   * grows daily, so the same unchanged claim could fall in and out of review
+   * with the calendar.
+   *
+   * The finish line does not move. A one-month tenure needs 20 of its 26
+   * working days; five is nowhere near it and is simply credited, while a claim
+   * reaching back across the whole month is held — which is the case worth a
+   * human's attention, because that student need attend nothing at all.
    */
   const asIfCounted = Object.assign(
     {}, student.toObject ? student.toObject() : student,
@@ -251,7 +257,8 @@ function claimNeedsReview(startDate, student) {
       preportalAbsentDays: 0
     }
   );
-  return getAttendanceSummary([], asIfCounted).isEligible;
+  const x = getAttendanceSummary([], asIfCounted);
+  return x.requiredByEnd > 0 && x.preportalCreditedDays >= x.requiredByEnd;
 }
 
 /**
@@ -369,7 +376,9 @@ function countPresentDays(attendanceRecords) {
  *   percentage: number, daysPresent: number, trackedDaysPresent: number,
  *   preportalCreditedDays: number, workingDaysElapsed: number,
  *   totalWorkingDays: number, totalCalendarDays: number, requiredDays: number,
- *   isEligible: boolean, stillNeeds: number, dayNumber: number,
+ *   isEligible: boolean, stillNeeds: number, requiredByEnd: number,
+ *   stillNeedsByEnd: number, workingDaysRemaining: number, canStillQualify: boolean,
+ *   dayNumber: number,
  *   daysRemaining: number, startDate: Date|null, endDate: Date|null
  * }}
  */
@@ -381,6 +390,7 @@ function getAttendanceSummary(attendanceRecords, student) {
     percentage: 0, daysPresent: 0, trackedDaysPresent: 0, preportalCreditedDays: 0,
     workingDaysElapsed: 0, totalWorkingDays: 0, totalCalendarDays: getTenureDays(tenure),
     requiredDays: 0, isEligible: false, stillNeeds: 0,
+    requiredByEnd: 0, stillNeedsByEnd: 0, workingDaysRemaining: 0, canStillQualify: true,
     dayNumber: 0, daysRemaining: getTenureDays(tenure), startDate: null, endDate: null
   };
   if (!startDate) return empty;
@@ -400,6 +410,32 @@ function getAttendanceSummary(attendanceRecords, student) {
     ? Math.min(100, Math.round((daysPresent / workingDaysElapsed) * 100))
     : 0;
 
+  /*
+   * The finish line, and how far it is — which is NOT `requiredDays - present`.
+   *
+   * requiredDays is 75% of the days that have ALREADY passed, so
+   * `requiredDays - daysPresent` is a snapshot of how far behind you are right
+   * now. Every screen printed that as "attend N more days to catch up", and
+   * that is a different question with a much bigger answer: attending N more
+   * days TAKES N more days, and the requirement grows by 0.75 of every one of
+   * them.
+   *
+   * A real student, 8 days present of 25 elapsed on a three-month tenure, was
+   * told to attend 11 more. Attending 11 more would leave them at 19 of 36 —
+   * still short. Reaching 75% from there takes 43 consecutive days, and
+   * finishing the tenure at 75% takes 50 of the 52 that remain.
+   *
+   * These are measured against totalWorkingDays, which is fixed by the tenure:
+   * a one-month student is judged on one month of working days and no more,
+   * however long they stay on the portal.
+   */
+  const requiredByEnd = Math.ceil(totalWorkingDays * ATTENDANCE_THRESHOLD);
+  const stillNeedsByEnd = Math.max(0, requiredByEnd - daysPresent);
+  const workingDaysRemaining = Math.max(0, totalWorkingDays - workingDaysElapsed);
+  // Whether 75% is still reachable at all. Nothing told a student this, so
+  // somebody could go on chasing a target that had already gone.
+  const canStillQualify = stillNeedsByEnd <= workingDaysRemaining;
+
   // Calendar-day progress, for "Day 12 of 45".
   const today = startOfDay(new Date());
   const msPerDay = 24 * 60 * 60 * 1000;
@@ -417,7 +453,14 @@ function getAttendanceSummary(attendanceRecords, student) {
     totalCalendarDays,
     requiredDays,
     isEligible: daysPresent >= requiredDays,
+    // How far behind you are TODAY. Not the number of days left to attend —
+    // stillNeedsByEnd is that.
     stillNeeds: Math.max(0, requiredDays - daysPresent),
+    // The tenure's own finish line, and the honest plan for reaching it.
+    requiredByEnd,
+    stillNeedsByEnd,
+    workingDaysRemaining,
+    canStillQualify,
     dayNumber,
     daysRemaining: Math.max(0, totalCalendarDays - dayNumber),
     startDate,

@@ -5942,7 +5942,14 @@ async function calculateAttendanceStats(employeeId) {
     coordPct: pct(coordCount),
     combinedPct: summary.percentage,
     minDays: summary.requiredDays,
+    // How far behind they are today. The banner asks a different question —
+    // how many days are left to attend — and that is stillNeedsByEnd.
     daysNeeded: summary.stillNeeds,
+    requiredByEnd: summary.requiredByEnd,
+    stillNeedsByEnd: summary.stillNeedsByEnd,
+    workingDaysRemaining: summary.workingDaysRemaining,
+    canStillQualify: summary.canStillQualify,
+    workingDaysElapsed: summary.workingDaysElapsed,
     markedToday,
     isAboveMinimum: summary.isEligible,
     tenure: student.tenure,
@@ -6573,6 +6580,9 @@ async function computeAttendanceStats(employeeId, joiningDate, domain){
             combinedPresentDays: 0, workingDays: 0,
             selfPct: 0, coordPct: 0, combinedPct: 0,
             requiredDays: 0, daysNeeded: 0,
+            requiredByEnd: summary.requiredByEnd, stillNeedsByEnd: summary.requiredByEnd,
+            workingDaysRemaining: summary.totalWorkingDays, canStillQualify: true,
+            workingDaysElapsed: 0, totalWorkingDays: summary.totalWorkingDays,
             dayNumber: 0, daysRemaining: summary.totalCalendarDays,
             preportalCreditedDays: 0,
             eligible: false
@@ -6592,6 +6602,11 @@ async function computeAttendanceStats(employeeId, joiningDate, domain){
         // Section 3: the real 75% target and the day counter for the panel.
         requiredDays: summary.requiredDays,
         daysNeeded: summary.stillNeeds,
+        requiredByEnd: summary.requiredByEnd,
+        stillNeedsByEnd: summary.stillNeedsByEnd,
+        workingDaysRemaining: summary.workingDaysRemaining,
+        canStillQualify: summary.canStillQualify,
+        workingDaysElapsed: summary.workingDaysElapsed,
         totalWorkingDays: summary.totalWorkingDays,
         totalCalendarDays: summary.totalCalendarDays,
         dayNumber: summary.dayNumber,

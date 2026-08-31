@@ -3977,18 +3977,32 @@ async function loadAttendance(){
       // number — a sixth copy of the tenure table, dividing by elapsed
       // CALENDAR days — so the banner routinely disagreed with the
       // percentage shown right above it.
+      /*
+       * Against the tenure's finish line, which does not move — not against
+       * 75% of the days that have passed, which grows as fast as you fill it.
+       * "need N more to reach 75%" printed that moving figure, so the number
+       * shrank every day the student attended and never got them there.
+       */
       const totalDays = s.workingDays || s.totalDays || 0;
-      const requiredDays = s.requiredDays || s.minDays || 0;
       const present = s.combinedPresentDays || s.combinedCount || 0;
-      const remaining = (s.daysNeeded !== undefined)
-        ? s.daysNeeded
-        : Math.max(0, requiredDays - present);
+      const requiredByEnd = (s.requiredByEnd !== undefined)
+        ? s.requiredByEnd
+        : Math.ceil(totalDays * 0.75);
+      const remaining = (s.stillNeedsByEnd !== undefined)
+        ? s.stillNeedsByEnd
+        : Math.max(0, requiredByEnd - present);
+      const daysLeft = (s.workingDaysRemaining !== undefined)
+        ? s.workingDaysRemaining
+        : Math.max(0, totalDays - (s.workingDaysElapsed || 0));
 
       if(remaining === 0 && totalDays > 0){
-        threshEl.innerText = "✅ You have met the 75% attendance requirement! (" + present + "/" + totalDays + " days)";
+        threshEl.innerText = "✅ You have met the 75% attendance requirement — " + present + " of the " + requiredByEnd + " working days needed.";
         threshEl.style.color = "#10b981";
+      } else if(s.canStillQualify === false){
+        threshEl.innerText = "⚠️ " + present + " of the " + requiredByEnd + " working days needed for 75%, with only " + daysLeft + " left. Talk to your coordinator.";
+        threshEl.style.color = "#f43f5e";
       } else {
-        threshEl.innerText = "⚠️ " + present + "/" + totalDays + " days present — need " + remaining + " more to reach 75% (" + requiredDays + " days required)";
+        threshEl.innerText = "⚠️ " + present + "/" + totalDays + " working days present — attend " + remaining + " more of the " + daysLeft + " still to come to reach 75% (" + requiredByEnd + " needed)";
         threshEl.style.color = "#f59e0b";
       }
     }
@@ -6278,6 +6292,17 @@ async function wizardConfirmJoiningDate() {
     document.getElementById('wizardStep3ResultPct').textContent = presentCount;
     document.getElementById('wizardStep3ResultDays').textContent = daysMore;
 
+    /*
+     * "Attend N more to catch up" was the wrong sentence for the wrong number.
+     *
+     * It printed `requiredSoFar - present`, which is how far behind you are
+     * TODAY. Attending that many more days takes that many more days, and the
+     * requirement grows by 0.75 of each one — so a student 8 of 25 was told to
+     * attend 11 more, when 11 more would leave them at 19 of 36, still short.
+     *
+     * The number that means something is measured against the tenure's own
+     * finish line, which does not move: 58 of 77 working days, so 50 more.
+     */
     var detailMsg;
     if (p.creditHeldForReview) {
       // Not a refusal. The date is saved; the days before their account
@@ -6286,15 +6311,20 @@ async function wizardConfirmJoiningDate() {
                 + 'requirement on its own, so HR will confirm it before those days are counted. '
                 + 'Your date is saved and your internship starts now — nothing is blocked.';
     } else if (daysMore <= 0) {
-      detailMsg = '✅ You are meeting the 75% requirement. ' + presentCount + ' of the '
-                + (p.workingDaysElapsed || 0) + ' working days so far, and you need '
-                + (p.requiredSoFar || 0) + '.';
+      detailMsg = '✅ You have already attended the ' + (p.requiredByEnd || 0)
+                + ' working days your ' + (p.totalWorkingDays || 0) + '-day internship needs for 75%.';
+    } else if (p.canStillQualify === false) {
+      // Say so plainly rather than printing a target that cannot be reached.
+      detailMsg = 'Attendance is counted on working days — Sundays do not count. You have '
+                + presentCount + ' of the ' + (p.requiredByEnd || 0) + ' your internship needs for 75%, '
+                + 'and only ' + (p.workingDaysRemaining || 0)
+                + (p.workingDaysRemaining === 1 ? ' working day is left. ' : ' working days are left. ')
+                + 'Talk to your coordinator — 75% is no longer reachable by attendance alone.';
     } else {
       detailMsg = 'Attendance is counted on working days — Sundays do not count. '
-                + (p.workingDaysElapsed || 0) + ' working days have passed since your start date, so you need '
-                + (p.requiredSoFar || 0) + ' of them to be at 75%. You have ' + presentCount + '. '
-                + 'Attend ' + daysMore + ' more to catch up.'
-                + (p.totalWorkingDays ? ' Your full tenure is ' + p.totalWorkingDays + ' working days.' : '');
+                + 'Your internship is ' + (p.totalWorkingDays || 0) + ' working days, so you need '
+                + (p.requiredByEnd || 0) + ' of them for 75%. You have ' + presentCount + '. '
+                + 'Attend ' + daysMore + ' more of the ' + (p.workingDaysRemaining || 0) + ' still to come.';
     }
     document.getElementById('wizardStep3ResultDaysDetail').textContent = detailMsg;
 

@@ -96,21 +96,57 @@ describe('a start date can no longer buy an attendance record', () => {
     expect(x.percentage).toBeLessThan(75);
   });
 
+  /*
+   * Against the tenure's finish line, not the days elapsed so far.
+   *
+   * Measuring it against elapsed days sent the ordinary case to HR: a one-month
+   * student who did five days on WhatsApp has six working days elapsed on their
+   * first day in the portal, so five of them "satisfies 75%" on a technicality
+   * — and that student is exactly who the feature exists for.
+   */
   it.each(['1week', '15days', '1month', '45days', '3months', '6months'])(
-    'no unreviewed claim makes a %s student eligible on its own', (tenure) => {
+    'no unreviewed claim covers a %s internship on its own', (tenure) => {
       const s = joiner({ tenure });
       const cutoff = A.getEarliestUnreviewedStartDate(s);
-      // The last date that is still waved through must leave them short.
       const x = A.getAttendanceSummary([], Object.assign({}, s, { internshipStartDate: cutoff }));
       expect(A.claimNeedsReview(cutoff, s)).toBe(false);
-      // Eligibility, not the rounded percentage: that is the line the portal
-      // actually draws, and the two disagree at the boundary.
-      expect(x.isEligible).toBe(false);
+      // The last claim waved through must still leave real days to attend.
+      expect(x.preportalCreditedDays).toBeLessThan(x.requiredByEnd);
+      expect(x.stillNeedsByEnd).toBeGreaterThan(0);
 
       // One day earlier crosses the line and is held.
       const over = new Date(cutoff);
       over.setDate(over.getDate() - 1);
       expect(A.claimNeedsReview(over, s)).toBe(true);
+    });
+
+  /*
+   * The worked example, at every tenure: a handful of WhatsApp days before the
+   * portal is an ordinary claim and is simply credited. This is the case the
+   * review gate used to swallow.
+   */
+  it.each(['1week', '15days', '1month', '45days', '3months', '6months'])(
+    'five WhatsApp days on a %s tenure are credited without asking HR', (tenure) => {
+      const anchor = new Date();
+      anchor.setHours(0, 0, 0, 0);
+      const start = new Date(anchor);
+      let working = 0;
+      while (working < 5) {
+        start.setDate(start.getDate() - 1);
+        if (start.getDay() !== 0) working++;
+      }
+      const s = {
+        joinerType: 'whatsapp', tenure,
+        joiningDate: anchor.toISOString().slice(0, 10), createdAt: anchor,
+        internshipStartDate: start.toISOString().slice(0, 10)
+      };
+      // A one-week tenure has only six working days in it, so five of them IS
+      // the whole internship — that one is meant to be checked.
+      const wholeInternship = tenure === '1week';
+      expect(A.claimNeedsReview(s.internshipStartDate, s)).toBe(wholeInternship);
+      if (!wholeInternship) {
+        expect(A.getAttendanceSummary([], s).preportalCreditedDays).toBe(5);
+      }
     });
 
   it('credits nothing for a start date on or after the account existed', () => {
@@ -354,5 +390,163 @@ describe('the one-off repair script', () => {
     // apart from someone who typed a number. That is what HR is for.
     expect(src).toContain('claimNeedsReview');
     expect(src).not.toContain('internshipStartDate: null');
+  });
+});
+
+describe('how many more days do I actually have to attend', () => {
+  const rows = (n, fromDaysAgo) => Array.from({ length: n }, (_, i) => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - fromDaysAgo + i);
+    return { status: 'Present', date: d, dateKey: d.toISOString().slice(0, 10) };
+  });
+
+  /*
+   * THE MISCALCULATION, reported from a phone.
+   *
+   * The card printed `requiredDays - present`, which is 75% of the days that
+   * have ALREADY passed minus what you have — how far behind you are today.
+   * Every screen labelled it "attend N more days to catch up", and that is a
+   * different question with a much bigger answer: attending N more days TAKES
+   * N more days, and the requirement grows by 0.75 of every one of them.
+   */
+  it('the number is not the gap you can see today', () => {
+    const s = { joinerType: 'new', tenure: '3months',
+                joiningDate: daysAgo(35), createdAt: new Date(daysAgo(35)) };
+    const x = A.getAttendanceSummary(rows(8, 12), s);
+
+    // The gap today, which is what used to be printed.
+    expect(x.stillNeeds).toBe(Math.max(0, x.requiredDays - x.daysPresent));
+
+    // Attending exactly that many more does NOT get you to 75%, because the
+    // requirement moved while you were attending.
+    const after = x.daysPresent + x.stillNeeds;
+    const elapsedThen = x.workingDaysElapsed + x.stillNeeds;
+    expect(after).toBeLessThan(Math.ceil(elapsedThen * 0.75));
+
+    // The figure that means something is against the tenure's fixed finish
+    // line, and it is the larger one.
+    expect(x.stillNeedsByEnd).toBeGreaterThan(x.stillNeeds);
+    expect(x.stillNeedsByEnd).toBe(x.requiredByEnd - x.daysPresent);
+  });
+
+  it('attending exactly stillNeedsByEnd more days finishes at 75%', () => {
+    // The promise the sentence makes, checked.
+    const s = { joinerType: 'new', tenure: '3months',
+                joiningDate: daysAgo(35), createdAt: new Date(daysAgo(35)) };
+    const x = A.getAttendanceSummary(rows(8, 12), s);
+    const finalPresent = x.daysPresent + x.stillNeedsByEnd;
+    expect(finalPresent).toBeGreaterThanOrEqual(Math.ceil(x.totalWorkingDays * 0.75));
+  });
+
+  /*
+   * "which student tenure is how, that candidate can only go that much only,
+   * not more than that" — every figure is bounded by the tenure.
+   */
+  it.each([
+    ['1week',   6],
+    ['15days',  12],
+    ['1month',  25],
+    ['45days',  38],
+    ['3months', 77],
+    ['6months', 154]
+  ])('a %s student is judged on %i working days and no more', (tenure, workingDays) => {
+    const s = { joinerType: 'new', tenure, joiningDate: daysAgo(400), createdAt: new Date(daysAgo(400)) };
+    const x = A.getAttendanceSummary([], s);
+    expect(x.totalWorkingDays).toBe(workingDays);
+    // Long past the end, and still bounded by the tenure.
+    expect(x.workingDaysElapsed).toBeLessThanOrEqual(x.totalWorkingDays);
+    expect(x.requiredByEnd).toBe(Math.ceil(workingDays * 0.75));
+    expect(x.stillNeedsByEnd).toBeLessThanOrEqual(workingDays);
+    expect(x.workingDaysRemaining).toBe(0);
+  });
+
+  it('says when 75% has stopped being reachable', () => {
+    // Nothing told a student this, so they could go on chasing a target that
+    // had already gone.
+    const gone = { joinerType: 'new', tenure: '1month',
+                   joiningDate: daysAgo(40), createdAt: new Date(daysAgo(40)) };
+    const x = A.getAttendanceSummary([], gone);
+    expect(x.workingDaysRemaining).toBe(0);
+    expect(x.stillNeedsByEnd).toBeGreaterThan(0);
+    expect(x.canStillQualify).toBe(false);
+
+    const fresh = { joinerType: 'new', tenure: '1month',
+                    joiningDate: daysAgo(1), createdAt: new Date(daysAgo(1)) };
+    expect(A.getAttendanceSummary([], fresh).canStillQualify).toBe(true);
+  });
+
+  /*
+   * The worked example: one month of tenure, five days already done on
+   * WhatsApp, then the portal. Those five working days are credited when the
+   * date is entered, Sundays excluded.
+   */
+  it('credits exactly the WhatsApp working days, Sundays excluded', () => {
+    const anchor = new Date();
+    anchor.setHours(0, 0, 0, 0);
+
+    // Walk back until five WORKING days have passed, whatever weekday today is.
+    const start = new Date(anchor);
+    let working = 0;
+    while (working < 5) {
+      start.setDate(start.getDate() - 1);
+      if (start.getDay() !== 0) working++;
+    }
+
+    const s = {
+      joinerType: 'whatsapp', tenure: '1month',
+      joiningDate: anchor.toISOString().slice(0, 10), createdAt: anchor,
+      internshipStartDate: start.toISOString().slice(0, 10)
+    };
+    const x = A.getAttendanceSummary([], s);
+
+    expect(x.preportalCreditedDays).toBe(5);
+    expect(x.daysPresent).toBe(5);
+    expect(A.claimNeedsReview(s.internshipStartDate, s)).toBe(false);   // ordinary, no HR needed
+    // And their one month is still one month: the WhatsApp stretch comes out
+    // of it, it is not added on top.
+    expect(x.totalWorkingDays).toBeLessThanOrEqual(26);
+  });
+
+  it('a Sunday in the WhatsApp stretch is not credited', () => {
+    const anchor = new Date();
+    anchor.setHours(0, 0, 0, 0);
+    const start = new Date(anchor);
+    start.setDate(start.getDate() - 14);          // two weeks: contains two Sundays
+
+    const s = { joinerType: 'whatsapp', tenure: '1month',
+                joiningDate: anchor.toISOString().slice(0, 10), createdAt: anchor,
+                internshipStartDate: start.toISOString().slice(0, 10) };
+
+    let sundays = 0;
+    const cur = new Date(start);
+    while (cur < anchor) { if (cur.getDay() === 0) sundays++; cur.setDate(cur.getDate() + 1); }
+
+    expect(A.getAttendanceSummary([], s).preportalCreditedDays).toBe(14 - sundays);
+  });
+});
+
+describe('every screen prints the figure that means something', () => {
+  const page = strip(fs.readFileSync(path.join(root, 'public/student-dashboard.html'), 'utf8'));
+  const api = strip(fs.readFileSync(path.join(root, 'routes/v2/studentPortal.js'), 'utf8'));
+  const srv = strip(fs.readFileSync(path.join(root, 'server.js'), 'utf8'));
+
+  it('the joining-date card', () => {
+    expect(api).toContain('daysNeededToAttendMore = summary.stillNeedsByEnd');
+    expect(api).not.toContain('daysNeededToAttendMore = summary.stillNeeds;');
+    expect(page).toContain('p.requiredByEnd');
+    expect(page).toContain('p.canStillQualify === false');
+    expect(page).not.toContain('more to catch up.');
+  });
+
+  it('the attendance banner on the dashboard', () => {
+    expect(page).toContain('s.stillNeedsByEnd');
+    expect(page).toContain('s.canStillQualify === false');
+    expect(page).not.toContain('more to reach 75% (" + requiredDays + " days required)');
+  });
+
+  it('both server payloads carry it', () => {
+    expect((srv.match(/stillNeedsByEnd: summary\.stillNeedsByEnd/g) || []).length).toBe(2);
+    expect((srv.match(/canStillQualify: summary\.canStillQualify/g) || []).length).toBe(2);
   });
 });

@@ -190,13 +190,29 @@ describe('the WhatsApp attendance figure', () => {
     mockState.student = studentRegistered(10);
     mockState.attendance = [];
 
-    const res = await post({ joinerType: 'whatsapp', joiningDate: iso(Date.now() - 70 * DAY) });
+    /*
+     * Against the tenure's finish line, not the days elapsed. A three-month
+     * internship is 77 working days and needs 58 of them, so 70 days back is
+     * about 51 credited — a large claim that still leaves real days to attend,
+     * and is simply credited. This one spans the whole internship.
+     */
+    const res = await post({ joinerType: 'whatsapp', joiningDate: iso(Date.now() - 130 * DAY) });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);              // accepted, not refused
     expect(res.body.student.progress.creditHeldForReview).toBe(true);
     expect(res.body.student.presentCount).toBe(0);    // worth nothing until HR says
     expect(mockState.saved.preportalCreditNeedsReview).toBe(true);
     expect(mockState.saved.internshipStartDate).toBeInstanceOf(Date);
+  });
+
+  it('a large but ordinary claim is credited without asking HR', async () => {
+    // The case the gate used to swallow when it measured against elapsed days.
+    mockState.student = studentRegistered(10);
+    mockState.attendance = [];
+    const res = await post({ joinerType: 'whatsapp', joiningDate: iso(Date.now() - 70 * DAY) });
+    expect(res.status).toBe(200);
+    expect(res.body.student.progress.creditHeldForReview).toBe(false);
+    expect(res.body.student.presentCount).toBeGreaterThan(0);
   });
 
   it('refuses a start date in the future, and nothing else', async () => {
