@@ -680,11 +680,18 @@ router.post("/student/complete-onboarding", requireStudent, async (req, res) => 
                  * the codebase computed it the other way.
                  */
                 totalTenureDays = getTenureDays(student.tenure || student.v2DurationType);
-                daysNeededToAttendMore = summary.stillNeeds;
+                // The days they must STILL ATTEND, against the tenure's own
+                // finish line — not summary.stillNeeds, which is how far behind
+                // they are today and grows back as fast as they fill it.
+                daysNeededToAttendMore = summary.stillNeedsByEnd;
                 progress = {
                     workingDaysElapsed: summary.workingDaysElapsed,
                     totalWorkingDays: summary.totalWorkingDays,
                     requiredSoFar: summary.requiredDays,
+                    requiredByEnd: summary.requiredByEnd,
+                    workingDaysRemaining: summary.workingDaysRemaining,
+                    canStillQualify: summary.canStillQualify,
+                    behindToday: summary.stillNeeds,
                     percentage: summary.percentage,
                     preportalCreditedDays: summary.preportalCreditedDays,
                     trackedDaysPresent: summary.trackedDaysPresent,
