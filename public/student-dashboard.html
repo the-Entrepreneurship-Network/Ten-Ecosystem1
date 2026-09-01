@@ -6303,8 +6303,18 @@ async function wizardConfirmJoiningDate() {
      * The number that means something is measured against the tenure's own
      * finish line, which does not move: 58 of 77 working days, so 50 more.
      */
+    /*
+     * The server's sentence, printed as it arrived.
+     *
+     * The page composing its own explanation is what let an old page print an
+     * old sentence around a new number. The fallback below still exists for a
+     * server that predates `progress.message`, but the server is the author.
+     */
     var detailMsg;
-    if (p.creditHeldForReview) {
+    if (p.message) {
+      document.getElementById('wizardStep3ResultDaysDetail').textContent = p.message;
+      detailMsg = null;
+    } else if (p.creditHeldForReview) {
       // Not a refusal. The date is saved; the days before their account
       // existed are simply not counted until somebody checks them.
       detailMsg = 'That start date is far enough back that it would cover your whole attendance '
@@ -6326,7 +6336,9 @@ async function wizardConfirmJoiningDate() {
                 + (p.requiredByEnd || 0) + ' of them for 75%. You have ' + presentCount + '. '
                 + 'Attend ' + daysMore + ' more of the ' + (p.workingDaysRemaining || 0) + ' still to come.';
     }
-    document.getElementById('wizardStep3ResultDaysDetail').textContent = detailMsg;
+    if (detailMsg !== null) {
+      document.getElementById('wizardStep3ResultDaysDetail').textContent = detailMsg;
+    }
 
     document.getElementById('wizardStep3ResultBlock').style.display = 'block';
     
@@ -7466,6 +7478,13 @@ document.addEventListener("DOMContentLoaded", function() {
     .catch(function () { /* the rest of the portal does not depend on this */ });
 })();
 </script>
+<!-- Two guards, on every page that shows or saves data:
+     db-banner says so when there is no database behind the portal, which
+     once ran for days looking normal while writing to a JSON file;
+     build-guard reloads a page the server has been deployed under, which
+     is how an old sentence came to be printed around a new number. -->
+<script src="/js/db-banner.js" defer></script>
+<script src="/js/build-guard.js" defer></script>
 </body>
 </html>
 

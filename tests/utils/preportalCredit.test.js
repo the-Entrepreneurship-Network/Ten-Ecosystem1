@@ -443,21 +443,39 @@ describe('how many more days do I actually have to attend', () => {
    * "which student tenure is how, that candidate can only go that much only,
    * not more than that" — every figure is bounded by the tenure.
    */
+  /*
+   * Counted, not hardcoded. A 30-day window holds 25 or 26 working days
+   * depending on which weekday it starts on — an earlier version of this test
+   * pinned 25 and began failing the next morning when the start date moved onto
+   * a different weekday.
+   */
   it.each([
-    ['1week',   6],
-    ['15days',  12],
-    ['1month',  25],
-    ['45days',  38],
-    ['3months', 77],
-    ['6months', 154]
-  ])('a %s student is judged on %i working days and no more', (tenure, workingDays) => {
-    const s = { joinerType: 'new', tenure, joiningDate: daysAgo(400), createdAt: new Date(daysAgo(400)) };
+    ['1week',   7],
+    ['15days',  15],
+    ['1month',  30],
+    ['45days',  45],
+    ['3months', 90],
+    ['6months', 180]
+  ])('a %s student is judged on the working days in %i calendar days and no more', (tenure, calendarDays) => {
+    const startISO = daysAgo(400);
+    const s = { joinerType: 'new', tenure, joiningDate: startISO, createdAt: new Date(startISO) };
     const x = A.getAttendanceSummary([], s);
-    expect(x.totalWorkingDays).toBe(workingDays);
+
+    // Count the Sundays in this student's actual span.
+    const cur = new Date(startISO);
+    cur.setHours(0, 0, 0, 0);
+    let sundays = 0;
+    for (let i = 0; i < calendarDays; i++) {
+      if (cur.getDay() === 0) sundays++;
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    expect(x.totalCalendarDays).toBe(calendarDays);
+    expect(x.totalWorkingDays).toBe(calendarDays - sundays);
     // Long past the end, and still bounded by the tenure.
     expect(x.workingDaysElapsed).toBeLessThanOrEqual(x.totalWorkingDays);
-    expect(x.requiredByEnd).toBe(Math.ceil(workingDays * 0.75));
-    expect(x.stillNeedsByEnd).toBeLessThanOrEqual(workingDays);
+    expect(x.requiredByEnd).toBe(Math.ceil(x.totalWorkingDays * 0.75));
+    expect(x.stillNeedsByEnd).toBeLessThanOrEqual(x.totalWorkingDays);
     expect(x.workingDaysRemaining).toBe(0);
   });
 

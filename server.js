@@ -284,37 +284,19 @@ function assertNoDuplicate(schema, items, doc, ignoreId) {
 function getCollectionData(modelName) {
     const file = path.join(DB_DIR, `db_${modelName}.json`);
     if (!fs.existsSync(file)) {
-        if (modelName === 'Student') {
-            const defaultRecords = [
-                {
-                    _id: "60c72b2f9b1d8b2badcd88a1",
-                    firstName: "Scholar",
-                    lastName: "TEN",
-                    name: "Scholar TEN",
-                    email: "student@entrepreneurshipnetwork.net",
-                    whatsapp: "1234567890",
-                    college: "The Entrepreneurship Network University",
-                    collegeName: "The Entrepreneurship Network University",
-                    domain: "Web Development",
-                    tenure: "3 Months",
-                    joiningDate: "2026-06-01",
-                    employeeId: "TEN-STUDENT-001",
-                    password: "intern123",
-                    currentStreak: 5,
-                    bestStreak: 12,
-                    lastAttendanceDate: new Date().toISOString(),
-                    lastActiveDate: new Date().toISOString(),
-                    v2Onboarded: true,
-                    v2DurationType: "3months",
-                    locStatus: "not_eligible",
-                    lorStatus: "not_eligible",
-                    starStatus: "not_submitted",
-                    offerLetterStatus: "approved"
-                }
-            ];
-            fs.writeFileSync(file, JSON.stringify(defaultRecords, null, 2), 'utf8');
-            return defaultRecords;
-        }
+        /*
+         * No invented student.
+         *
+         * This used to write a "Scholar TEN" record (TEN-STUDENT-001,
+         * student@entrepreneurshipnetwork.net, whatsapp 1234567890) the first
+         * time db_Student.json was missing — so a portal with NO DATABASE
+         * looked like a working portal with one student on it. HR opened All
+         * Students, saw a row, and had no reason to think anything was wrong.
+         *
+         * An empty list is the truth: there is no database, so there are no
+         * students. services/dbHealth.js says why, and every staff page shows
+         * the banner.
+         */
         if (modelName === 'DomainTask') {
             const seedFile = path.join(__dirname, 'seeds', 'domainTasks.seed.js');
             if (fs.existsSync(seedFile)) {
@@ -2073,6 +2055,66 @@ try {
     console.error('[Studio] paywall failed to load:', e.message);
 }
 
+/*
+ * The build this process is running.
+ *
+ * Deterministic from the checkout, NOT from boot time: PM2 can run several
+ * workers, and a per-process value would make them disagree and bounce a page
+ * between them forever. server.js is rewritten by every `git reset --hard` in
+ * the deploy, so its mtime and size identify the deployment exactly.
+ */
+const BUILD_ID = (() => {
+    try {
+        const st = require('fs').statSync(__filename);
+        return require('crypto').createHash('sha1')
+            .update(String(st.mtimeMs) + ':' + st.size).digest('hex').slice(0, 12);
+    } catch (_e) {
+        return 'unknown';
+    }
+})();
+
+/*
+ * GET /api/health/db — is there a database behind this portal?
+ *
+ * Public and unauthenticated on purpose: it is the first thing to check when
+ * the portal "shows the wrong data", and it must answer even when nothing can
+ * be read to authenticate anybody. It returns no data and no credentials —
+ * only whether the connection is up, and if not, the cause and the fix.
+ *
+ * Every page polls it for the banner, so it stays cheap: mongoose's readyState
+ * is a field, not a query.
+ */
+app.get('/api/health/db', (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+        const status = require('./services/dbHealth').status();
+        res.status(status.connected ? 200 : 503).json(status);
+    } catch (e) {
+        res.status(500).json({ connected: false, cause: e.message });
+    }
+});
+
+/*
+ * Every response says whether it came from a real database.
+ *
+ * The portal answered normally for a week with no database behind it, writing
+ * registrations into a JSON file, and nothing anywhere said so. This header is
+ * what public/js/db-banner.js reads, so a stale page that knows nothing about
+ * the endpoint above still cannot hide it for long.
+ */
+app.use((req, res, next) => {
+    try {
+        const dbHealth = require('./services/dbHealth');
+        const up = mongoose.connection.readyState === 1;
+        res.set('X-TEN-Database', up ? 'connected' : 'fallback');
+        // What public/js/build-guard.js watches: when this changes, a page open
+        // in a tab reloads itself instead of running old code against a new API.
+        res.set('X-TEN-Build', BUILD_ID);
+        if (!up && req.path.startsWith('/api/')) dbHealth.noteFallbackUse();
+    } catch (_e) { /* never break a request over a header */ }
+    next();
+});
+
 app.use(express.static("public", {
     maxAge: '7d',
     etag: true,
@@ -2609,6 +2651,8 @@ setInterval(runAutoDocumentCheck, 6 * 60 * 60 * 1000);
 
 mongoose.set('bufferCommands', false); // CRITICAL: fail fast, don't hang
 
+try { require('./services/dbHealth').watch(); } catch (e) { console.error('[Database] health watch failed:', e.message); }
+
 mongoose.connection.on('connected', () => {
   console.log("MongoDB connected successfully");
   global.isMongoUnhealthy = false;
@@ -3117,8 +3161,24 @@ connectMongo(mongoUri)
   }
 })
 .catch((err)=>{
-  console.warn("MongoDB connection warning: Working in local runtime mode. Some write services may require database configuration. " + err.message);
+  /*
+   * This used to be a console.warn and nothing else.
+   *
+   * The process carried on with no database, every model fell through to the
+   * JSON engine above, and registrations kept succeeding into
+   * .data/local_db/db_Student.json — a file on one EC2 box, outside every
+   * backup. There was no retry, so one failed attempt at boot left the portal
+   * in that state until somebody restarted it, however long the database had
+   * been healthy again. And nothing on any screen said the data was not real.
+   *
+   * dbHealth says WHY in words that name the fix, and keeps trying so the
+   * portal recovers on its own the moment the cause is dealt with.
+   */
   global.isMongoUnhealthy = true;
+  const dbHealth = require('./services/dbHealth');
+  const cause = dbHealth.diagnose(err, mongoUri);
+  dbHealth.status().cause = cause.summary;
+  dbHealth.keepTrying(connectMongo, mongoUri);
 });
 
 // ================= SCHEMAS =================
