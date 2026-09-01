@@ -42,6 +42,22 @@ const CAUSES = [
            + '`pm2 restart ecosystem.config.js --update-env`.'
     },
     {
+        /*
+         * The one that actually happened. MONGODB_URI was missing from .env and
+         * server.js defaulted to mongodb://localhost:27017 — so the failure read
+         * as "a database refused me" rather than "a line is missing from .env".
+         * That default is gone, but this stays: a URI can still name a host that
+         * is not listening.
+         */
+        id: 'refused',
+        test: (err) => /ECONNREFUSED/i.test(err.message || ''),
+        summary: 'nothing is listening at the address in MONGODB_URI',
+        fix: 'If that address is 127.0.0.1 or localhost, the .env on this server is missing the '
+           + 'real connection string: put the MongoDB Atlas URI in MONGODB_URI and restart with '
+           + '`pm2 restart ecosystem.config.js --update-env`. If a MongoDB is genuinely meant to '
+           + 'run on this box, start it with `sudo systemctl start mongod`.'
+    },
+    {
         id: 'auth',
         test: (err) => /authentication failed|bad auth|not authorized/i.test(err.message || ''),
         summary: 'the username or password in MONGODB_URI is wrong',
@@ -89,6 +105,19 @@ function diagnose(err, uri) {
     };
 }
 
+/**
+ * Record a failure so status() — and therefore /api/health/db and the banner on
+ * every page — can say why. Called at boot as well as on every retry: the first
+ * failure is the one somebody is staring at a blank portal about.
+ */
+function noteFailure(err, uri) {
+    const cause = diagnose(err || {}, uri);
+    state.lastError = (err && err.message) || String(err);
+    state.cause = cause.summary;
+    state.fix = cause.fix;
+    return cause;
+}
+
 /** The banner text every screen shows while the database is down. */
 function bannerMessage() {
     return 'The database is not connected. Anything you see or save right now is being held in a '
@@ -118,10 +147,7 @@ function keepTrying(connect, uri, log = console) {
             await connect(uri);
             // The 'connected' event handler marks the state; nothing to do here.
         } catch (err) {
-            const cause = diagnose(err, uri);
-            state.lastError = err.message;
-            state.cause = cause.summary;
-            state.fix = cause.fix;
+            const cause = noteFailure(err, uri);
 
             // Loud on the first failure, then quiet — a retry every minute must
             // not bury the rest of the log.
@@ -192,4 +218,4 @@ function status() {
     };
 }
 
-module.exports = { diagnose, keepTrying, watch, status, noteFallbackUse, bannerMessage, CAUSES };
+module.exports = { diagnose, noteFailure, keepTrying, watch, status, noteFallbackUse, bannerMessage, CAUSES };

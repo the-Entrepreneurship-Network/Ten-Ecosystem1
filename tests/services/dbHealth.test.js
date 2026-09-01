@@ -18,11 +18,43 @@ describe('why the database is not connected', () => {
     ['no MONGODB_URI at all',      new Error('whatever'), '',                    'no-uri'],
     ['a wrong password',           new Error('bad auth : authentication failed'), 'mongodb+srv://x', 'auth'],
     ['an IP that is not allowed',  new Error('Server at x is not allowed to connect'), 'mongodb+srv://x', 'ip-allowlist'],
-    ['a hostname that will not resolve', new Error('querySrv ENOTFOUND _mongodb._tcp.x'), 'mongodb+srv://x', 'dns']
+    ['a hostname that will not resolve', new Error('querySrv ENOTFOUND _mongodb._tcp.x'), 'mongodb+srv://x', 'dns'],
+    ['an address with nothing listening', new Error('connect ECONNREFUSED 127.0.0.1:27017'), 'mongodb://localhost:27017/internship', 'refused']
   ])('names %s', (_label, err, uri, id) => {
     const cause = dbHealth.diagnose(err, uri);
     expect(cause.id).toBe(id);
     expect(cause.fix).toBeTruthy();
+  });
+
+  it('names the failure that actually took the portal down', () => {
+    /*
+     * MONGODB_URI was missing from .env on the server and server.js defaulted to
+     * mongodb://localhost:27017, so mongoose dialled a MongoDB nobody had ever
+     * installed there. The error read `connect ECONNREFUSED 127.0.0.1:27017` —
+     * which sounds like a database that is down, not like a missing line in a
+     * config file. Nothing in the portal ever said the second thing.
+     */
+    const err = new Error('connect ECONNREFUSED 127.0.0.1:27017');
+    err.name = 'MongooseServerSelectionError';   // how mongoose actually reports it
+    const cause = dbHealth.diagnose(err, 'mongodb://localhost:27017/internship');
+    expect(cause.id).toBe('refused');
+    expect(cause.fix).toMatch(/MONGODB_URI/);
+    expect(cause.fix).toMatch(/localhost/);
+  });
+
+  it('a missing URI is a missing URI, not a refused connection', () => {
+    // With no URI at all the honest answer is "it is not set" — the ECONNREFUSED
+    // that follows is a consequence, not the cause.
+    expect(dbHealth.diagnose(new Error('connect ECONNREFUSED 127.0.0.1:27017'), '').id).toBe('no-uri');
+  });
+
+  it('records the reason at boot, not five seconds later on the first retry', () => {
+    // /api/health/db and the banner on every page read this, and they are asked
+    // immediately. server.js used to write it as `status().cause = ...`, which
+    // assigned to the throwaway object status() builds and did nothing at all.
+    dbHealth.noteFailure(new Error('bad auth : authentication failed'), 'mongodb+srv://x');
+    expect(dbHealth.status().cause).toMatch(/username or password/i);
+    expect(dbHealth.status().fix).toMatch(/Database Access/);
   });
 
   it('still says something useful for a cause it does not recognise', () => {
@@ -64,6 +96,22 @@ describe('a portal with no database says so', () => {
     // portal broken after the real problem is gone.
     expect(server).toContain('dbHealth.keepTrying(connectMongo, mongoUri)');
     expect(server).not.toContain('console.warn("MongoDB connection warning: Working in local runtime mode');
+  });
+
+  it('does not quietly point at a database on this server', () => {
+    /*
+     * `process.env.MONGODB_URI || "mongodb://localhost:27017/internship"`. A
+     * missing line in .env became a connection attempt to a MongoDB that was
+     * never installed on the box, and the portal reported it as a database
+     * problem rather than a configuration one. There is no default now.
+     */
+    expect(server).toContain('const mongoUri = process.env.MONGODB_URI || ""');
+    expect(server).not.toMatch(/MONGODB_URI\s*\|\|\s*["']mongodb:\/\/localhost/);
+  });
+
+  it('records why at boot rather than assigning to a throwaway object', () => {
+    expect(server).toContain('dbHealth.noteFailure(err, mongoUri)');
+    expect(server).not.toContain('dbHealth.status().cause =');
   });
 
   it('does not invent a student to fill the empty screen', () => {

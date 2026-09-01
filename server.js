@@ -2692,7 +2692,21 @@ async function runWithRetry(fn, retries = 3, delay = 1500) {
     }
 }
 
-let mongoUri = process.env.MONGODB_URI || "mongodb://localhost:27017/internship";
+/*
+ * No default.
+ *
+ * This line used to read `|| "mongodb://localhost:27017/internship"`, and that
+ * default is what took the portal down. MONGODB_URI was missing from .env on
+ * the server, so mongoose dialled a MongoDB nobody had ever installed on that
+ * box and failed with `connect ECONNREFUSED 127.0.0.1:27017` — a message that
+ * reads like a database which is merely down, not like a line missing from a
+ * config file. Every model fell through to the JSON engine above and real
+ * registrations were written to .data/local_db/db_Student.json for days.
+ *
+ * An empty string is honest: mongoose rejects it immediately and dbHealth says
+ * "MONGODB_URI is not set", which names the fix.
+ */
+const mongoUri = process.env.MONGODB_URI || "";
 
 function connectMongo(uri) {
   return mongoose.connect(uri, {
@@ -3176,8 +3190,11 @@ connectMongo(mongoUri)
    */
   global.isMongoUnhealthy = true;
   const dbHealth = require('./services/dbHealth');
-  const cause = dbHealth.diagnose(err, mongoUri);
-  dbHealth.status().cause = cause.summary;
+  // Record it now, not on the first retry five seconds from now: /api/health/db
+  // and the banner on every page read this, and they are asked immediately.
+  // (This used to be `dbHealth.status().cause = ...`, which assigned to the
+  // throwaway object status() builds and therefore did nothing at all.)
+  dbHealth.noteFailure(err, mongoUri);
   dbHealth.keepTrying(connectMongo, mongoUri);
 });
 
