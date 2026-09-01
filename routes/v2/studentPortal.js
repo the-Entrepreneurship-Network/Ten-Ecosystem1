@@ -684,7 +684,44 @@ router.post("/student/complete-onboarding", requireStudent, async (req, res) => 
                 // finish line — not summary.stillNeeds, which is how far behind
                 // they are today and grows back as fast as they fill it.
                 daysNeededToAttendMore = summary.stillNeedsByEnd;
+                /*
+                 * The sentence, composed HERE.
+                 *
+                 * The page used to build its own explanation around these
+                 * numbers, so a browser running yesterday's page against
+                 * today's API printed an old sentence with a new figure in it:
+                 * "26 working days have passed … you need 20 of them … Attend
+                 * 48 more" — 20 from the page's arithmetic, 48 from the
+                 * server's, each right on its own and nonsense together.
+                 *
+                 * A number and its explanation now travel as one thing, so no
+                 * version of the page can separate them.
+                 */
+                const say = (() => {
+                    if (updates.preportalCreditNeedsReview) {
+                        return 'That start date is far enough back that it would cover your whole attendance '
+                             + 'requirement on its own, so HR will confirm it before those days are counted. '
+                             + 'Your date is saved and your internship starts now — nothing is blocked.';
+                    }
+                    if (summary.stillNeedsByEnd <= 0) {
+                        return `You have already attended the ${summary.requiredByEnd} working days your `
+                             + `${summary.totalWorkingDays}-day internship needs for 75%.`;
+                    }
+                    if (!summary.canStillQualify) {
+                        const left = summary.workingDaysRemaining;
+                        return 'Attendance is counted on working days — Sundays do not count. You have '
+                             + `${summary.daysPresent} of the ${summary.requiredByEnd} your internship needs for 75%, `
+                             + `and only ${left} working day${left === 1 ? ' is' : 's are'} left. `
+                             + 'Talk to your coordinator — 75% is no longer reachable by attendance alone.';
+                    }
+                    return 'Attendance is counted on working days — Sundays do not count. '
+                         + `Your internship is ${summary.totalWorkingDays} working days, so you need `
+                         + `${summary.requiredByEnd} of them for 75%. You have ${summary.daysPresent}. `
+                         + `Attend ${summary.stillNeedsByEnd} more of the ${summary.workingDaysRemaining} still to come.`;
+                })();
+
                 progress = {
+                    message: say,
                     workingDaysElapsed: summary.workingDaysElapsed,
                     totalWorkingDays: summary.totalWorkingDays,
                     requiredSoFar: summary.requiredDays,

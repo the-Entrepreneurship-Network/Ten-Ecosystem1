@@ -1,0 +1,195 @@
+'use strict';
+
+/**
+ * Why the database is not connected, and keeping trying until it is.
+ *
+ * WHAT WENT WRONG IN PRODUCTION
+ *
+ * The initial mongoose.connect() failure was caught and logged as a warning:
+ *
+ *     .catch(err => { console.warn("MongoDB connection warning: Working in
+ *                     local runtime mode…"); global.isMongoUnhealthy = true; })
+ *
+ * and the process carried on. Every model then fell through to the JSON engine
+ * in server.js, which writes to .data/local_db/db_<Model>.json — a file on one
+ * EC2 box, outside every backup.
+ *
+ * Three things made that invisible rather than obvious:
+ *
+ *   - There was no retry. One failed attempt at boot and the process stayed in
+ *     fallback until somebody restarted it, however long the database had been
+ *     healthy again.
+ *   - The JSON engine INVENTED a student ("Scholar TEN", TEN-STUDENT-001) the
+ *     first time the file was missing, so a portal with no database looked like
+ *     a portal with one student in it.
+ *   - Nothing on any screen said the data was not real. Registrations kept
+ *     succeeding, into a file.
+ *
+ * This module fixes the half that is in the code: it says exactly WHY the
+ * connection failed, in words that name the fix, and it keeps trying so the
+ * portal recovers on its own the moment the cause is dealt with.
+ */
+
+const mongoose = require('mongoose');
+
+/** The four realistic causes, each with a different fix. */
+const CAUSES = [
+    {
+        id: 'no-uri',
+        test: (_err, uri) => !uri,
+        summary: 'MONGODB_URI is not set',
+        fix: 'Add MONGODB_URI to the .env file on the server, then restart with '
+           + '`pm2 restart ecosystem.config.js --update-env`.'
+    },
+    {
+        id: 'auth',
+        test: (err) => /authentication failed|bad auth|not authorized/i.test(err.message || ''),
+        summary: 'the username or password in MONGODB_URI is wrong',
+        fix: 'Check the database user and password in MongoDB Atlas under Database Access. '
+           + 'A password containing @ : / ? # [ ] must be percent-encoded in the URI.'
+    },
+    {
+        id: 'ip-allowlist',
+        test: (err) => /is not allowed to connect|IP address .* whitelist|connection .* closed/i.test(err.message || '')
+                    || (/ServerSelection/i.test(err.name || '') && /TLS|SSL|closed/i.test(err.message || '')),
+        summary: "this server's IP address is not allowed to connect",
+        fix: 'In MongoDB Atlas, Network Access → Add IP Address, and add this EC2 box\'s public IP. '
+           + 'An Elastic IP is worth having here: without one the address changes when the instance stops.'
+    },
+    {
+        id: 'dns',
+        test: (err) => /querySrv|ENOTFOUND|EAI_AGAIN|getaddrinfo/i.test(err.message || ''),
+        summary: 'the cluster hostname could not be resolved',
+        fix: 'Check the hostname in MONGODB_URI. If DNS SRV lookups are blocked on this network, '
+           + 'use the non-SRV mongodb:// connection string Atlas offers under "Connect → Drivers → older version".'
+    }
+];
+
+const state = {
+    connected: false,
+    since: null,
+    attempts: 0,
+    lastError: null,
+    cause: null,
+    fix: null,
+    /** Set once the process has served a request while disconnected. */
+    servedFromFallback: false
+};
+
+/** Classify a connection failure into something somebody can act on. */
+function diagnose(err, uri) {
+    const found = CAUSES.find((c) => {
+        try { return c.test(err || {}, uri); } catch (_e) { return false; }
+    });
+    return found || {
+        id: 'unknown',
+        summary: 'the database refused the connection',
+        fix: 'Check the server can reach MongoDB at all: '
+           + '`node -e "require(\'mongoose\').connect(process.env.MONGODB_URI).then(()=>console.log(\'ok\'))"`.'
+    };
+}
+
+/** The banner text every screen shows while the database is down. */
+function bannerMessage() {
+    return 'The database is not connected. Anything you see or save right now is being held in a '
+         + 'temporary file on the server and is NOT in the database.';
+}
+
+/**
+ * Keep trying to connect, forever, with backoff.
+ *
+ * Forever on purpose. The cause is almost always something changed outside this
+ * process — an expired Atlas IP allowlist entry, a rotated password — and it is
+ * fixed by somebody in a console, not by a deploy. Giving up means the portal
+ * stays broken after the real problem is gone.
+ *
+ * @param {(uri: string) => Promise} connect  the connect function to retry
+ * @param {string} uri
+ */
+function keepTrying(connect, uri, log = console) {
+    const FIRST_DELAY_MS = 5000;
+    const MAX_DELAY_MS = 60 * 1000;
+    let delay = FIRST_DELAY_MS;
+
+    async function attempt() {
+        if (mongoose.connection.readyState === 1) return;   // somebody else got there
+        state.attempts += 1;
+        try {
+            await connect(uri);
+            // The 'connected' event handler marks the state; nothing to do here.
+        } catch (err) {
+            const cause = diagnose(err, uri);
+            state.lastError = err.message;
+            state.cause = cause.summary;
+            state.fix = cause.fix;
+
+            // Loud on the first failure, then quiet — a retry every minute must
+            // not bury the rest of the log.
+            const line = `[Database] NOT CONNECTED — ${cause.summary}.`;
+            if (state.attempts === 1) {
+                log.error('');
+                log.error('  ' + '='.repeat(72));
+                log.error('  ' + line);
+                log.error('  ');
+                log.error('  ' + cause.fix);
+                log.error('  ');
+                log.error('  Until then the portal is running on .data/local_db/*.json — a file on');
+                log.error('  this server. Registrations still succeed and are NOT in the database.');
+                log.error('  Recover them with: node scripts/import-fallback-db.js --write');
+                log.error('  ' + '='.repeat(72));
+                log.error('');
+            } else if (state.attempts % 10 === 0) {
+                log.warn(`${line} Attempt ${state.attempts}; still retrying.`);
+            }
+
+            delay = Math.min(delay * 2, MAX_DELAY_MS);
+            setTimeout(attempt, delay).unref?.();
+        }
+    }
+
+    setTimeout(attempt, FIRST_DELAY_MS).unref?.();
+}
+
+/** Wire the mongoose events onto this module's state. */
+function watch(log = console) {
+    mongoose.connection.on('connected', () => {
+        const wasDown = !state.connected;
+        state.connected = true;
+        state.since = new Date();
+        state.lastError = null;
+        state.cause = null;
+        state.fix = null;
+        if (wasDown && state.attempts > 0) {
+            log.log(`[Database] Connected after ${state.attempts} attempt(s).`);
+            if (state.servedFromFallback) {
+                log.warn('[Database] This process served requests from the local file while it was '
+                       + 'down. Run `node scripts/import-fallback-db.js` to see what is only there.');
+            }
+        }
+    });
+    mongoose.connection.on('disconnected', () => { state.connected = false; });
+    mongoose.connection.on('reconnected', () => { state.connected = true; state.since = new Date(); });
+}
+
+/** Note that a request was answered without a database behind it. */
+function noteFallbackUse() {
+    state.servedFromFallback = true;
+}
+
+/** The shape both the health endpoint and the UI banner read. */
+function status() {
+    const connected = mongoose.connection.readyState === 1;
+    return {
+        connected,
+        state: ['disconnected', 'connected', 'connecting', 'disconnecting'][mongoose.connection.readyState] || 'unknown',
+        since: state.since,
+        attempts: state.attempts,
+        cause: connected ? null : state.cause,
+        fix: connected ? null : state.fix,
+        lastError: connected ? null : state.lastError,
+        servedFromFallback: state.servedFromFallback,
+        message: connected ? null : bannerMessage()
+    };
+}
+
+module.exports = { diagnose, keepTrying, watch, status, noteFallbackUse, bannerMessage, CAUSES };

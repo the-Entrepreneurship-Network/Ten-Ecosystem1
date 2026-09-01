@@ -764,5 +764,12 @@
 <!-- The notification orb, as on every other signed-in portal page. HR
      decisions on this desk now reach the contractor through it. -->
 <script src="/notify-orb.js" defer></script>
+<!-- Two guards, on every page that shows or saves data:
+     db-banner says so when there is no database behind the portal, which
+     once ran for days looking normal while writing to a JSON file;
+     build-guard reloads a page the server has been deployed under, which
+     is how an old sentence came to be printed around a new number. -->
+<script src="/js/db-banner.js" defer></script>
+<script src="/js/build-guard.js" defer></script>
 </body>
 </html>
