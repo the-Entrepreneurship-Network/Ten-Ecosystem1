@@ -67,7 +67,7 @@ function diskHeadroom(mountPoint = '/') {
     }
 }
 
-/** The four realistic causes, each with a different fix. */
+/** The realistic causes, most specific first — Array.find takes the first match. */
 const CAUSES = [
     {
         id: 'no-uri',
@@ -78,19 +78,19 @@ const CAUSES = [
     },
     {
         /*
-         * The one that actually happened. MONGODB_URI was missing from .env and
-         * server.js defaulted to mongodb://localhost:27017 — so the failure read
-         * as "a database refused me" rather than "a line is missing from .env".
-         * That default is gone, but this stays: a URI can still name a host that
-         * is not listening.
+         * A URI that is there but is not a connection string — the classic being a
+         * stray newline or a comment pasted into the .env line, which makes
+         * process.env.MONGODB_URI truthy and unusable. Without this the operator
+         * was told "the database refused the connection" and sent to check the
+         * network, for a fault entirely inside one line of a file.
          */
-        id: 'refused',
-        test: (err) => /ECONNREFUSED/i.test(err.message || ''),
-        summary: 'nothing is listening at the address in MONGODB_URI',
-        fix: 'If that address is 127.0.0.1 or localhost, the .env on this server is missing the '
-           + 'real connection string: put the MongoDB Atlas URI in MONGODB_URI and restart with '
-           + '`pm2 restart ecosystem.config.js --update-env`. If a MongoDB is genuinely meant to '
-           + 'run on this box, start it with `sudo systemctl start mongod`.'
+        id: 'parse',
+        test: (err) => /invalid scheme|invalid connection string|MongoParseError/i.test(err.message || '')
+                    || /MongoParseError/i.test(err.name || ''),
+        summary: 'MONGODB_URI is not a valid connection string',
+        fix: 'Look at the MONGODB_URI line in the .env file on the server. It must be one line '
+           + 'starting mongodb:// or mongodb+srv:// with no stray spaces, newlines or comments, '
+           + 'then restart with `pm2 restart ecosystem.config.js --update-env`.'
     },
     {
         id: 'auth',
@@ -113,6 +113,29 @@ const CAUSES = [
         summary: 'the cluster hostname could not be resolved',
         fix: 'Check the hostname in MONGODB_URI. If DNS SRV lookups are blocked on this network, '
            + 'use the non-SRV mongodb:// connection string Atlas offers under "Connect → Drivers → older version".'
+    },
+    {
+        /*
+         * LAST ON PURPOSE. ECONNREFUSED is a transport symptom that rides along with
+         * more specific causes, and Array.find takes the first match — so anywhere
+         * earlier in this list it steals them:
+         *
+         *   - a blocked SRV lookup reads "querySrv ECONNREFUSED _mongodb._tcp.…",
+         *     which is a DNS fault, and the operator was being told to start a local
+         *     mongod for it;
+         *   - a replica set with one node down reports "connect ECONNREFUSED 10.0.0.5"
+         *     even when the real fault is the password on the other two.
+         *
+         * By the time a failure reaches here, nothing more specific matched, and
+         * "nothing is listening" is then the honest reading.
+         */
+        id: 'refused',
+        test: (err) => /ECONNREFUSED/i.test(err.message || ''),
+        summary: 'nothing is listening at the address in MONGODB_URI',
+        fix: 'If that address is 127.0.0.1 or localhost, the .env on this server is missing the '
+           + 'real connection string: put the MongoDB Atlas URI in MONGODB_URI and restart with '
+           + '`pm2 restart ecosystem.config.js --update-env`. If a MongoDB is genuinely meant to '
+           + 'run on this box, start it with `sudo systemctl start mongod`.'
     }
 ];
 
@@ -174,9 +197,11 @@ function keepTrying(connect, uri, log = console) {
     const FIRST_DELAY_MS = 5000;
     const MAX_DELAY_MS = 60 * 1000;
     let delay = FIRST_DELAY_MS;
+    let stopped = false;
 
     async function attempt() {
         if (mongoose.connection.readyState === 1) return;   // somebody else got there
+        if (stopped) return;
         state.attempts += 1;
         try {
             await connect(uri);
@@ -201,6 +226,20 @@ function keepTrying(connect, uri, log = console) {
                 log.error('');
             } else if (state.attempts % 10 === 0) {
                 log.warn(`${line} Attempt ${state.attempts}; still retrying.`);
+            }
+
+            /*
+             * One cause cannot heal on its own: dotenv reads .env once, at boot, so
+             * an unset MONGODB_URI is unset for the life of the process no matter how
+             * often we ask. Retrying it forever only writes a connection error into
+             * the log every minute — into the very log somebody is reading to find
+             * out what is wrong.
+             */
+            if (cause.id === 'no-uri') {
+                stopped = true;
+                log.error('[Database] Not retrying: nothing in this process can set MONGODB_URI. '
+                        + 'Fix the .env file and restart.');
+                return;
             }
 
             delay = Math.min(delay * 2, MAX_DELAY_MS);

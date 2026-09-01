@@ -2718,7 +2718,7 @@ async function runWithRetry(fn, retries = 3, delay = 1500) {
  * An empty string is honest: mongoose rejects it immediately and dbHealth says
  * "MONGODB_URI is not set", which names the fix.
  */
-const mongoUri = process.env.MONGODB_URI || "";
+const mongoUri = (process.env.MONGODB_URI || "").trim();
 
 function connectMongo(uri) {
   return mongoose.connect(uri, {

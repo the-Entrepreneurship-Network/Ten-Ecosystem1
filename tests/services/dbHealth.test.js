@@ -42,10 +42,64 @@ describe('why the database is not connected', () => {
     expect(cause.fix).toMatch(/localhost/);
   });
 
+  /*
+   * REGRESSION. 'refused' was originally placed second in CAUSES, ahead of auth,
+   * ip-allowlist and dns. ECONNREFUSED is a transport symptom that rides along
+   * with more specific causes, and Array.find takes the first match — so it stole
+   * them, and an operator chasing a DNS problem was told to start a local mongod.
+   * It now sits last. These two cases are the ones that were actually wrong.
+   */
+  it('a blocked SRV lookup is a DNS fault, not a missing listener', () => {
+    // Node's c-ares errors read "<syscall> <code> <hostname>", so a refused SRV
+    // query literally contains ECONNREFUSED. server.js:3 repoints the resolver at
+    // 8.8.8.8, which is the code path that makes this reachable in production.
+    const err = new Error('querySrv ECONNREFUSED _mongodb._tcp.cluster0.abcde.mongodb.net');
+    err.name = 'MongooseServerSelectionError';
+    expect(dbHealth.diagnose(err, 'mongodb+srv://u:p@cluster0.abcde.mongodb.net/ten').id).toBe('dns');
+  });
+
+  it('a wrong password is a wrong password even when a replica node is also down', () => {
+    // MongoSystemError takes its message from the FIRST server description
+    // carrying an error, so one dead node puts ECONNREFUSED in front of the real
+    // fault on the other two.
+    const err = new Error('connect ECONNREFUSED 10.0.0.5:27017, bad auth : authentication failed');
+    expect(dbHealth.diagnose(err, 'mongodb://u:p@a,b,c/ten').id).toBe('auth');
+  });
+
+  it('refused is the last cause, so it can only win when nothing else matched', () => {
+    expect(dbHealth.CAUSES[dbHealth.CAUSES.length - 1].id).toBe('refused');
+  });
+
+  it('names a URI that is present but unusable', () => {
+    // A stray newline or a comment on the .env line makes MONGODB_URI truthy and
+    // unusable; this used to fall through to "the database refused the connection"
+    // and send the operator to check the network.
+    const cause = dbHealth.diagnose(
+      new Error('Invalid scheme, expected connection string to start with "mongodb://"'),
+      '\n mongodb+srv://x'
+    );
+    expect(cause.id).toBe('parse');
+    expect(cause.fix).toMatch(/\.env/);
+  });
+
   it('a missing URI is a missing URI, not a refused connection', () => {
     // With no URI at all the honest answer is "it is not set" — the ECONNREFUSED
     // that follows is a consequence, not the cause.
     expect(dbHealth.diagnose(new Error('connect ECONNREFUSED 127.0.0.1:27017'), '').id).toBe('no-uri');
+  });
+
+  it('stops retrying the one cause a retry can never fix', () => {
+    // dotenv reads .env once, at boot. An unset MONGODB_URI stays unset for the
+    // life of the process, so retrying forever only writes a connection error into
+    // the log every minute — the log somebody is reading to find out what is wrong.
+    const src = fs.readFileSync(path.join(root, 'services/dbHealth.js'), 'utf8');
+    expect(strip(src)).toContain("if (cause.id === 'no-uri')");
+    expect(strip(src)).toContain('stopped = true');
+  });
+
+  it('trims the URI so a stray newline in .env reads as unset, not as refused', () => {
+    const server = strip(fs.readFileSync(path.join(root, 'server.js'), 'utf8'));
+    expect(server).toContain('const mongoUri = (process.env.MONGODB_URI || "").trim()');
   });
 
   it('records the reason at boot, not five seconds later on the first retry', () => {
@@ -129,7 +183,7 @@ describe('a portal with no database says so', () => {
      * never installed on the box, and the portal reported it as a database
      * problem rather than a configuration one. There is no default now.
      */
-    expect(server).toContain('const mongoUri = process.env.MONGODB_URI || ""');
+    expect(server).toContain('const mongoUri = (process.env.MONGODB_URI || "").trim()');
     expect(server).not.toMatch(/MONGODB_URI\s*\|\|\s*["']mongodb:\/\/localhost/);
   });
 
