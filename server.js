@@ -1,5 +1,17 @@
 
 require("dotenv").config();
+
+/*
+ * Installed before anything can log.
+ *
+ * MongoDB aborted at 02:00 because the disk was full and it could not write its
+ * own log file. This process then logged one line per request about the missing
+ * database for eight hours, onto the same full disk, which is what stopped
+ * mongod from ever restarting. An identical line now prints once a minute with
+ * a count of what it stood in for; different lines are untouched.
+ */
+require("./utils/logThrottle").install();
+
 const dns = require("dns");
 try {
   dns.setServers(["8.8.8.8", "1.1.1.1", "8.8.4.4"]);

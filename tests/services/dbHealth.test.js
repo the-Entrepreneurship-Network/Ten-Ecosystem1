@@ -70,6 +70,30 @@ describe('why the database is not connected', () => {
     });
   });
 
+  it('calls the disk low at 90 per cent and not at 89', () => {
+    const spy = jest.spyOn(require('fs'), 'statfsSync');
+    spy.mockReturnValue({ blocks: 100, bsize: 1, bavail: 10 });
+    expect(dbHealth.diskHeadroom('/')).toMatchObject({ percentUsed: 90, low: true });
+    spy.mockReturnValue({ blocks: 100, bsize: 1, bavail: 11 });
+    expect(dbHealth.diskHeadroom('/')).toMatchObject({ percentUsed: 89, low: false });
+    spy.mockRestore();
+  });
+
+  it('returns no number rather than throwing where statfs is unavailable', () => {
+    // statfsSync needs Node 18.15+. The health endpoint must still answer.
+    const spy = jest.spyOn(require('fs'), 'statfsSync').mockImplementation(() => {
+      throw new Error('not implemented');
+    });
+    expect(dbHealth.diskHeadroom('/')).toBeNull();
+    spy.mockRestore();
+  });
+
+  it('carries the disk number in the status the banner reads', () => {
+    const s = dbHealth.status();
+    expect(s).toHaveProperty('disk');
+    if (s.disk) expect(typeof s.disk.percentUsed).toBe('number');
+  });
+
   it('reports a status the banner and the health endpoint can both read', () => {
     const s = dbHealth.status();
     expect(s).toHaveProperty('connected');
@@ -157,9 +181,22 @@ describe('a portal with no database says so', () => {
     // The network may be down for one request; crying wolf trains people to
     // ignore the banner that matters.
     const js = strip(fs.readFileSync(path.join(root, 'public/js/db-banner.js'), 'utf8'));
-    const at = js.indexOf('.catch(');
+    const at = js.lastIndexOf('.catch(');
     expect(at).toBeGreaterThan(-1);
-    expect(js.slice(at, at + 120)).not.toContain('show(');
+    expect(js.slice(at)).not.toContain('paint(');
+  });
+
+  it('says the disk is filling while the database is still up', () => {
+    /*
+     * The outage began here and nobody saw it. mongod aborted at 02:00 with
+     * "Writing to log file failed" because the disk was full, and the first
+     * anyone knew was a portal full of missing data the next morning. A number
+     * on the screen the day before is the whole fix.
+     */
+    const js = strip(fs.readFileSync(path.join(root, 'public/js/db-banner.js'), 'utf8'));
+    expect(js).toContain('d.disk && d.disk.low');
+    expect(js).toContain('% full');
+    expect(js).toContain('When it fills, the database stops.');
   });
 });
 

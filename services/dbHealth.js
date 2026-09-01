@@ -31,6 +31,41 @@
  */
 
 const mongoose = require('mongoose');
+const fs = require('fs');
+
+/*
+ * A disk this full is how the last outage started. mongod aborted because it
+ * could not write its own log file, and nothing anywhere had said the disk was
+ * filling. 90% leaves room to notice.
+ */
+const DISK_WARN_PERCENT = 90;
+
+/**
+ * How much room is left where this server writes.
+ *
+ * The database did not fail because of anything in this application: the disk
+ * filled, mongod could not write its log, and it aborted. This is the number
+ * that would have said so the day before.
+ */
+function diskHeadroom(mountPoint = '/') {
+    try {
+        const st = fs.statfsSync(mountPoint);
+        const total = st.blocks * st.bsize;
+        const free = st.bavail * st.bsize;
+        if (!total) return null;
+        const percentUsed = Math.round(((total - free) / total) * 100);
+        return {
+            percentUsed,
+            freeBytes: free,
+            totalBytes: total,
+            low: percentUsed >= DISK_WARN_PERCENT
+        };
+    } catch (_e) {
+        // statfsSync needs Node 18.15+. An older runtime simply gets no number
+        // rather than an endpoint that throws.
+        return null;
+    }
+}
 
 /** The four realistic causes, each with a different fix. */
 const CAUSES = [
@@ -214,8 +249,9 @@ function status() {
         fix: connected ? null : state.fix,
         lastError: connected ? null : state.lastError,
         servedFromFallback: state.servedFromFallback,
+        disk: diskHeadroom(),
         message: connected ? null : bannerMessage()
     };
 }
 
-module.exports = { diagnose, noteFailure, keepTrying, watch, status, noteFallbackUse, bannerMessage, CAUSES };
+module.exports = { diagnose, noteFailure, keepTrying, watch, status, noteFallbackUse, bannerMessage, diskHeadroom, DISK_WARN_PERCENT, CAUSES };
