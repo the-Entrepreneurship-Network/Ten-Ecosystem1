@@ -7831,9 +7831,18 @@ async function sendPromotionEmail({ to, name, fromRoleLabel, toRoleLabel, employ
     }
 }
 
+/*
+ * Guards /hr/promote/to-coordinator, /hr/promote/to-hr and /hr/promotions.
+ *
+ * This used to be `authorization.indexOf("Bearer hr_") === 0` — a prefix test
+ * the literal string "Bearer hr_" passed, so anyone who could reach the server
+ * could promote any student to coordinator or to HR. Identity now comes from
+ * the session, which nothing but a successful login can write, matching
+ * requireHR in middleware/sessionAuth.js.
+ */
 function isHRAuth(req){
-    const auth = req.headers.authorization;
-    return auth && auth.indexOf("Bearer hr_") === 0;
+    const session = req && req.session;
+    return !!(session && (session.hr || session.adminUser));
 }
 
 // ---- HR: promote student -> coordinator ----

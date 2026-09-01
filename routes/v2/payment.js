@@ -6,6 +6,18 @@ const router       = express.Router();
 const { validate, paymentInitSchema } = require('../../middleware/validationSchemas');
 const { allPurposesFor, purposeFor } = require('../../config/tenurePayment');
 const { normalizeTenure } = require('../../utils/tenure');
+/*
+ * Session-derived HR identity.
+ *
+ * The routes below used to guard themselves with
+ * `req.headers.authorization.startsWith('Bearer hr_')` — a prefix test with no
+ * token, no lookup and no session, which the literal string "Bearer hr_"
+ * satisfied. Anyone who could reach the server could approve any payment, and
+ * the name recorded against the approval was whatever they put after the
+ * underscore. The same hole was found and closed in hr.js, documents.js,
+ * certificates.js and coordinator.js; these were missed.
+ */
+const { requireHR } = require('../../middleware/sessionAuth');
 
 const rateLimit = require("express-rate-limit");
 const paymentLimiter = rateLimit({
@@ -722,38 +734,9 @@ router.get('/my-payments', async (req, res) => {
   }
 });
 
-// GET /api/v2/payment/check-credits
-router.get('/check-credits', async (req, res) => {
-  try {
-    const auth       = req.headers.authorization || '';
-    const employeeId = req.headers['x-employee-id'];
-    if (!employeeId && !auth.startsWith('Bearer hr_')) {
-      return res.status(401).json({ success: false, message: 'Unauthorised' });
-    }
-
-    let apiRes;
-    try { apiRes = await callPaymentSetuAPI('/check_credits', 'GET', null); }
-    catch (netErr) { return res.status(502).json({ success: false, message: 'Gateway unreachable' }); }
-
-    const body    = apiRes.body;
-    const credits = body && body.credits ? body.credits : body;
-    const warning = credits && credits.remaining_credits < 10
-      ? 'Warning: fewer than 10 payment credits remaining.'
-      : null;
-    return res.json({ success: true, credits, warning });
-  } catch (err) {
-    console.error('[PAYMENT] check-credits error:', err.message);
-    return res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
 // GET /api/v2/payment/hr-all-payments
-router.get('/hr-all-payments', async (req, res) => {
+router.get('/hr-all-payments', requireHR, async (req, res) => {
   try {
-    const auth = req.headers.authorization || '';
-    if (!auth.startsWith('Bearer hr_')) {
-      return res.status(403).json({ success: false, message: 'HR access required' });
-    }
     const payments = await Payment.find({}).sort({ createdAt: -1 })
       .populate('studentId', 'name email employeeId domain');
     return res.json({ success: true, total: payments.length, payments });
@@ -764,14 +747,11 @@ router.get('/hr-all-payments', async (req, res) => {
 });
 
 // POST /api/v2/payment/hr-verify
-router.post('/hr-verify', async (req, res) => {
+router.post('/hr-verify', requireHR, async (req, res) => {
   try {
-    const auth = req.headers.authorization || '';
-    if (!auth.startsWith('Bearer hr_')) {
-      return res.status(403).json({ success: false, message: 'HR access required' });
-    }
-
-    const hrUsername = auth.replace('Bearer hr_', '').trim() || 'HR';
+    // Who approved this comes from the session, never from the request. The
+    // caller used to name themselves in the header they were authenticated by.
+    const hrUsername = req.hrUser.username;
     const { orderId, approve, reason } = req.body;
 
     if (!orderId) {
