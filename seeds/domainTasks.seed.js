@@ -5,6 +5,47 @@ const DomainTask = require("../models/new/DomainTask");
 
 const MONGODB_URI = process.env.MONGODB_URI;
 
+/*
+ * The two shortest tenures had no work in them at all.
+ *
+ * A student can pick 1 week or 15 days, but this file only ever described
+ * 1month, 45days, 3months and 6months. routes/v2/studentPortal.js looks tasks
+ * up with `DomainTask.find({ domain, durationType })`, so those students got an
+ * empty list: they registered, opened the dashboard, and there was nothing to
+ * do. Meanwhile the free 6-month track has 24 tasks — so the shorter tracks,
+ * which are the paid ones, offered less work than the long free one. That is
+ * backwards for a product whose whole promise is "earn it, then claim it".
+ *
+ * Rather than invent 140 new tasks, the short tracks are cut from the front of
+ * the 3-month ladder, which is already ordered easy → expert. A one-week intern
+ * gets the first four weeks of real Python (or Java, or Data Science), not four
+ * newly-written filler exercises. It also stays in step: edit the 3-month track
+ * and the short ones follow.
+ */
+const SHORT_TRACKS = { '1week': 4, '15days': 6 };
+
+/** @returns {object[]} the derived rows, ready to seed alongside ALL_TASKS. */
+function deriveShortTracks(tasks) {
+    const byDomain = new Map();
+    for (const task of tasks) {
+        if (task.durationType !== '3months') continue;
+        if (!byDomain.has(task.domain)) byDomain.set(task.domain, []);
+        byDomain.get(task.domain).push(task);
+    }
+
+    const derived = [];
+    for (const [, rows] of byDomain) {
+        rows.sort((a, b) => a.weekNumber - b.weekNumber);
+        for (const durationType of Object.keys(SHORT_TRACKS)) {
+            rows.slice(0, SHORT_TRACKS[durationType]).forEach((task, i) => {
+                derived.push(Object.assign({}, task, { durationType, weekNumber: i + 1 }));
+            });
+        }
+    }
+    return derived;
+}
+
+
 // ─────────────────────────────────────────────
 // TASK DATA: 14 DOMAINS × 4 DURATION TYPES
 // ─────────────────────────────────────────────
@@ -786,7 +827,12 @@ async function seed() {
   let skipped  = 0;
   let errors   = 0;
 
-  for (const task of ALL_TASKS) {
+  // $setOnInsert means an existing row is never overwritten, so seeding the
+  // derived short tracks cannot disturb a student who is already part-way
+  // through a longer one.
+  const TO_SEED = ALL_TASKS.concat(deriveShortTracks(ALL_TASKS));
+
+  for (const task of TO_SEED) {
     try {
       await DomainTask.findOneAndUpdate(
         { domain: task.domain, durationType: task.durationType, weekNumber: task.weekNumber },
@@ -808,7 +854,7 @@ async function seed() {
 
   console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   console.log(`  Seed complete`);
-  console.log(`  Tasks processed : ${ALL_TASKS.length}`);
+  console.log(`  Tasks processed : ${TO_SEED.length} (${ALL_TASKS.length} written + ${TO_SEED.length - ALL_TASKS.length} derived)`);
   console.log(`  Inserted / Upserted : ${inserted}`);
   console.log(`  Skipped (already exist) : ${skipped}`);
   console.log(`  Errors           : ${errors}`);
@@ -819,7 +865,12 @@ async function seed() {
   process.exit(0);
 }
 
-seed().catch((err) => {
-  console.error("Fatal seed error:", err);
-  process.exit(1);
-});
+// Only run when invoked directly, so the derivation above can be unit-tested.
+if (require.main === module) {
+  seed().catch((err) => {
+    console.error("Fatal seed error:", err);
+    process.exit(1);
+  });
+}
+
+module.exports = { ALL_TASKS, SHORT_TRACKS, deriveShortTracks };
