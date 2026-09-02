@@ -38,6 +38,12 @@ async function main() {
     }
     await mongoose.connect(uri, { serverSelectionTimeoutMS: 15000 });
 
+    /*
+     * Student must be registered before the populate below, or mongoose throws
+     * `Schema hasn't been registered for model "Student"` — requiring Payment
+     * alone is not enough, because the ref is resolved by name at query time.
+     */
+    require('../models/Student');
     const Payment = require('../models/Payment');
     const rows = await Payment.find({
         purpose: { $in: studioPricing.allPurposes() },

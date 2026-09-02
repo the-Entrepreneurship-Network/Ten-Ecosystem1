@@ -82,15 +82,35 @@
     const token = localStorage.getItem('ten_auth_token') || localStorage.getItem('authToken');
     const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
 
-    // Try /api/student/my-internships, fallback to student-dashboard info
+    /*
+     * This asked /api/student/my-internships — a route that has never existed.
+     * The 404 was swallowed by the empty catch below it, so every student, with
+     * a live internship in progress, was shown "No internships yet" and invited
+     * to go and apply for one.
+     *
+     * The internship is described by /api/v2/student/status, which the rest of
+     * the portal already uses. A TEN student holds one at a time, so it becomes
+     * one card.
+     */
     let internships = [];
     try {
-      const res = await fetch('/api/student/my-internships', { headers });
+      const res = await fetch('/api/v2/student/status', { credentials: 'same-origin' });
       if (res.ok) {
-        const data = await res.json();
-        internships = data.data || data.applications || [];
+        const s = await res.json();
+        if (s && s.domain) {
+          internships = [{
+            title:     s.domain + ' Internship',
+            company:   'The Entrepreneurship Network',
+            status:    s.internshipComplete ? 'completed' : 'active',
+            startDate: s.startDate,
+            endDate:   s.endDate,
+            tenure:    s.registeredTenure || s.durationType || ''
+          }];
+        }
       }
-    } catch(e) {}
+    } catch (e) {
+      // Leave the list empty; the empty state below explains itself.
+    }
 
     // Render stats
     const total     = internships.length;
@@ -118,9 +138,9 @@
       list.innerHTML = `
         <div class="empty-state">
           <div class="icon">📋</div>
-          <h2 style="font-size:20px;font-weight:700;margin-bottom:8px;">No internships yet</h2>
-          <p style="color:var(--text-muted);margin-bottom:24px;">Browse available programs and apply to start your journey.</p>
-          <a href="/programs" class="btn btn--primary">Browse Programs →</a>
+          <h2 style="font-size:20px;font-weight:700;margin-bottom:8px;">We could not load your internship</h2>
+          <p style="color:var(--text-muted);margin-bottom:24px;">Your dashboard has everything about it. If this keeps happening, tell your coordinator.</p>
+          <a href="/student-dashboard" class="btn btn--primary">Open my dashboard &rarr;</a>
         </div>`;
       return;
     }
@@ -130,7 +150,10 @@
       const company = (item.internship && item.internship.company) || item.company || 'TEN Network';
       const status  = (item.status || 'pending').toLowerCase();
       const start   = item.startDate ? new Date(item.startDate).toLocaleDateString('en-IN') : '—';
-      const stipend = (item.internship && item.internship.stipend) || item.stipend || '—';
+      // Ends, not a stipend. A TEN internship does not pay one, and printing
+      // "Stipend: —" on every card only raises a question with no answer.
+      const ends   = item.endDate ? new Date(item.endDate).toLocaleDateString('en-IN') : '—';
+      const tenure = item.tenure ? String(item.tenure) : '';
       return `
         <div class="internship-card">
           <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
@@ -141,8 +164,9 @@
             <span class="status-badge ${status}">${status.charAt(0).toUpperCase()+status.slice(1)}</span>
           </div>
           <div style="display:flex;gap:24px;font-size:13px;color:var(--text-muted);margin-top:8px;flex-wrap:wrap;">
-            <span>📅 Start: ${start}</span>
-            <span>💰 Stipend: ${stipend}</span>
+            <span>📅 Started ${start}</span>
+            <span>🏁 Ends ${ends}</span>
+            ${tenure ? `<span>⏱ ${tenure}</span>` : ''}
           </div>
         </div>`;
     }).join('');

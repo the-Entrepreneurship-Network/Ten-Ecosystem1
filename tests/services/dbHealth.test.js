@@ -257,6 +257,19 @@ describe('a portal with no database says so', () => {
 describe('recovering what was captured offline', () => {
   const script = fs.readFileSync(path.join(root, 'scripts/import-fallback-db.js'), 'utf8');
 
+  it('registers every model a populate depends on', () => {
+    /*
+     * scripts/list-unverified-studio-access.js died on a live run with
+     * "Schema hasn't been registered for model \"Student\"". Requiring Payment
+     * is not enough: mongoose resolves a ref by NAME at query time, so the
+     * referenced model has to have been loaded too.
+     */
+    const listing = fs.readFileSync(path.join(root, 'scripts/list-unverified-studio-access.js'), 'utf8');
+    const at = listing.indexOf(".populate('studentId'");
+    expect(at).toBeGreaterThan(-1);
+    expect(listing.slice(0, at)).toContain("require('../models/Student')");
+  });
+
   it('writes nothing without --write', () => {
     expect(script).toContain("const write = process.argv.includes('--write')");
     expect(script).toContain('Dry run');
@@ -269,6 +282,46 @@ describe('recovering what was captured offline', () => {
     expect(script).toContain('if (!exists) missing.push(doc)');
     expect(script).not.toContain('findOneAndUpdate');
     expect(script).not.toContain('upsert');
+  });
+
+  it('looks in both model directories', () => {
+    /*
+     * Models live in models/ AND models/new/. Looking only in models/ made a
+     * real import silently skip seven collections, including 260 rows of
+     * StudentTaskProgress — a student's entire task history — reported as
+     * "no models/StudentTaskProgress.js, skipped".
+     */
+    expect(script).toContain("for (const dir of ['models', 'models/new'])");
+  });
+
+  it('knows the key each collection is actually unique on', () => {
+    /*
+     * Matching on _id alone declared rows "missing" that were already in the
+     * database under a different _id, and the insert then bounced off the real
+     * unique index. A live run produced 26 of these on BadgeAward alone.
+     */
+    const fs2 = require('fs');
+    [
+      ['BadgeAward',          ['employeeId', 'badgeId']],
+      ['StudentTaskProgress', ['studentId', 'taskId']],
+      ['StudentCoin',         ['studentId']],
+      ['TalentProfile',       ['userId']]
+    ].forEach(([model, keys]) => {
+      expect(script).toMatch(new RegExp(model + ':\\s*\\[' + keys.map((k) => "'" + k + "'").join(', ')));
+      // And the key is the one the schema really enforces.
+      const file = ['models/' + model + '.js', 'models/new/' + model + '.js']
+        .map((f) => path.join(root, f)).find((f) => fs2.existsSync(f));
+      expect(file).toBeTruthy();
+      const schema = fs2.readFileSync(file, 'utf8');
+      keys.forEach((k) => expect(schema).toContain(k));
+    });
+  });
+
+  it('treats a duplicate-key rejection as proof the row is already there', () => {
+    // E11000 means a unique index refused it, which is the database telling us
+    // the row exists. Counting that as a failure made a clean run look broken.
+    expect(script).toContain('if (e.code === 11000)');
+    expect(script).toContain('already++');
   });
 
   it('matches on a natural key, not only on _id', () => {
