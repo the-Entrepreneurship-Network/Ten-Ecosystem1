@@ -4,6 +4,7 @@
 const express      = require("express");
 const router       = express.Router();
 const Student      = require("../../models/Student");
+const { isInternshipComplete } = require("../../utils/internshipStatus");
 
 const {
   validate,
@@ -1484,7 +1485,20 @@ router.get("/student/status", requireStudent, async (req, res) => {
         joinerType:          student.joinerType          || null,
         totalCoins:          0,
         rupeeValue:          "0.00",
-        taskStats: { locked: 0, available: 0, in_progress: 0, submitted: 0, approved: 0 }
+        taskStats: { locked: 0, available: 0, in_progress: 0, submitted: 0, approved: 0 },
+
+        /*
+         * The dates, and whether the internship has finished.
+         *
+         * public/my-internships.html asked /api/student/my-internships — a route
+         * that has never existed — caught the failure silently, and rendered
+         * "No internships yet" to every student who has one. Rather than stand
+         * up a second endpoint describing the internship this one already
+         * describes, the three fields it was missing live here.
+         */
+        startDate:          student.joiningDate || null,
+        endDate:            student.internshipEndDate || null,
+        internshipComplete: isInternshipComplete(student)
     };
 
     // ── Everything else is a bonus ──────────────────────────────────────────

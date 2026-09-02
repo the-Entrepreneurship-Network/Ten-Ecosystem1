@@ -4965,8 +4965,34 @@ try{
         } catch(e) {}
     }
 
-    const notice = notices[domain] || notices["default"];
-    res.json(notice || {});
+    /*
+     * A domain with no notice of its own gets the shared text — never invented
+     * meeting details.
+     *
+     * This used to be `notices[domain] || notices["default"]`, and notice.json
+     * holds entries for two domains out of fifteen. So thirteen domains were
+     * served the default's "09:45 AM (Daily Alignment)" and a Google Meet link
+     * — https://meet.google.com/ten-ecosystem — that nobody runs. A student
+     * clicked it, arrived in an empty room, and drew the obvious conclusion
+     * about whether TEN is a real organisation.
+     *
+     * The welcome text is true for everyone, so it stays. The times and the
+     * link do not, so they are blank, and the dashboard already hides the
+     * button when the link is empty. isDomainSpecific lets a screen say "your
+     * coordinator has not posted times yet" instead of showing a fixture.
+     */
+    const own = notices[domain];
+    if (own) return res.json(Object.assign({ isDomainSpecific: true }, own));
+
+    const shared = notices["default"] || {};
+    res.json({
+        domain,
+        morningMeeting:  "",
+        eveningMeeting:  "",
+        meetingLink:     "",
+        importantNotice: shared.importantNotice || "",
+        isDomainSpecific: false
+    });
 }catch(error){ res.json({ success:false }); }
 });
 
