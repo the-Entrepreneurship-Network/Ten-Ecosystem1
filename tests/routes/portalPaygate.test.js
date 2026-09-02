@@ -56,12 +56,11 @@ describe('no portal is gated by the localStorage paygate', () => {
     expect(hits).toEqual([]);
   });
 
-  it('the duplicate payment wall baked into student-portal.html is gone too', () => {
-    const page = fs.readFileSync(path.join(root, 'public/student-portal.html'), 'utf8');
-    expect(page).not.toContain('Payment after Completion');
-    expect(page).not.toContain('Unlock your journey');
-    // and no button still points at the section that was removed
-    expect(page).not.toMatch(/href="#pay"/);
+  it('student-portal.html is gone, and with it the duplicate payment wall', () => {
+    // It carried a second paywall with its own UPI id. The whole page is now
+    // deleted — nothing routed it and nothing linked it — which settles the
+    // question more firmly than checking its contents ever could.
+    expect(fs.existsSync(path.join(root, 'public/student-portal.html'))).toBe(false);
   });
 
   it.each(BUILT)('%s does not load it', (rel) => {

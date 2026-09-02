@@ -101,7 +101,13 @@ describe('the paid course area has a name of its own', () => {
   const bundleName = (studio.match(/src="[^"]*assets\/(index-[^"]+\.js)"/) || [])[1];
   if (!bundleName) throw new Error('student-portal/index.html has no bundle script tag');
   const bundle = fs.readFileSync(path.join(root, 'public/student-portal/assets', bundleName), 'utf8');
-  const funnel = fs.readFileSync(path.join(root, 'public/student-portal.html'), 'utf8');
+  /*
+   * The internship funnel that used to live at /student-portal.html — the second
+   * thing called "Student Portal", which is most of why the name confused
+   * everyone — has been deleted. Nothing routed it and nothing linked it, so
+   * there is no page left to disambiguate from.
+   */
+  const funnel = '';
   const dashboard = fs.readFileSync(path.join(root, 'public/student-dashboard.html'), 'utf8');
 
   it('is called TEN Career Studio, in the app itself', () => {
@@ -124,13 +130,16 @@ describe('the paid course area has a name of its own', () => {
   });
 
   it('no longer shares its name with the internship funnel', () => {
-    // Two different paid things both called "Student Portal" is the confusion.
-    expect(funnel).not.toContain('<title>TEN — Student Portal</title>');
-    // It used to be identified by its "Internship Program Access" pay card.
-    // That card has been removed along with the paygate on every portal, so the
-    // page's own title carries the distinction now — same intent, evidence that
-    // still exists.
-    expect(funnel).toContain('<title>TEN — Internship Portal</title>');
+    /*
+     * Two different paid things both called "Student Portal" was the confusion:
+     * the course app at /student-portal/ and the internship funnel at
+     * /student-portal.html. The funnel page has since been deleted — nothing
+     * routed it and nothing linked it — so only one "Student Portal" is left
+     * and there is nothing to confuse it with. That settles the ambiguity more
+     * firmly than renaming ever did.
+     */
+    expect(fs.existsSync(path.join(root, 'public/student-portal.html'))).toBe(false);
+    expect(funnel).toBe('');
   });
 
   it('leaves the intern dashboard alone', () => {

@@ -951,7 +951,7 @@ describe('the Domains link goes somewhere public, and the list is one list', () 
   });
 
   it('nothing still links to it', () => {
-    const live = ['public/index.html', 'public/student-portal.html', 'public/academics.html',
+    const live = ['public/index.html', 'public/academics.html',
                   'public/student-dashboard.html', 'public/student-portal/index.html'];
     live.forEach((f) => {
       expect(fs.readFileSync(path.join(root, f), 'utf8')).not.toContain('student-journeys');
