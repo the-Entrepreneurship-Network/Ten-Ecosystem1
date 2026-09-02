@@ -708,7 +708,16 @@ router.post("/admin/documents/generate-lor/:studentId", requireHR, async (req, r
             StudentTaskProgress.countDocuments({ studentId: student._id }),
             StudentTaskProgress.countDocuments({ studentId: student._id, status: "approved" })
         ]);
-        const completionPercent = totalCount > 0 ? Math.round((approvedCount / totalCount) * 100) : 0;
+        const livePercent = totalCount > 0 ? Math.round((approvedCount / totalCount) * 100) : 0;
+        /*
+         * The better of now and before the track grew.
+         *
+         * Lengthening the short tracks moved the denominator under students who
+         * were already part-way through one: 4 of 4 became 4 of 8. Judging them
+         * on the new figure would withdraw an LOR they had already qualified for,
+         * for work they had already done. See preExpansionCompletionPercent.
+         */
+        const completionPercent = Math.max(livePercent, student.preExpansionCompletionPercent || 0);
         if (completionPercent < 50 && !force) {
             return res.json({
                 success: false,

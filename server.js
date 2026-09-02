@@ -1,5 +1,17 @@
 
 require("dotenv").config();
+
+/*
+ * Installed before anything can log.
+ *
+ * MongoDB aborted at 02:00 because the disk was full and it could not write its
+ * own log file. This process then logged one line per request about the missing
+ * database for eight hours, onto the same full disk, which is what stopped
+ * mongod from ever restarting. An identical line now prints once a minute with
+ * a count of what it stood in for; different lines are untouched.
+ */
+require("./utils/logThrottle").install();
+
 const dns = require("dns");
 try {
   dns.setServers(["8.8.8.8", "1.1.1.1", "8.8.4.4"]);
@@ -2692,7 +2704,21 @@ async function runWithRetry(fn, retries = 3, delay = 1500) {
     }
 }
 
-let mongoUri = process.env.MONGODB_URI || "mongodb://localhost:27017/internship";
+/*
+ * No default.
+ *
+ * This line used to read `|| "mongodb://localhost:27017/internship"`, and that
+ * default is what took the portal down. MONGODB_URI was missing from .env on
+ * the server, so mongoose dialled a MongoDB nobody had ever installed on that
+ * box and failed with `connect ECONNREFUSED 127.0.0.1:27017` — a message that
+ * reads like a database which is merely down, not like a line missing from a
+ * config file. Every model fell through to the JSON engine above and real
+ * registrations were written to .data/local_db/db_Student.json for days.
+ *
+ * An empty string is honest: mongoose rejects it immediately and dbHealth says
+ * "MONGODB_URI is not set", which names the fix.
+ */
+const mongoUri = (process.env.MONGODB_URI || "").trim();
 
 function connectMongo(uri) {
   return mongoose.connect(uri, {
@@ -3176,8 +3202,11 @@ connectMongo(mongoUri)
    */
   global.isMongoUnhealthy = true;
   const dbHealth = require('./services/dbHealth');
-  const cause = dbHealth.diagnose(err, mongoUri);
-  dbHealth.status().cause = cause.summary;
+  // Record it now, not on the first retry five seconds from now: /api/health/db
+  // and the banner on every page read this, and they are asked immediately.
+  // (This used to be `dbHealth.status().cause = ...`, which assigned to the
+  // throwaway object status() builds and therefore did nothing at all.)
+  dbHealth.noteFailure(err, mongoUri);
   dbHealth.keepTrying(connectMongo, mongoUri);
 });
 
@@ -7802,9 +7831,18 @@ async function sendPromotionEmail({ to, name, fromRoleLabel, toRoleLabel, employ
     }
 }
 
+/*
+ * Guards /hr/promote/to-coordinator, /hr/promote/to-hr and /hr/promotions.
+ *
+ * This used to be `authorization.indexOf("Bearer hr_") === 0` — a prefix test
+ * the literal string "Bearer hr_" passed, so anyone who could reach the server
+ * could promote any student to coordinator or to HR. Identity now comes from
+ * the session, which nothing but a successful login can write, matching
+ * requireHR in middleware/sessionAuth.js.
+ */
 function isHRAuth(req){
-    const auth = req.headers.authorization;
-    return auth && auth.indexOf("Bearer hr_") === 0;
+    const session = req && req.session;
+    return !!(session && (session.hr || session.adminUser));
 }
 
 // ---- HR: promote student -> coordinator ----
@@ -9994,16 +10032,22 @@ app.get("/coordinator/coding-submissions/:domain", requireStaffSession, async(re
 let _publicStatsCache = { at: 0, body: null };
 const PUBLIC_STATS_TTL_MS = 5 * 60 * 1000;
 
-// The landing page shows the intern count from a presentation floor rather than
-// the raw row count. The floor is a fixed offset, not a multiplier or a fake
-// ticker: every real signup still moves the printed number by exactly one, so
-// the figure tracks the database day by day.
-//
-//   printed = real + (FLOOR - FLOOR_AT)
-//
-// With the defaults, a real 783 prints 5,000 and a real 784 prints 5,001.
-// Set PUBLIC_INTERNS_FLOOR=0 in .env to print the raw count instead.
-const PUBLIC_INTERNS_FLOOR = Number(process.env.PUBLIC_INTERNS_FLOOR ?? 5000);
+/*
+ * The landing page prints the real number of interns.
+ *
+ * It used to print a "presentation floor": PUBLIC_INTERNS_FLOOR defaulted to
+ * 5000 against a PUBLIC_INTERNS_FLOOR_AT of 783, so a real 783 was displayed as
+ * 5,000 — a fixed +4,217 on the most prominent figure on the site, under the
+ * words "INTERNS TRAINED". Every signup moved it by one, so it tracked the
+ * database, but the number itself was never true.
+ *
+ * The floor now defaults to 0: the page states the count it can stand behind.
+ * A small honest number is better sales than a large soft one, and it is the
+ * only version that survives a journalist, a university partner or a student
+ * asking to see the list. Setting PUBLIC_INTERNS_FLOOR in .env re-enables the
+ * old behaviour for anyone who deliberately wants it.
+ */
+const PUBLIC_INTERNS_FLOOR = Number(process.env.PUBLIC_INTERNS_FLOOR ?? 0);
 const PUBLIC_INTERNS_FLOOR_AT = Number(process.env.PUBLIC_INTERNS_FLOOR_AT ?? 783);
 
 /** Real intern count -> the number the public page prints. */

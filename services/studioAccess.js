@@ -29,7 +29,30 @@
 
 const studioPricing = require('../config/studioPricing');
 
-const SETTLED = ['success', 'pending_verification'];
+/*
+ * 'pending_verification' means the student typed a transaction number into the
+ * box and nobody has checked it. It used to count as settled, so anyone could
+ * open the paid portals by typing anything at all.
+ *
+ * It no longer grants anything — but access already given is not taken away.
+ * Students who got in this way before the cutoff keep what they have, because
+ * some of them really did pay and the portal is what they are using today.
+ * `node scripts/list-unverified-studio-access.js` lists exactly who that is, so
+ * the backlog can be checked by a person and the date moved forward afterwards.
+ */
+const SETTLED = ['success'];
+
+const UNVERIFIED_UNTIL = new Date(
+    process.env.STUDIO_UNVERIFIED_GRANDFATHER_UNTIL || '2026-09-02T00:00:00.000Z'
+);
+
+/** Did this row actually pay for what it claims? */
+function isSettled(row) {
+    if (SETTLED.includes(row.status)) return true;
+    if (row.status !== 'pending_verification') return false;
+    // Grandfathered: written before anybody was told this would stop working.
+    return !!row.createdAt && new Date(row.createdAt) < UNVERIFIED_UNTIL;
+}
 
 /** Everything this student has ever bought or deferred in the Studio. */
 async function studioPayments(studentId) {
@@ -37,7 +60,7 @@ async function studioPayments(studentId) {
     return Payment.find({
         studentId,
         purpose: { $in: studioPricing.allPurposes() },
-        status: { $in: [...SETTLED, 'pending'] }
+        status: { $in: [...SETTLED, 'pending_verification', 'pending'] }
     }).select('purpose status metadata amount createdAt').lean();
 }
 
@@ -77,7 +100,7 @@ async function getStudioAccess(student) {
         const deferred = row.status === 'pending' &&
             row.metadata && row.metadata.payMode === studioPricing.PAY_MODES.AFTER &&
             !!row.metadata.deferApprovedAt;
-        if (!SETTLED.includes(row.status) && !deferred) continue;
+        if (!isSettled(row) && !deferred) continue;
 
         studioPricing.unlocksFor(key).forEach((portal) => {
             // A settled purchase outranks a deferral: a student who deferred and
@@ -97,7 +120,7 @@ async function getStudioAccess(student) {
     }
 
     // Settled anywhere means nothing is owed — the deferral was honoured.
-    if (feeDue && rows.some((r) => SETTLED.includes(r.status))) feeDue = null;
+    if (feeDue && rows.some(isSettled)) feeDue = null;
 
     return { portals, feeDue, premium: premium.premium };
 }
@@ -144,4 +167,6 @@ async function canOpen(student, portal) {
     return Boolean(portals[portal] && portals[portal].granted);
 }
 
-module.exports = { getStudioAccess, getStudioAccessForEither, canOpen };
+module.exports = {
+    isSettled,
+    UNVERIFIED_UNTIL, getStudioAccess, getStudioAccessForEither, canOpen };

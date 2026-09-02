@@ -158,7 +158,7 @@ html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);
   <!-- CONVERSATIONS -->
   <section class="pane" id="paneList">
     <div class="pane-head">
-      <button class="icon-btn" onclick="window.location.href='/student-dashboard'" title="Back to the portal">←</button>
+      <button class="icon-btn" onclick="goBackToPortal()" title="Back to the portal">←</button>
       <h2 style="flex:1">Messages</h2>
       <button class="icon-btn" onclick="openPicker()" title="Start a new conversation">✎</button>
     </div>
@@ -227,6 +227,40 @@ html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);
 "use strict";
 
 var me = null;                 // { id, role, ids: [...] }
+
+/*
+ * Back to YOUR portal, not to the student one.
+ *
+ * This button was `window.location.href='/student-dashboard'`, hardcoded. But
+ * server.js serves this one file to every role — it is linked from the HR
+ * portal, the coordinator dashboard, Founder OS, the investor, contractor and
+ * mentor dashboards and the admin portal. So an HR manager who opened Messages
+ * and pressed back landed in the student dashboard, which finds no student in
+ * localStorage and forwards to login.html. Every non-student appeared to be
+ * signed out of their own portal for pressing the only exit on the page.
+ *
+ * The role is already here: /api/chat/directory returns it and the page stores
+ * it on `me` to decide what it may send.
+ */
+var PORTAL_HOME = {
+  student:    '/student-dashboard',
+  hr:         '/hr-portal',
+  coordinator:'coordinator-dashboard.html',
+  admin:      '/ten-admin',
+  founder:    '/founder-os',
+  investor:   '/investor-dashboard',
+  contractor: '/contractor-dashboard',
+  mentor:     '/mentor-dashboard'
+};
+
+function goBackToPortal() {
+  var home = me && me.role && PORTAL_HOME[me.role];
+  if (home) { window.location.href = home; return; }
+  // Role not loaded yet (the directory call is still in flight, or it failed).
+  // Where they came from is a better guess than any single dashboard.
+  if (window.history.length > 1) { window.history.back(); return; }
+  window.location.href = '/';
+}
 var threads = [];
 
 /**

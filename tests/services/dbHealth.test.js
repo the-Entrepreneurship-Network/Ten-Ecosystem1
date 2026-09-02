@@ -18,11 +18,97 @@ describe('why the database is not connected', () => {
     ['no MONGODB_URI at all',      new Error('whatever'), '',                    'no-uri'],
     ['a wrong password',           new Error('bad auth : authentication failed'), 'mongodb+srv://x', 'auth'],
     ['an IP that is not allowed',  new Error('Server at x is not allowed to connect'), 'mongodb+srv://x', 'ip-allowlist'],
-    ['a hostname that will not resolve', new Error('querySrv ENOTFOUND _mongodb._tcp.x'), 'mongodb+srv://x', 'dns']
+    ['a hostname that will not resolve', new Error('querySrv ENOTFOUND _mongodb._tcp.x'), 'mongodb+srv://x', 'dns'],
+    ['an address with nothing listening', new Error('connect ECONNREFUSED 127.0.0.1:27017'), 'mongodb://localhost:27017/internship', 'refused']
   ])('names %s', (_label, err, uri, id) => {
     const cause = dbHealth.diagnose(err, uri);
     expect(cause.id).toBe(id);
     expect(cause.fix).toBeTruthy();
+  });
+
+  it('names the failure that actually took the portal down', () => {
+    /*
+     * MONGODB_URI was missing from .env on the server and server.js defaulted to
+     * mongodb://localhost:27017, so mongoose dialled a MongoDB nobody had ever
+     * installed there. The error read `connect ECONNREFUSED 127.0.0.1:27017` —
+     * which sounds like a database that is down, not like a missing line in a
+     * config file. Nothing in the portal ever said the second thing.
+     */
+    const err = new Error('connect ECONNREFUSED 127.0.0.1:27017');
+    err.name = 'MongooseServerSelectionError';   // how mongoose actually reports it
+    const cause = dbHealth.diagnose(err, 'mongodb://localhost:27017/internship');
+    expect(cause.id).toBe('refused');
+    expect(cause.fix).toMatch(/MONGODB_URI/);
+    expect(cause.fix).toMatch(/localhost/);
+  });
+
+  /*
+   * REGRESSION. 'refused' was originally placed second in CAUSES, ahead of auth,
+   * ip-allowlist and dns. ECONNREFUSED is a transport symptom that rides along
+   * with more specific causes, and Array.find takes the first match — so it stole
+   * them, and an operator chasing a DNS problem was told to start a local mongod.
+   * It now sits last. These two cases are the ones that were actually wrong.
+   */
+  it('a blocked SRV lookup is a DNS fault, not a missing listener', () => {
+    // Node's c-ares errors read "<syscall> <code> <hostname>", so a refused SRV
+    // query literally contains ECONNREFUSED. server.js:3 repoints the resolver at
+    // 8.8.8.8, which is the code path that makes this reachable in production.
+    const err = new Error('querySrv ECONNREFUSED _mongodb._tcp.cluster0.abcde.mongodb.net');
+    err.name = 'MongooseServerSelectionError';
+    expect(dbHealth.diagnose(err, 'mongodb+srv://u:p@cluster0.abcde.mongodb.net/ten').id).toBe('dns');
+  });
+
+  it('a wrong password is a wrong password even when a replica node is also down', () => {
+    // MongoSystemError takes its message from the FIRST server description
+    // carrying an error, so one dead node puts ECONNREFUSED in front of the real
+    // fault on the other two.
+    const err = new Error('connect ECONNREFUSED 10.0.0.5:27017, bad auth : authentication failed');
+    expect(dbHealth.diagnose(err, 'mongodb://u:p@a,b,c/ten').id).toBe('auth');
+  });
+
+  it('refused is the last cause, so it can only win when nothing else matched', () => {
+    expect(dbHealth.CAUSES[dbHealth.CAUSES.length - 1].id).toBe('refused');
+  });
+
+  it('names a URI that is present but unusable', () => {
+    // A stray newline or a comment on the .env line makes MONGODB_URI truthy and
+    // unusable; this used to fall through to "the database refused the connection"
+    // and send the operator to check the network.
+    const cause = dbHealth.diagnose(
+      new Error('Invalid scheme, expected connection string to start with "mongodb://"'),
+      '\n mongodb+srv://x'
+    );
+    expect(cause.id).toBe('parse');
+    expect(cause.fix).toMatch(/\.env/);
+  });
+
+  it('a missing URI is a missing URI, not a refused connection', () => {
+    // With no URI at all the honest answer is "it is not set" — the ECONNREFUSED
+    // that follows is a consequence, not the cause.
+    expect(dbHealth.diagnose(new Error('connect ECONNREFUSED 127.0.0.1:27017'), '').id).toBe('no-uri');
+  });
+
+  it('stops retrying the one cause a retry can never fix', () => {
+    // dotenv reads .env once, at boot. An unset MONGODB_URI stays unset for the
+    // life of the process, so retrying forever only writes a connection error into
+    // the log every minute — the log somebody is reading to find out what is wrong.
+    const src = fs.readFileSync(path.join(root, 'services/dbHealth.js'), 'utf8');
+    expect(strip(src)).toContain("if (cause.id === 'no-uri')");
+    expect(strip(src)).toContain('stopped = true');
+  });
+
+  it('trims the URI so a stray newline in .env reads as unset, not as refused', () => {
+    const server = strip(fs.readFileSync(path.join(root, 'server.js'), 'utf8'));
+    expect(server).toContain('const mongoUri = (process.env.MONGODB_URI || "").trim()');
+  });
+
+  it('records the reason at boot, not five seconds later on the first retry', () => {
+    // /api/health/db and the banner on every page read this, and they are asked
+    // immediately. server.js used to write it as `status().cause = ...`, which
+    // assigned to the throwaway object status() builds and did nothing at all.
+    dbHealth.noteFailure(new Error('bad auth : authentication failed'), 'mongodb+srv://x');
+    expect(dbHealth.status().cause).toMatch(/username or password/i);
+    expect(dbHealth.status().fix).toMatch(/Database Access/);
   });
 
   it('still says something useful for a cause it does not recognise', () => {
@@ -36,6 +122,30 @@ describe('why the database is not connected', () => {
       expect(typeof c.summary).toBe('string');
       expect(c.fix.length).toBeGreaterThan(30);
     });
+  });
+
+  it('calls the disk low at 90 per cent and not at 89', () => {
+    const spy = jest.spyOn(require('fs'), 'statfsSync');
+    spy.mockReturnValue({ blocks: 100, bsize: 1, bavail: 10 });
+    expect(dbHealth.diskHeadroom('/')).toMatchObject({ percentUsed: 90, low: true });
+    spy.mockReturnValue({ blocks: 100, bsize: 1, bavail: 11 });
+    expect(dbHealth.diskHeadroom('/')).toMatchObject({ percentUsed: 89, low: false });
+    spy.mockRestore();
+  });
+
+  it('returns no number rather than throwing where statfs is unavailable', () => {
+    // statfsSync needs Node 18.15+. The health endpoint must still answer.
+    const spy = jest.spyOn(require('fs'), 'statfsSync').mockImplementation(() => {
+      throw new Error('not implemented');
+    });
+    expect(dbHealth.diskHeadroom('/')).toBeNull();
+    spy.mockRestore();
+  });
+
+  it('carries the disk number in the status the banner reads', () => {
+    const s = dbHealth.status();
+    expect(s).toHaveProperty('disk');
+    if (s.disk) expect(typeof s.disk.percentUsed).toBe('number');
   });
 
   it('reports a status the banner and the health endpoint can both read', () => {
@@ -64,6 +174,22 @@ describe('a portal with no database says so', () => {
     // portal broken after the real problem is gone.
     expect(server).toContain('dbHealth.keepTrying(connectMongo, mongoUri)');
     expect(server).not.toContain('console.warn("MongoDB connection warning: Working in local runtime mode');
+  });
+
+  it('does not quietly point at a database on this server', () => {
+    /*
+     * `process.env.MONGODB_URI || "mongodb://localhost:27017/internship"`. A
+     * missing line in .env became a connection attempt to a MongoDB that was
+     * never installed on the box, and the portal reported it as a database
+     * problem rather than a configuration one. There is no default now.
+     */
+    expect(server).toContain('const mongoUri = (process.env.MONGODB_URI || "").trim()');
+    expect(server).not.toMatch(/MONGODB_URI\s*\|\|\s*["']mongodb:\/\/localhost/);
+  });
+
+  it('records why at boot rather than assigning to a throwaway object', () => {
+    expect(server).toContain('dbHealth.noteFailure(err, mongoUri)');
+    expect(server).not.toContain('dbHealth.status().cause =');
   });
 
   it('does not invent a student to fill the empty screen', () => {
@@ -109,9 +235,22 @@ describe('a portal with no database says so', () => {
     // The network may be down for one request; crying wolf trains people to
     // ignore the banner that matters.
     const js = strip(fs.readFileSync(path.join(root, 'public/js/db-banner.js'), 'utf8'));
-    const at = js.indexOf('.catch(');
+    const at = js.lastIndexOf('.catch(');
     expect(at).toBeGreaterThan(-1);
-    expect(js.slice(at, at + 120)).not.toContain('show(');
+    expect(js.slice(at)).not.toContain('paint(');
+  });
+
+  it('says the disk is filling while the database is still up', () => {
+    /*
+     * The outage began here and nobody saw it. mongod aborted at 02:00 with
+     * "Writing to log file failed" because the disk was full, and the first
+     * anyone knew was a portal full of missing data the next morning. A number
+     * on the screen the day before is the whole fix.
+     */
+    const js = strip(fs.readFileSync(path.join(root, 'public/js/db-banner.js'), 'utf8'));
+    expect(js).toContain('d.disk && d.disk.low');
+    expect(js).toContain('% full');
+    expect(js).toContain('When it fills, the database stops.');
   });
 });
 

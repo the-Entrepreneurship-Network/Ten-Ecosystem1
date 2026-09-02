@@ -17,16 +17,20 @@ const BENEFITS: [string, string, string][] = [
   ['🏆', 'Proof at every step', 'Verifiable certificates, a public hackathon repo, reviewed project work. Everything you claim, a recruiter can click.'],
 ];
 
-/* Sample voices — replace with real ones as they come in. First name and
- * domain only, so nothing here impersonates a specific real person. */
-const VOICES: [string, string, string][] = [
-  ['Priya', 'Web Development', 'The exams scared me at first — camera on, real questions. Then I realised that pressure is why my certificate gets taken seriously in interviews.'],
-  ['Arjun', 'Python Development', 'I paid after completion. Started with nothing, finished the course, paid from my first stipend. No other platform trusted me like that.'],
-  ['Sneha', 'Data Science', 'The technical explanation then the simple one — that order fixed how I learn. I stopped memorising and started actually getting it.'],
-  ['Rahul', 'DevOps with AWS', 'The mentor session before my interview mattered more than a month of YouTube. He had done the exact job I was applying for.'],
-  ['Ananya', 'MERN Stack', 'My hackathon repo is the first thing every recruiter asks about. One weekend, and my resume finally had something clickable.'],
-  ['Karan', 'Cyber Security', 'The job agent applied to openings while I prepared for interviews. Two offers in six weeks — I only chased one of them myself.'],
-];
+/*
+ * No testimonials until they are real.
+ *
+ * Six invented students used to live here — a first name, a domain and a quote
+ * each — shipped on the live, paid Career Studio page. They were written as
+ * placeholders ("replace with real ones as they come in") and never replaced,
+ * so the page told six stories that never happened to anyone.
+ *
+ * TEN's own product brief makes this a rule: "fake testimonials are worse than
+ * none". So the rail below renders nothing while this array is empty, exactly
+ * as public/index.html already does with #voicesWrap. Add real, approved quotes
+ * here — first name and domain only — and the section returns on its own.
+ */
+const VOICES: [string, string, string][] = [];
 
 export default function BenefitsSection() {
   return (
@@ -48,10 +52,12 @@ export default function BenefitsSection() {
         ))}
       </div>
 
+      {VOICES.length > 0 && (
       <FadeIn className="mt-24 text-center" y={30}>
         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-200/70">In their words</p>
         <h2 className="mt-3 text-3xl font-black uppercase tracking-tight md:text-5xl">Students, after</h2>
       </FadeIn>
+      )}
 
       <div className="mx-auto mt-12 grid max-w-5xl gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {VOICES.map(([name, domain, quote], i) => (

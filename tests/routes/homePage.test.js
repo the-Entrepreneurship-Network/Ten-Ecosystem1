@@ -100,10 +100,17 @@ describe('the page shows real numbers instead of literals', () => {
     expect(page).toContain('/api/public/stats');
   });
 
-  it('leaves the printed figure as a fallback rather than a zero', () => {
-    // A landing page that cannot reach its own API should look like the page
-    // it was, not like a portal nobody has ever interned at.
-    expect(page).toMatch(/id="statInterns"[^>]*>\d+</);
+  it('prints no figure at all until the server sends the real one', () => {
+    /*
+     * This used to assert the opposite: that the page ships a number as its own
+     * fallback, so it "should look like the page it was" when the API fails.
+     * The number it shipped was 5000 — the presentation floor, not the roster —
+     * so a landing page that could not reach its own API stated a figure that
+     * was never true of the database. An em-dash is the honest fallback: it says
+     * "not loaded", which is what happened.
+     */
+    expect(page).toMatch(/id="statInterns"[^>]*>&mdash;</);
+    expect(page).not.toMatch(/id="statInterns"[^>]*>\s*\d/);
     expect(page).toContain('if (!d || !d.success) return;');
   });
 });
@@ -944,7 +951,7 @@ describe('the Domains link goes somewhere public, and the list is one list', () 
   });
 
   it('nothing still links to it', () => {
-    const live = ['public/index.html', 'public/student-portal.html', 'public/academics.html',
+    const live = ['public/index.html', 'public/academics.html',
                   'public/student-dashboard.html', 'public/student-portal/index.html'];
     live.forEach((f) => {
       expect(fs.readFileSync(path.join(root, f), 'utf8')).not.toContain('student-journeys');
@@ -1108,8 +1115,11 @@ describe('the printed intern count', () => {
     expect(body).not.toMatch(/certificates: publicInternCount/);
   });
 
-  it('the page falls back to the floor, not to a stale raw figure', () => {
-    expect(page).toMatch(/id="statInterns">5000</);
+  it('the page falls back to no number, not to the floor', () => {
+    // The floor is gone as a default, so there is nothing left to fall back to
+    // except the truth: we do not know yet.
+    expect(page).not.toMatch(/id="statInterns">5000</);
+    expect(page).toMatch(/id="statInterns"[^>]*>&mdash;</);
   });
 
   it('both knobs are env-overridable', () => {

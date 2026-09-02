@@ -193,6 +193,22 @@ const studentsSchema = new mongoose.Schema({
      */
     joinerWizardCompletedAt: { type: Date, default: null },
 
+    /*
+     * What this student's completion percentage was before their track grew.
+     *
+     * The 1-week, 15-day, 1-month and 45-day tracks were lengthened (1 task
+     * became 4, 4 became 8, and so on). A student halfway through one of them
+     * had done, say, 4 of 4 — and would have woken up at 4 of 8 through no act
+     * of their own, which can drop them under the 50% an LOR requires.
+     *
+     * Set once, by scripts/expand-task-tracks.js, and only when the number
+     * actually fell. Anything that gates on completion reads the better of this
+     * and the live figure, so nobody loses standing they had already reached.
+     * Their real progress still counts up from where it is.
+     */
+    preExpansionCompletionPercent: { type: Number, default: null },
+    trackExpandedAt:               { type: Date,   default: null },
+
     preportalCreditNeedsReview:  { type: Boolean, default: false },
     preportalCreditConfirmedAt:  { type: Date,   default: null },
     preportalCreditConfirmedBy:  { type: String, default: "" },

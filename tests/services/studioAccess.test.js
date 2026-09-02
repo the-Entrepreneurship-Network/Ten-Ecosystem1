@@ -53,8 +53,24 @@ describe('a single purchase', () => {
 
   // The money has arrived; an admin has simply not looked yet. Making them wait
   // is how a paying student ends up in a support queue.
-  it('counts a payment still awaiting admin approval', async () => {
-    rows([{ purpose: 'studio_job', status: 'pending_verification', metadata: {} }]);
+  it('does NOT count a reference the student typed and nobody checked', async () => {
+    /*
+     * This used to assert the opposite. 'pending_verification' is the state a
+     * payment is in when a student has typed a transaction number into the box
+     * and no human has looked at it, and it counted as settled — so anyone
+     * could open every paid portal by typing anything at all.
+     *
+     * Rows written before the grandfather cutoff still count, so nobody using
+     * the Studio today loses it; a row with no date never does.
+     */
+    rows([{ purpose: 'studio_job', status: 'pending_verification', metadata: {}, createdAt: new Date() }]);
+    expect((await getStudioAccess(student())).portals.job.granted).toBe(false);
+  });
+
+  it('but keeps the students who already had access on one', async () => {
+    const { UNVERIFIED_UNTIL } = require('../../services/studioAccess');
+    const before = new Date(UNVERIFIED_UNTIL.getTime() - 86400000);
+    rows([{ purpose: 'studio_job', status: 'pending_verification', metadata: {}, createdAt: before }]);
     expect((await getStudioAccess(student())).portals.job.granted).toBe(true);
   });
 
