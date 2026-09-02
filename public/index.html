@@ -800,12 +800,23 @@
     <a href="coordinator-login.html" style="display:block; background:#121212; border:1px solid #2a2a2a; border-radius:14px; padding:18px 22px; color:#fff; text-decoration:none; font-weight:700; font-size:14px;" onmouseover="this.style.borderColor='#666'" onmouseout="this.style.borderColor='#2a2a2a'">Coordinator Login <span style="color:#666">&rarr;</span></a>
     <a href="coordinator-register.html" style="display:block; background:#121212; border:1px dashed #3a3a3a; border-radius:14px; padding:18px 22px; color:#fff; text-decoration:none; font-weight:700; font-size:14px;" onmouseover="this.style.borderColor='#666'" onmouseout="this.style.borderColor='#3a3a3a'">Coordinator Register <span style="color:#666">&rarr;</span></a>
     <a href="#" onclick="openHrLevelChooser(); return false;" style="display:block; background:#121212; border:1px solid #2a2a2a; border-radius:14px; padding:18px 22px; color:#fff; text-decoration:none; font-weight:700; font-size:14px;" onmouseover="this.style.borderColor='#666'" onmouseout="this.style.borderColor='#2a2a2a'">HR Portal <span style="color:#666">&rarr;</span></a>
+    <!--
+      Mentors, investors and contractors had no door on this page at all. Their
+      portals are built and their login pages are routed and live — they were
+      simply linked from nowhere, so the only way in was to already know the URL.
+      Three finished audiences that no visitor could reach.
+    -->
+    <a href="mentor-login.html" style="display:block; background:#121212; border:1px solid #2a2a2a; border-radius:14px; padding:18px 22px; color:#fff; text-decoration:none; font-weight:700; font-size:14px;" onmouseover="this.style.borderColor='#666'" onmouseout="this.style.borderColor='#2a2a2a'">Mentor Login <span style="color:#666">&rarr;</span></a>
+    <a href="investor-login.html" style="display:block; background:#121212; border:1px solid #2a2a2a; border-radius:14px; padding:18px 22px; color:#fff; text-decoration:none; font-weight:700; font-size:14px;" onmouseover="this.style.borderColor='#666'" onmouseout="this.style.borderColor='#2a2a2a'">Investor Login <span style="color:#666">&rarr;</span></a>
+    <a href="contractor-login.html" style="display:block; background:#121212; border:1px solid #2a2a2a; border-radius:14px; padding:18px 22px; color:#fff; text-decoration:none; font-weight:700; font-size:14px;" onmouseover="this.style.borderColor='#666'" onmouseout="this.style.borderColor='#2a2a2a'">Contractor Login <span style="color:#666">&rarr;</span></a>
   </div>
 
   <!-- the numbers -->
   <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:60px;">
     <div class="reveal" style="flex:1; min-width:150px; background:#0d0d0d; border:1px solid #1e1e1e; border-radius:16px; padding:26px; text-align:center;">
-      <p style="font-size:44px; font-weight:900;" id="statInterns">5000</p><p style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.2em; color:#888; margin-top:6px;">INTERNS TRAINED</p>
+      <!-- No number until the server sends the real one. Shipping "5000" as the
+           placeholder meant the page stated a figure even when the API failed. -->
+      <p style="font-size:44px; font-weight:900;" id="statInterns">&mdash;</p><p style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.2em; color:#888; margin-top:6px;">INTERNS TRAINED</p>
     </div>
     <div class="reveal" style="flex:1; min-width:150px; background:#0d0d0d; border:1px solid #1e1e1e; border-radius:16px; padding:26px; text-align:center;">
       <p style="font-size:44px; font-weight:900;" id="statDomains">14</p><p style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.2em; color:#888; margin-top:6px;">DOMAINS</p>

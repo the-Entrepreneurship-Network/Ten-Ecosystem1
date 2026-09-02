@@ -10032,16 +10032,22 @@ app.get("/coordinator/coding-submissions/:domain", requireStaffSession, async(re
 let _publicStatsCache = { at: 0, body: null };
 const PUBLIC_STATS_TTL_MS = 5 * 60 * 1000;
 
-// The landing page shows the intern count from a presentation floor rather than
-// the raw row count. The floor is a fixed offset, not a multiplier or a fake
-// ticker: every real signup still moves the printed number by exactly one, so
-// the figure tracks the database day by day.
-//
-//   printed = real + (FLOOR - FLOOR_AT)
-//
-// With the defaults, a real 783 prints 5,000 and a real 784 prints 5,001.
-// Set PUBLIC_INTERNS_FLOOR=0 in .env to print the raw count instead.
-const PUBLIC_INTERNS_FLOOR = Number(process.env.PUBLIC_INTERNS_FLOOR ?? 5000);
+/*
+ * The landing page prints the real number of interns.
+ *
+ * It used to print a "presentation floor": PUBLIC_INTERNS_FLOOR defaulted to
+ * 5000 against a PUBLIC_INTERNS_FLOOR_AT of 783, so a real 783 was displayed as
+ * 5,000 — a fixed +4,217 on the most prominent figure on the site, under the
+ * words "INTERNS TRAINED". Every signup moved it by one, so it tracked the
+ * database, but the number itself was never true.
+ *
+ * The floor now defaults to 0: the page states the count it can stand behind.
+ * A small honest number is better sales than a large soft one, and it is the
+ * only version that survives a journalist, a university partner or a student
+ * asking to see the list. Setting PUBLIC_INTERNS_FLOOR in .env re-enables the
+ * old behaviour for anyone who deliberately wants it.
+ */
+const PUBLIC_INTERNS_FLOOR = Number(process.env.PUBLIC_INTERNS_FLOOR ?? 0);
 const PUBLIC_INTERNS_FLOOR_AT = Number(process.env.PUBLIC_INTERNS_FLOOR_AT ?? 783);
 
 /** Real intern count -> the number the public page prints. */
