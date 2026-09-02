@@ -36,6 +36,47 @@ function resolveStudentDuration(student) {
  * aliasing and the short-duration remap, which is precisely the kind of second
  * copy that let the five tenure tables drift apart.
  */
+/** Only for a database that predates the per-tenure tracks. See tasksForTrack. */
+const LEGACY_SHORT_WEEKS = { "1week": [1], "15days": [1, 2] };
+
+/**
+ * The tasks that make up one tenure's track. THE only place that decides this.
+ *
+ * There used to be two copies of the rule in this file — one here and one in the
+ * journey builder — and both rewrote the short tenures onto the 1-month track,
+ * taking week 1 or weeks 1 and 2. Two copies of a rule are two rules, and fixing
+ * one of them is how a "fixed" 1-week internship still showed a single task.
+ *
+ * @param {string} domain
+ * @param {string} durationType  a key of TENURE_DAYS
+ * @param {object} [extra]       further query terms (e.g. a single weekNumber)
+ */
+async function tasksForTrack(domain, durationType, extra) {
+    // Ordered after .lean() rather than with .sort() on the query: one shared
+    // lookup now serves callers that mock DomainTask.find as a plain array, and
+    // the ordering is identical either way.
+    const byWeek = (a, b) => (a.weekNumber - b.weekNumber)
+        || String(a._id).localeCompare(String(b._id));
+
+    const query = Object.assign({ domain, durationType }, extra || {});
+    let tasks = await DomainTask.find(query).lean();
+    if (tasks.length) return tasks.slice().sort(byWeek);
+
+    /*
+     * Fallback for a database the seeder has not reached yet. Deploy order is not
+     * guaranteed — the code can land before `node seeds/domainTasks.seed.js` is
+     * run — and a student opening their dashboard in that window must not find it
+     * empty. It stops applying the moment the real track exists.
+     */
+    if (!LEGACY_SHORT_WEEKS[durationType]) return tasks;
+    const legacy = await DomainTask.find(Object.assign({
+        domain,
+        durationType: "1month",
+        weekNumber: { $in: LEGACY_SHORT_WEEKS[durationType] }
+    }, extra || {})).lean();
+    return legacy.slice().sort(byWeek);
+}
+
 async function resolveTaskScope(student) {
     let domain = student.domain;
     if (domain === "HR") domain = "HR Management";
@@ -47,20 +88,17 @@ async function resolveTaskScope(student) {
     const durationType = resolveStudentDuration(student);
     if (!domain || !durationType) return { domain: null, durationType, tasks: [] };
 
-    let queryDurationType = durationType;
-    let queryObj = { domain };
-
-    if (durationType === "1week") {
-        queryDurationType = "1month";
-        queryObj.weekNumber = 1;
-    } else if (durationType === "15days") {
-        queryDurationType = "1month";
-        queryObj.weekNumber = { $in: [1, 2] };
-    }
-
-    queryObj.durationType = queryDurationType;
-
-    return { domain, durationType, tasks: await DomainTask.find(queryObj).lean() };
+    /*
+     * Every tenure now has a track of its own, so this is just a lookup.
+     *
+     * It used to rewrite the two short tenures onto the 1-month track and take
+     * week 1, or weeks 1 and 2 — which is why a 1-week internship handed out ONE
+     * task and a 15-day internship TWO, while the free 6-month track handed out
+     * 24. Paying for a shorter course bought less work than not paying at all.
+     * seeds/domainTasks.seed.js now derives real 4 / 6 / 8 / 10-week tracks from
+     * the 3-month ladder, so there is nothing left to remap.
+     */
+    return { domain, durationType, tasks: await tasksForTrack(domain, durationType) };
 }
 
 /**
@@ -156,13 +194,16 @@ async function resyncTasksForStudent(student) {
     };
 }
 
-// How many weeks of tasks each duration is entitled to. Short durations borrow
-// the 1-month task set (see assignTasksForStudent), so without an explicit cap
-// they would keep unlocking weeks they never paid for.
-const WEEK_CAPS = {
-    "1week":  1,
-    "15days": 2
-};
+/*
+ * There is no cap table any more.
+ *
+ * This existed because the short tenures borrowed the 1-month task set, so
+ * without an explicit stop they would unlock weeks they had not paid for. Two
+ * places then described the same rule — this table and the remap in
+ * resolveTaskScope — and they could disagree. Each tenure now has its own
+ * track, so the last week of that track IS the cap, and it can only ever say
+ * the same thing as the tasks themselves.
+ */
 
 /**
  * Unlock the next week's tasks after all of the current week's tasks are approved.
@@ -181,8 +222,10 @@ async function tryUnlockNextWeek(student, approvedTaskId) {
     // two guards below could therefore never fire for exactly the students they
     // exist to cap, and week 3+ unlocked for a 15-days student.
     const studentDuration = resolveStudentDuration(student);
-    const weekCap = WEEK_CAPS[studentDuration];
-    if (weekCap && currentWeek >= weekCap) return { unlocked: 0 };
+    if (studentDuration !== durationType) {
+        // The task belongs to a track this student is not on. Nothing to unlock.
+        return { unlocked: 0 };
+    }
 
     // All tasks in the current week for this student
     const currentWeekTasks = await DomainTask.find({ domain, durationType, weekNumber: currentWeek }).lean();
@@ -275,21 +318,9 @@ async function getStudentTasks(student) {
 
     if (!domain || !durationType) return { weeks: [], domain, durationType };
 
-    let queryDurationType = durationType;
-    let queryObj = { domain };
-
-    if (durationType === "1week") {
-        queryDurationType = "1month";
-        queryObj.weekNumber = 1;
-    } else if (durationType === "15days") {
-        queryDurationType = "1month";
-        queryObj.weekNumber = { $in: [1, 2] };
-    }
-
-    queryObj.durationType = queryDurationType;
-
+    // Same rule as assignment, from the same function — see tasksForTrack.
     const [allTasks, progressList] = await Promise.all([
-        DomainTask.find(queryObj).sort({ weekNumber: 1, _id: 1 }).lean(),
+        tasksForTrack(domain, durationType),
         StudentTaskProgress.find({ studentId: student._id, taskId: { $in: taskIds } }).lean()
     ]);
 

@@ -22,10 +22,18 @@ const MONGODB_URI = process.env.MONGODB_URI;
  * newly-written filler exercises. It also stays in step: edit the 3-month track
  * and the short ones follow.
  */
-const SHORT_TRACKS = { '1week': 4, '15days': 6 };
+const TRACK_WEEKS = { '1week': 4, '15days': 6, '1month': 8, '45days': 10 };
+
+/*
+ * 1month and 45days already have hand-written tracks of 4 and 6 weeks. The
+ * seeder upserts with $setOnInsert, so those rows are kept exactly as written
+ * and only the weeks beyond them are filled in from the 3-month ladder. That
+ * makes the ladder rise with what a student pays for — 4, 6, 8, 10, 12, 24 —
+ * instead of a 1-week and a 1-month internship both handing out four tasks.
+ */
 
 /** @returns {object[]} the derived rows, ready to seed alongside ALL_TASKS. */
-function deriveShortTracks(tasks) {
+function deriveTrackWeeks(tasks) {
     const byDomain = new Map();
     for (const task of tasks) {
         if (task.durationType !== '3months') continue;
@@ -33,12 +41,19 @@ function deriveShortTracks(tasks) {
         byDomain.get(task.domain).push(task);
     }
 
+    // Weeks somebody already wrote by hand. $setOnInsert would keep them anyway,
+    // but emitting a derived duplicate means a wasted database round-trip per row
+    // and a "tasks processed" count that overstates the work.
+    const written = new Set(tasks.map((t) => t.durationType + '|' + t.domain + '|' + t.weekNumber));
+
     const derived = [];
-    for (const [, rows] of byDomain) {
+    for (const [domain, rows] of byDomain) {
         rows.sort((a, b) => a.weekNumber - b.weekNumber);
-        for (const durationType of Object.keys(SHORT_TRACKS)) {
-            rows.slice(0, SHORT_TRACKS[durationType]).forEach((task, i) => {
-                derived.push(Object.assign({}, task, { durationType, weekNumber: i + 1 }));
+        for (const durationType of Object.keys(TRACK_WEEKS)) {
+            rows.slice(0, TRACK_WEEKS[durationType]).forEach((task, i) => {
+                const weekNumber = i + 1;
+                if (written.has(durationType + '|' + domain + '|' + weekNumber)) return;
+                derived.push(Object.assign({}, task, { durationType, weekNumber }));
             });
         }
     }
@@ -830,7 +845,7 @@ async function seed() {
   // $setOnInsert means an existing row is never overwritten, so seeding the
   // derived short tracks cannot disturb a student who is already part-way
   // through a longer one.
-  const TO_SEED = ALL_TASKS.concat(deriveShortTracks(ALL_TASKS));
+  const TO_SEED = ALL_TASKS.concat(deriveTrackWeeks(ALL_TASKS));
 
   for (const task of TO_SEED) {
     try {
@@ -873,4 +888,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { ALL_TASKS, SHORT_TRACKS, deriveShortTracks };
+module.exports = { ALL_TASKS, TRACK_WEEKS, deriveTrackWeeks };

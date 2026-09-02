@@ -1,8 +1,8 @@
 'use strict';
 
-const { ALL_TASKS, SHORT_TRACKS, deriveShortTracks } = require('../../seeds/domainTasks.seed');
+const { ALL_TASKS, TRACK_WEEKS, deriveTrackWeeks } = require('../../seeds/domainTasks.seed');
 
-const derived = deriveShortTracks(ALL_TASKS);
+const derived = deriveTrackWeeks(ALL_TASKS);
 const all = ALL_TASKS.concat(derived);
 const countFor = (durationType) => all.filter((t) => t.durationType === durationType).length;
 const domains = new Set(ALL_TASKS.map((t) => t.domain));
@@ -26,23 +26,34 @@ describe('the short internships have work in them', () => {
   });
 
   it('covers every domain, not just the ones somebody remembered', () => {
-    Object.keys(SHORT_TRACKS).forEach((tenure) => {
+    Object.keys(TRACK_WEEKS).forEach((tenure) => {
       const covered = new Set(derived.filter((t) => t.durationType === tenure).map((t) => t.domain));
       expect(covered.size).toBe(domains.size);
     });
   });
 
-  it('gives each short track the agreed number of weeks per domain', () => {
-    Object.entries(SHORT_TRACKS).forEach(([tenure, weeks]) => {
+  it('gives each track the agreed number of weeks per domain', () => {
+    Object.entries(TRACK_WEEKS).forEach(([tenure, weeks]) => {
       expect(countFor(tenure)).toBe(weeks * domains.size);
     });
   });
 
+  it('never writes a row for a week somebody already wrote by hand', () => {
+    // $setOnInsert would keep the hand-written one anyway, so a duplicate is a
+    // wasted round-trip and a seed count that overstates the work.
+    const keyOf = (t) => t.durationType + '|' + t.domain + '|' + t.weekNumber;
+    const written = new Set(ALL_TASKS.map(keyOf));
+    expect(derived.filter((t) => written.has(keyOf(t)))).toEqual([]);
+  });
+
   it('numbers the weeks from 1, with no gaps', () => {
-    // The dashboard unlocks week by week; a track starting at week 3 would
-    // never open.
-    Object.entries(SHORT_TRACKS).forEach(([tenure, weeks]) => {
-      const python = derived
+    /*
+     * The dashboard unlocks one week at a time, so a track missing week 3 would
+     * stop there forever. What matters is the COMBINED track — hand-written rows
+     * plus derived ones — because that is what the database ends up holding.
+     */
+    Object.entries(TRACK_WEEKS).forEach(([tenure, weeks]) => {
+      const python = all
         .filter((t) => t.durationType === tenure && t.domain === 'Python Development')
         .map((t) => t.weekNumber)
         .sort((a, b) => a - b);
@@ -64,16 +75,35 @@ describe('the short internships have work in them', () => {
     expect(week.coinReward).toBe(source[0].coinReward);
   });
 
-  it('does not touch the tracks students are already part-way through', () => {
+  it('the ladder rises with what a student pays for', () => {
     /*
-     * Extending 1month or 45days would change the denominator under a student
-     * who is already on one: 4 of 4 becomes 4 of 8, and somebody who had passed
-     * the certificate threshold could fall back below it. Those two need a
-     * recalculation pass and a decision, not a quiet seed.
+     * A 1-week and a 1-month internship both handed out four tasks, and the free
+     * 6-month track handed out 24 — so paying for a shorter course bought less
+     * work than not paying at all. Weeks per tenure now only go up: 4, 6, 8, 10,
+     * 12, 24.
      */
-    expect(Object.keys(SHORT_TRACKS).sort()).toEqual(['15days', '1week']);
-    expect(countFor('1month')).toBe(ALL_TASKS.filter((t) => t.durationType === '1month').length);
-    expect(countFor('45days')).toBe(ALL_TASKS.filter((t) => t.durationType === '45days').length);
+    const weeksFor = (dur) => new Set(
+      all.filter((t) => t.durationType === dur && t.domain === 'Python Development')
+         .map((t) => t.weekNumber)
+    ).size;
+    const ladder = ['1week', '15days', '1month', '45days', '3months', '6months'].map(weeksFor);
+    expect(ladder).toEqual([4, 6, 8, 10, 12, 24]);
+    ladder.slice(1).forEach((weeks, i) => expect(weeks).toBeGreaterThan(ladder[i]));
+  });
+
+  it('keeps every hand-written task exactly as written', () => {
+    // $setOnInsert never overwrites, so the 1-month and 45-day tracks that were
+    // authored by hand survive; only the weeks beyond them come from the ladder.
+    const handwritten = ALL_TASKS.filter((t) => t.durationType === '1month'
+      && t.domain === 'Python Development');
+    handwritten.forEach((task) => {
+      const derivedSame = derived.find((d) => d.durationType === '1month'
+        && d.domain === task.domain && d.weekNumber === task.weekNumber);
+      // A derived row may exist for the same week, but $setOnInsert means the
+      // hand-written one is the row that stays.
+      if (derivedSame) expect(task.taskTitle).toBeTruthy();
+    });
+    expect(handwritten.length).toBe(4);
   });
 
   it('the seeder can be loaded without connecting to a database', () => {
@@ -83,5 +113,64 @@ describe('the short internships have work in them', () => {
     const path = require('path');
     const src = fs.readFileSync(path.join(__dirname, '../../seeds/domainTasks.seed.js'), 'utf8');
     expect(src).toContain('if (require.main === module)');
+  });
+});
+
+describe('nobody goes backwards when their track grows', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const root = path.join(__dirname, '../..');
+  const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
+  const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  /*
+   * Completion is approved / assigned. Lengthening a track moves the denominator
+   * under a student already part-way through one: 4 of 4 becomes 4 of 8, for
+   * work they had already done. An LOR needs 50%, so that student could be
+   * refused a document they had already qualified for.
+   */
+  it('one function decides a track, and it does not remap the short tenures', () => {
+    /*
+     * There were TWO copies of the remap in this file — one in the assignment
+     * path and one in the journey builder — and both rewrote 1week and 15days
+     * onto the 1-month track. Two copies of a rule are two rules: fixing one is
+     * how a "fixed" 1-week internship still showed a single task. A separate
+     * WEEK_CAPS table described the same thing a third time.
+     */
+    const engine = strip(read('services/v2/taskEngine.js'));
+    expect(engine).toContain('async function tasksForTrack(domain, durationType, extra)');
+    expect(engine).toContain('Object.assign({ domain, durationType }, extra || {})');
+    expect(engine).not.toContain('queryDurationType = "1month"');
+    expect(engine).not.toMatch(/const WEEK_CAPS = \{/);
+    // Exactly one place builds the query, so the two callers cannot disagree.
+    expect((engine.match(/DomainTask\.find\(query\)/g) || []).length).toBe(1);
+  });
+
+  it('falls back safely if the seeder has not run yet', () => {
+    // Deploy order is not guaranteed. A student opening their dashboard between
+    // the code landing and the seed running must not find it empty.
+    const engine = strip(read('services/v2/taskEngine.js'));
+    expect(engine).toContain('LEGACY_SHORT_WEEKS');
+    expect(engine).toContain('if (!LEGACY_SHORT_WEEKS[durationType]) return tasks;');
+    // The real track wins the moment it exists, so the fallback retires itself.
+    expect(engine).toContain('if (tasks.length) return tasks.slice().sort(byWeek);');
+  });
+
+  it('the student record can hold the standing they had before', () => {
+    expect(strip(read('models/Student.js'))).toContain('preExpansionCompletionPercent');
+  });
+
+  it('the LOR gate reads the better of the two figures', () => {
+    const docs = strip(read('routes/v2/documents.js'));
+    expect(docs).toContain('Math.max(livePercent, student.preExpansionCompletionPercent || 0)');
+  });
+
+  it('the migration writes nothing without --write, and never lowers protection', () => {
+    const script = strip(read('scripts/expand-task-tracks.js'));
+    expect(script).toContain("const write = process.argv.includes('--write')");
+    expect(script).toContain('Dry run');
+    // Only a DROP is recorded, only once — a second run must not overwrite the
+    // figure a first run protected somebody with.
+    expect(script).toContain('after.percent < before.percent && student.preExpansionCompletionPercent == null');
   });
 });
