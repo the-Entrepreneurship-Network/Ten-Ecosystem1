@@ -54,9 +54,23 @@ const KEYS = {
     Message:            ['_id'],
     MailHistory:        ['_id'],
     DocumentHistory:    ['_id'],
-    StudentCertificate: ['_id'],
-    StudentTaskProgress:['_id'],
-    Submission:         ['_id']
+    Submission:         ['_id'],
+
+    /*
+     * These carry a unique index on something other than _id, so matching on
+     * _id alone declared rows "missing" that were already there and the insert
+     * then bounced off the index. Taken from each schema's own index() call.
+     */
+    BadgeAward:          ['employeeId', 'badgeId'],
+    StudentTaskProgress: ['studentId', 'taskId'],
+    CommunityProfile:    ['userId'],
+    MentorProfile:       ['userId'],
+    StudentProfile:      ['userId'],
+    TalentProfile:       ['userId'],
+    StudentCoin:         ['studentId'],
+    StudentDocument:     ['studentId'],
+    StudentCertificate:  ['certificateId'],
+    PsychologyTrigger:   ['studentId', 'triggerName']
 };
 
 function keyFor(modelName, doc) {
@@ -92,6 +106,7 @@ async function main() {
     const files = fs.readdirSync(DB_DIR).filter((f) => /^db_.+\.json$/.test(f));
     let totalMissing = 0;
     let totalInserted = 0;
+    let totalAlready = 0;
 
     for (const file of files) {
         const modelName = file.replace(/^db_/, '').replace(/\.json$/, '');
@@ -106,11 +121,20 @@ async function main() {
         }
         if (!Array.isArray(rows) || !rows.length) continue;
 
-        let Model;
-        try {
-            Model = require(path.join(__dirname, '..', 'models', modelName));
-        } catch (_e) {
-            console.log(`${modelName.padEnd(22)} ${rows.length} row(s) — no models/${modelName}.js, skipped`);
+        /*
+         * Models live in two places. Looking only in models/ silently skipped
+         * models/new/ — including 260 rows of StudentTaskProgress, which is a
+         * student's entire task history.
+         */
+        let Model = null;
+        for (const dir of ['models', 'models/new']) {
+            try {
+                Model = require(path.join(__dirname, '..', dir, modelName));
+                break;
+            } catch (_e) { /* try the next directory */ }
+        }
+        if (!Model) {
+            console.log(`${modelName.padEnd(22)} ${rows.length} row(s) — no model named ${modelName}, skipped`);
             continue;
         }
 
@@ -137,6 +161,8 @@ async function main() {
 
         if (write) {
             let ok = 0;
+            let already = 0;
+            let failed = 0;
             for (const doc of missing) {
                 try {
                     // Let Mongoose mint a fresh _id: the JSON engine's ids are
@@ -147,17 +173,32 @@ async function main() {
                     await Model.create(clean);
                     ok++;
                 } catch (e) {
-                    console.log(`    ! ${doc.employeeId || doc.email || doc._id}: ${e.message}`);
+                    if (e.code === 11000) {
+                        // A unique index rejected it, which means the row IS
+                        // already in the database under a different _id — the
+                        // natural key above just did not catch it. Not an error.
+                        already++;
+                    } else {
+                        console.log(`    ! ${doc.employeeId || doc.email || doc._id}: ${e.message}`);
+                        failed++;
+                    }
                 }
             }
             totalInserted += ok;
-            console.log(`    inserted ${ok} of ${missing.length}`);
+            totalAlready += already;
+            const notes = [`inserted ${ok} of ${missing.length}`];
+            if (already) notes.push(`${already} were already there under another id`);
+            if (failed)  notes.push(`${failed} failed`);
+            console.log(`    ${notes.join(', ')}`);
         }
     }
 
     console.log('');
     console.log(`${totalMissing} row(s) exist only in the offline file.`);
-    if (write) console.log(`${totalInserted} inserted.`);
+    if (write) {
+        console.log(`${totalInserted} inserted.`);
+        if (totalAlready) console.log(`${totalAlready} were already in the database under a different id.`);
+    }
     else if (totalMissing) console.log('Re-run with --write to import them.');
 
     if (write && totalInserted) {
