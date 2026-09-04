@@ -7007,14 +7007,34 @@ app.post('/api/admin/recalculate-attendance', async (req, res) => {
 });
 
 // ---- COORDINATOR: approve student for certificate consideration ----
-app.post("/students/:id/coordinator-approve", async(req,res)=>{
+/*
+ * Both coordinator routes below were unauthenticated, while their HR siblings
+ * a few lines down have always called isHRSession(). So anyone who knew a
+ * student's id could approve them for certificate consideration, or revoke an
+ * approval the coordinator and HR had both already given — the approval chain
+ * that decides who gets a certificate was open to the internet.
+ *
+ * requireStaffSession is the guard the rest of this file uses for work that
+ * coordinators and HR both do; HR does step in here, since a student whose
+ * coordinator never responds is escalated to them.
+ *
+ * The approver is now taken from that session too. It used to be
+ * `coordinatorId` out of the request body, so the record of who approved a
+ * certificate was whatever the caller typed.
+ */
+app.post("/students/:id/coordinator-approve", requireStaffSession, async(req,res)=>{
 try{
-    const { coordinatorId, remarks } = req.body;
+    const { remarks } = req.body;
+    const s = req.session || {};
+    const approver = (s.coordinator && (s.coordinator.username || s.coordinator.name))
+        || (s.hr && (s.hr.username || "HR"))
+        || (s.adminUser && "admin")
+        || "coordinator";
     const student = await Student.findById(req.params.id);
     if(!student) return res.json({ success:false, message:"Student not found" });
 
     student.certificateApprovedByCoordinator = true;
-    student.approvedByCoordinatorId = coordinatorId || "coordinator";
+    student.approvedByCoordinatorId = approver;
     student.coordinatorApprovedAt = new Date();
     student.coordinatorRemarks = remarks || "";
     // Clear any prior HR rejection so the student re-enters HR's pending queue
@@ -7039,7 +7059,7 @@ try{
 });
 
 // ---- COORDINATOR: revoke a previously given approval ----
-app.post("/students/:id/coordinator-revoke", async(req,res)=>{
+app.post("/students/:id/coordinator-revoke", requireStaffSession, async(req,res)=>{
 try{
     const student = await Student.findById(req.params.id);
     if(!student) return res.json({ success:false, message:"Student not found" });
