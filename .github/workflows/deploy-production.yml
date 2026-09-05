@@ -47,4 +47,14 @@ jobs:
             sleep 10
             pm2 describe ten-portal-production | grep -q "status.*online" \
               || { echo "::error::ten-portal-production is not online after restart."; pm2 logs ten-portal-production --lines 40 --nostream; exit 1; }
+
+            # Online is not the same as working. The app stays up with no
+            # database behind it, so say so here — a green deploy with a dead
+            # database is how the first outage went unnoticed for a week.
+            # A warning, not a failure: the deploy itself succeeded, and the
+            # database is fixed on the box, not by re-running this job.
+            APP_PORT="$(grep -E '^PORT=' .env 2>/dev/null | tail -1 | cut -d= -f2 | tr -d '[:space:]')"
+            DB_HEALTH="$(curl -s -m 5 "http://127.0.0.1:${APP_PORT:-5000}/api/health/db" || true)"
+            echo "$DB_HEALTH" | grep -q '"connected":true' \
+              || echo "::warning::The app is online but reports the database NOT connected. On the server run: sudo bash scripts/server/harden-mongod.sh --check   ($DB_HEALTH)"
             echo "Deployed $(git rev-parse --short HEAD) to $APP_DIR"

@@ -2680,6 +2680,10 @@ mongoose.connection.on('reconnected', () => {
 mongoose.connection.on('error', (err) => {
   console.warn("[Database] Connection offline (working in memory-fallback mode):", err.message);
   global.isMongoUnhealthy = true;
+  // A failure after boot never reached dbHealth, so /api/health/db and the
+  // banner on every page had no `cause` for it — the operator saw "not
+  // connected" and nothing about why or what to do.
+  try { require('./services/dbHealth').noteFailure(err, mongoUri); } catch (_e) { /* never throw from a listener */ }
 });
 
 async function runWithRetry(fn, retries = 3, delay = 1500) {
