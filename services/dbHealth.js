@@ -132,10 +132,18 @@ const CAUSES = [
         id: 'refused',
         test: (err) => /ECONNREFUSED/i.test(err.message || ''),
         summary: 'nothing is listening at the address in MONGODB_URI',
-        fix: 'If that address is 127.0.0.1 or localhost, the .env on this server is missing the '
-           + 'real connection string: put the MongoDB Atlas URI in MONGODB_URI and restart with '
-           + '`pm2 restart ecosystem.config.js --update-env`. If a MongoDB is genuinely meant to '
-           + 'run on this box, start it with `sudo systemctl start mongod`.'
+        /*
+         * MONGODB_URI on the production box is mongodb://localhost:27017/… and
+         * that is correct: the database runs on the same EC2 instance. This
+         * text used to say a localhost address meant .env was "missing the real
+         * connection string" and sent the operator to MongoDB Atlas — for a
+         * database that had simply stopped. It is the message on every screen
+         * during exactly that outage, so it has to name the actual fix.
+         */
+        fix: 'The MongoDB at that address has stopped. On the server: `sudo systemctl start mongod`, '
+           + 'then `sudo bash scripts/server/harden-mongod.sh` so it restarts itself next time. '
+           + 'If the database is meant to be somewhere else, put that address in MONGODB_URI and '
+           + 'restart with `pm2 restart ecosystem.config.js --update-env`.'
     }
 ];
 

@@ -28,18 +28,25 @@ describe('why the database is not connected', () => {
 
   it('names the failure that actually took the portal down', () => {
     /*
-     * MONGODB_URI was missing from .env on the server and server.js defaulted to
-     * mongodb://localhost:27017, so mongoose dialled a MongoDB nobody had ever
-     * installed there. The error read `connect ECONNREFUSED 127.0.0.1:27017` —
-     * which sounds like a database that is down, not like a missing line in a
-     * config file. Nothing in the portal ever said the second thing.
+     * `connect ECONNREFUSED 127.0.0.1:27017`, twice now. The first time it was
+     * read as "MONGODB_URI must be missing from .env, so the app is dialling a
+     * MongoDB nobody installed" — and the fix text sent the operator to MongoDB
+     * Atlas. That was wrong: the URI was mongodb://localhost:27017/… and
+     * correct, because the database runs on the same EC2 box. It had stopped
+     * (a full disk, the first time) and nothing restarted it.
+     *
+     * So the advice on the banner during exactly this outage has to say: start
+     * it, and install the thing that restarts it next time.
      */
     const err = new Error('connect ECONNREFUSED 127.0.0.1:27017');
     err.name = 'MongooseServerSelectionError';   // how mongoose actually reports it
-    const cause = dbHealth.diagnose(err, 'mongodb://localhost:27017/internship');
+    const cause = dbHealth.diagnose(err, 'mongodb://localhost:27017/ten_production');
     expect(cause.id).toBe('refused');
+    expect(cause.fix).toMatch(/sudo systemctl start mongod/);
+    expect(cause.fix).toMatch(/harden-mongod\.sh/);
+    expect(cause.fix).not.toMatch(/Atlas/);
+    // Still covers the other reading, for a box whose database is elsewhere.
     expect(cause.fix).toMatch(/MONGODB_URI/);
-    expect(cause.fix).toMatch(/localhost/);
   });
 
   /*

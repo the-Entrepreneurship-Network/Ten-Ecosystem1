@@ -58,7 +58,7 @@ function getCertificatePrice(type, studentTenure) {
 // header starting with "Bearer hr_", and requireStudent read the employeeId
 // straight out of a header/body/query. They now come from the shared
 // session-derived guards.
-const { requireHR, requireStudent, requireStaff } = require("../../middleware/sessionAuth");
+const { requireHR, requireStudent, requireStaff, requireSelfOrStaff } = require("../../middleware/sessionAuth");
 const { validateOfficialPullRequestUrl } = require("../../config/github");
 
 // ── Compute completion percentage from task progress ──
@@ -1341,87 +1341,32 @@ router.post("/hr-issue", requireStaff, async (req, res) => {
     }
 });
 
-// POST /api/v2/certificates/hr-approve — HR manually approves
-router.post('/hr-approve', async (req, res) => {
-  try {
-    const { studentId, certTypes, force } = req.body;
-    const update = {};
-    if (certTypes.includes('LOC'))  update.locStatus  = 'pending_hr';
-    if (certTypes.includes('LOR'))  update.lorStatus  = 'pending_hr';
-    if (certTypes.includes('STAR')) update.starStatus = 'approved';
-    await Student.findByIdAndUpdate(studentId, update);
-    
-    if (force) {
-      const studentObj = await Student.findById(studentId);
-      if (certTypes.includes('LOC')) await generateAndSaveCert(studentId, 'LOC', studentObj, "HR Portal (Forced)");
-      if (certTypes.includes('LOR')) await generateAndSaveCert(studentId, 'LOR', studentObj, "HR Portal (Forced)");
-      if (certTypes.includes('STAR')) await generateAndSaveCert(studentId, 'STAR', studentObj, "HR Portal (Forced)");
-    } else {
-      await checkAndIssueCerts(studentId, "HR Portal");
-    }
-    
-    res.json({ success: true });
-  } catch(e) {
-    console.error('[HR-Approve] Error:', e.message);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// POST /api/v2/certificates/pay-fine
-router.post('/pay-fine', async (req, res) => {
-  try {
-    const { studentId, fineType } = req.body;
-    const student = await Student.findById(studentId);
-    if (!student) return res.status(404).json({ error: 'Student not found' });
-    
-    let fineFound = false;
-    if (student.pendingFines) {
-      student.pendingFines.forEach(f => {
-        if (f.fineType === fineType && !f.paid) {
-          f.paid = true;
-          fineFound = true;
-        }
-      });
-    }
-    
-    if (fineFound) {
-      if (fineType === 'loc_attendance' && student.locStatus === 'fine_pending') {
-        student.locStatus = 'pending_hr';
-      } else if (fineType === 'lor_criteria' && student.lorStatus === 'fine_pending') {
-        student.lorStatus = 'fine_pending';
-      }
-      
-      await student.save();
-      await checkAndIssueCerts(studentId);
-      return res.json({ success: true, message: `Fine of type ${fineType} successfully marked as paid and certificate generated` });
-    } else {
-      return res.status(400).json({ success: false, message: `No unpaid fine of type ${fineType} found for this student` });
-    }
-  } catch(e) {
-    console.error('[Pay-Fine] Error:', e.message);
-    res.status(500).json({ error: e.message });
-  }
-});
-  
-// POST /api/v2/certificates/coordinator-approve — Coordinator marks completion
-router.post('/coordinator-approve', async (req, res) => {
-  try {
-    const { studentId } = req.body;
-    await Student.findByIdAndUpdate(studentId, {
-      internshipCompleted: true,
-      internshipCompletedAt: new Date(),
-      coordinatorApprovedAt: new Date(),
-      coordinatorApprovalStatus: 'approved',
-      locStatus: 'pending_hr',
-      lorStatus: 'pending_hr',
-    });
-    await checkAndIssueCerts(studentId);
-    res.json({ success: true });
-  } catch(e) {
-    console.error('[Coordinator-Approve] Error:', e.message);
-    res.status(500).json({ error: e.message });
-  }
-});
+/*
+ * Five routes were deleted from here: hr-approve, pay-fine,
+ * coordinator-approve, issue-lop and pending-hr.
+ *
+ * None of them had any authentication, all five took the student's identity
+ * straight from the request body, and this router is mounted twice — at
+ * /api/v2 and at /api/v2/certificates — so each was reachable at two URLs.
+ * Together they were a complete, anonymous certificate factory: POST
+ * hr-approve with `force: true` to generate an LOC, LOR and STAR for any
+ * student id, POST issue-lop to mint a Letter of Promotion naming any role you
+ * liked, POST pay-fine to clear somebody's outstanding fine, POST
+ * coordinator-approve to mark an internship complete, and GET pending-hr to
+ * read out every student's name, employee id, attendance and performance
+ * score. No sign-in at any step.
+ *
+ * They are deleted rather than guarded because nothing called them. The HR
+ * portal's Approve button posts to /students/:id/hr-approve in server.js, and
+ * the coordinator dashboard posts to /students/:id/coordinator-approve — the
+ * real, guarded implementations. These five were an abandoned parallel copy;
+ * a grep across every page, script and built bundle finds no caller for any of
+ * them. Deleting beats adding a guard: a route nobody calls cannot be gated
+ * wrongly later.
+ *
+ * If a screen ever needs one of these, take the server.js version, which
+ * already checks the session.
+ */
   
 // POST /api/v2/certificates/star-submit — Student submits star contribution
 //
@@ -1515,33 +1460,6 @@ router.post('/star-review', requireStaff, async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-
-// POST /api/v2/certificates/issue-lop — HR issues a Letter of Promotion
-// Body: { studentId, oldRole, newRole, effectiveDate, department, gender? }
-router.post('/issue-lop', async (req, res) => {
-  try {
-    const { studentId, oldRole, newRole, effectiveDate, department, gender } = req.body || {};
-    if (!studentId) {
-      return res.status(400).json({ success: false, message: 'studentId is required' });
-    }
-    const update = { lopStatus: 'pending' };
-    if (oldRole)       update.lopOldRole       = oldRole;
-    if (newRole)       update.lopNewRole       = newRole;
-    if (effectiveDate) update.lopEffectiveDate = new Date(effectiveDate);
-    if (department)    update.lopDepartment    = department;
-    if (gender !== undefined) update.gender    = gender;
-    await Student.findByIdAndUpdate(studentId, update);
-
-    const studentObj = await Student.findById(studentId);
-    if (!studentObj) return res.status(404).json({ success: false, message: 'Student not found' });
-
-    const result = await generateAndSaveCert(studentId, 'LOP', studentObj, req.body.sentBy || 'HR Portal');
-    res.json({ success: true, ...result });
-  } catch (e) {
-    console.error('[Issue-LOP] Error:', e.message);
-    res.status(500).json({ success: false, error: e.message });
-  }
-});
   
 // GET /api/v2/certificates/my-certs
 router.get('/my-certs', async (req, res) => {
@@ -1549,10 +1467,26 @@ router.get('/my-certs', async (req, res) => {
 });
   
 // GET /api/v2/certificates/download/:type
-router.get('/download/:type', async (req, res) => {
+/*
+ * This served any student's certificate PDF to anybody who named an employee
+ * id — no session required. The ids are sequential and printed on every
+ * document, so walking them handed out other people's LOC, LOR, STAR, offer
+ * letter and promotion letter, each carrying their full name and dates.
+ *
+ * requireSelfOrStaff answers the only question that matters: is this your own
+ * record, or are you staff? Everything else about the route is unchanged, so
+ * the download link on my-documents.html — the one caller — still works.
+ */
+router.get('/download/:type', requireSelfOrStaff((req) => req.query && req.query.employeeId), async (req, res) => {
   try {
     const { employeeId } = req.query || {};
     const type = (req.params && req.params.type || "").toUpperCase();
+    /*
+     * Mongoose strips an undefined value out of a query, so a missing
+     * employeeId turned findOne({ employeeId: undefined }) into findOne({}) —
+     * the first student in the collection, whoever that happens to be.
+     */
+    if (!employeeId) return res.status(400).json({ error: 'employeeId is required' });
     const student = await Student.findOne({ employeeId }).lean();
     if (!student) return res.status(404).json({ error: 'Not found' });
   
@@ -1592,24 +1526,6 @@ router.get('/download/:type', async (req, res) => {
     res.send(buffer);
   } catch(e) {
     console.error('[Download] Error:', e.message);
-    res.status(500).json({ error: e.message });
-  }
-});
-  
-// GET /api/v2/certificates/pending-hr — HR views what needs approval
-router.get('/pending-hr', async (req, res) => {
-  try {
-    const students = await Student.find({
-      $or: [
-        { locStatus:  { $in: ['pending_hr'] } },
-        { lorStatus:  { $in: ['pending_hr'] } },
-        { starStatus: 'pending_review' },
-        { coordinatorApprovalStatus: 'escalated_to_hr' },
-      ]
-    }, 'name fullName employeeId domain attendancePercentage performanceScore locStatus lorStatus starStatus coordinatorApprovalStatus internshipCompletedAt starContribution').lean();
-    res.json({ students });
-  } catch(e) {
-    console.error('[Pending-HR] Error:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
