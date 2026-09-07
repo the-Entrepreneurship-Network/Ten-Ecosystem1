@@ -261,7 +261,7 @@
           </button>
 
           <!-- Coordinator Card -->
-          <button onclick="window.location.href='coordinator-register.html'" class="role-card text-left p-5 rounded-xl border border-sky-500/40 bg-sky-950/30 hover:border-sky-400 flex items-start gap-4 relative overflow-hidden transition duration-300 cursor-pointer">
+          <button onclick="selectRole('coordinator')" class="role-card text-left p-5 rounded-xl border border-sky-500/40 bg-sky-950/30 hover:border-sky-400 flex items-start gap-4 relative overflow-hidden transition duration-300 cursor-pointer">
             <span class="absolute top-2 right-2 bg-sky-500/20 text-sky-300 border border-sky-500/30 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">Management</span>
             <div class="flex-shrink-0 w-12 h-12 rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20 flex items-center justify-center">
               <i class="fa-solid fa-clipboard-user text-xl"></i>
@@ -283,6 +283,90 @@
           <div>
             <a href="login.html" class="text-[#D4AF37] hover:text-amber-300 hover:underline font-bold">Already registered? Log in →</a>
           </div>
+        </div>
+      </div>
+
+
+      <!--
+        STEP 1.5: WHAT THIS ROLE ACTUALLY IS
+
+        The role grid asked people to pick one of six identities from a single
+        line of text each. "Contractor" and "Investor" mean nothing to somebody
+        who has not worked with TEN before, and a student could not tell that
+        the 1 Week track costs 2000 rupees while 6 Months costs nothing — the
+        fee only appeared on step 3, after they had already committed.
+
+        So a role is now explained before it is chosen. Everything on this
+        screen is filled from ROLE_INTRO by renderRoleIntro(); there is one
+        panel, not six copies of the same markup.
+      -->
+      <div id="roleIntroScreen" class="hidden">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-4 mb-5">
+          <div class="flex items-center gap-3">
+            <div id="introIcon" class="w-11 h-11 rounded-lg flex items-center justify-center text-xl border"></div>
+            <div>
+              <h2 id="introTitle" class="text-lg font-bold text-slate-100 leading-tight"></h2>
+              <p id="introTagline" class="text-xs text-slate-400"></p>
+            </div>
+          </div>
+          <button type="button" onclick="backToRolesFromIntro()"
+                  class="text-xs text-slate-400 hover:text-slate-200 font-semibold whitespace-nowrap">
+            <i class="fa-solid fa-arrow-left mr-1"></i> All roles
+          </button>
+        </div>
+
+        <p id="introSummary" class="text-sm text-slate-300 leading-relaxed mb-5"></p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+          <div class="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+            <h3 class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3">
+              <i class="fa-solid fa-list-check mr-1.5"></i>What you do
+            </h3>
+            <ul id="introDoes" class="space-y-2 text-sm text-slate-300"></ul>
+          </div>
+          <div class="rounded-xl border border-[#D4AF37]/25 bg-[#D4AF37]/[0.04] p-4">
+            <h3 class="text-[11px] font-bold uppercase tracking-wider text-[#D4AF37] mb-3">
+              <i class="fa-solid fa-award mr-1.5"></i>What you get
+            </h3>
+            <ul id="introGets" class="space-y-2 text-sm text-slate-300"></ul>
+          </div>
+        </div>
+
+        <!-- Student only: the fee table, built from the tenure <select> below
+             so the two can never disagree. -->
+        <div id="introFees" class="hidden rounded-xl border border-slate-800 bg-slate-950/40 p-4 mb-5">
+          <h3 class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+            <i class="fa-solid fa-indian-rupee-sign mr-1.5"></i>What it costs
+          </h3>
+          <p class="text-xs text-slate-500 mb-3">The longer tracks are free. Pick before you register — you can change it later only with HR.</p>
+          <div id="introFeeGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
+
+          <!--
+            The Career Studio, on the same screen as the fee.
+
+            services/studioAccess.js grants the Studio to anyone on a PAID
+            track: the 1-week, 15-day and 1-month fees already carry it. The
+            free tracks do not, which is the honest difference to show — a
+            student on 6 Months is getting the internship for nothing and can
+            add the Studio, while a 1-week student has already bought it.
+
+            Prices come from GET /api/v2/studio/pricing, which reads
+            config/studioPricing.js. Writing 500 into this page would be a
+            second price list, and the one in config would eventually move
+            without it.
+          -->
+          <div id="introStudio" class="hidden mt-4 pt-4 border-t border-slate-800"></div>
+        </div>
+
+        <div id="introNote" class="hidden text-xs text-slate-400 border-l-2 border-slate-700 pl-3 mb-5"></div>
+
+        <div class="flex flex-col sm:flex-row gap-3 pt-1">
+          <button type="button" id="introPrimary" onclick="continueFromIntro()"
+                  class="flex-1 py-3 px-5 rounded-xl bg-[#D4AF37] text-slate-950 font-bold hover:bg-amber-300 transition"></button>
+          <a id="introSecondary" href="login.html"
+             class="flex-1 py-3 px-5 rounded-xl border border-slate-700 text-slate-300 font-semibold text-center hover:border-slate-500 transition">
+            I already have an account
+          </a>
         </div>
       </div>
 
@@ -2123,9 +2207,22 @@
        accepted both registrations all along. The block was a curtain in front
        of a working door. */
     function selectRole(role) {
+      // Every role now gets its explanation first. All five self-serve roles
+      // have their own wizard steps, so the intro is a description, not a
+      // holding page — Continue goes straight into the right form.
+      activeRole = role;
+      renderRoleIntro(role);
+      document.getElementById("roleSelectionScreen").classList.add('hidden');
+      document.getElementById("roleIntroScreen").classList.remove('hidden');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    /** Intro -> the wizard. What selectRole() used to do on its own. */
+    function openRoleForm(role) {
       activeRole = role;
       document.getElementById("selectedRoleInput").value = role;
       document.getElementById("roleSelectionScreen").classList.add('hidden');
+      document.getElementById("roleIntroScreen").classList.add('hidden');
       document.getElementById("formSectionScreen").classList.remove('hidden');
 
       currentStep = 1;
@@ -2133,10 +2230,346 @@
       renderWizardStep();
     }
 
+    function continueFromIntro() {
+      var info = ROLE_INTRO[activeRole];
+      if (info && info.href) { window.location.href = info.href; return; }
+      openRoleForm(activeRole);
+    }
+
+    function backToRolesFromIntro() {
+      document.getElementById("roleIntroScreen").classList.add('hidden');
+      document.getElementById("roleSelectionScreen").classList.remove('hidden');
+      activeRole = '';
+    }
+
     function goBackToSelection() {
       document.getElementById("formSectionScreen").classList.add('hidden');
       document.getElementById("roleSelectionScreen").classList.remove('hidden');
       activeRole = '';
+    }
+
+    /*
+     * What each role is, in the words somebody deciding would use.
+     *
+     * Every line here is something the product actually does. Nothing is
+     * aspirational: a promise made on this screen is one the portal has to keep
+     * three weeks later, and a student who finds out otherwise tells fifteen
+     * others.
+     */
+    var ROLE_INTRO = {
+      student: {
+        title: 'Student — Virtual Internship',
+        tagline: 'Finish real work. Leave with proof.',
+        icon: 'fa-graduation-cap', tone: 'emerald',
+        summary: 'Pick one of 15 domains and work through a real task track. Tasks unlock a week at a '
+               + 'time, your submissions are graded by a coordinator, and your attendance is on the '
+               + 'record. What you leave with is evidence, not a participation badge.',
+        does: [
+          'Choose a domain and a track length',
+          'Complete weekly tasks — each week unlocks after the last',
+          'Submit work that a coordinator reviews and grades',
+          'Keep your attendance up across the track'
+        ],
+        gets: [
+          'A TEN employee ID and your own portal',
+          'Certificates you earn: completion, recommendation, star performer',
+          'A public verification link anyone can check',
+          'Career Studio add-ons — course, resume and job portals'
+        ],
+        fees: true,
+        note: 'A letter of recommendation needs at least 50% of your assigned tasks approved. '
+            + 'It is earned, which is what makes it worth showing an employer.',
+        cta: 'Continue to registration'
+      },
+      mentor: {
+        title: 'Mentor', tagline: 'Shape someone\'s first real project.',
+        icon: 'fa-user-tie', tone: 'pink',
+        summary: 'Mentors guide the ventures and interns inside TEN — reviewing milestones, giving '
+               + 'the feedback that turns a submission into work worth showing, and lending your '
+               + 'professional judgement where a coordinator needs it.',
+        does: [
+          'Guide startup ventures and interns in your field',
+          'Review milestone submissions and give written feedback',
+          'Run occasional sessions in your area of expertise'
+        ],
+        gets: [
+          'A mentor portal with the people you are guiding',
+          'Your name on the work and letters you sign off',
+          'Direct line to founders building inside TEN'
+        ],
+        note: 'This is an application, not an instant account. TEN reviews it before your portal opens.',
+        cta: 'Continue to the application'
+      },
+      founder: {
+        title: 'Founder', tagline: 'Post your venture. Get talent and attention.',
+        icon: 'fa-rocket', tone: 'gold',
+        summary: 'Put your startup in front of the people who can move it — reviewed interns who want '
+               + 'real work, mentors who have done it before, and investors watching what is being '
+               + 'built here. Three steps to apply.',
+        does: [
+          'List your venture and what you are building',
+          'Post roles and milestones interns can take on',
+          'Review who applies and track their delivery'
+        ],
+        gets: [
+          'A founder portal for your venture pipeline',
+          'Access to interns whose work has already been graded',
+          'Investors can register interest in your startup'
+        ],
+        note: 'This is an application. TEN reviews the venture before it goes live to interns and investors.',
+        cta: 'Continue to the application'
+      },
+      investor: {
+        title: 'Investor', tagline: 'See what is being built, before anyone else.',
+        icon: 'fa-hand-holding-dollar', tone: 'amber',
+        summary: 'The investor portal is built and running: the ventures raising now, a private way to '
+               + 'register interest with a founder, and a portfolio of what you are tracking.',
+        does: [
+          'Browse the startups currently raising inside TEN',
+          'Register interest privately with a founder',
+          'Keep a portfolio of the ventures you follow'
+        ],
+        gets: [
+          'Early sight of ventures before they go public',
+          'Founders come to you, with their milestones attached'
+        ],
+        note: 'TEN reviews an investor application before the deal room opens to you, so founders '
+            + 'know who is looking at their numbers.',
+        cta: 'Continue to the application',
+        loginHref: 'investor-login.html'
+      },
+      contractor: {
+        title: 'Contractor', tagline: 'Real project work, paid on milestones.',
+        icon: 'fa-screwdriver-wrench', tone: 'orange',
+        summary: 'Contractors take on TEN projects as paid work — scoped briefs, milestones that HR '
+               + 'signs off, and timesheets that turn into payment. The portal for it is built and running.',
+        does: [
+          'Take on projects TEN assigns to you',
+          'Submit milestones for approval as you deliver',
+          'Log timesheets against the work'
+        ],
+        gets: [
+          'A contractor portal with your projects and milestones',
+          'Approved milestones and timesheets become payment'
+        ],
+        note: 'TEN reviews the application and matches you to projects, so there is real work waiting '
+            + 'rather than an empty desk.',
+        cta: 'Continue to the application',
+        loginHref: 'contractor-login.html'
+      },
+      coordinator: {
+        title: 'Coordinator', tagline: 'Run a domain and the students in it.',
+        icon: 'fa-clipboard-user', tone: 'sky',
+        summary: 'Coordinators are TEN staff. You own a domain: its student roster, its attendance, the '
+               + 'grading of what they submit, and the call on whether somebody has earned their certificate.',
+        does: [
+          'Manage the student roster for your domain',
+          'Verify attendance and grade submissions',
+          'Approve students for certificate consideration'
+        ],
+        gets: [
+          'A coordinator dashboard for your whole domain',
+          'The tools to assign mentors and oversee delivery'
+        ],
+        note: 'Coordinator accounts are for TEN staff and are set up separately.',
+        cta: 'Continue to coordinator registration',
+        href: 'coordinator-register.html'
+      }
+    };
+
+    var INTRO_TONES = {
+      emerald: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+      pink:    'bg-pink-500/10 text-pink-400 border-pink-500/20',
+      gold:    'bg-[#D4AF37]/10 text-[#D4AF37] border-[#D4AF37]/25',
+      amber:   'bg-amber-500/10 text-amber-400 border-amber-500/20',
+      orange:  'bg-orange-500/10 text-orange-400 border-orange-500/20',
+      sky:     'bg-sky-500/10 text-sky-400 border-sky-500/20'
+    };
+
+    /** textContent everywhere — none of this copy is ever built by concatenating HTML. */
+    function introBullets(el, items, mark) {
+      el.innerHTML = '';
+      items.forEach(function (text) {
+        var li = document.createElement('li');
+        li.className = 'flex items-start gap-2';
+        var i = document.createElement('i');
+        i.className = mark + ' text-[11px] mt-1 flex-shrink-0';
+        var span = document.createElement('span');
+        span.textContent = text;
+        li.appendChild(i); li.appendChild(span);
+        el.appendChild(li);
+      });
+    }
+
+    /*
+     * The fee grid is read out of the tenure <select> on step 3 rather than
+     * written again here. One list, so the intro cannot promise a price the
+     * form then contradicts — and adding a track updates both at once.
+     */
+    function renderIntroFees() {
+      var select = document.getElementById('stu_tenure');
+      var grid = document.getElementById('introFeeGrid');
+      if (!grid) return false;
+      grid.innerHTML = '';
+      // Renaming the select must not leave a silent empty panel promising a
+      // "what it costs" section with nothing in it. Say nothing rather than
+      // show an empty box, and leave a trace for whoever renamed it.
+      if (!select || !select.options.length) {
+        console.error('[register] tenure select not found — the fee panel cannot be built.');
+        return false;
+      }
+      Array.prototype.forEach.call(select.options, function (opt) {
+        if (!opt.value) return;
+        var parts = opt.textContent.split('—');
+        var cost = (parts[1] || '').trim();
+        var free = /free/i.test(cost);
+        var cell = document.createElement('div');
+        cell.className = 'rounded-lg border px-3 py-2 ' + (free
+          ? 'border-emerald-500/30 bg-emerald-500/[0.06]'
+          : 'border-slate-800 bg-slate-900/40');
+        var name = document.createElement('div');
+        name.className = 'text-sm font-bold text-slate-200';
+        name.textContent = opt.value;
+        var price = document.createElement('div');
+        price.className = 'text-xs font-semibold ' + (free ? 'text-emerald-400' : 'text-slate-400');
+        price.textContent = free ? 'Free' : cost.replace(/^crash course\s*/i, '').replace(/[()]/g, '');
+        cell.appendChild(name); cell.appendChild(price);
+
+        /*
+         * The line that decides the choice. A paid track already carries the
+         * Studio (services/studioAccess.js grants it to anyone on one), so the
+         * fee buys more than it looks like it does. A free track does not,
+         * which is the honest thing to tell somebody about to pick one.
+         */
+        if (STUDIO_COMBO) {
+          var extra = document.createElement('div');
+          extra.className = 'text-[10px] mt-1 ' + (free ? 'text-[#D4AF37]' : 'text-emerald-400/80');
+          extra.textContent = free
+            ? '+ Studio ₹' + STUDIO_COMBO.price
+            : 'Studio included';
+          cell.appendChild(extra);
+        }
+        grid.appendChild(cell);
+      });
+      return grid.children.length > 0;
+    }
+
+    /*
+     * The Career Studio, priced by the server.
+     *
+     * GET /api/v2/studio/pricing is public and reads config/studioPricing.js —
+     * the same file the pricing screen and the order endpoint charge from.
+     * Fetching it means this page cannot quote a price the checkout then
+     * contradicts. If the call fails the block simply does not appear: a
+     * registration screen must not break because an upsell did.
+     */
+    var STUDIO_COMBO = null;
+
+    function renderStudioOffer() {
+      var box = document.getElementById('introStudio');
+      if (!box || !STUDIO_COMBO) return;
+      var singles = (STUDIO_PRICING && STUDIO_PRICING.singles) || [];
+      var full = singles.reduce(function (sum, p) { return sum + (p.price || 0); }, 0);
+
+      box.innerHTML = '';
+      var head = document.createElement('div');
+      head.className = 'flex items-baseline justify-between gap-2 mb-2';
+      var h = document.createElement('h4');
+      h.className = 'text-xs font-bold uppercase tracking-wider text-[#D4AF37]';
+      h.textContent = 'On a free track? Add the Career Studio';
+      var p = document.createElement('div');
+      p.className = 'text-sm font-extrabold text-slate-100 whitespace-nowrap';
+      p.textContent = '₹' + STUDIO_COMBO.price;
+      head.appendChild(h); head.appendChild(p);
+      box.appendChild(head);
+
+      // Only claim a saving that is real — the singles are read from the same
+      // table, so this is arithmetic, not marketing.
+      if (full > STUDIO_COMBO.price) {
+        var save = document.createElement('p');
+        save.className = 'text-[11px] text-slate-500 mb-2';
+        save.textContent = 'All three separately cost ₹' + full + '. The combo saves ₹'
+                         + (full - STUDIO_COMBO.price) + '.';
+        box.appendChild(save);
+      }
+
+      var list = document.createElement('div');
+      list.className = 'grid grid-cols-1 sm:grid-cols-3 gap-2';
+      singles.forEach(function (prod) {
+        var c = document.createElement('div');
+        c.className = 'rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2';
+        var n = document.createElement('div');
+        n.className = 'text-xs font-bold text-slate-200';
+        n.textContent = prod.name;
+        var d = document.createElement('div');
+        d.className = 'text-[11px] text-slate-500 leading-snug mt-0.5';
+        d.textContent = prod.blurb || '';
+        c.appendChild(n); c.appendChild(d);
+        list.appendChild(c);
+      });
+      box.appendChild(list);
+
+      var foot = document.createElement('p');
+      foot.className = 'text-[11px] text-slate-500 mt-2';
+      foot.textContent = 'Optional, and never needed to finish your internship or earn your certificate. '
+                       + 'You can add it later from your dashboard.';
+      box.appendChild(foot);
+      box.classList.remove('hidden');
+    }
+
+    var STUDIO_PRICING = null;
+    (function loadStudioPricing() {
+      fetch('/api/v2/studio/pricing', { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          if (!d || !d.success || !d.pricing) return;
+          STUDIO_PRICING = d.pricing;
+          STUDIO_COMBO = d.pricing.combo
+            || (d.pricing.singles || []).find(function (p) { return p.key === 'combo'; })
+            || null;
+          // The panel may already be open — redraw it now that prices exist.
+          if (activeRole === 'student'
+              && !document.getElementById('roleIntroScreen').classList.contains('hidden')) {
+            renderIntroFees();
+            renderStudioOffer();
+          }
+        })
+        .catch(function () { /* an upsell must never break registration */ });
+    })();
+
+    function renderRoleIntro(role) {
+      var info = ROLE_INTRO[role];
+      if (!info) return;
+
+      var icon = document.getElementById('introIcon');
+      icon.className = 'w-11 h-11 rounded-lg flex items-center justify-center text-xl border '
+                     + (INTRO_TONES[info.tone] || INTRO_TONES.gold);
+      icon.innerHTML = '';
+      var fa = document.createElement('i');
+      fa.className = 'fa-solid ' + info.icon;
+      icon.appendChild(fa);
+
+      document.getElementById('introTitle').textContent = info.title;
+      document.getElementById('introTagline').textContent = info.tagline;
+      document.getElementById('introSummary').textContent = info.summary;
+      introBullets(document.getElementById('introDoes'), info.does, 'fa-solid fa-angle-right text-slate-500');
+      introBullets(document.getElementById('introGets'), info.gets, 'fa-solid fa-check text-[#D4AF37]');
+
+      var fees = document.getElementById('introFees');
+      var showFees = !!(info.fees && renderIntroFees());
+      fees.classList.toggle('hidden', !showFees);
+      var studio = document.getElementById('introStudio');
+      studio.classList.add('hidden');
+      if (showFees) renderStudioOffer();
+
+      var note = document.getElementById('introNote');
+      if (info.note) { note.textContent = info.note; note.classList.remove('hidden'); }
+      else { note.classList.add('hidden'); }
+
+      document.getElementById('introPrimary').textContent = info.cta;
+
+      var secondary = document.getElementById('introSecondary');
+      secondary.href = info.loginHref || 'login.html';
     }
 
     /*
@@ -2173,7 +2606,11 @@
       }
 
       if (KNOWN.indexOf(role) !== -1) {
-        selectRole(role);
+        // Straight past the role intro, on purpose. A ?role= link means the
+        // choice is already made — somebody arriving from /domains has picked
+        // a domain and a route, and explaining the role back to them there is
+        // the friction this whole flow exists to remove.
+        openRoleForm(role);
         // renderWizardStep() has just drawn step 1; the domain cards live on a
         // later step but are present in the DOM throughout, so this is safe.
         applyDomain();
