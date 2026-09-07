@@ -44,3 +44,7 @@ data/job-cache.json
 # Generated session signing key. Never commit — it would let anyone forge a
 # session for any role. Regenerating it signs everybody out.
 .session-secret
+
+# Screenshots and prompt text pasted in during development. Never referenced
+# by the application.
+attached_assets/

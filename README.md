@@ -63,6 +63,25 @@ docs/                Architecture maps and written specifications
 seeds/               Database seed scripts
 ```
 
+### What is deliberately not in git
+
+These directories exist on a running server but are excluded by `.gitignore`,
+so a fresh clone will not have them. That is intentional — do not commit them
+back.
+
+| Path | Why |
+|---|---|
+| `uploads/documents/`, `uploads/certificates/`, `uploads/offer-letters/` | Real student resumes, marksheets and generated letters. Personal data. |
+| `.data/` | The local JSON fallback database — user records and password hashes. |
+| `.env`, `.session-secret` | Every secret. |
+| `credentials-to-distribute.txt` | Cleartext passwords written by the setup script, for one-time hand-out. |
+| `node_modules/` | Installed with `npm ci`. |
+
+`uploads/` is **runtime data with no backup other than the server's own disk.**
+The production deploy workflow copies it aside before `git reset --hard` and
+restores anything the reset removes, so a deploy cannot delete a student's
+documents. Anything that changes how deploys work must keep that guarantee.
+
 ## Tests
 
 ```bash
@@ -95,3 +114,12 @@ npm test
 | `scripts/audit-domain-tenure.js` | Find (and optionally fix) students whose domain / tenure / offer letter disagree. Dry run by default |
 | `scripts/seed-dev-student.js` | Seed a local test student (development only) |
 | `scripts/verify-security.sh` | Drive a running server through the security and regression checks |
+| `scripts/capacity-check.js` | What the machine is, what the app uses of it, and how many interns it can carry. Read-only |
+| `scripts/import-fallback-db.js` | Recover rows written to `.data/local_db/` while the database was down. Dry run by default; `--write` to apply |
+| `scripts/recalculate-attendance.js` | Recompute attendance percentages after a tenure or joining-date change |
+| `scripts/list-unverified-studio-access.js` | List Studio payments sitting on a transaction number nobody has checked. Read-only |
+| `scripts/expand-task-tracks.js` | Grow every student's task track without lowering anyone's completion percentage. Dry run by default |
+
+Every script that changes data is **dry run by default** and prints what it
+would do. Add `--write` to apply it — except `audit-domain-tenure.js`, which
+uses `--apply`. Run it without the flag first and read the output.
