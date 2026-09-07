@@ -34,7 +34,30 @@ jobs:
 
             cd "$APP_DIR"
             git fetch origin
+
+            # uploads/ holds real student documents — resumes, marksheets, and
+            # generated certificates. Thirteen of them were committed before
+            # .gitignore covered the directory, and they are now untracked.
+            #
+            # `git reset --hard` deletes tracked files that a newer commit
+            # removes, so the FIRST deploy after that change would wipe those
+            # thirteen off this server — the only copy. Copy the directory
+            # aside first, then put back anything the reset took.
+            #
+            # -a keeps timestamps; -n never overwrites a file that is already
+            # there, so a newer upload always wins over the backup.
+            if [ -d uploads ]; then
+              mkdir -p ../ten-uploads-backup
+              cp -a uploads/. ../ten-uploads-backup/ 2>/dev/null || true
+            fi
+
             git reset --hard origin/main
+
+            if [ -d ../ten-uploads-backup ]; then
+              mkdir -p uploads
+              cp -rn ../ten-uploads-backup/. uploads/ 2>/dev/null || true
+            fi
+
             npm ci --legacy-peer-deps --omit=dev
 
             # `pm2 restart` re-reads ecosystem.config.js but keeps the process's
