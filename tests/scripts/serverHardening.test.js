@@ -104,7 +104,7 @@ describe('harden-mongod.sh --check', () => {
 });
 
 describe('watchdog.sh', () => {
-  let tmp, bin, state, log;
+  let tmp, bin, state, log, uptime;
 
   /** Stub binaries that record every call and answer from the environment. */
   function stub(name, body) {
@@ -118,12 +118,21 @@ describe('watchdog.sh', () => {
     bin = path.join(tmp, 'bin'); fs.mkdirSync(bin);
     state = path.join(tmp, 'state');
     log = path.join(tmp, 'calls.log');
+    /*
+     * The watchdog measures how long mongod has been up against the machine's
+     * uptime. On a laptop that is days; on a fresh CI runner it is under the
+     * two-minute grace period, so "up for ages" (ActiveEnterTimestampMonotonic
+     * 0) came out as "just started" and the app was never probed. Pin the
+     * clock so the tests mean the same thing wherever they run.
+     */
+    uptime = path.join(tmp, 'uptime');
+    fs.writeFileSync(uptime, '1000000.00 4000000.00\n');
 
     stub('systemctl', `
 case "$1" in
   cat)       [ "\${MONGOD_INSTALLED:-1}" = 1 ] && exit 0 || exit 1 ;;
   is-active) [ "\${MONGOD_ACTIVE:-1}" = 1 ] && exit 0 || exit 1 ;;
-  show)      if [ "\${MONGOD_JUST_STARTED:-0}" = 1 ]; then awk '{print int($1*1000000)}' /proc/uptime; else echo 0; fi ;;
+  show)      if [ "\${MONGOD_JUST_STARTED:-0}" = 1 ]; then awk '{print int($1*1000000)}' "\${WATCHDOG_UPTIME_FILE:-/proc/uptime}"; else echo 0; fi ;;
 esac
 exit 0`);
     stub('df', `printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\\n/dev/xvda1 8000000 1 7000000 %s%% /\\n' "\${DISK_USED:-40}"`);
@@ -143,6 +152,7 @@ exit 0`);
         STUB_LOG: log,
         TEN_PORTAL_CONF: '/nonexistent',
         TEN_WATCHDOG_STATE: state,
+        WATCHDOG_UPTIME_FILE: uptime,
         ...env
       }
     });

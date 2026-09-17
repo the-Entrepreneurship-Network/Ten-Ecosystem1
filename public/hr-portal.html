@@ -417,6 +417,7 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
     <button class="nav-btn" onclick="showView('submissions')" data-view="submissions"><span class="icon">📋</span> Submissions</button>
     <button class="nav-btn" onclick="showView('domains')" data-view="domains"><span class="icon">🏢</span> Domain Analytics</button>
     <button class="nav-btn" onclick="showView('attendance-monitor')" data-view="attendance-monitor"><span class="icon">🪪</span> Attendance Monitor</button>
+    <button class="nav-btn" onclick="showView('attendance-report')" data-view="attendance-report"><span class="icon">📆</span> Attendance Report</button>
     <div class="nav-divider"></div>
     <div class="nav-section-title">Certificates</div>
     <button class="nav-btn" onclick="showView('certificates')" data-view="certificates"><span class="icon">🎓</span> Certificate Approvals</button>
@@ -1199,6 +1200,10 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(245,197,66,0.02
   </div>
 
   <!-- ATTENDANCE MONITOR -->
+  <div class="view" id="view-attendance-report">
+    <div id="attendanceReportStaff"></div>
+  </div>
+
   <div class="view" id="view-attendance-monitor">
     <div class="section-header">
       <div class="section-title">Attendance Monitor</div>
@@ -1730,49 +1735,49 @@ const hrLevelDetails = {
     title: "Level 1: Jr HR Associate",
     desc: "Active Focus: Initial applicant logging, ecosystem directory, and trainee coordination tracker modules.",
     icon: "🔮",
-    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard']
+    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'attendance-report', 'leaderboard']
   },
   2: {
     title: "Level 2: Sr HR Associate",
     desc: "Active Focus: Assesses & verifies incoming Coordinator applications, enforces one coordinator-per-domain limit.",
     icon: "🛡️",
-    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard', 'ecosystem', 'submissions']
+    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'attendance-report', 'leaderboard', 'ecosystem', 'submissions']
   },
   3: {
     title: "Level 3: Jr HR Manager",
     desc: "Active Focus: Talent sourcing pipelines, cohort allocations, and strategic recruitment onboarding metrics.",
     icon: "🔥",
-    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard']
+    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'attendance-report', 'leaderboard']
   },
   4: {
     title: "Level 4: Sr HR Manager",
     desc: "Active Focus: Student task submissions logs, comprehensive domain analytics, and training KPI reporting.",
     icon: "📈",
-    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard', 'submissions', 'insights', 'domains']
+    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'attendance-report', 'leaderboard', 'submissions', 'insights', 'domains']
   },
   5: {
     title: "Level 5: HR Associate Director",
     desc: "Active Focus: High-level recruitment strategies, coordinator approvals, promotions management, and certificate boards.",
     icon: "👑",
-    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard', 'ecosystem', 'submissions', 'certificates', 'star-submissions', 'promotions', 'contributors']
+    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'attendance-report', 'leaderboard', 'ecosystem', 'submissions', 'certificates', 'star-submissions', 'promotions', 'contributors']
   },
   6: {
     title: "Level 6: Jr HR Director",
     desc: "Active Focus: Full operational oversight, official letter/LOR generation, global broadcast communications, and escalation desk.",
     icon: "💼",
-    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard', 'ecosystem', 'submissions', 'insights', 'domains', 'certificates', 'star-submissions', 'promotions', 'documents', 'send-notif', 'notif-history', 'contributors']
+    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'attendance-report', 'leaderboard', 'ecosystem', 'submissions', 'insights', 'domains', 'certificates', 'star-submissions', 'promotions', 'documents', 'send-notif', 'notif-history', 'contributors']
   },
   7: {
     title: "Level 7: HR Director & HRBP",
     desc: "Active Focus: Executive leadership, policy engineering, brand promotions, and global ecosystem administration dashboard.",
     icon: "🏛️",
-    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard', 'ecosystem', 'submissions', 'insights', 'domains', 'certificates', 'star-submissions', 'promotions', 'documents', 'send-notif', 'notif-history', 'contributors']
+    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'attendance-report', 'leaderboard', 'ecosystem', 'submissions', 'insights', 'domains', 'certificates', 'star-submissions', 'promotions', 'documents', 'send-notif', 'notif-history', 'contributors']
   },
   8: {
     title: "Level 8: Vice President",
     desc: "Active Focus: Supreme system orchestrations, venture coaching, startup diagnostics, and executive mentorship loops.",
     icon: "✨",
-    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'leaderboard', 'ecosystem', 'submissions', 'insights', 'domains', 'certificates', 'star-submissions', 'promotions', 'documents', 'send-notif', 'notif-history', 'contributors']
+    views: ['overview', 'students', 'tracker', 'attendance-monitor', 'attendance-report', 'leaderboard', 'ecosystem', 'submissions', 'insights', 'domains', 'certificates', 'star-submissions', 'promotions', 'documents', 'send-notif', 'notif-history', 'contributors']
   }
 };
 
@@ -2277,11 +2282,13 @@ async function publishFeedback(id, publish){
 }
 
 function showView(v){
+  if (v === 'attendance-report' && window.TENAttendanceReport) TENAttendanceReport.mountStaff(document.getElementById('attendanceReportStaff'), { headers: { Authorization: hrToken } });
   document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(el=>el.classList.remove('active'));
   document.getElementById('view-'+v).classList.add('active');
   document.querySelector(`[data-view="${v}"]`)?.classList.add('active');
-  const t={overview:'<span>Dashboard</span> Overview',ecosystem:'<span>TEN</span> Ecosystem Control Center',insights:'<span>Insights</span>',students:'<span>All</span> Students',tracker:'<span>Internship</span> Tracker',submissions:'<span>Task</span> Submissions',domains:'<span>Domain</span> Analytics',documents:'<span>Generate</span> Documents','send-notif':'<span>Send</span> Notification','notif-history':'<span>Notification</span> History','attendance-monitor':'<span>Attendance</span> Monitor',certificates:'<span>Certificate</span> Approvals','star-submissions':'<span>Star Performer</span> Submissions',feedback:'<span>Student</span> Feedback','cert-apps':'<span>Certificate</span> Requests',promotions:'<span>Promotions</span>',contributors:'<span>Home page</span> Contributors',leaderboard:'<span>Performance</span> Leaderboard'};
+  const t={overview:'<span>Dashboard</span> Overview',ecosystem:'<span>TEN</span> Ecosystem Control Center',insights:'<span>Insights</span>',students:'<span>All</span> Students',tracker:'<span>Internship</span> Tracker',submissions:'<span>Task</span> Submissions',domains:'<span>Domain</span> Analytics',documents:'<span>Generate</span> Documents','send-notif':'<span>Send</span> Notification','notif-history':'<span>Notification</span> History','attendance-monitor':'<span>Attendance</span> Monitor',
+'attendance-report':'<span>Attendance</span> Report',certificates:'<span>Certificate</span> Approvals','star-submissions':'<span>Star Performer</span> Submissions',feedback:'<span>Student</span> Feedback','cert-apps':'<span>Certificate</span> Requests',promotions:'<span>Promotions</span>',contributors:'<span>Home page</span> Contributors',leaderboard:'<span>Performance</span> Leaderboard'};
   document.getElementById('pageTitle').innerHTML=t[v]||v;
   if(v==='cert-apps') loadCertQueues();
   if(v==='ecosystem') loadEcosystem();
@@ -6165,5 +6172,6 @@ loadPendingDocsBadge();
      is how an old sentence came to be printed around a new number. -->
 <script src="/js/db-banner.js" defer></script>
 <script src="/js/build-guard.js" defer></script>
+<script src="/attendance-report.js"></script>
 </body>
 </html>

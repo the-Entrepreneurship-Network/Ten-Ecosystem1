@@ -3624,6 +3624,8 @@ function getRemainingLockoutTime(user) {
     return 0;
 }
 
+const loginEvents = require("./services/v2/loginEvents");
+
 async function checkLockout(res, user, userModel) {
     const minutes = getRemainingLockoutTime(user);
     if (minutes > 0) {
@@ -3663,6 +3665,14 @@ const LOCKOUT_WINDOW_MS   = 30 * 60 * 1000;
 
 async function recordFailedAttempt(res, user, userModel, defaultErrorMsg) {
     const attempts = loginIdentity.nextFailedAttemptCount(user, LOCKOUT_WINDOW_MS);
+    loginEvents.record(res.req, {
+        userType: loginEvents.typeFromModel(userModel, user),
+        userId: user.employeeId || user.username || user.email || String(user._id || ""),
+        label: user.name || user.fullName || [user.firstName, user.lastName].filter(Boolean).join(" "),
+        email: user.email || "",
+        success: false,
+        reason: attempts >= 5 ? "locked out" : "wrong password",
+    });
     const updateData = { failedLoginAttempts: attempts, lastFailedLoginAt: new Date() };
 
     if (attempts >= LOCKOUT_MAX_ATTEMPTS) {
@@ -3879,6 +3889,7 @@ try{
             req.session.ecosystemUserName = user.fullName || '';
             req.session.sessionToken = sessionToken;
 
+            loginEvents.record(req, { userType: user.role, userId: String(user._id), label: user.fullName, email: user.email, portal: "/login" });
             return res.json({
                 success: true,
                 sessionToken: sessionToken,
@@ -3956,6 +3967,7 @@ try{
                 establishStudentSession(req, responseStudent);
                 req.session.sessionToken = sessionToken;
 
+                loginEvents.record(req, { userType: "student", userId: student.employeeId, label: student.name || [student.firstName, student.lastName].filter(Boolean).join(" "), email: student.email, domain: (student.domains && student.domains[0]) || student.domain, portal: "/login" });
                 return res.json({
                     success: true,
                     sessionToken: sessionToken,
@@ -3983,6 +3995,7 @@ try{
             }
             if (pwdMatch) {
                 await clearFailedAttempts(hr, HR);
+                loginEvents.record(req, { userType: "hr", userId: hr.username || hr.email, label: hr.name, email: hr.email, portal: "/login" });
                 return res.json({
                     success: true,
                     role: 'hr',
@@ -4054,6 +4067,7 @@ try{
         establishStudentSession(req, responseStudent);
         req.session.sessionToken = sessionToken;
 
+        loginEvents.record(req, { userType: "student", userId: student.employeeId, label: student.name || [student.firstName, student.lastName].filter(Boolean).join(" "), email: student.email, domain: (student.domains && student.domains[0]) || student.domain, portal: "/login" });
         return res.json({ success: true, sessionToken: sessionToken, role: 'student', student: responseStudent });
     }
 }catch(error){
@@ -5126,6 +5140,7 @@ try{
                 role:     "hr",
                 level:    dbHR.level || 1
             };
+            loginEvents.record(req, { userType: "hr", userId: hrIdentity.username, label: hrIdentity.name, email: hrIdentity.email, portal: "/hr-login" });
             if (req.session) req.session.hr = hrIdentity;
             return res.json({ success:true, hr: hrIdentity });
         }
@@ -5143,6 +5158,7 @@ try{
                 return res.json({ success:false, message:"Invalid HR credentials" });
             }
             const hrIdentity = { username:u, email:v.email, name:v.name, role:"hr", level: v.level || 1 };
+            loginEvents.record(req, { userType: "hr", userId: hrIdentity.username, label: hrIdentity.name, email: hrIdentity.email, portal: "/hr-login" });
             if (req.session) req.session.hr = hrIdentity;
             return res.json({ success:true, hr: hrIdentity });
         }
@@ -5155,6 +5171,7 @@ try{
         return res.json({ success:false, message:"Invalid HR credentials" });
     }
     const hrIdentity = { username: identifier, email: hr.email || "", name:hr.name, role:"hr", level: hr.level || 1 };
+    loginEvents.record(req, { userType: "hr", userId: hrIdentity.username, label: hrIdentity.name, email: hrIdentity.email, portal: "/hr-login" });
     if (req.session) req.session.hr = hrIdentity;
     res.json({ success:true, hr: hrIdentity });
 }catch(error){
@@ -5841,6 +5858,7 @@ try{
         lastActiveDate: new Date(),
         activeSessionToken: studentSessionToken
     });
+    loginEvents.record(req, { userType: "student", userId: student.employeeId, label: student.name || [student.firstName, student.lastName].filter(Boolean).join(" "), email: student.email, domain: (student.domains && student.domains[0]) || student.domain, portal: "/student-login" });
     res.json({
         success:true,
         sessionToken: studentSessionToken,
@@ -6247,6 +6265,7 @@ try{
         // email and name are carried so chat can recognise this person under
         // every id they may already appear as in a conversation's room name.
         const coordIdentity = { username:identifier, email: legacy.email || "", name: legacy.name || identifier, domain:legacy.domain };
+        loginEvents.record(req, { userType: "coordinator", userId: coordIdentity.username, label: coordIdentity.name, email: coordIdentity.email, domain: coordIdentity.domain, portal: "/coordinator-login" });
         if (req.session) req.session.coordinator = coordIdentity;
         return res.json({ success:true, coordinator: coordIdentity });
     }
@@ -6308,6 +6327,7 @@ try{
                 name:     dbCoord.name || dbCoord.username || dbCoord.email,
                 domain:   dbCoord.domain
             };
+            loginEvents.record(req, { userType: "coordinator", userId: coordIdentity.username, label: coordIdentity.name, email: coordIdentity.email, domain: coordIdentity.domain, portal: "/coordinator-login" });
             if (req.session) req.session.coordinator = coordIdentity;
             return res.json({ success:true, coordinator: coordIdentity });
         } else {
@@ -10913,6 +10933,14 @@ try {
     // public API and aims searches at the ones that require a login.
     const v2JobAgent = require('./routes/v2/jobAgent');
     app.use('/api/v2/jobs', v2JobAgent);
+
+    // Attendance agent — who filled the attendance form and who signed in,
+    // as dashboard tables and as a WhatsApp report after 11 PM.
+    const v2AttendanceAgent = require('./routes/v2/attendanceAgent');
+    app.use('/api/v2/attendance-agent', v2AttendanceAgent);
+    if (process.env.NODE_ENV !== 'test') {
+        require('./services/v2/attendanceAgent').initAttendanceAgent();
+    }
 
     console.log('[V2] Academics mounted at /api/v2/academics, page at /academics');
     console.log('[V2] Assistant mounted at /api/v2/assistant, page at /assistant');

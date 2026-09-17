@@ -35,6 +35,8 @@ const attendanceDomain = require('../utils/attendanceDomain');
 
 // ─── AUTH ────────────────────────────────────────────────────────────────────
 
+const loginEvents = require('../services/v2/loginEvents');
+
 router.post('/login', adminLoginLimiter, async (req, res) => {
   try {
     const { username, password } = req.body || {};
@@ -75,6 +77,7 @@ router.post('/login', adminLoginLimiter, async (req, res) => {
       const grant = () => {
         Object.assign(req.session, carried);
         req.session.adminUser = { username: ADMIN_USERNAME, lastActivity: Date.now() };
+        loginEvents.record(req, { userType: 'admin', userId: ADMIN_USERNAME, label: ADMIN_USERNAME, portal: '/ten-admin/login' });
         res.json({ success: true });
       };
       if (req.session && typeof req.session.regenerate === 'function') {
@@ -90,6 +93,7 @@ router.post('/login', adminLoginLimiter, async (req, res) => {
     }
 
     console.warn('[AdminPortal] Admin authentication rejected.');
+    loginEvents.record(req, { userType: 'admin', userId: String(username || '').slice(0, 100), portal: '/ten-admin/login', success: false, reason: 'invalid credentials' });
     return res.status(401).json({ success: false, error: 'Invalid username or password' });
   } catch (err) {
     console.error('[AdminPortal] Error during login endpoint:', err.message);

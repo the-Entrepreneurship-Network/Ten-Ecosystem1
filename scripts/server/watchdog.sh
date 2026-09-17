@@ -66,7 +66,11 @@ if ! have_mongod; then
   up_for=$GRACE_SECONDS                     # database is elsewhere; nothing to wait for
 elif systemctl is-active --quiet mongod; then
   since="$(systemctl show -p ActiveEnterTimestampMonotonic --value mongod 2>/dev/null)"
-  now="$(awk '{print int($1 * 1000000)}' /proc/uptime)"
+  # The clock this is measured against. Overridable so the tests can pin it:
+  # a fresh CI runner is up for less than the grace period, and read from
+  # /proc/uptime that made "the database has been up for ages" look like
+  # "it started a minute ago" on some runs and not others.
+  now="$(awk '{print int($1 * 1000000)}' "${WATCHDOG_UPTIME_FILE:-/proc/uptime}")"
   up_for=$(( (now - ${since:-0}) / 1000000 ))
 else
   up_for=0                                  # still down; the app is right to say so
