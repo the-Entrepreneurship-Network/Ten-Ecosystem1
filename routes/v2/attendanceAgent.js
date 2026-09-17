@@ -13,6 +13,7 @@ const { isDateKey } = require("../../utils/reportClock");
 // controls, HR or coordinator for the tables, and the signed-in student for
 // their own days. A header or query string never names anyone.
 const { requireHR, requireStaff, sessionEmployeeId } = require("../../middleware/sessionAuth");
+const attendanceSettings = require("../../services/v2/attendanceSettings");
 
 function studentOf(req) {
     const s = (req.session && req.session.student) || {};
@@ -210,6 +211,78 @@ router.get("/form/check", requireStaff, async (req, res) => {
         });
     } catch (err) {
         res.status(502).json({ success: false, message: err.message });
+    }
+});
+
+// What the agent runs with and where each value comes from. Secrets never
+// leave the server: the token shows only whether it is set and its last four.
+function settingsView() {
+    const { values, source } = attendanceSettings.effective();
+    const c = agent.config();
+    return {
+        values: { ...values, whatsappToken: attendanceSettings.mask(values.whatsappToken) },
+        source,
+        tokenSet: Boolean(values.whatsappToken),
+        recipients: String(values.reportTo || "").split(",").filter(Boolean).map(sender.mask),
+        cron: c.cron,
+        reportTime: attendanceSettings.timeFromCron(c.cron) || c.cron,
+        tz: c.tz,
+        transport: c.transport,
+        formConfigured: formResponses.isConfigured(),
+    };
+}
+
+router.get("/settings", requireHR, async (req, res) => {
+    try {
+        await attendanceSettings.load();
+        res.json({ success: true, settings: settingsView() });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+router.put("/settings", requireHR, async (req, res) => {
+    try {
+        const by = (req.hrUser && (req.hrUser.username || req.hrUser.email)) || "HR";
+        const patch = { ...(req.body || {}) };
+        // The token field comes back masked or blank when it was not retyped;
+        // neither is a new token. null clears it on purpose.
+        if (patch.whatsappToken !== undefined && patch.whatsappToken !== null) {
+            const t = String(patch.whatsappToken).trim();
+            if (t === "" || /^\*+\S{0,4}$/.test(t)) delete patch.whatsappToken;
+        }
+        await attendanceSettings.save(patch, by);
+        formResponses.clearCache();
+        try {
+            const AuditLog = require("../../models/AuditLog");
+            await AuditLog.create({
+                actionType: "ATTENDANCE_SETTINGS_UPDATED", performedBy: by,
+                description: `Attendance agent settings changed: ${Object.keys(patch).join(", ")}`,
+                newState: { fields: Object.keys(patch) },
+            });
+        } catch (_) { /* the audit line is best effort */ }
+        res.json({ success: true, settings: settingsView() });
+    } catch (err) {
+        res.status(err.status || 500).json({ success: false, message: err.message, errors: err.errors || [] });
+    }
+});
+
+// One short message to the configured number, so the whole pipeline can be
+// proved in the afternoon rather than waited for at night.
+router.post("/settings/test-send", requireHR, async (req, res) => {
+    try {
+        const c = agent.config();
+        if (!c.recipients.length) return res.status(400).json({ success: false, message: "No report number is set" });
+        const when = attendanceSettings.timeFromCron(c.cron) || c.cron;
+        const text = `TEN attendance agent: test message. The daily attendance report will arrive here at ${when} (${c.tz}).`;
+        const results = [];
+        for (const to of c.recipients) {
+            results.push({ to: sender.mask(to), ...(await sender.send({ to, text, templateParams: ["Test", "attendance agent connected"] })) });
+        }
+        const ok = results.every((r) => r.ok && !r.dryRun);
+        return res.status(ok ? 200 : 502).json({ success: ok, results });
+    } catch (err) {
+        return res.status(500).json({ success: false, message: err.message });
     }
 });
 

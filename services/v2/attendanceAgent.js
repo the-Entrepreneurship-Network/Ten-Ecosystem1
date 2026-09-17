@@ -4,6 +4,7 @@ const cron = require("node-cron");
 const { buildDailyReport, formatWhatsApp } = require("./attendanceReport");
 const sender = require("./whatsappSender");
 const loginEvents = require("./loginEvents");
+const attendanceSettings = require("./attendanceSettings");
 const { dateKeyFor, shiftDateKey, isDateKey, reportTimeZone, humanDate } = require("../../utils/reportClock");
 
 const ACTION_SENT = "ATTENDANCE_REPORT_SENT";
@@ -16,7 +17,7 @@ const ACTION_SKIPPED = "ATTENDANCE_REPORT_SKIPPED";
 // rest of the WhatsApp setup.
 function recipients() {
     // Split on separators only: a number written "+91 83178 73609" keeps its spaces.
-    return String(process.env.ATTENDANCE_REPORT_TO || "")
+    return String(process.env.ATTENDANCE_REPORT_TO || attendanceSettings.fromDb("reportTo") || "")
         .split(/[,;\n]+/)
         .map(sender.normalizeNumber)
         .filter(Boolean);
@@ -26,7 +27,7 @@ function config() {
     const retention = parseInt(process.env.ATTENDANCE_LOGIN_RETENTION_DAYS || "90", 10);
     return {
         enabled: String(process.env.ATTENDANCE_AGENT_ENABLED || "true").toLowerCase() !== "false",
-        cron: String(process.env.ATTENDANCE_REPORT_CRON || "0 21 * * *").trim(),
+        cron: String(process.env.ATTENDANCE_REPORT_CRON || attendanceSettings.cronFromTime(attendanceSettings.fromDb("reportTime")) || "5 23 * * *").trim(),
         day: String(process.env.ATTENDANCE_REPORT_DAY || "today").toLowerCase() === "yesterday" ? "yesterday" : "today",
         tz: reportTimeZone(),
         retentionDays: Math.max(7, Number.isFinite(retention) ? retention : 90),
@@ -122,6 +123,7 @@ async function runDaily({ dateKey, force = false, trigger = "cron", by = "AUTO_S
 }
 
 let jobs = [];
+let listening = false;
 
 function stop() {
     jobs.forEach((j) => { try { j.stop(); } catch (_) {} });
@@ -129,6 +131,15 @@ function stop() {
 }
 
 function initAttendanceAgent() {
+    // Settings saved from the portal move the schedule and the recipient
+    // without a restart: load them now, keep them fresh, and re-plan the jobs
+    // whenever they change.
+    if (!listening) {
+        listening = true;
+        attendanceSettings.onChange(() => { if (jobs.length) initAttendanceAgent(); });
+        attendanceSettings.load().catch(() => {});
+        attendanceSettings.startRefresh();
+    }
     const c = config();
     if (!c.enabled) {
         console.log("[ATTENDANCE-AGENT] disabled (ATTENDANCE_AGENT_ENABLED=false)");

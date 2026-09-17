@@ -17,6 +17,27 @@ ATTENDANCE_REPORT_TO=918317873609        # digits, country code, no plus. Comma-
 ATTENDANCE_REPORT_CRON=5 23 * * *        # 23:05 in ATTENDANCE_TZ
 ```
 
+## Configuring it from the HR portal
+
+Nobody needs the server's `.env` to switch this on. In the HR portal, *Attendance
+Report* → **Agent settings** takes the responses sheet link, the WhatsApp
+number the report goes to, the send time, the submissions required per day,
+the WhatsApp sender id and token, and an optional n8n webhook. They are saved
+in the database (`AttendanceSettings`, one document), picked up within a
+minute without a restart, and the schedule moves with the time. **Send test
+WhatsApp** sends one line to the number right away, so the whole path can be
+proved in the afternoon.
+
+An environment variable, where one is set, still wins over the saved value
+and shows as locked in the panel. The token is never sent back to the
+browser: the panel shows whether one is set and its last four characters.
+
+```
+GET  /api/v2/attendance-agent/settings            values (token masked), source per field, schedule
+PUT  /api/v2/attendance-agent/settings            { sheetUrl, reportTo, reportTime, requiredPerDay, phoneNumberId, whatsappToken, n8nWebhookUrl }
+POST /api/v2/attendance-agent/settings/test-send  one test message to the configured number
+```
+
 ## The Google Form
 
 The form itself cannot be read; its **linked responses sheet** can. In the
@@ -28,7 +49,10 @@ ATTENDANCE_SHEET_URL=https://docs.google.com/spreadsheets/d/<id>/edit#gid=0
 ```
 
 Google Forms writes `Timestamp` first and one column per question. The
-report shows, per person, the first submission time and up to three fields,
+form's own **DATE** and **TIME** questions are the day and the clock a
+submission counts for, so a form filled at ten past midnight for the day
+before lands on the day before; the submission timestamp stands in when they
+are blank. The report shows, per person, that time and up to three fields,
 chosen by heading: something like *Name*, something like *Employee ID*, and
 something like *Domain*. Override with `ATTENDANCE_SHEET_COLUMNS=Full
 Name,Employee ID,Domain` (exact or partial headings, in display order).
