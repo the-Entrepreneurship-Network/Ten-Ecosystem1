@@ -19,6 +19,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="/session-guard.js"></script>
 <script src="/credential-reset.js"></script>
+<script src="/attendance-report.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
@@ -1704,6 +1705,11 @@ body.is-premium #premiumCard { box-shadow:0 0 0 1px rgba(212,175,55,0.25), 0 14p
         <div class="sec-card-title">Daily Attendance</div>
         <div class="sec-card-desc">Mark attendance and view stats</div>
       </div>
+      <div class="sec-card" onclick="openSectionModal('stu-view-attendance-report')">
+        <div class="sec-card-icon">📆</div>
+        <div class="sec-card-title">Attendance Report</div>
+        <div class="sec-card-desc">Your form attendance by date; download as CSV</div>
+      </div>
       <div class="sec-card" onclick="openSectionModal('stu-view-test')">
         <div class="sec-card-icon">📝</div>
         <div class="sec-card-title">Domain MCQ Test</div>
@@ -2241,6 +2247,11 @@ body.is-premium #premiumCard { box-shadow:0 0 0 1px rgba(212,175,55,0.25), 0 14p
     <div id="submissionContainer"></div>
   </div>
   </div><!-- /stu-view-submissions -->
+
+  <!-- ══════ VIEW: ATTENDANCE REPORT (Google Form responses, by date) ══════ -->
+  <div class="stu-view" id="stu-view-attendance-report">
+    <div id="attendanceReportStudent"></div>
+  </div>
 
   <!-- ══════ VIEW: ATTENDANCE ══════ -->
   <div class="stu-view" id="stu-view-attendance">
@@ -5370,6 +5381,7 @@ var sectionTitles = {
   'stu-view-coding': 'Coding Problems',
   'stu-view-submissions': 'Submitted Tasks',
   'stu-view-attendance': 'Daily Attendance',
+  'stu-view-attendance-report': 'Attendance Report',
   'stu-view-test': 'Domain MCQ Test',
   'stu-view-guidelines': 'Internship Guidelines',
   'stu-view-leaderboard': 'Extras & Badges'
@@ -5399,6 +5411,9 @@ function openSectionModal(sectionId) {
   if (overlay) overlay.classList.remove('show');
   // Trigger relevant data loads
   if (sectionId === 'stu-view-attendance' && typeof loadAttendance === 'function') loadAttendance();
+  if (sectionId === 'stu-view-attendance-report' && window.TENAttendanceReport) {
+    TENAttendanceReport.mountStudent(document.getElementById('attendanceReportStudent'), {});
+  }
   if (sectionId === 'stu-view-notice' && typeof loadNotice === 'function') loadNotice();
   if (sectionId === 'stu-view-submissions' && typeof loadStudentSubmissions === 'function') loadStudentSubmissions();
   if (sectionId === 'stu-view-leaderboard') {
