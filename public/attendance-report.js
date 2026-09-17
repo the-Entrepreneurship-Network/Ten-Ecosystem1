@@ -105,8 +105,9 @@
   }
 
   function errorBox(err) {
+    var notYet = err && /not connected yet/.test(String(err.message || ""));
     return h("div", { class: "ar-err" }, [
-      h("b", { text: "Attendance report unavailable. " }),
+      h("b", { text: notYet ? "Not connected yet. " : "Attendance report unavailable. " }),
       h("span", { text: err && err.message ? err.message : String(err) }),
     ]);
   }

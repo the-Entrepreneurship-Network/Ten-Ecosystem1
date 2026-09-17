@@ -15,6 +15,10 @@ const { isDateKey } = require("../../utils/reportClock");
 const { requireHR, requireStaff, sessionEmployeeId } = require("../../middleware/sessionAuth");
 const attendanceSettings = require("../../services/v2/attendanceSettings");
 
+// Said plainly, because "not configured" reads as a fault in the code when the
+// missing piece is a link only the form's owner can supply.
+const NOT_CONNECTED = "The attendance form is not connected yet. HR: open the HR portal, Attendance Report, Agent settings, and paste the link of the form's responses spreadsheet (shared as Anyone with the link, Viewer).";
+
 function studentOf(req) {
     const s = (req.session && req.session.student) || {};
     return { employeeId: String(sessionEmployeeId(req) || "").trim(), email: String(s.email || "").trim().toLowerCase() };
@@ -149,7 +153,7 @@ router.get("/form", requireStaff, async (req, res) => {
 router.get("/my", async (req, res) => {
     try {
         if (!formResponses.isConfigured()) {
-            return res.status(400).json({ success: false, message: "Attendance form is not configured" });
+            return res.status(400).json({ success: false, notConnected: true, message: NOT_CONNECTED });
         }
         return res.json({ success: true, ...(await myAttendance(req)) });
     } catch (err) {
@@ -173,7 +177,7 @@ router.get("/my.csv", async (req, res) => {
 router.get("/all", requireStaff, async (req, res) => {
     try {
         if (!formResponses.isConfigured()) {
-            return res.status(400).json({ success: false, message: "Attendance form is not configured" });
+            return res.status(400).json({ success: false, notConnected: true, message: NOT_CONNECTED });
         }
         return res.json({ success: true, ...(await allAttendance(req)) });
     } catch (err) {
