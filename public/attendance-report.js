@@ -40,6 +40,9 @@
     ".ar-suggest-item{padding:8px 10px;cursor:pointer;font-size:13px}.ar-suggest-item:hover{background:rgba(212,175,55,.2)}.ar-suggest-item small{opacity:.55}",
     ".ar-err{padding:12px 14px;border-radius:10px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4)}",
     ".ar-empty{padding:18px;text-align:center;opacity:.7}",
+    ".ar-card{margin-top:12px;padding:14px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(255,255,255,.04)}",
+    ".ar-wide{width:100%}.ar-wide input{width:100%;box-sizing:border-box}",
+    ".ar-card input:disabled{opacity:.55}",
   ].join("\n");
 
   function css() {
@@ -178,6 +181,69 @@
     el.innerHTML = "";
     var root = h("div", { class: "ar" });
     el.appendChild(root);
+    var settingsHost = h("div", { class: "ar" });
+    el.appendChild(settingsHost);
+    mountSettings(settingsHost);
+
+    // HR only: the sheet link, the number, the time and the token, saved on
+    // the server. Coordinators get a 401 here and see no card.
+    function mountSettings(host) {
+      getJson("/settings", {}, opts.headers)
+        .then(function (data) { renderSettings(host, data.settings); })
+        .catch(function () { host.remove(); });
+    }
+
+    function renderSettings(host, s) {
+      host.innerHTML = "";
+      var card = h("div", { class: "ar-card" });
+      card.hidden = true;
+      var toggle = h("button", { class: "ar-btn", text: "Agent settings", onclick: function () { card.hidden = !card.hidden; } });
+      var fields = [
+        ["sheetUrl", "Responses sheet link (shared as: Anyone with the link, Viewer)", "url", "https://docs.google.com/spreadsheets/d/.../edit"],
+        ["reportTo", "Report goes to (WhatsApp number with country code; comma for several)", "text", "918317873609"],
+        ["reportTime", "Send time, 24-hour, " + (s.tz || "Asia/Kolkata"), "time", "23:05"],
+        ["requiredPerDay", "Submissions required per day for a tick", "number", "2"],
+        ["phoneNumberId", "WhatsApp sender: phone number ID", "text", "1243779175483305"],
+        ["whatsappToken", "WhatsApp access token" + (s.tokenSet ? " (set: " + s.values.whatsappToken + "; retype to replace)" : " (not set)"), "password", ""],
+        ["n8nWebhookUrl", "n8n webhook URL (optional; used instead of Meta when set)", "url", ""],
+      ];
+      var inputs = {};
+      fields.forEach(function (f) {
+        var locked = s.source && s.source[f[0]] === "env";
+        var inp = h("input", { type: f[2], placeholder: f[3], autocomplete: "off", value: f[0] === "whatsappToken" ? "" : String(s.values[f[0]] || "") });
+        if (locked) inp.disabled = true;
+        inputs[f[0]] = inp;
+        card.appendChild(h("label", { class: "ar-field ar-wide" }, [f[1] + (locked ? "  (set on the server; change it there)" : ""), inp]));
+      });
+      var msg = h("div", { class: "ar-note" });
+      var status = "Report at " + (s.reportTime || "?") + " " + (s.tz || "") + " to " + (s.recipients && s.recipients.length ? s.recipients.join(", ") : "nobody yet") + ". Sheet " + (s.formConfigured ? "configured" : "not set") + ". Sending via " + s.transport + ".";
+      var save = h("button", { class: "ar-btn ar-primary", text: "Save", onclick: function () {
+        var body = {};
+        Object.keys(inputs).forEach(function (k) { if (!inputs[k].disabled) body[k] = inputs[k].value; });
+        if (!body.whatsappToken) delete body.whatsappToken;
+        msg.textContent = "Saving\u2026";
+        fetch(API + "/settings", { method: "PUT", credentials: "same-origin", headers: Object.assign({ "Content-Type": "application/json" }, opts.headers || {}), body: JSON.stringify(body) })
+          .then(function (r) { return r.json().then(function (j) { if (!r.ok || !j.success) throw new Error(j.message || ("HTTP " + r.status)); return j; }); })
+          .then(function (j) { renderSettings(host, j.settings); host.querySelector(".ar-card").hidden = false; host.querySelector(".ar-note").textContent = "Saved. " + host.querySelector(".ar-note").textContent; load(); })
+          .catch(function (e) { msg.textContent = "Not saved: " + e.message; });
+      } });
+      var test = h("button", { class: "ar-btn", text: "Send test WhatsApp", onclick: function () {
+        msg.textContent = "Sending\u2026";
+        fetch(API + "/settings/test-send", { method: "POST", credentials: "same-origin", headers: opts.headers || {} })
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            msg.textContent = j.success
+              ? "Test message delivered to " + j.results.map(function (x) { return x.to; }).join(", ") + "."
+              : "Not delivered: " + (j.message || (j.results || []).map(function (x) { return x.to + ": " + (x.error || "failed"); }).join("; "));
+          })
+          .catch(function (e) { msg.textContent = "Not delivered: " + e.message; });
+      } });
+      card.appendChild(h("div", { class: "ar-bar" }, [save, test]));
+      msg.textContent = status;
+      card.appendChild(msg);
+      host.appendChild(toggle);
+      host.appendChild(card);
+    }
 
     // Suggestions are domains only, the same rule as the server: a domain
     // starting with what was typed ranks first ("s" lists every S domain), a

@@ -1,5 +1,7 @@
 "use strict";
 
+const attendanceSettings = require("./attendanceSettings");
+
 // The attendance Google Form. Every submission lands in the linked
 // spreadsheet with "Timestamp" first and one column per question, and the
 // sheet is read through its CSV export, which needs no API key once the sheet
@@ -16,11 +18,19 @@ function gidFromUrl(url) {
 }
 
 function settings() {
-    const url = process.env.ATTENDANCE_SHEET_URL || "";
+    // The sheet link comes from the environment when the server was configured
+    // that way, else from what HR saved in the portal. A plain CSV URL saved
+    // there is served as such.
+    const envUrl = process.env.ATTENDANCE_SHEET_URL || "";
+    const envId = process.env.ATTENDANCE_SHEET_ID || "";
+    const envCsv = process.env.ATTENDANCE_SHEET_CSV_URL || "";
+    const stored = (!envUrl && !envId && !envCsv) ? String(attendanceSettings.fromDb("sheetUrl") || "").trim() : "";
+    const url = envUrl || stored;
+    const storedIsCsv = Boolean(stored) && !idFromUrl(stored) && /^https?:\/\//i.test(stored);
     return {
-        sheetId:    String(process.env.ATTENDANCE_SHEET_ID || idFromUrl(url)).trim(),
+        sheetId:    String(envId || idFromUrl(url)).trim(),
         gid:        String(process.env.ATTENDANCE_SHEET_GID || gidFromUrl(url) || "0").trim(),
-        csvUrl:     String(process.env.ATTENDANCE_SHEET_CSV_URL || "").trim(),
+        csvUrl:     String(envCsv || (storedIsCsv ? stored : "")).trim(),
         dateFormat: String(process.env.ATTENDANCE_SHEET_DATE_FORMAT || "auto").trim().toUpperCase(),
         columns:    String(process.env.ATTENDANCE_SHEET_COLUMNS || "").split(",").map((s) => s.trim()).filter(Boolean),
     };
@@ -199,8 +209,41 @@ async function fetchSheet({ fresh = false } = {}) {
 }
 
 function requiredPerDay() {
-    const n = parseInt(process.env.ATTENDANCE_REQUIRED_PER_DAY || "2", 10);
-    return Math.max(1, Number.isFinite(n) ? n : 2);
+    const raw = process.env.ATTENDANCE_REQUIRED_PER_DAY || attendanceSettings.fromDb("requiredPerDay") || "2";
+    const n = parseInt(raw, 10);
+    return Math.max(1, Number.isFinite(n) && n > 0 ? n : 2);
+}
+
+// The form asks for the DATE and TIME the attendance is for, apart from when
+// it was submitted. Where those columns exist they are the day and the clock;
+// the submission timestamp stands in when they are blank or absent, so a form
+// filled at ten past midnight for the day before lands on the day before.
+function columnsOf(header) {
+    const find = (re) => header.findIndex((h) => re.test(String(h).trim()));
+    let ts = find(/^timestamp$/i);
+    if (ts < 0) ts = 0;
+    return { ts, date: find(/^date$/i), time: find(/^time$/i) };
+}
+
+// "21:56", "21:56:00", "9:56:00 PM" -> "21:56"
+function parseClock(raw) {
+    const m = String(raw || "").trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*([AaPp]\.?[Mm]\.?)?$/);
+    if (!m) return "";
+    let h = Number(m[1]);
+    const ap = m[3] || "";
+    if (/p/i.test(ap) && h < 12) h += 12;
+    if (/a/i.test(ap) && h === 12) h = 0;
+    if (h > 23) return "";
+    return `${String(h).padStart(2, "0")}:${m[2]}`;
+}
+
+function stampOf(row, idx, fmt) {
+    const submitted = parseStamp(row[idx.ts], fmt);
+    const chosen = idx.date >= 0 ? parseStamp(row[idx.date], fmt) : null;
+    const base = chosen || submitted;
+    if (!base) return null;
+    const clock = (idx.time >= 0 ? parseClock(row[idx.time]) : "") || (submitted ? submitted.clock : "") || "00:00";
+    return { dateKey: base.dateKey, clock };
 }
 
 function valueOf(header, row, kind, cols) {
@@ -217,9 +260,8 @@ function valueOf(header, row, kind, cols) {
 async function byPerson({ from, to, fresh = false } = {}) {
     const { header, rows } = await fetchSheet({ fresh });
     const s = settings();
-    let tsIdx = header.findIndex((h) => /^timestamp$/i.test(h));
-    if (tsIdx < 0) tsIdx = 0;
-    const fmt = s.dateFormat === "AUTO" ? detectDateFormat(rows, tsIdx) : s.dateFormat;
+    const idx = columnsOf(header);
+    const fmt = s.dateFormat === "AUTO" ? detectDateFormat(rows, idx.date >= 0 ? idx.date : idx.ts) : s.dateFormat;
     const cols = pickColumns(header, s.columns);
     const required = requiredPerDay();
 
@@ -227,7 +269,7 @@ async function byPerson({ from, to, fresh = false } = {}) {
     const dates = new Set();
     let responses = 0;
     for (const r of rows) {
-        const st = parseStamp(r[tsIdx], fmt);
+        const st = stampOf(r, idx, fmt);
         if (!st) continue;
         if (from && st.dateKey < from) continue;
         if (to && st.dateKey > to) continue;
@@ -325,15 +367,14 @@ function personFor(list, { employeeId, email } = {}) {
 async function responsesForDay(dateKey) {
     const { header, rows } = await fetchSheet();
     const s = settings();
-    let tsIdx = header.findIndex((h) => /^timestamp$/i.test(h));
-    if (tsIdx < 0) tsIdx = 0;
-    const fmt = s.dateFormat === "AUTO" ? detectDateFormat(rows, tsIdx) : s.dateFormat;
+    const idx = columnsOf(header);
+    const fmt = s.dateFormat === "AUTO" ? detectDateFormat(rows, idx.date >= 0 ? idx.date : idx.ts) : s.dateFormat;
     const cols = pickColumns(header, s.columns);
 
     const people = new Map();
     let total = 0;
     for (const r of rows) {
-        const st = parseStamp(r[tsIdx], fmt);
+        const st = stampOf(r, idx, fmt);
         if (!st || st.dateKey !== dateKey) continue;
         total += 1;
         const fields = cols.map((c) => ({ label: c.label, value: String(r[c.idx] || "").trim() }));
@@ -359,5 +400,5 @@ async function responsesForDay(dateKey) {
 module.exports = {
     settings, exportUrl, isConfigured, fetchSheet, clearCache, responsesForDay,
     byPerson, matchesPerson, personFor, requiredPerDay, fuzzyMatch, domainRank, domainMatches,
-    parseCsv, parseStamp, detectDateFormat, pickColumns, idFromUrl, gidFromUrl,
+    parseCsv, parseStamp, parseClock, columnsOf, stampOf, detectDateFormat, pickColumns, idFromUrl, gidFromUrl,
 };

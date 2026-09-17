@@ -1,5 +1,7 @@
 "use strict";
 
+const attendanceSettings = require("./attendanceSettings");
+
 // Delivery only. Who receives a message is the caller's decision, passed in
 // as `to`; nothing here reads a recipient from the environment, so the test
 // number the sender is registered on can never become the destination by
@@ -15,10 +17,11 @@
 function settings() {
     return {
         transport:     String(process.env.ATTENDANCE_TRANSPORT || "auto").toLowerCase(),
-        n8nUrl:        String(process.env.N8N_ATTENDANCE_WEBHOOK_URL || "").trim(),
+        // Environment first, then what HR saved in the portal.
+        n8nUrl:        String(process.env.N8N_ATTENDANCE_WEBHOOK_URL || attendanceSettings.fromDb("n8nWebhookUrl") || "").trim(),
         n8nSecret:     String(process.env.N8N_WEBHOOK_SECRET || "").trim(),
-        token:         String(process.env.WHATSAPP_TOKEN || "").trim(),
-        phoneNumberId: String(process.env.WHATSAPP_PHONE_NUMBER_ID || "").trim(),
+        token:         String(process.env.WHATSAPP_TOKEN || attendanceSettings.fromDb("whatsappToken") || "").trim(),
+        phoneNumberId: String(process.env.WHATSAPP_PHONE_NUMBER_ID || attendanceSettings.fromDb("phoneNumberId") || "").trim(),
         apiVersion:    String(process.env.WHATSAPP_API_VERSION || "v20.0").trim(),
         templateName:  String(process.env.WHATSAPP_TEMPLATE_NAME || "").trim(),
         templateLang:  String(process.env.WHATSAPP_TEMPLATE_LANG || "en_US").trim(),
