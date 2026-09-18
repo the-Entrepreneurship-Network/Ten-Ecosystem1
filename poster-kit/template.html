@@ -1,0 +1,269 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page { margin: 0 }
+  * { box-sizing: border-box; margin: 0; padding: 0 }
+  :root{
+    --primary:#D04A02; --accent:#E0301E;
+    --ink:#141414; --muted:#5C5C5C; --line:#E8E8EA;
+    --soft:#F6F6F7; --dark:#22252A;
+  }
+  html,body{ width:1080px; height:1350px; overflow:hidden; background:#fff }
+  body{
+    font-family:"Segoe UI","Helvetica Neue",Helvetica,Arial,"Noto Sans",sans-serif;
+    color:var(--ink); -webkit-font-smoothing:antialiased;
+  }
+  #poster{ width:1080px; height:1350px; padding:22px; display:flex; flex-direction:column; gap:12px }
+  .card{ background:#fff; border:1.5px solid var(--line); border-radius:16px }
+
+  /* ---------- HERO ---------- */
+  .hero{ position:relative; flex:1 1 auto; min-height:0; background:#fff;
+    border-radius:18px; overflow:hidden }
+  .hero-left{ position:absolute; inset:0 0 0 0; width:636px; padding:8px 20px 8px 8px; z-index:3;
+    display:flex; flex-direction:column; justify-content:center }
+  .brandrow{ display:flex; align-items:center; gap:14px; margin-bottom:22px }
+  .logo-img{ height:56px; width:auto; object-fit:contain }
+  .logo-text{ font-size:46px; font-weight:800; letter-spacing:-2px; line-height:.9 }
+  .tagline{ border-left:2.5px solid #C9C9CC; padding-left:14px; font-size:14.5px; line-height:1.32; color:#2E2E2E; font-weight:600 }
+  h1{ font-size:82px; line-height:.88; font-weight:900; letter-spacing:-3px;
+    text-transform:uppercase; max-width:556px }
+  h1 .hl{ color:var(--accent); display:block; font-size:94px }
+  .rolebadge{ display:inline-block; margin-top:14px; background:var(--accent); color:#fff;
+    font-size:40px; font-weight:900; letter-spacing:.5px; text-transform:uppercase;
+    padding:8px 24px 10px; border-radius:10px; max-width:548px }
+  .blurb{ margin-top:20px; font-size:18.5px; line-height:1.42; color:#2A2A2A; max-width:468px; font-weight:500 }
+  .blurb em{ font-style:normal; color:var(--primary); font-weight:700 }
+
+  .hero-media{ position:absolute; top:0; right:0; width:560px; height:100%;
+    clip-path:polygon(31% 0,100% 0,100% 100%,7% 100%); z-index:1; background:var(--dark) }
+  .hero-media img{ width:100%; height:100%; object-fit:cover; display:block }
+  .wedge{ position:absolute; top:0; right:0; width:560px; height:100%;
+    background:var(--primary); clip-path:polygon(18% 0,31% 0,7% 100%,0 100%); z-index:2 }
+  .hero-cap{ position:absolute; right:26px; bottom:112px; z-index:4; width:196px;
+    background:rgba(28,30,34,.9); color:#fff; border-radius:8px; padding:14px 16px;
+    font-size:15.5px; line-height:1.32; font-weight:600 }
+  .hero-cap em{ font-style:normal; color:#FFB27A; font-weight:700 }
+  .accent-note{ position:absolute; right:30px; top:18px; z-index:4; text-align:right;
+    font-family:"Segoe Script","Comic Sans MS",cursive; font-size:21px; line-height:1.25;
+    color:#fff; font-weight:700; text-shadow:0 2px 10px rgba(0,0,0,.55) }
+  .accent-note .u{ display:block; height:3px; width:96px; background:#fff;
+    margin:5px 0 0 auto; border-radius:2px }
+
+  /* ---------- FACT STRIP ---------- */
+  .facts{ display:flex; padding:14px 6px; flex:none }
+  .fact{ flex:1; padding:0 8px; text-align:center; border-right:1.5px solid var(--line) }
+  .fact:last-child{ border-right:none }
+  .fact .ic{ height:38px; display:flex; align-items:center; justify-content:center; margin-bottom:7px }
+  .fact .lb{ font-size:11.5px; font-weight:800; letter-spacing:.7px; color:var(--primary); margin-bottom:4px }
+  .fact .vl{ font-size:16px; font-weight:700; line-height:1.22; color:var(--ink) }
+
+  /* ---------- ELIGIBILITY + SALARY ---------- */
+  .midrow{ display:flex; gap:12px; flex:none }
+  .elig{ flex:1.62; display:flex; gap:14px; align-items:center; padding:16px 18px }
+  .elig .badge{ width:62px; height:62px; border-radius:50%; background:var(--dark);
+    display:flex; align-items:center; justify-content:center; flex:none }
+  .elig h3{ font-size:19px; font-weight:900; letter-spacing:.4px; margin-bottom:5px }
+  .elig p{ font-size:14.5px; line-height:1.4; color:#333; font-weight:600 }
+  .sal{ flex:1; display:flex; gap:12px; align-items:center; padding:16px 18px }
+  .sal .badge{ width:58px; height:58px; border-radius:50%; background:var(--soft);
+    display:flex; align-items:center; justify-content:center; flex:none }
+  .sal .lb{ font-size:13.5px; font-weight:800; color:var(--accent); letter-spacing:.5px; margin-bottom:2px }
+  .sal .vl{ font-size:27px; font-weight:900; letter-spacing:-.5px; line-height:1.05 }
+  .sal .nt{ font-size:13px; color:var(--muted); font-weight:600; margin-top:2px }
+
+  /* ---------- WHY JOIN ---------- */
+  .whywrap{ position:relative; margin-top:6px; flex:none }
+  .pill{ position:absolute; top:-15px; left:50%; transform:translateX(-50%); z-index:5;
+    background:var(--dark); color:#fff; border-radius:999px; padding:8px 30px;
+    font-size:17px; font-weight:800; letter-spacing:.4px; white-space:nowrap }
+  .why{ display:flex; padding:30px 6px 18px }
+  .wi{ flex:1; padding:0 10px; text-align:center; border-right:1.5px solid var(--line) }
+  .wi:last-child{ border-right:none }
+  .wi .ic{ height:36px; display:flex; align-items:center; justify-content:center; margin-bottom:8px }
+  .wi p{ font-size:14px; line-height:1.3; font-weight:650; color:#2B2B2B }
+
+  /* ---------- CTA ---------- */
+  .cta{ position:relative; border:2px solid var(--accent); border-radius:16px;
+    padding:16px 20px; display:flex; align-items:center; gap:16px; flex:none; overflow:hidden }
+  .cta .bub{ flex:none }
+  .cta .txt{ flex:1 }
+  .cta .k{ font-size:13px; font-weight:800; letter-spacing:.8px; color:var(--muted) }
+  .cta .big{ font-size:36px; font-weight:900; letter-spacing:-.5px; line-height:1.05 }
+  .cta .big span{ color:var(--accent) }
+  .cta .sub{ font-size:13px; font-weight:700; color:#3A3A3A; letter-spacing:.2px; margin-top:4px }
+  .cta .right{ flex:none; text-align:center; width:180px; position:relative }
+  .cta .right .hw{ font-family:"Segoe Script","Comic Sans MS",cursive; font-size:19px;
+    font-weight:700; line-height:1.15; margin-top:2px }
+
+  /* ---------- FOOTER ---------- */
+  .foot{ display:flex; flex:none; height:108px; border:2px solid var(--accent); border-radius:16px; overflow:hidden }
+  .fl{ flex:1.35; display:flex; gap:14px; align-items:center; padding:14px 18px;
+    border-right:2px solid var(--accent) }
+  .fl p{ font-size:15px; line-height:1.34; font-weight:800; letter-spacing:.2px; text-transform:uppercase }
+  .fl p b{ color:var(--accent) }
+  .fr{ flex:1; display:flex; gap:13px; align-items:center; padding:14px 18px }
+  .fr .lb{ font-size:12.5px; font-weight:800; letter-spacing:.7px; color:var(--muted) }
+  .fr .nm{ font-size:22px; font-weight:900; letter-spacing:-.3px; line-height:1.1; color:var(--accent) }
+  .fr .sb{ font-size:12.5px; font-weight:800; letter-spacing:.5px; color:#3A3A3A; margin-top:2px }
+  svg{ display:block }
+</style>
+</head>
+<body>
+<div id="poster"></div>
+<script>
+var DATA = __POSTER_DATA__;
+
+var ICONS = {
+  building:'<rect x="3" y="3" width="11" height="18" rx="1.5"/><rect x="14" y="8" width="7" height="13" rx="1.5"/><path d="M6 7h2M6 11h2M6 15h2M10 7h1M10 11h1M10 15h1M17 12h1M17 16h1" stroke-width="1.6"/>',
+  briefcase:'<rect x="2.5" y="7" width="19" height="13" rx="2"/><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7" stroke-width="1.8"/><path d="M2.5 12h19" stroke-width="1.6"/>',
+  pin:'<path d="M12 22s7-7.2 7-12a7 7 0 1 0-14 0c0 4.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.6" fill="#fff" stroke="none"/>',
+  users:'<circle cx="8.5" cy="8" r="3.2"/><circle cx="16.5" cy="9.5" r="2.6"/><path d="M2.5 19c0-3.2 2.7-5.2 6-5.2s6 2 6 5.2z"/><path d="M15 14c2.9.2 5 2.1 5 5" stroke-width="1.8"/>',
+  doc:'<path d="M6 2.5h7.5L19 8v13.5H6z"/><path d="M13.5 2.5V8H19" stroke-width="1.6" fill="#fff"/><path d="M9 12.5h7M9 16h7" stroke-width="1.7"/>',
+  idcard:'<rect x="2.5" y="4.5" width="19" height="15" rx="2.2"/><circle cx="8.5" cy="11" r="2.4" fill="#fff" stroke="none"/><path d="M5 16.4c.6-1.6 1.9-2.4 3.5-2.4s2.9.8 3.5 2.4" fill="#fff" stroke="none"/><path d="M14.5 10h4.2M14.5 13.4h4.2" stroke-width="1.8"/>',
+  cap:'<path d="M12 4 2.5 8.6 12 13.2l9.5-4.6z"/><path d="M6.5 11v4.6c0 1.7 2.5 3 5.5 3s5.5-1.3 5.5-3V11" stroke-width="1.8"/><path d="M20.4 10v5.4" stroke-width="1.8"/>',
+  rupee:'<path d="M7 4h10M7 9h10M16.5 4c0 3-2.4 5-6 5h-.5l7 11H14L7 9" stroke-width="2.1"/>',
+  chart:'<rect x="3" y="12" width="4.4" height="9" rx="1"/><rect x="9.8" y="7" width="4.4" height="14" rx="1"/><rect x="16.6" y="3" width="4.4" height="18" rx="1"/>',
+  bulb:'<path d="M12 2.6a6.4 6.4 0 0 0-3.6 11.7V17h7.2v-2.7A6.4 6.4 0 0 0 12 2.6z"/><path d="M9.6 19.6h4.8M10.4 21.8h3.2" stroke-width="2"/>',
+  team:'<circle cx="12" cy="7" r="3"/><circle cx="5" cy="10" r="2.4"/><circle cx="19" cy="10" r="2.4"/><path d="M6.5 20c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M1.5 18c0-2.2 1.5-3.6 3.5-3.6M22.5 18c0-2.2-1.5-3.6-3.5-3.6" stroke-width="1.7"/>',
+  globe:'<circle cx="12" cy="12" r="9.2"/><path d="M2.8 12h18.4" stroke-width="1.7"/><path d="M12 2.8c2.6 2.6 4 5.8 4 9.2s-1.4 6.6-4 9.2c-2.6-2.6-4-5.8-4-9.2s1.4-6.6 4-9.2z" stroke-width="1.7"/>',
+  leaf:'<path d="M20.5 3.5C10 4 4 9.5 4 16.5c0 1.7.3 3.2.9 4.5 8.6.4 15.2-6 15.6-17.5z"/><path d="M4.9 21c2.2-5 6.2-8.8 11.1-11" stroke-width="1.7"/>',
+  clock:'<circle cx="12" cy="12" r="9.2"/><path d="M12 6.6V12l4 2.6" stroke-width="1.9"/>',
+  calendar:'<rect x="3" y="5" width="18" height="16" rx="2.2"/><path d="M3 10h18M8 5V2.8M16 5V2.8" stroke-width="1.8"/>',
+  target:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="2"/>',
+  rocket:'<path d="M12 2.8c3.6 2.4 5.6 6.2 5.6 10.4L12 18l-5.6-4.8C6.4 9 8.4 5.2 12 2.8z"/><circle cx="12" cy="10" r="2.1"/><path d="M8.4 17.2c-1.6 1-2.3 2.6-2.2 4.4 1.8.1 3.4-.6 4.4-2.2M15.6 17.2c1.6 1 2.3 2.6 2.2 4.4-1.8.1-3.4-.6-4.4-2.2" stroke-width="1.7"/>',
+  bubble:'<path d="M3 5.5h18v11H12.5L7 21v-4.5H3z"/><path d="M7.5 11h9" stroke-width="1.9"/>',
+  send:'<path d="M2 12 22 3l-4.5 18-5.5-6.5z"/><path d="M12 14.5 22 3" stroke-width="1.7"/>',
+  megaphone:'<path d="M3 10.5 16 5v14L3 13.5z"/><path d="M6.5 14v5.5h3.5V15.5" stroke-width="1.8"/><path d="M19 8.5a4.5 4.5 0 0 1 0 7" stroke-width="1.9"/>',
+  avatar:'<circle cx="12" cy="12" r="9.3"/><circle cx="12" cy="9.6" r="3.2"/><path d="M5.8 19.4c.9-3 3.3-4.6 6.2-4.6s5.3 1.6 6.2 4.6" stroke-width="1.8"/>'
+};
+
+function svg(name, color, size){
+  var p = ICONS[name] || ICONS.briefcase;
+  return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="'+color+
+         '" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>';
+}
+function esc(s){ return (s==null?'':String(s)); }
+
+var b = DATA.brand || {};
+var r = document.documentElement.style;
+if (b.primary) r.setProperty('--primary', b.primary);
+if (b.accent)  r.setProperty('--accent',  b.accent);
+var P = b.primary || '#D04A02', A = b.accent || '#E0301E';
+
+var h = DATA.headline || {}, hero = DATA.hero || {};
+var out = [];
+
+/* HERO */
+var logo = b.logo
+  ? '<img class="logo-img" src="'+esc(b.logo)+'">'
+  : '<div class="logo-text">'+esc(b.logo_text || h.company_display || '')+'</div>';
+var tag = (b.tagline && b.tagline.length)
+  ? '<div class="tagline">'+b.tagline.map(esc).join('<br>')+'</div>' : '';
+
+out.push(
+ '<div class="hero">',
+   '<div class="hero-media">', hero.image ? '<img src="'+esc(hero.image)+'">' : '', '</div>',
+   '<div class="wedge"></div>',
+   hero.accent_note ? '<div class="accent-note">'+esc(hero.accent_note).replace(/\n/g,'<br>')+'<span class="u"></span></div>' : '',
+   hero.caption ? '<div class="hero-cap">'+hero.caption+'</div>' : '',
+   '<div class="hero-left">',
+     '<div class="brandrow">', logo, tag, '</div>',
+     '<h1>', esc(h.lead || ((h.company_display||'')+' IS')), '<span class="hl">', esc(h.verb || 'HIRING!'), '</span></h1>',
+     h.role ? '<div class="rolebadge">'+esc(h.role)+'</div>' : '',
+     h.blurb ? '<div class="blurb">'+h.blurb+'</div>' : '',
+   '</div>',
+ '</div>'
+);
+
+/* FACTS */
+var facts = DATA.facts || [];
+out.push('<div class="card facts">');
+facts.forEach(function(f){
+  out.push('<div class="fact"><div class="ic">'+svg(f.icon,P,30)+'</div>',
+           '<div class="lb">'+esc(f.label).toUpperCase()+'</div>',
+           '<div class="vl">'+esc(f.value).replace(/\n/g,'<br>')+'</div></div>');
+});
+out.push('</div>');
+
+/* ELIGIBILITY + SALARY */
+var el = DATA.eligibility || {}, sl = DATA.salary || {};
+out.push('<div class="midrow">',
+  '<div class="card elig"><div class="badge">'+svg('cap','#fff',32)+'</div><div>',
+    '<h3>'+esc(el.heading || 'ELIGIBILITY')+'</h3>',
+    '<p>'+(el.items ? el.items.map(esc).join(' &nbsp;|&nbsp; ') : esc(el.text))+'</p>',
+  '</div></div>',
+  '<div class="card sal"><div class="badge">'+svg('rupee',A,30)+'</div><div>',
+    '<div class="lb">'+esc(sl.label || 'EXPECTED SALARY')+'</div>',
+    '<div class="vl">'+esc(sl.value)+'</div>',
+    sl.note ? '<div class="nt">'+esc(sl.note)+'</div>' : '',
+  '</div></div>',
+'</div>');
+
+/* WHY JOIN */
+var w = DATA.why || {};
+if (w.items && w.items.length){
+  out.push('<div class="whywrap">',
+    '<div class="pill">'+esc(w.heading || 'WHY JOIN US?')+'</div>',
+    '<div class="card why">');
+  w.items.forEach(function(i){
+    out.push('<div class="wi"><div class="ic">'+svg(i.icon,P,28)+'</div><p>'+esc(i.text)+'</p></div>');
+  });
+  out.push('</div></div>');
+}
+
+/* CTA */
+var c = DATA.cta || {};
+out.push('<div class="cta">',
+  '<div class="bub">'+svg('bubble',A,44)+'</div>',
+  '<div class="txt">',
+    '<div class="k">'+esc(c.kicker || 'COMMENT')+'</div>',
+    '<div class="big">&ldquo;<span>'+esc(c.quote || 'INTERESTED')+'</span>&rdquo; '+esc(c.tail || '')+'</div>',
+    c.sub ? '<div class="sub">'+esc(c.sub)+'</div>' : '',
+  '</div>',
+  '<div class="right">'+svg('send',A,40)+(c.accent_note?'<div class="hw">'+esc(c.accent_note).replace(/\n/g,'<br>')+'</div>':'')+'</div>',
+'</div>');
+
+/* FOOTER */
+var f = DATA.footer || {};
+out.push('<div class="foot">',
+  '<div class="fl">'+svg('megaphone',A,40)+'<p>'+(f.left||'')+'</p></div>',
+  '<div class="fr">'+svg('avatar',A,44)+'<div>',
+    '<div class="lb">'+esc(f.follow_label || 'FOLLOW')+'</div>',
+    '<div class="nm">'+esc(f.follow_name || '')+'</div>',
+    '<div class="sb">'+esc(f.follow_sub || '')+'</div>',
+  '</div></div>',
+'</div>');
+
+document.getElementById('poster').innerHTML = out.join('');
+
+/* Auto-fit the two headline elements.
+
+   The role badge and the "COMPANY IS" line are the only places a long real-world
+   string can break this layout, and a job title is not something to abbreviate
+   silently. So shrink the type until it fits, allow a wrap as a last resort, and
+   never drop characters. */
+function fitText(sel, startPx, minPx, maxW, allowWrap){
+  var el = document.querySelector(sel);
+  if (!el) return;
+  var size = startPx;
+  el.style.whiteSpace = 'nowrap';
+  el.style.fontSize = size + 'px';
+  while (el.scrollWidth > maxW && size > minPx){
+    size -= 1;
+    el.style.fontSize = size + 'px';
+  }
+  if (el.scrollWidth > maxW && allowWrap){
+    el.style.whiteSpace = 'normal';
+    el.style.lineHeight = '1.02';
+  }
+}
+fitText('.rolebadge', 40, 23, 548, true);
+fitText('h1 .hl',     94, 62, 556, false);
+fitText('h1',         82, 54, 556, true);
+
+window.__RENDERED__ = true;
+</script>
+</body>
+</html>

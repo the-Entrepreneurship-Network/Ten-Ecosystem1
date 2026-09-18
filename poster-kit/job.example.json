@@ -1,0 +1,62 @@
+{
+  "size": { "w": 1080, "h": 1350 },
+  "brand": {
+    "primary": "#0A66C2",
+    "accent": "#E0301E",
+    "logo": null,
+    "logo_text": "Zomato",
+    "tagline": ["Build", "Ship", "Learn Fast", "Grow With Us"]
+  },
+  "headline": {
+    "company_display": "Zomato",
+    "lead": "Zomato IS",
+    "verb": "HIRING!",
+    "role": "Data Analyst Intern",
+    "blurb": "Work alongside a product analytics team on live consumer data and ship dashboards that <em>real teams use</em> every single day."
+  },
+  "hero": {
+    "image": "hero_placeholder.png",
+    "caption": "Solving today's problems for a <em>brighter tomorrow.</em>",
+    "accent_note": "Freshers\nAre Welcome"
+  },
+  "facts": [
+    { "icon": "building",  "label": "Company",    "value": "Zomato" },
+    { "icon": "briefcase", "label": "Domain",     "value": "Data\nAnalytics" },
+    { "icon": "pin",       "label": "Location",   "value": "Gurugram,\nIndia" },
+    { "icon": "users",     "label": "Experience", "value": "Freshers" },
+    { "icon": "clock",     "label": "Duration",   "value": "6 Months" },
+    { "icon": "idcard",    "label": "Job ID",     "value": "ZOM24INT" }
+  ],
+  "eligibility": {
+    "heading": "ELIGIBILITY",
+    "items": ["B.E.", "B.Tech", "M.Tech", "BCA", "MCA", "B.Sc", "M.Sc", "MBA", "2026 / 2027 Batch"]
+  },
+  "salary": {
+    "label": "STIPEND",
+    "value": "₹25,000 / mo",
+    "note": "(Plus PPO offer)"
+  },
+  "why": {
+    "heading": "WHY JOIN ZOMATO?",
+    "items": [
+      { "icon": "chart",  "text": "Work on meaningful projects" },
+      { "icon": "bulb",   "text": "Learn from senior mentors" },
+      { "icon": "team",   "text": "Be part of an inclusive culture" },
+      { "icon": "globe",  "text": "Grow your career fast" },
+      { "icon": "rocket", "text": "Create real user impact" }
+    ]
+  },
+  "cta": {
+    "kicker": "COMMENT",
+    "quote": "INTERESTED",
+    "tail": "AND DM ME.",
+    "sub": "I'LL SHARE THE OFFICIAL APPLICATION LINK WITH YOU.",
+    "accent_note": "Let's Grow\nTogether"
+  },
+  "footer": {
+    "left": "I post verified <b>fresher jobs, internships</b> and <b>early-career opportunities</b> every day.",
+    "follow_label": "FOLLOW",
+    "follow_name": "SHOUNAK SINHA",
+    "follow_sub": "FOR DAILY JOB UPDATES"
+  }
+}

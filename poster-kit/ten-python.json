@@ -1,0 +1,94 @@
+{
+  "size": {
+    "w": 1080,
+    "h": 1350
+  },
+  "brand": {
+    "primary": "#D4AF37",
+    "accent": "#F5C542",
+    "logo": null,
+    "logo_text": "TEN",
+    "tagline": [
+      "Virtual",
+      "Internships",
+      "Real Projects",
+      "Across 19 Domains"
+    ]
+  },
+  "headline": {
+    "company_display": "The Entrepreneurship Network",
+    "lead": "TEN IS",
+    "verb": "HIRING!",
+    "role": "Python Development Intern",
+    "blurb": "Build something real with a coordinator reviewing your work every week, and finish with a portfolio you can <em>walk an interviewer through</em>."
+  },
+  "hero": {
+    "image": null,
+    "caption": "Project work, not <em>shadowing.</em>",
+    "accent_note": "Freshers\nAre Welcome"
+  },
+  "facts": [
+    {
+      "icon": "building",
+      "label": "Company",
+      "value": "The\nEntrepreneurship\nNetwork"
+    },
+    {
+      "icon": "briefcase",
+      "label": "Domain",
+      "value": "Python\nDevelopment"
+    },
+    {
+      "icon": "globe",
+      "label": "Mode",
+      "value": "Online"
+    },
+    {
+      "icon": "users",
+      "label": "Openings",
+      "value": "20"
+    },
+    {
+      "icon": "clock",
+      "label": "Duration",
+      "value": "3 Months"
+    },
+    {
+      "icon": "calendar",
+      "label": "Batch",
+      "value": "October\n2026"
+    }
+  ],
+  "eligibility": {
+    "heading": "ELIGIBILITY",
+    "items": [
+      "B.E.",
+      "B.Tech",
+      "BCA",
+      "MCA",
+      "B.Sc",
+      "M.Sc",
+      "Any Bachelor's",
+      "Any Master's",
+      "Freshers welcome"
+    ]
+  },
+  "salary": {
+    "label": "STIPEND",
+    "value": "₹5,000 / mo",
+    "note": "(As stated by the team)"
+  },
+  "cta": {
+    "kicker": "COMMENT",
+    "quote": "INTERESTED",
+    "tail": "AND WE WILL REPLY.",
+    "sub": "WE WILL SEND YOU THE OFFICIAL APPLICATION LINK.",
+    "accent_note": "No Prior\nSkill Needed"
+  },
+  "footer": {
+    "left": "We run <b>virtual internships</b> and <b>early-career projects</b> across every domain we teach.",
+    "follow_label": "APPLY AT",
+    "follow_name": "TEN",
+    "follow_sub": "VIRTUALINTERNSHIPS.ENTREPRENEURSHIPNETWORK.NET"
+  }
+}
