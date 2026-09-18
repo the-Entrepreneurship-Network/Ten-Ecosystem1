@@ -1,118 +1,130 @@
 # LinkedIn agent
 
-A section inside the HR portal, the coordinator dashboard, the mentor
-dashboard and Founder OS. A member of staff types a post idea — or a whole
-draft — into a chat and attaches the photograph they want on it. The agent
-checks it, tidies the lines, and publishes it to the company page,
-https://www.linkedin.com/company/the-entrepreneurship-network/.
+Every Saturday and every Sunday, at 10:00 IST, the agent publishes one
+internship opening to the company page,
+https://www.linkedin.com/company/the-entrepreneurship-network/. It rotates
+through the fourteen domains the site advertises, so each one comes round
+about every seven weeks.
 
-Students, investors and contractors do not see the section, and the API
-refuses them if they find the URL.
+Nobody writes it. Nobody approves it. There is no text box anywhere in the
+portal that reaches this — the dashboards carry a **read-only** section that
+shows how many posts the agent has put out, which went out last, and which
+domain is up next.
 
-## What the agent does with a draft
+The section appears in the HR portal, the coordinator dashboard, the mentor
+dashboard and Founder OS. Students, investors and contractors do not see it,
+and the API refuses them if they find the URL.
 
-**The post is yours.** What goes out is the text you typed and the photograph
-you attached. The agent does not write the post for you and it does not choose
-the picture.
+## What goes out
 
-1. **Checks it.** A deterministic content guard reads the draft and reports
-   every issue with the exact excerpt and a fix: hate or harassment, someone's
-   personal phone or e-mail, discriminatory hiring language, a person or
-   company called a fraud, guaranteed-placement claims, unverifiable
-   superlatives, shouting, hashtag and emoji overload, placeholder text, links
-   in the body, machine-written phrases, a weak first line, the company name
-   written wrong.
-2. **Tidies the lines.** Shouting becomes a sentence, `!!!` becomes `!`, a
-   missing capital and a missing full stop are added, doubled spaces and
-   accidental blank lines go. Your line breaks, your hashtags, your link and
-   your words are left exactly as typed. A clean draft comes back unchanged,
-   character for character.
-3. **Attaches your photo.** Whatever image you attach is the image on the post.
-   If you would rather the agent drew something, ask it to "make a poster" and
-   it will build a branded square from the facts in your draft — but only then.
-4. **Publishes the appropriate version, always.** "Post it" publishes what the
-   agent approved. If something had to be corrected, the reply says what. If
-   the draft was blocked, nothing is posted and the reply says why; "post it
-   anyway" does not change that, and the text is re-checked again at the
-   moment of publishing in case the session was tampered with.
+One post per slot, built from `services/v2/linkedin/weekendPost.js`:
 
-It also schedules ("schedule tomorrow 10am", India time), lists what has been
-posted, shows page statistics when the token allows, and takes line-level
-edits on request ("shorter", "change the headline to …", "no image").
+- The domain's own role name, domain, mode (Remote), duration (2–6 months),
+  eligibility, and the stipend stated as **Unpaid** — in the fact list and
+  again in prose, because burying it is how a fresher finds out after they
+  have already started. There is no rupee figure anywhere in the file.
+- **One application link**: the one for that domain's onboarding track, and no
+  others. The hand-written posts used to carry all six, which left an
+  applicant to work out which was theirs.
+- The argument the programme actually makes: no course to sit through first,
+  no training block before you touch anything real — an industry-level project
+  from week one, reviewed every week.
+- Five hashtags in total, two of them in the headline.
+
+Attached to it is that domain's poster, pre-rendered in
+`public/assets/linkedin-posters/<slug>.jpg`. See "Posters" below.
+
+## How it runs
+
+Two crons, and they are deliberately separate.
+
+`services/v2/linkedin/autopilot.js` ticks every ten minutes. It does nothing at
+all except on a Saturday or a Sunday between 10:00 and 22:00 IST, when it
+builds the post for whichever domain the date says, runs it past the content
+guard, reads the poster off disk and saves it as a `scheduled` post. Ten
+minutes rather than one weekly cron at 10:00 sharp: a weekly job that fires
+while the box is restarting misses the slot and nobody notices until Monday.
+
+`services/v2/linkedin/scheduler.js` ticks every minute and is what actually
+talks to LinkedIn. It claims a due post with a single atomic
+`findOneAndUpdate`, re-checks the text, uploads the image and publishes.
+
+The split is worth the extra hop: the scheduler already holds the parts that
+are hard to get right and are covered by tests — the atomic claim that stops
+two PM2 workers publishing the same thing, the dry-run path, the re-check at
+publish time, the failure recording. A second publish path would have to stay
+in step with all of that forever.
+
+### One post per slot
+
+The `slot` field on `LinkedInPost` carries `weekend:YYYY-MM-DD` and is uniquely
+and sparsely indexed. Every worker ticks; the first insert wins and the rest
+come back as a duplicate-key error, which the autopilot treats as success,
+because "somebody already queued this" is the normal outcome rather than a
+fault.
+
+### The rotation
+
+`weekendPost.pick(date)` is a pure function of the IST calendar date: the
+number of weekend days since a fixed Saturday, modulo fourteen. Nothing is
+stored, so a restart, a second worker and a database restore all agree on which
+domain a given day gets. Every calendar calculation is done by hand against a
+fixed +05:30, because the server runs in UTC and India has no daylight saving.
+
+### With no token
+
+A server with no LinkedIn connection still queues, records and reports every
+weekend post — it builds the payload and simply never sends it. That is how a
+fresh deployment behaves and how the tests run. The dashboard says so at the
+top of the section, because otherwise the count reads as a count of posts the
+public saw.
+
+## Posters
+
+Fourteen posters, one per domain, rendered once and committed:
+
+```bash
+python poster-kit/build_weekend_posters.py
+```
+
+That script drives `poster-kit/render_poster.py` (headless Chrome renders every
+word from JSON — an image model garbling a stipend on a live job ad is the
+failure this pipeline exists to prevent) and writes JPEGs to
+`public/assets/linkedin-posters/`. It fails loudly if its domain list drifts
+from `weekendPost.js`.
+
+Rendering at post time would mean a headless browser on the production box at
+ten past ten on a Saturday with nobody watching it fail, to draw a poster whose
+every word is a constant. A missing file costs the post its image and nothing
+else.
+
+## The HTTP surface
+
+`/api/v2/linkedin`, all of it read-only, all of it HR / coordinator / mentor /
+founder / admin:
+
+| Route | What it answers |
+| --- | --- |
+| `GET /autopilot` | The counts, the recent posts, what is queued, the next six slots |
+| `GET /status` | Whether the page is connected and when the token expires |
+| `GET /posts`, `GET /posts/:id` | The post history |
+| `GET /posts/:id/poster.svg` | The poster for an older, agent-written post |
+| `GET /stats` | LinkedIn's own share statistics, when the token allows |
+| `GET /oauth/start`, `GET /oauth/callback` | Connecting the page — **HR and admin only** |
+
+There is no route that publishes, schedules, edits or deletes a post. That is
+asserted by a test, because a publish route left mounted "just in case" is a
+second way for text to reach the company page, with no rotation behind it and
+no slot key.
 
 ## Connecting the page
 
-Until a token is present the agent runs **dry**: every post is reviewed,
-rewritten, saved and previewed with the exact payload it would send, and
-nothing reaches LinkedIn. That is how the test suite runs and how a fresh
-deployment behaves.
+HR opens the LinkedIn Agent section and uses Connect. It needs
+`LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` and `LINKEDIN_REDIRECT_URI`, the
+`w_organization_social` scope, and the signed-in person to be an
+ADMINISTRATOR or CONTENT_ADMIN of the page. The token is stored with
+`select: false` and never appears in a response or a log.
 
-Posting to a company page uses LinkedIn's Community Management API. That
-needs:
-
-- a LinkedIn developer app with the **Community Management API** product
-  added (LinkedIn reviews the request; allow a few days);
-- a member who is an **ADMINISTRATOR** (or CONTENT_ADMIN) of the page to
-  authorise the app with the scopes `w_organization_social`,
-  `r_organization_social`, `rw_organization_admin`.
-
-Two ways to hand the token to the server:
-
-```
-# 1. Paste it. Simplest; the token lives ~60 days and is then replaced by hand.
-LINKEDIN_ACCESS_TOKEN=...
-LINKEDIN_ORG_ID=            # numeric page id or urn:li:organization:<id>; blank = resolve by vanity name
-
-# 2. OAuth from the HR portal. Set these three, then an HR or admin user
-#    clicks "Connect LinkedIn" inside the agent. The token is stored in the
-#    database (LinkedInConnection), never in a file.
-LINKEDIN_CLIENT_ID=
-LINKEDIN_CLIENT_SECRET=
-LINKEDIN_REDIRECT_URI=https://virtualinternships.entrepreneurshipnetwork.net/api/v2/linkedin/oauth/callback
-```
-
-`LINKEDIN_API_VERSION` (default `202609`) is the Marketing API version sent
-as the `Linkedin-Version` header. LinkedIn retires each version about a year
-after release; a 426 from the API means it is time to bump it.
-
-The status card at the top of the section says which of the three states the
-server is in — connected (with the token's expiry), dry run, or expiring —
-so nobody discovers a lapsed token from a failed post.
-
-## API
-
-All routes require a signed-in HR, coordinator, mentor, founder or admin.
-
-```
-GET  /api/v2/linkedin/status              connection, LLM provider, scheduler
-POST /api/v2/linkedin/chat                { message, session, pngBase64? } → the agent's turn
-GET  /api/v2/linkedin/posts?limit=20      history
-GET  /api/v2/linkedin/posts/:id           one post, with its poster SVG
-GET  /api/v2/linkedin/posts/:id/poster.svg
-POST /api/v2/linkedin/posts/:id/publish   { pngBase64? } — publishes the stored final text, never the draft
-POST /api/v2/linkedin/posts/:id/schedule  { when }
-DELETE /api/v2/linkedin/posts/:id         withdraw an unpublished post
-GET  /api/v2/linkedin/oauth/start         HR/admin only — begins the LinkedIn authorisation
-GET  /api/v2/linkedin/oauth/callback
-GET  /api/v2/linkedin/stats               page share statistics, when the token allows
-```
-
-The chat is stateless in the way the resume agent is: the server returns a
-`session` object and the browser sends it back with the next message. Posts
-themselves are persisted (`LinkedInPost`) so history, scheduling and the audit
-trail — who posted what, when, and what the guard changed — survive a reload.
-
-## Where the pieces live
-
-```
-routes/v2/linkedinAgent.js            the HTTP surface and the role guard
-services/v2/linkedin/agent.js         the conversation: intents, review reply, refusals
-services/v2/linkedin/contentGuard.js  the rules, each with an excerpt and a fix
-services/v2/linkedin/postComposer.js  the sub-editor: tidies lines, adds nothing
-services/v2/linkedin/llm.js           OpenAI / Gemini, JSON only, never logs a key
-services/v2/linkedin/posterStudio.js  the SVG posters
-services/v2/linkedin/linkedinClient.js the official API: images, posts, org lookup, OAuth
-services/v2/linkedin/scheduler.js     minute cron for scheduled posts; "tomorrow 10am" parsing
-models/LinkedInPost.js, models/LinkedInConnection.js
-public/linkedin-agent.js              the section, mounted by the four dashboards
-```
+`LINKEDIN_AUTOPILOT_DISABLED=1` stops the weekend job without stopping the
+scheduler; `LINKEDIN_SCHEDULER_DISABLED=1` stops the publisher. Neither cron
+starts under `NODE_ENV=test`.

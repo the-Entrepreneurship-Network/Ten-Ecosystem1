@@ -10952,15 +10952,18 @@ try {
      * unrelated features that happen to share this block, and one require()
      * that throws here used to unmount all of them at once.
      *
-     * The route decides who may use it (HR, coordinator, mentor, founder,
-     * admin — never students or investors). The scheduler that publishes
-     * queued posts is a cron; it is not started under test, where a timer
+     * The route decides who may read it (HR, coordinator, mentor, founder,
+     * admin — never students or investors), and it is read-only: the posts
+     * themselves are written by the autopilot, which queues one hiring post
+     * every Saturday and Sunday, and published by the scheduler a minute
+     * later. Both are crons and neither is started under test, where a timer
      * that outlives the suite keeps jest's process alive.
      */
     try {
         app.use('/api/v2/linkedin', require('./routes/v2/linkedinAgent'));
         if (process.env.NODE_ENV !== 'test') {
             require('./services/v2/linkedin/scheduler').start();
+            require('./services/v2/linkedin/autopilot').start();
         }
         console.log('[V2] LinkedIn agent mounted at /api/v2/linkedin');
     } catch (e) {

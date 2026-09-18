@@ -29,6 +29,7 @@ const mongoose = require('mongoose');
 const KINDS = ['opening', 'placement', 'leadgen', 'general'];
 const STATUSES = ['draft', 'ready', 'scheduled', 'publishing', 'published', 'failed', 'rejected'];
 const VERDICTS = ['ok', 'revise', 'block'];
+const SOURCES = ['agent', 'autopilot'];
 
 const issueSchema = new mongoose.Schema({
   code: { type: String, default: '' },
@@ -65,6 +66,22 @@ const linkedInPostSchema = new mongoose.Schema({
   scheduledFor: { type: Date },
   publishedAt: { type: Date },
 
+  /* Who queued it. 'autopilot' is the unattended weekend job; 'agent' is the
+     older path where a staff member typed the text themselves. The stats view
+     shows both, because a page's posting history does not stop being history
+     when the way it was written changed. */
+  source: { type: String, enum: SOURCES, default: 'agent' },
+
+  /* Set only by the autopilot: the IST calendar day of the slot this post
+     fills, as 'weekend:YYYY-MM-DD'. The index below is unique and sparse,
+     which is the whole mechanism that stops several PM2 workers from queueing
+     the same Saturday several times — the second insert loses on a duplicate
+     key rather than on a race the code has to win. */
+  slot: { type: String },
+
+  /* The domain the autopilot picked for this slot, for the history list. */
+  domain: { type: String, default: '' },
+
   linkedin: {
     postUrn: { type: String, default: '' },
     imageUrn: { type: String, default: '' },
@@ -89,9 +106,13 @@ const linkedInPostSchema = new mongoose.Schema({
 /* The scheduler's query and the history list, respectively. */
 linkedInPostSchema.index({ status: 1, scheduledFor: 1 });
 linkedInPostSchema.index({ createdAt: -1 });
+/* Sparse, so the thousands of rows with no slot do not collide with each
+   other on a null key; unique, so the autopilot's second worker cannot. */
+linkedInPostSchema.index({ slot: 1 }, { unique: true, sparse: true });
 
 const LinkedInPost = mongoose.model('LinkedInPost', linkedInPostSchema);
 LinkedInPost.KINDS = KINDS;
 LinkedInPost.STATUSES = STATUSES;
 LinkedInPost.VERDICTS = VERDICTS;
+LinkedInPost.SOURCES = SOURCES;
 module.exports = LinkedInPost;

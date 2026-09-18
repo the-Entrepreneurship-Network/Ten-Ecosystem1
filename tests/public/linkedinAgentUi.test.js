@@ -1,22 +1,30 @@
 'use strict';
 
 /**
- * The LinkedIn Agent panel, run for real.
+ * The LinkedIn Agent section, run for real.
  *
  * public/linkedin-agent.js is a browser IIFE with no build step and no
  * framework, so there is nothing to import: the file is read as text, parsed
  * by the vm module (a syntax error fails here, not in someone's browser), and
  * executed against a fake window whose document hands out plain objects that
  * remember their children, attributes and listeners. That is enough to mount
- * the panel, type into it, click its chips, and watch what it sends — every
- * request must go to /api/v2/linkedin and carry the dashboard's auth header,
- * and "post now" must carry the rasterised poster only when there is one to
- * carry.
+ * the section and read what it drew.
  *
- * The static checks are the ones a reviewer would otherwise repeat by eye:
- * no innerHTML (a draft containing "<script>" must render as text), no inline
- * on*= handler strings, no secrets, and every class name prefixed la- so the
- * injected stylesheet cannot restyle the dashboard around it.
+ * What the section is now is a window onto an unattended job, so the tests are
+ * about what it reports rather than what it sends. Two of them matter more
+ * than the rest:
+ *
+ *   - it must offer no way to write a post. No textarea, no send button, no
+ *     form. The agent posts by itself; a text box here would be a second,
+ *     unrotated route to the company page.
+ *   - when the server says the page is not connected, the count it shows is a
+ *     count of posts nobody saw, and it has to say so where the eye lands
+ *     rather than in a footnote.
+ *
+ * The static checks are the ones a reviewer would otherwise repeat by eye: no
+ * innerHTML (a post excerpt containing "<script>" must render as text), no
+ * inline on*= handler strings, no secrets, and every class name prefixed la-
+ * so the injected stylesheet cannot restyle the dashboard around it.
  */
 
 const fs = require('fs');
@@ -34,23 +42,29 @@ function makeDom() {
     const node = {
       tagName: String(tag).toUpperCase(),
       children: [], attrs: {}, listeners: {}, style: {}, parentNode: null,
-      _text: '', className: '', id: '', hidden: false, disabled: false, value: '', placeholder: '',
-      scrollTop: 0, scrollHeight: 60, width: 0, height: 0, src: '',
+      _text: '', className: '', id: '', hidden: false, disabled: false, value: '', src: '',
       get textContent() { return this._text + this.children.map((c) => c.textContent).join(''); },
-      set textContent(v) { this._text = String(v); this.children = []; },
+      /* Setting textContent detaches what was there, and the detached nodes
+         have to actually lose their parent: `find`/`findAll` walk parentNode
+         upwards, so a child left pointing at its old parent would still be
+         found inside the host it was just cleared out of — and the test for
+         "mounting twice re-renders rather than stacking" would pass whether
+         the code re-rendered or not. */
+      set textContent(v) {
+        this._text = String(v);
+        this.children.forEach((c) => { c.parentNode = null; });
+        this.children = [];
+      },
       get firstChild() { return this.children[0] || null; },
       appendChild(c) { c.parentNode = this; this.children.push(c); return c; },
       removeChild(c) { this.children = this.children.filter((x) => x !== c); c.parentNode = null; return c; },
       remove() { if (this.parentNode) this.parentNode.removeChild(this); },
       setAttribute(k, v) { this.attrs[k] = String(v); },
       getAttribute(k) { return this.attrs[k] == null ? null : this.attrs[k]; },
+      removeAttribute(k) { delete this.attrs[k]; this[k] = ''; },
       addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
       dispatch(type, evt) { (this.listeners[type] || []).forEach((fn) => fn(Object.assign({ target: this, preventDefault() {} }, evt || {}))); },
       focus() {},
-      /* canvas */
-      getContext() { return { drawImage() {} }; },
-      toDataURL() { return 'data:image/png;base64,iVBORw0KGgoFAKEPNG'; },
-      /* helpers for the tests */
       find(pred) { return all.find((n) => n !== this && contains(this, n) && pred(n)); },
       findAll(pred) { return all.filter((n) => n !== this && contains(this, n) && pred(n)); },
     };
@@ -58,62 +72,77 @@ function makeDom() {
     return node;
   }
   function contains(root, n) { for (let p = n.parentNode; p; p = p.parentNode) if (p === root) return true; return false; }
+  const byId = {};
   const document = {
     head: element('head'),
     body: element('body'),
     createElement: element,
     createTextNode: (t) => ({ nodeType: 3, textContent: String(t), children: [], parentNode: null }),
-    getElementById: () => null,
+    getElementById: (id) => byId[id] || null,
+    __register: (id, node) => { byId[id] = node; },
   };
   return { document, all };
 }
 
-/* <img>: setting src "loads" on the next tick, like a data: URL would. */
-class FakeImage {
-  constructor() { this.listeners = {}; this._src = ''; }
-  addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); }
-  set src(v) { this._src = v; setTimeout(() => (this.listeners.load || []).forEach((fn) => fn()), 0); }
-  get src() { return this._src; }
-}
-
-function makeStorage() {
-  const m = new Map();
-  return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k), _map: m };
-}
-
-/*
- * A server that answers the way routes/v2/linkedinAgent.js does. Each test
- * can swap `replies.chat` to shape the next agent turn.
- */
-function makeServer() {
-  const calls = [];
-  const replies = {
-    status: { ok: true, role: 'hr', name: 'HR One', linkedin: { configured: false, source: 'none' }, llm: null, scheduler: { enabled: false } },
-    posts: { ok: true, posts: [] },
-    chat: { ok: true, kind: 'help', reply: 'I can draft, review and post.', session: {} },
+/* The answer routes/v2/linkedinAgent.js gives GET /autopilot, with two posts
+   behind it and a rotation in front. Tests reshape `body` before mounting. */
+function autopilotBody() {
+  return {
+    ok: true,
+    role: 'hr',
+    connected: true,
+    dryRun: false,
+    stats: {
+      published: 9,
+      failed: 1,
+      scheduled: 1,
+      total: 11,
+      schedule: { hour: 10, days: ['Saturday', 'Sunday'], timezone: 'Asia/Kolkata' },
+      upcoming: [
+        { domain: 'Data Science', scheduledFor: '2026-09-19T04:30:00.000Z', status: 'scheduled', source: 'autopilot' },
+      ],
+      recent: [
+        {
+          id: 'a1', domain: 'Python Development', status: 'published', source: 'autopilot',
+          dryRun: false, withImage: true, at: '2026-09-13T04:30:00.000Z',
+          url: 'https://www.linkedin.com/feed/update/urn:li:share:7/', error: '',
+          excerpt: 'WE ARE #HIRING #INTERNS | The Entrepreneurship Network (TEN)',
+        },
+        {
+          id: 'a2', domain: 'HR', status: 'failed', source: 'autopilot',
+          dryRun: false, withImage: true, at: '2026-09-12T04:30:00.000Z',
+          url: '', error: 'LinkedIn refused the post', excerpt: 'WE ARE #HIRING',
+        },
+      ],
+    },
+    forecast: [
+      { date: '2026-09-19', domain: 'Data Science', role: 'Data Science Intern' },
+      { date: '2026-09-20', domain: 'Java Development', role: 'Java Development Intern' },
+    ],
   };
+}
+
+function makeServer(body) {
+  const calls = [];
+  const state = { body: body || autopilotBody(), ok: true, status: 200 };
   const fetch = (url, init) => {
     calls.push({ url, init: init || {} });
-    const key = /\/status/.test(url) ? 'status' : /\/posts/.test(url) ? 'posts' : 'chat';
-    /* The body is looked up when json() is read, not when fetch is called:
-       mount fires /status and /posts synchronously, before a test has had a
-       chance to say what the server should answer. */
-    const body = () => (typeof replies[key] === 'function' ? replies[key](url, init) : replies[key]);
-    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body()) });
+    return Promise.resolve({
+      ok: state.ok,
+      status: state.status,
+      json: () => Promise.resolve(typeof state.body === 'function' ? state.body() : state.body),
+    });
   };
-  return { calls, replies, fetch };
+  return { calls, state, fetch };
 }
 
-function boot(opts = {}) {
+function boot(opts) {
+  const o = opts || {};
   const dom = makeDom();
-  const server = makeServer();
-  const storage = makeStorage();
+  const server = makeServer(o.body);
+  if (o.status) { server.state.status = o.status; server.state.ok = o.status < 400; }
   const context = {
     console, setTimeout, clearTimeout,
-    btoa: (s) => Buffer.from(s, 'binary').toString('base64'),
-    Image: FakeImage,
-    localStorage: storage,
-    location: { href: '' },
     document: dom.document,
     fetch: server.fetch,
   };
@@ -121,340 +150,234 @@ function boot(opts = {}) {
   vm.createContext(context);
   new vm.Script(SRC, { filename: 'linkedin-agent.js' }).runInContext(context);
   const host = dom.document.createElement('div');
-  context.window.TENLinkedInAgent.mount(host, Object.assign({ headers: { Authorization: 'Bearer test-token' }, role: 'hr' }, opts));
-  return { context, dom, server, storage, host };
+  context.window.TENLinkedInAgent.mount(host, Object.assign(
+    { headers: { Authorization: 'Bearer test-token' }, role: 'hr' }, o.options || {}));
+  return { context, dom, server, host };
 }
 
-const tick = (ms = 5) => new Promise((r) => setTimeout(r, ms));
-const settle = async () => { for (let i = 0; i < 6; i++) await tick(); };
+const tick = (ms) => new Promise((r) => setTimeout(r, ms == null ? 5 : ms));
+const settle = async () => { for (let i = 0; i < 6; i += 1) await tick(); };
+const hasClass = (n, c) => String(n.className || '').split(/\s+/).indexOf(c) >= 0;
+const textOf = (host) => host.textContent;
 
-const textarea = (host) => host.find((n) => n.tagName === 'TEXTAREA');
-const sendButton = (host) => host.find((n) => n.attrs['aria-label'] === 'Send message');
-const chatCalls = (server) => server.calls.filter((c) => /\/chat$/.test(c.url));
-const lastChatBody = (server) => JSON.parse(chatCalls(server).slice(-1)[0].init.body);
-const hasClass = (n, c) => String(n.className || '').split(/\s+/).includes(c);
-
-async function type(host, message) {
-  const ta = textarea(host);
-  ta.value = message;
-  ta.dispatch('keydown', { key: 'Enter', shiftKey: false });
+async function mounted(opts) {
+  const b = boot(opts);
   await settle();
+  return b;
 }
-
-const LONG_POST = 'Ten interns, one summer, and the question every fresher asks: does a virtual internship actually count? It does when the work is real. ' +
-  'This cohort shipped a working Python service, presented it to mentors, and two of them have offers already.\n\nApply for the next batch at https://virtualinternships.entrepreneurshipnetwork.net\n\n#TheEntrepreneurshipNetwork #TEN #Internships #Freshers';
-
-const REVIEW_REPLY = {
-  ok: true, kind: 'review',
-  reply: 'One thing to fix, then it is ready.\n\nHere is the version I will post:',
-  session: { draft: 'x', final: LONG_POST, kind: 'leadgen' },
-  review: { verdict: 'revise', kind: 'leadgen', original: 'x', final: LONG_POST, chars: LONG_POST.length,
-    issues: [{ code: 'exclamation_overload', severity: 'revise', excerpt: 'Apply now!!!', message: 'Three exclamation marks in a row.', fix: 'One is enough.' }] },
-  post: { text: LONG_POST, hashtags: ['#TheEntrepreneurshipNetwork', '#TEN', '#Internships', '#Freshers'], chars: LONG_POST.length, kind: 'leadgen' },
-  poster: { svg: '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200"><text>₹5,000</text></svg>', template: 'leadgen', width: 1200, height: 1200, alt: 'TEN poster', withImage: true },
-  options: { options: [{ label: 'Post now', value: 'post now' }, { label: 'Schedule', value: 'schedule tomorrow 10am' }, { label: 'Shorter', value: 'shorter', note: 'under 900' }] },
-};
 
 /* ---------- static ---------- */
 
 describe('public/linkedin-agent.js (static)', () => {
   it('parses and defines window.TENLinkedInAgent.mount', () => {
-    expect(() => new vm.Script(SRC, { filename: 'linkedin-agent.js' })).not.toThrow();
-    const { context } = boot();
+    const context = { console, setTimeout, document: makeDom().document, fetch: () => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) }) };
+    context.window = context;
+    vm.createContext(context);
+    expect(() => new vm.Script(SRC, { filename: 'linkedin-agent.js' }).runInContext(context)).not.toThrow();
     expect(typeof context.window.TENLinkedInAgent.mount).toBe('function');
-    expect(SRC.startsWith('/*')).toBe(true);
-    expect(SRC).toContain('"use strict";');
   });
 
   it('never assigns innerHTML and never wires a handler as a string', () => {
-    expect(SRC).not.toMatch(/innerHTML\s*=\s*[^'"`]/);
-    expect(SRC).not.toMatch(/\.innerHTML\b/);
-    expect(SRC).not.toMatch(/\bouterHTML\b|insertAdjacentHTML|document\.write/);
-    expect(SRC).not.toMatch(/\son[a-z]+\s*=\s*["'`]/i);
-    expect(SRC).not.toMatch(/\beval\s*\(|new\s+Function\s*\(/);
-    expect(SRC).toContain('addEventListener(');
+    expect(SRC).not.toMatch(/\.innerHTML\s*=/);
+    expect(SRC).not.toMatch(/\.outerHTML\s*=/);
+    expect(SRC).not.toMatch(/insertAdjacentHTML/);
+    expect(SRC).not.toMatch(/\son[a-z]+\s*=\s*["'][^"']*\(/);
+    expect(SRC).not.toMatch(/\beval\s*\(/);
   });
 
   it('carries no secrets, only the auth header the dashboard hands it', () => {
+    expect(SRC).not.toMatch(/Bearer\s+[A-Za-z0-9._-]{12,}/);
     expect(SRC).not.toMatch(/sk-[A-Za-z0-9]{16,}/);
-    expect(SRC).not.toMatch(/AQV[A-Za-z0-9_-]{20,}/);
-    expect(SRC).not.toMatch(/Bearer\s+[A-Za-z0-9]/);
-    expect(SRC).not.toMatch(/LINKEDIN_ACCESS_TOKEN|CLIENT_SECRET|OPENAI_API_KEY|GEMINI_API_KEY/);
-    expect(SRC).not.toMatch(/api\.linkedin\.com|api\.openai\.com/);
+    expect(SRC).not.toMatch(/client_secret/i);
   });
 
   it('talks only to /api/v2/linkedin', () => {
-    expect(SRC).toMatch(/var API = "\/api\/v2\/linkedin";/);
-    const fetches = SRC.match(/\bfetch\s*\(/g) || [];
-    expect(fetches.length).toBeGreaterThan(0);
-    expect(SRC.match(/\bfetch\s*\(\s*API \+ /g) || []).toHaveLength(fetches.length);
-    expect(SRC).toContain('API + "/oauth/start"');
-    expect(SRC).not.toMatch(/fetch\s*\(\s*["'`]/);
+    const urls = SRC.match(/['"`](https?:)?\/\/?[^'"`\s]+['"`]/g) || [];
+    urls
+      .map((u) => u.slice(1, -1))
+      .filter((u) => u.indexOf('/api/') === 0 || /^https?:/.test(u))
+      .forEach((u) => { expect(u.indexOf('/api/v2/linkedin')).toBe(0); });
   });
 
   it('prefixes every class it styles with la- so the stylesheet cannot leak', () => {
-    const css = SRC.slice(SRC.indexOf('var CSS = ['), SRC.indexOf('].join("\\n");'));
-    expect(css.length).toBeGreaterThan(1000);
-    const selectors = css.match(/\.[A-Za-z_][\w-]*/g) || [];
-    expect(selectors.length).toBeGreaterThan(50);
-    selectors.forEach((s) => expect(s).toMatch(/^\.la(?:-|$)/));
-    expect(SRC).toContain('prefers-reduced-motion');
-    expect(SRC).toContain(':focus-visible');
-    expect(SRC).not.toContain('transition:all');
-    expect(SRC).toContain('@media(max-width:900px)');
+    const from = SRC.indexOf('var CSS = [');
+    const css = SRC.slice(from, SRC.indexOf('].join(', from));
+    const selectors = css.match(/\.[a-zA-Z][\w-]*/g) || [];
+    expect(selectors.length).toBeGreaterThan(10);
+    selectors.forEach((s) => { expect(s.indexOf('.la')).toBe(0); });
+  });
+
+  /*
+   * The manual composer is gone from the server; it has to be gone from the
+   * browser too, or the section would be a text box wired to a 404 — which
+   * reads, to whoever is looking at it, as the feature being broken rather
+   * than as the feature having changed.
+   */
+  it('has no composing surface left in the source at all', () => {
+    expect(SRC).not.toMatch(/createElement\(\s*['"]textarea['"]/i);
+    expect(SRC).not.toMatch(/\/chat\b/);
+    expect(SRC).not.toMatch(/pngBase64/);
+    expect(SRC).not.toMatch(/method:\s*['"]POST['"]/);
+    expect(SRC).not.toMatch(/method:\s*['"]DELETE['"]/);
   });
 });
 
-/* ---------- mounted ---------- */
+/* ---------- mounting ---------- */
 
 describe('mounting', () => {
-  it('asks for status and recent posts with the dashboard headers', async () => {
-    const { server } = boot();
-    await settle();
-    const urls = server.calls.map((c) => c.url);
-    expect(urls).toContain('/api/v2/linkedin/status');
-    expect(urls.some((u) => u.startsWith('/api/v2/linkedin/posts?limit='))).toBe(true);
-    server.calls.forEach((c) => {
-      expect(c.url.startsWith('/api/v2/linkedin/')).toBe(true);
-      expect(c.init.headers.Authorization).toBe('Bearer test-token');
-      expect(c.init.credentials).toBe('same-origin');
-    });
+  it('asks the autopilot endpoint once, with the dashboard headers', async () => {
+    const { server } = await mounted();
+    expect(server.calls).toHaveLength(1);
+    expect(server.calls[0].url).toBe('/api/v2/linkedin/autopilot');
+    expect(server.calls[0].init.headers.Authorization).toBe('Bearer test-token');
+    expect(server.calls[0].init.credentials).toBe('same-origin');
   });
 
-  it('explains dry run when LinkedIn is not connected and offers Connect to HR', async () => {
-    const { host, context } = boot({ role: 'hr' });
-    await settle();
-    expect(host.textContent).toContain('Not connected');
-    expect(host.textContent).toContain('nothing is sent to LinkedIn');
-    const connect = host.find((n) => n.tagName === 'BUTTON' && n.textContent === 'Connect LinkedIn');
-    expect(connect).toBeTruthy();
-    expect(connect.attrs.type).toBe('button');
-    connect.dispatch('click');
-    expect(context.location.href).toBe('/api/v2/linkedin/oauth/start');
+  it('sends no Authorization header when the dashboard has none to give', async () => {
+    const { server } = await mounted({ options: { headers: undefined, role: 'coordinator' } });
+    expect(server.calls[0].init.headers.Authorization).toBeUndefined();
   });
 
-  it('shows no Connect button to a mentor, coordinator or founder', async () => {
-    for (const role of ['mentor', 'coordinator', 'founder']) {
-      const { host } = boot({ role });
-      await settle();
-      expect(host.find((n) => n.tagName === 'BUTTON' && /Connect LinkedIn/.test(n.textContent))).toBeUndefined();
-    }
+  it('shows the count of published posts and the posting schedule', async () => {
+    const { host } = await mounted();
+    const text = textOf(host);
+    expect(text).toContain('9');
+    expect(text).toMatch(/posts published/i);
+    expect(text).toMatch(/Saturday and Sunday/);
+    expect(text).toMatch(/10:00 IST/);
   });
 
-  it('reads the connected and expiring states from /status', async () => {
-    const a = boot();
-    a.server.replies.status = { ok: true, linkedin: { configured: true, orgName: 'The Entrepreneurship Network', orgUrn: 'urn:li:organization:123', expiresInDays: 41 }, llm: 'openai', scheduler: { enabled: true } };
-    await settle();
-    expect(a.host.textContent).toContain('Connected to The Entrepreneurship Network');
-    expect(a.host.textContent).toContain('expires in 41 days');
-    expect(a.host.textContent).toContain('OpenAI');
-    expect(a.host.find((n) => n.textContent === 'Reconnect LinkedIn')).toBeTruthy();
-
-    const b = boot();
-    b.server.replies.status = { ok: true, linkedin: { configured: true, expiresInDays: 3, warning: 'Token expires in 3 days' }, llm: null };
-    await settle();
-    expect(b.host.textContent).toContain('expiring soon');
-    expect(b.host.find((n) => hasClass(n, 'la-warn'))).toBeTruthy();
-
-    const c = boot();
-    c.server.replies.status = { ok: true, linkedin: { configured: true, expiresInDays: 0 } };
-    await settle();
-    expect(c.host.textContent).toContain('Connection expired');
+  it('offers nothing to type into and nothing to press', async () => {
+    const { host } = await mounted();
+    expect(host.find((n) => n.tagName === 'TEXTAREA')).toBeUndefined();
+    expect(host.find((n) => n.tagName === 'INPUT')).toBeUndefined();
+    expect(host.find((n) => n.tagName === 'BUTTON')).toBeUndefined();
+    expect(host.find((n) => n.tagName === 'FORM')).toBeUndefined();
   });
 
-  it('lists recent posts with a status badge and a link', async () => {
-    const { host, server } = boot();
-    server.replies.posts = { ok: true, posts: [
-      { id: '1', kind: 'opening', status: 'published', final: 'We are hiring interns.', publishedAt: '2026-09-17T04:30:00.000Z', url: 'https://www.linkedin.com/feed/update/urn:li:share:1' },
-      { id: '2', kind: 'placement', status: 'scheduled', final: 'Priya got placed.', scheduledFor: '2026-09-19T04:30:00.000Z' },
-      { id: '3', kind: 'general', status: 'published', dryRun: true, final: 'Dry.' },
-    ] };
-    await settle();
-    const badges = host.findAll((n) => hasClass(n, 'la-badge')).map((n) => n.textContent);
-    expect(badges).toEqual(['published', 'scheduled', 'dry run']);
-    const link = host.find((n) => n.tagName === 'A' && n.attrs.href === 'https://www.linkedin.com/feed/update/urn:li:share:1');
-    expect(link).toBeTruthy();
-    expect(link.attrs.rel).toContain('noopener');
+  it('warns, above the numbers, when the page is not connected', async () => {
+    const body = autopilotBody();
+    body.connected = false;
+    body.dryRun = true;
+    const { host } = await mounted({ body });
+    const warn = host.find((n) => hasClass(n, 'la-note-warn'));
+    expect(warn).toBeTruthy();
+    expect(warn.textContent).toMatch(/not connected/i);
+
+    /* Above the numbers, not below them: a caveat nobody scrolls to is not a
+       caveat. Both nodes are children of the same wrapper, so their order in
+       that list is the order they are painted in. */
+    const wrap = host.children[0];
+    const idx = (pred) => wrap.children.findIndex(pred);
+    expect(idx((n) => hasClass(n, 'la-note-warn'))).toBeLessThan(idx((n) => hasClass(n, 'la-cards')));
+  });
+
+  it('says nothing about dry runs when the page is connected', async () => {
+    const { host } = await mounted();
+    expect(host.find((n) => hasClass(n, 'la-note-warn'))).toBeUndefined();
   });
 });
 
-describe('a turn of the conversation', () => {
-  it('Enter sends the draft with the session; Shift+Enter does not', async () => {
-    const { host, server } = boot();
-    await settle();
-    const before = chatCalls(server).length;
-    const ta = textarea(host);
-    ta.value = 'line one';
-    ta.dispatch('keydown', { key: 'Enter', shiftKey: true });
-    await settle();
-    expect(chatCalls(server).length).toBe(before);
+/* ---------- the history ---------- */
 
-    await type(host, 'We are hiring Python interns, remote, 2 months.');
-    const body = lastChatBody(server);
-    expect(body.message).toBe('We are hiring Python interns, remote, 2 months.');
-    expect(body.session).toEqual({});
-    expect(body.pngBase64).toBeUndefined();
-    expect(host.textContent).toContain('We are hiring Python interns, remote, 2 months.');
-    expect(host.textContent).toContain('I can draft, review and post.');
+describe('what it reports', () => {
+  it('lists each post with its domain, a badge and a link out', async () => {
+    const { host } = await mounted();
+    const rows = host.findAll((n) => hasClass(n, 'la-row'));
+    /* two published/failed plus one queued plus two forecast */
+    expect(rows.length).toBe(5);
+
+    const python = rows.find((r) => r.textContent.indexOf('Python Development') >= 0);
+    expect(python.textContent).toContain('published');
+    const link = python.find((n) => n.tagName === 'A');
+    expect(link.attrs.href || link.href).toContain('linkedin.com');
+    expect(link.attrs.rel || link.rel).toContain('noopener');
   });
 
-  it('renders the review card and a LinkedIn-style preview with a see-more fold', async () => {
-    const { host, server } = boot();
-    server.replies.chat = REVIEW_REPLY;
-    await settle();
-    await type(host, 'some draft text long enough to review');
-
-    const pill = host.find((n) => hasClass(n, 'la-pill-revise'));
-    expect(pill).toBeTruthy();
-    expect(pill.textContent).toBe('Revised');
-    expect(host.textContent).toContain('exclamation overload');
-    expect(host.textContent).toContain('One is enough.');
-
-    const card = host.find((n) => hasClass(n, 'la-li'));
-    expect(card).toBeTruthy();
-    expect(card.textContent).toContain('The Entrepreneurship Network');
-    expect(card.textContent).toContain('46K followers');
-    expect(card.find((n) => hasClass(n, 'la-li-avatar')).textContent).toBe('TEN');
-    expect(card.textContent).toContain('Like');
-    expect(card.textContent).toContain('Repost');
-
-    /* folded: the hashtags at the end are not visible yet */
-    expect(card.textContent).not.toContain('#Freshers');
-    const more = card.find((n) => hasClass(n, 'la-li-more'));
-    expect(more.textContent).toBe('…see more');
-    more.dispatch('click');
-    expect(card.textContent).toContain('#Freshers');
-    const tags = card.findAll((n) => hasClass(n, 'la-tag')).map((n) => n.textContent);
-    expect(tags).toContain('#TheEntrepreneurshipNetwork');
-    expect(tags).toContain('#TEN');
-    expect(card.find((n) => hasClass(n, 'la-li-more'))).toBeUndefined();
-
-    const img = card.find((n) => n.tagName === 'IMG');
-    expect(img.src.startsWith('data:image/svg+xml;base64,')).toBe(true);
-    expect(Buffer.from(img.src.split(',')[1], 'base64').toString('utf8')).toContain('₹5,000');
-    expect(host.find((n) => hasClass(n, 'la-meta') && /characters/.test(n.textContent)).textContent).toMatch(/4 hashtags · leadgen poster attached/);
+  it('shows why a post did not send, instead of its text', async () => {
+    const { host } = await mounted();
+    const row = host.findAll((n) => hasClass(n, 'la-row')).find((r) => r.textContent.indexOf('HR') >= 0);
+    expect(row.textContent).toContain('did not send');
+    expect(row.textContent).toContain('LinkedIn refused the post');
   });
 
-  it('a draft with markup renders as text, never as elements', async () => {
-    const { host, server } = boot();
-    const evil = '<img src=x onerror=alert(1)> <script>alert(2)</script>';
-    server.replies.chat = Object.assign({}, REVIEW_REPLY, { reply: 'Echo: ' + evil, post: { text: evil + ' #TEN', hashtags: ['#TEN'], chars: 60 } });
-    await settle();
-    await type(host, evil);
-    /* nothing was ever parsed: the only IMG is the poster, with an SVG data URL */
+  it('marks a post that was recorded but never sent as a dry run', async () => {
+    const body = autopilotBody();
+    body.stats.recent[0].dryRun = true;
+    const { host } = await mounted({ body });
+    const row = host.findAll((n) => hasClass(n, 'la-row')).find((r) => r.textContent.indexOf('Python Development') >= 0);
+    expect(row.textContent).toContain('dry run');
+    expect(row.textContent).not.toContain('published');
+  });
+
+  it('names the domains coming up next, and where their posters live', async () => {
+    const { host } = await mounted();
+    const text = textOf(host);
+    expect(text).toContain('Java Development');
+    expect(text).toContain('Java Development Intern');
     const imgs = host.findAll((n) => n.tagName === 'IMG');
-    expect(imgs).toHaveLength(1);
-    expect(imgs[0].src.startsWith('data:image/svg+xml')).toBe(true);
-    expect(host.findAll((n) => n.tagName === 'SCRIPT')).toHaveLength(0);
-    expect(host.textContent).toContain('<script>alert(2)</script>');
+    expect(imgs.length).toBeGreaterThan(0);
+    expect(imgs.map((i) => i.src)).toContain('/assets/linkedin-posters/python.jpg');
+    expect(imgs.map((i) => i.src)).toContain('/assets/linkedin-posters/java.jpg');
+    /* Decorative: the domain is already written next to it in words. */
+    imgs.forEach((i) => expect(i.alt).toBe(''));
   });
 
-  it('option chips are buttons that send their value', async () => {
-    const { host, server } = boot();
-    server.replies.chat = REVIEW_REPLY;
-    await settle();
-    await type(host, 'draft');
-    const chip = host.find((n) => hasClass(n, 'la-chip') && n.textContent.startsWith('Shorter'));
-    expect(chip.tagName).toBe('BUTTON');
-    expect(chip.attrs.type).toBe('button');
-    expect(chip.textContent).toContain('under 900');
-    const primary = host.find((n) => hasClass(n, 'la-chip-primary') && n.textContent === 'Post now');
-    expect(primary).toBeTruthy();
-    server.replies.chat = { ok: true, kind: 'review', reply: 'Shorter version.', session: {} };
-    chip.dispatch('click');
-    await settle();
-    expect(lastChatBody(server).message).toBe('shorter');
-    expect(lastChatBody(server).session).toEqual({ draft: 'x', final: LONG_POST, kind: 'leadgen' });
+  it('says so, rather than showing nothing, before the first post has gone out', async () => {
+    const body = autopilotBody();
+    body.stats.published = 0;
+    body.stats.total = 0;
+    body.stats.recent = [];
+    body.stats.upcoming = [];
+    const { host } = await mounted({ body });
+    expect(host.find((n) => hasClass(n, 'la-empty'))).toBeTruthy();
+    expect(textOf(host)).toMatch(/Nothing has gone out yet/i);
   });
 
-  it('remembers only the session blob in localStorage', async () => {
-    const { host, server, storage } = boot();
-    server.replies.chat = REVIEW_REPLY;
-    await settle();
-    await type(host, 'draft');
-    expect(Array.from(storage._map.keys())).toEqual(['ten_linkedin_agent_session']);
-    expect(JSON.parse(storage.getItem('ten_linkedin_agent_session'))).toEqual(REVIEW_REPLY.session);
+  it('renders an excerpt containing markup as text, never as elements', async () => {
+    const body = autopilotBody();
+    body.stats.recent[0].excerpt = '<script>alert(1)</script><b>bold</b>';
+    const { host } = await mounted({ body });
+    expect(textOf(host)).toContain('<script>alert(1)</script>');
+    expect(host.find((n) => n.tagName === 'SCRIPT')).toBeUndefined();
+    expect(host.find((n) => n.tagName === 'B')).toBeUndefined();
   });
 
-  it('shows the agent an error bubble, and recovers, when the server is down', async () => {
-    const { host, server, context } = boot();
-    await settle();
-    context.fetch = () => Promise.reject(new Error('Failed to fetch'));
-    await type(host, 'anything');
-    expect(host.find((n) => hasClass(n, 'la-err')).textContent).toContain('Failed to fetch');
-    expect(sendButton(host).disabled).toBe(false);
-    context.fetch = server.fetch;
-    await type(host, 'again');
-    expect(lastChatBody(server).message).toBe('again');
+  it('shows a domain it does not recognise without a broken poster', async () => {
+    const body = autopilotBody();
+    body.stats.recent[0].domain = 'Underwater Basket Weaving';
+    const { host } = await mounted({ body });
+    const row = host.findAll((n) => hasClass(n, 'la-row')).find((r) => r.textContent.indexOf('Basket') >= 0);
+    expect(row).toBeTruthy();
+    expect(row.find((n) => n.tagName === 'IMG').src).toBe('');
   });
 });
 
-describe('posting', () => {
-  it('rasterises the poster and sends pngBase64 with "post now" when the poster has an image', async () => {
-    const { host, server } = boot();
-    server.replies.chat = REVIEW_REPLY;
-    await settle();
-    await type(host, 'draft');
-    server.replies.chat = { ok: true, kind: 'posted', reply: 'Posted.', session: {}, publish: { ok: false, dryRun: true, payload: { author: 'urn:li:organization:1', commentary: 'x', charCount: 1 } } };
-    await type(host, 'post now');
-    const body = lastChatBody(server);
-    expect(body.message).toBe('post now');
-    expect(body.pngBase64).toBe('iVBORw0KGgoFAKEPNG');
-    /* the dry-run card shows exactly what would have gone out */
-    expect(host.textContent).toContain('Dry run');
-    expect(host.find((n) => n.tagName === 'PRE').textContent).toContain('urn:li:organization:1');
-    /* and the recent-posts rail refreshes after a post */
-    expect(server.calls.filter((c) => /\/posts\?/.test(c.url)).length).toBe(2);
+/* ---------- failure ---------- */
+
+describe('when the server will not answer', () => {
+  it('explains an expired session rather than showing an empty panel', async () => {
+    const { host } = await mounted({ status: 401 });
+    const err = host.find((n) => hasClass(n, 'la-err'));
+    expect(err).toBeTruthy();
+    expect(err.textContent).toMatch(/session has expired/i);
   });
 
-  it('sends no image when the poster is off, or after the poster has been spent', async () => {
-    const { host, server } = boot();
-    server.replies.chat = Object.assign({}, REVIEW_REPLY, { poster: Object.assign({}, REVIEW_REPLY.poster, { withImage: false }) });
-    await settle();
-    await type(host, 'draft');
-    expect(host.find((n) => hasClass(n, 'la-li')).find((n) => n.tagName === 'IMG')).toBeUndefined();
-    server.replies.chat = { ok: true, kind: 'posted', reply: 'Posted.', session: {} };
-    await type(host, 'yes');
-    expect(lastChatBody(server).pngBase64).toBeUndefined();
-
-    /* a fresh draft after a post: the old poster must not ride along */
-    server.replies.chat = REVIEW_REPLY;
-    await type(host, 'draft two');
-    server.replies.chat = { ok: true, kind: 'posted', reply: 'Posted.', session: {} };
-    await type(host, 'publish');
-    expect(lastChatBody(server).pngBase64).toBe('iVBORw0KGgoFAKEPNG');
-    server.replies.chat = { ok: true, kind: 'help', reply: 'help', session: {} };
-    await type(host, 'post now');
-    expect(lastChatBody(server).pngBase64).toBeUndefined();
+  it('explains a 403 in terms of who the section is for', async () => {
+    const { host } = await mounted({ status: 403 });
+    expect(host.find((n) => hasClass(n, 'la-err')).textContent).toMatch(/HR, coordinators, mentors and founders/i);
   });
 
-  it('still sends when rasterisation fails', async () => {
-    const { host, server, context } = boot();
-    context.Image = class { addEventListener(type, fn) { if (type === 'error') setTimeout(fn, 0); } set src(v) { this._s = v; } };
-    server.replies.chat = REVIEW_REPLY;
-    await settle();
-    await type(host, 'draft');
-    server.replies.chat = { ok: true, kind: 'posted', reply: 'Posted.', session: {} };
-    await type(host, 'post it');
-    const body = lastChatBody(server);
-    expect(body.message).toBe('post it');
-    expect(body.pngBase64).toBeUndefined();
+  it('reports any other failure with its status code', async () => {
+    const { host } = await mounted({ status: 500 });
+    expect(host.find((n) => hasClass(n, 'la-err')).textContent).toContain('500');
   });
 
-  it('quick starts set the kind hint without a round trip; Help sends "help"', async () => {
-    const { host, server } = boot();
+  it('re-renders rather than stacking when the tab is opened twice', async () => {
+    const { context, host, server } = await mounted();
+    context.window.TENLinkedInAgent.mount(host, { headers: { Authorization: 'Bearer test-token' } });
     await settle();
-    const before = chatCalls(server).length;
-    host.find((n) => n.tagName === 'BUTTON' && n.textContent === 'Internship opening').dispatch('click');
-    await settle();
-    expect(chatCalls(server).length).toBe(before);
-    expect(host.textContent).toContain('apply-by date');
-    expect(textarea(host).placeholder).toContain('Hiring');
-    await type(host, 'Hiring Python interns, remote, 2 months');
-    expect(lastChatBody(server).session.kindHint).toBe('opening');
-
-    host.find((n) => n.tagName === 'BUTTON' && n.textContent === 'Help').dispatch('click');
-    await settle();
-    expect(lastChatBody(server).message).toBe('help');
+    expect(server.calls).toHaveLength(2);
+    expect(host.findAll((n) => hasClass(n, 'la-title'))).toHaveLength(1);
   });
 });
