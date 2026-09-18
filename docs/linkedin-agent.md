@@ -7,13 +7,16 @@ through the fourteen domains the site advertises, so each one comes round
 about every seven weeks.
 
 Nobody writes it. Nobody approves it. There is no text box anywhere in the
-portal that reaches this — the dashboards carry a **read-only** section that
-shows how many posts the agent has put out, which went out last, and which
-domain is up next.
+portal that reaches this — every portal carries a **read-only** section that
+shows the posts themselves: the poster and the full text of each one, newest
+first.
 
-The section appears in the HR portal, the coordinator dashboard, the mentor
-dashboard and Founder OS. Students, investors and contractors do not see it,
-and the API refuses them if they find the URL.
+The section is in **every portal**, in the slot the Attendance Report used to
+hold: the student dashboard, the HR portal, the coordinator dashboard, the
+mentor dashboard, Founder OS, the investor dashboard, the contractor dashboard
+and the admin portal. Everybody who signs in sees the same thing, because
+everything in it is already public on LinkedIn and there is nothing in it to
+operate. A request with no session is still refused.
 
 ## What goes out
 
@@ -75,9 +78,14 @@ fixed +05:30, because the server runs in UTC and India has no daylight saving.
 
 A server with no LinkedIn connection still queues, records and reports every
 weekend post — it builds the payload and simply never sends it. That is how a
-fresh deployment behaves and how the tests run. The dashboard says so at the
-top of the section, because otherwise the count reads as a count of posts the
-public saw.
+fresh deployment behaves and how the tests run.
+
+Those posts appear in the feed carrying a **"Not on LinkedIn yet"** badge
+rather than "Posted". Dropping them would leave a fresh deployment showing an
+empty section that reads as broken; counting them silently among the published
+ones would tell an intern the page said something it never said. HR and admin
+additionally get a line explaining that the page needs connecting, because
+they are the only roles that can do anything about it.
 
 ## Posters
 
@@ -100,17 +108,29 @@ else.
 
 ## The HTTP surface
 
-`/api/v2/linkedin`, all of it read-only, all of it HR / coordinator / mentor /
-founder / admin:
+`/api/v2/linkedin`, all of it read-only.
 
-| Route | What it answers |
-| --- | --- |
-| `GET /autopilot` | The counts, the recent posts, what is queued, the next six slots |
-| `GET /status` | Whether the page is connected and when the token expires |
-| `GET /posts`, `GET /posts/:id` | The post history |
-| `GET /posts/:id/poster.svg` | The poster for an older, agent-written post |
-| `GET /stats` | LinkedIn's own share statistics, when the token allows |
-| `GET /oauth/start`, `GET /oauth/callback` | Connecting the page — **HR and admin only** |
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `GET /feed` | **anyone signed in** | The published posts — poster, full text, date, link |
+| `GET /feed/:id/image` | **anyone signed in** | A stored poster, for posts not on one of the fourteen plates |
+| `GET /status` | staff | Whether the page is connected and when the token expires |
+| `GET /posts`, `GET /posts/:id` | staff | The history, failure states included |
+| `GET /posts/:id/poster.svg` | staff | The poster for an older, agent-written post |
+| `GET /stats` | staff | LinkedIn's own share statistics |
+| `GET /oauth/start`, `GET /oauth/callback` | HR and admin | Connecting the page |
+
+"Anyone signed in" is `requireRole(...ALL_ROLES)` — built from the constant in
+`config/roles.js` rather than a hand-written list, so a role added later is
+admitted instead of being silently locked out of a section every other role
+can see. "Staff" is HR, coordinator, mentor, founder and admin.
+
+`GET /feed` answers with the posts and nothing else. Failure counts, error
+strings, the queue, the rotation and the token's expiry are all real and all
+in the database; they are simply not that endpoint's business. Two connection
+fields are added for HR and admin, who are the only roles that can act on
+them. Posts that are queued or failed never appear — a queued post is
+tomorrow's announcement, and the feed must not be a way to read it today.
 
 There is no route that publishes, schedules, edits or deletes a post. That is
 asserted by a test, because a publish route left mounted "just in case" is a
@@ -119,7 +139,7 @@ no slot key.
 
 ## Connecting the page
 
-HR opens the LinkedIn Agent section and uses Connect. It needs
+HR visits `/api/v2/linkedin/oauth/start`. It needs
 `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` and `LINKEDIN_REDIRECT_URI`, the
 `w_organization_social` scope, and the signed-in person to be an
 ADMINISTRATOR or CONTENT_ADMIN of the page. The token is stored with

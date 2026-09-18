@@ -6,15 +6,15 @@
  * Every route here reads. None of them writes a post, and that is the whole
  * shape of this file: the posts are written by the weekend autopilot and sent
  * by the scheduler, both of them crons, with nobody logged in. What is left
- * for a dashboard to do is look — at how many posts have gone out, at which
- * domains are coming up, at whether the page is still connected — plus the
- * OAuth handshake that connects it.
+ * for a dashboard to do is look.
  *
- * Who may read it is decided once, at the top, for every route: HR,
- * coordinators, mentors, founders and admins. Students, investors and
- * contractors get 403 on all of it, and a request with no session gets 401.
- * The OAuth pair is narrower still (HR and admin only), because connecting the
- * page hands the whole app a token that can post as the company.
+ * `GET /feed` is the one every portal calls and every signed-in role may read
+ * — students, investors and contractors included. It answers with the posts
+ * the company page has published and nothing else. The operational views
+ * (history with failure states, connection status, LinkedIn's statistics) stay
+ * staff-only, and the OAuth pair is narrower still, HR and admin, because
+ * connecting the page hands the whole app a token that can post as the
+ * company. A request with no session gets 401 everywhere.
  *
  * The thinking lives in services/v2/linkedin/; the handlers here do not
  * compose, review or decide. They parse the request, hand it to the autopilot
@@ -26,7 +26,7 @@ const express = require('express');
 const crypto = require('crypto');
 
 const { requireRole, attachEcosystemUser } = require('../../middleware/roleGuard');
-const { ROLES } = require('../../config/roles');
+const { ROLES, ALL_ROLES } = require('../../config/roles');
 
 const router = express.Router();
 
@@ -50,6 +50,24 @@ router.use(express.json({ limit: '6mb' }));
  */
 router.use(attachEcosystemUser);
 
+/*
+ * Three gates, widest first.
+ *
+ * `signedIn` is every role this app has, which is what the feed uses: the
+ * LinkedIn section shows the company's own published posts and carries no
+ * controls, so a student seeing it is a student reading something already
+ * public. Built from ALL_ROLES rather than a hand-written list, so a role
+ * added to config/roles.js later is admitted without anybody remembering to
+ * come back here — the alternative failure is a new role locked out of a
+ * section every other role can see, and nobody noticing for a release.
+ *
+ * `staffOnly` keeps the operational views: the post history with its failure
+ * states, the connection status, LinkedIn's own statistics.
+ *
+ * `connectOnly` is narrower still, because connecting the page hands this
+ * server a token that can post as the company.
+ */
+const signedIn = requireRole(...ALL_ROLES);
 const staffOnly = requireRole(ROLES.HR, ROLES.COORDINATOR, ROLES.MENTOR, ROLES.FOUNDER, ROLES.ADMIN);
 const connectOnly = requireRole(ROLES.HR, ROLES.ADMIN);
 
@@ -209,36 +227,73 @@ router.get('/status', staffOnly, h(async (req, res) => {
   });
 }));
 
-/* ── autopilot ──────────────────────────────────────────────────────────── */
+/* ── the feed ───────────────────────────────────────────────────────────── */
 
 /**
- * Everything the dashboard's LinkedIn Agent section shows: how many posts have
- * gone out, the last dozen of them, what is queued, and which domains the next
- * few weekends will get.
+ * The posts the agent has put on the company page — the one thing the
+ * dashboards show, and the one route anybody signed in may read.
  *
- * Read-only, like every other route that is left here. There is deliberately
- * no endpoint that posts, edits, reschedules or skips — the weekend job is
- * either trusted to run unattended or it is not, and a "post now" button is
- * how it stops being unattended.
+ * `signedIn` rather than `staffOnly`, and that is the deliberate part. The
+ * LinkedIn section is a window onto what the company published; it has no
+ * controls, so there is nothing in it a student could operate. Hiding the
+ * company's own public posts from the interns they are advertising for would
+ * be protecting nothing. Anonymous requests are still refused: this is a
+ * portal section, not a public API.
+ *
+ * What the payload deliberately leaves out is everything operational —
+ * failure counts, error strings, the queue, the rotation, the token's
+ * expiry. Those are real and they are in the database; they are just not this
+ * endpoint's business. The two connection fields are added only for the roles
+ * that can act on them.
  */
-router.get('/autopilot', staffOnly, h(async (req, res) => {
+router.get('/feed', signedIn, h(async (req, res) => {
   const autopilot = mods.autopilot();
-  const now = new Date();
-  const [figures, cfg] = await Promise.all([
-    autopilot.stats({}, req.query.limit),
-    Promise.resolve().then(() => { try { return mods.client().config() || {}; } catch (e) { return {}; } }),
-  ]);
-  res.json({
-    ok: true,
-    role: req.user.role,
-    connected: Boolean(cfg.configured),
-    /* Without a token the scheduler still runs and still records a post — it
-       just never sends it. Saying so here is what stops the count on the card
-       being read as a count of things the public saw. */
-    dryRun: !cfg.configured,
-    stats: figures,
-    forecast: autopilot.forecast(now, 6),
-  });
+  const out = await autopilot.feed({}, req.query.limit);
+  const body = { ok: true, count: out.count, posts: out.posts };
+
+  if (req.user.role === ROLES.HR || req.user.role === ROLES.ADMIN) {
+    let cfg = {};
+    try { cfg = mods.client().config() || {}; } catch (e) { cfg = {}; }
+    body.canConnect = true;
+    body.connected = Boolean(cfg.configured);
+  }
+  res.json(body);
+}));
+
+/**
+ * The poster for one post, for the posts whose image is not one of the
+ * fourteen committed plates — an older hand-written post, or a domain the
+ * rotation does not know.
+ *
+ * Served from the stored bytes rather than redirected, because the bytes are
+ * what went to LinkedIn. `withImage === false` means the post went out as
+ * text and there is nothing to send.
+ */
+router.get('/feed/:id/image', signedIn, h(async (req, res) => {
+  if (!validId(req.params.id)) return res.status(404).type('text/plain').send('Not found');
+  const post = await leanOne(mods.LinkedInPost(), req.params.id);
+  /* Only published posts. A queued one has not been said yet, and the feed
+     must not become a way to read tomorrow's post today. */
+  if (!post || post.status !== 'published') return res.status(404).type('text/plain').send('Not found');
+  const poster = post.poster || {};
+  if (poster.withImage === false || !poster.png) return res.status(404).type('text/plain').send('No image on this post');
+
+  let buf;
+  try {
+    buf = Buffer.from(poster.png, 'base64');
+  } catch (e) {
+    buf = null;
+  }
+  if (!buf || !buf.length) return res.status(404).type('text/plain').send('No image on this post');
+
+  /* The stored bytes are whatever was uploaded — a JPEG from the poster kit,
+     or a PNG rasterised in a browser by the old chat agent. Sniff rather than
+     assume: a PNG served as image/jpeg renders in every browser that guesses,
+     and in none that does not. */
+  const isPng = buf.length > 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47;
+  res.set('Content-Type', isPng ? 'image/png' : 'image/jpeg');
+  res.set('Cache-Control', 'private, max-age=86400');
+  return res.send(buf);
 }));
 
 /* ── posts ──────────────────────────────────────────────────────────────── */

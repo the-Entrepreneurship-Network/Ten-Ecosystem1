@@ -19,6 +19,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="/session-guard.js"></script>
 <script src="/credential-reset.js"></script>
+<!-- LinkedIn: the posts the company page has published. Every portal carries
+     this, students included — it shows what TEN said publicly and carries no
+     controls, so there is nothing in it to keep from the people it advertises for. -->
+<script src="/linkedin-agent.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
@@ -1704,6 +1708,11 @@ body.is-premium #premiumCard { box-shadow:0 0 0 1px rgba(212,175,55,0.25), 0 14p
         <div class="sec-card-title">Daily Attendance</div>
         <div class="sec-card-desc">Mark attendance and view stats</div>
       </div>
+      <div class="sec-card" onclick="openSectionModal('stu-view-linkedin')">
+        <div class="sec-card-icon">📣</div>
+        <div class="sec-card-title">LinkedIn Agent</div>
+        <div class="sec-card-desc">Every internship opening TEN has posted to LinkedIn</div>
+      </div>
       <div class="sec-card" onclick="openSectionModal('stu-view-test')">
         <div class="sec-card-icon">📝</div>
         <div class="sec-card-title">Domain MCQ Test</div>
@@ -2241,6 +2250,11 @@ body.is-premium #premiumCard { box-shadow:0 0 0 1px rgba(212,175,55,0.25), 0 14p
     <div id="submissionContainer"></div>
   </div>
   </div><!-- /stu-view-submissions -->
+
+  <!-- ══════ VIEW: LINKEDIN — drawn by /linkedin-agent.js on first open ══════ -->
+  <div class="stu-view" id="stu-view-linkedin">
+    <div id="linkedinAgentHost"></div>
+  </div>
 
   <!-- ══════ VIEW: ATTENDANCE ══════ -->
   <div class="stu-view" id="stu-view-attendance">
@@ -5370,6 +5384,7 @@ var sectionTitles = {
   'stu-view-coding': 'Coding Problems',
   'stu-view-submissions': 'Submitted Tasks',
   'stu-view-attendance': 'Daily Attendance',
+  'stu-view-linkedin': 'LinkedIn Agent',
   'stu-view-test': 'Domain MCQ Test',
   'stu-view-guidelines': 'Internship Guidelines',
   'stu-view-leaderboard': 'Extras & Badges'
@@ -5399,6 +5414,7 @@ function openSectionModal(sectionId) {
   if (overlay) overlay.classList.remove('show');
   // Trigger relevant data loads
   if (sectionId === 'stu-view-attendance' && typeof loadAttendance === 'function') loadAttendance();
+  if (sectionId === 'stu-view-linkedin' && window.TENLinkedInAgent) TENLinkedInAgent.mount(document.getElementById('linkedinAgentHost'), { role: 'student' });
   if (sectionId === 'stu-view-notice' && typeof loadNotice === 'function') loadNotice();
   if (sectionId === 'stu-view-submissions' && typeof loadStudentSubmissions === 'function') loadStudentSubmissions();
   if (sectionId === 'stu-view-leaderboard') {

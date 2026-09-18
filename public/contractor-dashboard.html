@@ -119,6 +119,12 @@
         <button onclick="switchTab('deliverables')" class="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-white/5 transition text-left" id="tab-deliverables">
           <i class="fa-solid fa-paper-plane text-indigo-400"></i> Submitted Work
         </button>
+
+        <!-- LinkedIn: what the company page has published. Read-only, and the
+             same section every other portal carries. -->
+        <button onclick="switchTab('linkedin')" class="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-white/5 transition text-left" id="tab-linkedin">
+          <i class="fa-brands fa-linkedin text-sky-400"></i> LinkedIn Agent
+        </button>
         <a href="/messages" class="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-white/5 transition text-left">
           <i class="fa-solid fa-comment-dots text-slate-400"></i> Messages
         </a>
@@ -288,6 +294,11 @@
            contractor, and none of it backed by a ratings feature that exists.
            A deliverable submitted through this page had nowhere to appear, so
            this is the screen that shows it and what HR said back. -->
+      <!-- LinkedIn — drawn by /linkedin-agent.js the first time the tab opens -->
+      <div id="content-linkedin" class="tab-content hidden space-y-6">
+        <div id="linkedinAgentHost"></div>
+      </div>
+
       <div id="content-deliverables" class="tab-content hidden space-y-6">
         <div class="space-y-1">
           <h3 class="text-lg font-black text-white">Submitted Work</h3>
@@ -355,6 +366,10 @@
       const btn = document.getElementById('tab-' + tabId);
       if (btn) {
         btn.classList.add('active-nav', 'text-white');
+      }
+
+      if (tabId === 'linkedin' && window.TENLinkedInAgent) {
+        TENLinkedInAgent.mount(document.getElementById('linkedinAgentHost'), { role: 'contractor' });
       }
 
       // Close mobile sidebar if open
@@ -764,6 +779,7 @@
 <!-- The notification orb, as on every other signed-in portal page. HR
      decisions on this desk now reach the contractor through it. -->
 <script src="/notify-orb.js" defer></script>
+<script src="/linkedin-agent.js" defer></script>
 <!-- Two guards, on every page that shows or saves data:
      db-banner says so when there is no database behind the portal, which
      once ran for days looking normal while writing to a JSON file;

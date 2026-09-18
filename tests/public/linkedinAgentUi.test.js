@@ -10,21 +10,23 @@
  * remember their children, attributes and listeners. That is enough to mount
  * the section and read what it drew.
  *
- * What the section is now is a window onto an unattended job, so the tests are
- * about what it reports rather than what it sends. Two of them matter more
+ * What the section is now is a feed of the posts the company page has already
+ * published, shown in every portal to everybody who signs in. So the tests are
+ * about what it renders rather than what it sends. Two of them matter more
  * than the rest:
  *
  *   - it must offer no way to write a post. No textarea, no send button, no
  *     form. The agent posts by itself; a text box here would be a second,
  *     unrotated route to the company page.
- *   - when the server says the page is not connected, the count it shows is a
- *     count of posts nobody saw, and it has to say so where the eye lands
- *     rather than in a footnote.
+ *   - a post the server flagged as recorded-but-never-sent must not be shown
+ *     as one the public saw. Students read this section now, and a badge is
+ *     the difference between reporting and misreporting.
  *
  * The static checks are the ones a reviewer would otherwise repeat by eye: no
- * innerHTML (a post excerpt containing "<script>" must render as text), no
- * inline on*= handler strings, no secrets, and every class name prefixed la-
- * so the injected stylesheet cannot restyle the dashboard around it.
+ * innerHTML (post text containing "<script>" must render as text), no inline
+ * on*= handler strings, no secrets, every class name prefixed la- so the
+ * injected stylesheet cannot restyle the portal around it, and no request to
+ * anything but the one endpoint every role may read.
  */
 
 const fs = require('fs');
@@ -84,47 +86,54 @@ function makeDom() {
   return { document, all };
 }
 
-/* The answer routes/v2/linkedinAgent.js gives GET /autopilot, with two posts
-   behind it and a rotation in front. Tests reshape `body` before mounting. */
-function autopilotBody() {
+/* The answer routes/v2/linkedinAgent.js gives GET /feed. Tests reshape this
+   before mounting; the connect fields are only ever sent to HR and admin, so
+   they are absent here by default. */
+function feedBody() {
   return {
     ok: true,
-    role: 'hr',
-    connected: true,
-    dryRun: false,
-    stats: {
-      published: 9,
-      failed: 1,
-      scheduled: 1,
-      total: 11,
-      schedule: { hour: 10, days: ['Saturday', 'Sunday'], timezone: 'Asia/Kolkata' },
-      upcoming: [
-        { domain: 'Data Science', scheduledFor: '2026-09-19T04:30:00.000Z', status: 'scheduled', source: 'autopilot' },
-      ],
-      recent: [
-        {
-          id: 'a1', domain: 'Python Development', status: 'published', source: 'autopilot',
-          dryRun: false, withImage: true, at: '2026-09-13T04:30:00.000Z',
-          url: 'https://www.linkedin.com/feed/update/urn:li:share:7/', error: '',
-          excerpt: 'WE ARE #HIRING #INTERNS | The Entrepreneurship Network (TEN)',
-        },
-        {
-          id: 'a2', domain: 'HR', status: 'failed', source: 'autopilot',
-          dryRun: false, withImage: true, at: '2026-09-12T04:30:00.000Z',
-          url: '', error: 'LinkedIn refused the post', excerpt: 'WE ARE #HIRING',
-        },
-      ],
-    },
-    forecast: [
-      { date: '2026-09-19', domain: 'Data Science', role: 'Data Science Intern' },
-      { date: '2026-09-20', domain: 'Java Development', role: 'Java Development Intern' },
+    count: 9,
+    posts: [
+      {
+        id: 'a1',
+        domain: 'Python Development',
+        text: '🚀 WE ARE #HIRING #INTERNS | The Entrepreneurship Network (TEN)\n\nWe are looking for Python Development Interns.\n\n💰 Stipend: Unpaid',
+        image: '/assets/linkedin-posters/python.jpg',
+        alt: 'Hiring poster: Python Development Intern, Remote, stipend Unpaid.',
+        at: '2026-09-13T04:30:00.000Z',
+        url: 'https://www.linkedin.com/feed/update/urn:li:share:7/',
+        live: true,
+      },
+      {
+        id: 'a2',
+        domain: 'Web Development',
+        text: 'a short one',
+        image: '/assets/linkedin-posters/web.jpg',
+        alt: '',
+        at: '2026-09-12T04:30:00.000Z',
+        url: '',
+        live: false,
+      },
     ],
   };
 }
 
+/* Long enough to fold: the module's threshold is 320 characters. */
+const LONG_POST = [
+  '🚀 WE ARE #HIRING #INTERNS | The Entrepreneurship Network (TEN)',
+  '',
+  'We are looking for Cyber Security Interns to join The Entrepreneurship Network (TEN).',
+  '',
+  'No course to sit through first, no training block before you are allowed to touch anything real. From week one you are on an industry-level project, and the project is the training: you learn here by building and shipping, with a coordinator reviewing your work every week.',
+  '',
+  '💰 Stipend: Unpaid',
+  '',
+  '🔗 Apply for Cyber Security here: https://lnkd.in/gK5Cna3c',
+].join('\n');
+
 function makeServer(body) {
   const calls = [];
-  const state = { body: body || autopilotBody(), ok: true, status: 200 };
+  const state = { body: body || feedBody(), ok: true, status: 200 };
   const fetch = (url, init) => {
     calls.push({ url, init: init || {} });
     return Promise.resolve({
@@ -159,6 +168,7 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms == null ? 5 : ms));
 const settle = async () => { for (let i = 0; i < 6; i += 1) await tick(); };
 const hasClass = (n, c) => String(n.className || '').split(/\s+/).indexOf(c) >= 0;
 const textOf = (host) => host.textContent;
+const cards = (host) => host.findAll((n) => hasClass(n, 'la-post'));
 
 async function mounted(opts) {
   const b = boot(opts);
@@ -185,7 +195,7 @@ describe('public/linkedin-agent.js (static)', () => {
     expect(SRC).not.toMatch(/\beval\s*\(/);
   });
 
-  it('carries no secrets, only the auth header the dashboard hands it', () => {
+  it('carries no secrets, only the auth header the portal hands it', () => {
     expect(SRC).not.toMatch(/Bearer\s+[A-Za-z0-9._-]{12,}/);
     expect(SRC).not.toMatch(/sk-[A-Za-z0-9]{16,}/);
     expect(SRC).not.toMatch(/client_secret/i);
@@ -209,9 +219,9 @@ describe('public/linkedin-agent.js (static)', () => {
 
   /*
    * The manual composer is gone from the server; it has to be gone from the
-   * browser too, or the section would be a text box wired to a 404 — which
-   * reads, to whoever is looking at it, as the feature being broken rather
-   * than as the feature having changed.
+   * browser too, and now that the section is in front of students it has to
+   * stay gone. A text box wired to a 404 reads, to whoever is looking at it,
+   * as the feature being broken rather than as the feature having changed.
    */
   it('has no composing surface left in the source at all', () => {
     expect(SRC).not.toMatch(/createElement\(\s*['"]textarea['"]/i);
@@ -225,131 +235,197 @@ describe('public/linkedin-agent.js (static)', () => {
 /* ---------- mounting ---------- */
 
 describe('mounting', () => {
-  it('asks the autopilot endpoint once, with the dashboard headers', async () => {
+  it('asks the feed endpoint once, with the portal headers', async () => {
     const { server } = await mounted();
     expect(server.calls).toHaveLength(1);
-    expect(server.calls[0].url).toBe('/api/v2/linkedin/autopilot');
+    expect(server.calls[0].url).toBe('/api/v2/linkedin/feed');
     expect(server.calls[0].init.headers.Authorization).toBe('Bearer test-token');
     expect(server.calls[0].init.credentials).toBe('same-origin');
   });
 
-  it('sends no Authorization header when the dashboard has none to give', async () => {
-    const { server } = await mounted({ options: { headers: undefined, role: 'coordinator' } });
+  /* Only the HR portal has a token. Every other portal — including the student
+     dashboard — authenticates with the session cookie alone. */
+  it('sends no Authorization header when the portal has none to give', async () => {
+    const { server } = await mounted({ options: { headers: undefined, role: 'student' } });
     expect(server.calls[0].init.headers.Authorization).toBeUndefined();
+    expect(server.calls[0].init.credentials).toBe('same-origin');
   });
 
-  it('shows the count of published posts and the posting schedule', async () => {
-    const { host } = await mounted();
-    const text = textOf(host);
-    expect(text).toContain('9');
-    expect(text).toMatch(/posts published/i);
-    expect(text).toMatch(/Saturday and Sunday/);
-    expect(text).toMatch(/10:00 IST/);
-  });
-
-  it('offers nothing to type into and nothing to press', async () => {
+  it('offers nothing to type into and nothing to press but Show more', async () => {
     const { host } = await mounted();
     expect(host.find((n) => n.tagName === 'TEXTAREA')).toBeUndefined();
     expect(host.find((n) => n.tagName === 'INPUT')).toBeUndefined();
-    expect(host.find((n) => n.tagName === 'BUTTON')).toBeUndefined();
     expect(host.find((n) => n.tagName === 'FORM')).toBeUndefined();
+    host.findAll((n) => n.tagName === 'BUTTON').forEach((b) => {
+      expect(hasClass(b, 'la-more')).toBe(true);
+    });
   });
 
-  it('warns, above the numbers, when the page is not connected', async () => {
-    const body = autopilotBody();
-    body.connected = false;
-    body.dryRun = true;
-    const { host } = await mounted({ body });
-    const warn = host.find((n) => hasClass(n, 'la-note-warn'));
-    expect(warn).toBeTruthy();
-    expect(warn.textContent).toMatch(/not connected/i);
-
-    /* Above the numbers, not below them: a caveat nobody scrolls to is not a
-       caveat. Both nodes are children of the same wrapper, so their order in
-       that list is the order they are painted in. */
-    const wrap = host.children[0];
-    const idx = (pred) => wrap.children.findIndex(pred);
-    expect(idx((n) => hasClass(n, 'la-note-warn'))).toBeLessThan(idx((n) => hasClass(n, 'la-cards')));
-  });
-
-  it('says nothing about dry runs when the page is connected', async () => {
+  it('says how many posts have gone out and how often they go', async () => {
     const { host } = await mounted();
-    expect(host.find((n) => hasClass(n, 'la-note-warn'))).toBeUndefined();
+    const text = textOf(host);
+    expect(text).toContain('9 posts');
+    expect(text).toMatch(/every Saturday and Sunday/i);
+  });
+
+  it('re-renders rather than stacking when the section is opened twice', async () => {
+    const { context, host, server } = await mounted();
+    context.window.TENLinkedInAgent.mount(host, {});
+    await settle();
+    expect(server.calls).toHaveLength(2);
+    expect(host.findAll((n) => hasClass(n, 'la-title'))).toHaveLength(1);
+    expect(cards(host)).toHaveLength(2);
   });
 });
 
-/* ---------- the history ---------- */
+/* ---------- the posts ---------- */
 
-describe('what it reports', () => {
-  it('lists each post with its domain, a badge and a link out', async () => {
+describe('the posts', () => {
+  it('shows one card per post, with its poster and a link out', async () => {
     const { host } = await mounted();
-    const rows = host.findAll((n) => hasClass(n, 'la-row'));
-    /* two published/failed plus one queued plus two forecast */
-    expect(rows.length).toBe(5);
+    const list = cards(host);
+    expect(list).toHaveLength(2);
 
-    const python = rows.find((r) => r.textContent.indexOf('Python Development') >= 0);
-    expect(python.textContent).toContain('published');
+    const python = list.find((c) => c.textContent.indexOf('Python Development') >= 0);
+    const img = python.find((n) => n.tagName === 'IMG');
+    expect(img.src).toBe('/assets/linkedin-posters/python.jpg');
+    /* The poster carries the role, the stipend and the eligibility, none of
+       which a screen reader can read off a JPEG. */
+    expect(img.alt).toContain('stipend Unpaid');
+
     const link = python.find((n) => n.tagName === 'A');
-    expect(link.attrs.href || link.href).toContain('linkedin.com');
-    expect(link.attrs.rel || link.rel).toContain('noopener');
+    expect(link.href).toContain('linkedin.com');
+    expect(link.rel).toContain('noopener');
   });
 
-  it('shows why a post did not send, instead of its text', async () => {
-    const { host } = await mounted();
-    const row = host.findAll((n) => hasClass(n, 'la-row')).find((r) => r.textContent.indexOf('HR') >= 0);
-    expect(row.textContent).toContain('did not send');
-    expect(row.textContent).toContain('LinkedIn refused the post');
-  });
-
-  it('marks a post that was recorded but never sent as a dry run', async () => {
-    const body = autopilotBody();
-    body.stats.recent[0].dryRun = true;
-    const { host } = await mounted({ body });
-    const row = host.findAll((n) => hasClass(n, 'la-row')).find((r) => r.textContent.indexOf('Python Development') >= 0);
-    expect(row.textContent).toContain('dry run');
-    expect(row.textContent).not.toContain('published');
-  });
-
-  it('names the domains coming up next, and where their posters live', async () => {
+  it('shows the post text, not a summary of it', async () => {
     const { host } = await mounted();
     const text = textOf(host);
-    expect(text).toContain('Java Development');
-    expect(text).toContain('Java Development Intern');
-    const imgs = host.findAll((n) => n.tagName === 'IMG');
-    expect(imgs.length).toBeGreaterThan(0);
-    expect(imgs.map((i) => i.src)).toContain('/assets/linkedin-posters/python.jpg');
-    expect(imgs.map((i) => i.src)).toContain('/assets/linkedin-posters/java.jpg');
-    /* Decorative: the domain is already written next to it in words. */
-    imgs.forEach((i) => expect(i.alt).toBe(''));
+    expect(text).toContain('WE ARE #HIRING #INTERNS');
+    expect(text).toContain('Stipend: Unpaid');
   });
 
-  it('says so, rather than showing nothing, before the first post has gone out', async () => {
-    const body = autopilotBody();
-    body.stats.published = 0;
-    body.stats.total = 0;
-    body.stats.recent = [];
-    body.stats.upcoming = [];
+  it('marks a post that was recorded but never sent', async () => {
+    const { host } = await mounted();
+    const list = cards(host);
+    expect(list.find((c) => c.textContent.indexOf('Python Development') >= 0).textContent).toContain('Posted');
+    expect(list.find((c) => c.textContent.indexOf('Web Development') >= 0).textContent).toContain('Not on LinkedIn yet');
+  });
+
+  it('gives a post with no poster a card rather than a broken image', async () => {
+    const body = feedBody();
+    body.posts[0].image = '';
     const { host } = await mounted({ body });
-    expect(host.find((n) => hasClass(n, 'la-empty'))).toBeTruthy();
-    expect(textOf(host)).toMatch(/Nothing has gone out yet/i);
+    const card = cards(host).find((c) => c.textContent.indexOf('Python Development') >= 0);
+    expect(card).toBeTruthy();
+    expect(card.find((n) => n.tagName === 'IMG')).toBeUndefined();
   });
 
-  it('renders an excerpt containing markup as text, never as elements', async () => {
-    const body = autopilotBody();
-    body.stats.recent[0].excerpt = '<script>alert(1)</script><b>bold</b>';
+  it('drops a poster that fails to load rather than leaving a gap', async () => {
+    const { host } = await mounted();
+    const img = host.find((n) => n.tagName === 'IMG');
+    expect(typeof img.onerror).toBe('function');
+    img.onerror();
+    expect(host.findAll((n) => n.tagName === 'IMG' && n.parentNode)).toHaveLength(1);
+  });
+
+  it('omits the footer link for a post that never reached LinkedIn', async () => {
+    const { host } = await mounted();
+    const web = cards(host).find((c) => c.textContent.indexOf('Web Development') >= 0);
+    expect(web.find((n) => n.tagName === 'A')).toBeUndefined();
+  });
+
+  it('renders text containing markup as text, never as elements', async () => {
+    const body = feedBody();
+    body.posts[0].text = '<script>alert(1)</script><b>bold</b>';
+    body.posts[0].domain = '<img src=x onerror=1>';
     const { host } = await mounted({ body });
     expect(textOf(host)).toContain('<script>alert(1)</script>');
     expect(host.find((n) => n.tagName === 'SCRIPT')).toBeUndefined();
     expect(host.find((n) => n.tagName === 'B')).toBeUndefined();
   });
+});
 
-  it('shows a domain it does not recognise without a broken poster', async () => {
-    const body = autopilotBody();
-    body.stats.recent[0].domain = 'Underwater Basket Weaving';
+/* ---------- folding ---------- */
+
+describe('a long post', () => {
+  async function longOne() {
+    const body = feedBody();
+    body.posts = [Object.assign({}, body.posts[0], { text: LONG_POST, domain: 'Cyber Security' })];
+    return mounted({ body });
+  }
+
+  it('is folded, showing the top of it and offering the rest', async () => {
+    const { host } = await longOne();
+    const more = host.find((n) => hasClass(n, 'la-more'));
+    expect(more).toBeTruthy();
+    expect(more.textContent).toBe('Show more');
+    expect(more.attrs['aria-expanded']).toBe('false');
+
+    const body = host.find((n) => hasClass(n, 'la-text')).textContent;
+    expect(body).toContain('WE ARE #HIRING');
+    expect(body).not.toContain('Apply for Cyber Security here');
+    expect(body).toContain('…');
+    expect(body.length).toBeLessThan(LONG_POST.length);
+  });
+
+  it('opens and closes again in place, with no second request', async () => {
+    const { host, server } = await longOne();
+    const more = host.find((n) => hasClass(n, 'la-more'));
+
+    more.dispatch('click');
+    expect(textOf(host)).toContain('Apply for Cyber Security here');
+    expect(more.textContent).toBe('Show less');
+    expect(more.attrs['aria-expanded']).toBe('true');
+
+    more.dispatch('click');
+    expect(textOf(host)).not.toContain('Apply for Cyber Security here');
+    expect(more.textContent).toBe('Show more');
+    expect(server.calls).toHaveLength(1);
+  });
+
+  it('leaves a short post whole, with nothing to press', async () => {
+    const body = feedBody();
+    body.posts = [Object.assign({}, body.posts[0], { text: 'three words only' })];
     const { host } = await mounted({ body });
-    const row = host.findAll((n) => hasClass(n, 'la-row')).find((r) => r.textContent.indexOf('Basket') >= 0);
-    expect(row).toBeTruthy();
-    expect(row.find((n) => n.tagName === 'IMG').src).toBe('');
+    expect(host.find((n) => hasClass(n, 'la-more'))).toBeUndefined();
+    expect(textOf(host)).toContain('three words only');
+  });
+});
+
+/* ---------- who sees what ---------- */
+
+describe('what each role is shown', () => {
+  it('tells HR when the page still needs connecting', async () => {
+    const body = feedBody();
+    body.canConnect = true;
+    body.connected = false;
+    const { host } = await mounted({ body });
+    const warn = host.find((n) => hasClass(n, 'la-note-warn'));
+    expect(warn).toBeTruthy();
+    expect(warn.textContent).toMatch(/not connected/i);
+  });
+
+  /*
+   * A student's payload has no connect fields at all, so the warning cannot
+   * appear for them even if the page were somehow not connected — which is
+   * right: it is not a student's problem and not a student's to fix.
+   */
+  it('says nothing about connecting to anybody the server did not tell', async () => {
+    const { host } = await mounted();
+    expect(host.find((n) => hasClass(n, 'la-note-warn'))).toBeUndefined();
+
+    const body = feedBody();
+    body.connected = false;
+    const second = await mounted({ body });
+    expect(second.host.find((n) => hasClass(n, 'la-note-warn'))).toBeUndefined();
+  });
+
+  it('says so, rather than showing nothing, before the first post has gone out', async () => {
+    const { host } = await mounted({ body: { ok: true, count: 0, posts: [] } });
+    expect(host.find((n) => hasClass(n, 'la-empty'))).toBeTruthy();
+    expect(textOf(host)).toMatch(/Nothing has gone out yet/i);
+    expect(cards(host)).toHaveLength(0);
   });
 });
 
@@ -363,21 +439,13 @@ describe('when the server will not answer', () => {
     expect(err.textContent).toMatch(/session has expired/i);
   });
 
-  it('explains a 403 in terms of who the section is for', async () => {
+  it('explains a 403 without blaming the reader', async () => {
     const { host } = await mounted({ status: 403 });
-    expect(host.find((n) => hasClass(n, 'la-err')).textContent).toMatch(/HR, coordinators, mentors and founders/i);
+    expect(host.find((n) => hasClass(n, 'la-err')).textContent).toMatch(/not available on your account/i);
   });
 
   it('reports any other failure with its status code', async () => {
     const { host } = await mounted({ status: 500 });
     expect(host.find((n) => hasClass(n, 'la-err')).textContent).toContain('500');
-  });
-
-  it('re-renders rather than stacking when the tab is opened twice', async () => {
-    const { context, host, server } = await mounted();
-    context.window.TENLinkedInAgent.mount(host, { headers: { Authorization: 'Bearer test-token' } });
-    await settle();
-    expect(server.calls).toHaveLength(2);
-    expect(host.findAll((n) => hasClass(n, 'la-title'))).toHaveLength(1);
   });
 });

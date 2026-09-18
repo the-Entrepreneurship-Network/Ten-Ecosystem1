@@ -268,6 +268,104 @@ describe('autopilot — the forecast', () => {
   });
 });
 
+describe('autopilot — the feed every portal shows', () => {
+  function feedDeps(rows, count) {
+    const chain = (value) => {
+      const q = { sort: () => q, limit: () => q, select: () => q, lean: () => Promise.resolve(value) };
+      return q;
+    };
+    const find = jest.fn(() => chain(rows));
+    return {
+      find,
+      deps: {
+        LinkedInPost: {
+          find,
+          countDocuments: jest.fn(async () => (count == null ? rows.length : count)),
+        },
+      },
+    };
+  }
+
+  const PUBLISHED = {
+    _id: 'p1',
+    domain: 'Python Development',
+    final: '🚀 WE ARE #HIRING #INTERNS\n\nthe rest of it',
+    publishedAt: new Date('2026-09-19T04:30:00Z'),
+    dryRun: false,
+    linkedin: { url: 'https://linkedin.test/1' },
+    poster: { withImage: true, fields: { alt: 'Hiring poster: Python Development Intern' } },
+  };
+
+  it('asks only for published posts', async () => {
+    const f = feedDeps([PUBLISHED]);
+    await autopilot.feed(f.deps);
+    expect(f.find).toHaveBeenCalledWith({ status: 'published' });
+    expect(f.deps.LinkedInPost.countDocuments).toHaveBeenCalledWith({ status: 'published' });
+  });
+
+  it('hands back the whole post text, not an excerpt', async () => {
+    const out = await autopilot.feed(feedDeps([PUBLISHED]).deps);
+    expect(out.posts[0].text).toBe(PUBLISHED.final);
+    expect(out.posts[0].text).toContain('the rest of it');
+  });
+
+  it('counts every published post, not just the page it returned', async () => {
+    const out = await autopilot.feed(feedDeps([PUBLISHED], 137).deps);
+    expect(out.count).toBe(137);
+    expect(out.posts).toHaveLength(1);
+  });
+
+  it('marks a dry run as not live', async () => {
+    const out = await autopilot.feed(feedDeps([
+      Object.assign({}, PUBLISHED, { dryRun: true }),
+    ]).deps);
+    expect(out.posts[0].live).toBe(false);
+  });
+
+  it('carries no error, no status and no scheduling field', async () => {
+    const out = await autopilot.feed(feedDeps([
+      Object.assign({}, PUBLISHED, {
+        error: 'something internal', status: 'published',
+        scheduledFor: new Date('2026-09-19T04:30:00Z'), slot: 'weekend:2026-09-19',
+      }),
+    ]).deps);
+    expect(Object.keys(out.posts[0]).sort()).toEqual(
+      ['alt', 'at', 'domain', 'id', 'image', 'live', 'text', 'url'],
+    );
+    expect(JSON.stringify(out)).not.toContain('something internal');
+    expect(JSON.stringify(out)).not.toContain('weekend:');
+  });
+
+  it('is empty rather than broken when nothing has been published', async () => {
+    const out = await autopilot.feed(feedDeps([], 0).deps);
+    expect(out).toEqual({ count: 0, posts: [] });
+  });
+});
+
+describe('autopilot — where a post image comes from', () => {
+  it('uses the committed plate for a domain in the rotation', () => {
+    expect(autopilot.imageUrlFor({ _id: 'x', domain: 'Cyber Security', poster: { withImage: true } }))
+      .toBe('/assets/linkedin-posters/cyber.jpg');
+  });
+
+  it('falls back to the stored bytes for a domain it does not know', () => {
+    expect(autopilot.imageUrlFor({ _id: 'abc', domain: 'Underwater Basket Weaving', poster: { withImage: true } }))
+      .toBe('/api/v2/linkedin/feed/abc/image');
+  });
+
+  /* A text-only post has no image, and inventing a URL for it would give
+     every reader a broken picture instead of a post with no picture. */
+  it('gives a text-only post no url at all', () => {
+    expect(autopilot.imageUrlFor({ _id: 'x', domain: 'Cyber Security', poster: { withImage: false } })).toBe('');
+    expect(autopilot.imageUrlFor({ _id: 'x', domain: 'Nothing', poster: { withImage: false } })).toBe('');
+  });
+
+  it('survives a post with no poster field at all', () => {
+    expect(autopilot.imageUrlFor({ _id: 'x', domain: 'Nothing' })).toBe('');
+    expect(autopilot.imageUrlFor({})).toBe('');
+  });
+});
+
 describe('autopilot — the numbers the dashboard shows', () => {
   function statsDeps(rows) {
     const chain = (value) => {

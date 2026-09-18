@@ -187,6 +187,77 @@ async function tick(now, deps) {
 }
 
 /**
+ * The feed every signed-in person sees: the posts the agent has put on the
+ * company page, newest first, each with its poster and its text.
+ *
+ * This is the whole of what a dashboard shows now, and it is the same for a
+ * student as for the founder. That is deliberate. The section is not a console
+ * — there is nothing here to operate — so there is no reason to hide it from
+ * the people the posts are about, and every reason to show interns what their
+ * company is publishing. What is NOT in this payload is everything that is
+ * operational rather than public: failure counts, error strings, the
+ * scheduling queue, the rotation, the token's expiry. Those exist in the
+ * database; they are simply not this endpoint's business.
+ *
+ * `dryRun` posts are included and flagged. A server with no token records
+ * every weekend post without sending it, and dropping those would leave a
+ * fresh deployment showing an empty section that reads as broken — but
+ * counting them silently as published would tell an intern the page said
+ * something it never said.
+ */
+async function feed(deps, limit) {
+  const d = resolveDeps(deps);
+  const take = Math.max(1, Math.min(60, parseInt(limit, 10) || 30));
+
+  const [rows, count] = await Promise.all([
+    d.LinkedInPost.find({ status: 'published' })
+      .sort({ publishedAt: -1, createdAt: -1 })
+      .limit(take)
+      .select('domain final publishedAt createdAt dryRun linkedin poster.withImage poster.fields')
+      .lean(),
+    d.LinkedInPost.countDocuments({ status: 'published' }),
+  ]);
+
+  return {
+    count: typeof count === 'number' ? count : (rows || []).length,
+    posts: (rows || []).map((p) => {
+      const fields = (p.poster && p.poster.fields) || {};
+      return {
+        id: String(p._id),
+        domain: p.domain || '',
+        /* The whole post, not an excerpt. The section exists to show what was
+           said; a truncated version of it would be a worse copy of LinkedIn. */
+        text: String(p.final || ''),
+        image: imageUrlFor(p),
+        alt: String(fields.alt || ''),
+        at: p.publishedAt || p.createdAt,
+        url: (p.linkedin && p.linkedin.url) || '',
+        live: !p.dryRun,
+      };
+    }),
+  };
+}
+
+/**
+ * Where the browser should fetch this post's poster from.
+ *
+ * A weekend post's poster is one of the fourteen committed plates, so it is
+ * served as a static file: no database round trip, cached by the browser, and
+ * the same bytes for every reader. Anything else — an older post written by
+ * hand, or a domain with no plate — falls back to the route that reads the
+ * stored image off the document. A post with no image at all gets no URL and
+ * the card renders as text, which is a card.
+ */
+function imageUrlFor(post) {
+  const p = post || {};
+  if (p.poster && p.poster.withImage === false) return '';
+  const domain = weekendPost.byName(p.domain);
+  if (domain) return `/assets/linkedin-posters/${domain.slug}.jpg`;
+  if (p.poster && p.poster.withImage) return `/api/v2/linkedin/feed/${String(p._id)}/image`;
+  return '';
+}
+
+/**
  * What the read-only dashboard section shows: how many posts the agent has
  * put out, and the last few of them.
  *
@@ -304,4 +375,4 @@ function start() {
   return task;
 }
 
-module.exports = { SLOT_HOUR, SLOT_WINDOW_HOURS, due, forecast, readPoster, start, stats, tick };
+module.exports = { SLOT_HOUR, SLOT_WINDOW_HOURS, due, feed, forecast, imageUrlFor, readPoster, start, stats, tick };
