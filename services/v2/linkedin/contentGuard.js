@@ -640,10 +640,25 @@ function review(text, options) {
       'Keep the first five — the brand tags and the two that describe the post.');
   }
 
-  if (stats.emojis > 6) {
+  /*
+   * Emoji used as field markers are structure, not decoration.
+   *
+   * A recruitment post in the format this company asked for leads each fact
+   * with the same symbol every time — a building for the company, a clock for
+   * the duration, a bag of money for the stipend — and a reader who has seen
+   * one of these posts can find the stipend in the next one without reading
+   * it. Counting those the same way as a sentence sprinkled with sparkles
+   * flagged the house format as noise, every single time it was used.
+   *
+   * So a line that opens with one emoji and continues with a label is exempt,
+   * and only the emoji left over anywhere else are counted.
+   */
+  const markerLines = lines.filter((l) => /^\s*\p{Extended_Pictographic}️?\s*\S/u.test(l)).length;
+  const decorative = Math.max(0, stats.emojis - markerLines);
+  if (decorative > 6) {
     const e = firstMatch(/\p{Extended_Pictographic}/u, body);
     add('emoji_overload', e,
-      `${stats.emojis} emojis. Past a handful they stop being decoration and start being noise, and screen readers announce every one.`,
+      `${decorative} emojis outside the field markers. Past a handful they stop being decoration and start being noise, and screen readers announce every one.`,
       'Keep two or three at most, and none in the first line.');
   }
 

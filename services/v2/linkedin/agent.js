@@ -45,6 +45,17 @@ const INTENTS = {
   /* Drawing a poster is a separate request from keeping the author's own
      photograph, so it gets its own phrase. */
   makePoster: /^(make|draw|generate|create|add)( me)?( a| the)? poster$/i,
+  /* Showing the gallery, and choosing from it. "poster 2" and "use midnight"
+     are both how people answer a row of six pictures. */
+  showPosters: /^(posters?|show (me )?posters?|poster options|suggest (a )?posters?|design options)$/i,
+  pickPoster: /^(?:use |pick |choose |poster |design )?(midnight|solar|split|paper|spotlight|blueprint|[1-6])$/i,
+  noPoster: /^(no poster|without (a )?poster|skip the poster|text only)$/i,
+  /* The way back to the sub-editor, for somebody who wants their own words
+     and nothing else. "Elaborate" turns the full writer back on. */
+  keepShort: /^(keep it short|as typed|just my words|short version|do not elaborate|don.t elaborate|no elaboration)$/i,
+  elaborateMore: /^(elaborate|expand( it)?|make it longer|full version|write it properly|more detail)$/i,
+  /* Answering, or refusing to answer, one of the intake questions. */
+  skip: /^(skip|skip it|no|none|n\/a|not sure|later|does not matter|doesn.t matter)$/i,
   headline: /^(?:change (?:the )?headline to|headline:)\s*(.+)$/i,
   hashtags: /^hashtags:\s*(.+)$/i,
   cta: /^cta:\s*(.+)$/i,
@@ -78,6 +89,11 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 const BRAND_NAME = 'The Entrepreneurship Network';
 
+/* How many of the seven hiring facts have to be missing before the agent
+   starts asking. Four of seven means a one-line note opens the questions and
+   a filled-in brief does not. */
+const INTAKE_THRESHOLD = 4;
+
 /* ── dependencies ───────────────────────────────────────────────────────── */
 
 /*
@@ -97,6 +113,9 @@ function resolveDeps(deps) {
     composer: pick('composer', './postComposer'),
     guard: pick('guard', './contentGuard'),
     posters: pick('posters', './posterStudio'),
+    designs: pick('designs', './posterDesigns'),
+    elaborate: pick('elaborate', './elaborate'),
+    intake: pick('intake', './intake'),
     now: given.now || (() => new Date()),
   };
 }
@@ -250,7 +269,28 @@ function normaliseSession(raw) {
       fields: s.poster.fields && typeof s.poster.fields === 'object' ? s.poster.fields : {},
     } : null,
     withImage: s.withImage !== false,
-    awaiting: ['confirm-schedule', 'schedule-when', 'draft'].includes(s.awaiting) ? s.awaiting : '',
+    awaiting: ['confirm-schedule', 'schedule-when', 'draft', 'intake', 'pick-poster', 'confirm-post'].includes(s.awaiting) ? s.awaiting : '',
+    /*
+     * The intake, carried across turns.
+     *
+     * The session is client state and everything in it is re-validated here on
+     * the way back in, which is why each of these is clamped rather than
+     * copied. They were missing from this list at first and the effect was
+     * quietly absurd: the agent asked which domain the internship was for,
+     * the browser sent the answer back, `awaiting` had been scrubbed to '' on
+     * the way out, and the answer was read as a brand new draft — so every
+     * question was asked exactly once and answering it threw the post away.
+     */
+    facts: s.facts && typeof s.facts === 'object' ? cleanFacts(s.facts) : {},
+    asked: Array.isArray(s.asked) ? s.asked.slice(0, 20).map((f) => str(f, 30)) : [],
+    askingField: str(s.askingField, 30),
+    intakeDone: Boolean(s.intakeDone),
+    brevity: s.brevity === 'short' ? 'short' : 'full',
+    sourceText: str(s.sourceText, 6000),
+    /* Which designs were offered, so "poster 2" means the second of those. */
+    gallery: Array.isArray(s.gallery) ? s.gallery.slice(0, 8).map((g) => str(g, 24)) : [],
+    design: str(s.design, 24),
+    wantsPoster: Boolean(s.wantsPoster),
     scheduleFor: str(s.scheduleFor, 40),
     postId: str(s.postId, 40),
     lastPostId: str(s.lastPostId, 40),
@@ -261,6 +301,26 @@ function normaliseSession(raw) {
       ? { date: str(s.nearDuplicate.date, 20), score: Number(s.nearDuplicate.score) || 0 }
       : null,
   };
+  return out;
+}
+
+/**
+ * The collected facts, bounded.
+ *
+ * Only the fields the intake asks about survive, each clipped: the browser
+ * could send anything back under this key, and these values are printed onto
+ * a poster and into a post. An unbounded object here would be a way to put
+ * arbitrary text on the company's page through a field nobody is reading.
+ */
+const FACT_KEYS = ['org', 'role', 'domain', 'batch', 'openings', 'mode', 'location',
+  'duration', 'stipend', 'skills', 'eligibility', 'applyBy', 'afterLpa'];
+
+function cleanFacts(f) {
+  const out = {};
+  FACT_KEYS.forEach((k) => {
+    const v = str(f[k], 160).trim();
+    if (v) out[k] = v;
+  });
   return out;
 }
 
@@ -439,6 +499,31 @@ async function composeFinal(d, source, session, extra) {
   const kind = session.kind;
   const fields = safeExtract(d, source, kind);
   const opts = Object.assign({ kind, issues: session.issues, variant: session.variant, tone: session.tone, fields }, extra || {});
+
+  /*
+   * Elaborate by default; keep it short only when asked.
+   *
+   * "We are hiring Python developers" is true and nobody applies to it. A
+   * post has to say what the work is, what a student leaves with and what to
+   * do next, or it is a line the feed scrolls past — so the agent writes the
+   * full version unless the author has said "keep it short", in which case
+   * the sub-editor runs and their words come back tidied and otherwise
+   * untouched.
+   *
+   * Either path adds no fact the author did not give. The elaborator says
+   * what is true of every TEN internship and nothing about this one that was
+   * not in the note; the model-written variant is put through the content
+   * guard and a figure check before it is allowed anywhere near the page.
+   */
+  if (session.brevity !== 'short') {
+    try {
+      const long = await d.elaborate.elaborate(source, opts);
+      if (long && long.text) return { composed: long, fields };
+    } catch (e) {
+      console.error('[linkedin-agent] elaboration failed, falling back to the sub-editor:', e.message);
+    }
+  }
+
   let composed = null;
   try {
     composed = await d.composer.composeWithLLM(source, opts);
@@ -473,6 +558,16 @@ function applyComposed(session, composed) {
     chars: Number(composed.chars) || String(composed.text || '').length,
   };
   session.final = session.composed.text;
+  /*
+   * The note the post was written from, kept on the session.
+   *
+   * "Keep it short" and "elaborate" both re-run the writer, and they must
+   * re-run it over what the author typed — not over the post the agent last
+   * produced. Without this, asking for the full version twice fed finished
+   * prose back in as though it were a fresh note and the post grew each
+   * time.
+   */
+  if (composed.sourceText) session.sourceText = str(composed.sourceText, 6000);
 }
 
 async function reviewReply(d, session, opening) {
@@ -543,6 +638,44 @@ async function handleDraft(d, message, prev, user) {
   }
 
   const source = rv.cleaned || message;
+
+  /*
+   * Ask for the facts a hiring poster cannot be drawn without.
+   *
+   * A poster is a spec sheet, and "We are hiring Python interns" is not one:
+   * a student reading it cannot tell which batch it is for, how long it runs,
+   * whether it pays, or whether they are eligible. Every one of those decides
+   * whether somebody applies, and only the author knows them.
+   *
+   * The questions run one at a time with tappable answers rather than as a
+   * form, and everything already present in the draft is read first — a
+   * person who typed "hiring 20 Python interns, October batch, remote, 3
+   * months, 5k, freshers welcome" is asked nothing at all, which is the
+   * difference between an assistant and a form.
+   */
+  if (session.kind === 'opening' && !session.intakeDone) {
+    session.facts = Object.assign({}, d.intake.known(source, session.kind), session.facts || {});
+    session.sourceText = str(source, 6000);
+
+    /*
+     * Interrogate a note, not a brief.
+     *
+     * Somebody who typed "hiring python interns, remote, 2 months, stipend
+     * 5000, apply by 25 Sept" has done the work, and answering four more
+     * questions to be told what they already said is how a helpful feature
+     * becomes one people route around. So the questions only open when the
+     * draft is genuinely thin; above that the post is written immediately and
+     * the reply names the gaps, with a chip for anyone who does want to fill
+     * them in.
+     */
+    const gaps = d.intake.missing(session.facts);
+    if (gaps.length >= INTAKE_THRESHOLD) {
+      const q = d.intake.nextQuestion(session.facts, session.asked || []);
+      if (q) return askIntake(d, session, q);
+    }
+    session.intakeDone = true;
+  }
+
   const { composed, fields } = await composeFinal(d, source, session);
   applyComposed(session, composed);
   session.fixed = session.issues.filter((i) => i.severity === 'revise').map((i) => i.code);
@@ -617,6 +750,204 @@ async function handleTransform(d, session, op, arg) {
  * builds the branded square from the facts already extracted and attaches it
  * in place of (or in the absence of) a photograph.
  */
+/**
+ * Show the gallery: the author's line, already set in every design.
+ *
+ * This is the heart of the poster flow and the reason it is a gallery rather
+ * than a prompt. Nobody can describe the poster they want, but everybody can
+ * recognise it — so the agent renders the sentence six ways and lets them
+ * point. The options are the pictures themselves; the chat only needs to
+ * carry the numbers.
+ */
+/**
+ * Switch between the full post and the author's words alone, and rewrite.
+ *
+ * Both directions matter. Somebody who typed a careful paragraph does not
+ * want it expanded, and somebody who typed six words does not want those six
+ * words published — so the agent picks the useful default (elaborate) and
+ * makes the other one a single phrase away.
+ */
+async function handleBrevity(d, session, mode) {
+  if (!session.sourceText && !session.final) {
+    return ask(session, 'There is no post in progress. Paste a draft first.');
+  }
+  session.brevity = mode === 'short' ? 'short' : 'full';
+  const source = session.sourceText || session.final;
+  const { composed } = await composeFinal(d, source, session);
+  applyComposed(session, composed);
+  return reviewReply(d, session, mode === 'short'
+    ? 'Your words, tidied and otherwise untouched:'
+    : 'The full version:');
+}
+
+/**
+ * Put one intake question, with its answers as chips.
+ *
+ * The progress line matters more than it looks: nobody answers six questions
+ * without being told how many are left, and a chat that asks an unbounded
+ * series of questions is one people abandon half way through.
+ */
+function askIntake(d, session, q) {
+  session.awaiting = 'intake';
+  session.askingField = q.field;
+  const p = d.intake.progress(session.facts, session.asked);
+  const lines = [q.ask];
+  if (q.why) lines.push(q.why);
+  lines.push('');
+  lines.push(`${p.answered} of ${p.total} answered — say "skip" for anything that does not apply.`);
+
+  return {
+    ok: true,
+    kind: 'ask',
+    reply: lines.join('\n'),
+    session,
+    intake: { field: q.field, answered: p.answered, total: p.total, facts: session.facts },
+    options: {
+      options: q.options.map((o) => ({ label: o, value: o })).concat([{ label: 'Skip', value: 'skip' }]),
+    },
+  };
+}
+
+/**
+ * Record an answer and move on, or start writing once the list is done.
+ *
+ * "Skip" is a real answer: it marks the field asked so the agent never
+ * circles back to it, and the fact simply never appears on the poster. That
+ * is what keeps this a conversation rather than a validation loop.
+ */
+async function handleIntakeAnswer(d, session, message, user) {
+  const field = session.askingField;
+  const res = d.intake.answer(session.facts, session.asked, field, message);
+  session.facts = res.facts;
+  session.asked = res.asked;
+  session.askingField = '';
+
+  const q = d.intake.nextQuestion(session.facts, session.asked);
+  if (q) return askIntake(d, session, q);
+
+  session.intakeDone = true;
+  session.awaiting = '';
+
+  /*
+   * Everything asked: write the post in the format the company uses for
+   * hiring — a title, one labelled fact per line, eligibility, and a clear
+   * instruction to comment. The facts came from the author; the shape is the
+   * house style.
+   */
+  const composed = d.elaborate.hiringPost(session.facts, {
+    sourceText: session.sourceText,
+    eligibility: session.facts.eligibility,
+  });
+  applyComposed(session, composed);
+  const still = d.intake.missing(session.facts);
+  const opening = still.length
+    ? `Written up. ${still.length} thing${still.length === 1 ? '' : 's'} left blank, so ${still.length === 1 ? 'it is' : 'they are'} not on the poster: ${still.join(', ')}.`
+    : 'Written up, with everything you gave me.';
+  return reviewReply(d, session, opening);
+}
+
+function handleShowPosters(d, session) {
+  if (!session.final) return ask(session, 'Give me the line first, then I will show you some posters for it.');
+
+  let gallery = [];
+  try {
+    gallery = d.designs.suggest({ line: session.final, kind: session.kind || 'general' }) || [];
+  } catch (e) {
+    console.error('[linkedin-agent] poster gallery failed:', e.message);
+  }
+  if (!gallery.length) return ask(session, 'I could not draw the posters just now. The post can still go out without one.');
+
+  session.gallery = gallery.map((g) => g.id);
+  session.awaiting = 'pick-poster';
+
+  return {
+    ok: true,
+    kind: 'posters',
+    reply: [
+      `Here are ${gallery.length} posters with your line on them.`,
+      '',
+      'Click one and I will put it on the post, or say "no poster" to publish the text on its own.',
+    ].join('\n'),
+    session,
+    /* The full SVGs travel so the chooser can show them at once. The browser
+       rasterises whichever one is picked at publish time. */
+    gallery: gallery.map((g, i) => ({
+      index: i + 1, id: g.id, name: g.name, note: g.note,
+      svg: g.svg, width: g.width, height: g.height, alt: g.alt, line: g.line,
+    })),
+    options: {
+      options: gallery.map((g, i) => ({ label: `${i + 1}. ${g.name}`, value: `poster ${i + 1}`, note: g.note }))
+        .concat([{ label: 'No poster', value: 'no poster' }]),
+    },
+  };
+}
+
+/**
+ * Take the design they pointed at, and show the finished thing.
+ *
+ * Accepts a number ("poster 2") or a name ("use midnight"), because a person
+ * looking at a labelled row of pictures will use whichever is closer to hand.
+ * The answer is the post and the poster together, with the one question that
+ * matters left to ask.
+ */
+function handlePickPoster(d, session, choice) {
+  if (!session.final) return ask(session, 'There is no post in progress. Paste a draft first.');
+
+  const ids = Array.isArray(session.gallery) && session.gallery.length
+    ? session.gallery
+    : (d.designs.DESIGN_IDS || []);
+  const raw = String(choice || '').trim().toLowerCase();
+  const byNumber = /^[1-6]$/.test(raw) ? ids[Number(raw) - 1] : null;
+  const byName = ids.filter((id) => id === raw)[0] || null;
+  const id = byNumber || byName;
+  if (!id) return ask(session, 'I did not catch which poster. Say "poster 1" through "poster 6", or the name.');
+
+  let built = null;
+  try {
+    built = d.designs.renderDesign({ design: id, line: session.final, kind: session.kind || 'general' });
+  } catch (e) {
+    console.error('[linkedin-agent] poster render failed:', e.message);
+  }
+  if (!built) return ask(session, 'That poster would not draw. Pick another, or post the text on its own.');
+
+  /* A chosen design replaces both the drawn-from-facts poster and any
+     attachment: the author has just said, explicitly, which picture they
+     want. */
+  session.design = id;
+  session.wantsPoster = true;
+  session.withImage = true;
+  session.poster = null;
+  session.awaiting = 'confirm-post';
+
+  return {
+    ok: true,
+    kind: 'poster-chosen',
+    reply: [
+      `${built.name} it is. Your line is set in it.`,
+      '',
+      session.final,
+      '',
+      `${withCommas(session.final.length)} characters · ${countHashtags(session.final)} hashtag${countHashtags(session.final) === 1 ? '' : 's'} · ${built.name} poster attached`,
+      '',
+      'Shall I post it to LinkedIn?',
+    ].join('\n'),
+    session,
+    post: postSummary(session),
+    poster: {
+      svg: built.svg, template: built.id, fields: {}, width: built.width, height: built.height,
+      alt: built.alt, withImage: true, name: built.name,
+    },
+    options: {
+      options: [
+        { label: 'Yes, post it', value: 'post it' },
+        { label: 'Schedule it', value: 'schedule' },
+        { label: 'Show the posters again', value: 'posters' },
+        { label: 'No poster', value: 'no poster' },
+      ],
+    },
+  };
+}
+
 function handleMakePoster(d, session) {
   if (!session.final) return ask(session, 'There is no post in progress. Paste a draft first.');
   session.wantsPoster = true;
@@ -1097,6 +1428,21 @@ async function turn(input) {
     /* Checked before withImage, because "add the poster" would otherwise be
        read as "keep the attachment". */
     if (INTENTS.makePoster.test(message)) return handleMakePoster(d, session);
+    /* The gallery, and the answer to it. pickPoster is tested only while a
+       gallery is on screen, because a bare "2" means nothing otherwise and
+       would swallow a draft that happens to be one character long. */
+    /* An intake answer is whatever they typed while a question was open,
+       so it is checked before every other intent — 'Online' and '3 months'
+       are answers here and nothing else anywhere. */
+    if (session.awaiting === 'intake' && session.askingField) {
+      return handleIntakeAnswer(d, session, message, user);
+    }
+    if (INTENTS.showPosters.test(message)) return handleShowPosters(d, session);
+    if (session.awaiting === 'pick-poster' && INTENTS.pickPoster.test(message)) {
+      return handlePickPoster(d, session, message.match(INTENTS.pickPoster)[1]);
+    }
+    if (INTENTS.keepShort.test(message)) return handleBrevity(d, session, 'short');
+    if (INTENTS.elaborateMore.test(message)) return handleBrevity(d, session, 'full');
     if (INTENTS.withImage.test(message)) return handleImage(d, session, true);
     const headline = message.match(INTENTS.headline);
     if (headline) return handleTransform(d, session, 'headline', headline[1].trim());
