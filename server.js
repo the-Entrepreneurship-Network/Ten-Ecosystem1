@@ -10942,6 +10942,31 @@ try {
         require('./services/v2/attendanceAgent').initAttendanceAgent();
     }
 
+    /*
+     * LinkedIn agent — a section inside the HR, coordinator, mentor and
+     * founder dashboards where staff draft a post, the agent reviews and
+     * rewrites it, builds a poster, and publishes to the company page.
+     *
+     * Mounted on its own try so a broken LinkedIn module never takes the
+     * academics, resume, job and attendance agents down with it — they are
+     * unrelated features that happen to share this block, and one require()
+     * that throws here used to unmount all of them at once.
+     *
+     * The route decides who may use it (HR, coordinator, mentor, founder,
+     * admin — never students or investors). The scheduler that publishes
+     * queued posts is a cron; it is not started under test, where a timer
+     * that outlives the suite keeps jest's process alive.
+     */
+    try {
+        app.use('/api/v2/linkedin', require('./routes/v2/linkedinAgent'));
+        if (process.env.NODE_ENV !== 'test') {
+            require('./services/v2/linkedin/scheduler').start();
+        }
+        console.log('[V2] LinkedIn agent mounted at /api/v2/linkedin');
+    } catch (e) {
+        console.error('[V2] LinkedIn agent failed to mount:', e.message);
+    }
+
     console.log('[V2] Academics mounted at /api/v2/academics, page at /academics');
     console.log('[V2] Assistant mounted at /api/v2/assistant, page at /assistant');
     console.log('[V2] Resume agent mounted at /api/v2/resume');

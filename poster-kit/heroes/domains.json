@@ -1,0 +1,34 @@
+{
+  "_comment": [
+    "The fourteen domains, and the hero plate each one gets.",
+    "",
+    "Fourteen, not nineteen. config/domains.js carries a longer internal list,",
+    "but the site says '14 DOMAINS — ONE ECOSYSTEM' and ships exactly fourteen",
+    "icons in public/assets/domains/logo. That page is what a student sees, so",
+    "it is what the posters follow — a poster for a domain the site does not",
+    "advertise is a poster pointing at a door that is not there.",
+    "",
+    "Each plate is the high-resolution version of the icon already on that page,",
+    "which is what makes the poster and the page it links to look like one",
+    "product rather than two. The 512px icons are far too small for a 900x1200",
+    "hero panel, so they are not reused directly.",
+    "",
+    "One pairing is a guess and is marked as such: see java."
+  ],
+
+  "Business Development":   { "plate": "gold-bars",    "icon": "business", "alt": "Rising gold bars with a gold arrow" },
+  "Cyber Security":         { "plate": "shield-lock",  "icon": "cyber",    "alt": "A steel shield with a glowing padlock" },
+  "Data Science":           { "plate": "growth-chart", "icon": "datasci",  "alt": "A glass bar chart with a rising arrow" },
+  "DevOps with AWS":        { "plate": "cloud",        "icon": "devops",   "alt": "A neon cloud outline over server racks" },
+  "Flutter Development":    { "plate": "flutter",      "icon": "flutter",  "alt": "The Flutter mark on a circuit-etched shield" },
+  "HR":                     { "plate": "crown",        "icon": "hr",       "alt": "A crystal crown beside a brass-cornered case" },
+  "Java Development":       { "plate": "chip",         "icon": "java",     "alt": "A processor on a circuit board with amber traces",
+                              "uncertain": "Matched by elimination — it is the one plate left and the one domain left. The site's Java icon is a coffee cup and this plate is a circuit board, so if a Java-specific plate exists it should replace this." },
+  "MERN Stack Development": { "plate": "react",        "icon": "mern",     "alt": "A React atom with orbiting framework marks" },
+  "Python Development":     { "plate": "python",       "icon": "python",   "alt": "The Python logo in three dimensions" },
+  "Software Engineering":   { "plate": "gears",        "icon": "softeng",  "alt": "Interlocking cybernetic gears" },
+  "Space":                  { "plate": "rocket",       "icon": "space",    "alt": "A rocket with neon exhaust in deep space" },
+  "Venture Capital":        { "plate": "briefcase",    "icon": "venture",  "alt": "A brass-cornered case with a gold arrow" },
+  "Vibe Coding":            { "plate": "spark",        "icon": "vibe",     "alt": "A four-point magenta spark on a dark ground" },
+  "Web Development":        { "plate": "html5",        "icon": "web",      "alt": "An HTML5 shield badge" }
+}

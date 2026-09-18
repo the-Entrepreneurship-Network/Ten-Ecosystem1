@@ -1,0 +1,72 @@
+{
+  "briefcase": {
+    "alt": "Leather and brass case with a gold arrow",
+    "file": "briefcase.jpg",
+    "kb": 207
+  },
+  "chip": {
+    "alt": "Processor on a circuit board, amber traces",
+    "file": "chip.jpg",
+    "kb": 168
+  },
+  "cloud": {
+    "alt": "Neon cloud outline over server racks",
+    "file": "cloud.jpg",
+    "kb": 180
+  },
+  "crown": {
+    "alt": "Crystal crown beside a brass-cornered case",
+    "file": "crown.jpg",
+    "kb": 184
+  },
+  "flutter": {
+    "alt": "Flutter mark on a circuit-etched shield",
+    "file": "flutter.jpg",
+    "kb": 212
+  },
+  "gears": {
+    "alt": "Interlocking cybernetic gears, teal glow",
+    "file": "gears.jpg",
+    "kb": 251
+  },
+  "gold-bars": {
+    "alt": "Rising gold bars with a gold arrow",
+    "file": "gold-bars.jpg",
+    "kb": 136
+  },
+  "growth-chart": {
+    "alt": "Glass bar chart with a rising arrow",
+    "file": "growth-chart.jpg",
+    "kb": 134
+  },
+  "html5": {
+    "alt": "Orange HTML5 shield badge",
+    "file": "html5.jpg",
+    "kb": 92
+  },
+  "python": {
+    "alt": "Python logo in three dimensions",
+    "file": "python.jpg",
+    "kb": 60
+  },
+  "react": {
+    "alt": "React atom with orbiting framework marks",
+    "file": "react.jpg",
+    "kb": 193
+  },
+  "rocket": {
+    "alt": "Rocket with neon exhaust in deep space",
+    "file": "rocket.jpg",
+    "kb": 182
+  },
+  "shield-lock": {
+    "alt": "Steel shield with a glowing padlock",
+    "file": "shield-lock.jpg",
+    "kb": 189
+  },
+  "spark": {
+    "alt": "Four-point magenta spark on a dark ground",
+    "file": "spark.jpg",
+    "kb": 50
+  }
+}

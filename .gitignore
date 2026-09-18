@@ -48,3 +48,6 @@ data/job-cache.json
 # Screenshots and prompt text pasted in during development. Never referenced
 # by the application.
 attached_assets/
+poster-kit/out/
+nanobanana-output/
+poster-kit/jobs/
