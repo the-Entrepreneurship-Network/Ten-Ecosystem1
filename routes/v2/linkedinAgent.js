@@ -3,22 +3,23 @@
 /**
  * The LinkedIn agent's HTTP surface: /api/v2/linkedin.
  *
- * Staff in the HR, coordinator, mentor and founder dashboards talk to the
- * agent through POST /chat; everything else here is the plumbing around that
- * conversation — the connection status the dashboard card shows, the post
- * history, the poster image, the OAuth handshake that connects the company
- * page, and the direct publish/schedule/delete actions on a stored post.
+ * Every route here reads. None of them writes a post, and that is the whole
+ * shape of this file: the posts are written by the weekend autopilot and sent
+ * by the scheduler, both of them crons, with nobody logged in. What is left
+ * for a dashboard to do is look — at how many posts have gone out, at which
+ * domains are coming up, at whether the page is still connected — plus the
+ * OAuth handshake that connects it.
  *
- * Who may use it is decided once, at the top, for every route: HR,
+ * Who may read it is decided once, at the top, for every route: HR,
  * coordinators, mentors, founders and admins. Students, investors and
  * contractors get 403 on all of it, and a request with no session gets 401.
  * The OAuth pair is narrower still (HR and admin only), because connecting the
  * page hands the whole app a token that can post as the company.
  *
- * The thinking lives in services/v2/linkedin/agent.js; the handlers here do
- * not compose, review or decide. They parse the request, hand it to the
- * agent or the client, and shape the answer. That is what keeps the route
- * testable with every sibling module mocked.
+ * The thinking lives in services/v2/linkedin/; the handlers here do not
+ * compose, review or decide. They parse the request, hand it to the autopilot
+ * or the client, and shape the answer. That is what keeps the route testable
+ * with every sibling module mocked.
  */
 
 const express = require('express');
@@ -65,7 +66,7 @@ const ORG_VANITY = 'the-entrepreneurship-network';
  * tests to mock every module before the router is even loaded.
  */
 const mods = {
-  agent: () => require('../../services/v2/linkedin/agent'),
+  autopilot: () => require('../../services/v2/linkedin/autopilot'),
   client: () => require('../../services/v2/linkedin/linkedinClient'),
   scheduler: () => require('../../services/v2/linkedin/scheduler'),
   posters: () => require('../../services/v2/linkedin/posterStudio'),
@@ -100,11 +101,6 @@ function displayName(req) {
   if (s.coordinator) return String(s.coordinator.name || s.coordinator.username || '');
   if (s.adminUser) return String(s.adminUser.name || s.adminUser.username || '');
   return String(s.ecosystemUserName || '');
-}
-
-function userOf(req) {
-  const u = req.user || {};
-  return { role: u.role, id: u._id, name: displayName(req) };
 }
 
 const OBJECT_ID = /^[a-f0-9]{24}$/i;
@@ -160,25 +156,32 @@ async function leanMany(Model, filter, opts) {
   return Array.isArray(rows) ? rows : [];
 }
 
-/** A post as the dashboard list wants it: no SVG, no PNG, no full text. */
+/**
+ * A post as the dashboard list wants it: no SVG, no PNG, no full text.
+ *
+ * Shaped here rather than borrowed from the agent module, so that the fields
+ * the dashboard receives are visible in the file that serves them — and so
+ * that a field added to the model later does not appear in the response
+ * without anybody deciding it should.
+ */
 function listRow(p) {
-  return mods.agent().postRow(p);
-}
-
-function historyEntry(req, action, note) {
-  const u = userOf(req);
-  return { at: new Date(), by: u.name || String(u.id || '') || u.role, action, note: String(note || '').slice(0, 300) };
-}
-
-function pngOf(body) {
-  const b64 = body && typeof body.pngBase64 === 'string' ? body.pngBase64.replace(/^data:image\/png;base64,/, '') : '';
-  if (!b64) return { buffer: undefined, base64: '' };
-  try {
-    const buffer = Buffer.from(b64, 'base64');
-    return buffer.length ? { buffer, base64: b64 } : { buffer: undefined, base64: '' };
-  } catch (e) {
-    return { buffer: undefined, base64: '' };
-  }
+  const post = p || {};
+  const first = String(post.final || post.draft || '').split('\n').find((l) => l.trim()) || '';
+  return {
+    id: String(post._id || ''),
+    kind: post.kind || 'general',
+    domain: post.domain || '',
+    source: post.source || 'agent',
+    status: post.status || 'draft',
+    verdict: post.verdict || 'ok',
+    dryRun: Boolean(post.dryRun),
+    excerpt: first.trim().slice(0, 160),
+    createdAt: post.createdAt,
+    scheduledFor: post.scheduledFor,
+    publishedAt: post.publishedAt,
+    url: (post.linkedin && post.linkedin.url) || '',
+    error: post.error || '',
+  };
 }
 
 /* ── status ─────────────────────────────────────────────────────────────── */
@@ -206,17 +209,36 @@ router.get('/status', staffOnly, h(async (req, res) => {
   });
 }));
 
-/* ── chat ───────────────────────────────────────────────────────────────── */
+/* ── autopilot ──────────────────────────────────────────────────────────── */
 
-router.post('/chat', staffOnly, h(async (req, res) => {
-  const body = req.body || {};
-  const result = await mods.agent().turn({
-    message: typeof body.message === 'string' ? body.message : '',
-    session: body.session && typeof body.session === 'object' ? body.session : {},
-    user: userOf(req),
-    pngBase64: typeof body.pngBase64 === 'string' ? body.pngBase64 : undefined,
+/**
+ * Everything the dashboard's LinkedIn Agent section shows: how many posts have
+ * gone out, the last dozen of them, what is queued, and which domains the next
+ * few weekends will get.
+ *
+ * Read-only, like every other route that is left here. There is deliberately
+ * no endpoint that posts, edits, reschedules or skips — the weekend job is
+ * either trusted to run unattended or it is not, and a "post now" button is
+ * how it stops being unattended.
+ */
+router.get('/autopilot', staffOnly, h(async (req, res) => {
+  const autopilot = mods.autopilot();
+  const now = new Date();
+  const [figures, cfg] = await Promise.all([
+    autopilot.stats({}, req.query.limit),
+    Promise.resolve().then(() => { try { return mods.client().config() || {}; } catch (e) { return {}; } }),
+  ]);
+  res.json({
+    ok: true,
+    role: req.user.role,
+    connected: Boolean(cfg.configured),
+    /* Without a token the scheduler still runs and still records a post — it
+       just never sends it. Saying so here is what stops the count on the card
+       being read as a count of things the public saw. */
+    dryRun: !cfg.configured,
+    stats: figures,
+    forecast: autopilot.forecast(now, 6),
   });
-  res.json(result);
 }));
 
 /* ── posts ──────────────────────────────────────────────────────────────── */
@@ -257,114 +279,17 @@ router.get('/posts/:id/poster.svg', staffOnly, h(async (req, res) => {
   return res.send(svg);
 }));
 
-/**
- * Publish a stored post. Uses the stored `final` and nothing else: the draft
- * is what the person typed, the final is what the agent cleared, and only
- * the second may leave this server.
+/*
+ * There is no publish, schedule or delete route.
+ *
+ * There used to be all three, plus a chat endpoint, because a staff member
+ * wrote the post and pressed the button. Now the weekend job writes it and
+ * the scheduler sends it, so the only thing a dashboard does with a post is
+ * look at it. Leaving a publish route mounted "just in case" would mean a
+ * second way for text to reach the company page — one with no rotation, no
+ * slot key and no guarantee of which domain it named — which is precisely
+ * the arrangement this change exists to remove.
  */
-router.post('/posts/:id/publish', staffOnly, h(async (req, res) => {
-  const LinkedInPost = mods.LinkedInPost();
-  if (!validId(req.params.id)) return res.status(404).json({ ok: false, error: 'Post not found' });
-  const post = await leanOne(LinkedInPost, req.params.id);
-  if (!post) return res.status(404).json({ ok: false, error: 'Post not found' });
-  if (post.status === 'published' && !post.dryRun) {
-    return res.status(409).json({ ok: false, error: 'This post has already been published.' });
-  }
-  if (post.status === 'rejected') return res.status(409).json({ ok: false, error: 'This post was discarded; draft it again.' });
-  if (!post.final || post.verdict === 'block') {
-    return res.status(422).json({ ok: false, error: 'This post has no approved text to publish.' });
-  }
-
-  const png = pngOf(req.body);
-  const withImage = post.poster ? post.poster.withImage !== false : true;
-  const buffer = withImage ? (png.buffer || (post.poster && post.poster.png ? Buffer.from(post.poster.png, 'base64') : undefined)) : undefined;
-  const altText = `The Entrepreneurship Network — ${post.kind || 'general'} post`;
-
-  await LinkedInPost.findByIdAndUpdate(post._id, {
-    $set: { status: 'publishing' },
-    $push: { history: historyEntry(req, 'publishing', buffer ? 'with poster' : 'text only') },
-  });
-
-  let result;
-  try {
-    result = await mods.client().publish({ text: post.final, png: buffer, altText });
-  } catch (e) {
-    result = { ok: false, dryRun: false, error: e.message };
-  }
-  const r = result || { ok: false, error: 'no response from the LinkedIn client' };
-
-  if (r.ok || r.dryRun) {
-    await LinkedInPost.findByIdAndUpdate(post._id, {
-      $set: {
-        status: 'published',
-        publishedAt: new Date(),
-        dryRun: Boolean(r.dryRun),
-        linkedin: { postUrn: r.postUrn || '', imageUrn: r.imageUrn || '', url: r.url || '' },
-        error: '',
-      },
-      $push: { history: historyEntry(req, r.dryRun ? 'dry-run' : 'published', r.url || '') },
-    });
-  } else {
-    await LinkedInPost.findByIdAndUpdate(post._id, {
-      $set: { status: 'failed', error: String(r.error || '').slice(0, 500) },
-      $push: { history: historyEntry(req, 'failed', r.error || '') },
-    });
-  }
-
-  return res.json({
-    ok: Boolean(r.ok || r.dryRun),
-    dryRun: Boolean(r.dryRun),
-    url: r.url || '',
-    postUrn: r.postUrn || '',
-    payload: r.payload,
-    error: r.error || '',
-    notice: r.dryRun ? mods.agent().DRY_RUN_NOTICE : '',
-    postId: String(post._id),
-  });
-}));
-
-router.post('/posts/:id/schedule', staffOnly, h(async (req, res) => {
-  const LinkedInPost = mods.LinkedInPost();
-  if (!validId(req.params.id)) return res.status(404).json({ ok: false, error: 'Post not found' });
-  const post = await leanOne(LinkedInPost, req.params.id);
-  if (!post) return res.status(404).json({ ok: false, error: 'Post not found' });
-  if (post.status === 'published' && !post.dryRun) {
-    return res.status(409).json({ ok: false, error: 'This post has already been published.' });
-  }
-  if (!post.final || post.verdict === 'block') {
-    return res.status(422).json({ ok: false, error: 'This post has no approved text to schedule.' });
-  }
-  const whenText = req.body && typeof req.body.when === 'string' ? req.body.when.trim() : '';
-  if (!whenText) return res.status(400).json({ ok: false, error: 'Say when — for example "tomorrow 10am" (IST).' });
-  const when = mods.scheduler().parseWhen(whenText, new Date(), 'Asia/Kolkata');
-  if (!when) return res.status(400).json({ ok: false, error: `Could not read "${whenText.slice(0, 60)}" as a future time (IST).` });
-
-  const set = { status: 'scheduled', scheduledFor: when, error: '' };
-  const png = pngOf(req.body);
-  if (png.base64) set['poster.png'] = png.base64;
-  await LinkedInPost.findByIdAndUpdate(post._id, {
-    $set: set,
-    $push: { history: historyEntry(req, 'scheduled', when.toISOString()) },
-  });
-  return res.json({ ok: true, scheduledFor: when.toISOString(), scheduledForText: mods.agent().istDateTime(when) });
-}));
-
-router.delete('/posts/:id', staffOnly, h(async (req, res) => {
-  const LinkedInPost = mods.LinkedInPost();
-  if (!validId(req.params.id)) return res.status(404).json({ ok: false, error: 'Post not found' });
-  const post = await leanOne(LinkedInPost, req.params.id);
-  if (!post) return res.status(404).json({ ok: false, error: 'Post not found' });
-  /* A post that is already on LinkedIn cannot be un-posted from here; the
-     record stays so the history stays true. */
-  if (post.status === 'published' && !post.dryRun) {
-    return res.status(409).json({ ok: false, error: 'This post is already published on LinkedIn; delete it there.' });
-  }
-  await LinkedInPost.findByIdAndUpdate(post._id, {
-    $set: { status: 'rejected' },
-    $push: { history: historyEntry(req, 'rejected', 'discarded from the dashboard') },
-  });
-  return res.json({ ok: true });
-}));
 
 /* ── OAuth ──────────────────────────────────────────────────────────────── */
 
@@ -421,7 +346,7 @@ router.get('/oauth/callback', connectOnly, h(async (req, res) => {
 
   const org = await pickOrganization(client, tok.accessToken);
   const expiresAt = new Date(Date.now() + (Number(tok.expiresIn) > 0 ? Number(tok.expiresIn) : 60 * 24 * 3600) * 1000);
-  const u = userOf(req);
+  const u = { role: req.user && req.user.role, id: req.user && req.user._id, name: displayName(req) };
   await mods.LinkedInConnection().findOneAndUpdate(
     { key: 'default' },
     {

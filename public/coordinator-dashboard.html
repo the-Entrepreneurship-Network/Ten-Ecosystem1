@@ -785,7 +785,6 @@ body::before {
     <button class="coord-nav-btn active" data-tab="submissions" onclick="openCoordModal('submissions')"><span class="nav-icon">📂</span> Submissions</button>
     <button class="coord-nav-btn" onclick="window.location.href='/messages'"><span class="nav-icon">💬</span> Messages</button>
     <button class="coord-nav-btn" data-tab="attendance" onclick="openCoordModal('attendance')"><span class="nav-icon">🪪</span> Attendance</button>
-    <button class="coord-nav-btn" data-tab="attendance-report" onclick="openCoordModal('attendance-report')"><span class="nav-icon">📆</span> Attendance Report</button>
     <button class="coord-nav-btn" data-tab="linkedin-agent" onclick="openCoordModal('linkedin-agent')"><span class="nav-icon">📣</span> LinkedIn Agent</button>
     <button class="coord-nav-btn" data-tab="overview" onclick="openCoordModal('overview')"><span class="nav-icon">👥</span> Student Overview</button>
     <button class="coord-nav-btn" data-tab="notice" onclick="openCoordModal('notice')"><span class="nav-icon">📢</span> Notice Board</button>
@@ -896,15 +895,10 @@ body::before {
         <div class="sec-card-title">Attendance</div>
         <div class="sec-card-desc">Mark and manage class attendance</div>
       </div>
-      <div class="sec-card" onclick="openCoordModal('attendance-report')">
-        <div class="sec-card-icon">📆</div>
-        <div class="sec-card-title">Attendance Report</div>
-        <div class="sec-card-desc">Form attendance by student and date; filters and CSV</div>
-      </div>
       <div class="sec-card" onclick="openCoordModal('linkedin-agent')">
         <div class="sec-card-icon">📣</div>
         <div class="sec-card-title">LinkedIn Agent</div>
-        <div class="sec-card-desc">Draft a post, let the agent review it, add a poster, publish to TEN's page</div>
+        <div class="sec-card-desc">How many posts the agent has put on TEN's page, and which domain is up next</div>
       </div>
       <div class="sec-card" onclick="openCoordModal('overview')">
         <div class="sec-card-icon">👥</div>
@@ -1016,16 +1010,12 @@ body::before {
     </div>
   </div>
 
-  <!-- TAB: Student Overview (review + certificate approval) -->
-  <div class="tab-section" id="tab-attendance-report">
-    <div id="attendanceReportStaff"></div>
-  </div>
-
   <!-- TAB: LinkedIn agent — mounted by /linkedin-agent.js when opened -->
   <div class="tab-section" id="tab-linkedin-agent">
     <div id="linkedinAgentHost"></div>
   </div>
 
+  <!-- TAB: Student Overview (review + certificate approval) -->
   <div class="tab-section" id="tab-overview">
     <div class="submission-wrapper">
       <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
@@ -3178,7 +3168,6 @@ async function loadProctoringViolations() {
 
 <!-- ===== Phase 1 extras: leaderboard + session timeout ===== -->
 <script src="/ten-extras.js"></script>
-<script src="/attendance-report.js"></script>
 <script src="/linkedin-agent.js"></script>
 <script src="/session-timeout.js"></script>
 <script>
@@ -3202,7 +3191,6 @@ function closeSidebar() {
 <script>
 // ── Section Modal System ──
 var coordSectionTitles = {
-  'attendance-report': 'Attendance Report',
   'linkedin-agent': 'LinkedIn Agent',
   'submissions': 'Submissions',
   'attendance': 'Attendance',
@@ -3328,7 +3316,6 @@ async function pmReview(id, action){
 
 function openCoordModal(tabName) {
   switchTab(tabName);
-  if (tabName === 'attendance-report' && window.TENAttendanceReport) TENAttendanceReport.mountStaff(document.getElementById('attendanceReportStaff'), {});
   if (tabName === 'linkedin-agent' && window.TENLinkedInAgent) TENLinkedInAgent.mount(document.getElementById('linkedinAgentHost'), { role: 'coordinator' });
   if (tabName === 'premium') { pmLoadStudents(); pmLoadSent(); pmToggleDue(); }
   var modal = document.getElementById('coordModal');

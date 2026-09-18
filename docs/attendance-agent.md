@@ -130,20 +130,16 @@ node scripts/whatsapp-exchange-token.js --write
 
 ## In the dashboards
 
-- **Student dashboard** → tile *Attendance Report*: the student's own days in
-  the chosen range, one row per date with the number of responses and a green
-  tick once the day's required count (`ATTENDANCE_REQUIRED_PER_DAY`, default
-  2) is reached; *Download CSV*.
-- **Coordinator dashboard** (nav and tile *Attendance Report*) and **HR portal**
-  (nav *Attendance Report*): every student who filled the form, one column per
-  date with the count and tick, filtered by date range and by domain. The
-  search box suggests **domains only**: typing `s` lists every domain starting
-  with S, `d` lists *Web Development* (a word of it starts with D), `softe`
-  still finds *Software Engineering*. Names and employee ids are not filters.
-  *Download CSV* exports exactly what is shown.
+Nowhere, any more. The *Attendance Report* section — one script,
+`public/attendance-report.js`, mounted by the student dashboard, the
+coordinator dashboard and the HR portal — was removed, and the script with it.
 
-The panels are one script, `public/attendance-report.js`, mounted by each
-dashboard. Who is asking is the session's business alone, through the same
+The API below is unaffected and still serves the WhatsApp daily report, which
+is what this agent is for. Anything that needs the per-student table can call
+it; `tests/public/attendanceReportRemoved.test.js` is what keeps the dashboard
+side from creeping back half-wired.
+
+Who is asking stays the session's business alone, through the same
 `middleware/sessionAuth` every other portal route uses: no header or query
 string names a student, and the HR portal's `Bearer hr_` header is not what
 admits it — its session is.

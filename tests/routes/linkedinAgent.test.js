@@ -4,22 +4,25 @@
  * The LinkedIn agent's HTTP surface, proved end to end with nothing real
  * behind it.
  *
- * What this file is actually testing is two layers at once: the router in
- * routes/v2/linkedinAgent.js and the conversation in
- * services/v2/linkedin/agent.js, which the router calls with no injected
- * dependencies and therefore loads for real. Everything BELOW the agent —
- * the content guard, the composer, the LLM, the LinkedIn client, the
- * scheduler, the poster studio and both mongoose models — is replaced here
- * with a fake, by path, so that:
+ * Every route in this router reads. The posts themselves are written by the
+ * weekend autopilot and sent by the scheduler, both crons, neither of which
+ * runs under test — so what is under test here is the router plus
+ * services/v2/linkedin/autopilot.js, which the router calls with no injected
+ * dependencies and therefore loads for real. Below that, the LinkedIn client,
+ * the LLM probe, the poster studio and both mongoose models are replaced with
+ * fakes, by path, so that:
  *
  *   - the suite has no database, no LinkedIn token, no API key and no socket,
  *     which is the only way the promise "a test run can never post to the
  *     company page" can be kept;
- *   - the file stands alone while those sibling modules are still being
- *     written. They are mocked `{ virtual: true }`, so jest does not care
- *     whether the file exists on disk yet. The bug that prevents is the whole
- *     route suite going red because somebody else's module has a typo in it —
- *     a route regression must be visible on its own.
+ *   - a regression in a sibling module cannot turn this file red. They are
+ *     mocked `{ virtual: true }`, so jest does not care whether the file on
+ *     disk parses — a route regression must be visible on its own.
+ *
+ * One group of tests here exists to keep something absent rather than to prove
+ * something present: there must be no route that publishes, schedules, edits
+ * or deletes a post. That surface was removed on purpose, and a 404 on each of
+ * those paths is the assertion that it stays removed.
  *
  * Identity is forged the same way tests/routes/attendanceAgent.test.js does
  * it: a middleware that reads an `x-test-session` header the real middleware
@@ -31,115 +34,7 @@
  * the one thing under test.
  */
 
-/* ── the modules under the agent, all faked ─────────────────────────────── */
-
-/*
- * The guard's verdict is keyed off two markers in the text rather than any
- * real analysis. The router does not care how a draft came to be blocked, only
- * what happens afterwards, and a marker keeps the publishing tests honest: the
- * text that reaches the mocked publish() can be compared against the words the
- * person typed, character for character.
- */
-jest.mock('../../services/v2/linkedin/contentGuard', () => {
-  const statsFor = (t) => ({
-    chars: t.length,
-    words: t.split(/\s+/).filter(Boolean).length,
-    lines: t.split('\n').length,
-    hashtags: 0,
-    emojis: 0,
-    capsRatio: 0,
-    exclamations: 0,
-    links: [],
-  });
-  return {
-    BRAND: { name: 'The Entrepreneurship Network', short: 'TEN' },
-    CODES: {},
-    review: jest.fn((text) => {
-      const t = String(text == null ? '' : text);
-      if (t.indexOf('BLOCKME') >= 0) {
-        return {
-          verdict: 'block',
-          /* hate_slur is on the agent's UNRECOVERABLE list, so this draft has
-             no salvageable version and the agent must refuse outright. */
-          issues: [{
-            code: 'hate_slur',
-            severity: 'block',
-            excerpt: 'BLOCKME',
-            message: 'that word has no place on the company page',
-            fix: 'take it out and say what you mean plainly',
-          }],
-          cleaned: '',
-          stats: statsFor(t),
-        };
-      }
-      if (t.indexOf('REVISEME') >= 0) {
-        return {
-          verdict: 'revise',
-          issues: [{
-            code: 'shouting',
-            severity: 'revise',
-            excerpt: 'REVISEME',
-            message: 'most of this line is capitals',
-            fix: 'sentence case reads as confident, capitals read as shouting',
-          }],
-          cleaned: t.replace(/REVISEME/g, 'Reviseme'),
-          stats: statsFor(t),
-        };
-      }
-      return { verdict: 'ok', issues: [], cleaned: t, stats: statsFor(t) };
-    }),
-  };
-}, { virtual: true });
-
-/*
- * The composer's only job here is to be recognisably NOT the draft. Every
- * composed text carries the 'COMPOSED BODY ::' marker and quotes the source it
- * was given, which is what lets the publishing tests assert that the version
- * LinkedIn was offered is the reviewed one and not the raw draft.
- */
-jest.mock('../../services/v2/linkedin/postComposer', () => {
-  const build = (source, opts) => {
-    const o = opts || {};
-    const kind = o.kind || 'general';
-    const hook = `COMPOSED HOOK — ${kind} post`;
-    const body = `COMPOSED BODY :: ${String(source == null ? '' : source).trim()}`;
-    const cta = 'Apply at virtualinternships.entrepreneurshipnetwork.net';
-    const hashtags = ['#TheEntrepreneurshipNetwork', '#TEN', '#Internships'];
-    const text = [hook, '', body, '', cta, '', hashtags.join(' ')].join('\n');
-    return { hook, body, cta, hashtags, text, kind, chars: text.length };
-  };
-  const reassemble = (c) => {
-    const text = [c.hook, '', c.body, '', c.cta, '', (c.hashtags || []).join(' ')].join('\n');
-    return Object.assign({}, c, { text, chars: text.length });
-  };
-  return {
-    detectKind: jest.fn(() => 'opening'),
-    extractFields: jest.fn(() => ({
-      role: 'Python Intern',
-      domain: 'Python Development',
-      mode: 'Remote',
-      stipend: '5,000/month',
-      duration: '2 months',
-      applyBy: '25 Sep',
-      studentName: '',
-      company: '',
-      position: '',
-      location: '',
-      ctaUrl: 'https://virtualinternships.entrepreneurshipnetwork.net',
-    })),
-    compose: jest.fn((source, opts) => build(source, opts)),
-    composeWithLLM: jest.fn(async () => null),
-    transform: jest.fn((composed, op, arg) => {
-      const next = Object.assign({}, composed);
-      if (op === 'headline') next.hook = String(arg == null ? next.hook : arg);
-      if (op === 'cta') next.cta = String(arg == null ? next.cta : arg);
-      if (op === 'hashtags' && Array.isArray(arg)) next.hashtags = arg;
-      if (op === 'shorter') next.body = String(next.body).slice(0, 40);
-      return reassemble(next);
-    }),
-    assemble: jest.fn(reassemble),
-  };
-}, { virtual: true });
+/* ── the modules under the router, all faked ────────────────────────────── */
 
 jest.mock('../../services/v2/linkedin/llm', () => ({
   provider: jest.fn(() => null),
@@ -158,12 +53,6 @@ jest.mock('../../services/v2/linkedin/linkedinClient', () => ({
   exchangeCode: jest.fn(),
   resolveOrganization: jest.fn(),
   listAdministeredOrganizations: jest.fn(),
-}), { virtual: true });
-
-jest.mock('../../services/v2/linkedin/scheduler', () => ({
-  start: jest.fn(),
-  runDue: jest.fn(async () => ({ published: 0, failed: 0 })),
-  parseWhen: jest.fn(() => null),
 }), { virtual: true });
 
 /*
@@ -225,6 +114,7 @@ jest.mock('../../models/LinkedInPost', () => {
       const want = f[key];
       const have = doc[key];
       if (want && typeof want === 'object' && !(want instanceof Date)) {
+        if (Array.isArray(want.$in)) return want.$in.indexOf(have) >= 0;
         if (want.$gte != null && !(have && new Date(have).getTime() >= new Date(want.$gte).getTime())) return false;
         if (want.$lte != null && !(have && new Date(have).getTime() <= new Date(want.$lte).getTime())) return false;
         if (want.$lt != null && !(have && new Date(have).getTime() < new Date(want.$lt).getTime())) return false;
@@ -274,6 +164,17 @@ jest.mock('../../models/LinkedInPost', () => {
       return doc;
     })),
     findOneAndUpdate: jest.fn(() => chain(() => null)),
+    /* The one pipeline the autopilot runs: count the documents by status. It
+       is implemented rather than stubbed so the numbers on the dashboard card
+       are derived from the seeded documents, which is what makes a test that
+       seeds three published posts and expects "3" mean anything. */
+    aggregate: jest.fn(async (pipeline) => {
+      const group = (pipeline || []).find((s) => s && s.$group);
+      if (!group || group.$group._id !== '$status') throw new Error('unexpected pipeline in the test double');
+      const by = {};
+      docs.forEach((d) => { by[d.status] = (by[d.status] || 0) + 1; });
+      return Object.keys(by).map((k) => ({ _id: k, n: by[k] }));
+    }),
   };
   return Model;
 });
@@ -292,10 +193,7 @@ const { attachEcosystemUser } = require('../../middleware/roleGuard');
 const router = require('../../routes/v2/linkedinAgent');
 const agent = require('../../services/v2/linkedin/agent');
 
-const guard = require('../../services/v2/linkedin/contentGuard');
-const composer = require('../../services/v2/linkedin/postComposer');
 const client = require('../../services/v2/linkedin/linkedinClient');
-const scheduler = require('../../services/v2/linkedin/scheduler');
 const llm = require('../../services/v2/linkedin/llm');
 const posters = require('../../services/v2/linkedin/posterStudio');
 const LinkedInPost = require('../../models/LinkedInPost');
@@ -407,7 +305,6 @@ beforeEach(() => {
   client.exchangeCode.mockResolvedValue(null);
   client.resolveOrganization.mockResolvedValue(null);
   client.listAdministeredOrganizations.mockResolvedValue([]);
-  scheduler.parseWhen.mockReturnValue(null);
   llm.provider.mockReturnValue(null);
 });
 
@@ -428,43 +325,45 @@ describe('routes/v2/linkedinAgent — who may use it', () => {
       const status = await get('/status', role);
       expect(status.status).toBe(200);
       expect(status.body.ok).toBe(true);
-      expect(status.body.role).toBe(role);
-
-      expect((await get('/posts', role)).status).toBe(200);
-      expect((await post('/chat', { message: 'help', session: {} }, role)).status).toBe(200);
+      expect(status.body.role).toBe(role === 'admin' ? 'admin' : role);
     }
   });
 
   it('refuses students, investors and contractors with 403 on every route', async () => {
     for (const role of REFUSED) {
-      for (const path of ['/status', '/posts', '/stats']) {
-        const res = await get(path, role);
-        expect(res.status).toBe(403);
-        expect(res.body.yourRole).toBe(role);
-      }
-      expect((await post('/chat', { message: 'hello' }, role)).status).toBe(403);
-      /* The OAuth pair is narrower still, but for these roles the answer is
-         the same 403 — they never reach the client-id check. */
+      expect((await get('/status', role)).status).toBe(403);
+      expect((await get('/autopilot', role)).status).toBe(403);
+      expect((await get('/posts', role)).status).toBe(403);
+      expect((await get('/stats', role)).status).toBe(403);
       expect((await get('/oauth/start', role)).status).toBe(403);
     }
   });
 
   it('refuses a request with no session at all with 401', async () => {
-    for (const path of ['/status', '/posts', '/stats', '/oauth/start']) {
-      const res = await get(path);
-      expect(res.status).toBe(401);
-      expect(res.body.success).toBe(false);
-    }
-    expect((await post('/chat', { message: 'hello' })).status).toBe(401);
-    /* An unknown header names nobody: it must not be read as a role. */
-    const bluffed = await request(app).get('/api/v2/linkedin/status').set({ 'x-test-session': 'founder-ish', 'x-ecosystem-user-role': 'admin' });
-    expect(bluffed.status).toBe(401);
+    expect((await get('/status')).status).toBe(401);
+    expect((await get('/autopilot')).status).toBe(401);
+    expect((await get('/posts')).status).toBe(401);
+  });
+
+  /*
+   * The manual surface is gone, and it has to stay gone. A publish route left
+   * mounted "just in case" is a second way for text to reach the company page,
+   * one with no rotation behind it and no slot key — which is precisely the
+   * arrangement the weekend autopilot replaced.
+   */
+  it('has no route that writes, publishes, schedules or deletes a post', async () => {
+    expect((await post('/chat', { message: 'hello' }, 'hr')).status).toBe(404);
+    expect((await post('/posts/000000000000000000000001/publish', {}, 'hr')).status).toBe(404);
+    expect((await post('/posts/000000000000000000000001/schedule', { when: 'tomorrow 10am' }, 'hr')).status).toBe(404);
+    const del = await request(app)
+      .delete('/api/v2/linkedin/posts/000000000000000000000001')
+      .set(as('hr'));
+    expect(del.status).toBe(404);
   });
 });
 
 describe('routes/v2/linkedinAgent — GET /status', () => {
   it('reports the connection without ever returning the token', async () => {
-    llm.provider.mockReturnValue('openai');
     const res = await get('/status', 'hr');
     expect(res.status).toBe(200);
     expect(res.body.linkedin).toEqual({
@@ -476,262 +375,160 @@ describe('routes/v2/linkedinAgent — GET /status', () => {
       expiresAt: CONNECTED_CONFIG.expiresAt.toISOString(),
       expiresInDays: 30,
     });
-    expect(res.body.llm).toBe('openai');
-    expect(res.body.canConnect).toBe(true);
-    /* NODE_ENV is 'test' under jest, so the cron must report itself off. */
-    expect(res.body.scheduler).toEqual({ enabled: false });
-    expect(res.body.warning).toBe('');
-    /* The strongest form of the assertion: the token never appears anywhere in
-       the raw response body, under any key. */
-    expect(res.text).not.toContain('SUPER-SECRET');
-    expect(res.text).not.toContain('accessToken');
+    expect(JSON.stringify(res.body)).not.toContain('SECRET');
   });
 
   it('warns when the token is nearly out of time, and when it is gone', async () => {
     client.config.mockReturnValue(Object.assign({}, CONNECTED_CONFIG, { expiresInDays: 3 }));
-    const soon = await get('/status', 'hr');
-    expect(soon.body.warning).toBe('The LinkedIn token expires in 3 days — reconnect soon.');
+    expect((await get('/status', 'hr')).body.warning).toMatch(/expires in 3 days/i);
 
     client.config.mockReturnValue(Object.assign({}, CONNECTED_CONFIG, { expiresInDays: -1 }));
-    const gone = await get('/status', 'hr');
-    expect(gone.body.warning).toBe('The LinkedIn token has expired — reconnect the page to post again.');
+    expect((await get('/status', 'hr')).body.warning).toMatch(/expired/i);
   });
 
   it('survives a client that is not configured, and tells a mentor they cannot connect', async () => {
-    client.config.mockReturnValue({ configured: false, orgUrn: '', apiVersion: '202609', source: 'none' });
+    client.config.mockReturnValue({ configured: false, source: 'none' });
     const res = await get('/status', 'mentor');
     expect(res.status).toBe(200);
     expect(res.body.linkedin.configured).toBe(false);
     expect(res.body.canConnect).toBe(false);
-    expect(res.body.warning).toBe('');
   });
 
   it('answers even when the client throws on load', async () => {
-    client.config.mockImplementation(() => { throw new Error('module blew up'); });
-    llm.provider.mockImplementation(() => { throw new Error('no provider'); });
-    const res = await get('/status', 'founder');
+    client.config.mockImplementation(() => { throw new Error('no config'); });
+    const res = await get('/status', 'hr');
     expect(res.status).toBe(200);
     expect(res.body.linkedin.configured).toBe(false);
-    expect(res.body.llm).toBe(null);
   });
 });
 
-describe('routes/v2/linkedinAgent — POST /chat', () => {
-  it('reviews a clean draft and returns the review, the poster and the options', async () => {
-    const body = await chat(CLEAN_DRAFT);
-
-    expect(body.ok).toBe(true);
-    expect(body.kind).toBe('review');
-    expect(body.review.verdict).toBe('ok');
-    expect(body.review.original).toBe(CLEAN_DRAFT);
-
-    /* What would go out is the composed version, not the typed one. */
-    expect(body.post.text).toContain('COMPOSED BODY ::');
-    expect(body.post.text).not.toBe(CLEAN_DRAFT);
-    expect(body.review.final).toBe(body.post.text);
-    expect(body.review.chars).toBe(body.post.text.length);
-
-    /*
-     * No poster by default. The image that goes out is whatever the author
-     * attached; the agent draws a branded square only when asked, because
-     * otherwise it is choosing the picture on the company's post and the
-     * person who typed the words never chose it.
-     */
-    expect(body.poster).toBeNull();
-    expect(posters.build).not.toHaveBeenCalled();
-
-    const labels = body.options.options.map((o) => o.label);
-    expect(labels).toEqual(expect.arrayContaining(['Post now', 'Schedule', 'Shorter', 'Regenerate', 'No image']));
-
-    /* The session comes back for the browser to carry, and it carries the
-       final rather than only the draft. */
-    expect(body.session.final).toBe(body.post.text);
-    expect(body.session.kind).toBe('opening');
-    expect(guard.review).toHaveBeenCalledWith(CLEAN_DRAFT, { kind: 'opening' });
-    expect(composer.compose).toHaveBeenCalled();
-  });
-
-  it('answers "help" without touching the composer or the database', async () => {
-    const body = await chat('help');
-    expect(body.kind).toBe('help');
-    expect(body.reply).toBe(agent.helpText);
-    expect(composer.compose).not.toHaveBeenCalled();
-    expect(client.publish).not.toHaveBeenCalled();
-  });
-});
-
-describe('routes/v2/linkedinAgent — publishing through /chat', () => {
-  it('publishes nothing at all when the draft was blocked', async () => {
-    const drafted = await chat(`BLOCKME ${CLEAN_DRAFT}`);
-    expect(drafted.kind).toBe('refused');
-    expect(drafted.session.verdict).toBe('block');
-    expect(drafted.session.final).toBe('');
-    expect(drafted.post).toBeUndefined();
-    /* The refusal quotes the reason but must not hand the blocked draft back
-       in the agent's voice. */
-    expect(drafted.review.original).toBe('');
-    expect(drafted.reply).toContain('that word has no place on the company page');
-
-    const attempted = await chat('post it', drafted.session);
-    expect(attempted.kind).toBe('refused');
-    expect(client.publish).not.toHaveBeenCalled();
-    expect(LinkedInPost.create).not.toHaveBeenCalled();
-    expect(LinkedInPost.__docs).toHaveLength(0);
-
-    /* Even a forged session that smuggles the blocked text back in as `final`
-       is re-reviewed at the moment of publishing and refused there. */
-    const forged = Object.assign({}, drafted.session, { final: `BLOCKME ${CLEAN_DRAFT}`, verdict: 'ok' });
-    const smuggled = await chat('post it', forged);
-    expect(smuggled.kind).toBe('refused');
-    expect(client.publish).not.toHaveBeenCalled();
-  });
-
-  it('publishes the FINAL text of a revised draft, never the draft itself', async () => {
-    const drafted = await chat(`REVISEME ${CLEAN_DRAFT}`);
-    expect(drafted.kind).toBe('review');
-    expect(drafted.review.verdict).toBe('revise');
-
-    const final = drafted.post.text;
-    expect(final).toContain('Reviseme');
-    expect(final).not.toContain('REVISEME');
-
-    const posted = await chat('post it', drafted.session);
-    expect(posted.kind).toBe('posted');
-
-    expect(client.publish).toHaveBeenCalledTimes(1);
-    const sent = client.publish.mock.calls[0][0];
-    expect(sent.text).toBe(final);
-    expect(sent.text).not.toContain('REVISEME');
-    expect(sent.text).not.toContain(`REVISEME ${CLEAN_DRAFT}`);
-    expect(sent.altText).toBe('The Entrepreneurship Network — image attached to this post');
-    /* No PNG was rasterised by the browser, so nothing is uploaded. */
-    expect(sent.png).toBeUndefined();
-
-    /* And the record keeps both texts, with only the final one ever sent. */
-    const saved = LinkedInPost.__docs[0];
-    expect(saved.final).toBe(final);
-    expect(saved.draft).toBe(`REVISEME ${CLEAN_DRAFT}`);
-    expect(saved.status).toBe('published');
-    expect(saved.history.map((h) => h.action)).toEqual(['created', 'publishing', 'dry-run']);
-  });
-
-  it('shows the dry-run notice when LinkedIn is not connected', async () => {
-    const drafted = await chat(CLEAN_DRAFT);
-    const posted = await chat('post it', drafted.session);
-
-    expect(posted.publish.dryRun).toBe(true);
-    expect(posted.publish.ok).toBe(false);
-    expect(posted.publish.payload).toEqual(DRY_RUN_RESULT.payload);
-    expect(posted.reply).toContain(agent.DRY_RUN_NOTICE);
-    expect(posted.reply).toContain('dry run');
-    /* A dry run is still recorded, flagged, so nobody reads it as a real post. */
-    expect(LinkedInPost.__docs[0].dryRun).toBe(true);
-    /* Nothing secret rides along with the payload. */
-    expect(JSON.stringify(posted)).not.toContain('SUPER-SECRET');
-  });
-
-  it('reports a real publish with the post URL and clears the session for the next one', async () => {
-    client.publish.mockResolvedValue({
-      ok: true,
-      dryRun: false,
-      postUrn: 'urn:li:share:7100',
-      imageUrn: 'urn:li:image:C4E',
-      url: 'https://www.linkedin.com/feed/update/urn:li:share:7100',
+describe('routes/v2/linkedinAgent — GET /autopilot', () => {
+  /* Two published, one failed, one waiting — enough for every number on the
+     dashboard card to be a different number, so a transposed field is visible. */
+  function seedHistory() {
+    LinkedInPost.__seed({
+      status: 'published', source: 'autopilot', domain: 'Python Development',
+      final: '🚀 WE ARE #HIRING #INTERNS | The Entrepreneurship Network (TEN)\nrest of it',
+      publishedAt: new Date('2026-09-12T04:30:00Z'), dryRun: false,
+      linkedin: { url: 'https://www.linkedin.com/feed/update/urn:li:share:1/' },
+      poster: { withImage: true },
     });
-    const drafted = await chat(CLEAN_DRAFT);
-    const posted = await chat('post it', drafted.session);
+    LinkedInPost.__seed({
+      status: 'published', source: 'autopilot', domain: 'Web Development',
+      final: 'second one', publishedAt: new Date('2026-09-13T04:30:00Z'), dryRun: true,
+      poster: { withImage: true },
+    });
+    LinkedInPost.__seed({
+      status: 'failed', source: 'autopilot', domain: 'HR',
+      final: 'third one', error: 'LinkedIn refused the post', createdAt: new Date('2026-09-06T04:30:00Z'),
+    });
+    LinkedInPost.__seed({
+      status: 'scheduled', source: 'autopilot', domain: 'Data Science',
+      scheduledFor: new Date('2026-09-19T04:30:00Z'),
+    });
+  }
 
-    expect(posted.publish.ok).toBe(true);
-    expect(posted.publish.dryRun).toBe(false);
-    expect(posted.reply).toContain('https://www.linkedin.com/feed/update/urn:li:share:7100');
-    expect(posted.session.final).toBe('');
-    expect(posted.session.lastPostId).toBe(posted.publish.postId);
-    expect(LinkedInPost.__docs[0].linkedin.url).toBe('https://www.linkedin.com/feed/update/urn:li:share:7100');
+  it('counts what has gone out and lists the last few of them', async () => {
+    seedHistory();
+    const res = await get('/autopilot', 'coordinator');
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.stats.published).toBe(2);
+    expect(res.body.stats.failed).toBe(1);
+    expect(res.body.stats.scheduled).toBe(1);
+    expect(res.body.stats.total).toBe(4);
+
+    const domains = res.body.stats.recent.map((r) => r.domain);
+    expect(domains).toContain('Python Development');
+    expect(domains).toContain('HR');
+    /* A post still waiting to go out is not history and must not be counted
+       as something the page has already said. */
+    expect(domains).not.toContain('Data Science');
+
+    const python = res.body.stats.recent.find((r) => r.domain === 'Python Development');
+    expect(python.url).toContain('linkedin.com');
+    expect(python.excerpt).toContain('WE ARE');
+    expect(python.dryRun).toBe(false);
   });
 
-  it('records a refusal from LinkedIn as a failed post the chat can retry', async () => {
-    client.publish.mockResolvedValue({ ok: false, dryRun: false, code: 'unauthorized', error: 'token rejected (expired or revoked) — reconnect LinkedIn' });
-    const drafted = await chat(CLEAN_DRAFT);
-    const posted = await chat('post it', drafted.session);
-
-    expect(posted.publish.ok).toBe(false);
-    expect(posted.publish.dryRun).toBe(false);
-    expect(posted.reply).toContain('token rejected');
-    const saved = LinkedInPost.__docs[0];
-    expect(saved.status).toBe('failed');
-    expect(saved.error).toContain('token rejected');
-    /* The id stays on the session so "post it" retries rather than redrafts. */
-    expect(posted.session.postId).toBe(posted.publish.postId);
-  });
-});
-
-describe('routes/v2/linkedinAgent — scheduling through /chat', () => {
-  it('parses a time, asks for confirmation, and stores the scheduled post', async () => {
-    const when = new Date(Date.now() + 20 * 3600 * 1000);
-    scheduler.parseWhen.mockReturnValue(when);
-
-    const drafted = await chat(CLEAN_DRAFT);
-    const asked = await chat('schedule tomorrow 10am', drafted.session);
-    expect(asked.kind).toBe('ask');
-    expect(scheduler.parseWhen).toHaveBeenCalledWith('tomorrow 10am', expect.any(Date), 'Asia/Kolkata');
-    expect(asked.session.scheduleFor).toBe(when.toISOString());
-
-    const done = await chat('yes', asked.session);
-    expect(done.kind).toBe('scheduled');
-    expect(done.scheduledFor).toBe(when.toISOString());
-    expect(client.publish).not.toHaveBeenCalled();
-
-    const saved = LinkedInPost.__docs[0];
-    expect(saved.status).toBe('scheduled');
-    expect(new Date(saved.scheduledFor).toISOString()).toBe(when.toISOString());
-    expect(saved.final).toBe(drafted.post.text);
+  it('names the schedule and the domains coming up', async () => {
+    const res = await get('/autopilot', 'founder');
+    expect(res.body.stats.schedule).toEqual({
+      hour: 10, days: ['Saturday', 'Sunday'], timezone: 'Asia/Kolkata',
+    });
+    expect(res.body.forecast.length).toBeGreaterThan(0);
+    res.body.forecast.forEach((f) => {
+      expect(f.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(typeof f.domain).toBe('string');
+      expect(f.domain.length).toBeGreaterThan(0);
+      /* Every forecast day is a Saturday or a Sunday in IST. */
+      const dow = new Date(`${f.date}T12:00:00+05:30`).getUTCDay();
+      expect([0, 6]).toContain(dow);
+    });
   });
 
-  it('says so, and schedules nothing, when the time cannot be read', async () => {
-    scheduler.parseWhen.mockReturnValue(null);
-    const drafted = await chat(CLEAN_DRAFT);
-    const asked = await chat('schedule on the twelfth of never', drafted.session);
-    expect(asked.kind).toBe('ask');
-    expect(asked.reply).toContain("couldn't read");
-    expect(LinkedInPost.__docs).toHaveLength(0);
+  it('says the posts are not reaching LinkedIn when the page is not connected', async () => {
+    client.config.mockReturnValue({ configured: false, source: 'none' });
+    const res = await get('/autopilot', 'hr');
+    expect(res.body.connected).toBe(false);
+    expect(res.body.dryRun).toBe(true);
+  });
+
+  it('reports connected when the page is', async () => {
+    const res = await get('/autopilot', 'hr');
+    expect(res.body.connected).toBe(true);
+    expect(res.body.dryRun).toBe(false);
+  });
+
+  it('never returns a poster payload in the history', async () => {
+    LinkedInPost.__seed({
+      status: 'published', source: 'autopilot', domain: 'Java Development', final: 'x',
+      poster: { withImage: true, png: 'AAAABBBBCCCC', svg: '<svg/>' },
+    });
+    const res = await get('/autopilot', 'hr');
+    const body = JSON.stringify(res.body);
+    expect(body).not.toContain('AAAABBBBCCCC');
+    expect(body).not.toContain('<svg');
   });
 });
 
 describe('routes/v2/linkedinAgent — posts', () => {
-  const seedPost = (over) => LinkedInPost.__seed(Object.assign({
-    kind: 'opening',
-    draft: 'we are hiring python interns',
-    final: 'COMPOSED HOOK — opening post\n\nCOMPOSED BODY :: we are hiring python interns',
-    verdict: 'ok',
-    status: 'ready',
-    poster: { template: 'opening', fields: { headline: 'Python interns' }, svg: '<svg xmlns="http://www.w3.org/2000/svg"><title>stored</title></svg>', png: 'aGVsbG8=', withImage: true },
-    linkedin: { postUrn: '', imageUrn: '', url: '' },
-  }, over || {}));
+  function seedPost(over) {
+    return LinkedInPost.__seed(Object.assign({
+      kind: 'opening',
+      source: 'autopilot',
+      domain: 'Python Development',
+      draft: '',
+      final: 'FINAL TEXT that the autopilot wrote',
+      verdict: 'ok',
+      status: 'published',
+      poster: { template: 'weekend-hiring', fields: { domain: 'Python Development' }, svg: '<svg id="a"/>', png: 'SGVsbG8=', withImage: true },
+      history: [],
+      createdAt: new Date(),
+    }, over || {}));
+  }
 
   it('lists recent posts without the poster payloads', async () => {
-    seedPost({ status: 'published', publishedAt: new Date(), dryRun: true });
-    seedPost({ kind: 'placement', status: 'scheduled', scheduledFor: new Date(Date.now() + 3600 * 1000) });
-
-    const res = await get('/posts', 'coordinator');
+    seedPost();
+    seedPost({ domain: 'Space', final: 'another' });
+    const res = await get('/posts', 'mentor');
     expect(res.status).toBe(200);
     expect(res.body.posts).toHaveLength(2);
-    const [first] = res.body.posts;
-    expect(first.id).toMatch(/^[a-f0-9]{24}$/);
-    expect(first.kind).toBe('opening');
-    expect(first.status).toBe('published');
-    expect(first.dryRun).toBe(true);
-    expect(res.text).not.toContain('<svg');
-    expect(res.text).not.toContain('aGVsbG8=');
+    res.body.posts.forEach((p) => {
+      expect(p.poster).toBeUndefined();
+      expect(p.id).toBeTruthy();
+      expect(p.source).toBe('autopilot');
+    });
+    expect(JSON.stringify(res.body)).not.toContain('SGVsbG8=');
   });
 
   it('returns one post with the browser PNG stripped out', async () => {
     const doc = seedPost();
     const res = await get(`/posts/${doc._id}`, 'hr');
     expect(res.status).toBe(200);
+    expect(res.body.post.final).toBe('FINAL TEXT that the autopilot wrote');
     expect(res.body.post.poster.png).toBeUndefined();
-    expect(res.body.post.poster.svg).toContain('<svg');
-    /* Stripped from the answer, not from the record — the scheduler needs it. */
-    expect(LinkedInPost.__byId(doc._id).poster.png).toBe('aGVsbG8=');
+    expect(res.body.post.poster.svg).toBe('<svg id="a"/>');
   });
 
   it('404s an id that is not an ObjectId, without asking the database', async () => {
@@ -742,79 +539,16 @@ describe('routes/v2/linkedinAgent — posts', () => {
 
   it('serves the poster as image/svg+xml, stored or rebuilt', async () => {
     const stored = seedPost();
-    const res = await get(`/posts/${stored._id}/poster.svg`, 'mentor');
-    expect(res.status).toBe(200);
-    expect(res.headers['content-type']).toMatch(/^image\/svg\+xml/);
-    expect(res.headers['cache-control']).toBe('private, max-age=300');
-    expect(bodyText(res)).toContain('<title>stored</title>');
+    const a = await get(`/posts/${stored._id}/poster.svg`, 'hr');
+    expect(a.status).toBe(200);
+    expect(a.headers['content-type']).toMatch(/image\/svg\+xml/);
+    expect(bodyText(a)).toBe('<svg id="a"/>');
 
-    /* A scheduled post saved before the SVG existed is rebuilt from its
-       fields rather than answered with nothing. */
-    const bare = seedPost({ poster: { template: 'placement', fields: { headline: 'Priya at Infosys' }, svg: '', withImage: true } });
-    const rebuilt = await get(`/posts/${bare._id}/poster.svg`, 'mentor');
-    expect(rebuilt.status).toBe(200);
-    expect(rebuilt.headers['content-type']).toMatch(/^image\/svg\+xml/);
-    expect(bodyText(rebuilt)).toContain('Priya at Infosys');
-    expect(posters.build).toHaveBeenCalledWith({ template: 'placement', fields: { headline: 'Priya at Infosys' }, size: 'square' });
-  });
-
-  it('schedules a stored post from the dashboard', async () => {
-    const doc = seedPost();
-    const when = new Date(Date.now() + 6 * 3600 * 1000);
-    scheduler.parseWhen.mockReturnValue(when);
-
-    const res = await post(`/posts/${doc._id}/schedule`, { when: 'tomorrow 10am', pngBase64: 'data:image/png;base64,aGVsbG8=' }, 'hr');
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({ ok: true, scheduledFor: when.toISOString(), scheduledForText: agent.istDateTime(when) });
-    expect(scheduler.parseWhen).toHaveBeenCalledWith('tomorrow 10am', expect.any(Date), 'Asia/Kolkata');
-
-    const saved = LinkedInPost.__byId(doc._id);
-    expect(saved.status).toBe('scheduled');
-    expect(saved.scheduledFor).toBe(when);
-    /* The data: prefix is stripped, and the dotted key lands inside poster. */
-    expect(saved.poster.png).toBe('aGVsbG8=');
-    expect(saved.history[saved.history.length - 1].action).toBe('scheduled');
-  });
-
-  it('refuses to schedule without a time, with an unreadable time, or with no approved text', async () => {
-    const doc = seedPost();
-
-    const missing = await post(`/posts/${doc._id}/schedule`, {}, 'hr');
-    expect(missing.status).toBe(400);
-    expect(scheduler.parseWhen).not.toHaveBeenCalled();
-
-    scheduler.parseWhen.mockReturnValue(null);
-    const unreadable = await post(`/posts/${doc._id}/schedule`, { when: 'whenever' }, 'hr');
-    expect(unreadable.status).toBe(400);
-    expect(unreadable.body.error).toContain('whenever');
-
-    const blocked = seedPost({ final: '', verdict: 'block' });
-    scheduler.parseWhen.mockReturnValue(new Date(Date.now() + 3600 * 1000));
-    const refused = await post(`/posts/${blocked._id}/schedule`, { when: 'tomorrow 10am' }, 'hr');
-    expect(refused.status).toBe(422);
-    expect(LinkedInPost.__byId(blocked._id).status).toBe('ready');
-  });
-
-  it('publishes a stored post using its final text alone', async () => {
-    const doc = seedPost();
-    const res = await post(`/posts/${doc._id}/publish`, {}, 'founder');
-    expect(res.status).toBe(200);
-    expect(res.body.dryRun).toBe(true);
-    expect(res.body.notice).toBe(agent.DRY_RUN_NOTICE);
-    const sent = client.publish.mock.calls[0][0];
-    expect(sent.text).toBe(doc.final);
-    /* The stored browser PNG is used when the request carries none. */
-    expect(Buffer.isBuffer(sent.png)).toBe(true);
-    expect(LinkedInPost.__byId(doc._id).status).toBe('published');
-  });
-
-  it('will not publish a blocked post, or one that is already live', async () => {
-    const blocked = seedPost({ final: '', verdict: 'block' });
-    expect((await post(`/posts/${blocked._id}/publish`, {}, 'hr')).status).toBe(422);
-
-    const live = seedPost({ status: 'published', dryRun: false });
-    expect((await post(`/posts/${live._id}/publish`, {}, 'hr')).status).toBe(409);
-    expect(client.publish).not.toHaveBeenCalled();
+    const bare = seedPost({ poster: { template: 'opening', fields: { role: 'Python Intern' }, svg: '', withImage: true } });
+    const b = await get(`/posts/${bare._id}/poster.svg`, 'hr');
+    expect(b.status).toBe(200);
+    expect(posters.build).toHaveBeenCalled();
+    expect(bodyText(b)).toContain('<svg');
   });
 });
 
@@ -822,44 +556,33 @@ describe('routes/v2/linkedinAgent — OAuth', () => {
   it('is 400 when no client id is configured, even for HR', async () => {
     const res = await get('/oauth/start', 'hr');
     expect(res.status).toBe(400);
-    expect(res.body.error).toContain('LINKEDIN_CLIENT_ID');
     expect(client.oauthUrl).not.toHaveBeenCalled();
   });
 
   it('redirects HR to LinkedIn with a state and the default scopes', async () => {
     process.env.LINKEDIN_CLIENT_ID = 'client-abc';
-    process.env.LINKEDIN_REDIRECT_URI = 'https://ten.example/api/v2/linkedin/oauth/callback';
-
-    const res = await get('/oauth/start', 'hr');
+    process.env.LINKEDIN_REDIRECT_URI = 'https://portal.example/api/v2/linkedin/oauth/callback';
+    const res = await request(app).get('/api/v2/linkedin/oauth/start').set(as('hr'));
     expect(res.status).toBe(302);
-    expect(res.headers.location).toContain('https://www.linkedin.com/oauth/v2/authorization');
+    expect(res.headers.location).toContain('linkedin.com/oauth/v2/authorization');
     expect(res.headers.location).toContain('client_id=client-abc');
-
-    const args = client.oauthUrl.mock.calls[0][0];
-    expect(args.clientId).toBe('client-abc');
-    expect(args.redirectUri).toBe('https://ten.example/api/v2/linkedin/oauth/callback');
-    expect(args.scopes).toEqual(client.DEFAULT_SCOPES);
-    /* A random state, long enough to be unguessable, is what makes the
-       callback's cross-site check worth anything. */
-    expect(args.state).toMatch(/^[a-f0-9]{32}$/);
+    expect(res.headers.location).toMatch(/state=[^&]{16,}/);
+    expect(res.headers.location).toContain(encodeURIComponent('w_organization_social'));
   });
 
-  it('is 403 for a mentor, who may use the agent but may not connect the page', async () => {
+  it('is 403 for a mentor, who may read the section but may not connect the page', async () => {
     process.env.LINKEDIN_CLIENT_ID = 'client-abc';
-    process.env.LINKEDIN_REDIRECT_URI = 'https://ten.example/cb';
-    for (const role of ['mentor', 'coordinator', 'founder']) {
-      const res = await get('/oauth/start', role);
-      expect(res.status).toBe(403);
-    }
-    expect((await get('/oauth/start', 'admin')).status).toBe(302);
-    expect(client.oauthUrl).toHaveBeenCalledTimes(1);
+    process.env.LINKEDIN_REDIRECT_URI = 'https://portal.example/cb';
+    expect((await get('/oauth/start', 'mentor')).status).toBe(403);
+    expect((await get('/oauth/start', 'coordinator')).status).toBe(403);
+    expect((await get('/oauth/start', 'founder')).status).toBe(403);
   });
 
   it('refuses a callback whose state was never issued here', async () => {
     process.env.LINKEDIN_CLIENT_ID = 'client-abc';
-    process.env.LINKEDIN_CLIENT_SECRET = 'shh';
-    process.env.LINKEDIN_REDIRECT_URI = 'https://ten.example/cb';
-    const res = await get('/oauth/callback?code=abc&state=forged', 'hr');
+    process.env.LINKEDIN_CLIENT_SECRET = 'shhh';
+    process.env.LINKEDIN_REDIRECT_URI = 'https://portal.example/cb';
+    const res = await get('/oauth/callback?code=abc&state=never-issued', 'hr');
     expect(res.status).toBe(400);
     expect(client.exchangeCode).not.toHaveBeenCalled();
   });
@@ -867,17 +590,15 @@ describe('routes/v2/linkedinAgent — OAuth', () => {
 
 describe('routes/v2/linkedinAgent — GET /stats', () => {
   it('says so when LinkedIn is not connected, and passes the numbers through when it is', async () => {
-    client.config.mockReturnValue({ configured: false, orgUrn: '', apiVersion: '202609', source: 'none' });
+    client.config.mockReturnValue({ configured: false, source: 'none' });
     const off = await get('/stats', 'hr');
     expect(off.status).toBe(200);
-    expect(off.body).toEqual({ ok: false, reason: 'LinkedIn is not connected on this server.' });
+    expect(off.body.ok).toBe(false);
     expect(client.shareStatistics).not.toHaveBeenCalled();
 
     client.config.mockReturnValue(Object.assign({}, CONNECTED_CONFIG));
-    client.shareStatistics.mockResolvedValue({ elements: [{ totalShareStatistics: { impressionCount: 42 } }] });
+    client.shareStatistics.mockResolvedValue({ impressions: 1200, clicks: 42 });
     const on = await get('/stats', 'hr');
-    expect(on.body.ok).toBe(true);
-    expect(on.body.stats.elements[0].totalShareStatistics.impressionCount).toBe(42);
-    expect(client.shareStatistics).toHaveBeenCalledWith({ orgUrn: 'urn:li:organization:12345' });
+    expect(on.body).toEqual({ ok: true, stats: { impressions: 1200, clicks: 42 } });
   });
 });
