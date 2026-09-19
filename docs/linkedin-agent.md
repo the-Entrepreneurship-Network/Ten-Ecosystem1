@@ -180,8 +180,25 @@ no slot key.
 node scripts/linkedin-status.js
 ```
 
-Exits 0 and prints **LIVE** when posts reach the page; exits 1 and prints
-**DRY RUN** when they do not, with what is missing and what to do about it.
+Exits 0 and prints **CONFIGURED** when the credentials are set; exits 1 and
+prints **DRY RUN** when they are not, with what is missing and what to do
+about it.
+
+```bash
+node scripts/linkedin-status.js --live
+```
+
+Goes further and asks LinkedIn. Having the variables set is not the same as
+having them work: a token can be expired, revoked, issued for an app without
+the Community Management API product, or held by somebody who has since been
+removed as an administrator of the page. Every one of those looks identical
+from inside this process until the first post fails at two in the morning.
+
+The live check spends one API call to find out now, and prints the numeric id
+of every page the token can actually post as — which is the value
+`LINKEDIN_ORG_ID` has to be set to. Neither mode prints the token, and neither
+writes anything: `linkedinClient.probe()` returns the pages and never the
+credential, which is why `credentials()` stays module-private.
 
 Run this first whenever the page looks empty. With no credentials the agent
 does everything it does with them — builds the post, renders the poster, saves

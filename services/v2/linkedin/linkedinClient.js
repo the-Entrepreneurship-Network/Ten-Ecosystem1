@@ -808,8 +808,51 @@ async function exchangeCode({ code, clientId, clientSecret, redirectUri } = {}) 
   }
 }
 
+/**
+ * Ask LinkedIn whether the configured credentials actually work.
+ *
+ * `config()` can only report what is set. This reports what LinkedIn agrees
+ * to, which is a different question and the one that matters: a token can be
+ * expired, revoked, issued for an app without the Community Management API
+ * product, or held by somebody who has since been removed as an administrator
+ * of the page. Every one of those is indistinguishable from a working setup
+ * until the first post fails.
+ *
+ * `organizationAcls?q=roleAssignee&role=ADMINISTRATOR` is the right question
+ * because it is what LinkedIn itself checks when a post is created — not "is
+ * this token valid" but "does its holder administer this page".
+ *
+ * Returns the pages and never the token: this exists so a diagnostic can be
+ * written without `credentials()` becoming part of the module's public surface.
+ */
+async function probe(deps) {
+  /* Injectable for the same reason the rest of this feature is: a test has to
+     be able to exercise this without a socket, and a jest spy on the module's
+     own export would not intercept a module-local call. */
+  const list = (deps && deps.listOrganizations) || listAdministeredOrganizations;
+
+  let creds;
+  try {
+    creds = await credentials();
+  } catch (e) {
+    return { ok: false, reason: 'could not read the stored connection', orgs: [], orgUrn: '', source: 'none' };
+  }
+  if (!creds || !creds.token) {
+    return { ok: false, reason: 'no token', orgs: [], orgUrn: creds ? creds.orgUrn : '', source: 'none' };
+  }
+  const orgs = await list({ token: creds.token });
+  return {
+    ok: true,
+    reason: '',
+    orgs: Array.isArray(orgs) ? orgs : [],
+    orgUrn: creds.orgUrn || '',
+    source: creds.source || '',
+  };
+}
+
 module.exports = {
   config,
+  probe,
   headers,
   escapeCommentary,
   resolveOrganization,

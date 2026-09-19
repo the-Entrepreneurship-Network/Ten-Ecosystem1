@@ -16,6 +16,18 @@
  *
  * Exits 0 when the agent is live, 1 when it is not, so it can be a deploy
  * check rather than something somebody has to remember to run.
+ *
+ *     node scripts/linkedin-status.js --live
+ *
+ * With --live it goes further and asks LinkedIn. Having the variables set is
+ * not the same as having them work: a token can be expired, revoked, issued
+ * for the wrong app, or held by somebody who is not an administrator of the
+ * page, and every one of those looks identical from inside this process until
+ * the first post fails at two in the morning. The live check spends one API
+ * call to find out now, and prints the numeric id of every page the token can
+ * actually post as — which is the value LINKEDIN_ORG_ID has to be set to.
+ *
+ * Neither mode prints the token, and neither writes anything.
  */
 
 require('dotenv').config();
@@ -78,14 +90,25 @@ async function main() {
   line('publisher enabled', !has('LINKEDIN_SCHEDULER_DISABLED'), has('LINKEDIN_SCHEDULER_DISABLED') ? 'LINKEDIN_SCHEDULER_DISABLED is set' : '');
   console.log();
 
+  const wantsLive = process.argv.indexOf('--live') >= 0;
+
   /* The verdict is taken from the client rather than recomputed here, so this
      script cannot drift from what publish() will actually decide. */
   if (cfg.configured) {
-    console.log(c(GREEN, c(BOLD, '  LIVE — posts will reach the company page.')));
+    console.log(c(GREEN, c(BOLD, '  CONFIGURED — posts will be sent to the company page.')));
     console.log(`  Posting as ${cfg.orgName || cfg.orgUrn} ${c(DIM, `(${cfg.source})`)}`);
     if (cfg.warning) console.log(c(YELLOW, `  ${cfg.warning}`));
     console.log();
+    if (wantsLive) await liveCheck(cfg);
+    else console.log(`  ${c(DIM, 'Add --live to ask LinkedIn whether the token really works.')}\n`);
     return;
+  }
+
+  if (wantsLive && envToken) {
+    /* A token with no LINKEDIN_ORG_ID is the most common half-configured
+       state, and it is also the one the live check can fix outright: the
+       answer names the ids to choose from. */
+    await liveCheck(cfg);
   }
 
   process.exitCode = 1;
@@ -105,6 +128,69 @@ async function main() {
   console.log(`  product approved, the ${c(BOLD, 'w_organization_social')} scope, and whoever`);
   console.log(`  authorises it must be an ADMINISTRATOR of the page. LinkedIn`);
   console.log(`  reviews that product request — it is not instant.\n`);
+}
+
+/**
+ * Ask LinkedIn whether the token works, and which pages it may post as.
+ *
+ * `organizationAcls?q=roleAssignee&role=ADMINISTRATOR` is the right question
+ * because it is the same thing LinkedIn checks when a post is created: not
+ * "is this token valid" but "does whoever holds it administer this page".
+ * A perfectly valid token belonging to somebody who was removed as an admin
+ * fails at post time and nowhere earlier.
+ *
+ * Prints ids, never the token.
+ */
+async function liveCheck(cfg) {
+  console.log(c(BOLD, '  Asking LinkedIn…'));
+
+  let result;
+  try {
+    result = await client.probe();
+  } catch (e) {
+    console.log(c(RED, `  The call failed: ${e && e.message ? e.message : e}\n`));
+    process.exitCode = 1;
+    return;
+  }
+
+  if (!result.ok) {
+    process.exitCode = 1;
+    console.log(c(YELLOW, `  Nothing to check — ${result.reason}.\n`));
+    return;
+  }
+  const orgs = result.orgs || [];
+
+  if (!orgs.length) {
+    process.exitCode = 1;
+    console.log(c(RED, '  LinkedIn returned no administered pages.\n'));
+    console.log('  That is one of four things, in the order worth checking:\n');
+    console.log(`    1. The app does not have ${c(BOLD, 'Community Management API')} approved.`);
+    console.log('       Developer portal -> your app -> Products. This is the usual one,');
+    console.log('       and LinkedIn reviews the request by hand.');
+    console.log(`    2. The token is missing the ${c(BOLD, 'rw_organization_admin')} scope.`);
+    console.log('    3. Whoever authorised it is not an ADMINISTRATOR of the page.');
+    console.log('    4. The token has expired or been revoked.\n');
+    return;
+  }
+
+  console.log(c(GREEN, `  The token works. It administers ${orgs.length} page${orgs.length === 1 ? '' : 's'}:\n`));
+  orgs.forEach((o) => {
+    const id = String(o.orgUrn).replace(/^urn:li:organization:/, '');
+    const current = cfg.orgUrn && cfg.orgUrn === o.orgUrn;
+    console.log(`    ${c(BOLD, id)}  ${c(DIM, o.orgUrn)}${current ? c(GREEN, '   <- currently selected') : ''}`);
+  });
+  console.log();
+
+  if (!cfg.orgUrn) {
+    console.log(`  ${c(YELLOW, 'Set LINKEDIN_ORG_ID to one of the ids above and restart.')}\n`);
+    process.exitCode = 1;
+  } else if (!orgs.some((o) => o.orgUrn === cfg.orgUrn)) {
+    process.exitCode = 1;
+    console.log(c(RED, `  LINKEDIN_ORG_ID is ${cfg.orgUrn}, which is not in that list.`));
+    console.log('  Posts will be rejected. Use one of the ids above.\n');
+  } else {
+    console.log(c(GREEN, c(BOLD, '  LIVE — the next post will reach the page.\n')));
+  }
 }
 
 main().catch((e) => {

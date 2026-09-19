@@ -71,10 +71,16 @@ describe('scripts/linkedin-status.js', () => {
     expect(out).toContain('w_organization_social');
   });
 
-  it('says LIVE and exits zero once a token and a page are set', () => {
+  /*
+   * Without --live the script can only report what is set, so it says
+   * CONFIGURED rather than LIVE. The distinction is the point: a set variable
+   * is not a working credential, and only --live can tell them apart.
+   */
+  it('says CONFIGURED and exits zero once a token and a page are set', () => {
     const r = run({ LINKEDIN_ACCESS_TOKEN: 'test-token', LINKEDIN_ORG_ID: '12345' });
-    expect(r.stdout).toMatch(/LIVE/);
+    expect(r.stdout).toMatch(/CONFIGURED/);
     expect(r.stdout).not.toMatch(/DRY RUN/);
+    expect(r.stdout).toMatch(/--live/);
     expect(r.code).toBe(0);
   });
 
@@ -139,5 +145,83 @@ describe('the verdict matches what publish() will actually do', () => {
     const cfg = client.config();
     expect(cfg.configured).toBe(true);
     expect(cfg.orgUrn).toBe('urn:li:organization:12345');
+  });
+});
+
+describe('the live check', () => {
+  const REAL = {};
+
+  beforeEach(() => {
+    jest.resetModules();
+    LINKEDIN_ENV.forEach((k) => { REAL[k] = process.env[k]; delete process.env[k]; });
+  });
+
+  afterEach(() => {
+    LINKEDIN_ENV.forEach((k) => {
+      if (REAL[k] === undefined) delete process.env[k];
+      else process.env[k] = REAL[k];
+    });
+  });
+
+  /*
+   * probe() is the whole reason the live check can exist without widening the
+   * client's surface: a diagnostic needs to know whether the token works, and
+   * `credentials()` — which returns the token itself — stays module-private.
+   */
+  it('never hands the token back to its caller', async () => {
+    process.env.LINKEDIN_ACCESS_TOKEN = 'super-secret-token';
+    process.env.LINKEDIN_ORG_ID = '12345';
+    const client = require('../../services/v2/linkedin/linkedinClient');
+
+    let sawToken = '';
+    const out = await client.probe({
+      listOrganizations: async ({ token }) => { sawToken = token; return []; },
+    });
+    /* The lister does get the token — it has to, to make the call — but the
+       return value must not carry it back out to whoever asked. */
+    expect(sawToken).toBe('super-secret-token');
+    expect(JSON.stringify(out)).not.toContain('super-secret-token');
+    expect(out.token).toBeUndefined();
+  });
+
+  it('says plainly when there is no token to check', async () => {
+    const client = require('../../services/v2/linkedin/linkedinClient');
+    const out = await client.probe();
+    expect(out.ok).toBe(false);
+    expect(out.reason).toBe('no token');
+    expect(out.orgs).toEqual([]);
+  });
+
+  it('reports the pages the token may actually post as', async () => {
+    process.env.LINKEDIN_ACCESS_TOKEN = 'test-token';
+    process.env.LINKEDIN_ORG_ID = '12345';
+    const client = require('../../services/v2/linkedin/linkedinClient');
+    const out = await client.probe({
+      listOrganizations: async () => ([
+        { orgUrn: 'urn:li:organization:12345', role: 'ADMINISTRATOR', state: 'APPROVED' },
+      ]),
+    });
+    expect(out.ok).toBe(true);
+    expect(out.orgUrn).toBe('urn:li:organization:12345');
+    expect(out.orgs).toHaveLength(1);
+  });
+
+  /*
+   * The case that looks configured and is not: the variables are set, config()
+   * is happy, and LinkedIn will still refuse the post because the token does
+   * not administer that page. Only the live check can see it.
+   */
+  it('surfaces an org id the token does not administer', async () => {
+    process.env.LINKEDIN_ACCESS_TOKEN = 'test-token';
+    process.env.LINKEDIN_ORG_ID = '99999';
+    const client = require('../../services/v2/linkedin/linkedinClient');
+    expect(client.config().configured).toBe(true);
+
+    const out = await client.probe({
+      listOrganizations: async () => ([
+        { orgUrn: 'urn:li:organization:12345', role: 'ADMINISTRATOR', state: 'APPROVED' },
+      ]),
+    });
+    expect(out.orgs.some((o) => o.orgUrn === out.orgUrn)).toBe(false);
   });
 });
