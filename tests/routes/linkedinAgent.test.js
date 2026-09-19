@@ -5,7 +5,7 @@
  * behind it.
  *
  * Every route in this router reads. The posts themselves are written by the
- * weekend autopilot and sent by the scheduler, both crons, neither of which
+ * autopilot and sent by the scheduler, both crons, neither of which
  * runs under test — so what is under test here is the router plus
  * services/v2/linkedin/autopilot.js, which the router calls with no injected
  * dependencies and therefore loads for real. Below that, the LinkedIn client,
@@ -320,7 +320,7 @@ async function chat(message, session, role, body) {
 }
 
 describe('routes/v2/linkedinAgent — who may use it', () => {
-  it('lets HR, coordinators, mentors, founders and admins in', async () => {
+  it('lets HR, coordinators, mentors, founders and admins into the staff views', async () => {
     for (const role of ALLOWED) {
       const status = await get('/status', role);
       expect(status.status).toBe(200);
@@ -329,19 +329,34 @@ describe('routes/v2/linkedinAgent — who may use it', () => {
     }
   });
 
-  it('refuses students, investors and contractors with 403 on every route', async () => {
+  /*
+   * The feed is the one route everybody reads, and this is the test that says
+   * so. It is the opposite of what this file asserted a version ago, when the
+   * section was a composer and had to be kept away from students. It is not a
+   * composer any more — it shows the company's own published posts, which the
+   * students are the audience for.
+   */
+  it('lets every signed-in role read the feed, students and investors included', async () => {
+    for (const role of ALLOWED.concat(REFUSED)) {
+      const res = await get('/feed', role);
+      expect(res.status).toBe(200);
+      expect(res.body.ok).toBe(true);
+      expect(Array.isArray(res.body.posts)).toBe(true);
+    }
+  });
+
+  it('still refuses students, investors and contractors everywhere else', async () => {
     for (const role of REFUSED) {
       expect((await get('/status', role)).status).toBe(403);
-      expect((await get('/autopilot', role)).status).toBe(403);
       expect((await get('/posts', role)).status).toBe(403);
       expect((await get('/stats', role)).status).toBe(403);
       expect((await get('/oauth/start', role)).status).toBe(403);
     }
   });
 
-  it('refuses a request with no session at all with 401', async () => {
+  it('refuses a request with no session at all with 401, feed included', async () => {
     expect((await get('/status')).status).toBe(401);
-    expect((await get('/autopilot')).status).toBe(401);
+    expect((await get('/feed')).status).toBe(401);
     expect((await get('/posts')).status).toBe(401);
   });
 
@@ -349,7 +364,7 @@ describe('routes/v2/linkedinAgent — who may use it', () => {
    * The manual surface is gone, and it has to stay gone. A publish route left
    * mounted "just in case" is a second way for text to reach the company page,
    * one with no rotation behind it and no slot key — which is precisely the
-   * arrangement the weekend autopilot replaced.
+   * arrangement the autopilot replaced.
    */
   it('has no route that writes, publishes, schedules or deletes a post', async () => {
     expect((await post('/chat', { message: 'hello' }, 'hr')).status).toBe(404);
@@ -402,93 +417,179 @@ describe('routes/v2/linkedinAgent — GET /status', () => {
   });
 });
 
-describe('routes/v2/linkedinAgent — GET /autopilot', () => {
-  /* Two published, one failed, one waiting — enough for every number on the
-     dashboard card to be a different number, so a transposed field is visible. */
+describe('routes/v2/linkedinAgent — GET /feed', () => {
+  /* Two published (one of them a dry run), one failed, one still queued —
+     enough that the feed has to pick correctly rather than pass everything
+     through. */
   function seedHistory() {
     LinkedInPost.__seed({
       status: 'published', source: 'autopilot', domain: 'Python Development',
-      final: '🚀 WE ARE #HIRING #INTERNS | The Entrepreneurship Network (TEN)\nrest of it',
+      final: '🚀 WE ARE #HIRING #INTERNS | The Entrepreneurship Network (TEN)\n\nrest of the post',
       publishedAt: new Date('2026-09-12T04:30:00Z'), dryRun: false,
       linkedin: { url: 'https://www.linkedin.com/feed/update/urn:li:share:1/' },
-      poster: { withImage: true },
+      poster: { withImage: true, png: 'QUFB', fields: { alt: 'Hiring poster: Python Development Intern' } },
     });
     LinkedInPost.__seed({
       status: 'published', source: 'autopilot', domain: 'Web Development',
       final: 'second one', publishedAt: new Date('2026-09-13T04:30:00Z'), dryRun: true,
-      poster: { withImage: true },
+      poster: { withImage: true, png: 'QUFB' },
     });
     LinkedInPost.__seed({
       status: 'failed', source: 'autopilot', domain: 'HR',
-      final: 'third one', error: 'LinkedIn refused the post', createdAt: new Date('2026-09-06T04:30:00Z'),
+      final: 'the one that did not send', error: 'LinkedIn refused the post',
+      createdAt: new Date('2026-09-06T04:30:00Z'),
     });
     LinkedInPost.__seed({
       status: 'scheduled', source: 'autopilot', domain: 'Data Science',
-      scheduledFor: new Date('2026-09-19T04:30:00Z'),
+      final: 'tomorrow\'s post', scheduledFor: new Date('2026-09-19T04:30:00Z'),
     });
   }
 
-  it('counts what has gone out and lists the last few of them', async () => {
+  it('returns the published posts, whole, to anybody signed in', async () => {
     seedHistory();
-    const res = await get('/autopilot', 'coordinator');
+    const res = await get('/feed', 'student');
     expect(res.status).toBe(200);
-    expect(res.body.ok).toBe(true);
-    expect(res.body.stats.published).toBe(2);
-    expect(res.body.stats.failed).toBe(1);
-    expect(res.body.stats.scheduled).toBe(1);
-    expect(res.body.stats.total).toBe(4);
+    expect(res.body.count).toBe(2);
+    expect(res.body.posts).toHaveLength(2);
 
-    const domains = res.body.stats.recent.map((r) => r.domain);
-    expect(domains).toContain('Python Development');
-    expect(domains).toContain('HR');
-    /* A post still waiting to go out is not history and must not be counted
-       as something the page has already said. */
-    expect(domains).not.toContain('Data Science');
-
-    const python = res.body.stats.recent.find((r) => r.domain === 'Python Development');
+    const python = res.body.posts.find((p) => p.domain === 'Python Development');
+    /* The whole text, not an excerpt — the section exists to show what was said. */
+    expect(python.text).toContain('WE ARE #HIRING #INTERNS');
+    expect(python.text).toContain('rest of the post');
     expect(python.url).toContain('linkedin.com');
-    expect(python.excerpt).toContain('WE ARE');
-    expect(python.dryRun).toBe(false);
+    expect(python.live).toBe(true);
+    expect(python.alt).toContain('Python Development Intern');
   });
 
-  it('names the schedule and the domains coming up', async () => {
-    const res = await get('/autopilot', 'founder');
-    expect(res.body.stats.schedule).toEqual({
-      hour: 10, days: ['Saturday', 'Sunday'], timezone: 'Asia/Kolkata',
-    });
-    expect(res.body.forecast.length).toBeGreaterThan(0);
-    res.body.forecast.forEach((f) => {
-      expect(f.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-      expect(typeof f.domain).toBe('string');
-      expect(f.domain.length).toBeGreaterThan(0);
-      /* Every forecast day is a Saturday or a Sunday in IST. */
-      const dow = new Date(`${f.date}T12:00:00+05:30`).getUTCDay();
-      expect([0, 6]).toContain(dow);
-    });
+  it('shows neither what failed nor what has not gone out yet', async () => {
+    seedHistory();
+    const body = JSON.stringify((await get('/feed', 'student')).body);
+    /* A queued post is tomorrow's announcement; the feed must not be a way to
+       read it today. A failed one was never said at all. */
+    expect(body).not.toContain('Data Science');
+    expect(body).not.toContain("tomorrow's post");
+    expect(body).not.toContain('did not send');
+    expect(body).not.toContain('LinkedIn refused');
   });
 
-  it('says the posts are not reaching LinkedIn when the page is not connected', async () => {
-    client.config.mockReturnValue({ configured: false, source: 'none' });
-    const res = await get('/autopilot', 'hr');
-    expect(res.body.connected).toBe(false);
-    expect(res.body.dryRun).toBe(true);
+  it('flags a post that was recorded but never sent', async () => {
+    seedHistory();
+    const res = await get('/feed', 'contractor');
+    expect(res.body.posts.find((p) => p.domain === 'Web Development').live).toBe(false);
+    expect(res.body.posts.find((p) => p.domain === 'Python Development').live).toBe(true);
   });
 
-  it('reports connected when the page is', async () => {
-    const res = await get('/autopilot', 'hr');
-    expect(res.body.connected).toBe(true);
-    expect(res.body.dryRun).toBe(false);
+  it('points at the committed plate for a domain in the rotation', async () => {
+    seedHistory();
+    const res = await get('/feed', 'investor');
+    expect(res.body.posts.find((p) => p.domain === 'Python Development').image)
+      .toBe('/assets/linkedin-posters/python.jpg');
   });
 
-  it('never returns a poster payload in the history', async () => {
+  it('falls back to the stored image for a post the rotation does not know', async () => {
     LinkedInPost.__seed({
-      status: 'published', source: 'autopilot', domain: 'Java Development', final: 'x',
+      status: 'published', domain: 'Underwater Basket Weaving', final: 'x',
+      publishedAt: new Date('2026-09-14T04:30:00Z'),
+      poster: { withImage: true, png: 'QUFB' },
+    });
+    const res = await get('/feed', 'mentor');
+    expect(res.body.posts[0].image).toMatch(/^\/api\/v2\/linkedin\/feed\/[a-f0-9]{24}\/image$/);
+  });
+
+  it('gives a text-only post no image rather than a broken one', async () => {
+    LinkedInPost.__seed({
+      status: 'published', domain: 'Space', final: 'text only',
+      publishedAt: new Date('2026-09-14T04:30:00Z'),
+      poster: { withImage: false, png: '' },
+    });
+    expect((await get('/feed', 'student')).body.posts[0].image).toBe('');
+  });
+
+  /*
+   * The point of the whole change: a student opening this section sees the
+   * posts and nothing that is anybody's business but the team's.
+   */
+  it('tells a student nothing operational', async () => {
+    seedHistory();
+    const res = await get('/feed', 'student');
+    expect(Object.keys(res.body).sort()).toEqual(['count', 'ok', 'posts']);
+    expect(res.body.connected).toBeUndefined();
+    expect(res.body.canConnect).toBeUndefined();
+    const body = JSON.stringify(res.body);
+    expect(body).not.toContain('scheduled');
+    expect(body).not.toContain('forecast');
+    expect(body).not.toContain('SECRET');
+  });
+
+  it('tells HR, and only HR, whether the page still needs connecting', async () => {
+    client.config.mockReturnValue({ configured: false, source: 'none' });
+    const hr = await get('/feed', 'hr');
+    expect(hr.body.canConnect).toBe(true);
+    expect(hr.body.connected).toBe(false);
+
+    const coordinator = await get('/feed', 'coordinator');
+    expect(coordinator.body.canConnect).toBeUndefined();
+    expect(coordinator.body.connected).toBeUndefined();
+  });
+
+  it('never puts the poster payload itself in the feed', async () => {
+    LinkedInPost.__seed({
+      status: 'published', domain: 'Java Development', final: 'x',
+      publishedAt: new Date('2026-09-14T04:30:00Z'),
       poster: { withImage: true, png: 'AAAABBBBCCCC', svg: '<svg/>' },
     });
-    const res = await get('/autopilot', 'hr');
-    const body = JSON.stringify(res.body);
+    const body = JSON.stringify((await get('/feed', 'hr')).body);
     expect(body).not.toContain('AAAABBBBCCCC');
     expect(body).not.toContain('<svg');
+  });
+});
+
+describe('routes/v2/linkedinAgent — GET /feed/:id/image', () => {
+  it('serves the stored bytes of a published post to anybody signed in', async () => {
+    /* "AAA" as base64 — not a real JPEG, which is the point: the route must
+       not inspect it beyond the magic number it uses to choose a type. */
+    const doc = LinkedInPost.__seed({
+      status: 'published', domain: 'Space', final: 'x',
+      poster: { withImage: true, png: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2]).toString('base64') },
+    });
+    const res = await get(`/feed/${doc._id}/image`, 'student');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/image\/jpeg/);
+  });
+
+  it('answers a PNG as image/png rather than guessing jpeg', async () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0]);
+    const doc = LinkedInPost.__seed({
+      status: 'published', domain: 'Space', final: 'x',
+      poster: { withImage: true, png: png.toString('base64') },
+    });
+    const res = await get(`/feed/${doc._id}/image`, 'student');
+    expect(res.headers['content-type']).toMatch(/image\/png/);
+  });
+
+  it('will not serve the image of a post that has not been published', async () => {
+    const queued = LinkedInPost.__seed({
+      status: 'scheduled', domain: 'Space', final: 'x',
+      poster: { withImage: true, png: 'QUFB' },
+    });
+    expect((await get(`/feed/${queued._id}/image`, 'student')).status).toBe(404);
+  });
+
+  it('404s a text-only post and an id that is not an ObjectId', async () => {
+    const textOnly = LinkedInPost.__seed({
+      status: 'published', domain: 'Space', final: 'x',
+      poster: { withImage: false, png: '' },
+    });
+    expect((await get(`/feed/${textOnly._id}/image`, 'student')).status).toBe(404);
+    expect((await get('/feed/not-an-id/image', 'student')).status).toBe(404);
+  });
+
+  it('refuses an anonymous request', async () => {
+    const doc = LinkedInPost.__seed({
+      status: 'published', domain: 'Space', final: 'x',
+      poster: { withImage: true, png: 'QUFB' },
+    });
+    expect((await get(`/feed/${doc._id}/image`)).status).toBe(401);
   });
 });
 
@@ -502,7 +603,7 @@ describe('routes/v2/linkedinAgent — posts', () => {
       final: 'FINAL TEXT that the autopilot wrote',
       verdict: 'ok',
       status: 'published',
-      poster: { template: 'weekend-hiring', fields: { domain: 'Python Development' }, svg: '<svg id="a"/>', png: 'SGVsbG8=', withImage: true },
+      poster: { template: 'domain-hiring', fields: { domain: 'Python Development' }, svg: '<svg id="a"/>', png: 'SGVsbG8=', withImage: true },
       history: [],
       createdAt: new Date(),
     }, over || {}));

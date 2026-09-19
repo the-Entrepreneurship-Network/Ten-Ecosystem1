@@ -135,6 +135,7 @@
     <div class="nav-item" onclick="showSection('chat')" id="nav-chat">💬 Chat &amp; Reports <span class="nav-badge" id="chatReportBadge" style="display:none">0</span></div>
     <div class="nav-item" onclick="window.location.href='/messages'">✉️ My Messages</div>
     <div class="nav-item" onclick="showSection('auditlog')">📋 Audit Log</div>
+    <div class="nav-item" onclick="showSection('linkedin')">📣 LinkedIn Agent</div>
   </nav>
 </div>
 
@@ -166,6 +167,11 @@
         <h3>Students by Domain</h3>
         <div id="domainChart"></div>
       </div>
+    </div>
+
+    <!-- LINKEDIN — drawn by /linkedin-agent.js when the section opens -->
+    <div class="section" id="section-linkedin">
+      <div id="linkedinAgentHost"></div>
     </div>
 
     <!-- PAYMENTS -->
@@ -433,6 +439,7 @@ function showSection(name) {
   if (name === 'cert-overrides') loadOverrides(overrideFilter);
   if (name === 'hackathons') { loadHackathonEvents(); loadHackathonRegs(hackathonFilter); }
   if (name === 'auditlog') loadAuditLog();
+  if (name === 'linkedin' && window.TENLinkedInAgent) TENLinkedInAgent.mount(document.getElementById('linkedinAgentHost'), { role: 'admin' });
   if (name === 'overview') loadStats();
 }
 
@@ -1692,6 +1699,7 @@ function updateOverrideBadge(n) {
 })();
 </script>
 <script src="/notify-orb.js" defer></script>
+<script src="/linkedin-agent.js" defer></script>
 <!-- Two guards, on every page that shows or saves data:
      db-banner says so when there is no database behind the portal, which
      once ran for days looking normal while writing to a JSON file;

@@ -82,6 +82,7 @@ const CODES = Object.freeze({
   hashtag_overload: 'revise',
   emoji_overload: 'revise',
   too_long: 'block',
+  long_post: 'note',
   too_short: 'revise',
   placeholder_text: 'revise',
   insecure_link: 'revise',
@@ -305,13 +306,35 @@ function isBrandHost(value) {
   return BRAND_HOSTS.some((host) => v.indexOf(host) >= 0);
 }
 
+/*
+ * Product names that happen to be spelled like domains.
+ *
+ * A post that says "a Socket.io chat app" is naming a library, not linking to
+ * socket.io, and flagging it teaches whoever reads the report to ignore the
+ * link warning — which is the warning that actually matters, because a raw URL
+ * in the body of a LinkedIn post is what suppresses its reach.
+ *
+ * An allowlist rather than a cleverer pattern: "visit example.com" and "a
+ * Socket.io app" are the same shape, and the only thing that separates them is
+ * knowing that Socket.io is a library. That is a fact, so it is written down.
+ * A name here still counts as a link if it appears with a scheme or a path —
+ * `https://socket.io/docs` is a link whatever else socket.io is.
+ */
+const PRODUCT_NAMES = [
+  'socket.io', 'node.js', 'next.js', 'vue.js', 'nuxt.js', 'nest.js', 'express.js',
+  'three.js', 'd3.js', 'chart.js', 'ember.js', 'backbone.js', 'react.dev',
+];
+
 function findLinks(text) {
   const seen = [];
   const push = (v) => { if (seen.indexOf(v) < 0) seen.push(v); };
   for (const m of allMatches(URL_RE, text)) push(m.value);
   for (const m of allMatches(BARE_DOMAIN_RE, text)) {
     /* A bare domain that is already inside a full URL is the same link. */
-    if (!seen.some((u) => u.toLowerCase().indexOf(m.value.toLowerCase()) >= 0)) push(m.value);
+    if (seen.some((u) => u.toLowerCase().indexOf(m.value.toLowerCase()) >= 0)) continue;
+    /* Bare — no scheme, no path — and a known product name: not a link. */
+    if (PRODUCT_NAMES.indexOf(m.value.toLowerCase()) >= 0) continue;
+    push(m.value);
   }
   /* An e-mail's domain is not a link; drop anything that sits after an @. */
   const emails = allMatches(EMAIL_RE, text).map((m) => m.value.toLowerCase());
@@ -548,14 +571,27 @@ function review(text, options) {
 
   /* ---- length ---- */
 
+  /*
+   * Two different things used to share one code, and one of them was wrong.
+   *
+   * Past 3,000 characters LinkedIn truncates the post, so the end of it does
+   * not exist — that is a fact about the platform and it stays a block.
+   *
+   * Between about 1,300 and 3,000 is a matter of taste: long posts lose some
+   * readers before the call to action. It was a block too, which meant the
+   * house opinion about brevity could stop a post the team had deliberately
+   * written long. A hiring post that lists the projects an intern will build
+   * is long on purpose. So it is a note now, reported and ignorable, under a
+   * code of its own.
+   */
   if (body.length > 3000) {
     add('too_long', body.slice(0, 80),
       `This is ${body.length} characters. LinkedIn cuts a post off at 3,000, so the end would simply not exist.`,
-      'Cut it to under 1,300 characters — one idea per paragraph, and move the detail to the comments.');
+      'Cut it under 3,000 — one idea per paragraph, and move the detail to the comments.');
   } else if (body.length > 1300) {
-    add('too_long', body.slice(0, 80),
-      `This is ${body.length} characters. Posts over about 1,300 lose readers before the call to action.`,
-      'Trim to around 1,300 characters; keep the hook, the facts and the ask.');
+    add('long_post', body.slice(0, 80),
+      `This is ${body.length} characters. Posts over about 1,300 lose some readers before the call to action.`,
+      'Fine if the length is doing work. If it is not, cut to around 1,300 and keep the hook, the facts and the ask.');
   }
   if (body.length > 0 && body.length < 25) {
     add('too_short', body,

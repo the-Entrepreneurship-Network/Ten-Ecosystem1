@@ -184,3 +184,32 @@ describe('it stays fast on a long draft', () => {
     expect(r.verdict).toBeDefined();
   });
 });
+
+describe('a product name spelled like a domain', () => {
+  /*
+   * "A Socket.io chat app" names a library; "visit example.com" is a link.
+   * They are the same shape, and the only thing separating them is knowing
+   * what Socket.io is. Flagging the library teaches whoever reads the report
+   * to ignore the link warning — and that is the warning that matters, because
+   * a raw URL in the body is what suppresses a post's reach.
+   */
+  it('is not counted as a link', () => {
+    const r = review('A Socket.io chat app with rooms, and Node.js on the server.', { kind: 'opening' });
+    expect(r.stats.links).toEqual([]);
+    expect(r.issues.map((i) => i.code)).not.toContain('link_in_body');
+  });
+
+  it('still catches a real bare domain in the same sentence', () => {
+    const r = review('A Socket.io chat app. Apply at virtualinternships.entrepreneurshipnetwork.net today.', { kind: 'opening' });
+    expect(r.stats.links).toEqual(['virtualinternships.entrepreneurshipnetwork.net']);
+  });
+
+  /* The exemption is for the bare name only. With a scheme or a path it is a
+     link whatever else it is, and pretending otherwise would be a hole. */
+  it('still counts the same name when it carries a scheme or a path', () => {
+    expect(review('Read https://socket.io/docs for details.', { kind: 'opening' }).stats.links)
+      .toEqual(['https://socket.io/docs']);
+    expect(review('See socket.io/docs/v4 for details.', { kind: 'opening' }).stats.links)
+      .toEqual(['socket.io/docs/v4']);
+  });
+});
