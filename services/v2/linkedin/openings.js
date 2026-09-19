@@ -83,8 +83,8 @@ const DOMAINS = [
     ],
   },
   {
-    slug: 'business', name: 'Business Development', role: 'Business Development Intern',
-    track: 'business', tag: '#BusinessDevelopment',
+    slug: 'business', name: 'Business Analyst', role: 'Business Analyst Intern',
+    track: 'business', tag: '#BusinessAnalyst',
     builds: [
       'Build a 300-company prospect database in HubSpot, segmented by ideal customer profile',
       'Run a four-touch cold email sequence to 150 prospects and report the reply rates',
@@ -92,7 +92,7 @@ const DOMAINS = [
     ],
   },
   {
-    slug: 'mern', name: 'MERN Stack Development', role: 'MERN Stack Development Intern',
+    slug: 'mern', name: 'MERN Stack', role: 'MERN Stack Intern',
     track: 'tech', tag: '#MERN',
     builds: [
       'A Socket.io chat app with rooms, online presence and message history in MongoDB',
@@ -101,7 +101,7 @@ const DOMAINS = [
     ],
   },
   {
-    slug: 'hr', name: 'HR', role: 'Human Resources Intern',
+    slug: 'hr', name: 'HR Management', role: 'HR Management Intern',
     track: 'hr', tag: '#HumanResources',
     builds: [
       'Source, screen and schedule for one live role, then report the hiring funnel',
@@ -128,7 +128,7 @@ const DOMAINS = [
     ],
   },
   {
-    slug: 'space', name: 'Space', role: 'Space Technology Intern',
+    slug: 'space', name: 'Space Research', role: 'Space Research Intern',
     track: 'space', tag: '#SpaceTech',
     builds: [
       'A pass planner that turns live TLE data into antenna pointing and contact windows',
@@ -155,7 +155,7 @@ const DOMAINS = [
     ],
   },
   {
-    slug: 'flutter', name: 'Flutter Development', role: 'Flutter Development Intern',
+    slug: 'flutter', name: 'Flutter', role: 'Flutter Intern',
     track: 'tech', tag: '#Flutter',
     builds: [
       'An offline-first Flutter expense tracker that syncs to Firestore on reconnect',
