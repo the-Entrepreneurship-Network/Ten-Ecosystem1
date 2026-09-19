@@ -418,7 +418,49 @@ function start() {
     `[linkedin-autopilot] first post in ${FIRST_TICK_MS / 1000}s, `
     + `then one every ${SLOT_HOURS} hours, round the clock`,
   );
+  announceReach();
   return task;
+}
+
+/**
+ * Say, at start-up, whether any of this will actually reach LinkedIn.
+ *
+ * With no credentials the agent does everything it does with them — builds the
+ * post, renders the poster, saves the row, logs "queued Python Development" —
+ * and then does not send it. Every log line looks like success, which is how a
+ * company page can sit empty for a week while the logs say the job is running
+ * perfectly. The only signal was a badge in the dashboard, and nobody opens the
+ * dashboard to find out why nothing was posted.
+ *
+ * So the process says it plainly, once, at the point somebody is already
+ * reading the log: when it starts.
+ */
+function announceReach() {
+  let cfg = {};
+  try {
+    cfg = require('./linkedinClient').config() || {};
+  } catch (e) {
+    cfg = {};
+  }
+
+  if (cfg.configured) {
+    console.log(`[linkedin-autopilot] posting as ${cfg.orgName || cfg.orgUrn} — posts will be live`);
+    if (cfg.warning) console.warn(`[linkedin-autopilot] ${cfg.warning}`);
+    return;
+  }
+
+  console.warn(
+    '\n'
+    + '  ┌─────────────────────────────────────────────────────────────────┐\n'
+    + '  │  LinkedIn agent is in DRY RUN.                                  │\n'
+    + '  │  It will build every post and send NONE of them.                │\n'
+    + '  │                                                                 │\n'
+    + '  │  No LINKEDIN_ACCESS_TOKEN + LINKEDIN_ORG_ID, and no page        │\n'
+    + '  │  connected through OAuth.                                       │\n'
+    + '  │                                                                 │\n'
+    + '  │  Run:  node scripts/linkedin-status.js                          │\n'
+    + '  └─────────────────────────────────────────────────────────────────┘\n',
+  );
 }
 
 module.exports = { FIRST_TICK_MS, SLOT_HOURS, due, feed, forecast, imageUrlFor, readPoster, start, stats, tick };

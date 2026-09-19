@@ -437,6 +437,20 @@ async function publishOne(d, post) {
       linkedin: { postUrn: r.postUrn || '', imageUrn: r.imageUrn || '', url: r.url || '' },
       error: '',
     }, r.dryRun ? 'dry-run' : 'published', r.url || '');
+
+    /* A dry run counts as published because it is the configured behaviour of
+       a server with no token, and marking it 'failed' would fill the dashboard
+       with red for something working as designed. But it must not go past in
+       silence: this is the line that tells somebody reading the log why the
+       company page is still empty. */
+    if (r.dryRun) {
+      console.warn(
+        '[linkedin-scheduler] DRY RUN — post NOT sent to LinkedIn '
+        + '(no token/org configured; run: node scripts/linkedin-status.js)',
+      );
+    } else {
+      console.log(`[linkedin-scheduler] posted to LinkedIn: ${r.url || r.postUrn || 'ok'}`);
+    }
     return true;
   }
 

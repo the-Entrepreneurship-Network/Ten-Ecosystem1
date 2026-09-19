@@ -174,13 +174,50 @@ asserted by a test, because a publish route left mounted "just in case" is a
 second way for text to reach the company page, with no rotation behind it and
 no slot key.
 
+## Is it actually posting?
+
+```bash
+node scripts/linkedin-status.js
+```
+
+Exits 0 and prints **LIVE** when posts reach the page; exits 1 and prints
+**DRY RUN** when they do not, with what is missing and what to do about it.
+
+Run this first whenever the page looks empty. With no credentials the agent
+does everything it does with them — builds the post, renders the poster, saves
+the row, logs `queued Python Development` — and then does not send it. Every
+log line looks like success, which is how a page can sit empty for a week
+while the logs say the job is running perfectly.
+
+The same verdict is printed at start-up, and every dry-run publish logs a
+`DRY RUN — post NOT sent to LinkedIn` line. A test asserts the script's verdict
+and `publish()`'s behaviour can never disagree.
+
 ## Connecting the page
 
-HR visits `/api/v2/linkedin/oauth/start`. It needs
+Two routes. Either one makes it live; neither can be done from the codebase,
+because both need a credential only a page administrator can issue.
+
+**A — a token in the environment.** Fastest, and enough on its own:
+
+```
+LINKEDIN_ACCESS_TOKEN=...
+LINKEDIN_ORG_ID=...        the numeric id of the company page
+```
+
+Restart, and it posts. A token with no `LINKEDIN_ORG_ID` is **not** configured
+— there is no page to post as — and the agent stays in dry run.
+
+**B — OAuth.** Set `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` and
+`LINKEDIN_REDIRECT_URI`, then HR visits `/api/v2/linkedin/oauth/start`. It needs
 `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` and `LINKEDIN_REDIRECT_URI`, the
 `w_organization_social` scope, and the signed-in person to be an
 ADMINISTRATOR or CONTENT_ADMIN of the page. The token is stored with
 `select: false` and never appears in a response or a log.
+
+Either route needs the LinkedIn app to have the **Community Management API**
+product approved. LinkedIn reviews that request and it is not instant — it is
+usually the real blocker rather than anything in this repository.
 
 `LINKEDIN_AUTOPILOT_DISABLED=1` stops the posting job without stopping the
 scheduler; `LINKEDIN_SCHEDULER_DISABLED=1` stops the publisher. Neither cron
