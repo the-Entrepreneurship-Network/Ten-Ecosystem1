@@ -501,6 +501,34 @@ let running = false;
  * atomic so nothing would be posted twice, but the process would stack up
  * overlapping runs it never catches up from.
  */
+/*
+ * How long after boot the first sweep runs.
+ *
+ * A few seconds behind the autopilot's own first tick, so that on a fresh
+ * deploy the post it queues is picked up by this sweep rather than waiting for
+ * the next minute edge. That ordering is why the number is what it is; it is
+ * not a magic delay. If the autopilot has not finished, nothing is due and the
+ * sweep is a no-op, and the minute tick catches it moments later.
+ */
+const FIRST_SWEEP_MS = 15 * 1000;
+
+let firstTimer = null;
+
+/** One sweep, guarded so two overlapping runs cannot both claim a post. */
+function sweep() {
+  if (running) return Promise.resolve();
+  running = true;
+  return Promise.resolve()
+    .then(() => runDue(new Date()))
+    .then((res) => {
+      if (res && (res.published || res.failed)) {
+        console.log(`[linkedin-scheduler] published ${res.published}, failed ${res.failed}`);
+      }
+    })
+    .catch((e) => { console.error('[linkedin-scheduler] tick failed:', e && e.message ? e.message : e); })
+    .then(() => { running = false; });
+}
+
 function start() {
   if (process.env.NODE_ENV === 'test') return null;
   if (process.env.LINKEDIN_SCHEDULER_DISABLED) return null;
@@ -509,21 +537,16 @@ function start() {
   /* Required here rather than at the top so that loading this module for
      parseWhen alone — which is what the route does — does not pull in cron. */
   const cron = require('node-cron');
-  task = cron.schedule('* * * * *', () => {
-    if (running) return;
-    running = true;
-    Promise.resolve()
-      .then(() => runDue(new Date()))
-      .then((res) => {
-        if (res && (res.published || res.failed)) {
-          console.log(`[linkedin-scheduler] published ${res.published}, failed ${res.failed}`);
-        }
-      })
-      .catch((e) => { console.error('[linkedin-scheduler] tick failed:', e && e.message ? e.message : e); })
-      .then(() => { running = false; });
-  });
+  task = cron.schedule('* * * * *', () => { sweep(); });
+
+  /* One sweep shortly after start-up, so the post the autopilot queues on
+     boot goes out in seconds rather than at the next minute edge. The claim
+     is atomic, so a worker that sweeps early cannot take a post twice. */
+  firstTimer = setTimeout(() => { sweep(); }, FIRST_SWEEP_MS);
+  if (firstTimer && typeof firstTimer.unref === 'function') firstTimer.unref();
+
   console.log('[linkedin-scheduler] scheduled posts will be published every minute');
   return task;
 }
 
-module.exports = { start, runDue, parseWhen };
+module.exports = { FIRST_SWEEP_MS, start, runDue, parseWhen };
