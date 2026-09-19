@@ -10943,31 +10943,28 @@ try {
     }
 
     /*
-     * LinkedIn agent — a section inside the HR, coordinator, mentor and
-     * founder dashboards where staff draft a post, the agent reviews and
-     * rewrites it, builds a poster, and publishes to the company page.
+     * LinkedIn openings — a section in every portal listing the fourteen
+     * internship openings, each with its poster and the post that goes with
+     * it, so a person can copy the words, download the picture and post it
+     * from their own account.
      *
-     * Mounted on its own try so a broken LinkedIn module never takes the
-     * academics, resume, job and attendance agents down with it — they are
-     * unrelated features that happen to share this block, and one require()
-     * that throws here used to unmount all of them at once.
+     * Nothing here talks to LinkedIn and nothing runs on a timer. There used
+     * to be a cron that queued a hiring post and a scheduler that published it
+     * to the company page; both are gone, because automated posting is what
+     * gets a company page restricted and the page is where the applications
+     * come from. Fourteen people posting from real profiles reaches further
+     * and risks nothing.
      *
-     * The route decides who may read it (HR, coordinator, mentor, founder,
-     * admin — never students or investors), and it is read-only: the posts
-     * themselves are written by the autopilot, which queues one hiring post
-     * every Saturday and Sunday, and published by the scheduler a minute
-     * later. Both are crons and neither is started under test, where a timer
-     * that outlives the suite keeps jest's process alive.
+     * Still mounted on its own try, for the original reason: a broken module
+     * here must not take the academics, resume, job and attendance agents down
+     * with it — they are unrelated features that happen to share this block,
+     * and one require() that throws here used to unmount all of them at once.
      */
     try {
         app.use('/api/v2/linkedin', require('./routes/v2/linkedinAgent'));
-        if (process.env.NODE_ENV !== 'test') {
-            require('./services/v2/linkedin/scheduler').start();
-            require('./services/v2/linkedin/autopilot').start();
-        }
-        console.log('[V2] LinkedIn agent mounted at /api/v2/linkedin');
+        console.log('[V2] LinkedIn openings mounted at /api/v2/linkedin');
     } catch (e) {
-        console.error('[V2] LinkedIn agent failed to mount:', e.message);
+        console.error('[V2] LinkedIn openings failed to mount:', e.message);
     }
 
     console.log('[V2] Academics mounted at /api/v2/academics, page at /academics');

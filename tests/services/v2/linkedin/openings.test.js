@@ -1,0 +1,207 @@
+'use strict';
+
+/**
+ * The fourteen openings: their data, their posters and their text.
+ *
+ * Everything in this module is a pure function of constants in the same file,
+ * so this suite needs no database, no network and no mocks. The one thing it
+ * does touch is the filesystem, because `posters()` reads it — and the poster
+ * files are the part most likely to go missing, so reading them for real is
+ * the point rather than an inconvenience.
+ *
+ * The assertions that matter most are the ones about what is NOT in the post.
+ * The stipend was deliberately removed from the text while staying on the
+ * poster, and that is the kind of decision somebody re-adds in six months
+ * because the omission looks like an oversight. It is not one.
+ */
+
+const fs = require('fs');
+const path = require('path');
+
+const openings = require('../../../../services/v2/linkedin/openings');
+
+const POSTER_DIR = path.join(__dirname, '..', '..', '..', '..', 'public', 'assets', 'linkedin-posters');
+
+describe('openings — the fourteen domains', () => {
+  test('there are exactly fourteen, which is what the public site advertises', () => {
+    expect(openings.DOMAINS).toHaveLength(14);
+  });
+
+  test('every slug is unique, because the slug is the poster filename', () => {
+    const slugs = openings.DOMAINS.map((d) => d.slug);
+    expect(new Set(slugs).size).toBe(slugs.length);
+  });
+
+  test('every domain carries the fields the section renders', () => {
+    for (const d of openings.DOMAINS) {
+      expect(typeof d.slug).toBe('string');
+      expect(d.slug).toMatch(/^[a-z]+$/);
+      expect(d.name.length).toBeGreaterThan(1);
+      expect(d.role).toContain('Intern');
+      expect(d.tag.startsWith('#')).toBe(true);
+      /* Three builds, not two and not five: the post lists them as a block and
+         a domain with one looks thinner than its neighbours on the same page. */
+      expect(d.builds).toHaveLength(3);
+      for (const b of d.builds) expect(b.length).toBeGreaterThan(20);
+    }
+  });
+
+  test('every track resolves to a real apply link, so none falls back silently', () => {
+    for (const d of openings.DOMAINS) {
+      expect(Object.prototype.hasOwnProperty.call(openings.APPLY, d.track)).toBe(true);
+      expect(openings.applyUrl(d)).toBe(openings.APPLY[d.track]);
+      expect(openings.applyUrl(d)).toMatch(/^https:\/\//);
+    }
+  });
+
+  test('byName finds a domain by display name or by slug, and nothing by nonsense', () => {
+    expect(openings.byName('Python Development').slug).toBe('python');
+    expect(openings.byName('python').slug).toBe('python');
+    expect(openings.byName('PYTHON DEVELOPMENT').slug).toBe('python');
+    expect(openings.byName('Underwater Basket Weaving')).toBeNull();
+    expect(openings.byName('')).toBeNull();
+    expect(openings.byName(null)).toBeNull();
+  });
+});
+
+describe('openings — the posters on disk', () => {
+  test('all fourteen domain plates exist and are not empty', () => {
+    for (const d of openings.DOMAINS) {
+      const file = path.join(POSTER_DIR, `${d.slug}.jpg`);
+      expect(fs.existsSync(file)).toBe(true);
+      expect(fs.statSync(file).size).toBeGreaterThan(1000);
+    }
+  });
+
+  test('posters() lists the domain plate for every domain', () => {
+    for (const d of openings.DOMAINS) {
+      const found = openings.posters(d);
+      expect(found.length).toBeGreaterThanOrEqual(1);
+      const domainPlate = found.find((p) => p.variant === 'domain');
+      expect(domainPlate).toBeTruthy();
+      expect(domainPlate.url).toBe(`/assets/linkedin-posters/${d.slug}.jpg`);
+    }
+  });
+
+  /*
+   * The TEN-building set is not committed yet. This test does not demand it —
+   * it pins the behaviour that makes shipping without it safe: a variant whose
+   * file is absent is absent from the list, so the browser is never handed an
+   * <img> src that 404s. When the fourteen `-ten.jpg` plates land, this test
+   * keeps passing and the one above it starts returning two.
+   */
+  test('a variant with no file on disk is simply not listed', () => {
+    for (const d of openings.DOMAINS) {
+      for (const p of openings.posters(d)) {
+        expect(fs.existsSync(path.join(POSTER_DIR, p.file))).toBe(true);
+      }
+    }
+  });
+
+  test('posters() is empty rather than throwing for a domain that does not exist', () => {
+    expect(openings.posters('not-a-domain')).toEqual([]);
+  });
+});
+
+describe('openings — the post text', () => {
+  const python = openings.byName('python');
+
+  test('carries the facts a reader needs to act', () => {
+    const body = openings.text(python);
+    expect(body).toContain('Python Development Intern');
+    expect(body).toContain(openings.PROGRAMME.batch);
+    expect(body).toContain(openings.PROGRAMME.mode);
+    expect(body).toContain(openings.PROGRAMME.duration);
+    expect(body).toContain(openings.applyUrl(python));
+    expect(body).toContain('No prior knowledge needed');
+    expect(body).toContain('interview-ready and job-ready');
+  });
+
+  /*
+   * The load-bearing one. The poster states the stipend in its own field; the
+   * post does not raise it at all, and in particular never argues the
+   * internship is worth doing despite it — naming an absence and then
+   * defending it is what makes a reader decide the absence is the story.
+   */
+  test('never mentions the stipend, in any form', () => {
+    for (const d of openings.DOMAINS) {
+      const body = openings.text(d).toLowerCase();
+      expect(body).not.toContain('stipend');
+      expect(body).not.toContain('unpaid');
+      expect(body).not.toContain('unpaid internship');
+      expect(body).not.toMatch(/\bno pay\b|\bnot paid\b|\bwithout pay\b/);
+      expect(body).not.toContain('₹');
+    }
+  });
+
+  test('lists that domain\'s own three builds and no other domain\'s', () => {
+    for (const d of openings.DOMAINS) {
+      const body = openings.text(d);
+      for (const b of d.builds) expect(body).toContain(b);
+    }
+    /* The Redis clone belongs to Software Engineering. It reads well under
+       Python too, which is exactly why this guards against it drifting there:
+       a Python intern does not build Redis here, and saying so would be a
+       claim the programme does not keep. */
+    expect(openings.text('python')).not.toContain('Redis clone');
+    expect(openings.text('softeng')).toContain('Redis clone');
+  });
+
+  test('keeps hashtags to five across the whole post', () => {
+    for (const d of openings.DOMAINS) {
+      const tags = openings.text(d).match(/#[A-Za-z][A-Za-z0-9]*/g) || [];
+      expect(tags.length).toBeLessThanOrEqual(5);
+      expect(tags).toContain(d.tag);
+    }
+  });
+
+  test('throws on a domain that does not exist rather than posting a blank', () => {
+    expect(() => openings.text('not-a-domain')).toThrow(/no such domain/);
+  });
+});
+
+describe('openings — alt text', () => {
+  test('describes the poster, stipend included, because the poster shows it', () => {
+    const alt = openings.altText('python');
+    expect(alt).toContain('Python Development Intern');
+    expect(alt).toContain(openings.PROGRAMME.batch);
+    /* The one place the stipend belongs in words: a screen reader must be told
+       what a sighted reader can see on the plate. */
+    expect(alt).toContain(openings.PROGRAMME.stipend);
+  });
+
+  test('is empty rather than throwing for an unknown domain', () => {
+    expect(openings.altText('not-a-domain')).toBe('');
+  });
+});
+
+describe('openings — the payload the section receives', () => {
+  const list = openings.list();
+
+  test('is fourteen entries in the declared order', () => {
+    expect(list).toHaveLength(14);
+    expect(list.map((o) => o.slug)).toEqual(openings.DOMAINS.map((d) => d.slug));
+  });
+
+  test('every entry carries text, an apply link, alt text and its posters', () => {
+    for (const o of list) {
+      expect(o.text.length).toBeGreaterThan(500);
+      expect(o.applyUrl).toMatch(/^https:\/\//);
+      expect(o.alt.length).toBeGreaterThan(20);
+      expect(Array.isArray(o.posters)).toBe(true);
+      for (const p of o.posters) {
+        expect(['domain', 'ten']).toContain(p.variant);
+        expect(p.url.startsWith('/assets/linkedin-posters/')).toBe(true);
+      }
+    }
+  });
+
+  /* Nothing in this feature holds a credential any more, and the payload goes
+     to every signed-in role including students. Worth pinning. */
+  test('leaks nothing operational', () => {
+    const json = JSON.stringify(list).toLowerCase();
+    for (const forbidden of ['token', 'urn:li:organization', 'client_secret', 'authorization', 'orgurn']) {
+      expect(json).not.toContain(forbidden);
+    }
+  });
+});
