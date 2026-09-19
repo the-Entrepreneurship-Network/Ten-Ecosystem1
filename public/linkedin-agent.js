@@ -5,21 +5,21 @@
  * It shows one thing: the posts the company page has published, newest first,
  * each with its poster and its full text. There is no text box, no send
  * button, no poster picker and no publish action, because there is nothing
- * here for a person to do — the agent posts one internship opening every
- * Saturday and Sunday by itself. The section is a window onto what was said,
+ * here for a person to do — the agent posts one internship opening every two
+ * hours by itself, round the clock. The section is a window onto what was said,
  * which is why it is the same for a first-week intern as for the founder:
  * everything in it is already public on LinkedIn.
  *
  * Three things it is careful about.
  *
- * `mount()` is called again every time the section is opened, in seven portals
+ * `mount()` is called again every time the section is opened, in eight portals
  * that each re-run their own mount logic on every switch. So it is idempotent:
  * the same host element mounted twice re-renders rather than stacking a second
  * copy underneath the first.
  *
- * A server with no LinkedIn token still records every weekend post and simply
- * never sends it. Those come back flagged, and a flagged post is labelled "not
- * on LinkedIn yet" rather than quietly counted among the ones the public saw.
+ * A server with no LinkedIn token still records every post and simply never
+ * sends it. Those come back flagged, and a flagged post is labelled "not on
+ * LinkedIn yet" rather than quietly counted among the ones the public saw.
  *
  * Nothing from the server is interpolated as HTML. The post text is written
  * with textContent, one node per line — a post is plain text with line breaks,
@@ -82,9 +82,9 @@
   }
 
   /*
-   * Dates are shown in IST. The posts go out at 10:00 IST and everybody
-   * reading this is in the same office hours; a coordinator seeing "04:30"
-   * would reasonably conclude something had gone wrong.
+   * Dates are shown in IST, because the rotation is timed in IST and everybody
+   * reading this is in the same office hours. A reader seeing 04:30 against a
+   * 10:00 post would reasonably conclude something had gone wrong.
    */
   function istText(value) {
     if (!value) return '';
@@ -195,7 +195,7 @@
     head.appendChild(el('p', 'la-sub', count === 0
       ? 'Everything The Entrepreneurship Network has posted to LinkedIn will appear here.'
       : count + (count === 1 ? ' post' : ' posts') + ' published to The Entrepreneurship Network'
-        + ' so far. A new internship opening goes out every Saturday and Sunday, by itself.'));
+        + ' so far. A new internship opening goes out every two hours, by itself.'));
     wrap.appendChild(head);
 
     /* Only HR and admin are sent these fields, so only they ever see this. */
@@ -207,7 +207,7 @@
 
     if (!posts.length) {
       wrap.appendChild(el('div', 'la-empty',
-        'Nothing has gone out yet. The first post lands on the next Saturday or Sunday.'));
+        'Nothing has gone out yet. The first post lands within the next two hours.'));
       host.appendChild(wrap);
       return;
     }

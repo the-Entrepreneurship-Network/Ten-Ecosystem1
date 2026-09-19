@@ -5,7 +5,7 @@
  * behind it.
  *
  * Every route in this router reads. The posts themselves are written by the
- * weekend autopilot and sent by the scheduler, both crons, neither of which
+ * autopilot and sent by the scheduler, both crons, neither of which
  * runs under test — so what is under test here is the router plus
  * services/v2/linkedin/autopilot.js, which the router calls with no injected
  * dependencies and therefore loads for real. Below that, the LinkedIn client,
@@ -364,7 +364,7 @@ describe('routes/v2/linkedinAgent — who may use it', () => {
    * The manual surface is gone, and it has to stay gone. A publish route left
    * mounted "just in case" is a second way for text to reach the company page,
    * one with no rotation behind it and no slot key — which is precisely the
-   * arrangement the weekend autopilot replaced.
+   * arrangement the autopilot replaced.
    */
   it('has no route that writes, publishes, schedules or deletes a post', async () => {
     expect((await post('/chat', { message: 'hello' }, 'hr')).status).toBe(404);
@@ -603,7 +603,7 @@ describe('routes/v2/linkedinAgent — posts', () => {
       final: 'FINAL TEXT that the autopilot wrote',
       verdict: 'ok',
       status: 'published',
-      poster: { template: 'weekend-hiring', fields: { domain: 'Python Development' }, svg: '<svg id="a"/>', png: 'SGVsbG8=', withImage: true },
+      poster: { template: 'domain-hiring', fields: { domain: 'Python Development' }, svg: '<svg id="a"/>', png: 'SGVsbG8=', withImage: true },
       history: [],
       createdAt: new Date(),
     }, over || {}));

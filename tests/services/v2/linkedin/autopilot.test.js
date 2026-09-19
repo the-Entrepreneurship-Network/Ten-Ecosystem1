@@ -1,15 +1,15 @@
 'use strict';
 
 /**
- * The weekend autopilot — the tick that queues a hiring post with nobody
- * logged in.
+ * The autopilot — the tick that queues a hiring post with nobody logged in.
  *
  * Everything it touches is injected, so this suite has no database, no
  * filesystem read and no cron. What it is really about is the handful of
- * decisions that only ever play out at ten past ten on a Saturday, where there
- * is nobody to notice them going wrong:
+ * decisions that only ever play out at three in the morning, where there is
+ * nobody to notice them going wrong:
  *
- *   - it must do nothing on a Tuesday, and nothing at eight in the morning;
+ *   - every instant must belong to exactly one two-hour slot, and a worker
+ *     that wakes up late must queue the slot it is in, not the ones it missed;
  *   - two workers ticking at the same second must produce one post, not two,
  *     and the loser must treat its duplicate-key error as success rather than
  *     as a fault worth logging every ten minutes;
@@ -24,12 +24,15 @@
  */
 
 const autopilot = require('../../../../services/v2/linkedin/autopilot');
-const weekend = require('../../../../services/v2/linkedin/weekendPost');
+const posts = require('../../../../services/v2/linkedin/domainPost');
 
-/* 10:30 IST on Saturday 19 September 2026, comfortably inside the slot. */
-const SATURDAY = new Date('2026-09-19T05:00:00Z');
-const SUNDAY = new Date('2026-09-20T05:00:00Z');
-const TUESDAY = new Date('2026-09-22T05:00:00Z');
+/* A fixed IST wall-clock instant, so no test straddles a slot boundary. */
+const ist = (s) => new Date(`${s}+05:30`);
+
+/* 14:30 IST on a Tuesday — an ordinary slot, which under the weekend job
+   this replaced was no slot at all. */
+const SLOT = ist('2026-09-22T14:30:00');
+const NEXT_SLOT = ist('2026-09-22T16:30:00');
 
 function fakeModel() {
   const docs = [];
@@ -60,58 +63,83 @@ function deps(over) {
 }
 
 describe('autopilot — when it runs', () => {
-  it('queues nothing on a weekday', async () => {
-    const d = deps();
-    const res = await autopilot.tick(TUESDAY, d);
-    expect(res.queued).toBe(false);
-    expect(res.reason).toMatch(/not a weekend/);
-    expect(d.LinkedInPost.create).not.toHaveBeenCalled();
+  /*
+   * The weekend job this replaced had a lot of ways to say "not now": not a
+   * weekend, before the hour, after the window. All of them are gone. The
+   * clock never stops and neither does the rotation, so every instant belongs
+   * to a slot — including three in the morning on a Tuesday, which was the
+   * point of the change.
+   */
+  it('has a slot for every instant, including nights and weekdays', () => {
+    [
+      '2026-09-22T03:10:00+05:30', // Tuesday, 3am
+      '2026-09-19T00:00:00+05:30', // Saturday, midnight
+      '2026-09-23T13:45:00+05:30', // Wednesday afternoon
+      '2026-12-25T23:59:00+05:30', // Christmas night
+    ].forEach((when) => {
+      const d = autopilot.due(new Date(when));
+      expect(d.ok).toBe(true);
+      expect(d.key).toMatch(/^slot:\d{4}-\d{2}-\d{2}T\d{2}$/);
+    });
   });
 
-  it('queues nothing before the slot hour', async () => {
-    const d = deps();
-    /* 08:00 IST on the Saturday. */
-    const res = await autopilot.tick(new Date('2026-09-19T02:30:00Z'), d);
-    expect(res.queued).toBe(false);
-    expect(res.reason).toMatch(/before the 10:00 IST slot/);
-    expect(d.LinkedInPost.create).not.toHaveBeenCalled();
+  it('puts every minute of a two-hour bucket in the same slot', () => {
+    const early = autopilot.due(ist('2026-09-19T14:00:00'));
+    const late = autopilot.due(ist('2026-09-19T15:59:00'));
+    const next = autopilot.due(ist('2026-09-19T16:00:00'));
+    expect(early.key).toBe(late.key);
+    expect(next.key).not.toBe(early.key);
+    expect(early.key).toBe('slot:2026-09-19T14');
+  });
+
+  it('reads the IST clock, not the host clock', () => {
+    /* 18:30 UTC is midnight IST the next day. */
+    expect(autopilot.due(new Date('2026-09-18T18:30:00Z')).key).toBe('slot:2026-09-19T00');
+    expect(autopilot.due(new Date('2026-09-18T18:29:00Z')).key).toBe('slot:2026-09-18T22');
   });
 
   /*
-   * A process that was down all Saturday and comes back on Tuesday must not
-   * post Saturday's opening three days late; one that comes back at noon on
-   * the same Saturday should still post it. That is what the window is for.
+   * A process that was down for six hours comes back and queues the slot it is
+   * standing in, not the three it slept through. A post four hours late is
+   * competing with the one about to go out on time.
    */
-  it('still queues a missed slot later the same day, but not after the day is out', async () => {
-    expect(autopilot.due(new Date('2026-09-19T10:00:00Z')).ok).toBe(true);   // 15:30 IST
-    const late = autopilot.due(new Date('2026-09-19T17:30:00Z'));            // 23:00 IST
-    expect(late.ok).toBe(false);
-    expect(late.reason).toMatch(/closed/);
+  it('does not try to catch up on slots it slept through', async () => {
+    const model = fakeModel();
+    const d = deps({ LinkedInPost: model });
+    await autopilot.tick(ist('2026-09-19T14:30:00'), d);
+    await autopilot.tick(ist('2026-09-19T20:30:00'), d);
+    expect(model.created).toHaveLength(2);
+    expect(model.created.map((c) => c.slot)).toEqual(['slot:2026-09-19T14', 'slot:2026-09-19T20']);
   });
 
-  it('reads the IST calendar rather than the host clock', () => {
-    /* 05:00 UTC on Friday is 10:30 IST on... still Friday. 04:45 UTC Saturday
-       is 10:15 IST Saturday, which is in the slot. */
-    expect(autopilot.due(new Date('2026-09-18T05:00:00Z')).ok).toBe(false);
-    expect(autopilot.due(new Date('2026-09-19T04:45:00Z')).ok).toBe(true);
-    expect(autopilot.due(SATURDAY).key).toBe('weekend:2026-09-19');
-    expect(autopilot.due(SUNDAY).key).toBe('weekend:2026-09-20');
+  it('gets through all fourteen domains in a lap, and keeps going', async () => {
+    const model = fakeModel();
+    const d = deps({ LinkedInPost: model });
+    let t = ist('2026-09-19T00:00:00').getTime();
+    for (let i = 0; i < 14; i += 1) {
+      /* eslint-disable-next-line no-await-in-loop */
+      await autopilot.tick(new Date(t), d);
+      t += 2 * 3600000;
+    }
+    expect(model.created).toHaveLength(14);
+    expect(new Set(model.created.map((c) => c.domain)).size).toBe(14);
+    expect(new Set(model.created.map((c) => c.slot)).size).toBe(14);
   });
 });
 
 describe('autopilot — what it queues', () => {
-  it('saves the weekend post for the domain whose turn it is, ready to send', async () => {
+  it('saves the post for the domain whose turn it is, ready to send', async () => {
     const d = deps();
-    const res = await autopilot.tick(SATURDAY, d);
+    const res = await autopilot.tick(SLOT, d);
     expect(res.queued).toBe(true);
 
     const doc = d.LinkedInPost.created[0];
-    const domain = weekend.pick(SATURDAY);
+    const domain = posts.pick(SLOT);
     expect(doc.domain).toBe(domain.name);
-    expect(doc.final).toBe(weekend.body(domain));
+    expect(doc.final).toBe(posts.body(domain));
     expect(doc.status).toBe('scheduled');
     expect(doc.source).toBe('autopilot');
-    expect(doc.slot).toBe('weekend:2026-09-19');
+    expect(doc.slot).toBe('slot:2026-09-22T14');
     expect(doc.kind).toBe('opening');
     /* `draft` is what a person typed, and nobody typed this. */
     expect(doc.draft).toBe('');
@@ -119,9 +147,9 @@ describe('autopilot — what it queues', () => {
 
   it("attaches the domain poster as base64 and marks the post as carrying one", async () => {
     const d = deps();
-    await autopilot.tick(SATURDAY, d);
+    await autopilot.tick(SLOT, d);
     const doc = d.LinkedInPost.created[0];
-    expect(d.readPoster).toHaveBeenCalledWith(weekend.pick(SATURDAY).slug);
+    expect(d.readPoster).toHaveBeenCalledWith(posts.pick(SLOT).slug);
     expect(doc.poster.withImage).toBe(true);
     expect(Buffer.from(doc.poster.png, 'base64').toString()).toBe('poster-bytes');
     expect(doc.poster.fields.alt).toContain('Intern');
@@ -129,7 +157,7 @@ describe('autopilot — what it queues', () => {
 
   it('posts without an image rather than not posting, when the poster is missing', async () => {
     const d = deps({ readPoster: jest.fn(() => undefined) });
-    const res = await autopilot.tick(SATURDAY, d);
+    const res = await autopilot.tick(SLOT, d);
     expect(res.queued).toBe(true);
     expect(res.withImage).toBe(false);
     const doc = d.LinkedInPost.created[0];
@@ -141,16 +169,16 @@ describe('autopilot — what it queues', () => {
 
   it('survives a poster read that throws outright', async () => {
     const d = deps({ readPoster: jest.fn(() => { throw new Error('EACCES'); }) });
-    const res = await autopilot.tick(SATURDAY, d);
+    const res = await autopilot.tick(SLOT, d);
     expect(res.queued).toBe(true);
     expect(res.withImage).toBe(false);
   });
 
-  it('gives Saturday and Sunday different domains and different slots', async () => {
+  it('gives consecutive slots different domains and different slot keys', async () => {
     const model = fakeModel();
     const d = deps({ LinkedInPost: model });
-    await autopilot.tick(SATURDAY, d);
-    await autopilot.tick(SUNDAY, d);
+    await autopilot.tick(SLOT, d);
+    await autopilot.tick(NEXT_SLOT, d);
     expect(model.created).toHaveLength(2);
     expect(model.created[0].domain).not.toBe(model.created[1].domain);
     expect(model.created[0].slot).not.toBe(model.created[1].slot);
@@ -161,9 +189,9 @@ describe('autopilot — one post per slot', () => {
   it('queues once however many times it ticks in the same slot', async () => {
     const model = fakeModel();
     const d = deps({ LinkedInPost: model });
-    const first = await autopilot.tick(SATURDAY, d);
-    const second = await autopilot.tick(new Date(SATURDAY.getTime() + 10 * 60000), d);
-    const third = await autopilot.tick(new Date(SATURDAY.getTime() + 20 * 60000), d);
+    const first = await autopilot.tick(SLOT, d);
+    const second = await autopilot.tick(new Date(SLOT.getTime() + 10 * 60000), d);
+    const third = await autopilot.tick(new Date(SLOT.getTime() + 20 * 60000), d);
 
     expect(first.queued).toBe(true);
     expect(second.queued).toBe(false);
@@ -176,8 +204,8 @@ describe('autopilot — one post per slot', () => {
     const model = fakeModel();
     const d = deps({ LinkedInPost: model });
     const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    await autopilot.tick(SATURDAY, d);
-    const loser = await autopilot.tick(SATURDAY, d);
+    await autopilot.tick(SLOT, d);
+    const loser = await autopilot.tick(SLOT, d);
     expect(loser.reason).toMatch(/already queued/);
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
@@ -195,7 +223,7 @@ describe('autopilot — refusing to post', () => {
       },
     });
     const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    const res = await autopilot.tick(SATURDAY, d);
+    const res = await autopilot.tick(SLOT, d);
     expect(res.queued).toBe(false);
     expect(res.reason).toMatch(/content guard/);
     expect(d.LinkedInPost.create).not.toHaveBeenCalled();
@@ -206,16 +234,16 @@ describe('autopilot — refusing to post', () => {
     const d = deps({
       guard: { review: jest.fn(() => ({ verdict: 'revise', issues: [{ code: 'ai_slop', severity: 'revise' }] })) },
     });
-    const res = await autopilot.tick(SATURDAY, d);
+    const res = await autopilot.tick(SLOT, d);
     expect(res.queued).toBe(true);
     expect(d.LinkedInPost.created[0].verdict).toBe('revise');
     /* The issues are kept so the history can explain the badge later. */
     expect(d.LinkedInPost.created[0].issues).toHaveLength(1);
   });
 
-  it('queues when the guard itself throws, rather than losing the weekend to it', async () => {
+  it('queues when the guard itself throws, rather than losing the slot to it', async () => {
     const d = deps({ guard: { review: jest.fn(() => { throw new Error('guard exploded'); }) } });
-    const res = await autopilot.tick(SATURDAY, d);
+    const res = await autopilot.tick(SLOT, d);
     expect(res.queued).toBe(true);
   });
 
@@ -224,7 +252,7 @@ describe('autopilot — refusing to post', () => {
     model.create = jest.fn(async () => { throw new Error('connection lost'); });
     const d = deps({ LinkedInPost: model });
     const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    const res = await autopilot.tick(SATURDAY, d);
+    const res = await autopilot.tick(SLOT, d);
     expect(res.queued).toBe(false);
     expect(res.reason).toBe('save failed');
     expect(res.error).toMatch(/connection lost/);
@@ -240,31 +268,43 @@ describe('autopilot — refusing to post', () => {
 });
 
 describe('autopilot — the forecast', () => {
-  it('lists the next weekend days and the domain each will get', () => {
-    const rows = autopilot.forecast(TUESDAY, 4);
+  it('lists the next slots and the domain each will get', () => {
+    const rows = autopilot.forecast(SLOT, 4);
     expect(rows).toHaveLength(4);
     rows.forEach((r) => {
-      expect(r.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-      const dow = new Date(`${r.date}T12:00:00+05:30`).getUTCDay();
-      expect([0, 6]).toContain(dow);
-      expect(weekend.byName(r.domain)).toBeTruthy();
+      expect(r.slot).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}$/);
+      expect(posts.byName(r.domain)).toBeTruthy();
       expect(r.role).toMatch(/Intern$/);
+      /* Whatever the forecast says a slot will get is what pick() decides
+         when that slot arrives — otherwise the dashboard is telling people
+         something the job will not do. */
+      expect(r.domain).toBe(posts.pick(new Date(r.at)).name);
     });
-    /* Chronological, and each one matching what pick() will decide on the day. */
-    expect(rows[0].date < rows[1].date).toBe(true);
-    expect(rows[0].domain).toBe(weekend.pick(new Date(`${rows[0].date}T12:00:00+05:30`)).name);
   });
 
-  it("drops today once its slot has closed", () => {
-    const open = autopilot.forecast(new Date('2026-09-19T05:00:00Z'), 3);   // 10:30 IST Saturday
-    const shut = autopilot.forecast(new Date('2026-09-19T17:30:00Z'), 3);   // 23:00 IST Saturday
-    expect(open[0].date).toBe('2026-09-19');
-    expect(shut[0].date).toBe('2026-09-20');
+  it('is chronological, two hours apart, with no repeats inside a lap', () => {
+    const rows = autopilot.forecast(SLOT, 6);
+    for (let i = 1; i < rows.length; i += 1) {
+      const gap = new Date(rows[i].at) - new Date(rows[i - 1].at);
+      expect(gap).toBe(2 * 3600000);
+    }
+    expect(new Set(rows.map((r) => r.domain)).size).toBe(6);
+  });
+
+  /*
+   * The slot you are standing in is either already queued or about to be, so
+   * listing it under "coming up" would have a reader waiting two hours for
+   * something that went out five minutes ago.
+   */
+  it('starts at the next slot, not the current one', () => {
+    const rows = autopilot.forecast(ist('2026-09-22T14:30:00'), 2);
+    expect(rows[0].slot).toBe('2026-09-22T16');
+    expect(rows[0].domain).not.toBe(posts.pick(ist('2026-09-22T14:30:00')).name);
   });
 
   it('clamps how far ahead it will look', () => {
-    expect(autopilot.forecast(TUESDAY, 0)).toHaveLength(4);
-    expect(autopilot.forecast(TUESDAY, 99).length).toBeLessThanOrEqual(14);
+    expect(autopilot.forecast(SLOT, 0)).toHaveLength(6);
+    expect(autopilot.forecast(SLOT, 99).length).toBeLessThanOrEqual(14);
   });
 });
 
@@ -326,14 +366,14 @@ describe('autopilot — the feed every portal shows', () => {
     const out = await autopilot.feed(feedDeps([
       Object.assign({}, PUBLISHED, {
         error: 'something internal', status: 'published',
-        scheduledFor: new Date('2026-09-19T04:30:00Z'), slot: 'weekend:2026-09-19',
+        scheduledFor: new Date('2026-09-19T04:30:00Z'), slot: 'slot:2026-09-19T10',
       }),
     ]).deps);
     expect(Object.keys(out.posts[0]).sort()).toEqual(
       ['alt', 'at', 'domain', 'id', 'image', 'live', 'text', 'url'],
     );
     expect(JSON.stringify(out)).not.toContain('something internal');
-    expect(JSON.stringify(out)).not.toContain('weekend:');
+    expect(JSON.stringify(out)).not.toContain('slot:');
   });
 
   it('is empty rather than broken when nothing has been published', async () => {
@@ -395,7 +435,7 @@ describe('autopilot — the numbers the dashboard shows', () => {
     /* A post mid-flight is still a post that has not gone out. */
     expect(out.scheduled).toBe(2);
     expect(out.total).toBe(12);
-    expect(out.schedule).toEqual({ hour: 10, days: ['Saturday', 'Sunday'], timezone: 'Asia/Kolkata' });
+    expect(out.schedule).toEqual({ everyHours: 2, perDay: 12, timezone: 'Asia/Kolkata' });
   });
 
   it('shapes each row for the card and keeps the poster payload out of it', async () => {

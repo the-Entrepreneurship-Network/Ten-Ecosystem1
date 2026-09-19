@@ -265,7 +265,7 @@ describe('mounting', () => {
     const { host } = await mounted();
     const text = textOf(host);
     expect(text).toContain('9 posts');
-    expect(text).toMatch(/every Saturday and Sunday/i);
+    expect(text).toMatch(/every two hours/i);
   });
 
   it('re-renders rather than stacking when the section is opened twice', async () => {

@@ -1,12 +1,13 @@
 'use strict';
 
 /**
- * The weekend autopilot: the part of this feature that runs with nobody
- * logged in.
+ * The autopilot: the part of this feature that runs with nobody logged in.
  *
- * Every Saturday and every Sunday the company page gets one hiring post, for
+ * Every two hours, round the clock, the company page gets one hiring post for
  * one of the fourteen domains, with that domain's poster attached and that
- * domain's application link in the text. No staff member types anything, opens
+ * domain's application link in the text. Twelve posts a day against fourteen
+ * domains means a full lap takes twenty-eight hours, so the same domain never
+ * lands at the same hour twice running. No staff member types anything, opens
  * anything or approves anything — that is the requirement, and every decision
  * below follows from it.
  *
@@ -19,52 +20,51 @@
  * and the failure recording. Duplicating any of that here would mean two
  * publish paths that have to stay in step forever.
  *
- * **One row per slot, enforced by the database.** The tick runs every ten
- * minutes on every worker, so it will try to queue the same Saturday dozens of
- * times. `slot` is uniquely indexed, so the first insert wins and the rest come
- * back as a duplicate-key error which is caught and treated as success —
- * "somebody already queued this" is the normal outcome, not a fault.
+ * **One row per slot, enforced by the database.** The tick runs every few
+ * minutes on every worker, so it will try to queue the same two-hour slot many
+ * times over. `slot` is uniquely indexed, so the first insert wins and the
+ * rest come back as a duplicate-key error which is caught and treated as
+ * success — "somebody already queued this" is the normal outcome, not a fault.
+ * Nothing here depends on the tick interval dividing the slot length, or on
+ * two workers agreeing about anything; they agree because the slot key is a
+ * pure function of the clock.
  *
  * **The text is checked even though the text is ours.** contentGuard runs on
  * every generated body before it is saved. It should never fire, because the
  * body comes from a constant. That is exactly why it is cheap to keep: the day
- * somebody edits weekendPost.js and slips in a phone number or a stipend
- * figure, the guard catches it before the page does.
+ * somebody edits domainPost.js and slips in a phone number or a stipend
+ * figure, the guard catches it before the page does — and at twelve posts a
+ * day, a mistake that reaches the feed reaches it twelve times before anybody
+ * is at a desk.
  */
 
 const fs = require('fs');
 const path = require('path');
 
-const weekendPost = require('./weekendPost');
+const domainPost = require('./domainPost');
 
 /*
  * Posters live on disk as finished JPEGs rather than being drawn at post time.
  *
- * Drawing them here would mean a headless browser on the production box, at
- * ten past ten on a Saturday, with nobody watching it fail. The poster for a
- * domain does not change between weekends — the facts on it are the programme
- * constants — so it is rendered once by poster-kit, committed, and read as
- * bytes. A missing file costs the post its image and nothing else.
+ * Drawing them here would mean a headless browser on the production box every
+ * two hours, at three in the morning, with nobody watching it fail. The poster
+ * for a domain does not change between posts — the facts on it are the
+ * programme constants — so it is rendered once by poster-kit, committed, and
+ * read as bytes. A missing file costs the post its image and nothing else.
  */
 const POSTER_DIR = path.join(__dirname, '..', '..', '..', 'public', 'assets', 'linkedin-posters');
 
-/* The hour, IST, the weekend post goes out. Late morning: early enough to run
-   through the day, late enough that it is not sitting at the bottom of the
-   feed by the time anybody is awake. */
-const SLOT_HOUR = 10;
-
-/* How long after the slot hour the tick will still queue a missed post. A
-   process that was down from Saturday morning to Saturday evening should still
-   post on Saturday; one that comes back on Tuesday should not post Saturday's
-   opening three days late, so the window closes at the end of the day. */
-const SLOT_WINDOW_HOURS = 12;
+/* How far apart two posts are, in hours. Lives in domainPost.js because the
+   rotation is computed from it there; re-exported here because it is the one
+   number anybody reading this file wants to know. */
+const SLOT_HOURS = domainPost.SLOT_HOURS;
 
 function resolveDeps(deps) {
   const given = deps || {};
   return {
     LinkedInPost: given.LinkedInPost || require('../../../models/LinkedInPost'),
     guard: given.guard || require('./contentGuard'),
-    weekend: given.weekend || weekendPost,
+    posts: given.posts || domainPost,
     readPoster: given.readPoster || readPoster,
     now: given.now,
   };
@@ -74,7 +74,7 @@ function resolveDeps(deps) {
  * The poster bytes for a domain, or undefined.
  *
  * Undefined rather than throwing: a post with no image is a post, and the
- * alternative — a weekend with no hiring post because a JPEG was missing — is
+ * alternative — a slot with no hiring post because a JPEG was missing — is
  * strictly worse.
  */
 function readPoster(slug) {
@@ -88,20 +88,22 @@ function readPoster(slug) {
 }
 
 /**
- * Should a post be queued for this instant, and for which slot?
+ * Which slot this instant belongs to.
  *
- * Returns `{ ok: false, reason }` far more often than not — the tick runs
- * every ten minutes and only two of those runs a week do anything.
+ * Every instant belongs to one — the clock never stops and neither does the
+ * rotation — so unlike the weekend job this replaced, there is no "not today"
+ * answer and no window to miss. A process that was down for six hours comes
+ * back, computes the slot it is standing in, and queues that one. It does not
+ * try to catch up on the three it slept through: a post that went out four
+ * hours late is competing with the one that is about to go out on time, and
+ * the feed only has so much patience.
+ *
+ * The shape still returns `ok` because callers branch on it and because a
+ * future reason to skip a slot — a holiday, a pause switch — belongs here.
  */
 function due(now) {
   const at = (now instanceof Date && !Number.isNaN(now.getTime())) ? now : new Date();
-  if (!weekendPost.isWeekend(at)) return { ok: false, reason: 'not a weekend' };
-
-  const hour = weekendPost.istDay(at).h;
-  if (hour < SLOT_HOUR) return { ok: false, reason: `before the ${SLOT_HOUR}:00 IST slot` };
-  if (hour >= SLOT_HOUR + SLOT_WINDOW_HOURS) return { ok: false, reason: 'the slot for today has closed' };
-
-  return { ok: true, at, key: `weekend:${weekendPost.istDateKey(at)}` };
+  return { ok: true, at, key: `slot:${domainPost.slotKey(at)}` };
 }
 
 /**
@@ -123,8 +125,8 @@ async function tick(now, deps) {
   const slot = due(now);
   if (!slot.ok) return { queued: false, reason: slot.reason };
 
-  const domain = d.weekend.pick(slot.at);
-  const text = d.weekend.body(domain);
+  const domain = d.posts.pick(slot.at);
+  const text = d.posts.body(domain);
   const checked = verdictOf(text);
 
   /* 'revise' is expected and ignored: the house style opens with a rocket and
@@ -154,15 +156,15 @@ async function tick(now, deps) {
     issues: checked.issues || [],
     verdict: checked.verdict === 'block' ? 'block' : checked.verdict || 'ok',
     poster: {
-      template: 'weekend-hiring',
-      fields: { domain: domain.name, role: domain.role, alt: d.weekend.altText(domain) },
+      template: 'domain-hiring',
+      fields: { domain: domain.name, role: domain.role, alt: d.posts.altText(domain) },
       svg: '',
       png: png ? png.toString('base64') : '',
       withImage: Boolean(png),
     },
     status: 'scheduled',
     scheduledFor: slot.at,
-    author: { role: 'system', id: 'autopilot', name: 'Weekend autopilot' },
+    author: { role: 'system', id: 'autopilot', name: 'LinkedIn autopilot' },
     history: [{
       at: new Date(),
       by: 'autopilot',
@@ -177,11 +179,11 @@ async function tick(now, deps) {
     return { queued: true, slot: slot.key, domain: domain.name, withImage: doc.poster.withImage, id: saved && saved._id };
   } catch (e) {
     /* 11000 is the unique index on `slot` doing its job: another worker, or an
-       earlier run of this one, already queued today. */
+       earlier run of this one, already queued this two-hour slot. */
     if (e && (e.code === 11000 || e.code === 11001)) {
       return { queued: false, reason: 'already queued for this slot', slot: slot.key };
     }
-    console.error('[linkedin-autopilot] could not queue the weekend post:', e && e.message ? e.message : e);
+    console.error('[linkedin-autopilot] could not queue the post:', e && e.message ? e.message : e);
     return { queued: false, reason: 'save failed', error: e && e.message ? e.message : String(e) };
   }
 }
@@ -251,7 +253,7 @@ async function feed(deps, limit) {
 function imageUrlFor(post) {
   const p = post || {};
   if (p.poster && p.poster.withImage === false) return '';
-  const domain = weekendPost.byName(p.domain);
+  const domain = domainPost.byName(p.domain);
   if (domain) return `/assets/linkedin-posters/${domain.slug}.jpg`;
   if (p.poster && p.poster.withImage) return `/api/v2/linkedin/feed/${String(p._id)}/image`;
   return '';
@@ -291,7 +293,7 @@ async function stats(deps, limit) {
     failed: by.failed || 0,
     scheduled: (by.scheduled || 0) + (by.publishing || 0),
     total: Object.keys(by).reduce((n, k) => n + by[k], 0),
-    schedule: { hour: SLOT_HOUR, days: ['Saturday', 'Sunday'], timezone: 'Asia/Kolkata' },
+    schedule: { everyHours: SLOT_HOURS, perDay: Math.round(24 / SLOT_HOURS), timezone: 'Asia/Kolkata' },
     upcoming: (next || []).map((p) => ({
       domain: p.domain || '',
       scheduledFor: p.scheduledFor,
@@ -325,18 +327,23 @@ function firstLine(text) {
  */
 function forecast(now, count) {
   const at = (now instanceof Date && !Number.isNaN(now.getTime())) ? now : new Date();
-  const want = Math.max(1, Math.min(14, parseInt(count, 10) || 4));
+  const want = Math.max(1, Math.min(14, parseInt(count, 10) || 6));
+  const slotMs = SLOT_HOURS * 3600000;
+  /* Start at the NEXT slot, not this one: this one is either already queued
+     or about to be, and listing it under "coming up" would have a reader
+     waiting two hours for something that went out five minutes ago. */
+  const first = domainPost.slotStart(at).getTime() + slotMs;
   const out = [];
-  /* Walk forward a day at a time and keep the weekends. Two months of days is
-     far more than enough to find fourteen weekend slots. */
-  for (let i = 0; i < 70 && out.length < want; i += 1) {
-    const day = new Date(at.getTime() + i * 86400000);
-    if (!weekendPost.isWeekend(day)) continue;
-    const key = weekendPost.istDateKey(day);
-    /* Today only counts if its slot has not already closed. */
-    if (i === 0 && !due(at).ok) continue;
-    const domain = weekendPost.pick(day);
-    out.push({ date: key, domain: domain.name, role: domain.role });
+  for (let i = 0; i < want; i += 1) {
+    const when = new Date(first + i * slotMs);
+    const domain = domainPost.pick(when);
+    out.push({
+      at: when.toISOString(),
+      date: domainPost.istDateKey(when),
+      slot: domainPost.slotKey(when),
+      domain: domain.name,
+      role: domain.role,
+    });
   }
   return out;
 }
@@ -347,12 +354,14 @@ let task = null;
 let running = false;
 
 /**
- * Start the ten-minute check.
+ * Start the five-minute check.
  *
- * Ten minutes rather than once a week at 10:00 sharp: a weekly cron that fires
- * while the box is restarting misses the slot entirely and nobody notices
- * until Monday. A repeating check that is a no-op 1006 times out of 1008 costs
- * nothing and heals itself.
+ * Five minutes rather than a cron firing exactly on the even hours: a cron
+ * that fires while the box is restarting misses its slot outright, and with
+ * one post every two hours a missed slot is a two-hour hole. A repeating check
+ * that is a no-op twenty-three times out of twenty-four costs nothing, and the
+ * unique index on the slot key is what makes the twenty-third no-op free
+ * rather than a duplicate post.
  *
  * Off under NODE_ENV=test for the same reason as the scheduler — a registered
  * cron task keeps the Jest run alive and CI hangs.
@@ -363,7 +372,7 @@ function start() {
   if (task) return task;
 
   const cron = require('node-cron');
-  task = cron.schedule('*/10 * * * *', () => {
+  task = cron.schedule('*/5 * * * *', () => {
     if (running) return;
     running = true;
     Promise.resolve()
@@ -371,8 +380,8 @@ function start() {
       .catch((e) => { console.error('[linkedin-autopilot] tick failed:', e && e.message ? e.message : e); })
       .then(() => { running = false; });
   });
-  console.log(`[linkedin-autopilot] a hiring post will be queued every Saturday and Sunday at ${SLOT_HOUR}:00 IST`);
+  console.log(`[linkedin-autopilot] a hiring post will be queued every ${SLOT_HOURS} hours, round the clock`);
   return task;
 }
 
-module.exports = { SLOT_HOUR, SLOT_WINDOW_HOURS, due, feed, forecast, imageUrlFor, readPoster, start, stats, tick };
+module.exports = { SLOT_HOURS, due, feed, forecast, imageUrlFor, readPoster, start, stats, tick };
