@@ -850,9 +850,27 @@ async function probe(deps) {
   };
 }
 
+/**
+ * Drop the cached connection so the next call re-reads it.
+ *
+ * The cache exists so publishing does not hit the database every minute, and
+ * a sixty-second staleness is invisible for that. It is very visible the
+ * moment somebody connects the page from the portal: without this the
+ * dashboard keeps saying "not connected" for up to a minute after a connect
+ * that worked, which reads as a failure and invites a second attempt.
+ */
+function forgetConnection() {
+  cache.loadedAt = 0;
+  cache.token = '';
+  cache.orgUrn = '';
+  cache.orgName = '';
+  cache.expiresAt = null;
+}
+
 module.exports = {
   config,
   probe,
+  forgetConnection,
   headers,
   escapeCommentary,
   resolveOrganization,

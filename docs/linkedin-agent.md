@@ -212,6 +212,24 @@ and `publish()`'s behaviour can never disagree.
 
 ## Connecting the page
 
+### From the portal, no shell needed
+
+HR or admin opens the **LinkedIn Agent** section in any portal. When the page
+is not connected they see a field: paste the access token, press Connect.
+
+The server checks the token against LinkedIn before storing anything, asks
+which page if the token administers more than one, and saves it to MongoDB —
+where `loadConnection()` already looks. No SSH, no restart, and it survives
+redeploys because it lives in the database rather than in a file that is
+rebuilt with the box.
+
+HR and admin only, the same gate as OAuth, because a token that can post as
+the company is the same privilege however it arrived. The field is a password
+input, the value is cleared once submitted, and the token is never returned,
+never logged and never written to the DOM.
+
+### From a shell
+
 ```bash
 npm run linkedin:connect
 ```

@@ -106,15 +106,30 @@ describe('the module itself', () => {
   });
 
   /*
-   * The section is now in front of students and contractors, so it must ask
-   * for nothing that a staff-only route would answer. One endpoint, one
-   * method.
+   * The section is in front of students and contractors, so it must ask for
+   * nothing a staff-only route would answer. Everything it reads comes from
+   * /feed.
    */
   it('reads the feed and nothing else', () => {
     expect(src).toContain("'/feed'");
     expect(src).not.toMatch(/\/autopilot/);
     expect(src).not.toMatch(/\/status/);
     expect(src).not.toMatch(/\/stats/);
-    expect(src).not.toMatch(/method:\s*['"](POST|PUT|DELETE|PATCH)['"]/);
+  });
+
+  /*
+   * There is exactly one thing it writes: /connect, the form that puts the
+   * access token in. The server refuses that to anyone but HR and admin, and
+   * the payload that carries `canConnect` is only sent to those two roles, so
+   * nobody else is even shown the form. Any OTHER write would be a way to
+   * reach the company page that the rotation does not control.
+   */
+  it('writes only to the connect endpoints', () => {
+    const posts = src.match(/API \+ '\/[a-z/]+'/g) || [];
+    const written = posts.map((m) => m.replace(/.*'\/(.+)'/, '$1'));
+    written.forEach((route) => {
+      expect(['feed', 'connect', 'disconnect']).toContain(route.split('/')[0]);
+    });
+    expect(src).not.toMatch(/method:\s*['"](PUT|DELETE|PATCH)['"]/);
   });
 });

@@ -261,6 +261,138 @@ router.get('/feed', signedIn, h(async (req, res) => {
 }));
 
 /**
+ * Connect the page by pasting an access token into the portal.
+ *
+ * The other two ways in both need a shell on the production box: a token in
+ * `.env`, or the OAuth pair in `.env` before anybody can start the handshake.
+ * That is a real obstacle — `.env` is gitignored, so it cannot be committed,
+ * and editing it means SSH and a restart for what is one value.
+ *
+ * This is the third way, and it is the one a person can actually use: HR
+ * pastes the token into the portal over HTTPS and the server stores it in
+ * MongoDB, where `loadConnection()` already looks. No shell, no restart, and
+ * it survives redeploys because it is in the database rather than in a file
+ * that is rebuilt with the box.
+ *
+ * HR and admin only, like OAuth, because a token that can post as the company
+ * is the same privilege however it arrived. The token is validated against
+ * LinkedIn before anything is stored — an unusable token saved as if it worked
+ * would put the agent right back into silently posting nothing — and it is
+ * never echoed, never logged, and never returned.
+ */
+router.post('/connect', connectOnly, h(async (req, res) => {
+  const body = req.body || {};
+  const token = typeof body.token === 'string' ? body.token.trim() : '';
+  const wantedOrg = typeof body.orgId === 'string' ? body.orgId.trim() : '';
+
+  if (!token) return res.status(400).json({ ok: false, error: 'Paste the access token.' });
+  if (token.length < 40 || token.length > 4096) {
+    return res.status(400).json({ ok: false, error: 'That does not look like a LinkedIn access token.' });
+  }
+
+  const client = mods.client();
+
+  /* Ask LinkedIn before believing it. This is the same question publishing
+     asks — not "is the token valid" but "does its holder administer a page" —
+     so a token that passes here cannot fail for that reason at post time. */
+  let orgs = [];
+  try {
+    orgs = await client.listAdministeredOrganizations({ token });
+  } catch (e) {
+    return res.status(502).json({ ok: false, error: 'Could not reach LinkedIn to check the token. Try again.' });
+  }
+
+  if (!orgs.length) {
+    return res.status(400).json({
+      ok: false,
+      error: 'LinkedIn accepted the request but reports no pages this token administers.',
+      hints: [
+        'The app may not have the Community Management API product approved — that is the usual cause, and LinkedIn reviews it by hand.',
+        'The token may be missing the rw_organization_admin scope.',
+        'Whoever authorised it may not be an ADMINISTRATOR of the page.',
+        'The token may have expired or been revoked.',
+      ],
+    });
+  }
+
+  const choices = orgs.map((o) => ({
+    orgUrn: String(o.orgUrn),
+    orgId: String(o.orgUrn).replace(/^urn:li:organization:/, ''),
+  }));
+
+  let chosen = choices[0];
+  if (wantedOrg) {
+    const match = choices.find((o) => o.orgId === wantedOrg || o.orgUrn === wantedOrg);
+    if (!match) {
+      return res.status(400).json({
+        ok: false,
+        error: 'That page is not one this token administers.',
+        pages: choices,
+      });
+    }
+    chosen = match;
+  } else if (choices.length > 1) {
+    /* Never guess which company page to post as. */
+    return res.status(409).json({
+      ok: false,
+      error: 'This token administers more than one page. Say which one.',
+      pages: choices,
+    });
+  }
+
+  let orgName = '';
+  try {
+    const found = await client.resolveOrganization({ token, vanityName: ORG_VANITY });
+    if (found && found.orgUrn === chosen.orgUrn) orgName = found.name || '';
+  } catch (e) {
+    orgName = '';
+  }
+
+  const u = { role: req.user && req.user.role, id: req.user && req.user._id, name: displayName(req) };
+  await mods.LinkedInConnection().findOneAndUpdate(
+    { key: 'default' },
+    {
+      $set: {
+        key: 'default',
+        accessToken: token,
+        refreshToken: '',
+        /* A pasted token carries no expiry with it. LinkedIn's live about
+           sixty days from issue, so that is what is recorded — it drives the
+           "expires soon" warning, and a wrong-but-close date that prompts a
+           reconnect beats no date and a silent death. */
+        expiresAt: new Date(Date.now() + 60 * 24 * 3600 * 1000),
+        scopes: client.DEFAULT_SCOPES,
+        orgUrn: chosen.orgUrn,
+        orgName,
+        orgVanity: ORG_VANITY,
+        connectedBy: { role: u.role, id: String(u.id || ''), name: u.name },
+        connectedAt: new Date(),
+      },
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
+  );
+
+  /* The client caches the connection for a minute; without this the dashboard
+     would still say "not connected" for up to sixty seconds after a successful
+     connect, which reads as a failure. */
+  if (typeof client.forgetConnection === 'function') client.forgetConnection();
+
+  console.log(`[linkedin-agent] page connected by ${u.name || u.role} — ${chosen.orgUrn}`);
+  return res.json({ ok: true, orgId: chosen.orgId, orgUrn: chosen.orgUrn, orgName });
+}));
+
+/** Forget the stored token. Does not touch anything set in the environment. */
+router.post('/disconnect', connectOnly, h(async (req, res) => {
+  await mods.LinkedInConnection().findOneAndUpdate(
+    { key: 'default' },
+    { $set: { accessToken: '', refreshToken: '', orgUrn: '', orgName: '', expiresAt: null } },
+  );
+  const client = mods.client();
+  if (typeof client.forgetConnection === 'function') client.forgetConnection();
+  return res.json({ ok: true });
+}));
+
+/**
  * The poster for one post, for the posts whose image is not one of the
  * fourteen committed plates — an older hand-written post, or a domain the
  * rotation does not know.

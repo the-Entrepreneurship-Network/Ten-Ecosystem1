@@ -227,8 +227,38 @@ describe('public/linkedin-agent.js (static)', () => {
     expect(SRC).not.toMatch(/createElement\(\s*['"]textarea['"]/i);
     expect(SRC).not.toMatch(/\/chat\b/);
     expect(SRC).not.toMatch(/pngBase64/);
-    expect(SRC).not.toMatch(/method:\s*['"]POST['"]/);
-    expect(SRC).not.toMatch(/method:\s*['"]DELETE['"]/);
+    expect(SRC).not.toMatch(/method:\s*['"](PUT|DELETE|PATCH)['"]/);
+  });
+
+  /*
+   * There is one POST, and it carries a credential rather than a post: the
+   * connect form, which HR and admin use to put the access token in without
+   * needing a shell on the server. It must never leave the token anywhere it
+   * could outlive the submit.
+   */
+  it('the only POST is connect, and it does not stash the token', () => {
+    /* Comments stripped first. The prose in this file names localStorage and
+       data attributes in order to say it does not use them, and a check that
+       matched the comment would be a test passing on its own documentation. */
+    const code = SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+    const bodies = code.match(/JSON\.stringify\([^)]*\)/g) || [];
+    expect(bodies.join(' ')).toMatch(/token/);
+    expect(code).not.toMatch(/localStorage|sessionStorage/);
+    /*
+     * The token VALUE must never reach an attribute or a dataset, where it
+     * would sit in the DOM for anything on the page to read. Matched on the
+     * variable being passed, not on the word appearing in a string: the input
+     * carries aria-label="LinkedIn access token", which is the right label and
+     * not a leak.
+     */
+    expect(code).not.toMatch(/setAttribute\([^,]+,\s*token\b/);
+    expect(code).not.toMatch(/\.dataset\.\w+\s*=\s*token\b/);
+    expect(code).not.toMatch(/\.value\s*=\s*token\b/);
+    /* Not left readable on a shared screen... */
+    expect(SRC).toMatch(/input\.type\s*=\s*'password'/);
+    /* ...and cleared from the field once it has been handed over. */
+    expect(SRC).toMatch(/input\.value\s*=\s*''/);
   });
 });
 

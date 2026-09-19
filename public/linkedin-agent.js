@@ -64,6 +64,16 @@
     '.la-link:focus-visible{outline:2px solid #7ca0ff;outline-offset:3px;border-radius:4px}',
     '.la-empty{color:#98a2b8;font-size:13px;padding:20px;border:1px dashed rgba(255,255,255,.13);border-radius:14px;text-align:center}',
     '.la-err{color:#ffb3ae;font-size:13px;padding:14px;border:1px solid rgba(255,107,98,.35);background:rgba(255,107,98,.08);border-radius:12px}',
+    '.la-connect-head{margin-bottom:10px}',
+    '.la-connect-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}',
+    '.la-input{flex:1;min-width:220px;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.16);border-radius:9px;padding:8px 11px;color:#e8eaf0;font:inherit;font-size:13px}',
+    '.la-input:focus{outline:2px solid #7ca0ff;outline-offset:1px}',
+    '.la-btn{background:rgba(124,160,255,.16);border:1px solid rgba(124,160,255,.4);color:#c9d8ff;border-radius:9px;padding:8px 15px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}',
+    '.la-btn:hover:not(:disabled){background:rgba(124,160,255,.26)}',
+    '.la-btn:disabled{opacity:.55;cursor:default}',
+    '.la-btn:focus-visible{outline:2px solid #7ca0ff;outline-offset:2px}',
+    '.la-connect-msg{font-size:12.5px;min-height:1.2em}',
+    '.la-hints{margin:8px 0 0;padding-left:18px;font-size:12.5px;line-height:1.55}',
   ].join('\n');
 
   function injectCss() {
@@ -183,7 +193,110 @@
     return card;
   }
 
-  function render(host, data) {
+  /**
+   * The form that connects the page, for HR and admin only.
+   *
+   * It exists because the other two routes both need a shell on the
+   * production box — a token in .env, or the OAuth pair in .env before the
+   * handshake can even start — and asking somebody to SSH in to paste one
+   * value is how a feature stays switched off for a fortnight.
+   *
+   * The field is type="password" so the token is not left on screen, and the
+   * value is read once on submit and never written anywhere else: not into
+   * localStorage, not into the URL, not into a data attribute.
+   */
+  function connectPanel(host, opts) {
+    var box = el('div', 'la-note la-note-warn');
+    box.appendChild(el('div', 'la-connect-head',
+      'The company page is not connected, so the agent is writing these posts and not sending them.'));
+
+    var row = el('div', 'la-connect-row');
+    var input = el('input', 'la-input');
+    input.type = 'password';
+    input.placeholder = 'Paste the LinkedIn access token';
+    input.setAttribute('autocomplete', 'off');
+    input.setAttribute('spellcheck', 'false');
+    input.setAttribute('aria-label', 'LinkedIn access token');
+
+    var go = el('button', 'la-btn', 'Connect');
+    go.setAttribute('type', 'button');
+
+    var say = el('div', 'la-connect-msg');
+
+    function attempt(orgId) {
+      var token = String(input.value || '').trim();
+      if (!token) { say.textContent = 'Paste the token first.'; return; }
+
+      go.disabled = true;
+      say.textContent = 'Checking with LinkedIn…';
+
+      var init = {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(orgId ? { token: token, orgId: orgId } : { token: token }),
+      };
+      if (opts && opts.headers) {
+        Object.keys(opts.headers).forEach(function (k) {
+          if (opts.headers[k]) init.headers[k] = opts.headers[k];
+        });
+      }
+
+      fetch(API + '/connect', init)
+        .then(function (r) { return r.json().then(function (b) { return { status: r.status, body: b }; }); })
+        .then(function (res) {
+          var b = res.body || {};
+          if (b.ok) {
+            /* Clear it from the field the moment it is no longer needed. */
+            input.value = '';
+            say.textContent = 'Connected. Loading…';
+            mount(host, opts);
+            return;
+          }
+
+          go.disabled = false;
+
+          /* More than one page: ask which, rather than guessing which company
+             the agent should speak as. */
+          if (res.status === 409 && b.pages && b.pages.length) {
+            say.textContent = 'This token administers more than one page. Choose:';
+            var pick = el('div', 'la-connect-row');
+            b.pages.forEach(function (p) {
+              var btn = el('button', 'la-btn', p.orgId);
+              btn.setAttribute('type', 'button');
+              btn.addEventListener('click', function () { attempt(p.orgId); });
+              pick.appendChild(btn);
+            });
+            box.appendChild(pick);
+            return;
+          }
+
+          say.textContent = b.error || 'That did not work.';
+          if (b.hints && b.hints.length) {
+            var ul = el('ul', 'la-hints');
+            b.hints.forEach(function (hint) { ul.appendChild(el('li', null, hint)); });
+            box.appendChild(ul);
+          }
+        })
+        .catch(function () {
+          go.disabled = false;
+          say.textContent = 'The server could not be reached.';
+        });
+    }
+
+    go.addEventListener('click', function () { attempt(''); });
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); attempt(''); }
+    });
+
+    row.appendChild(input);
+    row.appendChild(go);
+    box.appendChild(row);
+    box.appendChild(say);
+    return box;
+  }
+
+  function render(host, data, opts) {
     host.textContent = '';
     var posts = (data && data.posts) || [];
     var count = data && typeof data.count === 'number' ? data.count : posts.length;
@@ -200,9 +313,7 @@
 
     /* Only HR and admin are sent these fields, so only they ever see this. */
     if (data && data.canConnect && data.connected === false) {
-      wrap.appendChild(el('div', 'la-note la-note-warn',
-        'The company page is not connected on this server, so the agent is writing and saving '
-        + 'these posts but not sending them. Connect the page to make them live.'));
+      wrap.appendChild(connectPanel(host, opts));
     }
 
     if (!posts.length) {
@@ -252,7 +363,7 @@
       })
       .then(function (data) {
         if (!data || data.ok === false) throw new Error((data && data.error) || 'The posts could not be loaded.');
-        render(host, data);
+        render(host, data, opts);
       })
       .catch(function (e) {
         renderError(host, e && e.message ? e.message : 'The posts could not be loaded.');
