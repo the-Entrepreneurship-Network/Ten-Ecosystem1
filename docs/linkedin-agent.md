@@ -65,6 +65,19 @@ two-hour hole. A worker that wakes up late queues the slot it is in and does
 **not** catch up on the ones it slept through — a post four hours late is
 competing with the one about to go out on time.
 
+### The post on deploy
+
+The autopilot also runs one check **ten seconds after start-up**, and the
+scheduler sweeps five seconds after that. So a fresh deploy puts a post on the
+company page inside about fifteen seconds rather than waiting up to five
+minutes for the next cron edge and another minute to publish.
+
+That kick runs on **every** boot, not only the first. What stops a redeploy
+inside an already-posted slot from posting twice is the unique index on `slot`,
+not a first-run flag — which is the same mechanism that already stops several
+PM2 workers booting together from posting the same thing, and is why there is
+no special case for it.
+
 `services/v2/linkedin/scheduler.js` ticks every minute and is what actually
 talks to LinkedIn. It claims a due post with a single atomic
 `findOneAndUpdate`, re-checks the text, uploads the image and publishes.

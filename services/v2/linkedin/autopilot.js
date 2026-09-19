@@ -351,17 +351,52 @@ function forecast(now, count) {
 /* ── cron ───────────────────────────────────────────────────────────────── */
 
 let task = null;
+let firstTimer = null;
 let running = false;
 
-/**
- * Start the five-minute check.
+/*
+ * How long after boot the first tick fires.
  *
- * Five minutes rather than a cron firing exactly on the even hours: a cron
- * that fires while the box is restarting misses its slot outright, and with
- * one post every two hours a missed slot is a two-hour hole. A repeating check
- * that is a no-op twenty-three times out of twenty-four costs nothing, and the
- * unique index on the slot key is what makes the twenty-third no-op free
- * rather than a duplicate post.
+ * Short enough to read as "it posted the moment we deployed", long enough that
+ * mongoose has finished connecting. Mongoose buffers commands until it does,
+ * so a write at second zero would work — but it would also be the first thing
+ * a cold process does, racing the connection, the index build on `slot` and
+ * whatever else start-up is doing. Ten seconds costs nothing and removes the
+ * whole class of question.
+ */
+const FIRST_TICK_MS = 10 * 1000;
+
+/** One tick, guarded so two overlapping runs cannot both claim a slot. */
+function runTick(why) {
+  if (running) return Promise.resolve();
+  running = true;
+  return Promise.resolve()
+    .then(() => tick(new Date()))
+    .then((res) => {
+      if (res && res.queued) console.log(`[linkedin-autopilot] ${why}: queued ${res.domain}`);
+    })
+    .catch((e) => { console.error('[linkedin-autopilot] tick failed:', e && e.message ? e.message : e); })
+    .then(() => { running = false; });
+}
+
+/**
+ * Start the checks: one straight away, then every five minutes.
+ *
+ * **The first one is the deploy's post.** A process that has just come up sits
+ * inside some two-hour slot, and if nothing has filled that slot yet it should
+ * fill it now rather than wait up to five minutes for the next cron edge. On
+ * the very first deploy that is the difference between a company page that
+ * posts the moment the change ships and one that appears to do nothing for
+ * five minutes. It is safe to run on every boot, not just the first: a restart
+ * halfway through a slot already posted loses the insert to the unique index
+ * on `slot`, which is the same mechanism that already stops two PM2 workers
+ * posting the same thing — and several workers booting together is exactly
+ * that case.
+ *
+ * **Then every five minutes**, rather than a cron firing on the even hours: a
+ * cron that fires while the box is restarting misses its slot outright, and
+ * with one post every two hours a missed slot is a two-hour hole. A repeating
+ * check that is a no-op twenty-three times out of twenty-four costs nothing.
  *
  * Off under NODE_ENV=test for the same reason as the scheduler — a registered
  * cron task keeps the Jest run alive and CI hangs.
@@ -372,16 +407,18 @@ function start() {
   if (task) return task;
 
   const cron = require('node-cron');
-  task = cron.schedule('*/5 * * * *', () => {
-    if (running) return;
-    running = true;
-    Promise.resolve()
-      .then(() => tick(new Date()))
-      .catch((e) => { console.error('[linkedin-autopilot] tick failed:', e && e.message ? e.message : e); })
-      .then(() => { running = false; });
-  });
-  console.log(`[linkedin-autopilot] a hiring post will be queued every ${SLOT_HOURS} hours, round the clock`);
+  task = cron.schedule('*/5 * * * *', () => { runTick('scheduled check'); });
+
+  firstTimer = setTimeout(() => { runTick('first check after start-up'); }, FIRST_TICK_MS);
+  /* Do not hold the event loop open on this alone; the web server is what
+     keeps the process alive, and a lingering timer would delay a clean exit. */
+  if (firstTimer && typeof firstTimer.unref === 'function') firstTimer.unref();
+
+  console.log(
+    `[linkedin-autopilot] first post in ${FIRST_TICK_MS / 1000}s, `
+    + `then one every ${SLOT_HOURS} hours, round the clock`,
+  );
   return task;
 }
 
-module.exports = { SLOT_HOURS, due, feed, forecast, imageUrlFor, readPoster, start, stats, tick };
+module.exports = { FIRST_TICK_MS, SLOT_HOURS, due, feed, forecast, imageUrlFor, readPoster, start, stats, tick };
