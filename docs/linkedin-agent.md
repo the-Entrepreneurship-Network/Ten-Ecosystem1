@@ -53,11 +53,11 @@ the right.
 | `domain` | `<slug>.jpg` | the domain's own mark — the Python logo, and so on |
 | `ten` | `<slug>-ten.jpg` | the TEN building with the gold-hands mark |
 
-**The TEN set is not committed yet.** `openings.posters()` asks the filesystem which plates
-exist and lists only those, so the section renders one plate per domain today and two the
-day the second set lands. Deploying them is copying fourteen files into
-`public/assets/linkedin-posters/`; there is no code change and no restart, because the
-directory is read per request rather than cached.
+Both sets are committed, so every domain shows two plates. `openings.posters()` asks the
+filesystem which exist rather than trusting a hard-coded list, which is what let the second
+set arrive by being copied in — no code change and no restart, because the directory is
+read per request rather than cached. A plate that goes missing drops out of the list rather
+than reaching the browser as a broken image.
 
 The facts on a plate and the facts in the post come from the same `PROGRAMME` constant, so
 they cannot disagree. If you regenerate a poster, check it still says what `PROGRAMME`
@@ -66,17 +66,24 @@ catch by looking at either one alone.
 
 ### Making them
 
-`poster-kit/` renders the plates and is still here, because the second set has to come from
-somewhere and because the facts on a poster change when the batch does:
+`poster-kit/` renders the plates, and the facts on a poster change when the batch does:
 
 ```bash
-python poster-kit/build_domain_posters.py
+python poster-kit/build_domain_posters.py                 # the fourteen domain plates
+python poster-kit/build_domain_posters.py --variant ten   # the fourteen TEN plates
+python poster-kit/build_domain_posters.py --all           # all twenty-eight
 ```
 
-An image model draws the artwork; a headless browser draws every word from JSON. That split
-is the point — a model garbling a stipend or a date on a live job advertisement is the
-failure this pipeline exists to prevent, and it is not a risk worth taking for the sake of
-one render step.
+An image model draws the artwork; a headless browser draws every word from JSON. **That
+split is the whole architecture, and it is not a stylistic preference.** The TEN hero came
+from a 3D render that also tried to letter the poster itself, and it produced "MGDE" for
+MODE, "Frechers" for Freshers, "Across 19 Domains" against a company that has fourteen, and
+a stipend of ₹5,000 a month for an internship that pays nothing. Those would have gone out
+on a live job advertisement. The plates above carry the same artwork with every word set by
+the browser, which is why they are right.
+
+The build fails loudly if its domain list drifts from `openings.js`, so a domain cannot
+quietly end up without a poster.
 
 The hero artwork carries no watermark: `prepare_heroes.py` cover-crops each source image to
 3:4 around its centre, which trims the bottom-right corner a watermark sits in. Keep that

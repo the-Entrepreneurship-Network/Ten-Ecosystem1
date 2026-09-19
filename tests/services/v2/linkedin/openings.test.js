@@ -73,24 +73,31 @@ describe('openings — the posters on disk', () => {
     }
   });
 
-  test('posters() lists the domain plate for every domain', () => {
+  test('all fourteen TEN plates exist and are not empty', () => {
+    for (const d of openings.DOMAINS) {
+      const file = path.join(POSTER_DIR, `${d.slug}-ten.jpg`);
+      expect(fs.existsSync(file)).toBe(true);
+      expect(fs.statSync(file).size).toBeGreaterThan(1000);
+    }
+  });
+
+  test('posters() gives every domain both plates, domain first', () => {
     for (const d of openings.DOMAINS) {
       const found = openings.posters(d);
-      expect(found.length).toBeGreaterThanOrEqual(1);
-      const domainPlate = found.find((p) => p.variant === 'domain');
-      expect(domainPlate).toBeTruthy();
-      expect(domainPlate.url).toBe(`/assets/linkedin-posters/${d.slug}.jpg`);
+      expect(found.map((p) => p.variant)).toEqual(['domain', 'ten']);
+      expect(found[0].url).toBe(`/assets/linkedin-posters/${d.slug}.jpg`);
+      expect(found[1].url).toBe(`/assets/linkedin-posters/${d.slug}-ten.jpg`);
     }
   });
 
   /*
-   * The TEN-building set is not committed yet. This test does not demand it —
-   * it pins the behaviour that makes shipping without it safe: a variant whose
-   * file is absent is absent from the list, so the browser is never handed an
-   * <img> src that 404s. When the fourteen `-ten.jpg` plates land, this test
-   * keeps passing and the one above it starts returning two.
+   * Both sets are committed now, so this no longer guards a gap — it guards the
+   * mechanism that closed it. posters() reads the directory rather than
+   * trusting a hard-coded list, which is what let the second set deploy by
+   * being copied in. A plate that goes missing must drop out of the list rather
+   * than reach the browser as an <img> src that 404s.
    */
-  test('a variant with no file on disk is simply not listed', () => {
+  test('never lists a plate that is not on disk', () => {
     for (const d of openings.DOMAINS) {
       for (const p of openings.posters(d)) {
         expect(fs.existsSync(path.join(POSTER_DIR, p.file))).toBe(true);
