@@ -6,9 +6,12 @@
  * This file used to assert the opposite — four staff dashboards carry it,
  * students and investors must not — and the reversal is the point of the
  * change it now pins. When the section was a composer, keeping students away
- * from it was the whole safety story. It is not a composer any more. It shows
- * the posts the company page has already published, it has no controls, and
- * the people it advertises for are the ones most entitled to read it.
+ * from it was the whole safety story. It is not a composer any more, and it is
+ * not an agent either: it lists the fourteen internship openings so a person
+ * can copy the words and download the poster and post them from their own
+ * account. It has nothing to operate and nothing to leak, and the people it
+ * advertises for are both the most entitled to read it and the best placed to
+ * spread it — an intern posting an opening outreaches the company page.
  *
  * So every portal a person lands on after signing in carries the section, and
  * the test that matters is that none of them was forgotten. Adding a portal to
@@ -108,28 +111,34 @@ describe('the module itself', () => {
   /*
    * The section is in front of students and contractors, so it must ask for
    * nothing a staff-only route would answer. Everything it reads comes from
-   * /feed.
+   * /openings, which is the only endpoint this feature still has.
    */
-  it('reads the feed and nothing else', () => {
-    expect(src).toContain("'/feed'");
+  it('reads the openings and nothing else', () => {
+    expect(src).toContain("'/openings'");
     expect(src).not.toMatch(/\/autopilot/);
     expect(src).not.toMatch(/\/status/);
     expect(src).not.toMatch(/\/stats/);
+    expect(src).not.toMatch(/\/feed/);
   });
 
   /*
-   * There is exactly one thing it writes: /connect, the form that puts the
-   * access token in. The server refuses that to anyone but HR and admin, and
-   * the payload that carries `canConnect` is only sent to those two roles, so
-   * nobody else is even shown the form. Any OTHER write would be a way to
-   * reach the company page that the rotation does not control.
+   * It writes nothing at all, and that is the change this file now pins.
+   *
+   * There used to be a /connect form here that put a LinkedIn access token
+   * into the server, because the server posted to the company page by itself.
+   * Both are gone: automated posting is what gets a page restricted, so the
+   * whole posting path was removed rather than guarded. A section that only
+   * reads cannot be talked into publishing, and there is no longer a
+   * credential for it to carry.
    */
-  it('writes only to the connect endpoints', () => {
-    const posts = src.match(/API \+ '\/[a-z/]+'/g) || [];
-    const written = posts.map((m) => m.replace(/.*'\/(.+)'/, '$1'));
-    written.forEach((route) => {
-      expect(['feed', 'connect', 'disconnect']).toContain(route.split('/')[0]);
+  it('writes nothing — every request it makes is a read', () => {
+    const called = src.match(/API \+ '\/[a-z/]+'/g) || [];
+    const routes = called.map((m) => m.replace(/.*'\/(.+)'/, '$1'));
+    expect(routes.length).toBeGreaterThan(0);
+    routes.forEach((route) => {
+      expect(route.split('/')[0]).toBe('openings');
     });
-    expect(src).not.toMatch(/method:\s*['"](PUT|DELETE|PATCH)['"]/);
+    expect(src).not.toMatch(/method:\s*['"](POST|PUT|DELETE|PATCH)['"]/);
+    expect(src).not.toMatch(/\bbody:\s/);
   });
 });

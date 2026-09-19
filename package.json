@@ -11,9 +11,7 @@
     "test": "jest --passWithNoTests",
     "seed": "node seeds/domainTasks.seed.js",
     "seed:fresh": "node seeds/dropAndReseed.js",
-    "seed:quiz": "node seeds/quizQuestions.seed.js",
-    "linkedin:connect": "node scripts/linkedin-connect.js",
-    "linkedin:status": "node scripts/linkedin-status.js"
+    "seed:quiz": "node seeds/quizQuestions.seed.js"
   },
   "keywords": [],
   "author": "",
