@@ -212,6 +212,28 @@ and `publish()`'s behaviour can never disagree.
 
 ## Connecting the page
 
+```bash
+npm run linkedin:connect
+```
+
+Run it **on the server that does the posting**. It asks for the access token in
+a hidden prompt, checks it against LinkedIn, lists the pages that token can
+actually post as, lets you pick one, and writes both values into `.env` with
+mode 0600.
+
+Nothing is written until LinkedIn has confirmed the token, so an abandoned or
+failed run leaves `.env` exactly as it was — and only the two keys it owns are
+touched, so comments and every other setting survive byte for byte.
+
+It refuses to read a piped secret and takes no token argument. That is
+deliberate: the two easy ways to leak one of these are pasting it into a chat
+window and putting it on a command line, where it lands in shell history and in
+the process table for every other account on the box.
+
+Then restart and confirm with `node scripts/linkedin-status.js --live`.
+
+### Doing it by hand
+
 Two routes. Either one makes it live; neither can be done from the codebase,
 because both need a credential only a page administrator can issue.
 
