@@ -116,12 +116,6 @@
           <i class="fa-solid fa-chart-line text-indigo-400"></i> Capital Portfolio
         </button>
 
-        <!-- LinkedIn: what the company page has published. Read-only, and the
-             same section every other portal carries. -->
-        <button onclick="switchTab('linkedin')" class="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-white/5 transition text-left" id="tab-linkedin">
-          <i class="fa-brands fa-linkedin text-sky-400"></i> LinkedIn Agent
-        </button>
-
         <p class="text-[9px] uppercase tracking-widest text-slate-500 font-bold px-3 pt-6 mb-2">Platform Perks</p>
         <a href="founder-directory.html" class="flex items-center gap-3 px-3 py-2 rounded-xl text-[11px] font-bold text-blue-400 hover:text-blue-300 transition">
           <i class="fa-solid fa-circle-nodes"></i> Browse Founder Directory
@@ -264,11 +258,6 @@
       </div>
 
       <!-- Portfolio Tab -->
-      <!-- LinkedIn — drawn by /linkedin-agent.js the first time the tab opens -->
-      <div id="content-linkedin" class="tab-content hidden space-y-6">
-        <div id="linkedinAgentHost"></div>
-      </div>
-
       <div id="content-portfolio" class="tab-content hidden space-y-6">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div class="space-y-1">
@@ -348,10 +337,6 @@
       const btn = document.getElementById('tab-' + tabId);
       if (btn) {
         btn.classList.add('active-nav', 'text-white');
-      }
-
-      if (tabId === 'linkedin' && window.TENLinkedInAgent) {
-        TENLinkedInAgent.mount(document.getElementById('linkedinAgentHost'), { role: 'investor' });
       }
 
       // Close mobile sidebar if open
@@ -714,7 +699,6 @@
      missing here, so an investor had no way of knowing a founder had answered
      them without opening the desk and looking. -->
 <script src="/notify-orb.js" defer></script>
-<script src="/linkedin-agent.js" defer></script>
 <!-- Two guards, on every page that shows or saves data:
      db-banner says so when there is no database behind the portal, which
      once ran for days looking normal while writing to a JSON file;

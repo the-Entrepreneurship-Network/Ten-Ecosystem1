@@ -123,10 +123,6 @@
         <button onclick="switchTab('meetings')" class="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-white/5 transition text-left" id="tab-meetings">
           <i class="fa-solid fa-calendar-days text-indigo-400"></i> Mentoring Calendar
         </button>
-        <!-- LinkedIn agent: staff-only section, shared with HR, coordinators and founders. -->
-        <button onclick="switchTab('linkedin')" class="w-full flex items-center gap-3.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-white/5 transition text-left" id="tab-linkedin">
-          <i class="fa-brands fa-linkedin text-sky-400"></i> LinkedIn Agent
-        </button>
         
         <!--
           A mentor used to be trapped here. This sidebar had three in-page tabs
@@ -346,11 +342,6 @@
       </div>
 
       <!-- Calendar Tab -->
-      <!-- LinkedIn agent — mounted by /linkedin-agent.js the first time the tab opens -->
-      <div id="content-linkedin" class="tab-content hidden space-y-6">
-        <div id="linkedinAgentHost"></div>
-      </div>
-
       <div id="content-meetings" class="tab-content hidden space-y-6">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2">
           <div class="space-y-1">
@@ -487,9 +478,6 @@
 
       if (tabId === 'meetings') {
         loadAssignedMentorshipSessions();
-      }
-      if (tabId === 'linkedin' && window.TENLinkedInAgent) {
-        TENLinkedInAgent.mount(document.getElementById('linkedinAgentHost'), { role: 'mentor' });
       }
 
       // Close mobile sidebar if open
@@ -981,7 +969,6 @@
      once ran for days looking normal while writing to a JSON file;
      build-guard reloads a page the server has been deployed under, which
      is how an old sentence came to be printed around a new number. -->
-<script src="/linkedin-agent.js" defer></script>
 <script src="/js/db-banner.js" defer></script>
 <script src="/js/build-guard.js" defer></script>
 </body>

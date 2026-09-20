@@ -68,7 +68,7 @@ describe('GET /openings — what the section reads', () => {
   });
 
   test('each opening carries the text, the poster and the apply link', async () => {
-    const res = await request(app).get('/api/v2/linkedin/openings').set(as('student'));
+    const res = await request(app).get('/api/v2/linkedin/openings').set(as('coordinator'));
     for (const o of res.body.openings) {
       expect(typeof o.slug).toBe('string');
       expect(typeof o.name).toBe('string');
@@ -81,21 +81,22 @@ describe('GET /openings — what the section reads', () => {
   });
 
   test('the text it serves is the text the module generates — one source of truth', async () => {
-    const res = await request(app).get('/api/v2/linkedin/openings').set(as('founder'));
+    const res = await request(app).get('/api/v2/linkedin/openings').set(as('admin'));
     const python = res.body.openings.find((o) => o.slug === 'python');
     expect(python.text).toBe(openings.text('python'));
   });
 
-  test('and that text never mentions the stipend', async () => {
+  test('and that text states the stipend once, with no invented figure', async () => {
     const res = await request(app).get('/api/v2/linkedin/openings').set(as('coordinator'));
     for (const o of res.body.openings) {
-      expect(o.text.toLowerCase()).not.toContain('stipend');
+      expect(o.text).toContain('Stipend: Competitive salary along with terms and conditions');
+      expect(o.text).not.toContain('₹');
       expect(o.text.toLowerCase()).not.toContain('unpaid');
     }
   });
 
   test('lists only poster variants that exist, so no download can 404', async () => {
-    const res = await request(app).get('/api/v2/linkedin/openings').set(as('mentor'));
+    const res = await request(app).get('/api/v2/linkedin/openings').set(as('hr'));
     for (const o of res.body.openings) {
       const expected = openings.posters(o.slug).map((p) => p.url);
       expect(o.posters.map((p) => p.url)).toEqual(expected);
@@ -105,17 +106,38 @@ describe('GET /openings — what the section reads', () => {
 
 describe('who may read it', () => {
   /*
-   * Every signed-in role, students included. The section is a noticeboard of
-   * copy the company wants spread as widely as possible, and the students are
-   * the ones best placed to spread it — an intern posting "this is where I am
-   * interning" outperforms the company page saying the same thing. A staff
-   * gate here would be a gate on the distribution.
+   * Three roles, and the list is exhaustive on both sides.
+   *
+   * An earlier version admitted every signed-in role on the argument that
+   * fourteen interns sharing an opening outreach one company page. That was
+   * overruled: this is hiring copy in draft, and who posts it and when is the
+   * hiring team's decision. The five refusals below are the half that matters —
+   * the UI is stripped from those portals too, but a stripped dashboard is a
+   * courtesy and this is the control.
    */
-  for (const role of Object.keys(SESSIONS)) {
+  const ALLOWED = ['hr', 'coordinator', 'admin'];
+  const REFUSED = ['student', 'mentor', 'founder', 'investor', 'contractor'];
+
+  test('the two lists together cover every role the suite knows about', () => {
+    expect([...ALLOWED, ...REFUSED].sort()).toEqual(Object.keys(SESSIONS).sort());
+  });
+
+  for (const role of ALLOWED) {
     test(`${role} can read the openings`, async () => {
       const res = await request(app).get('/api/v2/linkedin/openings').set(as(role));
       expect(res.status).toBe(200);
       expect(res.body.openings).toHaveLength(14);
+    });
+  }
+
+  for (const role of REFUSED) {
+    test(`${role} is refused`, async () => {
+      const res = await request(app).get('/api/v2/linkedin/openings').set(as(role));
+      expect(res.status).toBe(403);
+      /* Not just the status — a refusal that still leaked the copy in its body
+         would pass a status check and fail the point of the gate. */
+      expect(JSON.stringify(res.body)).not.toContain('Apply for');
+      expect(JSON.stringify(res.body)).not.toContain('WE ARE');
     });
   }
 

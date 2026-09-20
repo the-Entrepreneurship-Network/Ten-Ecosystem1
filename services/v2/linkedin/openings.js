@@ -207,7 +207,7 @@ const PROGRAMME = {
   batch: 'October 2026',
   mode: 'Online',
   duration: '3 Months',
-  stipend: 'Unpaid',
+  stipend: 'Competitive salary along with terms and conditions',
   eligibility: "Any Bachelor's | Any Master's | Any Stream",
 };
 
@@ -306,6 +306,7 @@ function text(domain) {
     `📅 Batch: ${PROGRAMME.batch}`,
     `💻 Mode: ${PROGRAMME.mode}`,
     `🕒 Duration: ${PROGRAMME.duration}`,
+    `💰 Stipend: ${PROGRAMME.stipend}`,
     `🎓 Eligibility: ${PROGRAMME.eligibility}`,
     '',
     '🙌 No prior knowledge needed.',
@@ -316,6 +317,7 @@ function text(domain) {
     '• A portfolio that shows work, not certificates of attendance',
     '• Certificate of Internship',
     '• Letter of Recommendation',
+    '• Competitive stipend',
     '• The experience of shipping something, which is the part nobody can teach you in a classroom',
     '',
     'This is what makes people interview-ready and job-ready: not what they studied, but what they have built and can defend.',
