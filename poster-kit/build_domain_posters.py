@@ -146,12 +146,15 @@ def job_for(name, slug, role, hero, workdir):
             {"icon": "globe",     "label": "Mode",     "value": "Online"},
             {"icon": "clock",     "label": "Duration", "value": "3 Months"},
             {"icon": "calendar",  "label": "Batch",    "value": "October\n2026"},
+            {"icon": "doc",       "label": "Perks",    "value": "Certificate\nLetter of\nRecommendation\nCompetitive Stipend"},
         ],
         "eligibility": {"heading": "ELIGIBILITY", "items": list(ELIGIBILITY)},
-        # The one change to the supplied poster: the rupee figure is gone and
-        # the field reads Stipend: Unpaid. No note under it — a note is where
-        # an explanation creeps back in, and the team asked for the word alone.
-        "salary": {"label": "STIPEND", "value": "Unpaid"},
+        # The team confirmed October 2026 interns are paid. The note carries the
+        # qualifier and nothing else: no figure, and no sentence spelling the
+        # terms out, because a poster is not where terms belong and a reader who
+        # sees them start would stop reading the poster.
+        "salary": {"label": "STIPEND", "value": "Competitive Salary",
+                   "note": "Terms and conditions"},
         # As supplied. The post carries the application link as well, so a
         # reader has both doors; this is the one the page has been using.
         "cta": {

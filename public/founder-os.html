@@ -221,9 +221,6 @@ tr:last-child td{border-bottom:0;}
 
     <div class="grp">Support</div>
     <button data-v="mentors"><span class="ic">&#9734;</span> Mentors <span class="cnt" id="cntBookings">0</span></button>
-
-    <div class="grp">Outreach</div>
-    <button data-v="linkedin"><span class="ic">&#9737;</span> LinkedIn Agent</button>
   </nav>
   <div class="foot">
     <a href="/">&larr; TEN home</a>
@@ -405,11 +402,6 @@ tr:last-child td{border-bottom:0;}
     </section>
 
     <!-- ── MENTORS ──────────────────────────────────────────────────────── -->
-    <!-- LinkedIn Agent — the section is drawn by /linkedin-agent.js on first open -->
-    <section class="view" id="v-linkedin">
-      <div id="linkedinAgentHost"></div>
-    </section>
-
     <section class="view" id="v-mentors">
       <div class="panel">
         <h2>Your sessions</h2>
@@ -515,8 +507,7 @@ var TITLES = {
   investors:   ['Investor interest', 'Investors who asked to talk to you'],
   dataroom:    ['Data room', 'Documents, private until you share them'],
   team:        ['Team', 'Who is building this'],
-  mentors:     ['Mentors', 'Book time with an approved mentor'],
-  linkedin:    ['LinkedIn Agent', 'Posts an opening to the TEN page every Saturday and Sunday, by itself']
+  mentors:     ['Mentors', 'Book time with an approved mentor']
 };
 
 var LOADED = {};
@@ -539,8 +530,7 @@ function go(v){
     overview: loadOverview, profile: loadProfile, jobs: loadJobs,
     pipeline: loadPipeline, talent: function(){ if(!LOADED.talent) loadTalent(1); },
     fundraising: loadRounds, investors: loadInterest,
-    dataroom: loadDocs, team: loadTeam, mentors: loadMentors,
-    linkedin: function(){ if (window.TENLinkedInAgent) TENLinkedInAgent.mount(document.getElementById('linkedinAgentHost'), { role: 'founder' }); }
+    dataroom: loadDocs, team: loadTeam, mentors: loadMentors
   };
   if (loaders[v]) { loaders[v](); LOADED[v] = true; }
 }
@@ -1536,7 +1526,6 @@ async function cancelBooking(id){
      once ran for days looking normal while writing to a JSON file;
      build-guard reloads a page the server has been deployed under, which
      is how an old sentence came to be printed around a new number. -->
-<script src="/linkedin-agent.js"></script>
 <script src="/js/db-banner.js" defer></script>
 <script src="/js/build-guard.js" defer></script>
 </body>

@@ -23,7 +23,7 @@
 const express = require('express');
 
 const { requireRole, attachEcosystemUser } = require('../../middleware/roleGuard');
-const { ALL_ROLES } = require('../../config/roles');
+const { ROLES } = require('../../config/roles');
 
 const router = express.Router();
 
@@ -37,20 +37,27 @@ const router = express.Router();
 router.use(attachEcosystemUser);
 
 /*
- * One gate, and it is the widest one: every role this app has.
+ * Three roles: HR, coordinator, admin. Nobody else, and in particular not
+ * students.
  *
- * The section is a noticeboard. Everything on it is copy the company wants
- * spread as far as it will go, and the people best placed to spread it are the
- * students — an intern posting "this is where I am interning" outperforms the
- * company page saying the same thing, and fourteen of them outperform it
- * badly. Locking the openings behind a staff gate would be locking the door on
- * the distribution.
+ * An earlier version of this file opened the section to every signed-in role,
+ * on the argument that fourteen interns sharing an opening outreach one
+ * company page. That argument still holds about reach and was overruled anyway:
+ * this is hiring material in draft, and who posts it and when is a decision the
+ * people running the hiring make. Handing every student the ready-to-post copy
+ * means the company's openings appear wherever and whenever fourteen people
+ * feel like putting them.
  *
- * Deriving the list from ALL_ROLES rather than naming roles means a role added
- * to config/roles.js later is admitted without anybody remembering to come
- * back here.
+ * Roles are named here rather than derived from ALL_ROLES, which is the point:
+ * a role added to config/roles.js later must NOT be admitted automatically. The
+ * previous derive-from-everything version would have let one in silently, which
+ * is the failure this list exists to prevent.
+ *
+ * The UI is stripped from the other five portals as well, but that is a
+ * courtesy, not the control. This is the control — a student who knows the URL
+ * gets a 403 from here whatever their dashboard does or does not draw.
  */
-const signedIn = requireRole(...ALL_ROLES);
+const staffOnly = requireRole(ROLES.HR, ROLES.COORDINATOR, ROLES.ADMIN);
 
 /* Required on first use rather than at load, so a mistake in the openings
    module cannot stop this router mounting — the same reason the old version of
@@ -83,7 +90,7 @@ function h(fn) {
  * change here. A domain with no plate at all still returns its text; the words
  * are the part that cannot be missing.
  */
-router.get('/openings', signedIn, h(async (req, res) => {
+router.get('/openings', staffOnly, h(async (req, res) => {
   res.json({ ok: true, openings: openings().list() });
 }));
 

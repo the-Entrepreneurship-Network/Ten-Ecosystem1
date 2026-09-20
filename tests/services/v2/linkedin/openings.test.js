@@ -125,19 +125,34 @@ describe('openings — the post text', () => {
   });
 
   /*
-   * The load-bearing one. The poster states the stipend in its own field; the
-   * post does not raise it at all, and in particular never argues the
-   * internship is worth doing despite it — naming an absence and then
-   * defending it is what makes a reader decide the absence is the story.
+   * The stipend line, and what it may not turn into.
+   *
+   * This post used to omit the stipend entirely, because the internship was
+   * unpaid and naming an absence then defending it is what makes a reader
+   * decide the absence is the story. The team has since confirmed October 2026
+   * interns are paid, so the line is back — stated once, qualified once, and
+   * never elaborated.
+   *
+   * What the assertions below actually guard is the elaboration. "Competitive
+   * salary" with the terms named is a claim the company stands behind; the same
+   * line followed by a paragraph explaining the terms is a poster arguing with
+   * itself, and a specific rupee figure nobody approved is the single most
+   * expensive thing this file could print.
    */
-  test('never mentions the stipend, in any form', () => {
+  test('states the stipend once, qualified, with no figure', () => {
     for (const d of openings.DOMAINS) {
-      const body = openings.text(d).toLowerCase();
-      expect(body).not.toContain('stipend');
-      expect(body).not.toContain('unpaid');
-      expect(body).not.toContain('unpaid internship');
-      expect(body).not.toMatch(/\bno pay\b|\bnot paid\b|\bwithout pay\b/);
+      const body = openings.text(d);
+      expect(body).toContain('Stipend: Competitive salary along with terms and conditions');
+      expect(body).toContain('• Competitive stipend');
+      /* Exactly those two: the fact line and the perk. A third mention is an
+         explanation starting, which is the thing this post must not do. */
+      expect(body.toLowerCase().split('stipend').length - 1).toBe(2);
+      /* No invented number, in either notation. */
       expect(body).not.toContain('₹');
+      expect(body).not.toMatch(/\bRs\.?\s*\d/i);
+      expect(body).not.toMatch(/\d[\d,]{3,}\s*(\/|per\b|a\b)?\s*(mo|month)/i);
+      /* And no leftover from when it was unpaid. */
+      expect(body.toLowerCase()).not.toContain('unpaid');
     }
   });
 

@@ -37,17 +37,25 @@ const read = (name) => fs.readFileSync(path.join(PUBLIC, name), 'utf8');
  * "is it reachable" below accepts all of them rather than one.
  */
 const PORTALS = [
-  ['student-dashboard.html', 'student'],
   ['hr-portal.html', 'hr'],
   ['coordinator-dashboard.html', 'coordinator'],
-  ['mentor-dashboard.html', 'mentor'],
-  ['founder-os.html', 'founder'],
-  ['investor-dashboard.html', 'investor'],
-  ['contractor-dashboard.html', 'contractor'],
   ['ten-admin.html', 'admin'],
 ];
 
-describe('every portal carries the LinkedIn section', () => {
+/*
+ * The five that must NOT carry it. Named rather than inferred as "everything
+ * not above", because a portal added to public/ later should land in neither
+ * column and fail the derived check at the bottom, making somebody decide.
+ */
+const WITHOUT = [
+  'student-dashboard.html',
+  'mentor-dashboard.html',
+  'founder-os.html',
+  'investor-dashboard.html',
+  'contractor-dashboard.html',
+];
+
+describe('the three portals that carry the LinkedIn section', () => {
   describe.each(PORTALS)('%s', (file, role) => {
     const html = read(file);
 
@@ -87,11 +95,30 @@ describe('every portal carries the LinkedIn section', () => {
   });
 
   /*
-   * A count, not a list, so that adding a portal without adding it here fails
-   * loudly rather than passing quietly. If this number changes, the change was
-   * either deliberate — add it to PORTALS above — or a page was missed.
+   * The half that matters now. The section carries ready-to-post hiring copy,
+   * and the decision is that HR, coordinators and admins hold it — not
+   * students, and not the mentor, investor, contractor or founder views it used
+   * to appear in. A page quietly regaining it is the regression this catches.
    */
-  it('is on every portal in public/ and no page was missed', () => {
+  describe.each(WITHOUT)('%s does not carry it', (file) => {
+    const html = read(file);
+
+    it('does not load the module', () => {
+      expect(html).not.toContain('linkedin-agent.js');
+    });
+
+    it('has no host element and never mounts it', () => {
+      expect(html).not.toContain('linkedinAgentHost');
+      expect(html).not.toContain('TENLinkedInAgent');
+    });
+  });
+
+  /*
+   * Derived from the directory rather than from PORTALS, so a portal added to
+   * public/ later lands in neither list and fails here instead of passing
+   * quietly in whichever direction the default happened to be.
+   */
+  it('exactly three pages in public/ carry it, and they are the expected three', () => {
     const carrying = fs.readdirSync(PUBLIC)
       .filter((f) => f.endsWith('.html'))
       .filter((f) => read(f).indexOf('linkedinAgentHost') >= 0)

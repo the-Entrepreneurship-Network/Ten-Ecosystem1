@@ -16,16 +16,15 @@ did not work — because of what it risked. Automated posting is what gets a com
 restricted, and the page is where the applications come from. The downside was not a bug
 that could be fixed; it was the design.
 
-The replacement is better distribution anyway. One company page posting an opening reaches
-the people already following it. Fourteen interns posting the same opening reach fourteen
-networks of exactly the students the opening is for — and a person saying "this is where I
-am interning" carries weight a company page cannot buy.
+Two things follow, and both are deliberate:
 
-Two related things follow, and both are deliberate:
-
-- **Every signed-in role sees it, students included.** It is a noticeboard of copy the
-  company wants spread as widely as possible, and the students are the ones best placed to
-  spread it. A staff-only gate here would be a gate on the distribution.
+- **Three roles see it: HR, coordinator, admin.** An earlier version opened it to every
+  signed-in role, on the argument that fourteen interns sharing an opening outreach one
+  company page. That argument about reach still holds and was overruled anyway: this is
+  hiring copy in draft, and who posts it and when is a decision the people running the
+  hiring make. The five other portals had the section stripped out, but that is a courtesy
+  — the control is `staffOnly` on the route, so a student who knows the URL gets a 403
+  whatever their dashboard draws.
 - **It is read-only.** No textarea, no publish button, no form. `tests/public/linkedinAgentUi.test.js`
   asserts their absence, and `tests/routes/linkedinAgent.test.js` asserts a 404 on every
   route that used to publish. Those tests exist because "just make it post again" is a
@@ -36,12 +35,13 @@ Two related things follow, and both are deliberate:
 | File | What it is |
 |---|---|
 | `services/v2/linkedin/openings.js` | The fourteen domains, the programme facts, the apply links, and the post text. Pure functions, no network, no database. |
-| `routes/v2/linkedinAgent.js` | One endpoint, `GET /api/v2/linkedin/openings`, behind every signed-in role. |
+| `routes/v2/linkedinAgent.js` | One endpoint, `GET /api/v2/linkedin/openings`, behind HR, coordinator and admin. |
 | `public/linkedin-agent.js` | The section. Exposes `window.TENLinkedInAgent.mount(host, { role, headers })`. |
 | `public/assets/linkedin-posters/*.jpg` | The plates. |
 
-The eight portals — student, HR, coordinator, mentor, contractor, investor, founder-os,
-ten-admin — each call `mount()` with a host element and their own role.
+Three portals — `hr-portal.html`, `coordinator-dashboard.html` and `ten-admin.html` — call
+`mount()` with a host element and their own role. `tests/public/linkedinAgentVisibility.test.js`
+checks both halves: that those three carry it, and that the other five do not.
 
 ## The posters
 
@@ -94,14 +94,17 @@ crop if you replace the plates.
 Long on purpose, and the length is all projects and specifics. A reader who stops after the
 first screen has still seen the role, the batch and three things they would build.
 
-**The stipend is not mentioned.** The poster states it plainly in its own field, so the
-fact is published and nobody is misled. But the post does not raise it, and it never argues
-that the internship is worth doing despite it. Naming an absence and then defending it is
-what makes a reader decide the absence is the story; a post that spends two lines on why
-unpaid is fine reads as a company with nothing else to offer. There is plenty else to offer
-— six hundred-odd interns came through the last batch — so the words go there instead.
-`tests/services/v2/linkedin/openings.test.js` asserts the word never appears, because the
-omission looks like an oversight and somebody will eventually try to "fix" it.
+**The stipend is stated once and never argued.** It reads `Stipend: Competitive salary
+along with terms and conditions`, and appears a second time only as a perk. There is no
+figure and no paragraph spelling the terms out, and both of those absences are tested:
+`tests/services/v2/linkedin/openings.test.js` fails on a rupee amount, on any number that
+looks like a monthly figure, and on a third mention of the word.
+
+That matters more than it looks. This copy went out unpaid until the team confirmed
+otherwise, so a stale figure here is not a typo — it is a compensation claim on a live job
+advertisement, made to freshers deciding whether to give up three months. If the terms
+change, change `PROGRAMME.stipend` and re-render; do not add a sentence explaining them,
+because a poster is not where terms belong and a reader who sees them start stops reading.
 
 Each domain's three `builds` lines are specific to that domain and true of it. The Redis
 clone belongs to Software Engineering because that is who builds it; putting it under
