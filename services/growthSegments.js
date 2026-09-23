@@ -33,6 +33,13 @@ function baseFilter() {
     };
 }
 
+/*
+ * Not a segment — the marker a campaign carries when its audience was ticked
+ * by hand instead of queried. Kept here so `isSegment` still answers false for
+ * it and nothing can accidentally run it as a Mongo query.
+ */
+const PICKED = 'picked';
+
 const SEGMENTS = {
     all: {
         label: 'Everyone',
@@ -109,4 +116,67 @@ async function recipientsFor(key, limit = 20000) {
     return out;
 }
 
-module.exports = { SEGMENTS, isSegment, filterFor, countFor, listWithCounts, recipientsFor, baseFilter };
+/** Deduplicate by address. One person on two domains is two rows, one inbox. */
+function dedupeByAddress(rows) {
+    const seen = new Set();
+    const out = [];
+    for (const r of rows) {
+        const addr = String(r.email || '').trim().toLowerCase();
+        if (!addr || seen.has(addr)) continue;
+        seen.add(addr);
+        out.push(r);
+    }
+    return out;
+}
+
+/**
+ * Students matching a typed query, for the hand-pick list.
+ *
+ * `baseFilter` applies here too, so somebody who unsubscribed cannot even be
+ * FOUND in the picker — the alternative is a list that offers a person you are
+ * not allowed to mail and only refuses at send time, which reads as a bug.
+ */
+async function searchStudents(q, limit = 40) {
+    const term = String(q || '').trim();
+    const filter = { ...baseFilter() };
+    if (term) {
+        // Escaped: a student searching "a+b" must not compile as a quantifier.
+        const rx = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        filter.$or = [{ name: rx }, { firstName: rx }, { lastName: rx }, { email: rx }, { employeeId: rx }];
+    }
+    const rows = await Student.find(filter)
+        .select('_id name firstName lastName email employeeId domain tenure')
+        .sort({ createdAt: -1 })
+        .limit(Math.max(1, Math.min(200, limit)))
+        .lean();
+    return dedupeByAddress(rows);
+}
+
+/**
+ * The hand-picked recipients of a campaign.
+ *
+ * The ids are only half the query. `baseFilter` is spread in alongside them so
+ * that a student who unsubscribed AFTER being ticked is dropped at send time:
+ * the list was built at some earlier moment, and the opt-out is always newer
+ * than the list.
+ */
+async function recipientsByIds(ids, limit = 20000) {
+    const clean = (ids || []).map(String).filter(Boolean);
+    if (!clean.length) return [];
+    const rows = await Student.find({ ...baseFilter(), _id: { $in: clean } })
+        .select('_id name firstName lastName email employeeId')
+        .limit(limit)
+        .lean();
+    return dedupeByAddress(rows);
+}
+
+/** Recipients for a campaign, whichever way its audience was chosen. */
+async function recipientsForCampaign(campaign) {
+    if (campaign && campaign.segment === PICKED) return recipientsByIds(campaign.studentIds);
+    return recipientsFor(campaign.segment);
+}
+
+module.exports = {
+    SEGMENTS, isSegment, filterFor, countFor, listWithCounts, recipientsFor, baseFilter,
+    searchStudents, recipientsByIds, recipientsForCampaign, dedupeByAddress, PICKED
+};

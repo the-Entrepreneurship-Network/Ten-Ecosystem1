@@ -20,6 +20,16 @@ const GrowthCampaignSchema = new mongoose.Schema({
     ctaUrl:    { type: String, default: '' },
     segment:   { type: String, required: true },
 
+    /*
+     * Only when `segment` is 'picked': the students ticked by hand.
+     *
+     * Stored on the campaign rather than resolved at send time so the record
+     * says who was chosen, even after somebody's details change. The opt-out
+     * filter is still applied when these are loaded — a list built on Monday
+     * must not mail somebody who unsubscribed on Tuesday.
+     */
+    studentIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Student' }],
+
     status: {
         type: String,
         enum: ['draft', 'sending', 'sent', 'stopped', 'failed'],
