@@ -82,6 +82,18 @@ const studentsSchema = new mongoose.Schema({
     lastAttendanceDate:   { type: Date },
     lastActiveDate:       { type: Date },
 
+    /*
+     * Opted out of campaign email.
+     *
+     * Only the Growth OS reads this. Certificates, offer letters and password
+     * resets are transactional and go out regardless — somebody who does not
+     * want the Monday mail has not given up the certificate they earned.
+     *
+     * Indexed because every segment query filters on it.
+     */
+    emailOptOut:          { type: Boolean, default: false, index: true },
+    emailOptOutAt:        { type: Date },
+
     milestones: {
         firstAttendance:        { type: Date },
         firstTaskSubmitted:     { type: Date },

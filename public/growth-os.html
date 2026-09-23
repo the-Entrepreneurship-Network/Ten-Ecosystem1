@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Growth OS</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#0c1220; color:#f0eee8; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:16px; }
+  .wrap { max-width:1000px; margin:0 auto; }
+  header { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:22px; }
+  .brand { font-size:11px; letter-spacing:5px; color:#f5c542; font-weight:700; }
+  h1 { font-size:24px; color:#fff7d6; font-weight:800; margin-top:6px; }
+  .linkbtn { background:none; border:1px solid #2a3350; color:#b9b4a8; border-radius:8px; padding:8px 14px; font-size:13px; cursor:pointer; }
+  .linkbtn:hover { border-color:#f5c542; color:#f5c542; }
+  .card { background:#0e1628; border:1px solid rgba(245,197,66,0.18); border-radius:16px; padding:20px; margin-bottom:18px; }
+  .card h2 { font-size:15px; color:#fff7d6; font-weight:700; margin-bottom:14px; }
+  .meter { height:14px; background:#0c1220; border:1px solid #2a3350; border-radius:99px; overflow:hidden; display:flex; }
+  .meter i { display:block; height:100%; }
+  .meter .used { background:linear-gradient(90deg,#f5c542,#d9a520); }
+  .meter .extra { background:#3f6f4f; }
+  .qrow { display:flex; gap:20px; flex-wrap:wrap; margin-top:14px; font-size:13px; color:#b9b4a8; }
+  .qrow b { color:#f0eee8; font-variant-numeric:tabular-nums; }
+  .warn { background:#2a1f06; border:1px solid #78500a; color:#fcd34d; border-radius:9px; padding:11px 13px; font-size:13px; margin-top:14px; line-height:1.55; }
+  .danger { background:#2a0f0f; border-color:#7f1d1d; color:#fca5a5; }
+  .segs { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:10px; }
+  .seg { background:#0c1220; border:1px solid #2a3350; border-radius:11px; padding:13px; cursor:pointer; transition:border-color .15s; }
+  .seg:hover { border-color:#6b5a20; }
+  .seg.on { border-color:#f5c542; background:#141c30; }
+  .seg .n { font-size:21px; font-weight:800; color:#f5c542; font-variant-numeric:tabular-nums; }
+  .seg .l { font-size:13px; font-weight:600; margin:3px 0 4px; }
+  .seg .d { font-size:11px; color:#8b8578; line-height:1.45; }
+  label { display:block; color:#b9b4a8; font-size:12px; margin:12px 0 6px; font-weight:500; }
+  input, textarea, select { width:100%; background:#0c1220; border:1px solid #2a3350; border-radius:9px; padding:11px 13px; color:#f0eee8; font-size:14px; outline:none; font-family:inherit; }
+  input:focus, textarea:focus, select:focus { border-color:#f5c542; }
+  textarea { min-height:130px; resize:vertical; line-height:1.55; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:560px){ .two { grid-template-columns:1fr; } }
+  .btn { background:linear-gradient(135deg,#f5c542,#d9a520); color:#1a1208; border:none; border-radius:9px; padding:12px 22px; font-size:14px; font-weight:700; cursor:pointer; margin-top:16px; }
+  .btn:disabled { background:#2a3350; color:#6b6558; cursor:not-allowed; }
+  .btn.ghost { background:none; border:1px solid #2a3350; color:#b9b4a8; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; color:#8b8578; font-weight:600; font-size:11px; letter-spacing:.6px; text-transform:uppercase; padding:0 10px 9px 0; }
+  td { padding:11px 10px 11px 0; border-top:1px solid #1b2440; font-variant-numeric:tabular-nums; }
+  .pill { display:inline-block; font-size:11px; padding:2px 9px; border-radius:99px; font-weight:600; }
+  .p-draft{background:#1b2440;color:#93a2c7}.p-sending{background:#2a1f06;color:#fcd34d}
+  .p-sent{background:#0f2a1a;color:#86efac}.p-failed,.p-stopped{background:#2a0f0f;color:#fca5a5}
+  .rupee { color:#86efac; font-weight:700; }
+  .empty { color:#6b6558; font-size:13px; padding:16px 0; }
+  .modal { position:fixed; inset:0; background:rgba(4,8,16,.82); display:none; align-items:center; justify-content:center; padding:16px; z-index:50; }
+  .modal.on { display:flex; }
+  .modal .card { max-width:430px; width:100%; margin:0; }
+  .toast { position:fixed; left:50%; transform:translateX(-50%); bottom:22px; background:#0e1628; border:1px solid #f5c542; color:#fff7d6; padding:12px 18px; border-radius:10px; font-size:13px; display:none; z-index:60; max-width:92vw; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="brand">THE ENTREPRENEURSHIP NETWORK</div>
+      <h1>Growth OS</h1>
+    </div>
+    <button class="linkbtn" id="logoutBtn" type="button">Sign out</button>
+  </header>
+
+  <!-- Quota -->
+  <section class="card">
+    <h2>This period's sending allowance</h2>
+    <div class="meter"><i class="used" id="barUsed" style="width:0"></i><i class="extra" id="barExtra" style="width:0"></i></div>
+    <div class="qrow">
+      <span>Sent <b id="qUsed">–</b></span>
+      <span>Left <b id="qLeft">–</b></span>
+      <span>Allowance <b id="qLimit">–</b></span>
+      <span>Resets <b id="qReset">–</b></span>
+      <span>Reserved for the portal <b id="qReserve">–</b></span>
+    </div>
+    <div class="warn" id="quotaWarn" style="display:none"></div>
+  </section>
+
+  <!-- Segments -->
+  <section class="card">
+    <h2>Who to send to</h2>
+    <div class="segs" id="segs"><div class="empty">Loading segments…</div></div>
+  </section>
+
+  <!-- Compose -->
+  <section class="card">
+    <h2>New campaign</h2>
+    <div class="two">
+      <div><label for="cName">Campaign name (internal)</label><input id="cName" placeholder="September Studio push"></div>
+      <div><label for="cSubject">Subject line</label><input id="cSubject" placeholder="Your Career Studio is ₹150 off this week"></div>
+    </div>
+    <label for="cHeading">Heading inside the email</label>
+    <input id="cHeading" placeholder="Everything in one place, ₹500">
+    <label for="cBody">Message</label>
+    <textarea id="cBody" placeholder="Write plainly. A blank line starts a new paragraph.&#10;&#10;Say what they get, what it costs, and what to do next."></textarea>
+    <div class="two">
+      <div><label for="cCtaLabel">Button text</label><input id="cCtaLabel" placeholder="See what's included"></div>
+      <div><label for="cCtaUrl">Button link</label><input id="cCtaUrl" placeholder="https://…/studio.html"></div>
+    </div>
+    <button class="btn" id="createBtn" type="button">Save and check</button>
+  </section>
+
+  <!-- Campaigns -->
+  <section class="card">
+    <h2>Campaigns</h2>
+    <div id="campWrap"><div class="empty">Loading…</div></div>
+  </section>
+</div>
+
+<!-- Pre-flight / extension modal -->
+<div class="modal" id="modal">
+  <div class="card">
+    <h2 id="mTitle">Ready to send?</h2>
+    <div id="mBody" style="font-size:14px;line-height:1.6;color:#d7d3c8"></div>
+    <div id="mExtend" style="display:none">
+      <label for="mAmount">How many more emails do you want to unlock?</label>
+      <input id="mAmount" type="number" min="1" step="100">
+      <div style="font-size:11px;color:#8b8578;margin-top:6px" id="mExtendNote"></div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn" id="mConfirm" type="button">Confirm</button>
+      <button class="btn ghost" id="mCancel" type="button">Cancel</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+  var API = '/api/growth';
+  var state = { quota: null, segment: null, campaignId: null, poll: null };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var fmt = function (n) { return (n == null ? '–' : Number(n).toLocaleString('en-IN')); };
+
+  function toast(msg) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.style.display = 'block';
+    clearTimeout(t._t);
+    t._t = setTimeout(function () { t.style.display = 'none'; }, 4200);
+  }
+
+  async function call(path, opts) {
+    var res = await fetch(API + path, Object.assign({
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' }
+    }, opts || {}));
+    if (res.status === 401) { location.href = '/growth/login?timeout=1'; throw new Error('signed out'); }
+    var data = await res.json().catch(function () { return {}; });
+    if (!res.ok || data.success === false) throw new Error(data.error || 'Request failed');
+    return data;
+  }
+
+  // ─── quota ────────────────────────────────────────────────────────────────
+  function renderQuota(q) {
+    state.quota = q;
+    var ceiling = q.ceiling || 1;
+    $('barUsed').style.width = Math.min(100, (q.used / ceiling) * 100) + '%';
+    $('barExtra').style.width = Math.min(100, Math.max(0, (q.limit - q.used) / ceiling) * 100) + '%';
+    $('qUsed').textContent = fmt(q.used);
+    $('qLeft').textContent = fmt(q.remaining);
+    $('qLimit').textContent = fmt(q.limit) + (q.granted ? ' (' + fmt(q.stage1) + ' + ' + fmt(q.granted) + ')' : '');
+    $('qReset').textContent = new Date(q.periodEnd).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    $('qReserve').textContent = fmt(q.portalReserve);
+
+    var w = $('quotaWarn');
+    w.className = 'warn';
+    if (q.exhausted) {
+      w.className = 'warn danger';
+      w.textContent = 'The full allowance for this period is spent. Campaign sending resumes on '
+        + new Date(q.periodEnd).toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })
+        + '. Certificates and offer letters are unaffected — they come out of the reserve.';
+      w.style.display = 'block';
+    } else if (q.needsExtension) {
+      w.textContent = 'Stage 1 (' + fmt(q.stage1) + ') is spent. You can unlock up to '
+        + fmt(q.grantable) + ' more for this period.';
+      w.style.display = 'block';
+    } else {
+      w.style.display = 'none';
+    }
+  }
+
+  async function loadQuota() {
+    try { renderQuota((await call('/quota')).quota); } catch (e) { toast(e.message); }
+  }
+
+  // ─── segments ─────────────────────────────────────────────────────────────
+  async function loadSegments() {
+    var box = $('segs');
+    try {
+      var segs = (await call('/segments')).segments;
+      box.textContent = '';
+      segs.forEach(function (s) {
+        var el = document.createElement('div');
+        el.className = 'seg';
+        el.dataset.key = s.key;
+        var n = document.createElement('div'); n.className = 'n';
+        n.textContent = s.count == null ? '?' : fmt(s.count);
+        var l = document.createElement('div'); l.className = 'l'; l.textContent = s.label;
+        var d = document.createElement('div'); d.className = 'd'; d.textContent = s.description;
+        el.appendChild(n); el.appendChild(l); el.appendChild(d);
+        el.addEventListener('click', function () {
+          state.segment = s.key;
+          Array.prototype.forEach.call(box.children, function (c) { c.classList.remove('on'); });
+          el.classList.add('on');
+        });
+        box.appendChild(el);
+      });
+    } catch (e) {
+      box.textContent = '';
+      var p = document.createElement('div'); p.className = 'empty';
+      p.textContent = 'Could not load segments: ' + e.message;
+      box.appendChild(p);
+    }
+  }
+
+  // ─── campaigns ────────────────────────────────────────────────────────────
+  function renderCampaigns(rows) {
+    var wrap = $('campWrap');
+    wrap.textContent = '';
+    if (!rows.length) {
+      var e = document.createElement('div'); e.className = 'empty';
+      e.textContent = 'No campaigns yet. Write one above.';
+      wrap.appendChild(e); return;
+    }
+    var t = document.createElement('table');
+    var head = document.createElement('tr');
+    ['Campaign', 'Status', 'Sent', 'Opened', 'Clicked', 'Earned', ''].forEach(function (h) {
+      var th = document.createElement('th'); th.textContent = h; head.appendChild(th);
+    });
+    t.appendChild(head);
+
+    rows.forEach(function (c) {
+      var tr = document.createElement('tr');
+      function cell(text, cls) {
+        var td = document.createElement('td');
+        if (cls) td.className = cls;
+        td.textContent = text;
+        tr.appendChild(td);
+        return td;
+      }
+      cell(c.name);
+      var st = document.createElement('td');
+      var pill = document.createElement('span');
+      pill.className = 'pill p-' + c.status;
+      pill.textContent = c.status;
+      st.appendChild(pill);
+      if (c.status === 'sending') {
+        var prog = document.createElement('div');
+        prog.style.cssText = 'font-size:11px;color:#8b8578;margin-top:4px';
+        prog.textContent = fmt(c.sentCount) + ' / ' + fmt(c.recipientCount);
+        st.appendChild(prog);
+      }
+      tr.appendChild(st);
+      cell(fmt(c.sentCount) + (c.skippedCount ? ' (+' + fmt(c.skippedCount) + ' skipped)' : ''));
+      cell(fmt(c.opened));
+      cell(fmt(c.clicked));
+      cell('₹' + fmt(c.revenue.rupees), 'rupee');
+
+      var act = document.createElement('td');
+      if (c.status === 'draft') {
+        var b = document.createElement('button');
+        b.className = 'linkbtn';
+        b.textContent = 'Send';
+        b.addEventListener('click', function () { preflight(c._id); });
+        act.appendChild(b);
+      }
+      tr.appendChild(act);
+      t.appendChild(tr);
+    });
+    wrap.appendChild(t);
+
+    // Keep refreshing while anything is mid-send, so progress moves on its own.
+    var live = rows.some(function (c) { return c.status === 'sending'; });
+    clearTimeout(state.poll);
+    if (live) state.poll = setTimeout(function () { loadCampaigns(); loadQuota(); }, 6000);
+  }
+
+  async function loadCampaigns() {
+    try { renderCampaigns((await call('/campaigns')).campaigns); }
+    catch (e) { $('campWrap').textContent = ''; toast(e.message); }
+  }
+
+  // ─── modal ────────────────────────────────────────────────────────────────
+  function closeModal() { $('modal').classList.remove('on'); $('mExtend').style.display = 'none'; }
+  $('mCancel').addEventListener('click', closeModal);
+
+  function openModal(title, bodyText, onConfirm, confirmLabel) {
+    $('mTitle').textContent = title;
+    $('mBody').textContent = bodyText;
+    $('mConfirm').textContent = confirmLabel || 'Confirm';
+    $('mConfirm').onclick = onConfirm;
+    $('modal').classList.add('on');
+  }
+
+  async function preflight(id) {
+    try {
+      var p = await call('/campaigns/' + id + '/preflight');
+      if (p.enough) {
+        openModal('Send this campaign?',
+          'It goes to ' + fmt(p.recipients) + ' people. You have ' + fmt(p.quota.remaining)
+          + ' left in this period, so ' + fmt(p.quota.remaining - p.recipients) + ' would remain afterwards.',
+          function () { closeModal(); startSend(id); }, 'Send now');
+        return;
+      }
+      // Not enough — offer the extension rather than starting a send that stops halfway.
+      var q = p.quota;
+      if (q.grantable > 0) {
+        $('mExtend').style.display = 'block';
+        $('mAmount').value = Math.min(q.grantable, Math.max(100, p.shortfall));
+        $('mExtendNote').textContent = 'Up to ' + fmt(q.grantable) + ' more can be unlocked this period. '
+          + fmt(q.portalReserve) + ' always stays reserved for certificates and offer letters.';
+        openModal('Not enough allowance',
+          'This campaign needs ' + fmt(p.recipients) + ' emails but only ' + fmt(q.remaining)
+          + ' are left — ' + fmt(p.shortfall) + ' short. Unlock more to continue.',
+          async function () {
+            var amount = parseInt($('mAmount').value, 10);
+            try {
+              var r = await call('/quota/extend', { method: 'POST', body: JSON.stringify({ amount: amount }) });
+              renderQuota(r.quota);
+              closeModal();
+              toast('Unlocked ' + fmt(amount) + ' more emails.');
+              preflight(id);
+            } catch (e) { toast(e.message); }
+          }, 'Unlock and continue');
+      } else {
+        openModal('No allowance left',
+          'This campaign needs ' + fmt(p.recipients) + ' emails and the full allowance for this period is spent. '
+          + 'It resets on ' + new Date(q.periodEnd).toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })
+          + '. Certificates and offer letters still go out as normal.',
+          closeModal, 'Close');
+      }
+    } catch (e) { toast(e.message); }
+  }
+
+  async function startSend(id) {
+    try {
+      await call('/campaigns/' + id + '/send', { method: 'POST' });
+      toast('Sending started. Progress updates here as it goes.');
+      loadCampaigns(); loadQuota();
+    } catch (e) { toast(e.message); }
+  }
+
+  // ─── create ───────────────────────────────────────────────────────────────
+  $('createBtn').addEventListener('click', async function () {
+    if (!state.segment) { toast('Pick who it goes to first.'); return; }
+    var payload = {
+      name: $('cName').value.trim(),
+      subject: $('cSubject').value.trim(),
+      heading: $('cHeading').value.trim(),
+      bodyText: $('cBody').value.trim(),
+      ctaLabel: $('cCtaLabel').value.trim(),
+      ctaUrl: $('cCtaUrl').value.trim(),
+      segment: state.segment
+    };
+    if (!payload.name || !payload.subject || !payload.bodyText) {
+      toast('Name, subject and message are all needed.'); return;
+    }
+    var btn = this;
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      var r = await call('/campaigns', { method: 'POST', body: JSON.stringify(payload) });
+      ['cName', 'cSubject', 'cHeading', 'cBody', 'cCtaLabel', 'cCtaUrl'].forEach(function (i) { $(i).value = ''; });
+      await loadCampaigns();
+      preflight(r.campaign._id);
+    } catch (e) { toast(e.message); }
+    btn.disabled = false; btn.textContent = 'Save and check';
+  });
+
+  $('logoutBtn').addEventListener('click', async function () {
+    try { await call('/logout', { method: 'POST' }); } catch (_) {}
+    location.href = '/growth/login';
+  });
+
+  loadQuota(); loadSegments(); loadCampaigns();
+})();
+</script>
+</body>
+</html>
