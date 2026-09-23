@@ -1288,6 +1288,7 @@ if(!Student.schema.path("v2DurationType")) Student.schema.add({ v2DurationType: 
 const DocumentHistory = require("./models/DocumentHistory");
 const { generateDocumentNumber, normalizeDocumentNumber } = require("./utils/documentNumber");
 const MailHistory = require("./models/MailHistory");
+const { greetingNameFor } = require("./utils/studentName");
 
 // Growth OS — the marketing allowance the weekly mailer now shares, and the
 // signed links that make its opens, clicks and revenue measurable.
@@ -2478,7 +2479,7 @@ async function sendActivityMail(student, studentName, mailType, campaignId){
         try {
             await MailHistory.create({
                 recipientEmail: email,
-                recipientName: studentName || "Intern",
+                recipientName: studentName || String(email).split("@")[0] || "",
                 studentId: student._id,
                 subject: spec.subject,
                 mailType,
@@ -2581,7 +2582,9 @@ async function runActivityMailer(){
                 if (alreadyMailed.has(key)) { skipped++; continue; }
 
                 const lastActive = student.lastActiveDate ? new Date(student.lastActiveDate) : null;
-                const studentName = (student.name || ((student.firstName||"") + " " + (student.lastName||"")).trim()).trim();
+                // Same rule as the campaign sender: a real name when we honestly
+                // have one, otherwise no greeting line rather than a guessed one.
+                const studentName = greetingNameFor(student);
                 let mailType = null;
                 if(lastActive && lastActive >= sevenDaysAgo){
                     mailType = "active-appreciation";

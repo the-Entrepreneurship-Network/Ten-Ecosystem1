@@ -23,6 +23,7 @@ const GrowthCampaign = require('../models/GrowthCampaign');
 const quota = require('./growthQuota');
 const segments = require('./growthSegments');
 const tracking = require('./growthTracking');
+const { greetingNameFor } = require('../utils/studentName');
 
 /** Milliseconds between messages. Matches the existing weekly mailer. */
 const THROTTLE_MS = parseInt(process.env.GROWTH_SEND_THROTTLE_MS, 10) || 2000;
@@ -35,8 +36,19 @@ function getTransporter() {
     return transporter;
 }
 
-const nameOf = (s) =>
-    (s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim() || 'Intern').trim();
+/*
+ * Who to greet.
+ *
+ * This used to fall back to the literal word "Intern" for anyone without a
+ * name on record. `greetingNameFor` does better where it honestly can —
+ * "anita.rao@" becomes "Anita Rao" — and returns '' where it cannot, so the
+ * mail opens on its first sentence instead of on a mangled mailbox name.
+ * renderEmail already omits the whole "Dear …" line for an empty name.
+ */
+const nameOf = greetingNameFor;
+
+/** For MailHistory, where a blank recipient name is just an unhelpful row. */
+const logNameOf = (s) => greetingNameFor(s) || String(s.email || '').split('@')[0] || '';
 
 /**
  * The HTML for one recipient.
@@ -85,7 +97,7 @@ async function sendOne(campaign, student) {
     try {
         await MailHistory.create({
             recipientEmail: student.email,
-            recipientName: nameOf(student),
+            recipientName: logNameOf(student),
             studentId: student._id,
             subject: campaign.subject,
             // This is what makes the send count against the marketing quota.
@@ -107,7 +119,7 @@ async function run(campaignId) {
 
     let recipients;
     try {
-        recipients = await segments.recipientsFor(campaign.segment);
+        recipients = await segments.recipientsForCampaign(campaign);
     } catch (err) {
         await GrowthCampaign.findByIdAndUpdate(campaignId, {
             status: 'failed', error: `Segment failed: ${err.message}`

@@ -24,6 +24,8 @@ const Payment = require('../models/Payment');
 const CollegeContact = require('../models/CollegeContact');
 const collegeDiscovery = require('../services/collegeDiscovery');
 const collegeOutreach = require('../services/collegeOutreach');
+const templates = require('../config/growthTemplates');
+const { greetingNameFor } = require('../utils/studentName');
 
 const api = express.Router();
 const trackingRouter = express.Router();
@@ -189,12 +191,19 @@ api.get('/campaigns/:id', requireGrowthAPI, async (req, res) => {
 
 api.post('/campaigns', requireGrowthAPI, async (req, res) => {
     try {
-        const { name, subject, heading, bodyText, ctaLabel, ctaUrl, segment } = req.body || {};
+        const { name, subject, heading, bodyText, ctaLabel, ctaUrl, segment, studentIds } = req.body || {};
         if (!name || !subject || !bodyText) {
             return res.status(400).json({ success: false, error: 'Name, subject and body are all required.' });
         }
-        if (!segments.isSegment(segment)) {
+        const picked = segment === segments.PICKED;
+        if (!picked && !segments.isSegment(segment)) {
             return res.status(400).json({ success: false, error: 'Pick a segment.' });
+        }
+        // A hand-picked campaign with an empty list would otherwise save as a
+        // draft that reaches nobody and reports success.
+        const ids = picked ? [...new Set((studentIds || []).map(String).filter(Boolean))] : [];
+        if (picked && !ids.length) {
+            return res.status(400).json({ success: false, error: 'Tick at least one student.' });
         }
         const c = await GrowthCampaign.create({
             name: String(name).slice(0, 200),
@@ -204,6 +213,7 @@ api.post('/campaigns', requireGrowthAPI, async (req, res) => {
             ctaLabel: String(ctaLabel || '').slice(0, 80),
             ctaUrl: String(ctaUrl || '').slice(0, 500),
             segment,
+            studentIds: ids,
             createdBy: req.session.growthUser.username
         });
         res.json({ success: true, campaign: publicCampaign(c) });
@@ -222,7 +232,12 @@ api.get('/campaigns/:id/preflight', requireGrowthAPI, async (req, res) => {
     try {
         const c = await GrowthCampaign.findById(req.params.id);
         if (!c) return res.status(404).json({ success: false, error: 'Not found' });
-        const recipients = await segments.countFor(c.segment);
+        // countFor would throw on 'picked' — it is not a query. Resolving the
+        // real rows is also more honest here: it re-applies the opt-out filter,
+        // so the number shown is who would ACTUALLY be mailed right now.
+        const recipients = c.segment === segments.PICKED
+            ? (await segments.recipientsByIds(c.studentIds)).length
+            : await segments.countFor(c.segment);
         const u = await quota.usage();
         res.json({
             success: true,
@@ -258,6 +273,105 @@ api.post('/campaigns/:id/send', requireGrowthAPI, async (req, res) => {
     } catch (err) {
         console.error('[Growth] send failed:', err.message);
         res.status(500).json({ success: false, error: 'Could not start the send' });
+    }
+});
+
+// ─── templates, preview, hand-picking ────────────────────────────────────────
+
+/* Relative paths become absolute here, so a template never hard-codes a
+   domain that later moves. */
+api.get('/templates', requireGrowthAPI, (req, res) => {
+    const base = String(tracking.BASE || '').replace(/\/+$/, '');
+    res.json({
+        success: true,
+        templates: templates.TEMPLATES.map((t) => ({
+            key: t.key, label: t.label, description: t.description,
+            suggestedSegment: t.suggestedSegment,
+            subject: t.subject, heading: t.heading, bodyText: t.bodyText,
+            ctaLabel: t.ctaLabel, ctaUrl: base + t.ctaPath
+        }))
+    });
+});
+
+/**
+ * What the mail will look like, before it exists as a campaign.
+ *
+ * Takes the draft straight from the form rather than an id, because the whole
+ * point is to look at it BEFORE saving. It renders through the same
+ * `renderEmail` the sender uses, with the same paragraph splitting, so the
+ * preview cannot drift from what is actually delivered.
+ *
+ * Nothing is written and nothing is sent.
+ *
+ * The sampled student lends their NAME and nothing else. Their real id never
+ * reaches buildHtml, because buildHtml signs the unsubscribe and click links
+ * with whatever id it is given — handing it a real one would put a working,
+ * correctly-signed unsubscribe link for that student inside a preview, one
+ * mis-click away from removing somebody who never asked to be removed.
+ */
+api.post('/preview', requireGrowthAPI, async (req, res) => {
+    try {
+        const { heading, bodyText, ctaLabel, ctaUrl, segment, studentIds } = req.body || {};
+        if (!bodyText || !String(bodyText).trim()) {
+            return res.status(400).json({ success: false, error: 'Write the body first.' });
+        }
+
+        /* A real recipient makes the preview honest about the greeting — it is
+           the one part that differs per person. Falls back to a stand-in when
+           the audience is empty or the database is unreachable. */
+        let sample = null;
+        try {
+            const rows = segment === segments.PICKED
+                ? await segments.recipientsByIds(studentIds, 1)
+                : await segments.recipientsFor(segments.isSegment(segment) ? segment : 'all', 1);
+            sample = rows[0] || null;
+        } catch (_) { /* preview must still render without a database */ }
+
+        const real = sample || { name: 'Anita Rao', email: 'anita.rao@example.com' };
+        /* Name and address are real so the greeting is honest; the id is not,
+           so every signed link in the preview points at nobody. */
+        const student = { _id: 'preview', name: real.name, firstName: real.firstName,
+                          lastName: real.lastName, email: real.email };
+        const html = sender.buildHtml({
+            _id: 'preview',
+            heading: String(heading || '').slice(0, 200),
+            subject: String(heading || 'Preview').slice(0, 300),
+            bodyText: String(bodyText).slice(0, 20000),
+            ctaLabel: String(ctaLabel || '').slice(0, 80),
+            ctaUrl: String(ctaUrl || '').slice(0, 500)
+        }, student);
+
+        res.json({
+            success: true,
+            html,
+            sampleEmail: real.email || '',
+            greeting: greetingNameFor(real),
+            usedRealStudent: !!sample
+        });
+    } catch (err) {
+        console.error('[Growth] preview failed:', err.message);
+        res.status(500).json({ success: false, error: 'Could not render the preview' });
+    }
+});
+
+/* The hand-pick list. Opted-out students are absent, not merely unselectable. */
+api.get('/students', requireGrowthAPI, async (req, res) => {
+    try {
+        const rows = await segments.searchStudents(req.query.q, parseInt(req.query.limit, 10) || 40);
+        res.json({
+            success: true,
+            count: rows.length,
+            students: rows.map((r) => ({
+                id: String(r._id),
+                name: greetingNameFor(r) || String(r.email || '').split('@')[0],
+                email: r.email,
+                employeeId: r.employeeId || '',
+                domain: r.domain || ''
+            }))
+        });
+    } catch (err) {
+        console.error('[Growth] student search failed:', err.message);
+        res.status(500).json({ success: false, error: 'Could not search students' });
     }
 });
 

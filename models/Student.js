@@ -376,30 +376,11 @@ studentsSchema.index({ lastActiveDate: -1 });
  * better than a row nobody can identify.
  * ------------------------------------------------------------------------- */
 
-/** Values that look like a name but are not one. */
-const NOT_A_NAME = new Set(["undefined", "null", "nan", "-", "—"]);
-
-function isUsableName(value) {
-    if (typeof value !== "string") return false;
-    const t = value.trim();
-    return t.length > 0 && !NOT_A_NAME.has(t.toLowerCase());
-}
-
-/** Best available human name for a student, or "" when there is nothing. */
-function deriveStudentName({ name, firstName, lastName, email } = {}) {
-    if (isUsableName(name)) return name.trim();
-
-    const parts = [firstName, lastName].filter(isUsableName).map(s => s.trim());
-    if (parts.length) return parts.join(" ");
-
-    // Last resort: the email local part, tidied. "kanishka.sharma05" reads as
-    // "Kanishka Sharma05" — imperfect, but identifiable, which is the point.
-    if (typeof email === "string" && email.includes("@")) {
-        const local = email.split("@")[0].replace(/[._\-+]+/g, " ").trim();
-        if (local) return local.replace(/\b\w/g, c => c.toUpperCase());
-    }
-    return "";
-}
+/*
+ * Moved to utils/studentName.js so the mail path can use it without loading a
+ * database driver. Re-exported below, so every existing caller is unchanged.
+ */
+const { deriveStudentName, isUsableName } = require("../utils/studentName");
 
 /** Give a document being saved the best name available. */
 function applyNameToDoc(doc) {

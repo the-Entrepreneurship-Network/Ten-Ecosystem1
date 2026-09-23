@@ -81,11 +81,23 @@
   <section class="card">
     <h2>Who to send to</h2>
     <div class="segs" id="segs"><div class="empty">Loading segments…</div></div>
+    <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <button class="btn ghost" id="pickToggle" type="button">Or pick students by hand</button>
+      <span style="font-size:12px;color:#8b8578" id="pickCount"></span>
+    </div>
+    <div id="pickPanel" style="display:none;margin-top:14px">
+      <label for="pickQ">Search by name, email or employee ID</label>
+      <input id="pickQ" placeholder="Start typing — anyone who unsubscribed will not appear">
+      <div id="pickWrap" style="max-height:290px;overflow-y:auto;margin-top:10px"></div>
+    </div>
   </section>
 
   <!-- Compose -->
   <section class="card">
     <h2>New campaign</h2>
+    <label for="tplPick">Start from a template</label>
+    <select id="tplPick"><option value="">Write it from scratch</option></select>
+    <div id="tplNote" style="font-size:12px;color:#8b8578;margin:6px 0 16px;min-height:16px"></div>
     <div class="two">
       <div><label for="cName">Campaign name (internal)</label><input id="cName" placeholder="September Studio push"></div>
       <div><label for="cSubject">Subject line</label><input id="cSubject" placeholder="Your Career Studio is ₹150 off this week"></div>
@@ -98,7 +110,15 @@
       <div><label for="cCtaLabel">Button text</label><input id="cCtaLabel" placeholder="See what's included"></div>
       <div><label for="cCtaUrl">Button link</label><input id="cCtaUrl" placeholder="https://…/studio.html"></div>
     </div>
-    <button class="btn" id="createBtn" type="button">Save and check</button>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn ghost" id="previewBtn" type="button">Preview</button>
+      <button class="btn" id="createBtn" type="button">Save and check</button>
+    </div>
+    <div id="previewWrap" style="display:none;margin-top:18px">
+      <div style="font-size:12px;color:#8b8578;margin-bottom:8px" id="previewNote"></div>
+      <iframe id="previewFrame" title="Email preview"
+              style="width:100%;height:620px;border:1px solid rgba(245,197,66,0.18);border-radius:12px;background:#0c1220"></iframe>
+    </div>
   </section>
 
   <!-- Campaigns -->
@@ -150,7 +170,7 @@
 (function () {
   'use strict';
   var API = '/api/growth';
-  var state = { quota: null, segment: null, campaignId: null, poll: null };
+  var state = { quota: null, segment: null, campaignId: null, poll: null, templates: [], picked: new Set() };
 
   var $ = function (id) { return document.getElementById(id); };
   var fmt = function (n) { return (n == null ? '–' : Number(n).toLocaleString('en-IN')); };
@@ -224,6 +244,15 @@
         el.appendChild(n); el.appendChild(l); el.appendChild(d);
         el.addEventListener('click', function () {
           state.segment = s.key;
+          // The two ways of choosing an audience are mutually exclusive. Without
+          // this, ticking one more student after picking a segment would flip the
+          // campaign back to the hand-picked list without saying so.
+          if (state.picked.size) {
+            state.picked.clear();
+            refreshPickCount();
+            Array.prototype.forEach.call($('pickWrap').querySelectorAll('input[type=checkbox]'),
+              function (c) { c.checked = false; });
+          }
           Array.prototype.forEach.call(box.children, function (c) { c.classList.remove('on'); });
           el.classList.add('on');
         });
@@ -366,7 +395,7 @@
 
   // ─── create ───────────────────────────────────────────────────────────────
   $('createBtn').addEventListener('click', async function () {
-    if (!state.segment) { toast('Pick who it goes to first.'); return; }
+    if (!state.segment) { toast('Pick a segment, or tick some students by hand.'); return; }
     var payload = {
       name: $('cName').value.trim(),
       subject: $('cSubject').value.trim(),
@@ -374,7 +403,8 @@
       bodyText: $('cBody').value.trim(),
       ctaLabel: $('cCtaLabel').value.trim(),
       ctaUrl: $('cCtaUrl').value.trim(),
-      segment: state.segment
+      segment: state.segment,
+      studentIds: Array.from(state.picked)
     };
     if (!payload.name || !payload.subject || !payload.bodyText) {
       toast('Name, subject and message are all needed.'); return;
@@ -487,7 +517,118 @@
       }, 'Send now');
   });
 
-  loadQuota(); loadSegments(); loadCampaigns(); loadColleges();
+  // ─── templates ────────────────────────────────────────────────────────────
+  async function loadTemplates() {
+    try {
+      var r = await call('/templates');
+      state.templates = r.templates || [];
+      var sel = $('tplPick');
+      state.templates.forEach(function (t) {
+        var o = document.createElement('option');
+        o.value = t.key; o.textContent = t.label;
+        sel.appendChild(o);
+      });
+    } catch (_) { /* a missing template list must not break composing */ }
+  }
+
+  $('tplPick').addEventListener('change', function () {
+    var t = (state.templates || []).filter(function (x) { return x.key === this.value; }.bind(this))[0];
+    if (!t) { $('tplNote').textContent = ''; return; }
+    $('tplNote').textContent = t.description;
+    $('cName').value = t.label + ' — ' + new Date().toISOString().slice(0, 10);
+    $('cSubject').value = t.subject;
+    $('cHeading').value = t.heading;
+    $('cBody').value = t.bodyText;
+    $('cCtaLabel').value = t.ctaLabel;
+    $('cCtaUrl').value = t.ctaUrl;
+    // Nudge the audience the template was written for, without forcing it.
+    var card = document.querySelector('.seg[data-key="' + t.suggestedSegment + '"]');
+    if (card && !state.picked.size) card.click();
+    toast('Template loaded — edit anything before sending.');
+  });
+
+  // ─── hand-picking ─────────────────────────────────────────────────────────
+  function refreshPickCount() {
+    var n = state.picked.size;
+    $('pickCount').textContent = n ? n + ' student' + (n === 1 ? '' : 's') + ' ticked' : '';
+    if (n) state.segment = 'picked';
+  }
+
+  function renderStudents(rows) {
+    var wrap = $('pickWrap');
+    wrap.innerHTML = '';
+    if (!rows.length) { wrap.innerHTML = '<div class="empty">Nobody matches that.</div>'; return; }
+    rows.forEach(function (st) {
+      var row = document.createElement('label');
+      row.style.cssText = 'display:flex;gap:10px;align-items:center;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px';
+      var cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.value = st.id; cb.style.cssText = 'width:auto;margin:0';
+      cb.checked = state.picked.has(st.id);
+      cb.addEventListener('change', function () {
+        if (cb.checked) state.picked.add(st.id); else state.picked.delete(st.id);
+        refreshPickCount();
+      });
+      var txt = document.createElement('span');
+      txt.innerHTML = '<b>' + (st.name || '—') + '</b> <span style="color:#8b8578">'
+        + st.email + (st.employeeId ? ' · ' + st.employeeId : '') + '</span>';
+      row.appendChild(cb); row.appendChild(txt);
+      wrap.appendChild(row);
+    });
+  }
+
+  async function searchStudents() {
+    try { renderStudents((await call('/students?q=' + encodeURIComponent($('pickQ').value.trim()))).students); }
+    catch (e) { $('pickWrap').innerHTML = '<div class="empty">' + e.message + '</div>'; }
+  }
+
+  $('pickToggle').addEventListener('click', function () {
+    var panel = $('pickPanel');
+    var opening = panel.style.display === 'none';
+    panel.style.display = opening ? 'block' : 'none';
+    this.textContent = opening ? 'Use a segment instead' : 'Or pick students by hand';
+    if (opening) { searchStudents(); }
+    else {
+      // Leaving the picker hands the audience back to the segment cards, so a
+      // stale tick list can never travel with a segment campaign.
+      state.picked.clear(); refreshPickCount();
+      var on = document.querySelector('.seg.on');
+      state.segment = on ? on.getAttribute('data-key') : null;
+    }
+  });
+
+  var pickTimer = null;
+  $('pickQ').addEventListener('input', function () {
+    clearTimeout(pickTimer);
+    pickTimer = setTimeout(searchStudents, 280);
+  });
+
+  // ─── preview ──────────────────────────────────────────────────────────────
+  $('previewBtn').addEventListener('click', async function () {
+    var body = $('cBody').value.trim();
+    if (!body) return toast('Write the message first.');
+    var btn = this;
+    btn.disabled = true; btn.textContent = 'Rendering…';
+    try {
+      var r = await call('/preview', { method: 'POST', body: JSON.stringify({
+        heading: $('cHeading').value.trim(),
+        bodyText: body,
+        ctaLabel: $('cCtaLabel').value.trim(),
+        ctaUrl: $('cCtaUrl').value.trim(),
+        segment: state.segment,
+        studentIds: Array.from(state.picked)
+      }) });
+      $('previewFrame').srcdoc = r.html;
+      $('previewNote').textContent = (r.usedRealStudent
+        ? 'As it would reach ' + r.sampleEmail
+        : 'No live recipient available — showing a stand-in')
+        + (r.greeting ? ' · opens “Dear ' + r.greeting + ',”' : ' · opens with no greeting line');
+      $('previewWrap').style.display = 'block';
+      $('previewWrap').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } catch (e) { toast(e.message); }
+    btn.disabled = false; btn.textContent = 'Preview';
+  });
+
+  loadQuota(); loadSegments(); loadCampaigns(); loadColleges(); loadTemplates();
 })();
 </script>
 </body>
