@@ -33,8 +33,11 @@ describe('every touched file parses', () => {
 const { SEED_COLLEGES } = require('../../config/collegeSeeds');
 
 describe('the seed roster', () => {
-  test('is big enough for a run to be worth pressing', () => {
-    expect(SEED_COLLEGES.length).toBeGreaterThan(100);
+  test('is big enough to plausibly reach a few hundred contacts', () => {
+    // Observed yield on the first live run was ~0.4 contacts per college with
+    // the strict filter only. The relaxed second pass roughly doubles that, so
+    // reaching ~300 needs a roster in the high hundreds, not one of 177.
+    expect(SEED_COLLEGES.length).toBeGreaterThan(300);
   });
 
   test('has no duplicates, which would waste a visit each', () => {
@@ -151,9 +154,33 @@ describe('runBulk', () => {
     } finally { s.restore(); }
   });
 
-  test('concurrency is bounded — the run is not 177 sockets at once', () => {
+  test('concurrency is bounded — the run is not 371 sockets at once', () => {
     expect(discovery.CONCURRENCY).toBeGreaterThanOrEqual(1);
-    expect(discovery.CONCURRENCY).toBeLessThanOrEqual(8);
+    expect(discovery.CONCURRENCY).toBeLessThanOrEqual(24);
+  });
+
+  test('a dead host is abandoned instead of timing out on every path', () => {
+    // The whole reason a run took an hour: eight paths, each waiting the full
+    // timeout, on a college whose server was simply down.
+    const src = read('services/collegeDiscovery.js');
+    expect(src).toContain('DEAD_HOST_STREAK');
+    const loop = src.slice(src.indexOf('async function discoverFromSite'));
+    expect(loop).toMatch(/if \(!reachable\)/);
+    expect(loop.slice(0, 1200)).toContain('break');
+  });
+
+  test('a 404 is not treated as a dead host', () => {
+    // Otherwise two wrong paths in a row would abandon a college that is up.
+    const src = read('services/collegeDiscovery.js');
+    const fn = src.slice(src.indexOf('async function fetchPage'));
+    expect(fn.slice(0, 700)).toMatch(/if \(!res\.ok\) return \{ reachable: true/);
+  });
+
+  test('timeouts are short enough that a run finishes', () => {
+    const src = read('services/collegeDiscovery.js');
+    const m = src.match(/COLLEGE_FETCH_TIMEOUT_MS, 10\) \|\| (\d+)/);
+    expect(m).toBeTruthy();
+    expect(Number(m[1])).toBeLessThanOrEqual(8000);
   });
 });
 

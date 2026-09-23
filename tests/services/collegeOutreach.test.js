@@ -62,9 +62,12 @@ describe('htmlToText', () => {
 
 describe('toOrigin', () => {
   test.each([
-    ['example.edu.in', 'http://example.edu.in'],
+    // A bare domain becomes https, not http: nearly every .ac.in is TLS-only,
+    // and starting on http costs a redirect hop on every one of the eight
+    // requests per college.
+    ['example.edu.in', 'https://example.edu.in'],
     ['https://www.example.edu.in/placements', 'https://www.example.edu.in'],
-    ['  http://a.ac.in  ', 'http://a.ac.in']
+    ['  http://a.ac.in  ', 'http://a.ac.in']   // an explicit scheme is respected
   ])('%s → %s', (input, expected) => {
     expect(discovery.toOrigin(input)).toBe(expected);
   });

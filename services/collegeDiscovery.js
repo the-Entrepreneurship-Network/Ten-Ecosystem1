@@ -24,9 +24,27 @@ const { contactsFromPosting } = require('./v2/recruiterContacts');
 /* Says who we are and where to complain, exactly as the job agent does. */
 const UA = { 'User-Agent': 'TEN-CollegeOutreach/1.0 (+https://entrepreneurshipnetwork.net)' };
 
-const FETCH_TIMEOUT_MS = 12000;
-const DELAY_MS = 1200;
+/*
+ * A dead host used to cost 105 seconds: eight paths, each waiting the full
+ * 12-second timeout, with 1.2 seconds of politeness between them. Across 177
+ * colleges — many of which are slow or simply down — that made a run take
+ * closer to an hour than the eight minutes it was advertised as.
+ *
+ * Six seconds is long enough for a college site that is merely slow. The
+ * delay stays only because it is the same host being asked twice.
+ */
+const FETCH_TIMEOUT_MS = parseInt(process.env.COLLEGE_FETCH_TIMEOUT_MS, 10) || 6000;
+const DELAY_MS = parseInt(process.env.COLLEGE_PATH_DELAY_MS, 10) || 350;
 const MAX_BYTES = 600 * 1024;
+
+/*
+ * Give up on a host after this many requests in a row fail to connect.
+ *
+ * A 404 means the server is there and that path is wrong, so it does not
+ * count — the next path is worth trying. Two refused connections mean the
+ * host is down, and the remaining six paths will be down too.
+ */
+const DEAD_HOST_STREAK = 2;
 
 /**
  * Where colleges put this. Ordered by how likely the page is to hold the
@@ -76,7 +94,10 @@ function titleOf(html) {
 function toOrigin(website) {
     let raw = String(website || '').trim();
     if (!raw) return '';
-    if (!/^https?:\/\//i.test(raw)) raw = 'http://' + raw;
+    // https, not http: nearly every .ac.in is TLS-only now, and starting on
+    // http costs a redirect hop on EVERY request — eight per college, 177
+    // colleges — or fails outright where the server does not redirect.
+    if (!/^https?:\/\//i.test(raw)) raw = 'https://' + raw;
     try {
         const u = new URL(raw);
         if (!/\./.test(u.hostname)) return '';
@@ -86,26 +107,72 @@ function toOrigin(website) {
     }
 }
 
-/** Fetch one page as text. Returns '' for anything that is not readable HTML. */
-async function fetchText(url) {
+/**
+ * Fetch one page.
+ *
+ * Returns `reachable: false` only when the host did not answer at all. A 404
+ * is reachable — it means try the next path, not abandon the college — and
+ * conflating the two is what made a dead host cost eight timeouts.
+ *
+ * @returns {Promise<{reachable: boolean, html: string}>}
+ */
+async function fetchPage(url) {
     let res;
     try {
         res = await httpFetch(url, { headers: UA, timeoutMs: FETCH_TIMEOUT_MS });
     } catch (_) {
-        return '';
+        return { reachable: false, html: '' };
     }
-    if (!res || !res.ok) return '';
+    if (!res) return { reachable: false, html: '' };
+    if (!res.ok) return { reachable: true, html: '' };
     const type = (res.headers && res.headers.get && res.headers.get('content-type')) || '';
-    if (type && !/html|text\/plain/i.test(type)) return '';
+    if (type && !/html|text\/plain/i.test(type)) return { reachable: true, html: '' };
     let body;
     try {
         body = await res.text();
     } catch (_) {
-        return '';
+        return { reachable: true, html: '' };
     }
     // A prospectus PDF rendered as HTML can run to megabytes; nothing past the
     // first few hundred KB is a contact block.
-    return body.length > MAX_BYTES ? body.slice(0, MAX_BYTES) : body;
+    return { reachable: true, html: body.length > MAX_BYTES ? body.slice(0, MAX_BYTES) : body };
+}
+
+/*
+ * Addresses worth having from a COLLEGE, which a job advert's rules reject.
+ *
+ * services/v2/recruiterContacts.js drops info@, admin@ and office@ because on
+ * a company's job advert they are a catch-all nobody reads. On a college's own
+ * contact page they are frequently the only address published, and they reach
+ * the front office, which is exactly who forwards a partnership enquiry.
+ *
+ * So this runs as a SECOND pass, only on a page where the strict rules found
+ * nothing. The genuinely useless ones stay out.
+ */
+const COLLEGE_OK_LOCALPART = /^(info|admin|office|enquiry|enquiries|contact|principal|director|registrar|dean|hod|head|academics?|admission|admissions)[._-]?\w*$/i;
+const NEVER_MAIL = /^(no-?reply|do-?not-?reply|postmaster|abuse|webmaster|notifications?|unsubscribe|mailer|bounce|automated|spam)$/i;
+const RE_EMAIL_ANY = /[\w.+-]+@[\w-]+\.[\w.]{2,}/g;
+
+/** The relaxed pass. Same cue requirement, a college's idea of a real mailbox. */
+function collegeContactsFrom(text, url, college) {
+    const out = [];
+    const seen = new Set();
+    RE_EMAIL_ANY.lastIndex = 0;
+    let m;
+    while ((m = RE_EMAIL_ANY.exec(text)) !== null) {
+        const email = m[0].replace(/[.,;)]+$/, '').toLowerCase();
+        const [local] = email.split('@');
+        if (!local || seen.has(email)) continue;
+        if (NEVER_MAIL.test(local)) continue;
+        if (!COLLEGE_OK_LOCALPART.test(local)) continue;
+        // The same honesty check the strict pass uses: the sentence around the
+        // address has to be inviting contact, not mentioning it in a footer.
+        const around = text.slice(Math.max(0, m.index - 220), m.index + 160);
+        if (!/\b(email|e-mail|mail|contact|reach|write|enquir|phone|call)\b/i.test(around)) continue;
+        seen.add(email);
+        out.push({ email, name: '', role: '', phone: '', sourceUrl: url, company: college || '' });
+    }
+    return out;
 }
 
 /**
@@ -120,18 +187,34 @@ async function discoverFromSite(website, meta = {}) {
     if (!origin) return [];
 
     const found = new Map();
+    let deadStreak = 0;
 
     for (let i = 0; i < PATHS.length; i++) {
         const url = origin + PATHS[i];
-        const html = await fetchText(url);
+        const { reachable, html } = await fetchPage(url);
+
+        if (!reachable) {
+            // The host itself did not answer. Trying seven more paths on a
+            // machine that is down is seven more full timeouts for nothing.
+            if (++deadStreak >= DEAD_HOST_STREAK) break;
+        } else {
+            deadStreak = 0;
+        }
+
         if (html) {
-            const rows = contactsFromPosting({
-                description: htmlToText(html),
+            const text = htmlToText(html);
+            let rows = contactsFromPosting({
+                description: text,
                 title: titleOf(html),
                 url,
                 company: meta.college || '',
                 source: 'college-page'
-            });
+            }).filter((r) => r.email);
+
+            // Only when the strict rules found nothing on THIS page: a college
+            // that publishes office@ and nothing else is still worth reaching.
+            if (!rows.length) rows = collegeContactsFrom(text, url, meta.college);
+
             rows.forEach((r) => {
                 if (!r.email) return;                 // a bare phone is not mailable
                 const key = r.email.toLowerCase();
@@ -197,13 +280,15 @@ async function saveContacts(rows) {
 /*
  * How many colleges are visited at once.
  *
- * Each site is a different host, so this is not hammering anybody — it is four
- * separate servers being asked for one page each. Sequentially, 177 colleges
- * at roughly ten seconds apiece is half an hour; at four it is about eight
- * minutes, which is the difference between a button somebody presses and one
- * they never press twice.
+ * Each site is a DIFFERENT host, so this is not hammering anybody — it is a
+ * dozen separate servers each being asked for one page. The limit exists to
+ * bound sockets and memory, not to be polite to one server; politeness to a
+ * single host is DELAY_MS, which still applies between that host's own pages.
+ *
+ * Was 4, which with the old 12-second timeout made a full run closer to an
+ * hour than the eight minutes it was sold as.
  */
-const CONCURRENCY = Math.max(1, Math.min(8, parseInt(process.env.COLLEGE_AGENT_CONCURRENCY, 10) || 4));
+const CONCURRENCY = Math.max(1, Math.min(24, parseInt(process.env.COLLEGE_AGENT_CONCURRENCY, 10) || 12));
 
 /*
  * The state of the run in progress.
