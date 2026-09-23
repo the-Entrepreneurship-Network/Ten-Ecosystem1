@@ -21,6 +21,9 @@ const tracking = require('../services/growthTracking');
 const GrowthCampaign = require('../models/GrowthCampaign');
 const Student = require('../models/Student');
 const Payment = require('../models/Payment');
+const CollegeContact = require('../models/CollegeContact');
+const collegeDiscovery = require('../services/collegeDiscovery');
+const collegeOutreach = require('../services/collegeOutreach');
 
 const api = express.Router();
 const trackingRouter = express.Router();
@@ -258,6 +261,101 @@ api.post('/campaigns/:id/send', requireGrowthAPI, async (req, res) => {
     }
 });
 
+// ─── colleges ────────────────────────────────────────────────────────────────
+//
+// Institutional outreach. These are placement offices, not students, so they
+// live in their own collection and never touch a segment — but they spend the
+// same monthly allowance, which is why `collegeOutreach` checks the same quota.
+
+/* Discovery makes outbound requests to somebody else's site, so it is metered
+   harder than the rest of the dashboard. */
+const discoverLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 12,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, error: 'Too many lookups. Wait a minute and try again.' }
+});
+
+api.get('/colleges', requireGrowthAPI, async (req, res) => {
+    try {
+        const [rows, counts] = await Promise.all([
+            CollegeContact.find({}).sort({ createdAt: -1 }).limit(200).lean(),
+            CollegeContact.aggregate([{ $group: { _id: '$status', n: { $sum: 1 } } }])
+        ]);
+        const byStatus = counts.reduce((a, c) => { a[c._id || 'new'] = c.n; return a; }, {});
+        res.json({
+            success: true,
+            byStatus,
+            total: Object.values(byStatus).reduce((a, b) => a + b, 0),
+            colleges: rows.map((r) => ({
+                id: String(r._id), email: r.email, college: r.college, state: r.state,
+                contactName: r.contactName, contactRole: r.contactRole,
+                sourceUrl: r.sourceUrl, via: r.via, status: r.status,
+                optOut: !!r.optOut, mailCount: r.mailCount || 0, lastMailedAt: r.lastMailedAt
+            }))
+        });
+    } catch (err) {
+        console.error('[Growth] college list failed:', err.message);
+        res.status(500).json({ success: false, error: 'Could not load colleges' });
+    }
+});
+
+api.post('/colleges/discover', requireGrowthAPI, discoverLimiter, async (req, res) => {
+    const { website, college, state } = req.body || {};
+    if (!website || !String(website).trim()) {
+        return res.status(400).json({ success: false, error: 'A college website is required.' });
+    }
+    try {
+        const rows = await collegeDiscovery.discoverFromSite(website, {
+            college: String(college || '').trim(),
+            state: String(state || '').trim()
+        });
+        if (!rows.length) {
+            return res.json({
+                success: true, added: 0, skipped: 0, found: 0,
+                message: 'No published contact address found on that site. Try the placement page URL directly.'
+            });
+        }
+        const { added, skipped } = await collegeDiscovery.saveContacts(rows);
+        res.json({ success: true, found: rows.length, added, skipped, contacts: rows });
+    } catch (err) {
+        console.error('[Growth] college discovery failed:', err.message);
+        res.status(500).json({ success: false, error: 'Lookup failed' });
+    }
+});
+
+api.post('/colleges/send', requireGrowthAPI, async (req, res) => {
+    try {
+        const u = await quota.usage();
+        if (u.remaining < 1) {
+            return res.status(409).json({ success: false, error: 'No marketing quota left this period.', quota: u });
+        }
+        const limit = Math.max(1, Math.min(500, parseInt(req.body && req.body.limit, 10) || collegeOutreach.DEFAULT_BATCH));
+        const pending = await CollegeContact.countDocuments({ status: 'new', optOut: { $ne: true } });
+        if (!pending) return res.status(409).json({ success: false, error: 'No colleges are waiting to be mailed.' });
+
+        // Not awaited, for the same reason a campaign is not: the loop
+        // throttles between messages and outlives any request.
+        collegeOutreach.run(limit).catch((err) => {
+            console.error('[Growth] college outreach failed:', err.message);
+        });
+        res.json({ success: true, started: true, queued: Math.min(pending, limit) });
+    } catch (err) {
+        console.error('[Growth] college send failed:', err.message);
+        res.status(500).json({ success: false, error: 'Could not start the send' });
+    }
+});
+
+/* The confirmation page both unsubscribe routes render. */
+const unsubPage = (title, body) => `<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head>
+<body style="margin:0;background:#0c1220;color:#f0eee8;font-family:Segoe UI,Arial,sans-serif;
+display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:24px;">
+<div style="max-width:440px;"><div style="font-size:12px;letter-spacing:5px;color:#f5c542;font-weight:700;">
+THE ENTREPRENEURSHIP NETWORK</div><h1 style="font-size:22px;margin:16px 0 12px;">${title}</h1>
+<p style="color:#b9b4a8;line-height:1.6;font-size:15px;">${body}</p></div></body></html>`;
+
 // ─── public tracking ─────────────────────────────────────────────────────────
 //
 // No session — these arrive from a mail client. Every one verifies the HMAC in
@@ -301,13 +399,7 @@ trackingRouter.get('/c/:campaignId/:uid/:sig', async (req, res) => {
 
 trackingRouter.get('/u/:uid/:sig', async (req, res) => {
     const { uid, sig } = req.params;
-    const page = (title, body) => `<!doctype html><html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head>
-<body style="margin:0;background:#0c1220;color:#f0eee8;font-family:Segoe UI,Arial,sans-serif;
-display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:24px;">
-<div style="max-width:440px;"><div style="font-size:12px;letter-spacing:5px;color:#f5c542;font-weight:700;">
-THE ENTREPRENEURSHIP NETWORK</div><h1 style="font-size:22px;margin:16px 0 12px;">${title}</h1>
-<p style="color:#b9b4a8;line-height:1.6;font-size:15px;">${body}</p></div></body></html>`;
+    const page = unsubPage;
 
     if (!tracking.verify(sig, 'u', uid)) {
         return res.status(400).send(page('That link is not valid',
@@ -333,6 +425,39 @@ THE ENTREPRENEURSHIP NETWORK</div><h1 style="font-size:22px;margin:16px 0 12px;"
     res.send(page('You have been unsubscribed',
         'You will not receive any more campaign emails from us.<br><br>'
         + 'Your certificates, offer letters and password resets are not affected — those still arrive as normal.'));
+});
+
+/*
+ * A college asking not to be written to again.
+ *
+ * Deliberately a separate route from /u/ rather than a branch inside it. The
+ * student one writes to the Student collection; if a college id ever reached
+ * it, `updateMany({_id})` would match nothing and the page would still say
+ * "you have been unsubscribed" — a silent lie to somebody who asked to be left
+ * alone. Different collection, different signature kind, different route.
+ */
+trackingRouter.get('/cu/:id/:sig', async (req, res) => {
+    const { id, sig } = req.params;
+    if (!tracking.verify(sig, 'cu', id)) {
+        return res.status(400).send(unsubPage('That link is not valid',
+            'Please use the link from a recent email, or reply to it and we will remove you by hand.'));
+    }
+    try {
+        const me = await CollegeContact.findById(id).select('email').lean();
+        await CollegeContact.updateMany({ _id: id }, { $set: { optOut: true, optOutAt: new Date() } });
+        // The same office can be listed for more than one campus, so the
+        // address is removed everywhere it appears, not just on the row linked.
+        if (me && me.email) {
+            await CollegeContact.updateMany({ email: me.email }, { $set: { optOut: true, optOutAt: new Date() } });
+        }
+    } catch (err) {
+        console.error('[Growth] college unsubscribe failed:', err.message);
+        return res.status(500).send(unsubPage('Something went wrong',
+            'We could not process that just now. Please reply to the email and we will remove you by hand.'));
+    }
+    res.send(unsubPage('Removed',
+        'We will not write to this address again.<br><br>'
+        + 'If a colleague would be the right contact instead, just reply to the original email and tell us who.'));
 });
 
 module.exports = { api, tracking: trackingRouter, revenueFor, ATTRIBUTION_DAYS };

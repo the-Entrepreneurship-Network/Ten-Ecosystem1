@@ -58,7 +58,8 @@ const MARKETING_TYPES = Object.freeze([
     'inactive-reengagement',
     'active-appreciation',
     'promotion',
-    'campaign'
+    'campaign',
+    'college-outreach'
 ]);
 
 /** The first instant of the period containing `now`. */

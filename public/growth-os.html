@@ -106,6 +106,26 @@
     <h2>Campaigns</h2>
     <div id="campWrap"><div class="empty">Loading…</div></div>
   </section>
+
+  <!-- Colleges -->
+  <section class="card">
+    <h2>Colleges</h2>
+    <p style="font-size:13px;color:#8b8578;line-height:1.6;margin:0 0 14px">
+      Placement offices, not students. Paste a college site and this reads the contact address
+      the college publishes on its own placement page — it never guesses one. Mail sent here
+      comes out of the same monthly allowance as everything above.
+    </p>
+    <div class="two">
+      <div><label for="colUrl">College website</label><input id="colUrl" placeholder="https://www.example.edu.in"></div>
+      <div><label for="colName">College name</label><input id="colName" placeholder="Example Institute of Technology"></div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
+      <button class="btn ghost" id="colFind" type="button">Find the placement contact</button>
+      <button class="btn" id="colSend" type="button">Mail the new ones</button>
+    </div>
+    <div class="qrow" id="colStats" style="margin-top:14px"></div>
+    <div id="colWrap"><div class="empty">Loading…</div></div>
+  </section>
 </div>
 
 <!-- Pre-flight / extension modal -->
@@ -375,7 +395,99 @@
     location.href = '/growth/login';
   });
 
-  loadQuota(); loadSegments(); loadCampaigns();
+  // ─── colleges ─────────────────────────────────────────────────────────────
+  function renderColleges(d) {
+    var stats = $('colStats');
+    var by = d.byStatus || {};
+    stats.innerHTML = '';
+    [['Waiting', by['new'] || 0], ['Mailed', by.mailed || 0],
+     ['Replied', by.replied || 0], ['Bounced', by.bounced || 0], ['Total', d.total || 0]
+    ].forEach(function (pair) {
+      var sp = document.createElement('span');
+      sp.innerHTML = pair[0] + ' <b>' + fmt(pair[1]) + '</b>';
+      stats.appendChild(sp);
+    });
+
+    var wrap = $('colWrap');
+    wrap.innerHTML = '';
+    if (!d.colleges || !d.colleges.length) {
+      wrap.innerHTML = '<div class="empty">No colleges yet. Add one above, or bulk-import with scripts/import-colleges.js</div>';
+      return;
+    }
+    var t = document.createElement('table');
+    var head = document.createElement('tr');
+    ['College', 'Contact', 'Email', 'Status', 'Source'].forEach(function (h) {
+      var th = document.createElement('th'); th.textContent = h; head.appendChild(th);
+    });
+    t.appendChild(head);
+    d.colleges.forEach(function (c) {
+      var tr = document.createElement('tr');
+      function cell(text, cls) {
+        var td = document.createElement('td');
+        td.textContent = text || '—';
+        if (cls) td.className = cls;
+        tr.appendChild(td);
+        return td;
+      }
+      cell(c.college || c.website);
+      cell([c.contactName, c.contactRole].filter(Boolean).join(' · '));
+      cell(c.email);
+      var st = document.createElement('td');
+      var pill = document.createElement('span');
+      pill.className = 'pill p-' + (c.optOut ? 'stopped' : (c.status === 'mailed' ? 'sent' : 'draft'));
+      pill.textContent = c.optOut ? 'removed' : c.status;
+      st.appendChild(pill);
+      tr.appendChild(st);
+      var src = document.createElement('td');
+      if (c.sourceUrl && /^https?:/.test(c.sourceUrl)) {
+        var a = document.createElement('a');
+        a.href = c.sourceUrl; a.target = '_blank'; a.rel = 'noopener noreferrer';
+        a.textContent = 'page'; a.style.color = '#cdb24a';
+        src.appendChild(a);
+      } else { src.textContent = c.via || '—'; }
+      tr.appendChild(src);
+      t.appendChild(tr);
+    });
+    wrap.appendChild(t);
+  }
+
+  async function loadColleges() {
+    try { renderColleges(await call('/colleges')); }
+    catch (e) { $('colWrap').innerHTML = '<div class="empty">' + e.message + '</div>'; }
+  }
+
+  $('colFind').addEventListener('click', async function () {
+    var btn = this;
+    var url = $('colUrl').value.trim();
+    if (!url) return toast('Paste the college website first.');
+    btn.disabled = true; btn.textContent = 'Looking…';
+    try {
+      var r = await call('/colleges/discover', {
+        method: 'POST',
+        body: JSON.stringify({ website: url, college: $('colName').value.trim() })
+      });
+      toast(r.message || ('Found ' + r.found + ', added ' + r.added + ', already had ' + r.skipped + '.'));
+      if (r.added) { $('colUrl').value = ''; $('colName').value = ''; }
+      await loadColleges();
+    } catch (e) { toast(e.message); }
+    btn.disabled = false; btn.textContent = 'Find the placement contact';
+  });
+
+  $('colSend').addEventListener('click', function () {
+    openModal('Mail the colleges waiting?',
+      'This writes to every college with status "waiting" that has not opted out, one every '
+      + '2 seconds, and each message counts against this period\'s allowance.',
+      async function () {
+        closeModal();
+        try {
+          var r = await call('/colleges/send', { method: 'POST', body: JSON.stringify({}) });
+          toast('Started — ' + fmt(r.queued) + ' queued.');
+          setTimeout(function () { loadColleges(); loadQuota(); }, 4000);
+        } catch (e) { toast(e.message); }
+      }, 'Send now');
+  });
+
+  loadQuota(); loadSegments(); loadCampaigns(); loadColleges();
 })();
 </script>
 </body>
