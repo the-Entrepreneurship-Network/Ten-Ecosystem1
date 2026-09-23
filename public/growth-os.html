@@ -129,21 +129,41 @@
 
   <!-- Colleges -->
   <section class="card">
-    <h2>Colleges</h2>
-    <p style="font-size:13px;color:#8b8578;line-height:1.6;margin:0 0 14px">
-      Placement offices, not students. Paste a college site and this reads the contact address
-      the college publishes on its own placement page — it never guesses one. Mail sent here
-      comes out of the same monthly allowance as everything above.
+    <h2>The agent</h2>
+    <p style="font-size:13px;color:#8b8578;line-height:1.6;margin:0 0 16px">
+      Press run and it visits every college it knows, reads the contact address each one
+      publishes on its own placement page, and adds it below. It never guesses an address
+      and it never collects a student's. Mail sent here comes out of the same monthly
+      allowance as everything above.
     </p>
-    <div class="two">
-      <div><label for="colUrl">College website</label><input id="colUrl" placeholder="https://www.example.edu.in"></div>
-      <div><label for="colName">College name</label><input id="colName" placeholder="Example Institute of Technology"></div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <button class="btn" id="agentRun" type="button">▶ Run the agent</button>
+      <span id="agentState" style="font-size:13px;color:#8b8578"></span>
     </div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
+    <div class="meter" id="agentMeter" style="display:none;margin-top:12px"><i class="used" id="agentBar" style="width:0"></i></div>
+
+    <details style="margin-top:16px">
+      <summary style="cursor:pointer;font-size:13px;color:#cdb24a">Add one college by hand</summary>
+      <div class="two" style="margin-top:12px">
+        <div><label for="colUrl">College website</label><input id="colUrl" placeholder="https://www.example.edu.in"></div>
+        <div><label for="colName">College name</label><input id="colName" placeholder="Example Institute of Technology"></div>
+      </div>
       <button class="btn ghost" id="colFind" type="button">Find the placement contact</button>
-      <button class="btn" id="colSend" type="button">Mail the new ones</button>
+    </details>
+  </section>
+
+  <section class="card">
+    <h2>Contacts found</h2>
+    <div class="qrow" id="colStats"></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0">
+      <label style="display:flex;gap:8px;align-items:center;font-size:13px;cursor:pointer;margin:0">
+        <input type="checkbox" id="colAll" style="width:auto;margin:0"> Select all waiting
+      </label>
+      <button class="btn ghost" id="colTemplate" type="button">Review the email</button>
+      <button class="btn" id="colSend" type="button" disabled>Send to selected</button>
+      <span id="colSelCount" style="font-size:12px;color:#8b8578"></span>
     </div>
-    <div class="qrow" id="colStats" style="margin-top:14px"></div>
     <div id="colWrap"><div class="empty">Loading…</div></div>
   </section>
 </div>
@@ -170,7 +190,8 @@
 (function () {
   'use strict';
   var API = '/api/growth';
-  var state = { quota: null, segment: null, campaignId: null, poll: null, templates: [], picked: new Set() };
+  var state = { quota: null, segment: null, campaignId: null, poll: null, templates: [],
+               picked: new Set(), colleges: [], colPicked: new Set(), agentWas: false };
 
   var $ = function (id) { return document.getElementById(id); };
   var fmt = function (n) { return (n == null ? '–' : Number(n).toLocaleString('en-IN')); };
@@ -440,34 +461,55 @@
 
     var wrap = $('colWrap');
     wrap.innerHTML = '';
-    if (!d.colleges || !d.colleges.length) {
-      wrap.innerHTML = '<div class="empty">No colleges yet. Add one above, or bulk-import with scripts/import-colleges.js</div>';
+    state.colleges = d.colleges || [];
+    if (!state.colleges.length) {
+      wrap.innerHTML = '<div class="empty">Nothing yet. Press “Run the agent” above, '
+        + 'or bulk-import with scripts/import-colleges.js</div>';
+      refreshColSelection();
       return;
     }
     var t = document.createElement('table');
     var head = document.createElement('tr');
-    ['College', 'Contact', 'Email', 'Status', 'Source'].forEach(function (h) {
+    ['', 'College', 'Contact', 'Email', 'Status', 'Source'].forEach(function (h) {
       var th = document.createElement('th'); th.textContent = h; head.appendChild(th);
     });
     t.appendChild(head);
-    d.colleges.forEach(function (c) {
+
+    state.colleges.forEach(function (c) {
       var tr = document.createElement('tr');
-      function cell(text, cls) {
+      var tick = document.createElement('td');
+      // Only a college that is waiting can be sent to, so only that one gets a
+      // box — a ticked row that the sender would skip is a lie about what will
+      // happen when Send is pressed.
+      if (c.status === 'new' && !c.optOut) {
+        var cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.value = c.id; cb.className = 'colTick';
+        cb.style.cssText = 'width:auto;margin:0';
+        cb.checked = state.colPicked.has(c.id);
+        cb.addEventListener('change', function () {
+          if (cb.checked) state.colPicked.add(c.id); else state.colPicked.delete(c.id);
+          refreshColSelection();
+        });
+        tick.appendChild(cb);
+      }
+      tr.appendChild(tick);
+
+      function cell(text) {
         var td = document.createElement('td');
         td.textContent = text || '—';
-        if (cls) td.className = cls;
         tr.appendChild(td);
-        return td;
       }
       cell(c.college || c.website);
       cell([c.contactName, c.contactRole].filter(Boolean).join(' · '));
       cell(c.email);
+
       var st = document.createElement('td');
       var pill = document.createElement('span');
       pill.className = 'pill p-' + (c.optOut ? 'stopped' : (c.status === 'mailed' ? 'sent' : 'draft'));
       pill.textContent = c.optOut ? 'removed' : c.status;
       st.appendChild(pill);
       tr.appendChild(st);
+
       var src = document.createElement('td');
       if (c.sourceUrl && /^https?:/.test(c.sourceUrl)) {
         var a = document.createElement('a');
@@ -479,12 +521,65 @@
       t.appendChild(tr);
     });
     wrap.appendChild(t);
+    refreshColSelection();
   }
+
+  function refreshColSelection() {
+    var n = state.colPicked.size;
+    $('colSelCount').textContent = n ? n + ' selected' : '';
+    $('colSend').disabled = n === 0;
+    $('colSend').textContent = n ? 'Send to selected (' + fmt(n) + ')' : 'Send to selected';
+    var boxes = document.querySelectorAll('.colTick');
+    $('colAll').checked = boxes.length > 0 && n >= boxes.length;
+  }
+
+  $('colAll').addEventListener('change', function () {
+    var on = this.checked;
+    Array.prototype.forEach.call(document.querySelectorAll('.colTick'), function (cb) {
+      cb.checked = on;
+      if (on) state.colPicked.add(cb.value); else state.colPicked.delete(cb.value);
+    });
+    refreshColSelection();
+  });
 
   async function loadColleges() {
     try { renderColleges(await call('/colleges')); }
     catch (e) { $('colWrap').innerHTML = '<div class="empty">' + e.message + '</div>'; }
   }
+
+  // ─── the agent ────────────────────────────────────────────────────────────
+  function renderAgent(st) {
+    var meter = $('agentMeter');
+    if (!st.total) { meter.style.display = 'none'; $('agentState').textContent = ''; return; }
+    var pct = Math.round((st.processed / st.total) * 100);
+    meter.style.display = 'block';
+    $('agentBar').style.width = pct + '%';
+    $('agentState').textContent = st.running
+      ? 'Visiting ' + fmt(st.processed) + ' of ' + fmt(st.total) + ' — found ' + fmt(st.added)
+      : 'Finished — visited ' + fmt(st.processed) + ', found ' + fmt(st.added)
+        + (st.failed ? ', ' + fmt(st.failed) + ' unreachable' : '');
+    $('agentRun').disabled = !!st.running;
+    $('agentRun').textContent = st.running ? 'Running…' : '▶ Run the agent';
+  }
+
+  async function pollAgent() {
+    try {
+      var st = (await call('/colleges/agent/status')).status;
+      renderAgent(st);
+      if (st.running) { setTimeout(pollAgent, 3000); }
+      else if (state.agentWas) { state.agentWas = false; loadColleges(); }
+    } catch (_) { /* a polling miss must not break the page */ }
+  }
+
+  $('agentRun').addEventListener('click', async function () {
+    this.disabled = true;
+    try {
+      var r = await call('/colleges/agent/run', { method: 'POST', body: JSON.stringify({}) });
+      state.agentWas = true;
+      toast('Agent started on ' + fmt(r.total) + ' colleges. This takes a few minutes.');
+      pollAgent();
+    } catch (e) { toast(e.message); this.disabled = false; }
+  });
 
   $('colFind').addEventListener('click', async function () {
     var btn = this;
@@ -503,18 +598,61 @@
     btn.disabled = false; btn.textContent = 'Find the placement contact';
   });
 
-  $('colSend').addEventListener('click', function () {
-    openModal('Mail the colleges waiting?',
-      'This writes to every college with status "waiting" that has not opted out, one every '
-      + '2 seconds, and each message counts against this period\'s allowance.',
-      async function () {
-        closeModal();
-        try {
-          var r = await call('/colleges/send', { method: 'POST', body: JSON.stringify({}) });
-          toast('Started — ' + fmt(r.queued) + ' queued.');
-          setTimeout(function () { loadColleges(); loadQuota(); }, 4000);
-        } catch (e) { toast(e.message); }
-      }, 'Send now');
+  // ─── review the email, then send ──────────────────────────────────────────
+  $('colTemplate').addEventListener('click', async function () {
+    var btn = this;
+    btn.disabled = true; btn.textContent = 'Loading…';
+    try {
+      var r = await call('/colleges/template');
+      showTemplate(r, false);
+    } catch (e) { toast(e.message); }
+    btn.disabled = false; btn.textContent = 'Review the email';
+  });
+
+  /* The review pane. `withSend` turns it into the confirm step, so the mail is
+     always on screen at the moment somebody agrees to send it. */
+  function showTemplate(r, withSend) {
+    var n = state.colPicked.size;
+    $('mTitle').textContent = withSend ? 'Send this to ' + fmt(n) + ' college' + (n === 1 ? '' : 's') + '?' : 'The email colleges receive';
+    $('mBody').innerHTML =
+      '<div style="font-size:12px;color:#8b8578;margin-bottom:10px">Subject: <b style="color:#f0eee8">'
+        + (r.subject || '').replace(/[<>&]/g, '') + '</b>'
+        + (r.usedRealCollege ? ' · shown as ' + String(r.sampleCollege).replace(/[<>&]/g, '') + ' would see it' : '')
+        + '</div>'
+      + '<iframe title="Email template" style="width:100%;height:440px;border:1px solid rgba(245,197,66,0.18);'
+        + 'border-radius:10px;background:#0c1220"></iframe>';
+    // srcdoc is assigned as a property, never built into the HTML string above,
+    // so the template's own markup cannot break out of the attribute.
+    $('mBody').querySelector('iframe').srcdoc = r.html;
+
+    $('mExtend').style.display = 'none';
+    $('mConfirm').textContent = withSend ? 'Looks right — send now' : 'Close';
+    $('mConfirm').onclick = withSend ? function () { closeModal(); startCollegeSend(); } : closeModal;
+    $('modal').classList.add('on');
+  }
+
+  async function startCollegeSend() {
+    try {
+      var r = await call('/colleges/send', {
+        method: 'POST', body: JSON.stringify({ ids: Array.from(state.colPicked) })
+      });
+      toast('Sending to ' + fmt(r.queued) + ' — one every 2 seconds.');
+      state.colPicked.clear();
+      setTimeout(function () { loadColleges(); loadQuota(); }, 4000);
+    } catch (e) { toast(e.message); }
+  }
+
+  $('colSend').addEventListener('click', async function () {
+    if (!state.colPicked.size) return toast('Tick some colleges first.');
+    var btn = this;
+    btn.disabled = true;
+    try {
+      // The template is fetched and shown BEFORE the confirm, so nobody can
+      // agree to send a mail they have not been shown.
+      showTemplate(await call('/colleges/template'), true);
+    } catch (e) { toast(e.message); }
+    btn.disabled = false;
+    refreshColSelection();
   });
 
   // ─── templates ────────────────────────────────────────────────────────────
@@ -628,7 +766,7 @@
     btn.disabled = false; btn.textContent = 'Preview';
   });
 
-  loadQuota(); loadSegments(); loadCampaigns(); loadColleges(); loadTemplates();
+  loadQuota(); loadSegments(); loadCampaigns(); loadColleges(); loadTemplates(); pollAgent();
 })();
 </script>
 </body>
