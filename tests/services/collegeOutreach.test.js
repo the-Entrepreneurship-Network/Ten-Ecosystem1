@@ -236,7 +236,18 @@ describe('re-running discovery or an import cannot undo a decision', () => {
     expect(body).toContain('No such file');
     expect(body).toContain('process.cwd()');   // says where it looked
     expect(body).toContain('readdirSync');     // lists what IS there
-    expect(body).toContain('scp ');            // says how to get it up
+    expect(body).toContain('Run the agent');   // names the path that works
+    expect(body).toContain('curl ');           // and a way in that needs no SSH key
+  });
+
+  test('nothing promises a regulator download that does not exist', () => {
+    // The docblock used to say AICTE publishes every approved institution with
+    // its contact details as a downloadable CSV. AICTE publishes PDFs, and the
+    // AICTE sets on data.gov.in are seat and enrolment statistics. Somebody
+    // followed that sentence and spent an afternoon hunting for the file.
+    const src = read('scripts/import-colleges.js') + read('config/collegeSeeds.js');
+    expect(src).not.toMatch(/aicte\.csv|aicte\.xlsx/i);
+    expect(src).not.toMatch(/Download the AICTE/i);
   });
 
   test('the import never invents an address from a domain', () => {

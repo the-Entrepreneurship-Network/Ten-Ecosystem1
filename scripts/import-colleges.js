@@ -4,16 +4,22 @@
 /**
  * Load a college list into CollegeContact.
  *
- * Built for the AICTE approved-institutions dataset, which is published as a
- * download and needs no crawler at all — the whole list, with contact details,
- * from the regulator. Any CSV or XLSX with the same sort of columns works.
+ * Loads any CSV or XLSX that carries institution names and email addresses —
+ * a state technical board's list, a conference roster, a sheet somebody
+ * compiled by hand. Columns are matched on meaning, not exact header text.
+ *
+ * It is NOT fed by a regulator download. AICTE publishes its approved-
+ * institution lists as PDFs, and the AICTE datasets on data.gov.in are
+ * statistics rather than a contact directory. If you have no such file, the
+ * dashboard's agent is the way to fill CollegeContact — it reads addresses off
+ * the placement pages colleges publish themselves.
  *
  * DRY RUN BY DEFAULT. It prints what it would insert and writes nothing.
  * Pass --apply to write.
  *
- *   node scripts/import-colleges.js aicte.csv
- *   node scripts/import-colleges.js aicte.xlsx --apply
- *   node scripts/import-colleges.js aicte.csv --state Karnataka --limit 500 --apply
+ *   node scripts/import-colleges.js colleges.csv
+ *   node scripts/import-colleges.js colleges.xlsx --apply
+ *   node scripts/import-colleges.js colleges.csv --state Karnataka --limit 500 --apply
  *
  * Rows with no usable email are counted and skipped, not guessed at. An
  * invented `principal@<domain>` is how a sending domain earns a spam
@@ -72,8 +78,8 @@ function toRow(raw) {
         phone:     pick(raw, 'phone'),
         // The dataset itself is the evidence for these rows — there is no page
         // to point at, so the row records which import it came from.
-        sourceUrl: 'aicte-dataset:' + path.basename(file || 'import'),
-        via:       'aicte-import'
+        sourceUrl: 'imported-file:' + path.basename(file || 'import'),
+        via:       'file-import'
     };
 }
 
@@ -106,10 +112,16 @@ async function main() {
             console.error('');
         } else {
             console.error('There are no .csv or .xlsx files in this directory.\n');
-            console.error('Download the AICTE approved-institutions list from');
-            console.error('  https://facilities.aicte-india.org/dashboard/pages/angulardashboard.php');
-            console.error('or search data.gov.in for "AICTE approved institutions", then copy it up:');
-            console.error('  scp -i <your-key.pem> aicte.csv ec2-user@<server>:' + process.cwd() + '/\n');
+            console.error('This script imports a spreadsheet you already have. There is no known');
+            console.error('free regulator file to fetch: AICTE publishes PDFs, and the AICTE');
+            console.error('datasets on data.gov.in are seat and enrolment statistics, not a');
+            console.error('contact directory.\n');
+            console.error('If you have no such file, use the dashboard instead:');
+            console.error('  Growth OS -> "Run the agent"');
+            console.error('It reads addresses off the placement pages colleges publish.\n');
+            console.error('If you DO have a file, download it on this server rather than');
+            console.error('copying it up — no SSH key needed:');
+            console.error('  curl -L -o colleges.csv "<the download url>"\n');
             console.error('Any CSV or XLSX with institution names and email addresses works —');
             console.error('columns are matched on meaning, not on exact header text.\n');
         }

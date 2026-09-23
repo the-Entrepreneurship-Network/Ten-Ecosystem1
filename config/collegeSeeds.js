@@ -9,14 +9,17 @@
  * a real, well-known Indian institution — a fabricated one would simply time
  * out and make the agent look broken.
  *
- * FOR REAL VOLUME, IMPORT AICTE. The regulator publishes every approved
- * institution with its contact details as a download, which is thousands of
- * rows in one go and needs no crawling at all:
+ * TO GO BEYOND IT, the agent is the realistic path — not an import. AICTE
+ * publishes its approved-institution lists as PDFs, and the AICTE datasets on
+ * data.gov.in are statistics (seat counts, enrolment) rather than a directory
+ * carrying email addresses. An earlier version of this comment claimed a
+ * downloadable regulator CSV with contact details; that was never verified and
+ * appears not to exist.
  *
- *     node scripts/import-colleges.js aicte.csv --apply
- *
- * The agent exists for the gaps in that file and for institutions that are
- * not on it. It is not the volume path and this file does not pretend to be.
+ * So: extend this list, and press run. scripts/import-colleges.js is still
+ * there for any spreadsheet that DOES carry names and addresses — a state
+ * board's list, a conference roster, anything already in hand — but there is
+ * no known free file that fills it in one go.
  */
 
 const SEED_COLLEGES = Object.freeze([
