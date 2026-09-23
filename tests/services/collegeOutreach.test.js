@@ -223,6 +223,22 @@ describe('re-running discovery or an import cannot undo a decision', () => {
     expect(src).toMatch(/if\s*\(!APPLY\)/);
   });
 
+  test('a missing file is explained, not dumped as a stack trace', () => {
+    // The first person to run the documented example did not have the file the
+    // example named, and got ten frames of ENOENT out of xlsx.js — which reads
+    // as "the script is broken" rather than "that file is not here".
+    const src = code('scripts/import-colleges.js');
+    const check = src.indexOf('if (!fs.existsSync(file))');
+    expect(check).toBeGreaterThan(-1);
+    // The guard must run BEFORE xlsx opens anything.
+    expect(check).toBeLessThan(src.indexOf('xlsx.readFile'));
+    const body = src.slice(check, check + 1400);
+    expect(body).toContain('No such file');
+    expect(body).toContain('process.cwd()');   // says where it looked
+    expect(body).toContain('readdirSync');     // lists what IS there
+    expect(body).toContain('scp ');            // says how to get it up
+  });
+
   test('the import never invents an address from a domain', () => {
     const src = code('scripts/import-colleges.js');
     expect(src).not.toMatch(/['"`](principal|info|hod|tpo)@['"`]\s*\+/);
