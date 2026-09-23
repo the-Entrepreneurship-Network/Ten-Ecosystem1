@@ -110,13 +110,20 @@ as_app() {
 have_mongod() { systemctl cat mongod >/dev/null 2>&1; }
 mongod_log()  { awk '/^ *path:/{print $2; exit}' /etc/mongod.conf 2>/dev/null; }
 
+# `systemctl show -p KEY --value UNIT` is systemd 231+. Amazon Linux 2 ships
+# 219, where --value is an unrecognized option: systemctl errors, the caller
+# gets an empty string, and every check that reads a property silently
+# degrades. `show -p KEY UNIT` prints `KEY=value` on every systemd ever
+# shipped, so parse that instead.
+sd_show() { systemctl show -p "$1" "$2" 2>/dev/null | cut -d= -f2-; }
+
 # ---- What is happening right now ----------------------------------------------
 
 db_now() {
   bold "DATABASE NOW"
   if have_mongod; then
     if systemctl is-active --quiet mongod; then
-      ok "mongod is running (since $(systemctl show -p ActiveEnterTimestamp --value mongod))"
+      ok "mongod is running (since $(sd_show ActiveEnterTimestamp mongod))"
     else
       miss "mongod is NOT running. The last things it logged:"
       journalctl -u mongod -n 8 --no-pager 2>/dev/null | sed 's/^/          /'
@@ -165,7 +172,7 @@ DROPIN_DIR=/etc/systemd/system/mongod.service.d
 DROPIN=$DROPIN_DIR/ten-portal.conf
 step2_restart() {
   have_mongod || { skip "2. restart-on-crash: no mongod here"; return; }
-  local current; current="$(systemctl show -p Restart --value mongod 2>/dev/null || echo '?')"
+  local current; current="$(sd_show Restart mongod)"; current="${current:-?}"
   if [ -f "$DROPIN" ] && [ "$current" = always ]; then
     ok "2. mongod restarts itself after a crash, and is protected from the OOM killer"; return
   fi

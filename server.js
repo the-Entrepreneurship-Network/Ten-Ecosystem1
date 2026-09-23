@@ -1288,6 +1288,12 @@ if(!Student.schema.path("v2DurationType")) Student.schema.add({ v2DurationType: 
 const DocumentHistory = require("./models/DocumentHistory");
 const { generateDocumentNumber, normalizeDocumentNumber } = require("./utils/documentNumber");
 const MailHistory = require("./models/MailHistory");
+
+// Growth OS — the marketing allowance the weekly mailer now shares, and the
+// signed links that make its opens, clicks and revenue measurable.
+const GrowthCampaign  = require("./models/GrowthCampaign");
+const growthQuota     = require("./services/growthQuota");
+const growthTracking  = require("./services/growthTracking");
 const Notice = require("./models/Notice");
 const Notification = require("./models/Notification");
 const Attendance = require("./models/Attendance");
@@ -2392,44 +2398,78 @@ if (mailerReady()) {
 
 // Sends one activity-cycle HR mail (appreciation or re-engagement), records it
 // in MailHistory and mirrors it as an in-app student notification.
+/*
+ * The two weekly mails.
+ *
+ * `html` now takes the per-person links as well as the name. Every campaign
+ * mail carries a tracked button and an unsubscribe link, and these two are
+ * campaign mail: they go to ~1,550 people every Monday. Without tracking we
+ * had no idea whether any of it worked, and without an unsubscribe link it is
+ * the kind of sending that got this domain suspended once already.
+ *
+ * The re-engagement mail also carries a real offer now. "Come back, your tasks
+ * are waiting" asked for nothing and sold nothing; the Career Studio combo is
+ * ₹500 against ₹650 bought separately, which is a reason to click.
+ */
 const ACTIVITY_MAILS = {
     "active-appreciation": {
         subject: "Keep it up! You're doing great 🌟",
-        html: (name) => renderEmail({
+        html: (name, links) => renderEmail({
             heading: "🌟 Keep it up",
             name: name || "Intern",
-            bodyHtml: `<p style="margin:0;">Great work staying active this week. Your consistency is what turns an internship into a portfolio — keep it up.</p>`,
-            cta: { label: "Open my portal", url: PORTAL_URL + "/student-dashboard.html" }
+            bodyHtml: `<p style="margin:0 0 12px;">Great work staying active this week. Your consistency is what turns an internship into a portfolio — keep it up.</p>
+                       <p style="margin:0;">When you are ready to go further, the Career Studio bundles the course, the ATS resume rebuild and the job agent for <b style="color:#f5c542;">₹500</b> — they are ₹650 bought separately.</p>`,
+            cta: { label: "See what's included", url: links.cta },
+            note: links.note
         }),
         notifTitle: "🌟 Appreciation from HR",
         notifMessage: (name) => `Hi ${name || "Intern"}, great work staying active this week. Keep it up! — TEN HR Team`,
         notifType: "success"
     },
     "inactive-reengagement": {
-        subject: "We miss you! Come back and keep growing 💪",
-        html: (name) => renderEmail({
-            heading: "💪 We miss you",
+        subject: "Your internship is still open — and the Studio is ₹150 off",
+        html: (name, links) => renderEmail({
+            heading: "💪 Pick up where you left off",
             name: name || "Intern",
-            bodyHtml: `<p style="margin:0;">We noticed you haven’t been active recently. Jump back in whenever you’re ready — your tasks are waiting and we’re here to help you keep growing.</p>`,
-            cta: { label: "Pick up where I left off", url: PORTAL_URL + "/student-dashboard.html" }
+            bodyHtml: `<p style="margin:0 0 12px;">We noticed you haven't been active recently. Your tasks are still waiting, and your certificate is still within reach.</p>
+                       <p style="margin:0 0 12px;">If it would help to have more than the internship: the <b>Career Studio</b> gives you the six-week course, a resume rebuilt to pass an ATS, and an agent that hunts live openings and applies for you.</p>
+                       <p style="margin:0;">All three together are <b style="color:#f5c542;">₹500</b>. Bought separately they are ₹650.</p>`,
+            cta: { label: "Open the Career Studio", url: links.cta },
+            note: links.note
         }),
-        notifTitle: "💪 Inactivity Alert",
-        notifMessage: (name) => `Hi ${name || "Intern"}, we noticed you haven't been active recently. Jump back in whenever you're ready — we're here to help you keep growing. — TEN HR Team`,
+        notifTitle: "💪 Your internship is still open",
+        notifMessage: (name) => `Hi ${name || "Intern"}, your tasks are still waiting and your certificate is still within reach. — TEN HR Team`,
         notifType: "warning"
     }
 };
 
-async function sendActivityMail(student, studentName, mailType){
+async function sendActivityMail(student, studentName, mailType, campaignId){
     const spec = ACTIVITY_MAILS[mailType];
     const email = student.email;
     let mailStatus = "sent";
     let mailError = "";
+
+    /*
+     * Per-person links. The button goes through /g/c so a click is attributable
+     * to this student and this week's run, which is what makes "the Monday mail
+     * earned ₹X" answerable at all. The unsubscribe goes through /g/u, signed,
+     * so the link in one person's mail can only ever remove that person.
+     */
+    const uid = String(student._id);
+    const cid = String(campaignId);
+    const links = {
+        cta: growthTracking.clickUrl(cid, uid),
+        note: `Not interested in these? <a href="${growthTracking.unsubscribeUrl(uid)}" style="color:#cdb24a;">Unsubscribe</a> — you will still receive your certificates and offer letters.`
+    };
+    const html = spec.html(studentName, links).replace('</body>',
+        `<img src="${growthTracking.openUrl(cid, uid)}" width="1" height="1" alt="" style="display:none">\n</body>`);
+
     try {
         await transporter.sendMail({
             from: EMAIL_FROM,
             to: email,
             subject: spec.subject,
-            html: spec.html(studentName)
+            html
         });
     } catch (err) {
         mailStatus = "failed";
@@ -2502,13 +2542,37 @@ async function runActivityMailer(){
             return;
         }
 
-        const students = await Student.find();
+        /*
+         * Never mail somebody who unsubscribed. The filter is in the query
+         * rather than the loop so a new segment or a new caller cannot forget
+         * it — an unsubscribe that keeps sending is worse than never offering
+         * one, and this account has been suspended for sending behaviour once.
+         */
+        const students = await Student.find({ emailOptOut: { $ne: true } });
         const now = new Date();
         const sevenDaysAgo = new Date(now);
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         const fourteenDaysAgo = new Date(now);
         fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
-        let sent = 0, skipped = 0;
+
+        /*
+         * This run is a campaign like any other, so it gets a GrowthCampaign
+         * row: it shows up in the dashboard beside hand-written ones, its
+         * opens and clicks are counted the same way, and the revenue join
+         * works on it. Before this, the biggest mailing the portal did was
+         * also the only one nobody could measure.
+         */
+        const weekly = await GrowthCampaign.create({
+            name: `Weekly activity mail — ${now.toISOString().slice(0, 10)}`,
+            subject: 'Weekly activity mail (two variants)',
+            bodyText: 'Sent automatically every Monday by the activity mailer.',
+            segment: 'dormant14',
+            status: 'sending',
+            startedAt: now,
+            createdBy: 'cron'
+        });
+
+        let sent = 0, skipped = 0, quotaSkipped = 0;
         for(const student of students){
             try{
                 const email = student.email;
@@ -2529,14 +2593,40 @@ async function runActivityMailer(){
                 // Claimed before the send, not after: the second row for this
                 // student is in the same loop, and an await in between is all
                 // the room it needs to slip through.
+                /*
+                 * The marketing allowance is shared with the Growth OS, and
+                 * this cron has no human watching it. Checked per message, not
+                 * once at the top: a campaign sent by hand may have consumed
+                 * the remainder since this run started.
+                 *
+                 * Running out stops the loop rather than failing it. The
+                 * students not reached are counted and logged, never silently
+                 * dropped, and certificates keep going out of the reserve.
+                 */
+                const { allowed } = await growthQuota.canSend(1);
+                if (!allowed) {
+                    quotaSkipped++;
+                    continue;
+                }
+
+                // Claimed before the send, not after: the second row for this
+                // student is in the same loop, and an await in between is all
+                // the room it needs to slip through.
                 alreadyMailed.add(key);
-                await sendActivityMail(student, studentName, mailType);
+                await sendActivityMail(student, studentName, mailType, weekly._id);
                 sent++;
             }catch(error){
                 console.log(error);
             }
         }
+        await GrowthCampaign.findByIdAndUpdate(weekly._id, {
+            status: 'sent', sentAt: new Date(),
+            recipientCount: sent + quotaSkipped, sentCount: sent, skippedCount: quotaSkipped
+        }).catch(() => {});
         console.log(`[ACTIVITY-MAILER] ${sent} sent, ${skipped} skipped (mailed within ${ACTIVITY_MAIL_COOLDOWN_DAYS} days)`);
+        if (quotaSkipped > 0) {
+            console.warn(`[ACTIVITY-MAILER] ${quotaSkipped} student(s) NOT mailed — the marketing quota is spent. Unlock more in the Growth OS, or they wait for the next period.`);
+        }
     }catch(error){
         console.log(error);
     }
@@ -11087,6 +11177,28 @@ app.get('/ten-admin/login', (req, res) => {
 app.get('/ten-admin', requireAdmin, (req, res) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.sendFile(path.join(__dirname, 'public', 'ten-admin.html'));
+});
+
+// ─── Growth OS ───────────────────────────────────────────────────────────────
+//
+// Its own sign-in, deliberately not the admin's: writing the Monday mail and
+// editing a student's payment are different jobs, and reusing /ten-admin would
+// have made this a second door into everything.
+const { requireGrowth } = require('./middleware/growthAuth');
+const growthRoutes = require('./routes/growth');
+
+app.use('/api/growth', growthRoutes.api);
+// Public on purpose — opens, clicks and unsubscribes arrive from a mail client
+// with no session. Every one verifies an HMAC in the URL before it acts.
+app.use('/g', growthRoutes.tracking);
+
+app.get('/growth/login', (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.sendFile(path.join(__dirname, 'public', 'growth-login.html'));
+});
+app.get('/growth', requireGrowth, (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.sendFile(path.join(__dirname, 'public', 'growth-os.html'));
 });
 
 // ================= SERVER =================
