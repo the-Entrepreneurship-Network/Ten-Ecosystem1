@@ -37,6 +37,13 @@ as_app() { sudo -n -u "$APP_USER" -H bash -lc "$*"; }
 
 have_mongod() { systemctl cat mongod >/dev/null 2>&1; }
 
+# `systemctl show -p KEY --value UNIT` is systemd 231+. Amazon Linux 2 ships
+# 219, where --value is an unrecognized option: systemctl errors, the caller
+# gets an empty string, and every check that reads a property silently
+# degrades. `show -p KEY UNIT` prints `KEY=value` on every systemd ever
+# shipped, so parse that instead.
+sd_show() { systemctl show -p "$1" "$2" 2>/dev/null | cut -d= -f2-; }
+
 # ---- 1. the database itself -----------------------------------------------------
 
 if have_mongod && ! systemctl is-active --quiet mongod; then
@@ -65,7 +72,7 @@ counter="$STATE/app-disconnected"
 if ! have_mongod; then
   up_for=$GRACE_SECONDS                     # database is elsewhere; nothing to wait for
 elif systemctl is-active --quiet mongod; then
-  since="$(systemctl show -p ActiveEnterTimestampMonotonic --value mongod 2>/dev/null)"
+  since="$(sd_show ActiveEnterTimestampMonotonic mongod)"
   # The clock this is measured against. Overridable so the tests can pin it:
   # a fresh CI runner is up for less than the grace period, and read from
   # /proc/uptime that made "the database has been up for ages" look like

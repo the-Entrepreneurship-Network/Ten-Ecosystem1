@@ -40,6 +40,19 @@ describe('both scripts parse', () => {
     expect(r.status).toBe(0);
   });
 
+  it('neither script uses `systemctl show --value`', () => {
+    /*
+     * --value arrived in systemd 231; production runs Amazon Linux 2 with
+     * systemd 219, where it is an unrecognized option. Every property read
+     * through it came back empty: --check reported restart-on-crash as
+     * missing even once it was installed, and the watchdog lost its grace
+     * period, so it could restart the app while it was still reconnecting.
+     */
+    const code = (f) => fs.readFileSync(f, 'utf8').replace(/^\s*#.*$/gm, '');
+    expect(code(HARDEN)).not.toContain('--value');
+    expect(code(WATCHDOG)).not.toContain('--value');
+  });
+
   it('the hardening script is what installs the watchdog', () => {
     // If somebody renames one, the other must follow.
     expect(fs.readFileSync(HARDEN, 'utf8')).toContain('scripts/server/watchdog.sh');
@@ -132,7 +145,15 @@ describe('watchdog.sh', () => {
 case "$1" in
   cat)       [ "\${MONGOD_INSTALLED:-1}" = 1 ] && exit 0 || exit 1 ;;
   is-active) [ "\${MONGOD_ACTIVE:-1}" = 1 ] && exit 0 || exit 1 ;;
-  show)      if [ "\${MONGOD_JUST_STARTED:-0}" = 1 ]; then awk '{print int($1*1000000)}' "\${WATCHDOG_UPTIME_FILE:-/proc/uptime}"; else echo 0; fi ;;
+  show)
+    # Amazon Linux 2 ships systemd 219, which has no --value: it errors out.
+    # The stub errors too, or a script using --value passes here and silently
+    # degrades in production - which is exactly what happened.
+    for a in "$@"; do
+      [ "$a" = --value ] && { echo "systemctl: unrecognized option '--value'" >&2; exit 1; }
+    done
+    if [ "\${MONGOD_JUST_STARTED:-0}" = 1 ]; then v=$(awk '{print int($1*1000000)}' "\${WATCHDOG_UPTIME_FILE:-/proc/uptime}"); else v=0; fi
+    printf '%s=%s\\n' "$3" "$v" ;;
 esac
 exit 0`);
     stub('df', `printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\\n/dev/xvda1 8000000 1 7000000 %s%% /\\n' "\${DISK_USED:-40}"`);
