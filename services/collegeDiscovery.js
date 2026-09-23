@@ -192,4 +192,97 @@ async function saveContacts(rows) {
     return { added, skipped };
 }
 
-module.exports = { discoverFromSite, saveContacts, htmlToText, toOrigin, titleOf, PATHS, PLACEMENT_HINT };
+/* ── the agent run ────────────────────────────────────────────────────────── */
+
+/*
+ * How many colleges are visited at once.
+ *
+ * Each site is a different host, so this is not hammering anybody — it is four
+ * separate servers being asked for one page each. Sequentially, 177 colleges
+ * at roughly ten seconds apiece is half an hour; at four it is about eight
+ * minutes, which is the difference between a button somebody presses and one
+ * they never press twice.
+ */
+const CONCURRENCY = Math.max(1, Math.min(8, parseInt(process.env.COLLEGE_AGENT_CONCURRENCY, 10) || 4));
+
+/*
+ * The state of the run in progress.
+ *
+ * ponytail: held in memory, not in Mongo. There is one app process, the run is
+ * a few minutes long, and the only cost of losing it to a restart is pressing
+ * the button again — a collection, a migration and a stale-run reaper would all
+ * be real code to maintain for that. If this ever runs on more than one
+ * process, or needs to survive a deploy, move it into its own small model.
+ */
+let current = {
+    running: false, startedAt: null, finishedAt: null,
+    total: 0, processed: 0, added: 0, skipped: 0, failed: 0, lastCollege: '', error: ''
+};
+
+/** A snapshot the dashboard can poll. */
+function runStatus() {
+    return { ...current };
+}
+
+/**
+ * Visit every site and store what each one publishes.
+ *
+ * Never throws: one college with an expired certificate must not end a run of
+ * a hundred and seventy-seven. A site that fails is counted and the run moves on.
+ */
+async function runBulk(sites, deps = {}) {
+    if (current.running) return runStatus();
+
+    /*
+     * The two calls that touch the network and the database, injectable.
+     * Without this the control flow here — every site visited once, a failure
+     * not ending the run, two runs not overlapping — could only be tested by
+     * actually crawling a hundred and seventy-seven colleges.
+     */
+    const discover = deps.discover || discoverFromSite;
+    const save = deps.save || saveContacts;
+
+    const list = [...new Set((sites || []).map((x) => String(x).trim()).filter(Boolean))];
+    current = {
+        running: true, startedAt: new Date(), finishedAt: null,
+        total: list.length, processed: 0, added: 0, skipped: 0, failed: 0,
+        lastCollege: '', error: ''
+    };
+
+    let cursor = 0;
+    async function worker() {
+        for (;;) {
+            const i = cursor++;
+            if (i >= list.length) return;
+            const site = list[i];
+            try {
+                const rows = await discover(site, { college: '', state: '' });
+                if (rows.length) {
+                    const { added, skipped } = await save(rows);
+                    current.added += added;
+                    current.skipped += skipped;
+                } else {
+                    current.skipped += 1;   // visited, published nothing usable
+                }
+            } catch (err) {
+                current.failed += 1;
+            }
+            current.processed += 1;
+            current.lastCollege = site;
+        }
+    }
+
+    try {
+        await Promise.all(Array.from({ length: Math.min(CONCURRENCY, list.length) }, worker));
+    } catch (err) {
+        current.error = String(err && err.message || err).slice(0, 300);
+    }
+    current.running = false;
+    current.finishedAt = new Date();
+    return runStatus();
+}
+
+module.exports = {
+    discoverFromSite, saveContacts, htmlToText, toOrigin, titleOf,
+    runBulk, runStatus, PATHS, PLACEMENT_HINT, CONCURRENCY
+};

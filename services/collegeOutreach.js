@@ -134,10 +134,23 @@ async function sendOne(contact) {
  * sender does it: the Monday cron may be running at the same time, and a check
  * from five minutes ago knows nothing about what it has sent since.
  */
-async function run(limit = DEFAULT_BATCH) {
-    const contacts = await CollegeContact.find({
-        status: 'new', optOut: { $ne: true }
-    }).limit(Math.max(1, Math.min(500, limit))).lean();
+async function run(opts = {}) {
+    // A bare number still means "a batch of that many", which is what the
+    // original caller passed.
+    const o = (typeof opts === 'number') ? { limit: opts } : (opts || {});
+    const limit = Math.max(1, Math.min(500, o.limit || DEFAULT_BATCH));
+
+    /*
+     * `ids` is the ticked selection from the dashboard. It narrows the query
+     * and never replaces it: `optOut` and `status` still apply, so ticking
+     * "select all" cannot mail somebody who asked to be left alone, and cannot
+     * mail the same college twice.
+     */
+    const filter = { status: 'new', optOut: { $ne: true } };
+    const ids = (o.ids || []).map(String).filter(Boolean);
+    if (ids.length) filter._id = { $in: ids };
+
+    const contacts = await CollegeContact.find(filter).limit(limit).lean();
 
     let sent = 0, failed = 0, skipped = 0, quotaStopped = false;
 

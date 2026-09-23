@@ -24,6 +24,7 @@ const Payment = require('../models/Payment');
 const CollegeContact = require('../models/CollegeContact');
 const collegeDiscovery = require('../services/collegeDiscovery');
 const collegeOutreach = require('../services/collegeOutreach');
+const { SEED_COLLEGES } = require('../config/collegeSeeds');
 const templates = require('../config/growthTemplates');
 const { greetingNameFor } = require('../utils/studentName');
 
@@ -391,6 +392,71 @@ const discoverLimiter = rateLimit({
     message: { success: false, error: 'Too many lookups. Wait a minute and try again.' }
 });
 
+/**
+ * Run the agent.
+ *
+ * Visits every college it knows about and stores the contact each one
+ * publishes. Not awaited — a run is minutes long, so the request returns at
+ * once and the dashboard polls `/colleges/agent/status`.
+ *
+ * The roster is the honest limit: it is a starting set of real institutions,
+ * not every college in India. Importing the AICTE dataset is how the list
+ * grows past it, and that needs no crawling at all.
+ */
+api.post('/colleges/agent/run', requireGrowthAPI, (req, res) => {
+    const status = collegeDiscovery.runStatus();
+    if (status.running) {
+        return res.status(409).json({ success: false, error: 'The agent is already running.', status });
+    }
+    collegeDiscovery.runBulk(SEED_COLLEGES).catch((err) => {
+        console.error('[Growth] agent run failed:', err.message);
+    });
+    res.json({ success: true, started: true, total: SEED_COLLEGES.length });
+});
+
+api.get('/colleges/agent/status', requireGrowthAPI, (req, res) => {
+    res.json({ success: true, status: collegeDiscovery.runStatus() });
+});
+
+/**
+ * The mail the colleges will get, rendered for review.
+ *
+ * Read-only and sends nothing. It renders through `collegeOutreach.buildHtml`,
+ * the same function the send loop calls, so what is reviewed here cannot
+ * differ from what goes out.
+ *
+ * The id handed to buildHtml is a placeholder, for the reason the campaign
+ * preview uses one: buildHtml signs an unsubscribe link with whatever id it is
+ * given, and a real one would put a working "remove me" link for that college
+ * inside the review pane.
+ */
+api.get('/colleges/template', requireGrowthAPI, async (req, res) => {
+    try {
+        let sample = null;
+        try {
+            sample = await CollegeContact.findOne({ status: 'new', optOut: { $ne: true } })
+                .select('college contactName email').lean();
+        } catch (_) { /* the template must render without a database */ }
+
+        const html = collegeOutreach.buildHtml({
+            _id: 'preview',
+            college: (sample && sample.college) || 'your college',
+            contactName: (sample && sample.contactName) || '',
+            email: (sample && sample.email) || ''
+        });
+        res.json({
+            success: true,
+            subject: collegeOutreach.SUBJECT,
+            html,
+            sampleCollege: (sample && (sample.college || sample.email)) || '',
+            usedRealCollege: !!sample
+        });
+    } catch (err) {
+        console.error('[Growth] college template failed:', err.message);
+        res.status(500).json({ success: false, error: 'Could not render the template' });
+    }
+});
+
 api.get('/colleges', requireGrowthAPI, async (req, res) => {
     try {
         const [rows, counts] = await Promise.all([
@@ -445,13 +511,26 @@ api.post('/colleges/send', requireGrowthAPI, async (req, res) => {
         if (u.remaining < 1) {
             return res.status(409).json({ success: false, error: 'No marketing quota left this period.', quota: u });
         }
-        const limit = Math.max(1, Math.min(500, parseInt(req.body && req.body.limit, 10) || collegeOutreach.DEFAULT_BATCH));
-        const pending = await CollegeContact.countDocuments({ status: 'new', optOut: { $ne: true } });
-        if (!pending) return res.status(409).json({ success: false, error: 'No colleges are waiting to be mailed.' });
+        const ids = [...new Set(((req.body && req.body.ids) || []).map(String).filter(Boolean))];
+        const limit = ids.length
+            ? Math.min(500, ids.length)
+            : Math.max(1, Math.min(500, parseInt(req.body && req.body.limit, 10) || collegeOutreach.DEFAULT_BATCH));
+
+        /* Counted through the same filter the sender uses, so the number the
+           dashboard reports is who would actually be mailed — a ticked college
+           that has already been written to is not queued twice. */
+        const pendingFilter = { status: 'new', optOut: { $ne: true } };
+        if (ids.length) pendingFilter._id = { $in: ids };
+        const pending = await CollegeContact.countDocuments(pendingFilter);
+        if (!pending) {
+            return res.status(409).json({ success: false, error: ids.length
+                ? 'Those are all mailed already, or have opted out.'
+                : 'No colleges are waiting to be mailed.' });
+        }
 
         // Not awaited, for the same reason a campaign is not: the loop
         // throttles between messages and outlives any request.
-        collegeOutreach.run(limit).catch((err) => {
+        collegeOutreach.run({ limit, ids }).catch((err) => {
             console.error('[Growth] college outreach failed:', err.message);
         });
         res.json({ success: true, started: true, queued: Math.min(pending, limit) });

@@ -23,6 +23,7 @@
  */
 
 require('dotenv').config();
+const fs = require('fs');
 const path = require('path');
 const mongoose = require('mongoose');
 const xlsx = require('xlsx');
@@ -83,6 +84,35 @@ async function main() {
     }
     if (!process.env.MONGODB_URI) {
         console.error('MONGODB_URI is not set. Point it at the database you want to import into.');
+        process.exit(1);
+    }
+
+    /*
+     * Say what is wrong before xlsx does.
+     *
+     * Without this the only thing a missing file produces is a ten-frame ENOENT
+     * trace out of xlsx.js, which reads like the script is broken rather than
+     * like the file is simply not there — and the first person to hit it was
+     * following an example that named a file they had never downloaded.
+     */
+    if (!fs.existsSync(file)) {
+        console.error(`\nNo such file: ${file}`);
+        console.error(`Looked in: ${process.cwd()}\n`);
+        const here = fs.readdirSync(process.cwd())
+            .filter((f) => /\.(csv|xlsx|xls)$/i.test(f));
+        if (here.length) {
+            console.error('Spreadsheets that ARE here:');
+            here.forEach((f) => console.error('  ' + f));
+            console.error('');
+        } else {
+            console.error('There are no .csv or .xlsx files in this directory.\n');
+            console.error('Download the AICTE approved-institutions list from');
+            console.error('  https://facilities.aicte-india.org/dashboard/pages/angulardashboard.php');
+            console.error('or search data.gov.in for "AICTE approved institutions", then copy it up:');
+            console.error('  scp -i <your-key.pem> aicte.csv ec2-user@<server>:' + process.cwd() + '/\n');
+            console.error('Any CSV or XLSX with institution names and email addresses works —');
+            console.error('columns are matched on meaning, not on exact header text.\n');
+        }
         process.exit(1);
     }
 
