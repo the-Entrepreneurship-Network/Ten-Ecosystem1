@@ -56,8 +56,51 @@ const PATHS = Object.freeze([
     '/tpo', '/career', '/contact-us', '/contact', '/'
 ]);
 
-/** Localparts that mean "this is the placement office", ranked first. */
-const PLACEMENT_HINT = /placement|tpo|training|career|internship|corporate|industry|recruit/i;
+/**
+ * The desk that actually handles this.
+ *
+ * "tnp" and "cdc" are as common as "placement" on Indian college sites —
+ * Training & Placement, Career Development Cell.
+ */
+const PLACEMENT_HINT = /placement|tpo|tnp|cdc|training|career|internship|corporate|industry|recruit|outreach/i;
+
+/**
+ * Desks that exist at every college and will never action an internship offer.
+ *
+ * The first live run returned pa2rector@, library@ and accounts@ — the PA to
+ * the Rector, the library and the finance office. None of them forward a
+ * partnership enquiry; they delete it. Mailing them is not merely wasted, it
+ * earns complaints against a domain that also carries certificates.
+ *
+ * Admissions is on the list deliberately: that desk handles people applying TO
+ * the college, not students already in it.
+ */
+/**
+ * Which of a page's addresses are worth keeping, and in what order.
+ *
+ * Pulled out as a pure function on purpose: tested as text, this rule passed
+ * while the wrong-desk check had been weakened to "has an email" — the test
+ * was reading the shape of the code rather than what it does.
+ *
+ * @param {Array<{email: string}>} rows
+ * @returns {Array<{email: string}>}
+ */
+function selectContacts(rows) {
+    const kept = (rows || []).filter(
+        (r) => r && r.email && !WRONG_DESK.test(String(r.email).split('@')[0]));
+    const placement = kept.filter((r) => PLACEMENT_HINT.test(r.email.split('@')[0]));
+    return placement.length ? placement : kept;
+}
+
+const WRONG_DESK = new RegExp('^(?:pa2?|po|so|ao)?[._-]?(?:' + [
+    'rector', 'vc', 'vicechancellor', 'chancellor', 'pro-?vc',
+    'registrar', 'controller', 'coe', 'exam', 'examination', 'result',
+    'account', 'accounts', 'finance', 'audit', 'purchase', 'store', 'tender',
+    'library', 'librarian', 'hostel', 'warden', 'mess', 'canteen',
+    'transport', 'estate', 'maintenance', 'engineer', 'security', 'medical',
+    'legal', 'grievance', 'antiragging', 'rti', 'vigilance', 'nss', 'ncc',
+    'admission', 'admissions', 'fee', 'fees', 'scholarship', 'sports'
+].join('|') + ')\\w*$', 'i');
 
 /**
  * Page HTML to readable text.
@@ -203,17 +246,26 @@ async function discoverFromSite(website, meta = {}) {
 
         if (html) {
             const text = htmlToText(html);
-            let rows = contactsFromPosting({
+            /*
+             * The wrong-desk filter runs BEFORE the fallback decision, not
+             * after. Applying it later meant a page publishing only accounts@
+             * and info@ looked like a hit to the strict pass, skipped the
+             * fallback, and then lost accounts@ to the filter — yielding
+             * nothing from a college that had published a usable address.
+             */
+            let rows = selectContacts(contactsFromPosting({
                 description: text,
                 title: titleOf(html),
                 url,
                 company: meta.college || '',
                 source: 'college-page'
-            }).filter((r) => r.email);
+            }));
 
-            // Only when the strict rules found nothing on THIS page: a college
-            // that publishes office@ and nothing else is still worth reaching.
-            if (!rows.length) rows = collegeContactsFrom(text, url, meta.college);
+            // Only when the strict rules found nothing usable on THIS page: a
+            // college that publishes office@ and nothing else is still worth
+            // reaching. Selection runs on the fallback too, or a page holding
+            // only accounts@ would look like a hit and then yield nothing.
+            if (!rows.length) rows = selectContacts(collegeContactsFrom(text, url, meta.college));
 
             rows.forEach((r) => {
                 if (!r.email) return;                 // a bare phone is not mailable
@@ -237,8 +289,14 @@ async function discoverFromSite(website, meta = {}) {
         if (i < PATHS.length - 1) await new Promise((r) => setTimeout(r, DELAY_MS));
     }
 
-    return [...found.values()].sort((a, b) =>
-        Number(PLACEMENT_HINT.test(b.email.split('@')[0])) - Number(PLACEMENT_HINT.test(a.email.split('@')[0])));
+    /*
+     * If the placement office was found, return ONLY it.
+     *
+     * Once tpo@ is in hand, principal@ and info@ from the same college are not
+     * extra reach — they are the same institution mailed twice, from the same
+     * sending domain, about the same thing. One right address beats three.
+     */
+    return selectContacts([...found.values()]);
 }
 
 /**
@@ -369,5 +427,5 @@ async function runBulk(sites, deps = {}) {
 
 module.exports = {
     discoverFromSite, saveContacts, htmlToText, toOrigin, titleOf,
-    runBulk, runStatus, PATHS, PLACEMENT_HINT, CONCURRENCY
+    runBulk, runStatus, PATHS, PLACEMENT_HINT, WRONG_DESK, selectContacts, CONCURRENCY
 };

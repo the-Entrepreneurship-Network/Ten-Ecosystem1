@@ -184,6 +184,77 @@ describe('runBulk', () => {
   });
 });
 
+describe('the agent aims at the placement desk, not the switchboard', () => {
+  const { WRONG_DESK, PLACEMENT_HINT } = discovery;
+
+  test.each([
+    ['pa2rector'], ['rector'], ['registrar'], ['vc'], ['coe'],
+    ['library'], ['librarian'], ['accounts'], ['finance'], ['exam'],
+    ['hostel'], ['warden'], ['transport'], ['admissions'], ['scholarship']
+  ])('%s@ is refused', (local) => {
+    // The first live run returned pa2rector@, library@ and accounts@. None of
+    // those desks forward an internship offer — they delete it, and a deletion
+    // that turns into a complaint costs the domain that carries certificates.
+    expect(WRONG_DESK.test(local)).toBe(true);
+  });
+
+  test.each([
+    ['tpo'], ['placement'], ['placements'], ['tnp'], ['cdc'],
+    ['training'], ['careers'], ['internship'], ['corporate'], ['outreach']
+  ])('%s@ is recognised as the right desk', (local) => {
+    expect(WRONG_DESK.test(local)).toBe(false);
+    expect(PLACEMENT_HINT.test(local)).toBe(true);
+  });
+
+  test.each([['info'], ['office'], ['principal'], ['director'], ['contact']])
+    ('%s@ survives as a fallback', (local) => {
+      // Not the right desk, but a real human who can forward. Kept only when
+      // the college published no placement address at all.
+      expect(WRONG_DESK.test(local)).toBe(false);
+    });
+
+  /* Run for real. An earlier version of these two read the source instead,
+     and passed while the wrong-desk check had been weakened to "has an
+     email" — the test was checking the shape of the code, not its behaviour. */
+  const sel = (...addrs) =>
+    discovery.selectContacts(addrs.map((email) => ({ email }))).map((r) => r.email);
+
+  test('a placement address suppresses the rest for that college', () => {
+    expect(sel('pa2rector@x.ac.in', 'tpo@x.ac.in', 'library@x.ac.in'))
+      .toEqual(['tpo@x.ac.in']);
+    expect(sel('info@x.ac.in', 'placement@x.ac.in')).toEqual(['placement@x.ac.in']);
+  });
+
+  test('the wrong desk is dropped even when nothing better is there', () => {
+    expect(sel('library@x.ac.in', 'accounts@x.ac.in')).toEqual([]);
+  });
+
+  test('a general office survives when no placement address was published', () => {
+    // Applying the filter after the fallback decision made this case yield
+    // nothing: accounts@ looked like a hit, skipped the fallback, then lost it.
+    expect(sel('info@x.ac.in', 'accounts@x.ac.in')).toEqual(['info@x.ac.in']);
+    expect(sel('principal@x.ac.in')).toEqual(['principal@x.ac.in']);
+  });
+
+  test('the fallback pass is selected through the same rule', () => {
+    const fn = read('services/collegeDiscovery.js');
+    const loop = fn.slice(fn.indexOf('async function discoverFromSite'));
+    expect(loop).toMatch(/selectContacts\(collegeContactsFrom\(/);
+  });
+
+  test('it survives nothing at all', () => {
+    expect(discovery.selectContacts([])).toEqual([]);
+    expect(discovery.selectContacts(null)).toEqual([]);
+    expect(discovery.selectContacts([{}, { email: '' }])).toEqual([]);
+  });
+
+  test('the shared recruiter extractor is left alone', () => {
+    // WRONG_DESK belongs to college discovery. Putting it in
+    // recruiterContacts.js would change what the live job agent returns.
+    expect(read('services/v2/recruiterContacts.js')).not.toContain('WRONG_DESK');
+  });
+});
+
 // ─── selection and review ────────────────────────────────────────────────────
 
 describe('a ticked selection cannot widen who gets mailed', () => {
