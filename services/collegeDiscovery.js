@@ -560,6 +560,41 @@ let current = {
     total: 0, processed: 0, added: 0, skipped: 0, failed: 0, lastCollege: '', error: ''
 };
 
+/**
+ * The longest one college may take before the run gives up on it.
+ *
+ * Eight paths at a six-second timeout with 350ms between them is about fifty
+ * seconds in the worst honest case, so ninety is headroom rather than a
+ * second ceiling.
+ *
+ * This exists even though httpFetch now enforces its own deadline, because
+ * the promise this guards is the whole college — every fetch, every parse,
+ * every save. One worker that never returns leaves `running: true` forever
+ * and the dashboard sits at "370 of 371" with a progress bar that never
+ * finishes, which is exactly what happened. A run must always end.
+ */
+const COLLEGE_DEADLINE_MS = Math.max(10000,
+    parseInt(process.env.COLLEGE_DEADLINE_MS, 10) || 90000);
+
+/** Reject if `promise` has not settled in `ms`. The loser is abandoned. */
+function withDeadline(promise, ms, label) {
+    let timer = null;
+    return Promise.race([
+        promise,
+        /* NOT unref'd. This timer is the only thing guaranteeing the run
+           makes progress — a hung college holds no socket and no handle of
+           its own, so an unref'd deadline let the process fall idle and exit
+           with the run still "running". It is cleared the moment either side
+           settles, so it holds the loop for at most `ms`. */
+        new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error(label + ' exceeded ' + ms + 'ms')), ms);
+        })
+    ]).then(
+        (v) => { clearTimeout(timer); return v; },
+        (e) => { clearTimeout(timer); throw e; }
+    );
+}
+
 /** A snapshot the dashboard can poll. */
 function runStatus() {
     return { ...current };
@@ -597,7 +632,8 @@ async function runBulk(sites, deps = {}) {
             if (i >= list.length) return;
             const site = list[i];
             try {
-                const rows = await discover(site, { college: '', state: '' });
+                const rows = await withDeadline(
+                    discover(site, { college: '', state: '' }), COLLEGE_DEADLINE_MS, site);
                 if (rows.length) {
                     const { added, skipped } = await save(rows);
                     current.added += added;
@@ -606,6 +642,9 @@ async function runBulk(sites, deps = {}) {
                     current.skipped += 1;   // visited, published nothing usable
                 }
             } catch (err) {
+                // Counted and moved past. One college with an expired
+                // certificate, a redirect loop or a server that never stops
+                // talking must not end a run of three hundred and seventy.
                 current.failed += 1;
             }
             current.processed += 1;
@@ -625,7 +664,8 @@ async function runBulk(sites, deps = {}) {
 
 module.exports = {
     discoverFromSite, saveContacts, htmlToText, toOrigin, titleOf,
-    runBulk, runStatus, PATHS, CONCURRENCY, MAX_PER_COLLEGE,
+    runBulk, runStatus, withDeadline, PATHS, CONCURRENCY, MAX_PER_COLLEGE,
+    COLLEGE_DEADLINE_MS,
     PLACEMENT_DESK, AUTHORITY_DESK, FRONT_OFFICE, WRONG_DESK,
     STUDENT_LOCAL, STUDENT_DOMAIN,
     isMailableDesk, rankOf, selectContacts, hasMx
