@@ -2057,6 +2057,195 @@ ctx.fillText("Domain: " + (studentData.domain || "Tech & Product Engineering"), 
         return submitUtrVerification(itemKey, employeeId, 200);
     }
 
+    /* ── TEN DAO ──────────────────────────────────────────────────────────
+     * Coin holders propose changes to the portal and vote on them. The rules
+     * are the server's (config/daoConfig.js); this only renders them, so the
+     * quorum and deposit numbers shown are always the ones being enforced
+     * rather than a copy that drifts.
+     */
+    let DAO_STATE = { me: null, proposals: [], mountId: "ten-x-dao" };
+
+    function daoPill(status) {
+        const map = {
+            open:      ["#f5c542", "rgba(245,197,66,0.12)",  "OPEN"],
+            passed:    ["#10b981", "rgba(16,185,129,0.12)",  "CARRIED"],
+            rejected:  ["#8aa4c8", "rgba(99,140,210,0.10)",  "REJECTED"],
+            cancelled: ["#8aa4c8", "rgba(99,140,210,0.10)",  "WITHDRAWN"]
+        };
+        const [fg, bg, label] = map[status] || map.rejected;
+        return '<span class="ten-x-mkt-disc" style="color:' + fg + ';background:' + bg + ';">'
+             + label + '</span>';
+    }
+
+    function daoProposalCard(p, me) {
+        const t = p.tally || { for: 0, against: 0, abstain: 0, voters: 0,
+                               forWeight: 0, againstWeight: 0 };
+        const quorum = (DAO_STATE.me && DAO_STATE.me.quorumVoters) || 10;
+        const pct = Math.min(100, Math.round((t.voters / Math.max(1, quorum)) * 100));
+        const decided = t.forWeight + t.againstWeight;
+        const forPct = decided ? Math.round((t.forWeight / decided) * 100) : 0;
+        const open = p.status === "open";
+        const canVote = open && me && me.signedIn && me.weight > 0 && !p.myVote;
+
+        let action;
+        if (p.myVote) {
+            action = '<div style="font-size:11px;color:#10b981;font-weight:700;margin-top:10px;">'
+                   + '✓ You voted ' + esc(p.myVote.toUpperCase()) + ' with ' + (p.myWeight || 0)
+                   + (p.myWeight === 1 ? ' vote' : ' votes') + '</div>';
+        } else if (canVote) {
+            action = '<div class="ten-x-side-btns" style="margin-top:10px;">'
+                + ['for', 'against', 'abstain'].map((c) =>
+                    '<button class="ten-x-side-btn" onclick="TenExtras.daoVote(\'' + esc(p.id)
+                    + '\',\'' + c + '\')">' + (c === 'for' ? '👍 For' : c === 'against' ? '👎 Against' : '🤐 Abstain')
+                    + '</button>').join('')
+                + '</div>';
+        } else if (open && me && me.signedIn && me.weight < 1) {
+            action = '<div style="font-size:11px;color:#5a7299;margin-top:10px;">'
+                   + 'Earn your first Coin in the portal and you can vote.</div>';
+        } else if (open) {
+            action = '<div style="font-size:11px;color:#5a7299;margin-top:10px;">Sign in to vote.</div>';
+        } else {
+            action = '<div style="font-size:11px;color:#8aa4c8;margin-top:10px;">'
+                   + esc(p.outcomeReason || "") + '</div>';
+        }
+
+        return '<div class="ten-x-mkt-card" style="margin-bottom:12px;">'
+            + '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">'
+            +   '<div class="ten-x-mkt-title" style="margin:0;">' + esc(p.title) + '</div>'
+            +   daoPill(p.status)
+            + '</div>'
+            + '<div class="ten-x-mkt-sub" style="margin:4px 0 10px;">'
+            +   'by ' + esc(p.authorName || "Student")
+            +   (open ? ' · closes ' + esc(fmtDate(p.closesAt)) : ' · closed ' + esc(fmtDate(p.closedAt)))
+            + '</div>'
+            + '<div style="font-size:12px;color:#cdd9ec;line-height:1.5;white-space:pre-wrap;margin-bottom:12px;">'
+            +   esc(p.body) + '</div>'
+            + '<div style="font-size:11px;color:#8aa4c8;display:flex;gap:12px;flex-wrap:wrap;">'
+            +   '<span>👍 ' + t.forWeight + '</span><span>👎 ' + t.againstWeight + '</span>'
+            +   '<span>🤐 ' + t.abstainWeight + '</span>'
+            +   '<span style="margin-left:auto;">' + t.voters + ' of ' + quorum + ' voters needed</span>'
+            + '</div>'
+            + '<div class="ten-x-progress" style="margin:6px 0 2px;"><div style="width:' + pct + '%"></div></div>'
+            + (decided ? '<div style="font-size:10px;color:#5a7299;letter-spacing:.5px;">'
+                       + forPct + '% of decided weight in favour</div>' : '')
+            + action
+            + '</div>';
+    }
+
+    function daoRender() {
+        const mount = document.getElementById(DAO_STATE.mountId);
+        if (!mount) return;
+        const me = DAO_STATE.me || {};
+        const deposit = me.depositCoins || 200;
+
+        let raise;
+        if (!me.signedIn) {
+            raise = '<div class="ten-x-mkt-sub">Sign in to raise a proposal.</div>';
+        } else if (me.canPropose) {
+            raise = '<button class="ten-x-mkt-btn" style="max-width:260px;" '
+                  + 'onclick="TenExtras.daoRaiseToggle()">✍️ Raise a proposal — '
+                  + deposit + ' Coins</button>';
+        } else if ((me.openProposals || 0) >= (me.maxOpenPerAuthor || 3)) {
+            raise = '<div class="ten-x-mkt-sub">You have ' + me.openProposals
+                  + ' proposals open. Wait for one to close.</div>';
+        } else {
+            raise = '<div class="ten-x-mkt-sub">Raising a proposal stakes ' + deposit
+                  + ' Coins. You have ' + (me.coins || 0) + '.</div>';
+        }
+
+        mount.innerHTML =
+              '<div class="ten-x-mkt-banner">'
+            +   '<div><div class="ten-x-mkt-coins">⚖️ ' + (me.weight || 0)
+            +     (me.weight === 1 ? ' vote' : ' votes') + '</div>'
+            +     '<div class="ten-x-mkt-value">from ' + (me.coins || 0) + ' Coins</div></div>'
+            +   '<div style="font-size:11px;color:#8aa4c8;text-align:right;max-width:230px;line-height:1.45;">'
+            +     'Voice is the square root of your balance, so a long head start '
+            +     'cannot outvote a whole cohort.</div>'
+            + '</div>'
+            + '<div>' + raise + '</div>'
+            + '<div id="ten-x-dao-form" style="display:none;margin-top:12px;">'
+            +   '<input id="ten-x-dao-title" maxlength="140" placeholder="What should change?" '
+            +     'style="width:100%;padding:10px;margin-bottom:8px;background:rgba(99,140,210,0.07);'
+            +     'border:1px solid rgba(99,140,210,0.25);border-radius:8px;color:#e2eaf7;'
+            +     'font-family:inherit;font-size:13px;">'
+            +   '<textarea id="ten-x-dao-body" maxlength="4000" rows="4" '
+            +     'placeholder="Why, and what it would change for other students." '
+            +     'style="width:100%;padding:10px;background:rgba(99,140,210,0.07);'
+            +     'border:1px solid rgba(99,140,210,0.25);border-radius:8px;color:#e2eaf7;'
+            +     'font-family:inherit;font-size:13px;resize:vertical;"></textarea>'
+            +   '<div class="ten-x-side-btns" style="margin-top:8px;">'
+            +     '<button class="ten-x-side-btn" onclick="TenExtras.daoSubmitProposal()">Submit</button>'
+            +     '<button class="ten-x-side-btn" onclick="TenExtras.daoRaiseToggle()">Cancel</button>'
+            +   '</div>'
+            +   '<div style="font-size:10px;color:#5a7299;margin-top:8px;line-height:1.5;">'
+            +     'Your ' + deposit + ' Coins come back if ' + (me.quorumVoters || 10)
+            +     ' students vote. Voting itself is free and never spends Coins.</div>'
+            + '</div>'
+            + '<div class="ten-x-mkt-sec">Proposals</div>'
+            + (DAO_STATE.proposals.length
+                ? DAO_STATE.proposals.map((p) => daoProposalCard(p, me)).join('')
+                : '<div class="ten-x-empty">Nothing proposed yet. Be the first.</div>');
+    }
+
+    function daoRaiseToggle() {
+        const f = document.getElementById("ten-x-dao-form");
+        if (f) f.style.display = (f.style.display === "none" ? "block" : "none");
+    }
+
+    function daoNotify(ok, msg) {
+        if (w.Swal) w.Swal.fire(ok ? "Done" : "Not done", msg, ok ? "success" : "error");
+        else alert(msg);
+    }
+
+    async function loadDao(mountId) {
+        DAO_STATE.mountId = mountId || DAO_STATE.mountId;
+        try {
+            const [meRes, listRes] = await Promise.all([
+                fetch("/api/dao/me"),
+                fetch("/api/dao/proposals")
+            ]);
+            DAO_STATE.me = meRes.ok ? await meRes.json() : { signedIn: false };
+            const list = listRes.ok ? await listRes.json() : null;
+            DAO_STATE.proposals = (list && list.proposals) || [];
+        } catch (_) {
+            DAO_STATE.me = DAO_STATE.me || { signedIn: false };
+        }
+        daoRender();
+    }
+
+    async function daoSubmitProposal() {
+        const titleEl = document.getElementById("ten-x-dao-title");
+        const bodyEl = document.getElementById("ten-x-dao-body");
+        if (!titleEl || !bodyEl) return;
+        try {
+            const r = await fetch("/api/dao/proposals", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title: titleEl.value, body: bodyEl.value })
+            });
+            const d = await r.json();
+            daoNotify(!!d.success, d.message || "Could not raise the proposal.");
+            if (d.success) await loadDao();
+        } catch (e) {
+            daoNotify(false, e.message);
+        }
+    }
+
+    async function daoVote(id, choice) {
+        try {
+            const r = await fetch("/api/dao/proposals/" + encodeURIComponent(id) + "/vote", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ choice })
+            });
+            const d = await r.json();
+            daoNotify(!!d.success, d.message || "Could not record your vote.");
+            if (d.success) await loadDao();
+        } catch (e) {
+            daoNotify(false, e.message);
+        }
+    }
+
     function injectStudent(opts){
         injectStyles();
         opts = opts || {};
@@ -2070,6 +2259,7 @@ ctx.fillText("Domain: " + (studentData.domain || "Tech & Product Engineering"), 
 
         mount.innerHTML =
               '<div class="ten-x-card"><h3>🛍️ Coin Marketplace & Rewards</h3><div id="ten-x-marketplace"></div></div>'
+            + '<div class="ten-x-card"><h3>🗳️ TEN DAO — your Coins, your vote</h3><div id="ten-x-dao"></div></div>'
             + '<div class="ten-x-card"><h3>🔥 Attendance Streak</h3><div id="ten-x-streak"></div></div>'
             + '<div class="ten-x-card"><h3>🛣️ Internship Timeline</h3><div id="ten-x-timeline"></div></div>'
             + '<div class="ten-x-card"><h3>🏅 Badges</h3><div id="ten-x-badges"></div></div>'
@@ -2079,6 +2269,7 @@ ctx.fillText("Domain: " + (studentData.domain || "Tech & Product Engineering"), 
             + '</div>';
 
         try { loadMarketplace(empId, "ten-x-marketplace"); } catch(e){ console.error(e); }
+        try { loadDao("ten-x-dao"); } catch(e){ console.error(e); }
         try { loadStreak(empId, "ten-x-streak"); } catch(e){ console.error(e); }
         try { loadTimeline(empId, "ten-x-timeline"); } catch(e){ console.error(e); }
         try { loadBadges(empId, "ten-x-badges"); } catch(e){ console.error(e); }
@@ -2401,7 +2592,8 @@ ctx.fillText("Domain: " + (studentData.domain || "Tech & Product Engineering"), 
         showBadgePopup, loadStreak, loadBadges, loadTimeline, loadLeaderboard,
         downloadBadge, downloadRedemptionPassPDF, showPostRedemptionPassModal, openVideoCallDetailsModal, loadMarketplace, openCheckoutModal, confirmMarketplacePayment, verifyMarketplacePayment, submitUtrVerification, addTestCoins, claimWelcomeCoins, switchPaymentMethod,
         submitCardPayment, submitNetBankingPayment, submitWalletPayment, processProviderPayment,
-        switchMktTab, loadStudentBookingsList, devResetCerts, devResetFlow, openRazorpayPayment
+        switchMktTab, loadStudentBookingsList, devResetCerts, devResetFlow, openRazorpayPayment,
+        loadDao, daoVote, daoRaiseToggle, daoSubmitProposal
     };
 
     if (typeof document !== "undefined") {

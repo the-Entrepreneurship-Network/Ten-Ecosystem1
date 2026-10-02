@@ -10774,6 +10774,14 @@ try {
     console.error('[V2] Failed to mount marketplace routes:', e.message);
 }
 
+// TEN DAO — Coin holders propose and vote on the portal. See config/daoConfig.js.
+try {
+    app.use('/api/dao', require('./routes/dao'));
+    console.log('[DAO] Governance routes mounted at /api/dao');
+} catch(e) {
+    console.error('[DAO] Failed to mount DAO routes:', e.message);
+}
+
 // TENURE PAYMENT SYSTEM ROUTES
 const SHORT_COURSE_PRICES = {
   '1week':   2000,
