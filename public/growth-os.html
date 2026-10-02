@@ -219,7 +219,17 @@
     }, opts || {}));
     if (res.status === 401) { location.href = '/growth/login?timeout=1'; throw new Error('signed out'); }
     var data = await res.json().catch(function () { return {}; });
-    if (!res.ok || data.success === false) throw new Error(data.error || 'Request failed');
+    if (!res.ok || data.success === false) {
+      /* A bare "Request failed" hid the one thing worth knowing. The app always
+         answers with an `error`, so when there isn't one the reply did not come
+         from the app at all — it is nginx: 502 while the process restarts, 504
+         when it is wedged. Saying which turns a dead end into something to act
+         on. */
+      throw new Error(data.error
+        || ('Request failed — HTTP ' + res.status + (res.statusText ? ' ' + res.statusText : '')
+            + (res.status === 502 || res.status === 504
+                ? ' (the server is restarting or busy — check pm2 logs)' : '')));
+    }
     return data;
   }
 

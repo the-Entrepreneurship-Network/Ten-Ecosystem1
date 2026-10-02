@@ -45,9 +45,15 @@ function makeResponse({ status, body, finalUrl, headers }) {
 /** One request, following redirects by hand because the shim must. */
 function request(url, options, redirectsLeft) {
   const opts = options || {};
+  const maxBytes = opts.maxBytes || 2 * 1024 * 1024;
   return new Promise((resolve, reject) => {
     let parsed;
     try { parsed = new URL(url); } catch (e) { reject(new Error('bad url')); return; }
+
+    /* Every exit from this request goes through settle(), so the deadline
+       timer below is always cleared — whichever way the request ends. */
+    let hard = null;
+    const settle = (fn) => { if (hard) clearTimeout(hard); fn(); };
 
     const lib = parsed.protocol === 'https:' ? https : http;
     const req = lib.request({
@@ -70,28 +76,54 @@ function request(url, options, redirectsLeft) {
         const nextOpts = (status === 303 || ((status === 301 || status === 302) && method === 'POST'))
           ? Object.assign({}, opts, { method: 'GET', body: undefined })
           : opts;
-        resolve(request(next, nextOpts, redirectsLeft - 1));
+        settle(() => resolve(request(next, nextOpts, redirectsLeft - 1)));
         return;
       }
 
       /* HEAD has no body and must not wait for one. */
       if ((opts.method || 'GET').toUpperCase() === 'HEAD') {
         res.resume();
-        resolve(makeResponse({ status, body: '', finalUrl: url, headers: res.headers }));
+        settle(() => resolve(makeResponse({ status, body: '', finalUrl: url, headers: res.headers })));
         return;
       }
 
       let raw = '';
       res.setEncoding('utf8');
-      res.on('data', (chunk) => { raw += chunk; });
-      res.on('end', () => resolve(makeResponse({ status, body: raw, finalUrl: url, headers: res.headers })));
+      res.on('data', (chunk) => {
+        raw += chunk;
+        /* A body with no ceiling is a memory leak with a URL. One college
+           serving a huge file would grow this string until the process died,
+           and pm2 restarting mid-run is what turns a stuck agent into a
+           failed dashboard request. Truncation is fine: every caller here
+           reads a contact block near the top. */
+        if (raw.length > maxBytes) {
+          raw = raw.slice(0, maxBytes);
+          res.destroy();
+          settle(() => resolve(makeResponse({ status, body: raw, finalUrl: url, headers: res.headers })));
+        }
+      });
+      res.on('end', () => settle(() => resolve(makeResponse({ status, body: raw, finalUrl: url, headers: res.headers }))));
+      res.on('error', () => settle(() => resolve(makeResponse({ status, body: raw, finalUrl: url, headers: res.headers }))));
     });
 
-    req.on('error', reject);
+    req.on('error', (e) => settle(() => reject(e)));
 
-    /* A plain socket timeout: available on every Node, unlike AbortSignal. */
     const ms = opts.timeoutMs || 8000;
-    req.setTimeout(ms, () => { req.destroy(new Error(`timeout after ${ms}ms`)); });
+
+    /*
+     * TWO timers, because one is not enough.
+     *
+     * `req.setTimeout` is an IDLE timeout: every byte that arrives resets it.
+     * A server that dribbles one byte every few seconds keeps it alive
+     * forever, and the request never ends — which is precisely how the
+     * college agent sat at "370 of 371" with one worker that would never
+     * return. `hard` is the deadline that does not move.
+     */
+    /* Both say "timeout": callers match on the word, and which of the two
+       timers fired is detail they should not have to know. */
+    req.setTimeout(ms, () => { req.destroy(new Error(`timeout (idle) after ${ms}ms`)); });
+    hard = setTimeout(() => { req.destroy(new Error(`timeout (deadline) after ${ms}ms`)); }, ms);
+    if (typeof hard.unref === 'function') hard.unref();
 
     if (opts.body) req.write(opts.body);
     req.end();
@@ -118,12 +150,21 @@ async function httpFetch(url, options) {
     if (opts.timeoutMs && typeof AbortController === 'function') {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), opts.timeoutMs);
+      /*
+       * The timer is deliberately NOT cleared when fetch() resolves.
+       *
+       * fetch settles as soon as the RESPONSE HEADERS arrive — the body is
+       * read afterwards, by the caller, with `res.text()`. Clearing the timer
+       * here left that read with no deadline at all, so a server that sent
+       * headers and then dribbled kept the request alive indefinitely. That
+       * is the hang: one college, one worker, "370 of 371" forever.
+       *
+       * Firing on an already-consumed response is a no-op, and unref keeps a
+       * pending timer from holding the process open.
+       */
+      if (typeof timer.unref === 'function') timer.unref();
       init.signal = controller.signal;
-      try {
-        return await globalThis.fetch(url, init);
-      } finally {
-        clearTimeout(timer);
-      }
+      return globalThis.fetch(url, init);
     }
     return globalThis.fetch(url, init);
   }
