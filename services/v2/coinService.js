@@ -83,10 +83,40 @@ async function getBalance(studentId) {
 }
 
 /**
+ * Spend coins. Returns { totalCoins, spent } or null when the balance is short.
+ *
+ * One atomic update, not read-then-write: the sufficient-balance check lives
+ * in the FILTER, so two simultaneous spends cannot both pass it and overdraw
+ * the account. The read-modify-write version of this is the classic way to
+ * hand somebody a negative balance under load.
+ *
+ * No document is created when one is missing — you cannot spend from an
+ * account that has never earned anything. awardCoins() is the only thing that
+ * opens an account, with its welcome bonus.
+ */
+async function spendCoins(studentId, label, coins) {
+    const amount = Math.floor(Number(coins) || 0);
+    if (amount <= 0) return null;
+
+    const doc = await StudentCoinModel.findOneAndUpdate(
+        { studentId, totalCoins: { $gte: amount } },
+        {
+            $inc:  { totalCoins: -amount },
+            $push: { coinsHistory: { action: String(label || 'Coins spent'),
+                                     coins: -amount, timestamp: new Date() } },
+            $set:  { lastUpdated: new Date() }
+        },
+        { new: true }
+    );
+
+    return doc ? { totalCoins: doc.totalCoins, spent: amount } : null;
+}
+
+/**
  * Convert coin count to rupee value string.
  */
 function coinsToRupees(coins) {
     return (coins * 0.5).toFixed(2);
 }
 
-module.exports = { awardCoins, getBalance, COIN_ACTIONS, coinsToRupees };
+module.exports = { awardCoins, spendCoins, getBalance, COIN_ACTIONS, coinsToRupees };
