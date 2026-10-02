@@ -517,6 +517,17 @@ api.post('/colleges/preview', requireGrowthAPI, async (req, res) => {
     }
 });
 
+/**
+ * GET /colleges/send/status — what the send in progress is doing.
+ *
+ * The dashboard used to say "Sending to 187 — one every 2 seconds" and then
+ * nothing at all, so a batch that stopped halfway looked exactly like a batch
+ * that finished. This is the same poll the agent's Run button already uses.
+ */
+api.get('/colleges/send/status', requireGrowthAPI, (req, res) => {
+    res.json({ success: true, send: collegeOutreach.sendStatus() });
+});
+
 api.get('/colleges', requireGrowthAPI, async (req, res) => {
     try {
         const [rows, counts] = await Promise.all([

@@ -163,6 +163,7 @@
       <button class="btn ghost" id="colTemplate" type="button">Review the email</button>
       <button class="btn" id="colSend" type="button" disabled>Send to selected</button>
       <span id="colSelCount" style="font-size:12px;color:#8b8578"></span>
+      <span id="colSendState" style="font-size:12px;color:#8b8578;margin-left:10px"></span>
     </div>
     <div id="colWrap"><div class="empty">Loading…</div></div>
   </section>
@@ -469,7 +470,10 @@
     var stats = $('colStats');
     var by = d.byStatus || {};
     stats.innerHTML = '';
-    [['Waiting', by['new'] || 0], ['Mailed', by.mailed || 0],
+    /* `Sending` is the queued state. Without it a claimed row disappears from
+       Waiting and is counted nowhere, so an interrupted batch reads as if it
+       had been sent. */
+    [['Waiting', by['new'] || 0], ['Sending', by.queued || 0], ['Mailed', by.mailed || 0],
      ['Replied', by.replied || 0], ['Bounced', by.bounced || 0], ['Total', d.total || 0]
     ].forEach(function (pair) {
       var sp = document.createElement('span');
@@ -705,10 +709,33 @@
       var r = await call('/colleges/send', {
         method: 'POST', body: JSON.stringify({ ids: Array.from(state.colPicked) })
       });
-      toast('Sending to ' + fmt(r.queued) + ' — one every 2 seconds.');
+      toast('Sending to ' + fmt(r.queued) + ' — one every 2 seconds, about '
+            + Math.ceil((r.queued * 2) / 60) + ' min.');
       state.colPicked.clear();
-      setTimeout(function () { loadColleges(); loadQuota(); }, 4000);
+      pollSend();
     } catch (e) { toast(e.message); }
+  }
+
+  /* A batch of 187 takes six minutes. It used to run behind one toast and
+     then silence, so a send that stopped halfway looked exactly like a send
+     that finished. Same poll the agent's Run button already uses. */
+  async function pollSend() {
+    try {
+      var st = (await call('/colleges/send/status')).send || {};
+      var line = $('colSendState');
+      if (line) {
+        line.textContent = st.running
+          ? 'Sending — ' + fmt(st.sent) + ' of ' + fmt(st.total)
+            + (st.failed ? ' · ' + fmt(st.failed) + ' failed' : '')
+          : (st.total
+              ? 'Last send: ' + fmt(st.sent) + ' of ' + fmt(st.total) + ' sent'
+                + (st.failed ? ', ' + fmt(st.failed) + ' failed' : '')
+                + (st.quotaStopped ? ' — stopped, no quota left this period' : '')
+              : '');
+      }
+      if (st.running) { setTimeout(pollSend, 3000); }
+      else { loadColleges(); loadQuota(); }
+    } catch (_) { /* a polling miss must not break the page */ }
   }
 
   $('colSend').addEventListener('click', async function () {
@@ -837,6 +864,9 @@
   });
 
   loadQuota(); loadSegments(); loadCampaigns(); loadColleges(); loadTemplates(); pollAgent();
+  /* A send started before this page was opened — or by a resume after a
+     restart — is still worth showing. */
+  pollSend();
 })();
 </script>
 </body>

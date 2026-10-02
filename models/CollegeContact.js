@@ -60,7 +60,13 @@ const CollegeContactSchema = new mongoose.Schema({
     mxOk:        { type: Boolean },
     mxCheckedAt: { type: Date },
 
-    status:      { type: String, enum: ['new', 'mailed', 'replied', 'partnered', 'bounced'], default: 'new', index: true },
+    /*
+     * `queued` means a send has claimed this row and is working through it.
+     * It exists so a batch survives the process: a run that dies mid-batch
+     * leaves its remaining rows queued, and the next boot finishes them.
+     * A run that stops cleanly hands them back to `new`.
+     */
+    status:      { type: String, enum: ['new', 'queued', 'mailed', 'replied', 'partnered', 'bounced'], default: 'new', index: true },
 
     // Same contract as Student.emailOptOut: set once, honoured forever, and
     // never cleared by an import.

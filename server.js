@@ -10774,6 +10774,22 @@ try {
     console.error('[V2] Failed to mount marketplace routes:', e.message);
 }
 
+/*
+ * Finish any college batch the previous process died in the middle of.
+ *
+ * A batch of 187 at one mail every two seconds is six minutes of looping, and
+ * `pm2 restart` — which every deploy runs — used to kill the remainder with
+ * nothing to show for it. The rows are claimed in the database now, so this
+ * picks up where that run stopped. Nothing can be sent twice: a contact flips
+ * to `mailed` as its mail is accepted.
+ */
+try {
+    require('./services/collegeOutreach').resumeInterrupted()
+        .catch((e) => console.error('[college-outreach] resume check failed:', e.message));
+} catch (e) {
+    console.error('[college-outreach] resume check failed to load:', e.message);
+}
+
 // TEN DAO — Coin holders propose and vote on the portal. See config/daoConfig.js.
 try {
     app.use('/api/dao', require('./routes/dao'));
