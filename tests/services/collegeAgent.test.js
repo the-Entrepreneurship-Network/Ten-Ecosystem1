@@ -184,56 +184,115 @@ describe('runBulk', () => {
   });
 });
 
-describe('the agent aims at the placement desk, not the switchboard', () => {
-  const { WRONG_DESK, PLACEMENT_HINT } = discovery;
+describe('the agent writes to the authorities, never to students', () => {
+  const { WRONG_DESK, PLACEMENT_DESK, AUTHORITY_DESK, isMailableDesk, rankOf } = discovery;
+
+  /*
+   * This block used to assert the OPPOSITE — that rector@, registrar@ and vc@
+   * were refused — because the first brief was "the placement desk, not the
+   * administration". The brief is now the authorities: the people who can
+   * actually approve a partnership. The tests are inverted deliberately, not
+   * loosened, and what stays refused is listed just as explicitly.
+   */
+  test.each([
+    ['pa2rector'], ['rector'], ['registrar'], ['vc'], ['vicechancellor'],
+    ['chancellor'], ['principal'], ['director'], ['dean'], ['hod'], ['provost']
+  ])('%s@ is an authority worth writing to', (local) => {
+    expect(isMailableDesk(local + '@x.ac.in')).toBe(true);
+  });
 
   test.each([
-    ['pa2rector'], ['rector'], ['registrar'], ['vc'], ['coe'],
-    ['library'], ['librarian'], ['accounts'], ['finance'], ['exam'],
-    ['hostel'], ['warden'], ['transport'], ['admissions'], ['scholarship']
-  ])('%s@ is refused', (local) => {
-    // The first live run returned pa2rector@, library@ and accounts@. None of
-    // those desks forward an internship offer — they delete it, and a deletion
-    // that turns into a complaint costs the domain that carries certificates.
+    ['coe'], ['controller'], ['library'], ['librarian'], ['accounts'], ['finance'],
+    ['exam'], ['hostel'], ['warden'], ['transport'], ['admissions'], ['scholarship'],
+    ['tender'], ['antiragging']
+  ])('%s@ is still refused — that desk deletes an internship offer', (local) => {
     expect(WRONG_DESK.test(local)).toBe(true);
+    expect(isMailableDesk(local + '@x.ac.in')).toBe(false);
   });
+
+  /* The explicit requirement: authorities yes, students never. */
+  test.each([
+    ['21cse045'], ['b190234'], ['2020ucs1234'], ['19bce1234'],
+    ['student'], ['students'], ['alumni2021']
+  ])('%s@ is a student address and is refused', (local) => {
+    expect(isMailableDesk(local + '@x.ac.in')).toBe(false);
+  });
+
+  test.each([
+    ['tpo@student.x.ac.in'], ['info@students.x.ac.in'], ['a@stu.x.ac.in'],
+    ['b@alumni.x.ac.in']
+  ])('%s is on a student subdomain and is refused', (addr) => {
+    expect(isMailableDesk(addr)).toBe(false);
+  });
+
+  /* The student rules are shaped like roll numbers, and a desk name must not
+     trip them. These four are the ones that would have, if written loosely. */
+  test.each([['tpo2'], ['principal2024'], ['hod.cse'], ['placement1']])
+    ('%s@ is a desk, not a roll number', (local) => {
+      expect(isMailableDesk(local + '@x.ac.in')).toBe(true);
+    });
 
   test.each([
     ['tpo'], ['placement'], ['placements'], ['tnp'], ['cdc'],
     ['training'], ['careers'], ['internship'], ['corporate'], ['outreach']
-  ])('%s@ is recognised as the right desk', (local) => {
-    expect(WRONG_DESK.test(local)).toBe(false);
-    expect(PLACEMENT_HINT.test(local)).toBe(true);
+  ])('%s@ is still the placement desk, ranked first', (local) => {
+    expect(PLACEMENT_DESK.test(local)).toBe(true);
+    expect(rankOf({ email: local + '@x.ac.in' })).toBe(1);
   });
 
-  test.each([['info'], ['office'], ['principal'], ['director'], ['contact']])
-    ('%s@ survives as a fallback', (local) => {
-      // Not the right desk, but a real human who can forward. Kept only when
-      // the college published no placement address at all.
-      expect(WRONG_DESK.test(local)).toBe(false);
-    });
+  test('an authority ranks below placement but above the front office', () => {
+    expect(rankOf({ email: 'principal@x.ac.in' })).toBe(2);
+    expect(AUTHORITY_DESK.test('principal')).toBe(true);
+    expect(rankOf({ email: 'info@x.ac.in' })).toBe(3);
+    expect(rankOf({ email: 'rpsharma@x.ac.in' })).toBe(4);
+  });
 
-  /* Run for real. An earlier version of these two read the source instead,
-     and passed while the wrong-desk check had been weakened to "has an
-     email" — the test was checking the shape of the code, not its behaviour. */
+  test('a stated role outranks the address — a named TPO is the placement desk', () => {
+    // The strict pass reads "Training and Placement Officer" out of the page,
+    // so rpsharma@ is tier 1 even though nothing in the address says so.
+    expect(rankOf({ email: 'rpsharma@x.ac.in', role: 'Training and Placement Officer' })).toBe(1);
+    expect(rankOf({ email: 'rpsharma@x.ac.in', contactRole: 'Registrar' })).toBe(2);
+  });
+
+  /* Run for real. An earlier version of these read the source instead, and
+     passed while the wrong-desk check had been weakened to "has an email" —
+     the test was checking the shape of the code, not its behaviour. */
   const sel = (...addrs) =>
     discovery.selectContacts(addrs.map((email) => ({ email }))).map((r) => r.email);
 
-  test('a placement address suppresses the rest for that college', () => {
+  test('placement first, then the authority — both kept', () => {
     expect(sel('pa2rector@x.ac.in', 'tpo@x.ac.in', 'library@x.ac.in'))
-      .toEqual(['tpo@x.ac.in']);
-    expect(sel('info@x.ac.in', 'placement@x.ac.in')).toEqual(['placement@x.ac.in']);
+      .toEqual(['tpo@x.ac.in', 'pa2rector@x.ac.in']);
   });
 
   test('the wrong desk is dropped even when nothing better is there', () => {
     expect(sel('library@x.ac.in', 'accounts@x.ac.in')).toEqual([]);
   });
 
-  test('a general office survives when no placement address was published', () => {
+  test('a general office survives when no better address was published', () => {
     // Applying the filter after the fallback decision made this case yield
     // nothing: accounts@ looked like a hit, skipped the fallback, then lost it.
     expect(sel('info@x.ac.in', 'accounts@x.ac.in')).toEqual(['info@x.ac.in']);
     expect(sel('principal@x.ac.in')).toEqual(['principal@x.ac.in']);
+  });
+
+  /*
+   * The cap is what keeps this outreach rather than spam. A contact page
+   * listing fifteen HODs must not become fifteen mails to one institution
+   * from the domain that also carries students' certificates.
+   */
+  test('one college yields at most MAX_PER_COLLEGE addresses', () => {
+    const many = sel('tpo@x.ac.in', 'principal@x.ac.in', 'dean@x.ac.in',
+                     'hod@x.ac.in', 'registrar@x.ac.in', 'info@x.ac.in');
+    expect(many.length).toBe(discovery.MAX_PER_COLLEGE);
+    expect(discovery.MAX_PER_COLLEGE).toBeLessThanOrEqual(5);
+    expect(many[0]).toBe('tpo@x.ac.in');   // best first, always
+  });
+
+  test('the cap is overridable for a caller that knows better', () => {
+    expect(discovery.selectContacts(
+      [{ email: 'tpo@x.ac.in' }, { email: 'principal@x.ac.in' }, { email: 'dean@x.ac.in' }], 3
+    ).length).toBe(3);
   });
 
   test('the fallback pass is selected through the same rule', () => {
@@ -246,12 +305,80 @@ describe('the agent aims at the placement desk, not the switchboard', () => {
     expect(discovery.selectContacts([])).toEqual([]);
     expect(discovery.selectContacts(null)).toEqual([]);
     expect(discovery.selectContacts([{}, { email: '' }])).toEqual([]);
+    expect(isMailableDesk('')).toBe(false);
+    expect(isMailableDesk('no-at-sign')).toBe(false);
   });
 
   test('the shared recruiter extractor is left alone', () => {
     // WRONG_DESK belongs to college discovery. Putting it in
     // recruiterContacts.js would change what the live job agent returns.
     expect(read('services/v2/recruiterContacts.js')).not.toContain('WRONG_DESK');
+  });
+});
+
+describe('an address that cannot receive mail is not a contact', () => {
+  test('a real domain resolves, an invented one does not', async () => {
+    expect(await discovery.hasMx('gmail.com')).toBe(true);
+    expect(await discovery.hasMx('no-such-domain-for-ten-tests-xyz123.ac.in')).toBe(false);
+  });
+
+  test('nonsense input is false, never a throw', async () => {
+    expect(await discovery.hasMx('')).toBe(false);
+    expect(await discovery.hasMx(null)).toBe(false);
+    expect(await discovery.hasMx('localhost')).toBe(false);   // no dot, not a domain
+  });
+
+  test('the answer is remembered, so one college is one lookup', async () => {
+    const first = await discovery.hasMx('gmail.com');
+    const second = await discovery.hasMx('GMAIL.COM');       // same domain, any case
+    expect(first).toBe(true);
+    expect(second).toBe(true);
+  });
+
+  const src = code('services/collegeDiscovery.js');
+
+  test('a resolver blip is not cached as a dead domain', () => {
+    // ENOTFOUND is permanent and worth remembering. A timeout or SERVFAIL is
+    // the resolver having a bad moment, and caching it would condemn a real
+    // college for the lifetime of the process.
+    const fn = src.slice(src.indexOf('async function hasMx'));
+    expect(fn).toMatch(/code === 'ENOTFOUND'/);
+    expect(fn).toMatch(/if \(code !== 'ENODATA'\) return false;/);
+  });
+
+  test('a domain with an A record but no MX still counts — RFC 5321', () => {
+    expect(src.slice(src.indexOf('async function hasMx'))).toMatch(/resolve4/);
+  });
+
+  test('it uses the resolver Node ships with, not a paid API', () => {
+    expect(src).toMatch(/require\('dns'\)\.promises/);
+    const pkg = JSON.parse(read('package.json'));
+    const deps = Object.keys(pkg.dependencies || {});
+    expect(deps.filter((d) => /email.*verif|verif.*email|mailboxlayer|zerobounce/i.test(d)))
+      .toEqual([]);
+  });
+
+  test('discovery refuses to store an unroutable address', () => {
+    const fn = src.slice(src.indexOf('async function saveContacts'));
+    expect(fn).toMatch(/hasMx\(String\(r\.email\)\.split\('@'\)\[1\]\)/);
+    expect(fn).toMatch(/mxOk: true/);
+  });
+
+  test('the sender and the preview share ONE deliverability rule', () => {
+    // If the review pane counted its own way it would promise a number the
+    // sender quietly fails to match, and the review step becomes theatre.
+    const out = code('services/collegeOutreach.js');
+    expect(out).toMatch(/async function partitionByDeliverability/);
+    expect(out).toMatch(/module\.exports[\s\S]*partitionByDeliverability/);
+    const run = out.slice(out.indexOf('async function run('));
+    expect(run).toMatch(/partitionByDeliverability\(found\)/);
+    expect(code('routes/growth.js')).toMatch(/collegeOutreach\.partitionByDeliverability/);
+  });
+
+  test('a verdict is written back, so it costs one lookup ever', () => {
+    const out = code('services/collegeOutreach.js');
+    expect(out).toMatch(/\$set: \{ mxOk: ok, mxCheckedAt: new Date\(\) \}/);
+    expect(read('models/CollegeContact.js')).toMatch(/mxOk:\s*\{ type: Boolean \}/);
   });
 });
 
@@ -292,7 +419,8 @@ describe('a ticked selection cannot widen who gets mailed', () => {
 
 describe('the reviewed email is the one that gets sent', () => {
   const r = code('routes/growth.js');
-  const route = r.slice(r.indexOf("api.get('/colleges/template'"), r.indexOf("api.get('/colleges',"));
+  const route = r.slice(r.indexOf("api.post('/colleges/preview'"),
+                        r.indexOf("api.get('/colleges',"));
 
   test('it renders through the sender, so it cannot drift', () => {
     expect(route).toContain('collegeOutreach.buildHtml');
@@ -305,7 +433,41 @@ describe('the reviewed email is the one that gets sent', () => {
   });
 
   test('it sends nothing and writes nothing', () => {
-    expect(route).not.toMatch(/sendMail|\.create\(|\.updateOne\(|outreach\.run/);
+    expect(route).not.toMatch(/sendMail|\.create\(|outreach\.run/);
+  });
+
+  /*
+   * The bug this replaced: the old route did findOne({ status: 'new' }) and
+   * showed whatever the database handed back, with no reference to what had
+   * been ticked. So the review step displayed a letter addressed to a college
+   * that was not in the send, and approving it reviewed nothing.
+   */
+  test('it previews the SELECTED colleges, not whatever the database offers', () => {
+    expect(route).toMatch(/filter\._id = \{ \$in: ids \}/);
+    expect(route).not.toMatch(/findOne\(/);
+  });
+
+  test('a ticked selection still cannot widen who is previewed', () => {
+    // Same filter the sender uses: ticking an opted-out college must not
+    // preview a mail the sender would refuse to send.
+    expect(route).toMatch(/const filter = \{ status: 'new', optOut: \{ \$ne: true \} \}/);
+  });
+
+  test('it pages through the selection rather than showing one row', () => {
+    expect(route).toMatch(/index/);
+    expect(route).toMatch(/total: sendable\.length/);
+  });
+
+  test('it reports who will be skipped, counted the sender\'s way', () => {
+    expect(route).toMatch(/collegeOutreach\.partitionByDeliverability/);
+    expect(route).toMatch(/noMx:/);
+    expect(route).toMatch(/unavailable:/);
+  });
+
+  test('it names the actual recipient, so the reviewer can check it', () => {
+    expect(route).toMatch(/recipient: \{/);
+    expect(route).toMatch(/email: recipient\.email/);
+    expect(route).toMatch(/contactRole: recipient\.contactRole/);
   });
 });
 
@@ -319,13 +481,39 @@ describe('the dashboard flow', () => {
     expect(html).toMatch(/id="colSend"[^>]*disabled/);
   });
 
-  test('pressing Send shows the template before it confirms', () => {
+  test('pressing Send shows the real recipient before it confirms', () => {
     const at = html.indexOf("$('colSend').addEventListener");
     const fn = html.slice(at, at + 700);
-    expect(fn).toContain('showTemplate');
-    expect(fn).toContain("call('/colleges/template')");
+    expect(fn).toContain('openReview(0, true)');
     // The send itself must not fire straight from the button.
     expect(fn).not.toContain("call('/colleges/send'");
+  });
+
+  test('the review asks for the ticked ids, so it shows who is being mailed', () => {
+    const at = html.indexOf('async function openReview');
+    const fn = html.slice(at, at + 500);
+    expect(fn).toContain("call('/colleges/preview'");
+    expect(fn).toMatch(/ids: Array\.from\(state\.colPicked\)/);
+    expect(fn).toContain('index: review.index');
+  });
+
+  test('scraped college and officer names are escaped before becoming HTML', () => {
+    // These strings come off somebody else's web page.
+    const at = html.indexOf('function showTemplate');
+    const fn = html.slice(at, at + 2600);
+    expect(fn).toMatch(/esc\(rcpt\.college/);
+    expect(fn).toMatch(/esc\(rcpt\.contactName\)/);
+    expect(fn).toMatch(/esc\(rcpt\.email\)/);
+    expect(html).toMatch(/var esc = function/);
+  });
+
+  test('nothing to send is not something to confirm', () => {
+    const at = html.indexOf('function showTemplate');
+    const fn = html.slice(at, html.indexOf('async function startCollegeSend'));
+    expect(at).toBeGreaterThan(-1);
+    expect(fn.length).toBeGreaterThan(0);
+    expect(fn).toMatch(/review\.withSend && total \?/);
+    expect(fn).toMatch(/\(review\.withSend && total\)/);
   });
 
   test('the send carries the ticked ids', () => {

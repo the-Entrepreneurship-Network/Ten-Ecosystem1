@@ -19,7 +19,7 @@
  */
 
 const { httpFetch } = require('./v2/httpFetch');
-const { contactsFromPosting } = require('./v2/recruiterContacts');
+const { contactsFromPosting, nameNear } = require('./v2/recruiterContacts');
 
 /* Says who we are and where to complain, exactly as the job agent does. */
 const UA = { 'User-Agent': 'TEN-CollegeOutreach/1.0 (+https://entrepreneurshipnetwork.net)' };
@@ -57,50 +57,138 @@ const PATHS = Object.freeze([
 ]);
 
 /**
- * The desk that actually handles this.
+ * Who is worth writing to at a college, in the order we would rather reach.
  *
- * "tnp" and "cdc" are as common as "placement" on Indian college sites —
- * Training & Placement, Career Development Cell.
+ * The earlier version of this file was built for the opposite brief — keep the
+ * placement desk, drop every administrator — so `rector`, `vc`, `chancellor`
+ * and `registrar` sat in the BLOCK list, and `pa2rector@jntuh.ac.in` was
+ * thrown away on the first live run. The brief is now the authorities: the
+ * people who can actually say yes to a partnership. Those names move from the
+ * block list into tier 2, and what stays blocked is only the desks that
+ * genuinely cannot action an internship offer.
+ *
+ * Tier 1 — the desk that runs placements. "tnp" and "cdc" are as common as
+ *          "placement" on Indian college sites: Training & Placement, Career
+ *          Development Cell.
  */
-const PLACEMENT_HINT = /placement|tpo|tnp|cdc|training|career|internship|corporate|industry|recruit|outreach/i;
+const PLACEMENT_DESK = /placement|tpo|tnp|cdc|training|career|internship|corporate|industry|recruit|outreach/i;
+
+/**
+ * Tier 2 — the authority who can sign one off.
+ *
+ * The `pa|po|so|ao` prefix is deliberate: `pa2rector@` is the Personal
+ * Assistant to the Rector, which IS how you reach the Rector. A university
+ * publishes the PA's address precisely so that people write to it.
+ */
+const AUTHORITY_DESK = new RegExp('^(?:pa2?|po|so|ao|office)?[._-]?(?:' + [
+    'principal', 'director', 'dean', 'hod', 'head', 'registrar',
+    'vc', 'vice-?chancellor', 'chancellor', 'pro-?vc', 'rector', 'provost',
+    'chairman', 'chairperson', 'president', 'secretary'
+].join('|') + ')\\w*', 'i');
+
+/** Tier 3 — the front office, which forwards what it cannot answer itself. */
+const FRONT_OFFICE = /^(?:info|admin|office|enquiry|enquiries|contact|academics?|mail|college|institute)\w*/i;
 
 /**
  * Desks that exist at every college and will never action an internship offer.
  *
- * The first live run returned pa2rector@, library@ and accounts@ — the PA to
- * the Rector, the library and the finance office. None of them forward a
- * partnership enquiry; they delete it. Mailing them is not merely wasted, it
- * earns complaints against a domain that also carries certificates.
+ * The first live run returned library@ and accounts@. Neither forwards a
+ * partnership enquiry; they delete it. Mailing them is not merely wasted — it
+ * earns complaints against a domain that also carries students' certificates.
  *
- * Admissions is on the list deliberately: that desk handles people applying TO
- * the college, not students already in it.
+ * Admissions is here deliberately: that desk handles people applying TO the
+ * college, not students already in it. So is the Controller of Examinations.
  */
-/**
- * Which of a page's addresses are worth keeping, and in what order.
- *
- * Pulled out as a pure function on purpose: tested as text, this rule passed
- * while the wrong-desk check had been weakened to "has an email" — the test
- * was reading the shape of the code rather than what it does.
- *
- * @param {Array<{email: string}>} rows
- * @returns {Array<{email: string}>}
- */
-function selectContacts(rows) {
-    const kept = (rows || []).filter(
-        (r) => r && r.email && !WRONG_DESK.test(String(r.email).split('@')[0]));
-    const placement = kept.filter((r) => PLACEMENT_HINT.test(r.email.split('@')[0]));
-    return placement.length ? placement : kept;
-}
-
 const WRONG_DESK = new RegExp('^(?:pa2?|po|so|ao)?[._-]?(?:' + [
-    'rector', 'vc', 'vicechancellor', 'chancellor', 'pro-?vc',
-    'registrar', 'controller', 'coe', 'exam', 'examination', 'result',
+    'controller', 'coe', 'exam', 'examination', 'result',
     'account', 'accounts', 'finance', 'audit', 'purchase', 'store', 'tender',
     'library', 'librarian', 'hostel', 'warden', 'mess', 'canteen',
     'transport', 'estate', 'maintenance', 'engineer', 'security', 'medical',
     'legal', 'grievance', 'antiragging', 'rti', 'vigilance', 'nss', 'ncc',
     'admission', 'admissions', 'fee', 'fees', 'scholarship', 'sports'
 ].join('|') + ')\\w*$', 'i');
+
+/**
+ * A student's own address, which this agent must never collect.
+ *
+ * Writing to the authorities is outreach to an institution. Harvesting the
+ * student body's addresses off a results page is a different thing entirely,
+ * and it is not what this is for.
+ *
+ * The local-part shapes are the Indian roll-number conventions — `21cse045`,
+ * `b190234`, `2020ucs1234` — written tightly enough that `tpo2@`,
+ * `principal2024@` and `hod.cse@` all survive: the second rule needs five or
+ * more digits after at most three letters, which no desk name produces.
+ *
+ * The word rule is exact-plus-digits (`student`, `students`, `alumni2021`) on
+ * purpose. A looser prefix match would have taken `internship@` — a placement
+ * address — and `studentaffairs@`, which is the Dean of Students, an authority
+ * this is supposed to find.
+ */
+const STUDENT_LOCAL = /^(?:students?|stud|alumni)\d*$|^\d{2,4}[a-z]{1,5}\d{2,}$|^[a-z]{1,3}\d{5,}$/i;
+
+/** @student.college.ac.in and its cousins. The dot is required, so `sturm.` survives. */
+const STUDENT_DOMAIN = /^(?:students?|stu|alumni|learners?|scholars?)\./i;
+
+/** Is this address a desk we are willing to write to at all? */
+function isMailableDesk(email) {
+    const [local, domain] = String(email || '').toLowerCase().split('@');
+    if (!local || !domain) return false;
+    if (STUDENT_LOCAL.test(local)) return false;
+    if (STUDENT_DOMAIN.test(domain)) return false;
+    return !WRONG_DESK.test(local);
+}
+
+/**
+ * How badly we want this one. Lower is better.
+ *
+ * The role text counts as well as the address, because the strict pass already
+ * reads "Training and Placement Officer" out of the sentence around it — a
+ * named officer at `rpsharma@` is the placement desk even though nothing in
+ * the address says so.
+ */
+function rankOf(row) {
+    const local = String((row && row.email) || '').split('@')[0];
+    const role = String((row && (row.role || row.contactRole)) || '');
+    if (PLACEMENT_DESK.test(local) || PLACEMENT_DESK.test(role)) return 1;
+    if (AUTHORITY_DESK.test(local) || AUTHORITY_DESK.test(role)) return 2;
+    if (FRONT_OFFICE.test(local)) return 3;
+    return 4;   // a named individual with no stated role — still a human
+}
+
+/**
+ * At most this many addresses per college.
+ *
+ * One mail to the placement officer and one to the Principal reaches two
+ * people who decide different things. Fifteen mails to fifteen department HODs
+ * from one sending domain is what spam filters are for, and this domain also
+ * carries students' certificates.
+ */
+const MAX_PER_COLLEGE = Math.max(1, Math.min(5,
+    parseInt(process.env.COLLEGE_MAX_CONTACTS, 10) || 2));
+
+/**
+ * Which of a page's addresses are worth keeping, best first.
+ *
+ * Pulled out as a pure function on purpose: tested as text, this rule once
+ * passed while the wrong-desk check had been weakened to "has an email" — the
+ * test was reading the shape of the code rather than what it does.
+ *
+ * @param {Array<{email: string, role?: string}>} rows
+ * @param {number} [limit]
+ * @returns {Array<object>} at most `limit` rows, placement desk first
+ */
+function selectContacts(rows, limit) {
+    const cap = limit || MAX_PER_COLLEGE;
+    return (rows || [])
+        .filter((r) => r && r.email && isMailableDesk(r.email))
+        .map((r, i) => ({ r, rank: rankOf(r), i }))
+        // The index keeps the sort stable across engines: two addresses of the
+        // same rank stay in the order the page published them.
+        .sort((a, b) => (a.rank - b.rank) || (a.i - b.i))
+        .slice(0, cap)
+        .map((x) => x.r);
+}
 
 /**
  * Page HTML to readable text.
@@ -196,7 +284,38 @@ const COLLEGE_OK_LOCALPART = /^(info|admin|office|enquiry|enquiries|contact|prin
 const NEVER_MAIL = /^(no-?reply|do-?not-?reply|postmaster|abuse|webmaster|notifications?|unsubscribe|mailer|bounce|automated|spam)$/i;
 const RE_EMAIL_ANY = /[\w.+-]+@[\w-]+\.[\w.]{2,}/g;
 
-/** The relaxed pass. Same cue requirement, a college's idea of a real mailbox. */
+/**
+ * The job title beside an address, in a college's vocabulary.
+ *
+ * recruiterContacts.roleNear() is not reused here because it knows corporate
+ * titles — "Talent Partner", "Hiring Manager", "CTO" — and would never match
+ * "Training and Placement Officer". Same job, different dictionary, so the
+ * dictionary is the only thing that is separate.
+ */
+const COLLEGE_ROLE = new RegExp('\\b(' + [
+    'Training (?:and|&) Placement Officer', 'Placement Officer', 'Placement Co-?ordinator',
+    'Placement Head', 'Placement Director', 'Head[, ]+Training (?:and|&) Placement',
+    'T\\.?P\\.?O\\.?', 'Dean[, ]+(?:Academics?|Students?|Placements?|Industry Relations)',
+    'Vice[- ]?Chancellor', 'Pro[- ]?Vice[- ]?Chancellor', 'Registrar', 'Rector',
+    'Principal', 'Director', 'Head of Department', 'H\\.?O\\.?D\\.?',
+    'Chairman', 'Chairperson', 'Secretary', 'Correspondent'
+].join('|') + ')\\b', 'i');
+
+/** A role title near the address, read from the college's own page. */
+function collegeRoleNear(text, index) {
+    const window = String(text).slice(Math.max(0, index - 220), index + 140);
+    const m = window.match(COLLEGE_ROLE);
+    return m ? m[1].replace(/\s+/g, ' ').trim() : '';
+}
+
+/**
+ * The relaxed pass. Same cue requirement, a college's idea of a real mailbox.
+ *
+ * It used to push `name: '', role: '', phone: ''` — three hard-coded blanks —
+ * so every address the strict pass missed arrived as a bare mailbox with no
+ * human attached, and the preview could only say "Dear Sir/Madam". The page
+ * usually names the officer right beside the address; this reads it.
+ */
 function collegeContactsFrom(text, url, college) {
     const out = [];
     const seen = new Set();
@@ -213,7 +332,14 @@ function collegeContactsFrom(text, url, college) {
         const around = text.slice(Math.max(0, m.index - 220), m.index + 160);
         if (!/\b(email|e-mail|mail|contact|reach|write|enquir|phone|call)\b/i.test(around)) continue;
         seen.add(email);
-        out.push({ email, name: '', role: '', phone: '', sourceUrl: url, company: college || '' });
+        out.push({
+            email,
+            name: nameNear(text, m.index),
+            role: collegeRoleNear(text, m.index),
+            phone: '',
+            sourceUrl: url,
+            company: college || ''
+        });
     }
     return out;
 }
@@ -283,20 +409,78 @@ async function discoverFromSite(website, meta = {}) {
                     via: 'page-discovery'
                 });
             });
-            // The placement page answered; the switchboard page adds nothing.
-            if ([...found.values()].some((r) => PLACEMENT_HINT.test(r.email.split('@')[0]))) break;
+            // Enough desks in hand. Walking the remaining paths cannot add a
+            // row that survives the cap, so it is seven fetches for nothing.
+            if (found.size >= MAX_PER_COLLEGE) break;
         }
         if (i < PATHS.length - 1) await new Promise((r) => setTimeout(r, DELAY_MS));
     }
 
     /*
-     * If the placement office was found, return ONLY it.
+     * Ranked, then capped. Everything this college published is in `found`;
+     * what comes back is the best MAX_PER_COLLEGE of it — the placement desk
+     * first, then an authority who can approve a partnership.
      *
-     * Once tpo@ is in hand, principal@ and info@ from the same college are not
-     * extra reach — they are the same institution mailed twice, from the same
-     * sending domain, about the same thing. One right address beats three.
+     * The cap is the point. Every extra address is the same institution mailed
+     * again from the same sending domain about the same thing, and that is how
+     * a domain that also carries certificates earns a spam reputation.
      */
     return selectContacts([...found.values()]);
+}
+
+/* ── is this address able to receive mail at all? ──────────────────────────── */
+
+/*
+ * Checked per DOMAIN, not per address, and remembered for the life of the
+ * process: one college publishes several addresses on one domain, and asking
+ * the resolver the same question four times is three round trips wasted.
+ */
+const mxCache = new Map();
+
+/**
+ * Does this domain accept mail?
+ *
+ * Node's own resolver — no dependency, no API, no cost. This is the difference
+ * between a list that sends and a list that bounces: a college that moved its
+ * site, a typo'd domain on a contact page, a department that was wound up.
+ * None of them are visible to a regex, and all of them bounce.
+ *
+ * ponytail: DNS only. The honest ceiling is that a domain with a mail server
+ * can still reject one particular mailbox, which only a live SMTP RCPT probe
+ * would catch — and that gets the sending IP blocklisted while most Indian
+ * college servers accept-all anyway, so it would buy false confidence rather
+ * than fewer bounces. If bounce rates stay high after this, read the bounces.
+ */
+async function hasMx(domain) {
+    const d = String(domain || '').trim().toLowerCase();
+    if (!d || !d.includes('.')) return false;
+    if (mxCache.has(d)) return mxCache.get(d);
+
+    const remember = (ok) => { mxCache.set(d, ok); return ok; };
+    const dns = require('dns').promises;
+
+    try {
+        const mx = await dns.resolveMx(d);
+        if (mx && mx.some((r) => r && r.exchange)) return remember(true);
+    } catch (err) {
+        const code = err && err.code;
+        // No such domain: permanent, worth remembering.
+        if (code === 'ENOTFOUND' || code === 'NXDOMAIN') return remember(false);
+        // ENODATA means the domain exists but publishes no MX — fall through
+        // to the A-record rule below. Anything else (timeout, SERVFAIL) is the
+        // resolver having a bad moment, so it is NOT cached: a blip must not
+        // condemn a real college for the lifetime of the process.
+        if (code !== 'ENODATA') return false;
+    }
+
+    // RFC 5321 §5.1: a domain with an address record and no MX still takes
+    // mail there. Small colleges on shared hosting really do this.
+    try {
+        const a = await dns.resolve4(d);
+        return remember(!!(a && a.length));
+    } catch (_) {
+        return remember(false);
+    }
 }
 
 /**
@@ -310,9 +494,21 @@ async function saveContacts(rows) {
     const all = rows || [];
     // A row without an address or without the page it came from cannot be
     // justified, so it never reaches the database.
-    const valid = all.filter((r) => r && r.email && r.sourceUrl);
-    let skipped = all.length - valid.length;
-    if (!valid.length) return { added: 0, skipped };
+    const wellFormed = all.filter((r) => r && r.email && r.sourceUrl);
+    let skipped = all.length - wellFormed.length;
+    if (!wellFormed.length) return { added: 0, skipped, unroutable: 0 };
+
+    /*
+     * An address whose domain cannot receive mail is not a contact, it is a
+     * future bounce. Rejected here rather than at send time so the dashboard
+     * count is the number of colleges actually reachable.
+     */
+    const checked = await Promise.all(wellFormed.map(async (r) =>
+        ({ row: r, ok: await hasMx(String(r.email).split('@')[1]) })));
+    const valid = checked.filter((c) => c.ok).map((c) => c.row);
+    const unroutable = checked.length - valid.length;
+    skipped += unroutable;
+    if (!valid.length) return { added: 0, skipped, unroutable };
 
     // Required here rather than at the top so the parsing half of this file —
     // which is pure text work — loads and tests without a database driver.
@@ -321,7 +517,9 @@ async function saveContacts(rows) {
     for (const row of valid) {
         try {
             const res = await CollegeContact.updateOne(
-                { email: row.email }, { $setOnInsert: row }, { upsert: true }
+                { email: row.email },
+                { $setOnInsert: { ...row, mxOk: true, mxCheckedAt: new Date() } },
+                { upsert: true }
             );
             if (res.upsertedCount) added++; else skipped++;
         } catch (err) {
@@ -330,7 +528,7 @@ async function saveContacts(rows) {
             skipped++;
         }
     }
-    return { added, skipped };
+    return { added, skipped, unroutable };
 }
 
 /* ── the agent run ────────────────────────────────────────────────────────── */
@@ -427,5 +625,8 @@ async function runBulk(sites, deps = {}) {
 
 module.exports = {
     discoverFromSite, saveContacts, htmlToText, toOrigin, titleOf,
-    runBulk, runStatus, PATHS, PLACEMENT_HINT, WRONG_DESK, selectContacts, CONCURRENCY
+    runBulk, runStatus, PATHS, CONCURRENCY, MAX_PER_COLLEGE,
+    PLACEMENT_DESK, AUTHORITY_DESK, FRONT_OFFICE, WRONG_DESK,
+    STUDENT_LOCAL, STUDENT_DOMAIN,
+    isMailableDesk, rankOf, selectContacts, hasMx
 };

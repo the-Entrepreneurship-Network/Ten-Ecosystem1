@@ -26,6 +26,7 @@ const {
 const MailHistory = require('../models/MailHistory');
 const CollegeContact = require('../models/CollegeContact');
 const quota = require('./growthQuota');
+const { hasMx } = require('./collegeDiscovery');
 const tracking = require('./growthTracking');
 
 /** Same throttle as every other bulk send in this app. */
@@ -134,6 +135,42 @@ async function sendOne(contact) {
  * sender does it: the Monday cron may be running at the same time, and a check
  * from five minutes ago knows nothing about what it has sent since.
  */
+/**
+ * Split a batch into who can be written to and who cannot.
+ *
+ * Exported because the PREVIEW calls it too. If the review pane counted
+ * recipients its own way, it would promise a number the sender then quietly
+ * fails to match — and the whole point of the review step is that what you
+ * are shown is what goes out.
+ *
+ * A row whose domain has never been checked is checked once here and the
+ * answer is written back, so this costs a resolver round trip the first time
+ * a contact is considered and nothing afterwards.
+ *
+ * @returns {Promise<{sendable: object[], unroutable: Array<object & {reason: string}>}>}
+ */
+async function partitionByDeliverability(contacts) {
+    const sendable = [];
+    const unroutable = [];
+    for (const c of contacts || []) {
+        if (!c || !isSendableAddress(c.email)) {
+            unroutable.push({ ...(c || {}), reason: 'malformed' });
+            continue;
+        }
+        if (c.mxOk === true) { sendable.push(c); continue; }
+
+        const ok = await hasMx(String(c.email).split('@')[1]);
+        if (c._id) {
+            await CollegeContact.updateOne(
+                { _id: c._id }, { $set: { mxOk: ok, mxCheckedAt: new Date() } }
+            ).catch(() => { /* the verdict is advisory; losing it costs one lookup */ });
+        }
+        if (ok) sendable.push({ ...c, mxOk: true });
+        else unroutable.push({ ...c, reason: 'no-mx' });
+    }
+    return { sendable, unroutable };
+}
+
 async function run(opts = {}) {
     // A bare number still means "a batch of that many", which is what the
     // original caller passed.
@@ -150,13 +187,17 @@ async function run(opts = {}) {
     const ids = (o.ids || []).map(String).filter(Boolean);
     if (ids.length) filter._id = { $in: ids };
 
-    const contacts = await CollegeContact.find(filter).limit(limit).lean();
+    const found = await CollegeContact.find(filter).limit(limit).lean();
 
-    let sent = 0, failed = 0, skipped = 0, quotaStopped = false;
+    /* Same rule the preview counted with, so the number shown before sending
+       is the number sent. An address that cannot receive mail is skipped here
+       rather than handed to the transport to bounce. */
+    const { sendable: contacts, unroutable } = await partitionByDeliverability(found);
+
+    let sent = 0, failed = 0, skipped = unroutable.length, quotaStopped = false;
 
     for (let i = 0; i < contacts.length; i++) {
         const contact = contacts[i];
-        if (!isSendableAddress(contact.email)) { skipped++; continue; }
 
         const { allowed } = await quota.canSend(1);
         if (!allowed) {
@@ -171,7 +212,9 @@ async function run(opts = {}) {
         if (i < contacts.length - 1) await new Promise((r) => setTimeout(r, THROTTLE_MS));
     }
 
-    return { attempted: contacts.length, sent, failed, skipped, quotaStopped };
+    return { attempted: found.length, sent, failed, skipped,
+             unroutable: unroutable.length, quotaStopped };
 }
 
-module.exports = { run, sendOne, buildHtml, unsubscribeUrl, SUBJECT, THROTTLE_MS, DEFAULT_BATCH };
+module.exports = { run, sendOne, buildHtml, unsubscribeUrl, partitionByDeliverability,
+                   SUBJECT, THROTTLE_MS, DEFAULT_BATCH };

@@ -430,30 +430,90 @@ api.get('/colleges/agent/status', requireGrowthAPI, (req, res) => {
  * given, and a real one would put a working "remove me" link for that college
  * inside the review pane.
  */
-api.get('/colleges/template', requireGrowthAPI, async (req, res) => {
+/**
+ * POST /colleges/preview — the exact mail, for the colleges actually selected.
+ *
+ * The version this replaces did:
+ *
+ *     CollegeContact.findOne({ status: 'new', optOut: { $ne: true } })
+ *
+ * — one row, picked by the database, with no reference to what was ticked. So
+ * the review step showed an email addressed to a college that was not in the
+ * send, and whoever approved it had reviewed somebody else's letter. Checking
+ * before a bulk send is the entire purpose of the step; showing the wrong
+ * recipient makes it theatre.
+ *
+ * Now it renders recipient `index` OF THE SELECTION, reports the total so the
+ * pane can page through them, and counts what will be skipped using
+ * `partitionByDeliverability` — the same function the sender uses, so the
+ * number promised here is the number that goes out.
+ */
+api.post('/colleges/preview', requireGrowthAPI, async (req, res) => {
     try {
-        let sample = null;
+        const ids = [...new Set(((req.body && req.body.ids) || []).map(String).filter(Boolean))];
+        const index = Math.max(0, parseInt((req.body && req.body.index), 10) || 0);
+
+        /* The selection narrows the query; it never replaces it. Ticking a
+           college that has opted out or has already been written to must not
+           preview a mail the sender would refuse to send. */
+        const filter = { status: 'new', optOut: { $ne: true } };
+        if (ids.length) filter._id = { $in: ids };
+
+        let rows = [];
+        let pickedButUnavailable = 0;
         try {
-            sample = await CollegeContact.findOne({ status: 'new', optOut: { $ne: true } })
-                .select('college contactName email').lean();
-        } catch (_) { /* the template must render without a database */ }
+            rows = await CollegeContact.find(filter)
+                .sort({ createdAt: -1 })
+                .limit(collegeOutreach.DEFAULT_BATCH)
+                .lean();
+            if (ids.length) pickedButUnavailable = ids.length - rows.length;
+        } catch (_) { /* the preview still renders without a database */ }
+
+        const { sendable, unroutable } = rows.length
+            ? await collegeOutreach.partitionByDeliverability(rows)
+            : { sendable: [], unroutable: [] };
+
+        /* With nothing selected and nothing in the database, the pane still has
+           to show the letter — somebody writing the copy needs to read it. */
+        const sample = sendable[Math.min(index, Math.max(0, sendable.length - 1))] || null;
+        const recipient = sample || {
+            college: 'your college', contactName: '', contactRole: '', email: ''
+        };
 
         const html = collegeOutreach.buildHtml({
+            /* Never the real id: buildHtml signs an unsubscribe link with
+               whatever it is handed, and a working "remove me" link for a real
+               college has no business sitting in an admin's preview pane. */
             _id: 'preview',
-            college: (sample && sample.college) || 'your college',
-            contactName: (sample && sample.contactName) || '',
-            email: (sample && sample.email) || ''
+            college: recipient.college || 'your college',
+            contactName: recipient.contactName || '',
+            email: recipient.email || ''
         });
+
         res.json({
             success: true,
             subject: collegeOutreach.SUBJECT,
             html,
-            sampleCollege: (sample && (sample.college || sample.email)) || '',
+            index: sample ? Math.min(index, sendable.length - 1) : 0,
+            total: sendable.length,
+            recipient: {
+                email: recipient.email || '',
+                college: recipient.college || '',
+                contactName: recipient.contactName || '',
+                contactRole: recipient.contactRole || ''
+            },
+            skipped: {
+                noMx: unroutable.filter((u) => u.reason === 'no-mx').length,
+                malformed: unroutable.filter((u) => u.reason === 'malformed').length,
+                /* Ticked, but opted out or already mailed — the gap between
+                   what was selected and what the sender's own filter returns. */
+                unavailable: Math.max(0, pickedButUnavailable)
+            },
             usedRealCollege: !!sample
         });
     } catch (err) {
-        console.error('[Growth] college template failed:', err.message);
-        res.status(500).json({ success: false, error: 'Could not render the template' });
+        console.error('[Growth] college preview failed:', err.message);
+        res.status(500).json({ success: false, error: 'Could not render the preview' });
     }
 });
 

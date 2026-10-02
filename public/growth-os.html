@@ -195,6 +195,14 @@
 
   var $ = function (id) { return document.getElementById(id); };
   var fmt = function (n) { return (n == null ? '–' : Number(n).toLocaleString('en-IN')); };
+  /* College and officer names are scraped off somebody else's web page, so they
+     are attacker-controlled text as far as this dashboard is concerned. Every
+     one of them goes through here before it is built into HTML. */
+  var esc = function (v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  };
 
   function toast(msg) {
     var t = $('toast');
@@ -599,35 +607,86 @@
   });
 
   // ─── review the email, then send ──────────────────────────────────────────
+  /* The review pane pages through the ACTUAL selection. It used to render one
+     row the database picked, so you could approve a letter addressed to a
+     college that was not in the send. */
+  var review = { index: 0, withSend: false };
+
+  async function openReview(index, withSend) {
+    review.index = Math.max(0, index || 0);
+    review.withSend = !!withSend;
+    var r = await call('/colleges/preview', {
+      method: 'POST',
+      body: JSON.stringify({ ids: Array.from(state.colPicked), index: review.index })
+    });
+    showTemplate(r);
+  }
+
   $('colTemplate').addEventListener('click', async function () {
     var btn = this;
     btn.disabled = true; btn.textContent = 'Loading…';
-    try {
-      var r = await call('/colleges/template');
-      showTemplate(r, false);
-    } catch (e) { toast(e.message); }
+    try { await openReview(0, false); } catch (e) { toast(e.message); }
     btn.disabled = false; btn.textContent = 'Review the email';
   });
 
-  /* The review pane. `withSend` turns it into the confirm step, so the mail is
-     always on screen at the moment somebody agrees to send it. */
-  function showTemplate(r, withSend) {
-    var n = state.colPicked.size;
-    $('mTitle').textContent = withSend ? 'Send this to ' + fmt(n) + ' college' + (n === 1 ? '' : 's') + '?' : 'The email colleges receive';
+  /* `review.withSend` turns it into the confirm step, so the mail is always on
+     screen — addressed to a real recipient — when somebody agrees to send. */
+  function showTemplate(r) {
+    var total = r.total || 0;
+    var sk = r.skipped || {};
+    var skipped = (sk.noMx || 0) + (sk.malformed || 0) + (sk.unavailable || 0);
+    review.index = r.index || 0;
+
+    $('mTitle').textContent = review.withSend
+      ? 'Send this to ' + fmt(total) + ' college' + (total === 1 ? '' : 's') + '?'
+      : 'The email colleges receive';
+
+    var rcpt = r.recipient || {};
+    var who = rcpt.email
+      ? esc(rcpt.college || '') + (rcpt.contactName ? ' · ' + esc(rcpt.contactName) : '')
+        + (rcpt.contactRole ? ' (' + esc(rcpt.contactRole) + ')' : '')
+        + '<br><span style="color:#f5c542">' + esc(rcpt.email) + '</span>'
+      : 'No college selected is still waiting to be mailed.';
+
+    var skipNote = skipped
+      ? '<div style="font-size:11px;color:#c98b3a;margin-top:6px">Skipping ' + fmt(skipped) + ' — '
+          + [ sk.noMx ? fmt(sk.noMx) + ' cannot receive mail' : '',
+              sk.malformed ? fmt(sk.malformed) + ' malformed' : '',
+              sk.unavailable ? fmt(sk.unavailable) + ' opted out or already mailed' : ''
+            ].filter(Boolean).join(' · ') + '</div>'
+      : '';
+
     $('mBody').innerHTML =
-      '<div style="font-size:12px;color:#8b8578;margin-bottom:10px">Subject: <b style="color:#f0eee8">'
-        + (r.subject || '').replace(/[<>&]/g, '') + '</b>'
-        + (r.usedRealCollege ? ' · shown as ' + String(r.sampleCollege).replace(/[<>&]/g, '') + ' would see it' : '')
-        + '</div>'
-      + '<iframe title="Email template" style="width:100%;height:440px;border:1px solid rgba(245,197,66,0.18);'
-        + 'border-radius:10px;background:#0c1220"></iframe>';
+        '<div style="font-size:12px;color:#8b8578;margin-bottom:4px">Subject: <b style="color:#f0eee8">'
+      +   esc(r.subject || '') + '</b></div>'
+      + '<div style="font-size:12px;color:#8b8578;margin-bottom:10px">To: ' + who + '</div>'
+      + skipNote
+      + (total > 1
+          ? '<div style="display:flex;align-items:center;gap:10px;margin:10px 0">'
+            + '<button type="button" id="revPrev" class="btn ghost" style="padding:4px 10px">‹ Prev</button>'
+            + '<span style="font-size:11px;color:#8b8578">Recipient ' + fmt(review.index + 1)
+            +   ' of ' + fmt(total) + '</span>'
+            + '<button type="button" id="revNext" class="btn ghost" style="padding:4px 10px">Next ›</button>'
+            + '</div>'
+          : '')
+      + '<iframe title="Email template" style="width:100%;height:420px;border:1px solid rgba(245,197,66,0.18);'
+      +   'border-radius:10px;background:#0c1220"></iframe>';
+
     // srcdoc is assigned as a property, never built into the HTML string above,
     // so the template's own markup cannot break out of the attribute.
     $('mBody').querySelector('iframe').srcdoc = r.html;
 
+    if (total > 1) {
+      $('revPrev').onclick = function () { openReview((review.index - 1 + total) % total, review.withSend).catch(function (e) { toast(e.message); }); };
+      $('revNext').onclick = function () { openReview((review.index + 1) % total, review.withSend).catch(function (e) { toast(e.message); }); };
+    }
+
     $('mExtend').style.display = 'none';
-    $('mConfirm').textContent = withSend ? 'Looks right — send now' : 'Close';
-    $('mConfirm').onclick = withSend ? function () { closeModal(); startCollegeSend(); } : closeModal;
+    // Nothing to send is not something to confirm.
+    $('mConfirm').textContent = review.withSend && total ? 'Looks right — send now' : 'Close';
+    $('mConfirm').onclick = (review.withSend && total)
+      ? function () { closeModal(); startCollegeSend(); }
+      : closeModal;
     $('modal').classList.add('on');
   }
 
@@ -647,9 +706,10 @@
     var btn = this;
     btn.disabled = true;
     try {
-      // The template is fetched and shown BEFORE the confirm, so nobody can
-      // agree to send a mail they have not been shown.
-      showTemplate(await call('/colleges/template'), true);
+      // The mail is fetched and shown BEFORE the confirm, so nobody can agree
+      // to send something they have not been shown — addressed to somebody
+      // who is actually in the send.
+      await openReview(0, true);
     } catch (e) { toast(e.message); }
     btn.disabled = false;
     refreshColSelection();
