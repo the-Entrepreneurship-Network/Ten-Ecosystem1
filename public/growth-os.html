@@ -199,6 +199,14 @@
   /* College and officer names are scraped off somebody else's web page, so they
      are attacker-controlled text as far as this dashboard is concerned. Every
      one of them goes through here before it is built into HTML. */
+  /* How often a running job is asked how it is doing.
+     Was 3s in two separate loops, which is 600 requests a quarter-hour — more
+     than the server's whole per-person allowance, so the dashboard started
+     answering 429 to itself. The polls are no longer counted against that
+     limit, but a send ticks once every two seconds and an agent run takes
+     minutes, so five is as much resolution as either can actually show. */
+  var POLL_MS = 5000;
+
   var esc = function (v) {
     return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -588,7 +596,7 @@
     try {
       var st = (await call('/colleges/agent/status')).status;
       renderAgent(st);
-      if (st.running) { setTimeout(pollAgent, 3000); }
+      if (st.running) { setTimeout(pollAgent, POLL_MS); }
       else if (state.agentWas) { state.agentWas = false; loadColleges(); }
     } catch (_) { /* a polling miss must not break the page */ }
   }
@@ -733,7 +741,7 @@
                 + (st.quotaStopped ? ' — stopped, no quota left this period' : '')
               : '');
       }
-      if (st.running) { setTimeout(pollSend, 3000); }
+      if (st.running) { setTimeout(pollSend, POLL_MS); }
       else { loadColleges(); loadQuota(); }
     } catch (_) { /* a polling miss must not break the page */ }
   }
