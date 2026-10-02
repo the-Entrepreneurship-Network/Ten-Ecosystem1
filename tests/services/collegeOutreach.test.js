@@ -116,13 +116,50 @@ describe('extraction on a real placement page shape', () => {
     expect(rows()[0].sourceUrl).toBe('https://kalinga.ac.in/placement');
   });
 
-  test('picks up the named officer beside the address', () => {
-    // "Dr Anita", not "Anita Rao": the shared nameNear() captures at most two
-    // capitalised words after the cue, and the honorific eats one of them.
-    // Left as it is on purpose — this regex is also the job agent's, it reads
-    // fine as a greeting, and rewriting it to chase a surname would put a live
-    // recruiter path at risk for a cosmetic gain.
-    expect(rows()[0].name).toBe('Dr Anita');
+  test('picks up the named officer beside the address, surname and all', () => {
+    /*
+     * This asserted "Dr Anita" until the brief became the authorities, and the
+     * reasoning for leaving it was that chasing a surname risked the live job
+     * agent for a cosmetic gain. Addressing a Vice-Chancellor as "Dear Dr
+     * Anita" is not cosmetic, so nameNear() now matches the honorific without
+     * capturing it. The job agent gets the same fix — "Contact Dr Priya Nair"
+     * was losing the surname there too.
+     */
+    expect(rows()[0].name).toBe('Anita Rao');
+  });
+
+  test('a bare honorific is never returned as a name', () => {
+    // "Prof. R Sharma" cannot be captured — the pattern wants two full words
+    // and "R" is an initial — so the regex used to backtrack and return
+    // "Prof". An empty name is honest; "Dear Prof" is not.
+    const { nameNear } = require('../../services/v2/recruiterContacts');
+    const t = 'For placements write to Prof. R Sharma at ';
+    expect(nameNear(t, t.length)).toBe('');
+    const u = 'Please contact The Office at ';
+    expect(nameNear(u, u.length)).toBe('');
+  });
+
+  test('the relaxed pass keeps the human too', () => {
+    /*
+     * It used to push name:'', role:'', phone:'' — three hard-coded blanks —
+     * so every address the strict rules missed arrived with nobody attached
+     * and the preview could only say "Dear Sir/Madam".
+     */
+    const src = code('services/collegeDiscovery.js');
+    const fn = src.slice(src.indexOf('function collegeContactsFrom'));
+    const body = fn.slice(0, fn.indexOf('\n}'));
+    expect(body).toMatch(/name: nameNear\(text, m\.index\)/);
+    expect(body).toMatch(/role: collegeRoleNear\(text, m\.index\)/);
+    expect(body).not.toMatch(/name: '',\s*role: ''/);
+  });
+
+  test('the role vocabulary is the college one, not the recruiter one', () => {
+    // roleNear() knows "Talent Partner" and "Hiring Manager" and would never
+    // match "Training and Placement Officer". Same job, different dictionary.
+    const src = code('services/collegeDiscovery.js');
+    expect(src).toMatch(/Training \(\?:and\|&\) Placement Officer/);
+    expect(src).toMatch(/Vice\[- \]\?Chancellor/);
+    expect(code('services/v2/recruiterContacts.js')).not.toMatch(/Placement Officer/);
   });
 
   test('the phone published beside it rides along', () => {
@@ -138,13 +175,22 @@ describe('extraction on a real placement page shape', () => {
   });
 });
 
-describe('PLACEMENT_HINT ranks the right mailbox first', () => {
+describe('PLACEMENT_DESK ranks the right mailbox first', () => {
   test.each(['placement', 'tpo', 'training', 'careers', 'internship', 'corporate.relations'])
     ('%s@ is recognised as the placement office', (local) => {
-      expect(discovery.PLACEMENT_HINT.test(local)).toBe(true);
+      expect(discovery.PLACEMENT_DESK.test(local)).toBe(true);
     });
-  test.each(['principal', 'library', 'admissions'])('%s@ is not', (local) => {
-    expect(discovery.PLACEMENT_HINT.test(local)).toBe(false);
+
+  test.each(['principal', 'library', 'admissions'])('%s@ is not the placement desk', (local) => {
+    expect(discovery.PLACEMENT_DESK.test(local)).toBe(false);
+  });
+
+  /* Not the placement desk is not the same as not wanted. principal@ is an
+     authority and is kept; library@ and admissions@ are neither. */
+  test('principal@ is still collected, as an authority', () => {
+    expect(discovery.isMailableDesk('principal@x.ac.in')).toBe(true);
+    expect(discovery.isMailableDesk('library@x.ac.in')).toBe(false);
+    expect(discovery.isMailableDesk('admissions@x.ac.in')).toBe(false);
   });
 });
 
@@ -156,7 +202,8 @@ describe('saveContacts refuses rows it cannot justify', () => {
       { sourceUrl: 'https://b.edu/contact' },     // no email
       null
     ]);
-    expect(res).toEqual({ added: 0, skipped: 3 });
+    // Nothing routable reached the resolver, so nothing is counted unroutable.
+    expect(res).toEqual({ added: 0, skipped: 3, unroutable: 0 });
   });
 });
 

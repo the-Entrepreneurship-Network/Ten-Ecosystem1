@@ -49,6 +49,17 @@ const CollegeContactSchema = new mongoose.Schema({
     // 'aicte-import' for the open dataset, 'page-discovery' for a fetched page.
     via:         { type: String, default: 'page-discovery', trim: true },
 
+    /*
+     * Does this address's domain accept mail at all?
+     *
+     * Written once, by whichever of discovery or the sender first asks the
+     * resolver, and read by the preview so the count it shows is the number
+     * that will actually be written to. `undefined` means nobody has checked
+     * yet — rows stored before this field existed — not that it failed.
+     */
+    mxOk:        { type: Boolean },
+    mxCheckedAt: { type: Date },
+
     status:      { type: String, enum: ['new', 'mailed', 'replied', 'partnered', 'bounced'], default: 'new', index: true },
 
     // Same contract as Student.emailOptOut: set once, honoured forever, and

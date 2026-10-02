@@ -60,10 +60,18 @@ function nameNear(text, index) {
      from the rest of the sentence. Hence the explicit classes rather than the
      `i` flag, which would have loosened both halves. */
   const m = window.match(
-    /\b(?:[Cc]ontact|[Ee]mail|[Ee]-mail|[Ww]rite to|[Rr]each out to|[Rr]each|[Ss]peak to|[Aa]sk|[Ss]end (?:it |your cv |your resume )?to)\s+(?:me\s+at\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b/);
+    /* The honorific is matched but NOT captured. Without this, "Contact Dr
+       Anita Rao" yielded "Dr Anita" — the title ate one of the two capitalised
+       words the capture allows, and the surname was lost. Indian pages title
+       almost everybody, so this was most of them. */
+    /\b(?:[Cc]ontact|[Ee]mail|[Ee]-mail|[Ww]rite to|[Rr]each out to|[Rr]each|[Ss]peak to|[Aa]sk|[Ss]end (?:it |your cv |your resume )?to)\s+(?:me\s+at\s+)?(?:(?:Dr|Prof|Mr|Mrs|Ms|Shri|Smt|Sri|Er)\.?\s+)*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b/);
   if (!m) return '';
   /* Guard against sentence-initial words that merely look like names. */
-  if (/^(The|We|Our|This|Please|You|If|For|All|Any|Send|Email|Apply)$/.test(m[1])) return '';
+  /* A bare honorific is not a name. "Prof. R Sharma" cannot be captured —
+     the pattern wants two full words and "R" is an initial — so without this
+     the regex backtracks and happily returns "Prof". An empty name is honest;
+     a greeting to "Dear Prof" is not. */
+  if (/^(The|We|Our|This|Please|You|If|For|All|Any|Send|Email|Apply|Dr|Prof|Mr|Mrs|Ms|Shri|Smt|Sri|Er)\b/.test(m[1])) return '';
   return m[1];
 }
 
