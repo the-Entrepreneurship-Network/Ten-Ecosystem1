@@ -118,7 +118,9 @@ describe('the dashboard stops going quiet', () => {
 
   test('progress is polled, not announced once and forgotten', () => {
     expect(html).toMatch(/call\('\/colleges\/send\/status'\)/);
-    expect(html).toMatch(/setTimeout\(pollSend, 3000\)/);
+    // The interval itself lives in one constant — see growthRateLimit.test.js,
+    // which is where the number is pinned. Here it only matters THAT it polls.
+    expect(html).toMatch(/setTimeout\(pollSend, POLL_MS\)/);
   });
 
   test('it says how many of how many, while it runs', () => {

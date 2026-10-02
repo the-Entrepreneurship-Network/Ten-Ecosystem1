@@ -2355,6 +2355,11 @@ function rateLimitKey(req) {
         || (ses.hr && (ses.hr.username || ses.hr.email))
         || (ses.coordinator && ses.coordinator.username)
         || (ses.adminUser && ses.adminUser.username)
+        /* The Growth OS signs in as `growthUser` and was missing from this
+           list, so every one of its requests fell through to the IP bucket —
+           the operator of the dashboard was being counted as a stranger, and
+           shared one allowance with everybody else behind that address. */
+        || (ses.growthUser && ses.growthUser.username)
         || (req.user && String(req.user._id));
     return who ? `u:${who}` : `ip:${ipKeyGenerator(req.ip)}`;
 }
@@ -2365,10 +2370,23 @@ const apiLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: rateLimitKey,
-    // Read-only polling is what the portal does constantly and is not what this
-    // limiter exists to stop. Counting it is how a student who is simply using
-    // the product hits the ceiling; the writes are still counted.
-    skip: (req) => req.method === 'GET' && /^\/(api\/)?(v2\/)?(notifications|messages|chat)/.test(req.path),
+    /*
+     * Read-only polling is what the portal does constantly and is not what
+     * this limiter exists to stop. Counting it is how a student who is simply
+     * using the product hits the ceiling; the writes are still counted.
+     *
+     * The Growth OS progress polls belong here for the same reason. An agent
+     * run takes minutes and a send of 200 takes nearly seven, and a dashboard
+     * watching its own job must not spend the operator's whole allowance to
+     * do it — which is exactly what happened: two three-second polls is 600
+     * requests a quarter-hour against a limit of 300, and the dashboard
+     * started answering 429 to itself. These two paths are behind
+     * requireGrowthAPI and do nothing but read a counter.
+     */
+    skip: (req) => req.method === 'GET' && (
+        /^\/(api\/)?(v2\/)?(notifications|messages|chat)/.test(req.path)
+        || /^\/(api\/)?growth\/colleges\/(agent|send)\/status$/.test(req.path)
+    ),
     message: { success: false, message: "Too many requests. Please slow down." }
 });
 app.use('/api', apiLimiter);
