@@ -141,6 +141,7 @@
       <button class="btn" id="agentRun" type="button">▶ Run the agent</button>
       <span id="agentState" style="font-size:13px;color:#8b8578"></span>
     </div>
+      <div id="agentQueue" style="font-size:12px;color:#8b8578;margin:6px 0"></div>
     <div class="meter" id="agentMeter" style="display:none;margin-top:12px"><i class="used" id="agentBar" style="width:0"></i></div>
 
     <details style="margin-top:16px">
@@ -585,9 +586,10 @@
     meter.style.display = 'block';
     $('agentBar').style.width = pct + '%';
     $('agentState').textContent = st.running
-      ? 'Visiting ' + fmt(st.processed) + ' of ' + fmt(st.total) + ' — found ' + fmt(st.added)
+      ? 'Visiting ' + fmt(st.processed) + ' of ' + fmt(st.total) + ' new colleges — found ' + fmt(st.added)
       : 'Finished — visited ' + fmt(st.processed) + ', found ' + fmt(st.added)
         + (st.failed ? ', ' + fmt(st.failed) + ' unreachable' : '');
+    if (!st.running) loadQueue();
     $('agentRun').disabled = !!st.running;
     $('agentRun').textContent = st.running ? 'Running…' : '▶ Run the agent';
   }
@@ -601,12 +603,27 @@
     } catch (_) { /* a polling miss must not break the page */ }
   }
 
+  /* The queue is the answer to "why did it find nothing?" — it says how many
+     colleges are left to visit and how many the crawl has turned up. */
+  async function loadQueue() {
+    try {
+      var q = (await call('/colleges/agent/queue')).queue || {};
+      var el = $('agentQueue');
+      if (!el) return;
+      el.textContent = q.total
+        ? fmt(q.waiting) + ' colleges waiting · ' + fmt(q.visited) + ' already visited'
+          + (q.dead ? ' · ' + fmt(q.dead) + ' unreachable' : '')
+        : '';
+    } catch (_) { /* a missing count must not break the page */ }
+  }
+
   $('agentRun').addEventListener('click', async function () {
     this.disabled = true;
     try {
       var r = await call('/colleges/agent/run', { method: 'POST', body: JSON.stringify({}) });
       state.agentWas = true;
-      toast('Agent started on ' + fmt(r.total) + ' colleges. This takes a few minutes.');
+      toast('Agent started on ' + fmt(r.total) + ' colleges it has never visited. '
+            + 'This takes a few minutes.');
       pollAgent();
     } catch (e) { toast(e.message); this.disabled = false; }
   });
@@ -872,6 +889,7 @@
   });
 
   loadQuota(); loadSegments(); loadCampaigns(); loadColleges(); loadTemplates(); pollAgent();
+  loadQueue();
   /* A send started before this page was opened — or by a resume after a
      restart — is still worth showing. */
   pollSend();
