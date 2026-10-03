@@ -193,6 +193,26 @@ function selectContacts(rows, limit) {
 /* ── finding colleges the agent has not heard of ──────────────────────────── */
 
 /**
+ * Is there a database to write to right now?
+ *
+ * Mongoose BUFFERS a command issued while disconnected and only rejects after
+ * ten seconds. The queue bookkeeping below is awaited inside the crawl loop,
+ * so without this check a process with no connection pauses ten seconds per
+ * page — four hundred colleges at eight paths each would never finish, and in
+ * CI it timed out every runBulk test at once.
+ *
+ * readyState 1 is "connected". Anything else means skip the bookkeeping and
+ * get on with the crawl; the queue is advisory, the crawl is the job.
+ */
+function dbReady() {
+    try {
+        return require('mongoose').connection.readyState === 1;
+    } catch (_) {
+        return false;   // no driver at all, which is the unit-test environment
+    }
+}
+
+/**
  * An Indian academic host, as published in a link.
  *
  * `.ac.in` and `.edu.in` are restricted suffixes — you cannot register one
@@ -240,7 +260,7 @@ function harvestHosts(html, fromUrl) {
  */
 async function rememberSites(hosts, fromUrl) {
     const list = (hosts || []).filter(Boolean);
-    if (!list.length) return 0;
+    if (!list.length || !dbReady()) return 0;
     const CollegeSite = require('../models/CollegeSite');
     let added = 0;
     for (const host of list) {
@@ -701,6 +721,7 @@ const BATCH = Math.max(1, Math.min(2000,
  * After that the queue feeds itself from what the crawl finds.
  */
 async function nextBatch(limit) {
+    if (!dbReady()) return [];
     const CollegeSite = require('../models/CollegeSite');
 
     const waiting = await CollegeSite.countDocuments({ status: 'new' });
@@ -723,6 +744,7 @@ async function nextBatch(limit) {
 
 /** How deep the queue is, for the dashboard. */
 async function queueDepth() {
+    if (!dbReady()) return { waiting: 0, visited: 0, dead: 0, total: 0 };
     try {
         const CollegeSite = require('../models/CollegeSite');
         const [waiting, visited, dead] = await Promise.all([
@@ -738,6 +760,7 @@ async function queueDepth() {
 
 /** Record that we have been, so the next run moves on rather than repeating. */
 async function markVisited(host, contacts, reached) {
+    if (!dbReady()) return;
     try {
         const CollegeSite = require('../models/CollegeSite');
         await CollegeSite.updateOne({ host: registrableHost(host) }, {
@@ -840,5 +863,5 @@ module.exports = {
     PLACEMENT_DESK, AUTHORITY_DESK, FRONT_OFFICE, WRONG_DESK,
     STUDENT_LOCAL, STUDENT_DOMAIN,
     isMailableDesk, rankOf, selectContacts, hasMx,
-    harvestHosts, registrableHost, rememberSites
+    harvestHosts, registrableHost, rememberSites, dbReady
 };
