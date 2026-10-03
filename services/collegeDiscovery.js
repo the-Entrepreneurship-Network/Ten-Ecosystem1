@@ -190,6 +190,76 @@ function selectContacts(rows, limit) {
         .map((x) => x.r);
 }
 
+/* ── finding colleges the agent has not heard of ──────────────────────────── */
+
+/**
+ * An Indian academic host, as published in a link.
+ *
+ * `.ac.in` and `.edu.in` are restricted suffixes — you cannot register one
+ * without being a recognised institution — so a link to one is a college with
+ * no guessing involved. That matters: this agent's whole promise is that it
+ * never invents an address, and inventing a DOMAIN would be the same sin one
+ * level up.
+ */
+const ACADEMIC_LINK = /https?:\/\/([a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:ac\.in|edu\.in))/gi;
+
+/**
+ * The site, not the department.
+ *
+ * `cse.nitk.ac.in`, `alumni.nitk.ac.in` and `www.nitk.ac.in` are one college
+ * with three front doors. Collapsing them to `nitk.ac.in` is what stops the
+ * queue filling with a hundred subdomains of a place already visited.
+ *
+ * Three labels, because `.ac.in` and `.edu.in` are two-label suffixes.
+ */
+function registrableHost(host) {
+    const parts = String(host || '').toLowerCase().trim().replace(/^www\./, '').split('.');
+    return parts.length <= 3 ? parts.join('.') : parts.slice(-3).join('.');
+}
+
+/** Every college host this page links to, except the one it is. */
+function harvestHosts(html, fromUrl) {
+    const out = new Set();
+    let self = '';
+    try { self = registrableHost(new URL(fromUrl).hostname); } catch (_) { /* keep going */ }
+
+    ACADEMIC_LINK.lastIndex = 0;
+    let m;
+    while ((m = ACADEMIC_LINK.exec(String(html || ''))) !== null) {
+        const host = registrableHost(m[1]);
+        if (!host || host === self) continue;
+        if (host.split('.').length < 3) continue;   // "ac.in" on its own is not a college
+        out.add(host);
+    }
+    return [...out];
+}
+
+/**
+ * Put newly-seen hosts in the queue. Never touches one already there, so a
+ * host that has been visited is not re-queued by the next page that links it.
+ */
+async function rememberSites(hosts, fromUrl) {
+    const list = (hosts || []).filter(Boolean);
+    if (!list.length) return 0;
+    const CollegeSite = require('../models/CollegeSite');
+    let added = 0;
+    for (const host of list) {
+        try {
+            // $setOnInsert and nothing else: a host already visited, or already
+            // marked dead, must not be dragged back to `new` by another page
+            // linking to it. That would be the re-visiting loop all over again.
+            const res = await CollegeSite.updateOne(
+                { host },
+                { $setOnInsert: { host, status: 'new', via: 'crawl',
+                                  discoveredFrom: String(fromUrl || '').slice(0, 400) } },
+                { upsert: true }
+            );
+            if (res.upsertedCount) added++;
+        } catch (_) { /* a duplicate is the index working, not a failure */ }
+    }
+    return added;
+}
+
 /**
  * Page HTML to readable text.
  *
@@ -409,6 +479,14 @@ async function discoverFromSite(website, meta = {}) {
                     via: 'page-discovery'
                 });
             });
+            /*
+             * The same page, read a second way: for links to OTHER colleges.
+             * This is what makes a run find places the last run had never
+             * heard of, instead of walking the same 371 seeds forever.
+             */
+            await rememberSites(harvestHosts(html, url), url)
+                .catch(() => { /* a link that cannot be queued is not a failure */ });
+
             // Enough desks in hand. Walking the remaining paths cannot add a
             // row that survives the cap, so it is seven fetches for nothing.
             if (found.size >= MAX_PER_COLLEGE) break;
@@ -606,6 +684,74 @@ function runStatus() {
  * Never throws: one college with an expired certificate must not end a run of
  * a hundred and seventy-seven. A site that fails is counted and the run moves on.
  */
+/**
+ * How many NEW colleges one press of Run works through.
+ *
+ * Sized against what the run is for: at this hit rate four hundred unvisited
+ * colleges yields comfortably over a hundred reachable officials, which is
+ * the number the outreach actually needs per run.
+ */
+const BATCH = Math.max(1, Math.min(2000,
+    parseInt(process.env.COLLEGE_AGENT_BATCH, 10) || 400));
+
+/**
+ * The next colleges to visit: ones never visited, oldest first.
+ *
+ * Empty queue means a first run, so the hand-written seeds are loaded once.
+ * After that the queue feeds itself from what the crawl finds.
+ */
+async function nextBatch(limit) {
+    const CollegeSite = require('../models/CollegeSite');
+
+    const waiting = await CollegeSite.countDocuments({ status: 'new' });
+    if (!waiting) {
+        const { SEED_COLLEGES } = require('../config/collegeSeeds');
+        const seeds = SEED_COLLEGES.map((raw) => registrableHost(
+            (toOrigin(raw) || '').replace(/^https?:\/\//, '')));
+        await rememberSites(seeds.filter((h) => h && h.split('.').length >= 3), 'seed');
+        await CollegeSite.updateMany({ via: 'crawl', discoveredFrom: 'seed' },
+                                     { $set: { via: 'seed' } }).catch(() => {});
+    }
+
+    const rows = await CollegeSite.find({ status: 'new' })
+        .sort({ createdAt: 1 })
+        .limit(limit || BATCH)
+        .select('host')
+        .lean();
+    return rows.map((r) => r.host);
+}
+
+/** How deep the queue is, for the dashboard. */
+async function queueDepth() {
+    try {
+        const CollegeSite = require('../models/CollegeSite');
+        const [waiting, visited, dead] = await Promise.all([
+            CollegeSite.countDocuments({ status: 'new' }),
+            CollegeSite.countDocuments({ status: 'visited' }),
+            CollegeSite.countDocuments({ status: 'dead' })
+        ]);
+        return { waiting, visited, dead, total: waiting + visited + dead };
+    } catch (_) {
+        return { waiting: 0, visited: 0, dead: 0, total: 0 };
+    }
+}
+
+/** Record that we have been, so the next run moves on rather than repeating. */
+async function markVisited(host, contacts, reached) {
+    try {
+        const CollegeSite = require('../models/CollegeSite');
+        await CollegeSite.updateOne({ host: registrableHost(host) }, {
+            // `dead` is a host that could not be reached at all. It is kept
+            // rather than deleted so the crawl does not re-queue it the next
+            // time another college links to it.
+            $set: { status: reached === false ? 'dead' : 'visited',
+                    lastVisitedAt: new Date(),
+                    contactsFound: Number(contacts) || 0 },
+            $inc: { visitCount: 1 }
+        });
+    } catch (_) { /* no database in a unit test; the loop is what is under test */ }
+}
+
 async function runBulk(sites, deps = {}) {
     if (current.running) return runStatus();
 
@@ -618,7 +764,20 @@ async function runBulk(sites, deps = {}) {
     const discover = deps.discover || discoverFromSite;
     const save = deps.save || saveContacts;
 
-    const list = [...new Set((sites || []).map((x) => String(x).trim()).filter(Boolean))];
+    /*
+     * An explicit list is honoured — that is how the tests drive this, and how
+     * a one-off re-crawl would. With no list, the queue decides, which is the
+     * whole point: each run takes the NEXT unvisited colleges.
+     */
+    let list = [...new Set((sites || []).map((x) => String(x).trim()).filter(Boolean))];
+    if (!list.length) {
+        try {
+            list = await (deps.nextBatch || nextBatch)(deps.limit || BATCH);
+        } catch (err) {
+            current = { ...current, running: false, error: 'Could not read the queue: ' + err.message };
+            return runStatus();
+        }
+    }
     current = {
         running: true, startedAt: new Date(), finishedAt: null,
         total: list.length, processed: 0, added: 0, skipped: 0, failed: 0,
@@ -631,9 +790,12 @@ async function runBulk(sites, deps = {}) {
             const i = cursor++;
             if (i >= list.length) return;
             const site = list[i];
+            let got = 0;
+            let reached = true;
             try {
                 const rows = await withDeadline(
                     discover(site, { college: '', state: '' }), COLLEGE_DEADLINE_MS, site);
+                got = rows.length;
                 if (rows.length) {
                     const { added, skipped } = await save(rows);
                     current.added += added;
@@ -646,9 +808,17 @@ async function runBulk(sites, deps = {}) {
                 // certificate, a redirect loop or a server that never stops
                 // talking must not end a run of three hundred and seventy.
                 current.failed += 1;
+                reached = false;
             }
             current.processed += 1;
             current.lastCollege = site;
+            /*
+             * Marked whatever happened, so the next run moves ON. A site left
+             * `new` after being tried is a site this agent would visit again
+             * every run forever, which is the bug this queue exists to end.
+             */
+            await (deps.markVisited || markVisited)(site, got, reached)
+                .catch(() => { /* the crawl matters more than the bookkeeping */ });
         }
     }
 
@@ -664,9 +834,11 @@ async function runBulk(sites, deps = {}) {
 
 module.exports = {
     discoverFromSite, saveContacts, htmlToText, toOrigin, titleOf,
-    runBulk, runStatus, withDeadline, PATHS, CONCURRENCY, MAX_PER_COLLEGE,
+    runBulk, runStatus, withDeadline, nextBatch, queueDepth, markVisited, BATCH,
+    PATHS, CONCURRENCY, MAX_PER_COLLEGE,
     COLLEGE_DEADLINE_MS,
     PLACEMENT_DESK, AUTHORITY_DESK, FRONT_OFFICE, WRONG_DESK,
     STUDENT_LOCAL, STUDENT_DOMAIN,
-    isMailableDesk, rankOf, selectContacts, hasMx
+    isMailableDesk, rankOf, selectContacts, hasMx,
+    harvestHosts, registrableHost, rememberSites
 };

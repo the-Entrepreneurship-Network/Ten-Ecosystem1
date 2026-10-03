@@ -258,9 +258,42 @@ describe('opting out actually removes the address', () => {
 
 describe('re-running discovery or an import cannot undo a decision', () => {
   test('saveContacts inserts only, never overwrites', () => {
+    /*
+     * Scoped to saveContacts. This used to police the WHOLE file for `$set:`,
+     * which was a fair proxy while the file only ever inserted contacts — but
+     * it is the contact rows that must never be overwritten, not every write
+     * the file makes. The crawl's own bookkeeping legitimately updates a site
+     * it has just visited; the test below is what keeps that honest.
+     */
     const src = code('services/collegeDiscovery.js');
-    expect(src).toContain('$setOnInsert');
-    expect(src).not.toMatch(/\$set:/);
+    const start = src.indexOf('async function saveContacts');
+    const fn = src.slice(start, src.indexOf('\n}', src.indexOf('for (const row of valid)', start)));
+    expect(start).toBeGreaterThan(-1);
+    expect(fn).toContain('$setOnInsert');
+    expect(fn).not.toMatch(/\$set:/);
+  });
+
+  test('nothing in discovery ever updates a CollegeContact in place', () => {
+    /*
+     * The property the assertion above was really protecting: a re-run must
+     * not resurrect an address that opted out, reset a status, or overwrite a
+     * contact name a human corrected. Stated against the collection rather
+     * than against the file, so the crawl can keep its own notes.
+     */
+    const src = code('services/collegeDiscovery.js');
+    const writes = src.match(/CollegeContact\.\w+\(/g) || [];
+    expect(writes.sort()).toEqual(['CollegeContact.updateOne(']);
+    const at = src.indexOf('CollegeContact.updateOne(');
+    expect(src.slice(at, at + 220)).toContain('$setOnInsert');
+    expect(src.slice(at, at + 220)).not.toMatch(/\$set:/);
+  });
+
+  test('the site queue may update itself, but only the queue', () => {
+    const src = code('services/collegeDiscovery.js');
+    const at = src.indexOf('async function markVisited');
+    const fn = src.slice(at, src.indexOf('\n}', at));
+    expect(fn).toMatch(/CollegeSite\.updateOne/);
+    expect(fn).not.toMatch(/CollegeContact/);
   });
 
   test('the bulk import does the same', () => {

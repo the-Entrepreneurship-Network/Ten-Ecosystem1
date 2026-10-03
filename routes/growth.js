@@ -403,15 +403,40 @@ const discoverLimiter = rateLimit({
  * not every college in India. Importing the AICTE dataset is how the list
  * grows past it, and that needs no crawling at all.
  */
-api.post('/colleges/agent/run', requireGrowthAPI, (req, res) => {
+/**
+ * POST /colleges/agent/run — work through the next batch of UNVISITED colleges.
+ *
+ * This used to be `runBulk(SEED_COLLEGES)`: the same 371 hard-coded sites,
+ * every single run. The first run collected what they publish and every run
+ * after it re-read the same pages to find nothing — "Visiting 238 of 371 —
+ * found 0". Passing no list makes the agent take the next unvisited colleges
+ * from its own queue, and the queue grows as it crawls.
+ */
+api.post('/colleges/agent/run', requireGrowthAPI, async (req, res) => {
     const status = collegeDiscovery.runStatus();
     if (status.running) {
         return res.status(409).json({ success: false, error: 'The agent is already running.', status });
     }
-    collegeDiscovery.runBulk(SEED_COLLEGES).catch((err) => {
+
+    const queue = await collegeDiscovery.queueDepth();
+    // A queue that has never been filled is seeded on the first run, so the
+    // count to report is the seed list rather than zero.
+    const waiting = queue.total ? queue.waiting : SEED_COLLEGES.length;
+    if (!waiting) {
+        return res.status(409).json({ success: false, queue,
+            error: 'Every college the agent knows has been visited. It finds new ones as it crawls, so run it again after the next batch.' });
+    }
+
+    collegeDiscovery.runBulk().catch((err) => {
         console.error('[Growth] agent run failed:', err.message);
     });
-    res.json({ success: true, started: true, total: SEED_COLLEGES.length });
+    res.json({ success: true, started: true,
+               total: Math.min(waiting, collegeDiscovery.BATCH), queue });
+});
+
+/** GET /colleges/agent/queue — how many colleges are waiting, visited, dead. */
+api.get('/colleges/agent/queue', requireGrowthAPI, async (req, res) => {
+    res.json({ success: true, queue: await collegeDiscovery.queueDepth() });
 });
 
 api.get('/colleges/agent/status', requireGrowthAPI, (req, res) => {
