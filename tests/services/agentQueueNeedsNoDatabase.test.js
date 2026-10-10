@@ -26,17 +26,37 @@
  * settles, the way a buffered one behaves until it rejects. doMock is used
  * rather than mock because it is not hoisted, so each test picks its own state.
  */
+/**
+ * Is mongoose actually installed here?
+ *
+ * CI installs it; this sandbox does not. The difference matters: `virtual: true`
+ * declares "this module does not exist", and passing it when the package IS
+ * present registers the mock under a virtual key while `require('mongoose')`
+ * inside dbReady() still resolves to the real, disconnected module. The stub is
+ * then never consulted and the test quietly checks nothing.
+ */
+const MONGOOSE_INSTALLED = (() => {
+    try { require.resolve('mongoose'); return true; } catch (_) { return false; }
+})();
+
+const asVirtual = MONGOOSE_INSTALLED ? undefined : { virtual: true };
+
 function load(readyState) {
     jest.resetModules();
     const writes = [];
     const hang = () => new Promise(() => {});
-    jest.doMock('mongoose', () => ({ connection: { readyState } }), { virtual: true });
+    jest.doMock('mongoose', () => ({ connection: { readyState }, __stub: true }), asVirtual);
     jest.doMock('../../models/CollegeSite', () => ({
         updateOne: (...a) => { writes.push(['updateOne', a]); return hang(); },
         bulkWrite: (...a) => { writes.push(['bulkWrite', a]); return hang(); },
         countDocuments: (...a) => { writes.push(['countDocuments', a]); return hang(); },
         find: () => { writes.push(['find', []]); return { sort: () => ({ limit: () => ({ lean: hang }) }) }; },
-    }), { virtual: true });
+    }));
+
+    // A mock that silently fails to apply would make every assertion below
+    // meaningless, so prove the module under test will really see the stub.
+    expect(require('mongoose').__stub).toBe(true);
+
     return { discovery: require('../../services/collegeDiscovery'), writes };
 }
 
