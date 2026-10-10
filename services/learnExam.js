@@ -88,7 +88,15 @@ const Type = {
 };
 
 const GEMINI_HOST  = 'generativelanguage.googleapis.com';
-const GEMINI_MODEL = 'gemini-2.0-flash';
+/**
+ * Which model to ask.
+ *
+ * Google retires these on their own schedule — gemini-2.0-flash started
+ * answering 404 with "no longer available", which took the exam down until
+ * someone shipped a one-word code change. Reading it from the environment
+ * makes the next retirement a config edit and a restart instead.
+ */
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 
 /**
  * How long to wait for the model before giving up.

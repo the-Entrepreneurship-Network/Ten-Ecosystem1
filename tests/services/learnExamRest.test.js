@@ -49,7 +49,7 @@ function stubHttps(status, body) {
 }
 
 function load() {
-    delete require.cache[require.resolve(SRC)];
+    jest.resetModules();
     process.env.GEMINI_API_KEY = KEY;
     return require(SRC);
 }
@@ -88,9 +88,22 @@ describe('the request we send', () => {
         expect(body.generationConfig.responseMimeType).toBe('application/json');
         expect(s.seen.opts.method).toBe('POST');
         expect(s.seen.opts.host).toBe('generativelanguage.googleapis.com');
-        expect(String(s.seen.opts.path)).toContain('gemini-2.0-flash');
+        expect(String(s.seen.opts.path)).toContain('gemini-3.8-flash');
         void schema;
         s.restore();
+    });
+
+    test('the model can be changed without a deploy', async () => {
+        // Google retires models; the exam must not need a code change for that.
+        const st = stubHttps(200, { candidates: [{ content: { parts: [{ text: '{"ok":true}' }] } }] });
+        jest.resetModules();
+        process.env.GEMINI_API_KEY = KEY;
+        process.env.GEMINI_MODEL = 'some-future-model';
+        await require(SRC).selfTest();
+
+        expect(String(st.seen.opts.path)).toContain('some-future-model');
+        delete process.env.GEMINI_MODEL;
+        st.restore();
     });
 
     test('a stalled connection gives up instead of hanging for ever', async () => {
@@ -153,7 +166,7 @@ describe('failures never leak the key', () => {
         const spy = jest.spyOn(https, 'request').mockImplementation(() => {
             throw new Error('a request was sent with no key');
         });
-        delete require.cache[require.resolve(SRC)];
+        jest.resetModules();
         for (const v of ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_KEY']) delete process.env[v];
         const exam = require(SRC);
 
@@ -164,7 +177,7 @@ describe('failures never leak the key', () => {
     });
 
     test('with no key at all it says so instead of calling out', async () => {
-        delete require.cache[require.resolve(SRC)];
+        jest.resetModules();
         delete process.env.GEMINI_API_KEY;
         delete process.env.GOOGLE_API_KEY;
         delete process.env.GEMINI_KEY;
