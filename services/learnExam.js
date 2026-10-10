@@ -61,7 +61,6 @@ function diagnose() {
 /** One real round trip, so "it should work" can be replaced with "it does". */
 async function selfTest() {
     if (!ready()) return diagnose();
-    const { Type } = require('@google/genai');
     try {
         const out = await gemini('Reply with {"ok":true}. Nothing else.',
             { type: Type.OBJECT, properties: { ok: { type: Type.BOOLEAN } }, required: ['ok'] });
@@ -71,18 +70,101 @@ async function selfTest() {
     }
 }
 
+/**
+ * Schema field types.
+ *
+ * These came from the Google SDK, whose only role here was to hold five
+ * uppercase strings and wrap one HTTPS POST. That SDK needs the fetch API and
+ * ReadableStream as globals, which this server's Node 16 does not have, so
+ * loading it threw before a request was ever made. The REST API takes the same
+ * strings, so every existing `Type.OBJECT` call site is unchanged.
+ */
+const Type = {
+    OBJECT:  'OBJECT',
+    ARRAY:   'ARRAY',
+    STRING:  'STRING',
+    BOOLEAN: 'BOOLEAN',
+    INTEGER: 'INTEGER'
+};
+
+const GEMINI_HOST  = 'generativelanguage.googleapis.com';
+const GEMINI_MODEL = 'gemini-2.0-flash';
+
+/**
+ * How long to wait for the model before giving up.
+ *
+ * Without this a stalled connection holds the request open indefinitely and the
+ * student sees a page that never resolves — the exam has no other way out.
+ */
+const GEMINI_TIMEOUT_MS = 60000;
+
+/**
+ * One POST to Gemini, returning the parsed JSON body.
+ *
+ * The API key travels in the query string, so the path must never reach an
+ * error message, a log line or a thrown stack. Failures are reported by status
+ * code and a short excerpt of the body, never by anything that saw the key.
+ */
+function post(body) {
+    const https = require('https');
+    const payload = JSON.stringify(body);
+
+    return new Promise((resolve, reject) => {
+        const req = https.request({
+            host: GEMINI_HOST,
+            path: `/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey())}`,
+            method: 'POST',
+            headers: {
+                'Content-Type':   'application/json',
+                'Content-Length': Buffer.byteLength(payload),
+                'User-Agent':     'aistudio-build'
+            }
+        }, (res) => {
+            let text = '';
+            res.setEncoding('utf8');
+            res.on('data', (c) => { text += c; });
+            res.on('end', () => {
+                if (res.statusCode < 200 || res.statusCode >= 300) {
+                    return reject(new Error(`Gemini returned ${res.statusCode}: ${text.slice(0, 200)}`));
+                }
+                try {
+                    resolve(JSON.parse(text));
+                } catch (_) {
+                    reject(new Error('Gemini sent a reply that was not JSON.'));
+                }
+            });
+        });
+
+        req.setTimeout(GEMINI_TIMEOUT_MS, () => {
+            req.destroy(new Error(`Gemini did not answer within ${GEMINI_TIMEOUT_MS}ms (timeout).`));
+        });
+        req.on('error', reject);
+        req.end(payload);
+    });
+}
+
 async function gemini(prompt, schema) {
-    const { GoogleGenAI } = require('@google/genai');
-    const ai = new GoogleGenAI({
-        apiKey: apiKey(),
-        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+    if (!apiKey()) throw new Error('No Gemini key on this server.');
+
+    const out = await post({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema:   schema
+        }
     });
-    const res = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
-        contents: prompt,
-        config: { responseMimeType: 'application/json', responseSchema: schema }
-    });
-    return JSON.parse(res.text);
+
+    const cand = out && out.candidates && out.candidates[0];
+    const text = cand && cand.content && cand.content.parts
+        && cand.content.parts[0] && cand.content.parts[0].text;
+
+    if (!text) {
+        // A blocked or empty candidate is a normal outcome, not a crash.
+        const why = (out && out.promptFeedback && out.promptFeedback.blockReason)
+            || (cand && cand.finishReason) || 'no content';
+        throw new Error(`Gemini returned no answer (${why}).`);
+    }
+    return JSON.parse(text);
 }
 
 /**
@@ -93,7 +175,6 @@ async function gemini(prompt, schema) {
  * @returns {Promise<Array<{kind, prompt, options?, answerIndex?}>>}
  */
 async function generatePaper(mod, topicN) {
-    const { Type } = require('@google/genai');
     const isFinal = topicN === 0;
     const wanted = { written: isFinal ? FINAL_WRITTEN : TOPIC_WRITTEN,
                      mcq:     isFinal ? FINAL_MCQ     : TOPIC_MCQ };
@@ -157,7 +238,6 @@ ${source.slice(0, 24000)}`;
  * @returns {Promise<Array<{correct: boolean, feedback: string}>>}
  */
 async function gradeWritten(mod, topicN, pairs) {
-    const { Type } = require('@google/genai');
     const topic = topicN > 0 ? mod.topics[topicN - 1] : null;
     const context = topic
         ? `${topic.title}\n${topic.technical}`
