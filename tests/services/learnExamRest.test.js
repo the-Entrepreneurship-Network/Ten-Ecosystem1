@@ -185,3 +185,82 @@ describe('failures never leak the key', () => {
         await expect(exam.selfTest()).resolves.toMatchObject({ reason: 'no-key' });
     });
 });
+
+/**
+ * Google answers 503 "this model is currently experiencing high demand" under
+ * load, and 429 when the free tier's per-minute limit is hit. Both clear in
+ * seconds. Without a retry, one of them is a student's exam failing outright.
+ */
+describe('a 503 or 429 is asked again, nothing else is', () => {
+    const OK = { candidates: [{ content: { parts: [{ text: '{"ok":true}' }] } }] };
+    const BUSY = { error: { code: 503, message: 'high demand', status: 'UNAVAILABLE' } };
+
+    /** Answer each call with the next entry in `replies`; count the calls. */
+    function stubSequence(replies) {
+        const calls = { n: 0 };
+        jest.spyOn(https, 'request').mockImplementation((opts, cb) => {
+            const { status, body, fail } = replies[Math.min(calls.n, replies.length - 1)];
+            calls.n += 1;
+            const req = new EventEmitter();
+            req.setTimeout = () => {};
+            req.destroy = () => {};
+            req.end = () => {
+                if (fail) return process.nextTick(() => req.emit('error', new Error(fail)));
+                const res = new EventEmitter();
+                res.statusCode = status;
+                res.setEncoding = () => {};
+                process.nextTick(() => {
+                    res.emit('data', JSON.stringify(body));
+                    res.emit('end');
+                });
+                cb(res);
+            };
+            return req;
+        });
+        return calls;
+    }
+
+    // The backoff is real seconds in production. Firing the timer at once keeps
+    // the suite instant while still proving the retry happened.
+    beforeEach(() => {
+        jest.spyOn(global, 'setTimeout').mockImplementation((fn) => { fn(); return 0; });
+    });
+
+    test('a 503 on the first try still produces a paper on the second', async () => {
+        const calls = stubSequence([
+            { status: 503, body: BUSY },
+            { status: 200, body: OK },
+        ]);
+        await expect(load().__gemini('hi', {})).resolves.toEqual({ ok: true });
+        expect(calls.n).toBe(2);
+    });
+
+    test('a 429 is retried the same way', async () => {
+        const calls = stubSequence([
+            { status: 429, body: { error: { code: 429, message: 'rate limit' } } },
+            { status: 200, body: OK },
+        ]);
+        await expect(load().__gemini('hi', {})).resolves.toEqual({ ok: true });
+        expect(calls.n).toBe(2);
+    });
+
+    test('three attempts is the ceiling, and the real reason is reported', async () => {
+        const calls = stubSequence([{ status: 503, body: BUSY }]);
+        await expect(load().__gemini('hi', {})).rejects.toThrow(/503/);
+        expect(calls.n).toBe(3);                 // one try plus two retries, not forever
+    });
+
+    test('a 400 is our mistake and is NOT retried', async () => {
+        const calls = stubSequence([
+            { status: 400, body: { error: { code: 400, message: 'bad schema' } } },
+        ]);
+        await expect(load().__gemini('hi', {})).rejects.toThrow(/400/);
+        expect(calls.n).toBe(1);
+    });
+
+    test('a dropped connection is not retried either', async () => {
+        const calls = stubSequence([{ fail: 'ECONNRESET' }]);
+        await expect(load().__gemini('hi', {})).rejects.toThrow(/ECONNRESET/);
+        expect(calls.n).toBe(1);
+    });
+});

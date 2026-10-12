@@ -133,7 +133,9 @@ function post(body) {
             res.on('data', (c) => { text += c; });
             res.on('end', () => {
                 if (res.statusCode < 200 || res.statusCode >= 300) {
-                    return reject(new Error(`Gemini returned ${res.statusCode}: ${text.slice(0, 200)}`));
+                    const err = new Error(`Gemini returned ${res.statusCode}: ${text.slice(0, 200)}`);
+                    err.status = res.statusCode;
+                    return reject(err);
                 }
                 try {
                     resolve(JSON.parse(text));
@@ -151,16 +153,47 @@ function post(body) {
     });
 }
 
+/**
+ * Statuses that mean "ask again", not "you did something wrong".
+ *
+ * 503 is Google's own wording: "This model is currently experiencing high
+ * demand. Spikes in demand are usually temporary. Please try again later."
+ * 429 is the free tier's rate limit, which clears in seconds. Both arrive
+ * fast, so retrying costs a student a moment rather than another minute.
+ *
+ * Nothing else is retried. A 400 is a bad request and will be bad again; a
+ * 404 means the model is gone; a timeout has already cost sixty seconds and
+ * trying twice more would leave a child staring at a blank page for three
+ * minutes.
+ */
+const RETRY_STATUS = [429, 503];
+const RETRY_WAITS_MS = [1000, 3000];
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 async function gemini(prompt, schema) {
     if (!apiKey()) throw new Error('No Gemini key on this server.');
 
-    const out = await post({
+    const body = {
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
             responseMimeType: 'application/json',
             responseSchema:   schema
         }
-    });
+    };
+
+    let out;
+    for (let attempt = 0; ; attempt += 1) {
+        try {
+            out = await post(body);
+            break;
+        } catch (err) {
+            const again = RETRY_STATUS.includes(err && err.status)
+                && attempt < RETRY_WAITS_MS.length;
+            if (!again) throw err;
+            await sleep(RETRY_WAITS_MS[attempt]);
+        }
+    }
 
     const cand = out && out.candidates && out.candidates[0];
     const text = cand && cand.content && cand.content.parts
@@ -290,5 +323,6 @@ ${pairs.map((p, i) => `Q${i + 1}: ${p.prompt}\nA${i + 1}: ${String(p.answer || '
 module.exports = {
     ready, diagnose, selfTest, generatePaper, gradeWritten,
     TOPIC_WRITTEN, TOPIC_MCQ, FINAL_WRITTEN, FINAL_MCQ,
-    TOPIC_MINUTES, FINAL_MINUTES, PASS_WRITTEN, PASS_MCQ
+    TOPIC_MINUTES, FINAL_MINUTES, PASS_WRITTEN, PASS_MCQ,
+    __gemini: gemini   // for the retry tests; not part of the public surface
 };
