@@ -476,27 +476,58 @@ function openRazorpay(orderData, type) {
   rzp.open();
 }
 
+/**
+ * Open a certificate PDF.
+ *
+ * A plain window.open is blocked when it runs after an await: by then the
+ * browser no longer counts it as something the student clicked. Falling back
+ * to a navigation keeps the download working rather than failing in silence.
+ */
+function openPdf(url) {
+  const win = window.open(url, '_blank');
+  if (!win) window.location.href = url;
+}
+
 async function downloadCert(pdfUrl, type) {
-  currentPdfUrl = pdfUrl;
+  // The list renders onclick="downloadCert('${record.pdfUrl}', ...)", so a
+  // missing URL arrives here as the STRING 'null', which is truthy.
+  currentPdfUrl    = (pdfUrl && pdfUrl !== 'null') ? pdfUrl : null;
   currentRevealType = type;
-  // If no PDF yet, generate it
-  if (!pdfUrl || pdfUrl === 'null') {
+
+  if (currentPdfUrl) return openPdf(currentPdfUrl);
+
+  // No PDF yet, so make one. Every failure below says so out loud: a button
+  // that does nothing reads as a broken site, and a student cannot tell
+  // "still working" apart from "gave up".
+  try {
     const r = await fetch(`/api/v2/certificates/generate-pdf/${type}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-employee-id': EMP_ID }
     });
     const d = await r.json();
-    if (d.success) {
-      currentPdfUrl = d.pdfUrl;
-      window.open(d.pdfUrl, '_blank');
-    }
-  } else {
-    window.open(pdfUrl, '_blank');
+    if (!d.success || !d.pdfUrl) throw new Error(d.message || 'The certificate could not be prepared.');
+    currentPdfUrl = d.pdfUrl;
+    openPdf(d.pdfUrl);
+  } catch (err) {
+    Swal.fire({
+      icon: 'error', title: 'Download failed', text: err.message,
+      background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#D4AF37'
+    });
   }
 }
 
+/**
+ * The Download PDF button on the reveal overlay.
+ *
+ * This used to open currentPdfUrl and do nothing whatsoever when it was null.
+ * That is every student who reaches the overlay through claimCert's
+ * "payment coming soon" branch or through a psychology trigger, because
+ * neither of those sets it — so the button was dead for most people who saw
+ * it. Delegating generates the PDF on demand, exactly as the certificate
+ * list already does.
+ */
 function downloadCurrentCert() {
-  if (currentPdfUrl) window.open(currentPdfUrl, '_blank');
+  return downloadCert(currentPdfUrl, currentRevealType);
 }
 
 function shareLinkedIn() {
