@@ -188,3 +188,77 @@ describe('the payment QR cannot be a broken image', () => {
     expect(BUSINESS_UPI.upiId).toBe('paytmqr5k0ods@ptys');
   });
 });
+
+// The route body, bounded by the next top-level app.get/app.post rather than a
+// guessed character count — the handler is ~4.5k and a fixed window silently
+// cut the response object in half.
+function tenureStatusRoute() {
+  const at = serverJs.indexOf("app.get('/api/tenure-payment/status'");
+  expect(at).toBeGreaterThan(-1);
+  const rest = serverJs.slice(at + 10);
+  const next = rest.search(/\napp\.(get|post|put|delete)\(/);
+  return next === -1 ? serverJs.slice(at) : serverJs.slice(at, at + 10 + next);
+}
+
+describe('the fee screen bills the same student the gate blocks', () => {
+  /**
+   * The status route and middleware/tenurePaymentGate.js answered the same
+   * question from two different sets of rules.
+   *
+   * The gate calls isExempt(), which covers both isExistingStudent and the
+   * registration cutoff, and lets those students straight through. The status
+   * route had its own copy of the price list and no notion of the cutoff at
+   * all: requiresPayment was `isShortCourse && !isPaid`. The dashboard shows
+   * the payment wall purely on that flag.
+   *
+   * So an exempt student on a paid track was never blocked from anything — and
+   * was still shown a bill for Rs 1,000 to Rs 2,000, with a working QR. Nothing
+   * downstream would have rejected the money.
+   */
+  it('status will not ask an exempt student to pay', () => {
+    const route = tenureStatusRoute();
+    expect(route).toMatch(/isExemptStudent\s*=\s*tenureFeeCfg\.isExempt\(stu\)/);
+    expect(route).toMatch(/requiresPayment:\s*isShortCourse && !isPaid && !isExemptStudent/);
+  });
+
+  it('status prices from the shared config, not its own table', () => {
+    const route = tenureStatusRoute();
+    expect(route).toMatch(/tenureFeeCfg\.getFeeFor\(stu\)/);
+    // The local table must not be what this route answers from.
+    expect(route).not.toMatch(/SHORT_COURSE_PRICES\[tenure\]/);
+  });
+
+  it('the exemption rule still covers both reasons', () => {
+    // Guards the helper the route now leans on.
+    expect(cfg.isExempt({ isExistingStudent: true })).toBe(true);
+    expect(cfg.isExempt({ createdAt: new Date('2026-01-01') })).toBe(true);
+    expect(cfg.isExempt({ createdAt: new Date('2026-12-01') })).toBe(false);
+    expect(cfg.isExempt(null)).toBe(false);
+  });
+});
+
+describe('one collection account, named in one place', () => {
+  it('status hands the dashboard the configured UPI identity', () => {
+    const route = tenureStatusRoute();
+    expect(route).toMatch(/upi:\s*\{\s*id:\s*BUSINESS_UPI\.upiId/);
+  });
+
+  it('the dashboard no longer hard-codes the account', () => {
+    // The QR is generated server-side from config/payment.js. A literal here
+    // would print one account beside a QR pointing at another the moment the
+    // collection account changes — the invoice and the money parting ways.
+    const live = dashboard.split('\n')
+      .filter((l) => l.includes('paytmqr5k0ods@ptys') && !l.trim().startsWith('//'));
+    expect(live).toEqual([]);
+    expect(dashboard).toMatch(/currentTenureUpiId = \(data\.upi && data\.upi\.id\)/);
+  });
+
+  it('the dead payment wall is gone', () => {
+    // 81 lines that were never displayed: the QR <img> had src="" and was
+    // never populated, every field was a static placeholder, and its submit
+    // button called submitTenurePayment(), which is not defined anywhere.
+    expect(dashboard).not.toMatch(/id="tenurePaymentWall"/);
+    expect(dashboard).not.toMatch(/submitTenurePayment/);
+    expect(dashboard).not.toMatch(/id="twQrCode"/);
+  });
+});
