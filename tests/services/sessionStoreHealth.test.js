@@ -119,6 +119,29 @@ describe('a failure observation expires — the flag is not a one-way door', () 
   });
 });
 
+describe('the session store resolves against the installed connect-mongo', () => {
+  // connect-mongo v6 exports { MongoStore }; v4 exports the class itself. We
+  // are pinned to v4 because v6 requires mongodb>=5 while mongoose@6 pins
+  // mongodb@4 — that clash made `npm ci`, and so every deploy, fail outright.
+  //
+  // Reading `.MongoStore` off v4 yields undefined, and the very next line calls
+  // `.create()` on it. That throws only once Mongo is reachable and a session
+  // is written, i.e. in production and not in any unit test, so it is worth
+  // pinning the import shape here rather than discovering it live.
+  it('gives a MongoStore with a usable create(), whichever major is installed', () => {
+    const connectMongo = require('connect-mongo');
+    const MongoStore = connectMongo.MongoStore || connectMongo;
+    expect(typeof MongoStore.create).toBe('function');
+  });
+
+  it('server.js reads the export defensively rather than assuming v6', () => {
+    const at = source.indexOf("require('connect-mongo')");
+    expect(at).toBeGreaterThan(-1);
+    const block = source.slice(at, at + 200);
+    expect(block).toMatch(/connectMongo\.MongoStore\s*\|\|\s*connectMongo/);
+  });
+});
+
 describe('the session store no longer caps every session at 30 minutes', () => {
   it('does not pass a fixed ttl to connect-mongo', () => {
     // `ttl: 1800` applied to EVERY session regardless of its cookie, so the

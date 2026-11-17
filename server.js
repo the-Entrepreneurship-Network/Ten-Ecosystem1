@@ -1848,7 +1848,12 @@ class FallbackStore extends session.Store {
             if (!this.mongoStore) {
                 try {
                     console.log("[FallbackStore] MongoDB is connected. Initializing MongoStore for session persistence...");
-                    const MongoStore = require('connect-mongo').MongoStore;
+                    // connect-mongo v6 exports { MongoStore }; v4 exports the
+                    // class itself. We are pinned to v4 because v6 needs
+                    // mongodb>=5 while mongoose@6 pins mongodb@4 — that clash
+                    // made `npm ci` (and therefore every deploy) fail.
+                    const connectMongo = require('connect-mongo');
+                    const MongoStore = connectMongo.MongoStore || connectMongo;
                     this.mongoStore = MongoStore.create({
                         mongoUrl: process.env.MONGODB_URI,
                         // No `ttl`: each session document expires at its own
