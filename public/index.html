@@ -171,7 +171,7 @@
      This is the internship portal; the band sends students to the main TEN
      site. First thing on scroll, gold on black so the eye lands on it, and the
      whole card is one big link that opens in a new tab. */
-  .eco-band { background:#000; padding:64px 22px 8px; display:flex; justify-content:center; }
+  .eco-band { background:#000; padding:64px 22px 8px; display:flex; justify-content:center; flex-wrap:wrap; gap:18px; }
   .eco-card {
     position:relative; display:block; max-width:1000px; width:100%;
     text-decoration:none; color:#fff; text-align:center; overflow:hidden;
@@ -204,6 +204,27 @@
   .eco-card:hover .eco-go { gap:18px; background:#ffd35a; }
   @keyframes ecoSheen { 0%,15% { background-position:180% 0; } 60%,100% { background-position:-40% 0; } }
   @media (prefers-reduced-motion:reduce) { .eco-card::before { animation:none; } .eco-card { transition:none; } }
+
+  /* The Business Playground sits in the same band as the main-site card but
+     reads as secondary: shorter, blue rather than gold, and no sheen — two
+     animated gold panels stacked would compete for the same attention. Blue
+     also separates the audiences at a glance: gold is the internship, blue is
+     the school game. */
+  .eco-card.eco-alt {
+    padding:38px 40px;
+    background:
+      radial-gradient(120% 160% at 50% -20%, rgba(124,196,255,.15), transparent 60%),
+      linear-gradient(180deg,#05101a,#0a0a0a);
+    border-color:rgba(124,196,255,.32);
+  }
+  .eco-card.eco-alt:hover { border-color:rgba(124,196,255,.70); }
+  .eco-card.eco-alt::before { animation:none; background:none; }
+  .eco-alt .eco-eyebrow { color:#7cc4ff; }
+  .eco-alt .eco-title { font-size:clamp(22px,3.4vw,32px); }
+  .eco-alt .eco-sub { margin-bottom:22px; }
+  .eco-alt .eco-go { background:#7cc4ff; }
+  .eco-card.eco-alt:hover .eco-go { background:#9ad2ff; }
+  .eco-card.eco-alt:focus-visible { outline-color:#7cc4ff; }
 
   /* ---------- section base ---------- */
   section { position:relative; }
@@ -661,7 +682,7 @@
   </div>
   <div class="hero-strip">
     <span>The Entrepreneurship Network — virtual internships &amp; portals</span>
-    <span><a href="academics.html">ACADEMICS</a> / <a href="student-portal/">STUDIO</a> / <a href="/domains">DOMAINS</a></span>
+    <span><a href="academics.html">ACADEMICS</a> / <a href="student-portal/">STUDIO</a> / <a href="/domains">DOMAINS</a> / <a href="https://ten-biz-game.tenetwork.workers.dev" target="_blank" rel="noopener noreferrer">PLAYGROUND</a></span>
   </div>
 </header>
 
@@ -673,6 +694,25 @@
     <h2 class="eco-title">TEN is bigger than one internship.</h2>
     <p class="eco-sub">You are in the internship portal. See everything The Entrepreneurship Network builds — the programmes, the ventures, the community — on the main site.</p>
     <span class="eco-go">Explore entrepreneurshipnetwork.net <span aria-hidden="true">&rarr;</span></span>
+  </a>
+
+  <!-- TEN Business Playground — the school game.
+       It runs on Cloudflare Workers, not on this server, so this is a link out
+       rather than a route. The page is static (express.static serves it,
+       nothing templates it), so the URL cannot come from the environment
+       without adding a fetch that would leave a dead link whenever it failed.
+
+       When the subdomain lands, every occurrence of the workers.dev host in
+       this file becomes https://game.entrepreneurshipnetwork.net — the nav,
+       this card, and both footer links. tests/public/playgroundLink.test.js
+       fails if they are changed apart, because a half-done swap leaves some
+       links on a host that may stop answering. -->
+  <a class="eco-card eco-alt" href="https://ten-biz-game.tenetwork.workers.dev"
+     target="_blank" rel="noopener noreferrer">
+    <span class="eco-eyebrow">FOR SCHOOLS</span>
+    <h2 class="eco-title">TEN Business Playground</h2>
+    <p class="eco-sub">A business simulation school students play in class. They run a shop week by week — pricing, stock, a little luck — and watch what each decision does. Free, no installation, works on a school tablet.</p>
+    <span class="eco-go">Open the playground <span aria-hidden="true">&rarr;</span></span>
   </a>
 </section>
 
@@ -908,6 +948,12 @@
     <div>
       <p style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.2em; color:#777; margin-bottom:12px;">FOR EMPLOYERS</p>
       <p style="line-height:2.1; font-size:13.5px;"><a href="verify.html" style="color:#ccc; text-decoration:none;">Verify a certificate</a><br><a href="register.html?role=founder" style="color:#ccc; text-decoration:none;">Hire our interns</a></p>
+    </div>
+    <!-- Schools are neither interns nor employers, so they get their own
+         column rather than a link wedged into one of the others. -->
+    <div>
+      <p style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.2em; color:#777; margin-bottom:12px;">FOR SCHOOLS</p>
+      <p style="line-height:2.1; font-size:13.5px;"><a href="https://ten-biz-game.tenetwork.workers.dev" target="_blank" rel="noopener noreferrer" style="color:#ccc; text-decoration:none;">TEN Business Playground</a><br><a href="https://ten-biz-game.tenetwork.workers.dev/teacher" target="_blank" rel="noopener noreferrer" style="color:#ccc; text-decoration:none;">Teacher sign in</a></p>
     </div>
     <div>
       <p style="font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.2em; color:#777; margin-bottom:12px;">CONTACT</p>
