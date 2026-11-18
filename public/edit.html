@@ -7,6 +7,10 @@
 <link rel="stylesheet" href="ten-motion.css">
 <style>
 
+/* The inputs are width:100% with 10px of padding, which under the default
+   content-box added 20px on top and pushed them past the card edge. */
+*{ box-sizing:border-box; }
+
 body{
     font-family:Arial;
     background:#f5f5f5;
@@ -14,7 +18,9 @@ body{
 }
 
 .container{
-    width:400px;
+    width:100%;        /* 400px fixed + 30px body padding each side = 460px,
+                          which ran off every phone and cut the Update button */
+    max-width:400px;
     margin:auto;
     background:white;
     padding:20px;

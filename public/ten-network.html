@@ -141,7 +141,11 @@
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
       gap: 24px;
-      max-width: 1100px;
+      /* min(), not a bare 1100px: body is a flex column, so with no upper
+         bound this grid sized itself from its own content and came out 936px
+         wide on a 390px phone. Two of the three cards sat off-screen, and
+         overflow-x:hidden meant they could not be scrolled to at all. */
+      max-width: min(1100px, 100%);
       margin: 40px auto 60px;
       padding: 0 24px;
     }
