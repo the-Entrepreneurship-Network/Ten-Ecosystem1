@@ -66,6 +66,19 @@ NotificationSchema.post("save", function (doc) {
     } catch (err) {
         console.error("[notification] email mirror failed to start:", err.message);
     }
+    /*
+     * And to the phone, for anyone who installed the portal and allowed it.
+     *
+     * Its own try/catch rather than sharing the one above: a push that cannot
+     * start must not stop the email, and an email that cannot start must not
+     * stop the push. Both are already fire-and-forget beside a notification
+     * that is saved either way.
+     */
+    try {
+        require("../services/notificationPush").mirror(doc).catch(() => {});
+    } catch (err) {
+        console.error("[notification] push mirror failed to start:", err.message);
+    }
 });
 
 module.exports = mongoose.model("Notification", NotificationSchema);
