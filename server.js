@@ -10916,10 +10916,22 @@ app.get('/api/tenure-payment/status', async (req, res) => {
     // values that already matched a key exactly; anything else fell through as
     // "not a short course" and skipped payment, or the reverse.
     const tenure = tenureUtils.normalizeTenure(stu.tenure) || '';
-    const isShortCourse = ['1week', '15days', '1month'].includes(tenure);
-    const price = SHORT_COURSE_PRICES[tenure] || 0;
+    // One definition of who pays and how much — the same helpers the server-side
+    // gate (middleware/tenurePaymentGate.js) decides on. This route used to
+    // answer from its own copy of the price list and its own idea of who was
+    // exempt, so the two disagreed: the gate let a pre-cutoff student straight
+    // through while this route still reported requiresPayment, and the dashboard
+    // bills purely on that flag. An exempt student was shown, and could pay, a
+    // fee they did not owe.
+    const tenureFeeCfg = require('./config/tenurePayment');
+    const { BUSINESS_UPI } = require('./config/payment');
+    const fee = tenureFeeCfg.getFeeFor(stu);
+    const isShortCourse = fee.required;
+    const price = fee.amount;
     let isPaid = stu.shortCoursePaid || false;
     const isExistingStudent = stu.isExistingStudent || false;
+    // Covers isExistingStudent AND the registration cutoff.
+    const isExemptStudent = tenureFeeCfg.isExempt(stu);
 
     // Check the latest payment status — use exact purpose to avoid $regex issues in local fallback
     const Payment = require('./models/Payment');
@@ -10950,8 +10962,14 @@ app.get('/api/tenure-payment/status', async (req, res) => {
     const benefits = tenurePaymentConfig.getBenefitsFor(tenure);
 
     res.json({
-      requiresPayment: isShortCourse && !isPaid,
+      requiresPayment: isShortCourse && !isPaid && !isExemptStudent,
       isExistingStudent: isExistingStudent,
+      isExempt: isExemptStudent,
+      // The collection account, from the one place it is configured. The
+      // dashboard used to carry this UPI id hard-coded in four separate spots,
+      // so changing where money is collected would have moved the invoice and
+      // left the QR pointing at the old account.
+      upi: { id: BUSINESS_UPI.upiId, payeeName: BUSINESS_UPI.payeeName },
       isPaid: isPaid,
       pendingVerification: !!pendingVerification,
       rejectionReason: rejectionReason,
