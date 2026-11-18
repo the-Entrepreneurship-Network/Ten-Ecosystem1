@@ -1887,4 +1887,26 @@ router.post('/ideas/:id/:action', requireAdminAPI, async (req, res) => {
   }
 });
 
+// ════════════════════════════════════════════════════
+// BUSINESS PLAYGROUND — school usage
+//
+// Read from the game, which is a separate Worker with its own database. The
+// key stays on this server: the browser asks the portal, the portal asks the
+// game. Putting it in the page would publish it to everyone who opens it.
+// ════════════════════════════════════════════════════
+
+router.get('/game-usage', requireAdminAPI, async (req, res) => {
+  try {
+    const { fetchUsage } = require('../services/gameUsage');
+    const out = await fetchUsage();
+    // Always 200: the panel renders its own "not set up" / "cannot reach"
+    // state, and a non-200 here would just make the browser's fetch noisier
+    // than the situation deserves.
+    res.json({ success: out.ok, ...out });
+  } catch (err) {
+    console.error('[admin] game usage failed:', err.message);
+    res.json({ success: false, reason: 'error' });
+  }
+});
+
 module.exports = router;

@@ -137,6 +137,7 @@
     <div class="nav-item" onclick="showSection('auditlog')">📋 Audit Log</div>
     <div class="nav-item" onclick="showSection('linkedin')">📣 LinkedIn Agent</div>
     <div class="nav-item" onclick="showSection('ideas')" id="nav-ideas">💡 Idea Agent <span class="nav-badge" id="ideaBadge" style="display:none">0</span></div>
+    <div class="nav-item" onclick="showSection('schools')">🏫 Schools</div>
   </nav>
 </div>
 
@@ -400,6 +401,20 @@
       <div id="ideaContent"><p style="color:#64748b;padding:16px">Loading…</p></div>
     </div>
 
+    <div class="section" id="section-schools">
+      <div style="background:#0e1628;border:1px solid #2a3550;border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+        <div style="font-weight:700;color:#e2e8f0;margin-bottom:6px;">What this is</div>
+        <div style="color:#94a3b8;font-size:13px;line-height:1.6;">
+          Schools using the <b style="color:#e2e8f0;">TEN Business Playground</b>, read live from
+          the game. The game runs separately with its own database and shares no accounts with
+          this portal, so this is counts only — no teacher or pupil is named here, and nothing
+          on this screen changes anything over there.
+        </div>
+      </div>
+      <div id="schoolTotals" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;"></div>
+      <div id="schoolContent"><p style="color:#64748b;padding:16px">Loading…</p></div>
+    </div>
+
     <div class="section" id="section-auditlog">
       <div id="auditContent"></div>
     </div>
@@ -461,6 +476,7 @@ function showSection(name) {
   if (name === 'hackathons') { loadHackathonEvents(); loadHackathonRegs(hackathonFilter); }
   if (name === 'auditlog') loadAuditLog();
   if (name === 'ideas') loadIdeas(ideaFilter);
+  if (name === 'schools') loadSchools();
   if (name === 'linkedin' && window.TENLinkedInAgent) TENLinkedInAgent.mount(document.getElementById('linkedinAgentHost'), { role: 'admin' });
   if (name === 'overview') loadStats();
 }
@@ -1366,6 +1382,58 @@ async function loadChatRooms() {
   } catch (e) {
     box.innerHTML = '<p style="color:#f43f5e">' + _aEsc(e.message) + '</p>';
   }
+}
+
+/* ── BUSINESS PLAYGROUND: SCHOOLS ───────────────────────────────────────────
+ *
+ * Read through the portal, never straight from the browser to the game: the
+ * key that opens the game's usage endpoint lives on this server, and a fetch
+ * from here would put it in the page for anyone who opened it.
+ */
+async function loadSchools() {
+  const host = document.getElementById('schoolContent');
+  const tot  = document.getElementById('schoolTotals');
+  host.innerHTML = '<p style="color:#64748b;padding:16px">Loading…</p>';
+  tot.innerHTML = '';
+
+  const d = await api('/game-usage');
+  if (!d) return;
+
+  if (!d.success) {
+    const why = {
+      'not-configured': 'Not connected yet. Set GAME_USAGE_KEY on this server and USAGE_KEY on the game (the same value), then reload.',
+      'unreachable':    'Could not reach the game. It may be down, or GAME_BASE_URL may be wrong.',
+      'rejected':       'The game refused the key. GAME_USAGE_KEY here and USAGE_KEY there are not the same value.',
+      'bad-json':       'The game answered with something that was not JSON.'
+    }[d.reason] || 'Could not load school usage.';
+    host.innerHTML = '<div class="empty"><div class="icon">🏫</div><p>' + escIdea(why) + '</p></div>';
+    return;
+  }
+
+  const t = d.totals || {};
+  const tile = (label, n) =>
+    '<div style="background:#0e1628;border:1px solid #2a3550;border-radius:10px;padding:12px 16px;min-width:110px;">'
+    + '<div style="font-size:22px;font-weight:800;color:#e2e8f0;font-variant-numeric:tabular-nums;">' + (Number(n) || 0) + '</div>'
+    + '<div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#64748b;margin-top:2px;">' + label + '</div></div>';
+  tot.innerHTML = tile('Schools', t.schools) + tile('Teachers', t.teachers)
+                + tile('Classes', t.classes) + tile('Pupils', t.pupils) + tile('Runs', t.runs);
+
+  if (!d.schools.length) {
+    host.innerHTML = '<div class="empty"><div class="icon">🏫</div><p>No school has registered yet. '
+      + 'Teachers who signed up without a school code are counted in the totals above.</p></div>';
+    return;
+  }
+
+  host.innerHTML = '<div class="table-wrap"><table>'
+    + '<thead><tr><th>School</th><th>Teachers</th><th>Classes</th><th>Pupils</th><th>Joined</th></tr></thead><tbody>'
+    + d.schools.map(s => '<tr>'
+        + '<td>' + escIdea(s.name) + '</td>'
+        + '<td style="font-variant-numeric:tabular-nums">' + (Number(s.teachers)||0) + '</td>'
+        + '<td style="font-variant-numeric:tabular-nums">' + (Number(s.classes)||0) + '</td>'
+        + '<td style="font-variant-numeric:tabular-nums">' + (Number(s.pupils)||0) + '</td>'
+        + '<td style="white-space:nowrap">' + (s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-IN') : '—') + '</td>'
+      + '</tr>').join('')
+    + '</tbody></table></div>';
 }
 
 /* ── IDEA AGENT ─────────────────────────────────────────────────────────────
