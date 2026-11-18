@@ -158,9 +158,7 @@ async function tryAutoGenerateLOC(student) {
         await doc.save();
 
         try {
-            const pdfBuffer = fs.readFileSync(outPath);
             await Student.findByIdAndUpdate(student._id, {
-                locPdfBase64: pdfBuffer.toString('base64'),
                 locStatus: 'issued',
                 locIssuedAt: new Date()
             });
@@ -515,9 +513,7 @@ router.post("/admin/documents/generate-offer-letters", requireHR, async (req, re
                 await docRec.save();
 
                 try {
-                    const pdfBuffer = fs.readFileSync(pdfPath);
                     await Student.findByIdAndUpdate(sid, {
-                        offerPdfBase64: pdfBuffer.toString('base64'),
                         offerLetterStatus: 'approved',
                         offerLetterGeneratedAt: new Date(),
                         documentRejectionReason: null

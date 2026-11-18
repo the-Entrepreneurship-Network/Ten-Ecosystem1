@@ -238,6 +238,22 @@ const studentsSchema = new mongoose.Schema({
     v2Onboarded:          { type: Boolean, default: false },
     v2DurationType:       { type: String, default: null },
 
+    /*
+     * The five *PdfBase64 columns below are on their way out, and nothing
+     * writes them any more.
+     *
+     * Every certificate was always written twice — a PDF under uploads/ and
+     * the same bytes as base64 here — and this second copy is the reason a
+     * single student record runs to megabytes, and the reason the three sort
+     * indexes at the bottom of this file have to exist at all.
+     *
+     * They stay declared until scripts/migrate-cert-pdfs.js has run on
+     * production, for two reasons: the download route still reads them for any
+     * record the backfill has not reached, and the backfill itself selects
+     * them by name, which Mongoose would strip from the projection if they
+     * were not in the schema. Delete them once that script reports nothing
+     * left to clear.
+     */
     locPdfBase64:            { type: String, default: null },
     locStatus:               { type: String, enum: ['not_eligible','pending_coordinator','pending_hr','fine_pending','issued'], default: 'not_eligible' },
     locIssuedAt:             { type: Date,   default: null },

@@ -1535,17 +1535,22 @@ function sanitizeStudent(student) {
     const obj = student.toObject ? student.toObject() : { ...student };
     const safe = {
         ...obj,
-        hasLocPdf:   !!obj.locPdfBase64,
-        hasLorPdf:   !!obj.lorPdfBase64,
-        hasStarPdf:  !!obj.starPdfBase64,
-        hasOfferPdf: !!obj.offerPdfBase64,
-        hasLopPdf:   !!obj.lopPdfBase64
+        // From the status field, which is set in the same write that produces
+        // the PDF. This runs for every student in every HR list, so it must
+        // not touch the filesystem: five existsSync calls a row is thousands
+        // of synchronous stats on one request.
+        hasLocPdf:   certFile.isIssued(obj, 'LOC'),
+        hasLorPdf:   certFile.isIssued(obj, 'LOR'),
+        hasStarPdf:  certFile.isIssued(obj, 'STAR'),
+        hasOfferPdf: certFile.isIssued(obj, 'OFFER'),
+        hasLopPdf:   certFile.isIssued(obj, 'LOP')
     };
     for (const field of STUDENT_PRIVATE_FIELDS) delete safe[field];
     return safe;
 }
 
 const { findSessionStudent, sessionExpired } = require('./middleware/sessionAuth');
+const certFile = require('./services/certificateFile');
 
 function establishStudentSession(req, student) {
     if (!req.session || !student) return;
@@ -2152,8 +2157,22 @@ app.use(express.static("public", {
 // Defence in depth: the fallback database no longer lives under uploads/, but
 // refuse to serve anything that looks like it regardless, so a stray copy left
 // by an older deploy can never be downloaded.
+/*
+ * /uploads is served to anyone, so what sits under it has to be safe to hand
+ * out. local_db was the first thing that was not — the whole user table,
+ * password hashes included, at a guessable path.
+ *
+ * The generated documents are the second. A certificate is named after the
+ * student's employee ID, so /uploads/certificates/TEN-WEB-1234_loc.pdf is a
+ * guess away, and these files are now the only copy: until the base64 columns
+ * on Student were dropped, a leak here just duplicated what the authenticated
+ * download route served, and now it IS the document. They are reachable only
+ * through GET /api/v2/certificates/download/:type, which checks that the
+ * caller owns the record or is staff.
+ */
+const UPLOADS_PRIVATE = /(^|\/)(local_db|\.env|certificates|offer-letters|loc|documents)(\/|$)/i;
 app.use('/uploads', (req, res, next) => {
-    if (/(^|\/)(local_db|\.env)/i.test(req.path)) {
+    if (UPLOADS_PRIVATE.test(req.path)) {
         return res.status(404).end();
     }
     next();

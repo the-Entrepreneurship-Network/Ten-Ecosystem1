@@ -29,6 +29,7 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 
 const Student = require('../models/Student');
+const certFile = require('../services/certificateFile');
 const { normalizeTenure, getTenureLabel, getInternshipEndDate } = require('../utils/tenure');
 const { normalizeDomain } = require('../config/domains');
 
@@ -99,8 +100,7 @@ function inspect(student, overrides) {
   }
 
   // ── Offer letter ── flagged, never auto-changed.
-  const hasIssuedOffer = !!student.offerPdfBase64 ||
-    ['issued', 'approved'].includes(student.offerLetterStatus);
+  const hasIssuedOffer = certFile.isIssued(student, 'OFFER');
   if (hasIssuedOffer && (fix.domain || fix.tenure)) {
     problems.push('⚠ an offer letter has been ISSUED — it states the old domain/tenure. Regenerate it by hand after reviewing.');
   }
@@ -121,7 +121,7 @@ async function main() {
 
   const query = args.employee ? { employeeId: args.employee } : {};
   let students = await Student.find(query)
-    .select('employeeId name domain tenure v2DurationType internshipStartDate joiningDate createdAt internshipEndDate offerLetterStatus offerPdfBase64')
+    .select('employeeId name domain tenure v2DurationType internshipStartDate joiningDate createdAt internshipEndDate offerLetterStatus')
     .lean();
   if (args.limit) students = students.slice(0, args.limit);
 
