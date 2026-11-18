@@ -91,6 +91,12 @@ function overrideFor(student, certType) {
     return {
         start: asDate(row.start),
         end: asDate(row.end),
+        // The printed name, when HR has retyped it. Stored in the same row as
+        // the dates: one override per document type, written and audited in
+        // one place, rather than a second store that could disagree with this
+        // one about who changed what and when.
+        name: typeof row.name === 'string' ? row.name : '',
+        corrected: !!row.corrected,
         setBy: row.setBy || '',
         setByLevel: row.setByLevel || null,
         at: asDate(row.at)
@@ -156,6 +162,50 @@ function validateOverride(input, student, certType) {
     return { ok: true, start, end };
 }
 
+/**
+ * The name to print, which is the stored override when there is one.
+ *
+ * A student's record holds the name they signed up with. A certificate that
+ * spells it wrong is corrected on the document without rewriting the account,
+ * because the account name is what they log in and are matched by, and a
+ * typo on a PDF is not a reason to touch it.
+ */
+function nameFor(student, certType) {
+    const o = overrideFor(student, certType);
+    if (o && o.name) return o.name;
+    return (student && (student.name || student.fullName)) || '';
+}
+
+/**
+ * A corrected document may not be corrected again.
+ *
+ * The first issue may carry overrides — that is HR filling in what the record
+ * could not derive. What this stops is the second, third and fourth rewrite of
+ * a document already in a student's hands: every reissue replaces the PDF they
+ * were sent and the one a verifier may have seen, and a document that can be
+ * rewritten without limit is not evidence of anything.
+ *
+ * Issued-and-not-yet-corrected is the one correction allowed.
+ */
+function correctionLocked(student, certType) {
+    const o = overrideFor(student, certType);
+    return !!(o && o.corrected);
+}
+
+/** Validate a retyped name. Empty means "leave it", not "clear it". */
+function validateName(input) {
+    if (input === undefined || input === null || String(input).trim() === '') {
+        return { ok: true, name: null };
+    }
+    const name = String(input).trim().replace(/\s+/g, ' ');
+    if (name.length < 2)   return { ok: false, message: 'That name is too short.' };
+    if (name.length > 100) return { ok: false, message: 'That name is too long for the certificate.' };
+    // The name is drawn into a PDF, not rendered as markup, so the bar is
+    // "reads like a name", not HTML safety.
+    if (/[<>{}\\]/.test(name)) return { ok: false, message: 'That name contains characters a certificate cannot carry.' };
+    return { ok: true, name };
+}
+
 /** Can this session edit the dates? Issuing is a lower bar than rewriting. */
 function mayEditDates(session) {
     const s = session || {};
@@ -172,5 +222,8 @@ module.exports = {
     derivedEnd,
     overrideFor,
     validateOverride,
+    nameFor,
+    validateName,
+    correctionLocked,
     mayEditDates
 };

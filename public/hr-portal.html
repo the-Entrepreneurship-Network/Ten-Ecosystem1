@@ -4332,9 +4332,23 @@ function _diDates(dates){
       '<div style="font-size:11px;color:var(--muted);margin-top:4px;">' + _diEsc(note) + '</div>' +
     '</div>';
 
+  // Same shape as the date field, typed instead of picked. The name sits with
+  // the dates because it is the same decision — what this one document prints
+  // — and is gated by the same level.
+  const textField = (id, label, value, note) =>
+    '<div style="flex:1;min-width:220px;">' +
+      '<label style="display:block;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;' +
+        'color:var(--muted);margin-bottom:5px;">' + label + '</label>' +
+      '<input type="text" id="' + id + '" value="' + _diEsc(value) + '" maxlength="100"' + (locked ? ' disabled' : '') +
+        ' style="width:100%;padding:9px 11px;border-radius:8px;border:1px solid rgba(245,197,66,.16);' +
+        'background:rgba(0,0,0,.3);color:#e8e6df;font-family:inherit;font-size:13px;' +
+        (locked ? 'opacity:.55;cursor:not-allowed;' : '') + '">' +
+      '<div style="font-size:11px;color:var(--muted);margin-top:4px;">' + _diEsc(note) + '</div>' +
+    '</div>';
+
   return '<div style="margin-top:16px;padding:14px 16px;border-radius:10px;' +
       'background:rgba(255,255,255,.02);border:1px solid rgba(245,197,66,.14);">' +
-    '<div style="font-size:12.5px;font-weight:800;color:var(--gold);margin-bottom:3px;">Dates on this document</div>' +
+    '<div style="font-size:12.5px;font-weight:800;color:var(--gold);margin-bottom:3px;">What this document prints</div>' +
     '<div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6;">' +
       (locked
         ? 'Level ' + (dates.minLevel || 3) + ' and above can correct these. Yours cannot, so they are shown as they will print.'
@@ -4345,6 +4359,15 @@ function _diDates(dates){
       field('directStartDate', 'Start', dates.start, SRC[(dates.source||{}).start] || '') +
       field('directEndDate',   'End',   dates.end,   SRC[(dates.source||{}).end] || '') +
     '</div>' +
+    '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;">' +
+      textField('directStudentName', 'Name on the certificate', dates.printedName || '',
+        dates.nameOverridden ? 'corrected by hand' : 'from the student record') +
+    '</div>' +
+    (dates.corrected
+      ? '<div style="margin-top:12px;font-size:12px;color:#fbbf24;">' +
+          'This document has already been corrected once, so it cannot be corrected again.' +
+        '</div>'
+      : '') +
   '</div>';
 }
 
@@ -4441,6 +4464,12 @@ async function directIssueConfirm(employeeId, certType, meets){
   const payload = { employeeId, certType, acknowledged: true, reason };
   if (sEl && !sEl.disabled && sEl.value && sEl.value !== sEl.defaultValue) payload.startDate = sEl.value;
   if (eEl && !eEl.disabled && eEl.value && eEl.value !== eEl.defaultValue) payload.endDate = eEl.value;
+  // Same rule for the name: echoing the record's own value back would freeze
+  // it as a hand-set correction on a document nobody meant to correct.
+  const nEl = document.getElementById('directStudentName');
+  if (nEl && !nEl.disabled && nEl.value.trim() && nEl.value.trim() !== nEl.defaultValue.trim()) {
+    payload.studentName = nEl.value.trim();
+  }
 
   box.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
 
