@@ -79,134 +79,15 @@ async function selfTest() {
  * loading it threw before a request was ever made. The REST API takes the same
  * strings, so every existing `Type.OBJECT` call site is unchanged.
  */
-const Type = {
-    OBJECT:  'OBJECT',
-    ARRAY:   'ARRAY',
-    STRING:  'STRING',
-    BOOLEAN: 'BOOLEAN',
-    INTEGER: 'INTEGER'
-};
-
-const GEMINI_HOST  = 'generativelanguage.googleapis.com';
 /**
- * Which model to ask.
+ * The Gemini client now lives in utils/gemini.js.
  *
- * Google retires these on their own schedule — gemini-2.0-flash started
- * answering 404 with "no longer available", which took the exam down until
- * someone shipped a one-word code change. Reading it from the environment
- * makes the next retirement a config edit and a restart instead.
+ * It was private to this file (exported as `__gemini`, "not part of the public
+ * surface") until the idea agent needed the same call. Two copies would have
+ * meant two retry policies and two places to edit when Google retires a model,
+ * which has already taken this exam down once. Same code, one home.
  */
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
-
-/**
- * How long to wait for the model before giving up.
- *
- * Without this a stalled connection holds the request open indefinitely and the
- * student sees a page that never resolves — the exam has no other way out.
- */
-const GEMINI_TIMEOUT_MS = 60000;
-
-/**
- * One POST to Gemini, returning the parsed JSON body.
- *
- * The API key travels in the query string, so the path must never reach an
- * error message, a log line or a thrown stack. Failures are reported by status
- * code and a short excerpt of the body, never by anything that saw the key.
- */
-function post(body) {
-    const https = require('https');
-    const payload = JSON.stringify(body);
-
-    return new Promise((resolve, reject) => {
-        const req = https.request({
-            host: GEMINI_HOST,
-            path: `/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey())}`,
-            method: 'POST',
-            headers: {
-                'Content-Type':   'application/json',
-                'Content-Length': Buffer.byteLength(payload),
-                'User-Agent':     'aistudio-build'
-            }
-        }, (res) => {
-            let text = '';
-            res.setEncoding('utf8');
-            res.on('data', (c) => { text += c; });
-            res.on('end', () => {
-                if (res.statusCode < 200 || res.statusCode >= 300) {
-                    const err = new Error(`Gemini returned ${res.statusCode}: ${text.slice(0, 200)}`);
-                    err.status = res.statusCode;
-                    return reject(err);
-                }
-                try {
-                    resolve(JSON.parse(text));
-                } catch (_) {
-                    reject(new Error('Gemini sent a reply that was not JSON.'));
-                }
-            });
-        });
-
-        req.setTimeout(GEMINI_TIMEOUT_MS, () => {
-            req.destroy(new Error(`Gemini did not answer within ${GEMINI_TIMEOUT_MS}ms (timeout).`));
-        });
-        req.on('error', reject);
-        req.end(payload);
-    });
-}
-
-/**
- * Statuses that mean "ask again", not "you did something wrong".
- *
- * 503 is Google's own wording: "This model is currently experiencing high
- * demand. Spikes in demand are usually temporary. Please try again later."
- * 429 is the free tier's rate limit, which clears in seconds. Both arrive
- * fast, so retrying costs a student a moment rather than another minute.
- *
- * Nothing else is retried. A 400 is a bad request and will be bad again; a
- * 404 means the model is gone; a timeout has already cost sixty seconds and
- * trying twice more would leave a child staring at a blank page for three
- * minutes.
- */
-const RETRY_STATUS = [429, 503];
-const RETRY_WAITS_MS = [1000, 3000];
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-async function gemini(prompt, schema) {
-    if (!apiKey()) throw new Error('No Gemini key on this server.');
-
-    const body = {
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-            responseMimeType: 'application/json',
-            responseSchema:   schema
-        }
-    };
-
-    let out;
-    for (let attempt = 0; ; attempt += 1) {
-        try {
-            out = await post(body);
-            break;
-        } catch (err) {
-            const again = RETRY_STATUS.includes(err && err.status)
-                && attempt < RETRY_WAITS_MS.length;
-            if (!again) throw err;
-            await sleep(RETRY_WAITS_MS[attempt]);
-        }
-    }
-
-    const cand = out && out.candidates && out.candidates[0];
-    const text = cand && cand.content && cand.content.parts
-        && cand.content.parts[0] && cand.content.parts[0].text;
-
-    if (!text) {
-        // A blocked or empty candidate is a normal outcome, not a crash.
-        const why = (out && out.promptFeedback && out.promptFeedback.blockReason)
-            || (cand && cand.finishReason) || 'no content';
-        throw new Error(`Gemini returned no answer (${why}).`);
-    }
-    return JSON.parse(text);
-}
+const { ask: gemini, Type } = require('../utils/gemini');
 
 /**
  * A fresh paper for one topic (or the final, topicN = 0).

@@ -18,9 +18,14 @@ const https = require('https');
 const { EventEmitter } = require('events');
 
 const SRC = path.join(__dirname, '../../services/learnExam.js');
-const code = fs.readFileSync(SRC, 'utf8')
+const strip = (f) => fs.readFileSync(f, 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/^\s*\/\/.*$/gm, '');
+const code = strip(SRC);
+// The HTTPS client moved to utils/gemini.js so the idea agent could share it
+// rather than carry a second copy. The assertions about how we talk to Gemini
+// follow it; the ones about the exam itself stay on learnExam.js.
+const client = strip(path.join(__dirname, '../../utils/gemini.js'));
 
 const KEY = 'SECRET-KEY-DO-NOT-LEAK-9999';
 
@@ -59,17 +64,18 @@ afterEach(() => { jest.restoreAllMocks(); delete process.env.GEMINI_API_KEY; });
 describe('the Google SDK is gone', () => {
     test('nothing requires it at runtime any more', () => {
         expect(code).not.toMatch(/require\(['"]@google\/genai['"]\)/);
+        expect(client).not.toMatch(/require\(['"]@google\/genai['"]\)/);
     });
 
     test('the schema types the call sites use are all defined locally', () => {
         for (const t of ['OBJECT', 'ARRAY', 'STRING', 'BOOLEAN', 'INTEGER']) {
-            expect(code).toMatch(new RegExp(`${t}:\\s*'${t}'`));
+            expect(client).toMatch(new RegExp(`${t}:\\s*'${t}'`));
         }
     });
 
     test('it uses node https, which Node 16 has, not fetch, which it does not', () => {
-        expect(code).toMatch(/require\('https'\)/);
-        expect(code).not.toMatch(/\bfetch\(/);
+        expect(client).toMatch(/require\('https'\)/);
+        expect(client).not.toMatch(/\bfetch\(/);
     });
 });
 

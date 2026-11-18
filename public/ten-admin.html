@@ -136,6 +136,7 @@
     <div class="nav-item" onclick="window.location.href='/messages'">✉️ My Messages</div>
     <div class="nav-item" onclick="showSection('auditlog')">📋 Audit Log</div>
     <div class="nav-item" onclick="showSection('linkedin')">📣 LinkedIn Agent</div>
+    <div class="nav-item" onclick="showSection('ideas')" id="nav-ideas">💡 Idea Agent <span class="nav-badge" id="ideaBadge" style="display:none">0</span></div>
   </nav>
 </div>
 
@@ -379,6 +380,26 @@
       <div id="hackathonContent"><p style="color:#64748b;padding:16px">Loading…</p></div>
     </div>
 
+    <div class="section" id="section-ideas">
+      <div style="background:#0e1628;border:1px solid #2a3550;border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+        <div style="font-weight:700;color:#e2e8f0;margin-bottom:6px;">What this is</div>
+        <div style="color:#94a3b8;font-size:13px;line-height:1.6;">
+          A scheduled job asks the model for things TEN could build, and writes them here.
+          It <b style="color:#e2e8f0;">only proposes</b> — nothing is built, published or sent
+          on its own. Approving records that the idea is worth doing; it does not start any work.
+          The agent is off unless <code style="color:#D4AF37">IDEA_AGENT_ENABLED=true</code> is set
+          on the server.
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+        <button class="btn btn-secondary" onclick="loadIdeas('pending_review')" id="ideaTabPending">Needs review</button>
+        <button class="btn btn-secondary" onclick="loadIdeas('approved')" id="ideaTabApproved">Approved</button>
+        <button class="btn btn-secondary" onclick="loadIdeas('rejected')" id="ideaTabRejected">Rejected</button>
+        <button class="btn btn-secondary" onclick="loadIdeas('all')" id="ideaTabAll">All</button>
+      </div>
+      <div id="ideaContent"><p style="color:#64748b;padding:16px">Loading…</p></div>
+    </div>
+
     <div class="section" id="section-auditlog">
       <div id="auditContent"></div>
     </div>
@@ -439,6 +460,7 @@ function showSection(name) {
   if (name === 'cert-overrides') loadOverrides(overrideFilter);
   if (name === 'hackathons') { loadHackathonEvents(); loadHackathonRegs(hackathonFilter); }
   if (name === 'auditlog') loadAuditLog();
+  if (name === 'ideas') loadIdeas(ideaFilter);
   if (name === 'linkedin' && window.TENLinkedInAgent) TENLinkedInAgent.mount(document.getElementById('linkedinAgentHost'), { role: 'admin' });
   if (name === 'overview') loadStats();
 }
@@ -1344,6 +1366,87 @@ async function loadChatRooms() {
   } catch (e) {
     box.innerHTML = '<p style="color:#f43f5e">' + _aEsc(e.message) + '</p>';
   }
+}
+
+/* ── IDEA AGENT ─────────────────────────────────────────────────────────────
+ *
+ * Every field below is text a language model wrote. It is the one place in
+ * this portal where the content did not come from a person or our own code,
+ * so it is escaped before it reaches innerHTML rather than trusted like the
+ * rows elsewhere on this page.
+ */
+function escIdea(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+let ideaFilter = 'pending_review';
+
+async function loadIdeas(status) {
+  ideaFilter = status || 'pending_review';
+  const host = document.getElementById('ideaContent');
+  host.innerHTML = '<p style="color:#64748b;padding:16px">Loading…</p>';
+
+  const data = await api('/ideas?status=' + encodeURIComponent(ideaFilter));
+  if (!data || !data.success) {
+    host.innerHTML = '<div class="empty"><div class="icon">⚠️</div><p>Could not load ideas.</p></div>';
+    return;
+  }
+
+  const pending = (data.counts && data.counts.pending_review) || 0;
+  const badge = document.getElementById('ideaBadge');
+  if (badge) { badge.textContent = pending; badge.style.display = pending ? '' : 'none'; }
+
+  if (!data.data.length) {
+    host.innerHTML = '<div class="empty"><div class="icon">💡</div><p>Nothing here yet. '
+      + 'The agent writes ideas on its schedule, and only when it is switched on.</p></div>';
+    return;
+  }
+
+  const effortColour = { small: 'badge-green', medium: 'badge-blue', large: 'badge-orange' };
+
+  host.innerHTML = data.data.map((i) => {
+    const canReview = i.status === 'pending_review';
+    return `
+    <div style="background:#0e1628;border:1px solid #2a3550;border-radius:10px;padding:14px 16px;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline;">
+        <div style="font-weight:700;color:#e2e8f0;font-size:15px;">${escIdea(i.title)}</div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <span class="badge ${effortColour[i.effort] || 'badge-blue'}">${escIdea(i.effort || 'medium')}</span>
+          <span class="badge">${escIdea(i.status)}</span>
+        </div>
+      </div>
+      <div style="color:#94a3b8;font-size:13px;line-height:1.6;margin-top:8px;">${escIdea(i.summary)}</div>
+      ${i.forWhom ? `<div style="color:#64748b;font-size:12px;margin-top:6px;"><b>For:</b> ${escIdea(i.forWhom)}</div>` : ''}
+      ${i.whyNow ? `<div style="color:#64748b;font-size:12px;margin-top:2px;"><b>Why now:</b> ${escIdea(i.whyNow)}</div>` : ''}
+      <div style="color:#475569;font-size:11px;margin-top:8px;">
+        ${i.createdAt ? new Date(i.createdAt).toLocaleString('en-IN') : '—'}
+        · ${escIdea(i.model || 'unknown model')}
+        ${i.reviewedBy ? ' · reviewed by ' + escIdea(i.reviewedBy) : ''}
+      </div>
+      ${canReview ? `<div style="display:flex;gap:8px;margin-top:12px;">
+        <button class="btn btn-primary" onclick="reviewIdea('${escIdea(i._id)}','approve')">Approve</button>
+        <button class="btn btn-secondary" onclick="reviewIdea('${escIdea(i._id)}','reject')">Reject</button>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+async function reviewIdea(id, action) {
+  let reason = '';
+  if (action === 'reject') {
+    reason = prompt('Why is this being rejected? (optional)') || '';
+  }
+  const out = await api('/ideas/' + encodeURIComponent(id) + '/' + action, {
+    method: 'POST',
+    body: JSON.stringify({ reason })
+  });
+  if (!out || !out.success) {
+    alert((out && out.error) || 'That did not go through.');
+    return;
+  }
+  loadIdeas(ideaFilter);
 }
 
 async function loadAuditLog() {

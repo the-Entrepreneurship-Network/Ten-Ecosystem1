@@ -1827,4 +1827,64 @@ router.post('/hackathon-registrations/:id/verify', requireAdminAPI, async (req, 
   }
 });
 
+// ════════════════════════════════════════════════════
+// IDEA AGENT
+//
+// The agent proposes; this is where a person decides. Reviewing is the whole
+// point of the queue — services/ideaAgent.js never acts on what it writes.
+// ════════════════════════════════════════════════════
+
+/** The queue, newest first. `status` filters it; default is what needs reading. */
+router.get('/ideas', requireAdminAPI, async (req, res) => {
+  try {
+    const AgentIdea = require('../models/AgentIdea');
+    const status = String(req.query.status || 'pending_review');
+    const allowed = ['pending_review', 'approved', 'rejected', 'all'];
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ success: false, error: 'Unknown status filter.' });
+    }
+    const where = status === 'all' ? {} : { status };
+    const ideas = await AgentIdea.find(where).sort({ createdAt: -1 }).limit(100).lean();
+
+    const counts = {};
+    for (const s of ['pending_review', 'approved', 'rejected']) {
+      counts[s] = await AgentIdea.countDocuments({ status: s });
+    }
+    res.json({ success: true, data: ideas, counts });
+  } catch (err) {
+    console.error('[admin] idea list failed:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/** Approve or reject one proposal. Approval records a decision; it builds nothing. */
+router.post('/ideas/:id/:action', requireAdminAPI, async (req, res) => {
+  try {
+    const AgentIdea = require('../models/AgentIdea');
+    const { id, action } = req.params;
+    if (!['approve', 'reject'].includes(action)) {
+      return res.status(400).json({ success: false, error: 'Unknown action.' });
+    }
+
+    const idea = await AgentIdea.findById(id);
+    if (!idea) return res.status(404).json({ success: false, error: 'No such idea.' });
+    if (idea.status !== 'pending_review') {
+      return res.status(409).json({ success: false, error: `Already ${idea.status}.` });
+    }
+
+    idea.status     = action === 'approve' ? 'approved' : 'rejected';
+    idea.reviewedBy = (req.session && req.session.admin && req.session.admin.username) || 'admin';
+    idea.reviewedAt = new Date();
+    if (action === 'reject') {
+      idea.rejectionReason = String((req.body && req.body.reason) || '').slice(0, 500) || null;
+    }
+    await idea.save();
+
+    res.json({ success: true, status: idea.status });
+  } catch (err) {
+    console.error('[admin] idea review failed:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;

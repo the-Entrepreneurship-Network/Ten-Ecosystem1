@@ -12118,6 +12118,15 @@ server.listen(PORT, "0.0.0.0", ()=>{
             console.error("[AUTO-CRON] Failed to start automation jobs:", err.message);
         }
     }
+
+    // The idea agent. Off unless IDEA_AGENT_ENABLED=true, and it applies the
+    // same worker-0 guard itself, so it is safe to call unconditionally here:
+    // it only ever proposes, never builds or publishes.
+    try {
+        require("./services/ideaAgent").initIdeaAgent();
+    } catch (err) {
+        console.error("[IDEA-AGENT] Failed to start:", err.message);
+    }
 });
 
 // Process-level crash protection and error handlers
