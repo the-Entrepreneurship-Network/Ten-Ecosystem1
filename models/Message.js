@@ -27,6 +27,26 @@ const messageSchema = new mongoose.Schema({
     imageName:    { type: String, default: null },
     imageMime:    { type: String, default: null },
 
+    /**
+     * The message this one answers, kept as a snapshot rather than a join.
+     *
+     * Three reasons it is copied instead of looked up. Messages can be
+     * deleted, and a quote that vanishes when the original does leaves a reply
+     * answering nothing. Direct-message rooms expire after 30 days, and the
+     * reply may outlive the line it quoted. And rendering a room would
+     * otherwise be one query per quoted message.
+     *
+     * `excerpt` is the quoted text, trimmed — enough to recognise the line,
+     * not a second copy of it. `hasImage` lets the quote say "photo" when the
+     * original carried one and no words.
+     */
+    replyTo: {
+        messageId:  { type: mongoose.Schema.Types.ObjectId, default: null },
+        senderName: { type: String, default: "" },
+        excerpt:    { type: String, default: "", maxlength: 160 },
+        hasImage:   { type: Boolean, default: false }
+    },
+
     timestamp:    { type: Date, default: Date.now, index: true },
 
     // When this message should stop existing.

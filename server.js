@@ -11340,6 +11340,36 @@ async function deliverChatMessage(identity, payload) {
             }
         }catch(_){}
 
+        /*
+         * The message being replied to, snapshotted.
+         *
+         * The id arrives from the client, so the room it belongs to is checked
+         * against the room being posted into. Without that, quoting is a read
+         * primitive: send any message id and the text of a conversation you
+         * cannot open comes back in your own reply, visible to everyone in
+         * your room. canAccessRoom above guards the room you are writing to,
+         * not the one you are quoting from.
+         *
+         * A bad or unreachable id drops the quote and sends the message
+         * anyway. Losing the quotation is a smaller harm than losing the reply.
+         */
+        let replyTo;
+        const replyId = payload && payload.replyTo;
+        if (replyId && mongoose.Types.ObjectId.isValid(String(replyId))) {
+            try {
+                const parent = await Message.findById(String(replyId))
+                    .select("chatRoom senderName message imageUrl").lean();
+                if (parent && parent.chatRoom === room) {
+                    replyTo = {
+                        messageId:  parent._id,
+                        senderName: String(parent.senderName || "").slice(0, 120),
+                        excerpt:    String(parent.message || "").replace(/\s+/g, " ").trim().slice(0, 160),
+                        hasImage:   !!parent.imageUrl
+                    };
+                }
+            } catch (_) { /* quote dropped, message still sent */ }
+        }
+
         const doc = await Message.create({
             chatRoom:     room,
             senderId:     identity.id,
@@ -11347,6 +11377,7 @@ async function deliverChatMessage(identity, payload) {
             senderRole:   identity.role,
             senderDomain: identity.domain || "",
             message:      text,
+            replyTo:      replyTo,
             imageUrl:     imageUrl,
             imageName:    imageUrl ? String((payload && payload.imageName) || "image").slice(0, 120) : null,
             imageMime:    imageUrl ? String((payload && payload.imageMime) || "").slice(0, 60) : null,
