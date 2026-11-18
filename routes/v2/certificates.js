@@ -814,7 +814,10 @@ async function buildCertPDF(student, certType) {
   const dates = certDates.datesFor(student, certType);
 
   const mapData = {
-    studentName: student.name || student.fullName || "Student Name",
+    // nameFor, not student.name: a certificate whose name was corrected must
+    // print the correction. Reading the record directly here is what made the
+    // date override necessary in the first place — see the note above.
+    studentName: certDates.nameFor(student, certType) || "Student Name",
     collegeName: student.collegeName || student.college || "College Name",
     employeeId: student.employeeId || "TEN/HR/00000",
     domain: student.domain || student.role || "Intern",
@@ -1207,12 +1210,24 @@ router.get("/hr-issue/precheck", requireStaff, async (req, res) => {
                 const certDates = require("../../services/certificateDates");
                 const d = certDates.datesFor(student, type);
                 const iso = (v) => (v ? new Date(v).toISOString().slice(0, 10) : "");
+                const statusField = { LOC: 'locStatus', LOR: 'lorStatus', STAR: 'starStatus',
+                                      OFFER: 'offerLetterStatus', LOP: 'lopStatus' }[type];
+                const issued = statusField && student[statusField] === 'issued';
+                const corrected = certDates.correctionLocked(student, type);
                 return {
                     start: iso(d.start),
                     end: iso(d.end),
                     source: d.source,
                     overriddenBy: d.override ? d.override.setBy : "",
-                    editable: certDates.mayEditDates(req.session),
+                    // What the certificate will actually print, so the field
+                    // shows the correction rather than the account name.
+                    printedName: certDates.nameFor(student, type),
+                    nameOverridden: !!(d.override && d.override.name),
+                    // An issued document that has had its one correction is
+                    // locked. Flagged here so the form can say so before HR
+                    // types a change the server is going to refuse.
+                    corrected: !!(issued && corrected),
+                    editable: certDates.mayEditDates(req.session) && !(issued && corrected),
                     minLevel: certDates.DATE_EDIT_MIN_LEVEL
                 };
             })()
@@ -1231,7 +1246,7 @@ router.get("/hr-issue/precheck", requireStaff, async (req, res) => {
 // short, so the warning cannot be skipped by a script that never asked for it.
 router.post("/hr-issue", requireStaff, async (req, res) => {
     try {
-        const { employeeId, certType, acknowledged, reason, startDate, endDate } = req.body || {};
+        const { employeeId, certType, acknowledged, reason, startDate, endDate, studentName } = req.body || {};
         const type = String(certType || "").toUpperCase();
         if (!OVERRIDE_FIELDS[type]) {
             return res.status(400).json({ success: false, message: "Unknown certificate type: " + certType });
@@ -1267,20 +1282,60 @@ router.post("/hr-issue", requireStaff, async (req, res) => {
          */
         const certDates = require("../../services/certificateDates");
         let dateNote = "";
-        if (startDate || endDate) {
+        if (startDate || endDate || studentName) {
             if (!certDates.mayEditDates(req.session)) {
                 return res.status(403).json({
                     success: false,
-                    message: `Editing the dates on a document needs HR level ${certDates.DATE_EDIT_MIN_LEVEL} or above.`
+                    message: `Editing a document needs HR level ${certDates.DATE_EDIT_MIN_LEVEL} or above.`
                 });
             }
+
+            /*
+             * Correcting a document already in the student's hands, once.
+             *
+             * Overrides on a document that has not been issued are HR filling
+             * in what the record could not derive. Once it is issued the
+             * student holds a PDF and has had it by email, so a change is a
+             * correction — it replaces the copy they were sent. One is a
+             * fixed typo; an unlimited number is a document that proves
+             * nothing, so the second is refused here rather than hidden in
+             * the UI, where a stale page or a direct POST would walk past it.
+             */
+            const statusField = { LOC: 'locStatus', LOR: 'lorStatus', STAR: 'starStatus',
+                                  OFFER: 'offerLetterStatus', LOP: 'lopStatus' }[type];
+            const alreadyIssued = statusField && student[statusField] === 'issued';
+
+            if (alreadyIssued && certDates.correctionLocked(student, type)) {
+                const prev = certDates.overrideFor(student, type) || {};
+                return res.status(409).json({
+                    success: false,
+                    alreadyCorrected: true,
+                    message: `This ${type} has already been corrected once`
+                        + (prev.setBy ? `, by ${prev.setBy}` : '')
+                        + (prev.at ? ` on ${new Date(prev.at).toLocaleDateString('en-GB')}` : '')
+                        + '. A document can be corrected once; raise it with an administrator if it is still wrong.'
+                });
+            }
+
             const check = certDates.validateOverride({ startDate, endDate }, student, type);
-            if (!check.ok) return res.status(400).json({ success: false, message: check.message });
+            // validateOverride refuses "nothing to change", which is the right
+            // answer for a date-only edit and the wrong one when the dates are
+            // untouched because only the name is being corrected.
+            if ((startDate || endDate) && !check.ok) {
+                return res.status(400).json({ success: false, message: check.message });
+            }
+
+            const nameCheck = certDates.validateName(studentName);
+            if (!nameCheck.ok) return res.status(400).json({ success: false, message: nameCheck.message });
 
             const existing = certDates.overrideFor(student, type) || {};
             const row = {
                 start: check.start || existing.start || null,
                 end: check.end || existing.end || null,
+                name: nameCheck.name || existing.name || '',
+                // Set only once the document exists: the first issue is not a
+                // correction of anything.
+                corrected: alreadyIssued ? true : !!existing.corrected,
                 setBy: issuer.name,
                 setByLevel: (req.session && req.session.hr && req.session.hr.level) || null,
                 at: new Date()
@@ -1293,8 +1348,17 @@ router.post("/hr-issue", requireStaff, async (req, res) => {
             if (typeof student.certificateDates.set === 'function') student.certificateDates.set(type, row);
             else student.certificateDates[type] = row;
 
+            // What was changed, in the audit record and the override log. A
+            // name correction that left no trace would be the one edit nobody
+            // could account for afterwards.
             const fmt = (d) => (d ? new Date(d).toLocaleDateString('en-GB') : '—');
-            dateNote = ` Dates set by hand: ${fmt(row.start)} to ${fmt(row.end)}.`;
+            const parts = [];
+            if (startDate || endDate) parts.push(`dates ${fmt(row.start)} to ${fmt(row.end)}`);
+            if (nameCheck.name) parts.push(`name printed as "${row.name}"`);
+            if (parts.length) {
+                dateNote = ` Set by hand: ${parts.join('; ')}.`
+                    + (alreadyIssued ? ' Correction to an already-issued document.' : '');
+            }
         }
 
         // Generate. generateAndSaveCert writes the PDF, sets the status to
