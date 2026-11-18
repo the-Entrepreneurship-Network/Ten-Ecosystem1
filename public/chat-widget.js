@@ -178,6 +178,25 @@
             ".tc-report:hover{color:#f43f5e;}",
             ".tc-launcher{background:#101a2e;border:1px solid rgba(99,140,210,0.3);color:#cdd9ec;border-radius:20px;padding:8px 14px;font:600 12px \'Plus Jakarta Sans\',sans-serif;cursor:pointer;}",
             ".tc-form{display:flex;gap:8px;padding:10px 12px;border-top:1px solid rgba(245,197,66,0.12);background:#0c1220;}",
+            // Quote inside a bubble, and the bar above the input. Both lean on
+            // the gold the widget already uses for "this is the thing you are
+            // acting on", so a reply reads as attached rather than decorative.
+            ".tc-quote{border-left:3px solid #f5c542;background:rgba(245,197,66,0.08);border-radius:6px;padding:5px 8px;margin-bottom:6px;cursor:pointer;max-width:100%;}",
+            ".tc-quote:hover{background:rgba(245,197,66,0.14);}",
+            ".tc-q-who{font-size:11px;font-weight:800;color:#f5c542;margin-bottom:1px;}",
+            ".tc-q-text{font-size:12px;color:#9fb0cc;line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word;}",
+            ".tc-q-photo,.tc-q-gone{font-style:italic;opacity:.8;}",
+            ".tc-q-missing{animation:tcShake .5s;}",
+            "@keyframes tcShake{0%,100%{transform:translateX(0);}25%{transform:translateX(-4px);}75%{transform:translateX(4px);}}",
+            ".tc-found{outline:2px solid #f5c542;outline-offset:2px;border-radius:8px;transition:outline-color .4s;}",
+            ".tc-replybar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#0c1220;border-top:1px solid rgba(245,197,66,0.12);}",
+            ".tc-rb-body{flex:1;border-left:3px solid #f5c542;padding-left:8px;min-width:0;}",
+            ".tc-rb-who{font-size:11px;font-weight:800;color:#f5c542;}",
+            ".tc-rb-text{font-size:12px;color:#9fb0cc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
+            ".tc-rb-x{background:none;border:none;color:#9fb0cc;cursor:pointer;font-size:14px;padding:4px 6px;line-height:1;}",
+            ".tc-rb-x:hover{color:#e2eaf7;}",
+            ".tc-reply{background:none;border:none;color:#9fb0cc;cursor:pointer;font-size:12px;padding:0 3px;line-height:1;}",
+            ".tc-reply:hover{color:#f5c542;}",
             ".tc-form input{flex:1;background:#101a2e;border:1px solid rgba(99,140,210,0.25);color:#e2eaf7;border-radius:10px;padding:9px 12px;outline:none;font:500 13px 'Plus Jakarta Sans','Outfit',sans-serif;}",
             ".tc-form input:focus{border-color:#f5c542;}",
             ".tc-form button{background:linear-gradient(135deg,#f5c542,#c9a227);color:#0c1220;border:none;font-weight:700;padding:0 16px;border-radius:10px;cursor:pointer;font-family:inherit;}",
@@ -291,6 +310,17 @@
         var msgsEl = win.querySelector(".tc-msgs");
         var form = win.querySelector(".tc-form");
         var inputEl = form.querySelector('input[type="text"]');
+
+        // Built here, not in the template string, because the handlers below
+        // close over `w` — and a reply started in one room must not attach to
+        // a message typed in another, which a module-level variable would do.
+        var replyBarEl = document.createElement("div");
+        replyBarEl.className = "tc-replybar";
+        replyBarEl.style.display = "none";
+        form.parentNode.insertBefore(replyBarEl, form);
+
+        var w = { room: room, label: label, el: win, msgsEl: msgsEl,
+                  inputEl: inputEl, _replyBarEl: replyBarEl, _replyTo: null };
         var fileEl = form.querySelector(".tc-file");
         var attachBtn = form.querySelector(".tc-attach");
         var previewEl = win.querySelector(".tc-preview");
@@ -362,6 +392,10 @@
 
             var targetRoom = (cfg.role === "hr" && room === "general") ? (win.dataset.currentRoom || "general") : room;
             var payload = { room: targetRoom, text: t };
+            // Only the id travels. The server snapshots the name and text from
+            // its own copy, so a client cannot put words in someone's mouth by
+            // sending an excerpt that was never written.
+            if (w && w._replyTo && w._replyTo.messageId) payload.replyTo = w._replyTo.messageId;
             if (pendingImage) {
                 payload.imageUrl  = pendingImage.imageUrl;
                 payload.imageName = pendingImage.imageName;
@@ -379,8 +413,9 @@
             }
             inputEl.value = "";
             clearPendingImage();
+            if (w) cancelReply(w);
         });
-        return { room: room, label: label, el: win, msgsEl: msgsEl, inputEl: inputEl };
+        return w;
     }
 
     // ── WhatsApp-style date grouping ────────────────────────────────────────
@@ -423,6 +458,51 @@
         w.msgsEl.appendChild(sep);
     }
 
+    /**
+     * The bar above the input showing what is being replied to.
+     *
+     * Kept on the window object rather than a module-level variable: the HR
+     * portal opens several rooms at once, and a reply started in one must not
+     * attach itself to the next message typed in another.
+     */
+    function startReply(w, m) {
+        w._replyTo = {
+            messageId: String(m._id),
+            senderName: m.senderName || "",
+            excerpt: (m.message || "").replace(/\s+/g, " ").trim().slice(0, 160),
+            hasImage: !!m.imageUrl
+        };
+        drawReplyBar(w);
+        if (w.inputEl) w.inputEl.focus();
+    }
+
+    function cancelReply(w) {
+        w._replyTo = null;
+        drawReplyBar(w);
+    }
+
+    function drawReplyBar(w) {
+        if (!w._replyBarEl) return;
+        var r = w._replyTo;
+        if (!r) { w._replyBarEl.style.display = "none"; w._replyBarEl.innerHTML = ""; return; }
+        var body = r.excerpt ? escapeHtml(r.excerpt) : (r.hasImage ? "photo" : "message");
+        w._replyBarEl.style.display = "";
+        w._replyBarEl.innerHTML =
+            '<div class="tc-rb-body">' +
+              '<div class="tc-rb-who">Replying to ' + escapeHtml(r.senderName || "someone") + '</div>' +
+              '<div class="tc-rb-text">' + body + '</div>' +
+            '</div>' +
+            '<button type="button" class="tc-rb-x" title="Cancel reply">✕</button>';
+        var x = w._replyBarEl.querySelector(".tc-rb-x");
+        if (x) x.addEventListener("click", function () { cancelReply(w); });
+    }
+
+    /** The quoted message is gone — deleted, or older than the loaded history. */
+    function flashQuote(qEl) {
+        qEl.classList.add("tc-q-missing");
+        setTimeout(function () { qEl.classList.remove("tc-q-missing"); }, 1200);
+    }
+
     function appendMessage(w, m) {
         maybeAppendDateDivider(w, m.timestamp);
         var mine = isOwnMessage(m);
@@ -450,6 +530,10 @@
         // Anyone can protect themselves from anyone else — including a student
         // from a member of staff. These appear on other people's messages only:
         // there is nothing to block or report about your own.
+        // Replying to your own message is normal in a group chat — correcting
+        // yourself, adding to a point — so this one is not in the safety set.
+        var replyBtn = '<button class="tc-reply" title="Reply">↩</button>';
+
         var safetyBtns = mine ? "" :
             '<button class="tc-dm" title="Message privately">✉</button>' +
             '<button class="tc-block" title="Block this person">🚫</button>' +
@@ -463,10 +547,25 @@
                 '<b>' + escapeHtml(m.senderName) + '</b>' +
                 '<span class="tc-tag" style="color:' + roleColor + ';border-color:' + roleColor + ';">' + roleTag + '</span>' +
                 '<span class="tc-time">' + escapeHtml(fmtTime(m.timestamp)) + '</span>' +
+                replyBtn +
                 safetyBtns +
                 delBtn +
             '</div>' +
             '<div class="' + bubbleClass + '">' + bubbleBody(m) + '</div>';
+        var rEl = row.querySelector(".tc-reply");
+        if (rEl) rEl.addEventListener("click", function () { startReply(w, m); });
+
+        var qEl = row.querySelector(".tc-quote");
+        if (qEl) qEl.addEventListener("click", function () {
+            var target = w.msgsEl.querySelector('.tc-row[data-id="' + qEl.dataset.jump + '"]');
+            // Deleted, or further back than the loaded history. Say so rather
+            // than doing nothing, which reads as a broken click.
+            if (!target) { flashQuote(qEl); return; }
+            target.scrollIntoView({ behavior: "smooth", block: "center" });
+            target.classList.add("tc-found");
+            setTimeout(function () { target.classList.remove("tc-found"); }, 1400);
+        });
+
         var dEl = row.querySelector(".tc-del");
         if (dEl) dEl.addEventListener("click", function () {
             if (!confirm("Delete this message for everyone?")) return;
@@ -515,8 +614,27 @@
      * Image messages go through the SAME row markup as text, so the sender name
      * and role badge are identical — which is what section 8 asks for.
      */
+    /**
+     * The quoted line above a reply.
+     *
+     * Rendered from the snapshot stored on the message, so it survives the
+     * original being deleted — the bar stays, the text stays, only the jump
+     * stops finding anything, which is handled where the click is wired.
+     */
+    function quoteBlock(m) {
+        var r = m && m.replyTo;
+        if (!r || !r.messageId) return "";
+        var body = r.excerpt
+            ? escapeHtml(r.excerpt)
+            : (r.hasImage ? '<span class="tc-q-photo">photo</span>' : '<span class="tc-q-gone">message</span>');
+        return '<div class="tc-quote" data-jump="' + escapeHtml(String(r.messageId)) + '">' +
+                 '<div class="tc-q-who">' + escapeHtml(r.senderName || "Someone") + '</div>' +
+                 '<div class="tc-q-text">' + body + '</div>' +
+               '</div>';
+    }
+
     function bubbleBody(m) {
-        var html = "";
+        var html = quoteBlock(m);
         if (m.imageUrl && /^\/uploads\/chat\//.test(m.imageUrl)) {
             var alt = escapeHtml(m.imageName || "shared image");
             html += '<a href="' + escapeHtml(m.imageUrl) + '" target="_blank" rel="noopener noreferrer">' +
