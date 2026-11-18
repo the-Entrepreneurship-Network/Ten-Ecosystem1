@@ -22,6 +22,7 @@ const adminLoginLimiter = rateLimit({
 
 // Load models
 const Student = require('../models/Student');
+const certFile = require('../services/certificateFile');
 const HR = require('../models/HR');
 const Coordinator = require('../models/Coordinator');
 const Payment = require('../models/Payment');
@@ -750,8 +751,7 @@ router.put('/students/:id', requireAdminAPI, async (req, res) => {
     // disagrees with the record. Tell the admin so they can reissue — the two
     // silently drifting apart is exactly issue 6.1.
     const identityChanged = update.domain !== undefined || update.tenure !== undefined;
-    const hasIssuedOffer = !!existing.offerPdfBase64 ||
-      ['issued', 'approved'].includes(existing.offerLetterStatus);
+    const hasIssuedOffer = certFile.isIssued(existing, 'OFFER');
 
     res.json({
       success: true,
@@ -826,8 +826,7 @@ router.post('/students/:id/extend-tenure', requireAdminAPI, async (req, res) => 
       newState: update
     });
 
-    const hasIssuedOffer = !!student.offerPdfBase64 ||
-      ['issued', 'approved'].includes(student.offerLetterStatus);
+    const hasIssuedOffer = certFile.isIssued(student, 'OFFER');
 
     res.json({
       success: true,
@@ -1554,6 +1553,13 @@ router.post('/certificate-overrides/:id/revoke', requireAdminAPI, async (req, re
       await Student.findByIdAndUpdate(row.studentId, {
         [f.pdf]: null, [f.status]: f.reset, [f.date]: null, [f.flag]: false
       }).catch((e) => console.error('[revoke] student update failed:', e.message));
+      /*
+       * And the PDF itself. Clearing the column used to be enough because the
+       * column was what downloads read; the file on disk is now the only copy,
+       * so leaving it would keep serving a document that has been revoked.
+       */
+      const gone = certFile.remove({ employeeId: row.employeeId, _id: row.studentId }, row.certificateType);
+      console.log(`[revoke] removed ${gone} ${row.certificateType} file(s) for ${row.employeeId}`);
     }
 
     row.revokedAt = new Date();

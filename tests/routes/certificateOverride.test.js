@@ -256,7 +256,14 @@ describe('the certificate reaches My Documents', () => {
   it('still never sends the base64 PDFs to the browser', () => {
     const at = certRoutes.indexOf('async function handleMyCerts(');
     const fn = certRoutes.slice(at, certRoutes.indexOf('\n}\n', at));
-    expect(fn).toContain('payload.hasLocPdf   = !!doc.locPdfBase64;');
+    /*
+     * A boolean still goes out in place of the blob. It is derived from the
+     * status field now rather than from the base64 column, because that column
+     * is being removed — the PDF lives on disk and nowhere else. What this
+     * test is for is unchanged: neither the column nor the password may appear
+     * on the payload.
+     */
+    expect(fn).toContain("payload.hasLocPdf   = certFile.isIssued(doc, 'LOC');");
     expect(fn).not.toMatch(/payload\.locPdfBase64\s*=/);
     expect(fn).not.toMatch(/payload\.password/);
   });

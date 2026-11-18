@@ -18,6 +18,7 @@ const Notification        = require("../../models/Notification");
 const PsychologyTrigger   = require("../../models/new/PsychologyTrigger");
 const StudentTaskProgress = require("../../models/new/StudentTaskProgress");
 const paymentConfig       = require("../../config/payment");
+const certFile            = require("../../services/certificateFile");
 const { generateCertificateId, generateExpertCertificate, generateNanoCertificate, generateFellowshipCertificate } = require("../../services/v2/certificateService");
 
 function getCertificatePrice(type, studentTenure) {
@@ -319,12 +320,12 @@ async function handleMyCerts(req, res) {
     payload.performanceScore  = doc.performanceScore;
     payload.pendingFines      = doc.pendingFines || [];
 
-    // The base64 PDFs themselves never leave the server — only whether one
+    // The PDFs themselves never leave the server here — only whether one
     // exists, which is all the page needs to draw a Download button.
-    payload.hasLocPdf   = !!doc.locPdfBase64;
-    payload.hasLorPdf   = !!doc.lorPdfBase64;
-    payload.hasStarPdf  = !!doc.starPdfBase64;
-    payload.hasOfferPdf = !!doc.offerPdfBase64;
+    payload.hasLocPdf   = certFile.isIssued(doc, 'LOC');
+    payload.hasLorPdf   = certFile.isIssued(doc, 'LOR');
+    payload.hasStarPdf  = certFile.isIssued(doc, 'STAR');
+    payload.hasOfferPdf = certFile.isIssued(doc, 'OFFER');
 
     // Certificates issued by HR bypassing the normal checks. The student is
     // told plainly that HR issued it — nothing about the override reason,
@@ -883,44 +884,34 @@ async function generateAndSaveCert(studentId, certType, studentData = null, sent
   const { pdfBuffer, documentNumber } = await buildCertPDF(student, certType);
 
   const fieldMap = {
-    LOC:   { pdfField: 'locPdfBase64',   statusField: 'locStatus',   dateField: 'locIssuedAt' },
-    LOR:   { pdfField: 'lorPdfBase64',   statusField: 'lorStatus',   dateField: 'lorIssuedAt' },
-    STAR:  { pdfField: 'starPdfBase64',  statusField: 'starStatus',  dateField: 'starIssuedAt' },
-    OFFER: { pdfField: 'offerPdfBase64', statusField: 'offerLetterStatus', dateField: 'offerLetterGeneratedAt' },
-    LOP:   { pdfField: 'lopPdfBase64',   statusField: 'lopStatus',   dateField: 'lopIssuedAt' },
+    LOC:   { statusField: 'locStatus',   dateField: 'locIssuedAt' },
+    LOR:   { statusField: 'lorStatus',   dateField: 'lorIssuedAt' },
+    STAR:  { statusField: 'starStatus',  dateField: 'starIssuedAt' },
+    OFFER: { statusField: 'offerLetterStatus', dateField: 'offerLetterGeneratedAt' },
+    LOP:   { statusField: 'lopStatus',   dateField: 'lopIssuedAt' },
   };
   const fields = fieldMap[certType];
-  
+
+  /*
+   * The PDF goes to disk and the status goes to Mongo.
+   *
+   * It used to go to both: the same bytes as a base64 string on the Student
+   * document as well as a file under uploads/. The file was always written,
+   * always the same content, and is what the download route serves, so the
+   * second copy bought nothing and cost a megabyte or so on every student
+   * record. The write is no longer inside a try/catch that swallows the error
+   * either — if the only copy cannot be written, saying the certificate was
+   * issued is a lie, so the failure has to reach the caller.
+   */
+  const destPath = certFile.save(student, certType, pdfBuffer);
+  if (!destPath) throw new Error(`Could not write ${certType} PDF for student ${studentId}`);
+  console.log(`[Cert] PDF written to disk: ${destPath}`);
+
   await Student.findByIdAndUpdate(studentId, {
-    [fields.pdfField]:   pdfBuffer.toString('base64'),
     [fields.statusField]: 'issued',
     [fields.dateField]:  new Date(),
   });
-  console.log(`[Cert] ✓ ${certType} saved to DB for student ${studentId}`);
-
-  // Write physical file to filesystem so that existsSync and student portal downloads work
-  try {
-    const empIdClean = student.employeeId ? student.employeeId.replace(/\//g, "-") : studentId;
-    let destDir = '';
-    let destPath = '';
-    
-    if (certType === 'OFFER') {
-      destDir = path.join(__dirname, "../../uploads/offer-letters");
-      destPath = path.join(destDir, `${empIdClean}_offer_letter.pdf`);
-    } else {
-      destDir = path.join(__dirname, "../../uploads/certificates");
-      destPath = path.join(destDir, `${empIdClean}_${certType.toLowerCase()}.pdf`);
-    }
-    
-    if (!fs.existsSync(destDir)) {
-      fs.mkdirSync(destDir, { recursive: true });
-    }
-    
-    fs.writeFileSync(destPath, pdfBuffer);
-    console.log(`[Cert] Physical file written to disk: ${destPath}`);
-  } catch (fsWriteErr) {
-    console.error(`[Cert] Failed to write physical PDF file to disk:`, fsWriteErr.message);
-  }
+  console.log(`[Cert] ✓ ${certType} issued for student ${studentId}`);
   
   const emailResult = await sendCertificateEmail(student.email, student.name || student.fullName || 'Student', certType, pdfBuffer);
   
@@ -1200,7 +1191,7 @@ router.get("/hr-issue/precheck", requireStaff, async (req, res) => {
             metRequirements,
             failedChecks: failed,
             snapshot,
-            alreadyIssued: !!student[{ LOC:"locPdfBase64", LOR:"lorPdfBase64", STAR:"starPdfBase64", OFFER:"offerPdfBase64", LOP:"lopPdfBase64" }[type]],
+            alreadyIssued: certFile.isIssued(student, type),
             /*
              * The dates that will actually print, so HR sees them before the
              * document exists rather than after. `iso` for the date inputs,
@@ -1554,40 +1545,28 @@ router.get('/download/:type', requireSelfOrStaff((req) => req.query && req.query
     const student = await Student.findOne({ employeeId }).lean();
     if (!student) return res.status(404).json({ error: 'Not found' });
   
-    const pdfMap = { LOC:'locPdfBase64', LOR:'lorPdfBase64', STAR:'starPdfBase64', OFFER:'offerPdfBase64', LOP:'lopPdfBase64' };
-    const b64 = student[pdfMap[type]];
-    if (!b64) {
-      try {
-        const StudentDocument = require("../../models/new/StudentDocument");
-        const docRec = await StudentDocument.findOne({ studentId: student._id }).lean();
-        let fileUrl = '';
-        if (type === 'OFFER' && docRec && docRec.offerLetterUrl) {
-          fileUrl = docRec.offerLetterUrl;
-        } else if (type === 'LOC' && docRec && docRec.locUrl) {
-          fileUrl = docRec.locUrl;
-        } else if (type === 'LOR' && docRec && docRec.lorUrl) {
-          fileUrl = docRec.lorUrl;
-        }
-        
-        if (fileUrl) {
-          const absolutePath = path.join(__dirname, "../..", fileUrl);
-          if (fs.existsSync(absolutePath)) {
-            res.setHeader('Content-Type', 'application/pdf');
-            res.setHeader('Content-Disposition', `attachment; filename="TEN-${type}-${employeeId}.pdf"`);
-            return res.sendFile(absolutePath);
-          }
-        }
-      } catch (fallbackErr) {
-        console.error('[Download] StudentDocument fallback error:', fallbackErr.message);
-      }
-      
-      return res.status(404).json({ error: 'Certificate not yet generated' });
-    }
-  
-    const buffer = Buffer.from(b64, 'base64');
+    /*
+     * The file is the copy that counts. The base64 column behind it is only
+     * for records the backfill (scripts/migrate-cert-pdfs.js) has not reached
+     * yet, so a download keeps working whichever side of that run it lands on,
+     * and this route needs no second deploy once the column is gone.
+     *
+     * The StudentDocument lookup that used to be the fallback is gone with it:
+     * it covered three of the five types, stored a path that had to be kept in
+     * step with the file, and pointed at the same uploads/ directories that
+     * certificateFile derives directly from the employee ID.
+     */
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="TEN-${type}-${employeeId}.pdf"`);
-    res.send(buffer);
+
+    const onDisk = certFile.findFor(student, type);
+    if (onDisk) return res.sendFile(onDisk);
+
+    const b64 = student[certFile.LEGACY_B64[type] || ''];
+    if (b64) return res.send(Buffer.from(b64, 'base64'));
+
+    res.removeHeader('Content-Disposition');
+    return res.status(404).json({ error: 'Certificate not yet generated' });
   } catch(e) {
     console.error('[Download] Error:', e.message);
     res.status(500).json({ error: e.message });
@@ -1626,9 +1605,20 @@ cron.schedule('20 * * * *', async () => {
       $or: [{ locStatus:'pending_hr' }, { lorStatus:'pending_hr' }],
       coordinatorApprovedAt: { $lt: cutoff },
     });
+    /*
+     * One student per try. Issuing now throws when the PDF cannot be written —
+     * the file is the only copy, so a silent failure would mark a certificate
+     * issued with nothing behind it. Caught per student rather than per batch,
+     * because the outer catch would otherwise let one bad record stop everyone
+     * behind it in the queue from being issued at all.
+     */
     for (const s of list) {
-      console.log(`[CertCron-2] Auto-issuing certs for ${s.employeeId}`);
-      await checkAndIssueCerts(s._id.toString());
+      try {
+        console.log(`[CertCron-2] Auto-issuing certs for ${s.employeeId}`);
+        await checkAndIssueCerts(s._id.toString());
+      } catch (one) {
+        console.error(`[CertCron-2] ${s.employeeId} failed:`, one.message);
+      }
     }
   } catch (e) {
     console.error('[CertCron-2] Error:', e.message);
@@ -1642,9 +1632,13 @@ cron.schedule('40 * * * *', async () => {
       offerLetterStatus: { $in: ['pending', 'under_review'] },
       documentsSubmittedAt: { $lt: cutoff },
     });
-    for (const s of list) {
-      console.log(`[CertCron-3] Auto-generating Offer Letter for ${s.employeeId}`);
-      await generateAndSaveCert(s._id.toString(), 'OFFER', s, "System Automation");
+    for (const s of list) {               // per student, see CertCron-2 above
+      try {
+        console.log(`[CertCron-3] Auto-generating Offer Letter for ${s.employeeId}`);
+        await generateAndSaveCert(s._id.toString(), 'OFFER', s, "System Automation");
+      } catch (one) {
+        console.error(`[CertCron-3] ${s.employeeId} failed:`, one.message);
+      }
     }
   } catch (e) {
     console.error('[CertCron-3] Error:', e.message);

@@ -33,6 +33,7 @@
 
 const Student   = require("../models/Student");
 const taskEngine = require("./v2/taskEngine");
+const certFile  = require("./certificateFile");
 const { normalizeTenure, getTenureLabel, getInternshipEndDate } = require("../utils/tenure");
 const { normalizeDomain } = require("../config/domains");
 
@@ -158,8 +159,7 @@ async function propagateStudentChange({ student, before = {}, actor = "system", 
   //    Nothing can rewrite a generated PDF in place, so surface it instead of
   //    letting the record and the document quietly disagree.
   if (tenureChanged || domainChanged) {
-    report.offerLetterStale = !!student.offerPdfBase64 ||
-      ["issued", "approved"].includes(student.offerLetterStatus);
+    report.offerLetterStale = certFile.isIssued(student, 'OFFER');
   }
 
   // 3. Tell the student. A tenure or domain change alters what they owe and

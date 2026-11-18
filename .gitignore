@@ -20,6 +20,7 @@ uploads/local_db/
 # These are personal data and must never be committed.
 uploads/documents/
 uploads/certificates/
+uploads/loc/
 uploads/offer-letters/
 uploads/*.pdf
 uploads/*.jpg
