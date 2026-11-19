@@ -42,8 +42,21 @@ and merged are different things, and only one of them deploys.
 
 ### When the last PR is still open
 
-Push to the same branch and say plainly in the reply that the existing PR now
-carries the extra commits, so the owner knows what they are merging.
+If the new work **continues what that PR is about**, push to the same branch
+and say plainly in the reply that the existing PR now carries the extra
+commits, so the owner knows what they are merging.
+
+If the new work is **unrelated** — a different feature, a different bug, a
+change to this file — start a new branch and open its own PR. Do not add it to
+a PR that is waiting to merge.
+
+The owner merges by hand, at a moment nobody can predict, so an unrelated
+commit pushed onto an open PR is in a race it can lose. PR #262 was merged
+while its description said it carried two changes; only the first was in it,
+and the second had to be rebased onto the new `main` and opened as #263
+afterwards. A merged PR whose description does not match its commits is worse
+than an extra PR: `git log` and GitHub then disagree about what shipped, and
+whoever reads it next has no way to tell which is right.
 
 ## What ships, and what does not
 
