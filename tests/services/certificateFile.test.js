@@ -50,6 +50,16 @@ describe('where a document is written', () => {
         }
     });
 
+    it('matches the old name for a full-domain ID, spaces and all', () => {
+        // The old code did employeeId.replace(/\//g, '-') and kept the space,
+        // so the file on disk is 'TEN-WEB DEVELOPMENT-1001_loc.pdf'. findFor has
+        // to produce that exact name or it cannot locate a real file that is
+        // already there — which is what left 265 certificates behind.
+        const p = certFile.pathFor({ employeeId: 'TEN/WEB DEVELOPMENT/1001' }, 'LOC');
+        expect(p).not.toBeNull();
+        expect(p.endsWith('TEN-WEB DEVELOPMENT-1001_loc.pdf')).toBe(true);
+    });
+
     it('is case-insensitive about the type and refuses an unknown one', () => {
         expect(certFile.pathFor(student, 'loc')).toBe(certFile.pathFor(student, 'LOC'));
         expect(certFile.pathFor(student, 'NOPE')).toBeNull();
@@ -75,7 +85,6 @@ describe('an employee ID cannot walk out of the uploads directory', () => {
         '..',
         '../secrets',
         'a/../../b',
-        'has space',
         'null\0byte',
         '',
         null
@@ -84,7 +93,12 @@ describe('an employee ID cannot walk out of the uploads directory', () => {
     });
 
     it('keeps every path it does produce inside uploads/', () => {
-        for (const id of ['TEN/WEB/1234', 'TEN-AI-9', 'abc_123', 'x.y']) {
+        // The spaced IDs are the ones this got wrong: real employee IDs carry
+        // the full domain name, 'TEN/WEB DEVELOPMENT/1001', and rejecting the
+        // space gave those students no path, so their certificate could not be
+        // written at all. A space is safe — it cannot climb a directory.
+        for (const id of ['TEN/WEB/1234', 'TEN/WEB DEVELOPMENT/1001',
+                          'TEN/ARTIFICIAL INTELLIGENCE/1097', 'TEN-AI-9', 'abc_123', 'x.y']) {
             const p = certFile.pathFor({ employeeId: id }, 'LOC');
             expect(p).not.toBeNull();
             expect(path.resolve(p).startsWith(path.resolve(certFile.UPLOADS) + path.sep)).toBe(true);

@@ -61,7 +61,16 @@ const normType = (t) => String(t || '').toUpperCase();
  */
 function slug(student) {
     const raw = String((student && (student.employeeId || student._id)) || '').replace(/\//g, '-');
-    return /^[A-Za-z0-9._-]+$/.test(raw) && !raw.includes('..') ? raw : '';
+    // A space is allowed. Real employee IDs carry the full domain name —
+    // TEN/WEB DEVELOPMENT/1001 — and the ID IS the filename, not a URL
+    // segment. A space cannot climb a directory; the only traversal moves are
+    // `..` and the separator, and both are still refused (the slash is turned
+    // to a dash above, `..` is blocked below, and `\`, NUL and control
+    // characters fall outside the class). An earlier version rejected the
+    // space too, which gave every full-name student no path at all: their
+    // certificates could not be written, and the backfill could not place
+    // them.
+    return /^[A-Za-z0-9 ._-]+$/.test(raw) && !raw.includes('..') ? raw : '';
 }
 
 /** Where a newly generated PDF of this type is written. Null if the ID is unusable. */
