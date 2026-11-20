@@ -40,6 +40,9 @@
   .btn:disabled { background:#2a3350; color:#6b6558; cursor:not-allowed; }
   .btn.ghost { background:none; border:1px solid #2a3350; color:#b9b4a8; }
   table { width:100%; border-collapse:collapse; font-size:13px; }
+  /* Seven columns do not fit a phone: the table scrolls inside its card
+     rather than dragging the whole page sideways. */
+  #campWrap { overflow-x:auto; }
   th { text-align:left; color:#8b8578; font-weight:600; font-size:11px; letter-spacing:.6px; text-transform:uppercase; padding:0 10px 9px 0; }
   td { padding:11px 10px 11px 0; border-top:1px solid #1b2440; font-variant-numeric:tabular-nums; }
   .pill { display:inline-block; font-size:11px; padding:2px 9px; border-radius:99px; font-weight:600; }
@@ -366,13 +369,24 @@
       cell('₹' + fmt(c.revenue.rupees), 'rupee');
 
       var act = document.createElement('td');
+      act.style.whiteSpace = 'nowrap';
       if (c.status === 'draft') {
         var b = document.createElement('button');
         b.className = 'linkbtn';
         b.textContent = 'Send';
+        b.style.marginRight = '6px';
         b.addEventListener('click', function () { preflight(c._id); });
         act.appendChild(b);
       }
+      // Any campaign, sent or not — its copy is what gets reused.
+      var tb = document.createElement('button');
+      tb.className = 'linkbtn';
+      tb.textContent = c.isTemplate ? 'Remove template' : 'Save as template';
+      tb.title = c.isTemplate
+        ? 'Stop offering this copy under "start from a template"'
+        : 'Offer this copy under "start from a template"';
+      tb.addEventListener('click', function () { toggleTemplate(c, tb); });
+      act.appendChild(tb);
       tr.appendChild(act);
       t.appendChild(tr);
     });
@@ -382,6 +396,15 @@
     var live = rows.some(function (c) { return c.status === 'sending'; });
     clearTimeout(state.poll);
     if (live) state.poll = setTimeout(function () { loadCampaigns(); loadQuota(); }, 6000);
+  }
+
+  async function toggleTemplate(c, btn) {
+    btn.disabled = true;
+    try {
+      await call('/campaigns/' + c._id + '/template', { method: c.isTemplate ? 'DELETE' : 'POST' });
+      toast(c.isTemplate ? 'Removed from templates.' : 'Saved — it is now under "start from a template".');
+      await Promise.all([loadCampaigns(), loadTemplates()]);
+    } catch (e) { toast(e.message); btn.disabled = false; }
   }
 
   async function loadCampaigns() {
@@ -790,11 +813,28 @@
       var r = await call('/templates');
       state.templates = r.templates || [];
       var sel = $('tplPick');
-      state.templates.forEach(function (t) {
-        var o = document.createElement('option');
-        o.value = t.key; o.textContent = t.label;
-        sel.appendChild(o);
+      var keep = sel.value;
+      // This runs again whenever a template is saved or removed. It used to
+      // append to whatever was there, which was fine while it ran once and
+      // would have listed every built-in twice on the second run. Start again
+      // from the one fixed option ("Write it from scratch").
+      while (sel.children.length > 1) sel.removeChild(sel.lastChild);
+      // Built-in and your own, apart: a saved campaign called "Studio push"
+      // next to the built-in "Career Studio offer" is otherwise a coin toss.
+      [false, true].forEach(function (saved) {
+        var list = state.templates.filter(function (t) { return !!t.saved === saved; });
+        if (!list.length) return;
+        var g = document.createElement('optgroup');
+        g.label = saved ? 'Saved from your campaigns' : 'Built in';
+        list.forEach(function (t) {
+          var o = document.createElement('option');
+          o.value = t.key; o.textContent = t.label;
+          g.appendChild(o);
+        });
+        sel.appendChild(g);
       });
+      if (state.templates.some(function (t) { return t.key === keep; })) sel.value = keep;
+      else { sel.value = ''; $('tplNote').textContent = ''; }
     } catch (_) { /* a missing template list must not break composing */ }
   }
 
@@ -802,7 +842,10 @@
     var t = (state.templates || []).filter(function (x) { return x.key === this.value; }.bind(this))[0];
     if (!t) { $('tplNote').textContent = ''; return; }
     $('tplNote').textContent = t.description;
-    $('cName').value = t.label + ' — ' + new Date().toISOString().slice(0, 10);
+    // A saved template's label is its campaign's name, which already ends in a
+    // date when that campaign began from a template. Replace the date rather
+    // than add one, or each reuse stacks another on: "X — 11-01 — 11-20".
+    $('cName').value = t.label.replace(/ — \d{4}-\d{2}-\d{2}$/, '') + ' — ' + new Date().toISOString().slice(0, 10);
     $('cSubject').value = t.subject;
     $('cHeading').value = t.heading;
     $('cBody').value = t.bodyText;

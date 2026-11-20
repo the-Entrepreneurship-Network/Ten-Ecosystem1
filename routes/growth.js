@@ -11,6 +11,7 @@
  */
 
 const express = require('express');
+const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
 
 const { requireGrowthAPI, verifyGrowthCredentials, GROWTH_USERNAME } = require('../middleware/growthAuth');
@@ -166,7 +167,8 @@ function publicCampaign(c, revenue) {
         opened: (c.openedStudentIds || []).length,
         clicked: (c.clickedStudentIds || []).length,
         revenue: revenue || { count: 0, rupees: 0 },
-        createdBy: c.createdBy, createdAt: c.createdAt, sentAt: c.sentAt, error: c.error
+        createdBy: c.createdBy, createdAt: c.createdAt, sentAt: c.sentAt, error: c.error,
+        isTemplate: !!c.isTemplate
     };
 }
 
@@ -280,20 +282,81 @@ api.post('/campaigns/:id/send', requireGrowthAPI, async (req, res) => {
 
 // ─── templates, preview, hand-picking ────────────────────────────────────────
 
+/**
+ * A campaign saved as a template, in the shape the picker already reads.
+ *
+ * The key is prefixed so it can never collide with a built-in key. A campaign
+ * sent to a hand-picked list suggests no segment: the picked ids are not part
+ * of the copy, and "picked" is not a segment the picker can select.
+ */
+function templateFromCampaign(c) {
+    const when = c.createdAt ? new Date(c.createdAt).toISOString().slice(0, 10) : '';
+    return {
+        key: 'saved:' + String(c._id),
+        label: c.name,
+        description: 'Saved from your own campaign' + (when ? ' of ' + when : '') + '.',
+        suggestedSegment: c.segment === segments.PICKED ? '' : c.segment,
+        subject: c.subject, heading: c.heading || '', bodyText: c.bodyText || '',
+        ctaLabel: c.ctaLabel || '', ctaUrl: c.ctaUrl || '',
+        saved: true
+    };
+}
+
+/*
+ * ponytail: the newest 50 saved templates, in one dropdown. Past that the
+ * picker is a scroll, not a choice; add search or folders if it gets there.
+ */
+const SAVED_TEMPLATE_LIMIT = 50;
+
 /* Relative paths become absolute here, so a template never hard-codes a
    domain that later moves. */
-api.get('/templates', requireGrowthAPI, (req, res) => {
+api.get('/templates', requireGrowthAPI, async (req, res) => {
     const base = String(tracking.BASE || '').replace(/\/+$/, '');
-    res.json({
-        success: true,
-        templates: templates.TEMPLATES.map((t) => ({
-            key: t.key, label: t.label, description: t.description,
-            suggestedSegment: t.suggestedSegment,
-            subject: t.subject, heading: t.heading, bodyText: t.bodyText,
-            ctaLabel: t.ctaLabel, ctaUrl: base + t.ctaPath
-        }))
-    });
+    const builtIn = templates.TEMPLATES.map((t) => ({
+        key: t.key, label: t.label, description: t.description,
+        suggestedSegment: t.suggestedSegment,
+        subject: t.subject, heading: t.heading, bodyText: t.bodyText,
+        ctaLabel: t.ctaLabel, ctaUrl: base + t.ctaPath
+    }));
+    // The built-ins are code and cannot fail. A database hiccup costs the
+    // saved ones for that page load, never the whole picker.
+    let saved = [];
+    try {
+        const rows = await GrowthCampaign.find({ isTemplate: true })
+            .sort({ createdAt: -1 }).limit(SAVED_TEMPLATE_LIMIT).lean();
+        saved = rows.map(templateFromCampaign);
+    } catch (err) {
+        console.error('[Growth] saved templates unavailable:', err.message);
+    }
+    res.json({ success: true, templates: builtIn.concat(saved) });
 });
+
+/**
+ * Save a campaign as a template, or stop offering it as one.
+ *
+ * The id is checked before the query, so a malformed one is a 400 and a
+ * genuine database failure is a 500 — the older routes above answer both with
+ * "Bad campaign id", which reports an outage as the caller's typo.
+ */
+async function setTemplate(req, res, on) {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+        return res.status(400).json({ success: false, error: 'Bad campaign id' });
+    }
+    try {
+        const c = await GrowthCampaign.findByIdAndUpdate(
+            req.params.id, { isTemplate: on }, { new: true });
+        if (!c) return res.status(404).json({ success: false, error: 'Not found' });
+        // No revenueFor here: it is a second query after the write has already
+        // succeeded, and if it threw, this would answer "could not update" for
+        // an update that happened. The page reloads the list for the numbers.
+        res.json({ success: true, campaign: publicCampaign(c) });
+    } catch (err) {
+        console.error('[Growth] template toggle failed:', err.message);
+        res.status(500).json({ success: false, error: 'Could not update the template' });
+    }
+}
+api.post('/campaigns/:id/template', requireGrowthAPI, (req, res) => setTemplate(req, res, true));
+api.delete('/campaigns/:id/template', requireGrowthAPI, (req, res) => setTemplate(req, res, false));
 
 /**
  * Draft the whole form from one line.
@@ -777,4 +840,4 @@ trackingRouter.get('/cu/:id/:sig', async (req, res) => {
         + 'If a colleague would be the right contact instead, just reply to the original email and tell us who.'));
 });
 
-module.exports = { api, tracking: trackingRouter, revenueFor, ATTRIBUTION_DAYS };
+module.exports = { api, tracking: trackingRouter, revenueFor, ATTRIBUTION_DAYS, templateFromCampaign };
