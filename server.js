@@ -12177,6 +12177,17 @@ server.listen(PORT, "0.0.0.0", ()=>{
     } catch (err) {
         console.error("[IDEA-AGENT] Failed to start:", err.message);
     }
+
+    // The college agent. On by default — an agent you have to switch on is
+    // the Run button it replaces — and set COLLEGE_AGENT_CRON=off to stop it
+    // without a deploy. It applies the same worker-0 guard itself. It only
+    // reads pages colleges publish and stores what it finds; it sends nothing,
+    // so it cannot touch the sending allowance that certificates share.
+    try {
+        require("./services/collegeDiscovery").initCollegeAgent();
+    } catch (err) {
+        console.error("[COLLEGE-AGENT] Failed to start:", err.message);
+    }
 });
 
 // Process-level crash protection and error handlers

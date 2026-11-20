@@ -18,6 +18,7 @@
  * per hour, parse robots.txt and add a per-host delay before widening it.
  */
 
+const cron = require('node-cron');
 const { httpFetch } = require('./v2/httpFetch');
 const { contactsFromPosting, nameNear } = require('./v2/recruiterContacts');
 
@@ -855,7 +856,102 @@ async function runBulk(sites, deps = {}) {
     return runStatus();
 }
 
+/* ───────────────────────── the agent on a schedule ───────────────────────── */
+
+/**
+ * Nothing here moved unless somebody pressed Run.
+ *
+ * The route's own error text admitted it — "run it again after the next
+ * batch" — so the agent worked through four hundred colleges and then waited
+ * for a human. An agent that needs a person at a keyboard is a button.
+ *
+ * This changes nothing about HOW it crawls. Same batch, same concurrency,
+ * same per-host delay, same identifying User-Agent: a scheduled run is byte
+ * for byte the run that pressing Run already does. What changes is that it
+ * happens four times a day without anyone there.
+ *
+ * On the ceiling this file states at the top — parse robots.txt above
+ * thousands of domains per hour — a scheduled run does not cross it that a
+ * pressed one did not. The burst is identical; only its frequency changes,
+ * and four spaced runs a day is roughly 1,600 colleges, not a continuous
+ * crawl. Widening BATCH or the schedule much past this is the point at which
+ * that note has to be acted on.
+ */
+let cronStarted = false;
+
+/**
+ * Schedule the crawl. Safe to call twice; the second call does nothing.
+ *
+ * `deps` is injectable for the same reason runBulk's is: without it the only
+ * way to find out what the scheduled callback does is to wait until 02:37 and
+ * crawl four hundred colleges.
+ *
+ * @param {{runBulk?: Function, runStatus?: Function}} [deps]
+ * @returns {{started: boolean, reason?: string, expr?: string}}
+ */
+function initCollegeAgent(deps = {}) {
+    if (cronStarted) return { started: false, reason: 'already-started' };
+
+    const run = deps.runBulk || runBulk;
+    const status = deps.runStatus || runStatus;
+
+    /*
+     * On by default, because an agent you have to switch on is the button
+     * this replaces. One variable does both jobs: a cron expression to
+     * reschedule it, or the word "off" to stop it without a deploy.
+     */
+    const expr = process.env.COLLEGE_AGENT_CRON || '37 2,8,14,20 * * *';
+    if (String(expr).trim().toLowerCase() === 'off') {
+        console.log('[COLLEGE-AGENT] COLLEGE_AGENT_CRON=off — not scheduling.');
+        return { started: false, reason: 'disabled' };
+    }
+
+    /*
+     * Under PM2 cluster mode every worker runs server.js. Without this guard
+     * each worker schedules the same slot, and four workers crawling the same
+     * four hundred colleges at once is four times the traffic at somebody
+     * else's server — the trap services/automationCron.js documents.
+     */
+    const worker = process.env.NODE_APP_INSTANCE;
+    if (!(worker === undefined || worker === '0')) {
+        console.log(`[COLLEGE-AGENT] Skipped on cluster worker ${worker}; worker 0 runs it.`);
+        return { started: false, reason: 'not-cron-worker' };
+    }
+
+    if (!cron.validate(expr)) {
+        console.error(`[COLLEGE-AGENT] COLLEGE_AGENT_CRON is not a valid expression: ${expr}`);
+        return { started: false, reason: 'bad-cron' };
+    }
+
+    cron.schedule(expr, async () => {
+        try {
+            /*
+             * runBulk refuses a second run itself, but it refuses by returning
+             * the snapshot, which in a log looks the same as a run that did
+             * nothing. Checking here is what makes the log readable.
+             */
+            if (status().running) {
+                console.log('[COLLEGE-AGENT] Still working through the last batch; skipping this slot.');
+                return;
+            }
+            const r = await run();
+            console.log(`[COLLEGE-AGENT] processed ${r.processed}/${r.total}, `
+                + `added ${r.added}, skipped ${r.skipped}, failed ${r.failed}`
+                + (r.error ? ` — ${r.error}` : ''));
+        } catch (err) {
+            // A scheduled job has no caller. runBulk is documented never to
+            // throw, and this is here for the day that stops being true.
+            console.error('[COLLEGE-AGENT] run failed:', (err && err.message) || err);
+        }
+    }, { timezone: 'Asia/Kolkata' });
+
+    cronStarted = true;
+    console.log(`[COLLEGE-AGENT] Scheduled: ${expr} (Asia/Kolkata).`);
+    return { started: true, expr };
+}
+
 module.exports = {
+    initCollegeAgent,
     discoverFromSite, saveContacts, htmlToText, toOrigin, titleOf,
     runBulk, runStatus, withDeadline, nextBatch, queueDepth, markVisited, BATCH,
     PATHS, CONCURRENCY, MAX_PER_COLLEGE,
