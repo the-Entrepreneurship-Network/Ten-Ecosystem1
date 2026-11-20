@@ -239,36 +239,25 @@ const studentsSchema = new mongoose.Schema({
     v2DurationType:       { type: String, default: null },
 
     /*
-     * The five *PdfBase64 columns below are on their way out, and nothing
-     * writes them any more.
-     *
-     * Every certificate was always written twice — a PDF under uploads/ and
-     * the same bytes as base64 here — and this second copy is the reason a
-     * single student record runs to megabytes, and the reason the three sort
-     * indexes at the bottom of this file have to exist at all.
-     *
-     * They stay declared until scripts/migrate-cert-pdfs.js has run on
-     * production, for two reasons: the download route still reads them for any
-     * record the backfill has not reached, and the backfill itself selects
-     * them by name, which Mongoose would strip from the projection if they
-     * were not in the schema. Delete them once that script reports nothing
-     * left to clear.
+     * A generated certificate is a PDF under uploads/, and only there. It used
+     * to be stored a second time as base64 on this document — one column per
+     * type — which is what made a single record run to megabytes. Those five
+     * columns are gone now: scripts/migrate-cert-pdfs.js wrote any missing file
+     * and cleared every column, and the status fields below (locStatus and the
+     * rest) are what say whether a document exists. services/certificateFile.js
+     * knows where the file is, from the employee ID.
      */
-    locPdfBase64:            { type: String, default: null },
     locStatus:               { type: String, enum: ['not_eligible','pending_coordinator','pending_hr','fine_pending','issued'], default: 'not_eligible' },
     locIssuedAt:             { type: Date,   default: null },
-      
-    lorPdfBase64:            { type: String, default: null },
+
     lorStatus:               { type: String, enum: ['not_eligible','pending_coordinator','pending_hr','fine_pending','issued'], default: 'not_eligible' },
     lorIssuedAt:             { type: Date,   default: null },
-      
-    starPdfBase64:           { type: String, default: null },
+
     starStatus:              { type: String, enum: ['not_submitted','pending_review','approved','issued','rejected'], default: 'not_submitted' },
     starIssuedAt:            { type: Date,   default: null },
     starContribution:        { type: String, default: null },
 
     // Letter of Promotion (LOP)
-    lopPdfBase64:            { type: String, default: null },
     lopStatus:               { type: String, enum: ['not_eligible','pending','issued'], default: 'not_eligible' },
     lopIssuedAt:             { type: Date,   default: null },
     lopOldRole:              { type: String, default: null },
@@ -291,8 +280,7 @@ const studentsSchema = new mongoose.Schema({
     // Gender — drives correct pronouns in generated documents.
     // Empty / undefined values fall back to neutral "they/them/their".
     gender:                  { type: String, enum: ['male','female','',null], default: '' },
-      
-    offerPdfBase64:          { type: String, default: null },
+
     offerLetterStatus:       { type: String, enum: ['not_uploaded','pending','under_review','approved','rejected','issued'], default: 'not_uploaded' },
     offerLetterGeneratedAt:  { type: Date,   default: null },
     documentRejectionReason: { type: String, default: null },
@@ -353,20 +341,22 @@ const studentsSchema = new mongoose.Schema({
 studentsSchema.index({ email: 1 });
 studentsSchema.index({ domain: 1 });
 
-// Sort keys. These are not an optimisation — without them the HR lists BREAK.
+// Sort keys for the HR lists.
 //
-// A Student document embeds up to five base64 PDFs (offer letter, LOC, LOR,
-// star, promotion), so a single record can be megabytes. An unindexed
-// `.sort()` makes MongoDB run a blocking SORT stage over the FETCHED
-// documents — PDFs included — and at ~778 students that exceeded the 100MB
-// in-memory sort limit and returned:
+// These were once load-bearing for more than speed. A Student document used to
+// embed up to five base64 PDFs, so a single record could be megabytes; an
+// unindexed `.sort()` ran a blocking SORT stage over the FETCHED documents —
+// PDFs included — and at ~778 students that exceeded MongoDB's 100MB in-memory
+// sort limit and failed the query outright:
 //
 //   Executor error during find command :: caused by ::
 //   Sort exceeded memory limit of 104857600 bytes
 //
-// A projection does not help: the sort happens before it. An index does,
-// because the planner then walks the index in order (IXSCAN) and drops the
-// blocking sort entirely. This one line fixes every HR list that sorts.
+// The PDFs are out of the documents now (scripts/migrate-cert-pdfs.js), so a
+// record is kilobytes and that limit is no longer in reach — the lists would
+// no longer BREAK without these. They stay because they are still the right
+// indexes: the planner walks them in order (IXSCAN) and skips the sort stage
+// entirely, which is what every HR list that sorts by one of these wants.
 studentsSchema.index({ createdAt: -1 });
 studentsSchema.index({ joiningDate: -1 });
 studentsSchema.index({ lastActiveDate: -1 });

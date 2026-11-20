@@ -43,7 +43,15 @@ const STATUS = {
     OFFER: { field: 'offerLetterStatus',   issued: ['approved', 'issued'] }
 };
 
-/** The legacy base64 column for a type. Read-only, and only until the backfill runs. */
+/*
+ * The base64 column a type used to live in. These columns are no longer on the
+ * Student schema — the backfill cleared them and models/Student.js dropped the
+ * declarations — so on current data every read here is undefined. The map stays
+ * for two things that still name the columns: scripts/migrate-cert-pdfs.js uses
+ * it as the query key (a lean read still returns a raw column if an old backup
+ * is ever restored), and isIssued / the download route keep it as a last-resort
+ * fallback for exactly that case. Read-only; nothing writes these any more.
+ */
 const LEGACY_B64 = {
     LOC: 'locPdfBase64', LOR: 'lorPdfBase64', STAR: 'starPdfBase64',
     OFFER: 'offerPdfBase64', LOP: 'lopPdfBase64'
