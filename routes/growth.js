@@ -26,6 +26,7 @@ const collegeDiscovery = require('../services/collegeDiscovery');
 const collegeOutreach = require('../services/collegeOutreach');
 const { SEED_COLLEGES } = require('../config/collegeSeeds');
 const templates = require('../config/growthTemplates');
+const growthCopy = require('../services/growthCopy');
 const { greetingNameFor } = require('../utils/studentName');
 
 const api = express.Router();
@@ -292,6 +293,33 @@ api.get('/templates', requireGrowthAPI, (req, res) => {
             ctaLabel: t.ctaLabel, ctaUrl: base + t.ctaPath
         }))
     });
+});
+
+/**
+ * Draft the whole form from one line.
+ *
+ * The six campaign fields are the slowest part of sending anything, so this
+ * hands a brief to services/growthCopy and returns a draft in the exact shape
+ * the form holds. It writes nothing and sends nothing — the human edits it,
+ * previews it, and saves it, same as a hand-typed campaign.
+ *
+ * A missing key or an empty brief is the caller's to fix, so it comes back 400
+ * with the reason to show them; an actual model failure is a 502 with a plain
+ * retry message and the detail in the log.
+ */
+api.post('/copy/draft', requireGrowthAPI, async (req, res) => {
+    try {
+        const draft = await growthCopy.draft((req.body || {}).brief);
+        res.json({ success: true, draft });
+    } catch (err) {
+        const userFacing = /AI key|sentence first/.test(err.message || '');
+        if (!userFacing) console.error('[Growth] copy draft failed:', err.message);
+        res.status(userFacing ? 400 : 502).json({
+            success: false,
+            error: userFacing ? err.message
+                : 'The AI could not draft this — try again, or write it by hand.'
+        });
+    }
 });
 
 /**
