@@ -95,7 +95,14 @@
   <!-- Compose -->
   <section class="card">
     <h2>New campaign</h2>
-    <label for="tplPick">Start from a template</label>
+    <label for="aiBrief">Describe it in one line — AI drafts the rest</label>
+    <div style="display:flex;gap:8px;align-items:stretch;flex-wrap:wrap">
+      <input id="aiBrief" style="flex:1;min-width:220px" placeholder="Nudge dormant students to finish and claim their certificate">
+      <!-- margin-top:0 — .btn carries a 16px top margin for its usual place under a form, which in this row pushed it below the input -->
+      <button class="btn ghost" id="aiDraftBtn" type="button" style="white-space:nowrap;margin-top:0">✨ Draft with AI</button>
+    </div>
+    <div id="aiNote" style="font-size:12px;color:#8b8578;margin:6px 0 16px;min-height:16px"></div>
+    <label for="tplPick">Or start from a template</label>
     <select id="tplPick"><option value="">Write it from scratch</option></select>
     <div id="tplNote" style="font-size:12px;color:#8b8578;margin:6px 0 16px;min-height:16px"></div>
     <div class="two">
@@ -805,6 +812,37 @@
     var card = document.querySelector('.seg[data-key="' + t.suggestedSegment + '"]');
     if (card && !state.picked.size) card.click();
     toast('Template loaded — edit anything before sending.');
+  });
+
+  // ─── draft from a one-line brief ──────────────────────────────────────────
+  // Fills the same six fields a template does, from Gemini. It writes a draft,
+  // never a sent mail — Preview and Save still stand between it and anyone.
+  $('aiDraftBtn').addEventListener('click', async function () {
+    var brief = $('aiBrief').value.trim();
+    if (!brief) { $('aiNote').textContent = 'Write a sentence first.'; return; }
+    var btn = this, label = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Drafting…'; $('aiNote').textContent = '';
+    try {
+      var r = await call('/copy/draft', { method: 'POST', body: JSON.stringify({ brief: brief }) });
+      var d = r.draft || {};
+      if (d.name) $('cName').value = d.name;
+      $('cSubject').value = d.subject || '';
+      $('cHeading').value = d.heading || '';
+      $('cBody').value = d.bodyText || '';
+      $('cCtaLabel').value = d.ctaLabel || '';
+      $('cCtaUrl').value = d.ctaUrl || '';
+      if (d.segment) {
+        var seg = document.querySelector('.seg[data-key="' + d.segment + '"]');
+        if (seg && !state.picked.size) seg.click();
+      }
+      $('aiNote').textContent = 'Draft ready — read it, change anything, then Preview.';
+      toast('Draft ready — edit before sending.');
+    } catch (e) {
+      // The no-key and bad-brief messages are meant for the user; show them.
+      $('aiNote').textContent = e.message;
+    } finally {
+      btn.disabled = false; btn.textContent = label;
+    }
   });
 
   // ─── hand-picking ─────────────────────────────────────────────────────────
