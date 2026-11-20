@@ -47,6 +47,14 @@ const GrowthCampaignSchema = new mongoose.Schema({
     openedStudentIds:  [{ type: mongoose.Schema.Types.ObjectId, ref: 'Student' }],
     clickedStudentIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Student' }],
 
+    /*
+     * Offered in the "start from a template" picker, beside the built-in ones
+     * in config/growthTemplates.js. A flag rather than a copy: a campaign's copy
+     * is never edited after it is created, so the campaign IS the template, and
+     * there is no second record to drift from it.
+     */
+    isTemplate: { type: Boolean, default: false },
+
     createdBy: { type: String, default: '' },
     startedAt: { type: Date, default: null },
     sentAt:    { type: Date, default: null },

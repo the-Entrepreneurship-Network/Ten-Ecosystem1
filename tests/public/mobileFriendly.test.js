@@ -150,6 +150,17 @@ describe('nothing is cut off the right edge of a phone', () => {
     expect(block).toMatch(/\.sidebar nav\{[^}]*overflow-x:auto/);
   });
 
+  it('growth-os scrolls its campaigns table inside the card, not the page', () => {
+    /*
+     * The sweep above could not see this one: the table is only drawn once
+     * the API answers, and a page with no session shows "Loading…". Measured
+     * with data at 390px, the seven columns came to 423px, and the row's
+     * "Save as template" button took them to 559px, dragging the whole page
+     * sideways. This page does not load mobile.css, so nothing clipped it.
+     */
+    expect(ruleBody(read('public/growth-os.html'), '#campWrap')).toMatch(/overflow-x:\s*auto/);
+  });
+
   it('leaves every one of them alone on a desktop', () => {
     // Each fix is either inside a width query or bounded by min(), so a wide
     // screen keeps the 1100px grid, the 400px card and the 220px rail.
