@@ -4,6 +4,11 @@ Internship management platform for The Entrepreneurship Network (TEN) — studen
 onboarding, task journeys, attendance, certificates, and role portals for HR,
 coordinators, founders, mentors, investors and contractors.
 
+> **Taking over this project? Start with [HANDOVER.md](HANDOVER.md).** It covers
+> the architecture, the access you need, how deploys work, how to run the
+> server, the data model, every scheduled job and outside service, and what is
+> unfinished. It was checked against the code on 21 November 2026.
+
 ## Stack
 
 | Layer | Technology |
@@ -16,14 +21,17 @@ coordinators, founders, mentors, investors and contractors.
 | Documents | PDFKit, QR codes |
 | Email | Nodemailer |
 
-Frontend is plain HTML/CSS/JS in `public/` — no framework, no build step.
+Most of the frontend is plain HTML/CSS/JS in `public/`. Four products (the job,
+resume, hackathon and student portals) are React apps built with Vite into
+`public/<name>/`. The built files are committed, because the deploy does not
+build them; see [HANDOVER.md §15.5](HANDOVER.md#155-the-four-react-apps).
 
 ## Running locally
 
 ```bash
 npm ci --legacy-peer-deps
 cp .env.example .env      # then fill in the values — see below
-node server.js            # defaults to PORT=5000
+node server.js            # defaults to PORT=3000; production's .env sets 5000
 ```
 
 Without `MONGODB_URI` the app falls back to JSON files under `.data/local_db/`
@@ -90,7 +98,10 @@ npm test
 
 ## Documentation
 
-**Architecture**
+**Start with [HANDOVER.md](HANDOVER.md).** Its §18 says which of the older
+documents below are still accurate; several are not.
+
+**Architecture (older; see HANDOVER.md §18)**
 - `docs/current-system-map.md` — architecture overview
 - `docs/api-map.md` — endpoint inventory
 - `docs/database-map.md` — collections and fields
@@ -121,5 +132,7 @@ npm test
 | `scripts/expand-task-tracks.js` | Grow every student's task track without lowering anyone's completion percentage. Dry run by default |
 
 Every script that changes data is **dry run by default** and prints what it
-would do. Add `--write` to apply it — except `audit-domain-tenure.js`, which
-uses `--apply`. Run it without the flag first and read the output.
+would do, but the flag that applies it differs from script to script:
+`--apply`, `--write`, `--fix`, `--unlock` or `--send`. The full list is in
+[HANDOVER.md §14.4](HANDOVER.md#144-scripts). Run a script without the flag
+first and read the output.
