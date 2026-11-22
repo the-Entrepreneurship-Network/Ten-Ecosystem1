@@ -1,0 +1,52 @@
+# One complete copy of the portal with its own MongoDB: for a demo, or for a
+# customer's own copy. Production still deploys with npm ci + pm2
+# (HANDOVER.md §13); this file does not change that.
+#
+#   cp .env.example .env      # fill it in; never reuse the production .env
+#   docker compose up -d --build
+#   docker compose exec app npm run seed        # first time: weekly task tracks
+#   docker compose exec app npm run seed:quiz   # first time: quiz banks (needs internet)
+#
+# NODE_ENV=development works over plain http on a laptop. A copy other people
+# use must sit behind HTTPS with NODE_ENV=production: the sign-in cookie is
+# Secure there, and the app refuses to start without its secrets.
+#
+# A second copy on the same machine: its own folder, its own .env with
+# HOST_PORT=5001, then the same command.
+services:
+  app:
+    build: .
+    image: ten-portal
+    env_file: .env
+    environment:
+      PORT: "5000"
+      # Always this copy's own database, whatever .env says, so one copy can
+      # never write to another's data or mail its students.
+      MONGODB_URI: mongodb://mongo:27017/ten
+    ports:
+      - "${HOST_PORT:-5000}:5000"
+    volumes:
+      - uploads:/app/uploads
+      - data:/app/.data
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:7.0
+    # MongoDB takes half the machine's memory unless told otherwise.
+    command: ["--wiredTigerCacheSizeGB", "0.25"]
+    volumes:
+      - db:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  uploads:
+  data:
+  db:

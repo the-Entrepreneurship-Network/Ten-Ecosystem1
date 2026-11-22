@@ -159,6 +159,7 @@ products are React + Vite apps whose **built** output is committed to git
 
 | Path | What it is |
 |---|---|
+| `Dockerfile`, `docker-compose.yml`, `.dockerignore` | One copy of the portal with its own MongoDB, for a demo or a customer (§15.3). Not used by the production deploy |
 | `server.js` | The app: startup, middleware, about 200 inline routes (legacy student, HR and coordinator APIs, attendance, chat, uploads, payments), the JSON fallback engine, Socket.IO, and several scheduled jobs |
 | `routes/` | Routers mounted by `server.js`. `routes/v2/` holds the newer student portal, tasks, quiz, certificates, documents, payment, HR, Studio, learn, academics, resume and job agents, hackathons, marketplace, attendance agent, LinkedIn openings. Also at the top level: `growth.js` (Growth OS), `adminPortal.js` (admin API), `founderOS.js`, `dao.js`, `chatModeration.js`, `push.js`, `notificationFeed.js` |
 | `controllers/` | Handlers for the register hub and the profile routes |
@@ -1049,6 +1050,16 @@ task, so editing a task in the seed file does not change it in the database.
    - HR and coordinators: build the maps with
      `scripts/generate-credentials-env.js`; the names must be on the rosters
      in `server.js`.
+
+**Or with Docker.** `cp .env.example .env`, fill it in, then
+`docker compose up -d --build`. That serves http://localhost:5000 with its
+own MongoDB: `docker-compose.yml` forces `MONGODB_URI` to it whatever `.env`
+says, and keeps uploads and the database in Docker volumes. The first time,
+run `docker compose exec app npm run seed` for the task tracks and
+`docker compose exec app npm run seed:quiz` for the quiz banks (the second
+needs internet). One copy uses about 340 MB of memory when idle (app and
+MongoDB together, measured 22 November 2026). Production still deploys with
+npm and pm2 (§13); the Docker files change nothing there.
 
 ### 15.4 Tests
 

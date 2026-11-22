@@ -1,0 +1,13 @@
+# Never bake secrets or a copy's own data into the image.
+.env
+.env.*
+.session-secret
+credentials-to-distribute.txt
+.data
+uploads
+
+# Installed inside the image, or not needed to run it.
+**/node_modules
+.git
+coverage
+*.log
