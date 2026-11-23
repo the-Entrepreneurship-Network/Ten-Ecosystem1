@@ -2169,7 +2169,12 @@ app.use(express.static("public", {
  * download route served, and now it IS the document. They are reachable only
  * through GET /api/v2/certificates/download/:type, which checks that the
  * caller owns the record or is staff.
+ *
+ * Uploaded documents (address proofs, marksheets, resumes) are served to HR
+ * and admins only, at their old URLs, by the router mounted here — ahead of
+ * the guard, which still turns everybody else away.
  */
+app.use('/uploads/documents', require('./routes/privateDocuments'));
 const UPLOADS_PRIVATE = /(^|\/)(local_db|\.env|certificates|offer-letters|loc|documents)(\/|$)/i;
 app.use('/uploads', (req, res, next) => {
     if (UPLOADS_PRIVATE.test(req.path)) {
@@ -11244,12 +11249,6 @@ try {
     app.use("/api/v2/groups",         require("./routes/v2/domainGroups"));
     console.log("[V2] Contractor, investor, hackathon and group routes mounted");
 } catch(e) { console.error("[V2] ecosystem desk routes:", e.message); }
-
-// NEW FEATURE: Serve uploaded certificates, documents, and offer letters
-const expressModule = require("express");
-app.use("/uploads/certificates", expressModule.static("uploads/certificates"));
-app.use("/uploads/documents",    expressModule.static("uploads/documents"));
-app.use("/uploads/offer-letters", expressModule.static("uploads/offer-letters"));
 
 // Admin Portal — Internal Only
 const { requireAdmin } = require('./middleware/adminAuth');
