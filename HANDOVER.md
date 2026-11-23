@@ -359,7 +359,8 @@ loads.
   links open `/complaint-feedback?answer=yes|no`; the page records the answer
   (`models/ComplaintFeedback.js`, anonymous) and, on "no", shows the WhatsApp
   group from `COMPLAINTS_WHATSAPP_URL`. HR sees the 30-day totals on the
-  overview.
+  overview. The help desk (§7.12) can answer these emails itself, in the
+  student's thread; once it sends replies, the vacation responder must be off.
 - **Feedback.** A student submits it once; HR can publish it as a testimonial
   on the home page.
 - **Notice board.** Coordinators post meeting times; the data lives in
@@ -604,6 +605,77 @@ The in-house email console (`routes/growth.js`, `public/growth-os.html`,
   links to it, and shows usage counts in the admin's Schools panel. That needs
   `GAME_USAGE_KEY` here equal to `USAGE_KEY` on the Worker.
 
+### 7.12 Help desk (complaints@)
+
+`services/supportDesk/` answers emails to complaints@ from saved answers.
+**There is no AI:** it only ever sends text written in the database, which HR
+edits at `/hr-help-desk.html` (HR portal → **Help Desk**).
+
+- **Every two minutes** (worker 0 only) it reads new inbox mail through the
+  Gmail API (`gmail.js`: plain https, no SDK). `matcher.js` compares each email
+  with the saved answers: TF-IDF similarity, after folding together how
+  students write ("emp id", "empid", Hinglish fillers, plurals). Each sentence
+  is scored on its own too. At or above `SUPPORT_MATCH_THRESHOLD` (default
+  0.5) it answers, with at most two answers per email.
+- **Replies go into the student's thread**, from complaints@. They end with
+  the "Did this answer your question?" links, so "No" still leads to the
+  WhatsApp group (§7.1, Complaints).
+- **Modes** (`SUPPORT_AGENT_MODE`):
+  - `off`: the default.
+  - `draft`: the reply waits as a Gmail draft, labelled **Help desk/Draft
+    ready**.
+  - `send`: the reply goes out at once, labelled **Help desk/Answered**. An
+    email no answer fits gets "a member of our team will reply" and
+    **Help desk/Needs reply**. Switch the mailbox's vacation responder off
+    before using `send`.
+- **Account details** (`{{employeeId}}` and the other placeholders in
+  `facts.js`) are sent only to a registered student **whose address Gmail
+  verified** (DMARC pass in Gmail's own `Authentication-Results`). A forged
+  From gets the generic answer.
+- **Always left to a person:**
+  - refunds, fraud, legal threats, harassment, self-harm and similar
+    (`SENSITIVE` in `matcher.js`);
+  - a conversation the team already replied in or is handling;
+  - automatic mail (auto-replies, bounces, mailing lists);
+  - a fourth email from the same sender in a day.
+- **Learning:**
+  - The team replies to a student in Gmail and adds the label **Help
+    desk/Teach** to that conversation.
+  - The next run saves the student's question with the team's reply, without
+    the greeting and sign-off, as a new answer, and relabels the conversation
+    **Help desk/Learned**.
+  - HR can edit the new answer or switch it off.
+- **Starter answers** are in `services/supportDesk/starterAnswers.js`. They
+  are copied into the database on first use. A later release updates a
+  starter answer unless HR has edited it; deleting a starter answer only
+  switches it off.
+- **Records:**
+  - `SupportAnswer`: the answers.
+  - `SupportTicket`: what was done with each email, kept 90 days. It is
+    written before anything is sent, so its unique Gmail id stops one email
+    being answered twice.
+- **Setup, once (₹0):**
+  1. At console.cloud.google.com, **signed in with an @entrepreneurshipnetwork.net
+     account**:
+     - create a project;
+     - enable the **Gmail API**;
+     - set the OAuth consent screen's audience to **Internal**;
+     - create an OAuth client of type **Desktop app**.
+  2. In the server's `.env`, add `SUPPORT_GMAIL_CLIENT_ID`,
+     `SUPPORT_GMAIL_CLIENT_SECRET` and `SUPPORT_AGENT_MODE=draft`.
+  3. Run `node scripts/connect-support-mailbox.js`. Open the link it prints,
+     sign in as complaints@, press Allow, and paste back the address the
+     browser lands on. The script writes `SUPPORT_GMAIL_REFRESH_TOKEN`.
+  4. Run `pm2 restart ecosystem.config.js --only ten-portal-production --update-env`.
+     The Help Desk page then says "Connected".
+
+  **Internal matters:** with an External consent screen "in testing", Google
+  expires the permission after seven days.
+
+  **Put these settings on one server only.** A staging copy with its own
+  database would answer the same mail again. Skipping mail already labelled by
+  the help desk narrows that window but does not close it.
+
 ---
 
 ## 8. Data model
@@ -728,6 +800,7 @@ server's clock, and **whether the EC2 box is on UTC is UNSURE**:
 | When | What | Where | Off switch |
 |---|---|---|---|
 | Monday 09:00 (server time) | Weekly activity mail to every student who has not opted out: a thank-you to the active, a nudge to those inactive 14+ days, both pitching the ₹500 Studio combo. Counts against the Growth quota | `server.js` (`cron.schedule('0 9 * * 1'…)`) | **none**, every process |
+| Every 2 minutes | The complaints@ help desk reads new mail, then answers it or labels it for the team (§7.12) | `services/supportDesk/agent.js` | `SUPPORT_AGENT_MODE=off` (the default); worker 0 only |
 | 30 s after boot, then every 6 h | End-of-tenure sender: generates and emails OFFER + LOC + LOR to students past their end date who have no `DocumentHistory` row. **No eligibility check** | `server.js` | **none**, every process |
 | Hourly at :00, :20, :40 | Certificate pipeline: escalate to HR after 24 h; issue LOC/LOR when the rules are met (or add a fine); issue offer letters 24 h after documents are submitted | `routes/v2/certificates.js` | **none**, every process |
 | Every 30 min, and daily 09:00, 23:55, 08:00 IST | Automation crons: offer letters for pending documents; daily certificate requests; auto-approval after 24 h; auto-issue after the HR deadline; mark active students present at 23:55 (not Sundays); email-health alert at 08:00 | `services/automationCron.js` | `ENABLE_AUTOMATION_CRON=false` or `DISABLE_CRON_JOBS=true` |
@@ -973,6 +1046,7 @@ first.
 | `setup-production-env.sh` | builds a complete production `.env` (interactive). Re-running regenerates `SESSION_SECRET` and every staff password | — |
 | `generate-credentials-env.js` | turns cleartext passwords into the bcrypt `HR_CREDENTIALS` / `COORDINATOR_CREDENTIALS` value | prints only |
 | `generate-vapid-keys.js` | Web Push key pair (once per server) | prints only |
+| `connect-support-mailbox.js` | connects complaints@ to the help desk (§7.12): prints a Google link, then writes `SUPPORT_GMAIL_REFRESH_TOKEN` into `.env` without printing it | — |
 | `whatsapp-exchange-token.js` | swaps a short WhatsApp token for a ~60-day one | `--write` (rewrites the line in `.env`) |
 | `check-email.js`, `check-mail-health.js`, `check-admin-login.js`, `diagnose-session.js`, `capacity-check.js` | read-only diagnostics | — |
 | `diagnose-student-login.js` | every login check for one student | `--unlock` |

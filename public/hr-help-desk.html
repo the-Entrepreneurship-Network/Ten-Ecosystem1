@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TEN HR — help desk</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/mobile.css">
+<style>
+:root{--bg:#05070e;--card:#0e1428;--gold:#D4AF37;--text:#F0EEE8;--muted:#9a9080;--dim:#4E4840;
+  --green:#10b981;--red:#ef4444;--amber:#f59e0b;--border:rgba(212,175,55,.14);--border-strong:rgba(212,175,55,.32);}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;padding:26px 20px 70px;}
+.wrap{max-width:960px;margin:0 auto;}
+a{color:var(--gold);}
+h1{font-family:'Outfit',sans-serif;font-size:30px;font-weight:900;letter-spacing:-.02em;}
+h2{font-family:'Outfit',sans-serif;font-size:19px;font-weight:800;}
+.sub{color:var(--muted);font-size:14px;line-height:1.6;margin-top:9px;max-width:70ch;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:15px;padding:20px;margin-top:16px;}
+.hd{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;}
+.meta{font-size:12.5px;color:var(--muted);margin-top:5px;line-height:1.6;}
+.stats{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+.pill{font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:5px 11px;border-radius:999px;
+  background:rgba(154,144,128,.14);color:var(--muted);white-space:nowrap;}
+.pill.sent{background:rgba(16,185,129,.14);color:var(--green);}
+.pill.drafted,.pill.starter{background:rgba(212,175,55,.14);color:var(--gold);}
+.pill.held,.pill.taught{background:rgba(245,158,11,.14);color:var(--amber);}
+.pill.human,.pill.failed,.pill.off{background:rgba(239,68,68,.14);color:#fca5a5;}
+.item{border-top:1px solid var(--border);padding:14px 0;}
+.item:first-of-type{border-top:0;}
+.q{font-weight:800;font-size:15px;}
+.text{white-space:pre-wrap;font-size:13.5px;line-height:1.65;color:#ddd8cc;margin-top:8px;}
+.ex{font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.6;}
+label{display:block;font-size:12.5px;font-weight:700;color:var(--muted);margin-top:12px;}
+input[type=text],textarea{width:100%;margin-top:6px;padding:10px 12px;border-radius:10px;background:#0b1222;
+  border:1px solid var(--border);color:var(--text);font:inherit;font-size:14px;font-weight:400;line-height:1.6;}
+textarea{min-height:90px;resize:vertical;}
+input:focus,textarea:focus{outline:none;border-color:var(--border-strong);}
+.row{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center;}
+button{font:inherit;font-weight:800;font-size:13px;padding:10px 16px;min-height:44px;border-radius:10px;
+  border:1px solid var(--border-strong);background:transparent;color:var(--gold);cursor:pointer;}
+button.primary{background:var(--gold);color:#1a1208;border-color:transparent;}
+button.danger{border-color:rgba(239,68,68,.45);color:#fca5a5;}
+button:disabled{opacity:.45;cursor:not-allowed;}
+button:focus-visible{outline:2px solid var(--gold);outline-offset:3px;}
+.note{padding:13px 16px;border-radius:11px;background:rgba(212,175,55,.09);border:1px solid var(--border-strong);
+  color:#e8d9a8;font-size:13.5px;margin-top:14px;line-height:1.6;}
+.preview{white-space:pre-wrap;background:#0b1222;border:1px solid var(--border);border-radius:10px;padding:14px;
+  font-size:13px;line-height:1.65;margin-top:12px;overflow-wrap:anywhere;}
+code{background:#0b1222;border:1px solid var(--border);border-radius:6px;padding:1px 6px;font-size:12.5px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Help desk</h1>
+  <p class="sub">It answers emails to complaints@ using the answers on this page. There is no AI: it only ever
+     sends what is written here. When no answer fits, it labels the email <b>Help desk/Needs reply</b> in
+     Gmail for your team.</p>
+
+  <div class="card" id="status"><div class="meta">Loading…</div></div>
+
+  <div class="card">
+    <h2>Try a question</h2>
+    <p class="meta">Type what a student might write. You'll see the reply they would get. Nothing is sent.</p>
+    <textarea id="tryText" placeholder="e.g. sir I didn't get my offer letter yet"></textarea>
+    <div class="row"><button class="primary" id="tryBtn" type="button">Try it</button></div>
+    <div id="tryOut"></div>
+  </div>
+
+  <div class="card">
+    <h2>Teach it a new answer</h2>
+    <p class="meta">Reply to the student in Gmail as you normally would. Then add the label
+      <b>Help desk/Teach</b> to that conversation. Within two minutes, their question and your reply appear
+      below as a new answer, and the next student who asks the same thing gets it. Edit it here if your reply
+      was only about that one student.</p>
+  </div>
+
+  <div class="card">
+    <div class="hd"><h2>Recent emails</h2><button type="button" id="refresh">Refresh</button></div>
+    <div id="tickets"><div class="meta">Loading…</div></div>
+  </div>
+
+  <div class="card">
+    <div class="hd"><h2>Answers</h2><button type="button" class="primary" id="addBtn">Add an answer</button></div>
+    <div id="editor"></div>
+    <div id="answers"><div class="meta">Loading…</div></div>
+  </div>
+</div>
+<script>
+'use strict';
+const esc = (v) => String(v == null ? '' : v)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+const when = (d) => d ? new Date(d).toLocaleString() : '';
+const OUTCOME = { sent: 'Answered', drafted: 'Draft ready', held: 'Told a person will reply',
+  human: 'Needs reply', skipped: 'Skipped', failed: 'Failed', working: 'Working' };
+const MODE = {
+  off: ['Off', 'Nothing is read or sent. Set SUPPORT_AGENT_MODE=draft in the server\'s .env to start.'],
+  draft: ['Drafts', 'Each reply waits in Gmail as a draft. Check it, then press Send.'],
+  send: ['Sending', 'Replies go out by themselves.']
+};
+let answers = [];
+let placeholders = [];
+
+async function api(path, options) {
+  const r = await fetch('/api/support-desk' + path, Object.assign({ credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' } }, options || {}));
+  if (r.status === 401 || r.status === 403) {
+    document.querySelector('.wrap').innerHTML = '<h1>Help desk</h1><div class="note">Sign in to the HR portal first. ' +
+      '<a href="/hr-login">Sign in →</a></div>';
+    throw new Error('signed out');
+  }
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || d.success === false) throw new Error(d.message || 'Request failed (' + r.status + ')');
+  return d;
+}
+
+async function loadStatus() {
+  const s = await api('/status');
+  placeholders = s.placeholders || [];
+  const [mode, modeText] = MODE[s.mode] || MODE.off;
+  const run = s.lastRun || {};
+  const counts = s.last24h || {};
+  document.getElementById('status').innerHTML =
+    '<div class="hd"><h2>' + (s.connected ? 'Connected to complaints@' : 'Not connected yet') + '</h2>' +
+    '<span class="pill ' + (s.mode === 'off' ? 'off' : s.mode === 'send' ? 'sent' : 'drafted') + '">' + esc(mode) + '</span></div>' +
+    '<p class="meta">' + esc(modeText) + '</p>' +
+    (s.connected ? '' : '<div class="note">The server needs a one-time permission for the complaints@ mailbox. ' +
+      'The steps are in HANDOVER.md, section "Help desk".</div>') +
+    (run.at ? '<p class="meta">Last checked ' + esc(when(run.at)) + (run.error ? ' — <b style="color:#fca5a5">' + esc(run.error) + '</b>' : '') + '</p>' : '') +
+    '<div class="stats">' + Object.keys(OUTCOME).filter((k) => k !== 'working').map((k) =>
+      '<span class="pill ' + k + '">' + esc(OUTCOME[k]) + ': ' + Number(counts[k] || 0) + '</span>').join('') +
+    '</div><p class="meta">Last 24 hours.</p>';
+}
+
+async function loadTickets() {
+  const { tickets } = await api('/tickets?limit=40');
+  const box = document.getElementById('tickets');
+  if (!tickets.length) { box.innerHTML = '<p class="meta">No emails handled yet.</p>'; return; }
+  box.innerHTML = tickets.map((t) =>
+    '<div class="item"><div class="hd"><div><div class="q">' + esc(t.subject || '(no subject)') + '</div>' +
+    '<div class="meta">' + esc(t.fromName ? t.fromName + ' · ' : '') + esc(t.from) + ' · ' + esc(when(t.createdAt)) +
+    (t.student ? ' · registered student' : '') + '</div></div>' +
+    '<span class="pill ' + esc(t.action) + '">' + esc(OUTCOME[t.action] || t.action) + '</span></div>' +
+    (t.answers && t.answers.length ? '<div class="ex">Answered with: ' + t.answers.map((a) =>
+      esc(a.question) + ' (' + Math.round(a.score * 100) + '%)').join(', ') + '</div>' : '') +
+    (t.reason ? '<div class="ex">Why: ' + esc(t.reason) + '</div>' : '') +
+    (t.excerpt ? '<div class="text">' + esc(t.excerpt.slice(0, 280)) + (t.excerpt.length > 280 ? '…' : '') + '</div>' : '') +
+    '</div>').join('');
+}
+
+async function loadAnswers() {
+  answers = (await api('/answers')).answers;
+  const box = document.getElementById('answers');
+  if (!answers.length) { box.innerHTML = '<p class="meta">No answers yet.</p>'; return; }
+  box.innerHTML = answers.map((a) =>
+    '<div class="item" id="a-' + esc(a._id) + '"><div class="hd"><div class="q">' + esc(a.question) + '</div><div class="stats" style="margin:0">' +
+    '<span class="pill ' + esc(a.source) + '">' + esc({ starter: 'Starter', taught: 'Taught', hr: 'Added by HR' }[a.source] || a.source) + '</span>' +
+    (a.active ? '' : '<span class="pill off">Off</span>') +
+    '<span class="pill">Used ' + Number(a.uses || 0) + '×</span></div></div>' +
+    (a.examples && a.examples.length ? '<div class="ex">Students ask: ' + a.examples.slice(0, 3).map((e) =>
+      '“' + esc(e.length > 90 ? e.slice(0, 90) + '…' : e) + '”').join(' · ') +
+      (a.examples.length > 3 ? ' · +' + (a.examples.length - 3) + ' more' : '') + '</div>' : '') +
+    '<div class="text">' + esc(a.answer) + '</div>' +
+    (a.personal ? '<div class="ex" style="margin-top:10px">For a verified student:</div><div class="text">' + esc(a.personal) + '</div>' : '') +
+    '<div class="row"><button type="button" data-edit="' + esc(a._id) + '">Edit</button>' +
+    '<button type="button" data-toggle="' + esc(a._id) + '">' + (a.active ? 'Turn off' : 'Turn on') + '</button>' +
+    (a.starterKey ? '' : '<button type="button" class="danger" data-delete="' + esc(a._id) + '">Delete</button>') +
+    '</div></div>').join('');
+}
+
+function openEditor(a) {
+  const box = document.getElementById('editor');
+  box.innerHTML = '<div class="note" style="background:transparent">' +
+    '<h2>' + (a ? 'Edit answer' : 'New answer') + '</h2>' +
+    '<label>The question<input type="text" id="fQ" maxlength="300" value="' + esc(a ? a.question : '') + '"></label>' +
+    '<label>Other ways students ask it, one per line<textarea id="fEx">' + esc(a ? (a.examples || []).join('\n') : '') + '</textarea></label>' +
+    '<label>The answer<textarea id="fA" style="min-height:130px">' + esc(a ? a.answer : '') + '</textarea></label>' +
+    '<label>Optional: the same answer for a registered student, using their own details<textarea id="fP">' + esc(a ? a.personal : '') + '</textarea></label>' +
+    '<p class="meta">You can use: ' + placeholders.map((p) => '<code>{{' + esc(p.key) + '}}</code> ' + esc(p.label)).join(' · ') +
+    '. Leave it empty to send everyone the answer above.</p>' +
+    '<div class="row"><button type="button" class="primary" id="fSave">Save</button><button type="button" id="fCancel">Cancel</button>' +
+    '<span class="meta" id="fMsg"></span></div></div>';
+  document.getElementById('fCancel').onclick = () => { box.innerHTML = ''; };
+  document.getElementById('fSave').onclick = async () => {
+    const body = { question: document.getElementById('fQ').value, examples: document.getElementById('fEx').value,
+      answer: document.getElementById('fA').value, personal: document.getElementById('fP').value };
+    try {
+      await api(a ? '/answers/' + a._id : '/answers', { method: a ? 'PUT' : 'POST', body: JSON.stringify(body) });
+      box.innerHTML = '';
+      await loadAnswers();
+    } catch (err) { document.getElementById('fMsg').textContent = err.message; }
+  };
+  box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+document.getElementById('answers').addEventListener('click', async (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  const find = (id) => answers.find((a) => a._id === id);
+  try {
+    if (b.dataset.edit) openEditor(find(b.dataset.edit));
+    if (b.dataset.toggle) {
+      const a = find(b.dataset.toggle);
+      await api('/answers/' + a._id, { method: 'PUT', body: JSON.stringify({ active: !a.active }) });
+      await loadAnswers();
+    }
+    if (b.dataset.delete && confirm('Delete this answer?')) {
+      await api('/answers/' + b.dataset.delete, { method: 'DELETE' });
+      await loadAnswers();
+    }
+  } catch (err) { alert(err.message); }
+});
+
+document.getElementById('addBtn').onclick = () => openEditor(null);
+document.getElementById('refresh').onclick = () => { loadStatus(); loadTickets(); };
+document.getElementById('tryBtn').onclick = async () => {
+  const out = document.getElementById('tryOut');
+  try {
+    const r = await api('/try', { method: 'POST', body: JSON.stringify({ text: document.getElementById('tryText').value }) });
+    if (r.sensitive) out.innerHTML = '<div class="note">This touches a topic a person should handle, so it would go to your team.</div>';
+    else if (!r.reply) out.innerHTML = '<div class="note">No answer fits, so it would go to your team (labelled Needs reply). ' +
+      'If students ask this often, add an answer for it.</div>';
+    else out.innerHTML = '<p class="meta" style="margin-top:12px">Matched: ' + r.answers.map((a) =>
+      esc(a.question) + ' (' + Math.round(a.score * 100) + '%)').join(', ') + '</p><div class="preview">' + esc(r.reply) + '</div>';
+  } catch (err) { out.innerHTML = '<div class="note">' + esc(err.message) + '</div>'; }
+};
+
+Promise.all([loadStatus(), loadTickets(), loadAnswers()]).catch(() => {});
+</script>
+</body>
+</html>
