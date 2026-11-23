@@ -28,6 +28,7 @@ const {
   createEmailTransporter, mailerReady, isSendableAddress,
   renderEmail, escapeHtml, PORTAL_URL, EMAIL_FROM
 } = require('../utils/mailer');
+const { getFeeFor } = require('../config/tenurePayment');
 
 const { ALL_ROLES, ROLES } = require('../config/roles');
 
@@ -49,7 +50,86 @@ const { ALL_ROLES, ROLES } = require('../config/roles');
  * Never throws. An account that was created successfully must not be reported
  * as failed because the confirmation could not be sent.
  */
-async function sendRegistrationWelcome({ name, email, role, memberId, employeeId, domain, studentId }) {
+/*
+ * The door that belongs to each role.
+ *
+ * Every welcome mail used to send every role to /student-login — so a founder,
+ * mentor, investor or contractor was mailed a link to a sign-in form that is
+ * not theirs, on the one message they are most likely to click. Coordinators
+ * sign in at the .html page: GET /coordinator-login is a 404.
+ */
+const DOOR = {
+  founder:     ['Sign in to the Founder OS',      '/founder-login'],
+  investor:    ['Sign in to the Deal Room',       '/investor-login'],
+  contractor:  ['Sign in to the Contractor Desk', '/contractor-login'],
+  mentor:      ['Sign in to the portal',          '/login.html?role=mentor'],
+  coordinator: ['Sign in to the portal',          '/coordinator-login.html']
+};
+const doorFor = (role) => DOOR[role] || ['Sign in to the portal', '/student-login'];
+
+/* What each role is there to do — only theirs, never another role's. */
+const RESPONSIBILITIES = {
+  student: [
+    'Mark attendance every working day, Monday to Saturday: fill in the TEN attendance form first, then press the attendance button on your dashboard.',
+    'Every week, watch the video, do the task, submit it and take the quiz. The next week opens once this week is approved.',
+    'Keep your attendance at 75% or more: the Letter of Completion needs it.',
+    'Upload your documents (address proof and marksheet) so your offer letter can be issued.',
+    'Ask questions in your domain chat. Keep the working groups free of spam; send complaints to complaints@entrepreneurshipnetwork.net.'
+  ],
+  coordinator: [
+    'Mark and check attendance for the students in your domain.',
+    'Review and grade the tasks they submit, and approve or revoke their certificates.',
+    'Set your domain test and coding problems, and keep the task list and notice board up to date.',
+    'Handle mentor bookings: check the payment reference, then choose a mentor and a time.',
+    'Answer your students in the domain chat room.'
+  ],
+  founder: [
+    'Keep your startup profile accurate: investors and interns judge you by it.',
+    'Post your roles and move candidates through your hiring pipeline.',
+    'Track your fundraising round and answer investors from your inbound list.',
+    'Book a mentor when you need advice.'
+  ],
+  investor: [
+    'Keep your investor profile current: founders decide whom to talk to from it.',
+    'Browse the startups raising now and register your interest with a short note.',
+    'Follow up on founders’ answers and keep your holdings up to date.'
+  ],
+  mentor: [
+    'Keep your profile and expertise current: students and founders choose you from it.',
+    'Run the sessions assigned to you on time, and mark each one complete.'
+  ],
+  contractor: [
+    'Work on the projects HR assigns to you.',
+    'Log your milestones and timesheets as you go; HR approves each entry.',
+    'Keep your profile and availability current.'
+  ]
+};
+
+/** "Your responsibilities" as an HTML list, or '' for a role without one. */
+function responsibilitiesHtml(role) {
+  const items = RESPONSIBILITIES[role];
+  if (!items) return '';
+  return '<p style="margin-top:14px;"><b>Your responsibilities</b></p>'
+    + '<ul style="margin:6px 0 0;padding-left:20px;">'
+    + items.map((item) => `<li style="margin-top:4px;">${escapeHtml(item)}</li>`).join('')
+    + '</ul>';
+}
+
+function responsibilitiesText(role) {
+  const items = RESPONSIBILITIES[role];
+  return items ? `\nYour responsibilities:\n${items.map((item) => `- ${item}`).join('\n')}\n` : '';
+}
+
+/** A student's plan, and whether a fee stands between them and week one. */
+function planFor(tenure) {
+  if (!tenure) return null;
+  const fee = getFeeFor({ tenure });
+  return fee.required
+    ? { label: `${fee.label} (fast-track)`, line: `Your plan is ${fee.label} on the fast-track. Pay the ₹${fee.amount.toLocaleString('en-IN')} fee by UPI on your dashboard to start week one.` }
+    : { label: `${fee.label} (free)`, line: `Your plan is ${fee.label}, free of charge. You can start right away.` };
+}
+
+async function sendRegistrationWelcome({ name, email, role, memberId, employeeId, domain, studentId, tenure }) {
   const subject = 'Welcome to The Entrepreneurship Network';
   let status = 'sent';
   let errorMessage = '';
@@ -63,37 +143,15 @@ async function sendRegistrationWelcome({ name, email, role, memberId, employeeId
       errorMessage = 'No usable recipient address';
       console.warn(`[Email] \u2717 Welcome mail skipped \u2014 unusable address: ${email}`);
     } else {
+      const plan = role === 'student' ? planFor(tenure) : null;
       const rows = [];
       if (employeeId) rows.push(`<div><b>Employee ID:</b> ${escapeHtml(employeeId)}</div>`);
       if (domain)     rows.push(`<div><b>Domain:</b> ${escapeHtml(domain)}</div>`);
+      if (plan)       rows.push(`<div><b>Plan:</b> ${escapeHtml(plan.label)}</div>`);
       if (memberId)   rows.push(`<div><b>Member ID:</b> ${escapeHtml(memberId)}</div>`);
       rows.push(`<div><b>Email:</b> ${escapeHtml(email)}</div>`);
 
-      /*
-       * The door that belongs to THIS role.
-       *
-       * Every welcome mail sent every role to /student-login — so a founder,
-       * mentor, investor or contractor was mailed a link to a sign-in form
-       * that is not theirs, on the one message they are most likely to click.
-       */
-      const DOOR = {
-        founder:     ['Sign in to the Founder OS',    '/founder-login'],
-        investor:    ['Sign in to the Deal Room',     '/investor-login'],
-        contractor:  ['Sign in to the Contractor Desk', '/contractor-login'],
-        mentor:      ['Sign in to the portal',        '/login.html?role=mentor'],
-        coordinator: ['Sign in to the portal',        '/coordinator-login']
-      };
-      const [ctaLabel, ctaPath] = DOOR[role] || ['Sign in to the portal', '/student-login'];
-
-      /* What waits on the other side, so the mail says what they signed up for
-         rather than "your account is set up". */
-      const WAITS = {
-        founder:    'Post roles, search TEN interns by their real work record, run a hiring pipeline, track a raise and book mentors.',
-        investor:   'See the startups raising now, register your interest with the founder, and keep a private portfolio.',
-        contractor: 'Your assigned projects, milestone submissions and timesheets — approved by TEN and paid.',
-        mentor:     'Session requests from founders and interns, and the profile they choose you from.',
-        student:    'Your task journey, attendance, submissions and the certificate at the end of it.'
-      };
+      const [ctaLabel, ctaPath] = doorFor(role);
       const REVIEWED = ['founder', 'investor', 'contractor', 'mentor'].includes(role);
 
       await createEmailTransporter().sendMail({
@@ -105,24 +163,27 @@ async function sendRegistrationWelcome({ name, email, role, memberId, employeeId
           name,
           bodyHtml: `<p>Welcome to The Entrepreneurship Network. Your ${escapeHtml(role)}
                      account has been created.</p>`
-                   + (WAITS[role] ? `<p style="margin-top:10px;">${escapeHtml(WAITS[role])}</p>` : '')
+                   + (plan ? `<p style="margin-top:10px;">${escapeHtml(plan.line)}</p>` : '')
                    + (REVIEWED
                        ? `<p style="margin-top:10px;">Our team reviews ${escapeHtml(role)} accounts before
                           they open — usually within a day. You will get a second email the moment yours is
                           approved, and that is when the button below starts working.</p>`
                        : `<p style="margin-top:10px;">You can sign in now with this email address and the
-                          password you chose.</p>`),
+                          password you chose.</p>`)
+                   + responsibilitiesHtml(role),
           panel: rows.join(''),
           cta: { label: ctaLabel, url: `${PORTAL_URL}${ctaPath}` },
-          note: 'Keep this email — your member ID is the quickest way for us to find your account.'
+          note: memberId ? 'Keep this email — your member ID is the quickest way for us to find your account.' : ''
         }),
         text: `Welcome to The Entrepreneurship Network.\n\n`
             + (employeeId ? `Employee ID: ${employeeId}\n` : '')
             + (domain ? `Domain: ${domain}\n` : '')
+            + (plan ? `${plan.line}\n` : '')
             + (REVIEWED
                 ? `\nOur team reviews ${role} accounts before they open. You will be emailed when yours is approved.\n`
                 : `\nSign in with this email address and the password you chose:\n`)
             + `${PORTAL_URL}${ctaPath}\n`
+            + responsibilitiesText(role)
       });
       console.log(`[Email] \u2713 Welcome mail sent to ${email}`);
     }
@@ -138,6 +199,62 @@ async function sendRegistrationWelcome({ name, email, role, memberId, employeeId
     await MailHistory.create({
       recipientEmail: email, recipientName: name || '', studentId: studentId || null,
       subject, mailType: 'welcome', sentAt: new Date(), status, errorMessage
+    });
+  } catch (_) { /* the mail matters more than the record of it */ }
+}
+
+/**
+ * HR's answer to a founder, investor, mentor or contractor.
+ *
+ * The welcome mail promises "a second email the moment yours is approved",
+ * but HR's approve and reject buttons sent nothing at all, so people found out
+ * only by trying to sign in. Never throws: HR's decision is saved whether or
+ * not the mail goes.
+ */
+async function sendPartnerDecision({ name, email, role, approved }) {
+  const subject = approved ? 'Your TEN account is approved' : 'Your TEN application';
+  let status = 'sent';
+  let errorMessage = '';
+  try {
+    if (!mailerReady()) {
+      status = 'failed';
+      errorMessage = 'Email not configured';
+    } else if (!isSendableAddress(email)) {
+      status = 'failed';
+      errorMessage = 'No usable recipient address';
+    } else {
+      const [ctaLabel, ctaPath] = doorFor(role);
+      await createEmailTransporter().sendMail({
+        from: EMAIL_FROM,
+        to: email,
+        subject,
+        html: renderEmail({
+          heading: approved ? 'Your account is approved' : 'Your application was not approved',
+          name,
+          bodyHtml: approved
+            ? `<p>Good news: our team has approved your ${escapeHtml(role)} account. You can sign in now.</p>`
+              + responsibilitiesHtml(role)
+            : `<p>Our team has reviewed your ${escapeHtml(role)} application and could not approve it this time.</p>
+               <p style="margin-top:10px;">If you think this is a mistake, write to
+               <a href="mailto:complaints@entrepreneurshipnetwork.net" style="color:#f5c542;">complaints@entrepreneurshipnetwork.net</a>.</p>`,
+          cta: approved ? { label: ctaLabel, url: `${PORTAL_URL}${ctaPath}` } : null,
+          footerWhy: `You are receiving this because you applied for a ${role} account with TEN.`
+        }),
+        text: approved
+          ? `Our team has approved your ${role} account. Sign in: ${PORTAL_URL}${ctaPath}\n` + responsibilitiesText(role)
+          : `Our team reviewed your ${role} application and could not approve it this time. `
+            + 'If you think this is a mistake, write to complaints@entrepreneurshipnetwork.net.\n'
+      });
+    }
+  } catch (err) {
+    status = 'failed';
+    errorMessage = (err && err.message) || 'unknown';
+    console.error(`[Email] ✗ Decision mail to ${email} failed: ${errorMessage}`);
+  }
+  try {
+    await MailHistory.create({
+      recipientEmail: email, recipientName: name || '', subject,
+      mailType: approved ? 'partner_approved' : 'partner_rejected', sentAt: new Date(), status, errorMessage
     });
   } catch (_) { /* the mail matters more than the record of it */ }
 }
@@ -480,6 +597,7 @@ async function registerUser(req, res) {
        end of this function, which is outside that branch's scope. */
     let studentEmployeeId = '';
     let studentDomainName = '';
+    let studentTenure = '';
     let studentDocId = null;
     // Generate sequential Member IDs for Ecosystem Profiles
     if (role === ROLES.STUDENT) {
@@ -533,6 +651,7 @@ async function registerUser(req, res) {
       const tenureValue = getTenureLabel(roleSpecificData.tenure);
       studentEmployeeId = employeeId;
       studentDomainName = domain;
+      studentTenure = tenureValue;
       const legacyStudent = await Student.create({
         firstName: name.trim().split(' ')[0] || name.trim(),
         lastName: name.trim().split(' ').slice(1).join(' ') || "",
@@ -796,7 +915,8 @@ async function registerUser(req, res) {
       memberId: genMemberId,
       employeeId: studentEmployeeId,
       domain: studentDomainName,
-      studentId: studentDocId
+      studentId: studentDocId,
+      tenure: studentTenure
     });
 
     return res.status(201).json({ 
@@ -820,5 +940,5 @@ async function registerUser(req, res) {
   }
 }
 
-module.exports = { getHub, getRoleConfig, registerUser, sendRegistrationWelcome };
+module.exports = { getHub, getRoleConfig, registerUser, sendRegistrationWelcome, sendPartnerDecision };
 
