@@ -73,6 +73,9 @@ function isSendableAddress(address) {
 const PORTAL_URL = (process.env.BASE_URL || 'https://virtualinternships.entrepreneurshipnetwork.net')
     .replace(/\/$/, '');
 
+/** Where people write when something is wrong; printed under every email. */
+const COMPLAINTS_EMAIL = 'complaints@entrepreneurshipnetwork.net';
+
 function escapeHtml(value) {
     return String(value == null ? '' : value)
         .replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -136,7 +139,9 @@ function renderEmail({ heading, name, bodyHtml, cta, panel, note, footerWhy } = 
     <tr><td style="padding:18px 34px 26px;border-top:1px solid rgba(245,197,66,0.12);">
       <p style="margin:0;font-size:11px;line-height:1.6;color:#8b8578;">
         The Entrepreneurship Network · <a href="${PORTAL_URL}" style="color:#cdb24a;">${PORTAL_URL.replace(/^https?:\/\//, '')}</a><br>
-        ${escapeHtml(footerWhy || 'You are receiving this because of activity on your TEN internship account.')}
+        ${escapeHtml(footerWhy || 'You are receiving this because of activity on your TEN internship account.')}<br>
+        This is an auto-generated email, please don't reply. Questions or complaints:
+        <a href="mailto:${COMPLAINTS_EMAIL}" style="color:#cdb24a;">${COMPLAINTS_EMAIL}</a>
       </p>
     </td></tr>
   </table>
@@ -235,5 +240,6 @@ module.exports = {
     escapeHtml,
     PORTAL_URL,
     EMAIL_FROM,
-    HR_NOTIFY_EMAIL
+    HR_NOTIFY_EMAIL,
+    COMPLAINTS_EMAIL
 };

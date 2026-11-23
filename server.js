@@ -11275,6 +11275,13 @@ const { requireGrowth } = require('./middleware/growthAuth');
 const growthRoutes = require('./routes/growth');
 
 app.use('/api/growth', growthRoutes.api);
+
+// "Did our reply answer your question?" — the links at the foot of the
+// complaints@ auto-reply (which lives in the mailbox, not here).
+app.use('/api/complaint-feedback', require('./routes/complaintFeedback'));
+app.get('/complaint-feedback', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'complaint-feedback.html'));
+});
 // Public on purpose — opens, clicks and unsubscribes arrive from a mail client
 // with no session. Every one verifies an HMAC in the URL before it acts.
 app.use('/g', growthRoutes.tracking);

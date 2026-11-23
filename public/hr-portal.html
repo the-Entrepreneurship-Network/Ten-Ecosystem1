@@ -2625,6 +2625,11 @@ async function loadOverview(){
       <div class="stat-card" data-c="amber" onclick="openSubmissionModal('Pending')"><div class="stat-icon">⏳</div><div class="stat-label">Pending Review</div><div class="stat-value">${stats.pending}</div><div class="stat-sub">Click to view</div></div>
       <div class="stat-card" data-c="cyan" onclick="openSubmissionModal('All')"><div class="stat-icon">📋</div><div class="stat-label">Total Submissions</div><div class="stat-value">${stats.totalSubmissions}</div><div class="stat-sub">Click to view</div></div>`;
     renderHRCharts(stats, domainStats);
+    // complaints@ auto-reply: how many said it answered them, last 30 days.
+    fetch('/api/complaint-feedback/summary').then(x=>x.json()).then(c=>{
+      if(!c.success)return;
+      document.getElementById('statsGrid').insertAdjacentHTML('beforeend',`<div class="stat-card" data-c="green"><div class="stat-icon">💬</div><div class="stat-label">Complaint replies (${Number(c.days)} days)</div><div class="stat-value">${Number(c.yes)} / ${Number(c.no)}</div><div class="stat-sub">satisfied / not satisfied</div></div>`);
+    }).catch(()=>{});
     const rn=document.getElementById('recentNotifs');
     if(!notifications.length){rn.innerHTML='<div class="empty-state"><div class="es-icon">🔔</div><p>No notifications yet</p></div>';return;}
     rn.innerHTML=notifications.map(n=>notifItemHTML(n)).join('');
