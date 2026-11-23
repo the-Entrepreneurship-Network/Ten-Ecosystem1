@@ -252,13 +252,15 @@ describe('learning from the team', () => {
         expect(gmail.labels).toContainEqual({ threadId: 'teach1', add: ['Help desk/Learned'], remove: ['Help desk/Teach'] });
     });
 
-    test('until the team has replied, the Teach label stays and nothing is learned', async () => {
+    test('until the team has replied, the Teach label stays, nothing is learned and the rest of the mail is still answered', async () => {
         const { agent, SupportAnswer } = load('draft');
         const question = mail({ id: 'q', threadId: 'teach2', body: 'question only' });
-        const gmail = fakeGmail({ threads: { teach2: [question] }, teach: ['teach2'] });
+        const gmail = fakeGmail({ messages: [mail({ id: 'n1', threadId: 'tn' })], threads: { teach2: [question] }, teach: ['teach2'] });
         await agent.runOnce({ gmail });
         expect(SupportAnswer.rows.filter((a) => a.source === 'taught')).toHaveLength(0);
-        expect(gmail.labels).toHaveLength(0);
+        expect(gmail.labels.filter((l) => l.threadId === 'teach2')).toHaveLength(0);
+        expect(agent.lastRun.error).toBe('');
+        expect(gmail.drafts).toHaveLength(1);
     });
 });
 

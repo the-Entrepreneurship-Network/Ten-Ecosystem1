@@ -21,11 +21,14 @@ const PHRASES = [
     [/\b(?:employee|emp|intern(?:ship)?|ten)\s*(?:id|i\.d\.?|no\.?|number|code)\b|\bemp-?id\b/g, ' employeeid '],
     [/\b(?:offer|joining|appointment)\s*letters?\b/g, ' offerletter '],
     [/\bletters? of recommendation\b|\brecommendation letters?\b|\blor\b/g, ' lor '],
-    [/\bletters? of completion\b|\bcompletion (?:letter|certificate)s?\b|\binternship certificates?\b|\bloc\b/g, ' completioncertificate '],
+    // Both tokens, so "internship certificate" still meets a plain "certificate".
+    [/\bletters? of completion\b|\bcompletion (?:letter|certificate)s?\b|\binternship certificates?\b|\bloc\b/g, ' completioncertificate certificate '],
     [/\bcertificates?\b|\bcerti\b|\bcert\b/g, ' certificate '],
     [/\b(?:forgot|forget|forgotten|reset|recover|lost)\s+(?:my\s+|the\s+)?(?:password|pass|pwd)\b|\bpassword\s+(?:bhool|bhul)\b/g, ' passwordreset '],
     [/\b(?:log\s?-?in|sign\s?-?in|signin)\b/g, ' login '],
-    [/\b(?:fees?|charges?|paisa|paise|amount|cost|price|pricing|payments?|pay|paid|paying|upi|utr)\b/g, ' fee '],
+    // Kept apart: "what is the fee" and "how do I pay" want different answers.
+    [/\b(?:fees?|charges?|paisa|paise|amount|cost|price|pricing)\b/g, ' fee '],
+    [/\b(?:pay|paid|paying|payments?|upi|utr)\b/g, ' pay '],
     [/\b(?:attendance|attendence|attendnce|atendance|attandance)\b/g, ' attendance '],
     [/\bwhats\s?app\b|\bwa\s+group\b/g, ' whatsapp '],
     [/\bmark\s?sheets?\b|\bmarks?\s?cards?\b/g, ' marksheet '],
@@ -48,11 +51,32 @@ const STOP = new Set((
     'get got getting want wanted need needed know tell let help like please pls plz kindly ' +
     'sir mam maam madam hello hi hii hey dear team regards thanks thank thankyou ' +
     'after before still already now today yet again really actually completely successfully currently ' +
+    'respected anyone able look regarding request requesting query matter concern ' +
+    'come coming came give given provide provided send sent ' +
     'hai hain ka ki ke ko se me mein mai main hu hoon ho raha rahi rahe kar karo karna kya ye yeh wo woh bhi aur toh ji na ab abhi ' +
     'not nahi'
 ).split(/\s+/));
 
-const SENSITIVE = /\b(?:refunds?|money back|charge-?back|cheat(?:ed|ing)?|scam|fraud|fake|police|legal|lawyer|advocate|court|consumer forum|harass(?:ed|ment|ing)?|abus(?:e|ed|ive)|threat(?:en|ened|ening)?|suicid(?:e|al)|kill myself|self[- ]harm|sexual(?:ly)?|delete my (?:data|account)|remove my (?:data|account)|complaint against|misbehav(?:e|ed|iour|ior))\b/i;
+/*
+ * Always a person, whatever matches. The first line is what needs a human
+ * because of what it is. The rest is where the portal itself is inconsistent
+ * today (HANDOVER §17.2), so any fixed answer would be wrong for someone:
+ * stipend, the Letter of Recommendation, fines, course certificates, name
+ * corrections, changing domain or plan, and end dates.
+ */
+const SENSITIVE = new RegExp('\\b(?:' + [
+    'refunds?|money back|charge-?back|cheat(?:ed|ing)?|scam|fraud|fake|police|legal|lawyer|advocate|court|consumer forum',
+    'harass(?:ed|ment|ing)?|abus(?:e|ed|ive)|threat(?:en|ened|ening)?|suicid(?:e|al)|kill myself|self[- ]harm|sexual(?:ly)?',
+    'delete my (?:data|account)|remove my (?:data|account)|complaint against|misbehav(?:e|ed|iour|ior)',
+    'stipend|salary|paid internship|internship (?:is )?paid',
+    'lor|letters? of recommendation|recommendation letters?',
+    // Not a bare "fine": "it was working fine" is not about money.
+    'fines|fine amount|(?:pay|paid|paying) (?:the |a |my )?fine|(?:attendance|lor|loc) fine|penalt(?:y|ies)',
+    'nano ?degree|fellowship|expert certificate',
+    'wrong name|name (?:is )?wrong|name correction|correct(?:ion)? (?:in |of )?my name|spelling (?:mistake|error)|misspelt|misspelled',
+    'change (?:my |the )?(?:domain|plan|tenure)|switch (?:my |the )?(?:domain|plan)',
+    'end date|extend (?:my )?internship|internship extension'
+].join('|') + ')\\b', 'i');
 
 function stem(t) {
     if (t.length > 5 && t.endsWith('ing')) t = t.slice(0, -3);
