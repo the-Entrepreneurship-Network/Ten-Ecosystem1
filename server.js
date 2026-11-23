@@ -4410,6 +4410,9 @@ app.get("/api/ecosystem/users", requireHROrAdminAPI, async(req, res) => {
   }
 });
 
+// Welcome and decision mails live with the registration that promises them.
+const { sendRegistrationWelcome, sendPartnerDecision } = require("./controllers/registerHubController");
+
 app.post("/api/ecosystem/users/:id/approve", requireHROrAdminAPI, async(req, res) => {
   try {
     const EcosystemUser     = require("./models/EcosystemUser");
@@ -4424,11 +4427,16 @@ app.post("/api/ecosystem/users/:id/approve", requireHROrAdminAPI, async(req, res
     if (!user) return res.status(404).json({ success: false, error: "User not found" });
 
     // Update corresponding profile status
-    if (user.role === 'student') await StudentProfile.findOneAndUpdate({ userId: uId }, { verificationStatus: 'approved' });
-    if (user.role === 'founder') await FounderProfile.findOneAndUpdate({ userId: uId }, { verificationStatus: 'approved' });
-    if (user.role === 'mentor')  await MentorProfile.findOneAndUpdate({ userId: uId }, { verificationStatus: 'approved' });
-    if (user.role === 'investor') await InvestorProfile.findOneAndUpdate({ userId: uId }, { verificationStatus: 'approved' });
-    if (user.role === 'contractor') await ContractorProfile.findOneAndUpdate({ userId: uId }, { verificationStatus: 'approved' });
+    const Profile = { student: StudentProfile, founder: FounderProfile, mentor: MentorProfile,
+                      investor: InvestorProfile, contractor: ContractorProfile }[user.role];
+    const before = Profile && await Profile.findOneAndUpdate({ userId: uId }, { verificationStatus: 'approved' });
+
+    // Tell founders, mentors, investors and contractors — the welcome mail
+    // promised it — and only when the decision changed, so a second click
+    // sends nothing. Students never wait for this; they are active at once.
+    if (before && before.verificationStatus !== 'approved' && user.role !== 'student') {
+      await sendPartnerDecision({ name: user.fullName, email: user.email, role: user.role, approved: true });
+    }
 
     res.json({ success: true, message: "User verified and onboarding approved." });
   } catch(err) {
@@ -4450,11 +4458,16 @@ app.post("/api/ecosystem/users/:id/reject", requireHROrAdminAPI, async(req, res)
     const user = await EcosystemUser.findByIdAndUpdate(uId, { isVerified: false }, { new: true });
     if (!user) return res.status(404).json({ success: false, error: "User not found" });
 
-    if (user.role === 'student') await StudentProfile.findOneAndUpdate({ userId: uId }, { verificationStatus: 'rejected' });
-    if (user.role === 'founder') await FounderProfile.findOneAndUpdate({ userId: uId }, { verificationStatus: 'rejected' });
-    if (user.role === 'mentor')  await MentorProfile.findOneAndUpdate({ userId: uId }, { verificationStatus: 'rejected' });
-    if (user.role === 'investor') await InvestorProfile.findOneAndUpdate({ userId: uId }, { verificationStatus: 'rejected' });
-    if (user.role === 'contractor') await ContractorProfile.findOneAndUpdate({ userId: uId }, { verificationStatus: 'rejected' });
+    const Profile = { student: StudentProfile, founder: FounderProfile, mentor: MentorProfile,
+                      investor: InvestorProfile, contractor: ContractorProfile }[user.role];
+    const before = Profile && await Profile.findOneAndUpdate({ userId: uId }, { verificationStatus: 'rejected' });
+
+    // Tell founders, mentors, investors and contractors — the welcome mail
+    // promised it — and only when the decision changed, so a second click
+    // sends nothing. Students never wait for this; they are active at once.
+    if (before && before.verificationStatus !== 'rejected' && user.role !== 'student') {
+      await sendPartnerDecision({ name: user.fullName, email: user.email, role: user.role, approved: false });
+    }
 
     res.json({ success: true, message: "Onboarding rejected." });
   } catch(err) {
@@ -11591,6 +11604,7 @@ app.post("/api/v2/coordinator/register", async (req, res) => {
         });
 
         await newCoord.save();
+        await sendRegistrationWelcome({ name, email: email.toLowerCase(), role: "coordinator", domain });
         return res.json({ success: true, message: "Coordinator account created and approved successfully." });
     } catch (err) {
         console.error(err);

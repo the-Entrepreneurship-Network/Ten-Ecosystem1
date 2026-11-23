@@ -303,6 +303,13 @@ loads.
   (`controllers/registerHubController.js`). It creates the `EcosystemUser`, a
   profile, a `Student` row, a `TalentProfile` and a `CommunityProfile`, then
   sends a welcome email. The older `/register` API still exists.
+- **Welcome and decision mails** (`controllers/registerHubController.js`).
+  Each role's welcome lists that role's responsibilities and no one else's;
+  a student's also names the plan and, on a fast-track, the fee that starts
+  week one. Coordinators who sign up at `coordinator-register.html` get one
+  too. When HR approves or rejects a founder, mentor, investor or contractor
+  in the TEN Ecosystem tab, `sendPartnerDecision` emails them, only when the
+  decision changes.
 - **Tenure.** `utils/tenure.js` is the one mapping from "1 Week" … "6 Months"
   to a key, a day count and a label. The task track follows the tenure.
 - **Tasks.** Three systems run side by side, so check which one a screen uses
@@ -1193,7 +1200,7 @@ whoever takes over. Until then:
 | A revoked certificate comes back after the next deploy | The deploy restores missing files from its uploads backup | `deploy-production.yml` + admin revoke |
 | The `/student-portal/` page still shows six testimonials that were removed from its source on 2 September | The bundle was never rebuilt | rebuild `student-portal-app` and commit (§15.5) |
 | Admin console: certificate Approve/Reject buttons return 404. HR portal: "AI Queries" does nothing. Coordinator mentorship tab: empty mentor list. Mentor dashboard: expertise panel fails | Broken buttons | `ten-admin.html`, `hr-portal.html`, `coordinator-dashboard.html`, `mentor-dashboard.html` |
-| `EcosystemNotification` rows are written but never shown | HR never sees new-feedback alerts; founders, investors and contractors miss theirs | §7.1 |
+| `EcosystemNotification` rows are written but never shown | HR never sees new-feedback alerts; founders, investors and contractors miss theirs (HR's approve/reject decision is now emailed) | §7.1 |
 | Paying an attendance or LOR fine does not release the certificate | The fine types the cron writes differ from the one the admin's approval clears | `routes/v2/certificates.js` vs `routes/adminPortal.js` |
 | Studio UTR claims have no approve button | The admin's pending queue lists only `mode: 'manual'`; Studio rows are `mode: 'upi'` | `routes/adminPortal.js`, `ten-admin.html` |
 | Missing SMTP credentials make mail "succeed" without sending | Silent loss of every mail | `utils/mailer.js` |
