@@ -689,7 +689,7 @@ backup tooling in the repository either — see §17.
 | `uploads/certificates/` | LOC, LOR, STAR, LOP as `<slug>_<type>.pdf`; paid course certificates as `<studentId>_<expert\|nano_degree\|fellowship>.pdf` | only through the download route (the folder is blocked) |
 | `uploads/offer-letters/` | `<slug>_offer_letter.pdf` | download route |
 | `uploads/loc/` | `<studentId>_loc.pdf`, auto-generated when every task is approved | download route (found by `certificateFile`'s fallback) |
-| `uploads/documents/` | address proofs, marksheets, coordinator-applicant resumes | blocked (§17: HR's links to these are broken) |
+| `uploads/documents/` | address proofs, marksheets, coordinator-applicant resumes | to a signed-in HR or admin only, at the same URLs (`routes/privateDocuments.js`); blocked for everyone else |
 | `uploads/chat/` | chat images | public; never deleted, even after a DM expires |
 | `uploads/contributors/` | home-page contributor photos | public |
 | `uploads/` (root) | task screenshots and files, as random names without an extension | public |
@@ -1199,7 +1199,7 @@ whoever takes over. Until then:
 
 | Problem | Effect | Where |
 |---|---|---|
-| Paid course certificates (Expert, Nano Degree, Fellowship) and HR's links to uploaded student documents return 404 | Students cannot download a certificate they paid for; HR cannot open address proofs, marksheets or coordinator-applicant resumes | Since #263 (18 Nov), the `/uploads` guard in `server.js` blocks `certificates/` and `documents/`, but these links still point there (`routes/v2/certificates.js` `generate-pdf`, `routes/v2/documents.js`). Needs an authenticated download route, not reopening the folders |
+| Paid course certificates (Expert, Nano Degree, Fellowship) return 404 | Students cannot download a certificate they paid for | Since #263 (18 Nov), the `/uploads` guard in `server.js` blocks `certificates/`, but these links still point there (`routes/v2/certificates.js` `generate-pdf`). Needs an authenticated download route, not reopening the folder. (HR's links into `documents/` had the same cause and now go through `routes/privateDocuments.js`.) |
 | HR's certificate **name** correction is not stored, and the "correct once" lock does not hold | The PDF made at that moment has the corrected name, but a later regeneration prints the old one, and HR can correct without limit | Since #259 (18 Nov): `name` and `corrected` are missing from the `certificateDates` sub-schema in `models/Student.js`, so Mongoose drops them |
 | A Growth campaign interrupted by a deploy or restart stays `sending` for ever | The rest of its audience is never mailed, and its revenue shows ₹0 | `services/growthSender.js`: no resume or stop exists |
 | The `freeTenure` / `paidTenure` segments probably select the wrong students | `Student.tenure` holds labels ("1 Month"); the segments compare against keys ("1month") | `services/growthSegments.js`. **Check the stored values first** |
