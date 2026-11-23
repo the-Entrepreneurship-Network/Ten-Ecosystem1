@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Did our reply help? — TEN</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+         padding: 24px 16px; background: #0c1220; color: #f0eee8;
+         font: 16px/1.6 "Segoe UI", Arial, sans-serif; }
+  main { width: 100%; max-width: 520px; background: #0e1628; border: 1px solid rgba(245,197,66,0.18);
+         border-radius: 18px; padding: 32px 28px; text-align: center; }
+  .brand { font-size: 12px; letter-spacing: 4px; font-weight: 700; color: #f5c542; margin: 0 0 14px; }
+  h1 { font-size: 22px; line-height: 1.3; margin: 0 0 10px; color: #fff7d6; }
+  p { margin: 0 0 12px; color: #d8d4ca; }
+  .row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 18px; }
+  button, .btn { font: inherit; font-weight: 700; border-radius: 10px; padding: 12px 22px; cursor: pointer;
+                 border: 1px solid rgba(245,197,66,0.45); background: transparent; color: #f5c542; text-decoration: none; }
+  .primary { background: linear-gradient(135deg,#f5c542,#d9a520); color: #1a1208; border-color: transparent; }
+  .wa { background: #1f8f4e; color: #fff; border-color: transparent; display: inline-block; margin: 8px 0 16px; }
+  button:focus-visible, .btn:focus-visible { outline: 3px solid #fff7d6; outline-offset: 2px; }
+  a { color: #f5c542; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <p class="brand">THE ENTREPRENEURSHIP NETWORK</p>
+
+  <section id="ask">
+    <h1>Did our reply answer your question?</h1>
+    <div class="row">
+      <button type="button" class="primary" data-answer="yes">Yes, it is solved</button>
+      <button type="button" data-answer="no">No, I still need help</button>
+    </div>
+  </section>
+
+  <section id="thanks" hidden aria-live="polite">
+    <h1>Thank you — glad it's sorted.</h1>
+    <p>There's nothing more you need to do.</p>
+  </section>
+
+  <section id="help" hidden aria-live="polite">
+    <h1>Sorry our reply didn't help.</h1>
+    <p>Join our complaints group on WhatsApp and we'll sort it out with you there.</p>
+    <a id="wa" class="btn wa" href="#" target="_blank" rel="noopener" hidden>Join the complaints group on WhatsApp</a>
+    <p id="mailOnly">Write to us at <a href="mailto:complaints@entrepreneurshipnetwork.net">complaints@entrepreneurshipnetwork.net</a> and a member of our team will reply.</p>
+  </section>
+</main>
+<script>
+(function () {
+  var asked = document.getElementById('ask');
+
+  function show(answer, whatsapp) {
+    asked.hidden = true;
+    document.getElementById(answer === 'yes' ? 'thanks' : 'help').hidden = false;
+    if (answer === 'no' && whatsapp) {
+      var wa = document.getElementById('wa');
+      wa.href = whatsapp;
+      wa.hidden = false;
+      document.getElementById('mailOnly').innerHTML =
+        'Or write to <a href="mailto:complaints@entrepreneurshipnetwork.net">complaints@entrepreneurshipnetwork.net</a>.';
+    }
+  }
+
+  function answer(value) {
+    // One answer per visit: a refresh shows the result again without counting twice.
+    var key = 'complaint-feedback-' + value;
+    var done = null;
+    try { done = sessionStorage.getItem(key); } catch (_) {}
+    if (done !== null) return show(value, done);
+    fetch('/api/complaint-feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answer: value })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        try { sessionStorage.setItem(key, d.whatsapp || ''); } catch (_) {}
+        show(value, d.whatsapp);
+      })
+      .catch(function () { show(value, null); });
+  }
+
+  asked.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-answer]');
+    if (b) answer(b.getAttribute('data-answer'));
+  });
+
+  var given = new URLSearchParams(location.search).get('answer');
+  if (given === 'yes' || given === 'no') answer(given);
+})();
+</script>
+</body>
+</html>

@@ -352,6 +352,14 @@ loads.
 - **Chat.** Domain rooms, staff rooms and DMs, with reply-to-a-message (#260),
   personal blocks, reports, admin moderation, and images under
   `uploads/chat/`.
+- **Complaints.** complaints@entrepreneurshipnetwork.net is on the landing
+  page footer, the student dashboard, the registration page, and under every
+  email (`utils/mailer.js` `renderEmail`, with an "auto-generated" line). Its
+  auto-reply lives in the mailbox settings, not in this code. The reply's two
+  links open `/complaint-feedback?answer=yes|no`; the page records the answer
+  (`models/ComplaintFeedback.js`, anonymous) and, on "no", shows the WhatsApp
+  group from `COMPLAINTS_WHATSAPP_URL`. HR sees the 30-day totals on the
+  overview.
 - **Feedback.** A student submits it once; HR can publish it as a testimonial
   on the home page.
 - **Notice board.** Coordinators post meeting times; the data lives in
