@@ -99,7 +99,10 @@
         postJSON("/chat/messages", payload)
             .then(function (d) {
                 var win = openWin;
-                if (d && d.doc && win && win.el && win.el.dataset.currentRoom === d.doc.chatRoom) {
+                // Only the HR window has tabs, and so a currentRoom; every
+                // other window is its own room. Comparing currentRoom alone
+                // dropped the sender's copy in every window but HR's.
+                if (d && d.doc && win && win.el && (win.el.dataset.currentRoom || win.room) === d.doc.chatRoom) {
                     appendMessage(win, d.doc);
                 }
             })
@@ -263,6 +266,17 @@
         return String(s).replace(/(["\\])/g, "\\$1");
     }
 
+    /*
+     * The server puts each socket in the shared rooms it may use, but in no
+     * private conversation: there would be thousands. A window has to ask for
+     * its own, or it never hears a message arrive there, including the copy of
+     * the one it just sent. A private reply vanished from the sender's screen
+     * on Send, and the answer never came back. messages.html always did this.
+     */
+    function joinRoom(room) {
+        if (socket) socket.emit("join_room", { room: room });
+    }
+
     var winsByRoom = {};
     function toggleChat(room, label) {
         if (openWin && openWin.room === room) {
@@ -273,7 +287,7 @@
         // Close whatever is open and open this one
         if (openWin) openWin.el.classList.remove("open");
         var w = winsByRoom[room];
-        if (!w) { w = createWindow(room, label); winsByRoom[room] = w; loadHistory(room, w); }
+        if (!w) { w = createWindow(room, label); winsByRoom[room] = w; loadHistory(room, w); joinRoom(room); }
         w.el.classList.add("open");
         openWin = w;
         setBadge(room, 0);
@@ -379,7 +393,13 @@
                     
                     var targetRoom = tab.dataset.room;
                     win.dataset.currentRoom = targetRoom;
-                    loadHistory(targetRoom, { msgsEl: msgsEl });
+                    // The window itself, not a stand-in holding only the
+                    // message list: ↩ calls back into whatever it was drawn
+                    // with, and a stand-in has no reply bar and no input, so
+                    // Reply did nothing once any tab had been clicked.
+                    // A reply begun on one tab cannot quote into another.
+                    cancelReply(w);
+                    loadHistory(targetRoom, w);
                 });
             });
         }
@@ -598,7 +618,8 @@
             if (reason === null) return;
             postJSON("/api/chat/report", {
                 userId: m.senderId, userName: m.senderName, userRole: m.senderRole,
-                messageId: m._id, room: w.room || m.chatRoom, reason: reason
+                // The message's own room: the HR window is "general" on every tab.
+                messageId: m._id, room: m.chatRoom || w.room, reason: reason
             })
                 .then(function (d) { alert(d.message || "Reported."); })
                 .catch(function (e) { alert(e.message); });
@@ -677,6 +698,10 @@
         else auth.username = cfg.username;
 
         socket = io({ auth: auth });
+        // Every connect, reconnects included: the server starts each new
+        // socket with no private rooms, so an open conversation would go quiet
+        // after any dropped connection.
+        socket.on("connect", function () { Object.keys(winsByRoom).forEach(joinRoom); });
         socket.on("connect_error", function (e) { console.warn("[TenChat] connect_error:", e.message); });
 
         socket.on("receive_message", function (m) {
