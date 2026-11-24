@@ -664,8 +664,10 @@ edits at `/hr-help-desk.html` (HR portal → **Help Desk**).
   2. In the server's `.env`, add `SUPPORT_GMAIL_CLIENT_ID`,
      `SUPPORT_GMAIL_CLIENT_SECRET` and `SUPPORT_AGENT_MODE=draft`.
   3. Run `node scripts/connect-support-mailbox.js`. Open the link it prints,
-     sign in as complaints@, press Allow, and paste back the address the
-     browser lands on. The script writes `SUPPORT_GMAIL_REFRESH_TOKEN`.
+     sign in as complaints@, press Allow, and paste back the link from the
+     address bar of the page that does not load (it starts with
+     `http://127.0.0.1:8765/`). A wrong paste is refused and asked for again.
+     The script writes `SUPPORT_GMAIL_REFRESH_TOKEN`.
   4. Run `pm2 restart ecosystem.config.js --only ten-portal-production --update-env`.
      The Help Desk page then says "Connected".
 
