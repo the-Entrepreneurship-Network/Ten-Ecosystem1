@@ -66,6 +66,19 @@ function saveToEnv(key, value) {
     fs.writeFileSync(ENV_FILE, lines.join('\n'), { mode: 0o600 });
 }
 
+/** The code in the link Google sent the browser to. Anything else throws what to do instead. */
+function codeFrom(pasted, state) {
+    let params = new URLSearchParams();
+    try { params = new URL(pasted, REDIRECT).searchParams; } catch (_) { /* not a link at all */ }
+    if (params.get('error')) throw new Error(`Google said "${params.get('error')}". Open the link above again and press Allow.`);
+    if (!params.get('code')) {
+        throw new Error('That is not the link. Open the link above, press Allow, then copy the address bar of the page ' +
+            `that does not load. It starts with ${REDIRECT}`);
+    }
+    if (params.get('state') && params.get('state') !== state) throw new Error('That link is from an earlier try. Open the link above again.');
+    return params.get('code');
+}
+
 async function main() {
     const clientId = String(process.env.SUPPORT_GMAIL_CLIENT_ID || '').trim();
     const secret = String(process.env.SUPPORT_GMAIL_CLIENT_SECRET || '').trim();
@@ -95,17 +108,17 @@ async function main() {
     console.log('\n1. Open this link in your browser:\n\n' + link + '\n');
     console.log(`2. Sign in as ${COMPLAINTS_EMAIL} and press Allow.`);
     console.log('3. The browser then shows "This site can\'t be reached". That is expected.');
-    console.log('   Copy the whole address from the address bar (it starts with http://127.0.0.1:8765/).\n');
+    console.log(`   Copy the whole link from the address bar. It starts with ${REDIRECT}\n`);
 
-    const pasted = String(await ask('4. Paste that address here and press Enter: ')).trim();
-    let code = pasted;
-    if (/^https?:\/\//i.test(pasted)) {
-        const params = new URL(pasted).searchParams;
-        if (params.get('error')) throw new Error('Google said: ' + params.get('error') + '. Run this again and press Allow.');
-        if (params.get('state') && params.get('state') !== state) throw new Error('That address is from an earlier attempt. Use the link printed above.');
-        code = params.get('code') || '';
+    // A wrong paste asks again: the link above stays valid, so nothing has to start over.
+    let code = '';
+    while (!code) {
+        try {
+            code = codeFrom(String(await ask('4. Paste that link here (not the email address) and press Enter: ')).trim(), state);
+        } catch (err) {
+            console.log('\n   ' + err.message + '\n');
+        }
     }
-    if (!code) throw new Error('No code in what you pasted. Copy the full address from the address bar.');
 
     const form = querystring.stringify({
         code, client_id: clientId, client_secret: secret, redirect_uri: REDIRECT,
@@ -131,7 +144,11 @@ async function main() {
     console.log('  pm2 restart ecosystem.config.js --only ten-portal-production --update-env\n');
 }
 
-main().catch((err) => {
-    console.error('\n✗ ' + err.message + '\n');
-    process.exitCode = 1;
-});
+if (require.main === module) {
+    main().catch((err) => {
+        console.error('\n✗ ' + err.message + '\n');
+        process.exitCode = 1;
+    });
+}
+
+module.exports = { codeFrom };
