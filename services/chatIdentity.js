@@ -135,7 +135,14 @@ function identityFromSession(session) {
      * with the user id as an alias. There is no legacy spelling to preserve
      * here precisely because none of these accounts could ever send a message.
      */
-    if (s.ecosystemUserId && s.ecosystemUserRole) {
+    /*
+     * Not for students. /login writes these keys for every account, students
+     * included, next to session.student. Taking them here gave a student their
+     * email as id and no domain, so their own domain room answered Forbidden:
+     * they could neither read Domain Chat nor send to it. A student is
+     * identified by employee ID, below.
+     */
+    if (s.ecosystemUserId && s.ecosystemUserRole && s.ecosystemUserRole !== "student") {
         const email = normalize(s.ecosystemUserEmail);
         const id = email || normalize(s.ecosystemUserId);
         if (!id) return null;
