@@ -45,8 +45,15 @@ test('a changed Employee ID is saved and the page reloads to use it', () => {
   expect(ctx.window.location.reload).toHaveBeenCalled();
 });
 
+const ack = page.slice(page.indexOf('async function acknowledgeInstructions'), page.indexOf('function updateDashboardAfterOnboarding'));
+
 test('the server’s reply is merged into the stored student, so hasSeenWelcome survives', () => {
-  const ack = page.slice(page.indexOf('async function acknowledgeInstructions'), page.indexOf('function updateDashboardAfterOnboarding'));
   expect(ack).toMatch(/stu = Object\.assign\(stu, data\.student\)/);
   expect(ack).not.toMatch(/stu = data\.student;/);
+});
+
+test('"Onboarding Complete" does not replace a pop-up that is already open', () => {
+  // A pre-paid plan's "Your track is unlocked" opens at page load and is
+  // marked as seen when it opens; replacing it lost it for good.
+  expect(ack).toMatch(/if \(!Swal\.isVisible\(\)\) Swal\.fire\(\{\s*icon: 'success',\s*title: 'Onboarding Complete!/);
 });

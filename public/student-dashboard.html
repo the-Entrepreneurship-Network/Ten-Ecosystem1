@@ -6319,7 +6319,10 @@ async function acknowledgeInstructions() {
     
     updateDashboardAfterOnboarding(stu);
 
-    Swal.fire({
+    // On a pre-paid plan, "Your track is unlocked" opened at page load, under
+    // the onboarding steps, and is marked as seen when it opens. Replacing it
+    // here meant the student never saw what their plan includes.
+    if (!Swal.isVisible()) Swal.fire({
       icon: 'success',
       title: 'Onboarding Complete! 🎉',
       text: 'Welcome to your personalized student dashboard!',
