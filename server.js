@@ -578,7 +578,7 @@ class FallbackQuery {
 }
 
 const guardedExec = require('./utils/guardedExec');
-const { attendanceFormLink } = require('./utils/attendanceForm');
+const { attendanceFormLink, FORM: ATTENDANCE_FORM } = require('./utils/attendanceForm');
 
 function wrapModelWithFileFallback(model) {
     function isNetworkError(err) {
@@ -9422,62 +9422,59 @@ try{
 // ==================================================================
 // =================== QR CODE ATTENDANCE (Feature 3) ===============
 // ==================================================================
-// One QR per (domain, coordinatorId). The QR encodes a URL pointing at
-// /qr-attendance.html, which collects a student's credentials and POSTs
-// them to /qr-attendance/mark below.
-app.get("/coordinator/qr/:coordinatorId", async(req,res)=>{
+// Two meeting QR codes, the same for every domain and every coordinator.
+// The portal code opens /qr-attendance.html, where a student picks their
+// domain and signs in; the page POSTs to /qr-attendance/mark below. The form
+// code opens the attendance Google Form directly, with no sign-in, so it
+// records nothing in the portal.
+app.get("/attendance/qr", async(req,res)=>{
 try{
-    const coordinatorId = decodeURIComponent(req.params.coordinatorId);
-    const domain = (req.query && req.query.domain) || "";
-    if(!domain) return res.status(400).json({ success:false, message:"domain required" });
     const host = (req.headers["x-forwarded-proto"] || req.protocol) + "://" + req.get("host");
-    const url  = host + "/qr-attendance.html?domain=" + encodeURIComponent(domain) + "&coordinatorId=" + encodeURIComponent(coordinatorId);
-    const dataUrl = await QRCode.toDataURL(url, { errorCorrectionLevel: "M", margin: 2, width: 360, color: { dark:"#0c1220", light:"#ffffff" } });
-    res.json({ success:true, url, dataUrl });
+    const code = async (url) => ({ url, dataUrl: await QRCode.toDataURL(url, { errorCorrectionLevel: "M", margin: 2, width: 360, color: { dark:"#0c1220", light:"#ffffff" } }) });
+    res.json({ success:true, portal: await code(host + "/qr-attendance.html"), form: await code(ATTENDANCE_FORM) });
 }catch(e){ console.log(e); res.status(500).json({ success:false, message:"Failed to generate QR" }); }
 });
 
+// The scan page's domain list: every domain a student can hold, including the
+// ones no longer offered to new registrations.
+app.get("/qr-attendance/domains", (req,res)=> res.json({ domains: require("./config/domains").DOMAIN_NAMES }));
+
 // Verify-and-mark from the QR scan landing page.
 //
-// One scan marks both sides of the day: the class attendance the coordinator
-// would otherwise mark, and the student's own. A student already signed in on
-// their phone only taps; anyone else signs in with Employee ID and password.
-//
-// The sign-in limiters apply only when a password is being checked. A whole
-// class tapping "Mark me present" from one college network must not trip the
-// per-network sign-in cap, and without a password there is nothing to guess.
-function limitPasswordTries(req, res, next){
-    if(!(req.body && req.body.password)) return next();
-    loginIpLimiter(req, res, () => loginLimiter(req, res, next));
-}
-
-app.post("/qr-attendance/mark", limitPasswordTries, async(req,res)=>{
+// The student picks their domain and signs in with Employee ID and password.
+// Only when the password is right and the domain is one they hold is the day
+// marked, on both sides: the class attendance the coordinator would otherwise
+// mark, and the student's own.
+// ponytail: every scan is a sign-in, so loginIpLimiter lets one network make
+// RATE_AUTH_MAX × 6 scans per window (60 per 15 minutes by default). Raise
+// RATE_AUTH_MAX if a bigger class ever scans from one shared Wi-Fi.
+app.post("/qr-attendance/mark", loginIpLimiter, loginLimiter, async(req,res)=>{
 try{
     const { employeeId, password, domain, coordinatorId } = req.body || {};
     if(!domain)
-        return res.json({ success:false, message:"This QR is missing a domain — ask your coordinator for a fresh QR." });
+        return res.json({ success:false, message:"Choose your domain" });
+    if(!employeeId || !password)
+        return res.json({ success:false, message:"Employee ID and password are required" });
 
-    let student;
-    if(employeeId || password){
-        if(!employeeId || !password)
-            return res.json({ success:false, message:"Employee ID and password are required" });
-        // Passwords are bcrypt hashes. Looking the student up by { employeeId,
-        // password } matched the typed password against the hash itself, so no
-        // QR scan ever found anyone: "Invalid Employee ID or Password", every
-        // time. Checked the way /student-login checks it, lockout included.
-        student = await Student.findOne({ employeeId });
-        if(!student) return res.json({ success:false, message:"Invalid Employee ID or Password" });
-        if (await checkLockout(res, student, Student)) return;
-        let pwdMatch = false;
-        try { pwdMatch = await bcrypt.compare(String(password), student.password || ""); } catch (_) {}
-        if(!pwdMatch) return await recordFailedAttempt(res, student, Student, "Invalid Employee ID or Password");
-        await clearFailedAttempts(student, Student);
-    } else {
-        student = await findSessionStudent(req);
-        if(!student) return res.json({ success:false, needsSignIn:true, message:"Enter your Employee ID and password" });
+    // Passwords are bcrypt hashes. Looking the student up by { employeeId,
+    // password } matched the typed password against the hash itself, so no
+    // QR scan ever found anyone: "Invalid Employee ID or Password", every
+    // time. Checked the way /student-login checks it, lockout included.
+    const student = await Student.findOne({ employeeId: String(employeeId) });
+    if(!student) return res.json({ success:false, message:"Invalid Employee ID or Password" });
+    if (await checkLockout(res, student, Student)) return;
+    let pwdMatch = false;
+    try { pwdMatch = await bcrypt.compare(String(password), student.password || ""); } catch (_) {}
+    if(!pwdMatch) return await recordFailedAttempt(res, student, Student, "Invalid Employee ID or Password");
+    await clearFailedAttempts(student, Student);
+
+    // A student can hold two domains; either one is theirs to mark.
+    if(!attendanceDomain.holdsDomain(student, domain)){
+        const mine = attendanceDomain.studentDomains(student);
+        return res.json({ success:false, message: mine.length
+            ? "You're registered in " + mine.join(" and ") + ". Choose " + (mine.length > 1 ? "one of those" : "that domain") + " and try again."
+            : "No domain is recorded on your account. Ask your coordinator to check your registration." });
     }
-    if((student.domain || "") !== domain)
-        return res.json({ success:false, message:"This QR is for a different domain" });
 
     const today = new Date();
     const dateKey = toDateKey(today);

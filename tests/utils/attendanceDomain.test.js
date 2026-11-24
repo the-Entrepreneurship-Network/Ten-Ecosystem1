@@ -16,6 +16,7 @@ const {
   domainKey,
   studentDomains,
   primaryDomain,
+  holdsDomain,
   hasMultipleDomains,
   resolveActiveDomain,
   recordMatchesDomain,
@@ -180,5 +181,24 @@ describe('primaryDomain / hasMultipleDomains', () => {
     expect(hasMultipleDomains(single)).toBe(false);
     expect(hasMultipleDomains(dualOneRecord)).toBe(true);
     expect(hasMultipleDomains(dualLinked)).toBe(true);
+  });
+});
+
+describe('holdsDomain: the domain a student picks on the QR scan page', () => {
+  test('any domain the student holds counts, in every shape the portal stores', () => {
+    expect(holdsDomain(single, 'Web Development')).toBe(true);
+    expect(holdsDomain(dualOneRecord, 'Data Science')).toBe(true);
+    expect(holdsDomain(dualLinked, 'Cyber Security')).toBe(true);
+  });
+
+  test('case and spacing do not matter', () => {
+    expect(holdsDomain(single, '  web development ')).toBe(true);
+  });
+
+  test('a domain they do not hold, or none at all, is refused', () => {
+    expect(holdsDomain(single, 'Data Science')).toBe(false);
+    expect(holdsDomain(single, '')).toBe(false);
+    expect(holdsDomain(single, undefined)).toBe(false);
+    expect(holdsDomain({ employeeId: 'TEN/X/1' }, 'Web Development')).toBe(false);
   });
 });

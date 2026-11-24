@@ -20,11 +20,12 @@ body{ background:var(--bg); color:var(--text); font-family:'Plus Jakarta Sans','
 .card::before{ content:""; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,transparent,var(--gold),transparent); }
 h1{ font-size:20px; font-weight:800; margin-bottom:6px; }
 .sub{ font-size:13px; color:var(--muted); margin-bottom:18px; }
-.dom-pill{ display:inline-block; padding:5px 14px; background:rgba(245,197,66,.12); border:1px solid rgba(245,197,66,.3); color:var(--gold); border-radius:99px; font-weight:700; font-size:11px; letter-spacing:1px; text-transform:uppercase; margin-bottom:18px; }
 .field{ margin-bottom:14px; }
 .field label{ display:block; font-size:11px; font-weight:700; letter-spacing:1.4px; text-transform:uppercase; color:var(--muted); margin-bottom:7px; }
-.field input{ width:100%; padding:13px 16px; background:rgba(255,255,255,.04); border:1px solid var(--border); border-radius:10px; color:var(--text); font-size:14.5px; outline:none; font-family:inherit; transition:all .2s; }
-.field input:focus{ border-color:var(--gold); box-shadow:0 0 0 3px rgba(245,197,66,.1); }
+.field input,.field select{ width:100%; padding:13px 16px; background:rgba(255,255,255,.04); border:1px solid var(--border); border-radius:10px; color:var(--text); font-size:14.5px; outline:none; font-family:inherit; transition:all .2s; }
+.field input:focus,.field select:focus{ border-color:var(--gold); box-shadow:0 0 0 3px rgba(245,197,66,.1); }
+.field select{ color-scheme:dark; }
+.field select option{ background:var(--card); color:var(--text); }
 .btn{ width:100%; padding:14px; border:none; border-radius:11px; background:linear-gradient(135deg,var(--gold),var(--gold-dim)); color:#0a0600; font-weight:800; cursor:pointer; font-family:inherit; font-size:14.5px; letter-spacing:.5px; transition:transform .15s,box-shadow .15s; }
 .btn:hover{ transform:translateY(-1px); box-shadow:0 8px 24px rgba(245,197,66,.35); }
 .btn:disabled{ opacity:.6; cursor:not-allowed; transform:none; box-shadow:none; }
@@ -53,19 +54,14 @@ h1{ font-size:20px; font-weight:800; margin-bottom:6px; }
     <div class="brand-sub">Coordinator-verified scan</div>
   </div>
   <div class="card ten-qr-radar">
-    <div id="domainHeader"></div>
-    <h1 id="title">Mark Your Attendance</h1>
-    <p class="sub" id="subtitle">One scan marks today's attendance on your side and your coordinator's. Then today's attendance form opens.</p>
+    <h1>Mark Your Attendance</h1>
+    <p class="sub">Choose your domain and sign in. Today's attendance is then marked on your side and your coordinator's, and the attendance form opens.</p>
     <div id="msg"></div>
-    <div id="me" style="display:none">
-      <p class="sub" id="meLine"></p>
-      <button class="btn" id="meBtn" onclick="markIt(true)">✅ Mark me present</button>
-      <p class="foot"><a href="#" onclick="useForm(); return false;">Not you? Use your Employee ID and password</a></p>
-    </div>
     <div id="form">
-      <div class="field"><label>Employee ID</label><input type="text" id="employeeId" placeholder="e.g. TEN/WEB/1001" autocomplete="username"></div>
-      <div class="field"><label>Password</label><input type="password" id="password" placeholder="Your portal password" autocomplete="current-password"></div>
-      <button class="btn" id="submitBtn" onclick="markIt(false)">✅ Mark My Attendance</button>
+      <div class="field"><label for="domain">Your domain</label><select id="domain"><option value="" disabled selected>Choose your domain</option></select></div>
+      <div class="field"><label for="employeeId">Employee ID</label><input type="text" id="employeeId" placeholder="e.g. TEN/WEB/1001" autocomplete="username"></div>
+      <div class="field"><label for="password">Password</label><input type="password" id="password" placeholder="Your portal password" autocomplete="current-password"></div>
+      <button class="btn" id="submitBtn" onclick="markIt()">✅ Mark My Attendance</button>
     </div>
   </div>
   <div class="foot">© The Entrepreneurship Network · <a href="/login.html">Back to Login</a></div>
@@ -73,47 +69,31 @@ h1{ font-size:20px; font-weight:800; margin-bottom:6px; }
 
 <script>
 const params = new URLSearchParams(window.location.search);
-const domain = params.get("domain") || "";
+// Older per-domain QR codes carry a domain and a coordinator: that domain
+// comes preselected. The single QR carries neither.
+const linkDomain = (params.get("domain") || "").trim().toLowerCase();
 const coordinatorId = params.get("coordinatorId") || "";
+const select = document.getElementById("domain");
 
-if(domain){
-  // Text, not HTML: the domain comes from the link.
-  const pill = document.createElement("div");
-  pill.className = "dom-pill"; pill.textContent = domain;
-  document.getElementById("domainHeader").appendChild(pill);
-  document.getElementById("title").textContent = "Mark Your Attendance — " + domain;
-  showSignedIn();
-} else {
-  setMsg("This QR is missing a domain — ask your coordinator for a fresh QR.", "warn");
-  document.getElementById("submitBtn").disabled = true;
-}
+fetch("/qr-attendance/domains").then(r => r.json()).then(d => {
+  (d.domains || []).slice().sort((a, b) => a.localeCompare(b)).forEach(name => {
+    const o = document.createElement("option");
+    o.value = name;
+    o.textContent = name;
+    o.selected = name.toLowerCase() === linkDomain;
+    select.appendChild(o);
+  });
+}).catch(() => setMsg("Couldn't load the list of domains. Check your connection and reload this page.", "error"));
 
+// Text, not HTML: messages can carry what a student's record says.
 function setMsg(text, kind){
-  const el = document.getElementById("msg");
-  el.innerHTML = '<div class="alert alert-' + (kind==="ok"?"ok":kind==="warn"?"warn":"error") + '">' + text + '</div>';
-}
-
-// Already signed in to the portal on this phone: one tap, no password.
-async function showSignedIn(){
-  try{
-    const r = await fetch("/api/v2/student/me", { credentials:"same-origin" });
-    const d = r.ok ? await r.json() : null;
-    if(!d || !d.success || !d.student) return;
-    const s = d.student;
-    document.getElementById("meLine").textContent = "Signed in as " + (s.name ? s.name + " · " : "") + s.employeeId;
-    document.getElementById("me").style.display = "block";
-    document.getElementById("form").style.display = "none";
-  }catch(_){ /* not signed in: the Employee ID form stays */ }
-}
-
-function useForm(){
-  document.getElementById("me").style.display = "none";
-  document.getElementById("form").style.display = "block";
-  document.getElementById("employeeId").focus();
+  const div = document.createElement("div");
+  div.className = "alert alert-" + (kind==="ok"?"ok":kind==="warn"?"warn":"error");
+  div.textContent = text;
+  document.getElementById("msg").replaceChildren(div);
 }
 
 function done(formUrl){
-  document.getElementById("me").style.display = "none";
   document.getElementById("form").style.display = "none";
   if(!formUrl) return;
   const a = document.createElement("a");
@@ -122,24 +102,26 @@ function done(formUrl){
   document.getElementById("msg").appendChild(a);
 }
 
-async function markIt(useSession){
-  const body = { domain, coordinatorId };
-  if(!useSession){
-    body.employeeId = document.getElementById("employeeId").value.trim();
-    body.password   = document.getElementById("password").value;
-    if(!body.employeeId || !body.password){ setMsg("Employee ID and password are required.", "error"); return; }
-  }
-  const btn = document.getElementById(useSession ? "meBtn" : "submitBtn");
+async function markIt(){
+  const body = {
+    domain: select.value,
+    coordinatorId,
+    employeeId: document.getElementById("employeeId").value.trim(),
+    password: document.getElementById("password").value
+  };
+  if(!body.domain){ setMsg("Choose your domain.", "error"); return; }
+  if(!body.employeeId || !body.password){ setMsg("Employee ID and password are required.", "error"); return; }
+  const btn = document.getElementById("submitBtn");
   const label = btn.textContent;
-  btn.disabled = true; btn.textContent = "Marking...";
+  btn.disabled = true; btn.textContent = "Checking...";
   try{
     const r = await fetch("/qr-attendance/mark", {
-      method:"POST", headers:{ "Content-Type":"application/json" }, credentials:"same-origin",
+      method:"POST", headers:{ "Content-Type":"application/json" },
       body: JSON.stringify(body)
     });
     const d = await r.json();
     if(d.success){
-      setMsg("✅ " + (d.message || "Attendance marked. Have a great day!") + "<br>Opening today's attendance form…", "ok");
+      setMsg("✅ " + (d.message || "Attendance marked. Have a great day!") + " Opening today's attendance form…", "ok");
       done(d.formUrl);
       if(d.formUrl) setTimeout(() => { window.location.href = d.formUrl; }, 1800);
     } else if(d.alreadyMarked){
@@ -147,7 +129,6 @@ async function markIt(useSession){
       done(d.formUrl);
     } else {
       setMsg("❌ " + (d.message || "Failed to mark attendance."), "error");
-      if(d.needsSignIn) useForm();
       btn.disabled = false; btn.textContent = label;
     }
   }catch(e){
@@ -157,7 +138,7 @@ async function markIt(useSession){
 }
 
 document.addEventListener("keydown", e => {
-  if(e.key === "Enter" && document.getElementById("form").style.display !== "none") markIt(false);
+  if(e.key === "Enter" && document.getElementById("form").style.display !== "none") markIt();
 });
 </script>
 <script src="ten-motion.js"></script>

@@ -1,65 +1,76 @@
 'use strict';
 
 /**
- * Scanning the coordinator's meeting QR marks the day on both sides.
+ * Meeting attendance by QR.
  *
- * The route used to look the student up by { employeeId, password }, matching
+ * There are two codes, the same for every domain. The portal code opens
+ * /qr-attendance.html: the student picks their domain and signs in with
+ * Employee ID and password. Only when the password is right and the domain is
+ * one they hold is the day marked on both sides, and then the Google Form
+ * opens. The form code opens the Google Form directly, with no sign-in.
+ *
+ * The route once looked the student up by { employeeId, password }, matching
  * the typed password against the bcrypt hash stored in that column, so it
  * never found anyone: every scan answered "Invalid Employee ID or Password".
- * Now a signed-in student only taps; anyone else signs in with Employee ID and
- * password. One scan marks the class attendance and the student's own, then
- * hands over the day's Google Form.
  */
 const fs = require('fs');
 const path = require('path');
 
-const server = fs.readFileSync(path.join(__dirname, '../../server.js'), 'utf8')
+const read = (p) => fs.readFileSync(path.join(__dirname, '../..', p), 'utf8');
+const server = read('server.js')
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/^\s*\/\/.*$/gm, '');
-const start = server.indexOf('app.post("/qr-attendance/mark"');
-const route = server.slice(start, server.indexOf('\n});', start));
+const routeOf = (head) => {
+  const start = server.indexOf(head);
+  return start < 0 ? '' : server.slice(start, server.indexOf('\n});', start));
+};
+const route = routeOf('app.post("/qr-attendance/mark"');
 
 test('the password is checked against the hash, not looked up as a value', () => {
   expect(route).not.toMatch(/Student\.findOne\(\{\s*employeeId,\s*password\s*\}\)/);
-  expect(route).toMatch(/Student\.findOne\(\{ employeeId \}\)/);
+  expect(route).toMatch(/Student\.findOne\(\{ employeeId: String\(employeeId\) \}\)/);
   expect(route).toMatch(/bcrypt\.compare\(String\(password\), student\.password/);
   expect(route).toMatch(/checkLockout\(res, student, Student\)/);
   expect(route).toMatch(/recordFailedAttempt\(res, student, Student,/);
 });
 
-test('only a password check goes through the sign-in limiters', () => {
-  const fnSrc = server.slice(server.indexOf('function limitPasswordTries'), start);
-  const calls = [];
-  // eslint-disable-next-line no-new-func
-  const limit = new Function('loginIpLimiter', 'loginLimiter', `${fnSrc}; return limitPasswordTries;`)(
-    (req, res, next) => { calls.push('network'); next(); },
-    (req, res, next) => { calls.push('account'); next(); });
-  const next = jest.fn();
-
-  // A signed-in tap: no password, so nothing to guess and no cap to trip.
-  limit({ body: { domain: 'Web Development' } }, {}, next);
-  expect(calls).toEqual([]);
-  expect(next).toHaveBeenCalledTimes(1);
-
-  limit({ body: { employeeId: 'TEN/WEB/1001', password: 'x', domain: 'Web Development' } }, {}, next);
-  expect(calls).toEqual(['network', 'account']);
-  expect(next).toHaveBeenCalledTimes(2);
-  expect(route).toMatch(/^app\.post\("\/qr-attendance\/mark", limitPasswordTries,/);
+test('every scan signs in: a domain, Employee ID and password, through the sign-in limiters', () => {
+  expect(route).toMatch(/^app\.post\("\/qr-attendance\/mark", loginIpLimiter, loginLimiter,/);
+  expect(route).toMatch(/if\(!domain\)/);
+  expect(route).toMatch(/if\(!employeeId \|\| !password\)/);
+  expect(route).not.toMatch(/findSessionStudent/);
 });
 
-test('a scan with no password uses the phone’s own sign-in', () => {
-  expect(route).toMatch(/student = await findSessionStudent\(req\)/);
-  expect(route).toMatch(/needsSignIn:true/);
+test('the chosen domain must be one the student holds, checked after the password and before marking', () => {
+  const password = route.indexOf('clearFailedAttempts(student, Student)');
+  const domain = route.indexOf('attendanceDomain.holdsDomain(student, domain)');
+  expect(password).toBeGreaterThan(-1);
+  expect(domain).toBeGreaterThan(password);
+  expect(route.indexOf('new Attendance(')).toBeGreaterThan(domain);
 });
 
 test('one scan marks both sides, the self side exactly like the dashboard button', () => {
   expect(route).toMatch(/markedBy:"coordinator"/);
   expect(route).toMatch(/await markSelfAttendance\(student, domain\)/);
-  const selfRoute = server.slice(server.indexOf('app.post("/attendance/self"'));
-  expect(selfRoute.slice(0, selfRoute.indexOf('\n});'))).toMatch(/await markSelfAttendance\(student,/);
+  expect(routeOf('app.post("/attendance/self"')).toMatch(/await markSelfAttendance\(student,/);
 });
 
 test('it hands back the day’s Google Form', () => {
   expect(route).toMatch(/const formUrl = attendanceFormLink\(student, dateKey\)/);
   expect(route).toMatch(/res\.json\(\{ success:true, formUrl,/);
+});
+
+test('one portal code for every domain, and a separate code for the form', () => {
+  const codes = routeOf('app.get("/attendance/qr"');
+  expect(codes).toMatch(/portal: await code\(host \+ "\/qr-attendance\.html"\)/);
+  expect(codes).toMatch(/form: await code\(ATTENDANCE_FORM\)/);
+});
+
+test('the pages call routes that exist', () => {
+  expect(server).toMatch(/app\.get\("\/attendance\/qr",/);
+  expect(server).toMatch(/app\.get\("\/qr-attendance\/domains",/);
+  expect(read('public/coordinator-dashboard.html')).toMatch(/fetch\("\/attendance\/qr"\)/);
+  const page = read('public/qr-attendance.html');
+  expect(page).toMatch(/fetch\("\/qr-attendance\/domains"\)/);
+  expect(page).toMatch(/fetch\("\/qr-attendance\/mark"/);
 });

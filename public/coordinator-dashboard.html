@@ -973,18 +973,36 @@ body::before {
   <!-- TAB: Attendance (class attendance marking) -->
   <div class="tab-section" id="tab-attendance">
     <div class="submission-wrapper">
-      <!-- QR Code card (Feature 3) -->
-      <div id="qrCard" style="background:rgba(245,197,66,0.06);border:1px solid rgba(245,197,66,0.25);border-radius:14px;padding:18px 22px;margin-bottom:16px;display:flex;gap:18px;align-items:center;flex-wrap:wrap;">
-        <div id="qrImg" style="width:120px;height:120px;background:#0c1220;border:1px solid rgba(245,197,66,0.2);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--muted);">
-          loading…
+      <!-- Meeting QR codes (Feature 3): the same two for every domain -->
+      <div id="qrCard" style="background:rgba(245,197,66,0.06);border:1px solid rgba(245,197,66,0.25);border-radius:14px;padding:18px 22px;margin-bottom:16px;display:flex;gap:18px;flex-wrap:wrap;">
+        <div style="flex-basis:100%;">
+          <div style="color:var(--accent);font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;">Meeting QR codes</div>
+          <div style="font-size:12px;color:var(--muted);">The same two codes for every domain. Show them in the meeting.</div>
         </div>
-        <div style="flex:1;min-width:200px;">
-          <div style="color:var(--accent);font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;">Meeting QR</div>
-          <div style="font-size:15px;font-weight:700;margin-bottom:4px;">Show this QR in the meeting: one scan marks today's attendance on both sides</div>
-          <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Permanent QR for your domain. A scan marks the student's class attendance and their own, then opens the attendance form. Students signed in on their phone just tap; others enter their Employee ID and password.</div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button id="qrDownload" class="refresh-btn" style="background:linear-gradient(135deg,#f5c542,#c9a227);color:#0c1220;border:none;font-weight:700;">⬇️ Download QR (PNG)</button>
-            <a id="qrOpenUrl" target="_blank" rel="noopener" class="refresh-btn" style="text-decoration:none;">🔗 Open scan page</a>
+        <div style="flex:1;min-width:260px;display:flex;gap:14px;align-items:center;">
+          <div id="qrImg" style="flex:none;width:120px;height:120px;background:#0c1220;border:1px solid rgba(245,197,66,0.2);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--muted);">
+            loading…
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:15px;font-weight:700;margin-bottom:4px;">Portal attendance</div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">For students registered on the portal. They choose their domain and sign in with Employee ID and password. Today is then marked on both sides, and the attendance form opens.</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button id="qrDownload" class="refresh-btn" style="background:linear-gradient(135deg,#f5c542,#c9a227);color:#0c1220;border:none;font-weight:700;">⬇️ Download PNG</button>
+              <a id="qrOpenUrl" target="_blank" rel="noopener" class="refresh-btn" style="text-decoration:none;">🔗 Open scan page</a>
+            </div>
+          </div>
+        </div>
+        <div style="flex:1;min-width:260px;display:flex;gap:14px;align-items:center;">
+          <div id="formQrImg" style="flex:none;width:120px;height:120px;background:#0c1220;border:1px solid rgba(245,197,66,0.2);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--muted);">
+            loading…
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:15px;font-weight:700;margin-bottom:4px;">Attendance form only</div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Opens the Google Form straight away, with no sign-in. It records nothing in the portal.</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button id="formQrDownload" class="refresh-btn" style="background:linear-gradient(135deg,#f5c542,#c9a227);color:#0c1220;border:none;font-weight:700;">⬇️ Download PNG</button>
+              <a id="formQrOpenUrl" target="_blank" rel="noopener" class="refresh-btn" style="text-decoration:none;">🔗 Open form</a>
+            </div>
           </div>
         </div>
       </div>
@@ -1821,29 +1839,25 @@ async function bulkAtt(status){
 }
 
 // QR card loader (Feature 3)
+// The two meeting QR codes, the same for every domain.
 async function loadCoordQR(){
   try{
-    const r = await fetch("/coordinator/qr/" + encodeURIComponent(coordUsername) + "?domain=" + encodeURIComponent(domainStr));
-    const d = await r.json();
-    const img = document.getElementById("qrImg");
-    if(d.success){
-      img.innerHTML = '<img src="' + d.dataUrl + '" alt="QR" style="width:100%;height:100%;border-radius:8px;">';
-      const dl = document.getElementById("qrDownload");
-      if(dl) dl.onclick = () => {
-        const a = document.createElement("a");
-        a.href = d.dataUrl;
-        a.download = "TEN-attendance-" + (domainStr || "qr").replace(/\s+/g,"_") + ".png";
-        a.click();
-      };
-      const opener = document.getElementById("qrOpenUrl");
-      if(opener) opener.href = d.url;
-    } else {
-      img.textContent = "QR unavailable";
-    }
+    const d = await (await fetch("/attendance/qr")).json();
+    if(!d.success) throw new Error(d.message);
+    showQR(d.portal, "qrImg", "qrDownload", "qrOpenUrl", "TEN-attendance-QR.png");
+    showQR(d.form, "formQrImg", "formQrDownload", "formQrOpenUrl", "TEN-attendance-form-QR.png");
   }catch(e){
-    const img = document.getElementById("qrImg");
-    if(img) img.textContent = "QR error";
+    ["qrImg", "formQrImg"].forEach(id => { const el = document.getElementById(id); if(el) el.textContent = "QR unavailable"; });
   }
+}
+
+function showQR(qr, imgId, downloadId, openId, file){
+  document.getElementById(imgId).innerHTML = '<img src="' + qr.dataUrl + '" alt="QR code" style="width:100%;height:100%;border-radius:8px;">';
+  document.getElementById(downloadId).onclick = () => {
+    const a = document.createElement("a");
+    a.href = qr.dataUrl; a.download = file; a.click();
+  };
+  document.getElementById(openId).href = qr.url;
 }
 
 async function editCoordAttendance(employeeId, currentStatus){
