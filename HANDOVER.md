@@ -900,7 +900,7 @@ except SMTP, which fails silently (§11). By area:
 | Core | `NODE_ENV` (pm2 sets `production`), `PORT` (production 5000; the code's default is 3000), `BASE_URL` (absolute links in mail), `PORTAL_URL` (Growth "Draft with AI" links; separate from `BASE_URL`), `LOCAL_DB_DIR` |
 | Database | `MONGODB_URI`. Without it the app runs on the JSON fallback |
 | Logins | `ADMIN_USERNAME`, `GROWTH_USERNAME`, `GROWTH_PASSWORD_HASH`, `ASSISTANT_ADMIN_TOKEN`, `STUDIO_UNVERIFIED_GRANDFATHER_UNTIL` |
-| Rate limits | `RATE_AUTH_*`, `RATE_AUTH_USER_*`, `RATE_REGISTER_*`, `RATE_PAYMENT_*` (`RATE_PUBLIC_*` is read but never applied) |
+| Rate limits | `RATE_AUTH_*`, `RATE_AUTH_USER_*`, `RATE_REGISTER_*`, `RATE_PAYMENT_*` (`RATE_PUBLIC_*` is read but never applied). A signed-in person's GETs are counted apart from their writes and get three times `RATE_AUTH_USER_MAX` |
 | Email | `SMTP_USER` / `SES_SMTP_USER` / `EMAIL_USER`, the matching `*_PASS`, `*_HOST` (default: the Brevo relay), `*_PORT` (587), `SMTP_SERVICE`, `EMAIL_SECURE`, `EMAIL_FROM`, `HR_NOTIFY_EMAIL` |
 | AI | `GEMINI_API_KEY` (aliases `GOOGLE_API_KEY`, `GEMINI_KEY` work only in `utils/gemini.js`), `GEMINI_MODEL`, `IDEA_AGENT_ENABLED`, `IDEA_AGENT_CRON` |
 | Push | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_CONTACT` |

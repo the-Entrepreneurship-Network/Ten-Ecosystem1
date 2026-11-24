@@ -2395,12 +2395,22 @@ function rateLimitKey(req) {
     return who ? `u:${who}` : `ip:${ipKeyGenerator(req.ip)}`;
 }
 
+/*
+ * A signed-in person's reads get their own allowance, three times the size.
+ * Measured on a local copy: one walk through every section of the student
+ * dashboard is about 150 counted requests, and every open tab polls about six
+ * a minute on top. A new intern exploring in two tabs used up the shared 300
+ * and every section answered 429. Writes keep the original allowance, and
+ * anonymous callers still share one allowance per IP.
+ */
+const isSignedInRead = (req) => req.method === 'GET' && rateLimitKey(req).startsWith('u:');
+
 const apiLimiter = rateLimit({
     windowMs: RATE_LIMIT_CONFIG.authenticated.windowMs,
-    max: RATE_LIMIT_CONFIG.authenticated.max,
+    max: (req) => RATE_LIMIT_CONFIG.authenticated.max * (isSignedInRead(req) ? 3 : 1),
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: rateLimitKey,
+    keyGenerator: (req) => rateLimitKey(req) + (isSignedInRead(req) ? ':read' : ''),
     /*
      * Read-only polling is what the portal does constantly and is not what
      * this limiter exists to stop. Counting it is how a student who is simply

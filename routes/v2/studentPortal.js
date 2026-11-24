@@ -14,19 +14,14 @@ const {
   mongoIdParamSchema
 } = require("../../middleware/validationSchemas");
 
-const rateLimit = require("express-rate-limit");
-const authenticatedLimiter = rateLimit({
-    windowMs: process.env.RATE_AUTH_USER_WINDOW_MS
-      ? parseInt(process.env.RATE_AUTH_USER_WINDOW_MS)
-      : 15 * 60 * 1000,
-    max: process.env.RATE_AUTH_USER_MAX
-      ? parseInt(process.env.RATE_AUTH_USER_MAX)
-      : 300,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { success: false, message: "Too many requests. Please slow down." }
-});
-router.use(authenticatedLimiter);
+/*
+ * No rate limiter of its own. This router is mounted at /api/v2, ahead of
+ * almost every other v2 router, so a limiter here counted all of /api/v2 —
+ * Career Studio, documents, certificates, HR — in one allowance of 300 per
+ * 15 minutes per IP address. Everyone behind one college network or mobile
+ * carrier shared it. The /api limiter in server.js already covers these paths,
+ * per person.
+ */
 
 const mongoose = require("mongoose");
 if (!Student.schema.path("v2Onboarded"))           Student.schema.add({ v2Onboarded:           { type: Boolean, default: false } });

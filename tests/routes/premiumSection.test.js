@@ -239,7 +239,9 @@ describe('the "Too many requests" wall', () => {
     // students shared one 300-request budget and the whole building was
     // throttled — which is what the notifications screen was reporting.
     expect(serverJs).toMatch(/function rateLimitKey\(req\)/);
-    expect(serverJs).toMatch(/keyGenerator: rateLimitKey/);
+    // Reads get a bucket of their own (tests/routes/readAllowance.test.js),
+    // but both buckets are still the person's.
+    expect(serverJs).toMatch(/keyGenerator: \(req\) => rateLimitKey\(req\)/);
     expect(serverJs).toMatch(/ses\.student && \(ses\.student\.employeeId/);
     // anonymous still falls back to the IP, normalised for IPv6
     expect(serverJs).toMatch(/ip:\$\{ipKeyGenerator\(req\.ip\)\}/);
