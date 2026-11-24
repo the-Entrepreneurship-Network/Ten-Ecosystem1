@@ -578,6 +578,7 @@ class FallbackQuery {
 }
 
 const guardedExec = require('./utils/guardedExec');
+const { attendanceFormLink } = require('./utils/attendanceForm');
 
 function wrapModelWithFileFallback(model) {
     function isNetworkError(err) {
@@ -6963,14 +6964,13 @@ async function computeAttendanceStats(employeeId, joiningDate, domain){
 }
 
 // ---- STUDENT: mark own attendance (once per day) ----
-app.post("/attendance/self", async(req,res)=>{
-try{
-    const { employeeId } = req.body;
-    if(!employeeId) return res.json({ success:false, message:"Employee ID required" });
-
-    const student = await Student.findOne({ employeeId });
-    if(!student) return res.json({ success:false, message:"Student not found" });
-
+/**
+ * Mark a student's own ("self") attendance for today. Shared by the dashboard
+ * button and the meeting QR, so a scan counts exactly like the button: streak,
+ * badges and certificate eligibility included.
+ */
+async function markSelfAttendance(student, requestedDomain){
+    const employeeId = student.employeeId;
     const now = new Date();
     const dateKey = toDateKey(now);
 
@@ -6979,19 +6979,21 @@ try{
     // is scoped to the domain for exactly that reason. An unrecognised domain
     // (or none) falls back to their primary; a domain they are not enrolled in
     // is never honoured. See utils/attendanceDomain.js.
-    const markDomain = attendanceDomain.domainForWrite(
-        student,
-        req.body.domain || req.headers['x-active-domain']
-    );
+    const markDomain = attendanceDomain.domainForWrite(student, requestedDomain);
 
     const existing = await Attendance.findOne({ employeeId, dateKey, markedBy:"self", domain: markDomain });
-    if(existing) return res.json({ success:false, alreadyMarked:true, domain: markDomain, message:"Already marked for today" });
+    if(existing) return { alreadyMarked:true, domain: markDomain };
 
-    const att = new Attendance({
-        studentId: student._id, employeeId, domain: markDomain,
-        date: now, dateKey, status:"Present", markedBy:"self"
-    });
-    await att.save();
+    let att;
+    try{
+        att = await new Attendance({
+            studentId: student._id, employeeId, domain: markDomain,
+            date: now, dateKey, status:"Present", markedBy:"self"
+        }).save();
+    }catch(e){
+        if(e.code === 11000) return { alreadyMarked:true, domain: markDomain };
+        throw e;
+    }
     await Student.findOneAndUpdate({ employeeId }, { lastActiveDate: new Date() });
     // Streak + milestones + badges (Features 6, 7, 11)
     await bumpStreakAndMilestones(student);
@@ -7003,9 +7005,21 @@ try{
     // dashboard re-fetched, the domain filter dropped every row, and the panel
     // stayed at zero right after a successful mark.
     const stats = await computeAttendanceStats(employeeId, student.joiningDate, markDomain);
-    res.json({ success:true, message:"Attendance marked for today", domain: markDomain, attendance:att, stats });
+    return { alreadyMarked:false, domain: markDomain, attendance: att, stats };
+}
+
+app.post("/attendance/self", async(req,res)=>{
+try{
+    const { employeeId } = req.body;
+    if(!employeeId) return res.json({ success:false, message:"Employee ID required" });
+
+    const student = await Student.findOne({ employeeId });
+    if(!student) return res.json({ success:false, message:"Student not found" });
+
+    const r = await markSelfAttendance(student, req.body.domain || req.headers['x-active-domain']);
+    if(r.alreadyMarked) return res.json({ success:false, alreadyMarked:true, domain: r.domain, message:"Already marked for today" });
+    res.json({ success:true, message:"Attendance marked for today", domain: r.domain, attendance: r.attendance, stats: r.stats });
 }catch(e){
-    if(e.code === 11000) return res.json({ success:false, alreadyMarked:true, message:"Already marked for today" });
     console.log(e); res.json({ success:false, message:"Failed to mark attendance" });
 }
 });
@@ -9424,57 +9438,84 @@ try{
 });
 
 // Verify-and-mark from the QR scan landing page.
-// Behind the sign-in limiters: it checks a password, like any sign-in.
-app.post("/qr-attendance/mark", loginIpLimiter, loginLimiter, async(req,res)=>{
+//
+// One scan marks both sides of the day: the class attendance the coordinator
+// would otherwise mark, and the student's own. A student already signed in on
+// their phone only taps; anyone else signs in with Employee ID and password.
+//
+// The sign-in limiters apply only when a password is being checked. A whole
+// class tapping "Mark me present" from one college network must not trip the
+// per-network sign-in cap, and without a password there is nothing to guess.
+function limitPasswordTries(req, res, next){
+    if(!(req.body && req.body.password)) return next();
+    loginIpLimiter(req, res, () => loginLimiter(req, res, next));
+}
+
+app.post("/qr-attendance/mark", limitPasswordTries, async(req,res)=>{
 try{
     const { employeeId, password, domain, coordinatorId } = req.body || {};
-    if(!employeeId || !password || !domain)
-        return res.json({ success:false, message:"Employee ID, password and domain are required" });
+    if(!domain)
+        return res.json({ success:false, message:"This QR is missing a domain — ask your coordinator for a fresh QR." });
 
-    // Passwords are bcrypt hashes. Looking the student up by { employeeId,
-    // password } matched the typed password against the hash itself, so no
-    // QR scan ever found anyone: "Invalid Employee ID or Password", every
-    // time. Checked the way /student-login checks it, lockout included.
-    const student = await Student.findOne({ employeeId });
-    if(!student) return res.json({ success:false, message:"Invalid Employee ID or Password" });
-    if (await checkLockout(res, student, Student)) return;
-    let pwdMatch = false;
-    try { pwdMatch = await bcrypt.compare(String(password), student.password || ""); } catch (_) {}
-    if(!pwdMatch) return await recordFailedAttempt(res, student, Student, "Invalid Employee ID or Password");
-    await clearFailedAttempts(student, Student);
+    let student;
+    if(employeeId || password){
+        if(!employeeId || !password)
+            return res.json({ success:false, message:"Employee ID and password are required" });
+        // Passwords are bcrypt hashes. Looking the student up by { employeeId,
+        // password } matched the typed password against the hash itself, so no
+        // QR scan ever found anyone: "Invalid Employee ID or Password", every
+        // time. Checked the way /student-login checks it, lockout included.
+        student = await Student.findOne({ employeeId });
+        if(!student) return res.json({ success:false, message:"Invalid Employee ID or Password" });
+        if (await checkLockout(res, student, Student)) return;
+        let pwdMatch = false;
+        try { pwdMatch = await bcrypt.compare(String(password), student.password || ""); } catch (_) {}
+        if(!pwdMatch) return await recordFailedAttempt(res, student, Student, "Invalid Employee ID or Password");
+        await clearFailedAttempts(student, Student);
+    } else {
+        student = await findSessionStudent(req);
+        if(!student) return res.json({ success:false, needsSignIn:true, message:"Enter your Employee ID and password" });
+    }
     if((student.domain || "") !== domain)
         return res.json({ success:false, message:"This QR is for a different domain" });
 
     const today = new Date();
     const dateKey = toDateKey(today);
     const markDomain = attendanceDomain.domainForWrite(student, domain);
-    const existing = await Attendance.findOne({ employeeId, dateKey, markedBy:"coordinator", domain: markDomain });
-    if(existing){
-        return res.json({ success:false, alreadyMarked:true,
-            message:"Attendance already marked for today ✅" });
+    const sid = student.employeeId;
+
+    // The coordinator's side: class attendance.
+    let classMarked = false;
+    if(!(await Attendance.findOne({ employeeId: sid, dateKey, markedBy:"coordinator", domain: markDomain }))){
+        await new Attendance({
+            studentId: student._id, employeeId: sid, domain: markDomain,
+            date: today, dateKey, status:"Present", markedBy:"coordinator",
+            coordinatorId: coordinatorId || "qr",
+            source: "qr"
+        }).save();
+        classMarked = true;
+
+        // Notify the student
+        try{
+            const notif = new Notification({
+                title: "Class attendance marked via QR",
+                message: `Your class attendance for ${dateKey} has been marked via QR scan.`,
+                type: "success", from: "Coordinator",
+                targetType: "student", targetEmployeeId: sid, targetDomain: student.domain
+            });
+            await notif.save();
+            broadcastNotification(student.domain, sid, notif);
+        }catch(_){}
     }
 
-    const att = new Attendance({
-        studentId: student._id, employeeId, domain: markDomain,
-        date: today, dateKey, status:"Present", markedBy:"coordinator",
-        coordinatorId: coordinatorId || "qr",
-        source: "qr"
-    });
-    await att.save();
+    // The student's side, exactly as the dashboard button marks it.
+    const self = await markSelfAttendance(student, domain);
 
-    // Notify the student
-    try{
-        const notif = new Notification({
-            title: "Class attendance marked via QR",
-            message: `Your class attendance for ${dateKey} has been marked via QR scan.`,
-            type: "success", from: "Coordinator",
-            targetType: "student", targetEmployeeId: student.employeeId, targetDomain: student.domain
-        });
-        await notif.save();
-        broadcastNotification(student.domain, student.employeeId, notif);
-    }catch(_){}
-
-    res.json({ success:true, message:`Attendance marked successfully for ${dateKey}. Have a great day!` });
+    // Next stop: the day's Google Form, filled in with what the portal knows.
+    const formUrl = attendanceFormLink(student, dateKey);
+    if(!classMarked && self.alreadyMarked)
+        return res.json({ success:false, alreadyMarked:true, formUrl, message:"Attendance already marked for today ✅" });
+    res.json({ success:true, formUrl, message:`Attendance marked for ${dateKey}, on your side and your coordinator's. Have a great day!` });
 }catch(e){ console.log(e); res.status(500).json({ success:false, message:"Server error" }); }
 });
 
