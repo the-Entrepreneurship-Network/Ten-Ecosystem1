@@ -2683,6 +2683,10 @@ async function runActivityMailer(){
 }
 cron.schedule('0 9 * * 1', runActivityMailer);
 
+// The complaints@ help desk (services/supportDesk/agent.js). Does nothing until
+// SUPPORT_AGENT_MODE is draft or send and the mailbox is connected. Never throws.
+cron.schedule('*/2 * * * *', () => { require('./services/supportDesk/agent').runOnce(); });
+
 // ======= AUTO DOCUMENT EMAIL HELPERS =======
 function tenureToDays(tenure) {
     if (!tenure) return 30;
@@ -11291,6 +11295,8 @@ app.use('/api/growth', growthRoutes.api);
 // "Did our reply answer your question?" — the links at the foot of the
 // complaints@ auto-reply (which lives in the mailbox, not here).
 app.use('/api/complaint-feedback', require('./routes/complaintFeedback'));
+// The help desk that answers complaints@ from saved answers. HR only.
+app.use('/api/support-desk', require('./routes/supportDesk'));
 app.get('/complaint-feedback', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'complaint-feedback.html'));
 });
