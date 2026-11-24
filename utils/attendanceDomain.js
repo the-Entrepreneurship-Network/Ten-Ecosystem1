@@ -87,6 +87,12 @@ function primaryDomain(student) {
   return all.length ? all[0] : '';
 }
 
+/** Is `domain` one this student is enrolled in? Case and spacing don't matter. */
+function holdsDomain(student, domain) {
+  const wanted = domainKey(domain);
+  return !!wanted && studentDomains(student).some((d) => domainKey(d) === wanted);
+}
+
 /** Is this student enrolled in more than one domain? */
 function hasMultipleDomains(student) {
   return studentDomains(student).length > 1;
@@ -158,6 +164,7 @@ module.exports = {
   domainKey,
   studentDomains,
   primaryDomain,
+  holdsDomain,
   hasMultipleDomains,
   resolveActiveDomain,
   recordMatchesDomain,
