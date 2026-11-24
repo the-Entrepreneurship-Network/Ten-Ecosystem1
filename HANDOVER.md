@@ -140,6 +140,11 @@ emulated there. Every page shows a banner, and `services/dbHealth.js` keeps
 reconnecting. After an outage, `scripts/import-fallback-db.js` (dry run, then
 `--write`) copies the rows written during the outage into MongoDB. The
 production deploy warns if `/api/health/db` does not report `"connected":true`.
+The fallback works by wrapping every model's query methods
+(`wrapModelWithFileFallback` in `server.js`). A wrapped `exec` must go through
+`utils/guardedExec.js`: populate calls `exec` with a callback, which returns
+nothing, and chaining `.catch` onto that made every `.populate()` throw while
+MongoDB was up.
 
 **Frontend.** Most pages are plain HTML, CSS and JavaScript in `public/`. Four
 products are React + Vite apps whose **built** output is committed to git
@@ -353,7 +358,7 @@ loads.
   personal blocks, reports, admin moderation, and images under
   `uploads/chat/`.
 - **Complaints.** complaints@entrepreneurshipnetwork.net is on the landing
-  page footer, the student dashboard, the registration page, and under every
+  page footer, the student dashboard, the registration confirmation page, and under every
   email (`utils/mailer.js` `renderEmail`, with an "auto-generated" line). Its
   auto-reply lives in the mailbox settings, not in this code. The reply's two
   links open `/complaint-feedback?answer=yes|no`; the page records the answer
@@ -1283,7 +1288,7 @@ whoever takes over. Until then:
 | The coordinator notice board resets on every deploy | `notice.json` is live data tracked in git | move it into the database (`models/Notice.js` exists, unused) |
 | A revoked certificate comes back after the next deploy | The deploy restores missing files from its uploads backup | `deploy-production.yml` + admin revoke |
 | The `/student-portal/` page still shows six testimonials that were removed from its source on 2 September | The bundle was never rebuilt | rebuild `student-portal-app` and commit (§15.5) |
-| Admin console: certificate Approve/Reject buttons return 404. HR portal: "AI Queries" does nothing. Coordinator mentorship tab: empty mentor list. Mentor dashboard: expertise panel fails | Broken buttons | `ten-admin.html`, `hr-portal.html`, `coordinator-dashboard.html`, `mentor-dashboard.html` |
+| Admin console: certificate Approve/Reject buttons return 404 | `routes/adminPortal.js` lists pending requests but has no approve or reject route, and `CertificateRequest` has no rejected status to record a rejection in | `ten-admin.html`; HR's approve route is `routes/v2/hr.js`. Reject needs a product decision first |
 | `EcosystemNotification` rows are written but never shown | HR never sees new-feedback alerts; founders, investors and contractors miss theirs (HR's approve/reject decision is now emailed) | §7.1 |
 | Paying an attendance or LOR fine does not release the certificate | The fine types the cron writes differ from the one the admin's approval clears | `routes/v2/certificates.js` vs `routes/adminPortal.js` |
 | Studio UTR claims have no approve button | The admin's pending queue lists only `mode: 'manual'`; Studio rows are `mode: 'upi'` | `routes/adminPortal.js`, `ten-admin.html` |

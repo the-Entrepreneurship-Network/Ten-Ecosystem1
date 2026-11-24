@@ -577,6 +577,8 @@ class FallbackQuery {
     }
 }
 
+const guardedExec = require('./utils/guardedExec');
+
 function wrapModelWithFileFallback(model) {
     function isNetworkError(err) {
         if (!err) return false;
@@ -935,7 +937,7 @@ function wrapModelWithFileFallback(model) {
         const mongooseQuery = originalFind.apply(this, arguments);
         const originalExec = mongooseQuery.exec;
         mongooseQuery.exec = function() {
-            return originalExec.apply(this, arguments).catch(err => {
+            return guardedExec(originalExec, this, arguments, err => {
                 if (isNetworkError(err)) {
                     console.warn(`[DB FALLBACK] find failed with network error: "${err.message}". Falling back to file DB...`);
                     return runFindFallback(query, mongooseQuery._sort, mongooseQuery._limit);
@@ -963,7 +965,7 @@ function wrapModelWithFileFallback(model) {
         const mongooseQuery = originalFindOne.apply(this, arguments);
         const originalExec = mongooseQuery.exec;
         mongooseQuery.exec = function() {
-            return originalExec.apply(this, arguments).catch(err => {
+            return guardedExec(originalExec, this, arguments, err => {
                 if (isNetworkError(err)) {
                     console.warn(`[DB FALLBACK] findOne failed with network error: "${err.message}". Falling back...`);
                     return runFindOneFallback(query);
@@ -991,7 +993,7 @@ function wrapModelWithFileFallback(model) {
         const mongooseQuery = originalFindById.apply(this, arguments);
         const originalExec = mongooseQuery.exec;
         mongooseQuery.exec = function() {
-            return originalExec.apply(this, arguments).catch(err => {
+            return guardedExec(originalExec, this, arguments, err => {
                 if (isNetworkError(err)) {
                     console.warn(`[DB FALLBACK] findById failed with network error: "${err.message}". Falling back...`);
                     return runFindByIdFallback(id);
@@ -1019,7 +1021,7 @@ function wrapModelWithFileFallback(model) {
         const mongooseQuery = originalCountDocuments.apply(this, arguments);
         const originalExec = mongooseQuery.exec;
         mongooseQuery.exec = function() {
-            return originalExec.apply(this, arguments).catch(err => {
+            return guardedExec(originalExec, this, arguments, err => {
                 if (isNetworkError(err)) {
                     console.warn(`[DB FALLBACK] countDocuments failed with network error: "${err.message}". Falling back...`);
                     return runCountDocumentsFallback(query);
@@ -1047,7 +1049,7 @@ function wrapModelWithFileFallback(model) {
         const mongooseQuery = originalFindOneAndUpdate.apply(this, arguments);
         const originalExec = mongooseQuery.exec;
         mongooseQuery.exec = function() {
-            return originalExec.apply(this, arguments).catch(err => {
+            return guardedExec(originalExec, this, arguments, err => {
                 if (isNetworkError(err)) {
                     console.warn(`[DB FALLBACK] findOneAndUpdate failed with network error: "${err.message}". Falling back...`);
                     return runFindOneAndUpdateFallback(query, update, options);
@@ -1075,7 +1077,7 @@ function wrapModelWithFileFallback(model) {
         const mongooseQuery = originalFindByIdAndUpdate.apply(this, arguments);
         const originalExec = mongooseQuery.exec;
         mongooseQuery.exec = function() {
-            return originalExec.apply(this, arguments).catch(err => {
+            return guardedExec(originalExec, this, arguments, err => {
                 if (isNetworkError(err)) {
                     console.warn(`[DB FALLBACK] findByIdAndUpdate failed with network error: "${err.message}". Falling back...`);
                     return runFindByIdAndUpdateFallback(id, update, options);
@@ -1549,7 +1551,7 @@ function sanitizeStudent(student) {
     return safe;
 }
 
-const { findSessionStudent, sessionExpired } = require('./middleware/sessionAuth');
+const { findSessionStudent, sessionExpired, requireStaff } = require('./middleware/sessionAuth');
 const certFile = require('./services/certificateFile');
 
 function establishStudentSession(req, student) {
@@ -4416,6 +4418,28 @@ app.get("/api/ecosystem/users", requireHROrAdminAPI, async(req, res) => {
   } catch(err) {
     console.error("Users API error:", err);
     res.status(500).json({ success: false, error: "Failed to retrieve ecosystem directory." });
+  }
+});
+
+/*
+ * The approved mentors, for staff who assign them to bookings.
+ *
+ * Mentorship Bookings in the coordinator dashboard fetched the list above to
+ * fill its "assign a mentor" menu, but that list is everyone in the ecosystem
+ * and is HR and admin only, so coordinators got a 401 and a menu with nobody
+ * in it. This returns only approved mentors, and only what the menu shows.
+ */
+app.get("/api/ecosystem/mentors", requireStaff, async (req, res) => {
+  try {
+    const EcosystemUser = require("./models/EcosystemUser");
+    const MentorProfile = require("./models/MentorProfile");
+    const profiles = await MentorProfile.find({ verificationStatus: 'approved' }).select('userId headline expertise').lean();
+    const byUser = new Map(profiles.map((p) => [String(p.userId), p]));
+    const users = await EcosystemUser.find({ _id: { $in: [...byUser.keys()] }, role: 'mentor' }).select('fullName email role').lean();
+    res.json({ success: true, users: users.map((u) => ({ ...u, isVerified: true, profile: byUser.get(String(u._id)) })) });
+  } catch (err) {
+    console.error("Mentors API error:", err.message);
+    res.status(500).json({ success: false, error: "Failed to retrieve mentors." });
   }
 });
 

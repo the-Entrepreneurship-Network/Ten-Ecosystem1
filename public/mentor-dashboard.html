@@ -405,43 +405,43 @@
       }
 
       try {
-        const res = await fetch('/api/ecosystem/users');
+        // The signed-in mentor's own profile. This used to fetch the whole user
+        // list from /api/ecosystem/users, which only HR can read, so mentors got
+        // a 401 and their expertise badges never appeared.
+        const res = await fetch('/api/mentor/profile/me');
         const data = await res.json();
-        if (data.success && data.users) {
-          const userObj = data.users.find(u => (u.email || '').toLowerCase().trim() === email);
-          if (userObj) {
-            const profile = userObj.profile || {};
-            
-            let domainsList = [];
-            if (profile.expertise && profile.expertise.length > 0) {
-              domainsList = profile.expertise.map(exp => ({
-                area: exp.area || 'General Mentor',
-                level: exp.level || 'Expert'
-              }));
+        if (data.success && data.data) {
+          const profile = data.data;
+          
+          let domainsList = [];
+          if (profile.expertise && profile.expertise.length > 0) {
+            domainsList = profile.expertise.map(exp => ({
+              area: exp.area || 'General Mentor',
+              level: exp.level || 'Expert'
+            }));
+          }
+          
+          if (domainsList.length === 0) {
+            const domainVal = activeUser.domain || '';
+            if (domainVal) {
+              domainsList.push({ area: domainVal, level: 'Expert' });
             }
-            
-            if (domainsList.length === 0) {
-              const domainVal = userObj.domain || profile.domain || '';
-              if (domainVal) {
-                domainsList.push({ area: domainVal, level: 'Expert' });
-              }
-            }
+          }
 
-            if (badgeContainer) {
-              if (domainsList.length > 0) {
-                badgeContainer.innerHTML = domainsList.map(exp => {
-                  return `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-wider">${exp.area} (${exp.level})</span>`;
-                }).join('');
-              } else {
-                badgeContainer.innerHTML = `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-wider">Expert Mentor</span>`;
-              }
+          if (badgeContainer) {
+            if (domainsList.length > 0) {
+              badgeContainer.innerHTML = domainsList.map(exp => {
+                return `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-wider">${exp.area} (${exp.level})</span>`;
+              }).join('');
+            } else {
+              badgeContainer.innerHTML = `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[10px] font-black uppercase tracking-wider">Expert Mentor</span>`;
             }
-            
-            if (profile.headline) {
-              const titleEl = document.getElementById('bannerTitle');
-              if (titleEl) {
-                titleEl.innerHTML = `${profile.headline} | <span id="bannerEmail" class="text-yellow-400 font-bold italic">${email}</span>`;
-              }
+          }
+          
+          if (profile.headline) {
+            const titleEl = document.getElementById('bannerTitle');
+            if (titleEl) {
+              titleEl.innerHTML = `${profile.headline} | <span id="bannerEmail" class="text-yellow-400 font-bold italic">${email}</span>`;
             }
           }
         }
