@@ -55,12 +55,17 @@ h1{ font-size:20px; font-weight:800; margin-bottom:6px; }
   <div class="card ten-qr-radar">
     <div id="domainHeader"></div>
     <h1 id="title">Mark Your Attendance</h1>
-    <p class="sub" id="subtitle">Scan verified by coordinator. Enter your credentials to record today's class attendance.</p>
+    <p class="sub" id="subtitle">One scan marks today's attendance on your side and your coordinator's. Then today's attendance form opens.</p>
     <div id="msg"></div>
+    <div id="me" style="display:none">
+      <p class="sub" id="meLine"></p>
+      <button class="btn" id="meBtn" onclick="markIt(true)">✅ Mark me present</button>
+      <p class="foot"><a href="#" onclick="useForm(); return false;">Not you? Use your Employee ID and password</a></p>
+    </div>
     <div id="form">
-      <div class="field"><label>Employee ID</label><input type="text" id="employeeId" placeholder="e.g. TEN/WEB/1001" autocomplete="off"></div>
-      <div class="field"><label>Password</label><input type="password" id="password" placeholder="Your portal password"></div>
-      <button class="btn" id="submitBtn" onclick="markIt()">✅ Mark My Attendance</button>
+      <div class="field"><label>Employee ID</label><input type="text" id="employeeId" placeholder="e.g. TEN/WEB/1001" autocomplete="username"></div>
+      <div class="field"><label>Password</label><input type="password" id="password" placeholder="Your portal password" autocomplete="current-password"></div>
+      <button class="btn" id="submitBtn" onclick="markIt(false)">✅ Mark My Attendance</button>
     </div>
   </div>
   <div class="foot">© The Entrepreneurship Network · <a href="/login.html">Back to Login</a></div>
@@ -72,8 +77,12 @@ const domain = params.get("domain") || "";
 const coordinatorId = params.get("coordinatorId") || "";
 
 if(domain){
-  document.getElementById("domainHeader").innerHTML = '<div class="dom-pill">' + domain + '</div>';
+  // Text, not HTML: the domain comes from the link.
+  const pill = document.createElement("div");
+  pill.className = "dom-pill"; pill.textContent = domain;
+  document.getElementById("domainHeader").appendChild(pill);
   document.getElementById("title").textContent = "Mark Your Attendance — " + domain;
+  showSignedIn();
 } else {
   setMsg("This QR is missing a domain — ask your coordinator for a fresh QR.", "warn");
   document.getElementById("submitBtn").disabled = true;
@@ -84,35 +93,72 @@ function setMsg(text, kind){
   el.innerHTML = '<div class="alert alert-' + (kind==="ok"?"ok":kind==="warn"?"warn":"error") + '">' + text + '</div>';
 }
 
-async function markIt(){
-  const employeeId = document.getElementById("employeeId").value.trim();
-  const password   = document.getElementById("password").value;
-  if(!employeeId || !password){ setMsg("Employee ID and password are required.", "error"); return; }
-  const btn = document.getElementById("submitBtn");
+// Already signed in to the portal on this phone: one tap, no password.
+async function showSignedIn(){
+  try{
+    const r = await fetch("/api/v2/student/me", { credentials:"same-origin" });
+    const d = r.ok ? await r.json() : null;
+    if(!d || !d.success || !d.student) return;
+    const s = d.student;
+    document.getElementById("meLine").textContent = "Signed in as " + (s.name ? s.name + " · " : "") + s.employeeId;
+    document.getElementById("me").style.display = "block";
+    document.getElementById("form").style.display = "none";
+  }catch(_){ /* not signed in: the Employee ID form stays */ }
+}
+
+function useForm(){
+  document.getElementById("me").style.display = "none";
+  document.getElementById("form").style.display = "block";
+  document.getElementById("employeeId").focus();
+}
+
+function done(formUrl){
+  document.getElementById("me").style.display = "none";
+  document.getElementById("form").style.display = "none";
+  if(!formUrl) return;
+  const a = document.createElement("a");
+  a.className = "btn"; a.href = formUrl; a.style.display = "block"; a.style.textAlign = "center"; a.style.textDecoration = "none";
+  a.textContent = "📝 Open today's attendance form";
+  document.getElementById("msg").appendChild(a);
+}
+
+async function markIt(useSession){
+  const body = { domain, coordinatorId };
+  if(!useSession){
+    body.employeeId = document.getElementById("employeeId").value.trim();
+    body.password   = document.getElementById("password").value;
+    if(!body.employeeId || !body.password){ setMsg("Employee ID and password are required.", "error"); return; }
+  }
+  const btn = document.getElementById(useSession ? "meBtn" : "submitBtn");
+  const label = btn.textContent;
   btn.disabled = true; btn.textContent = "Marking...";
   try{
     const r = await fetch("/qr-attendance/mark", {
-      method:"POST", headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({ employeeId, password, domain, coordinatorId })
+      method:"POST", headers:{ "Content-Type":"application/json" }, credentials:"same-origin",
+      body: JSON.stringify(body)
     });
     const d = await r.json();
     if(d.success){
-      setMsg("✅ " + (d.message || "Attendance marked successfully. Have a great day!"), "ok");
-      document.getElementById("form").style.display = "none";
+      setMsg("✅ " + (d.message || "Attendance marked. Have a great day!") + "<br>Opening today's attendance form…", "ok");
+      done(d.formUrl);
+      if(d.formUrl) setTimeout(() => { window.location.href = d.formUrl; }, 1800);
     } else if(d.alreadyMarked){
       setMsg("ℹ️ " + (d.message || "Attendance already marked for today."), "warn");
-      document.getElementById("form").style.display = "none";
+      done(d.formUrl);
     } else {
       setMsg("❌ " + (d.message || "Failed to mark attendance."), "error");
-      btn.disabled = false; btn.textContent = "✅ Mark My Attendance";
+      if(d.needsSignIn) useForm();
+      btn.disabled = false; btn.textContent = label;
     }
   }catch(e){
     setMsg("Network error. Please try again.", "error");
-    btn.disabled = false; btn.textContent = "✅ Mark My Attendance";
+    btn.disabled = false; btn.textContent = label;
   }
 }
 
-document.addEventListener("keydown", e => { if(e.key === "Enter") markIt(); });
+document.addEventListener("keydown", e => {
+  if(e.key === "Enter" && document.getElementById("form").style.display !== "none") markIt(false);
+});
 </script>
 <script src="ten-motion.js"></script>
 <script src="/password-toggle.js"></script>

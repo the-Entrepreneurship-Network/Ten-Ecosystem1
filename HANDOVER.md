@@ -341,6 +341,13 @@ loads.
   needs 75% of the working days so far (`utils/attendanceUtils.js`).
   - Students mark themselves once a day per domain; coordinators mark single,
     bulk or by QR.
+  - The coordinator's meeting QR (`/qr-attendance.html`) marks both sides in
+    one scan: the class attendance and the student's own, through the same
+    `markSelfAttendance` the dashboard button uses. A student signed in on
+    their phone just taps; anyone else enters Employee ID and password. The
+    page then opens the attendance Google Form. To have the form open filled
+    in, put the form's field ids (from its editor: ⋮ → "Get pre-filled link")
+    in `FIELDS` in `utils/attendanceForm.js`; until then it opens blank.
   - Students who joined through WhatsApp before the portal can get credit for
     earlier days, reviewed by HR.
   - HR's Attendance Monitor shows the picture; the admin can recalculate.
