@@ -577,6 +577,8 @@ class FallbackQuery {
     }
 }
 
+const guardedExec = require('./utils/guardedExec');
+
 function wrapModelWithFileFallback(model) {
     function isNetworkError(err) {
         if (!err) return false;
@@ -935,7 +937,7 @@ function wrapModelWithFileFallback(model) {
         const mongooseQuery = originalFind.apply(this, arguments);
         const originalExec = mongooseQuery.exec;
         mongooseQuery.exec = function() {
-            return originalExec.apply(this, arguments).catch(err => {
+            return guardedExec(originalExec, this, arguments, err => {
                 if (isNetworkError(err)) {
                     console.warn(`[DB FALLBACK] find failed with network error: "${err.message}". Falling back to file DB...`);
                     return runFindFallback(query, mongooseQuery._sort, mongooseQuery._limit);
@@ -963,7 +965,7 @@ function wrapModelWithFileFallback(model) {
         const mongooseQuery = originalFindOne.apply(this, arguments);
         const originalExec = mongooseQuery.exec;
         mongooseQuery.exec = function() {
-            return originalExec.apply(this, arguments).catch(err => {
+            return guardedExec(originalExec, this, arguments, err => {
                 if (isNetworkError(err)) {
                     console.warn(`[DB FALLBACK] findOne failed with network error: "${err.message}". Falling back...`);
                     return runFindOneFallback(query);
@@ -991,7 +993,7 @@ function wrapModelWithFileFallback(model) {
         const mongooseQuery = originalFindById.apply(this, arguments);
         const originalExec = mongooseQuery.exec;
         mongooseQuery.exec = function() {
-            return originalExec.apply(this, arguments).catch(err => {
+            return guardedExec(originalExec, this, arguments, err => {
                 if (isNetworkError(err)) {
                     console.warn(`[DB FALLBACK] findById failed with network error: "${err.message}". Falling back...`);
                     return runFindByIdFallback(id);
@@ -1019,7 +1021,7 @@ function wrapModelWithFileFallback(model) {
         const mongooseQuery = originalCountDocuments.apply(this, arguments);
         const originalExec = mongooseQuery.exec;
         mongooseQuery.exec = function() {
-            return originalExec.apply(this, arguments).catch(err => {
+            return guardedExec(originalExec, this, arguments, err => {
                 if (isNetworkError(err)) {
                     console.warn(`[DB FALLBACK] countDocuments failed with network error: "${err.message}". Falling back...`);
                     return runCountDocumentsFallback(query);
@@ -1047,7 +1049,7 @@ function wrapModelWithFileFallback(model) {
         const mongooseQuery = originalFindOneAndUpdate.apply(this, arguments);
         const originalExec = mongooseQuery.exec;
         mongooseQuery.exec = function() {
-            return originalExec.apply(this, arguments).catch(err => {
+            return guardedExec(originalExec, this, arguments, err => {
                 if (isNetworkError(err)) {
                     console.warn(`[DB FALLBACK] findOneAndUpdate failed with network error: "${err.message}". Falling back...`);
                     return runFindOneAndUpdateFallback(query, update, options);
@@ -1075,7 +1077,7 @@ function wrapModelWithFileFallback(model) {
         const mongooseQuery = originalFindByIdAndUpdate.apply(this, arguments);
         const originalExec = mongooseQuery.exec;
         mongooseQuery.exec = function() {
-            return originalExec.apply(this, arguments).catch(err => {
+            return guardedExec(originalExec, this, arguments, err => {
                 if (isNetworkError(err)) {
                     console.warn(`[DB FALLBACK] findByIdAndUpdate failed with network error: "${err.message}". Falling back...`);
                     return runFindByIdAndUpdateFallback(id, update, options);
@@ -1549,7 +1551,7 @@ function sanitizeStudent(student) {
     return safe;
 }
 
-const { findSessionStudent, sessionExpired } = require('./middleware/sessionAuth');
+const { findSessionStudent, sessionExpired, requireStaff } = require('./middleware/sessionAuth');
 const certFile = require('./services/certificateFile');
 
 function establishStudentSession(req, student) {
@@ -1648,6 +1650,22 @@ function requireStaffSession(req, res, next) {
 }
 
 const app = express();
+
+/*
+ * The roster's staff for the chat directory: ids, names and domains only,
+ * never the password material these maps also carry. Roster accounts have no
+ * database record, and the directory searched only the database, so a student
+ * who searched Messages for their coordinator or for HR found nobody.
+ */
+app.set('rosterStaff', [
+    ...Object.entries(COORDINATORS).map(([username, c]) => ({
+        id: c.email || username, username, role: 'coordinator', domain: c.domain || '',
+        name: c.name || ((c.domain || '') + ' coordinator').trim()
+    })),
+    ...Object.entries(HR_ACCOUNTS).map(([username, h]) => ({
+        id: h.email || username, username, role: 'hr', domain: '', name: h.name || username
+    }))
+]);
 
 const compression = require('compression');
 app.use(compression({
@@ -2393,12 +2411,22 @@ function rateLimitKey(req) {
     return who ? `u:${who}` : `ip:${ipKeyGenerator(req.ip)}`;
 }
 
+/*
+ * A signed-in person's reads get their own allowance, three times the size.
+ * Measured on a local copy: one walk through every section of the student
+ * dashboard is about 150 counted requests, and every open tab polls about six
+ * a minute on top. A new intern exploring in two tabs used up the shared 300
+ * and every section answered 429. Writes keep the original allowance, and
+ * anonymous callers still share one allowance per IP.
+ */
+const isSignedInRead = (req) => req.method === 'GET' && rateLimitKey(req).startsWith('u:');
+
 const apiLimiter = rateLimit({
     windowMs: RATE_LIMIT_CONFIG.authenticated.windowMs,
-    max: RATE_LIMIT_CONFIG.authenticated.max,
+    max: (req) => RATE_LIMIT_CONFIG.authenticated.max * (isSignedInRead(req) ? 3 : 1),
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: rateLimitKey,
+    keyGenerator: (req) => rateLimitKey(req) + (isSignedInRead(req) ? ':read' : ''),
     /*
      * Read-only polling is what the portal does constantly and is not what
      * this limiter exists to stop. Counting it is how a student who is simply
@@ -4416,6 +4444,28 @@ app.get("/api/ecosystem/users", requireHROrAdminAPI, async(req, res) => {
   } catch(err) {
     console.error("Users API error:", err);
     res.status(500).json({ success: false, error: "Failed to retrieve ecosystem directory." });
+  }
+});
+
+/*
+ * The approved mentors, for staff who assign them to bookings.
+ *
+ * Mentorship Bookings in the coordinator dashboard fetched the list above to
+ * fill its "assign a mentor" menu, but that list is everyone in the ecosystem
+ * and is HR and admin only, so coordinators got a 401 and a menu with nobody
+ * in it. This returns only approved mentors, and only what the menu shows.
+ */
+app.get("/api/ecosystem/mentors", requireStaff, async (req, res) => {
+  try {
+    const EcosystemUser = require("./models/EcosystemUser");
+    const MentorProfile = require("./models/MentorProfile");
+    const profiles = await MentorProfile.find({ verificationStatus: 'approved' }).select('userId headline expertise').lean();
+    const byUser = new Map(profiles.map((p) => [String(p.userId), p]));
+    const users = await EcosystemUser.find({ _id: { $in: [...byUser.keys()] }, role: 'mentor' }).select('fullName email role').lean();
+    res.json({ success: true, users: users.map((u) => ({ ...u, isVerified: true, profile: byUser.get(String(u._id)) })) });
+  } catch (err) {
+    console.error("Mentors API error:", err.message);
+    res.status(500).json({ success: false, error: "Failed to retrieve mentors." });
   }
 });
 
@@ -9374,14 +9424,24 @@ try{
 });
 
 // Verify-and-mark from the QR scan landing page.
-app.post("/qr-attendance/mark", async(req,res)=>{
+// Behind the sign-in limiters: it checks a password, like any sign-in.
+app.post("/qr-attendance/mark", loginIpLimiter, loginLimiter, async(req,res)=>{
 try{
     const { employeeId, password, domain, coordinatorId } = req.body || {};
     if(!employeeId || !password || !domain)
         return res.json({ success:false, message:"Employee ID, password and domain are required" });
 
-    const student = await Student.findOne({ employeeId, password });
+    // Passwords are bcrypt hashes. Looking the student up by { employeeId,
+    // password } matched the typed password against the hash itself, so no
+    // QR scan ever found anyone: "Invalid Employee ID or Password", every
+    // time. Checked the way /student-login checks it, lockout included.
+    const student = await Student.findOne({ employeeId });
     if(!student) return res.json({ success:false, message:"Invalid Employee ID or Password" });
+    if (await checkLockout(res, student, Student)) return;
+    let pwdMatch = false;
+    try { pwdMatch = await bcrypt.compare(String(password), student.password || ""); } catch (_) {}
+    if(!pwdMatch) return await recordFailedAttempt(res, student, Student, "Invalid Employee ID or Password");
+    await clearFailedAttempts(student, Student);
     if((student.domain || "") !== domain)
         return res.json({ success:false, message:"This QR is for a different domain" });
 

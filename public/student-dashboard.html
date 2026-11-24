@@ -6304,7 +6304,9 @@ async function acknowledgeInstructions() {
       });
       var data = await res.json();
       if (data.success) {
-        stu = data.student;
+        // Merged, not replaced: the server's copy has no hasSeenWelcome, and
+        // dropping the one set a moment ago brought the welcome back.
+        stu = Object.assign(stu, data.student);
       }
     }
     
@@ -6317,7 +6319,10 @@ async function acknowledgeInstructions() {
     
     updateDashboardAfterOnboarding(stu);
 
-    Swal.fire({
+    // On a pre-paid plan, "Your track is unlocked" opened at page load, under
+    // the onboarding steps, and is marked as seen when it opens. Replacing it
+    // here meant the student never saw what their plan includes.
+    if (!Swal.isVisible()) Swal.fire({
       icon: 'success',
       title: 'Onboarding Complete! 🎉',
       text: 'Welcome to your personalized student dashboard!',
@@ -6337,9 +6342,14 @@ async function acknowledgeInstructions() {
 function updateDashboardAfterOnboarding(stuData) {
   if (stuData.employeeId) {
      localStorage.setItem('employeeId', stuData.employeeId);
-     if (typeof employeeId !== 'undefined') {
-        employeeId = stuData.employeeId;
-     }
+     /*
+      * employeeId is a const, so it cannot be updated in place. Assigning it
+      * threw on every New Joiner's "I Have Read & Understood", and onboarding
+      * fell into its error path: a reload, and the welcome shown a second time.
+      * A changed ID still needs the page reloaded, since the rest of it uses
+      * the old one.
+      */
+     if (stuData.employeeId !== employeeId) { window.location.reload(); return; }
   }
 
   var pmEmpId = document.getElementById('pmEmpId');

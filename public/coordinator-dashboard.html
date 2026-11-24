@@ -3530,7 +3530,7 @@ async function loadMentorshipBookingsQueue() {
     } catch (_) {}
 
     try {
-      const resMentors = await fetch('/api/ecosystem/users');
+      const resMentors = await fetch('/api/ecosystem/mentors');
       const dataMentors = await resMentors.json();
       if (dataMentors.success && dataMentors.users) {
         mentors = dataMentors.users.filter(u => u.role === 'mentor' && u.isVerified);

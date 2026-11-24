@@ -212,6 +212,26 @@ describe('a student is identified by employee ID', () => {
     expect(ci.identityFromSession({ student: { name: 'No ID' } })).toBeNull();
   });
 
+  /*
+   * What /login actually writes for a student: the student, and the ecosystem
+   * keys every account gets. Read as an ecosystem account, the student had
+   * their email as id and no domain, and their own domain room was Forbidden.
+   */
+  it('is still the student, with their domain, when signed in through /login', () => {
+    const viaLogin = Object.assign({}, STUDENT_SESSION, {
+      ecosystemUserId: '6b054031760fe502e9cbba23',
+      ecosystemUserRole: 'student',
+      ecosystemUserEmail: 'anmol@example.com',
+      ecosystemUserName: 'Anmol Kumar'
+    });
+    const me = ci.identityFromSession(viaLogin);
+    expect(me.role).toBe('student');
+    expect(me.id).toBe('TEN/AI/1663');
+    expect(me.domain).toBe('Artificial Intelligence');
+    // Conversations started under the email in the meantime stay theirs.
+    expect(me.aliases).toEqual(expect.arrayContaining(['TEN/AI/1663', 'anmol@example.com']));
+  });
+
   it('treats a slash in an employee ID as a literal in the inbox query', () => {
     const me = ci.identityFromSession(STUDENT_SESSION);
     const filter = ci.dmRoomFilterFor(me);

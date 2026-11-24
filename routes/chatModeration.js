@@ -83,6 +83,13 @@ router.get("/directory", requireChatUser, async (req, res) => {
             const id = h.email || h.username;
             if (id && !chatIdentity.isSelf(me, id)) people.push({ id, name: h.name || id, role: "hr", domain: "" });
         }
+        // The roster's coordinators and HR have no database record; server.js
+        // hands over who they are (app.set('rosterStaff')).
+        for (const r of req.app.get("rosterStaff") || []) {
+            if (rx && !rx.test([r.name, r.id, r.username, r.domain].join(" "))) continue;
+            if (people.some((p) => p.id === r.id) || chatIdentity.isSelf(me, r.id)) continue;
+            people.push({ id: r.id, name: r.name, role: r.role, domain: r.domain });
+        }
 
         const studentFilter = {};
         if (rx) studentFilter.$or = [{ name: rx }, { employeeId: rx }, { email: rx }];

@@ -140,6 +140,11 @@ emulated there. Every page shows a banner, and `services/dbHealth.js` keeps
 reconnecting. After an outage, `scripts/import-fallback-db.js` (dry run, then
 `--write`) copies the rows written during the outage into MongoDB. The
 production deploy warns if `/api/health/db` does not report `"connected":true`.
+The fallback works by wrapping every model's query methods
+(`wrapModelWithFileFallback` in `server.js`). A wrapped `exec` must go through
+`utils/guardedExec.js`: populate calls `exec` with a callback, which returns
+nothing, and chaining `.catch` onto that made every `.populate()` throw while
+MongoDB was up.
 
 **Frontend.** Most pages are plain HTML, CSS and JavaScript in `public/`. Four
 products are React + Vite apps whose **built** output is committed to git
@@ -191,7 +196,7 @@ products are React + Vite apps whose **built** output is committed to git
 
 | Role | Account store | Sign-in | Session key |
 |---|---|---|---|
-| Student | `students` (one document per enrolment, §8.2). Register-hub students also get an `ecosystemusers` row | `POST /login` with email or employee ID | `req.session.student` (+ `sessionToken`) |
+| Student | `students` (one document per enrolment, §8.2). Register-hub students also get an `ecosystemusers` row | `POST /login` with email or employee ID | `req.session.student` (+ `sessionToken`). A register-hub student also gets the `ecosystemUser*` keys below; chat and notifications must still treat them as a student, identified by employee ID (`services/chatIdentity.js`), or their own Domain Chat answers 403 |
 | HR | **Two sources:** 8 roster accounts in `server.js` (`HR_ROSTER`, levels 1–8) with hashes from `HR_CREDENTIALS`; and `hrs` in the database (coordinators promoted to HR) | `POST /hr-login` | `req.session.hr` |
 | Coordinator | **Two sources:** 16 roster usernames, one per domain (`COORDINATOR_ROSTER`), with hashes from `COORDINATOR_CREDENTIALS`; and `coordinators` in the database | `POST /coordinator-login` | `req.session.coordinator` |
 | Admin | **One account, in `.env` only** (`ADMIN_USERNAME`, default `tenadmin`; `ADMIN_PASSWORD_HASH`) | `POST /api/admin-internal/login` (page `/ten-admin/login`) | `req.session.adminUser` |
@@ -353,7 +358,7 @@ loads.
   personal blocks, reports, admin moderation, and images under
   `uploads/chat/`.
 - **Complaints.** complaints@entrepreneurshipnetwork.net is on the landing
-  page footer, the student dashboard, the registration page, and under every
+  page footer, the student dashboard, the registration confirmation page, and under every
   email (`utils/mailer.js` `renderEmail`, with an "auto-generated" line). Its
   auto-reply lives in the mailbox settings, not in this code. The reply's two
   links open `/complaint-feedback?answer=yes|no`; the page records the answer
@@ -895,7 +900,7 @@ except SMTP, which fails silently (§11). By area:
 | Core | `NODE_ENV` (pm2 sets `production`), `PORT` (production 5000; the code's default is 3000), `BASE_URL` (absolute links in mail), `PORTAL_URL` (Growth "Draft with AI" links; separate from `BASE_URL`), `LOCAL_DB_DIR` |
 | Database | `MONGODB_URI`. Without it the app runs on the JSON fallback |
 | Logins | `ADMIN_USERNAME`, `GROWTH_USERNAME`, `GROWTH_PASSWORD_HASH`, `ASSISTANT_ADMIN_TOKEN`, `STUDIO_UNVERIFIED_GRANDFATHER_UNTIL` |
-| Rate limits | `RATE_AUTH_*`, `RATE_AUTH_USER_*`, `RATE_REGISTER_*`, `RATE_PAYMENT_*` (`RATE_PUBLIC_*` is read but never applied) |
+| Rate limits | `RATE_AUTH_*`, `RATE_AUTH_USER_*`, `RATE_REGISTER_*`, `RATE_PAYMENT_*` (`RATE_PUBLIC_*` is read but never applied). A signed-in person's GETs are counted apart from their writes and get three times `RATE_AUTH_USER_MAX` |
 | Email | `SMTP_USER` / `SES_SMTP_USER` / `EMAIL_USER`, the matching `*_PASS`, `*_HOST` (default: the Brevo relay), `*_PORT` (587), `SMTP_SERVICE`, `EMAIL_SECURE`, `EMAIL_FROM`, `HR_NOTIFY_EMAIL` |
 | AI | `GEMINI_API_KEY` (aliases `GOOGLE_API_KEY`, `GEMINI_KEY` work only in `utils/gemini.js`), `GEMINI_MODEL`, `IDEA_AGENT_ENABLED`, `IDEA_AGENT_CRON` |
 | Push | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_CONTACT` |
@@ -1279,11 +1284,11 @@ whoever takes over. Until then:
 | HR's certificate **name** correction is not stored, and the "correct once" lock does not hold | The PDF made at that moment has the corrected name, but a later regeneration prints the old one, and HR can correct without limit | Since #259 (18 Nov): `name` and `corrected` are missing from the `certificateDates` sub-schema in `models/Student.js`, so Mongoose drops them |
 | A Growth campaign interrupted by a deploy or restart stays `sending` for ever | The rest of its audience is never mailed, and its revenue shows ₹0 | `services/growthSender.js`: no resume or stop exists |
 | The `freeTenure` / `paidTenure` segments probably select the wrong students | `Student.tenure` holds labels ("1 Month"); the segments compare against keys ("1month") | `services/growthSegments.js`. **Check the stored values first** |
-| QR attendance marking always fails | Compares the typed password with a bcrypt hash | `/qr-attendance/mark` in `server.js` |
 | The coordinator notice board resets on every deploy | `notice.json` is live data tracked in git | move it into the database (`models/Notice.js` exists, unused) |
 | A revoked certificate comes back after the next deploy | The deploy restores missing files from its uploads backup | `deploy-production.yml` + admin revoke |
 | The `/student-portal/` page still shows six testimonials that were removed from its source on 2 September | The bundle was never rebuilt | rebuild `student-portal-app` and commit (§15.5) |
-| Admin console: certificate Approve/Reject buttons return 404. HR portal: "AI Queries" does nothing. Coordinator mentorship tab: empty mentor list. Mentor dashboard: expertise panel fails | Broken buttons | `ten-admin.html`, `hr-portal.html`, `coordinator-dashboard.html`, `mentor-dashboard.html` |
+| Admin console: certificate Approve/Reject buttons return 404 | `routes/adminPortal.js` lists pending requests but has no approve or reject route, and `CertificateRequest` has no rejected status to record a rejection in | `ten-admin.html`; HR's approve route is `routes/v2/hr.js`. Reject needs a product decision first |
+| The mentor dashboard's home tab lists two startups that do not exist (AgroVedic Systems, PayBlock Finance), its Assigned Students tab shows a template card ("Intern name"), and every mentor's rating (4.9/5) and logged hours (32 hrs) are the same fixed numbers | All fixed placeholder markup; nothing loads real assignments and there is no route for them. The Mentoring Calendar tab is real | `public/mentor-dashboard.html` (`#startupList`). Needs a decision: an honest empty state, or real assignments |
 | `EcosystemNotification` rows are written but never shown | HR never sees new-feedback alerts; founders, investors and contractors miss theirs (HR's approve/reject decision is now emailed) | §7.1 |
 | Paying an attendance or LOR fine does not release the certificate | The fine types the cron writes differ from the one the admin's approval clears | `routes/v2/certificates.js` vs `routes/adminPortal.js` |
 | Studio UTR claims have no approve button | The admin's pending queue lists only `mode: 'manual'`; Studio rows are `mode: 'upi'` | `routes/adminPortal.js`, `ten-admin.html` |
