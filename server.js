@@ -1651,6 +1651,22 @@ function requireStaffSession(req, res, next) {
 
 const app = express();
 
+/*
+ * The roster's staff for the chat directory: ids, names and domains only,
+ * never the password material these maps also carry. Roster accounts have no
+ * database record, and the directory searched only the database, so a student
+ * who searched Messages for their coordinator or for HR found nobody.
+ */
+app.set('rosterStaff', [
+    ...Object.entries(COORDINATORS).map(([username, c]) => ({
+        id: c.email || username, username, role: 'coordinator', domain: c.domain || '',
+        name: c.name || ((c.domain || '') + ' coordinator').trim()
+    })),
+    ...Object.entries(HR_ACCOUNTS).map(([username, h]) => ({
+        id: h.email || username, username, role: 'hr', domain: '', name: h.name || username
+    }))
+]);
+
 const compression = require('compression');
 app.use(compression({
     level: 6,
