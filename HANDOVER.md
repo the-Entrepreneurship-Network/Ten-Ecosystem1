@@ -196,7 +196,7 @@ products are React + Vite apps whose **built** output is committed to git
 
 | Role | Account store | Sign-in | Session key |
 |---|---|---|---|
-| Student | `students` (one document per enrolment, §8.2). Register-hub students also get an `ecosystemusers` row | `POST /login` with email or employee ID | `req.session.student` (+ `sessionToken`) |
+| Student | `students` (one document per enrolment, §8.2). Register-hub students also get an `ecosystemusers` row | `POST /login` with email or employee ID | `req.session.student` (+ `sessionToken`). A register-hub student also gets the `ecosystemUser*` keys below; chat and notifications must still treat them as a student, identified by employee ID (`services/chatIdentity.js`), or their own Domain Chat answers 403 |
 | HR | **Two sources:** 8 roster accounts in `server.js` (`HR_ROSTER`, levels 1–8) with hashes from `HR_CREDENTIALS`; and `hrs` in the database (coordinators promoted to HR) | `POST /hr-login` | `req.session.hr` |
 | Coordinator | **Two sources:** 16 roster usernames, one per domain (`COORDINATOR_ROSTER`), with hashes from `COORDINATOR_CREDENTIALS`; and `coordinators` in the database | `POST /coordinator-login` | `req.session.coordinator` |
 | Admin | **One account, in `.env` only** (`ADMIN_USERNAME`, default `tenadmin`; `ADMIN_PASSWORD_HASH`) | `POST /api/admin-internal/login` (page `/ten-admin/login`) | `req.session.adminUser` |
