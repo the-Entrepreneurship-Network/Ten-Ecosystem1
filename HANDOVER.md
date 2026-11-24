@@ -1284,7 +1284,6 @@ whoever takes over. Until then:
 | HR's certificate **name** correction is not stored, and the "correct once" lock does not hold | The PDF made at that moment has the corrected name, but a later regeneration prints the old one, and HR can correct without limit | Since #259 (18 Nov): `name` and `corrected` are missing from the `certificateDates` sub-schema in `models/Student.js`, so Mongoose drops them |
 | A Growth campaign interrupted by a deploy or restart stays `sending` for ever | The rest of its audience is never mailed, and its revenue shows ₹0 | `services/growthSender.js`: no resume or stop exists |
 | The `freeTenure` / `paidTenure` segments probably select the wrong students | `Student.tenure` holds labels ("1 Month"); the segments compare against keys ("1month") | `services/growthSegments.js`. **Check the stored values first** |
-| QR attendance marking always fails | Compares the typed password with a bcrypt hash | `/qr-attendance/mark` in `server.js` |
 | The coordinator notice board resets on every deploy | `notice.json` is live data tracked in git | move it into the database (`models/Notice.js` exists, unused) |
 | A revoked certificate comes back after the next deploy | The deploy restores missing files from its uploads backup | `deploy-production.yml` + admin revoke |
 | The `/student-portal/` page still shows six testimonials that were removed from its source on 2 September | The bundle was never rebuilt | rebuild `student-portal-app` and commit (§15.5) |

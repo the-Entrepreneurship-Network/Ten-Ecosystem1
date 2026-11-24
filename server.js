@@ -9424,14 +9424,24 @@ try{
 });
 
 // Verify-and-mark from the QR scan landing page.
-app.post("/qr-attendance/mark", async(req,res)=>{
+// Behind the sign-in limiters: it checks a password, like any sign-in.
+app.post("/qr-attendance/mark", loginIpLimiter, loginLimiter, async(req,res)=>{
 try{
     const { employeeId, password, domain, coordinatorId } = req.body || {};
     if(!employeeId || !password || !domain)
         return res.json({ success:false, message:"Employee ID, password and domain are required" });
 
-    const student = await Student.findOne({ employeeId, password });
+    // Passwords are bcrypt hashes. Looking the student up by { employeeId,
+    // password } matched the typed password against the hash itself, so no
+    // QR scan ever found anyone: "Invalid Employee ID or Password", every
+    // time. Checked the way /student-login checks it, lockout included.
+    const student = await Student.findOne({ employeeId });
     if(!student) return res.json({ success:false, message:"Invalid Employee ID or Password" });
+    if (await checkLockout(res, student, Student)) return;
+    let pwdMatch = false;
+    try { pwdMatch = await bcrypt.compare(String(password), student.password || ""); } catch (_) {}
+    if(!pwdMatch) return await recordFailedAttempt(res, student, Student, "Invalid Employee ID or Password");
+    await clearFailedAttempts(student, Student);
     if((student.domain || "") !== domain)
         return res.json({ success:false, message:"This QR is for a different domain" });
 
