@@ -31,7 +31,8 @@ function mount(session) {
     const agent = {
         mode: () => 'draft', lastRun: { at: null }, LABEL: {},
         seedStarters: jest.fn(async () => {}),
-        tryQuestion: jest.fn(async () => ({ answers: [], sensitive: false, reply: null }))
+        tryQuestion: jest.fn(async () => ({ answers: [], sensitive: false, reply: null })),
+        sendAllDrafts: jest.fn(async () => ({ sent: 0, handled: 0, failed: 0 }))
     };
     jest.doMock('../../models/SupportAnswer', () => SupportAnswer);
     jest.doMock('../../models/SupportTicket', () => SupportTicket);
@@ -98,4 +99,13 @@ test('deleting a starter answer switches it off; any other answer is deleted', a
     expect(SupportAnswer.deleteOne).not.toHaveBeenCalled();
     await request(app).delete('/api/support-desk/answers/64b000000000000000000002');
     expect(SupportAnswer.deleteOne).toHaveBeenCalledWith({ _id: '64b000000000000000000002' });
+});
+
+test('Send all is for HR only, and waits until the mailbox is connected', async () => {
+    expect((await request(mount({}).app).post('/api/support-desk/send-drafts')).status).toBe(401);
+    const { app, agent } = mount(HR);
+    const res = await request(app).post('/api/support-desk/send-drafts');
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/not connected/);
+    expect(agent.sendAllDrafts).not.toHaveBeenCalled();
 });

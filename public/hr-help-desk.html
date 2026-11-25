@@ -101,6 +101,7 @@ const MODE = {
 };
 let answers = [];
 let placeholders = [];
+let sendNote = '';
 
 async function api(path, options) {
   const r = await fetch('/api/support-desk' + path, Object.assign({ credentials: 'same-origin',
@@ -130,7 +131,30 @@ async function loadStatus() {
     (run.at ? '<p class="meta">Last checked ' + esc(when(run.at)) + (run.error ? ' — <b style="color:#fca5a5">' + esc(run.error) + '</b>' : '') + '</p>' : '') +
     '<div class="stats">' + Object.keys(OUTCOME).filter((k) => k !== 'working').map((k) =>
       '<span class="pill ' + k + '">' + esc(OUTCOME[k]) + ': ' + Number(counts[k] || 0) + '</span>').join('') +
-    '</div><p class="meta">Last 24 hours.</p>';
+    '</div><p class="meta">Last 24 hours.</p>' +
+    (s.connected && s.waiting ? '<div class="row"><button type="button" class="primary" id="sendAll">Send all ' +
+      Number(s.waiting) + (s.waiting === 1 ? ' waiting reply' : ' waiting replies') + '</button></div>' +
+      '<p class="meta">Each reply goes to its student as it is in Gmail’s Drafts now, with any edits you made there.</p>' : '') +
+    (sendNote ? '<p class="meta"><b>' + esc(sendNote) + '</b></p>' : '');
+  const btn = document.getElementById('sendAll');
+  if (btn) btn.onclick = () => sendAll(Number(s.waiting));
+}
+
+// HR's one click for every reply waiting as a draft.
+async function sendAll(n) {
+  if (!confirm('Send ' + n + (n === 1 ? ' reply' : ' replies') + ' to students now?')) return;
+  const btn = document.getElementById('sendAll');
+  btn.disabled = true; btn.textContent = 'Sending…';
+  try {
+    const r = await api('/send-drafts', { method: 'POST' });
+    sendNote = 'Sent ' + r.sent + (r.sent === 1 ? ' reply.' : ' replies.') +
+      (r.handled ? ' ' + r.handled + ' had already been sent or deleted in Gmail.' : '') +
+      (r.failed ? ' ' + r.failed + ' could not be sent. Press the button again.' : '');
+  } catch (e) {
+    sendNote = e.message;
+  }
+  await loadStatus();
+  loadTickets();
 }
 
 async function loadTickets() {

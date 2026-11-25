@@ -643,7 +643,9 @@ edits at `/hr-help-desk.html` (HR portal → **Help Desk**).
 - **Modes** (`SUPPORT_AGENT_MODE`):
   - `off`: the default.
   - `draft`: the reply waits as a Gmail draft, labelled **Help desk/Draft
-    ready**.
+    ready**. **Send all** on the Help Desk page sends every waiting draft as
+    it stands in Gmail, HR's edits included. A conversation whose draft is
+    gone was sent or deleted by a person, and is marked so.
   - `send`: the reply goes out at once, labelled **Help desk/Answered**. An
     email no answer fits gets "a member of our team will reply" and
     **Help desk/Needs reply**. Switch the mailbox's vacation responder off

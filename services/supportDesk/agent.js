@@ -402,6 +402,43 @@ async function runOnce({ gmail = require('./gmail') } = {}) {
     return lastRun;
 }
 
+/**
+ * HR's "Send all" button: every reply still waiting as a draft goes to its
+ * student, as it stands in Gmail now, HR's edits included. A waiting
+ * conversation with no draft left was sent or deleted in Gmail by a person.
+ */
+async function sendAllDrafts({ gmail = require('./gmail') } = {}) {
+    const out = { sent: 0, handled: 0, failed: 0 };
+    const waiting = (await SupportTicket.find({ action: 'drafted' })).filter((t) => t.threadId);
+    if (!waiting.length) return out;
+    const draftsIn = {};
+    for (const d of await gmail.listDrafts()) {
+        const threadId = d.message && d.message.threadId;
+        if (threadId) (draftsIn[threadId] = draftsIn[threadId] || []).push(d.id);
+    }
+    for (const threadId of new Set(waiting.map((t) => t.threadId))) {
+        const tickets = waiting.filter((t) => t.threadId === threadId);
+        const mark = (action, reason) => Promise.all(tickets.map((t) =>
+            SupportTicket.updateOne({ _id: t._id }, { $set: { action, reason } })));
+        const drafts = draftsIn[threadId] || [];
+        if (!drafts.length) {
+            await mark('human', 'Sent or deleted in Gmail by a person');
+            out.handled += tickets.length;
+            continue;
+        }
+        try {
+            for (const id of drafts) await gmail.sendDraft(id);
+            await mark('sent', 'Sent from the Help Desk page');
+            out.sent += drafts.length;
+            await gmail.labelThread(threadId, [LABEL.answered], [LABEL.draft]).catch(() => {});
+        } catch (err) {
+            console.error('[help desk] send draft', String((err && err.message) || err).slice(0, 200));
+            out.failed += 1;
+        }
+    }
+    return out;
+}
+
 /** What HR's "Try a question" box shows: the reply a stranger would get. */
 async function tryQuestion(text) {
     await seedStarters();
@@ -415,7 +452,7 @@ async function tryQuestion(text) {
 }
 
 module.exports = {
-    runOnce, tryQuestion, seedStarters, mode, lastRun, LABEL,
+    runOnce, sendAllDrafts, tryQuestion, seedStarters, mode, lastRun, LABEL,
     // for tests
     _internal: { cleanBody, bodyText, parseAddress, automated, verifiedSender, render, compose, tidyReply, nameFrom }
 };

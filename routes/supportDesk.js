@@ -49,9 +49,15 @@ router.get('/status', wrap(async (req, res) => {
         connected: gmail.configured(),
         lastRun: agent.lastRun,
         last24h,
+        waiting: await SupportTicket.countDocuments({ action: 'drafted' }),
         labels: agent.LABEL,
         placeholders: PLACEHOLDERS
     });
+}));
+
+router.post('/send-drafts', wrap(async (req, res) => {
+    if (!gmail.configured()) return res.status(400).json({ success: false, message: 'The help desk is not connected to complaints@ yet.' });
+    res.json(Object.assign({ success: true }, await agent.sendAllDrafts()));
 }));
 
 router.get('/tickets', wrap(async (req, res) => {
