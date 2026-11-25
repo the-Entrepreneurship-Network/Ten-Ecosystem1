@@ -37,13 +37,19 @@ function mount(session) {
     jest.doMock('../../models/SupportAnswer', () => SupportAnswer);
     jest.doMock('../../models/SupportTicket', () => SupportTicket);
     jest.doMock('../../services/supportDesk/agent', () => agent);
+    const bugAgent = {
+        ENGINES: ['claude', 'gemini', 'off'],
+        summary: jest.fn(async () => ({ engine: 'claude', down: false })),
+        setEngine: jest.fn(async (engine) => ({ engine, down: false }))
+    };
+    jest.doMock('../../services/supportDesk/bugAgent', () => bugAgent);
     jest.doMock('../../services/supportDesk/gmail', () => ({ configured: () => false }));
     jest.doMock('../../services/supportDesk/facts', () => ({ PLACEHOLDERS: [{ key: 'employeeId', label: 'their Employee ID' }] }));
     const app = express();
     app.use(express.json());
     app.use((req, _res, next) => { req.session = session; next(); });
     app.use('/api/support-desk', require('../../routes/supportDesk'));
-    return { app, SupportAnswer, agent };
+    return { app, SupportAnswer, agent, bugAgent };
 }
 
 const HR = { hr: { username: 'hr1', email: 'hr@ten.in' } };
@@ -64,6 +70,7 @@ test('HR sees the status, with the placeholders a personal answer can use', asyn
     const res = await request(app).get('/api/support-desk/status');
     expect(res.body).toEqual(expect.objectContaining({ success: true, mode: 'draft', connected: false }));
     expect(res.body.placeholders[0].key).toBe('employeeId');
+    expect(res.body.bugAgent).toEqual({ engine: 'claude', down: false });
 });
 
 test('listing the answers puts the starter answers in first', async () => {
@@ -108,4 +115,13 @@ test('Send all is for HR only, and waits until the mailbox is connected', async 
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/not connected/);
     expect(agent.sendAllDrafts).not.toHaveBeenCalled();
+});
+
+test('HR switches who handles website bug reports; only Claude, Gemini or Off, and only HR', async () => {
+    expect((await request(mount({}).app).post('/api/support-desk/bug-agent').send({ engine: 'gemini' })).status).toBe(401);
+    const { app, bugAgent } = mount(HR);
+    const res = await request(app).post('/api/support-desk/bug-agent').send({ engine: 'gemini' });
+    expect(res.body).toEqual({ success: true, bugAgent: { engine: 'gemini', down: false } });
+    expect((await request(app).post('/api/support-desk/bug-agent').send({ engine: 'chatgpt' })).status).toBe(400);
+    expect(bugAgent.setEngine).toHaveBeenCalledTimes(1);
 });

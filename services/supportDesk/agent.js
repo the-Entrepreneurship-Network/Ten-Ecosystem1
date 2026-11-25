@@ -25,13 +25,15 @@ const { escapeHtml, PORTAL_URL } = require('../../utils/mailer');
 const { match } = require('./matcher');
 const facts = require('./facts');
 const starterAnswers = require('./starterAnswers');
+const bugAgent = require('./bugAgent');
 
 const LABEL = {
     answered: 'Help desk/Answered',
     draft: 'Help desk/Draft ready',
     human: 'Help desk/Needs reply',
     teach: 'Help desk/Teach',
-    learned: 'Help desk/Learned'
+    learned: 'Help desk/Learned',
+    agent: 'Help desk/Bug agent'
 };
 // More than this many automatic replies a day to one sender is a conversation
 // with another robot, or a person going round in circles. Either way, a human.
@@ -227,6 +229,7 @@ async function claim(msg) {
 async function decide(gmail, me, msg, mail, answers) {
     const { from, subject, body } = mail;
     if (!from.email || from.email === me) return { action: 'skipped', reason: 'sent by the help desk itself' };
+    if (from.email === copyAddress()) return { action: 'skipped', reason: 'from the team inbox' };
     const auto = automated(msg, from);
     if (auto) return { action: 'skipped', reason: auto };
     const team = await teamHas(gmail, msg);
@@ -263,6 +266,28 @@ async function decide(gmail, me, msg, mail, answers) {
         : '';
 
     if (why) {
+        // The switch on the Help Desk page says Gemini: it writes the first reply to a
+        // report of a website problem. Touchy topics and busy senders still go to people.
+        const gem = !result.sensitive && recent < PER_SENDER_PER_DAY && LOOKS_LIKE_A_BUG.test(subject + '\n' + body)
+            && (await bugAgent.state()).engine === 'gemini'
+            ? await bugAgent.geminiReply({
+                subject, body, portalUrl: PORTAL_URL,
+                known: answers.map((a) => a.question + ': ' + render(a.answer, facts.STATIC)).join('\n\n').slice(0, 8000)
+            }).catch((err) => { console.error('[help desk] Gemini', String((err && err.message) || err).slice(0, 200)); return null; })
+            : null;
+        if (gem) {
+            const text = compose(firstName, [gem.reply]);
+            // Answered for good only when nothing is broken; otherwise the team follows up.
+            const labels = gem.kind === 'not-a-bug' ? [] : [LABEL.human];
+            if (mode() === 'send') {
+                await gmail.send(await rawReply({ me, to: from.email, subject, text, msg, auto: true }), msg.threadId);
+                await gmail.labelThread(msg.threadId, [LABEL.answered, ...labels]);
+            } else {
+                await gmail.createDraft(await rawReply({ me, to: from.email, subject, text, msg, auto: false }), msg.threadId);
+                await gmail.labelThread(msg.threadId, [LABEL.draft, ...labels]);
+            }
+            return Object.assign(base, { action: mode() === 'send' ? 'sent' : 'drafted', reason: 'Gemini: ' + gem.kind, answers: [] });
+        }
         // Say a person will answer, so nobody waits in silence; never into a loop.
         if (mode() === 'send' && recent < PER_SENDER_PER_DAY) {
             const text = compose(firstName, []);
@@ -311,7 +336,8 @@ async function handle(gmail, me, msg, answers, stats) {
         }, outcome)
     });
     stats[outcome.action] = (stats[outcome.action] || 0) + 1;
-    await copyTo(gmail, me, msg, mail, outcome);
+    // A copied email that reads like a website problem: the bug agent should see it now.
+    return (await copyTo(gmail, me, msg, mail, outcome)) && LOOKS_LIKE_A_BUG.test(mail.subject + '\n' + mail.body);
 }
 
 /**
@@ -322,8 +348,8 @@ async function handle(gmail, me, msg, answers, stats) {
  * Reply-To is the student. Robots and mail the team has answered stay out.
  */
 async function copyTo(gmail, me, msg, mail, outcome) {
-    const to = String(process.env.SUPPORT_COPY_TO || '').trim();
-    if (!to || outcome.action === 'skipped') return;
+    const to = copyAddress();
+    if (!to || outcome.action === 'skipped') return false;
     const fields = {
         from: { name: process.env.SUPPORT_FROM_NAME || 'TEN Support', address: me },
         to,
@@ -337,12 +363,50 @@ async function copyTo(gmail, me, msg, mail, outcome) {
         await gmail.send(await build(Object.assign({}, fields, {
             attachments: [{ filename: 'original.eml', contentType: 'message/rfc822', content: raw }]
         })));
+        return true;
     } catch (err) {
         // Too big to attach, most likely. The words still get through.
-        await gmail.send(await build(Object.assign({}, fields, { text: fields.text + '\n\n(Attachments: see complaints@.)' })))
-            .catch((e) => console.error('[help desk] copy', String((e && e.message) || e).slice(0, 200)));
+        return gmail.send(await build(Object.assign({}, fields, { text: fields.text + '\n\n(Attachments: see complaints@.)' })))
+            .then(() => true, (e) => { console.error('[help desk] copy', String((e && e.message) || e).slice(0, 200)); return false; });
     }
 }
+
+// ponytail: a word list, so a report phrased some other way waits for the bug
+// agent's next scheduled pass instead of waking it at once.
+const LOOKS_LIKE_A_BUG = new RegExp('\\b(?:' + [
+    'errors?|bugs?|crash(?:ed|es|ing)?|glitch|blank|stuck|freez(?:e|es|ing)|404|500',
+    'not (?:working|opening|loading|showing|visible|submitting|uploading|updating|responding|accepting)',
+    "(?:is|are|was|were)n'?t working|does(?:n'?t| not) work|won'?t (?:open|load|work)",
+    "can(?:'|no)?t (?:open|log ?in|sign ?in|upload|submit|see|access|download|click|find)|unable to"
+].join('|') + ')\\b', 'i');
+
+
+/** SUPPORT_COPY_TO, the team inbox (growth@): copies go there, and so do the bug agent's alerts. */
+const copyAddress = () => String(process.env.SUPPORT_COPY_TO || '').trim().toLowerCase();
+
+/**
+ * Claude's check-in: an email from the team inbox to complaints@ whose subject
+ * starts "[bug-agent]" (docs/bug-agent.md). Noted, filed under
+ * "Help desk/Bug agent" and out of the inbox, never answered or copied.
+ */
+async function checkIn(gmail, msg, notify) {
+    const from = parseAddress(header(msg, 'from')).email;
+    if (!copyAddress() || from !== copyAddress() || !/^\[bug-agent\]/i.test(header(msg, 'subject').trim())) return false;
+    await bugAgent.heartbeat(new Date(Number(msg.internalDate) || Date.now()), notify);
+    if (msg.threadId) await gmail.labelThread(msg.threadId, [LABEL.agent], ['INBOX']).catch(() => {});
+    return true;
+}
+
+/** The bug agent's alerts, by email to the team inbox. Never throws. */
+const notifier = (gmail) => async (subject, text) => {
+    const to = copyAddress();
+    if (!to) return;
+    try {
+        await gmail.send(await build({ from: { name: process.env.SUPPORT_FROM_NAME || 'TEN Support', address: me }, to, subject, text }));
+    } catch (err) {
+        console.error('[help desk] alert', String((err && err.message) || err).slice(0, 200));
+    }
+};
 
 // ── Learning from the team ─────────────────────────────────────────────────
 
@@ -405,7 +469,7 @@ let running = false;
 let me = '';
 const lastRun = { at: null, error: '', stats: {} };
 
-async function runOnce({ gmail = require('./gmail') } = {}) {
+async function runOnce({ gmail = require('./gmail'), wake = bugAgent.wake } = {}) {
     // Under pm2 cluster mode only worker 0 runs jobs, as the idea agent does.
     const worker = process.env.NODE_APP_INSTANCE;
     if (!(worker === undefined || worker === '0')) return lastRun;
@@ -420,12 +484,19 @@ async function runOnce({ gmail = require('./gmail') } = {}) {
         // Labelled by the help desk already: answered by another server
         // connected to the same mailbox (staging, say), with its own database.
         const done = await Promise.all([LABEL.answered, LABEL.draft, LABEL.human].map((n) => gmail.labelId(n)));
+        const notify = notifier(gmail);
+        let bugReport = false;
         for (const { id } of await gmail.listMessages(NEW_MAIL, 25)) {
             if (await SupportTicket.findOne({ gmailId: id })) continue;
             const msg = await gmail.getMessage(id);
             if ((msg.labelIds || []).some((l) => done.includes(l))) continue;
-            await handle(gmail, me, msg, answers, stats);
+            if (await checkIn(gmail, msg, notify)) { stats.checkIns = (stats.checkIns || 0) + 1; continue; }
+            if (await handle(gmail, me, msg, answers, stats)) bugReport = true;
         }
+        // Claude, when the switch says so. Once per run at most: the task takes 30
+        // starts an hour, and runs are 2 minutes apart.
+        if (bugReport && (await bugAgent.state()).engine === 'claude') stats.agentWoken = await wake(notify);
+        await bugAgent.check(notify);
         Object.assign(lastRun, { at: new Date(), error: '', stats });
     } catch (err) {
         Object.assign(lastRun, { at: new Date(), error: String((err && err.message) || err).slice(0, 300), stats });
@@ -488,5 +559,5 @@ async function tryQuestion(text) {
 module.exports = {
     runOnce, sendAllDrafts, tryQuestion, seedStarters, mode, lastRun, LABEL,
     // for tests
-    _internal: { cleanBody, bodyText, parseAddress, automated, verifiedSender, render, compose, tidyReply, nameFrom }
+    _internal: { LOOKS_LIKE_A_BUG, cleanBody, bodyText, parseAddress, automated, verifiedSender, render, compose, tidyReply, nameFrom }
 };

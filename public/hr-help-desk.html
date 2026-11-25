@@ -41,6 +41,9 @@ button{font:inherit;font-weight:800;font-size:13px;padding:10px 16px;min-height:
   border:1px solid var(--border-strong);background:transparent;color:var(--gold);cursor:pointer;}
 button.primary{background:var(--gold);color:#1a1208;border-color:transparent;}
 button.danger{border-color:rgba(239,68,68,.45);color:#fca5a5;}
+.note.alert{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.45);color:#fecaca;margin-top:12px;}
+.engine{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+.engine button[aria-pressed="true"]{background:var(--gold);color:#1a1208;border-color:transparent;}
 button:disabled{opacity:.45;cursor:not-allowed;}
 button:focus-visible{outline:2px solid var(--gold);outline-offset:3px;}
 .note{padding:13px 16px;border-radius:11px;background:rgba(212,175,55,.09);border:1px solid var(--border-strong);
@@ -102,6 +105,7 @@ const MODE = {
 let answers = [];
 let placeholders = [];
 let sendNote = '';
+let engineNote = '';
 
 async function api(path, options) {
   const r = await fetch('/api/support-desk' + path, Object.assign({ credentials: 'same-origin',
@@ -138,6 +142,46 @@ async function loadStatus() {
     (sendNote ? '<p class="meta"><b>' + esc(sendNote) + '</b></p>' : '');
   const btn = document.getElementById('sendAll');
   if (btn) btn.onclick = () => sendAll(Number(s.waiting));
+  if (s.bugAgent) showBugAgent(s.bugAgent);
+}
+
+// Who handles students' reports of website problems.
+const ENGINE = {
+  claude: ['Claude', 'The Claude bug agent fixes real bugs through a pull request and keeps the student told.'],
+  gemini: ['Gemini (free)', 'The server writes the first reply itself with the free Gemini key, and flags the email for the team.'],
+  off: ['Off', 'Neither. Reports wait for the team, as other emails do.']
+};
+
+function showBugAgent(b) {
+  const box = document.createElement('div');
+  const alert = b.down
+    ? '<div class="note alert" role="alert"><b>The Claude bug agent is not responding</b> since ' + esc(when(b.downSince)) +
+      ': ' + esc(b.downReason) + '. ' + (b.engine === 'gemini'
+        ? 'Gemini is answering reports meanwhile.'
+        : 'Switch to <b>Gemini (free)</b> below until it works again.') +
+      ' Then check the "TEN bug agent" scheduled task at claude.ai/code/routines.</div>'
+    : '';
+  const hint = (k) => k === 'claude' && !b.claudeReady ? ' — not set up on the server'
+    : k === 'gemini' && !b.geminiReady ? ' — needs GEMINI_API_KEY' : '';
+  box.innerHTML = '<h2 style="margin-top:18px">Website bug reports</h2>' + alert +
+    '<div class="engine" role="group" aria-label="Who handles website bug reports">' +
+    Object.keys(ENGINE).map((k) => '<button type="button" data-engine="' + k + '" aria-pressed="' + (b.engine === k) + '"' +
+      (k === 'gemini' && !b.geminiReady ? ' disabled' : '') + '>' + esc(ENGINE[k][0]) + '</button>').join('') + '</div>' +
+    '<p class="meta">' + esc(ENGINE[b.engine][1] + hint(b.engine)) +
+    (b.lastPassAt ? ' Claude last checked in ' + esc(when(b.lastPassAt)) + '.' : '') + '</p>' +
+    (engineNote ? '<p class="meta"><b>' + esc(engineNote) + '</b></p>' : '');
+  document.getElementById('status').appendChild(box);
+  box.querySelectorAll('[data-engine]').forEach((el) => { el.onclick = () => setEngine(el.dataset.engine); });
+}
+
+async function setEngine(engine) {
+  try {
+    await api('/bug-agent', { method: 'POST', body: JSON.stringify({ engine }) });
+    engineNote = 'Website bug reports now go to ' + ENGINE[engine][0] + '.';
+  } catch (e) {
+    engineNote = e.message;
+  }
+  loadStatus();
 }
 
 // HR's one click for every reply waiting as a draft.
