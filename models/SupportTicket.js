@@ -5,7 +5,7 @@
  *
  * Written BEFORE anything is sent: `gmailId` is unique, so a second process,
  * or the next run, cannot answer the same email twice. Kept 90 days; it holds
- * a student's address and the start of their message, nothing more.
+ * a student's address, the start of their message and the reply it sent.
  */
 const mongoose = require('mongoose');
 
@@ -16,6 +16,8 @@ const supportTicketSchema = new mongoose.Schema({
     fromName:   { type: String, default: '' },
     subject:    { type: String, default: '', maxlength: 300 },
     excerpt:    { type: String, default: '', maxlength: 600 },
+    // The reply as the help desk sent or drafted it, for HR to check on the Help Desk page.
+    reply:      { type: String, default: '', maxlength: 5000 },
     action:     { type: String, enum: ['working', 'sent', 'drafted', 'held', 'human', 'skipped', 'failed'], default: 'working' },
     reason:     { type: String, default: '' },
     answers:    { type: [{ _id: false, answerId: String, question: String, score: Number }], default: [] },

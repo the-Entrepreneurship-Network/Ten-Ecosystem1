@@ -286,14 +286,14 @@ async function decide(gmail, me, msg, mail, answers) {
                 await gmail.createDraft(await rawReply({ me, to: from.email, subject, text, msg, auto: false }), msg.threadId);
                 await gmail.labelThread(msg.threadId, [LABEL.draft, ...labels]);
             }
-            return Object.assign(base, { action: mode() === 'send' ? 'sent' : 'drafted', reason: 'Gemini: ' + gem.kind, answers: [] });
+            return Object.assign(base, { action: mode() === 'send' ? 'sent' : 'drafted', reason: 'Gemini: ' + gem.kind, answers: [], reply: text.slice(0, 5000) });
         }
         // Say a person will answer, so nobody waits in silence; never into a loop.
         if (mode() === 'send' && recent < PER_SENDER_PER_DAY) {
             const text = compose(firstName, []);
             await gmail.send(await rawReply({ me, to: from.email, subject, text, msg, auto: true }), msg.threadId);
             await gmail.labelThread(msg.threadId, [LABEL.human]);
-            return Object.assign(base, { action: 'held', reason: why, answers: [] });
+            return Object.assign(base, { action: 'held', reason: why, answers: [], reply: text.slice(0, 5000) });
         }
         await gmail.labelThread(msg.threadId, [LABEL.human]);
         return Object.assign(base, { action: 'human', reason: why, answers: [] });
@@ -310,7 +310,7 @@ async function decide(gmail, me, msg, mail, answers) {
     for (const u of used) {
         await SupportAnswer.updateOne({ _id: u.answerId }, { $inc: { uses: 1 }, $set: { lastUsedAt: new Date() } });
     }
-    return Object.assign(base, { action: mode() === 'send' ? 'sent' : 'drafted', reason: '' });
+    return Object.assign(base, { action: mode() === 'send' ? 'sent' : 'drafted', reason: '', reply: text.slice(0, 5000) });
 }
 
 async function handle(gmail, me, msg, answers, stats) {
