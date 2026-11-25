@@ -99,6 +99,9 @@ module.exports = {
         api('GET', '/threads?' + querystring.stringify({ labelIds: await labelId(name), maxResults: max })).then((r) => r.threads || []),
     send: (raw, threadId) => api('POST', '/messages/send', { raw, threadId }),
     createDraft: (raw, threadId) => api('POST', '/drafts', { message: { raw, threadId } }),
+    // ponytail: one page of 500 drafts; page through if the mailbox ever keeps more.
+    listDrafts: () => api('GET', '/drafts?maxResults=500').then((r) => r.drafts || []),
+    sendDraft: (draftId) => api('POST', '/drafts/send', { id: draftId }),
     labelThread: async (threadId, add = [], remove = []) => api('POST', `/threads/${id(threadId)}/modify`, {
         addLabelIds: await Promise.all(add.map(labelId)),
         removeLabelIds: await Promise.all(remove.map(labelId))

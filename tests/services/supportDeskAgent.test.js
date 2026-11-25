@@ -75,7 +75,8 @@ function stores() {
         }),
         findOne: jest.fn(async (q) => tickets.find((t) => matches(t, q)) || null),
         updateOne: jest.fn(async ({ _id }, { $set }) => { Object.assign(tickets.find((t) => t._id === _id), $set); }),
-        countDocuments: jest.fn(async (q) => tickets.filter((t) => matches(t, q)).length)
+        countDocuments: jest.fn(async (q) => tickets.filter((t) => matches(t, q)).length),
+        find: jest.fn(async (q) => tickets.filter((t) => matches(t, q)))
     };
     const SupportAnswer = {
         rows: answers,
@@ -291,5 +292,43 @@ describe('reading mail', () => {
         expect(t.verifiedSender(forged, t.parseAddress('asha@gmail.com'))).toBe(false);
         expect(t.verifiedSender(mail({ verified: true }), t.parseAddress('asha@gmail.com'))).toBe(true);
         expect(t.verifiedSender(mail({ verified: true }), t.parseAddress('asha@other.in'))).toBe(false);
+    });
+});
+
+describe('Send all', () => {
+    // t1's draft is still waiting; t2's was already sent or deleted in Gmail by a person.
+    function waitingDrafts() {
+        const gmail = fakeGmail({ messages: [mail(), mail({ id: 'm2', threadId: 't2', from: 'Ravi <ravi@gmail.com>' })] });
+        gmail.listDrafts = jest.fn(async () => [{ id: 'd1', message: { threadId: 't1' } }, { id: 'mine', message: { threadId: 'hr-own' } }]);
+        gmail.sendDraft = jest.fn(async () => ({}));
+        return gmail;
+    }
+
+    test('every waiting reply goes out as it stands in Gmail, once, and nothing else is sent', async () => {
+        const { agent, SupportTicket } = load('draft');
+        const gmail = waitingDrafts();
+        await agent.runOnce({ gmail });
+        expect(SupportTicket.rows.map((t) => t.action)).toEqual(['drafted', 'drafted']);
+
+        expect(await agent.sendAllDrafts({ gmail })).toEqual({ sent: 1, handled: 1, failed: 0 });
+        expect(gmail.sendDraft.mock.calls).toEqual([['d1']]);
+        expect(gmail.labels).toContainEqual({ threadId: 't1', add: ['Help desk/Answered'], remove: ['Help desk/Draft ready'] });
+        expect(SupportTicket.rows.map((t) => t.action)).toEqual(['sent', 'human']);
+
+        expect(await agent.sendAllDrafts({ gmail })).toEqual({ sent: 0, handled: 0, failed: 0 });
+        expect(gmail.sendDraft).toHaveBeenCalledTimes(1);
+    });
+
+    test('a reply Gmail refuses stays waiting for the next press', async () => {
+        const { agent, SupportTicket } = load('draft');
+        const gmail = waitingDrafts();
+        gmail.sendDraft = jest.fn().mockRejectedValueOnce(new Error('Gmail 500')).mockResolvedValue({});
+        await agent.runOnce({ gmail });
+        const quiet = jest.spyOn(console, 'error').mockImplementation(() => {});
+        expect(await agent.sendAllDrafts({ gmail })).toEqual({ sent: 0, handled: 1, failed: 1 });
+        quiet.mockRestore();
+        expect(SupportTicket.rows[0].action).toBe('drafted');
+        expect(await agent.sendAllDrafts({ gmail })).toEqual({ sent: 1, handled: 0, failed: 0 });
+        expect(SupportTicket.rows[0].action).toBe('sent');
     });
 });
