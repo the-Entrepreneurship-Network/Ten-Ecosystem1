@@ -173,6 +173,10 @@ function toHtml(text) {
         '</div>';
 }
 
+/** An email as Gmail's API wants it: raw RFC 822, base64url. */
+const build = (fields) => new Promise((resolve, reject) => new MailComposer(fields).compile().build(
+    (err, buf) => (err ? reject(err) : resolve(toB64url(buf)))));
+
 /** The reply as Gmail wants it: raw, base64url, threaded under the student's message. */
 function rawReply({ me, to, subject, text, msg, auto }) {
     const id = header(msg, 'message-id');
@@ -189,8 +193,7 @@ function rawReply({ me, to, subject, text, msg, auto }) {
     }
     // RFC 3834: tells other auto-responders not to answer this one.
     if (auto) fields.headers = { 'Auto-Submitted': 'auto-replied' };
-    return new Promise((resolve, reject) => new MailComposer(fields).compile().build(
-        (err, buf) => (err ? reject(err) : resolve(toB64url(buf)))));
+    return build(fields);
 }
 
 // ── One email ──────────────────────────────────────────────────────────────
@@ -308,6 +311,37 @@ async function handle(gmail, me, msg, answers, stats) {
         }, outcome)
     });
     stats[outcome.action] = (stats[outcome.action] || 0) + 1;
+    await copyTo(gmail, me, msg, mail, outcome);
+}
+
+/**
+ * A copy of each student email for the mailbox in SUPPORT_COPY_TO (growth@),
+ * where the bug agent reads them. complaints@ cannot forward by itself without
+ * a two-step code only one person has, but the help desk can already send.
+ * The original rides along as an attachment, screenshots included, and
+ * Reply-To is the student. Robots and mail the team has answered stay out.
+ */
+async function copyTo(gmail, me, msg, mail, outcome) {
+    const to = String(process.env.SUPPORT_COPY_TO || '').trim();
+    if (!to || outcome.action === 'skipped') return;
+    const fields = {
+        from: { name: process.env.SUPPORT_FROM_NAME || 'TEN Support', address: me },
+        to,
+        replyTo: mail.from.email,
+        subject: '[complaints@] ' + (mail.subject.trim() || '(no subject)'),
+        text: `From: ${mail.from.name ? mail.from.name + ' ' : ''}<${mail.from.email}>\n` +
+            `Help desk: ${outcome.action}${outcome.reason ? ' (' + outcome.reason + ')' : ''}\n\n${mail.body}`
+    };
+    try {
+        const raw = Buffer.from(await gmail.getRaw(msg.id), 'base64');
+        await gmail.send(await build(Object.assign({}, fields, {
+            attachments: [{ filename: 'original.eml', contentType: 'message/rfc822', content: raw }]
+        })));
+    } catch (err) {
+        // Too big to attach, most likely. The words still get through.
+        await gmail.send(await build(Object.assign({}, fields, { text: fields.text + '\n\n(Attachments: see complaints@.)' })))
+            .catch((e) => console.error('[help desk] copy', String((e && e.message) || e).slice(0, 200)));
+    }
 }
 
 // ── Learning from the team ─────────────────────────────────────────────────

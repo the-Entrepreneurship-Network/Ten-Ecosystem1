@@ -94,6 +94,7 @@ module.exports = {
     listMessages: (q, max = 25) =>
         api('GET', '/messages?' + querystring.stringify({ q, maxResults: max })).then((r) => r.messages || []),
     getMessage: (messageId) => api('GET', `/messages/${id(messageId)}?format=full`),
+    getRaw: (messageId) => api('GET', `/messages/${id(messageId)}?format=raw`).then((m) => m.raw || ''),
     getThread: (threadId) => api('GET', `/threads/${id(threadId)}?format=full`),
     threadsLabelled: async (name, max = 20) =>
         api('GET', '/threads?' + querystring.stringify({ labelIds: await labelId(name), maxResults: max })).then((r) => r.threads || []),
