@@ -55,36 +55,63 @@ function pick(threads, { me, copyTo, seen }) {
     return out;
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * One Gmail call, unhurried. Gmail allows a mailbox only so much work a
+ * minute, and the live help desk shares it: a second between calls, and a
+ * "slow down" (403 quota or rate limit, 429) is waited out, up to three times.
+ */
+async function gently(call, wait = sleep) {
+    for (let tries = 0; ; tries += 1) {
+        await wait(1000);
+        try {
+            return await call();
+        } catch (err) {
+            const slowDown = err && (err.status === 429 || (err.status === 403 && /quota|rate.?limit/i.test(err.message)));
+            if (!slowDown || tries >= 3) throw err;
+            console.log('Gmail asked for a pause. Waiting a minute...');
+            await wait(61000);
+        }
+    }
+}
+
 async function main() {
     const [day, flag] = process.argv.slice(2);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day || '')) throw new Error('Usage: node scripts/bug-agent-backfill.js YYYY-MM-DD [--send]');
     const copyTo = String(process.env.SUPPORT_COPY_TO || '').trim().toLowerCase();
     if (!gmail.configured() || !copyTo) throw new Error('The help desk is not connected, or SUPPORT_COPY_TO is not set in .env.');
-    const me = String((await gmail.profile()).emailAddress || '').toLowerCase();
+    const me = String((await gently(() => gmail.profile())).emailAddress || '').toLowerCase();
 
     const seen = new Set();
-    for (const { id } of await gmail.listMessages(`in:sent to:${copyTo} subject:"[complaints@]"`, 500)) {
-        const copy = await gmail.getMessage(id);
+    for (const { id } of await gently(() => gmail.listMessages(`in:sent to:${copyTo} subject:"[complaints@]"`, 500))) {
+        const copy = await gently(() => gmail.getMessage(id));
         seen.add(desk.parseAddress(desk.header(copy, 'reply-to')).email + '|' + topic(desk.header(copy, 'subject').replace(/^\[complaints@\]\s*/i, '')));
     }
 
     const since = Math.floor(Date.parse(day + 'T00:00:00+05:30') / 1000);
     const until = Math.floor(Date.now() / 1000) - 300; // anything newer, the help desk copies itself
     // ponytail: one page of 500 messages, about two weeks of complaints@.
-    const found = await gmail.listMessages(`after:${since} before:${until} -from:me -category:promotions -category:social -category:forums`, 500);
+    const found = await gently(() => gmail.listMessages(`after:${since} before:${until} -from:me -category:promotions -category:social -category:forums`, 500));
+    const ids = [...new Set(found.map((m) => m.threadId))];
+    console.log(`Reading ${ids.length} conversations, one a second (about ${Math.ceil(ids.length / 60)} min)...`);
     const threads = [];
-    for (const threadId of new Set(found.map((m) => m.threadId))) threads.push(await gmail.getThread(threadId));
+    for (const threadId of ids) threads.push(await gently(() => gmail.getThread(threadId)));
 
     const todo = pick(threads, { me, copyTo, seen });
+    let failed = 0;
     for (const c of todo) {
         console.log(`${fmt(c.msg.internalDate)}  ${c.mail.from.email}  ${c.mail.subject || '(no subject)'}`);
-        if (flag === '--send' && !(await desk.copyTo(gmail, me, c.msg, c.mail, c.outcome))) console.log('  could not copy this one');
+        if (flag === '--send' && !(await gently(() => desk.copyTo(gmail, me, c.msg, c.mail, c.outcome)))) {
+            failed += 1;
+            console.log('  could not copy this one');
+        }
     }
-    console.log(flag === '--send'
-        ? `${todo.length} copied to ${copyTo}. The bug agent handles them on its next run.`
-        : `${todo.length} to copy. Run it again with --send to copy them.`);
+    console.log(flag !== '--send' ? `${todo.length} to copy. Run it again with --send to copy them.`
+        : `${todo.length - failed} copied to ${copyTo}. The bug agent handles them on its next run.` +
+          (failed ? ` ${failed} failed: run it again later to copy just those.` : ''));
 }
 
 if (require.main === module) main().catch((err) => { console.error(err.message || err); process.exit(1); });
 
-module.exports = { pick, topic };
+module.exports = { pick, topic, gently };

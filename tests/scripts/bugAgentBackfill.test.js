@@ -5,7 +5,7 @@
  * bug agent. Only website problems it has not seen, from people, with the
  * whole conversation and never an unsent draft.
  */
-const { pick, topic } = require('../../scripts/bug-agent-backfill');
+const { pick, topic, gently } = require('../../scripts/bug-agent-backfill');
 
 let n = 0;
 function msg(from, subject, text, { labelIds = [], headers = [] } = {}) {
@@ -52,4 +52,18 @@ test('what the agent has seen, other questions, robots and its own check-ins sta
     expect(pick(threads, opts(['riya@mail.test|upload']))).toEqual([]);
     expect(topic('Re: Fwd: Upload ')).toBe('upload');
     expect(topic('')).toBe('(no subject)');
+});
+
+test('a "slow down" from Gmail is waited out; any other refusal is not', async () => {
+    const wait = jest.fn(async () => {});
+    const quota = Object.assign(new Error("Gmail GET /threads/t: 403 Quota exceeded for quota metric 'Total Query Cost'"), { status: 403 });
+    const call = jest.fn().mockRejectedValueOnce(quota).mockResolvedValueOnce('thread');
+    expect(await gently(call, wait)).toBe('thread');
+    expect(call).toHaveBeenCalledTimes(2);
+    expect(wait).toHaveBeenCalledWith(61000);
+
+    const denied = Object.assign(new Error('Gmail GET /threads/t: 403 Insufficient Permission'), { status: 403 });
+    const once = jest.fn().mockRejectedValue(denied);
+    await expect(gently(once, wait)).rejects.toThrow(/Insufficient Permission/);
+    expect(once).toHaveBeenCalledTimes(1);
 });
