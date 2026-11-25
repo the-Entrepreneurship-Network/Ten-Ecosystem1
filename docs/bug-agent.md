@@ -51,6 +51,11 @@ the team is emailed. Then, if nothing is new, say "Nothing new." and stop.
 
 ## For each new email
 
+If the copy's body says just `Help desk: sent` or `Help desk: drafted`, with
+nothing in brackets, one of the help desk's saved answers already went to the
+student. Label it `Bug agent/Done` and do nothing else. If the student writes
+back and no saved answer fits, that reaches you as a new copy.
+
 If the copy's body says `Help desk: sent (Gemini: …)` or
 `Help desk: drafted (Gemini: …)`, the student already has a first reply from
 Gemini, written while you were switched off. Do not send another first reply.
@@ -92,6 +97,37 @@ description names that thread.
   merge has succeeded: reply that it is fixed and to try again (and to reply
   if it still happens). Label `Bug agent/Done`.
 - Closed without merging: label `Bug agent/Needs person`.
+
+## Teach the help desk
+
+The help desk answers from its saved answers for free, with no AI, and the
+Gemini switch reads them too. The portal does not wake you for an email a saved
+answer covers, so every answer you add is a question you are not woken for
+again.
+
+When your reply would help the next student with the same problem (how a page
+works and what to do, or that a bug is fixed and live), add an answer to
+`services/supportDesk/starterAnswers.js`. Read the note at the top of that
+file first: some topics must always reach a person. Each answer has:
+
+- `key`: short, unique, kebab-case;
+- `question`: the question as a student would ask it;
+- `examples`: five to ten ways students phrase it, short, with no names or IDs;
+- `answer`: the answer only, in plain English. No greeting or sign-off (the
+  help desk adds them), nothing about one student, and no dates promised.
+
+If a saved answer already covers it, add your phrasings to its `examples`
+instead. Never teach a request for more details, or anything about one
+student's account.
+
+Where the answer goes:
+- with a fix: in the fix's own pull request, worded for after the fix is live;
+- otherwise: on the branch `claude/bug-agent-answers`, in one pull request
+  titled `Help desk: answers from the bug agent`. If that pull request is open,
+  add to it. If it is merged, start the branch again from `main` and open a new
+  one (CLAUDE.md).
+
+An answer starts working once its pull request is merged and deployed.
 
 ## Replies
 

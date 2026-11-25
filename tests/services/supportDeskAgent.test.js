@@ -412,13 +412,25 @@ describe('Waking the bug agent (BUG_AGENT_FIRE_URL, BUG_AGENT_TOKEN)', () => {
         process.env.SUPPORT_COPY_TO = 'growth@entrepreneurshipnetwork.net';
         const { agent } = load('draft');
         const gmail = fakeGmail({ messages: [
-            mail({ body: 'my task journey page is not working' }),
-            mail({ id: 'm2', threadId: 't2', from: 'Ravi <ravi@gmail.com>', body: 'cant login to the portal, error 500' })
+            mail({ subject: 'task journey', body: 'my task journey page is not working' }),
+            mail({ id: 'm2', threadId: 't2', from: 'Ravi <ravi@gmail.com>', subject: 'site down', body: 'cant login to the portal, error 500' })
         ] });
         gmail.getRaw = jest.fn(async () => b64('Subject: x\r\n\r\nbody'));
         const wake = jest.fn(async () => true);
         await agent.runOnce({ gmail, wake });
         expect(wake).toHaveBeenCalledTimes(1);
+    });
+
+    test('a website problem a saved answer already covers is copied but does not wake it', async () => {
+        process.env.SUPPORT_COPY_TO = 'growth@entrepreneurshipnetwork.net';
+        const { agent } = load('draft');
+        const gmail = fakeGmail({ messages: [mail({ body: "I can't find my employee id anywhere" })] });
+        gmail.getRaw = jest.fn(async () => b64('x'));
+        const wake = jest.fn(async () => true);
+        await agent.runOnce({ gmail, wake });
+        expect(gmail.sent).toHaveLength(1);
+        expect(gmail.sent[0].raw).toContain('Help desk: drafted');
+        expect(wake).not.toHaveBeenCalled();
     });
 
     test('ordinary questions, and emails that were not copied, do not wake it', async () => {
