@@ -18,6 +18,7 @@
  * "Help desk/Teach" to that conversation, and the next run saves the student's
  * question with your reply as a new answer.
  */
+const https = require('https');
 const MailComposer = require('nodemailer/lib/mail-composer');
 const SupportAnswer = require('../../models/SupportAnswer');
 const SupportTicket = require('../../models/SupportTicket');
@@ -311,7 +312,8 @@ async function handle(gmail, me, msg, answers, stats) {
         }, outcome)
     });
     stats[outcome.action] = (stats[outcome.action] || 0) + 1;
-    await copyTo(gmail, me, msg, mail, outcome);
+    // A copied email that reads like a website problem: the bug agent should see it now.
+    return (await copyTo(gmail, me, msg, mail, outcome)) && LOOKS_LIKE_A_BUG.test(mail.subject + '\n' + mail.body);
 }
 
 /**
@@ -323,7 +325,7 @@ async function handle(gmail, me, msg, answers, stats) {
  */
 async function copyTo(gmail, me, msg, mail, outcome) {
     const to = String(process.env.SUPPORT_COPY_TO || '').trim();
-    if (!to || outcome.action === 'skipped') return;
+    if (!to || outcome.action === 'skipped') return false;
     const fields = {
         from: { name: process.env.SUPPORT_FROM_NAME || 'TEN Support', address: me },
         to,
@@ -337,11 +339,56 @@ async function copyTo(gmail, me, msg, mail, outcome) {
         await gmail.send(await build(Object.assign({}, fields, {
             attachments: [{ filename: 'original.eml', contentType: 'message/rfc822', content: raw }]
         })));
+        return true;
     } catch (err) {
         // Too big to attach, most likely. The words still get through.
-        await gmail.send(await build(Object.assign({}, fields, { text: fields.text + '\n\n(Attachments: see complaints@.)' })))
-            .catch((e) => console.error('[help desk] copy', String((e && e.message) || e).slice(0, 200)));
+        return gmail.send(await build(Object.assign({}, fields, { text: fields.text + '\n\n(Attachments: see complaints@.)' })))
+            .then(() => true, (e) => { console.error('[help desk] copy', String((e && e.message) || e).slice(0, 200)); return false; });
     }
+}
+
+// ponytail: a word list, so a report phrased some other way waits for the bug
+// agent's next scheduled pass instead of waking it at once.
+const LOOKS_LIKE_A_BUG = new RegExp('\\b(?:' + [
+    'errors?|bugs?|crash(?:ed|es|ing)?|glitch|blank|stuck|freez(?:e|es|ing)|404|500',
+    'not (?:working|opening|loading|showing|visible|submitting|uploading|updating|responding|accepting)',
+    "(?:is|are|was|were)n'?t working|does(?:n'?t| not) work|won'?t (?:open|load|work)",
+    "can(?:'|no)?t (?:open|log ?in|sign ?in|upload|submit|see|access|download|click|find)|unable to"
+].join('|') + ')\\b', 'i');
+
+/**
+ * Starts the bug agent, a Claude scheduled task, through its API trigger, so a
+ * report is looked at now rather than at the agent's next scheduled pass.
+ * BUG_AGENT_FIRE_URL and BUG_AGENT_TOKEN come from that task's API trigger in
+ * claude.ai/code/routines. The token is never logged.
+ */
+function wakeAgent() {
+    const url = String(process.env.BUG_AGENT_FIRE_URL || '').trim();
+    const token = String(process.env.BUG_AGENT_TOKEN || '').trim();
+    if (!url || !token) return Promise.resolve(false);
+    const body = JSON.stringify({ text: 'The portal copied a new student email that may report a website problem to growth@.' });
+    return new Promise((resolve) => {
+        const req = https.request(url, {
+            method: 'POST',
+            timeout: 15000,
+            headers: {
+                Authorization: 'Bearer ' + token,
+                'anthropic-version': '2023-06-01',
+                'anthropic-beta': 'experimental-cc-routine-2026-04-01',
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(body)
+            }
+        }, (res) => {
+            res.resume();
+            res.on('end', () => {
+                if (res.statusCode !== 200) console.error('[help desk] waking the bug agent: HTTP', res.statusCode);
+                resolve(res.statusCode === 200);
+            });
+        });
+        req.on('timeout', () => req.destroy(new Error('timed out')));
+        req.on('error', (e) => { console.error('[help desk] waking the bug agent:', e.message); resolve(false); });
+        req.end(body);
+    });
 }
 
 // ── Learning from the team ─────────────────────────────────────────────────
@@ -405,7 +452,7 @@ let running = false;
 let me = '';
 const lastRun = { at: null, error: '', stats: {} };
 
-async function runOnce({ gmail = require('./gmail') } = {}) {
+async function runOnce({ gmail = require('./gmail'), wake = wakeAgent } = {}) {
     // Under pm2 cluster mode only worker 0 runs jobs, as the idea agent does.
     const worker = process.env.NODE_APP_INSTANCE;
     if (!(worker === undefined || worker === '0')) return lastRun;
@@ -420,12 +467,15 @@ async function runOnce({ gmail = require('./gmail') } = {}) {
         // Labelled by the help desk already: answered by another server
         // connected to the same mailbox (staging, say), with its own database.
         const done = await Promise.all([LABEL.answered, LABEL.draft, LABEL.human].map((n) => gmail.labelId(n)));
+        let bugReport = false;
         for (const { id } of await gmail.listMessages(NEW_MAIL, 25)) {
             if (await SupportTicket.findOne({ gmailId: id })) continue;
             const msg = await gmail.getMessage(id);
             if ((msg.labelIds || []).some((l) => done.includes(l))) continue;
-            await handle(gmail, me, msg, answers, stats);
+            if (await handle(gmail, me, msg, answers, stats)) bugReport = true;
         }
+        // Once per run at most: the task takes 30 starts an hour, and runs are 2 minutes apart.
+        if (bugReport) stats.agentWoken = await wake();
         Object.assign(lastRun, { at: new Date(), error: '', stats });
     } catch (err) {
         Object.assign(lastRun, { at: new Date(), error: String((err && err.message) || err).slice(0, 300), stats });
@@ -488,5 +538,5 @@ async function tryQuestion(text) {
 module.exports = {
     runOnce, sendAllDrafts, tryQuestion, seedStarters, mode, lastRun, LABEL,
     // for tests
-    _internal: { cleanBody, bodyText, parseAddress, automated, verifiedSender, render, compose, tidyReply, nameFrom }
+    _internal: { LOOKS_LIKE_A_BUG, wakeAgent, cleanBody, bodyText, parseAddress, automated, verifiedSender, render, compose, tidyReply, nameFrom }
 };

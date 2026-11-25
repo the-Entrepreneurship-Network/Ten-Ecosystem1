@@ -384,3 +384,78 @@ describe('Copy to the team inbox (SUPPORT_COPY_TO)', () => {
         expect(gmail.sent[0].raw).not.toMatch(/message\/rfc822/);
     });
 });
+
+describe('Waking the bug agent (BUG_AGENT_FIRE_URL, BUG_AGENT_TOKEN)', () => {
+    afterEach(() => {
+        delete process.env.SUPPORT_COPY_TO;
+        delete process.env.BUG_AGENT_FIRE_URL;
+        delete process.env.BUG_AGENT_TOKEN;
+    });
+
+    test('copied emails that read like a website problem wake it, once per run', async () => {
+        process.env.SUPPORT_COPY_TO = 'growth@entrepreneurshipnetwork.net';
+        const { agent } = load('draft');
+        const gmail = fakeGmail({ messages: [
+            mail({ body: 'my task journey page is not working' }),
+            mail({ id: 'm2', threadId: 't2', from: 'Ravi <ravi@gmail.com>', body: 'cant login to the portal, error 500' })
+        ] });
+        gmail.getRaw = jest.fn(async () => b64('Subject: x\r\n\r\nbody'));
+        const wake = jest.fn(async () => true);
+        await agent.runOnce({ gmail, wake });
+        expect(wake).toHaveBeenCalledTimes(1);
+    });
+
+    test('ordinary questions, and emails that were not copied, do not wake it', async () => {
+        process.env.SUPPORT_COPY_TO = 'growth@entrepreneurshipnetwork.net';
+        const wake = jest.fn(async () => true);
+        let ctx = load('draft');
+        let gmail = fakeGmail({ messages: [mail()] });
+        gmail.getRaw = jest.fn(async () => b64('x'));
+        await ctx.agent.runOnce({ gmail, wake });
+        expect(wake).not.toHaveBeenCalled();
+
+        delete process.env.SUPPORT_COPY_TO;
+        ctx = load('draft');
+        gmail = fakeGmail({ messages: [mail({ body: 'the upload button is not working' })] });
+        await ctx.agent.runOnce({ gmail, wake });
+        expect(wake).not.toHaveBeenCalled();
+    });
+
+    test('it calls the scheduled task\'s API trigger with its token, and does nothing without them', async () => {
+        const { agent } = load('draft');
+        expect(await agent._internal.wakeAgent()).toBe(false);
+
+        process.env.BUG_AGENT_FIRE_URL = 'https://api.anthropic.com/v1/claude_code/routines/trig_test/fire';
+        process.env.BUG_AGENT_TOKEN = 'sk-ant-oat01-test';
+        const https = require('https');
+        const { EventEmitter } = require('events');
+        let seen;
+        const spy = jest.spyOn(https, 'request').mockImplementation((url, opts, cb) => {
+            seen = { url, opts };
+            const req = new EventEmitter();
+            req.destroy = () => {};
+            req.end = (body) => {
+                seen.body = body;
+                const res = new EventEmitter();
+                res.statusCode = 200;
+                res.resume = () => {};
+                cb(res);
+                res.emit('end');
+            };
+            return req;
+        });
+        try {
+            expect(await agent._internal.wakeAgent()).toBe(true);
+        } finally {
+            spy.mockRestore();
+        }
+        expect(seen.url).toBe('https://api.anthropic.com/v1/claude_code/routines/trig_test/fire');
+        expect(seen.opts.method).toBe('POST');
+        expect(seen.opts.headers).toEqual(expect.objectContaining({
+            Authorization: 'Bearer sk-ant-oat01-test',
+            'anthropic-version': '2023-06-01',
+            'Content-Type': 'application/json'
+        }));
+        expect(JSON.parse(seen.body).text).toMatch(/website problem/);
+    });
+});

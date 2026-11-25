@@ -646,6 +646,13 @@ edits at `/hr-help-desk.html` (HR portal → **Help Desk**).
   Reply-To set to the student. Automatic mail is not copied. It exists because
   complaints@ cannot use Gmail's own forwarding without a two-step code only
   one person holds; the bug-fixing agent reads the copies in growth@.
+- **Waking the bug agent** (`BUG_AGENT_FIRE_URL`, `BUG_AGENT_TOKEN`). When a
+  copied email reads like a website problem ("not working", "error", "can't
+  upload" and similar), the run calls the bug agent's API trigger once, so it
+  starts at once rather than at its next scheduled pass. Both values come from
+  the "TEN bug agent" scheduled task's API trigger at claude.ai/code/routines;
+  the token is shown only once there and is never logged. What the agent does
+  is in `docs/bug-agent.md`.
 - **Modes** (`SUPPORT_AGENT_MODE`):
   - `off`: the default.
   - `draft`: the reply waits as a Gmail draft, labelled **Help desk/Draft
