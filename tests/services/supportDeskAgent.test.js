@@ -332,3 +332,55 @@ describe('Send all', () => {
         expect(SupportTicket.rows[0].action).toBe('sent');
     });
 });
+
+describe('Copy to the team inbox (SUPPORT_COPY_TO)', () => {
+    afterEach(() => { delete process.env.SUPPORT_COPY_TO; });
+
+    function withRaw(gmail) {
+        gmail.getRaw = jest.fn(async () => b64('From: Asha Rao <asha@gmail.com>\r\nSubject: emp id\r\n\r\nsir what is my employee id'));
+        return gmail;
+    }
+
+    test('each student email reaches it, the original attached and Reply-To the student', async () => {
+        process.env.SUPPORT_COPY_TO = 'growth@entrepreneurshipnetwork.net';
+        const { agent } = load('draft');
+        const gmail = withRaw(fakeGmail({ messages: [mail()] }));
+        await agent.runOnce({ gmail });
+        expect(gmail.drafts).toHaveLength(1);
+        expect(gmail.sent).toHaveLength(1);
+        const { raw, threadId } = gmail.sent[0];
+        expect(threadId).toBeUndefined();
+        expect(raw).toMatch(/^To: growth@entrepreneurshipnetwork\.net/m);
+        expect(raw).toMatch(/^Reply-To: asha@gmail\.com/m);
+        expect(raw).toMatch(/^Subject: \[complaints@\] emp id/m);
+        expect(raw).toContain('Help desk: drafted');
+        expect(raw).toMatch(/Content-Type: message\/rfc822/);
+    });
+
+    test('robots are not copied, and nothing is copied while it is unset', async () => {
+        process.env.SUPPORT_COPY_TO = 'growth@entrepreneurshipnetwork.net';
+        let ctx = load('draft');
+        let gmail = withRaw(fakeGmail({ messages: [mail({ headers: { 'Auto-Submitted': 'auto-replied' } })] }));
+        await ctx.agent.runOnce({ gmail });
+        expect(gmail.sent).toHaveLength(0);
+
+        delete process.env.SUPPORT_COPY_TO;
+        ctx = load('draft');
+        gmail = withRaw(fakeGmail({ messages: [mail()] }));
+        await ctx.agent.runOnce({ gmail });
+        expect(gmail.sent).toHaveLength(0);
+        expect(gmail.getRaw).not.toHaveBeenCalled();
+    });
+
+    test('an email too big to attach still arrives as words', async () => {
+        process.env.SUPPORT_COPY_TO = 'growth@entrepreneurshipnetwork.net';
+        const { agent } = load('draft');
+        const gmail = withRaw(fakeGmail({ messages: [mail()] }));
+        const record = gmail.send;
+        gmail.send = jest.fn().mockRejectedValueOnce(new Error('Request payload size exceeds the limit')).mockImplementation(record);
+        await agent.runOnce({ gmail });
+        expect(gmail.sent).toHaveLength(1);
+        expect(gmail.sent[0].raw).toContain('(Attachments: see complaints@.)');
+        expect(gmail.sent[0].raw).not.toMatch(/message\/rfc822/);
+    });
+});

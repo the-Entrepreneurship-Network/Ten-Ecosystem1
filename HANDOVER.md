@@ -640,6 +640,12 @@ edits at `/hr-help-desk.html` (HR portal → **Help Desk**).
 - **Replies go into the student's thread**, from complaints@. They end with
   the "Did this answer your question?" links, so "No" still leads to the
   WhatsApp group (§7.1, Complaints).
+- **A copy for the team** (`SUPPORT_COPY_TO`, off by default). Set it to an
+  address such as growth@ and every student email the help desk handles also
+  goes there as "[complaints@] subject", with the original attached and
+  Reply-To set to the student. Automatic mail is not copied. It exists because
+  complaints@ cannot use Gmail's own forwarding without a two-step code only
+  one person holds; the bug-fixing agent reads the copies in growth@.
 - **Modes** (`SUPPORT_AGENT_MODE`):
   - `off`: the default.
   - `draft`: the reply waits as a Gmail draft, labelled **Help desk/Draft
