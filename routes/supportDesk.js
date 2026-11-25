@@ -13,6 +13,7 @@ const SupportAnswer = require('../models/SupportAnswer');
 const SupportTicket = require('../models/SupportTicket');
 const agent = require('../services/supportDesk/agent');
 const gmail = require('../services/supportDesk/gmail');
+const bugAgent = require('../services/supportDesk/bugAgent');
 const { PLACEHOLDERS } = require('../services/supportDesk/facts');
 
 const router = express.Router();
@@ -50,9 +51,17 @@ router.get('/status', wrap(async (req, res) => {
         lastRun: agent.lastRun,
         last24h,
         waiting: await SupportTicket.countDocuments({ action: 'drafted' }),
+        bugAgent: await bugAgent.summary(),
         labels: agent.LABEL,
         placeholders: PLACEHOLDERS
     });
+}));
+
+// Who handles students' reports of website problems: claude, gemini or off.
+router.post('/bug-agent', wrap(async (req, res) => {
+    const engine = String((req.body && req.body.engine) || '');
+    if (!bugAgent.ENGINES.includes(engine)) return res.status(400).json({ success: false, message: 'Choose Claude, Gemini or Off.' });
+    res.json({ success: true, bugAgent: await bugAgent.setEngine(engine) });
 }));
 
 router.post('/send-drafts', wrap(async (req, res) => {

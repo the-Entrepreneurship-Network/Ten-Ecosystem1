@@ -653,6 +653,22 @@ edits at `/hr-help-desk.html` (HR portal → **Help Desk**).
   the "TEN bug agent" scheduled task's API trigger at claude.ai/code/routines;
   the token is shown only once there and is never logged. What the agent does
   is in `docs/bug-agent.md`.
+- **Claude, Gemini (free) or Off.** The Help Desk page's "Website bug reports"
+  switch (stored in `SupportDeskState`, `services/supportDesk/bugAgent.js`)
+  says who handles a report:
+  - **Claude**: the portal wakes the Claude scheduled task, as above.
+  - **Gemini (free)**: the server writes the first reply itself with the free
+    `GEMINI_API_KEY` (`utils/gemini.js`), from the saved answers. The email is
+    labelled **Help desk/Needs reply** unless nothing is broken. Touchy topics
+    and busy senders still go to people. Draft mode still makes drafts.
+  - **Off**: neither.
+- **When Claude stops responding.** Claude checks in by emailing complaints@
+  "[bug-agent] checking in" at the start of every pass; the help desk files it
+  under **Help desk/Bug agent** and never answers or copies it. Claude counts
+  as not responding when waking it fails, when it is woken and does not check
+  in within 30 minutes, or when it has not checked in for 13 hours (its
+  schedule runs 9:41 to 21:41 IST). Then the Help Desk page shows a red banner
+  and one email goes to `SUPPORT_COPY_TO`; another goes when it checks in again.
 - **Modes** (`SUPPORT_AGENT_MODE`):
   - `off`: the default.
   - `draft`: the reply waits as a Gmail draft, labelled **Help desk/Draft

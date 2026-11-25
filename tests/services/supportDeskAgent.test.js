@@ -93,7 +93,16 @@ function stores() {
             if (u.$inc) row.uses += u.$inc.uses;
         })
     };
-    return { SupportTicket, SupportAnswer };
+    let desk = null;
+    const SupportDeskState = {
+        doc: () => desk,
+        set: (d) => { desk = Object.assign({ _id: 'bug-agent' }, d); },
+        findById: jest.fn(() => ({ lean: async () => (desk ? Object.assign({}, desk) : null) })),
+        findByIdAndUpdate: jest.fn((id, { $set }) => ({
+            lean: async () => { desk = Object.assign({ _id: id, engine: 'claude' }, desk || {}, $set); return Object.assign({}, desk); }
+        }))
+    };
+    return { SupportTicket, SupportAnswer, SupportDeskState };
 }
 
 function load(mode) {
@@ -102,6 +111,13 @@ function load(mode) {
     const s = stores();
     jest.doMock('../../models/SupportTicket', () => s.SupportTicket);
     jest.doMock('../../models/SupportAnswer', () => s.SupportAnswer);
+    jest.doMock('../../models/SupportDeskState', () => s.SupportDeskState);
+    const gem = {
+        ready: jest.fn(() => true),
+        ask: jest.fn(async () => ({ kind: 'vague', reply: 'Could you tell us what you clicked and what you saw?' })),
+        Type: { OBJECT: 'OBJECT', STRING: 'STRING' }
+    };
+    jest.doMock('../../utils/gemini', () => gem);
     jest.doMock('../../services/supportDesk/starterAnswers', () => STARTERS);
     jest.doMock('../../services/supportDesk/facts', () => ({
         STATIC: { registerUrl: 'https://portal.test/register' },
@@ -109,7 +125,7 @@ function load(mode) {
         findStudent: jest.fn(async (email) => (email === 'asha@gmail.com' ? { name: 'Asha Rao', employeeId: 'TEN/WEB/1001' } : null)),
         valuesFor: jest.fn(async (st) => ({ firstName: 'Asha', employeeId: st.employeeId }))
     }));
-    return Object.assign({ agent: require('../../services/supportDesk/agent') }, s);
+    return Object.assign({ agent: require('../../services/supportDesk/agent'), gem }, s);
 }
 
 afterAll(() => { delete process.env.SUPPORT_AGENT_MODE; });
@@ -420,42 +436,86 @@ describe('Waking the bug agent (BUG_AGENT_FIRE_URL, BUG_AGENT_TOKEN)', () => {
         await ctx.agent.runOnce({ gmail, wake });
         expect(wake).not.toHaveBeenCalled();
     });
+});
 
-    test('it calls the scheduled task\'s API trigger with its token, and does nothing without them', async () => {
+describe('Claude, Gemini (free) or Off', () => {
+    afterEach(() => { delete process.env.SUPPORT_COPY_TO; });
+    const report = () => mail({ subject: 'task journey', body: 'my task journey page is not working' });
+    const withRaw = (gmail) => { gmail.getRaw = jest.fn(async () => b64('x')); return gmail; };
+
+    test('Claude\'s check-in is filed away, never answered, ticketed or copied', async () => {
+        process.env.SUPPORT_COPY_TO = 'growth@entrepreneurshipnetwork.net';
+        const { agent, SupportTicket, SupportDeskState } = load('send');
+        const gmail = withRaw(fakeGmail({ messages: [mail({ id: 'hb', threadId: 'thb',
+            from: 'Growth <growth@entrepreneurshipnetwork.net>', subject: '[bug-agent] checking in', body: '', internalDate: String(Date.now()) })] }));
+        await agent.runOnce({ gmail, wake: jest.fn() });
+        expect(gmail.sent).toHaveLength(0);
+        expect(gmail.drafts).toHaveLength(0);
+        expect(SupportTicket.rows).toHaveLength(0);
+        expect(gmail.labels).toContainEqual({ threadId: 'thb', add: ['Help desk/Bug agent'], remove: ['INBOX'] });
+        expect(SupportDeskState.doc().lastPassAt).toBeInstanceOf(Date);
+    });
+
+    test('Gemini writes the first reply to a report, and Claude is not woken', async () => {
+        process.env.SUPPORT_COPY_TO = 'growth@entrepreneurshipnetwork.net';
+        const { agent, SupportTicket, SupportDeskState, gem } = load('draft');
+        SupportDeskState.set({ engine: 'gemini' });
+        const gmail = withRaw(fakeGmail({ messages: [report()] }));
+        const wake = jest.fn();
+        await agent.runOnce({ gmail, wake });
+        expect(gem.ask).toHaveBeenCalledTimes(1);
+        expect(gem.ask.mock.calls[0][0]).toContain('my task journey page is not working');
+        expect(gmail.drafts).toHaveLength(1);
+        expect(gmail.drafts[0].raw).toContain('Could you tell us what you clicked and what you saw?');
+        expect(gmail.labels).toContainEqual({ threadId: 't1', add: ['Help desk/Draft ready', 'Help desk/Needs reply'], remove: [] });
+        expect(SupportTicket.rows[0]).toEqual(expect.objectContaining({ action: 'drafted', reason: 'Gemini: vague' }));
+        expect(wake).not.toHaveBeenCalled();
+        // The copy tells Claude that a first reply already went out.
+        expect(gmail.sent.find((m) => /^To: growth@/m.test(m.raw)).raw).toContain('Help desk: drafted (Gemini: vague)');
+    });
+
+    test('if Gemini has nothing usable, the report goes to the team as before', async () => {
+        const { agent, SupportTicket, SupportDeskState, gem } = load('draft');
+        SupportDeskState.set({ engine: 'gemini' });
+        gem.ask.mockRejectedValueOnce(new Error('Gemini returned 429'));
+        const quiet = jest.spyOn(console, 'error').mockImplementation(() => {});
+        const gmail = fakeGmail({ messages: [report()] });
+        await agent.runOnce({ gmail });
+        quiet.mockRestore();
+        expect(gmail.drafts).toHaveLength(0);
+        expect(SupportTicket.rows[0].action).toBe('human');
+    });
+
+    test('ordinary questions and touchy topics never go to Gemini', async () => {
+        const { agent, SupportDeskState, gem } = load('draft');
+        SupportDeskState.set({ engine: 'gemini' });
+        const gmail = fakeGmail({ messages: [
+            mail({ body: 'what are the fees' }),
+            mail({ id: 'm2', threadId: 't2', from: 'Ravi <ravi@gmail.com>', body: 'the payment page is not working, I want a refund' })
+        ] });
+        await agent.runOnce({ gmail });
+        expect(gem.ask).not.toHaveBeenCalled();
+    });
+
+    test('Off: neither Claude nor Gemini', async () => {
+        process.env.SUPPORT_COPY_TO = 'growth@entrepreneurshipnetwork.net';
+        const { agent, SupportDeskState, gem } = load('draft');
+        SupportDeskState.set({ engine: 'off' });
+        const gmail = withRaw(fakeGmail({ messages: [report()] }));
+        const wake = jest.fn();
+        await agent.runOnce({ gmail, wake });
+        expect(wake).not.toHaveBeenCalled();
+        expect(gem.ask).not.toHaveBeenCalled();
+    });
+
+    test('the alert email goes to the team inbox', async () => {
+        process.env.SUPPORT_COPY_TO = 'growth@entrepreneurshipnetwork.net';
         const { agent } = load('draft');
-        expect(await agent._internal.wakeAgent()).toBe(false);
-
-        process.env.BUG_AGENT_FIRE_URL = 'https://api.anthropic.com/v1/claude_code/routines/trig_test/fire';
-        process.env.BUG_AGENT_TOKEN = 'sk-ant-oat01-test';
-        const https = require('https');
-        const { EventEmitter } = require('events');
-        let seen;
-        const spy = jest.spyOn(https, 'request').mockImplementation((url, opts, cb) => {
-            seen = { url, opts };
-            const req = new EventEmitter();
-            req.destroy = () => {};
-            req.end = (body) => {
-                seen.body = body;
-                const res = new EventEmitter();
-                res.statusCode = 200;
-                res.resume = () => {};
-                cb(res);
-                res.emit('end');
-            };
-            return req;
-        });
-        try {
-            expect(await agent._internal.wakeAgent()).toBe(true);
-        } finally {
-            spy.mockRestore();
-        }
-        expect(seen.url).toBe('https://api.anthropic.com/v1/claude_code/routines/trig_test/fire');
-        expect(seen.opts.method).toBe('POST');
-        expect(seen.opts.headers).toEqual(expect.objectContaining({
-            Authorization: 'Bearer sk-ant-oat01-test',
-            'anthropic-version': '2023-06-01',
-            'Content-Type': 'application/json'
-        }));
-        expect(JSON.parse(seen.body).text).toMatch(/website problem/);
+        const gmail = withRaw(fakeGmail({ messages: [report()] }));
+        const wake = (notify) => notify('The Claude bug agent is not responding', 'its API trigger answered HTTP 401').then(() => 'failed');
+        await agent.runOnce({ gmail, wake });
+        const alert = gmail.sent.find((m) => /not responding/.test(m.raw));
+        expect(alert.raw).toMatch(/^To: growth@entrepreneurshipnetwork\.net/m);
+        expect(alert.raw).toContain('HTTP 401');
     });
 });
