@@ -40,3 +40,4 @@ Add a toggle button anywhere:
 | `.ten-alert-*` | Success/warning/danger alerts |
 | `.ten-badge` | Pill badge label |
 | `.ten-form-group` | Labelled input wrapper |
+| `.ten-tooltip` | Small informational popup |
