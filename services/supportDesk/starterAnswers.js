@@ -260,6 +260,19 @@ module.exports = [
             'My Documents. Sign in at {{loginUrl}}.'
     },
     {
+        key: 'whatsapp-link-reset',
+        question: "The WhatsApp group link doesn't work, or says it was reset",
+        examples: [
+            'unable to join the domain group', 'not able to join the whatsapp group', 'the whatsapp link is reset',
+            'the invite link was reset', 'the group invitation link is not working', 'whatsapp group link expired',
+            'the group link is invalid', 'please share a new invitation link', 'cannot join the group with the link',
+            'group link reset ho gaya'
+        ],
+        answer: "That happens when a WhatsApp group's admin resets its invite link: the old link stops working for " +
+            'everyone. It is a WhatsApp setting, not a problem with your account or with the portal.\n\n' +
+            'Please ask your coordinator or the group admin for the new link, and join with that.'
+    },
+    {
         key: 'internship-mode',
         question: 'Is the internship online or offline?',
         examples: [

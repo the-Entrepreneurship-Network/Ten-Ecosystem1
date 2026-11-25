@@ -76,8 +76,9 @@ far, oldest first. If it was answered or the problem has gone, label it
 your reply by apologising for the slow answer.
 
 1. **Not a website problem** (fees, certificate or offer-letter dates, general
-   questions): do nothing; the help desk and HR handle it. Label it
-   `Bug agent/Done`.
+   questions, or a WhatsApp group invite link that says it was reset: the
+   group admin made a new link, and the coordinator or group admin has it):
+   do nothing; the help desk and HR handle it. Label it `Bug agent/Done`.
 2. **A website problem, too vague to act on**: reply asking what they clicked,
    what they saw (any error text), a screenshot, and their device and browser.
    Label `Bug agent/Waiting`.
