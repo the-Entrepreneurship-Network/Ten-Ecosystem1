@@ -650,7 +650,8 @@ edits at `/hr-help-desk.html` (HR portal → **Help Desk**).
   copied email reads like a website problem ("not working", "error", "can't
   upload" and similar), the run calls the bug agent's API trigger once, so it
   starts at once rather than at its next scheduled pass. It does not when a
-  saved answer already went out: the agent adds saved answers to
+  saved answer already went out, or when Gemini answered and found nothing
+  broken (below). The agent adds saved answers to
   `starterAnswers.js` in its pull requests ("Teach the help desk" in
   `docs/bug-agent.md`), so a repeat of a question it solved is answered free.
   Both values come from
@@ -660,7 +661,10 @@ edits at `/hr-help-desk.html` (HR portal → **Help Desk**).
 - **Claude, Gemini (free) or Off.** The Help Desk page's "Website bug reports"
   switch (stored in `SupportDeskState`, `services/supportDesk/bugAgent.js`)
   says who handles a report:
-  - **Claude**: the portal wakes the Claude scheduled task, as above.
+  - **Claude**: when no saved answer fits, Gemini (free) writes the first
+    reply, as below, without the Needs reply label. The portal wakes the Claude
+    scheduled task only when Gemini judges something is really broken, or when
+    Gemini has no answer (no key, or an error).
   - **Gemini (free)**: the server writes the first reply itself with the free
     `GEMINI_API_KEY` (`utils/gemini.js`), from the saved answers. The email is
     labelled **Help desk/Needs reply** unless nothing is broken. Touchy topics

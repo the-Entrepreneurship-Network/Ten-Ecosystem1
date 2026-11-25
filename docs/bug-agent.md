@@ -56,11 +56,18 @@ nothing in brackets, one of the help desk's saved answers already went to the
 student. Label it `Bug agent/Done` and do nothing else. If the student writes
 back and no saved answer fits, that reaches you as a new copy.
 
-If the copy's body says `Help desk: sent (Gemini: …)` or
-`Help desk: drafted (Gemini: …)`, the student already has a first reply from
-Gemini, written while you were switched off. Do not send another first reply.
-Still investigate: fix a real bug and close the loop as below, and reply only
-when you have something new to say.
+When no saved answer fits, Gemini (free) writes the first reply from the saved
+answers, and the portal wakes you only when Gemini finds something broken.
+
+If the copy's body says `Help desk: sent (Gemini: vague)` or
+`(Gemini: not-a-bug)` (or `drafted`), Gemini asked for details or explained.
+Label it `Bug agent/Done` and do nothing else. A student who writes back
+reaches you only if the free side cannot answer them.
+
+If it says `(Gemini: bug)`, the student already has a first reply saying the
+team is looking into it. Do not send another first reply. Investigate: fix a
+real bug and close the loop as below, and reply only when you have something
+new to say.
 
 If it says `Help desk: backfill (…)`, the email came in before you were set
 up (scripts/bug-agent-backfill.js), and the body is the whole conversation so

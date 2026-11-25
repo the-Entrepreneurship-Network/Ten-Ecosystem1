@@ -410,7 +410,8 @@ describe('Waking the bug agent (BUG_AGENT_FIRE_URL, BUG_AGENT_TOKEN)', () => {
 
     test('copied emails that read like a website problem wake it, once per run', async () => {
         process.env.SUPPORT_COPY_TO = 'growth@entrepreneurshipnetwork.net';
-        const { agent } = load('draft');
+        const { agent, gem } = load('draft');
+        gem.ask.mockResolvedValue({ kind: 'bug', reply: 'Thanks, the team is looking into it.' });
         const gmail = fakeGmail({ messages: [
             mail({ subject: 'task journey', body: 'my task journey page is not working' }),
             mail({ id: 'm2', threadId: 't2', from: 'Ravi <ravi@gmail.com>', subject: 'site down', body: 'cant login to the portal, error 500' })
@@ -486,6 +487,34 @@ describe('Claude, Gemini (free) or Off', () => {
         expect(gmail.sent.find((m) => /^To: growth@/m.test(m.raw)).raw).toContain('Help desk: drafted (Gemini: vague)');
     });
 
+    test('with Claude on, Gemini answers first and Claude is woken only for a real bug', async () => {
+        process.env.SUPPORT_COPY_TO = 'growth@entrepreneurshipnetwork.net';
+        let ctx = load('draft');
+        let gmail = withRaw(fakeGmail({ messages: [report()] }));
+        let wake = jest.fn(async () => 'woken');
+        await ctx.agent.runOnce({ gmail, wake });
+        expect(ctx.SupportTicket.rows[0]).toEqual(expect.objectContaining({ action: 'drafted', reason: 'Gemini: vague' }));
+        expect(gmail.labels).toContainEqual({ threadId: 't1', add: ['Help desk/Draft ready'], remove: [] });
+        expect(wake).not.toHaveBeenCalled();
+
+        ctx = load('draft');
+        ctx.gem.ask.mockResolvedValue({ kind: 'bug', reply: 'Thanks, the team is looking into it.' });
+        gmail = withRaw(fakeGmail({ messages: [report()] }));
+        wake = jest.fn(async () => 'woken');
+        await ctx.agent.runOnce({ gmail, wake });
+        expect(gmail.drafts[0].raw).toContain('the team is looking into it');
+        expect(wake).toHaveBeenCalledTimes(1);
+
+        // No Gemini answer: Claude takes it, as before.
+        ctx = load('draft');
+        ctx.gem.ready.mockReturnValue(false);
+        gmail = withRaw(fakeGmail({ messages: [report()] }));
+        wake = jest.fn(async () => 'woken');
+        await ctx.agent.runOnce({ gmail, wake });
+        expect(ctx.SupportTicket.rows[0].action).toBe('human');
+        expect(wake).toHaveBeenCalledTimes(1);
+    });
+
     test('if Gemini has nothing usable, the report goes to the team as before', async () => {
         const { agent, SupportTicket, SupportDeskState, gem } = load('draft');
         SupportDeskState.set({ engine: 'gemini' });
@@ -522,7 +551,8 @@ describe('Claude, Gemini (free) or Off', () => {
 
     test('the alert email goes to the team inbox', async () => {
         process.env.SUPPORT_COPY_TO = 'growth@entrepreneurshipnetwork.net';
-        const { agent } = load('draft');
+        const { agent, gem } = load('draft');
+        gem.ask.mockResolvedValue({ kind: 'bug', reply: 'Thanks, the team is looking into it.' });
         const gmail = withRaw(fakeGmail({ messages: [report()] }));
         const wake = (notify) => notify('The Claude bug agent is not responding', 'its API trigger answered HTTP 401').then(() => 'failed');
         await agent.runOnce({ gmail, wake });

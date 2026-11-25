@@ -154,7 +154,7 @@ async function loadStatus() {
 
 // Who handles students' reports of website problems.
 const ENGINE = {
-  claude: ['Claude', 'The Claude bug agent fixes real bugs through a pull request and keeps the student told.'],
+  claude: ['Claude', 'Gemini (free) writes the first reply. Only when something is really broken is the Claude bug agent woken: it fixes it through a pull request and keeps the student told.'],
   gemini: ['Gemini (free)', 'The server writes the first reply itself with the free Gemini key, and flags the email for the team.'],
   off: ['Off', 'Neither. Reports wait for the team, as other emails do.']
 };

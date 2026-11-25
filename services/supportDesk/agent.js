@@ -266,10 +266,13 @@ async function decide(gmail, me, msg, mail, answers) {
         : '';
 
     if (why) {
-        // The switch on the Help Desk page says Gemini: it writes the first reply to a
-        // report of a website problem. Touchy topics and busy senders still go to people.
+        // Unless the switch on the Help Desk page says Off, Gemini (free) writes the first
+        // reply to a report of a website problem, from the saved answers. With Claude on,
+        // handle() wakes Claude only when Gemini finds something broken. Touchy topics and
+        // busy senders still go to people.
+        const engine = (await bugAgent.state()).engine;
         const gem = !result.sensitive && recent < PER_SENDER_PER_DAY && LOOKS_LIKE_A_BUG.test(subject + '\n' + body)
-            && (await bugAgent.state()).engine === 'gemini'
+            && engine !== 'off'
             ? await bugAgent.geminiReply({
                 subject, body, portalUrl: PORTAL_URL,
                 known: answers.map((a) => a.question + ': ' + render(a.answer, facts.STATIC)).join('\n\n').slice(0, 8000)
@@ -277,8 +280,8 @@ async function decide(gmail, me, msg, mail, answers) {
             : null;
         if (gem) {
             const text = compose(firstName, [gem.reply]);
-            // Answered for good only when nothing is broken; otherwise the team follows up.
-            const labels = gem.kind === 'not-a-bug' ? [] : [LABEL.human];
+            // Without Claude, the team follows up anything Gemini could not settle.
+            const labels = engine === 'gemini' && gem.kind !== 'not-a-bug' ? [LABEL.human] : [];
             if (mode() === 'send') {
                 await gmail.send(await rawReply({ me, to: from.email, subject, text, msg, auto: true }), msg.threadId);
                 await gmail.labelThread(msg.threadId, [LABEL.answered, ...labels]);
@@ -337,8 +340,8 @@ async function handle(gmail, me, msg, answers, stats) {
     });
     stats[outcome.action] = (stats[outcome.action] || 0) + 1;
     // A copied email that reads like a website problem: the bug agent should see it now,
-    // unless a saved answer already went out. Answers the agent taught are free; it is not.
-    const answered = outcome.action === 'sent' || outcome.action === 'drafted';
+    // unless the free side covered it: a saved answer, or Gemini finding nothing broken.
+    const answered = (outcome.action === 'sent' || outcome.action === 'drafted') && outcome.reason !== 'Gemini: bug';
     return (await copyTo(gmail, me, msg, mail, outcome)) && !answered && LOOKS_LIKE_A_BUG.test(mail.subject + '\n' + mail.body);
 }
 
