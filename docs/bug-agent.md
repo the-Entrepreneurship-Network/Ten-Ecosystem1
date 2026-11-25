@@ -57,6 +57,12 @@ Gemini, written while you were switched off. Do not send another first reply.
 Still investigate: fix a real bug and close the loop as below, and reply only
 when you have something new to say.
 
+If it says `Help desk: backfill (…)`, the email came in before you were set
+up (scripts/bug-agent-backfill.js), and the body is the whole conversation so
+far, oldest first. If it was answered or the problem has gone, label it
+`Bug agent/Done` and do not reply. Otherwise handle it as below, and start
+your reply by apologising for the slow answer.
+
 1. **Not a website problem** (fees, certificate or offer-letter dates, general
    questions): do nothing; the help desk and HR handle it. Label it
    `Bug agent/Done`.
