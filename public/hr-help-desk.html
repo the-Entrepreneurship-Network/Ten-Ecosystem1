@@ -43,6 +43,10 @@ button.primary{background:var(--gold);color:#1a1208;border-color:transparent;}
 button.danger{border-color:rgba(239,68,68,.45);color:#fca5a5;}
 .note.alert{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.45);color:#fecaca;margin-top:12px;}
 .engine{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+button.pill{min-height:34px;border:1px solid transparent;cursor:pointer;}
+button.pill[aria-pressed="true"]{border-color:currentColor;}
+details{margin-top:8px;font-size:12.5px;}
+summary{cursor:pointer;color:var(--gold);font-weight:700;}
 .engine button[aria-pressed="true"]{background:var(--gold);color:#1a1208;border-color:transparent;}
 button:disabled{opacity:.45;cursor:not-allowed;}
 button:focus-visible{outline:2px solid var(--gold);outline-offset:3px;}
@@ -106,6 +110,7 @@ let answers = [];
 let placeholders = [];
 let sendNote = '';
 let engineNote = '';
+let ticketFilter = '';
 
 async function api(path, options) {
   const r = await fetch('/api/support-desk' + path, Object.assign({ credentials: 'same-origin',
@@ -133,15 +138,17 @@ async function loadStatus() {
     (s.connected ? '' : '<div class="note">The server needs a one-time permission for the complaints@ mailbox. ' +
       'The steps are in HANDOVER.md, section "Help desk".</div>') +
     (run.at ? '<p class="meta">Last checked ' + esc(when(run.at)) + (run.error ? ' — <b style="color:#fca5a5">' + esc(run.error) + '</b>' : '') + '</p>' : '') +
-    '<div class="stats">' + Object.keys(OUTCOME).filter((k) => k !== 'working').map((k) =>
-      '<span class="pill ' + k + '">' + esc(OUTCOME[k]) + ': ' + Number(counts[k] || 0) + '</span>').join('') +
-    '</div><p class="meta">Last 24 hours.</p>' +
+    '<div class="stats" role="group" aria-label="Show the emails behind a count">' + Object.keys(OUTCOME).filter((k) => k !== 'working').map((k) =>
+      '<button type="button" class="pill ' + k + '" data-filter="' + k + '" aria-pressed="' + (ticketFilter === k) + '">' +
+      esc(OUTCOME[k]) + ': ' + Number(counts[k] || 0) + '</button>').join('') +
+    '</div><p class="meta">Last 24 hours. Click a count to see those emails and the replies.</p>' +
     (s.connected && s.waiting ? '<div class="row"><button type="button" class="primary" id="sendAll">Send all ' +
       Number(s.waiting) + (s.waiting === 1 ? ' waiting reply' : ' waiting replies') + '</button></div>' +
       '<p class="meta">Each reply goes to its student as it is in Gmail’s Drafts now, with any edits you made there.</p>' : '') +
     (sendNote ? '<p class="meta"><b>' + esc(sendNote) + '</b></p>' : '');
   const btn = document.getElementById('sendAll');
   if (btn) btn.onclick = () => sendAll(Number(s.waiting));
+  document.querySelectorAll('#status [data-filter]').forEach((el) => { el.onclick = () => filterTickets(el.dataset.filter); });
   if (s.bugAgent) showBugAgent(s.bugAgent);
 }
 
@@ -201,11 +208,24 @@ async function sendAll(n) {
   loadTickets();
 }
 
+// A count clicked: that outcome's emails from the last 24 hours. Clicked again: all of them.
+function filterTickets(k) {
+  ticketFilter = ticketFilter === k ? '' : k;
+  document.querySelectorAll('#status [data-filter]').forEach((el) => el.setAttribute('aria-pressed', String(el.dataset.filter === ticketFilter)));
+  loadTickets().then(() => document.getElementById('tickets').scrollIntoView({ behavior: 'smooth', block: 'start' }));
+}
+
+const GMAIL = 'https://mail.google.com/mail/?authuser=complaints%40entrepreneurshipnetwork.net#all/';
+
 async function loadTickets() {
-  const { tickets } = await api('/tickets?limit=40');
+  const { tickets } = await api('/tickets?limit=' + (ticketFilter ? '200&hours=24&action=' + ticketFilter : '40'));
   const box = document.getElementById('tickets');
-  if (!tickets.length) { box.innerHTML = '<p class="meta">No emails handled yet.</p>'; return; }
-  box.innerHTML = tickets.map((t) =>
+  const bar = ticketFilter ? '<div class="row" style="margin-top:0"><span class="meta" style="margin:0">Showing <b>' +
+    esc(OUTCOME[ticketFilter]) + '</b> from the last 24 hours: ' + tickets.length + '</span>' +
+    '<button type="button" id="showAll">Show all emails</button></div>' : '';
+  if (!tickets.length) {
+    box.innerHTML = bar + '<p class="meta">' + (ticketFilter ? 'None in the last 24 hours.' : 'No emails handled yet.') + '</p>';
+  } else box.innerHTML = bar + tickets.map((t) =>
     '<div class="item"><div class="hd"><div><div class="q">' + esc(t.subject || '(no subject)') + '</div>' +
     '<div class="meta">' + esc(t.fromName ? t.fromName + ' · ' : '') + esc(t.from) + ' · ' + esc(when(t.createdAt)) +
     (t.student ? ' · registered student' : '') + '</div></div>' +
@@ -214,7 +234,12 @@ async function loadTickets() {
       esc(a.question) + ' (' + Math.round(a.score * 100) + '%)').join(', ') + '</div>' : '') +
     (t.reason ? '<div class="ex">Why: ' + esc(t.reason) + '</div>' : '') +
     (t.excerpt ? '<div class="text">' + esc(t.excerpt.slice(0, 280)) + (t.excerpt.length > 280 ? '…' : '') + '</div>' : '') +
+    (t.reply ? '<details><summary>' + (t.action === 'drafted' ? 'The draft it wrote' : 'The reply it sent') + '</summary>' +
+      '<div class="text">' + esc(t.reply) + '</div></details>' : '') +
+    (t.threadId ? '<div class="ex"><a href="' + GMAIL + encodeURIComponent(t.threadId) + '" target="_blank" rel="noopener">Open in Gmail</a></div>' : '') +
     '</div>').join('');
+  const all = document.getElementById('showAll');
+  if (all) all.onclick = () => filterTickets(ticketFilter);
 }
 
 async function loadAnswers() {

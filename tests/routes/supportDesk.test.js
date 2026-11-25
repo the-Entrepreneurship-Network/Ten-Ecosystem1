@@ -49,7 +49,7 @@ function mount(session) {
     app.use(express.json());
     app.use((req, _res, next) => { req.session = session; next(); });
     app.use('/api/support-desk', require('../../routes/supportDesk'));
-    return { app, SupportAnswer, agent, bugAgent };
+    return { app, SupportAnswer, SupportTicket, agent, bugAgent };
 }
 
 const HR = { hr: { username: 'hr1', email: 'hr@ten.in' } };
@@ -124,4 +124,16 @@ test('HR switches who handles website bug reports; only Claude, Gemini or Off, a
     expect(res.body).toEqual({ success: true, bugAgent: { engine: 'gemini', down: false } });
     expect((await request(app).post('/api/support-desk/bug-agent').send({ engine: 'chatgpt' })).status).toBe(400);
     expect(bugAgent.setEngine).toHaveBeenCalledTimes(1);
+});
+
+test('a count clicked on the page lists that outcome from the last 24 hours, and nothing odd gets into the query', async () => {
+    const { app, SupportTicket } = mount(HR);
+    await request(app).get('/api/support-desk/tickets?limit=200&hours=24&action=sent');
+    const [q] = SupportTicket.find.mock.calls[0];
+    expect(q.action).toBe('sent');
+    expect(Date.now() - q.createdAt.$gte.getTime()).toBeGreaterThanOrEqual(24 * 3600 * 1000 - 1000);
+    expect(Date.now() - q.createdAt.$gte.getTime()).toBeLessThan(24 * 3600 * 1000 + 60000);
+
+    await request(app).get('/api/support-desk/tickets?action[$ne]=sent');
+    expect(SupportTicket.find.mock.calls[1][0]).toEqual({});
 });

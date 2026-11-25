@@ -17,6 +17,9 @@ const bugAgent = require('../services/supportDesk/bugAgent');
 const { PLACEHOLDERS } = require('../services/supportDesk/facts');
 
 const router = express.Router();
+
+/** What the help desk did with an email: SupportTicket's actions, as the Help Desk page counts them. */
+const ACTIONS = ['sent', 'drafted', 'held', 'human', 'skipped', 'failed'];
 router.use(requireHR);
 
 const wrap = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((err) => {
@@ -41,7 +44,7 @@ function fields(body) {
 router.get('/status', wrap(async (req, res) => {
     const since = new Date(Date.now() - 24 * 3600 * 1000);
     const last24h = {};
-    for (const action of ['sent', 'drafted', 'held', 'human', 'skipped', 'failed']) {
+    for (const action of ACTIONS) {
         last24h[action] = await SupportTicket.countDocuments({ action, createdAt: { $gte: since } });
     }
     res.json({
@@ -71,7 +74,12 @@ router.post('/send-drafts', wrap(async (req, res) => {
 
 router.get('/tickets', wrap(async (req, res) => {
     const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
-    res.json({ success: true, tickets: await SupportTicket.find({}).sort({ createdAt: -1 }).limit(limit) });
+    // A count on the page, clicked: one outcome, over the same last-24-hours window.
+    const q = {};
+    if (ACTIONS.includes(req.query.action)) q.action = req.query.action;
+    const hours = Math.min(Number(req.query.hours) || 0, 90 * 24);
+    if (hours > 0) q.createdAt = { $gte: new Date(Date.now() - hours * 3600 * 1000) };
+    res.json({ success: true, tickets: await SupportTicket.find(q).sort({ createdAt: -1 }).limit(limit) });
 }));
 
 router.get('/answers', wrap(async (req, res) => {

@@ -519,3 +519,19 @@ describe('Claude, Gemini (free) or Off', () => {
         expect(alert.raw).toContain('HTTP 401');
     });
 });
+
+describe('The Help Desk page can show what was sent', () => {
+    test('each email keeps the reply sent, the draft written, or the note that a person will reply', async () => {
+        let ctx = load('draft');
+        let gmail = fakeGmail({ messages: [mail()] });
+        await ctx.agent.runOnce({ gmail });
+        expect(ctx.SupportTicket.rows[0].action).toBe('drafted');
+        expect(ctx.SupportTicket.rows[0].reply).toContain('https://portal.test/register');
+
+        ctx = load('send');
+        gmail = fakeGmail({ messages: [mail({ subject: 'stipend', body: 'is there any stipend for this' })] });
+        await ctx.agent.runOnce({ gmail });
+        expect(ctx.SupportTicket.rows[0].action).toBe('held');
+        expect(ctx.SupportTicket.rows[0].reply).toMatch(/A member of our team will read your message and reply/);
+    });
+});
