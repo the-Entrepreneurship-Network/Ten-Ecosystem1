@@ -558,6 +558,6 @@ async function tryQuestion(text) {
 
 module.exports = {
     runOnce, sendAllDrafts, tryQuestion, seedStarters, mode, lastRun, LABEL,
-    // for tests
-    _internal: { LOOKS_LIKE_A_BUG, cleanBody, bodyText, parseAddress, automated, verifiedSender, render, compose, tidyReply, nameFrom }
+    // for tests, and for scripts/bug-agent-backfill.js
+    _internal: { LOOKS_LIKE_A_BUG, cleanBody, bodyText, parseAddress, automated, verifiedSender, render, compose, tidyReply, nameFrom, header, copyTo }
 };
