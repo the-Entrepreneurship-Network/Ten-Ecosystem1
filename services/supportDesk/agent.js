@@ -336,8 +336,10 @@ async function handle(gmail, me, msg, answers, stats) {
         }, outcome)
     });
     stats[outcome.action] = (stats[outcome.action] || 0) + 1;
-    // A copied email that reads like a website problem: the bug agent should see it now.
-    return (await copyTo(gmail, me, msg, mail, outcome)) && LOOKS_LIKE_A_BUG.test(mail.subject + '\n' + mail.body);
+    // A copied email that reads like a website problem: the bug agent should see it now,
+    // unless a saved answer already went out. Answers the agent taught are free; it is not.
+    const answered = outcome.action === 'sent' || outcome.action === 'drafted';
+    return (await copyTo(gmail, me, msg, mail, outcome)) && !answered && LOOKS_LIKE_A_BUG.test(mail.subject + '\n' + mail.body);
 }
 
 /**

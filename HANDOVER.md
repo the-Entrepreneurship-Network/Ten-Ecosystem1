@@ -649,7 +649,11 @@ edits at `/hr-help-desk.html` (HR portal → **Help Desk**).
 - **Waking the bug agent** (`BUG_AGENT_FIRE_URL`, `BUG_AGENT_TOKEN`). When a
   copied email reads like a website problem ("not working", "error", "can't
   upload" and similar), the run calls the bug agent's API trigger once, so it
-  starts at once rather than at its next scheduled pass. Both values come from
+  starts at once rather than at its next scheduled pass. It does not when a
+  saved answer already went out: the agent adds saved answers to
+  `starterAnswers.js` in its pull requests ("Teach the help desk" in
+  `docs/bug-agent.md`), so a repeat of a question it solved is answered free.
+  Both values come from
   the "TEN bug agent" scheduled task's API trigger at claude.ai/code/routines;
   the token is shown only once there and is never logged. What the agent does
   is in `docs/bug-agent.md`.
