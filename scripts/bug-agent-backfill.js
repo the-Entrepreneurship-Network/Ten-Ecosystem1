@@ -96,7 +96,10 @@ async function main() {
     const ids = [...new Set(found.map((m) => m.threadId))];
     console.log(`Reading ${ids.length} conversations, one a second (about ${Math.ceil(ids.length / 60)} min)...`);
     const threads = [];
-    for (const threadId of ids) threads.push(await gently(() => gmail.getThread(threadId)));
+    for (const threadId of ids) {
+        // One conversation Gmail will not hand over must not stop the rest.
+        try { threads.push(await gently(() => gmail.getThread(threadId))); } catch (err) { console.log(`  skipped conversation ${threadId}: ${err.message}`); }
+    }
 
     const todo = pick(threads, { me, copyTo, seen });
     let failed = 0;
