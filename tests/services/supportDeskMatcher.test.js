@@ -32,7 +32,14 @@ describe('emails get the answer they ask for', () => {
         ["I didn't get any email from you", 'emails-not-received'],
         ['Sir please provide me the whatsapp group link of web development', 'whatsapp-group'],
         ['Respected Sir/Madam, I have completed all my tasks but have not received my internship certificate yet. Kindly look into it.', 'completion-certificate'],
-        ['I am not able to upload my aadhaar card, it says invalid file format', 'documents']
+        ['I am not able to upload my aadhaar card, it says invalid file format', 'documents'],
+        // complaints@ on 25 Nov 2026, word for word apart from names: formal letters
+        // and odd phrasings that went to a person before.
+        ['Respected Sir/Madam, I am writing to kindly request you to provide me with my Employee ID. I would be extremely grateful if you could share this information at your earliest convenience.', 'employee-id'],
+        ["I didn't got employee email id", 'employee-id'],
+        ['Please provide my employee id , feel free to contact me if any further details are required.', 'employee-id'],
+        ['I am unable to join the domain group using the invitation link provided. Could you please check the issue and help me get access to the group? If necessary, kindly share a new invitation link or guide me through the joining process.', 'whatsapp-link-reset'],
+        ['when i open the whatsapp group link it says the link was reset', 'whatsapp-link-reset']
     ])('%s', (text, key) => {
         expect(answerFor(text)).toBe(key);
     });
@@ -51,7 +58,11 @@ describe('a person answers', () => {
         'Is this internship fake?',
         // Nothing saved fits.
         'my laptop broke during the hackathon',
-        'hello'
+        'hello',
+        // Job seekers asking for a referral, 25 Nov 2026: not an intern's Employee ID.
+        'I am currently looking for internship opportunities. I kindly request you to share your Employee ID or referral details so that I can apply through the appropriate referral process.',
+        // A question about which document to send instead: HR decides.
+        'I do not have my latest semester marksheet available. Could you please advise me on what alternative document I can submit in its place, or if I can submit it at a later date?'
     ])('%s', (text) => {
         expect(answerFor(text)).toBe('PERSON');
     });

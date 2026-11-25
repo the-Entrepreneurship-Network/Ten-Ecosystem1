@@ -18,6 +18,9 @@
 
 // Folded to one token before splitting. Specific phrases first.
 const PHRASES = [
+    // Letter-writing filler that would otherwise outweigh the one word that matters.
+    [/\bfeel free to (?:contact|reach|call|message) (?:me|us)\b/g, ' '],
+    [/\b(?:employee|emp)\s*e-?mail\s*id\b/g, ' employeeid '],
     [/\b(?:employee|emp|intern(?:ship)?|ten)\s*(?:id|i\.d\.?|no\.?|number|code)\b|\bemp-?id\b/g, ' employeeid '],
     [/\b(?:offer|joining|appointment)\s*letters?\b/g, ' offerletter '],
     [/\bletters? of recommendation\b|\brecommendation letters?\b|\blor\b/g, ' lor '],
@@ -52,7 +55,10 @@ const STOP = new Set((
     'sir mam maam madam hello hi hii hey dear team regards thanks thank thankyou ' +
     'after before still already now today yet again really actually completely successfully currently ' +
     'respected anyone able look regarding request requesting query matter concern ' +
-    'come coming came give given provide provided send sent ' +
+    'come coming came give given provide provided send sent share shared sharing ' +
+    'write writing inform informing earliest convenience grateful further detail details require required ' +
+    'feel forward looking response consideration assistance guidance ' +
+    "didn doesn don haven hasn isn wasn won aren weren couldn wouldn " +
     'hai hain ka ki ke ko se me mein mai main hu hoon ho raha rahi rahe kar karo karna kya ye yeh wo woh bhi aur toh ji na ab abhi ' +
     'not nahi'
 ).split(/\s+/));
