@@ -261,10 +261,23 @@ async function decide(gmail, me, msg, mail, answers) {
     }
 
     const base = { student: !!student, verified, answers: used };
-    const why = recent >= PER_SENDER_PER_DAY ? 'several emails from this sender today'
+    const desk = await bugAgent.state();
+    const engine = desk.engine;
+    const bugLike = LOOKS_LIKE_A_BUG.test(subject + '\n' + body);
+    let why = recent >= PER_SENDER_PER_DAY ? 'several emails from this sender today'
         : result.sensitive ? 'a topic a person should handle'
         : !blocks.length ? `no saved answer fits (closest ${Math.round(result.best * 100)}%)`
         : '';
+    // A report of a website problem that a saved answer seems to cover: Gemini (free)
+    // checks the answer fixes the problem, not just its topic ("how do I submit a task"
+    // is no help when the upload fails). It sees the general answer, never the student's
+    // own details. No verdict from Gemini keeps the saved answer.
+    if (!why && bugLike && engine !== 'off') {
+        const fits = await bugAgent.answerFits({
+            subject, body, answer: result.answers.map(({ entry }) => render(entry.answer, facts.STATIC)).join('\n\n')
+        }).catch((err) => { console.error('[help desk] Gemini check', String((err && err.message) || err).slice(0, 200)); return null; });
+        if (fits === false) why = 'the saved answer does not fix this problem';
+    }
 
     if (why) {
         // No saved answer settles it. Unless the switch on the Help Desk page says Off,
@@ -272,10 +285,8 @@ async function decide(gmail, me, msg, mail, answers) {
         // answering, what neither settles goes to Claude, and only Claude replies: nothing
         // is sent from here, and handle() wakes it. Touchy topics and busy senders always
         // go to people.
-        const desk = await bugAgent.state();
-        const engine = desk.engine;
         const free = !result.sensitive && recent < PER_SENDER_PER_DAY;
-        const gem = free && LOOKS_LIKE_A_BUG.test(subject + '\n' + body) && engine !== 'off'
+        const gem = free && bugLike && engine !== 'off'
             ? await bugAgent.geminiReply({
                 subject, body, portalUrl: PORTAL_URL,
                 known: answers.map((a) => a.question + ': ' + render(a.answer, facts.STATIC)).join('\n\n').slice(0, 8000)

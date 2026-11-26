@@ -539,6 +539,42 @@ describe('Claude, Gemini (free) or Off', () => {
         expect(r.wake).toHaveBeenCalledTimes(1);
     });
 
+    test('a reported error a saved answer only shares its topic with goes to Claude', async () => {
+        process.env.SUPPORT_COPY_TO = 'growth@entrepreneurshipnetwork.net';
+        // A registered student (verified), so the saved answer has a personal version.
+        const report = () => mail({ verified: true, body: "I can't find my employee id on the dashboard, it shows an error" });
+
+        // Gemini: the saved answer does not fix it, and something is broken. Only Claude replies.
+        let ctx = load('draft');
+        ctx.gem.ask.mockResolvedValueOnce({ verdict: 'does-not-fix' }).mockResolvedValueOnce({ kind: 'bug', reply: 'Looking into it.' });
+        let gmail = withRaw(fakeGmail({ messages: [report()] }));
+        let wake = jest.fn(async () => 'woken');
+        await ctx.agent.runOnce({ gmail, wake });
+        const prompt = ctx.gem.ask.mock.calls[0][0];
+        expect(prompt).toContain('The saved answer:\nYou get your Employee ID when you register');
+        expect(prompt).not.toContain('TEN/WEB/1001'); // the general answer, never the student's own details
+        expect(gmail.drafts).toHaveLength(0);
+        expect(ctx.SupportTicket.rows[0]).toEqual(expect.objectContaining({ action: 'agent' }));
+        expect(wake).toHaveBeenCalledTimes(1);
+
+        // Gemini: it does fix it. The saved answer goes out as before.
+        ctx = load('draft');
+        ctx.gem.ask.mockResolvedValueOnce({ verdict: 'fixes' });
+        gmail = withRaw(fakeGmail({ messages: [report()] }));
+        wake = jest.fn(async () => 'woken');
+        await ctx.agent.runOnce({ gmail, wake });
+        expect(ctx.SupportTicket.rows[0]).toEqual(expect.objectContaining({ action: 'drafted', reason: '' }));
+        expect(wake).not.toHaveBeenCalled();
+
+        // Off: no check at all.
+        ctx = load('draft');
+        ctx.SupportDeskState.set({ engine: 'off' });
+        gmail = withRaw(fakeGmail({ messages: [report()] }));
+        await ctx.agent.runOnce({ gmail, wake: jest.fn() });
+        expect(ctx.gem.ask).not.toHaveBeenCalled();
+        expect(ctx.SupportTicket.rows[0].action).toBe('drafted');
+    });
+
     test('when Claude cannot take it, people do: not set up, not responding, or no copy for it', async () => {
         const run = async (setup) => {
             const ctx = load('draft');
