@@ -78,6 +78,29 @@ module.exports = [
             'forgotten your password, use "Forgot password?" on the sign-in page.'
     },
     {
+        key: 'login-loop',
+        question: 'It says login successful, then sends me back to the login page',
+        examples: [
+            'login successful then back to login page', 'it shows login successfully then again i come back to the login page',
+            'after login it goes back to the login page', 'logged in but redirected to login again', 'access granted then login page again',
+            'dashboard does not open after login it goes back', 'login loop', 'keeps sending me back to the sign in page',
+            'sign in works but the dashboard does not open', 'login hone ke baad phir se login page aa jata hai'
+        ],
+        // Fixed on 26 Nov: an account whose internship registration never
+        // finished is now told so at sign-in, and can register again with the
+        // same email and password (see /login and registerUser).
+        answer: 'That happens when an account was created but its internship registration did not finish, so there ' +
+            'is no dashboard to open yet. Please sign in once more at {{loginUrl}}: the page now tells you what to do.\n\n' +
+            'If you registered for the internship with a different email, sign in with your Employee ID instead. If ' +
+            'not, register again at {{registerUrl}} with the same email and the same password. Your registration will ' +
+            'finish and you will get your Employee ID straight away.\n\n' +
+            'If it still sends you back, open the portal in Chrome (not inside Gmail or WhatsApp, and not in an ' +
+            'incognito window) and reply to this email with a screenshot.',
+        personal: 'Please sign in with your Employee ID, {{employeeId}}, at {{loginUrl}} instead of your email address. ' +
+            'If it still sends you back, open the portal in Chrome (not inside Gmail or WhatsApp, and not in an ' +
+            'incognito window) and reply to this email with a screenshot of what you see.'
+    },
+    {
         key: 'password-reset',
         question: 'I forgot my password',
         examples: [
