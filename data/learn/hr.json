@@ -1,152 +1,478 @@
 {
- "note": "Edit this file to change the module; the server reads it at boot.",
- "topics": [
-  {
-   "title": "What HR really does",
-   "technical": "Human resources builds the workforce a strategy needs: hiring, developing, retaining and supporting people, and shaping culture. Modern HR is a business partner, not a paperwork department — its work shows up in performance and retention.",
-   "simple": "Building and looking after the people a company needs to succeed.",
-   "videoSearch": "what is human resources",
-   "difficulty": 1
-  },
-  {
-   "title": "The employee lifecycle",
-   "technical": "From attraction and hiring through onboarding, development, retention and exit, HR touches every stage; each transition is a chance to build or lose engagement. Seeing the whole arc prevents fixing one stage while breaking another.",
-   "simple": "The full journey of an employee — and HR's role at every step.",
-   "videoSearch": "employee lifecycle explained",
-   "difficulty": 1
-  },
-  {
-   "title": "Recruitment and sourcing",
-   "technical": "Sourcing finds candidates through job boards, referrals and outreach; a clear role definition and scorecard keep it objective. Hiring the wrong person is among the most expensive mistakes a team makes.",
-   "simple": "Finding the right candidates — and defining 'right' before you start.",
-   "videoSearch": "recruitment sourcing strategies",
-   "difficulty": 1
-  },
-  {
-   "title": "Writing job descriptions",
-   "technical": "A good description states responsibilities, required skills and success criteria honestly, attracting fit and repelling mismatch. Vague postings flood you with wrong applicants and hide the right ones.",
-   "simple": "Describing a role clearly so the right people apply and the wrong ones don't.",
-   "videoSearch": "how to write job description",
-   "difficulty": 1
-  },
-  {
-   "title": "Screening and interviewing",
-   "technical": "Structured interviews with consistent questions and scoring reduce bias and predict performance better than gut feel. Behavioural questions — 'tell me about a time' — surface evidence over rehearsed answers.",
-   "simple": "Asking every candidate the same fair questions and judging on evidence.",
-   "videoSearch": "structured interview techniques",
-   "difficulty": 1
-  },
-  {
-   "title": "Selection and bias",
-   "technical": "Cognitive biases — halo, similarity, first impressions — corrupt hiring; structured scoring and diverse panels counter them. Fair selection is both an ethical duty and a performance advantage.",
-   "simple": "Spotting the mental shortcuts that lead to unfair, worse hiring decisions.",
-   "videoSearch": "hiring bias reduction",
-   "difficulty": 2
-  },
-  {
-   "title": "Onboarding",
-   "technical": "Structured onboarding — paperwork, tools, introductions, early goals — turns a new hire productive and committed faster; a chaotic first week predicts early exits. Retention starts on day one.",
-   "simple": "Setting new hires up to succeed and stay from their very first week.",
-   "videoSearch": "employee onboarding best practices",
-   "difficulty": 2
-  },
-  {
-   "title": "Employment law basics",
-   "technical": "Contracts, working hours, leave, anti-discrimination and termination rules bound what HR may do; getting them wrong is legally and financially costly. HR is where policy meets the law.",
-   "simple": "The legal rules HR must follow — because breaking them is expensive.",
-   "videoSearch": "employment law basics",
-   "difficulty": 2
-  },
-  {
-   "title": "Compensation and benefits",
-   "technical": "Pay structures, benefits and equity attract and retain talent; internal fairness and market benchmarking keep them defensible. Compensation is a message about what an organisation values.",
-   "simple": "Designing pay and benefits that are fair inside and competitive outside.",
-   "videoSearch": "compensation benefits fundamentals",
-   "difficulty": 2
-  },
-  {
-   "title": "Performance management",
-   "technical": "Goal-setting, ongoing feedback and reviews align individual work with organisational aims; continuous feedback beats the dreaded annual surprise. The aim is growth, not judgment.",
-   "simple": "Helping people know what's expected and how they're doing — all year, not once.",
-   "videoSearch": "performance management process",
-   "difficulty": 3
-  },
-  {
-   "title": "Feedback and difficult conversations",
-   "technical": "Specific, timely, behaviour-focused feedback improves performance; avoiding hard conversations lets small problems become big ones. Doing this well is a defining HR and management skill.",
-   "simple": "Giving honest feedback — including the uncomfortable kind — in a way that helps.",
-   "videoSearch": "giving difficult feedback",
-   "difficulty": 3
-  },
-  {
-   "title": "Learning and development",
-   "technical": "Training, mentoring and career paths grow capability and retention; people leave stagnation as readily as bad pay. Development is an investment with measurable returns in performance and loyalty.",
-   "simple": "Growing people's skills and careers so they perform better and stay.",
-   "videoSearch": "learning development strategy",
-   "difficulty": 3
-  },
-  {
-   "title": "Engagement and motivation",
-   "technical": "Engaged employees produce more and quit less; autonomy, purpose and recognition drive engagement more reliably than perks. Surveys measure it; managers move it.",
-   "simple": "What actually makes people care about their work — and how to measure it.",
-   "videoSearch": "employee engagement drivers",
-   "difficulty": 3
-  },
-  {
-   "title": "Culture and values",
-   "technical": "Culture is the behaviour a company actually rewards, not the poster on the wall; HR shapes it through hiring, promotion and what leaders tolerate. Culture eats strategy when the two conflict.",
-   "simple": "The real, lived 'how we do things here' — and HR's hand in shaping it.",
-   "videoSearch": "company culture explained",
-   "difficulty": 4
-  },
-  {
-   "title": "Conflict resolution",
-   "technical": "Workplace conflict is inevitable; mediation, active listening and fair process resolve it before it poisons teams. Ignored conflict costs performance and good people.",
-   "simple": "Settling disputes fairly before they damage the team.",
-   "videoSearch": "workplace conflict resolution",
-   "difficulty": 4
-  },
-  {
-   "title": "Diversity, equity and inclusion",
-   "technical": "Diverse teams outperform when included; DEI means fair access, belonging and removing systemic barriers, not quotas alone. It is both a moral and a business case, backed by evidence.",
-   "simple": "Building teams where different people are fairly included and can thrive.",
-   "videoSearch": "diversity equity inclusion workplace",
-   "difficulty": 4
-  },
-  {
-   "title": "HR analytics",
-   "technical": "People data — turnover, time-to-hire, engagement, absence — turns HR from anecdote to evidence. Metrics reveal problems and prove the impact of interventions to a numbers-driven leadership.",
-   "simple": "Using data to understand and improve how people are hired, kept and grown.",
-   "videoSearch": "hr analytics metrics",
-   "difficulty": 4
-  },
-  {
-   "title": "HR technology and systems",
-   "technical": "HRIS and applicant-tracking systems automate records, hiring and workflows, freeing HR for judgment work. The tool serves the process; a bad process automated is just faster chaos.",
-   "simple": "The software that handles HR's records and workflows so people focus on people.",
-   "videoSearch": "hris systems explained",
-   "difficulty": 5
-  },
-  {
-   "title": "Offboarding and exits",
-   "technical": "Respectful exits — handover, exit interviews, alumni goodwill — protect reputation and surface honest feedback. How people leave shapes how those who stay feel and what the world hears.",
-   "simple": "Ending employment well — because how people leave matters as much as how they arrive.",
-   "videoSearch": "offboarding exit interview",
-   "difficulty": 5
-  },
-  {
-   "title": "HR strategy",
-   "technical": "Strategic HR aligns workforce planning, capability and culture with business goals, earning a seat at the leadership table. HR that only reacts stays a cost centre; HR that plans becomes a partner.",
-   "simple": "Connecting people decisions to the company's actual goals.",
-   "videoSearch": "strategic human resource management",
-   "difficulty": 5
-  },
-  {
-   "title": "The capstone",
-   "technical": "Design a complete people plan for a growing team: hiring process, onboarding, performance and development approach, engagement measures and key metrics. A concrete plan demonstrates the whole discipline.",
-   "simple": "One full plan to hire, grow and keep a team — proof you can do HR.",
-   "videoSearch": "hr strategy plan example",
-   "difficulty": 5
-  }
- ]
+  "note": "Edit this file to change the module; the server reads it at boot.",
+  "topics": [
+    {
+      "title": "What HR really does",
+      "technical": "Human resources builds the workforce a strategy needs: hiring, developing, retaining and supporting people, and shaping culture. Modern HR is a business partner, not a paperwork department — its work shows up in performance and retention.",
+      "simple": "Building and looking after the people a company needs to succeed.",
+      "difficulty": 1,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x5h871g",
+          "title": "Find out how the Honda HR-V does off road",
+          "minutes": 6
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x8b969l",
+          "title": "What does diversity really mean?",
+          "minutes": 3
+        }
+      ]
+    },
+    {
+      "title": "The employee lifecycle",
+      "technical": "From attraction and hiring through onboarding, development, retention and exit, HR touches every stage; each transition is a chance to build or lose engagement. Seeing the whole arc prevents fixing one stage while breaking another.",
+      "simple": "The full journey of an employee — and HR's role at every step.",
+      "difficulty": 1,
+      "videos": []
+    },
+    {
+      "title": "Recruitment and sourcing",
+      "technical": "Sourcing finds candidates through job boards, referrals and outreach; a clear role definition and scorecard keep it objective. Hiring the wrong person is among the most expensive mistakes a team makes.",
+      "simple": "Finding the right candidates — and defining 'right' before you start.",
+      "difficulty": 1,
+      "videos": []
+    },
+    {
+      "title": "Writing job descriptions",
+      "technical": "A good description states responsibilities, required skills and success criteria honestly, attracting fit and repelling mismatch. Vague postings flood you with wrong applicants and hide the right ones.",
+      "simple": "Describing a role clearly so the right people apply and the wrong ones don't.",
+      "difficulty": 1,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/theinterviewtherightpersonforthejob",
+          "title": "The Interview: The Right Person for the Job",
+          "minutes": 26
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/34884e-your-job-in-the-navy-aviation-radioman",
+          "title": "1944 U.S. NAVY RECRUITING FILM YOUR JOB IN THE NAVY AVIATION RADIOMAN 34884e",
+          "minutes": 5
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x91ep3c",
+          "title": "Grant  Writing Manager (Remote Job) | 30",
+          "minutes": 5
+        }
+      ]
+    },
+    {
+      "title": "Screening and interviewing",
+      "technical": "Structured interviews with consistent questions and scoring reduce bias and predict performance better than gut feel. Behavioural questions — 'tell me about a time' — surface evidence over rehearsed answers.",
+      "simple": "Asking every candidate the same fair questions and judging on evidence.",
+      "difficulty": 1,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://video.igem.org/videos/embed/sKKQJZDuzyKTHapgVB2ZRz",
+          "title": "CPU_CHINA: Convenient and readable platform for cancer screening (2022) - Team Presentation [English]",
+          "minutes": 14
+        },
+        {
+          "src": "pt",
+          "embed": "https://video.igem.org/videos/embed/rRvUrbCm5zfyzsHk2y9adH",
+          "title": "CHINA-XJTU: De novo Design, Screening and Application of D-Tagatose-3-Epimerase ... (2025) - Team Presentation [English]",
+          "minutes": 14
+        },
+        {
+          "src": "pt",
+          "embed": "https://video.igem.org/videos/embed/ntnf6ePS8V4TsRzHGhqCGg",
+          "title": "BIT: Early screening of colorectal cancer(CRC) based on CRISPR/Cas12-coupled Sli... (2021) - Team Presentation [English]",
+          "minutes": 20
+        },
+        {
+          "src": "pt",
+          "embed": "https://video.igem.org/videos/embed/v9NGwiSpUiMmA94dk2mMG3",
+          "title": "NNHS: Building an evolutionary system based on mutations and screening to make a... (2024) - Team Presentation [English]",
+          "minutes": 15
+        },
+        {
+          "src": "pt",
+          "embed": "https://video.igem.org/videos/embed/qPpLHiXihtTDi3yEh4Uz89",
+          "title": "CJUH-JLU-China: BreFast: A Fast and Convenient Screening Kit for Breast Cancer E... (2023) - Team Presentation [English]",
+          "minutes": 15
+        }
+      ]
+    },
+    {
+      "title": "Selection and bias",
+      "technical": "Cognitive biases — halo, similarity, first impressions — corrupt hiring; structured scoring and diverse panels counter them. Fair selection is both an ethical duty and a performance advantage.",
+      "simple": "Spotting the mental shortcuts that lead to unfair, worse hiring decisions.",
+      "difficulty": 2,
+      "videos": []
+    },
+    {
+      "title": "Onboarding",
+      "technical": "Structured onboarding — paperwork, tools, introductions, early goals — turns a new hire productive and committed faster; a chaotic first week predicts early exits. Retention starts on day one.",
+      "simple": "Setting new hires up to succeed and stay from their very first week.",
+      "difficulty": 2,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/bctvpa-Recruiting_Selecting_and_Onboarding_9-10-19",
+          "title": "Recruiting, Selecting, and Onboarding 9-10-19",
+          "minutes": 56
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/prkcitut-Great_First_Impression_Employee_Onboarding",
+          "title": "Great First Impression Employee Onboarding!",
+          "minutes": 12
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/prkcitut-Mountain_Morning_Show_-_Impactful_Employee_Onboarding",
+          "title": "Mountain Morning Show: Impactful Employee Onboarding",
+          "minutes": 11
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/prkcitut-5_Top_Ways_to_Onboard_Millennial_Employees",
+          "title": "5 Top Ways to Onboard Millennial Employees",
+          "minutes": 10
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/factvwi-BBB_-_Onboarding_New_Employees",
+          "title": "BBB - Onboarding New Employees",
+          "minutes": 6
+        }
+      ]
+    },
+    {
+      "title": "Employment law basics",
+      "technical": "Contracts, working hours, leave, anti-discrimination and termination rules bound what HR may do; getting them wrong is legally and financially costly. HR is where policy meets the law.",
+      "simple": "The legal rules HR must follow — because breaking them is expensive.",
+      "difficulty": 2,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/LawEnforcementEmployeesBenevolentAssociation",
+          "title": "Law Enforcement Employees Benevolent Association",
+          "minutes": 12
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/mpmc-Law_Talk_-_An_Interview_with_DeAnna_Loraine",
+          "title": "Law Talk: An Interview with DeAnna Loraine",
+          "minutes": 40
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/linktv_explore_india1182385219",
+          "title": "The Law of the Land: An Interview With M.C. Mehta (Part 1)",
+          "minutes": 7
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/wcmwi-The_Local_Perspective_-_Engage_HR_Law",
+          "title": "The Local Perspective - Engage HR Law",
+          "minutes": 29
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/EX11.006",
+          "title": "Interview with U.S. Supreme Court Justice Antonin Scalia about his book Reading Law. Describes how judges become corrupted, Exhibit #11.006",
+          "minutes": 4
+        }
+      ]
+    },
+    {
+      "title": "Compensation and benefits",
+      "technical": "Pay structures, benefits and equity attract and retain talent; internal fairness and market benchmarking keep them defensible. Compensation is a message about what an organisation values.",
+      "simple": "Designing pay and benefits that are fair inside and competitive outside.",
+      "difficulty": 2,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/2017_CoB_Employees_Benefit_Options_Changes",
+          "title": "2017 CoB Employees Benefit Options/Changes",
+          "minutes": 32
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/geert-vanden-bossche-open-letter-to-who-halt-all-covid-19-mass-vaccination",
+          "title": "Mass Vaccination In A Pandemic Benefits Versus Risks Interview With 1080 Trimmed No Recode",
+          "minutes": 39
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Benefits_of_Disability_in_the_Workplace_-_Mythbusting_Common_Barriers",
+          "title": "Benefits of Disability in the Workplace: Mythbusting Common Barriers",
+          "minutes": 59
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x51yndk",
+          "title": "SSS sickness, maternity and employees compensation benefits payment thru the Bank (SMEC-PM)",
+          "minutes": 7
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x6jmmog",
+          "title": "Rep. Suarez wants higher compensation, benefits for barangay execs",
+          "minutes": 3
+        }
+      ]
+    },
+    {
+      "title": "Performance management",
+      "technical": "Goal-setting, ongoing feedback and reviews align individual work with organisational aims; continuous feedback beats the dreaded annual surprise. The aim is growth, not judgment.",
+      "simple": "Helping people know what's expected and how they're doing — all year, not once.",
+      "difficulty": 3,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/usaodd_nov_4_08",
+          "title": "nov 4 2007 - steven leyba bloodletting performance and kick off party minor interviews - Chicago, IL - ** out of daily/yearly order.",
+          "minutes": 21
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/BA_Admin_2009-WestSideStoryMusicalPerformanceAndInterview619",
+          "title": "West Side Story musical performance and interview",
+          "minutes": 10
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/usaodd_may_24_08",
+          "title": "may 24 2008 - interviews with an iraq vet and anarchist and wife and performance artist bob magian - San Francisco, CA",
+          "minutes": 5
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/scm-467157-fromosofundraiserinterviewsto",
+          "title": "From OSO Fundraiser interviews to watching a performance at the Central Saloon on Public Interest",
+          "minutes": 11
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/AnInterviewWithSheikYakzanCirca1991AndPublicPerformanceOfSema",
+          "title": "An interview with Sheik Yakzan circa 1991 and Public Performance of Sema",
+          "minutes": 58
+        }
+      ]
+    },
+    {
+      "title": "Feedback and difficult conversations",
+      "technical": "Specific, timely, behaviour-focused feedback improves performance; avoiding hard conversations lets small problems become big ones. Doing this well is a defining HR and management skill.",
+      "simple": "Giving honest feedback — including the uncomfortable kind — in a way that helps.",
+      "difficulty": 3,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/TamekiaMizLadiSmith_2018",
+          "title": "Tamekia MizLadi Smith: How to train employees to have difficult conversations",
+          "minutes": 8
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x7k579x",
+          "title": "5 Tips to Having Difficult Conversations With Employees",
+          "minutes": 5
+        }
+      ]
+    },
+    {
+      "title": "Learning and development",
+      "technical": "Training, mentoring and career paths grow capability and retention; people leave stagnation as readily as bad pay. Development is an investment with measurable returns in performance and loyalty.",
+      "simple": "Growing people's skills and careers so they perform better and stay.",
+      "difficulty": 3,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Development_in_Provincetown_-_An_Interview_with_Duane_Steele",
+          "title": "Development in Provincetown: An Interview with Duane Steele",
+          "minutes": 29
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Cubicgarden-InterviewWithEdParsonsAtGoogleDevelopmentDay564",
+          "title": "Interview with Ed Parsons at Google development day",
+          "minutes": 9
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Cubicgarden-InterviewWithChrisDibonaAtGoogleDevelopmentDay149",
+          "title": "Interview with Chris Dibona at Google development day",
+          "minutes": 22
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Development_in_Provincetown_-_An_Interview_with_Sheila_Lyons",
+          "title": "Development in Provincetown: An Interview with Sheila Lyons",
+          "minutes": 30
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Development_in_Provincetown_-_An_Interview_with_Mary_Jo_Avellar",
+          "title": "Development in Provincetown: An Interview with Mary Jo Avellar",
+          "minutes": 29
+        }
+      ]
+    },
+    {
+      "title": "Engagement and motivation",
+      "technical": "Engaged employees produce more and quit less; autonomy, purpose and recognition drive engagement more reliably than perks. Surveys measure it; managers move it.",
+      "simple": "What actually makes people care about their work — and how to measure it.",
+      "difficulty": 3,
+      "videos": []
+    },
+    {
+      "title": "Culture and values",
+      "technical": "Culture is the behaviour a company actually rewards, not the poster on the wall; HR shapes it through hiring, promotion and what leaders tolerate. Culture eats strategy when the two conflict.",
+      "simple": "The real, lived 'how we do things here' — and HR's hand in shaping it.",
+      "difficulty": 4,
+      "videos": []
+    },
+    {
+      "title": "Conflict resolution",
+      "technical": "Workplace conflict is inevitable; mediation, active listening and fair process resolve it before it poisons teams. Ignored conflict costs performance and good people.",
+      "simple": "Settling disputes fairly before they damage the team.",
+      "difficulty": 4,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/ncgvtvca-NCTV_Interviews_-_Conflict_Resolution_Center",
+          "title": "NCTV Interviews - Conflict Resolution Center",
+          "minutes": 29
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/factvwi-BBB_-_Employee_Conflict_Resolution",
+          "title": "BBB: Employee Conflict Resolution",
+          "minutes": 6
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/ncgvtvca-Interviews_Conflict_Resolution_8_14_2010",
+          "title": "Interviews Conflict Resolution 8 14 2010",
+          "minutes": 30
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x74xv8a",
+          "title": "Leadership Behaviors: Conflict Resolution",
+          "minutes": 6
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x6fpzpj",
+          "title": "ON THE SPOT: Karamah Institute on Law, leadership & Conflict Resolution",
+          "minutes": 9
+        }
+      ]
+    },
+    {
+      "title": "Diversity, equity and inclusion",
+      "technical": "Diverse teams outperform when included; DEI means fair access, belonging and removing systemic barriers, not quotas alone. It is both a moral and a business case, backed by evidence.",
+      "simple": "Building teams where different people are fairly included and can thrive.",
+      "difficulty": 4,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/cctv15mi-Dr_Bowtie_Talks_Leadership_and_Improving_Workplace_Diversity_Equity_and_Inclusion_in_the_W",
+          "title": "Dr Bowtie Talks Leadership and Improving Workplace Diversity, Equity and Inclusion in the Workplace",
+          "minutes": 17
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/la35ca-LA_Currents_-_City_Attorney_-_Diversity_Equity_and_Inclusion_Full_Interview",
+          "title": "LA Currents: City Attorney - Diversity, Equity, and Inclusion (Full Interview)",
+          "minutes": 30
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/lctvma-LCTV_News_Interview_-_Diversity_Equity_Inclusion_August_19_2021",
+          "title": "LCTV News Interview: Diversity, Equity & Inclusion - August 19, 2021",
+          "minutes": 23
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/vutvpa-Calls_for_Change_-_Interview_with_the_Office_of_Diversity_Equity_and_Inclusion",
+          "title": "Calls for Change: Interview with the Office of Diversity, Equity, and Inclusion",
+          "minutes": 36
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/la35ca-LA_Currents_-_Public_Safety_Workplace_Equity-Aram_Kouyoumdjian_Full_Interview",
+          "title": "LA Currents: Public Safety & Workplace Equity-Aram Kouyoumdjian (Full Interview)",
+          "minutes": 30
+        }
+      ]
+    },
+    {
+      "title": "HR analytics",
+      "technical": "People data — turnover, time-to-hire, engagement, absence — turns HR from anecdote to evidence. Metrics reveal problems and prove the impact of interventions to a numbers-driven leadership.",
+      "simple": "Using data to understand and improve how people are hired, kept and grown.",
+      "difficulty": 4,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x5ihr9",
+          "title": "Interview with Guardian Analytics",
+          "minutes": 8
+        }
+      ]
+    },
+    {
+      "title": "HR technology and systems",
+      "technical": "HRIS and applicant-tracking systems automate records, hiring and workflows, freeing HR for judgment work. The tool serves the process; a bad process automated is just faster chaos.",
+      "simple": "The software that handles HR's records and workflows so people focus on people.",
+      "difficulty": 5,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9e2ubq",
+          "title": "AI in Human Resource Management: How Technology is Revolutionizing Hiring & HR Processes!",
+          "minutes": 13
+        }
+      ]
+    },
+    {
+      "title": "Offboarding and exits",
+      "technical": "Respectful exits — handover, exit interviews, alumni goodwill — protect reputation and surface honest feedback. How people leave shapes how those who stay feel and what the world hears.",
+      "simple": "Ending employment well — because how people leave matters as much as how they arrive.",
+      "difficulty": 5,
+      "videos": []
+    },
+    {
+      "title": "HR strategy",
+      "technical": "Strategic HR aligns workforce planning, capability and culture with business goals, earning a seat at the leadership table. HR that only reacts stays a cost centre; HR that plans becomes a partner.",
+      "simple": "Connecting people decisions to the company's actual goals.",
+      "difficulty": 5,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://video.igem.org/videos/embed/u3qXXDwxaJeq5E67bGbLd7",
+          "title": "LZU-MEDICINE-CHINA: A Transformative Strategy For Type2 Diabetes (2024) - Team Presentation [English]",
+          "minutes": 13
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/CurrentMarketDynamicsAndStrategyAnExclusiveInterviewWithGreatInvestorHershCohen",
+          "title": "Current Market Dynamics and Strategy: An Exclusive Interview With Great Investor Hersh Cohen",
+          "minutes": 20
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9covba",
+          "title": "HR Minister Steven Sim outlines government strategies to tackle long-seated labour issues",
+          "minutes": 5
+        }
+      ]
+    },
+    {
+      "title": "The capstone",
+      "technical": "Design a complete people plan for a growing team: hiring process, onboarding, performance and development approach, engagement measures and key metrics. A concrete plan demonstrates the whole discipline.",
+      "simple": "One full plan to hire, grow and keep a team — proof you can do HR.",
+      "difficulty": 5,
+      "videos": []
+    }
+  ]
 }
