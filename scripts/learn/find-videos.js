@@ -295,7 +295,8 @@ const RIP_TITLE = new RegExp([
     'cbt\\s*nuggets', 'itpro\\.?tv', 'infinite\\s*skills', 'udacity', 'educative', 'codecademy',
     'frontend\\s*masters', 'egghead', 'treehouse', 'zero\\s*to\\s*mastery', 'zero\\s*to\\s*hero', 'bootcamp',
     'eduonix', 'simplilearn', 'edureka', 'intellipaat', 'whizlabs', 'a\\s*cloud\\s*guru', 'linux\\s*academy',
-    'kodekloud', '^\\s*\\[new\\]', '\\.ir\\b', 'corporate finance foundation'
+    'kodekloud', '^\\s*\\[new\\]', '\\.ir\\b', 'corporate finance foundation',
+    'mosh\\s*hamedani', 'premium\\s*courses?\\s*free', 'developer[-\\s]course', 'full\\s*course\\s*free\\s*download'
 ].join('|'), 'i');
 const RIP_DESC = /downloadly|freecoursesite|free\s*course\s*site|tutsgalaxy|course\s*download|\[fcs\]|getfreecourses|tutsnode|paid\s*course\s*for\s*free|bonus\s*20\d\d/i;
 // "10 Linux Terminal Tips" is a listicle, "14 Python programming" a track number.

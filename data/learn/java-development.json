@@ -14,24 +14,6 @@
           "minutes": 21
         },
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/053TheJavaClassLibraryDownloadly.ir",
-          "title": "053 The Java Class Library Downloadly.ir",
-          "minutes": 15
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/appsdevelo",
-          "title": "15. Strings.xml - Storing String Array in it and Decoding it in Java Class",
-          "minutes": 6
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/cittvny-Juice_and_Java_I_Online_Classes_Tips",
-          "title": "Juice and Java I Online Classes Tips",
-          "minutes": 4
-        },
-        {
           "src": "dm",
           "embed": "https://www.dailymotion.com/embed/video/x938b3y",
           "title": "Introduction of Java | Selenium Automation | KAZ Classes",
@@ -51,21 +33,60 @@
       "technical": "Arithmetic, comparison and logical operators combine into expressions; if/else, switch (now with arrow syntax), while and for direct execution. Integer division truncates, && and || short-circuit, and switch fall-through remains the classic beginner trap.",
       "simple": "The usual maths and decisions, with a compiler strict enough to catch most slips before they become bugs.",
       "difficulty": 1,
-      "videos": []
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x6d5xcy",
+          "title": "Java Tutorial For Beginners Part 05 (Assignment and Increment Operator)",
+          "minutes": 7
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x1pijzt",
+          "title": "Learn Java Tutorial 1.15- The modulus operator",
+          "minutes": 7
+        }
+      ]
     },
     {
       "title": "Methods and overloading",
       "technical": "Methods declare a return type, parameters, and possibly static (belonging to the class, not an instance). Overloading lets one name serve several parameter lists resolved at compile time; arguments pass by value — for objects, the value is the reference.",
       "simple": "Methods are named actions. The same name can accept different ingredient lists, and Java picks the right one by what you pass.",
       "difficulty": 1,
-      "videos": []
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/ChrisThielFiveOps",
+          "title": "Five Ops",
+          "minutes": 25
+        }
+      ]
     },
     {
       "title": "Classes, objects and constructors",
       "technical": "A class is a blueprint; new invokes a constructor to allocate an instance whose fields hold its state. this names the current object, encapsulation hides fields behind methods, and getters/setters (or records, later) control every touch of the data.",
       "simple": "Classes are cookie cutters, objects are cookies. Constructors bake them, and private fields keep other code's fingers out.",
       "difficulty": 1,
-      "videos": []
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x8nio2d",
+          "title": "PROGRAMMING IN JAVA using Eclipse - Tutorial 7 | Custom Classes (Part 1)",
+          "minutes": 7
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/MakingAJavaClassForDots",
+          "title": "Making a Java Class for Dots",
+          "minutes": 21
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/ChrisThielPokerHandclass",
+          "title": "Poker Hand class",
+          "minutes": 15
+        }
+      ]
     },
     {
       "title": "Inheritance and polymorphism",
@@ -79,7 +100,20 @@
       "technical": "An interface declares capability without implementation; classes implement any number of them, and default methods add shared behaviour. Programming to interfaces — List, not ArrayList — decouples callers from implementations and is the backbone of testable Java design.",
       "simple": "An interface is a contract: anything that signs it promises certain abilities, and code can depend on the promise instead of the maker.",
       "difficulty": 2,
-      "videos": []
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/ChrisThielJavaInterfacesParts1and2",
+          "title": "Java Interfaces Parts 1 and 2",
+          "minutes": 30
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/ChrisThielInterfacesPart3",
+          "title": "Interfaces Part 3",
+          "minutes": 18
+        }
+      ]
     },
     {
       "title": "Exceptions done properly",
@@ -142,7 +176,20 @@
       "technical": "java.nio.file's Path and Files read, write, copy and walk directory trees in single calls; streams of lines process large files lazily. Character encodings are explicit — UTF-8 by choice, not by luck — and try-with-resources guarantees handles close.",
       "simple": "Modern Java file work is one-liners: read all lines, write a list, walk a folder — with files that close themselves.",
       "difficulty": 4,
-      "videos": []
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x3il5hk",
+          "title": "Read/Write File in Java",
+          "minutes": 10
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xxdete",
+          "title": "Java File Processing Video 1 of 5",
+          "minutes": 18
+        }
+      ]
     },
     {
       "title": "Concurrency fundamentals",
@@ -156,32 +203,7 @@
       "technical": "JDBC standardises database access: DriverManager or a DataSource yields Connections, PreparedStatements bind parameters (and kill SQL injection), ResultSets iterate rows, and transactions group statements atomically. Every Java persistence framework stands on this floor.",
       "simple": "Java talks to databases through one standard doorway: ask with placeholders, read rows back, commit together or not at all.",
       "difficulty": 4,
-      "videos": [
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/14.creatingdatabaseswithjdbcinjava",
-          "title": "14. Creating Databases With JDBC In Java",
-          "minutes": 17
-        },
-        {
-          "src": "pt",
-          "embed": "https://videos.ijug.eu/videos/embed/87DQZqSZHQvzmbMjfM8nz3",
-          "title": "Intro to CrateDB: Distributed SQL & Search Database – Andrei Dan | Java Vienna 2017-06-26",
-          "minutes": 49
-        },
-        {
-          "src": "pt",
-          "embed": "https://videos.ijug.eu/videos/embed/tmFYag2aDbwgD6h7K84K6u",
-          "title": "Springs' PetClinic with a Graph-Database (Neo4J) – Daniel Jahre | Java Vienna 2018-04-16",
-          "minutes": 59
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/database-fundamentals-for-java-programmers",
-          "title": "Database Fundamentals for Java Programmers",
-          "minutes": 3
-        }
-      ]
+      "videos": []
     },
     {
       "title": "Build tools: Maven and Gradle",
@@ -203,28 +225,10 @@
           "minutes": 9
         },
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/5.introductiontounittestingwithjunit",
-          "title": "5. Introduction To Unit Testing With JUnit",
-          "minutes": 16
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/29.testinsertjdbccode",
-          "title": "29. Test Insert JDBC Code",
-          "minutes": 18
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/lo6u9y4xocezlqxcpasbvzziepk78feesmhnor0t",
-          "title": "AD #2821 - SEAT Tests Workers to Restart Production; Byton Takes Drastic Action to Survive; GM Shutting Down Maven",
-          "minutes": 9
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x9265sa",
-          "title": "Solving FizzBuzz Coding Test with Java loop and Stream",
-          "minutes": 19
+          "src": "pt",
+          "embed": "https://peertube.watch/videos/embed/gbDpejZNLb6f1LhEcTkGq8",
+          "title": "Advanced testing in action on a Java project",
+          "minutes": 50
         }
       ]
     },
@@ -235,10 +239,10 @@
       "difficulty": 5,
       "videos": [
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/5.-sample-web-application-with-spring-boot",
-          "title": "5. Sample Web Application WIth Spring Boot",
-          "minutes": 16
+          "src": "pt",
+          "embed": "https://videos.ijug.eu/videos/embed/aj5x4wV5XgwinwqEbhzkMi",
+          "title": "Quick Overview of Spring Boot 1.x – Dominik Dorn | Java Vienna 2018-04-16",
+          "minutes": 23
         },
         {
           "src": "pt",
@@ -247,22 +251,22 @@
           "minutes": 60
         },
         {
-          "src": "pt",
-          "embed": "https://videos.ijug.eu/videos/embed/aj5x4wV5XgwinwqEbhzkMi",
-          "title": "Quick Overview of Spring Boot 1.x – Dominik Dorn | Java Vienna 2018-04-16",
-          "minutes": 23
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x92651a",
+          "title": "REST API: 9 Basic Spring Annotations to Master",
+          "minutes": 34
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9264ss",
+          "title": "Spring REST API: PathVariable, RequestParam, RequestBody and Input Validation",
+          "minutes": 21
         },
         {
           "src": "pt",
           "embed": "https://videos.ijug.eu/videos/embed/fEfBeKPzCGHoEE81ZvdQVw",
           "title": "What's new in Spring Boot 2 – Dominik Dorn | Java Vienna 2018-04-16",
           "minutes": 33
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/new-spring-boot-3-spring-6-hibernate-for-beginners04-new-rest-crud-apis",
-          "title": "[NEW] Spring Boot 3, Spring 6 & Hibernate for Beginners(04 - NEW - REST CRUD APIs)",
-          "minutes": 5
         }
       ]
     },
@@ -271,7 +275,20 @@
       "technical": "Spring Data JPA maps entities to tables and derives queries from repository method names — findByEmailAndActiveTrue writes itself. Transactions demarcate with @Transactional, and the H2 in-memory database makes persistence testable without infrastructure.",
       "simple": "Declare what your data looks like and what you want to find; the framework writes the SQL and manages the safety.",
       "difficulty": 5,
-      "videos": []
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://videos.ijug.eu/videos/embed/tJsjfuDtq1e7LCfZ8VRzXR",
+          "title": "How to optimize JPA: The SQL Police – Philipp Seifert-Kehrer | Java Vienna 2025-01-27",
+          "minutes": 49
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xlsnhr",
+          "title": "Learn about Hibernate in the Introduction to Hibernate",
+          "minutes": 24
+        }
+      ]
     },
     {
       "title": "The final project",
@@ -280,34 +297,16 @@
       "difficulty": 5,
       "videos": [
         {
-          "src": "pt",
-          "embed": "https://videos.ijug.eu/videos/embed/sZ6sDN63invaawXPyKqLFQ",
-          "title": "Spring Boot Autoconfiguration: Behind the scenes – Marco Behler | Java Vienna 2019-01-21",
-          "minutes": 60
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9264ss",
+          "title": "Spring REST API: PathVariable, RequestParam, RequestBody and Input Validation",
+          "minutes": 21
         },
         {
-          "src": "pt",
-          "embed": "https://videos.ijug.eu/videos/embed/aj5x4wV5XgwinwqEbhzkMi",
-          "title": "Quick Overview of Spring Boot 1.x – Dominik Dorn | Java Vienna 2018-04-16",
-          "minutes": 23
-        },
-        {
-          "src": "pt",
-          "embed": "https://videos.ijug.eu/videos/embed/fEfBeKPzCGHoEE81ZvdQVw",
-          "title": "What's new in Spring Boot 2 – Dominik Dorn | Java Vienna 2018-04-16",
-          "minutes": 33
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/new-spring-boot-3-spring-6-hibernate-for-beginners04-new-rest-crud-apis",
-          "title": "[NEW] Spring Boot 3, Spring 6 & Hibernate for Beginners(04 - NEW - REST CRUD APIs)",
-          "minutes": 5
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/new-spring-boot-3-spring-6-hibernate-for-beginners03-new-hibernatejpa-crud",
-          "title": "[NEW] Spring Boot 3, Spring 6 & Hibernate for Beginners(03 - NEW - HibernateJPA CRUD)",
-          "minutes": 9
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x92651a",
+          "title": "REST API: 9 Basic Spring Annotations to Master",
+          "minutes": 34
         }
       ]
     }

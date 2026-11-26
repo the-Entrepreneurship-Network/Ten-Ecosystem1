@@ -1,152 +1,379 @@
 {
- "note": "Edit this file to change the module; the server reads it at boot.",
- "topics": [
-  {
-   "title": "How the web works",
-   "technical": "A browser resolves a domain through DNS, opens a TLS connection, and sends an HTTP request; a server answers with HTML the browser parses into the DOM, fetching CSS, JavaScript and images as it discovers them. Every performance and security decision hangs off this request/response skeleton.",
-   "simple": "Type an address, and your browser asks a server for a page, then assembles the pieces it receives into what you see.",
-   "videoId": "kUMe1FH4CHE",
-   "difficulty": 1
-  },
-  {
-   "title": "HTML: the structure",
-   "technical": "HTML marks meaning, not looks: headings, paragraphs, lists, links, images and forms nest into a tree. Semantic elements — nav, main, article, footer — tell browsers, screen readers and search engines what each region is, which is why div-soup is a defect, not a style.",
-   "simple": "HTML is the skeleton of every page: what things ARE — a heading, a list, a button — not how they look.",
-   "videoId": "kUMe1FH4CHE",
-   "difficulty": 1
-  },
-  {
-   "title": "Forms and inputs",
-   "technical": "Forms collect user data with typed inputs — email, number, date — whose built-in validation (required, pattern, min) runs before any JavaScript. Labels bind text to controls for accessibility, and method/action decide how the browser submits without a single script.",
-   "simple": "Forms are how users talk back. The browser already knows how to check emails and require fields — use it before writing code.",
-   "videoId": "kUMe1FH4CHE",
-   "difficulty": 1
-  },
-  {
-   "title": "CSS: selectors and the cascade",
-   "technical": "CSS rules select elements and declare properties; conflicts resolve by specificity, then source order, with inheritance filling gaps. The box model — content, padding, border, margin — governs all sizing, and box-sizing: border-box makes it sane.",
-   "simple": "CSS paints the skeleton. When two rules argue, the more specific and later one wins — that argument is the cascade.",
-   "videoId": "kUMe1FH4CHE",
-   "difficulty": 1
-  },
-  {
-   "title": "Layout: Flexbox",
-   "technical": "Flexbox lays out one dimension at a time: a flex container distributes space among children with justify-content and align-items, wraps with flex-wrap, and reorders visually without touching the HTML. It replaced float hacks for almost every component-level layout.",
-   "simple": "Flexbox lines things up in a row or column and shares out the spare space — the everyday layout tool.",
-   "videoId": "kUMe1FH4CHE",
-   "difficulty": 1
-  },
-  {
-   "title": "Layout: Grid",
-   "technical": "CSS Grid is two-dimensional: define rows and columns (fr units, minmax, auto-fit), then place children into areas by name or line. Page-level scaffolding — header, sidebar, content, footer — is Grid's home turf, with Flexbox for what lives inside.",
-   "simple": "Grid draws the page's chessboard — rows AND columns — and drops each piece exactly where you name.",
-   "videoId": "kUMe1FH4CHE",
-   "difficulty": 2
-  },
-  {
-   "title": "Responsive design",
-   "technical": "Responsive pages adapt with fluid units (%, rem, vw), media queries at content-driven breakpoints, and responsive images via srcset. Mobile-first CSS starts narrow and layers width on top; the meta viewport tag is the one line without which phones lie about their size.",
-   "simple": "One page, every screen: measure in relative units, adjust at sensible widths, and design for the phone first.",
-   "videoId": "kUMe1FH4CHE",
-   "difficulty": 2
-  },
-  {
-   "title": "JavaScript: the language",
-   "technical": "JavaScript brings behaviour: let/const scoping, first-class functions, closures, objects and arrays with rich methods (map, filter, reduce), and template literals. It runs single-threaded inside the page — everything interactive on the web ends up here.",
-   "simple": "JavaScript is the muscle of a page: the language that reacts, computes and changes what you see.",
-   "videoId": "PkZNo7MFNFg",
-   "difficulty": 2
-  },
-  {
-   "title": "The DOM: scripting the page",
-   "technical": "The DOM is the page as live objects: querySelector finds nodes, textContent and classList change them, createElement and append grow the tree. Every visual change a user sees is a DOM mutation something scripted.",
-   "simple": "The page is a tree your code can climb and prune: find an element, change its text, add a class, insert a new branch.",
-   "videoId": "PkZNo7MFNFg",
-   "difficulty": 2
-  },
-  {
-   "title": "Events",
-   "technical": "addEventListener subscribes handlers to clicks, input, keys and scroll; events bubble up the tree, so one listener on a parent can serve a thousand children (delegation). preventDefault stops native behaviour, and the event object carries everything about what happened.",
-   "simple": "Events are the page's nervous system: something happens, your function fires, one listener can watch a whole region.",
-   "videoId": "PkZNo7MFNFg",
-   "difficulty": 3
-  },
-  {
-   "title": "Async JavaScript: promises and fetch",
-   "technical": "JavaScript never waits: slow operations return promises, consumed with async/await inside try/catch. fetch performs HTTP from the page, res.json() parses answers, and the event loop explains why nothing blocks while everything appears sequential.",
-   "simple": "The page fetches data in the background and your code says 'await' — wait here, but keep the page alive meanwhile.",
-   "videoId": "PkZNo7MFNFg",
-   "difficulty": 3
-  },
-  {
-   "title": "Working with APIs and JSON",
-   "technical": "Front ends live on JSON APIs: request with the right method and headers, check response.ok before parsing, render data into the DOM, and show honest loading and error states. The contract with the server — the shapes exchanged — is the real interface of your app.",
-   "simple": "Your page asks servers for data and draws the answers. Good pages also show 'loading' and admit failures.",
-   "videoId": "PkZNo7MFNFg",
-   "difficulty": 3
-  },
-  {
-   "title": "Browser storage and state",
-   "technical": "localStorage persists small key-value strings per origin; sessionStorage forgets on close; cookies travel to the server with every request. JSON.stringify bridges objects to storage, and nothing secret belongs in any of them — the user can read every byte.",
-   "simple": "The browser can remember for you — preferences, drafts, a token — but anything stored there, the user can see.",
-   "videoId": "PkZNo7MFNFg",
-   "difficulty": 3
-  },
-  {
-   "title": "Accessibility",
-   "technical": "Accessibility is engineering, not garnish: semantic elements and labels give assistive tech a map, keyboard operability covers every interaction, focus is visible and managed, contrast meets WCAG ratios, and ARIA fills only the gaps semantics cannot. Broken a11y excludes real users.",
-   "simple": "The web is for everyone: keyboards must reach everything, screen readers must understand everything, contrast must be readable.",
-   "videoId": "kUMe1FH4CHE",
-   "difficulty": 4
-  },
-  {
-   "title": "Git and deployment for the front end",
-   "technical": "Front-end work ships through the same git flow as everything else, and static hosting deploys it: push to a repo, a pipeline builds, a CDN serves. HTTPS, caching headers and atomic deploys come free from the platform; a URL anyone can open is the definition of done.",
-   "simple": "Your page is not real until it is on the internet: git push, automatic build, live URL.",
-   "videoSearch": "deploy static website github pages netlify",
-   "difficulty": 4
-  },
-  {
-   "title": "React: components and JSX",
-   "technical": "React describes UI as components — functions returning JSX — and re-renders them when data changes, reconciling the DOM for you. Props flow data down, composition builds screens from parts, and thinking in components replaces thinking in pages.",
-   "simple": "React lets you build the page out of Lego bricks you design, and it repaints them automatically when data changes.",
-   "videoId": "bMknfKXIFA8",
-   "difficulty": 4
-  },
-  {
-   "title": "React state and hooks",
-   "technical": "useState holds component state whose setter triggers re-render; useEffect runs side effects after render with a dependency array governing when. Lifting state up shares it between siblings, and the rules of hooks — top level only — keep the machinery deterministic.",
-   "simple": "State is what a component remembers. Change it through the setter and React redraws exactly what depends on it.",
-   "videoId": "bMknfKXIFA8",
-   "difficulty": 4
-  },
-  {
-   "title": "React forms, lists and effects in practice",
-   "technical": "Controlled inputs bind form fields to state; lists render with map and stable keys; data loads in effects with loading and error states modelled explicitly. These three patterns compose into nearly every screen a working front end ships.",
-   "simple": "Forms, lists and fetched data — the three patterns almost every real screen is built from.",
-   "videoId": "bMknfKXIFA8",
-   "difficulty": 5
-  },
-  {
-   "title": "Routing and multi-page apps",
-   "technical": "Client-side routing swaps components on URL changes without full reloads: routes declare the map, links navigate, params carry ids, and a catch-all route handles the unknown. The URL is state — a screen you cannot link to is a screen users cannot share.",
-   "simple": "One app pretending to be many pages: the address bar changes, React swaps the view, and every screen is shareable.",
-   "videoId": "bMknfKXIFA8",
-   "difficulty": 5
-  },
-  {
-   "title": "Performance and DevTools",
-   "technical": "DevTools exposes the truth: the Network tab shows what loads and how slowly, Lighthouse scores what matters, and the Performance panel finds jank. Optimise by measurement — compress images, lazy-load below the fold, cache aggressively — never by folklore.",
-   "simple": "The browser's built-in X-ray shows why a page is slow; fix what the measurements name, not what you guess.",
-   "videoSearch": "chrome devtools performance tutorial",
-   "difficulty": 5
-  },
-  {
-   "title": "The final project",
-   "technical": "Ship a complete responsive React application against a real API: routed screens, forms with validation, loading and error states, accessibility passes, deployed to a public URL with the repo README explaining it. This is the portfolio piece that opens interviews.",
-   "simple": "One finished, live, responsive app that uses everything above — with a link you can put on a resume.",
-   "videoId": "bMknfKXIFA8",
-   "difficulty": 5
-  }
- ]
+  "note": "Edit this file to change the module; the server reads it at boot.",
+  "topics": [
+    {
+      "title": "How the web works",
+      "technical": "A browser resolves a domain through DNS, opens a TLS connection, and sends an HTTP request; a server answers with HTML the browser parses into the DOM, fetching CSS, JavaScript and images as it discovers them. Every performance and security decision hangs off this request/response skeleton.",
+      "simple": "Type an address, and your browser asks a server for a page, then assembles the pieces it receives into what you see.",
+      "difficulty": 1,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://tilvids.com/videos/embed/3CueXegQi12Pz8LoyjnRsN",
+          "title": "The Internet: HTTP & HTML",
+          "minutes": 7
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x1kmz5h",
+          "title": "What is HTTP and How it Works|What is HTTPS and How it works|What is SSL and How it Works",
+          "minutes": 4
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x8q84t6",
+          "title": "How does the internet work!",
+          "minutes": 6
+        }
+      ]
+    },
+    {
+      "title": "HTML: the structure",
+      "technical": "HTML marks meaning, not looks: headings, paragraphs, lists, links, images and forms nest into a tree. Semantic elements — nav, main, article, footer — tell browsers, screen readers and search engines what each region is, which is why div-soup is a defect, not a style.",
+      "simple": "HTML is the skeleton of every page: what things ARE — a heading, a list, a button — not how they look.",
+      "difficulty": 1,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x80op5",
+          "title": "HTML Tutorial 1: Introduction to HTML",
+          "minutes": 10
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xcnby9",
+          "title": "HTML W3C Tutorial Pt1",
+          "minutes": 9
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x8wzh2q",
+          "title": "Section, header, article, aside, footer in HTML | Stuintern",
+          "minutes": 43
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x3t6keg",
+          "title": "HTML Tutorial for Beginners - 01 - Creating the first web page",
+          "minutes": 10
+        }
+      ]
+    },
+    {
+      "title": "Forms and inputs",
+      "technical": "Forms collect user data with typed inputs — email, number, date — whose built-in validation (required, pattern, min) runs before any JavaScript. Labels bind text to controls for accessibility, and method/action decide how the browser submits without a single script.",
+      "simple": "Forms are how users talk back. The browser already knows how to check emails and require fields — use it before writing code.",
+      "difficulty": 1,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x1ndy3",
+          "title": "HTML Forms explained",
+          "minutes": 6
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x7utffk",
+          "title": "HTML -  Create a simple form in HTML",
+          "minutes": 8
+        }
+      ]
+    },
+    {
+      "title": "CSS: selectors and the cascade",
+      "technical": "CSS rules select elements and declare properties; conflicts resolve by specificity, then source order, with inheritance filling gaps. The box model — content, padding, border, margin — governs all sizing, and box-sizing: border-box makes it sane.",
+      "simple": "CSS paints the skeleton. When two rules argue, the more specific and later one wins — that argument is the cascade.",
+      "difficulty": 1,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x8qf7js",
+          "title": "CSS3 PROGRAMMING - Tutorial 1 | Introduction",
+          "minutes": 3
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x4bnfe",
+          "title": "CSS Style Sheets and HTML",
+          "minutes": 10
+        }
+      ]
+    },
+    {
+      "title": "Layout: Flexbox",
+      "technical": "Flexbox lays out one dimension at a time: a flex container distributes space among children with justify-content and align-items, wraps with flex-wrap, and reorders visually without touching the HTML. It replaced float hacks for almost every component-level layout.",
+      "simple": "Flexbox lines things up in a row or column and shares out the spare space — the everyday layout tool.",
+      "difficulty": 1,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x6icaxv",
+          "title": "Single Level Responsive Navigation Bar Using Html and Css (Css Flexbox) (No javascript) (Web Designing)",
+          "minutes": 10
+        }
+      ]
+    },
+    {
+      "title": "Layout: Grid",
+      "technical": "CSS Grid is two-dimensional: define rows and columns (fr units, minmax, auto-fit), then place children into areas by name or line. Page-level scaffolding — header, sidebar, content, footer — is Grid's home turf, with Flexbox for what lives inside.",
+      "simple": "Grid draws the page's chessboard — rows AND columns — and drops each piece exactly where you name.",
+      "difficulty": 2,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://peertube.kaleidos.net/videos/embed/goGqxR7EvmpBBg9u1iXzta",
+          "title": "CSS Grid Layout tutorial | Basics",
+          "minutes": 8
+        }
+      ]
+    },
+    {
+      "title": "Responsive design",
+      "technical": "Responsive pages adapt with fluid units (%, rem, vw), media queries at content-driven breakpoints, and responsive images via srcset. Mobile-first CSS starts narrow and layers width on top; the meta viewport tag is the one line without which phones lie about their size.",
+      "simple": "One page, every screen: measure in relative units, adjust at sensible widths, and design for the phone first.",
+      "difficulty": 2,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x6icaxv",
+          "title": "Single Level Responsive Navigation Bar Using Html and Css (Css Flexbox) (No javascript) (Web Designing)",
+          "minutes": 10
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/ResponsiveWebdesign-DrupalTheming",
+          "title": "Responsive Webdesign - Drupal Theming",
+          "minutes": 46
+        }
+      ]
+    },
+    {
+      "title": "JavaScript: the language",
+      "technical": "JavaScript brings behaviour: let/const scoping, first-class functions, closures, objects and arrays with rich methods (map, filter, reduce), and template literals. It runs single-threaded inside the page — everything interactive on the web ends up here.",
+      "simple": "JavaScript is the muscle of a page: the language that reacts, computes and changes what you see.",
+      "difficulty": 2,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://video.infosec.exchange/videos/embed/7THyu6sAvn21vVUAL3TWvJ",
+          "title": "JavaScript WTFs 2 - Equality and Inequality",
+          "minutes": 6
+        },
+        {
+          "src": "pt",
+          "embed": "https://video.infosec.exchange/videos/embed/1113JtbuuYQkXuBif6qqju",
+          "title": "JavaScript WTFs 3 - Syntax",
+          "minutes": 13
+        },
+        {
+          "src": "pt",
+          "embed": "https://video.infosec.exchange/videos/embed/aiq4voNtVNMByEhNA1wZQr",
+          "title": "JavaScript WTFs 6 - Arrays",
+          "minutes": 11
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/open-source-bridge-2014-lauren-voswinkel-advanced-javascript-basics-for-web-developers",
+          "title": "Open Source Bridge 2014 Lauren Voswinkel Advanced Javascript Basics For Web Developers",
+          "minutes": 51
+        }
+      ]
+    },
+    {
+      "title": "The DOM: scripting the page",
+      "technical": "The DOM is the page as live objects: querySelector finds nodes, textContent and classList change them, createElement and append grow the tree. Every visual change a user sees is a DOM mutation something scripted.",
+      "simple": "The page is a tree your code can climb and prune: find an element, change its text, add a class, insert a new branch.",
+      "difficulty": 2,
+      "videos": []
+    },
+    {
+      "title": "Events",
+      "technical": "addEventListener subscribes handlers to clicks, input, keys and scroll; events bubble up the tree, so one listener on a parent can serve a thousand children (delegation). preventDefault stops native behaviour, and the event object carries everything about what happened.",
+      "simple": "Events are the page's nervous system: something happens, your function fires, one listener can watch a whole region.",
+      "difficulty": 3,
+      "videos": []
+    },
+    {
+      "title": "Async JavaScript: promises and fetch",
+      "technical": "JavaScript never waits: slow operations return promises, consumed with async/await inside try/catch. fetch performs HTTP from the page, res.json() parses answers, and the event loop explains why nothing blocks while everything appears sequential.",
+      "simple": "The page fetches data in the background and your code says 'await' — wait here, but keep the page alive meanwhile.",
+      "difficulty": 3,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/nodevember16-Promises_are_terrible_start_using_them",
+          "title": "Promises are terrible; start using them!",
+          "minutes": 34
+        }
+      ]
+    },
+    {
+      "title": "Working with APIs and JSON",
+      "technical": "Front ends live on JSON APIs: request with the right method and headers, check response.ok before parsing, render data into the DOM, and show honest loading and error states. The contract with the server — the shapes exchanged — is the real interface of your app.",
+      "simple": "Your page asks servers for data and draws the answers. Good pages also show 'loading' and admit failures.",
+      "difficulty": 3,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://video.infosec.exchange/videos/embed/h4oiyBWVUPVhKUpJwqT3Da",
+          "title": "A Basic REST API",
+          "minutes": 25
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xayct2a",
+          "title": "What Is a REST API? How Modern Apps Communicate With Each Other 🔗",
+          "minutes": 10
+        }
+      ]
+    },
+    {
+      "title": "Browser storage and state",
+      "technical": "localStorage persists small key-value strings per origin; sessionStorage forgets on close; cookies travel to the server with every request. JSON.stringify bridges objects to storage, and nothing secret belongs in any of them — the user can read every byte.",
+      "simple": "The browser can remember for you — preferences, drafts, a token — but anything stored there, the user can see.",
+      "difficulty": 3,
+      "videos": []
+    },
+    {
+      "title": "Accessibility",
+      "technical": "Accessibility is engineering, not garnish: semantic elements and labels give assistive tech a map, keyboard operability covers every interaction, focus is visible and managed, contrast meets WCAG ratios, and ARIA fills only the gaps semantics cannot. Broken a11y excludes real users.",
+      "simple": "The web is for everyone: keyboards must reach everything, screen readers must understand everything, contrast must be readable.",
+      "difficulty": 4,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://diler.tube/videos/embed/cyYwHhfHjG5ThhWzfdiNFQ",
+          "title": "The Internet's Accessibility Problem — and How To Fix It ｜ Clive Loseby ｜ TED",
+          "minutes": 14
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x833sqj",
+          "title": "WordFest Live - Christina Workman - Accessible Websites Benefit Everyone",
+          "minutes": 41
+        }
+      ]
+    },
+    {
+      "title": "Git and deployment for the front end",
+      "technical": "Front-end work ships through the same git flow as everything else, and static hosting deploys it: push to a repo, a pipeline builds, a CDN serves. HTTPS, caching headers and atomic deploys come free from the platform; a URL anyone can open is the definition of done.",
+      "simple": "Your page is not real until it is on the internet: git push, automatic build, live URL.",
+      "difficulty": 4,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://video.infosec.exchange/videos/embed/c1f7LFkUAhqaCrcVvwetr2",
+          "title": "How to use git (the basics)",
+          "minutes": 21
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x7svlv2",
+          "title": "Getting Started with Git",
+          "minutes": 24
+        },
+        {
+          "src": "pt",
+          "embed": "https://tilvids.com/videos/embed/1sEt7cshqRfFyV8dLqRgRH",
+          "title": "What is GitHub Pages?",
+          "minutes": 4
+        },
+        {
+          "src": "pt",
+          "embed": "https://video.infosec.exchange/videos/embed/7n58tkkSkLX4HWRic5tT4u",
+          "title": "Branches in git",
+          "minutes": 15
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9jczfk",
+          "title": "Git Basics Tutorial: Learn Version Control, Commits & Branches for Beginners",
+          "minutes": 40
+        }
+      ]
+    },
+    {
+      "title": "React: components and JSX",
+      "technical": "React describes UI as components — functions returning JSX — and re-renders them when data changes, reconciling the DOM for you. Props flow data down, composition builds screens from parts, and thinking in components replaces thinking in pages.",
+      "simple": "React lets you build the page out of Lego bricks you design, and it repaints them automatically when data changes.",
+      "difficulty": 4,
+      "videos": []
+    },
+    {
+      "title": "React state and hooks",
+      "technical": "useState holds component state whose setter triggers re-render; useEffect runs side effects after render with a dependency array governing when. Lifting state up shares it between siblings, and the rules of hooks — top level only — keep the machinery deterministic.",
+      "simple": "State is what a component remembers. Change it through the setter and React redraws exactly what depends on it.",
+      "difficulty": 4,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9pym7o",
+          "title": "Advanced React Hooks – useMemo, useCallback & useReducer",
+          "minutes": 48
+        }
+      ]
+    },
+    {
+      "title": "React forms, lists and effects in practice",
+      "technical": "Controlled inputs bind form fields to state; lists render with map and stable keys; data loads in effects with loading and error states modelled explicitly. These three patterns compose into nearly every screen a working front end ships.",
+      "simple": "Forms, lists and fetched data — the three patterns almost every real screen is built from.",
+      "difficulty": 5,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x8oq4u3",
+          "title": "How To Make Sign In & Sign Up Form Using React JS _ ReactJS Login & Registration Form",
+          "minutes": 21
+        }
+      ]
+    },
+    {
+      "title": "Routing and multi-page apps",
+      "technical": "Client-side routing swaps components on URL changes without full reloads: routes declare the map, links navigate, params carry ids, and a catch-all route handles the unknown. The URL is state — a screen you cannot link to is a screen users cannot share.",
+      "simple": "One app pretending to be many pages: the address bar changes, React swaps the view, and every screen is shareable.",
+      "difficulty": 5,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/nodevember16-Introduction_to_React_Router",
+          "title": "Introduction to React Router",
+          "minutes": 32
+        }
+      ]
+    },
+    {
+      "title": "Performance and DevTools",
+      "technical": "DevTools exposes the truth: the Network tab shows what loads and how slowly, Lighthouse scores what matters, and the Performance panel finds jank. Optimise by measurement — compress images, lazy-load below the fold, cache aggressively — never by folklore.",
+      "simple": "The browser's built-in X-ray shows why a page is slow; fix what the measurements name, not what you guess.",
+      "difficulty": 5,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://peertube.watch/videos/embed/hU2hJDXt94JejpD6VPmi2u",
+          "title": "Understanding how the web browser works, or tracing your way out of (performance) problems",
+          "minutes": 24
+        },
+        {
+          "src": "pt",
+          "embed": "https://tubedu.org/videos/embed/vu6jHhtkfd9kY7EeYSuGy5",
+          "title": "Chrome DevTools - Experimental Recorder panel",
+          "minutes": 3
+        }
+      ]
+    },
+    {
+      "title": "The final project",
+      "technical": "Ship a complete responsive React application against a real API: routed screens, forms with validation, loading and error states, accessibility passes, deployed to a public URL with the repo README explaining it. This is the portfolio piece that opens interviews.",
+      "simple": "One finished, live, responsive app that uses everything above — with a link you can put on a resume.",
+      "difficulty": 5,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x91u4hy",
+          "title": "Portfolio Website Design: HTML, CSS & JS",
+          "minutes": 4
+        }
+      ]
+    }
+  ]
 }
