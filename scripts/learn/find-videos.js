@@ -665,7 +665,7 @@ async function main() {
                 dump[slug].push({
                     n: i, title: topic.title, technical: topic.technical,
                     existing: keep.map(slim), dropped,
-                    candidates: found.filter((v) => !seen.has(v.embed) && !REJECT.has(v.embed) && !seen.add(v.embed))
+                    candidates: found.filter((v) => { if (seen.has(v.embed) || REJECT.has(v.embed)) return false; seen.add(v.embed); return true; })
                         .map((v) => ({ ...slim(v), note: v.note || '', score: Math.round(v.score * 100) / 100 }))
                 });
             }
