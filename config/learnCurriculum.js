@@ -10,7 +10,7 @@
  * than invented into the product.
  *
  * Each topic carries the module text (a technical explanation, then a simple
- * one), the video that follows it, and a difficulty from 1 to 5 that must
+ * one), the videos that follow it, and a difficulty from 1 to 5 that must
  * never decrease as the topics advance — the ramp is part of the spec.
  *
  * Deliberately NO question bank in the seeds: questions are generated fresh
@@ -47,8 +47,8 @@ function load() {
                 title: String(t.title || '').trim(),
                 technical: String(t.technical || '').trim(),
                 simple: String(t.simple || '').trim(),
-                videoId: t.videoId || null,
-                videoSearch: t.videoSearch || null,
+                videos: (Array.isArray(t.videos) ? t.videos : [])
+                    .map((v) => v && v.embed).filter(isAllowedEmbed),
                 difficulty: Math.min(5, Math.max(1, Number(t.difficulty) || 1))
             })).filter((t) => t.title && t.technical && t.simple);
         } catch (err) {
@@ -83,42 +83,29 @@ function getTopic(slug, n) {
 }
 
 /**
- * Videos that can stand in for a topic's own.
- *
- * Two thirds of the topics carry a `videoSearch` string rather than an id,
- * and the embed built from one — `youtube.com/embed?listType=search&list=…` —
- * is a form YouTube withdrew: it answers "Error 153, video player
- * configuration error" every time. So a topic with no id of its own gets the
- * other videos from ITS OWN module, which are at least the same course, and
- * the page offers a search link for the exact topic beside them.
- *
- * ponytail: same-module videos, not a search API. Put real per-topic ids in
- * data/learn/<slug>.json — one line each — and they take precedence here.
+ * The players a topic's video may come from. No YouTube, by the owner's call:
+ * Internet Archive, any PeerTube instance, and Dailymotion, each through its
+ * own embed player and over https only. The list is picked per topic by
+ * scripts/learn/find-videos.js; anything else in the file is dropped here, so
+ * a hand edit cannot put a YouTube or plain-http frame on the page.
  */
-function videoPoolFor(slug, topicN) {
-    const mod = getModule(slug);
-    if (!mod) return [];
-    const own = mod.topics[topicN - 1];
-    const seen = new Set();
-    const out = [];
-    const push = (id) => {
-        const v = String(id || '').trim();
-        if (v && !seen.has(v)) { seen.add(v); out.push(v); }
-    };
-    if (own) {
-        push(own.videoId);
-        (own.videoIds || []).forEach(push);
-    }
-    // Nearest first: the topics either side of this one are the closest thing
-    // to "related" that needs no network call to find.
-    const byDistance = mod.topics
-        .map((t, i) => ({ t, d: Math.abs((i + 1) - topicN) }))
-        .sort((a, b) => a.d - b.d);
-    for (const { t } of byDistance) push(t.videoId);
-    return out.slice(0, 6);
+const EMBEDS = [
+    /^https:\/\/archive\.org\/embed\/[\w.-]+$/,
+    /^https:\/\/www\.dailymotion\.com\/embed\/video\/[a-zA-Z0-9]+$/,
+    /^https:\/\/[a-z0-9.-]+\.[a-z]{2,}\/videos\/embed\/[\w-]+$/      // PeerTube
+];
+function isAllowedEmbed(url) {
+    const u = String(url || '');
+    return !/youtu\.?be/i.test(u) && EMBEDS.some((re) => re.test(u));
+}
+
+/** A topic's videos, best first, as embed urls. */
+function videosFor(slug, topicN) {
+    const t = getTopic(slug, topicN);
+    return t ? t.videos.slice() : [];
 }
 
 /** Test hook: forget the cache so a suite can point DATA_DIR at fixtures. */
 function _reload() { CACHE = null; }
 
-module.exports = { getModules, getModule, getTopic, videoPoolFor, slugify, _reload, DATA_DIR };
+module.exports = { getModules, getModule, getTopic, videosFor, isAllowedEmbed, slugify, _reload, DATA_DIR };
