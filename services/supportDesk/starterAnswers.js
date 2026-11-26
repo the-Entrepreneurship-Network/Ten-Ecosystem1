@@ -37,7 +37,9 @@ module.exports = [
         question: 'Where is my dashboard and how do I open it?',
         examples: [
             'where is my dashboard', 'how can i find my dashboard', 'how to open student dashboard', 'dashboard not found',
-            'where is the intern dashboard', 'dashboard kaha hai', 'how to go to my dashboard', 'dashboard link'
+            'where is the intern dashboard', 'dashboard kaha hai', 'how to go to my dashboard', 'dashboard link',
+            'how can i access my dashboard', 'where can i access my dashboard', 'how do i log in to my dashboard',
+            'how to access student portal', 'where do i sign in'
         ],
         answer: 'Your dashboard opens as soon as you sign in. Go to {{loginUrl}} and sign in with your email address or ' +
             'your Employee ID and the password you chose when you registered.\n\n' +
