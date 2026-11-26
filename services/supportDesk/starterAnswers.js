@@ -293,6 +293,23 @@ module.exports = [
             'Please ask your coordinator or the group admin for the new link, and join with that.'
     },
     {
+        key: 'course-videos',
+        question: 'Are the course videos from YouTube? Why pay if videos are free online?',
+        examples: [
+            'are these videos from youtube', 'the same video is on youtube', 'is this video copied from youtube',
+            'why should i pay when the videos are free on youtube', 'where do the course videos come from',
+            'i can watch these videos for free online', 'youtube pe free me hai', 'why take the course if videos are on youtube',
+            'are the videos made by ten', 'who made the course videos'
+        ],
+        // Truthful on purpose: the videos are free ones made by others, so this
+        // says what the course adds instead of claiming them as ours or paid.
+        answer: 'The course videos are not taken from YouTube. For each topic we choose a good video from open learning ' +
+            'libraries and other video platforms, and it plays inside the portal.\n\n' +
+            'The video is one part of the course. What the course gives you is the written lesson for every topic (a ' +
+            'technical explanation and a simple one), a proctored exam after each topic with AI marking and feedback on ' +
+            'your written answers, a final exam, and a certificate that anyone can verify.'
+    },
+    {
         key: 'internship-mode',
         question: 'Is the internship online or offline?',
         examples: [
