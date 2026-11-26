@@ -333,6 +333,12 @@ router.get('/module/:slug', requireLearner(async (req, res, who) => {
     const hold = await ProctorIncident.findOne({ userId: who.id, domainSlug: mod.slug, status: 'pending' })
         .select('topicN createdAt').lean();
 
+    // The final is open: write its paper now, so "Start the final" does not wait on the model.
+    if (open > mod.topics.length && !progress.finalExam.passedAt && !progress.finalExam.closedByHRAt
+        && !hold && learnExam.ready()) {
+        learnExam.preparePaper(paperKey(who, mod.slug, 0), mod, 0);
+    }
+
     res.json({
         success: true,
         slug: mod.slug, name: mod.name,
@@ -383,6 +389,10 @@ router.get('/module/:slug/topic/:n', requireLearner(async (req, res, who) => {
     );
 
     const st = topicState(await progressFor(who, mod.slug), n);
+    // The exam is unlocked: write its paper now, so "Start the exam" does not wait on the model.
+    if (st && st.videoDoneAt && !st.passedAt && !st.closedByHRAt && learnExam.ready()) {
+        learnExam.preparePaper(paperKey(who, mod.slug, n), mod, n);
+    }
     res.json({
         success: true,
         // So the way back can say the module's name rather than its url slug.
@@ -437,6 +447,9 @@ async function liveAttempt(who, slug, topicN) {
         deadlineAt: { $gt: new Date() }
     });
 }
+
+/** Whose paper, for which exam. topicN 0 is the final. */
+const paperKey = (who, slug, topicN) => String(who.id) + ':' + slug + ':' + topicN;
 
 function clientQuestions(attempt) {
     return attempt.questions.map((q, i) => ({
@@ -502,20 +515,13 @@ router.post('/exam/start', requireLearner(async (req, res, who) => {
             message: 'The examiner is offline just now. Try again in a few minutes.' });
     }
 
-    /*
-     * One retry. Paper generation is a single call to a model that occasionally
-     * returns a malformed or short paper, and a learner sitting in front of a
-     * "try again later" for a hiccup that would have passed on the next attempt
-     * is the difference between "the exam works" and "the exam is broken".
-     */
-    let paper = null, lastErr = null;
-    for (let attemptNo = 0; attemptNo < 2 && !paper; attemptNo++) {
-        try {
-            paper = await learnExam.generatePaper(mod, topicN);
-        } catch (err) {
-            lastErr = err;
-            console.error('[learn] paper generation failed (try ' + (attemptNo + 1) + '):', err.message);
-        }
+    // Usually written already, while the learner was on the topic page; see
+    // preparePaper in services/learnExam.js. Either way it is used once.
+    let paper = null;
+    try {
+        paper = await learnExam.takePaper(paperKey(who, mod.slug, topicN), mod, topicN);
+    } catch (err) {
+        console.error('[learn] paper generation failed:', err.message);
     }
     if (!paper) {
         return res.status(503).json({ success: false, reason: 'paper-failed',
@@ -586,19 +592,25 @@ router.post('/exam/:id/warning', requireLearner(async (req, res, who) => {
         message: 'Three warnings — this attempt is void and HR has been asked to review.' });
 }));
 
-router.post('/exam/:id/submit', requireLearner(async (req, res, who) => {
-    const attempt = await Attempt().findById(req.params.id);
-    if (!attempt || String(attempt.userId) !== String(who.id)) {
-        return res.status(404).json({ success: false });
-    }
-    if (attempt.voidedAt) return res.status(423).json({ success: false, message: 'This attempt was voided by proctoring.' });
-    if (attempt.submittedAt) return res.status(409).json({ success: false, message: 'Already submitted.' });
-    // The server's clock decides, with one minute of grace for the wire.
-    if (Date.now() > attempt.deadlineAt.getTime() + 60 * 1000) {
-        return res.status(410).json({ success: false, message: 'Time was up before this arrived.' });
-    }
+/** Their marked paper: what the first submit returns, and any repeat of it. */
+function resultBody(attempt) {
+    const written = attempt.questions.filter((q) => q.kind === 'written');
+    const mcq = attempt.questions.filter((q) => q.kind === 'mcq');
+    return {
+        success: true, passed: attempt.passed,
+        writtenScore: attempt.writtenScore, writtenTotal: written.length,
+        mcqScore: attempt.mcqScore, mcqTotal: mcq.length,
+        // Their paper back, marked — feedback per written answer, right answers NOT
+        // revealed for MCQs, because the retake draws from the same well.
+        review: attempt.questions.map((q) => ({
+            kind: q.kind, prompt: q.prompt, given: q.givenAnswer,
+            correct: q.correct, feedback: q.feedback || undefined
+        }))
+    };
+}
 
-    const answers = (req.body && req.body.answers) || {};
+/** Grade, save, and open the next step. Resolves to the result body. */
+async function markAttempt(attempt, answers, who) {
     const mod = curriculum.getModule(attempt.domainSlug);
 
     const writtenIdx = [], writtenPairs = [];
@@ -612,16 +624,7 @@ router.post('/exam/:id/submit', requireLearner(async (req, res, who) => {
         }
     });
 
-    let verdicts;
-    try {
-        verdicts = await learnExam.gradeWritten(mod, attempt.topicN, writtenPairs);
-    } catch (err) {
-        console.error('[learn] grading failed:', err.message);
-        // The paper is kept, nothing is lost, and the learner is not failed by
-        // an outage — they are told to submit again in a moment.
-        return res.status(503).json({ success: false, retryable: true,
-            message: 'The marker is busy — your answers are safe, submit again in a moment.' });
-    }
+    const verdicts = await learnExam.gradeWritten(mod, attempt.topicN, writtenPairs);
     verdicts.forEach((v, k) => {
         const q = attempt.questions[writtenIdx[k]];
         q.correct = v.correct;
@@ -647,18 +650,49 @@ router.post('/exam/:id/submit', requireLearner(async (req, res, who) => {
                 { $set: { 'topics.$.passedAt': new Date() } });
         }
     }
+    return resultBody(attempt);
+}
 
-    res.json({
-        success: true, passed: attempt.passed,
-        writtenScore: attempt.writtenScore, writtenTotal: written.length,
-        mcqScore: attempt.mcqScore, mcqTotal: mcq.length,
-        // Their paper back, marked — feedback per written answer, right answers NOT
-        // revealed for MCQs, because the retake draws from the same well.
-        review: attempt.questions.map((q) => ({
-            kind: q.kind, prompt: q.prompt, given: q.givenAnswer,
-            correct: q.correct, feedback: q.feedback || undefined
-        }))
-    });
+/*
+ * Marking in progress, by attempt id. Marking waits on the model, which under
+ * load can outlast the proxy in front of this server; the learner then sees an
+ * error while the marking carries on here. Their second press of Submit joins
+ * that marking instead of starting another, and once it is saved a repeat
+ * submit returns the same result rather than "Already submitted".
+ * ponytail: in-process, like the prepared papers; pm2 runs one instance.
+ */
+const marking = new Map();
+
+router.post('/exam/:id/submit', requireLearner(async (req, res, who) => {
+    const attempt = await Attempt().findById(req.params.id);
+    if (!attempt || String(attempt.userId) !== String(who.id)) {
+        return res.status(404).json({ success: false });
+    }
+    if (attempt.voidedAt) return res.status(423).json({ success: false, message: 'This attempt was voided by proctoring.' });
+    if (attempt.submittedAt) return res.json(resultBody(attempt));
+
+    const id = String(attempt._id);
+    if (!marking.has(id)) {
+        // The server's clock decides, with one minute of grace for the wire.
+        if (Date.now() > attempt.deadlineAt.getTime() + 60 * 1000) {
+            return res.status(410).json({ success: false, message: 'Time was up before this arrived.' });
+        }
+        const job = markAttempt(attempt, (req.body && req.body.answers) || {}, who);
+        marking.set(id, job);
+        job.catch(() => {}).then(() => marking.delete(id));
+    }
+
+    let result;
+    try {
+        result = await marking.get(id);
+    } catch (err) {
+        console.error('[learn] grading failed:', err.message);
+        // The paper is kept, nothing is lost, and the learner is not failed by
+        // an outage — they are told to submit again in a moment.
+        return res.status(503).json({ success: false, retryable: true,
+            message: 'The marker is busy — your answers are safe, submit again in a moment.' });
+    }
+    res.json(result);
 }));
 
 /**

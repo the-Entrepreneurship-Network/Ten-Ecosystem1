@@ -516,6 +516,21 @@
         }, 1200);
 
       } else {
+      if (data.noInternship) {
+        // A half-finished sign-up: send them to finish it rather than show a bare error.
+        Swal.fire({
+          icon: "info",
+          title: "Finish your registration",
+          text: data.message,
+          showCancelButton: true,
+          confirmButtonText: "Register now",
+          cancelButtonText: "Close",
+          background: "#0e1428",
+          color: "#F0EEE8",
+          confirmButtonColor: "#D4AF37"
+        }).then((r) => { if (r.isConfirmed) window.location.href = data.registerUrl || "/register"; });
+        return;
+      }
         Swal.fire({
           icon: "error",
           title: "Login Failed",

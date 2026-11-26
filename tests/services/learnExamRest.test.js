@@ -203,14 +203,17 @@ describe('a 503 or 429 is asked again, nothing else is', () => {
 
     /** Answer each call with the next entry in `replies`; count the calls. */
     function stubSequence(replies) {
-        const calls = { n: 0 };
+        const calls = { n: 0, paths: [] };
         jest.spyOn(https, 'request').mockImplementation((opts, cb) => {
-            const { status, body, fail } = replies[Math.min(calls.n, replies.length - 1)];
+            const { status, body, fail, stall } = replies[Math.min(calls.n, replies.length - 1)];
             calls.n += 1;
+            calls.paths.push(String(opts.path));
             const req = new EventEmitter();
-            req.setTimeout = () => {};
-            req.destroy = () => {};
+            // `stall`: the line stays silent, so the client's own timeout fires.
+            req.setTimeout = (ms, onTimeout) => { if (stall) process.nextTick(onTimeout); };
+            req.destroy = (err) => { if (err) req.emit('error', err); };
             req.end = () => {
+                if (stall) return;
                 if (fail) return process.nextTick(() => req.emit('error', new Error(fail)));
                 const res = new EventEmitter();
                 res.statusCode = status;
@@ -250,10 +253,11 @@ describe('a 503 or 429 is asked again, nothing else is', () => {
         expect(calls.n).toBe(2);
     });
 
-    test('three attempts is the ceiling, and the real reason is reported', async () => {
+    test('three attempts per model is the ceiling, and the real reason is reported', async () => {
         const calls = stubSequence([{ status: 503, body: BUSY }]);
         await expect(load().__gemini('hi', {})).rejects.toThrow(/503/);
-        expect(calls.n).toBe(3);                 // one try plus two retries, not forever
+        // One try plus two retries on the main model, the same on the backup, not forever.
+        expect(calls.n).toBe(6);
     });
 
     test('a 400 is our mistake and is NOT retried', async () => {
@@ -264,9 +268,95 @@ describe('a 503 or 429 is asked again, nothing else is', () => {
         expect(calls.n).toBe(1);
     });
 
+    /*
+     * 2026-11-26, 19:11: the exam's paper waited 60 s for the main model, then
+     * got "high demand". The backup model is asked before the learner is told no.
+     */
+    test('an overloaded main model hands the question to the backup model', async () => {
+        const calls = stubSequence([
+            { status: 503, body: BUSY }, { status: 503, body: BUSY }, { status: 503, body: BUSY },
+            { status: 200, body: OK },
+        ]);
+        await expect(load().__gemini('hi', {})).resolves.toEqual({ ok: true });
+        expect(calls.paths[0]).toContain('gemini-3.8-flash');
+        expect(calls.paths[3]).toContain('gemini-flash-lite-latest');
+        expect(calls.paths[3]).not.toContain('gemini-3.8-flash');
+    });
+
+    test('a stalled main model hands over at once, without waiting a second minute on it', async () => {
+        const calls = stubSequence([{ stall: true }, { status: 200, body: OK }]);
+        await expect(load().__gemini('hi', {})).resolves.toEqual({ ok: true });
+        expect(calls.n).toBe(2);
+        expect(calls.paths[1]).toContain('gemini-flash-lite-latest');
+    });
+
+    test('a mistake of ours is not sent to the backup model', async () => {
+        const calls = stubSequence([{ status: 400, body: { error: { code: 400, message: 'bad schema' } } }]);
+        await expect(load().__gemini('hi', {})).rejects.toThrow(/400/);
+        expect(calls.n).toBe(1);
+    });
+
+    test('the backup can be switched off', async () => {
+        process.env.GEMINI_FALLBACK_MODEL = 'off';
+        const calls = stubSequence([{ status: 503, body: BUSY }]);
+        await expect(load().__gemini('hi', {})).rejects.toThrow(/503/);
+        expect(calls.n).toBe(3);
+        delete process.env.GEMINI_FALLBACK_MODEL;
+    });
+
     test('a dropped connection is not retried either', async () => {
         const calls = stubSequence([{ fail: 'ECONNRESET' }]);
         await expect(load().__gemini('hi', {})).rejects.toThrow(/ECONNRESET/);
         expect(calls.n).toBe(1);
+    });
+});
+
+/*
+ * The exam's paper is written while the learner is still on the topic page,
+ * and Start only collects it. These run the real service against a stubbed
+ * Gemini, counting the calls, so "written once, handed out once" is measured,
+ * not read off the source.
+ */
+describe('a paper is ready before Start is pressed', () => {
+    const MOD = { name: 'Java Development', slug: 'java-development',
+        topics: [{ title: 'Generics', difficulty: 2, technical: 'Type parameters.', simple: 'Boxes with labels.' }] };
+    const PAPER = {
+        written: Array.from({ length: 10 }, (_, i) => 'Explain point ' + (i + 1) + '.'),
+        mcq: Array.from({ length: 10 }, (_, i) => ({ prompt: 'Pick ' + (i + 1), options: ['a', 'b', 'c', 'd'], answerIndex: i % 4 }))
+    };
+    const reply = { candidates: [{ content: { parts: [{ text: JSON.stringify(PAPER) }] } }] };
+
+    test('Start collects the paper written earlier instead of writing another', async () => {
+        const s = stubHttps(200, reply);
+        const exam = load();
+        exam.preparePaper('u1:java-development:1', MOD, 1);
+        exam.preparePaper('u1:java-development:1', MOD, 1);      // a reload does not write a second
+        const paper = await exam.takePaper('u1:java-development:1', MOD, 1);
+
+        expect(paper).toHaveLength(20);
+        expect(paper.filter((q) => q.kind === 'mcq')).toHaveLength(10);
+        expect(https.request).toHaveBeenCalledTimes(1);
+        s.restore();
+    });
+
+    test('each paper is handed out once, so a retake gets new questions', async () => {
+        const s = stubHttps(200, reply);
+        const exam = load();
+        await exam.takePaper('u2:java-development:1', MOD, 1);
+        await exam.takePaper('u2:java-development:1', MOD, 1);
+        expect(https.request).toHaveBeenCalledTimes(2);
+        s.restore();
+    });
+
+    test('a paper that failed is not kept for the next Start', async () => {
+        const bad = stubHttps(400, { error: { code: 400, message: 'bad schema' } });
+        const exam = load();
+        await expect(exam.takePaper('u3:java-development:1', MOD, 1)).rejects.toThrow(/400/);
+        expect(https.request).toHaveBeenCalledTimes(2);          // the one retry, then no
+        bad.restore();
+
+        const good = stubHttps(200, reply);
+        await expect(exam.takePaper('u3:java-development:1', MOD, 1)).resolves.toHaveLength(20);
+        good.restore();
     });
 });

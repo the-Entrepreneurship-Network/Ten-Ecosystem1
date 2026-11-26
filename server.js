@@ -4019,6 +4019,24 @@ try{
                 }
             }
 
+            // A student account with no internship record behind it: a sign-up
+            // that stopped half way (see registerUser), or one from before the
+            // record existed. Every dashboard call needs that record, so
+            // signing them in said "Access Granted", the first call came back
+            // as an expired session, and the page sent them back to sign in,
+            // round and round (26 Nov). Say what is wrong and how to finish.
+            if (user.role === 'student' && !student) {
+                return res.json({
+                    success: false,
+                    noInternship: true,
+                    registerUrl: '/register',
+                    message: 'Your password is right, but this email has no internship registration yet, so there is ' +
+                        'no dashboard to open. If you registered for the internship with another email, sign in with ' +
+                        'your Employee ID. If not, register with this same email and password: your registration will ' +
+                        'finish and you will get your Employee ID straight away.'
+                });
+            }
+
             // Identity for the browser, never the raw document: that shipped the
             // bcrypt hash, the password-reset token and megabytes of base64 PDF
             // to the client on every sign-in.

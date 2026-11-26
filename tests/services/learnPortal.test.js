@@ -74,7 +74,7 @@ describe('the exam shape', () => {
    * there is no bank to repeat.
    */
   it('sets a fresh paper for every attempt', () => {
-    expect(ROUTE).toContain('paper = await learnExam.generatePaper(mod, topicN)');
+    expect(ROUTE).toContain('paper = await learnExam.takePaper(');
     const files = fs.readdirSync(curriculum.DATA_DIR);
     files.forEach((f) => {
       const raw = JSON.parse(fs.readFileSync(path.join(curriculum.DATA_DIR, f), 'utf8'));
@@ -427,6 +427,34 @@ describe('the exam works, and looks like it', () => {
   const PAGESRC = strip(PAGE);
 
   /*
+   * 2026-11-26: "Setting your paper…" for a full minute, then nothing. The
+   * paper was written only when Start was pressed, by a model that was
+   * overloaded that afternoon.
+   */
+  it('writes the paper when the exam unlocks, not when Start is pressed', () => {
+    const topic = ROUTE.slice(ROUTE.indexOf("router.get('/module/:slug/topic/:n'"), ROUTE.indexOf("router.post('/module/:slug/topic/:n/video-done'"));
+    expect(topic).toMatch(/st\.videoDoneAt && !st\.passedAt && !st\.closedByHRAt[\s\S]*learnExam\.preparePaper\(/);
+    const modulePage = ROUTE.slice(ROUTE.indexOf("router.get('/module/:slug'"), ROUTE.indexOf("router.get('/module/:slug/topic/:n'"));
+    expect(modulePage).toContain('learnExam.preparePaper(paperKey(who, mod.slug, 0), mod, 0)');
+  });
+
+  it('never leaves the page waiting on a reply that is not coming', () => {
+    // A dropped connection made fetch throw, and nothing replaced the "Setting your paper…" card.
+    expect(PAGESRC).toMatch(/catch \(e\) \{\s*return \{ ok: false, status: 0, d: \{\} \};/);
+    // No answer, or the proxy giving up (502/504), offers "Try again" like a busy examiner does.
+    expect(PAGESRC).toContain('const offline = noAnswer(status);');
+    expect(PAGESRC).toMatch(/noAnswer = \(status\) => status === 0 \|\| status === 502 \|\| status === 503 \|\| status === 504/);
+  });
+
+  it('a second press of Submit gets the marked paper, not "Already submitted"', () => {
+    const submit = ROUTE.slice(ROUTE.indexOf("router.post('/exam/:id/submit'"));
+    expect(submit).toContain('if (attempt.submittedAt) return res.json(resultBody(attempt));');
+    // While the first press is still being marked, the second joins it.
+    expect(submit).toMatch(/if \(!marking\.has\(id\)\)[\s\S]*marking\.set\(id, job\)/);
+    expect(submit).toContain('result = await marking.get(id);');
+  });
+
+  /*
    * "The examiner is offline" on a server that had a working key — under one
    * of the other two names it can be set under.
    */
@@ -446,7 +474,10 @@ describe('the exam works, and looks like it', () => {
 
   // A single model hiccup should not read as "the exam is broken".
   it('retries a failed paper once before giving up', () => {
-    expect(ROUTE).toContain('attemptNo < 2 && !paper');
+    // The retry lives with the paper now (services/learnExam.js writePaper),
+    // so a paper written ahead of Start gets it too.
+    const svc = strip(read('services/learnExam.js'));
+    expect(svc).toMatch(/async function writePaper[\s\S]*catch \(err\)[\s\S]*return generatePaper\(mod, topicN\);/);
     expect(ROUTE).toContain('nothing has been counted against you');
   });
 

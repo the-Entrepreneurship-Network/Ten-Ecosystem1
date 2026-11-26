@@ -195,12 +195,21 @@ const esc = (v) => String(v == null ? '' : v)
   .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const api = async (path, opts) => {
-  const r = await fetch('/api/v2/learn' + path, Object.assign({
-    credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }
-  }, opts || {}));
+  let r;
+  try {
+    r = await fetch('/api/v2/learn' + path, Object.assign({
+      credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }
+    }, opts || {}));
+  } catch (e) {
+    // A dropped connection used to throw here and leave whatever was on screen,
+    // "Setting your paper…" included, on screen for good. Status 0 = no answer.
+    return { ok: false, status: 0, d: {} };
+  }
   let d = null; try { d = await r.json(); } catch (e) {}
   return { ok: r.ok, status: r.status, d: d || {} };
 };
+// No answer, or the proxy gave up waiting: worth trying again, nothing was used up.
+const noAnswer = (status) => status === 0 || status === 502 || status === 503 || status === 504;
 let me = null;
 
 /* ── sign in / sign up ─────────────────────────────────────────────────── */
@@ -765,13 +774,13 @@ async function startExam(slug, topicN) {
   const { ok, status, d } = await api('/exam/start',
     { method: 'POST', body: JSON.stringify({ slug, topicN }) });
   if (!ok) {
-    const offline = status === 503;
+    const offline = noAnswer(status);
     examStop(slug, {
       icon: status === 423 ? '⏸' : offline ? '⏳' : '✕',
       bad: !offline,
       title: status === 423 ? 'Your exams are on hold'
         : offline ? 'The examiner is busy' : 'Could not start the exam',
-      body: esc(d.message || 'Could not start.')
+      body: esc(d.message || (offline ? 'The paper did not arrive in time.' : 'Could not start.'))
         + (offline ? ' <br><br>Nothing has been counted against you and no attempt has been used — '
                      + 'the paper simply was not written. Try again, and tell your coordinator if it keeps happening.' : ''),
       retry: offline ? () => startExam(slug, topicN) : null
@@ -892,7 +901,9 @@ async function startExam(slug, topicN) {
     const r = await api('/exam/' + d.attemptId + '/submit', { method: 'POST', body: JSON.stringify({ answers }) });
     if (!r.ok) {
       if (btn) btn.disabled = false;
-      $('examMsg').innerHTML = '<div class="note bad">' + esc(r.d.message || 'Could not submit.') + '</div>';
+      $('examMsg').innerHTML = '<div class="note bad">' + esc(r.d.message || (noAnswer(r.status)
+        ? 'The marking took too long to reach you. Your answers are safe — press Submit again.'
+        : 'Could not submit.')) + '</div>';
       return;
     }
     clearInterval(clock); stopProctor();

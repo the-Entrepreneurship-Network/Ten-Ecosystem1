@@ -37,6 +37,16 @@ const GEMINI_HOST = 'generativelanguage.googleapis.com';
  */
 const GEMINI_MODEL = () => process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 
+/**
+ * The model to ask when the first one is overloaded.
+ *
+ * "This model is currently experiencing high demand" and minute-long stalls
+ * are per model: on 2026-11-26 the exam, the help desk and the task feedback
+ * all hit them in the same afternoon. A lighter model usually has room when
+ * the main one does not. Set GEMINI_FALLBACK_MODEL=off for no second try.
+ */
+const GEMINI_FALLBACK_MODEL = () => process.env.GEMINI_FALLBACK_MODEL || 'gemini-flash-lite-latest';
+
 /** How long to wait before giving up on a stalled connection. */
 const GEMINI_TIMEOUT_MS = 60000;
 
@@ -55,13 +65,13 @@ function ready() {
  * error message, a log line or a thrown stack. Failures are reported by status
  * code and a short excerpt of the body, never by anything that saw the key.
  */
-function post(body) {
+function post(body, model) {
     const payload = JSON.stringify(body);
 
     return new Promise((resolve, reject) => {
         const req = https.request({
             host: GEMINI_HOST,
-            path: `/v1beta/models/${GEMINI_MODEL()}:generateContent?key=${encodeURIComponent(apiKey())}`,
+            path: `/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey())}`,
             method: 'POST',
             headers: {
                 'Content-Type':   'application/json',
@@ -87,7 +97,9 @@ function post(body) {
         });
 
         req.setTimeout(GEMINI_TIMEOUT_MS, () => {
-            req.destroy(new Error(`Gemini did not answer within ${GEMINI_TIMEOUT_MS}ms (timeout).`));
+            const err = new Error(`Gemini did not answer within ${GEMINI_TIMEOUT_MS}ms (timeout).`);
+            err.timeout = true;
+            req.destroy(err);
         });
         req.on('error', reject);
         req.end(payload);
@@ -107,6 +119,20 @@ const RETRY_WAITS_MS = [1000, 3000];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/** One model, with the 429/503 retries. */
+async function askModel(body, model) {
+    for (let attempt = 0; ; attempt += 1) {
+        try {
+            return await post(body, model);
+        } catch (err) {
+            const again = RETRY_STATUS.includes(err && err.status)
+                && attempt < RETRY_WAITS_MS.length;
+            if (!again) throw err;
+            await sleep(RETRY_WAITS_MS[attempt]);
+        }
+    }
+}
+
 /**
  * Ask the model for JSON matching `schema`.
  * @param {string} prompt
@@ -124,16 +150,18 @@ async function ask(prompt, schema) {
     };
 
     let out;
-    for (let attempt = 0; ; attempt += 1) {
-        try {
-            out = await post(body);
-            break;
-        } catch (err) {
-            const again = RETRY_STATUS.includes(err && err.status)
-                && attempt < RETRY_WAITS_MS.length;
-            if (!again) throw err;
-            await sleep(RETRY_WAITS_MS[attempt]);
-        }
+    try {
+        out = await askModel(body, GEMINI_MODEL());
+    } catch (err) {
+        // Busy or stalled: the second model gets the same question once.
+        // Anything else (a 400, a 404, a dropped line) would fail there too.
+        const fallback = GEMINI_FALLBACK_MODEL();
+        const busy = RETRY_STATUS.includes(err && err.status) || (err && err.timeout);
+        if (!busy || fallback === 'off' || fallback === GEMINI_MODEL()) throw err;
+        out = await askModel(body, fallback).catch((err2) => {
+            console.error(`[gemini] ${fallback} failed too:`, err2.message);
+            throw err;
+        });
     }
 
     const cand = out && out.candidates && out.candidates[0];
@@ -149,4 +177,4 @@ async function ask(prompt, schema) {
     return JSON.parse(text);
 }
 
-module.exports = { ask, ready, apiKey, Type, GEMINI_MODEL, RETRY_STATUS, RETRY_WAITS_MS };
+module.exports = { ask, ready, apiKey, Type, GEMINI_MODEL, GEMINI_FALLBACK_MODEL, RETRY_STATUS, RETRY_WAITS_MS };

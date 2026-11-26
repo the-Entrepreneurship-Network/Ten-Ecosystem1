@@ -62,6 +62,24 @@ module.exports = [
             '15 Days ₹1500 and 1 Month ₹1000.'
     },
     {
+        key: 'resume-upload',
+        question: 'My resume will not upload when I register',
+        examples: [
+            'getting error while uploading the resume', 'resume upload not working', 'when i am trying to upload the resume it is not responding',
+            'resume is not uploading', 'unable to upload my resume', 'resume upload failed', 'cv upload error during registration',
+            'stuck on uploading resume', 'resume upload nahi ho raha'
+        ],
+        // 26 Nov: the upload gave up after a flat minute, which cut off a few-MB
+        // file on mobile data; it now waits in proportion to the file. Deploys
+        // also no longer reinstall packages under the running site.
+        answer: 'Please try the upload once more at {{registerUrl}}. It now waits longer on a slow connection, so ' +
+            'keep the page open while it says "Uploading resume PDF...".\n\n' +
+            'The resume must be a PDF file (its name ends in .pdf) and under 5MB. A Word file or a photo will not ' +
+            'upload: open it in Word, Google Docs or Canva and save or download it as PDF first.\n\n' +
+            'If it still fails, reply with the exact message you see under the upload box (a screenshot is best) ' +
+            'and the size of the file.'
+    },
+    {
         key: 'login',
         question: "I can't log in to the portal",
         examples: [
@@ -76,6 +94,29 @@ module.exports = [
             'you chose when you registered.\n\n' +
             'After 5 wrong passwords the account locks for 15 minutes, so wait a little and try again. If you have ' +
             'forgotten your password, use "Forgot password?" on the sign-in page.'
+    },
+    {
+        key: 'login-loop',
+        question: 'It says login successful, then sends me back to the login page',
+        examples: [
+            'login successful then back to login page', 'it shows login successfully then again i come back to the login page',
+            'after login it goes back to the login page', 'logged in but redirected to login again', 'access granted then login page again',
+            'dashboard does not open after login it goes back', 'login loop', 'keeps sending me back to the sign in page',
+            'sign in works but the dashboard does not open', 'login hone ke baad phir se login page aa jata hai'
+        ],
+        // Fixed on 26 Nov: an account whose internship registration never
+        // finished is now told so at sign-in, and can register again with the
+        // same email and password (see /login and registerUser).
+        answer: 'That happens when an account was created but its internship registration did not finish, so there ' +
+            'is no dashboard to open yet. Please sign in once more at {{loginUrl}}: the page now tells you what to do.\n\n' +
+            'If you registered for the internship with a different email, sign in with your Employee ID instead. If ' +
+            'not, register again at {{registerUrl}} with the same email and the same password. Your registration will ' +
+            'finish and you will get your Employee ID straight away.\n\n' +
+            'If it still sends you back, open the portal in Chrome (not inside Gmail or WhatsApp, and not in an ' +
+            'incognito window) and reply to this email with a screenshot.',
+        personal: 'Please sign in with your Employee ID, {{employeeId}}, at {{loginUrl}} instead of your email address. ' +
+            'If it still sends you back, open the portal in Chrome (not inside Gmail or WhatsApp, and not in an ' +
+            'incognito window) and reply to this email with a screenshot of what you see.'
     },
     {
         key: 'password-reset',
@@ -230,6 +271,24 @@ module.exports = [
             'If you fail a quiz three times, it locks for 24 hours.\n\n' +
             'Tasks your coordinator posts are under My Tasks. Submit them with your GitHub or Google Drive link, a short ' +
             'description and a screenshot, and your coordinator reviews them.'
+    },
+    {
+        key: 'learn-exam',
+        question: "The course exam will not start, or stays on \"Setting your paper\"",
+        examples: [
+            'exam section is not working', 'i could not give the test after the video', 'setting your paper is stuck',
+            'the exam is not starting', 'topic exam not opening', 'start the exam button does nothing',
+            'examiner is busy', 'test is not loading in the course', 'exam page stuck', 'exam nahi khul raha'
+        ],
+        // Fixed on 26 Nov: the paper is now written while the topic page is
+        // open, a backup model takes over when the main one is overloaded, and
+        // the page offers "Try again" instead of waiting for ever.
+        answer: 'Please open the topic again and press "Start the exam". The paper is now prepared while you are on ' +
+            'the topic page, so it should open within a few seconds.\n\n' +
+            'The exam opens after you mark the topic\'s video as watched, and it needs your camera on, so allow camera ' +
+            'access when the browser asks. If the page says "The examiner is busy", press "Try again": nothing is ' +
+            'counted against you.\n\n' +
+            'If it still does not start, reply with a screenshot of what you see.'
     },
     {
         key: 'verify-certificate',
