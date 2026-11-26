@@ -11,6 +11,13 @@
  *
  *   node scripts/bug-agent-backfill.js 2026-11-22          lists them
  *   node scripts/bug-agent-backfill.js 2026-11-22 --send   copies them
+ *
+ * With --all, every conversation since that date whose student is still
+ * waiting, about anything, including those copied before: no reply yet, or a
+ * reply still in Drafts, which the copy shows so it can be checked.
+ *
+ *   node scripts/bug-agent-backfill.js 2026-11-22 --all          lists them
+ *   node scripts/bug-agent-backfill.js 2026-11-22 --all --send   copies them
  */
 require('dotenv').config();
 const gmail = require('../services/supportDesk/gmail');
@@ -21,36 +28,55 @@ const fmt = (ms) => new Date(Number(ms)).toLocaleString('en-IN', { timeZone: 'As
 // separate conversation with the same subject counts as seen.
 const topic = (subject) => String(subject || '').replace(/^\s*(?:(?:re|fwd?)\s*:\s*)+/i, '').trim().toLowerCase() || '(no subject)';
 
-/** The conversations to copy, each with what the agent reads. */
-function pick(threads, { me, copyTo, seen }) {
+/**
+ * The conversations to copy, each with what the agent reads.
+ *
+ * Default: website problems it has never seen. `all`: every conversation whose
+ * student is still waiting, i.e. no person replied after their last message,
+ * seen before or not, with any reply still sitting in Drafts shown as such.
+ */
+function pick(threads, { me, copyTo, seen, backfilled = new Set(), all = false }) {
     const out = [];
     for (const thread of threads) {
-        const msgs = (thread.messages || []).filter((m) => !(m.labelIds || []).includes('DRAFT'));
+        const isDraft = (m) => (m.labelIds || []).includes('DRAFT');
+        const msgs = thread.messages || [];
         const fromOf = (m) => desk.parseAddress(desk.header(m, 'from'));
         const text = (m) => desk.cleanBody(desk.bodyText(m.payload));
         const theirs = msgs.filter((m) => {
             const f = fromOf(m);
-            return f.email !== me && f.email !== copyTo && !desk.automated(m, f);
+            return !isDraft(m) && f.email !== me && f.email !== copyTo && !desk.automated(m, f);
         });
         const last = theirs[theirs.length - 1];
         if (!last) continue;
         const from = fromOf(last);
         const subject = desk.header(last, 'subject');
-        if (seen.has(from.email + '|' + topic(subject))) continue;
-        // ponytail: the same word list that wakes the agent for new mail.
-        if (!theirs.some((m) => desk.LOOKS_LIKE_A_BUG.test(desk.header(m, 'subject') + '\n' + text(m)))) continue;
+        const drafts = msgs.filter(isDraft);
+        if (all) {
+            // Copied by an earlier --all run: a second run copies only what failed.
+            if (backfilled.has(from.email + '|' + topic(subject))) continue;
+            // A person, or a draft they sent, answered after the student's last word.
+            const answered = msgs.some((m) => {
+                const f = fromOf(m);
+                return !isDraft(m) && f.email === me && !desk.automated(m, f) && Number(m.internalDate) > Number(last.internalDate);
+            });
+            if (answered) continue;
+        } else {
+            if (seen.has(from.email + '|' + topic(subject))) continue;
+            // ponytail: the same word list that wakes the agent for new mail.
+            if (!theirs.some((m) => desk.LOOKS_LIKE_A_BUG.test(desk.header(m, 'subject') + '\n' + text(m)))) continue;
+        }
         const body = msgs.map((m) => {
             const f = fromOf(m);
-            const who = f.email === from.email ? 'Student'
+            const who = isDraft(m) ? 'complaints@ (draft, not sent yet)'
+                : f.email === from.email ? 'Student'
                 : f.email === me ? 'complaints@' + (desk.automated(m, f) ? ' (automatic reply)' : '')
                 : f.email;
             return `--- ${who}, ${fmt(m.internalDate)} ---\n${text(m)}`;
         }).join('\n\n');
-        out.push({
-            msg: last,
-            mail: { from, subject, body },
-            outcome: { action: 'backfill', reason: `arrived ${fmt(last.internalDate)}, before the bug agent was set up` }
-        });
+        const reason = !all ? `arrived ${fmt(last.internalDate)}, before the bug agent was set up`
+            : drafts.length ? `arrived ${fmt(last.internalDate)}; a reply is waiting in Drafts, check it`
+            : `arrived ${fmt(last.internalDate)}; no reply yet`;
+        out.push({ msg: last, mail: { from, subject, body }, outcome: { action: 'backfill', reason } });
     }
     return out;
 }
@@ -77,16 +103,22 @@ async function gently(call, wait = sleep) {
 }
 
 async function main() {
-    const [day, flag] = process.argv.slice(2);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(day || '')) throw new Error('Usage: node scripts/bug-agent-backfill.js YYYY-MM-DD [--send]');
+    const [day, ...flags] = process.argv.slice(2);
+    const send = flags.includes('--send');
+    const all = flags.includes('--all');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day || '')) throw new Error('Usage: node scripts/bug-agent-backfill.js YYYY-MM-DD [--all] [--send]');
     const copyTo = String(process.env.SUPPORT_COPY_TO || '').trim().toLowerCase();
     if (!gmail.configured() || !copyTo) throw new Error('The help desk is not connected, or SUPPORT_COPY_TO is not set in .env.');
     const me = String((await gently(() => gmail.profile())).emailAddress || '').toLowerCase();
 
+    // Copies already made: by the help desk as mail came in, and by this script.
     const seen = new Set();
+    const backfilled = new Set();
     for (const { id } of await gently(() => gmail.listMessages(`in:sent to:${copyTo} subject:"[complaints@]"`, 500))) {
         const copy = await gently(() => gmail.getMessage(id));
-        seen.add(desk.parseAddress(desk.header(copy, 'reply-to')).email + '|' + topic(desk.header(copy, 'subject').replace(/^\[complaints@\]\s*/i, '')));
+        const key = desk.parseAddress(desk.header(copy, 'reply-to')).email + '|' + topic(desk.header(copy, 'subject').replace(/^\[complaints@\]\s*/i, ''));
+        seen.add(key);
+        if (/^Help desk: backfill\b/m.test(desk.bodyText(copy.payload))) backfilled.add(key);
     }
 
     const since = Math.floor(Date.parse(day + 'T00:00:00+05:30') / 1000);
@@ -101,16 +133,16 @@ async function main() {
         try { threads.push(await gently(() => gmail.getThread(threadId))); } catch (err) { console.log(`  skipped conversation ${threadId}: ${err.message}`); }
     }
 
-    const todo = pick(threads, { me, copyTo, seen });
+    const todo = pick(threads, { me, copyTo, seen, backfilled, all });
     let failed = 0;
     for (const c of todo) {
         console.log(`${fmt(c.msg.internalDate)}  ${c.mail.from.email}  ${c.mail.subject || '(no subject)'}`);
-        if (flag === '--send' && !(await gently(() => desk.copyTo(gmail, me, c.msg, c.mail, c.outcome)))) {
+        if (send && !(await gently(() => desk.copyTo(gmail, me, c.msg, c.mail, c.outcome)))) {
             failed += 1;
             console.log('  could not copy this one');
         }
     }
-    console.log(flag !== '--send' ? `${todo.length} to copy. Run it again with --send to copy them.`
+    console.log(!send ? `${todo.length} to copy. Run it again with --send added to copy them.`
         : `${todo.length - failed} copied to ${copyTo}. The bug agent handles them on its next run.` +
           (failed ? ` ${failed} failed: run it again later to copy just those.` : ''));
 }
