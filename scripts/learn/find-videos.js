@@ -30,8 +30,8 @@
  *
  * Then relevant: a video is accepted only if its title (Internet Archive:
  * title or description) carries the topic's distinctive words, or two of the
- * technical terms in the topic's own text, AND a word that ties it to the
- * course (e.g. "java"). Picks a person rejected by hand are listed in REJECT
+ * technical terms in the topic's own text, AND its title carries a word that
+ * ties it to the course (e.g. "java"). Picks a person rejected by hand are listed in REJECT
  * and never come back. A slot stays empty rather than hold something
  * off-topic: the page then says there is no video for the topic yet.
  *
@@ -639,8 +639,23 @@ async function legal(v) {
         return '';
     }
     if (isRip(v.title, '')) return 'rip';
-    if (v.src === 'pt') return PT_LICENCES.includes(v.licence) ? '' : 'licence';
-    if (v.src === 'dm') return (NOT_TEACHING.test(v.title) || !DM_CHANNELS.has(v.channel)) ? 'news' : '';
+    if (v.src === 'pt') {
+        // The data file does not store the licence: look the video up again.
+        if (v.licence === undefined) {
+            const data = await getJson('https://sepiasearch.org/api/v1/search/videos?search=' + encodeURIComponent(v.title) + '&count=50');
+            const hit = ((data && data.data) || []).find((x) => x.embedUrl === v.embed);
+            v.licence = hit && hit.licence ? hit.licence.id : null;
+        }
+        return PT_LICENCES.includes(v.licence) ? '' : 'licence';
+    }
+    if (v.src === 'dm') {
+        if (v.channel === undefined) {
+            const id = v.embed.split('/').pop();
+            const data = await getJson(`https://api.dailymotion.com/video/${encodeURIComponent(id)}?fields=channel`);
+            v.channel = data ? data.channel : null;
+        }
+        return (NOT_TEACHING.test(v.title) || !DM_CHANNELS.has(v.channel)) ? 'news' : '';
+    }
     return '';
 }
 
@@ -759,9 +774,15 @@ function keyTerms(technical, courseWords) {
  * plus the course context, for a human to judge.
  */
 function match(t, title, desc, lax) {
+    // Strict: the course tie must be in the title itself ("flutter" in an
+    // aircraft-test description is not Flutter); a description may only
+    // supply the topic words.
+    const titleCtx = contextOk(title, t.ctx, t.not, lax ? null : t.words);
+    if (!lax && !titleCtx) return 0;
     for (const text of [title, desc]) {
         if (!text) continue;
-        if (!contextOk(text, t.ctx, t.not, lax ? null : t.words)) continue;
+        if (text !== title && lax && !contextOk(text, t.ctx, t.not, null)) continue;
+        if (text === title && !titleCtx) continue;
         let s = topicScore(t.words, text, t.courseWords);
         if (!s) {
             const set = stemSet(text);
