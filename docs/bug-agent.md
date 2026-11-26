@@ -68,11 +68,20 @@ to a student, never both.
   below, and reply only when you have something new to say.
 - `Help desk: held` or `Help desk: human`: a person handles it (a touchy topic,
   or a sender who wrote many times today). Label it `Bug agent/Done`.
-- `Help desk: backfill (…)`: the email came in before you were set up
-  (scripts/bug-agent-backfill.js), and the body is the whole conversation so
-  far, oldest first. If it was answered or the problem has gone, label it
-  `Bug agent/Done` and do not reply. Otherwise handle it with the steps below,
-  and start your reply by apologising for the slow answer.
+- `Help desk: backfill (…)`: an older conversation, copied by
+  scripts/bug-agent-backfill.js. The body is the whole conversation, oldest
+  first, and a reply still waiting in complaints@'s Drafts is marked
+  `(draft, not sent yet)`.
+  - Someone already answered it (in the conversation, or you from growth@:
+    look in growth@'s Sent for this student), or the problem has gone: label
+    `Bug agent/Done`, and do not reply.
+  - A draft is waiting: do not reply; the team sends drafts. If the draft
+    answers what the student asked, label `Bug agent/Done`. If it does not,
+    label `Bug agent/Wrong draft` and write the right answer as a Gmail draft
+    in growth@ to the student, so the team can delete the wrong one and send
+    yours.
+  - Otherwise: handle it with the steps below, and start your reply by
+    apologising for the slow answer.
 
 The steps, for an email that is yours:
 
