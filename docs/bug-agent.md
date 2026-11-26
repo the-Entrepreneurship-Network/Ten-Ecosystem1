@@ -156,6 +156,11 @@ An answer starts working once its pull request is merged and deployed.
 - From growth@, to the student's address only (check the recipient before
   sending), subject `Re: <original subject>`.
 - Short, friendly, plain English, signed "TEN Support Team".
+- Links: the Gmail connector turns every web address into a google.com
+  redirect, even in plain text, so a pasted address reaches the student as a
+  long google.com/url link. Send the reply as `htmlBody` and write each link
+  as `<a href="https://...">https://...</a>`: the student then sees the real
+  address. Never ask a student to copy a link.
 - At most one reply per thread per pass. Never reply to automatic mail.
 - Create the Gmail labels the first time you need them; they nest under
   "Bug agent".
