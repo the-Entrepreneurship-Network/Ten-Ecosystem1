@@ -142,6 +142,27 @@ The steps, for an email that is yours:
    them, without promising an outcome. Label `Bug agent/Needs person`; the team
    follows these up from growth@.
 
+## The server
+
+You have no login to the production server. The "Server ops" GitHub workflow
+(`.github/workflows/server-ops.yml`) does a fixed list of things there for
+you: run `server-ops.yml` on `main` with your GitHub tools (input `action`),
+then read the run's log.
+
+- `status`: whether the app, database, nginx, disk and memory are fine. Run it
+  when a report suggests the whole site is down or slow.
+- `logs`: the app's last 200 log lines reach growth@ within a minute as
+  "[server] last 200 log lines". Run it when a student reports an error the
+  code alone does not explain. They hold students' data: never copy them into
+  a PR, a commit or a reply.
+- `restart`: only when `status` shows the app stopped or the database check
+  failing, at most once a pass. Say so in your summary.
+- `nginx`: nginx settings live in `deploy/nginx/` and change by PR, like code;
+  the deploy installs them after the merge. This installs them again.
+
+Anything else on the server (student data, `.env`, accounts) is for a person:
+label `Bug agent/Needs person` and say what is needed.
+
 ## Closing the loop, every pass
 
 For each thread labelled `Bug agent/Fix in review`, find the PR whose
