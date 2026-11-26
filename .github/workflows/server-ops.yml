@@ -1,0 +1,36 @@
+name: Server ops
+
+# A fixed menu of things the bug agent, or a person, can do on the production
+# server without logging in to it: GitHub holds the SSH key, and whoever runs
+# this only chooses from the menu. Every run is recorded here. The menu itself
+# is scripts/server/ops.sh. This repository is public, so this job's log is
+# too: nothing private is printed, and the app's logs are emailed instead.
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "status | logs (emailed to the team inbox) | restart | nginx"
+        type: choice
+        options: [status, logs, restart, nginx]
+        default: status
+
+concurrency: production-server
+
+jobs:
+  ops:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Run on the server
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          OPS_ACTION: ${{ inputs.action }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_SSH_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: OPS_ACTION
+          script: |
+            set -euo pipefail
+            cd "${PROD_APP_DIR:-/home/ec2-user/InternshipManagementSystem-Final}"
+            bash scripts/server/ops.sh "$OPS_ACTION"
