@@ -608,11 +608,28 @@ describe('Claude, Gemini (free) or Off', () => {
         expect(SupportTicket.rows[0].action).toBe('human');
     });
 
-    test('ordinary questions and touchy topics never go to Gemini', async () => {
+    test('a question the saved answer only shares a topic with goes to Claude alone, not two replies', async () => {
+        /*
+         * Not worded like a broken page, so the word list alone used to send the saved
+         * answer, and Claude then sent a second, right one. Now Gemini checks first.
+         */
+        process.env.SUPPORT_COPY_TO = 'growth@entrepreneurshipnetwork.net';
+        const ctx = load('send');
+        ctx.gem.ask.mockResolvedValueOnce({ verdict: 'does-not-fix' });
+        const gmail = withRaw(fakeGmail({ messages: [mail({ body: 'my employee id shows the wrong domain' })] }));
+        const wake = jest.fn(async () => 'woken');
+        await ctx.agent.runOnce({ gmail, wake });
+        expect(ctx.gem.ask.mock.calls[0][0]).toContain('The saved answer:\nYou get your Employee ID when you register');
+        expect(gmail.sent.filter((m) => !/^To: growth@/m.test(m.raw))).toHaveLength(0); // nothing to the student
+        expect(ctx.SupportTicket.rows[0]).toEqual(expect.objectContaining({ action: 'agent', reason: 'the saved answer does not answer this' }));
+        expect(wake).toHaveBeenCalledTimes(1);
+    });
+
+    test('questions no saved answer fits, and touchy topics, never go to Gemini', async () => {
         const { agent, SupportDeskState, gem } = load('draft');
         SupportDeskState.set({ engine: 'gemini' });
         const gmail = fakeGmail({ messages: [
-            mail({ body: 'what are the fees' }),
+            mail({ subject: 'fees', body: 'what are the fees' }),
             mail({ id: 'm2', threadId: 't2', from: 'Ravi <ravi@gmail.com>', body: 'the payment page is not working, I want a refund' })
         ] });
         await agent.runOnce({ gmail });

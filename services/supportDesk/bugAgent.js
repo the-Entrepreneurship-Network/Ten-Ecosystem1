@@ -185,16 +185,17 @@ const FIT_SCHEMA = {
 };
 
 /**
- * Does a saved answer fix the website problem a student reports, or only share
- * its topic? true, false, or null when Gemini gives no usable verdict.
+ * Does a saved answer answer what the student wrote, or only share its topic?
+ * true, false, or null when Gemini gives no usable verdict.
  */
 async function answerFits({ subject, body, answer }) {
     if (!gemini.ready()) return null;
     const out = await gemini.ask([
-        "A student of TEN's virtual internship portal emailed about a problem with the website, and the help desk",
-        'found the saved answer below. Set "verdict" to "fixes" only if following the answer should solve the problem',
-        'the student describes. Set it to "does-not-fix" if the answer only covers the same topic: for example, how to',
-        'submit a task, when their upload fails with an error.',
+        "A student of TEN's virtual internship portal emailed the help desk, which found the saved answer below.",
+        'Set "verdict" to "fixes" only if the answer answers what the student asks, or following it should solve the',
+        'problem they describe. Set it to "does-not-fix" if it only covers the same topic: for example, how to submit',
+        'a task, when their upload fails with an error; or how to sign in, when sign-in keeps sending them back to the',
+        'sign-in page.',
         '',
         'The saved answer:',
         answer,
