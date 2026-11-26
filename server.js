@@ -1713,6 +1713,10 @@ app.use(cors({
     credentials: true
 }));
 app.use(express.json());
+// Express 5 leaves req.body undefined when nothing was parsed (no body, or not JSON),
+// and handlers destructure it: a bare POST /login logged "Cannot destructure property
+// 'employeeId' of 'req.body'" and answered 500. Every handler gets an object instead.
+app.use((req, res, next) => { if (req.body === undefined) req.body = {}; next(); });
 
 const session = require('express-session');
 
@@ -4770,18 +4774,10 @@ try{
           console.log(`[AI Feedback] Skipping auto-feedback for Case Study: "${task || ""}"`);
           return;
         }
-        const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-        if (!GEMINI_API_KEY) return;
-
-        const { GoogleGenAI } = require("@google/genai");
-        const ai = new GoogleGenAI({
-          apiKey: GEMINI_API_KEY,
-          httpOptions: {
-            headers: {
-              'User-Agent': 'aistudio-build',
-            }
-          }
-        });
+        // utils/gemini, not the @google/genai SDK: the SDK needs ReadableStream, which
+        // this server's Node lacks, so every feedback failed with "ReadableStream is not defined".
+        const gemini = require("./utils/gemini");
+        if (!gemini.ready()) return;
 
         const taskTitle = req.body.task || 'Internship Task';
         const taskNote = req.body.note || '';
@@ -4799,20 +4795,19 @@ Be specific to the task. Give ONE strength and ONE specific improvement suggesti
 Sound like a real mentor — not a bot. Vary your opening (don't always start with "Great work").
 Keep it under 80 words. Do not use bullet points.`;
 
-        const response = await ai.models.generateContent({
-          model: "gemini-2.0-flash",
-          contents: prompt,
-          config: { maxOutputTokens: 150, temperature: 0.8 }
+        const out = await gemini.ask(prompt, {
+          type: gemini.Type.OBJECT,
+          properties: { feedback: { type: gemini.Type.STRING } },
+          required: ['feedback']
         });
-
-        const feedback = response.text?.trim();
+        const feedback = String((out && out.feedback) || '').trim();
 
         if (feedback && submission._id) {
-          // Update the submission with AI feedback
+          // Feedback only. The coordinator still approves: this code never ran on the
+          // server (see above), so approving here would have been new behaviour.
           await Submission.findByIdAndUpdate(submission._id, {
             $set: {
               feedback: feedback,
-              status: 'Approved', // AI auto-approves after generating feedback
               aiFeedback: true,
               feedbackGeneratedAt: new Date()
             }

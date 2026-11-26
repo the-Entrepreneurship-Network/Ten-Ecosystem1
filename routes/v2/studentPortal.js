@@ -1968,7 +1968,8 @@ router.post("/student/quiz-result", requireStudent, async (req, res) => {
 router.post("/automated-tasks/generate", requireStudent, async (req, res) => {
     try {
         const student = req.student;
-        const { GoogleGenAI, Type } = require("@google/genai");
+        const gemini = require("../../utils/gemini");
+        const { Type } = gemini;
 
         const Submission = require("../../models/Submission");
         const domain = student.domain || "Web Development";
@@ -1992,10 +1993,6 @@ router.post("/automated-tasks/generate", requireStudent, async (req, res) => {
             .populate('taskId', 'taskTitle');
         const recentTitles = recentProgress.map(p => p.taskId?.taskTitle).filter(Boolean);
 
-        const ai = new GoogleGenAI({
-            apiKey: process.env.GEMINI_API_KEY,
-            httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-        });
 
         const prompt = `Generate a highly professional, domain-specific, resume-building internship task.
 Domain: ${domain}
@@ -2005,12 +2002,7 @@ You MUST return a JSON object following the format below. Create a realistic, ch
 
         let generated;
         try {
-            const geminiRes = await ai.models.generateContent({
-                model: "gemini-2.0-flash",
-                contents: prompt,
-                config: {
-                    responseMimeType: "application/json",
-                    responseSchema: {
+            generated = await gemini.ask(prompt, {
                         type: Type.OBJECT,
                         properties: {
                             title: { type: Type.STRING },
@@ -2032,10 +2024,7 @@ You MUST return a JSON object following the format below. Create a realistic, ch
                             }
                         },
                         required: ["title", "description", "deliverables", "complexity", "learningVideos"]
-                    }
-                }
-            });
-            generated = JSON.parse(geminiRes.text);
+                    });
         } catch(e) {
             console.warn("[V2] Gemini task generation failed or quota exceeded, using rotating fallback pool:", e.message);
             const fbTask = getFallbackTask(domain, difficultyLevel, recentTitles);
@@ -2118,16 +2107,13 @@ You MUST return a JSON object following the format below. Create a realistic, ch
 router.post("/coding-challenges/generate", requireStudent, async (req, res) => {
     try {
         const student = req.student;
-        const { GoogleGenAI, Type } = require("@google/genai");
+        const gemini = require("../../utils/gemini");
+        const { Type } = gemini;
 
         const domain = student.domain || "Web Development";
         const approvedCount = await StudentTaskProgress.countDocuments({ studentId: student._id, status: "approved" });
         const level = approvedCount >= 5 ? "Hard" : approvedCount >= 2 ? "Medium" : "Easy";
 
-        const ai = new GoogleGenAI({
-            apiKey: process.env.GEMINI_API_KEY,
-            httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-        });
 
         const prompt = `Generate a modern algorithmic programming problem targeting ${domain} concepts.
 Difficulty: ${level} (choose from Easy, Medium, Hard).
@@ -2135,12 +2121,7 @@ Output strict schema JSON format with input/output cases.`;
 
         let generated;
         try {
-            const geminiRes = await ai.models.generateContent({
-                model: "gemini-2.0-flash",
-                contents: prompt,
-                config: {
-                    responseMimeType: "application/json",
-                    responseSchema: {
+            generated = await gemini.ask(prompt, {
                         type: Type.OBJECT,
                         properties: {
                             title: { type: Type.STRING },
@@ -2162,10 +2143,7 @@ Output strict schema JSON format with input/output cases.`;
                             }
                         },
                         required: ["title", "problemStatement", "inputFormat", "outputFormat", "sampleInput", "sampleOutput", "testCases"]
-                    }
-                }
-            });
-            generated = JSON.parse(geminiRes.text);
+                    });
         } catch(e) {
             console.warn("[V2] Gemini coding challange generation failed or quota exceeded, using fallback:", e.message);
             generated = {
@@ -2240,7 +2218,8 @@ router.post("/quizzes/generate", requireStudent, async (req, res) => {
     try {
         const student = req.student;
         const { taskId } = req.body;
-        const { GoogleGenAI, Type } = require("@google/genai");
+        const gemini = require("../../utils/gemini");
+        const { Type } = gemini;
 
         let targetTaskId = taskId;
         if (!targetTaskId) {
@@ -2255,22 +2234,13 @@ router.post("/quizzes/generate", requireStudent, async (req, res) => {
         const task = await DomainTask.findById(targetTaskId);
         if (!task) return res.status(404).json({ success: false, message: "Reference task not found." });
 
-        const ai = new GoogleGenAI({
-            apiKey: process.env.GEMINI_API_KEY,
-            httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-        });
 
         const prompt = `Generate exactly 5 highly technical, distinct multiple-choice questions matching domain: ${task.domain} and topic: ${task.taskTitle || ""}.
 For each question, formulate very clear conceptual options, specify the single correct choice (A, B, C, or D), and write a robust, diagnostic explanation explaining why the correct and incorrect answers behave the way they do (to serve as diagnostic learning feedback for students).`;
 
         let generatedQuestions;
         try {
-            const geminiRes = await ai.models.generateContent({
-                model: "gemini-2.0-flash",
-                contents: prompt,
-                config: {
-                    responseMimeType: "application/json",
-                    responseSchema: {
+            generatedQuestions = await gemini.ask(prompt, {
                         type: Type.ARRAY,
                         items: {
                             type: Type.OBJECT,
@@ -2291,10 +2261,7 @@ For each question, formulate very clear conceptual options, specify the single c
                             },
                             required: ["question", "options", "correct", "explanation"]
                         }
-                    }
-                }
-            });
-            generatedQuestions = JSON.parse(geminiRes.text);
+                    });
         } catch(e) {
             console.warn("[V2] Gemini quiz generation failed or quota exceeded, using high quality local fallback:", e.message);
             generatedQuestions = [
@@ -2402,26 +2369,18 @@ For each question, formulate very clear conceptual options, specify the single c
 router.post("/daily-learning/generate", requireStudent, async (req, res) => {
     try {
         const student = req.student;
-        const { GoogleGenAI, Type } = require("@google/genai");
+        const gemini = require("../../utils/gemini");
+        const { Type } = gemini;
 
         const domain = student.domain || "Web Development";
 
-        const ai = new GoogleGenAI({
-            apiKey: process.env.GEMINI_API_KEY,
-            httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-        });
 
         const prompt = `Formulate a short 5-minute micro-learning topic card with real practical guidance and a miniature diagnostic quiz question for the domain: ${domain}.
 The response MUST follow the strict JSON format matching the schema rules. Make sure the technical tips are actionable.`;
 
         let generated;
         try {
-            const geminiRes = await ai.models.generateContent({
-                model: "gemini-2.0-flash",
-                contents: prompt,
-                config: {
-                    responseMimeType: "application/json",
-                    responseSchema: {
+            generated = await gemini.ask(prompt, {
                         type: Type.OBJECT,
                         properties: {
                             conceptTitle: { type: Type.STRING },
@@ -2447,10 +2406,7 @@ The response MUST follow the strict JSON format matching the schema rules. Make 
                             }
                         },
                         required: ["conceptTitle", "quickTipBody", "quickQuiz"]
-                    }
-                }
-            });
-            generated = JSON.parse(geminiRes.text);
+                    });
         } catch(e) {
             console.warn("[V2] Gemini daily-learning generation failed or quota exceeded, using fallback:", e.message);
             generated = {
