@@ -169,3 +169,21 @@ test('Gemini\'s reply is used only when it is usable', async () => {
     ({ bugAgent } = load({ geminiReady: false }));
     expect(await bugAgent.geminiReply(ask)).toBeNull();
 });
+
+test('the check on a saved answer: fixes, does not fix, or no verdict', async () => {
+    const check = { subject: 'Task upload', body: 'File is too large, but my files are under 25MB', answer: 'How to submit a task: open Task Journey.' };
+    const ask = jest.fn(async () => ({ verdict: 'fixes' }));
+    let { bugAgent } = load({ ask });
+    expect(await bugAgent.answerFits(check)).toBe(true);
+    expect(ask.mock.calls[0][0]).toContain('The saved answer:\nHow to submit a task: open Task Journey.');
+    expect(ask.mock.calls[0][0]).toContain('File is too large, but my files are under 25MB');
+
+    ({ bugAgent } = load({ ask: jest.fn(async () => ({ verdict: ' Does-Not-Fix ' })) }));
+    expect(await bugAgent.answerFits(check)).toBe(false);
+
+    ({ bugAgent } = load({ ask: jest.fn(async () => ({ verdict: 'maybe' })) }));
+    expect(await bugAgent.answerFits(check)).toBeNull();
+
+    ({ bugAgent } = load({ geminiReady: false }));
+    expect(await bugAgent.answerFits(check)).toBeNull();
+});
