@@ -672,7 +672,10 @@ edits at `/hr-help-desk.html` (HR portal → **Help Desk**).
     Help Desk page), the thread is labelled **Help desk/Bug agent**, and the
     portal wakes Claude, which replies itself. If Claude is not set up, is
     marked not responding, or the copy to growth@ fails, the email goes to
-    people instead (**Help desk/Needs reply**).
+    people instead (**Help desk/Needs reply**). Each copy in growth@ ends
+    with the reply the help desk sent, and Claude reads it: if it missed the
+    student's question, Claude sends the right answer and teaches the help
+    desk.
   - **Gemini (free)**: the server writes the first reply itself with the free
     `GEMINI_API_KEY` (`utils/gemini.js`), from the saved answers. The email is
     labelled **Help desk/Needs reply** unless nothing is broken. Touchy topics

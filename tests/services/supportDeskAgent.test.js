@@ -376,6 +376,8 @@ describe('Copy to the team inbox (SUPPORT_COPY_TO)', () => {
         expect(raw).toMatch(/^Reply-To: asha@gmail\.com/m);
         expect(raw).toMatch(/^Subject: \[complaints@\] emp id/m);
         expect(raw).toContain('Help desk: drafted');
+        // The reply rides along, so the bug agent can check it answered the student.
+        expect(raw).toMatch(/--- Our reply ---\s+Hi Asha/);
         expect(raw).toMatch(/Content-Type: message\/rfc822/);
     });
 
