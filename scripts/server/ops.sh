@@ -10,6 +10,9 @@
 #            never printed.
 #   restart  restart the app and check it comes back
 #   nginx    install the settings in deploy/nginx/ (apply-nginx.sh)
+#   selftest the live check (scripts/server/selftest.js): pages, database,
+#            Gemini, an exam paper, uploads, half-made student accounts.
+#            Emailed, like the logs; only the pass/fail count is printed.
 set -euo pipefail
 APP=ten-portal-production
 PORT="$(grep -E '^PORT=' .env 2>/dev/null | tail -1 | cut -d= -f2 | tr -d '[:space:]' || true)"
@@ -39,8 +42,11 @@ case "${1:-}" in
   nginx)
     bash scripts/server/apply-nginx.sh
     ;;
+  selftest)
+    node scripts/server/selftest.js | node scripts/server/mail-team.js "[server] live self-test"
+    ;;
   *)
-    echo "Usage: ops.sh status|logs|restart|nginx" >&2
+    echo "Usage: ops.sh status|logs|restart|nginx|selftest" >&2
     exit 2
     ;;
 esac
