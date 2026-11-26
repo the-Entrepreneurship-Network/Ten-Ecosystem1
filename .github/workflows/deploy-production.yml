@@ -80,4 +80,8 @@ jobs:
             DB_HEALTH="$(curl -s -m 5 "http://127.0.0.1:${APP_PORT:-5000}/api/health/db" || true)"
             echo "$DB_HEALTH" | grep -q '"connected":true' \
               || echo "::warning::The app is online but reports the database NOT connected. On the server run: sudo bash scripts/server/harden-mongod.sh --check   ($DB_HEALTH)"
+            # nginx settings kept in deploy/nginx/ (the upload size limit) ship
+            # like code. A file nginx rejects is taken back out, and the job fails.
+            bash scripts/server/apply-nginx.sh
+
             echo "Deployed $(git rev-parse --short HEAD) to $APP_DIR"

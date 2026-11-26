@@ -104,6 +104,8 @@ The steps, for an email that is yours:
      whose description includes the line `Help desk thread: <Gmail thread id>`.
      Reply that we found the problem and a fix is being reviewed, and that we
      will email as soon as it is live. Label `Bug agent/Fix in review`.
+     An nginx setting (an upload size limit, a timeout) is fixed the same
+     way, in `deploy/nginx/`: the deploy installs it.
 4. **Only a person can decide** (fees, refunds or payments; a change to their
    account, domain or dates; an exception about documents; anything you cannot
    check in the code): reply briefly that a member of the team will get back to
