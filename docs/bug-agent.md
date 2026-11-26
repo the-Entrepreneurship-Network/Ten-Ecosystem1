@@ -33,7 +33,7 @@ the team is emailed. Then, if nothing is new, say "Nothing new." and stop.
   `Help desk: <what the help desk did>`. The original email is attached as
   `original.eml`; download it when you need screenshots.
 - New copies: search
-  `subject:"[complaints@]" newer_than:14d -label:bug-agent-done -label:bug-agent-waiting -label:bug-agent-fix-in-review -label:bug-agent-needs-person`
+  `subject:"[complaints@]" newer_than:14d -label:bug-agent-done -label:bug-agent-waiting -label:bug-agent-fix-in-review -label:bug-agent-needs-person -label:bug-agent-wrong-draft`
 - Follow-ups: threads labelled `Bug agent/Waiting` with a new message from the
   student since the last reply from growth@.
 
@@ -52,20 +52,25 @@ the team is emailed. Then, if nothing is new, say "Nothing new." and stop.
 
 ## For each new email
 
-The `Help desk:` line in the copy says who answers. Exactly one side replies
-to a student, never both.
+The `Help desk:` line in the copy says who answers. Never send a second
+answer to a question that is already answered.
 
 - `Help desk: agent (…)`: **yours.** No saved answer and no Gemini reply
   settled it, so the help desk sent nothing and woke you. You are the only one
   who replies. Handle it with the steps below.
-- `Help desk: sent` or `Help desk: drafted`, with nothing in brackets: a saved
-  answer went to the student. Label it `Bug agent/Done` and do nothing else.
-- `Help desk: sent (Gemini: …)` or `drafted (Gemini: …)`: Gemini replied while
-  the switch was on Gemini, or for something it could settle (it asked for
-  details, or explained). Label it `Bug agent/Done`. The one exception is
-  `(Gemini: bug)`: the student was told the team is looking into it, so do not
-  send another first reply; investigate, fix a real bug and close the loop as
-  below, and reply only when you have something new to say.
+- `Help desk: sent` or `Help desk: drafted`: a saved answer, or Gemini
+  (`(Gemini: …)`), already replied. The reply is at the end of the copy, under
+  `--- Our reply ---` (older copies have none: label them `Bug agent/Done`).
+  Read the student's email and that reply together.
+  - The reply answers what the student asked: label `Bug agent/Done`.
+  - It does not, and it was `sent`: the email is yours. Handle it with the
+    steps below, start your reply by saying sorry that our first answer missed
+    their question, and teach the help desk so the next student gets the right
+    answer or reaches a person. If it was `drafted`, do as for a wrong draft
+    below instead.
+  - `(Gemini: bug)`: the student was told the team is looking into it, so do
+    not send another first reply; investigate, fix a real bug and close the
+    loop as below, and reply only when you have something new to say.
 - `Help desk: held` or `Help desk: human`: a person handles it (a touchy topic,
   or a sender who wrote many times today). Label it `Bug agent/Done`.
 - `Help desk: backfill (…)`: an older conversation, copied by
@@ -79,7 +84,9 @@ to a student, never both.
     answers what the student asked, label `Bug agent/Done`. If it does not,
     label `Bug agent/Wrong draft` and write the right answer as a Gmail draft
     in growth@ to the student, so the team can delete the wrong one and send
-    yours.
+    yours. If the student reports a website problem, also fix it as in step 3
+    and label `Bug agent/Fix in review`: your draft is the first reply, and
+    you email them when the fix is live.
   - Otherwise: handle it with the steps below, and start your reply by
     apologising for the slow answer.
 

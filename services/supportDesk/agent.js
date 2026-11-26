@@ -385,7 +385,9 @@ async function copyTo(gmail, me, msg, mail, outcome) {
         replyTo: mail.from.email,
         subject: '[complaints@] ' + (mail.subject.trim() || '(no subject)'),
         text: `From: ${mail.from.name ? mail.from.name + ' ' : ''}<${mail.from.email}>\n` +
-            `Help desk: ${outcome.action}${outcome.reason ? ' (' + outcome.reason + ')' : ''}\n\n${mail.body}`
+            `Help desk: ${outcome.action}${outcome.reason ? ' (' + outcome.reason + ')' : ''}\n\n${mail.body}` +
+            // So the bug agent can check the reply really answered the student.
+            (outcome.reply ? `\n\n--- Our reply ---\n${outcome.reply}` : '')
     };
     try {
         const raw = Buffer.from(await gmail.getRaw(msg.id), 'base64');
