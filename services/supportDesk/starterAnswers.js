@@ -23,13 +23,26 @@ module.exports = [
             'i forgot my employee id', 'how to get employee id', 'employee id kaise milega', 'mera employee id kya hai',
             'intern id not showing', 'lost my ten id', 'seeking employee id', 'i didn\'t got employee id',
             'please share my employee id', 'kindly provide my employee id', 'not yet received my employee id',
-            'i didn\'t get employee id till now', 'still no employee id', 'did not receive employee id yet'
+            'i didn\'t get employee id till now', 'still no employee id', 'did not receive employee id yet',
+            'please generate my employee id', 'assign me a new employee id', 'kindly generate employee id for my internship'
         ],
         answer: 'You get your Employee ID the moment you register. It looks like TEN/WEB/1005, and you will find it in ' +
             'your welcome email and at the top of your dashboard.\n\n' +
             'Not registered yet? Register here: {{registerUrl}}\n\n' +
             "Already registered but can't find it? Sign in with your email address at {{loginUrl}}, and it is at the top of your dashboard.",
         personal: 'Your Employee ID is {{employeeId}}. You can also see it at the top of your dashboard after signing in at {{loginUrl}}.'
+    },
+    {
+        key: 'dashboard',
+        question: 'Where is my dashboard and how do I open it?',
+        examples: [
+            'where is my dashboard', 'how can i find my dashboard', 'how to open student dashboard', 'dashboard not found',
+            'where is the intern dashboard', 'dashboard kaha hai', 'how to go to my dashboard', 'dashboard link'
+        ],
+        answer: 'Your dashboard opens as soon as you sign in. Go to {{loginUrl}} and sign in with your email address or ' +
+            'your Employee ID and the password you chose when you registered.\n\n' +
+            'On the dashboard you will find your Employee ID at the top, "Mark Today\'s Attendance", your coordinator, ' +
+            'the Task Journey and My Documents. On a phone, open the menu at the top to see all the pages.'
     },
     {
         key: 'register',
