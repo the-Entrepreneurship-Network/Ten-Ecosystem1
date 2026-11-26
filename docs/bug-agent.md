@@ -50,6 +50,29 @@ the team is emailed. Then, if nothing is new, say "Nothing new." and stop.
   student's name, email, Employee ID or message text, and must not describe a
   security weakness in detail.
 
+## Work fast
+
+Every pass costs time and usage: spend it on the bug, not on reading.
+
+- Start from the student's own words. Search for the exact error text or
+  button label they quote (`grep -rn "File is too large" public routes server.js`):
+  messages on the site are literal strings, so this lands on the right line.
+- Read only the lines you need: search, then read that range. Never read
+  `server.js` (12,000 lines) or `HANDOVER.md` whole.
+- Where things are:
+  - task submission and its uploads: `server.js` (`/submit-task`),
+    `public/student-dashboard.html`, `deploy/nginx/`
+  - documents and the offer letter: `routes/v2/documents.js`
+  - Task Journey videos and quizzes: `routes/v2/academics.js`,
+    `routes/v2/quiz.js`, `services/v2/quizEngine.js`
+  - attendance: `routes/v2/studentPortal.js`, `utils/attendanceUtils.js`
+  - certificates: `routes/v2/certificates.js`, `routes/v2/certificateApplications.js`
+  - registration and groups: `routes/registerHub.js`, `routes/v2/domainGroups.js`
+  - the help desk and its saved answers: `services/supportDesk/`
+- Run only the tests for what you changed (`npx jest tests/<area>`). CI runs
+  the whole suite on the pull request.
+- Work quietly: no commentary between steps, just the few lines at the end.
+
 ## For each new email
 
 The `Help desk:` line in the copy says who answers. Never send a second
@@ -106,7 +129,7 @@ The steps, for an email that is yours:
    - **Not a bug** (works as designed, or a mistake on their side): reply
      explaining simply what is happening and what to do. Label
      `Bug agent/Done`.
-   - **A real bug**: fix the root cause, add or update a test, run `npx jest`,
+   - **A real bug**: fix the root cause, add or update a test, run its tests,
      push the branch and open a PR titled `Student bug: <short description>`
      whose description includes the line `Help desk thread: <Gmail thread id>`.
      Reply that we found the problem and a fix is being reviewed, and that we
