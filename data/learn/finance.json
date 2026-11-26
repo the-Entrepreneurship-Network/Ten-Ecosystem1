@@ -1,152 +1,681 @@
 {
- "note": "Edit this file to change the module; the server reads it at boot.",
- "topics": [
-  {
-   "title": "What finance is",
-   "technical": "Finance is the management of money over time under uncertainty: how individuals, companies and markets allocate capital, price risk and make decisions today about uncertain tomorrows. Its core question is always value.",
-   "simple": "Managing money over time — deciding today with an uncertain future in mind.",
-   "videoSearch": "what is finance",
-   "difficulty": 1
-  },
-  {
-   "title": "Time value of money",
-   "technical": "A rupee today is worth more than a rupee tomorrow; present and future value, discounting and compounding formalise this. It underlies every valuation, loan and investment decision in finance.",
-   "simple": "Money now beats money later — the single idea behind almost all of finance.",
-   "videoSearch": "time value of money explained",
-   "difficulty": 1
-  },
-  {
-   "title": "Interest and compounding",
-   "technical": "Simple and compound interest, and the frequency of compounding, drive how money grows or debt balloons. Compounding is the quiet engine behind both wealth and ruinous debt.",
-   "simple": "How money grows on itself — the force behind both savings and crushing debt.",
-   "videoSearch": "compound interest explained",
-   "difficulty": 1
-  },
-  {
-   "title": "Financial statements",
-   "technical": "The income statement, balance sheet and cash flow statement together describe a company's performance, position and liquidity. Reading all three — and how they connect — is financial literacy's core.",
-   "simple": "The three reports that tell you how a company is really doing.",
-   "videoSearch": "financial statements explained",
-   "difficulty": 1
-  },
-  {
-   "title": "Reading the balance sheet",
-   "technical": "Assets equal liabilities plus equity; the balance sheet is a snapshot of what a company owns and owes. Its structure reveals solvency and how the business is financed.",
-   "simple": "A snapshot of what a company owns, owes, and is worth right now.",
-   "videoSearch": "balance sheet explained",
-   "difficulty": 1
-  },
-  {
-   "title": "Income and cash flow",
-   "technical": "Profit is an opinion; cash is a fact. The income statement shows earnings while the cash flow statement shows the money actually moving — profitable companies still fail when cash runs out.",
-   "simple": "Earnings can be dressed up; cash flow shows the money that truly moved.",
-   "videoSearch": "income statement cash flow",
-   "difficulty": 2
-  },
-  {
-   "title": "Financial ratios",
-   "technical": "Liquidity, profitability, leverage and efficiency ratios turn statements into comparable signals; trends and peer comparison matter more than any single number. Ratios are questions, not verdicts.",
-   "simple": "Quick measures that turn financial reports into comparable health signals.",
-   "videoSearch": "financial ratio analysis",
-   "difficulty": 2
-  },
-  {
-   "title": "Risk and return",
-   "technical": "Higher expected return demands higher risk; measuring risk (volatility, downside) and pricing it is finance's central bargain. Free lunches do not survive in efficient markets.",
-   "simple": "You cannot get more reward without accepting more risk — finance's basic trade.",
-   "videoSearch": "risk and return explained",
-   "difficulty": 2
-  },
-  {
-   "title": "Diversification and portfolios",
-   "technical": "Combining uncorrelated assets reduces risk without proportionally cutting return — the one genuinely free lunch. Portfolio thinking beats betting everything on a single conviction.",
-   "simple": "Not putting all your eggs in one basket — the closest thing to free safety.",
-   "videoSearch": "portfolio diversification explained",
-   "difficulty": 2
-  },
-  {
-   "title": "Stocks and equity markets",
-   "technical": "Shares represent ownership; markets price them continuously on expectations of future cash flows. Understanding what a share is, and what moves its price, is investing's foundation.",
-   "simple": "Owning slices of companies — and what makes their prices move.",
-   "videoSearch": "stock market basics",
-   "difficulty": 3
-  },
-  {
-   "title": "Bonds and fixed income",
-   "technical": "Bonds are loans with fixed payments; price moves inversely to interest rates, and credit risk sets yield. Fixed income anchors portfolios and reveals the market's view of risk and rates.",
-   "simple": "Lending money for steady interest — and why bond prices fall when rates rise.",
-   "videoSearch": "bonds fixed income explained",
-   "difficulty": 3
-  },
-  {
-   "title": "Valuation fundamentals",
-   "technical": "Value is the present value of future cash flows; DCF, multiples and comparables estimate it under uncertainty. Every price is an implicit forecast — valuation makes the forecast explicit.",
-   "simple": "What is something really worth — the discounted value of the cash it will make.",
-   "videoSearch": "valuation dcf basics",
-   "difficulty": 3
-  },
-  {
-   "title": "Corporate finance",
-   "technical": "Companies decide how to raise capital (debt vs equity), which projects to fund, and how to return cash. Capital structure and investment decisions shape value and risk.",
-   "simple": "How companies decide where to get money and where to spend it.",
-   "videoSearch": "corporate finance basics",
-   "difficulty": 3
-  },
-  {
-   "title": "Capital budgeting",
-   "technical": "NPV, IRR and payback evaluate whether projects create value; positive-NPV decisions grow the firm, and the discount rate encodes risk. It is time value of money applied to real decisions.",
-   "simple": "Deciding which projects are worth doing by whether they add value.",
-   "videoSearch": "capital budgeting npv irr",
-   "difficulty": 4
-  },
-  {
-   "title": "Financial markets and instruments",
-   "technical": "Equities, bonds, derivatives and currencies trade in interconnected markets that price and transfer risk. Understanding the instruments and who uses them maps how capital actually flows.",
-   "simple": "The different things that trade — and how markets move risk around.",
-   "videoSearch": "financial markets instruments overview",
-   "difficulty": 4
-  },
-  {
-   "title": "Derivatives basics",
-   "technical": "Options, futures and swaps derive value from underlying assets and let users hedge or speculate on risk. Powerful and dangerous, they amplify both protection and mistakes.",
-   "simple": "Contracts that let you bet on or protect against price moves — powerful and risky.",
-   "videoSearch": "derivatives explained",
-   "difficulty": 4
-  },
-  {
-   "title": "Personal finance",
-   "technical": "Budgeting, saving, debt management, insurance and long-term investing apply finance to a life; compounding and discipline beat cleverness. The principles that build institutional wealth build personal wealth too.",
-   "simple": "Using finance to manage your own money — budget, save, invest, protect.",
-   "videoSearch": "personal finance basics",
-   "difficulty": 4
-  },
-  {
-   "title": "Behavioral finance",
-   "technical": "People are not rational: biases like loss aversion, herding and overconfidence move markets and wreck individual decisions. Knowing your own wiring is part of investing well.",
-   "simple": "Why people — and markets — make predictably irrational money choices.",
-   "videoSearch": "behavioral finance explained",
-   "difficulty": 5
-  },
-  {
-   "title": "Financial modelling",
-   "technical": "Spreadsheet models project statements, value companies and test scenarios; clean structure and honest assumptions separate insight from garbage. A model is only as good as its inputs and logic.",
-   "simple": "Building spreadsheets that forecast and value — only as smart as their assumptions.",
-   "videoSearch": "financial modelling basics",
-   "difficulty": 5
-  },
-  {
-   "title": "Ethics and regulation",
-   "technical": "Finance runs on trust: disclosure, fiduciary duty and regulation exist because the incentives to cheat are enormous. Ethical lapses in finance scale into crises.",
-   "simple": "Finance depends on trust — and the rules that exist because money tempts.",
-   "videoSearch": "finance ethics regulation",
-   "difficulty": 5
-  },
-  {
-   "title": "The capstone",
-   "technical": "Analyse a real company end to end: read its statements, compute ratios, value it, and write an investment view with the reasoning. A full analysis demonstrates financial literacy applied.",
-   "simple": "Fully analyse and value a real company — proof you can do finance.",
-   "videoSearch": "company financial analysis project",
-   "difficulty": 5
-  }
- ]
+  "note": "Edit this file to change the module; the server reads it at boot.",
+  "topics": [
+    {
+      "title": "What finance is",
+      "technical": "Finance is the management of money over time under uncertainty: how individuals, companies and markets allocate capital, price risk and make decisions today about uncertain tomorrows. Its core question is always value.",
+      "simple": "Managing money over time — deciding today with an uncertain future in mind.",
+      "difficulty": 1,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://autonomy.tube/videos/embed/45636746-de62-4b88-a481-408af5b81886",
+          "title": "What is the Future of (Bankster) Finance? - Questions For Corbett #049 (December 18, 2019)",
+          "minutes": 18
+        },
+        {
+          "src": "pt",
+          "embed": "https://autonomy.tube/videos/embed/ae4bdc91-10e2-4b18-9c95-caeb11d7a4ab",
+          "title": "What is the Future of (Bankster) Finance? - QFC (December 20, 2019)",
+          "minutes": 18
+        },
+        {
+          "src": "pt",
+          "embed": "https://peertube.mesnumeriques.fr/videos/embed/nm94gPv2WcsKyskUNhP9Lc",
+          "title": "From Impact Investment to Regenerative Finance, What Can Web 3 Do for Nature?",
+          "minutes": 45
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/BankingF",
+          "title": "Personal Finance Software",
+          "minutes": 26
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/academictorrents_f07203f2eedb4792c351ba0e28406dab9ab54d7d",
+          "title": "[Coursera] Introduction to Computational Finance and Financial Econometrics (University of Washington) (compfinance)",
+          "minutes": 13
+        }
+      ]
+    },
+    {
+      "title": "Time value of money",
+      "technical": "A rupee today is worth more than a rupee tomorrow; present and future value, discounting and compounding formalise this. It underlies every valuation, loan and investment decision in finance.",
+      "simple": "Money now beats money later — the single idea behind almost all of finance.",
+      "difficulty": 1,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xsu4fj",
+          "title": "LSBF Business Challenge Week 5: Time Value of Money",
+          "minutes": 4
+        }
+      ]
+    },
+    {
+      "title": "Interest and compounding",
+      "technical": "Simple and compound interest, and the frequency of compounding, drive how money grows or debt balloons. Compounding is the quiet engine behind both wealth and ruinous debt.",
+      "simple": "How money grows on itself — the force behind both savings and crushing debt.",
+      "difficulty": 1,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://diler.tube/videos/embed/6Ea4p9tSjJPYsPESYnvGxj",
+          "title": "Compound Interest ｜ Numbers ｜ Maths ｜ FuseSchool",
+          "minutes": 5
+        },
+        {
+          "src": "pt",
+          "embed": "https://diler.tube/videos/embed/nBqwyKgardeT2T46KwpDmx",
+          "title": "Deducing Compound Interest formula | Comparing Quantities | TG Grade 8 | Math | Khan Academy",
+          "minutes": 7
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/bptvpa-All_Things_Financial_-_Compound_Interest",
+          "title": "All Things Financial - Compound Interest",
+          "minutes": 24
+        },
+        {
+          "src": "pt",
+          "embed": "https://peertube.dngr.us/videos/embed/wcEpdZiuK8BNS8LuWSHMMz",
+          "title": "STOCK FOOTAGE CLIPS  SIMPLE & COMPOUND MACHINES   WATER FAUCET  CAR CRASHES INTO STORE SF10015",
+          "minutes": 4
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/findingcompoundingmachineswiththegreatinvestorchuckakrehisgenxco-managerjohnneff",
+          "title": "Finding Compounding Machines With The Great Investor, Chuck Akre & His Gen X Co-manager, John Neff",
+          "minutes": 27
+        }
+      ]
+    },
+    {
+      "title": "Financial statements",
+      "technical": "The income statement, balance sheet and cash flow statement together describe a company's performance, position and liquidity. Reading all three — and how they connect — is financial literacy's core.",
+      "simple": "The three reports that tell you how a company is really doing.",
+      "difficulty": 1,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Dr.RichardSandorOnFinancialFuturesCarbonTradingDiscussesHisBestIdeaYet",
+          "title": "Dr. Richard Sandor on Financial Futures & Carbon Trading Discusses His “Best Idea Yet”",
+          "minutes": 22
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/DaveRamseyFinancialPeaceUniversity2019",
+          "title": "Dave Ramsey's Financial Peace University 2019",
+          "minutes": 26
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/financial-plans-pandemic-era-rethink",
+          "title": "Financial Plans: Pandemic Era Rethink",
+          "minutes": 26
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x91p10e",
+          "title": "Notes to Financial Statements 02",
+          "minutes": 10
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x2yfnq6",
+          "title": "IFRS 10 - Consolidated Financial Statements",
+          "minutes": 10
+        }
+      ]
+    },
+    {
+      "title": "Reading the balance sheet",
+      "technical": "Assets equal liabilities plus equity; the balance sheet is a snapshot of what a company owns and owes. Its structure reveals solvency and how the business is financed.",
+      "simple": "A snapshot of what a company owns, owes, and is worth right now.",
+      "difficulty": 1,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://tilvids.com/videos/embed/aSuCAezxkjetYuT4hEkRkf",
+          "title": "Ice sheets and Surface mass balance - what does this mean? Scientific explanation",
+          "minutes": 5
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x889qz5",
+          "title": "'No Big Shocks' To Impact Balance Sheet In Future : L&T Finance",
+          "minutes": 12
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x7mc7ve",
+          "title": "Centre's Balance-Sheet Trick",
+          "minutes": 4
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9xgxbq",
+          "title": "Anil Lamba - Romancing the Balance Sheet (EN)",
+          "minutes": 8
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x24v5yf",
+          "title": "007 Introduction to Balance Sheets",
+          "minutes": 10
+        }
+      ]
+    },
+    {
+      "title": "Income and cash flow",
+      "technical": "Profit is an opinion; cash is a fact. The income statement shows earnings while the cash flow statement shows the money actually moving — profitable companies still fail when cash runs out.",
+      "simple": "Earnings can be dressed up; cash flow shows the money that truly moved.",
+      "difficulty": 2,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/FinancialEmpowermentPrayerFlow4",
+          "title": "Financial Empowerment Prayer Flow 4",
+          "minutes": 20
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/62854FinacialManagementVwr",
+          "title": "1950s NATIONAL CASH REGISTER CORP. PUNCH CARD COMPUTERS & FINANCIAL MANAGEMENT FILM 62854",
+          "minutes": 29
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x8wdrxg",
+          "title": "What is Financing cash flow?",
+          "minutes": 4
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9qjvk6",
+          "title": "8-assets-that-make-people-rich-and-never-work-again-financial-freedom-passive-income-cash-flow in English #finance #finance2025",
+          "minutes": 11
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x8thvko",
+          "title": "The Best Ways to Increase Your Cash Flow Today and Tomorrow | Oz Finance",
+          "minutes": 16
+        }
+      ]
+    },
+    {
+      "title": "Financial ratios",
+      "technical": "Liquidity, profitability, leverage and efficiency ratios turn statements into comparable signals; trends and peer comparison matter more than any single number. Ratios are questions, not verdicts.",
+      "simple": "Quick measures that turn financial reports into comparable health signals.",
+      "difficulty": 2,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x7zmmc9",
+          "title": "Kahaani Financial Ratios Ki - An introduction to Financial Ratios and The Analysis",
+          "minutes": 6
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x6euz8d",
+          "title": "Financial ratios to understand fundamentals",
+          "minutes": 5
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x36dwa2",
+          "title": "MDMN Group - Financial Ratio Analysis - Business",
+          "minutes": 3
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xax3hl6",
+          "title": "Financial Ratio Analysis in 5 minutes",
+          "minutes": 5
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x889sxt",
+          "title": "Ujjivan Financial Expects To Bring Down Cost To Income Ratio",
+          "minutes": 7
+        }
+      ]
+    },
+    {
+      "title": "Risk and return",
+      "technical": "Higher expected return demands higher risk; measuring risk (volatility, downside) and pricing it is finance's central bargain. Free lunches do not survive in efficient markets.",
+      "simple": "You cannot get more reward without accepting more risk — finance's basic trade.",
+      "difficulty": 2,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/equity-like-returns-with-less-than-stock-market-risk",
+          "title": "Equity-Like Returns With Less Than Stock Market Risk",
+          "minutes": 27
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/whhisc-TALK_OF_THE_TOWN_Steve_Gaito_-_Controllable_Retirement_Risks_Certified_Financial_Planner_W",
+          "title": "TALK OF THE TOWN - Steve Gaito: Controllable Retirement Risks - Certified Financial Planner - WHHITV",
+          "minutes": 5
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x2b0nzj",
+          "title": "P13EN : Anglo-saxon finance - M134 : Analysis of the company’s risk and return : tools and ratios",
+          "minutes": 6
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xvn66t",
+          "title": "Assessing Profit Return and Risk in Social Investment",
+          "minutes": 3
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x6new6l",
+          "title": "How women and men approach money differently: risk, investment, and return",
+          "minutes": 7
+        }
+      ]
+    },
+    {
+      "title": "Diversification and portfolios",
+      "technical": "Combining uncorrelated assets reduces risk without proportionally cutting return — the one genuinely free lunch. Portfolio thinking beats betting everything on a single conviction.",
+      "simple": "Not putting all your eggs in one basket — the closest thing to free safety.",
+      "difficulty": 2,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/whhisc-LOWCOUNTRY_MONEY_TALK_Diversification_Revolutionary_Financial_Group_April_2023_WHHITV",
+          "title": "LOWCOUNTRY MONEY TALK - Diversification - Revolutionary Financial Group - April 2023 - WHHITV",
+          "minutes": 6
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/whhisc-Phil_Bloyd_-_Tax_Diversification_Income_Distribution_REVOLUTIONARY_FINANCIAL_GROUP_Vignett",
+          "title": "Phil Bloyd: Tax Diversification & Income Distribution - REVOLUTIONARY FINANCIAL GROUP - Vignette",
+          "minutes": 4
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x8fzywn",
+          "title": "The Mutual Fund Show: Portfolio Diversification Via Debt Funds",
+          "minutes": 29
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x8a762e",
+          "title": "The Mutual Fund Show: Top Investment Bets & Portfolio Diversification",
+          "minutes": 32
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x88a0gc",
+          "title": "Amit Trivedi Explains The Importance Of Portfolio Diversification For Your Investments",
+          "minutes": 4
+        }
+      ]
+    },
+    {
+      "title": "Stocks and equity markets",
+      "technical": "Shares represent ownership; markets price them continuously on expectations of future cash flows. Understanding what a share is, and what moves its price, is investing's foundation.",
+      "simple": "Owning slices of companies — and what makes their prices move.",
+      "difficulty": 3,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x888ubt",
+          "title": "Stocks, Equity Futures Climb; Dollar Edges Lower: Markets Wrap",
+          "minutes": 8
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9zm8fk",
+          "title": "Equity Market: Stocks पर Long Term Tax हटेगा? | AAP MP Raghav Chadha | Union Budget 2026",
+          "minutes": 5
+        }
+      ]
+    },
+    {
+      "title": "Bonds and fixed income",
+      "technical": "Bonds are loans with fixed payments; price moves inversely to interest rates, and credit risk sets yield. Fixed income anchors portfolios and reveals the market's view of risk and rates.",
+      "simple": "Lending money for steady interest — and why bond prices fall when rates rise.",
+      "difficulty": 3,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x6hcz33",
+          "title": "Fixed income after the fall of the Bond King",
+          "minutes": 5
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x3r6648",
+          "title": "Global fixed income winners and losers",
+          "minutes": 5
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x346p5",
+          "title": "Fixed Income Investing",
+          "minutes": 3
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x6ev01c",
+          "title": "Fixed income obligations to income ratio | Dejargoned",
+          "minutes": 4
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x6hd64h",
+          "title": "Global fixed income winners and losers | FT Markets",
+          "minutes": 5
+        }
+      ]
+    },
+    {
+      "title": "Valuation fundamentals",
+      "technical": "Value is the present value of future cash flows; DCF, multiples and comparables estimate it under uncertainty. Every price is an implicit forecast — valuation makes the forecast explicit.",
+      "simple": "What is something really worth — the discounted value of the cash it will make.",
+      "difficulty": 3,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/openpublica-sacramento-california-7df29203-e983-4256-931d-a7069512f462",
+          "title": "AIFM Special Meeting: Investment Reports, Actuarial Valuation, and 2022 Schedule – November 18, 2021",
+          "minutes": 48
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x889teh",
+          "title": "L&T Finance Or M&M Finance: The Better Bet At Current Valuations? #AskBQ",
+          "minutes": 26
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x88a0s1",
+          "title": "UBS: Markets Have Corrected From Very Expensive Valuation To Less Expensive Valuation",
+          "minutes": 17
+        }
+      ]
+    },
+    {
+      "title": "Corporate finance",
+      "technical": "Companies decide how to raise capital (debt vs equity), which projects to fund, and how to return cash. Capital structure and investment decisions shape value and risk.",
+      "simple": "How companies decide where to get money and where to spend it.",
+      "difficulty": 3,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/publici_cast_eppingforestdc_370813",
+          "title": "Finance and Performance Management Cabinet Committee",
+          "minutes": 59
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x77x9u8",
+          "title": "PNB Housing finance cautious on corporate finance disbursements",
+          "minutes": 8
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x95r5a6",
+          "title": "Corporate Finance Foundation: 2.2 Finance inside of companies",
+          "minutes": 3
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x95tais",
+          "title": "Corporate Finance Foundation: 5.2 - Stock markets",
+          "minutes": 4
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x95r5oc",
+          "title": "Corporate Finance Foundation: 3.4 - Beta- Examples",
+          "minutes": 3
+        }
+      ]
+    },
+    {
+      "title": "Capital budgeting",
+      "technical": "NPV, IRR and payback evaluate whether projects create value; positive-NPV decisions grow the firm, and the discount rate encodes risk. It is time value of money applied to real decisions.",
+      "simple": "Deciding which projects are worth doing by whether they add value.",
+      "difficulty": 4,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://fediverse.tv/videos/embed/rKudVPvKNwvSe22mEhBvv7",
+          "title": "Budget Update, Revenue and Capital - Cllr  Derek Louden",
+          "minutes": 6
+        },
+        {
+          "src": "pt",
+          "embed": "https://fediverse.tv/videos/embed/9VpoqrvFWrUVW5tJAhVcVw",
+          "title": "Budget Update, Revenue and Capital - Cllr Raymond Bremner opening the debate",
+          "minutes": 5
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xpmxog",
+          "title": "Pre-budget wishlist of capital good manufactures Budget ETNOW",
+          "minutes": 4
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x6b5665",
+          "title": "Pre Budget 2014 : Education & Human Capital",
+          "minutes": 24
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xxvjvt",
+          "title": "Market overreacted to the Budget : Macquarie Capital",
+          "minutes": 15
+        }
+      ]
+    },
+    {
+      "title": "Financial markets and instruments",
+      "technical": "Equities, bonds, derivatives and currencies trade in interconnected markets that price and transfer risk. Understanding the instruments and who uses them maps how capital actually flows.",
+      "simple": "The different things that trade — and how markets move risk around.",
+      "difficulty": 4,
+      "videos": []
+    },
+    {
+      "title": "Derivatives basics",
+      "technical": "Options, futures and swaps derive value from underlying assets and let users hedge or speculate on risk. Powerful and dangerous, they amplify both protection and mistakes.",
+      "simple": "Contracts that let you bet on or protect against price moves — powerful and risky.",
+      "difficulty": 4,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/f_sl_buffett_derivatives_berkshire.fortune_576x324_dl",
+          "title": "CNN Money Archive: Buffett's stance on derivatives",
+          "minutes": 4
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/mkts_ss_sec_white_board.cnnmoney_576x324_dl",
+          "title": "CNN Money Archive: SEC explains dangerous derivatives",
+          "minutes": 6
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x88a9p7",
+          "title": "Equity Derivatives: Longer Trading Hours",
+          "minutes": 9
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x88aan6",
+          "title": "Longer Trading Hours For Equity Derivatives",
+          "minutes": 5
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x6b68oj",
+          "title": "Market Talk: Deriving value from derivatives",
+          "minutes": 24
+        }
+      ]
+    },
+    {
+      "title": "Personal finance",
+      "technical": "Budgeting, saving, debt management, insurance and long-term investing apply finance to a life; compounding and discipline beat cleverness. The principles that build institutional wealth build personal wealth too.",
+      "simple": "Using finance to manage your own money — budget, save, invest, protect.",
+      "difficulty": 4,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/BankingF",
+          "title": "Personal Finance Software",
+          "minutes": 26
+        },
+        {
+          "src": "pt",
+          "embed": "https://videos.fsci.in/videos/embed/4bBgduLXCr64FyPcieQZCg",
+          "title": "GnuCash for Personal Finance - Getting Started and Basics",
+          "minutes": 22
+        },
+        {
+          "src": "pt",
+          "embed": "https://videos.fsci.in/videos/embed/cZC5YuCyCnxncjpuAjTaXx",
+          "title": "GnuCash for Personal Finance - Tracking Stocks and Mutual Funds",
+          "minutes": 16
+        },
+        {
+          "src": "pt",
+          "embed": "https://videos.fsci.in/videos/embed/fozE6RBFftHjmMdemt9dKs",
+          "title": "GnuCash for Personal Finance - Split Transactions",
+          "minutes": 8
+        },
+        {
+          "src": "pt",
+          "embed": "https://videos.fsci.in/videos/embed/orA3Xxvij3hg7orV4HQvpi",
+          "title": "GnuCash for Personal Finance - Reconciliation",
+          "minutes": 9
+        }
+      ]
+    },
+    {
+      "title": "Behavioral finance",
+      "technical": "People are not rational: biases like loss aversion, herding and overconfidence move markets and wreck individual decisions. Knowing your own wiring is part of investing well.",
+      "simple": "Why people — and markets — make predictably irrational money choices.",
+      "difficulty": 5,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xacted6",
+          "title": "Finance of America’s Jonathan Scarpati on shifting consumer behavior",
+          "minutes": 9
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x60xq07",
+          "title": "Behavioral Economics Is More Important Internally",
+          "minutes": 5
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9o769w",
+          "title": "Regulation vs  Behavioral Mistakes in Investing",
+          "minutes": 5
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x6l5bw7",
+          "title": "Dan Ariely: What Is Behavioral Economics?",
+          "minutes": 5
+        }
+      ]
+    },
+    {
+      "title": "Financial modelling",
+      "technical": "Spreadsheet models project statements, value companies and test scenarios; clean structure and honest assumptions separate insight from garbage. A model is only as good as its inputs and logic.",
+      "simple": "Building spreadsheets that forecast and value — only as smart as their assumptions.",
+      "difficulty": 5,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x8w8sh0",
+          "title": "How Financial Modeling impacts on financing choices?",
+          "minutes": 5
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x95x5no",
+          "title": "1 - Robust financial modeling",
+          "minutes": 3
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x95x66u",
+          "title": "1 - What is a financial model.",
+          "minutes": 3
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x96m3l0",
+          "title": "The Most Important eCommerce Financial Modeling Lesson | Modeliks",
+          "minutes": 46
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x4bcjjj",
+          "title": "What Working Capital Means in Valuation and Financial Modeling",
+          "minutes": 20
+        }
+      ]
+    },
+    {
+      "title": "Ethics and regulation",
+      "technical": "Finance runs on trust: disclosure, fiduciary duty and regulation exist because the incentives to cheat are enormous. Ethical lapses in finance scale into crises.",
+      "simple": "Finance depends on trust — and the rules that exist because money tempts.",
+      "difficulty": 5,
+      "videos": []
+    },
+    {
+      "title": "The capstone",
+      "technical": "Analyse a real company end to end: read its statements, compute ratios, value it, and write an investment view with the reasoning. A full analysis demonstrates financial literacy applied.",
+      "simple": "Fully analyse and value a real company — proof you can do finance.",
+      "difficulty": 5,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/KA-converted-WvITkPn83gc",
+          "title": "What it means to buy a company's stock",
+          "minutes": 14
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/really-cheap-markets-and-the-pandemics-hidden-toll-with-financial-thought-leader-rob-arnott",
+          "title": "Really Cheap Markets and the Pandemic’s Hidden Toll With Financial Thought Leader Rob Arnott",
+          "minutes": 26
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Dr.RichardSandorOnFinancialFuturesCarbonTradingDiscussesHisBestIdeaYet",
+          "title": "Dr. Richard Sandor on Financial Futures & Carbon Trading Discusses His “Best Idea Yet”",
+          "minutes": 22
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x50lel5",
+          "title": "Virtual Financial Group - Company Review - Virtual Financial Scam",
+          "minutes": 6
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9f655e",
+          "title": "Company Law Directors  Operational Financial Control",
+          "minutes": 60
+        }
+      ]
+    }
+  ]
 }
