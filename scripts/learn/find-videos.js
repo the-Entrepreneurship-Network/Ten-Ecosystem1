@@ -279,7 +279,7 @@ async function getJson(url) {
 // as "<slug>#<topic index> <embed url>". A re-run never puts them back on
 // that topic.
 const REJECT = new Set([
-    // 238 earlier picks judged off-topic in the review of 2026-11:
+    // 239 picks judged off-topic in the review of 2026-11:
     'artificial-intelligence#0 https://archive.org/embed/disruptivetechs-ai',
     'artificial-intelligence#0 https://archive.org/embed/isoc-no-ai',
     'artificial-intelligence#0 https://archive.org/embed/pyconza2018-Guide_to_choose_right_deep_Learning_framework_for_your_AI_project',
@@ -409,6 +409,7 @@ const REJECT = new Set([
     'finance#6 https://www.dailymotion.com/embed/video/x7zmmc9',
     'finance#7 https://www.dailymotion.com/embed/video/x2b0nzj',
     'finance#7 https://www.dailymotion.com/embed/video/x6new6l',
+    'flutter-development#2 https://www.dailymotion.com/embed/video/x84e73b',
     'flutter-development#0 https://www.dailymotion.com/embed/video/x84e73b',
     'flutter-development#0 https://www.dailymotion.com/embed/video/x8i8zwj',
     'flutter-development#1 https://www.dailymotion.com/embed/video/x84e73b',
