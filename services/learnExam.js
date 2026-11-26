@@ -150,6 +150,53 @@ ${source.slice(0, 24000)}`;
     return [...written, ...mcq];
 }
 
+/*
+ * Papers written before the click.
+ *
+ * A paper is one Gemini call, and under load that call has taken a full minute
+ * and then failed (2026-11-26, 19:11: a 60 s timeout, then a 503 "high
+ * demand") with the learner looking at "Setting your paper…" the whole time.
+ * So the paper is started as soon as the exam unlocks (the topic page opening
+ * after the video, the module page once the final is open) and Start only
+ * collects it. Each paper is handed out once, so a retake still gets new
+ * questions.
+ *
+ * ponytail: an in-process Map, because pm2 runs one instance. A restart only
+ * means the next Start writes its paper live, as it always did.
+ */
+const PREPARED_TTL_MS = 30 * 60 * 1000;
+const prepared = new Map();
+
+async function writePaper(mod, topicN) {
+    // One retry: a short or malformed paper usually comes right the next time.
+    try {
+        return await generatePaper(mod, topicN);
+    } catch (err) {
+        console.error('[learn] paper generation failed (try 1):', err.message);
+        return generatePaper(mod, topicN);
+    }
+}
+
+/** Start writing this learner's next paper, unless one is already on its way. */
+function preparePaper(key, mod, topicN) {
+    if (!prepared.has(key)) {
+        const paper = writePaper(mod, topicN);
+        const forget = () => { if (prepared.get(key) === paper) prepared.delete(key); };
+        prepared.set(key, paper);
+        paper.catch(forget);                       // a failed paper is never handed out
+        const t = setTimeout(forget, PREPARED_TTL_MS);
+        if (t && t.unref) t.unref();
+    }
+    return prepared.get(key);
+}
+
+/** The paper for the attempt starting now: the prepared one, or a fresh write. */
+function takePaper(key, mod, topicN) {
+    const paper = preparePaper(key, mod, topicN);
+    prepared.delete(key);
+    return paper;
+}
+
 /**
  * Grade the written section. MCQs are graded by index comparison in the route;
  * only prose needs a reader.
@@ -202,7 +249,7 @@ ${pairs.map((p, i) => `Q${i + 1}: ${p.prompt}\nA${i + 1}: ${String(p.answer || '
 }
 
 module.exports = {
-    ready, diagnose, selfTest, generatePaper, gradeWritten,
+    ready, diagnose, selfTest, generatePaper, gradeWritten, preparePaper, takePaper,
     TOPIC_WRITTEN, TOPIC_MCQ, FINAL_WRITTEN, FINAL_MCQ,
     TOPIC_MINUTES, FINAL_MINUTES, PASS_WRITTEN, PASS_MCQ,
     __gemini: gemini   // for the retry tests; not part of the public surface
