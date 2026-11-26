@@ -232,6 +232,24 @@ module.exports = [
             'description and a screenshot, and your coordinator reviews them.'
     },
     {
+        key: 'learn-exam',
+        question: "The course exam will not start, or stays on \"Setting your paper\"",
+        examples: [
+            'exam section is not working', 'i could not give the test after the video', 'setting your paper is stuck',
+            'the exam is not starting', 'topic exam not opening', 'start the exam button does nothing',
+            'examiner is busy', 'test is not loading in the course', 'exam page stuck', 'exam nahi khul raha'
+        ],
+        // Fixed on 26 Nov: the paper is now written while the topic page is
+        // open, a backup model takes over when the main one is overloaded, and
+        // the page offers "Try again" instead of waiting for ever.
+        answer: 'Please open the topic again and press "Start the exam". The paper is now prepared while you are on ' +
+            'the topic page, so it should open within a few seconds.\n\n' +
+            'The exam opens after you mark the topic\'s video as watched, and it needs your camera on, so allow camera ' +
+            'access when the browser asks. If the page says "The examiner is busy", press "Try again": nothing is ' +
+            'counted against you.\n\n' +
+            'If it still does not start, reply with a screenshot of what you see.'
+    },
+    {
         key: 'verify-certificate',
         question: 'How can an employer verify my certificate or offer letter?',
         examples: [
