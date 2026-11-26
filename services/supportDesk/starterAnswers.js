@@ -62,6 +62,24 @@ module.exports = [
             '15 Days ₹1500 and 1 Month ₹1000.'
     },
     {
+        key: 'resume-upload',
+        question: 'My resume will not upload when I register',
+        examples: [
+            'getting error while uploading the resume', 'resume upload not working', 'when i am trying to upload the resume it is not responding',
+            'resume is not uploading', 'unable to upload my resume', 'resume upload failed', 'cv upload error during registration',
+            'stuck on uploading resume', 'resume upload nahi ho raha'
+        ],
+        // 26 Nov: the upload gave up after a flat minute, which cut off a few-MB
+        // file on mobile data; it now waits in proportion to the file. Deploys
+        // also no longer reinstall packages under the running site.
+        answer: 'Please try the upload once more at {{registerUrl}}. It now waits longer on a slow connection, so ' +
+            'keep the page open while it says "Uploading resume PDF...".\n\n' +
+            'The resume must be a PDF file (its name ends in .pdf) and under 5MB. A Word file or a photo will not ' +
+            'upload: open it in Word, Google Docs or Canva and save or download it as PDF first.\n\n' +
+            'If it still fails, reply with the exact message you see under the upload box (a screenshot is best) ' +
+            'and the size of the file.'
+    },
+    {
         key: 'login',
         question: "I can't log in to the portal",
         examples: [

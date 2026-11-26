@@ -16,6 +16,17 @@
 (function initResumeUpload() {
   var MAX_BYTES = 5 * 1024 * 1024;
   var TIMEOUT_MS = 60000;
+  /*
+   * Plus one second for every 25KB, the slowest upload worth waiting for.
+   * A flat minute cut off a 4MB resume on mobile data half way, retried, cut
+   * it off again, and the student watched "Uploading..." for two minutes
+   * before a timeout message (26 Nov: "it is not responding"). A 5MB file now
+   * gets about four and a half minutes; a 200KB one still about a minute.
+   */
+  var SLOWEST_BYTES_PER_SEC = 25 * 1024;
+  function timeoutFor(file) {
+    return TIMEOUT_MS + Math.ceil(((file && file.size) || 0) / SLOWEST_BYTES_PER_SEC) * 1000;
+  }
 
   /*
    * Is this a PDF?
@@ -62,7 +73,7 @@
     var controller = typeof AbortController === 'function' ? new AbortController() : null;
     // Without this a stalled mobile connection leaves "Uploading..." on screen
     // for ever, which reads as a hang rather than a failure worth retrying.
-    var timer = controller ? setTimeout(function () { controller.abort(); }, TIMEOUT_MS) : null;
+    var timer = controller ? setTimeout(function () { controller.abort(); }, timeoutFor(file)) : null;
 
     try {
       var res = await fetch('/api/v2/upload-resume', {
@@ -117,5 +128,5 @@
     }
   }
 
-  window.TENResumeUpload = { validate: validate, upload: upload, MAX_BYTES: MAX_BYTES };
+  window.TENResumeUpload = { validate: validate, upload: upload, timeoutFor: timeoutFor, MAX_BYTES: MAX_BYTES };
 })();

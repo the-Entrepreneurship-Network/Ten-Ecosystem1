@@ -56,6 +56,8 @@ jobs:
               cp -a uploads/. ../ten-uploads-backup/ 2>/dev/null || true
             fi
 
+            # Before the reset, so the dependency check below can compare.
+            OLD_REV="$(git rev-parse HEAD)"
             git reset --hard origin/main
 
             if [ -d ../ten-uploads-backup ]; then
@@ -63,7 +65,17 @@ jobs:
               cp -rn ../ten-uploads-backup/. uploads/ 2>/dev/null || true
             fi
 
-            npm ci --legacy-peer-deps --omit=dev
+            # npm ci deletes node_modules and reinstalls it under the running
+            # app. Anything the app loads on first use fails during that
+            # minute: 26 Nov 17:08, mid-deploy, "[help desk] Cannot find module
+            # './types/ArraySubdocument'", and a student's upload errored twice
+            # just after deploys. Nine deploys that day meant nine such
+            # minutes. Reinstall only when the dependencies actually changed.
+            if [ ! -d node_modules ] || ! git diff --quiet "$OLD_REV" HEAD -- package.json package-lock.json; then
+              npm ci --legacy-peer-deps --omit=dev
+            else
+              echo "Dependencies unchanged since $OLD_REV: npm ci skipped, node_modules kept."
+            fi
 
             # `pm2 restart` re-reads ecosystem.config.js but keeps the process's
             # existing environment, so a changed .env would not be picked up.
