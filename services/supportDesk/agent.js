@@ -268,15 +268,16 @@ async function decide(gmail, me, msg, mail, answers) {
         : result.sensitive ? 'a topic a person should handle'
         : !blocks.length ? `no saved answer fits (closest ${Math.round(result.best * 100)}%)`
         : '';
-    // A report of a website problem that a saved answer seems to cover: Gemini (free)
-    // checks the answer fixes the problem, not just its topic ("how do I submit a task"
-    // is no help when the upload fails). It sees the general answer, never the student's
-    // own details. No verdict from Gemini keeps the saved answer.
-    if (!why && bugLike && engine !== 'off') {
+    // Before any saved answer goes out, Gemini (free) checks it answers this email and
+    // not just its topic ("how to sign in" is no help when sign-in loops back to the
+    // sign-in page). The word match alone sent such answers, and then Claude had to send
+    // a second, right one. Gemini sees the general answer, never the student's own
+    // details. No verdict from Gemini keeps the saved answer.
+    if (!why && engine !== 'off') {
         const fits = await bugAgent.answerFits({
             subject, body, answer: result.answers.map(({ entry }) => render(entry.answer, facts.STATIC)).join('\n\n')
         }).catch((err) => { console.error('[help desk] Gemini check', String((err && err.message) || err).slice(0, 200)); return null; });
-        if (fits === false) why = 'the saved answer does not fix this problem';
+        if (fits === false) why = 'the saved answer does not answer this';
     }
 
     if (why) {

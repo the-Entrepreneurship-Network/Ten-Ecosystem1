@@ -660,10 +660,9 @@ edits at `/hr-help-desk.html` (HR portal → **Help Desk**).
 - **Claude, Gemini (free) or Off.** The Help Desk page's "Website bug reports"
   switch (stored in `SupportDeskState`, `services/supportDesk/bugAgent.js`)
   says who handles a report:
-  - **Claude**: exactly one side replies. A saved answer goes out as usual,
-    except that for a report of a website problem Gemini (free) first checks
-    the answer fixes the problem and not just its topic (`answerFits`); if not,
-    the email carries on as though no answer fit. Gemini sees the general
+  - **Claude**: exactly one side replies. A saved answer goes out only after
+    Gemini (free) checks it answers the email and not just its topic
+    (`answerFits`); if not, the email carries on as though no answer fit. Gemini sees the general
     answer, never the student's own details, and no verdict keeps the answer.
     When none fits, a report of a website problem goes to Gemini (free), which
     replies only when it can settle it (it asks for details, or explains). Any
