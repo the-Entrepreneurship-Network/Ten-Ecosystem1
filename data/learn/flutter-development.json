@@ -9,27 +9,9 @@
       "videos": [
         {
           "src": "pt",
-          "embed": "https://tube.tchncs.de/videos/embed/pRXeruCxiqcGgBU1ZfNfP9",
-          "title": "Flutter 3.3 - Dart 2.18 - Flutter Vikings 2022 - zapp.run and Flame Game Jam",
-          "minutes": 23
-        },
-        {
-          "src": "pt",
-          "embed": "https://tube.tchncs.de/videos/embed/4UbPAanH6GyNdvRE9io1my",
-          "title": "Flutter 3.10 - Dart 3.0 - Serverpod 1.1 - Google Flip - Flutter News",
-          "minutes": 29
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x84e73b",
-          "title": "Flutter Tutorials- WidgetWithCodeView | Flutter Dart Source Code Preview",
-          "minutes": 7
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x8i8zwj",
-          "title": "How to find Minimum & Maximum Number in Dart & Flutter",
-          "minutes": 8
+          "embed": "https://tube.tchncs.de/videos/embed/ivqtHGjQvVUTUaqth4Fz3c",
+          "title": "Install Flutter on Windows 11",
+          "minutes": 22
         }
       ]
     },
@@ -41,21 +23,9 @@
       "videos": [
         {
           "src": "pt",
-          "embed": "https://tube.tchncs.de/videos/embed/pRXeruCxiqcGgBU1ZfNfP9",
-          "title": "Flutter 3.3 - Dart 2.18 - Flutter Vikings 2022 - zapp.run and Flame Game Jam",
-          "minutes": 23
-        },
-        {
-          "src": "pt",
-          "embed": "https://tube.tchncs.de/videos/embed/4UbPAanH6GyNdvRE9io1my",
-          "title": "Flutter 3.10 - Dart 3.0 - Serverpod 1.1 - Google Flip - Flutter News",
-          "minutes": 29
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x84e73b",
-          "title": "Flutter Tutorials- WidgetWithCodeView | Flutter Dart Source Code Preview",
-          "minutes": 7
+          "embed": "https://video.infosec.exchange/videos/embed/4TD3NUiEnE1gMD9MhjbUrT",
+          "title": "Dart: First impressions (formed by writing Snake)",
+          "minutes": 14
         },
         {
           "src": "dm",
@@ -70,38 +40,7 @@
       "technical": "Flutter's UI is a tree of widgets — structural, layout and styling — that you compose and nest. Stateless widgets are pure functions of their inputs; stateful ones hold changing data. Composition replaces inheritance.",
       "simple": "You build screens by nesting small building blocks called widgets.",
       "difficulty": 1,
-      "videos": [
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/the-complete-flutter-development-bootcamp-with-dart06-micard-how-to-build-beauti",
-          "title": "The Complete Flutter Development Bootcamp with Dart(06 - MiCard - How to Build Beautiful UIs with Flutter Widgets)",
-          "minutes": 6
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/12.compositionvs.inheritancebuildingflutterwidgetsfromscratch",
-          "title": "12. Composition Vs. Inheritance Building Flutter Widgets From Scratch",
-          "minutes": 28
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/9.fluttercardlisttilewidgets",
-          "title": "9. Flutter Card & List Tile Widgets",
-          "minutes": 13
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/3.howtorefactorflutterwidgets",
-          "title": "3. How To Refactor Flutter Widgets",
-          "minutes": 20
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/5.creatingcustomflutterwidgets",
-          "title": "5. Creating Custom Flutter Widgets",
-          "minutes": 18
-        }
-      ]
+      "videos": []
     },
     {
       "title": "Layout widgets",
@@ -129,14 +68,7 @@
       "technical": "setState rebuilds a stateful widget when its data changes — the starting point every Flutter dev learns before reaching for bigger tools. Knowing when a rebuild happens is core to correctness and speed.",
       "simple": "Telling Flutter 'this changed, redraw it' — the foundation of interactivity.",
       "difficulty": 2,
-      "videos": [
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/flutter-cubit-blo-c-state-management-explained",
-          "title": "Flutter Cubit BLo C State Management Explained",
-          "minutes": 21
-        }
-      ]
+      "videos": []
     },
     {
       "title": "Navigation and routing",
@@ -150,28 +82,14 @@
       "technical": "ListView and GridView render long, scrollable collections lazily, building only visible items; builders keep large lists smooth. Most app screens are lists, so this pattern recurs everywhere.",
       "simple": "Showing long scrollable lists without loading everything at once.",
       "difficulty": 2,
-      "videos": [
-        {
-          "src": "pt",
-          "embed": "https://tube.tchncs.de/videos/embed/vd74rhArtcrPVxdU4bzKby",
-          "title": "Endless Scroll Animation in Flutter - Beautiful Flutter Animations for everyday developer",
-          "minutes": 26
-        }
-      ]
+      "videos": []
     },
     {
       "title": "Async and futures",
       "technical": "Network and disk work returns Futures consumed with async/await; FutureBuilder and StreamBuilder render loading, error and data states declaratively. Modelling those three states honestly is what makes apps feel solid.",
       "simple": "Fetching data in the background and showing loading, error or result cleanly.",
       "difficulty": 3,
-      "videos": [
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/3.dartfuturesasyncawait",
-          "title": "3. [ Dart] Futures, Async & Await",
-          "minutes": 24
-        }
-      ]
+      "videos": []
     },
     {
       "title": "Calling REST APIs",
@@ -192,14 +110,28 @@
       "technical": "shared_preferences stores small key-value data; sqflite or Hive persist structured data offline. Deciding what to cache and when to sync is what makes apps usable without signal.",
       "simple": "Saving data on the device so the app works offline and remembers settings.",
       "difficulty": 3,
-      "videos": []
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x80qvvd",
+          "title": "Shared Preference Part 1 || Flutter Tutorial",
+          "minutes": 38
+        }
+      ]
     },
     {
       "title": "Firebase integration",
       "technical": "Firebase supplies auth, Firestore, storage and messaging with little backend code; real-time listeners update the UI as data changes server-side. It is the fastest path from idea to backed app.",
       "simple": "A ready-made backend — logins, database, notifications — with almost no server code.",
       "difficulty": 4,
-      "videos": []
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x80qwqw",
+          "title": "Firebase Part 1 || Flutter Tutorial",
+          "minutes": 25
+        }
+      ]
     },
     {
       "title": "Animations",
@@ -208,34 +140,16 @@
       "difficulty": 4,
       "videos": [
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/6.customflutteranimationswiththeanimationcontroller",
-          "title": "6. Custom Flutter Animations With The Animation Controller",
-          "minutes": 29
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/5.flutterheroanimations",
-          "title": "5. Flutter Hero Animations",
-          "minutes": 9
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/8.prepackagedflutteranimations",
-          "title": "8. Prepackaged Flutter Animations",
-          "minutes": 5
-        },
-        {
-          "src": "pt",
-          "embed": "https://tube.tchncs.de/videos/embed/vd74rhArtcrPVxdU4bzKby",
-          "title": "Endless Scroll Animation in Flutter - Beautiful Flutter Animations for everyday developer",
-          "minutes": 26
-        },
-        {
           "src": "dm",
           "embed": "https://www.dailymotion.com/embed/video/x856viv",
           "title": "Flutter staggered Animation code example. flutter Grid View Animation. Flutter AnimationLimiter. How to set FadeIn Animation Grid View.",
           "minutes": 7
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x858tje",
+          "title": "How to create flutter avatar glow animations. How to design flutter avatar. Avatar glow package example.",
+          "minutes": 6
         }
       ]
     },
@@ -258,20 +172,7 @@
       "technical": "Unit tests check logic, widget tests render and interact with UI, integration tests drive whole flows. Tests let you refactor a growing app without breaking screens silently.",
       "simple": "Robots that press your app's buttons to prove screens still work.",
       "difficulty": 5,
-      "videos": [
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/flutterfilm4177arrowtransonicfluttertest",
-          "title": "Flutter Film 4-177: Arrow Transonic Flutter Test",
-          "minutes": 8
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/xatiaue",
-          "title": "Autonomous Flutter UI Testing: 8 Maestro Flows Written by an AI Agent — Full Run",
-          "minutes": 4
-        }
-      ]
+      "videos": []
     },
     {
       "title": "Performance and debugging",
@@ -285,52 +186,14 @@
       "technical": "Release builds, signing, app icons and store submission ship the app; flavors separate dev from production. An app in a store, updatable, is the definition of done.",
       "simple": "Turning your project into an installable app on the real app stores.",
       "difficulty": 5,
-      "videos": [
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x87k458",
-          "title": "Diamond Eyes - Flutter [NCS Release]",
-          "minutes": 4
-        }
-      ]
+      "videos": []
     },
     {
       "title": "The capstone",
       "technical": "Ship a complete app: multiple screens, state management, a REST or Firebase backend, local persistence, animations, tests, and a release build. It is the portfolio artifact that demonstrates the whole journey.",
       "simple": "One finished, installable app that uses everything above.",
       "difficulty": 5,
-      "videos": [
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/create-your-own-uber-app-with-flutter-firebase-course-2021",
-          "title": "Create Your Own UBER App With Flutter & Firebase Course 2021",
-          "minutes": 6
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/the-complete-flutter-development-bootcamp-with-dart03-i-am-rich-how-to-create-fl",
-          "title": "The Complete Flutter Development Bootcamp with Dart(03 - I Am Rich - How to Create Flutter Apps From Scratch)",
-          "minutes": 16
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/the-complete-flutter-news-app",
-          "title": "The Complete Flutter News App",
-          "minutes": 6
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/the-complete-flutter-development-bootcamp-with-dart04-running-your-app-on-a-physical-device",
-          "title": "The Complete Flutter Development Bootcamp with Dart(04 - Running Your App on a Physical Device)",
-          "minutes": 6
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/9.flutterapparchitecturepatterns",
-          "title": "9. Flutter App Architecture Patterns",
-          "minutes": 11
-        }
-      ]
+      "videos": []
     }
   ]
 }

@@ -8,10 +8,10 @@
       "difficulty": 1,
       "videos": [
         {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x9qnnzs",
-          "title": "'Until Israel shifts from a mindset of dominance, it will never enjoy security'",
-          "minutes": 11
+          "src": "ia",
+          "embed": "https://archive.org/embed/introduction-to-security",
+          "title": "Introduction To Security",
+          "minutes": 17
         }
       ]
     },
@@ -20,7 +20,14 @@
       "technical": "Confidentiality, Integrity and Availability define what security protects: keeping secrets, preventing tampering, and staying up. Every control maps to one or more; every incident violates one or more.",
       "simple": "The three things security defends: secrecy, correctness, and being online.",
       "difficulty": 1,
-      "videos": []
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/introduction-to-security",
+          "title": "Introduction To Security",
+          "minutes": 17
+        }
+      ]
     },
     {
       "title": "Networking for security",
@@ -29,34 +36,16 @@
       "difficulty": 1,
       "videos": [
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/Day2Part1ReverseEngineeringMalware",
-          "title": "Day 2 Part 1 Reverse Engineering Malware - Network Communications - Intro, Finding The Code",
-          "minutes": 25
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/Day2Part2ReverseEngineeringMalware",
-          "title": "Day 2 Part 2 Reverse Engineering Malware - Network Communications - Command & Control, Indicators",
-          "minutes": 11
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xbzflim",
+          "title": "TCP vs UDP, Ports & Packets Explained | Networking Basics",
+          "minutes": 19
         },
         {
           "src": "ia",
           "embed": "https://archive.org/embed/Day1Part9DynamicMalwareAnalysis",
           "title": "Dynamic Malware Analysis Day 1 Part 09 - Background: Networking Refresher",
           "minutes": 28
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/udemylearnnetworkhackingfromscratchwifiwired_202003",
-          "title": "Udemy Learn Network Hacking From Scratch ( Wi Fi & Wired)",
-          "minutes": 4
-        },
-        {
-          "src": "pt",
-          "embed": "https://bitube.ict-battenberg.ch/videos/embed/2NAcKERmp3piyWXxHNAiz1",
-          "title": "Networking For Hackers! (Common Network Protocols)",
-          "minutes": 24
         }
       ]
     },
@@ -67,10 +56,22 @@
       "difficulty": 1,
       "videos": [
         {
+          "src": "pt",
+          "embed": "https://video.nikau.io/videos/embed/7jTfV9wunbVbwxVBSXdMVy",
+          "title": "Linux command line crash course",
+          "minutes": 43
+        },
+        {
           "src": "dm",
           "embed": "https://www.dailymotion.com/embed/video/x8saag2",
           "title": "Basic Kali Linux Commands Tutorial",
           "minutes": 20
+        },
+        {
+          "src": "pt",
+          "embed": "https://tilvids.com/videos/embed/hoL6QqDcTZBpWdtvd6rV7w",
+          "title": "Learn the \"ls\" command! Lil' Linux Lesson!",
+          "minutes": 6
         }
       ]
     },
@@ -81,34 +82,22 @@
       "difficulty": 1,
       "videos": [
         {
+          "src": "pt",
+          "embed": "https://media.privacyinternational.org/videos/embed/twG2MwR4cHyNHEmbA3pQb4",
+          "title": "What is Encryption? Codes, Keys, and Hashes",
+          "minutes": 55
+        },
+        {
           "src": "ia",
           "embed": "https://archive.org/embed/hitb2004-suresh-ramasamy",
           "title": "HITB 2004 Security Conference - Suresh Ramasamy (TimeDotCom) - Cryptography Demystified",
           "minutes": 32
         },
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/NPTEL-CompSciEngr-Cryptography_and_Network_Secu",
-          "title": "NPTEL Lectures: Computer Science and Engineering - Cryptography and Network Security",
-          "minutes": 59
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/EuroPython_2015_0QYfhD46",
-          "title": "[EuroPython 2015] Jose Ortega - Python Security & Cryptography",
-          "minutes": 39
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/epcctx-The_Hackers_Corner_8_-_Cryptography_Part_I_-_Symmetric-Key_Algorithms",
-          "title": "The Hackers' Corner 8: Cryptography Part I: Symmetric-Key Algorithms",
-          "minutes": 25
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/epcctx-The_Hackers_Corner_9_-_Cryptography_Part_II_-_Asymmetric_Algorithms_and_Hashing",
-          "title": "The Hackers' Corner 9: Cryptography Part II: Asymmetric Algorithms and Hashing",
-          "minutes": 26
+          "src": "pt",
+          "embed": "https://phpc.tv/videos/embed/vtoYZqczqnvDXDdsgZdsDR",
+          "title": "More Secrets of Cryptography - Chris Riley - PHP UK Conference 2019",
+          "minutes": 52
         }
       ]
     },
@@ -119,10 +108,22 @@
       "difficulty": 2,
       "videos": [
         {
+          "src": "pt",
+          "embed": "https://thenewoil.tv/videos/embed/mdQQyZhU3C6Tt6r5G9LTeB",
+          "title": "Everything You Need to Know About Passwords",
+          "minutes": 14
+        },
+        {
           "src": "ia",
           "embed": "https://archive.org/embed/the-practical-guide-to-mac-security-part-4-two-factor-authentication-macmost-2491",
           "title": "The Practical Guide To Mac Security: Part 4, Two-Factor Authentication (MacMost #2491)",
           "minutes": 18
+        },
+        {
+          "src": "pt",
+          "embed": "https://tube.tchncs.de/videos/embed/o4S2HdUoFDp5YuYc2L3JUZ",
+          "title": "Don't Store Passwords In The Browser",
+          "minutes": 7
         }
       ]
     },
@@ -131,76 +132,14 @@
       "technical": "Authorisation decides what an authenticated user may do: least privilege, role-based access, and ownership checks on every action. Missing authorisation — not broken crypto — is the commonest serious flaw.",
       "simple": "Being logged in is not permission for everything — each action must be checked.",
       "difficulty": 2,
-      "videos": [
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/Pbwiki1.0And2.0--SecurityControlsAccessControls",
-          "title": "PBwiki 1.0 and 2.0 -- Security controls, access controls",
-          "minutes": 14
-        },
-        {
-          "src": "pt",
-          "embed": "https://peertube.eqver.se/videos/embed/mYKdqq9xJGNrXqsNZgvx65",
-          "title": "Dan Petro & David Vargas: Vulnerabilities in the OSDP Protocol for Access Control Systems",
-          "minutes": 43
-        },
-        {
-          "src": "pt",
-          "embed": "https://peertube.eqver.se/videos/embed/2XvdgwXy18t5dkDY88qKen",
-          "title": "Ege Feyzioglu & Andrew M.: RFID 101 — Hacking Access Control Systems",
-          "minutes": 21
-        },
-        {
-          "src": "pt",
-          "embed": "https://peertube.eqver.se/videos/embed/217Y67kobQ6WKtzeWKNuSb",
-          "title": "Sam Quinn and Steve Povolny: Hacking an Access Control System",
-          "minutes": 43
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/bbs-reading-group-20230604-Fang2010a",
-          "title": "Reading group discussion \"Information content security on the Internet: the control model and its evaluation\"",
-          "minutes": 59
-        }
-      ]
+      "videos": []
     },
     {
       "title": "Web vulnerabilities: the OWASP Top 10",
       "technical": "Injection, broken auth, XSS, insecure deserialisation and access-control flaws recur across the web. Knowing the top ten by name lets you find and fix the bugs attackers look for first.",
       "simple": "The ten mistakes attackers try first on every website.",
       "difficulty": 2,
-      "videos": [
-        {
-          "src": "pt",
-          "embed": "https://phpc.tv/videos/embed/aYcZ1WdaxDmhg9KACA69D1",
-          "title": "OWASP Top 10 With Gunnard Engebreth",
-          "minutes": 31
-        },
-        {
-          "src": "pt",
-          "embed": "https://phpc.tv/videos/embed/ji3QbUqpXfK5jZgQrd62eS",
-          "title": "Securing Your API: The OWASP Top 10 - Rob Allen",
-          "minutes": 35
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/topdns-dnsai",
-          "title": "topDNS Best Practice Series: DNSAI Compass Dashboards – Benchmarking the prevalence and persistence of malware and phishing",
-          "minutes": 46
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/top-25-weird-things-caught-on-security-cameras-cctv_202103",
-          "title": "Top 25 Weird Things Caught On Security Cameras & CCTV",
-          "minutes": 11
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/top-10-weird-things-caught-on-security-cctv-cameras",
-          "title": "Top 10 WEIRD THINGS CAUGHT ON SECURITY & CCTV CAMERAS!",
-          "minutes": 11
-        }
-      ]
+      "videos": []
     },
     {
       "title": "SQL injection",
@@ -209,28 +148,10 @@
       "difficulty": 2,
       "videos": [
         {
-          "src": "pt",
-          "embed": "https://peertube.eqver.se/videos/embed/2Z45e5XTq6qggPCq8c7MUa",
-          "title": "Paul Gerste: SQL Injection Isn’t Dead — Protocol-Level Injection Attacks",
-          "minutes": 38
-        },
-        {
-          "src": "pt",
-          "embed": "https://peertube.eqver.se/videos/embed/qEtncGrm32WLt55E8318BN",
-          "title": "Cybersecurity cert prep: Lab 30: SQL Injection — Reveal hidden items with Python automation",
-          "minutes": 25
-        },
-        {
           "src": "dm",
           "embed": "https://www.dailymotion.com/embed/video/x2w31lv",
           "title": "Sqlmap hacking with sql injection + tutorial = Website Hacked",
           "minutes": 7
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x27hfns",
-          "title": "(Tutorial) - Hack a Website With SQL Injection 2 - YouTube",
-          "minutes": 5
         }
       ]
     },
@@ -239,7 +160,20 @@
       "technical": "XSS injects attacker script into pages other users view, stealing sessions and acting as them. Output encoding and Content-Security-Policy are the defences; every unescaped user string is a candidate.",
       "simple": "Sneaking malicious code into a page so it runs in a victim's browser.",
       "difficulty": 3,
-      "videos": []
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xe7i1h",
+          "title": "XSS Stored XSS",
+          "minutes": 4
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/BSidesDC2015-Sunday-FixingXSSWithContentSecurityPolicy",
+          "title": "BSides DC 2015 - Sunday - Fixing XSS with Content Security Policy",
+          "minutes": 40
+        }
+      ]
     },
     {
       "title": "Secure coding practices",
@@ -255,34 +189,22 @@
       "difficulty": 3,
       "videos": [
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/Day2Part1ReverseEngineeringMalware",
-          "title": "Day 2 Part 1 Reverse Engineering Malware - Network Communications - Intro, Finding The Code",
-          "minutes": 25
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x8phbmw",
+          "title": "What is network security and why we need",
+          "minutes": 7
         },
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/Day2Part2ReverseEngineeringMalware",
-          "title": "Day 2 Part 2 Reverse Engineering Malware - Network Communications - Command & Control, Indicators",
-          "minutes": 11
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x2efirg",
+          "title": "Firewalls-Generations-and-Network-security-Computer-Networking-tutorial",
+          "minutes": 14
         },
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/Day1Part9DynamicMalwareAnalysis",
-          "title": "Dynamic Malware Analysis Day 1 Part 09 - Background: Networking Refresher",
-          "minutes": 28
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/udemylearnnetworkhackingfromscratchwifiwired_202003",
-          "title": "Udemy Learn Network Hacking From Scratch ( Wi Fi & Wired)",
-          "minutes": 4
-        },
-        {
-          "src": "pt",
-          "embed": "https://makertube.net/videos/embed/pUNCnzgHdUQhntsbyXzUsd",
-          "title": "RIOT Summit, Network Security: \"Pieces to Picture: Security components of the CoRE ecosystem\"",
-          "minutes": 33
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xaroz32",
+          "title": "What is firewall, How Firewall works",
+          "minutes": 31
         }
       ]
     },
@@ -291,7 +213,26 @@
       "technical": "Attackers map targets with nmap, banner grabbing and OSINT before striking; defenders run the same tools to find their own exposed surface first. You cannot defend what you did not know was reachable.",
       "simple": "Mapping a target's exposed doors and windows — done by both sides.",
       "difficulty": 3,
-      "videos": []
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x1v4ncv",
+          "title": "NMap 101: Port Scanning Options - HakTip",
+          "minutes": 8
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x1wa8tg",
+          "title": "NMap 101: Operating System Detection - HakTip",
+          "minutes": 8
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x20u2hv",
+          "title": "NMap 101: The Nmap Scripting Engine - HakTip",
+          "minutes": 7
+        }
+      ]
     },
     {
       "title": "Vulnerability assessment",
@@ -300,34 +241,10 @@
       "difficulty": 4,
       "videos": [
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/Haktip_25",
-          "title": "Haktip 25: DEFCON 19: Wireless Security Assessment",
-          "minutes": 13
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/gov.house.hbs.hrs02INT2212_070118.2",
-          "title": "Current Assessment of Threats to U.S. National Security (Part 2 of 2)",
-          "minutes": 47
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/annual-threat-assessment-2021-director-general-of-security",
-          "title": "Annual Threat Assessment 2021 Director General Of Security",
-          "minutes": 29
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x9ghwew",
-          "title": "NTSB Says MDTA Failed to Run 'Vulnerability Assessment' Of FSK Bridge Prior To Its Collapse",
-          "minutes": 28
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x5vt1y0",
-          "title": "Assessing America's electoral vulnerability",
-          "minutes": 25
+          "src": "pt",
+          "embed": "https://makertube.net/videos/embed/1aGyA7YVhumLvdFci8sJWv",
+          "title": "Automated vulnerability scanning and vulnerability management - mrmcd25",
+          "minutes": 46
         }
       ]
     },
@@ -344,28 +261,16 @@
           "minutes": 5
         },
         {
-          "src": "pt",
-          "embed": "https://peertube.dngr.us/videos/embed/8cB52Hkpm9sdVjg87ZPttk",
-          "title": "(BADLY DAMAGED) \" MICROMETEORITE PENETRATION STUDIES \"  NASA ANIMAL TEST FILM  SPACE TRAVEL XD47134",
-          "minutes": 14
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9bbyvg",
+          "title": "How to Use Metasploit for Penetration Testing",
+          "minutes": 31
         },
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/Penetration_Testing_199",
-          "title": "Penetration_Testing_199",
-          "minutes": 5
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/recon-for-ethical-hacking-penetration-testing-bug-bounty",
-          "title": "Recon For Ethical Hacking Penetration Testing & Bug Bounty",
-          "minutes": 7
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/offensive-penetration-testing",
-          "title": "Offensive Penetration Testing",
-          "minutes": 7
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x8qfs10",
+          "title": "Penetration Testing with Hydra and Kali Linux",
+          "minutes": 17
         }
       ]
     },
@@ -376,34 +281,10 @@
       "difficulty": 4,
       "videos": [
         {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x56sbh9",
-          "title": "The Newsmakers: Global Security and Japanese Self-Defence",
-          "minutes": 26
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x6rlu2p",
-          "title": "CAR's security and defence rebuilding efforts [The Morning Call]",
-          "minutes": 4
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x739wi5",
-          "title": "India Debates : Narendra Modi's security defence busted?",
-          "minutes": 28
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x2m5hpi",
-          "title": "Defence Sec: Cannot gamble with UK security",
-          "minutes": 5
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x8jr03b",
-          "title": "National Defence and Security Industry Policy to be launched at Lima 2023",
-          "minutes": 5
+          "src": "ia",
+          "embed": "https://archive.org/embed/Day2Part1ReverseEngineeringMalware",
+          "title": "Day 2 Part 1 Reverse Engineering Malware - Network Communications - Intro, Finding The Code",
+          "minutes": 25
         }
       ]
     },
@@ -414,16 +295,10 @@
       "difficulty": 4,
       "videos": [
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/Shmoocon_2013_Strategies_of_a_World_Class_Security_Incident_Response_Team",
-          "title": "Shmoocon 2013 Strategies of a World Class Security Incident Response Team",
-          "minutes": 34
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/TAG_Solutions_-_IT_Security_Incident_Response_Exercise",
-          "title": "TAG Solutions - IT Security Incident Response Exercise",
-          "minutes": 50
+          "src": "pt",
+          "embed": "https://videos.spacebar.ca/videos/embed/jzWbTNa4kRVBekRhkZa7Bs",
+          "title": "NSEC2022 - Caspian Kilkelly - 10 Things I wish I knew before my first incident",
+          "minutes": 22
         }
       ]
     },
@@ -432,7 +307,20 @@
       "technical": "Security visibility is logs, alerts and SIEM correlation; you cannot investigate what you did not record. Alerts must fire on real signals, not drown responders in noise.",
       "simple": "You cannot catch what you never logged — record, watch, and alert on what matters.",
       "difficulty": 5,
-      "videos": []
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x36q7zk",
+          "title": "Network Monitoring Overview",
+          "minutes": 7
+        },
+        {
+          "src": "pt",
+          "embed": "https://watch.softinio.com/videos/embed/6T6tpf8U5yLLCaxMpLv55Z",
+          "title": "Securing sensitive data in logs like a pro By Vivek Ragunathan & Bahul Jain",
+          "minutes": 50
+        }
+      ]
     },
     {
       "title": "Social engineering",
@@ -441,6 +329,12 @@
       "difficulty": 5,
       "videos": [
         {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9lqjr8",
+          "title": "How Hackers Steal Instagram Passwords – Phishing & Social‑Engineering Explained",
+          "minutes": 7
+        },
+        {
           "src": "ia",
           "embed": "https://archive.org/embed/the-practical-guide-to-mac-security-part-6-social-engineering-macmost-2493",
           "title": "The Practical Guide To Mac Security: Part 6, Social Engineering (MacMost #2493)",
@@ -448,27 +342,9 @@
         },
         {
           "src": "pt",
-          "embed": "https://videos.spacebar.ca/videos/embed/mBNVRq3HrzmFMMPsceWuAV",
-          "title": "NorthSec 2025 - Dorota Kozlowska - Social Engineering for Physical Pentesting Assignments",
-          "minutes": 32
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/Sharon_Conheady_Social_Engineering_for_Penetration_Testers",
-          "title": "Recon 2006 - Sharon Conheady - Social Engineering for Penetration Testers",
-          "minutes": 54
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/YourSoci1940",
-          "title": "Your Social Security",
-          "minutes": 18
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/SocialSe1962",
-          "title": "Social Security Story, The",
-          "minutes": 14
+          "embed": "https://videos.spacebar.ca/videos/embed/jMjZzv3qjKDw57ZTTqExgY",
+          "title": "NorthSec2025 - Michael Joyce - Why preventing phishing is so difficult, and what we can do about it",
+          "minutes": 31
         }
       ]
     },

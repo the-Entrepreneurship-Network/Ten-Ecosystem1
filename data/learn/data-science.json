@@ -9,33 +9,21 @@
       "videos": [
         {
           "src": "pt",
-          "embed": "https://toobnix.org/videos/embed/b4eLjcLo9vcewVTzrv95L8",
-          "title": "EmacsConf 2023: Teaching computer and data science with literate programming tools - Marcus Birke...",
-          "minutes": 19
-        },
-        {
-          "src": "pt",
-          "embed": "https://peertube.watch/videos/embed/wKUmEyyruHMx2yi9G28m4T",
-          "title": "The Computer Science behind a modern distributed data store",
-          "minutes": 39
-        },
-        {
-          "src": "pt",
           "embed": "https://tubedu.org/videos/embed/29YCgt79u1gYrkhet5gWGQ",
           "title": "Introductory Video on Data Science",
           "minutes": 16
         },
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/complete-machine-learning-and-data-science-zero-to-mastery",
-          "title": "Complete Machine Learning And Data Science Zero To Mastery",
-          "minutes": 6
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x95qx9y",
+          "title": "Data Science for Everyone 1-2 What is Data Science?",
+          "minutes": 8
         },
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/the-data-science-course-2021-complete-data-science-bootcamp",
-          "title": "The Data Science Course 2021 Complete Data Science Bootcamp",
-          "minutes": 5
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9j3f18",
+          "title": "Lecture 2: Introduction to Data Science",
+          "minutes": 6
         }
       ]
     },
@@ -44,14 +32,52 @@
       "technical": "NumPy vectorises numeric arrays, pandas handles labelled tables, and Jupyter notebooks host the experiment-first workflow. Vectorised thinking — operate on whole columns, not element loops — is the productivity unlock.",
       "simple": "The daily tools: fast arrays, smart tables, and notebooks where code and charts sit together.",
       "difficulty": 1,
-      "videos": []
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9oyx78",
+          "title": "Day 40: Pandas for Data Manipulation in Python",
+          "minutes": 18
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9ov3me",
+          "title": "Day 39: NumPy for Numerical Computing in Python",
+          "minutes": 19
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xbxgqwi",
+          "title": "Explore World Population Data with Pandas | Python EDA Tutorial",
+          "minutes": 32
+        }
+      ]
     },
     {
       "title": "Loading and cleaning data",
       "technical": "Real data arrives dirty: missing values, wrong types, duplicates, inconsistent categories. pandas reads CSV/JSON/SQL, and cleaning — imputation, type coercion, deduplication — typically consumes most of a project's hours.",
       "simple": "Most of the job is scrubbing data into a state you can actually analyse.",
       "difficulty": 1,
-      "videos": []
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9phmxc",
+          "title": "Day 44: Data Cleaning with Pandas",
+          "minutes": 16
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xb6s9x6",
+          "title": "MySQL Data Cleaning Project: Remove Duplicates, Fix Dates & Nulls",
+          "minutes": 51
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Europython_2020_X8yezGQ4",
+          "title": "[EuroPython 2020] Hui Xiang Chua - Top 15 Python Tips for Data Cleaning/ Understanding",
+          "minutes": 25
+        }
+      ]
     },
     {
       "title": "Exploratory data analysis",
@@ -72,10 +98,16 @@
           "minutes": 22
         },
         {
+          "src": "ia",
+          "embed": "https://archive.org/embed/pytx19-Introduction_to_Exploratory_Data_Analysis_with_the_SciAnalysis_Python_Package",
+          "title": "Introduction to Exploratory Data Analysis with the Sci-Analysis Python Package",
+          "minutes": 27
+        },
+        {
           "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/xb5x7ta",
-          "title": "MySQL Exploratory Data Analysis Project: Layoff Trends, Rolling Totals, and Company Rankings",
-          "minutes": 33
+          "embed": "https://www.dailymotion.com/embed/video/xbxgqwi",
+          "title": "Explore World Population Data with Pandas | Python EDA Tutorial",
+          "minutes": 32
         }
       ]
     },
@@ -86,10 +118,22 @@
       "difficulty": 1,
       "videos": [
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/KA-converted-uhxtUt_-GyM",
-          "title": "Statistics: The Average",
-          "minutes": 13
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xbtil3q",
+          "title": "Calculate Mean, Median, and Mode with Python",
+          "minutes": 17
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xbvqtvm",
+          "title": "Measure Data Spread: Standard Deviation Explained with Python",
+          "minutes": 11
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xbrqvfu",
+          "title": "Statistics for Data Professionals: Mean, Median, Mode and Sampling",
+          "minutes": 10
         }
       ]
     },
@@ -100,34 +144,16 @@
       "difficulty": 2,
       "videos": [
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/how-to-use-conditional-highlighting-in-numbers-for-data-visualization-macmost-2907",
-          "title": "How to Use Conditional Highlighting In Numbers For Data Visualization (MacMost #2907)",
-          "minutes": 15
-        },
-        {
           "src": "pt",
           "embed": "https://video.igem.org/videos/embed/eCTSexkiByMSB4DceUERFC",
           "title": "Data Visualization Techniques for Better Science communication",
           "minutes": 16
         },
         {
-          "src": "pt",
-          "embed": "https://video.blender.org/videos/embed/aVvducRgN9L9Nc4ny8oiEU",
-          "title": "SciExplorer: From Microscopy Data to Interactive Scientific Visualisation — BCON26",
-          "minutes": 18
-        },
-        {
-          "src": "pt",
-          "embed": "https://video.osgeo.org/videos/embed/rbt6rr7n5ogxRbqmbDSQUk",
-          "title": "FOSS4G 2022 | Exploring the World’s Open Data Portals - Discovery, Visualisation and Analysis of…",
-          "minutes": 20
-        },
-        {
-          "src": "pt",
-          "embed": "https://video.matomocamp.org/videos/embed/496b49e5-b045-4e74-a8ab-165f05bb7e87",
-          "title": "Matomo: External Dashboards & Data Visualization - Google Looker Studio",
-          "minutes": 37
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xbz592u",
+          "title": "Build Pandas Charts: Visualize Ice Cream Ratings in Python",
+          "minutes": 17
         }
       ]
     },
@@ -136,7 +162,20 @@
       "technical": "Probability quantifies uncertainty: distributions, independence, conditional probability and Bayes' rule. It underlies every model's claim and every A/B test's verdict.",
       "simple": "The math of chance — how likely, given what we already know.",
       "difficulty": 2,
-      "videos": []
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://tubedu.org/videos/embed/e5aU1TbEzypVHNmDXsKnaz",
+          "title": "Probability, Sampling and hypothesis testing",
+          "minutes": 24
+        },
+        {
+          "src": "pt",
+          "embed": "https://tubedu.org/videos/embed/taG1oTC7sSyLZysKGxs9V7",
+          "title": "Probability distribution and hypothesis testing in R",
+          "minutes": 25
+        }
+      ]
     },
     {
       "title": "Statistical inference",
@@ -145,22 +184,10 @@
       "difficulty": 2,
       "videos": [
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/NPTEL-Math-Statistical_Inference",
-          "title": "NPTEL Lectures: Mathematics - Statistical Inference",
-          "minutes": 58
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/Redwood_Center_2007_10_24_Liam_Paninski",
-          "title": "Liam Paninski: Statistical Models for Neural Encoding, Decoding, Information Estimation, and Optimal On-Line Stimulus Design",
-          "minutes": 33
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/Microsoft_Research_Video_103558",
-          "title": "Microsoft Research Video 103558: Graphical Models and Statistical Mechanics in Communications and Storage Applications",
-          "minutes": 46
+          "src": "pt",
+          "embed": "https://tubedu.org/videos/embed/e5aU1TbEzypVHNmDXsKnaz",
+          "title": "Probability, Sampling and hypothesis testing",
+          "minutes": 24
         }
       ]
     },
@@ -169,7 +196,26 @@
       "technical": "A/B testing compares variants with a test statistic and a pre-registered threshold; peeking, multiple comparisons and underpowered samples are the classic ways to fool yourself. Randomisation is what licenses the causal claim.",
       "simple": "The disciplined way to decide if a change actually helped, not just looked like it did.",
       "difficulty": 2,
-      "videos": []
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://tubedu.org/videos/embed/e5aU1TbEzypVHNmDXsKnaz",
+          "title": "Probability, Sampling and hypothesis testing",
+          "minutes": 24
+        },
+        {
+          "src": "pt",
+          "embed": "https://tubedu.org/videos/embed/taG1oTC7sSyLZysKGxs9V7",
+          "title": "Probability distribution and hypothesis testing in R",
+          "minutes": 25
+        },
+        {
+          "src": "pt",
+          "embed": "https://tubedu.org/videos/embed/92qg5jrGyZKqNwGb5XDY6B",
+          "title": "Advanced Hypothesis testing and Intro to Regression",
+          "minutes": 19
+        }
+      ]
     },
     {
       "title": "SQL for analysis",
@@ -178,34 +224,10 @@
       "difficulty": 3,
       "videos": [
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/FlowAnalysisP7",
-          "title": "Flow Analysis & Network Hunting Part 7: Analytics - Situational Awareness",
-          "minutes": 18
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/FlowAnalysisP9",
-          "title": "Flow Analysis & Network Hunting Part 9: Analytics - Hunting",
-          "minutes": 20
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/FlowAnalysisP10",
-          "title": "Flow Analysis & Network Hunting Part 10: Analytics - Data Fusion",
-          "minutes": 20
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/FlowAnalysisP8",
-          "title": "Flow Analysis & Network Hunting Part 8: Analytics - Situational Awareness 2",
-          "minutes": 18
-        },
-        {
           "src": "pt",
-          "embed": "https://tubedu.org/videos/embed/wdnPNtFUSmeGxEiVen8sEm",
-          "title": "Exploratory data analysis",
-          "minutes": 17
+          "embed": "https://aperi.tube/videos/embed/rrPM9ZBH6ffG4iUxMLQgmi",
+          "title": "How to Write SQL Queries — Dimitri Fontaine",
+          "minutes": 52
         }
       ]
     },
@@ -223,27 +245,9 @@
         },
         {
           "src": "ia",
-          "embed": "https://archive.org/embed/Day1Part9ReverseEngineeringMalware",
-          "title": "Day 1 Part 9 Reverse Engineering Malware - Data Encoding",
-          "minutes": 11
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/Day1Part15ReverseEngineeringMalware",
-          "title": "Day 1 Part 15 Reverse Engineering Malware - Data Decoding",
-          "minutes": 20
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/Day1Part14ReverseEngineeringMalware",
-          "title": "Day 1 Part 14 Reverse Engineering Malware - Data Encoding - Common Algorithms - String Obfuscation",
-          "minutes": 10
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/Day1Part13ReverseEngineeringMalware",
-          "title": "Day 1 Part 13 Reverse Engineering Malware - Data Encoding - Common Algorithms - Compression",
-          "minutes": 4
+          "embed": "https://archive.org/embed/Europython_2018_vDSO7PAK",
+          "title": "[EuroPython 2018] Alisa Dammer - Data is not flat",
+          "minutes": 32
         }
       ]
     },
@@ -254,22 +258,10 @@
       "difficulty": 3,
       "videos": [
         {
-          "src": "pt",
-          "embed": "https://peertube.openstreetmap.fr/videos/embed/3eQMKBzoVo3WHCKZsGjHZB",
-          "title": "OpenStreetMap Data for Spatial Regression Modeling of Urban Operating Speed",
-          "minutes": 5
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/deep-learning-prerequisites-linear-regression-in-python",
-          "title": "Deep Learning Prerequisites Linear Regression In Python",
-          "minutes": 3
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/machine-learning-a-z-ai-python-r-chatgpt-bonus-2023-07-multiple-linear-regression",
-          "title": "Machine Learning A-Z AI, Python & R + ChatGPT Bonus 2023 (07 - Multiple Linear Regression)",
-          "minutes": 4
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9l1t1q",
+          "title": "Day 12: Linear Regression: Predicting Numbers",
+          "minutes": 20
         },
         {
           "src": "dm",
@@ -278,10 +270,16 @@
           "minutes": 26
         },
         {
+          "src": "pt",
+          "embed": "https://tubedu.org/videos/embed/92qg5jrGyZKqNwGb5XDY6B",
+          "title": "Advanced Hypothesis testing and Intro to Regression",
+          "minutes": 19
+        },
+        {
           "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/xa5vh4o",
-          "title": "LINEAR REGRESSION SCALPING: Syncing Linear Regression & Multi-Timeframe Data For Snipered Entries",
-          "minutes": 7
+          "embed": "https://www.dailymotion.com/embed/video/x9s9b9s",
+          "title": "Day 62: Evaluating a Linear Regression Model",
+          "minutes": 25
         }
       ]
     },
@@ -292,34 +290,28 @@
       "difficulty": 3,
       "videos": [
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/machine-learning-a-z-ai-python-r-chatgpt-bonus-2023-23-classification-model-selection-in-python",
-          "title": "Machine Learning A-Z AI, Python & R + ChatGPT Bonus 2023 (23 - Classification Model Selection in Python)",
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9lch9k",
+          "title": "Day 13: Logistic Regression for Classification",
+          "minutes": 23
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9sncfu",
+          "title": "Day 63: Building a Logistic Regression Model",
+          "minutes": 23
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xae85p2",
+          "title": "When to Use Regression and When to Use Classification",
           "minutes": 5
         },
         {
-          "src": "pt",
-          "embed": "https://video.osgeo.org/videos/embed/dmu5xdDZ7J6Kbh8QUcgmZz",
-          "title": "FOSS4G - Land cover classification using freely available multitemporal SAR data (work in progress)",
-          "minutes": 25
-        },
-        {
-          "src": "pt",
-          "embed": "https://videos.spacebar.ca/videos/embed/qmrRP8P6FxRJSqGbRm7VKe",
-          "title": "NSEC2022- Yuriy Arbitman - Obfuscation classification via Machine Learning",
-          "minutes": 28
-        },
-        {
           "src": "ia",
-          "embed": "https://archive.org/embed/pyvideo_417___statistical-machine-learning-for-text-classification-with-scikit-learn",
-          "title": "Statistical machine learning for text classification with scikit-learn",
-          "minutes": 32
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/pyvideo_3548___Classification_using_Pandas_and_ScikitLearn",
-          "title": "Classification using Pandas and Scikit-Learn",
-          "minutes": 45
+          "embed": "https://archive.org/embed/Europython_2018_Qwdr9ETH",
+          "title": "[EuroPython 2018] Obiamaka Agbaneje - Building a Naive Bayes Text Classifier with scikit learn",
+          "minutes": 30
         }
       ]
     },
@@ -331,33 +323,21 @@
       "videos": [
         {
           "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x5rqiuy",
-          "title": "Data Validation In Excel",
-          "minutes": 31
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x8v8bac",
-          "title": "06 - Data Validation Tips and Tricks",
-          "minutes": 12
-        },
-        {
-          "src": "dm",
           "embed": "https://www.dailymotion.com/embed/video/x9krn9a",
           "title": "Day 10: Training, Validation and Test Data Explained",
           "minutes": 18
         },
         {
           "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x9l69b2",
-          "title": "Day 10 Audio-Podcast: Training, Testing, and Validation Data—Crack the ML Code! | #DailyAIWizard",
-          "minutes": 15
-        },
-        {
-          "src": "dm",
           "embed": "https://www.dailymotion.com/embed/video/x9ts7sw",
           "title": "Day 70: Cross-Validation for Machine Learning",
           "minutes": 23
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9r524u",
+          "title": "Day 49: Model Evaluation: Accuracy and Other Metrics",
+          "minutes": 19
         }
       ]
     },
@@ -366,7 +346,14 @@
       "technical": "k-means and hierarchical clustering find groups; PCA compresses many correlated features into a few informative ones. Both explore and simplify rather than predict.",
       "simple": "Finding natural groups and shrinking wide data down to what matters.",
       "difficulty": 4,
-      "videos": []
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9tbw90",
+          "title": "Day 68: Principal Component Analysis (PCA) for Beginners",
+          "minutes": 24
+        }
+      ]
     },
     {
       "title": "Time series",
@@ -379,30 +366,6 @@
           "embed": "https://content.haacksnetworking.org/videos/embed/sgxB9thEAGV5HpCaZ7baAm",
           "title": "Statistics - Time Series",
           "minutes": 7
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/Wednesday-204-4-TimeSeriesAnalysisInPythonWithstatsmodels",
-          "title": "Wednesday - 204 - 4 - Time Series Analysis in Python with 'Statsmodels'",
-          "minutes": 19
-        },
-        {
-          "src": "pt",
-          "embed": "https://video.osgeo.org/videos/embed/o5tdNdUShw3xup6BbWPb8N",
-          "title": "2023 | Time series raster data in PostgreSQL with the TimescaleDB and postgis_raster",
-          "minutes": 21
-        },
-        {
-          "src": "pt",
-          "embed": "https://peertube.un-ihe.org/videos/embed/dJqS2sXfELZ7vMGp6eKTyo",
-          "title": "Hand-in-Hand_Time Series Analysis of WaPOR data",
-          "minutes": 6
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/yt2s5l9ErNL3s",
-          "title": "Golang UK Conf. 2016 - Jennie Lees - Managing and Scaling Real Time Data Pipelines using Go",
-          "minutes": 28
         }
       ]
     },
@@ -418,7 +381,14 @@
       "technical": "A result nobody understands changes nothing: dashboards, clear visuals and a narrative that states the decision, the confidence and the caveats turn analysis into action. This is the half that gets analysts promoted.",
       "simple": "Telling the story of what the data means so someone actually acts on it.",
       "difficulty": 5,
-      "videos": []
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://video.igem.org/videos/embed/eCTSexkiByMSB4DceUERFC",
+          "title": "Data Visualization Techniques for Better Science communication",
+          "minutes": 16
+        }
+      ]
     },
     {
       "title": "Ethics and pitfalls",
@@ -431,6 +401,12 @@
           "embed": "https://archive.org/embed/Europython_2018_1SclTQeo",
           "title": "[EuroPython 2018] Sarah Diot Girard - Trust me, I'm a Data Scientist - ethics for builders of data based applications",
           "minutes": 25
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/lca2020-Privacy_is_not_Binary_A_discussion_of_data_systems_ethics_and_human_rights",
+          "title": "Privacy is not Binary: A discussion of data systems, ethics, and human rights",
+          "minutes": 45
         }
       ]
     },
@@ -447,15 +423,9 @@
           "minutes": 33
         },
         {
-          "src": "pt",
-          "embed": "https://indymotion.fr/videos/embed/5aBTeKBP8WhJSD7e1mWF4f",
-          "title": "Joe Pringle - Computer Vision Data Version Control and Reproducibility at Scale",
-          "minutes": 53
-        },
-        {
-          "src": "pt",
-          "embed": "https://indymotion.fr/videos/embed/rTNrsFxNPDbsnKxq4bLBK9",
-          "title": "Ivo Bellin Salarin - Virtual Environments and Lockfiles - How Python is Improvising Reproducibility",
+          "src": "ia",
+          "embed": "https://archive.org/embed/Europython_2020_jT2WdEk6",
+          "title": "[EuroPython 2020] Sarah Gibson - Sharing Reproducible Python Environments with Binder",
           "minutes": 28
         }
       ]
@@ -465,7 +435,26 @@
       "technical": "Take one real dataset end to end: question, clean, explore, model with honest validation, and present a decision with its uncertainty. A finished, documented analysis is the portfolio piece.",
       "simple": "One complete project — question to defended conclusion — that you can show.",
       "difficulty": 5,
-      "videos": []
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xb5x7ta",
+          "title": "MySQL Exploratory Data Analysis Project: Layoff Trends, Rolling Totals, and Company Rankings",
+          "minutes": 33
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xb6s9x6",
+          "title": "MySQL Data Cleaning Project: Remove Duplicates, Fix Dates & Nulls",
+          "minutes": 51
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9v1646",
+          "title": "Day 82: Sentiment Analysis: A Beginner NLP Project",
+          "minutes": 15
+        }
+      ]
     }
   ]
 }

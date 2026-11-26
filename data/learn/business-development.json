@@ -9,33 +9,9 @@
       "videos": [
         {
           "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x6l5p3i",
-          "title": "Re: What is the most exciting development in the business world?",
-          "minutes": 3
-        },
-        {
-          "src": "dm",
           "embed": "https://www.dailymotion.com/embed/video/x9xx52",
           "title": "Business Development",
           "minutes": 3
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x3963o",
-          "title": "Business Development Discussion",
-          "minutes": 5
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x21m2t3",
-          "title": "Business Today BRICS development bank",
-          "minutes": 8
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x9l36va",
-          "title": "Negosyo Tayo | Software Development Agency business",
-          "minutes": 4
         }
       ]
     },
@@ -46,33 +22,9 @@
       "difficulty": 1,
       "videos": [
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/segagremlintapearchive07",
-          "title": "Sega-Gremlin Marketing Archive (Tape 07)",
-          "minutes": 6
-        },
-        {
           "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x9ze65a",
-          "title": "E-Suite | Understanding The Market",
-          "minutes": 15
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x7f1mbh",
-          "title": "How to Market Your Business for Under $1,000",
-          "minutes": 4
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x83w2am",
-          "title": "Understanding the Investment Landscape in the Crypto Market",
-          "minutes": 5
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x6l5hwx",
-          "title": "Murray Low on Understanding the Context of Your Business",
+          "embed": "https://www.dailymotion.com/embed/video/x4jrn2",
+          "title": "Market research - how to get great results",
           "minutes": 4
         }
       ]
@@ -89,14 +41,7 @@
       "technical": "A value proposition states who you help, what problem you solve, and why you over alternatives. Sharp positioning makes selling easy; fuzzy positioning makes even good products hard to move.",
       "simple": "One clear sentence: who you help, how, and why you beat the alternatives.",
       "difficulty": 1,
-      "videos": [
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x8j9dyz",
-          "title": "Unique value proposition of Domitys to the senior living market with Arnaud Fety, Head of Institutional Sales",
-          "minutes": 5
-        }
-      ]
+      "videos": []
     },
     {
       "title": "Lead generation",
@@ -106,27 +51,9 @@
       "videos": [
         {
           "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x59wh0",
-          "title": "(HOME BUSINESS LEAD GENERATION INTERNET MARKETING AFFILIATE)",
-          "minutes": 7
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x7te3hh",
-          "title": "How To Start A Lead Generation Business (And Make Money WITHOUT Selling)",
-          "minutes": 9
-        },
-        {
-          "src": "dm",
           "embed": "https://www.dailymotion.com/embed/video/xa9zr3",
           "title": "Global Marketing Strategies: What Is Lead Generation?",
           "minutes": 4
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x7vr6pd",
-          "title": "How to Leverage LinkedIn for Lead Generation and Sales",
-          "minutes": 11
         }
       ]
     },
@@ -144,34 +71,10 @@
       "difficulty": 2,
       "videos": [
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/59594TheComputerComesToMarketingCF",
-          "title": "THE IBM MAINFRAME COMPUTER & MARKETING 1960s SALES DATA ANALYSIS FOR BUSINESS 59594 CF",
-          "minutes": 29
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/61314TheNewFilmosound202ProjectorVwr",
-          "title": "1952 BELL & HOWELL 16mm FILMOSOUND 202 PROJECTOR SALES & PROMOTIONAL FILM 61314",
-          "minutes": 11
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x7lpge6",
-          "title": "How to Improve Your Sales Process and Increase Business",
-          "minutes": 28
-        },
-        {
           "src": "dm",
           "embed": "https://www.dailymotion.com/embed/video/x99rp2",
           "title": "Issues with the Sales Process",
           "minutes": 14
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x4v19at",
-          "title": "High Ticket Sales Process",
-          "minutes": 5
         }
       ]
     },
@@ -180,90 +83,42 @@
       "technical": "Discovery is listening: open questions, active listening and understanding needs before pitching. The best salespeople talk least and diagnose most.",
       "simple": "Winning by understanding the customer first, then talking.",
       "difficulty": 2,
-      "videos": []
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x7ohxb",
+          "title": "How to Use Tie Down Questions in RV Sales Training",
+          "minutes": 17
+        }
+      ]
     },
     {
       "title": "Negotiation",
       "technical": "Negotiation seeks value for both sides: knowing your BATNA, anchoring thoughtfully, and trading concessions rather than caving. Win-lose deals cost the relationship that business development exists to build.",
       "simple": "Reaching a deal both sides are glad to sign — without giving everything away.",
       "difficulty": 2,
-      "videos": [
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/cobrtn-It_s_Your_Business_-_Negotiation",
-          "title": "It's Your Business - Negotiation",
-          "minutes": 13
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/n7zh8u1hkdvbsc2ncdiuzwjxeuxaz2armtgfdrvn",
-          "title": "AD 2628 - EV Sales Up, New Charger and Challenger Delayed for Negotiations? All-Electric Off-Road Racing Series",
-          "minutes": 8
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x7b2rkt",
-          "title": "East Africa-China trade negotiations [Business Africa]",
-          "minutes": 4
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x8ay5z4",
-          "title": "Tony Pua: Avoiding direct negotiations with cronies \"not business-friendly\"?",
-          "minutes": 5
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x6tfs15",
-          "title": "Dragons fall out over drone business in savage negotiation!  | Dragons' Den - BBC",
-          "minutes": 14
-        }
-      ]
+      "videos": []
     },
     {
       "title": "Building relationships",
       "technical": "Trust compounds: consistent follow-through, genuine help and long horizons turn contacts into partners and referrers. Relationship capital is the asset that outlasts any single deal.",
       "simple": "Turning contacts into lasting partnerships by being reliably useful.",
       "difficulty": 3,
-      "videos": [
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/InboundMarketing-IMSBrentLearyPostH264ForIPodVideoAndIPhone640x480930",
-          "title": "Social CRM: Not Your Father's Customer Relationship Management System - Brent Leary IMS08",
-          "minutes": 59
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/Business_Insight_-_Strategic_Relationships_at_Work",
-          "title": "Business Insight - \"Strategic Relationships at Work\"",
-          "minutes": 15
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x7tftz0",
-          "title": "Why savvy business people build relationship capital",
-          "minutes": 4
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x7rqgtm",
-          "title": "Why There's Nothing More Valuable In Business Than Your Relationships",
-          "minutes": 21
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/xb10sxm",
-          "title": "Abdel Khawatmi pt. 2. Systems create scale. Relationships create the business.",
-          "minutes": 26
-        }
-      ]
+      "videos": []
     },
     {
       "title": "Partnerships and alliances",
       "technical": "Strategic partnerships extend reach through others' customers and capabilities; clear mutual value and defined terms keep them alive. A good partnership multiplies effort; a vague one drains it.",
       "simple": "Growing by teaming up with others who reach customers you cannot.",
       "difficulty": 3,
-      "videos": []
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9iw1f",
+          "title": "Bill Bartmann - Billionaire U - Business Partnerships",
+          "minutes": 6
+        }
+      ]
     },
     {
       "title": "Pricing strategy",
@@ -272,34 +127,10 @@
       "difficulty": 3,
       "videos": [
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/InboundMarketing-IMSChrisBroganPostH264ForIPodVideoAndIPhone640x480964",
-          "title": "Social Media Strategy: Building Business from Blogging, Social Networks, & More - Chris Brogan IMS08",
-          "minutes": 56
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/httpsbit.ly3dspmg2",
-          "title": "Amazon's TRILLION Dollar Marketing Strategy The Greatest Amazon Strategy Amazon Prime",
-          "minutes": 6
-        },
-        {
-          "src": "pt",
-          "embed": "https://video.fraxoweb.com/videos/embed/4XhWuk4wb6xACunVYJf6oh",
-          "title": "My Pricing Strategy for Amazon Merch on Demand",
-          "minutes": 13
-        },
-        {
-          "src": "pt",
-          "embed": "https://video.fraxoweb.com/videos/embed/jmcw6ungopQejqWRqaRBcR",
-          "title": "Pricing & Strategies for Amazon Merch using Productor",
-          "minutes": 18
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/SteveJobsTalksMarketingStrategyInAnInternalNeXTVideo1991",
-          "title": "Steve Jobs Talks Marketing Strategy In An Internal NeXT Video (1991)",
-          "minutes": 18
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9lhfcq",
+          "title": "12 Sneaky Pricing Strategies Companies Use to Get You to Spend More!",
+          "minutes": 5
         }
       ]
     },
@@ -311,33 +142,9 @@
       "videos": [
         {
           "src": "ia",
-          "embed": "https://archive.org/embed/free-course-site.com-udemy-online-marketing-business-create-your-agency-step-by-step-1",
-          "title": "Free Course Site.com Udemy Online Marketing Business Create Your Agency, Step By Step ( 1)",
-          "minutes": 3
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/osen2017-emergingmarket",
-          "title": "Open Source Entrepreneur Network Symposium 2017 - How to successfully enter the FOSS emerging market",
-          "minutes": 40
-        },
-        {
-          "src": "pt",
-          "embed": "https://diler.tube/videos/embed/eFZyMw1mPcQLQkGh2MJtSF",
-          "title": "Why gender-based marketing is bad for business ｜ Gaby Barrios  |  TED",
-          "minutes": 11
-        },
-        {
-          "src": "pt",
-          "embed": "https://peertube.dngr.us/videos/embed/71ufYuRYfkPBbjKvqkfZ8K",
-          "title": "THE IBM MAINFRAME COMPUTER & MARKETING  1960s SALES DATA ANALYSIS FOR BUSINESS 59594 CF",
-          "minutes": 29
-        },
-        {
-          "src": "pt",
-          "embed": "https://peertube.dngr.us/videos/embed/uCBetsXg6NsNJQkhXX4CmM",
-          "title": "1960s TIRE SALES \"MAN ON THE STREET\" MARKETING RESEARCH FILM   JC10154a",
-          "minutes": 13
+          "embed": "https://archive.org/embed/Ask_Jay_54",
+          "title": "Ask Jay 54: Marketing",
+          "minutes": 7
         }
       ]
     },
@@ -346,7 +153,20 @@
       "technical": "Content, social, email and SEO reach modern buyers where they research; each channel has its own economics and metrics. Choosing a few channels well beats spreading thin across all.",
       "simple": "Reaching buyers online where they already look — through content, search and email.",
       "difficulty": 4,
-      "videos": []
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x7n0z2v",
+          "title": "What is Digital Marketing & why digital marketing is important for your business",
+          "minutes": 12
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x53ffg0",
+          "title": "Digital Marketing Tutorial, Online Marketing, SEO, SEM, Adwords, Google AdSense | Digital Nest",
+          "minutes": 45
+        }
+      ]
     },
     {
       "title": "Metrics and analytics",
@@ -356,33 +176,9 @@
       "videos": [
         {
           "src": "ia",
-          "embed": "https://archive.org/embed/DrupalconDc2009-BusinessAnalyticsWithViews",
-          "title": "DrupalCon DC 2009 - Business Analytics with Views",
-          "minutes": 25
-        },
-        {
-          "src": "ia",
           "embed": "https://archive.org/embed/InboundMarketing-IMSMattCuterPostH264ForIPodVideoAndIPhone640x480371",
           "title": "Marketing Analytics for the Data-Driven Marketer: What to Measure & How - Matt Cutler IMS08",
           "minutes": 39
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/R-BusinessAnalyticsUsingRProgramming",
-          "title": "R - Business Analytics Using R Programming",
-          "minutes": 12
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/unccnc-The_Live_Wire_-_Professional_Science_Masters_in_Data_Science_and_Business_Analytics",
-          "title": "The Live Wire - Professional Science Masters in Data Science and Business Analytics",
-          "minutes": 22
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/unccnc-2020_Virtual_Commencement_-_Business_Analytics",
-          "title": "2020 Virtual Commencement: Business Analytics",
-          "minutes": 3
         }
       ]
     },
@@ -394,15 +190,9 @@
       "videos": [
         {
           "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x88aikw",
-          "title": "TCS CEO On Margin Trajectory, Retail Business Rebound & Digital Deal Pipeline",
-          "minutes": 6
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x6hcvva",
-          "title": "Gazprom: Pipeline pricing",
-          "minutes": 3
+          "embed": "https://www.dailymotion.com/embed/video/x56aux",
+          "title": "Customer Relationship Management and Direct Marketing (CRM)",
+          "minutes": 5
         }
       ]
     },
@@ -411,7 +201,14 @@
       "technical": "Proposals restate value, scope and price clearly; closing asks for the decision directly and handles the final objection. Deals die in ambiguity — clarity and a clear ask move them.",
       "simple": "Putting the offer in writing and confidently asking for the yes.",
       "difficulty": 4,
-      "videos": []
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9sr592",
+          "title": "Nail Your Business Proposal Presentation",
+          "minutes": 10
+        }
+      ]
     },
     {
       "title": "Account management and retention",
@@ -424,12 +221,6 @@
           "embed": "https://archive.org/embed/InboundMarketing-IMSMarkKleinPostH264ForIPodVideoAndIPhone640x480660-2",
           "title": "Managing the Bottom of the Funnel: New Marketing Tools for Customer Retention - Mark Klein IMS08",
           "minutes": 42
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/thatsbusinessaccountsreceivable",
-          "title": "That's Business: Accounts Receivable",
-          "minutes": 34
         }
       ]
     },
@@ -440,34 +231,22 @@
       "difficulty": 5,
       "videos": [
         {
-          "src": "pt",
-          "embed": "https://tv.dyne.org/videos/embed/iLHoU4f7qEnVbqt9DJ7yFV",
-          "title": "Ledger - Open-source & Business models Open panel",
-          "minutes": 6
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xabnq30",
+          "title": "Only For Entrepreneurs | Business Model Canvas Explained",
+          "minutes": 5
         },
         {
-          "src": "pt",
-          "embed": "https://peertube.f-si.org/videos/embed/81951ef3-5914-4d21-99cf-b8019e698711",
-          "title": "Open Source parasitic extraction - solutions, challenges, and business models, Enrico Di Lorenzo, FastFieldSolvers",
-          "minutes": 27
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x2rmcgm",
+          "title": "Validating Business Models",
+          "minutes": 7
         },
         {
-          "src": "pt",
-          "embed": "https://videos.shmalls.pw/videos/embed/7SbiTRer1pwCdXrBPPCsz9",
-          "title": "Pyramid Scheme Business Model Pitch | Dragons' Den - Reaction - Scorpio Shadow",
-          "minutes": 15
-        },
-        {
-          "src": "pt",
-          "embed": "https://peertube.kaleidos.net/videos/embed/ipS1CgVtShpPqSz7fdmUFS",
-          "title": "Penpot unfolds new open-source business model",
-          "minutes": 17
-        },
-        {
-          "src": "pt",
-          "embed": "https://video.fraxoweb.com/videos/embed/4NGCKoQ9XSSjT1192p37hu",
-          "title": "6 Reasons Why Print-on-Demand Might NOT Be For you (Business Model Weaknesses) From My Experience",
-          "minutes": 13
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x7omnai",
+          "title": "How Nike and Adobe revolutionized their business models",
+          "minutes": 4
         }
       ]
     },
@@ -479,27 +258,9 @@
       "videos": [
         {
           "src": "ia",
-          "embed": "https://archive.org/embed/HowToPlanACRMProjectCRMStrategyPlanningAdviceFromAUKConsultancyPartnerYouTube",
-          "title": "How To Plan A CRM Project CRM Strategy Planning Advice From A UK Consultancy Partner You Tube",
-          "minutes": 25
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/bliptv-20131031-092725-Captureyourflag-InnovationStrategistHammansStallings2013InterviewChapter1437",
-          "title": "How to Use Psychology and Decision Sciences in Business Strategy",
-          "minutes": 7
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x73sntn",
-          "title": "The Moneycontrol Show | Estate Planning, passenger charter, market strategies",
-          "minutes": 26
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x74ol5t",
-          "title": "The Moneycontrol Show │ Estate Planning, EV Policy , Market Strategies",
-          "minutes": 25
+          "embed": "https://archive.org/embed/Ask_Jay_5",
+          "title": "Ask Jay 5: Do I Need A Business Plan?",
+          "minutes": 5
         }
       ]
     },
@@ -510,34 +271,10 @@
       "difficulty": 5,
       "videos": [
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/nina-and-the-neurons-go-eco-monkey-business-jungle-and-spotty",
-          "title": "Nina And The Neurons Go Eco! Monkey Business Jungle And Spotty",
-          "minutes": 31
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/nina-and-the-neurons-go-eco-9.-monkey-business",
-          "title": "Nina And The Neurons Go Eco! 9. Monkey Business",
-          "minutes": 14
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/nina-and-the-neurons-go-eco-monkey-business-orinoco-and-the-big-black-umbrella-and-painting",
-          "title": "Nina And The Neurons Go Eco! Monkey Business Orinoco And The Big Black Umbrella And Painting",
-          "minutes": 31
-        },
-        {
           "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x9le0he",
-          "title": "Lets go to the market",
-          "minutes": 5
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x2p4oxp",
-          "title": "What to do when markets go wild",
-          "minutes": 4
+          "embed": "https://www.dailymotion.com/embed/video/x9ow4xg",
+          "title": "How To Write a Business Plan To Start Your Own Business",
+          "minutes": 9
         }
       ]
     }

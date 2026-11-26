@@ -14,28 +14,22 @@
           "minutes": 14
         },
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/coops-venture-capital-meet",
-          "title": "When Co-ops and Venture Capital Meet",
-          "minutes": 59
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xaq6bnm",
+          "title": "The $3 Trillion Traffic Jam | How Venture Capital Really Works",
+          "minutes": 8
         },
         {
           "src": "ia",
-          "embed": "https://archive.org/embed/kmvt-Keiretsu_Forum_Presents_-_Public_Venture_Capital",
-          "title": "Keiretsu Forum Presents - Public Venture Capital",
-          "minutes": 29
+          "embed": "https://archive.org/embed/Ask_Jay_4",
+          "title": "Ask Jay 4: Angel Investors VS. VCs",
+          "minutes": 6
         },
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/eYQuKVAtCzIWEoeGsupd1XNWHfFasN",
-          "title": "\"MEET KING JOE\" 1949 CAPITALISM & CAPITAL INVESTMENT CARTOON HARDING UNIVERSITY XD6617",
-          "minutes": 10
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/DesertVe1958",
-          "title": "Desert Venture (Part I)",
-          "minutes": 14
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x6l5rgd",
+          "title": "Fred Wilson on Technology and Venture Capital",
+          "minutes": 8
         }
       ]
     },
@@ -44,7 +38,32 @@
       "technical": "From pre-seed and seed through Series A, B and beyond to exit, each stage funds a different risk: idea, product, growth, scale. Knowing the ladder frames every valuation and expectation.",
       "simple": "The stages of raising money — each buying down a different startup risk.",
       "difficulty": 1,
-      "videos": []
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://video.igem.org/videos/embed/ouG6R7oDVNeN4QYFvULMVi",
+          "title": "Fundraising 360: From Seed to Series, Unveiling Startup Finance",
+          "minutes": 32
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Ask_Jay_16",
+          "title": "Ask Jay 16: What Are Funding Rounds?",
+          "minutes": 8
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Ask_Jay_2",
+          "title": "Ask Jay 2: How Much $$ Do I Raise For My New Company?",
+          "minutes": 4
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Ask_Jay_13",
+          "title": "Ask Jay 13: How Do Companies Raise So Much Money?",
+          "minutes": 6
+        }
+      ]
     },
     {
       "title": "How VC funds work",
@@ -54,33 +73,15 @@
       "videos": [
         {
           "src": "ia",
-          "embed": "https://archive.org/embed/KeysToInvestmentSuccessWithDennisStattmanCo-FounderBlackrockGlobalAllocationFund",
-          "title": "Keys to Investment Success With Dennis Stattman, Co-Founder Blackrock Global Allocation Fund",
-          "minutes": 27
+          "embed": "https://archive.org/embed/Ask_Jay_56",
+          "title": "Ask Jay 56: Starting a VC Firm",
+          "minutes": 9
         },
         {
           "src": "ia",
-          "embed": "https://archive.org/embed/ischinaworththeinvestmentriskprosconswithasovereignriskexpertandchinafundmanager",
-          "title": "Is China Worth the Investment Risk? Pros & Cons With a Sovereign Risk Expert and China Fund Manager",
-          "minutes": 27
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/TimBrunsdenAttheCuttingEdgeofFundraising",
-          "title": "At the Cutting Edge of Fundraising",
-          "minutes": 5
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/KA-converted--hJj5NpWUXQ",
-          "title": "Getting a seed round from a VC",
-          "minutes": 11
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/71952ThisIsChina",
-          "title": "\" HERE IS CHINA \" WWII UNITED CHINA RELIEF FUNDRAISING / PROPAGANDA FILM 71952",
-          "minutes": 27
+          "embed": "https://archive.org/embed/Ask_Jay_29",
+          "title": "Ask Jay 29: What a VC Wants",
+          "minutes": 8
         }
       ]
     },
@@ -96,39 +97,27 @@
       "technical": "Early-stage bets are bets on people: coachability, resilience, insight and complementary teams predict more than the plan, which will change. VCs back founders who navigate uncertainty, not just present well.",
       "simple": "Judging the people, because at the start the team matters more than the plan.",
       "difficulty": 1,
-      "videos": []
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Ask_Jay_32",
+          "title": "Ask Jay 32: Team, Size & Burn",
+          "minutes": 5
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Ask_Jay_10",
+          "title": "Ask Jay 10: What is a Co-Founder & Should I Have One?",
+          "minutes": 8
+        }
+      ]
     },
     {
       "title": "Market sizing and opportunity",
       "technical": "VCs need markets big enough for outsized returns: TAM/SAM/SOM, growth rate and timing separate a lifestyle business from a venture-scale one. A great team in a tiny market still cannot return a fund.",
       "simple": "Checking the opportunity is huge enough for a startup to become enormous.",
       "difficulty": 2,
-      "videos": [
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/Impact_Investing_in_Emerging_Markets_-_Challenges_and_Opportunities",
-          "title": "Impact Investing in Emerging Markets: Challenges and Opportunities",
-          "minutes": 49
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/kmvt-Silicon_Valley_Successes_-_CJ_Terrel_Startup_Marketing_Expert",
-          "title": "Silicon Valley Successes - CJ Terrel Startup Marketing Expert",
-          "minutes": 29
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/xa4ecim",
-          "title": "Strategic capital allocator focused on maximizing market opportunities. Specializing in technical analysis and disciplined risk management to drive consistent growth and build a high-performance investment portfolio in today’s markets.",
-          "minutes": 11
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x90hv14",
-          "title": "Top FinTech VC Sees Big Opportunity In Down Market",
-          "minutes": 17
-        }
-      ]
+      "videos": []
     },
     {
       "title": "Business models and unit economics",
@@ -138,21 +127,15 @@
       "videos": [
         {
           "src": "ia",
-          "embed": "https://archive.org/embed/covid-19-is-changing-economic-investment-behavior-in-profound-lasting-ways",
-          "title": "Covid-19 Is Changing Economic & Investment Behavior in Profound & Lasting Ways",
-          "minutes": 27
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/expect-more-economic-market-damage-as-pandemic-repercussions-multiply-says-investment-veteran",
-          "title": "Expect More Economic & Market Damage as Pandemic Repercussions Multiply Says Investment Veteran",
-          "minutes": 26
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/cornv-Sharon_Zadra_on_Economic_Development_and_Reno_Startups.",
-          "title": "Sharon Zadra on Economic Development and Reno Startups.",
+          "embed": "https://archive.org/embed/Ask_Jay_64",
+          "title": "Ask Jay 64: Validating Business Models",
           "minutes": 7
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Ask_Jay_36",
+          "title": "Ask Jay 36: Advertising as Biz Model",
+          "minutes": 6
         }
       ]
     },
@@ -163,22 +146,22 @@
       "difficulty": 2,
       "videos": [
         {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x57lfz",
-          "title": "Denon DN-Hs5500 Pitch Control w/ 2 Decks",
+          "src": "pt",
+          "embed": "https://video.igem.org/videos/embed/tguUzhDzH8Y6Z4oXJwQE9v",
+          "title": "Pitch Workshop - the Art of Compelling Storytelling",
+          "minutes": 26
+        },
+        {
+          "src": "pt",
+          "embed": "https://video.igem.org/videos/embed/kPyyKgtFaFAMtqL1msmvzf",
+          "title": "Live Roast Session - Pitch Deck Teardown",
+          "minutes": 46
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Ask_Jay_6",
+          "title": "Ask Jay 6: How To Prep for a Meeting with a VC",
           "minutes": 6
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x4joet4",
-          "title": "PBS: Carrier - Landing on a Pitching Deck Pt. 1",
-          "minutes": 10
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x8c31x2",
-          "title": "This Entrepreneur Shares What You Can Do to Nail Your Investor Pitch Deck",
-          "minutes": 8
         }
       ]
     },
@@ -187,20 +170,7 @@
       "technical": "Growth, retention, engagement and revenue quality show whether a product works; vanity metrics flatter while cohort and retention data tell the truth. Traction de-risks the bet more than any story.",
       "simple": "The real numbers that prove a startup is working, not just talking.",
       "difficulty": 2,
-      "videos": [
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/a2ppeokuzu5fvjdo1k9qqjgmgj06rjmfz4lpqtht",
-          "title": "AD #1383 - Investors Bearish on Tesla, UAW Gains Traction in the South, Designers on Bland Colors",
-          "minutes": 8
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x7equlc",
-          "title": "Reporter's Take | Venture debt gaining traction among unicorns",
-          "minutes": 5
-        }
-      ]
+      "videos": []
     },
     {
       "title": "Valuation basics",
@@ -210,21 +180,9 @@
       "videos": [
         {
           "src": "ia",
-          "embed": "https://archive.org/embed/openpublica-sacramento-california-7df29203-e983-4256-931d-a7069512f462",
-          "title": "AIFM Special Meeting: Investment Reports, Actuarial Valuation, and 2022 Schedule – November 18, 2021",
-          "minutes": 48
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x3t0qzi",
-          "title": "Startup Central | Infoedge Valuation | Turecallers Indian bet",
-          "minutes": 19
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x7n0jk0",
-          "title": "Startup Street: Here's how the current economic slowdown has impacted the valuations of startups",
-          "minutes": 21
+          "embed": "https://archive.org/embed/Ask_Jay_9",
+          "title": "Ask Jay 9: What % of My Company Should Investors Get?",
+          "minutes": 6
         }
       ]
     },
@@ -236,9 +194,15 @@
       "videos": [
         {
           "src": "ia",
-          "embed": "https://archive.org/embed/d80f7phhgqxj3jxvvtmqkcmij5e5jhdcn4mgtwel",
-          "title": "Business Podcasts | The Founder of SNAP Fitness Shares How to Nail & Scale a Successful Business + How Discipline, Accountability & Long-Term Perspective Creates Sustainable Success + How a Multi-Millionaire Entrepreneur Organizes Their Day",
-          "minutes": 52
+          "embed": "https://archive.org/embed/Ask_Jay_7",
+          "title": "Ask Jay 7: What Goes Into a Term Sheet?",
+          "minutes": 7
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Ask_Jay_27",
+          "title": "Ask Jay 27: Convertible Notes",
+          "minutes": 7
         }
       ]
     },
@@ -249,10 +213,16 @@
       "difficulty": 3,
       "videos": [
         {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x6hpsun",
-          "title": "A Seat at the \"CAP\" Table: How to Encourage More Female Investors to Back Female-Founded Firms",
-          "minutes": 29
+          "src": "ia",
+          "embed": "https://archive.org/embed/Ask_Jay_9",
+          "title": "Ask Jay 9: What % of My Company Should Investors Get?",
+          "minutes": 6
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Ask_Jay_39",
+          "title": "Ask Jay 39: Getting Your Equity",
+          "minutes": 11
         }
       ]
     },
@@ -268,45 +238,27 @@
       "technical": "VCs build portfolios expecting most to fail and few to return the fund; diversification, reserves for follow-on, and ownership targets manage the power law. One winner can pay for everything.",
       "simple": "Spreading bets knowing most lose, because one giant win covers all.",
       "difficulty": 4,
-      "videos": [
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/vidssave.com-bell-wethwer-associates-the-journey-sept-23-chintan-haria-market-ou",
-          "title": "BellWethwer Associates - \"The Journey\"- Sept 23-Chintan Haria \"Market Outlook & Investment Strategy\"",
-          "minutes": 42
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/FUN15002Building",
-          "title": "Building an Investment Portfolio of Silver Dollars",
-          "minutes": 48
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/MSSW10003",
-          "title": "How to Include U.S. Gold Coins in Your Investment Portfolio",
-          "minutes": 58
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/video-149975-720-p-short-venture-capital",
-          "title": "VC 101: Why consider adding venture capital to your investment portfolio",
-          "minutes": 3
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/openpublica-oakland-california-f63456b8-e7b2-4d3a-bd12-a52961cc9b02",
-          "title": "Oakland Finance & Management Committee Meeting – June 24, 2025: PFRS Investment Portfolio Update and Routine Approvals",
-          "minutes": 24
-        }
-      ]
+      "videos": []
     },
     {
       "title": "Supporting portfolio companies",
       "technical": "Beyond capital, VCs help with hiring, introductions, strategy and follow-on funding; the best add real value between rounds. Money is a commodity; help is the differentiator.",
       "simple": "What good investors do after investing — hiring, intros, advice, more money.",
       "difficulty": 4,
-      "videos": []
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Ask_Jay_19",
+          "title": "Ask Jay 19: Board of Directors",
+          "minutes": 9
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Ask_Jay_28",
+          "title": "Ask Jay 28: Bad Board Member",
+          "minutes": 7
+        }
+      ]
     },
     {
       "title": "Exits: IPOs and acquisitions",
@@ -316,33 +268,21 @@
       "videos": [
         {
           "src": "ia",
-          "embed": "https://archive.org/embed/e2c-journeys-BSW",
-          "title": "Exit to Community: Two Startup Journeys to User-Ownership",
-          "minutes": 49
+          "embed": "https://archive.org/embed/Ask_Jay_72",
+          "title": "Ask Jay 72: Selling Your Company",
+          "minutes": 7
         },
         {
           "src": "ia",
-          "embed": "https://archive.org/embed/detrmi-9.2M_Historic_Investment_to_Help_Families_Exit_and_Stay_Out_of_Homelessness",
-          "title": "$9.2M Historic Investment to Help Families Exit and Stay Out of Homelessness",
-          "minutes": 31
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/inside-the-tech-cult-how-venture-capital-plans-to-exit-democracy-1080p",
-          "title": "Inside the Tech Cult: How Venture Capital Plans to Exit Democracy",
-          "minutes": 48
+          "embed": "https://archive.org/embed/Ask_Jay_66",
+          "title": "Ask Jay 66: Acqui-Hires",
+          "minutes": 9
         },
         {
           "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x95ivlo",
-          "title": "Exit Strategies From IPO to M&A and Beyond",
-          "minutes": 28
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x6ev24g",
-          "title": "Governance, capital, exit: reasons for UTI IPO",
-          "minutes": 5
+          "embed": "https://www.dailymotion.com/embed/video/xbanc3e",
+          "title": "IPO",
+          "minutes": 41
         }
       ]
     },
@@ -351,7 +291,14 @@
       "technical": "Most startups fail; VCs manage risk through portfolio construction, staged funding and honest post-mortems, not by avoiding failure. Understanding failure modes improves the next bet.",
       "simple": "Failure is normal — good investors plan for it and learn from it.",
       "difficulty": 4,
-      "videos": []
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Ask_Jay_55",
+          "title": "Ask Jay 55: Callin' It Quits",
+          "minutes": 7
+        }
+      ]
     },
     {
       "title": "The founder's perspective",
@@ -360,10 +307,22 @@
       "difficulty": 5,
       "videos": [
         {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x6254xp",
-          "title": "PERSPECTIVES | Trump in New York for RNC fundraising dinner | Tuesday, September 26th 2017",
-          "minutes": 10
+          "src": "pt",
+          "embed": "https://video.igem.org/videos/embed/ouG6R7oDVNeN4QYFvULMVi",
+          "title": "Fundraising 360: From Seed to Series, Unveiling Startup Finance",
+          "minutes": 32
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Ask_Jay_33",
+          "title": "Ask Jay 33: Attracting Investors",
+          "minutes": 9
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Ask_Jay_8",
+          "title": "Ask Jay 8: Will Investors Try to Screw Me?",
+          "minutes": 9
         }
       ]
     },
@@ -372,21 +331,21 @@
       "technical": "Sectors, geographies and models shift; AI, climate and new fund structures reshape where capital flows. Reading trends early is part of the edge, though hype must be discounted.",
       "simple": "Spotting where the next wave of startups and money is heading.",
       "difficulty": 5,
-      "videos": [
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x8nxabl",
-          "title": "Talking Point: Assessing Valuation Trends In Emerging Sectors",
-          "minutes": 14
-        }
-      ]
+      "videos": []
     },
     {
       "title": "Ethics and the ecosystem",
       "technical": "VC shapes which futures get built and funded; access, bias and incentive misalignment are real problems the industry wrestles with. Capital allocation is a form of power with consequences.",
       "simple": "The responsibility that comes with deciding which ideas get funded.",
       "difficulty": 5,
-      "videos": []
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://video.igem.org/videos/embed/dLMrR6tWDUPRZvSvgCU7EX",
+          "title": "Insights into the iGEM Startups Ecosystem",
+          "minutes": 20
+        }
+      ]
     },
     {
       "title": "The capstone",

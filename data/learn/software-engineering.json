@@ -9,15 +9,15 @@
       "videos": [
         {
           "src": "pt",
-          "embed": "https://phpc.tv/videos/embed/3vctEMmk3wxfxig12vz2Hk",
-          "title": "Vibe Coding vs. Engineering: Building AI Apps in PHP with Paul Conroy",
-          "minutes": 35
+          "embed": "https://videos.devteams.at/videos/embed/93cqJ6Sw4emxJ6yYhXUwNi",
+          "title": "Engineer, Craftsperson or Gardener?",
+          "minutes": 7
         },
         {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/xby9pzi",
-          "title": "Day in the Life: Google Software Engineer in Bangalore | Office Perks & Coding",
-          "minutes": 6
+          "src": "pt",
+          "embed": "https://tube.tchncs.de/videos/embed/wKtbTc26YzjiVwfvytP2Kb",
+          "title": "Are We Engineers? With Hillel Wayne",
+          "minutes": 56
         }
       ]
     },
@@ -26,7 +26,14 @@
       "technical": "From requirements through design, implementation, testing, deployment and maintenance, the SDLC frames the work; Agile iterates it in short loops with feedback, replacing big-bang plans that meet reality too late.",
       "simple": "The full journey of software — and why building it in small, feedback-driven loops beats one giant plan.",
       "difficulty": 1,
-      "videos": []
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x21l615",
+          "title": "System Analysis and Design Tutorial | Systems Development  Life Cycle (SDLC) | Waterfall Method, Parallel development method, Phased development method, System prototyping, Design prototyping, and Agile development",
+          "minutes": 21
+        }
+      ]
     },
     {
       "title": "Version control and collaboration",
@@ -35,16 +42,22 @@
       "difficulty": 1,
       "videos": [
         {
-          "src": "pt",
-          "embed": "https://tilvids.com/videos/embed/82rJbedwEZegWoZfwiALqM",
-          "title": "Git season: A deeply personal approach to version control",
-          "minutes": 27
-        },
-        {
           "src": "dm",
           "embed": "https://www.dailymotion.com/embed/video/x9jczfk",
           "title": "Git Basics Tutorial: Learn Version Control, Commits & Branches for Beginners",
           "minutes": 40
+        },
+        {
+          "src": "pt",
+          "embed": "https://videotheque.uness.fr/videos/embed/aTgXJxW7ZtrjkvuTb7RLfL",
+          "title": "Git Best Practices: A Start-Up Guide",
+          "minutes": 20
+        },
+        {
+          "src": "pt",
+          "embed": "https://videos.alexhyett.com/videos/embed/dKR8eD3pZPo2Y19HiQYNyY",
+          "title": "Git Flow vs GitHub Flow: What You Need to Know",
+          "minutes": 6
         }
       ]
     },
@@ -62,28 +75,16 @@
       "difficulty": 1,
       "videos": [
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/EuroPython_2015_NUqYduic",
-          "title": "[EuroPython 2015] Holger Peters - Using Scikit-Learn's interface for turning Spaghetti Data Science into Maintainable Software",
-          "minutes": 33
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x5qkr08",
-          "title": "Data Structures Algorithms Course",
-          "minutes": 8
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x2y38li",
-          "title": "14 Python programming - data structured as a list",
-          "minutes": 4
-        },
-        {
           "src": "dm",
           "embed": "https://www.dailymotion.com/embed/video/x94g0d0",
           "title": "Data Structures & Algorithms from Beginner to Advanced | Road to Dream Job Part 1",
           "minutes": 16
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/ucberkeley_webcast_itunesu_556422740",
+          "title": "Computer Science 61B - Fall 2012",
+          "minutes": 33
         }
       ]
     },
@@ -92,32 +93,7 @@
       "technical": "Big-O describes how work grows with input; sorting, searching and graph traversal are the recurring patterns. You rarely invent algorithms, but you constantly choose and combine them — and recognise the O(n^2) that will not scale.",
       "simple": "How to tell fast code from code that dies as data grows.",
       "difficulty": 2,
-      "videos": [
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/ucberkeley_webcast_wodsSFQnV5w",
-          "title": "Computer Science 10 - Lecture 7: Algorithm Complexity",
-          "minutes": 52
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/ucberkeley_webcast_P-MM1u3unW8",
-          "title": "Computer Science 10 - Lecture 7: Algorithmic Complexity",
-          "minutes": 49
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/Microsoft_Research_Video_104437",
-          "title": "Microsoft Research Video 104437: Two Network Coding Talks for the price of one: Security, Low Complexity",
-          "minutes": 57
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/ytAKBwu5sTxvE",
-          "title": "Programming Complexity - Modelling Complex Systems with Go & React by Sau Sheong",
-          "minutes": 56
-        }
-      ]
+      "videos": []
     },
     {
       "title": "Object-oriented design",
@@ -127,33 +103,9 @@
       "videos": [
         {
           "src": "pt",
-          "embed": "https://tubedu.org/videos/embed/pqgRag1nscwRhMV6bbjaHi",
-          "title": "Session 1 Object Oriented Programming - Introduction",
-          "minutes": 5
-        },
-        {
-          "src": "pt",
           "embed": "https://tubedu.org/videos/embed/ie5QqoA1jwcoumNAeZxDB1",
           "title": "Fun programming 104: OOP means Object Oriented Programming",
           "minutes": 11
-        },
-        {
-          "src": "pt",
-          "embed": "https://toobnix.org/videos/embed/augR7u7F75FZoxsBT2Fwwn",
-          "title": "Object Oriented Code in the Gnus Newsreader - Eric Abrahamsen - EmacsConf 2020",
-          "minutes": 24
-        },
-        {
-          "src": "pt",
-          "embed": "https://peertube.lagbag.com/videos/embed/wu93Lckww5AbmuQeW6LBY4",
-          "title": "Object-Oriented Programming is Bad",
-          "minutes": 45
-        },
-        {
-          "src": "pt",
-          "embed": "https://tubedu.org/videos/embed/7CPAowLLwFJvdqWHNqX7Qp",
-          "title": "Session 2 Object Oriented Programming - Classes and Objects",
-          "minutes": 7
         }
       ]
     },
@@ -164,10 +116,16 @@
       "difficulty": 2,
       "videos": [
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/pyconza2019-machine-learning-engineering-principles-with-python-and-mlflow",
-          "title": "Machine Learning Engineering principles with Python and MLFlow",
-          "minutes": 43
+          "src": "pt",
+          "embed": "https://videos.alexhyett.com/videos/embed/czCBwYQS7Arpyo6BWZLER9",
+          "title": "SOLID Principles: Do You Really Understand Them?",
+          "minutes": 7
+        },
+        {
+          "src": "pt",
+          "embed": "https://phpc.tv/videos/embed/w2YsPAStpjobYrELJraCGT",
+          "title": "From Good To SOLID: How to Become a Better PHP Developer? - Katerina Trajchevska - PHP UK 2019",
+          "minutes": 34
         }
       ]
     },
@@ -184,28 +142,22 @@
           "minutes": 9
         },
         {
-          "src": "pt",
-          "embed": "https://watch.softinio.com/videos/embed/dqkfvcbeRnFvhSaCj94YBJ",
-          "title": "Down the Wabbit Hole - Some Haskell Design Patterns in Machine Learning Engineering by Chris McKinlay",
-          "minutes": 54
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xamo9ci",
+          "title": "Architecture Day 04: Diving into Creational Design Patterns",
+          "minutes": 12
         },
         {
-          "src": "pt",
-          "embed": "https://phpc.tv/videos/embed/sa2ZbdAaw7CLvSiDiPev88",
-          "title": "Architecture Design Patterns for PHP",
-          "minutes": 56
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xa7gszi",
+          "title": "Architecture Day 05: Exploring Structural Design Patterns",
+          "minutes": 12
         },
         {
-          "src": "pt",
-          "embed": "https://phpc.tv/videos/embed/vgnEPquwhHq39hchuPQq9z",
-          "title": "Beyond design patterns and principles - writing good OO code - Matthias Noback - Forum PHP 2018",
-          "minutes": 41
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/grtvco-The_Circadian_Code_-_Optimize_your_Brain_Food_and_Sleep_Patterns_with_Dr._Satchin_Panda",
-          "title": "The Circadian Code: Optimize your Brain, Food and Sleep Patterns with Dr. Satchin Panda",
-          "minutes": 21
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xamo9bq",
+          "title": "Architecture Day 06: Behavioral Design Patterns Overview",
+          "minutes": 16
         }
       ]
     },
@@ -217,33 +169,21 @@
       "videos": [
         {
           "src": "pt",
-          "embed": "https://videos.danksquad.org/videos/embed/57c0d8a6-32ca-48bb-b940-5ebb2770f4df",
-          "title": "\"Clean\" Code, Horrible Performance",
-          "minutes": 23
+          "embed": "https://phpc.tv/videos/embed/jLoeopLZUznbqqk721MRY3",
+          "title": "Testing Legacy Code: Safe Refactoring - Katy Ereira - PHP UK 2020",
+          "minutes": 40
         },
         {
           "src": "pt",
-          "embed": "https://phpc.tv/videos/embed/4jaTK3DkDq5im2GE9X74ih",
-          "title": "[VOD] EMERGENCY: CLEAN CODE in 2025",
-          "minutes": 58
+          "embed": "https://videos.devteams.at/videos/embed/n8TDBBWWPJxKaySi7yArxC",
+          "title": "Java Refactoring: Honest and Complete Names",
+          "minutes": 15
         },
         {
           "src": "pt",
-          "embed": "https://phpc.tv/videos/embed/9aqGcyJTQjwvi28bJ6CdwW",
-          "title": "The Action Pattern Is Key to Clean Code",
-          "minutes": 10
-        },
-        {
-          "src": "pt",
-          "embed": "https://phpc.tv/videos/embed/x2jubJAmBEoBsj9VEhBC9w",
-          "title": "Oct 2017 Austin PHP Meetup - A Journey Toward Clean Code and Enjoyment",
-          "minutes": 53
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x9lqmea",
-          "title": "Master Debugging with xxd: Inspect Program Output at a Byte Level for Automation & Clean Code!",
-          "minutes": 13
+          "embed": "https://videos.devteams.at/videos/embed/x4s6tn5cJigdm84qpARgpe",
+          "title": "Refactoring: Inverting a Dependency",
+          "minutes": 22
         }
       ]
     },
@@ -254,34 +194,16 @@
       "difficulty": 3,
       "videos": [
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/Agilehelpline-AgileStrategyManifesto190",
-          "title": "Agile Strategy Manifesto",
-          "minutes": 4
+          "src": "pt",
+          "embed": "https://tube.tchncs.de/videos/embed/iCL3s2GUo75zVJNznnUwvx",
+          "title": "Rik Marselis Testing and Quality - Live from",
+          "minutes": 31
         },
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/7minPowerSpeech",
-          "title": "CNN Programming Strategy Analysis",
-          "minutes": 7
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/roulette-xl-pro-v-2-3-premium-roulette-1e4",
-          "title": "ROULETTE SOFTWARE ROULETTE STRATEGY",
-          "minutes": 27
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x7zw6nm",
-          "title": "Pool testing – a new strategy",
-          "minutes": 6
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x876w18",
-          "title": "We need to change our testing strategy, pandemic management: ICMR",
-          "minutes": 3
+          "src": "pt",
+          "embed": "https://cuddly.tube/videos/embed/wRCWe3V6U8o9LAN61boWpv",
+          "title": "Efficient Integration Testing in Go: A Case Study on Dapr",
+          "minutes": 26
         }
       ]
     },
@@ -293,27 +215,15 @@
       "videos": [
         {
           "src": "pt",
-          "embed": "https://videos.trom.tf/videos/embed/dsaf5UmbcQ6bG3ZUkeCJMa",
-          "title": "Software freedom day @hsbxl - Free software in robotics: build your own autonomous systems (Arne Baeyens)",
-          "minutes": 55
+          "embed": "https://peertube.wtf/videos/embed/7sN1Yh34mqWqU2VaDwvq1U",
+          "title": "Python – Debugging in Visual Studio Code",
+          "minutes": 4
         },
         {
           "src": "pt",
-          "embed": "https://video.igem.org/videos/embed/6yU2ibWg44GL6kkakqYCQb",
-          "title": "Systematic Engineering of Yarrowia lipolytica for 7-Dehydrocholesterol Production",
-          "minutes": 8
-        },
-        {
-          "src": "pt",
-          "embed": "https://video.igem.org/videos/embed/8B9J4ue1ZS5QfhuJDP72Pu",
-          "title": "SYSU-Software: BioRocket: Systematic Discovery of Novel Protein Delivery Systems... (2023) - Team Presentation [English]",
-          "minutes": 15
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x2ml9jc",
-          "title": "EPIC PICKUP!  RARE PS2 Sony Playstation 2 Test Debugging Station Debug DTL-H30001 Console System",
-          "minutes": 3
+          "embed": "https://phpc.tv/videos/embed/vpjqQb2jMakZy4KDgRgzsd",
+          "title": "PHP UK Conference 2018 - Mark Niebergall -Debugging PHP with Xdebug",
+          "minutes": 49
         }
       ]
     },
@@ -325,21 +235,15 @@
       "videos": [
         {
           "src": "pt",
-          "embed": "https://peertube.watch/videos/embed/7iSzQte4pjfSSkJxW4rpS1",
-          "title": "Feeding ML models with the data from the databases in real-time",
-          "minutes": 12
+          "embed": "https://video.hardlimit.com/videos/embed/prZz2CKhtCdn5cs9YzNAVK",
+          "title": "Database Design for Beginners - RailsConf 2019",
+          "minutes": 39
         },
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/Redwood_Center_2007_04_17_Steve_Waydo",
-          "title": "Steve Waydo: Sparse Coding in the Human MTL: Experimental Results and Computational Modeling",
-          "minutes": 59
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/EuroPython_2015_NUqYduic",
-          "title": "[EuroPython 2015] Holger Peters - Using Scikit-Learn's interface for turning Spaghetti Data Science into Maintainable Software",
-          "minutes": 33
+          "src": "pt",
+          "embed": "https://tv.404again.com/videos/embed/2zKLJj4t92twwLbkj6Qffc",
+          "title": "The Biggest Database Design Mistake",
+          "minutes": 9
         }
       ]
     },
@@ -350,10 +254,10 @@
       "difficulty": 4,
       "videos": [
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/hak5_8x18",
-          "title": "hak5 8x18: Using Screen in Linux, Motion Detection Webcam Software, and QT Interface Design",
-          "minutes": 26
+          "src": "pt",
+          "embed": "https://phpc.tv/videos/embed/qBJkgTBVii5n3xPRN93zJz",
+          "title": "Aphorisms of API Design - Larry Garfield - Forum PHP 2013",
+          "minutes": 44
         },
         {
           "src": "ia",
@@ -362,22 +266,10 @@
           "minutes": 44
         },
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/Twit_Coding_101_73",
-          "title": "Coding 101 73: iOS User Interface Elements",
-          "minutes": 56
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/7.applicationprogramminginterfacesapisexplained",
-          "title": "7. Application Programming Interfaces ( APIs) Explained",
-          "minutes": 9
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/the-complete-2023-web-development-bootcamp-25-apis-application-programming-interfaces",
-          "title": "The Complete 2023 Web Development Bootcamp (25 - APIs - Application Programming Interfaces)",
-          "minutes": 9
+          "src": "pt",
+          "embed": "https://video.infosec.exchange/videos/embed/h4oiyBWVUPVhKUpJwqT3Da",
+          "title": "A Basic REST API",
+          "minutes": 25
         }
       ]
     },
@@ -389,9 +281,15 @@
       "videos": [
         {
           "src": "ia",
-          "embed": "https://archive.org/embed/ytw8yWZks_k70",
-          "title": "Programming in Go: Concurrency tips",
-          "minutes": 7
+          "embed": "https://archive.org/embed/Europython_2019_ElHcaVnW",
+          "title": "[EuroPython 2019] Samuel Colvin - Python's Parallel Programming Possibilities - 4 levels of concurrency",
+          "minutes": 32
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Europython_2017_Sa9FeEC1",
+          "title": "[EuroPython 2017] Michal Wysokinski - Running Python code in parallel and asynchronously",
+          "minutes": 43
         }
       ]
     },
@@ -402,28 +300,10 @@
       "difficulty": 4,
       "videos": [
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/NPTEL-MechEngr-Design_and_Optimization_of_Energ",
-          "title": "NPTEL Lectures: Mechanical Engineering - Design and Optimization of Energy systems",
-          "minutes": 50
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/NPTEL-ElecCommEngr-Circuits_for_Analog_System_D",
-          "title": "NPTEL Lectures: Electronics and Communication Engineering - Circuits for Analog System Design",
-          "minutes": 59
-        },
-        {
           "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x9jytx2",
-          "title": "System Design Interview: Design Ticketmaster w/ a Ex-Meta Staff Engineer",
-          "minutes": 59
-        },
-        {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x21l615",
-          "title": "System Analysis and Design Tutorial | Systems Development  Life Cycle (SDLC) | Waterfall Method, Parallel development method, Phased development method, System prototyping, Design prototyping, and Agile development",
-          "minutes": 21
+          "embed": "https://www.dailymotion.com/embed/video/xaavuvm",
+          "title": "Architecture Day 16: Scalability Patterns",
+          "minutes": 12
         }
       ]
     },
@@ -440,28 +320,16 @@
           "minutes": 49
         },
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/exploring-the-remarkable-regenerative-patterns-and-practices-of-the-internet-eng",
-          "title": "Exploring the Remarkable Regenerative Patterns and Practices of the Internet Engineering Task Force (IETF) (Young, Waterbury)",
-          "minutes": 51
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/five-must-have-code-patterns-for-your-godot-game-feat.-play-with-furcifer-1080p",
-          "title": "Five Must Have Code Patterns for Your Godot Game (feat. @PlayWithFurcifer)",
-          "minutes": 12
-        },
-        {
-          "src": "ia",
-          "embed": "https://archive.org/embed/Europython_2019_83CDZBLR",
-          "title": "[EuroPython 2019] Radoslav Georgiev - Software patterns for productive teams",
+          "src": "pt",
+          "embed": "https://tube.tchncs.de/videos/embed/npoQU4eYc52ewhVtwj6jEn",
+          "title": "Architecture and Organization: Inverse Conway and Team Topologies",
           "minutes": 44
         },
         {
           "src": "pt",
-          "embed": "https://phpc.tv/videos/embed/sa2ZbdAaw7CLvSiDiPev88",
-          "title": "Architecture Design Patterns for PHP",
-          "minutes": 56
+          "embed": "https://tube.tchncs.de/videos/embed/qYpbspX4xLptb4AS3EDwS7",
+          "title": "Why You Might Fail With Domain-driven Design (Wordwide Software Architecture Summit 23)",
+          "minutes": 28
         }
       ]
     },
@@ -478,16 +346,16 @@
           "minutes": 12
         },
         {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x8knb55",
-          "title": "Software Engineer  Hits Swiggy Delivery Boy And Current Poll _ Alwal  _ Secunderabad _ V6 News",
-          "minutes": 5
+          "src": "ia",
+          "embed": "https://archive.org/embed/SeaGL2020-Cameron_Bielstein-Building_Free_CI_CD_with_GitHub_Actions",
+          "title": "Building Free CI/CD with GitHub Actions",
+          "minutes": 22
         },
         {
-          "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/xby8zvq",
-          "title": "GSP521 | Secure Software Delivery: Challenge Lab | Google Cloud DevSecOps",
-          "minutes": 9
+          "src": "pt",
+          "embed": "https://peertube.watch/videos/embed/3mU8gXxePueEB9XxqQuQJu",
+          "title": "Streamlining Developer Experience: The Power of CI/CD Standardization and Interoperability",
+          "minutes": 33
         }
       ]
     },
@@ -496,7 +364,14 @@
       "technical": "Code says how; docs and design records say why. READMEs, architecture notes and decision logs carry the context that keeps a codebase understandable as people come and go.",
       "simple": "Writing down the why, so the next engineer inherits understanding, not a mystery.",
       "difficulty": 5,
-      "videos": []
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://peertube.watch/videos/embed/e2UkmpFPSpt6M6UuAqAGx6",
+          "title": "Style as code: Using open source tooling to codify technical documentation style",
+          "minutes": 24
+        }
+      ]
     },
     {
       "title": "Working on a team",
@@ -511,22 +386,22 @@
           "minutes": 42
         },
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/Redmonk-6thSenseAndJIRA805",
-          "title": "Improving Agile Development Teams with 6th Sense Analytics and Atlassian JIRA",
-          "minutes": 26
+          "src": "pt",
+          "embed": "https://phpc.tv/videos/embed/rr1tnPqE96eDVsJAZSbxKt",
+          "title": "PHP UK Conference 2017 - Hannes Van De Vreken - Code Review Beyond Code Style",
+          "minutes": 53
         },
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/nbpy23-Make_Your_Engineering_Team_A_Fabulous_Place_for_Programmers_with_ADHD_and_Autism",
-          "title": "Make Your Engineering Team A Fabulous Place for Programmers with ADHD and Autism",
-          "minutes": 23
+          "src": "pt",
+          "embed": "https://videos.devteams.at/videos/embed/2BKu8TDU9fT5S3TKn7Tint",
+          "title": "Communicate Design Ideas: Pair Programming / Mob Programming is Knowledge Tranfer",
+          "minutes": 8
         },
         {
-          "src": "ia",
-          "embed": "https://archive.org/embed/Europython_2019_83CDZBLR",
-          "title": "[EuroPython 2019] Radoslav Georgiev - Software patterns for productive teams",
-          "minutes": 44
+          "src": "pt",
+          "embed": "https://tube.kockatoo.org/videos/embed/ahDxBDz1nMYU6eBn6EqoZr",
+          "title": "Aniketh Girish - Strengthen Code Review Culture rm -rf \"Toxic Behaviors\" - Akademy 2019",
+          "minutes": 28
         }
       ]
     },
@@ -538,9 +413,9 @@
       "videos": [
         {
           "src": "dm",
-          "embed": "https://www.dailymotion.com/embed/video/x4czuv",
-          "title": "Investment Portfolio Management Software",
-          "minutes": 5
+          "embed": "https://www.dailymotion.com/embed/video/x8jyqqf",
+          "title": "What is Project | Project management | Agile | Scrum | Software project management with JIRA #1",
+          "minutes": 10
         }
       ]
     }

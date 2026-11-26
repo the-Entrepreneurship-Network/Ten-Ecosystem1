@@ -274,12 +274,252 @@ async function getJson(url) {
 /* Judged by hand                                                      */
 /* ------------------------------------------------------------------ */
 
-// Videos a person watched the title of and rejected as off-topic for the
-// topic they matched (wrong meaning, neighbouring topic, too generic, or
-// not teaching). A re-run never picks them again.
+// Videos a person read the title of and rejected for the topic they had
+// matched (wrong meaning, neighbouring topic, too generic, not teaching),
+// as "<slug>#<topic index> <embed url>". A re-run never puts them back on
+// that topic.
 const REJECT = new Set([
-    // @@REJECT@@
+    // 238 earlier picks judged off-topic in the review of 2026-11:
+    'artificial-intelligence#0 https://archive.org/embed/disruptivetechs-ai',
+    'artificial-intelligence#0 https://archive.org/embed/isoc-no-ai',
+    'artificial-intelligence#0 https://archive.org/embed/pyconza2018-Guide_to_choose_right_deep_Learning_framework_for_your_AI_project',
+    'artificial-intelligence#0 https://archive.org/embed/sexfuture',
+    'artificial-intelligence#1 https://archive.org/embed/neural-prophet-a-powerful-ai-framework-for-time-series-models',
+    'artificial-intelligence#10 https://video.osgeo.org/videos/embed/7BXS5TCfRJjCUZU5BiavdA',
+    'artificial-intelligence#11 https://archive.org/embed/pyconza2017-Getting_more_out_of_your_pandas',
+    'artificial-intelligence#11 https://video.osgeo.org/videos/embed/tmj5ko9gP6JH8DUzFMTWPV',
+    'artificial-intelligence#11 https://www.dailymotion.com/embed/video/x96ac8a',
+    'artificial-intelligence#16 https://archive.org/embed/disruptivetechs-ai',
+    'artificial-intelligence#17 https://archive.org/embed/Europython_2019_YWujJSHp',
+    'artificial-intelligence#3 https://video.osgeo.org/videos/embed/dw5JMMJg8G5pTDrCcegQHR',
+    'artificial-intelligence#5 https://archive.org/embed/Europython_2019_3z5E8ZHb',
+    'artificial-intelligence#5 https://videos.spacebar.ca/videos/embed/qmrRP8P6FxRJSqGbRm7VKe',
+    'business-development#0 https://www.dailymotion.com/embed/video/x6l5p3i',
+    'business-development#1 https://www.dailymotion.com/embed/video/x6l5hwx',
+    'business-development#11 https://archive.org/embed/InboundMarketing-IMSChrisBroganPostH264ForIPodVideoAndIPhone640x480964',
+    'business-development#11 https://archive.org/embed/httpsbit.ly3dspmg2',
+    'business-development#11 https://video.fraxoweb.com/videos/embed/4XhWuk4wb6xACunVYJf6oh',
+    'business-development#11 https://video.fraxoweb.com/videos/embed/jmcw6ungopQejqWRqaRBcR',
+    'business-development#12 https://archive.org/embed/osen2017-emergingmarket',
+    'business-development#12 https://diler.tube/videos/embed/eFZyMw1mPcQLQkGh2MJtSF',
+    'business-development#12 https://peertube.dngr.us/videos/embed/71ufYuRYfkPBbjKvqkfZ8K',
+    'business-development#12 https://peertube.dngr.us/videos/embed/uCBetsXg6NsNJQkhXX4CmM',
+    'business-development#14 https://archive.org/embed/DrupalconDc2009-BusinessAnalyticsWithViews',
+    'business-development#18 https://peertube.f-si.org/videos/embed/81951ef3-5914-4d21-99cf-b8019e698711',
+    'business-development#18 https://peertube.kaleidos.net/videos/embed/ipS1CgVtShpPqSz7fdmUFS',
+    'business-development#18 https://tv.dyne.org/videos/embed/iLHoU4f7qEnVbqt9DJ7yFV',
+    'business-development#18 https://video.fraxoweb.com/videos/embed/4NGCKoQ9XSSjT1192p37hu',
+    'business-development#18 https://videos.shmalls.pw/videos/embed/7SbiTRer1pwCdXrBPPCsz9',
+    'business-development#20 https://archive.org/embed/nina-and-the-neurons-go-eco-9.-monkey-business',
+    'business-development#20 https://archive.org/embed/nina-and-the-neurons-go-eco-monkey-business-jungle-and-spotty',
+    'business-development#20 https://archive.org/embed/nina-and-the-neurons-go-eco-monkey-business-orinoco-and-the-big-black-umbrella-and-painting',
+    'business-development#4 https://www.dailymotion.com/embed/video/x59wh0',
+    'business-development#4 https://www.dailymotion.com/embed/video/x7te3hh',
+    'business-development#9 https://archive.org/embed/InboundMarketing-IMSBrentLearyPostH264ForIPodVideoAndIPhone640x480930',
+    'business-development#9 https://www.dailymotion.com/embed/video/x7tftz0',
+    'cyber-security#11 https://archive.org/embed/Day1Part9DynamicMalwareAnalysis',
+    'cyber-security#11 https://archive.org/embed/Day2Part1ReverseEngineeringMalware',
+    'cyber-security#11 https://archive.org/embed/Day2Part2ReverseEngineeringMalware',
+    'cyber-security#11 https://makertube.net/videos/embed/pUNCnzgHdUQhntsbyXzUsd',
+    'cyber-security#13 https://archive.org/embed/Haktip_25',
+    'cyber-security#13 https://archive.org/embed/gov.house.hbs.hrs02INT2212_070118.2',
+    'cyber-security#14 https://peertube.dngr.us/videos/embed/8cB52Hkpm9sdVjg87ZPttk',
+    'cyber-security#18 https://archive.org/embed/SocialSe1962',
+    'cyber-security#18 https://archive.org/embed/YourSoci1940',
+    'cyber-security#18 https://videos.spacebar.ca/videos/embed/mBNVRq3HrzmFMMPsceWuAV',
+    'cyber-security#2 https://archive.org/embed/Day2Part1ReverseEngineeringMalware',
+    'cyber-security#2 https://archive.org/embed/Day2Part2ReverseEngineeringMalware',
+    'cyber-security#6 https://archive.org/embed/bbs-reading-group-20230604-Fang2010a',
+    'cyber-security#7 https://archive.org/embed/topdns-dnsai',
+    'cyber-security#8 https://www.dailymotion.com/embed/video/x27hfns',
+    'data-science#0 https://peertube.watch/videos/embed/wKUmEyyruHMx2yi9G28m4T',
+    'data-science#0 https://toobnix.org/videos/embed/b4eLjcLo9vcewVTzrv95L8',
+    'data-science#10 https://archive.org/embed/Day1Part13ReverseEngineeringMalware',
+    'data-science#10 https://archive.org/embed/Day1Part14ReverseEngineeringMalware',
+    'data-science#10 https://archive.org/embed/Day1Part15ReverseEngineeringMalware',
+    'data-science#10 https://archive.org/embed/Day1Part9ReverseEngineeringMalware',
+    'data-science#11 https://peertube.openstreetmap.fr/videos/embed/3eQMKBzoVo3WHCKZsGjHZB',
+    'data-science#11 https://www.dailymotion.com/embed/video/xa5vh4o',
+    'data-science#12 https://video.osgeo.org/videos/embed/dmu5xdDZ7J6Kbh8QUcgmZz',
+    'data-science#12 https://videos.spacebar.ca/videos/embed/qmrRP8P6FxRJSqGbRm7VKe',
+    'data-science#13 https://www.dailymotion.com/embed/video/x5rqiuy',
+    'data-science#3 https://www.dailymotion.com/embed/video/xb5x7ta',
+    'data-science#5 https://archive.org/embed/how-to-use-conditional-highlighting-in-numbers-for-data-visualization-macmost-2907',
+    'data-science#5 https://video.blender.org/videos/embed/aVvducRgN9L9Nc4ny8oiEU',
+    'data-science#5 https://video.matomocamp.org/videos/embed/496b49e5-b045-4e74-a8ab-165f05bb7e87',
+    'data-science#5 https://video.osgeo.org/videos/embed/rbt6rr7n5ogxRbqmbDSQUk',
+    'data-science#9 https://archive.org/embed/FlowAnalysisP10',
+    'data-science#9 https://archive.org/embed/FlowAnalysisP7',
+    'data-science#9 https://archive.org/embed/FlowAnalysisP8',
+    'data-science#9 https://archive.org/embed/FlowAnalysisP9',
+    'data-science#9 https://tubedu.org/videos/embed/wdnPNtFUSmeGxEiVen8sEm',
+    'devops-with-aws#0 https://archive.org/embed/SeaGL2021-Bri_Hatch-SSH_from_your_DevOps_CI_CD_securely',
+    'devops-with-aws#0 https://archive.org/embed/auto-devops',
+    'devops-with-aws#0 https://archive.org/embed/dodboise2016-industryofcool',
+    'devops-with-aws#0 https://archive.org/embed/lca2019-Oracle_Public_Cloud_DevOps_OpenStack_CICD_Infrastructure',
+    'devops-with-aws#0 https://archive.org/embed/lcza18-Linux_and_Open_Source_for_SMEs_DevOps',
+    'devops-with-aws#1 https://tilvids.com/videos/embed/a1CGAwt3fush7XGwHDvabC',
+    'devops-with-aws#1 https://tilvids.com/videos/embed/cCG1Whk6bAvqEJrBbt8hSB',
+    'devops-with-aws#1 https://tube.devwithzachary.com/videos/embed/ntbSZNoxjzCgVuJa1EHdEV',
+    'devops-with-aws#10 https://archive.org/embed/chicagolug-2020-05-02-sten-turpin-k3s',
+    'devops-with-aws#10 https://archive.org/embed/nodevember16-Docker_for_Devs_Why_you_should_care_about_containers',
+    'devops-with-aws#10 https://archive.org/embed/pyconza2017-Deploying_Django_web_applications_in_Docker_containers',
+    'devops-with-aws#15 https://archive.org/embed/BSidesDC2014-Day2-DoctorDockerInfrastructureImmunity',
+    'devops-with-aws#15 https://archive.org/embed/day1_1715_A_Behind-the-Scenes_Peek_at_Worlds_First_Linux-Based_Laptop_Orchestra_',
+    'devops-with-aws#15 https://archive.org/embed/lca2019-Oracle_Public_Cloud_DevOps_OpenStack_CICD_Infrastructure',
+    'devops-with-aws#16 https://archive.org/embed/pyconza2019-migrating-to-python-3-using-docker-for-your-cicd-pipeline',
+    'devops-with-aws#17 https://archive.org/embed/pyconza2017-Deploying_Django_web_applications_in_Docker_containers',
+    'devops-with-aws#19 https://archive.org/embed/nodevember16-Dockerized_Node_Application_Pipeline_DockerDroneRancher_Oh_My',
+    'devops-with-aws#19 https://www.dailymotion.com/embed/video/x9dbl0c',
+    'devops-with-aws#2 https://www.dailymotion.com/embed/video/xbzgh36',
+    'devops-with-aws#3 https://archive.org/embed/automatically-organize-files-with-an-automator-folder-action-shell-script-macmost-2262',
+    'devops-with-aws#3 https://archive.org/embed/creating-an-information-notification-with-shell-scripts-and-automator-macmost-2185',
+    'devops-with-aws#6 https://archive.org/embed/auto-devops',
+    'devops-with-aws#7 https://archive.org/embed/SeaGL2024-Bash_Variable_Expansion',
+    'devops-with-aws#7 https://video.osgeo.org/videos/embed/ahs7oABEg56rWD5gi9MY6B',
+    'devops-with-aws#7 https://video.osgeo.org/videos/embed/pDai2KjdjUWSibacnZ7TSA',
+    'devops-with-aws#8 https://www.dailymotion.com/embed/video/x86eea5',
+    'devops-with-aws#9 https://www.dailymotion.com/embed/video/xaxkx0i',
+    'devops-with-aws#9 https://www.dailymotion.com/embed/video/xbk61qi',
+    'finance#0 https://archive.org/embed/BankingF',
+    'finance#0 https://autonomy.tube/videos/embed/45636746-de62-4b88-a481-408af5b81886',
+    'finance#0 https://autonomy.tube/videos/embed/ae4bdc91-10e2-4b18-9c95-caeb11d7a4ab',
+    'finance#0 https://peertube.mesnumeriques.fr/videos/embed/nm94gPv2WcsKyskUNhP9Lc',
+    'finance#12 https://www.dailymotion.com/embed/video/x95r5a6',
+    'finance#12 https://www.dailymotion.com/embed/video/x95r5oc',
+    'finance#12 https://www.dailymotion.com/embed/video/x95tais',
+    'finance#13 https://fediverse.tv/videos/embed/9VpoqrvFWrUVW5tJAhVcVw',
+    'finance#13 https://fediverse.tv/videos/embed/rKudVPvKNwvSe22mEhBvv7',
+    'finance#16 https://archive.org/embed/BankingF',
+    'finance#16 https://videos.fsci.in/videos/embed/cZC5YuCyCnxncjpuAjTaXx',
+    'finance#16 https://videos.fsci.in/videos/embed/fozE6RBFftHjmMdemt9dKs',
+    'finance#16 https://videos.fsci.in/videos/embed/orA3Xxvij3hg7orV4HQvpi',
+    'finance#17 https://www.dailymotion.com/embed/video/x9o769w',
+    'finance#18 https://www.dailymotion.com/embed/video/x8w8sh0',
+    'finance#2 https://diler.tube/videos/embed/6Ea4p9tSjJPYsPESYnvGxj',
+    'finance#2 https://diler.tube/videos/embed/nBqwyKgardeT2T46KwpDmx',
+    'finance#2 https://peertube.dngr.us/videos/embed/wcEpdZiuK8BNS8LuWSHMMz',
+    'finance#20 https://www.dailymotion.com/embed/video/x9f655e',
+    'finance#3 https://www.dailymotion.com/embed/video/x2yfnq6',
+    'finance#3 https://www.dailymotion.com/embed/video/x91p10e',
+    'finance#4 https://tilvids.com/videos/embed/aSuCAezxkjetYuT4hEkRkf',
+    'finance#5 https://www.dailymotion.com/embed/video/x8thvko',
+    'finance#5 https://www.dailymotion.com/embed/video/x8wdrxg',
+    'finance#6 https://www.dailymotion.com/embed/video/x36dwa2',
+    'finance#6 https://www.dailymotion.com/embed/video/x7zmmc9',
+    'finance#7 https://www.dailymotion.com/embed/video/x2b0nzj',
+    'finance#7 https://www.dailymotion.com/embed/video/x6new6l',
+    'flutter-development#0 https://www.dailymotion.com/embed/video/x84e73b',
+    'flutter-development#0 https://www.dailymotion.com/embed/video/x8i8zwj',
+    'flutter-development#1 https://www.dailymotion.com/embed/video/x84e73b',
+    'flutter-development#17 https://www.dailymotion.com/embed/video/xatiaue',
+    'hr#11 https://archive.org/embed/Cubicgarden-InterviewWithChrisDibonaAtGoogleDevelopmentDay149',
+    'hr#11 https://archive.org/embed/Cubicgarden-InterviewWithEdParsonsAtGoogleDevelopmentDay564',
+    'hr#11 https://archive.org/embed/Development_in_Provincetown_-_An_Interview_with_Duane_Steele',
+    'hr#11 https://archive.org/embed/Development_in_Provincetown_-_An_Interview_with_Mary_Jo_Avellar',
+    'hr#11 https://archive.org/embed/Development_in_Provincetown_-_An_Interview_with_Sheila_Lyons',
+    'hr#19 https://video.igem.org/videos/embed/u3qXXDwxaJeq5E67bGbLd7',
+    'hr#3 https://www.dailymotion.com/embed/video/x91ep3c',
+    'hr#4 https://video.igem.org/videos/embed/ntnf6ePS8V4TsRzHGhqCGg',
+    'hr#4 https://video.igem.org/videos/embed/qPpLHiXihtTDi3yEh4Uz89',
+    'hr#4 https://video.igem.org/videos/embed/rRvUrbCm5zfyzsHk2y9adH',
+    'hr#4 https://video.igem.org/videos/embed/sKKQJZDuzyKTHapgVB2ZRz',
+    'hr#4 https://video.igem.org/videos/embed/v9NGwiSpUiMmA94dk2mMG3',
+    'hr#7 https://archive.org/embed/LawEnforcementEmployeesBenevolentAssociation',
+    'hr#9 https://archive.org/embed/AnInterviewWithSheikYakzanCirca1991AndPublicPerformanceOfSema',
+    'hr#9 https://archive.org/embed/BA_Admin_2009-WestSideStoryMusicalPerformanceAndInterview619',
+    'hr#9 https://archive.org/embed/scm-467157-fromosofundraiserinterviewsto',
+    'hr#9 https://archive.org/embed/usaodd_may_24_08',
+    'hr#9 https://archive.org/embed/usaodd_nov_4_08',
+    'java-development#15 https://videos.ijug.eu/videos/embed/87DQZqSZHQvzmbMjfM8nz3',
+    'java-development#15 https://videos.ijug.eu/videos/embed/tmFYag2aDbwgD6h7K84K6u',
+    'java-development#17 https://www.dailymotion.com/embed/video/x9265sa',
+    'java-development#20 https://videos.ijug.eu/videos/embed/aj5x4wV5XgwinwqEbhzkMi',
+    'java-development#20 https://videos.ijug.eu/videos/embed/fEfBeKPzCGHoEE81ZvdQVw',
+    'java-development#20 https://videos.ijug.eu/videos/embed/sZ6sDN63invaawXPyKqLFQ',
+    'mern-stack-development#1 https://archive.org/embed/1720TermsJavaScript_201807',
+    'mern-stack-development#1 https://archive.org/embed/Code4libJessieKeck',
+    'mern-stack-development#14 https://archive.org/embed/lca2019-Is_it_Really_that_Bad_Exploring_IoT_Camera_Security',
+    'mern-stack-development#18 https://peertube.watch/videos/embed/36f61CtPQx3wmyp5NLEhMR',
+    'mern-stack-development#5 https://archive.org/embed/lca2019-Is_it_Really_that_Bad_Exploring_IoT_Camera_Security',
+    'mern-stack-development#9 https://www.dailymotion.com/embed/video/x8lj722',
+    'python-development#0 https://archive.org/embed/ChiehIntrotoprogramminginPythonandTkinterlecture3',
+    'python-development#0 https://archive.org/embed/ChiehIntrotoprogramminginPythonnTkinterlecture4',
+    'python-development#0 https://archive.org/embed/ChiehIntrotoprogrammingwithPythonandTkinterlecture6',
+    'python-development#1 https://archive.org/embed/nbpy19-A_Gradual_Introduction_to_Types',
+    'python-development#1 https://archive.org/embed/pyohio_2024-Is_Python_Your_TYPE_of_Programming_Language_How_to_Use_Static_Typing_in_Python_with_Type',
+    'python-development#13 https://archive.org/embed/Europython_2018_HWZ9IN08',
+    'python-development#13 https://archive.org/embed/Europython_2018_PVIrGo0i',
+    'python-development#13 https://archive.org/embed/Europython_2020_XmERDgac',
+    'python-development#13 https://archive.org/embed/lca2018-Modernising_firmware_testing_on_POWER_with_Python_and_prerelease_everything',
+    'python-development#14 https://archive.org/embed/building-simple-yet-effective-apis-for-the-city-of-cape-town',
+    'python-development#14 https://archive.org/embed/pyconza2017-Better_APIs_using_GraphQL_with_Python_and_React',
+    'python-development#14 https://archive.org/embed/rapid-serverless-apis-with-python-and-aws-amplify',
+    'python-development#16 https://archive.org/embed/pyconza2018-Building_Rest_API_with_Django_Rest_Framework_2',
+    'python-development#18 https://archive.org/embed/pyconza2020-Trio-re-encoded',
+    'python-development#4 https://www.dailymotion.com/embed/video/x3ftrhl',
+    'python-development#4 https://www.dailymotion.com/embed/video/xykqlo',
+    'python-development#5 https://www.dailymotion.com/embed/video/x9o9ukg',
+    'python-development#8 https://archive.org/embed/oscw-2024-william-woodruff-x-509-path-validation-in-python',
+    'python-development#8 https://archive.org/embed/pytx19-Saturday_Keynote',
+    'python-development#8 https://www.dailymotion.com/embed/video/x8dhbuz',
+    'python-development#9 https://archive.org/embed/pyconza2019-radio-astronomy-reduction-pipelines-using-python-and-containers',
+    'python-development#9 https://archive.org/embed/pytx19-Introduction_to_Exploratory_Data_Analysis_with_the_SciAnalysis_Python_Package',
+    'software-engineering#0 https://www.dailymotion.com/embed/video/xby9pzi',
+    'software-engineering#10 https://archive.org/embed/7minPowerSpeech',
+    'software-engineering#10 https://archive.org/embed/Agilehelpline-AgileStrategyManifesto190',
+    'software-engineering#11 https://video.igem.org/videos/embed/6yU2ibWg44GL6kkakqYCQb',
+    'software-engineering#11 https://video.igem.org/videos/embed/8B9J4ue1ZS5QfhuJDP72Pu',
+    'software-engineering#11 https://videos.trom.tf/videos/embed/dsaf5UmbcQ6bG3ZUkeCJMa',
+    'software-engineering#12 https://peertube.watch/videos/embed/7iSzQte4pjfSSkJxW4rpS1',
+    'software-engineering#13 https://archive.org/embed/Twit_Coding_101_73',
+    'software-engineering#13 https://archive.org/embed/hak5_8x18',
+    'software-engineering#15 https://www.dailymotion.com/embed/video/x21l615',
+    'software-engineering#16 https://archive.org/embed/Europython_2019_83CDZBLR',
+    'software-engineering#16 https://archive.org/embed/exploring-the-remarkable-regenerative-patterns-and-practices-of-the-internet-eng',
+    'software-engineering#16 https://archive.org/embed/five-must-have-code-patterns-for-your-godot-game-feat.-play-with-furcifer-1080p',
+    'software-engineering#17 https://www.dailymotion.com/embed/video/xby8zvq',
+    'software-engineering#19 https://archive.org/embed/Europython_2019_83CDZBLR',
+    'software-engineering#19 https://archive.org/embed/Redmonk-6thSenseAndJIRA805',
+    'software-engineering#19 https://archive.org/embed/nbpy23-Make_Your_Engineering_Team_A_Fabulous_Place_for_Programmers_with_ADHD_and_Autism',
+    'software-engineering#2 https://tilvids.com/videos/embed/82rJbedwEZegWoZfwiALqM',
+    'software-engineering#20 https://www.dailymotion.com/embed/video/x4czuv',
+    'software-engineering#4 https://www.dailymotion.com/embed/video/x5qkr08',
+    'software-engineering#6 https://peertube.lagbag.com/videos/embed/wu93Lckww5AbmuQeW6LBY4',
+    'software-engineering#6 https://toobnix.org/videos/embed/augR7u7F75FZoxsBT2Fwwn',
+    'software-engineering#6 https://tubedu.org/videos/embed/7CPAowLLwFJvdqWHNqX7Qp',
+    'software-engineering#6 https://tubedu.org/videos/embed/pqgRag1nscwRhMV6bbjaHi',
+    'software-engineering#7 https://archive.org/embed/pyconza2019-machine-learning-engineering-principles-with-python-and-mlflow',
+    'software-engineering#8 https://watch.softinio.com/videos/embed/dqkfvcbeRnFvhSaCj94YBJ',
+    'software-engineering#9 https://www.dailymotion.com/embed/video/x9lqmea',
+    'space-intern#0 https://solarsystem.video/videos/embed/1XanUu2QPwJLaCfG9Qoqaf',
+    'space-intern#0 https://solarsystem.video/videos/embed/6tikJvULLfZx7vbgAYCZyH',
+    'space-intern#0 https://tube.mucs.club/videos/embed/9qGGuK288f88wEW2AVptb4',
+    'space-intern#11 https://www.dailymotion.com/embed/video/x8gol59',
+    'space-intern#11 https://www.dailymotion.com/embed/video/xb2rumi',
+    'space-intern#11 https://www.dailymotion.com/embed/video/xb3hpi6',
+    'space-intern#12 https://www.dailymotion.com/embed/video/x8jpux3',
+    'space-intern#14 https://archive.org/embed/DigitalspaceSpace.comVideobootprintsOnAsteroidsHumanCrewedMissionTo',
+    'space-intern#14 https://archive.org/embed/SpaceRoverEpisodeIINeHumanisCredeAudioVersion',
+    'space-intern#15 https://www.dailymotion.com/embed/video/xrsuib',
+    'space-intern#17 https://astrotube.obspm.fr/videos/embed/3zjdBaiX78h6AzYgN5Cm2q',
+    'space-intern#17 https://peertube.dngr.us/videos/embed/h2ddbsnKNwqtQ8tf4UweLv',
+    'space-intern#2 https://diler.tube/videos/embed/pvMNwSpHetYvcuoys2UGG5',
+    'space-intern#3 https://archive.org/embed/FB-219',
+    'space-intern#3 https://www.dailymotion.com/embed/video/x2ygngm',
+    'space-intern#8 https://makertube.net/videos/embed/3nAGnHu7MptgT4Xao4uHTe',
+    'space-intern#8 https://www.dailymotion.com/embed/video/x913gy4',
+    'space-intern#9 https://peertube.openstreetmap.fr/videos/embed/uGPyREvudjUUbZWKsnqBYy',
+    'space-intern#9 https://video.osgeo.org/videos/embed/gbZGVNqA9Ffu8PsBqB6XgU',
+    'space-intern#9 https://video.osgeo.org/videos/embed/uRhDyEAkuSopyje5w8cwZr',
+    'space-intern#9 https://video.osgeo.org/videos/embed/vB4b7CxPtSFsGH5SGoKWwa',
+    'venture-capital#0 https://archive.org/embed/DesertVe1958',
+    'venture-capital#0 https://archive.org/embed/coops-venture-capital-meet',
+    'venture-capital#15 https://archive.org/embed/e2c-journeys-BSW',
+    'venture-capital#2 https://archive.org/embed/TimBrunsdenAttheCuttingEdgeofFundraising',
+    'venture-capital#5 https://www.dailymotion.com/embed/video/xa4ecim',
 ]);
+const rejected = (slug, n, embed) => REJECT.has(`${slug}#${n} ${embed}`);
 
 /* ------------------------------------------------------------------ */
 /* Legal and teaching filters                                          */
@@ -545,7 +785,7 @@ function match(t, title, desc, lax) {
 const dedupeKey = (title) => tokens(title).join(' ').replace(/\b(part|pt|ep|episode)\s*\d*\b/g, '').replace(/\s+/g, ' ').trim();
 const slim = (v) => ({ src: v.src, embed: v.embed, title: v.title, minutes: v.minutes });
 
-function pick(all, keep) {
+function pick(all, keep, isRejected) {
     const seenEmbed = new Set(keep.map((v) => v.embed));
     const seenTitle = new Set(keep.map((v) => dedupeKey(v.title)));
     const ordered = [
@@ -556,7 +796,7 @@ function pick(all, keep) {
     for (const v of ordered) {
         if (out.length >= MAX_VIDEOS) break;
         const k = dedupeKey(v.title);
-        if (seenEmbed.has(v.embed) || seenTitle.has(k) || REJECT.has(v.embed)) continue;
+        if (seenEmbed.has(v.embed) || seenTitle.has(k) || isRejected(v.embed)) continue;
         seenEmbed.add(v.embed);
         seenTitle.add(k);
         out.push(slim(v));
@@ -649,7 +889,7 @@ async function main() {
             const keep = [];
             const dropped = [];
             for (const v of topic.videos || []) {
-                const why = REJECT.has(v.embed) ? 'rejected' : await legal(v);
+                const why = rejected(slug, i, v.embed) ? 'rejected' : await legal(v);
                 if (why) dropped.push({ ...slim(v), why }); else keep.push(v);
             }
             let found = [];
@@ -660,13 +900,13 @@ async function main() {
                     console.error(`[${slug} #${i + 1}] ${err.message}`);
                 }
             }
-            const videos = pick(found, keep);
+            const videos = pick(found, keep, (e) => rejected(slug, i, e));
             if (candOut) {
                 const seen = new Set(keep.map((v) => v.embed));
                 dump[slug].push({
                     n: i, title: topic.title, technical: topic.technical,
                     existing: keep.map(slim), dropped,
-                    candidates: found.filter((v) => { if (seen.has(v.embed) || REJECT.has(v.embed)) return false; seen.add(v.embed); return true; })
+                    candidates: found.filter((v) => { if (seen.has(v.embed) || rejected(slug, i, v.embed)) return false; seen.add(v.embed); return true; })
                         .map((v) => ({ ...slim(v), note: v.note || '', score: Math.round(v.score * 100) / 100 }))
                 });
             }
@@ -696,4 +936,4 @@ if (require.main === module) {
     main().catch((err) => { console.error(err); process.exit(1); });
 }
 
-module.exports = { distinctive, topicScore, contextOk, stemSet, parseRuntime, isRip, iaLicenceOk, keyTerms };
+module.exports = { distinctive, topicScore, contextOk, stemSet, parseRuntime, isRip, iaLicenceOk, keyTerms, NOT_TEACHING, REJECT, rejected };
