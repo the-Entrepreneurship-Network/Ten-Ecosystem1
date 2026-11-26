@@ -25,7 +25,7 @@ module.exports = [
             'please share my employee id', 'kindly provide my employee id', 'not yet received my employee id',
             'i didn\'t get employee id till now', 'still no employee id', 'did not receive employee id yet',
             'please generate my employee id', 'assign me a new employee id', 'kindly generate employee id for my internship',
-            'request for employee id', 'could you please share my employee id to complete my onboarding', 'i joined as an intern please share my employee id'
+            'i filled the google form but did not get employee id', 'request for employee id', 'could you please share my employee id to complete my onboarding', 'i joined as an intern please share my employee id'
         ],
         answer: 'You get your Employee ID the moment you register. It looks like TEN/WEB/1005, and you will find it in ' +
             'your welcome email and at the top of your dashboard.\n\n' +
@@ -183,7 +183,9 @@ module.exports = [
         question: 'How does attendance work?',
         examples: [
             'how does attendance work', 'how to mark attendance', 'my attendance is not marked', 'attendance system',
-            'attendance kaise lagaye', 'what is the attendance rule', 'is attendance compulsory', 'attendance percentage'
+            'attendance kaise lagaye', 'what is the attendance rule', 'is attendance compulsory', 'attendance percentage',
+            'how to fill the attendance form', 'where is the attendance form', 'i want to fill the attendance form',
+            'who fills the attendance form details', 'attendance google form'
         ],
         answer: "Attendance is marked every day from Monday to Saturday (Sundays don't count). On your dashboard, open " +
             '🪪 Attendance:\n' +
