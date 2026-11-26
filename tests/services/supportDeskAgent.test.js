@@ -402,6 +402,10 @@ describe('Copy to the team inbox (SUPPORT_COPY_TO)', () => {
 });
 
 describe('Waking the bug agent (BUG_AGENT_FIRE_URL, BUG_AGENT_TOKEN)', () => {
+    beforeEach(() => {
+        process.env.BUG_AGENT_FIRE_URL = 'https://api.anthropic.test/fire';
+        process.env.BUG_AGENT_TOKEN = 'token';
+    });
     afterEach(() => {
         delete process.env.SUPPORT_COPY_TO;
         delete process.env.BUG_AGENT_FIRE_URL;
@@ -452,7 +456,11 @@ describe('Waking the bug agent (BUG_AGENT_FIRE_URL, BUG_AGENT_TOKEN)', () => {
 });
 
 describe('Claude, Gemini (free) or Off', () => {
-    afterEach(() => { delete process.env.SUPPORT_COPY_TO; });
+    beforeEach(() => {
+        process.env.BUG_AGENT_FIRE_URL = 'https://api.anthropic.test/fire';
+        process.env.BUG_AGENT_TOKEN = 'token';
+    });
+    afterEach(() => { delete process.env.SUPPORT_COPY_TO; delete process.env.BUG_AGENT_FIRE_URL; delete process.env.BUG_AGENT_TOKEN; });
     const report = () => mail({ subject: 'task journey', body: 'my task journey page is not working' });
     const withRaw = (gmail) => { gmail.getRaw = jest.fn(async () => b64('x')); return gmail; };
 
@@ -487,32 +495,61 @@ describe('Claude, Gemini (free) or Off', () => {
         expect(gmail.sent.find((m) => /^To: growth@/m.test(m.raw)).raw).toContain('Help desk: drafted (Gemini: vague)');
     });
 
-    test('with Claude on, Gemini answers first and Claude is woken only for a real bug', async () => {
+    test('with Claude on, exactly one side replies: the free side when it can, otherwise only Claude', async () => {
         process.env.SUPPORT_COPY_TO = 'growth@entrepreneurshipnetwork.net';
-        let ctx = load('draft');
-        let gmail = withRaw(fakeGmail({ messages: [report()] }));
-        let wake = jest.fn(async () => 'woken');
-        await ctx.agent.runOnce({ gmail, wake });
-        expect(ctx.SupportTicket.rows[0]).toEqual(expect.objectContaining({ action: 'drafted', reason: 'Gemini: vague' }));
-        expect(gmail.labels).toContainEqual({ threadId: 't1', add: ['Help desk/Draft ready'], remove: [] });
-        expect(wake).not.toHaveBeenCalled();
+        const run = async (setup, message) => {
+            const ctx = load('draft');
+            setup(ctx);
+            const gmail = withRaw(fakeGmail({ messages: [message] }));
+            const wake = jest.fn(async () => 'woken');
+            await ctx.agent.runOnce({ gmail, wake });
+            return { ctx, gmail, wake, ticket: ctx.SupportTicket.rows[0] };
+        };
 
-        ctx = load('draft');
-        ctx.gem.ask.mockResolvedValue({ kind: 'bug', reply: 'Thanks, the team is looking into it.' });
-        gmail = withRaw(fakeGmail({ messages: [report()] }));
-        wake = jest.fn(async () => 'woken');
-        await ctx.agent.runOnce({ gmail, wake });
-        expect(gmail.drafts[0].raw).toContain('the team is looking into it');
-        expect(wake).toHaveBeenCalledTimes(1);
+        // Gemini settles it (asks for details): Gemini replies, Claude is not woken.
+        let r = await run(() => {}, report());
+        expect(r.ticket).toEqual(expect.objectContaining({ action: 'drafted', reason: 'Gemini: vague' }));
+        expect(r.gmail.labels).toContainEqual({ threadId: 't1', add: ['Help desk/Draft ready'], remove: [] });
+        expect(r.wake).not.toHaveBeenCalled();
 
-        // No Gemini answer: Claude takes it, as before.
-        ctx = load('draft');
-        ctx.gem.ready.mockReturnValue(false);
-        gmail = withRaw(fakeGmail({ messages: [report()] }));
-        wake = jest.fn(async () => 'woken');
-        await ctx.agent.runOnce({ gmail, wake });
-        expect(ctx.SupportTicket.rows[0].action).toBe('human');
-        expect(wake).toHaveBeenCalledTimes(1);
+        // Something is broken: nothing goes out from here, and Claude is woken to reply.
+        r = await run((c) => c.gem.ask.mockResolvedValue({ kind: 'bug', reply: 'Thanks, the team is looking into it.' }), report());
+        expect(r.gmail.drafts).toHaveLength(0);
+        expect(r.ticket).toEqual(expect.objectContaining({ action: 'agent', reason: 'Gemini found a website problem' }));
+        expect(r.gmail.labels).toContainEqual({ threadId: 't1', add: ['Help desk/Bug agent'], remove: [] });
+        expect(r.gmail.sent.find((m) => /^To: growth@/m.test(m.raw)).raw).toContain('Help desk: agent (Gemini found a website problem)');
+        expect(r.wake).toHaveBeenCalledTimes(1);
+
+        // A question no saved answer fits, and not about a broken page: straight to Claude.
+        r = await run(() => {}, mail({ subject: 'marksheet', body: 'Can I upload my 12th marksheet instead of the latest semester one?' }));
+        expect(r.ctx.gem.ask).not.toHaveBeenCalled();
+        expect(r.gmail.drafts).toHaveLength(0);
+        expect(r.ticket.action).toBe('agent');
+        expect(r.wake).toHaveBeenCalledTimes(1);
+
+        // No Gemini answer: Claude takes it.
+        r = await run((c) => c.gem.ready.mockReturnValue(false), report());
+        expect(r.ticket.action).toBe('agent');
+        expect(r.wake).toHaveBeenCalledTimes(1);
+    });
+
+    test('when Claude cannot take it, people do: not set up, not responding, or no copy for it', async () => {
+        const run = async (setup) => {
+            const ctx = load('draft');
+            setup(ctx);
+            const gmail = withRaw(fakeGmail({ messages: [mail({ subject: 'marksheet', body: 'Can I upload my 12th marksheet instead of the latest semester one?' })] }));
+            const wake = jest.fn(async () => 'woken');
+            await ctx.agent.runOnce({ gmail, wake });
+            expect(ctx.SupportTicket.rows[0].action).toBe('human');
+            expect(gmail.labels).toContainEqual({ threadId: 't1', add: ['Help desk/Needs reply'], remove: [] });
+            expect(wake).not.toHaveBeenCalled();
+        };
+        process.env.SUPPORT_COPY_TO = 'growth@entrepreneurshipnetwork.net';
+        await run((c) => c.SupportDeskState.set({ down: true }));
+        await run(() => { delete process.env.BUG_AGENT_TOKEN; });
+        process.env.BUG_AGENT_TOKEN = 'token';
+        delete process.env.SUPPORT_COPY_TO;
+        await run(() => {});
     });
 
     test('if Gemini has nothing usable, the report goes to the team as before', async () => {

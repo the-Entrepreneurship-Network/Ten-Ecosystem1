@@ -19,7 +19,7 @@ const { PLACEHOLDERS } = require('../services/supportDesk/facts');
 const router = express.Router();
 
 /** What the help desk did with an email: SupportTicket's actions, as the Help Desk page counts them. */
-const ACTIONS = ['sent', 'drafted', 'held', 'human', 'skipped', 'failed'];
+const ACTIONS = ['sent', 'drafted', 'held', 'human', 'agent', 'skipped', 'failed'];
 router.use(requireHR);
 
 const wrap = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((err) => {

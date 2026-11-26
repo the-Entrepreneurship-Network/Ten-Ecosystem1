@@ -178,4 +178,4 @@ async function geminiReply({ subject, body, known, portalUrl }) {
     return { kind: KINDS.includes(out.kind) ? out.kind : 'bug', reply };
 }
 
-module.exports = { ENGINES, state, summary, setEngine, wake, heartbeat, check, geminiReply, _internal: { fire, WAKE_WINDOW_MS, QUIET_MS } };
+module.exports = { ENGINES, state, summary, setEngine, claudeReady, wake, heartbeat, check, geminiReply, _internal: { fire, WAKE_WINDOW_MS, QUIET_MS } };

@@ -26,6 +26,7 @@ h2{font-family:'Outfit',sans-serif;font-size:19px;font-weight:800;}
 .pill.drafted,.pill.starter{background:rgba(212,175,55,.14);color:var(--gold);}
 .pill.held,.pill.taught{background:rgba(245,158,11,.14);color:var(--amber);}
 .pill.human,.pill.failed,.pill.off{background:rgba(239,68,68,.14);color:#fca5a5;}
+.pill.agent{background:rgba(129,140,248,.16);color:#c7d2fe;}
 .item{border-top:1px solid var(--border);padding:14px 0;}
 .item:first-of-type{border-top:0;}
 .q{font-weight:800;font-size:15px;}
@@ -100,7 +101,7 @@ const esc = (v) => String(v == null ? '' : v)
   .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const when = (d) => d ? new Date(d).toLocaleString() : '';
 const OUTCOME = { sent: 'Answered', drafted: 'Draft ready', held: 'Told a person will reply',
-  human: 'Needs reply', skipped: 'Skipped', failed: 'Failed', working: 'Working' };
+  human: 'Needs reply', agent: 'Sent to Claude', skipped: 'Skipped', failed: 'Failed', working: 'Working' };
 const MODE = {
   off: ['Off', 'Nothing is read or sent. Set SUPPORT_AGENT_MODE=draft in the server\'s .env to start.'],
   draft: ['Drafts', 'Each reply waits in Gmail as a draft. Check it, then press Send.'],
@@ -154,7 +155,7 @@ async function loadStatus() {
 
 // Who handles students' reports of website problems.
 const ENGINE = {
-  claude: ['Claude', 'Gemini (free) writes the first reply. Only when something is really broken is the Claude bug agent woken: it fixes it through a pull request and keeps the student told.'],
+  claude: ['Claude', 'Saved answers and Gemini (free) answer what they can. Everything else goes to the Claude agent, and only Claude replies: it answers, fixes real bugs through a pull request and keeps the student told.'],
   gemini: ['Gemini (free)', 'The server writes the first reply itself with the free Gemini key, and flags the email for the team.'],
   off: ['Off', 'Neither. Reports wait for the team, as other emails do.']
 };

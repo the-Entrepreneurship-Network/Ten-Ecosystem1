@@ -18,7 +18,7 @@ const supportTicketSchema = new mongoose.Schema({
     excerpt:    { type: String, default: '', maxlength: 600 },
     // The reply as the help desk sent or drafted it, for HR to check on the Help Desk page.
     reply:      { type: String, default: '', maxlength: 5000 },
-    action:     { type: String, enum: ['working', 'sent', 'drafted', 'held', 'human', 'skipped', 'failed'], default: 'working' },
+    action:     { type: String, enum: ['working', 'sent', 'drafted', 'held', 'human', 'agent', 'skipped', 'failed'], default: 'working' },
     reason:     { type: String, default: '' },
     answers:    { type: [{ _id: false, answerId: String, question: String, score: Number }], default: [] },
     student:    { type: Boolean, default: false },
