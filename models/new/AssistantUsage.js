@@ -46,7 +46,11 @@ const assistantUsageSchema = new mongoose.Schema({
     tier:        { type: String, default: null },
     amount:      { type: Number, default: null },
     utr:         { type: String, default: null },
-    status:      { type: String, enum: ['pending', 'verified', 'rejected'], default: null },
+    // null is "no payment claimed", the default. Mongoose's enum check does
+    // not let null through unless it is listed, so without it every new row
+    // failed to save ("`null` is not a valid enum value", 26 Nov log) and the
+    // student was served the free Starter tier whatever they had paid for.
+    status:      { type: String, enum: [null, 'pending', 'verified', 'rejected'], default: null },
     submittedAt: { type: Date,   default: null },
     reviewedBy:  { type: String, default: null },
     reviewedAt:  { type: Date,   default: null },
