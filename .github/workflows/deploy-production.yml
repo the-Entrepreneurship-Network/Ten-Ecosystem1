@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
 
+# One at a time, with Server ops too: two merges a few seconds apart ran two
+# deploys at once, and the app hit "Cannot find module" while both replaced
+# node_modules under it.
+concurrency: production-server
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
