@@ -298,6 +298,12 @@ describe('reading mail', () => {
         expect(t.bodyText(payload).replace(/\s+/g, ' ').trim()).toBe('Emp id please');
     });
 
+    test('a link ending a sentence does not take the full stop into the link', () => {
+        const html = t.toHtml('Sign in at https://x.example/student-login. Or https://x.example/a?b=1, then go.');
+        expect(html).toContain('<a href="https://x.example/student-login">https://x.example/student-login</a>.');
+        expect(html).toContain('<a href="https://x.example/a?b=1">https://x.example/a?b=1</a>,');
+    });
+
     test('a placeholder with no value leaves the whole answer unused', () => {
         expect(t.render('Your ID is {{employeeId}}.', {})).toBeNull();
         expect(t.render('Your ID is {{employeeId}}.', { employeeId: 'X1' })).toBe('Your ID is X1.');
