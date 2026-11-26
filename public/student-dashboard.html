@@ -3302,7 +3302,11 @@ async function submitTask(){
       data = await response.json();
     } catch (parseErr) {
       if (response.status === 413) {
-        data = { success: false, message: "File is too large! Maximum limit is 25MB. Please compress your screenshot or PDF and try again." };
+        // A 413 that is not JSON came from the web server in front of the
+        // portal, whose upload limit is lower than the portal's own per-file one.
+        // Naming the portal's limit here told students with small files they were
+        // over a limit they were not.
+        data = { success: false, message: "The upload was too large for the server. Your screenshot and PDF are sent together, so please make both smaller (for example a JPG screenshot and a compressed PDF) and try again. You can also put the files in Google Drive and paste the link." };
       } else {
         data = { success: false, message: "Server error occurred during task submission." };
       }
