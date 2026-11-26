@@ -646,12 +646,11 @@ edits at `/hr-help-desk.html` (HR portal → **Help Desk**).
   Reply-To set to the student. Automatic mail is not copied. It exists because
   complaints@ cannot use Gmail's own forwarding without a two-step code only
   one person holds; the bug-fixing agent reads the copies in growth@.
-- **Waking the bug agent** (`BUG_AGENT_FIRE_URL`, `BUG_AGENT_TOKEN`). When a
-  copied email reads like a website problem ("not working", "error", "can't
-  upload" and similar), the run calls the bug agent's API trigger once, so it
-  starts at once rather than at its next scheduled pass. It does not when a
-  saved answer already went out, or when Gemini answered and found nothing
-  broken (below). The agent adds saved answers to
+- **Waking the bug agent** (`BUG_AGENT_FIRE_URL`, `BUG_AGENT_TOKEN`). The run
+  calls the bug agent's API trigger once, so it starts at once rather than at
+  its next scheduled pass. It does so only for
+  an email handed to Claude (below), never for one a saved answer or Gemini
+  answered. The agent adds saved answers to
   `starterAnswers.js` in its pull requests ("Teach the help desk" in
   `docs/bug-agent.md`), so a repeat of a question it solved is answered free.
   Both values come from
@@ -661,10 +660,15 @@ edits at `/hr-help-desk.html` (HR portal → **Help Desk**).
 - **Claude, Gemini (free) or Off.** The Help Desk page's "Website bug reports"
   switch (stored in `SupportDeskState`, `services/supportDesk/bugAgent.js`)
   says who handles a report:
-  - **Claude**: when no saved answer fits, Gemini (free) writes the first
-    reply, as below, without the Needs reply label. The portal wakes the Claude
-    scheduled task only when Gemini judges something is really broken, or when
-    Gemini has no answer (no key, or an error).
+  - **Claude**: exactly one side replies. A saved answer goes out as usual.
+    When none fits, a report of a website problem goes to Gemini (free), which
+    replies only when it can settle it (it asks for details, or explains). Any
+    other email that is not a touchy topic or from a busy sender goes to Claude
+    with nothing sent: the ticket's action is `agent` ("Sent to Claude" on the
+    Help Desk page), the thread is labelled **Help desk/Bug agent**, and the
+    portal wakes Claude, which replies itself. If Claude is not set up, is
+    marked not responding, or the copy to growth@ fails, the email goes to
+    people instead (**Help desk/Needs reply**).
   - **Gemini (free)**: the server writes the first reply itself with the free
     `GEMINI_API_KEY` (`utils/gemini.js`), from the saved answers. The email is
     labelled **Help desk/Needs reply** unless nothing is broken. Touchy topics

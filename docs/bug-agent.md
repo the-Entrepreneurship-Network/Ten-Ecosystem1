@@ -1,12 +1,13 @@
 # The bug agent
 
 A Claude scheduled task ("TEN bug agent", at claude.ai/code/routines) that
-handles students' reports of website problems. It runs in a fresh session with
-this repository and the Gmail connector (signed in as growth@):
+answers the student emails the free help desk cannot, and fixes website
+problems. It runs in a fresh session with this repository and the Gmail
+connector (signed in as growth@):
 
-- right away, when the portal's help desk copies a new student email that
-  reads like a website problem (`BUG_AGENT_FIRE_URL` and `BUG_AGENT_TOKEN`,
-  see HANDOVER.md §7.12), and
+- right away, when the portal's help desk hands it a new student email that
+  neither a saved answer nor Gemini settled (`BUG_AGENT_FIRE_URL` and
+  `BUG_AGENT_TOKEN`, see HANDOVER.md §7.12), and
 - on its schedule, to catch anything else and to close the loop on merged fixes.
 
 Its prompt says to follow this file. Everything below is its instructions.
@@ -51,39 +52,41 @@ the team is emailed. Then, if nothing is new, say "Nothing new." and stop.
 
 ## For each new email
 
-If the copy's body says just `Help desk: sent` or `Help desk: drafted`, with
-nothing in brackets, one of the help desk's saved answers already went to the
-student. Label it `Bug agent/Done` and do nothing else. If the student writes
-back and no saved answer fits, that reaches you as a new copy.
+The `Help desk:` line in the copy says who answers. Exactly one side replies
+to a student, never both.
 
-When no saved answer fits, Gemini (free) writes the first reply from the saved
-answers, and the portal wakes you only when Gemini finds something broken.
+- `Help desk: agent (…)`: **yours.** No saved answer and no Gemini reply
+  settled it, so the help desk sent nothing and woke you. You are the only one
+  who replies. Handle it with the steps below.
+- `Help desk: sent` or `Help desk: drafted`, with nothing in brackets: a saved
+  answer went to the student. Label it `Bug agent/Done` and do nothing else.
+- `Help desk: sent (Gemini: …)` or `drafted (Gemini: …)`: Gemini replied while
+  the switch was on Gemini, or for something it could settle (it asked for
+  details, or explained). Label it `Bug agent/Done`. The one exception is
+  `(Gemini: bug)`: the student was told the team is looking into it, so do not
+  send another first reply; investigate, fix a real bug and close the loop as
+  below, and reply only when you have something new to say.
+- `Help desk: held` or `Help desk: human`: a person handles it (a touchy topic,
+  or a sender who wrote many times today). Label it `Bug agent/Done`.
+- `Help desk: backfill (…)`: the email came in before you were set up
+  (scripts/bug-agent-backfill.js), and the body is the whole conversation so
+  far, oldest first. If it was answered or the problem has gone, label it
+  `Bug agent/Done` and do not reply. Otherwise handle it with the steps below,
+  and start your reply by apologising for the slow answer.
 
-If the copy's body says `Help desk: sent (Gemini: vague)` or
-`(Gemini: not-a-bug)` (or `drafted`), Gemini asked for details or explained.
-Label it `Bug agent/Done` and do nothing else. A student who writes back
-reaches you only if the free side cannot answer them.
+The steps, for an email that is yours:
 
-If it says `(Gemini: bug)`, the student already has a first reply saying the
-team is looking into it. Do not send another first reply. Investigate: fix a
-real bug and close the loop as below, and reply only when you have something
-new to say.
-
-If it says `Help desk: backfill (…)`, the email came in before you were set
-up (scripts/bug-agent-backfill.js), and the body is the whole conversation so
-far, oldest first. If it was answered or the problem has gone, label it
-`Bug agent/Done` and do not reply. Otherwise handle it as below, and start
-your reply by apologising for the slow answer.
-
-1. **Not a website problem** (fees, certificate or offer-letter dates, general
-   questions, or a WhatsApp group invite link that says it was reset: the
-   group admin made a new link, and the coordinator or group admin has it):
-   do nothing; the help desk and HR handle it. Label it `Bug agent/Done`.
+1. **A question about how the portal works** (where to find something, why a
+   page behaves as it does, what a step means): answer it from the code and
+   the docs, simply. If WhatsApp says a group invite link was reset, the group
+   admin made a new link: say so, and to ask the coordinator or group admin
+   for it. Label `Bug agent/Done`, and teach the help desk (below).
 2. **A website problem, too vague to act on**: reply asking what they clicked,
    what they saw (any error text), a screenshot, and their device and browser.
    Label `Bug agent/Waiting`.
-3. **Enough detail**: investigate the code. Read the relevant routes and pages,
-   run the tests, and run the app locally if it helps.
+3. **A website problem with enough detail**: investigate the code. Read the
+   relevant routes and pages, run the tests, and run the app locally if it
+   helps.
    - **Not a bug** (works as designed, or a mistake on their side): reply
      explaining simply what is happening and what to do. Label
      `Bug agent/Done`.
@@ -92,9 +95,11 @@ your reply by apologising for the slow answer.
      whose description includes the line `Help desk thread: <Gmail thread id>`.
      Reply that we found the problem and a fix is being reviewed, and that we
      will email as soon as it is live. Label `Bug agent/Fix in review`.
-   - **Cannot handle it** (needs a change to live data, a payment, a security
-     matter, or you are blocked): label `Bug agent/Needs person` and do not
-     reply.
+4. **Only a person can decide** (fees, refunds or payments; a change to their
+   account, domain or dates; an exception about documents; anything you cannot
+   check in the code): reply briefly that a member of the team will get back to
+   them, without promising an outcome. Label `Bug agent/Needs person`; the team
+   follows these up from growth@.
 
 ## Closing the loop, every pass
 

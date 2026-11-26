@@ -266,22 +266,29 @@ async function decide(gmail, me, msg, mail, answers) {
         : '';
 
     if (why) {
-        // Unless the switch on the Help Desk page says Off, Gemini (free) writes the first
-        // reply to a report of a website problem, from the saved answers. With Claude on,
-        // handle() wakes Claude only when Gemini finds something broken. Touchy topics and
-        // busy senders still go to people.
-        const engine = (await bugAgent.state()).engine;
-        const gem = !result.sensitive && recent < PER_SENDER_PER_DAY && LOOKS_LIKE_A_BUG.test(subject + '\n' + body)
-            && engine !== 'off'
+        // No saved answer settles it. Unless the switch on the Help Desk page says Off,
+        // Gemini (free) reads a report of a website problem first. With Claude on and
+        // answering, what neither settles goes to Claude, and only Claude replies: nothing
+        // is sent from here, and handle() wakes it. Touchy topics and busy senders always
+        // go to people.
+        const desk = await bugAgent.state();
+        const engine = desk.engine;
+        const free = !result.sensitive && recent < PER_SENDER_PER_DAY;
+        const gem = free && LOOKS_LIKE_A_BUG.test(subject + '\n' + body) && engine !== 'off'
             ? await bugAgent.geminiReply({
                 subject, body, portalUrl: PORTAL_URL,
                 known: answers.map((a) => a.question + ': ' + render(a.answer, facts.STATIC)).join('\n\n').slice(0, 8000)
             }).catch((err) => { console.error('[help desk] Gemini', String((err && err.message) || err).slice(0, 200)); return null; })
             : null;
+        if (free && (!gem || gem.kind === 'bug') && engine === 'claude' && !desk.down && bugAgent.claudeReady()) {
+            await gmail.labelThread(msg.threadId, [LABEL.agent]);
+            return Object.assign(base, { action: 'agent', reason: gem ? 'Gemini found a website problem' : why, answers: [] });
+        }
         if (gem) {
             const text = compose(firstName, [gem.reply]);
-            // Without Claude, the team follows up anything Gemini could not settle.
-            const labels = engine === 'gemini' && gem.kind !== 'not-a-bug' ? [LABEL.human] : [];
+            // Claude is not taking it here, so the team follows up anything broken, and,
+            // with Gemini on, anything Gemini could not settle.
+            const labels = gem.kind === 'bug' || (engine === 'gemini' && gem.kind === 'vague') ? [LABEL.human] : [];
             if (mode() === 'send') {
                 await gmail.send(await rawReply({ me, to: from.email, subject, text, msg, auto: true }), msg.threadId);
                 await gmail.labelThread(msg.threadId, [LABEL.answered, ...labels]);
@@ -339,10 +346,15 @@ async function handle(gmail, me, msg, answers, stats) {
         }, outcome)
     });
     stats[outcome.action] = (stats[outcome.action] || 0) + 1;
-    // A copied email that reads like a website problem: the bug agent should see it now,
-    // unless the free side covered it: a saved answer, or Gemini finding nothing broken.
-    const answered = (outcome.action === 'sent' || outcome.action === 'drafted') && outcome.reason !== 'Gemini: bug';
-    return (await copyTo(gmail, me, msg, mail, outcome)) && !answered && LOOKS_LIKE_A_BUG.test(mail.subject + '\n' + mail.body);
+    // Claude's emails are copied for it to read, and it is woken now. Without the copy it
+    // cannot see the email, so a person takes it instead.
+    const copied = await copyTo(gmail, me, msg, mail, outcome);
+    if (outcome.action === 'agent' && !copied) {
+        await gmail.labelThread(msg.threadId, [LABEL.human]).catch(() => {});
+        await SupportTicket.updateOne({ _id: ticket._id }, { $set: { action: 'human', reason: 'could not copy it for Claude' } });
+        return false;
+    }
+    return copied && outcome.action === 'agent';
 }
 
 /**
