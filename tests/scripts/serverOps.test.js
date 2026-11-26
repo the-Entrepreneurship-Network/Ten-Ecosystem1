@@ -50,3 +50,24 @@ test('the workflow hands the choice over as data, never pasted into the script',
     expect(wf.split('script: |')[1]).not.toContain('${{');
     expect(spawnSync('bash', ['-n', OPS]).status).toBe(0);
 });
+
+/*
+ * The live self-test names students (accounts with no internship record), so
+ * like the logs it is emailed, and only the pass/fail count reaches the
+ * public job log.
+ */
+test('the self-test report is emailed; the job log gets only the count', () => {
+    stub('node', [
+        'if [ "$1" = "scripts/server/selftest.js" ]; then',
+        '  echo "PASS  half-made student accounts: 1 of 9 — ravi.k@gmail.com"',
+        '  echo "self-test: 9 passed, 0 failed" >&2',
+        'else cat > "$CAPTURED"; echo "Emailed to the team inbox."; fi'
+    ].join('\n'));
+    const r = run('selftest');
+    expect(r.status).toBe(0);
+    expect(fs.readFileSync(captured, 'utf8')).toContain('ravi.k@gmail.com');
+    expect(r.stdout + r.stderr).not.toContain('ravi.k@gmail.com');
+    expect(r.stderr).toContain('self-test: 9 passed, 0 failed');
+    expect(fs.readFileSync(path.join(root, '.github/workflows/server-ops.yml'), 'utf8'))
+        .toContain('options: [status, logs, restart, nginx, selftest]');
+});

@@ -129,7 +129,9 @@ The steps, for an email that is yours:
    - **Not a bug** (works as designed, or a mistake on their side): reply
      explaining simply what is happening and what to do. Label
      `Bug agent/Done`.
-   - **A real bug**: fix the root cause, add or update a test, run its tests,
+   - **A real bug**: fix the root cause for every student, not this one
+     account (see "Fixed for everyone" below), add a test that fails without
+     the fix, run its tests,
      push the branch and open a PR titled `Student bug: <short description>`
      whose description includes the line `Help desk thread: <Gmail thread id>`.
      Reply that we found the problem and a fix is being reviewed, and that we
@@ -159,9 +161,33 @@ then read the run's log.
   failing, at most once a pass. Say so in your summary.
 - `nginx`: nginx settings live in `deploy/nginx/` and change by PR, like code;
   the deploy installs them after the merge. This installs them again.
+- `selftest`: the live check. It loads the sign-in, registration, dashboard
+  and course pages, checks the database, has Gemini answer and write an exam
+  paper, saves a file in the uploads folder, and counts student accounts with
+  no internship record. The report reaches growth@ as "[server] live
+  self-test"; the run's log shows only "self-test: N passed, M failed". Run it
+  after every deploy that carries a fix, before telling anyone it is fixed.
 
 Anything else on the server (student data, `.env`, accounts) is for a person:
 label `Bug agent/Needs person` and say what is needed.
+
+## Fixed for everyone
+
+The owner's rule: a student is told "it is fixed" only when it is fixed for
+every student who could hit it, now and later, and that has been checked.
+
+- **The root cause, in the shared path.** If one student's data is wrong,
+  also fix what let it go wrong, so it cannot happen to the next one.
+- **A test that fails without the fix**, in the same PR. When the bug is on a
+  page, run the page in a browser (Playwright) and watch it, before and after.
+- **Others with the same problem.** If you can see more students affected
+  (other emails, the self-test's count), say so in the PR and in your summary.
+  Do not email students who did not write in; a person decides that.
+- **Checked live before the reply.** After the deploy: run Server ops
+  `selftest` and read the "[server] live self-test" email. Every check must
+  pass, and the one for this fix must show it working. Then run `logs` and
+  look for the bug's error: it must not be there after the deploy time. If
+  either fails, do not reply; fix it again.
 
 ## Closing the loop, every pass
 
@@ -169,8 +195,10 @@ For each thread labelled `Bug agent/Fix in review`, find the PR whose
 description names that thread.
 
 - Merged, and a "Deploy to Production" run on `main` that started after the
-  merge has succeeded: reply that it is fixed and to try again (and to reply
-  if it still happens). Label `Bug agent/Done`.
+  merge has succeeded: check it live (Server ops `selftest` and `logs`, as in
+  "Fixed for everyone"). If it passes: reply that it is fixed and to try
+  again (and to reply if it still happens), and label `Bug agent/Done`. If it
+  does not: leave the label, and fix it again.
 - Closed without merging: label `Bug agent/Needs person`.
 
 ## Teach the help desk

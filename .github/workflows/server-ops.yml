@@ -11,7 +11,7 @@ on:
       action:
         description: "status | logs (emailed to the team inbox) | restart | nginx"
         type: choice
-        options: [status, logs, restart, nginx]
+        options: [status, logs, restart, nginx, selftest]
         default: status
 
 concurrency: production-server
