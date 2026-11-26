@@ -385,6 +385,7 @@ function getRoleConfig(req, res) {
 const { generateEmployeeId } = require('../utils/employeeId');
 const { normalizeDomain } = require('../config/domains');
 const { isValidTenure, getTenureLabel } = require('../utils/tenure');
+const { findStudentByEmail } = require('../services/loginIdentity');
 
 /**
  * Parse the domain selection, which the form sends as a comma-joined string.
@@ -444,6 +445,9 @@ function requiredFieldMessage(field) {
 }
 
 async function registerUser(req, res) {
+  // What this request created, so a failure part way can be undone (see the catch).
+  let createdUserId = null;
+  let createdStudentId = null;
   try {
     const { fullName, email, password, role, roleSpecificData = {} } = req.body;
     const name = fullName || req.body.name;
@@ -570,7 +574,21 @@ async function registerUser(req, res) {
       Coordinator.findOne({ email: trimmedEmail }),
     ]);
 
-    if (existingEco || existingStudent || existingHR || existingCoord) {
+    /*
+     * A student account with no internship record: a sign-up that stopped part
+     * way, or one from before the record existed. Its owner cannot use the
+     * portal (sign-in now says so and sends them here) and could not register
+     * either ("Email already registered"). The same password proves it is
+     * theirs, so the half-made account is cleared and this sign-up goes ahead.
+     * Without that proof nothing is touched: anyone can type an email here.
+     */
+    if (existingEco && !existingStudent && !existingHR && !existingCoord
+        && role === ROLES.STUDENT && existingEco.role === ROLES.STUDENT
+        && !(await findStudentByEmail(Student, trimmedEmail))
+        && await bcrypt.compare(password, existingEco.password || '').catch(() => false)) {
+      await removeHalfMadeAccount(existingEco._id, null);
+      console.log('[register] finished a half-made student sign-up for user %s', existingEco._id);
+    } else if (existingEco || existingStudent || existingHR || existingCoord) {
       return res.status(409).json({ 
         success: false, 
         message: 'Email already registered. Please login.',
@@ -591,6 +609,7 @@ async function registerUser(req, res) {
       // are not reviewed; they are verified by having an internship.
       isVerified: ![ROLES.MENTOR, ROLES.FOUNDER, ROLES.INVESTOR, ROLES.CONTRACTOR].includes(role)
     });
+    createdUserId = user._id;
 
     let genMemberId = '';
     /* Filled in by the student branch below and read by the welcome mail at the
@@ -668,6 +687,7 @@ async function registerUser(req, res) {
         joiningDate: new Date().toISOString().split('T')[0]
       });
       studentDocId = legacyStudent && legacyStudent._id;
+      createdStudentId = studentDocId;
 
       // Automatically create Talent Profile for students
       await TalentProfile.create({
@@ -928,7 +948,17 @@ async function registerUser(req, res) {
       memberId: genMemberId
     });
   } catch (err) {
-    if (err.code === 11000) {
+    // Undo whatever this request made. Left behind, a half-made account turned
+    // "Please try again" into "Email already registered. Please login.", and
+    // signing in then looped back to the sign-in page for good.
+    if (createdUserId) {
+      await removeHalfMadeAccount(createdUserId, createdStudentId)
+        .catch((e) => console.error('[register] could not undo a failed sign-up:', e.message));
+    }
+    // A duplicate key is only "already registered" when the key is the email.
+    // A clashing Employee ID is our fault, the sign-up was undone above, and
+    // trying again works.
+    if (err.code === 11000 && /email/i.test(JSON.stringify(err.keyPattern || err.keyValue || err.message || ''))) {
       return res.status(409).json({ 
         success: false, 
         message: 'Email already registered. Please login.',
@@ -938,6 +968,28 @@ async function registerUser(req, res) {
     console.error("Registration error:", err);
     return res.status(500).json({ success: false, error: 'Registration failed. Please try again.' });
   }
+}
+
+/**
+ * Delete one sign-up's records: the account, every profile keyed to it, and
+ * the internship record when there is one. Only ever called with ids this
+ * request created, or for an account whose owner just proved the password.
+ */
+async function removeHalfMadeAccount(userId, studentId) {
+  if (!userId) return;
+  const keyed = [
+    [StudentProfile, 'userId'], [TalentProfile, 'userId'], [FounderProfile, 'userId'],
+    [StartupProfile, 'founderId'], [MentorProfile, 'userId'], [InvestorProfile, 'userId'],
+    [ContractorProfile, 'userId'], [CommunityProfile, 'userId']
+  ];
+  await Promise.all(keyed.map(([M, field]) => {
+    // Mongoose drops a filter on a field the schema does not have, and
+    // deleteMany({}) empties the collection. Never let that happen here.
+    if (!M.schema.path(field)) throw new Error(`${M.modelName} has no ${field}`);
+    return M.deleteMany({ [field]: userId });
+  }));
+  if (studentId) await Student.deleteOne({ _id: studentId });
+  await EcosystemUser.deleteOne({ _id: userId });
 }
 
 module.exports = { getHub, getRoleConfig, registerUser, sendRegistrationWelcome, sendPartnerDecision };
