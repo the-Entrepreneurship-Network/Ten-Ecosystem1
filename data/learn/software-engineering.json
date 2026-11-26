@@ -1,152 +1,548 @@
 {
- "note": "Edit this file to change the module; the server reads it at boot.",
- "topics": [
-  {
-   "title": "Engineering vs coding",
-   "technical": "Software engineering is building software that survives change, scale and teams — not just making it run once. Requirements, design, testing, maintenance and communication surround the code, and most cost lives after the first release.",
-   "simple": "Writing code that a team can keep running and changing for years, not just today.",
-   "videoSearch": "what is software engineering",
-   "difficulty": 1
-  },
-  {
-   "title": "The software development lifecycle",
-   "technical": "From requirements through design, implementation, testing, deployment and maintenance, the SDLC frames the work; Agile iterates it in short loops with feedback, replacing big-bang plans that meet reality too late.",
-   "simple": "The full journey of software — and why building it in small, feedback-driven loops beats one giant plan.",
-   "videoSearch": "software development lifecycle agile",
-   "difficulty": 1
-  },
-  {
-   "title": "Version control and collaboration",
-   "technical": "Git tracks history and enables parallel work through branches and pull requests; trunk-based or feature-branch flows structure teams. Clean history and reviewed changes are how many people edit one codebase without chaos.",
-   "simple": "How a whole team edits the same code without overwriting each other.",
-   "videoSearch": "git workflow team tutorial",
-   "difficulty": 1
-  },
-  {
-   "title": "Requirements and specifications",
-   "technical": "Vague requirements produce wrong software efficiently. User stories, acceptance criteria and edge cases turn wishes into buildable, testable statements — clarifying before coding is the cheapest fix there is.",
-   "simple": "Pinning down exactly what to build before building the wrong thing well.",
-   "videoSearch": "requirements engineering user stories",
-   "difficulty": 1
-  },
-  {
-   "title": "Data structures",
-   "technical": "Arrays, lists, stacks, queues, hash maps and trees each trade time against space for particular operations; choosing the right one is often the difference between fast and unusable. This is the shared vocabulary of the field.",
-   "simple": "The containers that hold data — each fast at different jobs, and choosing well is half of performance.",
-   "videoSearch": "data structures explained",
-   "difficulty": 1
-  },
-  {
-   "title": "Algorithms and complexity",
-   "technical": "Big-O describes how work grows with input; sorting, searching and graph traversal are the recurring patterns. You rarely invent algorithms, but you constantly choose and combine them — and recognise the O(n^2) that will not scale.",
-   "simple": "How to tell fast code from code that dies as data grows.",
-   "videoSearch": "big o notation algorithms",
-   "difficulty": 2
-  },
-  {
-   "title": "Object-oriented design",
-   "technical": "Classes bundle state and behaviour; encapsulation, inheritance and polymorphism organise larger systems. Modelling the domain in objects — and hiding what callers should not touch — keeps growth manageable.",
-   "simple": "Organising code into things that own their data and behaviour, so systems can grow.",
-   "videoSearch": "object oriented design principles",
-   "difficulty": 2
-  },
-  {
-   "title": "SOLID and design principles",
-   "technical": "SOLID — single responsibility, open/closed, Liskov, interface segregation, dependency inversion — plus DRY and YAGNI guide code toward change-tolerance. They are heuristics, not laws, but ignoring them compounds interest.",
-   "simple": "A handful of guidelines that keep code flexible instead of brittle as it grows.",
-   "videoSearch": "solid principles explained",
-   "difficulty": 2
-  },
-  {
-   "title": "Design patterns",
-   "technical": "Patterns name recurring solutions — factory, strategy, observer, adapter — giving teams shared vocabulary. The skill is recognising when a pattern fits, and resisting forcing one where plain code would do.",
-   "simple": "Named, reusable solutions to problems that keep coming up — used sparingly.",
-   "videoSearch": "design patterns explained",
-   "difficulty": 2
-  },
-  {
-   "title": "Clean code",
-   "technical": "Readable names, small functions, honest comments and low nesting make code a team can change. Code is read far more than written; optimising for the reader is optimising for cost.",
-   "simple": "Writing code the next person — often you — can understand and safely change.",
-   "videoSearch": "clean code principles",
-   "difficulty": 3
-  },
-  {
-   "title": "Testing strategy",
-   "technical": "Unit, integration and end-to-end tests form a pyramid: many fast unit tests, fewer slow broad ones. Tests document behaviour and let you refactor without fear; TDD writes them first.",
-   "simple": "A layered safety net that lets you change code without breaking it silently.",
-   "videoSearch": "testing pyramid explained",
-   "difficulty": 3
-  },
-  {
-   "title": "Debugging systematically",
-   "technical": "Debugging is science: reproduce, hypothesise, isolate with a bisection, fix the cause not the symptom, and add a test so it never returns. Guessing scales worse than the bug.",
-   "simple": "Finding the real cause of a bug by narrowing it down, not by guessing.",
-   "videoSearch": "systematic debugging techniques",
-   "difficulty": 3
-  },
-  {
-   "title": "Databases and data modelling",
-   "technical": "Relational schemas, normalisation, keys and indexes shape how data is stored and queried; the model outlives the code on top of it. A wrong data model taxes every feature forever.",
-   "simple": "Designing how data is stored so every future feature stays easy.",
-   "videoSearch": "database design tutorial",
-   "difficulty": 3
-  },
-  {
-   "title": "APIs and interfaces",
-   "technical": "Well-designed interfaces hide implementation and stay stable while insides change; REST, versioning and clear contracts let components and teams evolve independently. The boundary is the product.",
-   "simple": "The agreed-upon boundaries that let parts of a system change without breaking each other.",
-   "videoSearch": "api design best practices",
-   "difficulty": 4
-  },
-  {
-   "title": "Concurrency and performance",
-   "technical": "Parallelism speeds work but invites races and deadlocks; measure before optimising, because intuition about bottlenecks is usually wrong. Correct-then-fast beats fast-then-debugged.",
-   "simple": "Doing many things at once safely — and speeding up only what measurement proves is slow.",
-   "videoSearch": "concurrency basics explained",
-   "difficulty": 4
-  },
-  {
-   "title": "System design fundamentals",
-   "technical": "Larger systems balance load balancers, caches, queues, databases and services against scale, latency and failure. Trade-offs — consistency vs availability, cost vs speed — are the substance of senior work.",
-   "simple": "How the big pieces fit so a system stays fast and up as users multiply.",
-   "videoSearch": "system design basics",
-   "difficulty": 4
-  },
-  {
-   "title": "Architecture patterns",
-   "technical": "Monolith, microservices and event-driven designs each suit different scales and teams; premature microservices are a common self-inflicted wound. Architecture follows the organisation and the load, not fashion.",
-   "simple": "The overall shapes systems take — and choosing one for real reasons, not hype.",
-   "videoSearch": "software architecture patterns",
-   "difficulty": 4
-  },
-  {
-   "title": "CI/CD and delivery",
-   "technical": "Automated build, test and deploy pipelines ship changes safely and often; small frequent releases lower risk versus rare big ones. Delivery is an engineering capability, not an afterthought.",
-   "simple": "Automating the path from commit to production so releases are boring and frequent.",
-   "videoSearch": "ci cd pipeline explained",
-   "difficulty": 5
-  },
-  {
-   "title": "Documentation and communication",
-   "technical": "Code says how; docs and design records say why. READMEs, architecture notes and decision logs carry the context that keeps a codebase understandable as people come and go.",
-   "simple": "Writing down the why, so the next engineer inherits understanding, not a mystery.",
-   "videoSearch": "technical documentation best practices",
-   "difficulty": 5
-  },
-  {
-   "title": "Working on a team",
-   "technical": "Estimation, code review, standups and handling disagreement are the human protocols of shipping software. Most projects fail on coordination, not on code — these skills are load-bearing.",
-   "simple": "The human side of shipping — reviews, estimates, and disagreeing well.",
-   "videoSearch": "software engineering teamwork",
-   "difficulty": 5
-  },
-  {
-   "title": "The capstone",
-   "technical": "Design and build a non-trivial application with clean architecture, tests, CI, documentation and a git history a reviewer can read. It demonstrates engineering judgment, not just working code.",
-   "simple": "One well-built, well-documented project that shows you engineer, not just code.",
-   "videoSearch": "software engineering portfolio project",
-   "difficulty": 5
-  }
- ]
+  "note": "Edit this file to change the module; the server reads it at boot.",
+  "topics": [
+    {
+      "title": "Engineering vs coding",
+      "technical": "Software engineering is building software that survives change, scale and teams — not just making it run once. Requirements, design, testing, maintenance and communication surround the code, and most cost lives after the first release.",
+      "simple": "Writing code that a team can keep running and changing for years, not just today.",
+      "difficulty": 1,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://phpc.tv/videos/embed/3vctEMmk3wxfxig12vz2Hk",
+          "title": "Vibe Coding vs. Engineering: Building AI Apps in PHP with Paul Conroy",
+          "minutes": 35
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xby9pzi",
+          "title": "Day in the Life: Google Software Engineer in Bangalore | Office Perks & Coding",
+          "minutes": 6
+        }
+      ]
+    },
+    {
+      "title": "The software development lifecycle",
+      "technical": "From requirements through design, implementation, testing, deployment and maintenance, the SDLC frames the work; Agile iterates it in short loops with feedback, replacing big-bang plans that meet reality too late.",
+      "simple": "The full journey of software — and why building it in small, feedback-driven loops beats one giant plan.",
+      "difficulty": 1,
+      "videos": []
+    },
+    {
+      "title": "Version control and collaboration",
+      "technical": "Git tracks history and enables parallel work through branches and pull requests; trunk-based or feature-branch flows structure teams. Clean history and reviewed changes are how many people edit one codebase without chaos.",
+      "simple": "How a whole team edits the same code without overwriting each other.",
+      "difficulty": 1,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://tilvids.com/videos/embed/82rJbedwEZegWoZfwiALqM",
+          "title": "Git season: A deeply personal approach to version control",
+          "minutes": 27
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9jczfk",
+          "title": "Git Basics Tutorial: Learn Version Control, Commits & Branches for Beginners",
+          "minutes": 40
+        }
+      ]
+    },
+    {
+      "title": "Requirements and specifications",
+      "technical": "Vague requirements produce wrong software efficiently. User stories, acceptance criteria and edge cases turn wishes into buildable, testable statements — clarifying before coding is the cheapest fix there is.",
+      "simple": "Pinning down exactly what to build before building the wrong thing well.",
+      "difficulty": 1,
+      "videos": []
+    },
+    {
+      "title": "Data structures",
+      "technical": "Arrays, lists, stacks, queues, hash maps and trees each trade time against space for particular operations; choosing the right one is often the difference between fast and unusable. This is the shared vocabulary of the field.",
+      "simple": "The containers that hold data — each fast at different jobs, and choosing well is half of performance.",
+      "difficulty": 1,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/EuroPython_2015_NUqYduic",
+          "title": "[EuroPython 2015] Holger Peters - Using Scikit-Learn's interface for turning Spaghetti Data Science into Maintainable Software",
+          "minutes": 33
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x5qkr08",
+          "title": "Data Structures Algorithms Course",
+          "minutes": 8
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x2y38li",
+          "title": "14 Python programming - data structured as a list",
+          "minutes": 4
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x94g0d0",
+          "title": "Data Structures & Algorithms from Beginner to Advanced | Road to Dream Job Part 1",
+          "minutes": 16
+        }
+      ]
+    },
+    {
+      "title": "Algorithms and complexity",
+      "technical": "Big-O describes how work grows with input; sorting, searching and graph traversal are the recurring patterns. You rarely invent algorithms, but you constantly choose and combine them — and recognise the O(n^2) that will not scale.",
+      "simple": "How to tell fast code from code that dies as data grows.",
+      "difficulty": 2,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/ucberkeley_webcast_wodsSFQnV5w",
+          "title": "Computer Science 10 - Lecture 7: Algorithm Complexity",
+          "minutes": 52
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/ucberkeley_webcast_P-MM1u3unW8",
+          "title": "Computer Science 10 - Lecture 7: Algorithmic Complexity",
+          "minutes": 49
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Microsoft_Research_Video_104437",
+          "title": "Microsoft Research Video 104437: Two Network Coding Talks for the price of one: Security, Low Complexity",
+          "minutes": 57
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/ytAKBwu5sTxvE",
+          "title": "Programming Complexity - Modelling Complex Systems with Go & React by Sau Sheong",
+          "minutes": 56
+        }
+      ]
+    },
+    {
+      "title": "Object-oriented design",
+      "technical": "Classes bundle state and behaviour; encapsulation, inheritance and polymorphism organise larger systems. Modelling the domain in objects — and hiding what callers should not touch — keeps growth manageable.",
+      "simple": "Organising code into things that own their data and behaviour, so systems can grow.",
+      "difficulty": 2,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://tubedu.org/videos/embed/pqgRag1nscwRhMV6bbjaHi",
+          "title": "Session 1 Object Oriented Programming - Introduction",
+          "minutes": 5
+        },
+        {
+          "src": "pt",
+          "embed": "https://tubedu.org/videos/embed/ie5QqoA1jwcoumNAeZxDB1",
+          "title": "Fun programming 104: OOP means Object Oriented Programming",
+          "minutes": 11
+        },
+        {
+          "src": "pt",
+          "embed": "https://toobnix.org/videos/embed/augR7u7F75FZoxsBT2Fwwn",
+          "title": "Object Oriented Code in the Gnus Newsreader - Eric Abrahamsen - EmacsConf 2020",
+          "minutes": 24
+        },
+        {
+          "src": "pt",
+          "embed": "https://peertube.lagbag.com/videos/embed/wu93Lckww5AbmuQeW6LBY4",
+          "title": "Object-Oriented Programming is Bad",
+          "minutes": 45
+        },
+        {
+          "src": "pt",
+          "embed": "https://tubedu.org/videos/embed/7CPAowLLwFJvdqWHNqX7Qp",
+          "title": "Session 2 Object Oriented Programming - Classes and Objects",
+          "minutes": 7
+        }
+      ]
+    },
+    {
+      "title": "SOLID and design principles",
+      "technical": "SOLID — single responsibility, open/closed, Liskov, interface segregation, dependency inversion — plus DRY and YAGNI guide code toward change-tolerance. They are heuristics, not laws, but ignoring them compounds interest.",
+      "simple": "A handful of guidelines that keep code flexible instead of brittle as it grows.",
+      "difficulty": 2,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/pyconza2019-machine-learning-engineering-principles-with-python-and-mlflow",
+          "title": "Machine Learning Engineering principles with Python and MLFlow",
+          "minutes": 43
+        }
+      ]
+    },
+    {
+      "title": "Design patterns",
+      "technical": "Patterns name recurring solutions — factory, strategy, observer, adapter — giving teams shared vocabulary. The skill is recognising when a pattern fits, and resisting forcing one where plain code would do.",
+      "simple": "Named, reusable solutions to problems that keep coming up — used sparingly.",
+      "difficulty": 2,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://videos.alexhyett.com/videos/embed/wjFQZxbnx3M3EYVqgQkPRa",
+          "title": "5 Design Patterns That Are ACTUALLY Used By Developers",
+          "minutes": 9
+        },
+        {
+          "src": "pt",
+          "embed": "https://watch.softinio.com/videos/embed/dqkfvcbeRnFvhSaCj94YBJ",
+          "title": "Down the Wabbit Hole - Some Haskell Design Patterns in Machine Learning Engineering by Chris McKinlay",
+          "minutes": 54
+        },
+        {
+          "src": "pt",
+          "embed": "https://phpc.tv/videos/embed/sa2ZbdAaw7CLvSiDiPev88",
+          "title": "Architecture Design Patterns for PHP",
+          "minutes": 56
+        },
+        {
+          "src": "pt",
+          "embed": "https://phpc.tv/videos/embed/vgnEPquwhHq39hchuPQq9z",
+          "title": "Beyond design patterns and principles - writing good OO code - Matthias Noback - Forum PHP 2018",
+          "minutes": 41
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/grtvco-The_Circadian_Code_-_Optimize_your_Brain_Food_and_Sleep_Patterns_with_Dr._Satchin_Panda",
+          "title": "The Circadian Code: Optimize your Brain, Food and Sleep Patterns with Dr. Satchin Panda",
+          "minutes": 21
+        }
+      ]
+    },
+    {
+      "title": "Clean code",
+      "technical": "Readable names, small functions, honest comments and low nesting make code a team can change. Code is read far more than written; optimising for the reader is optimising for cost.",
+      "simple": "Writing code the next person — often you — can understand and safely change.",
+      "difficulty": 3,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://videos.danksquad.org/videos/embed/57c0d8a6-32ca-48bb-b940-5ebb2770f4df",
+          "title": "\"Clean\" Code, Horrible Performance",
+          "minutes": 23
+        },
+        {
+          "src": "pt",
+          "embed": "https://phpc.tv/videos/embed/4jaTK3DkDq5im2GE9X74ih",
+          "title": "[VOD] EMERGENCY: CLEAN CODE in 2025",
+          "minutes": 58
+        },
+        {
+          "src": "pt",
+          "embed": "https://phpc.tv/videos/embed/9aqGcyJTQjwvi28bJ6CdwW",
+          "title": "The Action Pattern Is Key to Clean Code",
+          "minutes": 10
+        },
+        {
+          "src": "pt",
+          "embed": "https://phpc.tv/videos/embed/x2jubJAmBEoBsj9VEhBC9w",
+          "title": "Oct 2017 Austin PHP Meetup - A Journey Toward Clean Code and Enjoyment",
+          "minutes": 53
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9lqmea",
+          "title": "Master Debugging with xxd: Inspect Program Output at a Byte Level for Automation & Clean Code!",
+          "minutes": 13
+        }
+      ]
+    },
+    {
+      "title": "Testing strategy",
+      "technical": "Unit, integration and end-to-end tests form a pyramid: many fast unit tests, fewer slow broad ones. Tests document behaviour and let you refactor without fear; TDD writes them first.",
+      "simple": "A layered safety net that lets you change code without breaking it silently.",
+      "difficulty": 3,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Agilehelpline-AgileStrategyManifesto190",
+          "title": "Agile Strategy Manifesto",
+          "minutes": 4
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/7minPowerSpeech",
+          "title": "CNN Programming Strategy Analysis",
+          "minutes": 7
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/roulette-xl-pro-v-2-3-premium-roulette-1e4",
+          "title": "ROULETTE SOFTWARE ROULETTE STRATEGY",
+          "minutes": 27
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x7zw6nm",
+          "title": "Pool testing – a new strategy",
+          "minutes": 6
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x876w18",
+          "title": "We need to change our testing strategy, pandemic management: ICMR",
+          "minutes": 3
+        }
+      ]
+    },
+    {
+      "title": "Debugging systematically",
+      "technical": "Debugging is science: reproduce, hypothesise, isolate with a bisection, fix the cause not the symptom, and add a test so it never returns. Guessing scales worse than the bug.",
+      "simple": "Finding the real cause of a bug by narrowing it down, not by guessing.",
+      "difficulty": 3,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://videos.trom.tf/videos/embed/dsaf5UmbcQ6bG3ZUkeCJMa",
+          "title": "Software freedom day @hsbxl - Free software in robotics: build your own autonomous systems (Arne Baeyens)",
+          "minutes": 55
+        },
+        {
+          "src": "pt",
+          "embed": "https://video.igem.org/videos/embed/6yU2ibWg44GL6kkakqYCQb",
+          "title": "Systematic Engineering of Yarrowia lipolytica for 7-Dehydrocholesterol Production",
+          "minutes": 8
+        },
+        {
+          "src": "pt",
+          "embed": "https://video.igem.org/videos/embed/8B9J4ue1ZS5QfhuJDP72Pu",
+          "title": "SYSU-Software: BioRocket: Systematic Discovery of Novel Protein Delivery Systems... (2023) - Team Presentation [English]",
+          "minutes": 15
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x2ml9jc",
+          "title": "EPIC PICKUP!  RARE PS2 Sony Playstation 2 Test Debugging Station Debug DTL-H30001 Console System",
+          "minutes": 3
+        }
+      ]
+    },
+    {
+      "title": "Databases and data modelling",
+      "technical": "Relational schemas, normalisation, keys and indexes shape how data is stored and queried; the model outlives the code on top of it. A wrong data model taxes every feature forever.",
+      "simple": "Designing how data is stored so every future feature stays easy.",
+      "difficulty": 3,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://peertube.watch/videos/embed/7iSzQte4pjfSSkJxW4rpS1",
+          "title": "Feeding ML models with the data from the databases in real-time",
+          "minutes": 12
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Redwood_Center_2007_04_17_Steve_Waydo",
+          "title": "Steve Waydo: Sparse Coding in the Human MTL: Experimental Results and Computational Modeling",
+          "minutes": 59
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/EuroPython_2015_NUqYduic",
+          "title": "[EuroPython 2015] Holger Peters - Using Scikit-Learn's interface for turning Spaghetti Data Science into Maintainable Software",
+          "minutes": 33
+        }
+      ]
+    },
+    {
+      "title": "APIs and interfaces",
+      "technical": "Well-designed interfaces hide implementation and stay stable while insides change; REST, versioning and clear contracts let components and teams evolve independently. The boundary is the product.",
+      "simple": "The agreed-upon boundaries that let parts of a system change without breaking each other.",
+      "difficulty": 4,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/hak5_8x18",
+          "title": "hak5 8x18: Using Screen in Linux, Motion Detection Webcam Software, and QT Interface Design",
+          "minutes": 26
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Twit_Coding_101_32",
+          "title": "Coding 101 32: C# Abstract Classes and Interfaces",
+          "minutes": 44
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Twit_Coding_101_73",
+          "title": "Coding 101 73: iOS User Interface Elements",
+          "minutes": 56
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/7.applicationprogramminginterfacesapisexplained",
+          "title": "7. Application Programming Interfaces ( APIs) Explained",
+          "minutes": 9
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/the-complete-2023-web-development-bootcamp-25-apis-application-programming-interfaces",
+          "title": "The Complete 2023 Web Development Bootcamp (25 - APIs - Application Programming Interfaces)",
+          "minutes": 9
+        }
+      ]
+    },
+    {
+      "title": "Concurrency and performance",
+      "technical": "Parallelism speeds work but invites races and deadlocks; measure before optimising, because intuition about bottlenecks is usually wrong. Correct-then-fast beats fast-then-debugged.",
+      "simple": "Doing many things at once safely — and speeding up only what measurement proves is slow.",
+      "difficulty": 4,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/ytw8yWZks_k70",
+          "title": "Programming in Go: Concurrency tips",
+          "minutes": 7
+        }
+      ]
+    },
+    {
+      "title": "System design fundamentals",
+      "technical": "Larger systems balance load balancers, caches, queues, databases and services against scale, latency and failure. Trade-offs — consistency vs availability, cost vs speed — are the substance of senior work.",
+      "simple": "How the big pieces fit so a system stays fast and up as users multiply.",
+      "difficulty": 4,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/NPTEL-MechEngr-Design_and_Optimization_of_Energ",
+          "title": "NPTEL Lectures: Mechanical Engineering - Design and Optimization of Energy systems",
+          "minutes": 50
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/NPTEL-ElecCommEngr-Circuits_for_Analog_System_D",
+          "title": "NPTEL Lectures: Electronics and Communication Engineering - Circuits for Analog System Design",
+          "minutes": 59
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9jytx2",
+          "title": "System Design Interview: Design Ticketmaster w/ a Ex-Meta Staff Engineer",
+          "minutes": 59
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x21l615",
+          "title": "System Analysis and Design Tutorial | Systems Development  Life Cycle (SDLC) | Waterfall Method, Parallel development method, Phased development method, System prototyping, Design prototyping, and Agile development",
+          "minutes": 21
+        }
+      ]
+    },
+    {
+      "title": "Architecture patterns",
+      "technical": "Monolith, microservices and event-driven designs each suit different scales and teams; premature microservices are a common self-inflicted wound. Architecture follows the organisation and the load, not fashion.",
+      "simple": "The overall shapes systems take — and choosing one for real reasons, not hype.",
+      "difficulty": 4,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://videos.ijug.eu/videos/embed/3RmMTNhBE2BvxTgeFHxVhF",
+          "title": "Consistency and Coordination Patterns in Event-Driven Architecture",
+          "minutes": 49
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/exploring-the-remarkable-regenerative-patterns-and-practices-of-the-internet-eng",
+          "title": "Exploring the Remarkable Regenerative Patterns and Practices of the Internet Engineering Task Force (IETF) (Young, Waterbury)",
+          "minutes": 51
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/five-must-have-code-patterns-for-your-godot-game-feat.-play-with-furcifer-1080p",
+          "title": "Five Must Have Code Patterns for Your Godot Game (feat. @PlayWithFurcifer)",
+          "minutes": 12
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Europython_2019_83CDZBLR",
+          "title": "[EuroPython 2019] Radoslav Georgiev - Software patterns for productive teams",
+          "minutes": 44
+        },
+        {
+          "src": "pt",
+          "embed": "https://phpc.tv/videos/embed/sa2ZbdAaw7CLvSiDiPev88",
+          "title": "Architecture Design Patterns for PHP",
+          "minutes": 56
+        }
+      ]
+    },
+    {
+      "title": "CI/CD and delivery",
+      "technical": "Automated build, test and deploy pipelines ship changes safely and often; small frequent releases lower risk versus rare big ones. Delivery is an engineering capability, not an afterthought.",
+      "simple": "Automating the path from commit to production so releases are boring and frequent.",
+      "difficulty": 5,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://videos.alexhyett.com/videos/embed/oKorcEMf1sG4UmyGjbG1to",
+          "title": "CI/CD Pipeline Using GitHub Actions: Automate Software Delivery (for free)",
+          "minutes": 12
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x8knb55",
+          "title": "Software Engineer  Hits Swiggy Delivery Boy And Current Poll _ Alwal  _ Secunderabad _ V6 News",
+          "minutes": 5
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xby8zvq",
+          "title": "GSP521 | Secure Software Delivery: Challenge Lab | Google Cloud DevSecOps",
+          "minutes": 9
+        }
+      ]
+    },
+    {
+      "title": "Documentation and communication",
+      "technical": "Code says how; docs and design records say why. READMEs, architecture notes and decision logs carry the context that keeps a codebase understandable as people come and go.",
+      "simple": "Writing down the why, so the next engineer inherits understanding, not a mystery.",
+      "difficulty": 5,
+      "videos": []
+    },
+    {
+      "title": "Working on a team",
+      "technical": "Estimation, code review, standups and handling disagreement are the human protocols of shipping software. Most projects fail on coordination, not on code — these skills are load-bearing.",
+      "simple": "The human side of shipping — reviews, estimates, and disagreeing well.",
+      "difficulty": 5,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/pyconza2013-panel-discussion-pt1",
+          "title": "PyConZA 2013: Panel discussion: Effective Team Practices in Software Development (part 1)",
+          "minutes": 42
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Redmonk-6thSenseAndJIRA805",
+          "title": "Improving Agile Development Teams with 6th Sense Analytics and Atlassian JIRA",
+          "minutes": 26
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/nbpy23-Make_Your_Engineering_Team_A_Fabulous_Place_for_Programmers_with_ADHD_and_Autism",
+          "title": "Make Your Engineering Team A Fabulous Place for Programmers with ADHD and Autism",
+          "minutes": 23
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/Europython_2019_83CDZBLR",
+          "title": "[EuroPython 2019] Radoslav Georgiev - Software patterns for productive teams",
+          "minutes": 44
+        }
+      ]
+    },
+    {
+      "title": "The capstone",
+      "technical": "Design and build a non-trivial application with clean architecture, tests, CI, documentation and a git history a reviewer can read. It demonstrates engineering judgment, not just working code.",
+      "simple": "One well-built, well-documented project that shows you engineer, not just code.",
+      "difficulty": 5,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x4czuv",
+          "title": "Investment Portfolio Management Software",
+          "minutes": 5
+        }
+      ]
+    }
+  ]
 }
