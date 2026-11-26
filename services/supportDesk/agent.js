@@ -171,7 +171,8 @@ function compose(firstName, blocks) {
 
 function toHtml(text) {
     return '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;">' +
-        escapeHtml(text).replace(/https?:\/\/[^\s<]+/g, (u) => `<a href="${u}">${u}</a>`).replace(/\n/g, '<br>') +
+        // A link at the end of a sentence must not swallow the full stop: "…/student-login." would 404.
+        escapeHtml(text).replace(/https?:\/\/[^\s<]*[^\s<.,;:!?)]/g, (u) => `<a href="${u}">${u}</a>`).replace(/\n/g, '<br>') +
         '</div>';
 }
 
@@ -576,5 +577,5 @@ async function tryQuestion(text) {
 module.exports = {
     runOnce, sendAllDrafts, tryQuestion, seedStarters, mode, lastRun, LABEL,
     // for tests, and for scripts/bug-agent-backfill.js
-    _internal: { LOOKS_LIKE_A_BUG, cleanBody, bodyText, parseAddress, automated, verifiedSender, render, compose, tidyReply, nameFrom, header, copyTo }
+    _internal: { LOOKS_LIKE_A_BUG, cleanBody, bodyText, parseAddress, automated, verifiedSender, render, compose, toHtml, tidyReply, nameFrom, header, copyTo }
 };
