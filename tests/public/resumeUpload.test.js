@@ -154,6 +154,26 @@ describe('public/js/resume-upload.js — upload', () => {
         expect(calls).toBe(1);
     });
 
+    // 26 Nov, "it is not responding": a flat 60s cut a 4MB upload on mobile data
+    // off half way, twice. The wait now grows with the file.
+    it('waits longer for a bigger file, and never less than a minute', async () => {
+        const seen = [];
+        const sandbox = { window: {}, FormData: class { append() {} },
+            AbortController: class { constructor() { this.signal = {}; } abort() {} },
+            setTimeout: (fn, ms) => { seen.push(ms); return 0; }, clearTimeout: () => {}, console,
+            fetch: () => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ success: true, filePath: '/p.pdf' }) }) };
+        sandbox.globalThis = sandbox;
+        vm.createContext(sandbox);
+        vm.runInContext(SOURCE, sandbox);
+        const api = sandbox.window.TENResumeUpload;
+        await api.upload(file('small.pdf', 'application/pdf', 200 * 1024));
+        await api.upload(file('big.pdf', 'application/pdf', 4.5 * 1024 * 1024));
+        expect(seen[0]).toBeGreaterThanOrEqual(60000);
+        expect(seen[0]).toBeLessThan(75000);
+        expect(seen[1]).toBeGreaterThan(4 * 60000);                 // 4.5MB at 25KB/s is ~3 minutes on top
+        expect(api.timeoutFor(file('x.pdf', 'application/pdf', 5 * 1024 * 1024))).toBeLessThan(5 * 60000);
+    });
+
     it('never reaches the network for a file it can reject on the device', async () => {
         let calls = 0;
         const api = load(() => { calls++; return Promise.resolve(htmlResponse(200)); });
