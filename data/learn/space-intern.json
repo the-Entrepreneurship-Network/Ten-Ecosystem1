@@ -1,152 +1,577 @@
 {
- "note": "Edit this file to change the module; the server reads it at boot.",
- "topics": [
-  {
-   "title": "The space environment",
-   "technical": "Space is vacuum, extreme temperature swings, microgravity and radiation — every design constraint flows from it. Understanding the environment is the foundation of every spacecraft decision, from materials to shielding.",
-   "simple": "Why space is brutally hard on hardware — no air, wild temperatures, radiation.",
-   "videoSearch": "space environment explained",
-   "difficulty": 1
-  },
-  {
-   "title": "Orbital mechanics basics",
-   "technical": "Orbits are continuous free-fall governed by gravity and velocity; altitude sets period, and small burns change orbits enormously later. Kepler's laws and delta-v are the grammar of everything that flies.",
-   "simple": "How things stay in orbit — falling around Earth fast enough to keep missing it.",
-   "videoSearch": "orbital mechanics explained",
-   "difficulty": 1
-  },
-  {
-   "title": "Types of orbits",
-   "technical": "LEO, MEO, GEO and polar orbits each suit different missions — imaging, communications, navigation — trading coverage, latency and launch cost. Choosing the orbit is choosing the mission's shape.",
-   "simple": "Different heights and paths around Earth, each good for different jobs.",
-   "videoSearch": "types of satellite orbits",
-   "difficulty": 1
-  },
-  {
-   "title": "Rockets and propulsion",
-   "technical": "Rockets throw mass backward to move forward; the rocket equation ties fuel to achievable speed, and staging beats the tyranny of carrying empty tanks. Getting to orbit is mostly a fuel-fraction problem.",
-   "simple": "How rockets push against nothing — and why they shed stages on the way up.",
-   "videoSearch": "how rockets work",
-   "difficulty": 1
-  },
-  {
-   "title": "Spacecraft subsystems",
-   "technical": "A spacecraft is power, thermal, propulsion, communications, attitude control and payload working together; a failure in any can end a mission. Systems thinking — how parts interact — is the core discipline.",
-   "simple": "The teamwork of systems — power, heat, steering, radio — that keeps a satellite alive.",
-   "videoSearch": "spacecraft subsystems overview",
-   "difficulty": 1
-  },
-  {
-   "title": "Satellites and their uses",
-   "technical": "Communications, Earth observation, navigation and science satellites serve distinct purposes with distinct designs. Understanding the application drives every engineering trade-off above it.",
-   "simple": "The different jobs satellites do — talking, watching, guiding, discovering.",
-   "videoSearch": "how satellites work",
-   "difficulty": 2
-  },
-  {
-   "title": "Attitude and orbit control",
-   "technical": "Spacecraft must point precisely — antennas at Earth, cameras at targets, panels at the Sun — using reaction wheels, thrusters and star trackers. Pointing is a control problem solved continuously.",
-   "simple": "Keeping a satellite aimed the right way as it hurtles through space.",
-   "videoSearch": "attitude control satellite",
-   "difficulty": 2
-  },
-  {
-   "title": "Power and thermal",
-   "technical": "Solar panels and batteries power spacecraft through sunlight and eclipse; radiators and heaters manage temperatures with no air to carry heat away. Energy and heat budgets constrain every design.",
-   "simple": "Feeding a satellite with sunlight and keeping it from freezing or cooking.",
-   "videoSearch": "spacecraft power thermal systems",
-   "difficulty": 2
-  },
-  {
-   "title": "Communications and ground stations",
-   "technical": "Spacecraft talk to ground stations over radio links budgeted for distance, power and noise; limited passes make autonomy and data compression essential. The link closes or the mission is deaf.",
-   "simple": "How we stay in radio contact with something moving thousands of km up.",
-   "videoSearch": "satellite communication ground station",
-   "difficulty": 2
-  },
-  {
-   "title": "Space data and remote sensing",
-   "technical": "Earth-observation satellites gather imagery and sensor data across the spectrum; processing turns raw signals into maps, weather and climate insight. The value is in the data, not the hardware alone.",
-   "simple": "Turning what satellites see into maps, weather and climate knowledge.",
-   "videoSearch": "remote sensing basics",
-   "difficulty": 3
-  },
-  {
-   "title": "Mission design",
-   "technical": "A mission balances objectives, orbit, spacecraft, launch and budget against constraints; requirements flow into design and verification. Trade studies — cost vs capability vs risk — are the daily work.",
-   "simple": "Planning a space mission by balancing goals, physics and money.",
-   "videoSearch": "space mission design process",
-   "difficulty": 3
-  },
-  {
-   "title": "Launch and deployment",
-   "technical": "Launch vehicles carry payloads to orbit through staging and separation; deployment sequences unfold panels and antennas. The riskiest minutes of a mission's life are its first.",
-   "simple": "Getting to orbit and unfolding into a working satellite — the tensest part.",
-   "videoSearch": "rocket launch sequence explained",
-   "difficulty": 3
-  },
-  {
-   "title": "CubeSats and small satellites",
-   "technical": "Standardised small satellites democratised space: cheaper, faster missions built by universities and startups. They trade capability for accessibility, opening space to far more players.",
-   "simple": "Small, cheap, standardised satellites that let almost anyone reach space.",
-   "videoSearch": "cubesat explained",
-   "difficulty": 3
-  },
-  {
-   "title": "Radiation and reliability",
-   "technical": "Space radiation flips bits and degrades parts; redundancy, radiation-hardened components and error correction keep systems alive. You cannot service a satellite, so reliability is designed in, not repaired.",
-   "simple": "Protecting electronics from space radiation you can never send a technician to fix.",
-   "videoSearch": "space radiation electronics",
-   "difficulty": 4
-  },
-  {
-   "title": "Human spaceflight",
-   "technical": "Keeping humans alive adds life support, radiation shielding and psychology to every constraint; margins tighten when failure means death. The hardest missions carry people.",
-   "simple": "Everything gets harder when the payload is a living, breathing person.",
-   "videoSearch": "human spaceflight basics",
-   "difficulty": 4
-  },
-  {
-   "title": "Deep space and exploration",
-   "technical": "Missions beyond Earth face long delays, autonomy, extreme distances and unforgiving windows; gravity assists and careful trajectories stretch limited fuel. Patience and precision replace real-time control.",
-   "simple": "Sending probes to other worlds, where commands take hours and there's no second chance.",
-   "videoSearch": "deep space exploration missions",
-   "difficulty": 4
-  },
-  {
-   "title": "Space data analysis",
-   "technical": "Space missions generate torrents of telemetry and science data analysed with the same statistics and programming as any data field. The domain is exotic; the tools are pandas and Python.",
-   "simple": "Making sense of the mountains of numbers a mission sends home.",
-   "videoSearch": "satellite data analysis python",
-   "difficulty": 4
-  },
-  {
-   "title": "The space industry",
-   "technical": "Government agencies, established primes and new commercial players form an ecosystem reshaped by falling launch costs. Understanding the industry maps where the work and the future are.",
-   "simple": "Who builds and flies space hardware today — and how new companies changed it.",
-   "videoSearch": "space industry overview",
-   "difficulty": 5
-  },
-  {
-   "title": "Space policy and sustainability",
-   "technical": "Orbital debris, spectrum, and international law govern a shared and crowded environment; sustainability is now an engineering constraint, not an afterthought. Space is a commons that can be ruined.",
-   "simple": "The rules and the growing junk problem of a crowded, shared orbit.",
-   "videoSearch": "space debris sustainability",
-   "difficulty": 5
-  },
-  {
-   "title": "Careers in space",
-   "technical": "Space work spans engineering, science, data, operations and business; the field rewards systems thinkers who cross disciplines. Knowing the roles maps a path into an expanding industry.",
-   "simple": "The many kinds of jobs in space — and how to aim at one.",
-   "videoSearch": "careers in space industry",
-   "difficulty": 5
-  },
-  {
-   "title": "The capstone",
-   "technical": "Design a small satellite mission on paper: objective, orbit, subsystems, data plan and constraints, with the trade-offs justified. A coherent mission design demonstrates systems thinking end to end.",
-   "simple": "Design a complete small-satellite mission — proof you can think like a space engineer.",
-   "videoSearch": "cubesat mission design project",
-   "difficulty": 5
-  }
- ]
+  "note": "Edit this file to change the module; the server reads it at boot.",
+  "topics": [
+    {
+      "title": "The space environment",
+      "technical": "Space is vacuum, extreme temperature swings, microgravity and radiation — every design constraint flows from it. Understanding the environment is the foundation of every spacecraft decision, from materials to shielding.",
+      "simple": "Why space is brutally hard on hardware — no air, wild temperatures, radiation.",
+      "difficulty": 1,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://tube.mucs.club/videos/embed/9qGGuK288f88wEW2AVptb4",
+          "title": "3D Orchestration in Virtual Space: An Open-Source VR Environment for Spatial Music and Immersive Audio",
+          "minutes": 28
+        },
+        {
+          "src": "pt",
+          "embed": "https://peertube.dngr.us/videos/embed/uoAgx2anGwkKYUx3yG7w5o",
+          "title": "Moonwalk Series: Program 2 - Adapting to a Space Environment",
+          "minutes": 29
+        },
+        {
+          "src": "pt",
+          "embed": "https://peertube.dngr.us/videos/embed/waBgxGspxqMCE9fQPVCgVh",
+          "title": "Living Well in Space: Monitoring Environment",
+          "minutes": 10
+        },
+        {
+          "src": "pt",
+          "embed": "https://solarsystem.video/videos/embed/6tikJvULLfZx7vbgAYCZyH",
+          "title": "The Moon's Response to the Interplanetary Meteoroid Environment",
+          "minutes": 56
+        },
+        {
+          "src": "pt",
+          "embed": "https://solarsystem.video/videos/embed/1XanUu2QPwJLaCfG9Qoqaf",
+          "title": "Mini-Moon 1_[2] Prof. Jasper Halekas─The Plasma Environment of the Moon",
+          "minutes": 37
+        }
+      ]
+    },
+    {
+      "title": "Orbital mechanics basics",
+      "technical": "Orbits are continuous free-fall governed by gravity and velocity; altitude sets period, and small burns change orbits enormously later. Kepler's laws and delta-v are the grammar of everything that flies.",
+      "simple": "How things stay in orbit — falling around Earth fast enough to keep missing it.",
+      "difficulty": 1,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/330-dvic-804859",
+          "title": "Space Flight: The Application of Orbital Mechanics",
+          "minutes": 37
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/NasaConnect-Iss-OrbitalMechanicsWebActivity",
+          "title": "NASA Connect - ISS - Orbital Mechanics Web Activity",
+          "minutes": 4
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/NPTEL-MechEngr-Rocket_Propulsion",
+          "title": "NPTEL Lectures: Mechanical Engineering - Rocket Propulsion",
+          "minutes": 58
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/the-mechanical-universe-24-navigating-in-space",
+          "title": "The Mechanical Universe 24 Navigating In Space",
+          "minutes": 29
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/lost-in-space-s-02-e-28-the-mechanical-men",
+          "title": "Lost In Space S 02 E 28 The Mechanical Men",
+          "minutes": 59
+        }
+      ]
+    },
+    {
+      "title": "Types of orbits",
+      "technical": "LEO, MEO, GEO and polar orbits each suit different missions — imaging, communications, navigation — trading coverage, latency and launch cost. Choosing the orbit is choosing the mission's shape.",
+      "simple": "Different heights and paths around Earth, each good for different jobs.",
+      "difficulty": 1,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://diler.tube/videos/embed/pvMNwSpHetYvcuoys2UGG5",
+          "title": "Types of Orbit | Space Mission | MH Grade 10 | Science | Khan Academy",
+          "minutes": 4
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/NasaConnect-Gs-StressTypeAndDataAnalysis",
+          "title": "NASA Connect - GS - Stress Type and Data Analysis",
+          "minutes": 7
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x8h8y5u",
+          "title": "The Different Types of Spacecraft You Should Know About | Unveiled",
+          "minutes": 10
+        }
+      ]
+    },
+    {
+      "title": "Rockets and propulsion",
+      "technical": "Rockets throw mass backward to move forward; the rocket equation ties fuel to achievable speed, and staging beats the tyranny of carrying empty tanks. Getting to orbit is mostly a fuel-fraction problem.",
+      "simple": "How rockets push against nothing — and why they shed stages on the way up.",
+      "difficulty": 1,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/NPTEL-MechEngr-Rocket_Propulsion",
+          "title": "NPTEL Lectures: Mechanical Engineering - Rocket Propulsion",
+          "minutes": 58
+        },
+        {
+          "src": "pt",
+          "embed": "https://peertube.dngr.us/videos/embed/mUe51L65XkAmCZv2mZqUBs",
+          "title": "\" NUCLEAR PROPULSION IN SPACE \"  PROJECT NERVA   SPACE NUCLEAR PROPULSION OFFICE PROMO FILM 25192",
+          "minutes": 24
+        },
+        {
+          "src": "pt",
+          "embed": "https://peertube.dngr.us/videos/embed/8xCPp3sKYVTMJrMhv1axFY",
+          "title": "Low Thrust Space Propulsion",
+          "minutes": 5
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/FB-219",
+          "title": "War Dept Film Bulletin 219: V-2 Rocket Assembling And Launching, 1947",
+          "minutes": 9
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x2ygngm",
+          "title": "Solid Mass-Centrifugal Propulsion System (ISA) International Space Agency",
+          "minutes": 6
+        }
+      ]
+    },
+    {
+      "title": "Spacecraft subsystems",
+      "technical": "A spacecraft is power, thermal, propulsion, communications, attitude control and payload working together; a failure in any can end a mission. Systems thinking — how parts interact — is the core discipline.",
+      "simple": "The teamwork of systems — power, heat, steering, radio — that keeps a satellite alive.",
+      "difficulty": 1,
+      "videos": []
+    },
+    {
+      "title": "Satellites and their uses",
+      "technical": "Communications, Earth observation, navigation and science satellites serve distinct purposes with distinct designs. Understanding the application drives every engineering trade-off above it.",
+      "simple": "The different jobs satellites do — talking, watching, guiding, discovering.",
+      "difficulty": 2,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/gov.archives.arc.1257667",
+          "title": "Earth Resources Technology Satellite (ERTS)",
+          "minutes": 28
+        }
+      ]
+    },
+    {
+      "title": "Attitude and orbit control",
+      "technical": "Spacecraft must point precisely — antennas at Earth, cameras at targets, panels at the Sun — using reaction wheels, thrusters and star trackers. Pointing is a control problem solved continuously.",
+      "simple": "Keeping a satellite aimed the right way as it hurtles through space.",
+      "difficulty": 2,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/77424NASAFlightControllerOrientation",
+          "title": "NASA Project Gemini Flight Controller Orientation Film 77424",
+          "minutes": 10
+        }
+      ]
+    },
+    {
+      "title": "Power and thermal",
+      "technical": "Solar panels and batteries power spacecraft through sunlight and eclipse; radiators and heaters manage temperatures with no air to carry heat away. Energy and heat budgets constrain every design.",
+      "simple": "Feeding a satellite with sunlight and keeping it from freezing or cooking.",
+      "difficulty": 2,
+      "videos": []
+    },
+    {
+      "title": "Communications and ground stations",
+      "technical": "Spacecraft talk to ground stations over radio links budgeted for distance, power and noise; limited passes make autonomy and data compression essential. The link closes or the mission is deaf.",
+      "simple": "How we stay in radio contact with something moving thousands of km up.",
+      "difficulty": 2,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://makertube.net/videos/embed/3nAGnHu7MptgT4Xao4uHTe",
+          "title": "New Ground Station Launch Control and Communications Test",
+          "minutes": 5
+        },
+        {
+          "src": "pt",
+          "embed": "https://peertube.dngr.us/videos/embed/nh7EJrsBuqoGgBDeSF9EV3",
+          "title": "NASA GODDARD FLIGHT CENTER GROUND CONTROL, SATELLITE COMMUNICATIONS FILM 47534",
+          "minutes": 29
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/NASA_eClips_Our_World_Communication_HD",
+          "title": "NASA_eClips_Our_World_Communication_HD",
+          "minutes": 7
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x913gy4",
+          "title": "Space to Ground NASA space exploration station",
+          "minutes": 4
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x82fetc",
+          "title": "India's Mega ASEAN Space Push To Build Ground Station In Vietnam NewsX",
+          "minutes": 9
+        }
+      ]
+    },
+    {
+      "title": "Space data and remote sensing",
+      "technical": "Earth-observation satellites gather imagery and sensor data across the spectrum; processing turns raw signals into maps, weather and climate insight. The value is in the data, not the hardware alone.",
+      "simple": "Turning what satellites see into maps, weather and climate knowledge.",
+      "difficulty": 3,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://video.osgeo.org/videos/embed/vB4b7CxPtSFsGH5SGoKWwa",
+          "title": "FOSS4G 2021 - Open remote sensing data to analyze the effectiveness of Payments for Ecosystem.......",
+          "minutes": 30
+        },
+        {
+          "src": "pt",
+          "embed": "https://solarsystem.video/videos/embed/cuSkGV7F7W8PxS28XgZuNt",
+          "title": "Introduction to remote sensing and planetary data",
+          "minutes": 43
+        },
+        {
+          "src": "pt",
+          "embed": "https://video.osgeo.org/videos/embed/uRhDyEAkuSopyje5w8cwZr",
+          "title": "FOSS4GE 2024 | Mapping Soil Erosion Classes using Remote Sensing Data and Ensemble Models",
+          "minutes": 25
+        },
+        {
+          "src": "pt",
+          "embed": "https://video.osgeo.org/videos/embed/gbZGVNqA9Ffu8PsBqB6XgU",
+          "title": "FOSS4G 2021 A study in vulnerable settlements using remote sensing and census data",
+          "minutes": 9
+        },
+        {
+          "src": "pt",
+          "embed": "https://peertube.openstreetmap.fr/videos/embed/uGPyREvudjUUbZWKsnqBYy",
+          "title": "Towards a Real-Time Monitoring System for the Road Network Based on OpenStreetMap and Remote Sensing Data: OSM Road",
+          "minutes": 24
+        }
+      ]
+    },
+    {
+      "title": "Mission design",
+      "technical": "A mission balances objectives, orbit, spacecraft, launch and budget against constraints; requirements flow into design and verification. Trade studies — cost vs capability vs risk — are the daily work.",
+      "simple": "Planning a space mission by balancing goals, physics and money.",
+      "difficulty": 3,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/NasaConnect-Fofe-DesigningAircraft",
+          "title": "NASA Connect - FOFE - Designing Aircraft",
+          "minutes": 6
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/NasaConnect-Mtf-RatiosAndAircraftDesign",
+          "title": "NASA Connect - MTF - Ratios and Aircraft Design",
+          "minutes": 6
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/25974DesignForSurvival",
+          "title": "POST-WWII JET AGE AIRCRAFT DESIGN, ROCKET & NUCLEAR POWERED AIRCRAFT 25974",
+          "minutes": 26
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/NasaConnect-Mtf-AirplaneDesignOnlineActivity",
+          "title": "NASA Connect - MTF - Airplane Design Online Activity",
+          "minutes": 3
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/NasaSciFiles-AirplaneDesign",
+          "title": "NASA SCI Files - Airplane Design",
+          "minutes": 3
+        }
+      ]
+    },
+    {
+      "title": "Launch and deployment",
+      "technical": "Launch vehicles carry payloads to orbit through staging and separation; deployment sequences unfold panels and antennas. The riskiest minutes of a mission's life are its first.",
+      "simple": "Getting to orbit and unfolding into a working satellite — the tensest part.",
+      "difficulty": 3,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x9ci64a",
+          "title": "SpaceX launches seventh Starship in deployment test, prototype fails in space",
+          "minutes": 6
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x8gol59",
+          "title": "James Webb Space Telescope Christmas 2021 Launch From T-1 Minute Through Deployment",
+          "minutes": 56
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xb2rumi",
+          "title": "SpaceX deploys Roman Space Telescope shortly after Falcon Heavy launch",
+          "minutes": 11
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x3w0l5y",
+          "title": "S. Korea, U.S. launch formal talks on THAAD deployment",
+          "minutes": 3
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xb3hpi6",
+          "title": "SpaceX launches and deploys 27 Starlink satellites, sticks droneship landing",
+          "minutes": 9
+        }
+      ]
+    },
+    {
+      "title": "CubeSats and small satellites",
+      "technical": "Standardised small satellites democratised space: cheaper, faster missions built by universities and startups. They trade capability for accessibility, opening space to far more players.",
+      "simple": "Small, cheap, standardised satellites that let almost anyone reach space.",
+      "difficulty": 3,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://video.pa3weg.nl/videos/embed/b1sLs7wXnKmnnk487pvpLB",
+          "title": "2025: Keynote: SSTL and Small Sats& CubeSat Simulator - Patrick Wood, 2E0IFB, CEO SSTL (Retired)",
+          "minutes": 56
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/87174bNASA3ManApolloNextAndSwitchboardInTheSky",
+          "title": "NASA 1966 APOLLO 1 MISSION, HL-10 LIFTING BODY, ATS SATELLITE LAUNCH 87174b",
+          "minutes": 9
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/satellites_202003",
+          "title": "SATELLITES MANNED AND UNMANNED INTERPLANETARY VEHICLES",
+          "minutes": 38
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x8jpux3",
+          "title": "INCREDIBLE BEDROOM AND SPACE SAVING FURNITURE FOR SMALL SPACES | TechZone",
+          "minutes": 10
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xaadydq",
+          "title": "Exploring the Curious Geography of Small Towns and Vast Empty Spaces",
+          "minutes": 18
+        }
+      ]
+    },
+    {
+      "title": "Radiation and reliability",
+      "technical": "Space radiation flips bits and degrades parts; redundancy, radiation-hardened components and error correction keep systems alive. You cannot service a satellite, so reliability is designed in, not repaired.",
+      "simple": "Protecting electronics from space radiation you can never send a technician to fix.",
+      "difficulty": 4,
+      "videos": []
+    },
+    {
+      "title": "Human spaceflight",
+      "technical": "Keeping humans alive adds life support, radiation shielding and psychology to every constraint; margins tighten when failure means death. The hardest missions carry people.",
+      "simple": "Everything gets harder when the payload is a living, breathing person.",
+      "difficulty": 4,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/gov.dod.dimoc.38554",
+          "title": "AIR FORCE STORY, VOL 2, CHAPTER 8 -- HUMAN FACTORS IN SPACE FLIGHT, 1950-1960",
+          "minutes": 14
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/SpaceRoverEpisodeIINeHumanisCredeAudioVersion",
+          "title": "Space Rover - Episode II: Ne Humanis Crede - Audio Version",
+          "minutes": 31
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/LisaNip_2015X",
+          "title": "Lisa Nip: How humans could evolve to survive in space",
+          "minutes": 13
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/005-why-do-humans-need-a-closed-environment-for-space-travel",
+          "title": "005 Why Do Humans Need A Closed Environment For Space Travel",
+          "minutes": 24
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/DigitalspaceSpace.comVideobootprintsOnAsteroidsHumanCrewedMissionTo",
+          "title": "DigitalSpace: Space.com Video \"BootPrints On Asteroids\" Human Crewed Mission To A NEO (for NASA-2007)",
+          "minutes": 6
+        }
+      ]
+    },
+    {
+      "title": "Deep space and exploration",
+      "technical": "Missions beyond Earth face long delays, autonomy, extreme distances and unforgiving windows; gravity assists and careful trajectories stretch limited fuel. Patience and precision replace real-time control.",
+      "simple": "Sending probes to other worlds, where commands take hours and there's no second chance.",
+      "difficulty": 4,
+      "videos": [
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/xrsuib",
+          "title": "NASA Announces Design For New Deep Space Exploration System",
+          "minutes": 5
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x87m1cv",
+          "title": "Deep Dive: Walrus Audio's Mako R1 is perfect for stereo space exploration",
+          "minutes": 7
+        }
+      ]
+    },
+    {
+      "title": "Space data analysis",
+      "technical": "Space missions generate torrents of telemetry and science data analysed with the same statistics and programming as any data field. The domain is exotic; the tools are pandas and Python.",
+      "simple": "Making sense of the mountains of numbers a mission sends home.",
+      "difficulty": 4,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://makertube.net/videos/embed/8mdy34ogXrg2apaVu3LRZU",
+          "title": "Cluster analysis with satellite and sociodemographic data to classify the Salvadoran territory.",
+          "minutes": 15
+        }
+      ]
+    },
+    {
+      "title": "The space industry",
+      "technical": "Government agencies, established primes and new commercial players form an ecosystem reshaped by falling launch costs. Understanding the industry maps where the work and the future are.",
+      "simple": "Who builds and flies space hardware today — and how new companies changed it.",
+      "difficulty": 5,
+      "videos": [
+        {
+          "src": "pt",
+          "embed": "https://peertube.dngr.us/videos/embed/h2ddbsnKNwqtQ8tf4UweLv",
+          "title": "\"OUTLOOK '70 \"  IMPACT OF NASA SPACE PROGRAM TECHNOLOGY ON AMERICAN INDUSTRY PROMO FILM  SM10485",
+          "minutes": 11
+        },
+        {
+          "src": "pt",
+          "embed": "https://astrotube.obspm.fr/videos/embed/3zjdBaiX78h6AzYgN5Cm2q",
+          "title": "#SLOT10: Camera systems for small satellite scientific missions – state-of-the-art industry view",
+          "minutes": 53
+        },
+        {
+          "src": "pt",
+          "embed": "https://video.blender.org/videos/embed/mfedfqCVHChyuSXZRtp2jZ",
+          "title": "Using Blender in space industry - Airbus D&S",
+          "minutes": 21
+        },
+        {
+          "src": "pt",
+          "embed": "https://video.pa3weg.nl/videos/embed/pWmv1HepnGpa2cHLdyARoA",
+          "title": "2019: Challenges for the Small Communication Satellite Industry - Dr Barnaby Osborne (M6KGO), ESA",
+          "minutes": 55
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x329b79",
+          "title": "ESA Euronews: The industry of space",
+          "minutes": 12
+        }
+      ]
+    },
+    {
+      "title": "Space policy and sustainability",
+      "technical": "Orbital debris, spectrum, and international law govern a shared and crowded environment; sustainability is now an engineering constraint, not an afterthought. Space is a commons that can be ruined.",
+      "simple": "The rules and the growing junk problem of a crowded, shared orbit.",
+      "difficulty": 5,
+      "videos": []
+    },
+    {
+      "title": "Careers in space",
+      "technical": "Space work spans engineering, science, data, operations and business; the field rewards systems thinkers who cross disciplines. Knowing the roles maps a path into an expanding industry.",
+      "simple": "The many kinds of jobs in space — and how to aim at one.",
+      "difficulty": 5,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/OurWorldCareersAtNasa-MoreThanJustAstronauts",
+          "title": "Our World: Careers at NASA - More Than Just Astronauts!",
+          "minutes": 6
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/NASA_Real_World_Because_It_Flew_HD",
+          "title": "Real World: Legacy of NASA's Space Shuttle - Because It Flew",
+          "minutes": 6
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x84odw5",
+          "title": "World Space Week celebrates women pursuing careers in space",
+          "minutes": 6
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x328fsd",
+          "title": "Norwegian students consider a career in space",
+          "minutes": 4
+        },
+        {
+          "src": "dm",
+          "embed": "https://www.dailymotion.com/embed/video/x1dhbme",
+          "title": "Kerbal Space Program Career - Part 3: A Sad Day",
+          "minutes": 20
+        }
+      ]
+    },
+    {
+      "title": "The capstone",
+      "technical": "Design a small satellite mission on paper: objective, orbit, subsystems, data plan and constraints, with the trade-offs justified. A coherent mission design demonstrates systems thinking end to end.",
+      "simple": "Design a complete small-satellite mission — proof you can think like a space engineer.",
+      "difficulty": 5,
+      "videos": [
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/NasaConnect-Fofe-DesigningAircraft",
+          "title": "NASA Connect - FOFE - Designing Aircraft",
+          "minutes": 6
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/NasaConnect-Mtf-RatiosAndAircraftDesign",
+          "title": "NASA Connect - MTF - Ratios and Aircraft Design",
+          "minutes": 6
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/25974DesignForSurvival",
+          "title": "POST-WWII JET AGE AIRCRAFT DESIGN, ROCKET & NUCLEAR POWERED AIRCRAFT 25974",
+          "minutes": 26
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/NasaConnect-Mtf-AirplaneDesignOnlineActivity",
+          "title": "NASA Connect - MTF - Airplane Design Online Activity",
+          "minutes": 3
+        },
+        {
+          "src": "ia",
+          "embed": "https://archive.org/embed/NasaSciFiles-AirplaneDesign",
+          "title": "NASA SCI Files - Airplane Design",
+          "minutes": 3
+        }
+      ]
+    }
+  ]
 }
