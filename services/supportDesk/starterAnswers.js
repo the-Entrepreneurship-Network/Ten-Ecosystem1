@@ -24,7 +24,8 @@ module.exports = [
             'intern id not showing', 'lost my ten id', 'seeking employee id', 'i didn\'t got employee id',
             'please share my employee id', 'kindly provide my employee id', 'not yet received my employee id',
             'i didn\'t get employee id till now', 'still no employee id', 'did not receive employee id yet',
-            'please generate my employee id', 'assign me a new employee id', 'kindly generate employee id for my internship'
+            'please generate my employee id', 'assign me a new employee id', 'kindly generate employee id for my internship',
+            'request for employee id', 'could you please share my employee id to complete my onboarding', 'i joined as an intern please share my employee id'
         ],
         answer: 'You get your Employee ID the moment you register. It looks like TEN/WEB/1005, and you will find it in ' +
             'your welcome email and at the top of your dashboard.\n\n' +
@@ -51,7 +52,8 @@ module.exports = [
         question: 'How do I register for the internship?',
         examples: [
             'how to register', 'how can i join the internship', 'how to apply for the internship', 'registration process',
-            'i want to join', 'how to enroll', 'registration kaise kare', 'where is the registration form'
+            'i want to join', 'how to enroll', 'registration kaise kare', 'where is the registration form',
+            'i am interested', 'interested in the internship', 'i am interested in joining'
         ],
         answer: 'You can register here: {{registerUrl}}\n\n' +
             'Choose "Student", pick your domain and your plan, and submit the form. Your Employee ID is created straight ' +
