@@ -22,7 +22,8 @@ module.exports = [
             'what is my employee id', 'i did not get my employee id', 'emp id not received', 'where can i find my emp id',
             'i forgot my employee id', 'how to get employee id', 'employee id kaise milega', 'mera employee id kya hai',
             'intern id not showing', 'lost my ten id', 'seeking employee id', 'i didn\'t got employee id',
-            'please share my employee id', 'kindly provide my employee id', 'not yet received my employee id'
+            'please share my employee id', 'kindly provide my employee id', 'not yet received my employee id',
+            'i didn\'t get employee id till now', 'still no employee id', 'did not receive employee id yet'
         ],
         answer: 'You get your Employee ID the moment you register. It looks like TEN/WEB/1005, and you will find it in ' +
             'your welcome email and at the top of your dashboard.\n\n' +
