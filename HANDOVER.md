@@ -594,6 +594,36 @@ From the sidebar of `hr-portal.html`:
   resume names a college. The server fetches neither.
 - The send step has "Open in Gmail" and "Open in my mail app": a draft to the
   recruiter from the student's own mailbox, resume attached by them.
+- **AI where it helps, never required** (`services/v2/careerAi.js`). Gemini
+  scores the top 20 openings 0-100 with reasons and missing skills
+  (`POST /api/v2/jobs/match`, one call per search), and "Reword with AI" in the
+  application panel rewrites the student's bullets and cover letter for the job
+  (`POST /api/v2/jobs/reword`). Every answer is cached 30 days in
+  `CareerAiCall`, and calls are limited to `CAREER_AI_PER_STUDENT` (15) per
+  student and `CAREER_AI_PER_DAY` (150) for everyone per IST day, because the
+  free quota is shared with exams and the AI Coordinator. When the limit is
+  reached, Gemini refuses, or no answer comes within 20 s, the screens keep the
+  rule-based result and say why. After a 429 or 503, Gemini is not asked again
+  for 10 minutes.
+- **No new facts from the AI** (`services/v2/jobReword.js`). Every reworded
+  line is checked against the resume: its numbers, its skills and its names
+  must all be ones the student wrote (a letter may also name the employer and
+  the role). A failing bullet stays as written and the student is told what
+  the rewrite tried to add; a failing letter sentence is left out. The model
+  asks for missing numbers instead of making them up. Missing skills in a
+  match must be named by the posting and absent from the resume.
+- The resume portal shows a job description's match, the way Jobscan does:
+  the share of its keywords the resume has, and where each missing one would
+  go, only if true (`POST /api/v2/resume/match`, rules only). It appears above
+  an opened job and under "Match a job description" for a pasted one. Short
+  forms count as the skill (JS = JavaScript, k8s = Kubernetes; the list is
+  `ALIASES` in `services/v2/jobFitness.js`, kept to forms that mean nothing
+  else on a resume).
+- A LinkedIn profile saved as a PDF ("More → Save to PDF") is read as a resume
+  by both agents (`services/v2/linkedinPdf.js`, via `services/v2/pdfText.js`).
+  The converter was checked against two real exports. pdf-parse fails some
+  files a call or two after a restart, including PDFs this portal itself
+  renders, so `pdfText` tries three times.
 
 **Hackathon portal** (`routes/v2/hackathons.js`)
 - A public board; teams register with UPI payment and get a team code.
@@ -1202,6 +1232,7 @@ rest.
 | `CertificateApplication`, `CertificateOverride`, `CertificateRequest` | a student's request; an HR override (audit); the automation cron's approval cycle | |
 | `StudentDocument` (`models/new/`) | one student's uploads and document links | `studentId` unique |
 | `GrowthCampaign`, `GrowthQuotaGrant`, `MailHistory` | a campaign; a quota top-up; one mail sent | `MailHistory` is what the quota counts |
+| `CareerAiCall` (`careeraicalls`) | one Gemini answer for the job or resume agent; also the count for the daily AI limits | `key` (sha256 of the question) unique; `createdAt` expires after 30 days; index on `subject`, `createdAt` |
 | `JobOpening` (`jobopenings`) | one opening the job collector stored | `key` (title\|company) unique; `seenAt` expires after 30 days; text index on title, tags, description |
 | `CollegeContact`, `CollegeSite` | a placement-office address; a college host in the crawl queue | `email` unique; `host` unique |
 | `Notification`, `EcosystemNotification`, `PushSubscription` | the two notification systems (§7.1); a browser push endpoint | |
@@ -1342,7 +1373,7 @@ above.
 | Service | Used for | Settings | When the settings are missing |
 |---|---|---|---|
 | **SMTP** (one account for all mail) | Transactional mail (welcome, password reset, documents, an email copy of every personal notification, HR alerts) **and** marketing (the Monday mail, Growth campaigns, college outreach) | `SMTP_*`, `SES_SMTP_*` or `EMAIL_*` (first non-empty wins), `EMAIL_FROM`, `HR_NOTIFY_EMAIL` | **Mail is silently not sent**: the mailer falls back to a JSON transport and reports success. Bulk senders then record mails as sent. Check with `node scripts/check-email.js` |
-| **Gemini** (`generativelanguage.googleapis.com`) | LLM-portal exams, the idea agent, Growth "Draft with AI", the AI Coordinator's chat answers and the submission pre-check (all through `utils/gemini.js`, model `GEMINI_MODEL`, backup `GEMINI_FALLBACK_MODEL`) | `GEMINI_API_KEY` | Those features say so and switch off; the AI Coordinator hands questions to people and the pre-check runs without the match and draft |
+| **Gemini** (`generativelanguage.googleapis.com`) | LLM-portal exams, the idea agent, Growth "Draft with AI", the AI Coordinator's chat answers, the submission pre-check, and the job agent's match and rewording (all through `utils/gemini.js`, model `GEMINI_MODEL`, backup `GEMINI_FALLBACK_MODEL`) | `GEMINI_API_KEY` | Those features say so and switch off; the AI Coordinator hands questions to people and the pre-check runs without the match and draft |
 | **Web Push** (`web-push`, VAPID) | Personal notifications and chat messages to phones | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_CONTACT` | Push is off. Generate keys once with `node scripts/generate-vapid-keys.js`. **Regenerating them unsubscribes every device** |
 | **WhatsApp** (n8n webhook or the Meta Cloud API) | The daily attendance report only | `ATTENDANCE_TRANSPORT`, `N8N_*`, `WHATSAPP_*` | Dry run, printed to the log. Meta tokens last about 60 days; `scripts/whatsapp-exchange-token.js` renews one |
 | **Google Sheets** (public CSV export) | Attendance form responses | `ATTENDANCE_SHEET_*` | The report falls back to portal sign-ins |
@@ -1414,7 +1445,7 @@ except SMTP, which fails silently (§11). By area:
 | Attendance agent | `ATTENDANCE_AGENT_ENABLED`, `ATTENDANCE_REPORT_CRON`, `ATTENDANCE_REPORT_DAY`, `ATTENDANCE_REPORT_TO`, `ATTENDANCE_TZ`, `ATTENDANCE_LOGIN_RETENTION_DAYS`, `ATTENDANCE_TRANSPORT`, `N8N_ATTENDANCE_WEBHOOK_URL`, `N8N_WEBHOOK_SECRET`, `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_API_VERSION`, `WHATSAPP_TEMPLATE_NAME`, `WHATSAPP_TEMPLATE_LANG`, `ATTENDANCE_SHEET_URL` / `_ID` / `_CSV_URL` / `_GID`, `ATTENDANCE_SHEET_CACHE_SECONDS`, `ATTENDANCE_REQUIRED_PER_DAY`, `ATTENDANCE_INCLUDE_PORTAL_LOGINS` |
 | Payments | `PAYMENT_ENABLED`, `PAYMENT_PROVIDER`, `UPI_ID`, `PAYMENTSETU_API_KEY`, `SETU_CLIENT_ID`, `SETU_CLIENT_SECRET`, `SETU_SCHEME_ID`, `SETU_BASE_URL`, `SETU_WEBHOOK_SECRET`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` |
 | Schedulers | `ENABLE_AUTOMATION_CRON`, `DISABLE_CRON_JOBS`, `ENABLE_CODE_RUNNER` |
-| Other | `INSTANTLY_API_KEY`, `JOB_CACHE_PATH`, `ADZUNA_APP_ID`, `ADZUNA_APP_KEY`, `JOOBLE_API_KEY`, `JOOBLE_HOST`, `JOB_COLLECTOR_CRON`, `GITHUB_TOKEN`, `GITHUB_REPO_OWNER`, `GITHUB_REPO_NAME`, `GITHUB_OFFICIAL_REPO`, `GAME_BASE_URL`, `GAME_USAGE_KEY`, `DAO_PROPOSAL_DEPOSIT`, `DAO_QUORUM_VOTERS`, `DAO_VOTING_DAYS`, `PUBLIC_INTERNS_FLOOR`, `PUBLIC_INTERNS_FLOOR_AT` |
+| Other | `INSTANTLY_API_KEY`, `JOB_CACHE_PATH`, `CAREER_AI_PER_STUDENT`, `CAREER_AI_PER_DAY` (0 switches the career AI off), `CAREER_AI_WAIT_MS`, `ADZUNA_APP_ID`, `ADZUNA_APP_KEY`, `JOOBLE_API_KEY`, `JOOBLE_HOST`, `JOB_COLLECTOR_CRON`, `GITHUB_TOKEN`, `GITHUB_REPO_OWNER`, `GITHUB_REPO_NAME`, `GITHUB_OFFICIAL_REPO`, `GAME_BASE_URL`, `GAME_USAGE_KEY`, `DAO_PROPOSAL_DEPOSIT`, `DAO_QUORUM_VOTERS`, `DAO_VOTING_DAYS`, `PUBLIC_INTERNS_FLOOR`, `PUBLIC_INTERNS_FLOOR_AT` |
 
 `.env.example` is missing many of the optional names above: all the
 `COLLEGE_AGENT_*`, `ATTENDANCE_*`, `WHATSAPP_*`, `N8N_*`, `IDEA_AGENT_*` and

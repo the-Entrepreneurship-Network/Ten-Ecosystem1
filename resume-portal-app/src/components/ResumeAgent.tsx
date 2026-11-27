@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ResumeDocument } from './ResumeDocument';
 import { JobPosting } from './JobPosting';
+import { JobMatch } from './JobMatch';
 
 /*
  * The agent, in two frames.
@@ -468,6 +469,9 @@ export function AgentChat() {
   /* Phones show one pane at a time. The page pane used to be hidden below
      1024px, so a phone had no jobs, no resume and no download at all. */
   const [phoneView, setPhoneView] = useState<'chat' | 'pane'>('chat');
+  /* "Match a job description": the text being typed, and the one last checked. */
+  const [jdDraft, setJdDraft] = useState('');
+  const [jdChecked, setJdChecked] = useState('');
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -758,6 +762,9 @@ export function AgentChat() {
                       <span className="text-[#9ca3af]">/</span>
                       <span className="truncate text-[#9ca3af]">{openJob.title}</span>
                     </div>
+                    <div className="mb-3">
+                      <JobMatch resume={latestResume} jd={openJob.description || openJob.snippet || ''} title={openJob.title} />
+                    </div>
                     <JobPosting
                       job={openJob}
                       busy={busy}
@@ -766,7 +773,21 @@ export function AgentChat() {
                       onTailor={() => send(`I want to tailor my resume for the ${openJob.title} role at ${openJob.company}`)}
                     />
                   </div>
-                ) : jobs.length ? (
+                ) : (
+                  <>
+                  {/* Any job description, pasted, against the resume on the page. */}
+                  <details className="mx-auto mb-3 max-w-[760px] rounded-xl border border-[#e5e9f0] bg-white px-5 py-3">
+                    <summary className="cursor-pointer text-[13px] font-semibold text-[#111827]">Match a job description</summary>
+                    <textarea value={jdDraft} onChange={(e) => setJdDraft(e.target.value)} rows={5}
+                      placeholder="Paste the whole job description here"
+                      className="mt-3 w-full rounded-lg border border-[#d1d5db] p-3 text-[12.5px] text-[#111827] outline-none focus:border-[#2563eb]" />
+                    <button onClick={() => setJdChecked(jdDraft)} disabled={jdDraft.trim().length < 40}
+                      className="mt-2 rounded-lg bg-[#2563eb] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#1d4ed8] disabled:opacity-50">
+                      Check my match
+                    </button>
+                    {jdChecked && <div className="mt-3"><JobMatch resume={latestResume} jd={jdChecked} /></div>}
+                  </details>
+                  {jobs.length ? (
                   <div className="mx-auto max-w-[760px] space-y-3">
                     {jobs.map((j, i) => (
                       /* The whole card opens the posting. Deciding to tailor
@@ -813,6 +834,8 @@ export function AgentChat() {
                       : 'Attach your resume, or name the role you are after, and the openings land here.'}
                     <br />Every row opens a real listing, or it is not shown.
                   </p>
+                  )}
+                  </>
                 )
               )}
 

@@ -1005,9 +1005,8 @@ async function textFromUpload(file) {
   if (!file) return '';
   const name = (file.originalname || '').toLowerCase();
   if (name.endsWith('.pdf')) {
-    const pdfParse = require('pdf-parse');
-    const out = await pdfParse(file.buffer);
-    return out.text || '';
+    /* pdfText retries pdf-parse's early-call failures; a LinkedIn export reads as a resume. */
+    return require('../../services/v2/pdfText').pdfText(file.buffer);
   }
   /*
    * A .docx is a zip, and reading it as UTF-8 gives you the zip.
@@ -1067,6 +1066,41 @@ router.post('/scan', upload.single('file'), async (req, res) => {
   } catch (e) {
     res.status(500).json({ ok: false, error: 'Could not read that file. Try a text-based PDF (not a scan) or paste the text.' });
   }
+});
+
+/*
+ * A resume against one job description, the way Jobscan shows it: the share
+ * of the posting's keywords the resume has, what is missing, and where each
+ * missing one would go, if it is true. Rules only (services/v2/jobFitness.js,
+ * short forms included), so it is instant and costs nothing.
+ */
+function whereFor(term, title) {
+  const { SKILL_VOCAB } = require('../../services/v2/jobFitness');
+  if (SKILL_VOCAB.includes(term)) {
+    return { where: 'Skills', tip: 'Add it to Skills only if you have used it, and name it in the bullet where you did.' };
+  }
+  if (String(title || '').toLowerCase().split(/[^a-z0-9+#.]+/).includes(term)) {
+    return { where: 'Headline', tip: "It is in the job's title. Use it in your headline or summary if it describes you." };
+  }
+  return { where: 'Experience or projects', tip: 'Name it in the bullet for the work where you used it.' };
+}
+
+router.post('/match', (req, res) => {
+  const b = bodyOf(req);
+  const text = String(b.text || b.resumeText || '').slice(0, 20000);
+  const jd = String(b.jd || '').slice(0, 20000);
+  const title = String(b.title || '').slice(0, 140);
+  if (!text.trim()) return res.status(400).json({ ok: false, error: 'Attach your resume in the chat first.' });
+  if (jd.trim().length < 40 && !title) return res.status(400).json({ ok: false, error: 'Paste the whole job description.' });
+  const { atsMatch } = require('../../services/v2/jobFitness');
+  const m = atsMatch(text, `${title}\n${jd}`, undefined, title);
+  res.json({
+    ok: true,
+    percent: m.percent,
+    passes: m.passes,
+    matched: m.matched,
+    missing: m.missing.map((term) => ({ term, ...whereFor(term, title) })),
+  });
 });
 
 router.post('/build', (req, res) => {

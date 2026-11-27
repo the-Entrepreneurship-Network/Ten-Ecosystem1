@@ -152,3 +152,33 @@ describe('ATS matching', () => {
     expect(result.passes).toBe(false);
   });
 });
+
+describe('short forms are the same skill', () => {
+  const { hasWord } = require('../../services/v2/jobFitness');
+  const { profileFromResume } = require('../../routes/v2/jobAgent');
+
+  it.each([
+    ['skills: js, react', 'javascript'],
+    ['deployed on k8s', 'kubernetes'],
+    ['postgres, redis', 'postgresql'],
+    ['restful apis in express', 'rest api'],
+  ])('"%s" has %s', (text, skill) => expect(hasWord(text, skill)).toBe(true));
+
+  it.each([
+    ['built with node.js and express', 'javascript'],   // "js" inside a dotted name is not a claim
+    ['html, css', 'machine learning'],                  // "ml" inside a word
+    ['hyderabad, ts', 'typescript'],                    // no "ts": it is Telangana in an address
+  ])('"%s" does not have %s', (text, skill) => expect(hasWord(text, skill)).toBe(false));
+
+  it('matches in both directions, posting to resume and resume to posting', () => {
+    const a = atsMatch('Skills: JS, ReactJS, Postgres', 'We need JavaScript, React and PostgreSQL', undefined, 'Frontend Developer');
+    expect(a.matched).toEqual(expect.arrayContaining(['javascript', 'react', 'postgresql']));
+    expect(a.missing).not.toEqual(expect.arrayContaining(['javascript']));
+    expect(atsMatch('Skills: JavaScript', 'Must know JS', undefined, '').matched).toContain('javascript');
+  });
+
+  it('the job agent reads the same skills off a resume', () => {
+    expect(profileFromResume('Asha\nFrontend developer\nSkills: JS, ReactJS, k8s').skills)
+      .toEqual(['javascript', 'react', 'kubernetes']);
+  });
+});

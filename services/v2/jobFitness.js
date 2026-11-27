@@ -72,12 +72,52 @@ const DOMAINS = Object.freeze({
 
 const escapeRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/** Word-boundary match that tolerates the +/# in "c++" and "c#". */
+/*
+ * Short forms people write for a skill in the vocabulary. A posting asking for
+ * JavaScript and a resume saying JS are the same skill, and an ATS that says
+ * otherwise is the reason students are told to write both. Only forms that
+ * mean nothing else on a resume: not "ts" (Telangana in an address), "go" or
+ * "dl" (a driving licence).
+ */
+const ALIASES = Object.freeze({
+  javascript: ['js', 'es6', 'ecmascript'],
+  react: ['reactjs'],
+  'next.js': ['nextjs'],
+  node: ['nodejs'],
+  express: ['expressjs'],
+  mongodb: ['mongo'],
+  postgresql: ['postgres', 'psql'],
+  kubernetes: ['k8s'],
+  'machine learning': ['ml'],
+  nlp: ['natural language processing'],
+  'ci/cd': ['cicd', 'ci-cd'],
+  gcp: ['google cloud'],
+  aws: ['amazon web services'],
+  'power bi': ['powerbi'],
+  'scikit-learn': ['sklearn'],
+  'spring boot': ['springboot'],
+  'rest api': ['restful', 'rest apis', 'restful apis'],
+  'cyber security': ['cybersecurity'],
+  'penetration testing': ['pentesting', 'pentest', 'pen testing'],
+  'data visualization': ['data visualisation'],
+  'financial modelling': ['financial modeling'],
+  tailwind: ['tailwindcss'],
+  elasticsearch: ['elastic search'],
+  seo: ['search engine optimization', 'search engine optimisation'],
+  'ui/ux': ['ux/ui', 'ui ux']
+});
+
+/**
+ * Word-boundary match that tolerates the +/# in "c++" and "c#", and reads a
+ * vocabulary skill's short forms. A short form must stand on its own: the
+ * "js" in "Node.js" is not a separate claim to know JavaScript.
+ */
 function hasWord(haystack, term) {
   if (!term) return false;
-  return new RegExp(
-    `(^|[^a-z0-9+#])${escapeRe(String(term).toLowerCase())}([^a-z0-9+#]|$)`, 'i'
-  ).test(haystack);
+  const t = String(term).toLowerCase();
+  if (new RegExp(`(^|[^a-z0-9+#])${escapeRe(t)}([^a-z0-9+#]|$)`, 'i').test(haystack)) return true;
+  return (ALIASES[t] || []).some((a) =>
+    new RegExp(`(^|[^a-z0-9+#.-])${escapeRe(a)}([^a-z0-9+#]|$)`, 'i').test(haystack));
 }
 
 /**
@@ -325,6 +365,7 @@ module.exports = {
   requiredSeniority,
   domainsOf,
   hasWord,
+  ALIASES,
   WEIGHTS,
   BANDS
 };

@@ -111,7 +111,8 @@ function studioApi(portal) {
             if (!subject) {
                 return res.status(401).json({ ok: false, error: 'Please sign in to use this.', signIn: '/login.html' });
             }
-            if (await studioAccess.canOpen(subject, portal)) return next();
+            /* Kept for the route: the AI limits are per student. */
+            if (await studioAccess.canOpen(subject, portal)) { req.studioSubject = subject; return next(); }
             const name = portal === 'job' ? 'Job Portal' : 'Resume Portal';
             return res.status(403).json({ ok: false, error: `This needs the ${name}. You can get it from the Career Studio.`, buy: '/studio.html?want=' + portal });
         } catch (err) {
