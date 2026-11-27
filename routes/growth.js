@@ -10,6 +10,7 @@
  *              client with no session and must stay public
  */
 
+const crypto = require('crypto');
 const express = require('express');
 const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
@@ -838,6 +839,47 @@ trackingRouter.get('/cu/:id/:sig', async (req, res) => {
     res.send(unsubPage('Removed',
         'We will not write to this address again.<br><br>'
         + 'If a colleague would be the right contact instead, just reply to the original email and tell us who.'));
+});
+
+// ─── sign-ups by source ──────────────────────────────────────────────────────
+
+/*
+ * The marketing agent reads the route below with SIGNUP_SOURCES_KEY, sent as
+ * "Authorization: Bearer <key>". The key opens this one read-only route and
+ * nothing else in Growth OS. With no key set, or one shorter than 24
+ * characters, only a Growth OS session can read it.
+ */
+function sourcesKeyOr(signedIn) {
+    return (req, res, next) => {
+        const key = Buffer.from(process.env.SIGNUP_SOURCES_KEY || '');
+        const sent = Buffer.from(String(req.get('authorization') || '').replace(/^Bearer\s+/i, ''));
+        if (key.length >= 24 && sent.length === key.length && crypto.timingSafeEqual(sent, key)) return next();
+        return signedIn(req, res, next);
+    };
+}
+
+/**
+ * GET /api/growth/signup-sources?days=30
+ *
+ * How many students signed up through each ?ref= label (utils/signupRef.js) in
+ * the last `days` days, most first. `signups` counts everyone, with or without
+ * a label.
+ */
+api.get('/signup-sources', sourcesKeyOr(requireGrowthAPI), async (req, res) => {
+    const days = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 30));
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    try {
+        const rows = await Student.find({ createdAt: { $gte: since } }).select('signupRef').lean();
+        const counts = new Map();
+        for (const r of rows) if (r.signupRef) counts.set(r.signupRef, (counts.get(r.signupRef) || 0) + 1);
+        const sources = [...counts]
+            .map(([ref, signups]) => ({ ref, signups }))
+            .sort((a, b) => b.signups - a.signups || a.ref.localeCompare(b.ref));
+        res.json({ success: true, days, since, signups: rows.length, sources });
+    } catch (err) {
+        console.error('[Growth] signup-sources failed:', err.message);
+        res.status(500).json({ success: false, error: 'Could not count sign-ups just now.' });
+    }
 });
 
 module.exports = { api, tracking: trackingRouter, revenueFor, ATTRIBUTION_DAYS, templateFromCampaign };
