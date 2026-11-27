@@ -264,15 +264,28 @@ function attentionText(p) {
 const SAMPLE_LINE = 'Hello. I am your TEN interviewer. A question will sound like this: your API returned the right data in testing, but times out in production. Where do you look first, and why?';
 const END_LINE = 'That brings us to the end of the interview. Thank you for your time. Your report is on the screen now, and a copy is on its way to your email.';
 const ACKS = ['Thank you.', 'Alright, thank you.', 'Okay. Let us move on.', 'Thank you for that.', 'Understood.', 'Right. Next one.', 'Thank you.'];
-const LEADS = ['intro', 'ack', 'resume'];
+/** Morning, afternoon or evening in India, for the greeting. */
+function partOfDay(now = new Date()) {
+    const h = new Date(now.getTime() + IST_OFFSET_MS).getUTCHours();
+    return h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
+}
+// greet / back: the welcome when the student joins or rejoins, ending with "How are
+// you doing today?"; the page waits for the student's reply (not marked, not kept).
+// begin: after that reply, the format and the question they start on. ack: the
+// acknowledgement of an answer and the next question.
+const LEADS = ['greet', 'back', 'begin', 'ack'];
 function spokenLine(session, student, n, lead) {
     const turn = session.turns[n - 1];
     if (!turn || !turn.question) return '';
     const first = nameOf(student).split(' ')[0];
-    const opening = lead === 'intro'
-        ? `Hello ${first}, and welcome. This is your ${levelName(session.difficulty)} level interview in ${session.domain || 'your domain'}. ` +
-          `I will ask you ${QUESTIONS} questions on the work you have done. Take a moment to think, then answer in your own words. Let us begin.`
-        : lead === 'resume' ? 'Welcome back. Let us continue where we stopped.' : ACKS[Math.max(0, n - 2) % ACKS.length];
+    const level = levelName(session.difficulty);
+    const domain = session.domain || 'your domain';
+    if (lead === 'greet') return `Hi ${first}, good ${partOfDay()}. I am your TEN interviewer for today's ${level} level interview in ${domain}. How are you doing today?`;
+    if (lead === 'back') return `Hi ${first}, good ${partOfDay()}, and welcome back to your ${level} level interview. How are you doing?`;
+    const opening = lead !== 'begin' ? ACKS[Math.max(0, n - 2) % ACKS.length]
+        : n === 1 ? `Thank you, ${first}. Over the next twenty minutes, I will ask you ${QUESTIONS} questions on the work you have done in your internship. ` +
+            'Take a moment to think before each answer, and answer in your own words. Okay, let us start with the interview.'
+        : `Thank you, ${first}. Let us continue from question ${n}, where we stopped.`;
     return `${opening} ${n === QUESTIONS ? 'The last question.' : `Question ${n}.`} ${turn.question}`;
 }
 
@@ -411,7 +424,7 @@ async function startInterview({ student, difficulty }) {
     if (open) {
         const last = open.turns[open.turns.length - 1];
         return { sessionId: String(open._id), question: last.question, number: open.turns.length, of: QUESTIONS, difficulty: open.difficulty, resumed: true,
-            say: spokenLine(open, student, open.turns.length, 'resume') };
+            greeting: spokenLine(open, student, open.turns.length, 'back'), say: spokenLine(open, student, open.turns.length, 'begin') };
     }
     if (!when.trial && await used(student)) return { error: 'You have taken your interview. Your report is on this page and in your email.', closed: true };
     if (!when.open) return { error: `The interview opens every second Sunday. Next: ${longDate(when.next)} (IST).`, closed: true };
@@ -427,7 +440,8 @@ async function startInterview({ student, difficulty }) {
         difficulty, engine: use.engine, claudeModel: use.model, trial: when.trial
     });
     await log(student, 'interview', 'start', question);
-    return { sessionId: String(session._id), question, number: 1, of: QUESTIONS, difficulty, say: spokenLine(session, student, 1, 'intro') };
+    return { sessionId: String(session._id), question, number: 1, of: QUESTIONS, difficulty,
+        greeting: spokenLine(session, student, 1, 'greet'), say: spokenLine(session, student, 1, 'begin') };
 }
 
 async function openSession(student, sessionId) {
@@ -569,5 +583,5 @@ async function emailReport(student, session) {
 
 module.exports = {
     schedule, status, startInterview, answerInterview, finishInterview, warnInterview, reports, aiSummary, saveAiSettings, voiceOf, voiceInfo, QUESTIONS, TURNS_PER_DAY, LEVELS, WARNINGS_TO_END,
-    _internal: { interviewPrompt, topicsFor, proctorOf, addProctor, attentionText, warningText, average, engineForNew, monthStart, spokenLine, voiceCache, BUSY, NO_FACE_CHECK, ANCHOR, EVERY_DAYS, CLAUDE_COST_INR, CLAUDE_SCHEMA }
+    _internal: { interviewPrompt, topicsFor, proctorOf, addProctor, attentionText, warningText, average, engineForNew, monthStart, spokenLine, partOfDay, voiceCache, BUSY, NO_FACE_CHECK, ANCHOR, EVERY_DAYS, CLAUDE_COST_INR, CLAUDE_SCHEMA }
 };

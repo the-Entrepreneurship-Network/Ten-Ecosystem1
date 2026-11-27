@@ -1022,9 +1022,16 @@ rest.
 - **Marks** stay hidden during the interview, as in a real one: after each
   answer the interviewer only acknowledges it and asks the next question. The
   marks and feedback come in the report.
+- **The welcome:** on joining, the interviewer greets the student by first
+  name with good morning, afternoon or evening by India time (`partOfDay`),
+  introduces itself and the level, and asks "How are you doing today?". The
+  page waits for the student's reply (spoken or typed; not marked, not sent,
+  not stored), then the interviewer thanks them, explains the format and asks
+  question 1. On a rejoin: "welcome back… how are you doing?", then the
+  question it stopped at.
 - **Voice:** the interviewer's lines are written on the server
-  (`spokenLine`: a welcome with the student's name, level and domain; a short
-  acknowledgement; "the last question"; a closing line) and returned as `say`.
+  (`spokenLine`: the greeting, the start, a short acknowledgement, "the last
+  question", a closing line) and returned as `greeting` and `say`.
   With **`AZURE_SPEECH_KEY`** (and `AZURE_SPEECH_REGION`, default
   `centralindia`) they are spoken in Azure's Indian-English neural voice
   (`utils/speech.js`; `INTERVIEW_VOICE`, default `en-IN-NeerjaNeural`,

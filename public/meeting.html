@@ -246,7 +246,7 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
   </section>
 
   <section class="panel" id="answer-panel" hidden>
-    <label class="a-label" for="input">Your answer</label>
+    <label class="a-label" for="input" id="a-label">Your answer</label>
     <textarea id="input" rows="3" placeholder="Press Answer aloud and speak. Your words appear here, and you can correct them before submitting." maxlength="3000" disabled></textarea>
     <div class="bar">
       <button class="btn" id="mic" type="button" disabled>Answer aloud</button>
@@ -288,6 +288,8 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
   var input = $('input'), status = $('status');
+  // running: in the room (face check and warnings on); started: past the welcome, on the questions.
+  var started = false, pending = null;
   var ME = null, session = null, busy = false, busyText = '', running = false, paused = false, qStart = 0, clock = null, number = 0, OF = 8, level = null;
   var LEVEL_NAME = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
 
@@ -413,7 +415,7 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
       try { if (synth) synth.cancel(); } catch (e) {}
       $('ai-state').textContent = 'Paused until your face is in view';
     } else {
-      $('ai-state').textContent = running ? 'Listening for your answer' : $('ai-state').textContent;
+      $('ai-state').textContent = running ? (started ? 'Listening for your answer' : 'Listening for your reply') : $('ai-state').textContent;
       if (audioHeld) { audioHeld = false; audio.play().catch(function () {}); }
     }
     enableAnswer();
@@ -482,7 +484,7 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
   function speaking(on) {
     $('ai-tile').classList.toggle('speaking', on);
     if (on) $('ai-state').textContent = 'Speaking';
-    else if (!paused && !busy) $('ai-state').textContent = running ? 'Listening for your answer' : number ? 'Interview complete' : 'Waiting for you to join';
+    else if (!paused && !busy) $('ai-state').textContent = running ? (started ? 'Listening for your answer' : 'Listening for your reply') : number ? 'Interview complete' : 'Waiting for you to join';
   }
   audio.onplay = function () { speaking(true); };
   audio.onpause = audio.onended = function () { speaking(false); };
@@ -674,6 +676,14 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
     var text = input.value.trim();
     if (!text || busy || !running || paused) return;
     if (listening) { try { rec.stop(); } catch (e) {} }
+    // The reply to "How are you doing?": not marked and not sent; the interviewer goes on to question 1.
+    if (!started) {
+      started = true;
+      $('a-label').textContent = 'Your answer';
+      showQuestion(pending.number, pending.question);
+      say(pending.say || pending.question, { sessionId: session, n: pending.number, lead: 'begin' });
+      return;
+    }
     setBusy(true, 'The interviewer is noting your answer…');
     $('ai-state').textContent = 'Noting your answer';
     var seconds = Math.round((Date.now() - qStart) / 1000);
@@ -721,17 +731,25 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
   $('start').addEventListener('click', function () {
     if (busy || !readyToJoin()) return;
     var resuming = ME.state === 'resume';
-    setBusy(true, resuming ? 'Rejoining your interview…' : 'The interviewer is preparing your first question…');
-    $('ai-state').textContent = 'Preparing your first question';
+    setBusy(true, resuming ? 'Rejoining your interview…' : 'The interviewer is joining…');
+    $('ai-state').textContent = 'Joining';
     post('/interview/start', { difficulty: level }).then(function (j) {
       session = j.sessionId; running = true; OF = j.of || OF;
       warnings = resuming ? ME.warnings || 0 : 0; warnLeft = ME.warningsToEnd || warnLeft; away = false; obj.since = 0; obj.warnedAt = 0;
       renderWarnings();
-      $('lobby').hidden = true; $('answer-panel').hidden = false; $('qcard').hidden = false; $('proctor').hidden = false; $('report-card').hidden = true; $('repeat').hidden = false;
+      $('lobby').hidden = true; $('qcard').hidden = false; $('answer-panel').hidden = false; $('proctor').hidden = false; $('report-card').hidden = true; $('repeat').hidden = false;
       if (j.difficulty) $('level-label').textContent = ' · ' + LEVEL_NAME[j.difficulty];
       setBusy(false);
-      showQuestion(j.number, j.question);
-      say(j.say || j.question, { sessionId: session, n: j.number, lead: j.resumed ? 'resume' : 'intro' });
+      // First the welcome, and the student's reply to it; then the first question.
+      started = false; pending = j;
+      $('qnum').textContent = j.resumed ? 'Welcome back' : 'Welcome';
+      renderSteps(j.number - 1 || 0);
+      $('question').textContent = j.greeting || '';
+      $('a-label').textContent = 'Your reply';
+      input.value = '';
+      $('ai-state').textContent = 'Listening for your reply';
+      say(j.greeting, { sessionId: session, n: j.number, lead: j.resumed ? 'back' : 'greet' });
+      enableAnswer();
     }).catch(function (e) {
       setBusy(false);
       status.textContent = e.message;
@@ -749,7 +767,7 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
       .catch(function (e) { setBusy(false); status.textContent = e.message; });
   });
   function endInterview(report, line) {
-    running = false; session = null;
+    running = false; session = null; started = false; pending = null;
     if (paused) setPaused(false);
     if (clock) { clearInterval(clock); clock = null; }
     $('answer-panel').hidden = true; $('proctor').hidden = true; $('timer').textContent = '';

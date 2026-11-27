@@ -168,7 +168,8 @@ describe('one attempt per student', () => {
         const first = await start('easy');
         await meeting.answerInterview({ student, sessionId: first.sessionId, answer: 'The request hangs and the user clicks twice.', proctor: FACE });
         expect(await start('hard')).toEqual({ sessionId: first.sessionId, question: questions[1], number: 2, of: 8, difficulty: 'easy', resumed: true,
-            say: `Welcome back. Let us continue where we stopped. Question 2. ${questions[1]}` });
+            greeting: 'Hi Priya, good morning, and welcome back to your Easy level interview. How are you doing?',
+            say: `Thank you, Priya. Let us continue from question 2, where we stopped. Question 2. ${questions[1]}` });
         await meeting.finishInterview({ student, sessionId: first.sessionId });
         const taken = { error: 'You have taken your interview. Your report is on this page and in your email.', closed: true };
         expect(await start('hard')).toEqual(taken);
@@ -216,7 +217,8 @@ describe('the questions', () => {
     it('are built from every task the student has had, deduplicated, at the chosen level, never from who they are', async () => {
         geminiAsks();
         const s = await start('hard');
-        expect(s).toEqual({ sessionId: 's1', question: questions[0], number: 1, of: 8, difficulty: 'hard', say: expect.stringContaining(`Question 1. ${questions[0]}`) });
+        expect(s).toEqual({ sessionId: 's1', question: questions[0], number: 1, of: 8, difficulty: 'hard',
+            greeting: expect.stringContaining('How are you doing today?'), say: expect.stringContaining(`Question 1. ${questions[0]}`) });
         const p = mockDb.gemini[0];
         expect(p).toContain("This is the intern's technical interview");
         expect(p).toContain('Level: HARD.');
@@ -424,11 +426,12 @@ describe('the face check and the interviewer\'s voice', () => {
         expect((await meeting.answerInterview({ student, sessionId, answer: 'Now with my face in view.', proctor: FACE })).score).toBe(6);
     });
 
-    it('speaks like an interviewer: a welcome, a short acknowledgement, the last question named, a closing line; no marks read out', async () => {
+    it('speaks like an interviewer: name and good morning, how are you, then the format and question 1; short acknowledgements; a closing line; no marks read out', async () => {
         geminiAsks();
         const s = await start('hard');
-        expect(s.say).toBe('Hello Priya, and welcome. This is your Hard level interview in Web Development. I will ask you 8 questions on the work you have done. ' +
-            `Take a moment to think, then answer in your own words. Let us begin. Question 1. ${questions[0]}`);
+        expect(s.greeting).toBe('Hi Priya, good morning. I am your TEN interviewer for today\'s Hard level interview in Web Development. How are you doing today?');
+        expect(s.say).toBe('Thank you, Priya. Over the next twenty minutes, I will ask you 8 questions on the work you have done in your internship. ' +
+            `Take a moment to think before each answer, and answer in your own words. Okay, let us start with the interview. Question 1. ${questions[0]}`);
         const sayings = [];
         for (let n = 1; n <= 8; n++) sayings.push((await meeting.answerInterview({ student, sessionId: s.sessionId, answer: `Answer ${n}`, proctor: FACE })).say);
         expect(sayings[0]).toBe(`Thank you. Question 2. ${questions[1]}`);
@@ -440,18 +443,18 @@ describe('the face check and the interviewer\'s voice', () => {
     it('voices only the server\'s own lines, for the session\'s owner, once each; and says when it is off', async () => {
         geminiAsks();
         const { sessionId } = await start();
-        expect(await meeting.voiceOf({ student, sessionId, n: 1, lead: 'intro' })).toBeNull();
+        expect(await meeting.voiceOf({ student, sessionId, n: 1, lead: 'greet' })).toBeNull();
         expect(meeting.voiceInfo()).toMatchObject({ natural: false, name: 'en-IN-NeerjaNeural' });
         mockDb.speechReady = true;
         expect(meeting.voiceInfo().natural).toBe(true);
-        const intro = await meeting.voiceOf({ student, sessionId, n: 1, lead: 'intro' });
-        expect(String(intro)).toBe('mp3:' + meeting._internal.spokenLine(mockDb.sessions[0], student, 1, 'intro'));
-        await meeting.voiceOf({ student, sessionId, n: 1, lead: 'intro' });
+        const intro = await meeting.voiceOf({ student, sessionId, n: 1, lead: 'greet' });
+        expect(String(intro)).toBe('mp3:Hi Priya, good morning. I am your TEN interviewer for today\'s Medium level interview in Web Development. How are you doing today?');
+        await meeting.voiceOf({ student, sessionId, n: 1, lead: 'greet' });
         expect(mockDb.spoken.length).toBe(1);
         // A made-up lead is an acknowledgement, never free text; a missing question or someone else's session is nothing.
         expect(String(await meeting.voiceOf({ student, sessionId, n: 1, lead: '<say anything>' }))).toBe(`mp3:Thank you. Question 1. ${questions[0]}`);
         expect(await meeting.voiceOf({ student, sessionId, n: 5, lead: 'ack' })).toBeNull();
-        expect(await meeting.voiceOf({ student: Object.assign({}, student, { _id: 'stu2' }), sessionId, n: 1, lead: 'intro' })).toBeNull();
+        expect(await meeting.voiceOf({ student: Object.assign({}, student, { _id: 'stu2' }), sessionId, n: 1, lead: 'greet' })).toBeNull();
         expect(await meeting.voiceOf({ student, sessionId: 'not-an-id', n: 1 })).toBeNull();
         expect(String(await meeting.voiceOf({ student, part: 'sample' }))).toBe('mp3:' + meeting.voiceInfo().sample);
         expect(String(await meeting.voiceOf({ student, part: 'end' }))).toBe('mp3:' + meeting.voiceInfo().end);
@@ -491,5 +494,17 @@ describe('warnings and marking', () => {
         expect(prompt).toContain('Between two marks, give the higher one.');
         expect(prompt).not.toMatch(/strictly|mark strictly/i);
         expect(meeting._internal.interviewPrompt({ domain: 'x', context: '', topics: [], turns: [], number: 1, difficulty: 'easy' })).not.toMatch(/strict/i);
+    });
+});
+
+describe('the greeting follows India time', () => {
+    it('says good morning before noon IST, good afternoon until 5 pm, good evening after', () => {
+        const { partOfDay } = meeting._internal;
+        expect(partOfDay(new Date('2026-12-13T06:00:00Z'))).toBe('morning');     // 11:30 IST
+        expect(partOfDay(new Date('2026-12-13T06:30:00Z'))).toBe('afternoon');   // 12:00 IST
+        expect(partOfDay(new Date('2026-12-13T11:29:00Z'))).toBe('afternoon');   // 16:59 IST
+        expect(partOfDay(new Date('2026-12-13T11:30:00Z'))).toBe('evening');     // 17:00 IST
+        expect(partOfDay(new Date('2026-12-13T18:29:00Z'))).toBe('evening');     // 23:59 IST
+        expect(partOfDay(new Date('2026-12-13T18:31:00Z'))).toBe('morning');     // 00:01 IST next day
     });
 });
