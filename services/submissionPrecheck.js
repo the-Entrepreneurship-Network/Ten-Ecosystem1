@@ -11,8 +11,9 @@
  *     with a draft of the feedback.
  * The result is stored on the submission as `aiCheck`. The coordinator sees it
  * on the card, with the draft already in the feedback box, so approving is one
- * click. Nothing here approves or rejects: the decision stays with a person,
- * because certificates depend on it.
+ * click. Nothing here approves or rejects: that is the coordinator, or for the
+ * clear cases the AI Coordinator's review in services/aiCoordinatorJobs.js,
+ * both through the same path, because certificates depend on it.
  *
  * This replaces the old step that wrote Gemini's text straight into `feedback`,
  * where the student saw it as "COORDINATOR FEEDBACK" before any coordinator had
@@ -276,11 +277,14 @@ function draftWithoutAi(task, problems) {
 /**
  * Check a submission and store the result. Never throws.
  * @param {string} id the Submission _id
- * @param {{screenshotExpected?: boolean, notify?: boolean}} [opts] notify: tell the
- *        student about a problem (the first check only, not a coordinator's re-check)
+ * @param {{screenshotExpected?: boolean, notify?: boolean, review?: boolean}} [opts]
+ *        notify: tell the student about a problem (the first check only, not a
+ *        coordinator's re-check); review: a student's hand-in or resubmission,
+ *        which the AI Coordinator then decides right away when it is a clear case
+ *        (services/aiCoordinatorJobs.js), so the status follows the student's fix
  * @returns {Promise<object|null>} the aiCheck stored, or null
  */
-async function run(id, { screenshotExpected = true, notify = true } = {}) {
+async function run(id, { screenshotExpected = true, notify = true, review = false } = {}) {
     try {
         if (/^(off|false|0|no)$/i.test(String(process.env.AI_COORDINATOR || 'on').trim())) return null;
         const Submission = mongoose.model('Submission');
@@ -372,7 +376,13 @@ async function run(id, { screenshotExpected = true, notify = true } = {}) {
         const saved = await Submission.updateOne({ _id: sub._id, reviewedOnce: { $ne: true } }, { $set: { aiCheck: check } });
         const stored = !!(saved && (saved.modifiedCount || saved.nModified));
         if (stored) logCheck(sub, task, check);
-        if (notify && problems.length && stored) await tellStudent(sub, task, problems);
+        // Decided now, the student hears the decision itself, not the pre-check.
+        let decided = false;
+        if (stored && review) {
+            decided = await require('./aiCoordinatorJobs').reviewOne(sub._id, check)
+                .catch((err) => { console.error('[pre-check] review failed:', err.message); return false; });
+        }
+        if (notify && problems.length && stored && !decided) await tellStudent(sub, task, problems);
         return check;
     } catch (err) {
         console.error('[pre-check] failed:', err.message);

@@ -14,8 +14,9 @@
  *   4. a hand-over, when Gemini cannot answer or is not available.
  *
  * It says it is an AI: in its name, in the "AI" tag the chat shows, and in its
- * first message of every conversation. It never approves, marks or changes
- * anything; it only talks.
+ * first message of every conversation. In chat it never approves, marks or
+ * changes anything; it only talks. Its reviews of clear submissions are in
+ * services/aiCoordinatorJobs.js, labelled as its own.
  *
  * server.js calls attach() once with the function that saves and delivers a
  * chat message, and onMessage() after every message it delivers.

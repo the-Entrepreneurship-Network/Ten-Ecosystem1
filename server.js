@@ -3404,6 +3404,9 @@ const submissionSchema = new mongoose.Schema({
     feedback: { type: String, default: "No Feedback Yet" },
     status: { type: String, default: "Pending" },
     reviewedOnce: { type: Boolean, default: false },
+    // "" for a person (the coordinator's Approve button), "ai" for the AI
+    // Coordinator (services/aiCoordinatorJobs.js). Both dashboards label it.
+    reviewedBy: { type: String, default: "" },
     attendanceAllowed: { type: Boolean, default: false },
     attendanceGiven: { type: Boolean, default: false },
     attendanceCount: { type: Number, default: 0 },
@@ -4711,9 +4714,14 @@ try{
     const image = req.files["image"] ? "/" + req.files["image"][0].path : "";
     const pdf   = req.files["pdf"]   ? "/" + req.files["pdf"][0].path   : "";
 
-    // 1. Double Submission Protection: Check if a Submission for this specific task and employee has already gone through
+    // 1. Double Submission Protection: Check if a Submission for this specific task and employee has already gone through.
+    //    The one second submission that is meant to happen is after "ask for
+    //    changes" (Rejected): it replaces the first, as the Task Journey's
+    //    resubmission does, and is reviewed afresh. Before, it was silently
+    //    dropped with "already submitted successfully".
     const existingSubmission = await Submission.findOne({ employeeId, task: task || "" });
-    if (existingSubmission) {
+    const resubmission = !!(existingSubmission && existingSubmission.status === "Rejected");
+    if (existingSubmission && !resubmission) {
       console.log(`[Double Submission Block] Ignored duplicate Submission write for employeeId: ${employeeId}, task: ${task}`);
       return res.json({ success: true, message: "Task has already been submitted successfully!" });
     }
@@ -4726,7 +4734,7 @@ try{
       targetAssignment = await TaskAssignment.findOne({ employeeId, title: task });
     }
 
-    if (targetAssignment && targetAssignment.status !== "Pending") {
+    if (targetAssignment && targetAssignment.status !== "Pending" && !(resubmission && targetAssignment.status === "Rejected")) {
       console.log(`[Double Submission Block] Ignored duplicate status write. TaskAssignment is currently in '${targetAssignment.status}' state.`);
       return res.json({ success: true, message: "Task has already been submitted successfully!" });
     }
@@ -4743,23 +4751,36 @@ try{
 
     const isCaseStudy = req.body.isCaseStudy === 'true' || req.body.isCaseStudy === true;
 
-    const submission = new Submission({
-        employeeId, domain,
-        task: task || "",
-        githubLink, note,
-        image, pdf,
-        status: "Pending",
-        reviewedOnce: false,
-        isCaseStudy: isCaseStudy,
-        attendanceAllowed: false,
-        attendanceGiven: false,
-        attendanceCount: 0,
-        internshipDuration,
-        monthlyAttendance: { month1:0, month2:0, month3:0, month4:0, month5:0, month6:0 },
-        tasksCompleted: 0,
-        meetingsJoined: 0,
-        performance: "B"
-    });
+    let submission;
+    if (resubmission) {
+        // The second attempt takes the first one's place; a file not sent again is kept.
+        Object.assign(existingSubmission, {
+            domain, githubLink, note,
+            image: image || existingSubmission.image, pdf: pdf || existingSubmission.pdf,
+            status: "Pending", reviewedOnce: false, reviewedBy: "", feedback: "No Feedback Yet",
+            performance: "B", tasksCompleted: 0, coordinatorRating: 0,
+            submittedAt: new Date(), aiCheck: null, isCaseStudy
+        });
+        submission = existingSubmission;
+    } else {
+        submission = new Submission({
+            employeeId, domain,
+            task: task || "",
+            githubLink, note,
+            image, pdf,
+            status: "Pending",
+            reviewedOnce: false,
+            isCaseStudy: isCaseStudy,
+            attendanceAllowed: false,
+            attendanceGiven: false,
+            attendanceCount: 0,
+            internshipDuration,
+            monthlyAttendance: { month1:0, month2:0, month3:0, month4:0, month5:0, month6:0 },
+            tasksCompleted: 0,
+            meetingsJoined: 0,
+            performance: "B"
+        });
+    }
 
     await submission.save();
 
@@ -4778,7 +4799,7 @@ try{
       );
     } else {
       await TaskAssignment.findOneAndUpdate(
-        { employeeId, title: task, status: "Pending" },
+        { employeeId, title: task, status: resubmission ? { $in: ["Pending", "Rejected"] } : "Pending" },
         {
           status: "Submitted",
           submittedAt: new Date(),
@@ -4802,7 +4823,7 @@ try{
     // longer writes `feedback`: that showed the student AI text as
     // "COORDINATOR FEEDBACK" before any coordinator had looked.
     // Case studies are reviewed their own way, as before.
-    if (!isCaseStudy) require("./services/submissionPrecheck").run(submission._id).catch(() => {});
+    if (!isCaseStudy) require("./services/submissionPrecheck").run(submission._id, { review: true }).catch(() => {});
 }catch(error){
     console.log(error);
     res.json({ success:false, message:"Submission Failed" });
@@ -4856,32 +4877,45 @@ try{
 
 // ================= UPDATE STATUS =================
 
-app.post("/update-status", async(req,res)=>{
-try{
-    const { id, status, feedback, rating } = req.body;
-
-    const existing = await Submission.findById(id);
-    if(!existing){
-        return res.json({ success:false, message:"Submission not found" });
-    }
-    if(existing.reviewedOnce){
-        return res.json({ success:false, message:"Already reviewed. Cannot change decision.", alreadyReviewed:true });
-    }
+/**
+ * One review of a submission, whoever makes it: the coordinator's Approve or
+ * Reject button (POST /update-status) and the AI Coordinator's own reviews of
+ * clear cases (services/aiCoordinatorJobs.js) both come here, so the student's
+ * notice, the Task Journey, the milestones, the certificate check and the
+ * badges happen the same way for both.
+ *
+ * The decision is written only if nobody else has reviewed it first: one
+ * conditional update, not a read and then a write, so a coordinator and the
+ * AI acting in the same second cannot both decide. An AI decision is not
+ * final: a coordinator can change it, and a resubmission is checked afresh.
+ */
+async function reviewSubmission({ id, status, feedback, rating, from = "Coordinator", reviewedBy = "" }) {
+    if (status !== "Approved" && status !== "Rejected") return { success:false, message:"status must be Approved or Rejected" };
 
     let performance = "B";
     if(status === "Approved"){ performance = "A+"; }
 
     const ratingValue = rating ? Number(rating) : 0;
 
-    await Submission.findByIdAndUpdate(id, {
+    // A person may change the AI Coordinator's decision (the student's resubmission
+    // or the coordinator's own call); nobody changes a person's, and the AI
+    // changes nobody's.
+    const open = reviewedBy === "ai" ? { reviewedOnce: { $ne: true } } : { $or: [{ reviewedOnce: { $ne: true } }, { reviewedBy: "ai" }] };
+    const existing = await Submission.findOneAndUpdate(Object.assign({ _id: id }, open), {
         status,
         feedback,
         reviewedOnce: true,
+        reviewedBy,
         attendanceAllowed: status === "Approved",
         performance,
         tasksCompleted: status === "Approved" ? 1 : 0,
         coordinatorRating: ratingValue
-    }, { new:true });
+    });
+    if(!existing){
+        const seen = await Submission.findById(id).select("reviewedOnce").lean();
+        if(!seen) return { success:false, message:"Submission not found" };
+        return { success:false, message:"Already reviewed. Cannot change decision.", alreadyReviewed:true };
+    }
 
     // Synchronize to the automated TaskAssignment if applicable
     await TaskAssignment.findOneAndUpdate(
@@ -4896,7 +4930,7 @@ try{
             title: `Task ${status}`,
             message: `Your task submission has been ${status.toLowerCase()}. Feedback: ${feedback || "No feedback provided"}`,
             type: status === "Approved" ? "success" : "warning",
-            from: "Coordinator",
+            from,
             targetType: "student",
             targetEmployeeId: submission.employeeId,
             targetDomain: submission.domain
@@ -4951,7 +4985,13 @@ try{
         await recomputeBadgesFor(submission.employeeId);
     }
 
-    res.json({ success:true, message:"Status Updated Successfully" });
+    return { success:true, message:"Status Updated Successfully" };
+}
+
+app.post("/update-status", async(req,res)=>{
+try{
+    const { id, status, feedback, rating } = req.body;
+    res.json(await reviewSubmission({ id, status, feedback, rating }));
 }catch(error){
     console.log(error);
     res.json({ success:false });
@@ -7153,7 +7193,7 @@ try{
 app.get("/coordinator/student-overview/:domain", async(req,res)=>{
 try{
     const domain = decodeURIComponent(req.params.domain);
-    const studentsRaw = await Student.find({ domain }).select('firstName lastName name domain collegeName college employeeId tenure joiningDate certificateApprovedByCoordinator coordinatorRemarks coordinatorApprovedAt certificateApprovedByHR hrRejected hrRejectionReason createdAt').sort({ createdAt:-1 });
+    const studentsRaw = await Student.find({ domain }).select('firstName lastName name domain collegeName college employeeId tenure joiningDate certificateApprovedByCoordinator approvedByCoordinatorId coordinatorRemarks coordinatorApprovedAt certificateApprovedByHR hrRejected hrRejectionReason createdAt').sort({ createdAt:-1 });
     // BUG FIX 2: deduplicate by employeeId so each student appears only once.
     // Earlier registrations may have produced duplicate Student docs with the
     // same employeeId; keep only the most recent.
@@ -7181,6 +7221,7 @@ try{
             performance: perf ? (perf.score + " · " + perf.grade) : "—",
             performanceObj: perf || null,
             certificateApprovedByCoordinator: s.certificateApprovedByCoordinator,
+            approvedByCoordinatorId: s.approvedByCoordinatorId,
             coordinatorRemarks: s.coordinatorRemarks,
             coordinatorApprovedAt: s.coordinatorApprovedAt,
             certificateApprovedByHR: s.certificateApprovedByHR,
@@ -7245,17 +7286,14 @@ app.post('/api/admin/recalculate-attendance', async (req, res) => {
  * `coordinatorId` out of the request body, so the record of who approved a
  * certificate was whatever the caller typed.
  */
-app.post("/students/:id/coordinator-approve", requireStaffSession, async(req,res)=>{
-try{
-    const { remarks } = req.body;
-    const s = req.session || {};
-    const approver = (s.coordinator && (s.coordinator.username || s.coordinator.name))
-        || (s.hr && (s.hr.username || "HR"))
-        || (s.adminUser && "admin")
-        || "coordinator";
-    const student = await Student.findById(req.params.id);
-    if(!student) return res.json({ success:false, message:"Student not found" });
-
+/**
+ * The coordinator's approval of a student for certificate consideration, which
+ * puts them in HR's queue (GET /students/coordinator-approved). The Approve
+ * button below and the AI Coordinator (services/aiCoordinatorJobs.js, for
+ * students who finished with both criteria met) both come here, so the record
+ * and the student's notice are the same whoever approved.
+ */
+async function approveForCertificate(student, { approver = "coordinator", remarks = "", from = "Coordinator", message } = {}) {
     student.certificateApprovedByCoordinator = true;
     student.approvedByCoordinatorId = approver;
     student.coordinatorApprovedAt = new Date();
@@ -7270,12 +7308,39 @@ try{
     // Notify the student
     const notif = new Notification({
         title:"Coordinator Approved You ✅",
-        message:"Your coordinator has approved you for certificate consideration. Awaiting HR final review.",
-        type:"success", from:"Coordinator",
+        message: message || "Your coordinator has approved you for certificate consideration. Awaiting HR final review.",
+        type:"success", from,
         targetType:"student", targetEmployeeId:student.employeeId, targetDomain:student.domain
     });
     await notif.save();
     broadcastNotification(student.domain, student.employeeId, notif);
+}
+
+/**
+ * The two criteria for a certificate, as the coordinator's Students tab shows
+ * them: combined attendance of 75% or more, and at least five approved tasks.
+ * The certificateEligible milestone and the AI Coordinator's approvals use the
+ * same rule.
+ */
+async function certificateCriteria(student){
+    const stats = await computeAttendanceStats(student.employeeId, student.joiningDate);
+    const approvedTasks = await Submission.countDocuments({ employeeId: student.employeeId, status:"Approved" });
+    const attendance = stats.combinedPct || 0;
+    return { attendance, approvedTasks, ok: attendance >= 75 && approvedTasks >= 5 };
+}
+
+app.post("/students/:id/coordinator-approve", requireStaffSession, async(req,res)=>{
+try{
+    const { remarks } = req.body;
+    const s = req.session || {};
+    const approver = (s.coordinator && (s.coordinator.username || s.coordinator.name))
+        || (s.hr && (s.hr.username || "HR"))
+        || (s.adminUser && "admin")
+        || "coordinator";
+    const student = await Student.findById(req.params.id);
+    if(!student) return res.json({ success:false, message:"Student not found" });
+
+    await approveForCertificate(student, { approver, remarks });
 
     res.json({ success:true, message:"Student approved and sent to HR for review" });
 }catch(e){ console.log(e); res.json({ success:false, message:"Failed to approve" }); }
@@ -8515,9 +8580,7 @@ async function checkCertificateEligibility(employeeId){
     try{
         const s = await Student.findOne({ employeeId });
         if(!s) return;
-        const stats = await computeAttendanceStats(employeeId, s.joiningDate);
-        const approved = await Submission.countDocuments({ employeeId, status:"Approved" });
-        if((stats.combinedPct || 0) >= 75 && approved >= 5){
+        if((await certificateCriteria(s)).ok){
             await setMilestone(employeeId, "certificateEligible");
         }
     }catch(_){}
@@ -11434,6 +11497,9 @@ app.set("io", io);
 // same delivery as everyone else's (services/aiCoordinator.js).
 const aiCoordinator = require("./services/aiCoordinator");
 aiCoordinator.attach({ deliver: deliverChatMessage, io, roster: () => app.get("rosterStaff") || [] });
+// Its reviews of clear submissions take the coordinator's own path, on
+// whichever worker takes the hand-in; the scheduled runs stay on worker 0.
+require("./services/aiCoordinatorJobs").attach({ review: reviewSubmission, certificate: { criteria: certificateCriteria, approve: approveForCertificate } });
 
 io.use(async (socket, next) => {
     try{
