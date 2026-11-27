@@ -152,6 +152,7 @@
     <div class="nav-item" onclick="showSection('documents')">📄 Documents</div>
     <div class="nav-item" onclick="showSection('notifications')">📢 Notifications</div>
     <div class="nav-item" onclick="showSection('system')">⚙️ System</div>
+    <div class="nav-item" onclick="showSection('interview')">🎓 Interview Room AI</div>
     <div class="nav-item" onclick="showSection('chat')" id="nav-chat">💬 Chat &amp; Reports <span class="nav-badge" id="chatReportBadge" style="display:none">0</span></div>
     <div class="nav-item" onclick="window.location.href='/messages'">✉️ My Messages</div>
     <div class="nav-item" onclick="showSection('auditlog')">📋 Audit Log</div>
@@ -421,6 +422,41 @@
       <div id="ideaContent"><p style="color:#64748b;padding:16px">Loading…</p></div>
     </div>
 
+    <!-- Which AI runs the Interview Room: routes/adminPortal.js → /interview-ai,
+         services/aiMeeting.js. -->
+    <div class="section" id="section-interview">
+      <div style="background:#0e1628;border:1px solid #2a3550;border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+        <div style="font-weight:700;color:#e2e8f0;margin-bottom:6px;">Which AI interviews the students</div>
+        <div style="color:#94a3b8;font-size:13px;line-height:1.6;">
+          <b style="color:#e2e8f0;">Gemini</b> is free. <b style="color:#e2e8f0;">Claude</b> is paid per interview, from the
+          Anthropic account whose key is <code>ANTHROPIC_API_KEY</code> in the server's .env, and stops at the monthly
+          limit below: after it, Gemini takes the new interviews. A change applies to interviews started from now;
+          one already running keeps the AI it started with. If Claude fails on a question, Gemini answers that one.
+        </div>
+      </div>
+      <div id="interviewAiStatus" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;"></div>
+      <div style="background:#0e1628;border:1px solid #2a3550;border-radius:10px;padding:16px;max-width:560px;">
+        <div class="form-group">
+          <label>AI</label>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;color:#e2e8f0;font-size:14px;">
+            <label style="display:flex;gap:6px;align-items:center;color:#e2e8f0;font-size:14px;margin:0;"><input type="radio" name="iaiEngine" value="gemini" style="width:auto"> Gemini (free)</label>
+            <label style="display:flex;gap:6px;align-items:center;color:#e2e8f0;font-size:14px;margin:0;"><input type="radio" name="iaiEngine" value="claude" style="width:auto"> Claude (paid)</label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="iaiModel">Claude model</label>
+          <select id="iaiModel"></select>
+        </div>
+        <div class="form-group">
+          <label for="iaiCap">Claude interviews a month, at most</label>
+          <input id="iaiCap" type="number" min="0" max="100000" step="1">
+          <div id="iaiCapCost" style="font-size:12px;color:#94a3b8;margin-top:6px;"></div>
+        </div>
+        <button class="btn" onclick="saveInterviewAI()">Save</button>
+        <span id="iaiMsg" style="margin-left:10px;font-size:13px;color:#94a3b8;"></span>
+      </div>
+    </div>
+
     <div class="section" id="section-schools">
       <div style="background:#0e1628;border:1px solid #2a3550;border-radius:10px;padding:14px 16px;margin-bottom:16px;">
         <div style="font-weight:700;color:#e2e8f0;margin-bottom:6px;">What this is</div>
@@ -512,6 +548,7 @@ function showSection(name) {
   if (name === 'hr') loadHRs();
   if (name === 'certificates') loadPendingCerts();
   if (name === 'system') loadSystemInfo();
+  if (name === 'interview') loadInterviewAI();
   if (name === 'attendance') { /* waits for an Employee ID */ }
   if (name === 'documents') loadAdminDocuments();
   if (name === 'chat') loadChatReports('open');
@@ -523,6 +560,51 @@ function showSection(name) {
   if (name === 'referrals') loadReferrals();
   if (name === 'linkedin' && window.TENLinkedInAgent) TENLinkedInAgent.mount(document.getElementById('linkedinAgentHost'), { role: 'admin' });
   if (name === 'overview') loadStats();
+}
+
+// ── Interview Room: which AI ──
+const IAI_NAMES = { 'claude-haiku-5-5': 'Claude Haiku 5.5', 'claude-sonnet-5-5': 'Claude Sonnet 5.5', 'claude-opus-5-5': 'Claude Opus 5.5' };
+let iaiModels = [];
+function iaiCost() {
+  const m = iaiModels.find(x => x.id === document.getElementById('iaiModel').value);
+  const cap = Math.max(0, parseInt(document.getElementById('iaiCap').value, 10) || 0);
+  document.getElementById('iaiCapCost').textContent = m
+    ? `About ₹${m.costPerInterviewInr} an interview, so at most about ₹${Math.round(m.costPerInterviewInr * cap).toLocaleString('en-IN')} a month at this limit. Anthropic's console shows the real spend.`
+    : '';
+}
+function iaiRender(d) {
+  document.querySelectorAll('input[name=iaiEngine]').forEach(r => { r.checked = r.value === d.engine; });
+  iaiModels = d.models || [];
+  const sel = document.getElementById('iaiModel');
+  sel.innerHTML = iaiModels.map(m => `<option value="${m.id}">${IAI_NAMES[m.id] || m.id} · about ₹${m.costPerInterviewInr} an interview</option>`).join('');
+  sel.value = d.claudeModel;
+  document.getElementById('iaiCap').value = d.claudeMonthlyCap;
+  sel.onchange = iaiCost; document.getElementById('iaiCap').oninput = iaiCost;
+  iaiCost();
+  const chip = (label, ok, text) => `<div class="stat-card"><div class="label">${label}</div><div class="value" style="font-size:15px;color:${ok ? '#34d399' : '#fbbf24'}">${text}</div></div>`;
+  const now = d.engine === 'claude' && !d.claudeReady ? 'Gemini (no Claude key)'
+    : d.engine === 'claude' && d.claudeThisMonth >= d.claudeMonthlyCap ? 'Gemini (Claude limit reached)'
+    : d.engine === 'claude' ? (IAI_NAMES[d.claudeModel] || 'Claude') : 'Gemini';
+  document.getElementById('interviewAiStatus').innerHTML =
+    chip('New interviews now use', true, now) +
+    chip('Claude key (ANTHROPIC_API_KEY)', d.claudeReady, d.claudeReady ? 'Set' : 'Not set') +
+    chip('Gemini key', d.geminiReady, d.geminiReady ? 'Set' : 'Not set') +
+    chip('Claude interviews this month', d.claudeThisMonth < d.claudeMonthlyCap, `${d.claudeThisMonth} of ${d.claudeMonthlyCap}`);
+}
+async function loadInterviewAI() {
+  const j = await api('/interview-ai');
+  if (j && j.success) iaiRender(j.data);
+  else document.getElementById('iaiMsg').textContent = (j && j.message) || 'Could not load the setting.';
+}
+async function saveInterviewAI() {
+  const engine = (document.querySelector('input[name=iaiEngine]:checked') || {}).value || '';
+  const msg = document.getElementById('iaiMsg');
+  msg.textContent = 'Saving…';
+  const j = await api('/interview-ai', { method: 'POST', body: JSON.stringify({
+    engine, claudeModel: document.getElementById('iaiModel').value, claudeMonthlyCap: parseInt(document.getElementById('iaiCap').value, 10)
+  }) });
+  if (j && j.success) { iaiRender(j.data); msg.textContent = 'Saved. New interviews use it from now.'; }
+  else msg.textContent = (j && j.message) || 'Could not save.';
 }
 
 function openModal(title, bodyHtml, actions = []) {

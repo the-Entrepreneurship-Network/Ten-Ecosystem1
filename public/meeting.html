@@ -80,6 +80,12 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
 .report td.s{text-align:right;white-space:nowrap;font-weight:800}
 .report .fb{color:var(--muted);font-size:12.5px;margin-top:2px}
 .reports li{font-size:13.5px;padding:8px 0;border-bottom:1px dashed var(--line);list-style:none;display:flex;justify-content:space-between;gap:10px}
+.levels{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.level{flex:1;min-width:150px;text-align:left;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--card2);color:var(--text);font:inherit;cursor:pointer}
+.level b{display:block;font-size:15px}
+.level small{color:var(--muted);font-size:12.5px}
+.level[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.level[aria-pressed="true"] b{color:var(--accent)}
 .notice{padding:10px 12px;border-radius:10px;background:var(--accent-soft);border:1px solid var(--accent-line);font-size:13.5px;margin-top:10px}
 </style>
 </head>
@@ -89,7 +95,7 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
   <a class="back" href="student-dashboard.html">← Dashboard</a>
   <div>
     <div class="title">Interview Room</div>
-    <div class="sub">Fortnightly technical interview · <span id="domain">your domain</span></div>
+    <div class="sub">Technical interview · <span id="domain">your domain</span><span id="level-label"></span></div>
   </div>
   <span class="pill">AI INTERVIEWER, NOT A PERSON</span>
 </header>
@@ -101,8 +107,13 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
     <ul class="rules">
       <li>Camera on, your face in the frame and your eyes on the camera. The video stays in your browser; only attention totals are sent with your answers and appear in your report.</li>
       <li>Eight questions on the work you have been given so far, at the level of a company interview. Speak your answers; typing is the fallback.</li>
-      <li>One attempt per opening. Your marks and a report come at the end, and a copy is emailed to you.</li>
+      <li>One attempt: choose your level before you start. Your marks and a report come at the end, and a copy is emailed to you.</li>
     </ul>
+    <div class="levels" id="levels" role="group" aria-label="Choose your level" style="display:none">
+      <button class="level" type="button" data-level="easy" aria-pressed="false"><b>Easy</b><small>The core ideas behind your tasks</small></button>
+      <button class="level" type="button" data-level="medium" aria-pressed="false"><b>Medium</b><small>A real junior-developer interview</small></button>
+      <button class="level" type="button" data-level="hard" aria-pressed="false"><b>Hard</b><small>Failure cases, trade-offs and follow-ups</small></button>
+    </div>
   </section>
 
   <div class="grid">
@@ -404,8 +415,18 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
   $('send').addEventListener('click', send);
   input.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
 
+  var level = null;
+  var LEVEL_NAME = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
+  Array.prototype.forEach.call(document.querySelectorAll('.level'), function (b) {
+    b.addEventListener('click', function () {
+      level = b.getAttribute('data-level');
+      Array.prototype.forEach.call(document.querySelectorAll('.level'), function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+      if (ME && ME.state === 'open') { $('start').disabled = false; $('start').textContent = 'Start the ' + LEVEL_NAME[level] + ' interview'; }
+    });
+  });
   $('start').addEventListener('click', function () {
     if (busy) return;
+    if (ME && ME.state === 'open' && !level) { status.textContent = 'Choose easy, medium or hard first.'; return; }
     $('start').disabled = true;
     setBusy(true, 'Starting the camera…');
     startCamera().then(function () {
@@ -414,11 +435,12 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
       return loadDetector();
     }).then(function () { return waitForFace(); }).then(function () {
       status.textContent = 'Preparing your first question…';
-      return post('/interview/start');
+      return post('/interview/start', { difficulty: level });
     }).then(function (j) {
       session = j.sessionId; running = true; OF = j.of || OF;
       $('start').style.display = 'none'; $('finish').style.display = '';
       $('schedule-card').style.display = 'none';
+      if (j.difficulty) $('level-label').textContent = ' · ' + LEVEL_NAME[j.difficulty];
       if (j.resumed) status.textContent = 'Continuing your unfinished interview from today.';
       showQuestion(j.number, j.question);
     }).catch(function (e) {
@@ -429,7 +451,7 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
   });
   $('finish').addEventListener('click', function () {
     if (busy || !session) return;
-    if (!confirm('End the interview now? Unanswered questions count as not attempted, and the room opens again in two weeks.')) return;
+    if (!confirm('End the interview now? Unanswered questions count as not attempted, and this is your one attempt.')) return;
     setBusy(true, 'Preparing your report…');
     post('/interview/finish', { sessionId: session, proctor: proctor() }).then(function (j) { endInterview(j.report); })
       .catch(function (e) { status.textContent = e.message; }).then(function () { setBusy(false); });
@@ -445,14 +467,14 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
     stopCamera();
     renderReport(report);
     speak('That is the end of the interview. Your overall mark is ' + (report.overall == null ? 'not available' : report.overall + ' out of 10') + '. ' + report.summary);
-    if (ME) { ME.reports.unshift(report); ME.state = 'taken'; renderReports(); renderSchedule(); }
+    if (ME) { ME.reports.unshift(report); ME.state = ME.schedule && ME.schedule.trial ? 'open' : 'taken'; renderReports(); renderSchedule(); if (ME.state === 'open') { $('start').style.display = ''; $('schedule-card').style.display = ''; } }
   }
   function renderReport(r) {
     var card = $('report-card');
     card.style.display = 'block';
     card.innerHTML = '<h3>Your report <span class="pill" style="margin-left:6px">AI</span></h3>' +
       '<div class="row" style="align-items:flex-end;gap:16px"><div class="big">' + (r.overall != null ? r.overall + '<span style="font-size:18px;color:var(--muted)">/10</span>' : '–') + '</div>' +
-      '<div class="muted small">' + r.marks.got + ' of ' + r.marks.of + ' marks across ' + (r.marks.of / 10) + ' question' + (r.marks.of === 10 ? '' : 's') + '</div></div>' +
+      '<div class="muted small">' + (LEVEL_NAME[r.difficulty] || 'Medium') + ' · ' + r.marks.got + ' of ' + r.marks.of + ' marks across ' + (r.marks.of / 10) + ' question' + (r.marks.of === 10 ? '' : 's') + '</div></div>' +
       '<p style="margin-top:12px"><b>What to improve before the next interview:</b> ' + esc(r.summary) + '</p>' +
       '<p class="muted small" style="margin-top:8px">Camera: ' + esc(r.attention) + '</p>' +
       '<table>' + r.turns.filter(function (t) { return t.answer; }).map(function (t, i) {
@@ -465,24 +487,30 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
     if (!ME || !ME.reports.length) return;
     $('reports-card').style.display = 'block';
     $('reports').innerHTML = ME.reports.map(function (r) {
-      return '<li><span>' + new Date(r.startedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) + ' · ' + r.marks.got + '/' + r.marks.of + ' marks</span><b>' + (r.overall != null ? r.overall + '/10' : '–') + '</b></li>';
+      return '<li><span>' + new Date(r.startedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) + ' · ' + (LEVEL_NAME[r.difficulty] || 'Medium') + (r.trial ? ' (trial)' : '') + ' · ' + r.marks.got + '/' + r.marks.of + ' marks</span><b>' + (r.overall != null ? r.overall + '/10' : '–') + '</b></li>';
     }).join('');
   }
   function renderSchedule() {
     var w = ME.schedule, title = $('when-title'), text = $('when-text');
     $('start').disabled = true;
+    $('levels').style.display = ME.state === 'open' ? 'flex' : 'none';
     if (!ME.enabled) { title.textContent = 'The Interview Room is switched off'; text.textContent = 'Your coordinator is in Messages.'; return; }
     if (ME.state === 'closed') {
       title.textContent = 'Next interview: ' + w.nextLabel;
       text.textContent = 'The room opens on alternate Sundays, India time, for the whole day. Come back then with your camera on. After that: ' + w.followingLabel + '.';
     } else if (ME.state === 'taken') {
-      title.textContent = 'You have taken this fortnight\'s interview';
-      text.textContent = 'Your report is below and in your email. The next interview is on ' + w.followingLabel + '.';
-    } else {
-      title.textContent = ME.state === 'resume' ? 'Your interview from today is unfinished' : 'The interview is open today';
-      text.textContent = (ME.state === 'resume' ? 'Press Continue to carry on from the question you stopped at. ' : 'One attempt, eight questions, about twenty minutes. ') + 'The next opening after today is ' + w.followingLabel + '.';
-      $('start').textContent = ME.state === 'resume' ? 'Continue the interview' : 'Start the interview';
+      title.textContent = 'You have taken your interview';
+      text.textContent = 'Your report is below and in your email.';
+    } else if (ME.state === 'resume') {
+      title.textContent = 'Your interview from today is unfinished';
+      text.textContent = 'Press Continue to carry on from the question you stopped at' + (ME.difficulty ? ', at the ' + LEVEL_NAME[ME.difficulty] + ' level' : '') + '.';
+      $('start').textContent = 'Continue the interview';
       $('start').disabled = false;
+    } else {
+      title.textContent = w.trial ? 'The interview is open (trial)' : 'The interview is open today';
+      text.textContent = (w.trial ? 'Trial mode: interviews can be repeated and do not use up your one attempt. ' : 'One attempt, eight questions, about twenty minutes. ') + 'Choose your level, then start.';
+      $('start').textContent = level ? 'Start the ' + LEVEL_NAME[level] + ' interview' : 'Start the interview';
+      $('start').disabled = !level;
     }
   }
 

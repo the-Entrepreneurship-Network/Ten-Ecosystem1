@@ -13,7 +13,8 @@ jest.mock('../../services/aiMeeting', () => ({
     QUESTIONS: 8,
     schedule: jest.fn(() => ({ open: false, today: '2026-12-14', next: '2026-12-27', following: '2027-01-10' })),
     status: jest.fn(async () => ({ schedule: { open: true, today: '2026-12-13', next: '2026-12-13', following: '2026-12-27', nextLabel: 'Sunday, 13 December 2026', followingLabel: 'Sunday, 27 December 2026' }, state: 'open', sessionId: null, reports: [{ id: 's0', overall: 6 }] })),
-    startInterview: jest.fn(async ({ student }) => (student.domain === 'closed' ? { error: 'The interview opens every second Sunday. Next: Sunday, 27 December 2026 (IST).', closed: true } : { sessionId: 's1', question: 'Q1', number: 1, of: 8 })),
+    LEVELS: ['easy', 'medium', 'hard'],
+    startInterview: jest.fn(async ({ student, difficulty }) => (student.domain === 'closed' ? { error: 'The interview opens every second Sunday. Next: Sunday, 27 December 2026 (IST).', closed: true } : { sessionId: 's1', question: 'Q1', number: 1, of: 8, difficulty })),
     answerInterview: jest.fn(async ({ answer, seconds, proctor }) => (answer === 'busy' ? { error: BUSY }
         : answer === '' ? { error: 'Say or type your answer first.' } : { score: 7, feedback: 'ok', question: 'Q2', number: 2, of: 8, done: false, report: null, got: { seconds, proctor } })),
     finishInterview: jest.fn(async () => ({ report: { overall: 7 } })),
@@ -51,8 +52,8 @@ describe('/api/v2/meeting', () => {
             schedule: { open: true, nextLabel: 'Sunday, 13 December 2026' }, reports: [{ id: 's0', overall: 6 }] });
     });
 
-    it('starts the interview, and answers 403 outside the opening', async () => {
-        expect((await call('post', '/interview/start')).body).toMatchObject({ success: true, sessionId: 's1', question: 'Q1', of: 8 });
+    it('starts the interview at the chosen level, and answers 403 outside the opening', async () => {
+        expect((await call('post', '/interview/start', { difficulty: 'Hard' })).body).toMatchObject({ success: true, sessionId: 's1', question: 'Q1', of: 8, difficulty: 'hard' });
         expect(await call('post', '/interview/start', {}, Object.assign({}, student, { domain: 'closed' })))
             .toEqual({ status: 403, body: { success: false, message: 'The interview opens every second Sunday. Next: Sunday, 27 December 2026 (IST).', closed: true } });
     });
@@ -70,6 +71,6 @@ describe('/api/v2/meeting', () => {
         process.env.AI_COORDINATOR = 'off';
         expect((await call('post', '/interview/start')).status).toBe(503);
         expect((await call('post', '/interview/answer', { sessionId: 's1', answer: 'hi' })).status).toBe(503);
-        expect((await call('get', '/')).body).toMatchObject({ enabled: false, state: 'off', reports: [], schedule: { open: false } });
+        expect((await call('get', '/')).body).toMatchObject({ enabled: false, state: 'off', reports: [], levels: ['easy', 'medium', 'hard'], schedule: { open: false } });
     });
 });
