@@ -603,7 +603,7 @@ function reportText(r) {
         ...r.answers.slice(0, 3).map((a) => `   ${at(a.createdAt)}, ${a.employeeId}: "${clip(ai.scrub(a.question), 90)}" -> "${clip(a.reply, 140)}"`),
         `2. Handed over to a coordinator: ${r.handovers.length}${byReason ? ` (${byReason})` : ''}.`,
         `3. Reviewed submissions: ${r.reviews.length} (${n(r.reviews, 'approve')} approved, ${n(r.reviews, 'changes')} asked for changes), after ${r.prechecks.length} pre-check(s).`,
-        ...r.reviews.slice(0, 3).map((p) => `   ${at(p.createdAt)}, ${p.employeeId}: "${clip(p.question, 70)}" -> ` +
+        ...r.reviews.slice(0, 5).map((p) => `   ${at(p.createdAt)}, ${p.employeeId}: "${clip(p.question, 70)}" -> ` +
             (p.source === 'approve' ? 'approved' : 'asked for changes') + (p.reply ? `: ${clip(p.reply, 120)}` : '')),
         `   Still waiting for a coordinator: ${r.waiting}. Of these, ${r.unchecked} have no pre-check yet, ` +
             `${unsure} could not be checked automatically or Gemini did not read them (a person should look), ` +
