@@ -283,6 +283,12 @@ describe('a 503 or 429 is asked again, nothing else is', () => {
         expect(calls.paths[3]).not.toContain('gemini-3.8-flash');
     });
 
+    // Live self-test, 26 Nov: the main model took over 60 s on a one-line
+    // question; the backup wrote a whole paper in about 4 s.
+    test('a stalled model is given 25 seconds, not a minute', () => {
+        expect(client).toMatch(/const GEMINI_TIMEOUT_MS = 25000;/);
+    });
+
     test('a stalled main model hands over at once, without waiting a second minute on it', async () => {
         const calls = stubSequence([{ stall: true }, { status: 200, body: OK }]);
         await expect(load().__gemini('hi', {})).resolves.toEqual({ ok: true });
