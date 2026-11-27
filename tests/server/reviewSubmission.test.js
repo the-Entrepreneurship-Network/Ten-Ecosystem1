@@ -50,6 +50,16 @@ describe('reviewSubmission() in server.js', () => {
         expect(SERVER).toContain('require("./services/submissionPrecheck").run(submission._id, { review: true })');
         expect(read('routes/v2/studentPortal.js')).toContain('.run(legSub._id, { screenshotExpected: false, review: true })');
     });
+
+    it('a second submission after "ask for changes" replaces the first instead of being dropped', () => {
+        // /submit-task used to answer "already submitted successfully" to any
+        // second submission of the same task and save nothing, so a student
+        // whose task was sent back could never hand it in again from the dashboard.
+        const route = SERVER.slice(SERVER.indexOf('app.post("/submit-task"'), SERVER.indexOf('app.post("/submit-task"') + 6000);
+        expect(route).toContain('const resubmission = !!(existingSubmission && existingSubmission.status === "Rejected");');
+        expect(route).toContain('if (existingSubmission && !resubmission) {');
+        expect(route).toMatch(/status: "Pending", reviewedOnce: false, reviewedBy: "", feedback: "No Feedback Yet",\s*performance: "B", tasksCompleted: 0, coordinatorRating: 0,\s*submittedAt: new Date\(\), aiCheck: null/);
+    });
 });
 
 describe('the certificate approval has one path too', () => {

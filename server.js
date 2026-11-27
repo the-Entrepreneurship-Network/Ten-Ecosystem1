@@ -4714,9 +4714,14 @@ try{
     const image = req.files["image"] ? "/" + req.files["image"][0].path : "";
     const pdf   = req.files["pdf"]   ? "/" + req.files["pdf"][0].path   : "";
 
-    // 1. Double Submission Protection: Check if a Submission for this specific task and employee has already gone through
+    // 1. Double Submission Protection: Check if a Submission for this specific task and employee has already gone through.
+    //    The one second submission that is meant to happen is after "ask for
+    //    changes" (Rejected): it replaces the first, as the Task Journey's
+    //    resubmission does, and is reviewed afresh. Before, it was silently
+    //    dropped with "already submitted successfully".
     const existingSubmission = await Submission.findOne({ employeeId, task: task || "" });
-    if (existingSubmission) {
+    const resubmission = !!(existingSubmission && existingSubmission.status === "Rejected");
+    if (existingSubmission && !resubmission) {
       console.log(`[Double Submission Block] Ignored duplicate Submission write for employeeId: ${employeeId}, task: ${task}`);
       return res.json({ success: true, message: "Task has already been submitted successfully!" });
     }
@@ -4729,7 +4734,7 @@ try{
       targetAssignment = await TaskAssignment.findOne({ employeeId, title: task });
     }
 
-    if (targetAssignment && targetAssignment.status !== "Pending") {
+    if (targetAssignment && targetAssignment.status !== "Pending" && !(resubmission && targetAssignment.status === "Rejected")) {
       console.log(`[Double Submission Block] Ignored duplicate status write. TaskAssignment is currently in '${targetAssignment.status}' state.`);
       return res.json({ success: true, message: "Task has already been submitted successfully!" });
     }
@@ -4746,23 +4751,36 @@ try{
 
     const isCaseStudy = req.body.isCaseStudy === 'true' || req.body.isCaseStudy === true;
 
-    const submission = new Submission({
-        employeeId, domain,
-        task: task || "",
-        githubLink, note,
-        image, pdf,
-        status: "Pending",
-        reviewedOnce: false,
-        isCaseStudy: isCaseStudy,
-        attendanceAllowed: false,
-        attendanceGiven: false,
-        attendanceCount: 0,
-        internshipDuration,
-        monthlyAttendance: { month1:0, month2:0, month3:0, month4:0, month5:0, month6:0 },
-        tasksCompleted: 0,
-        meetingsJoined: 0,
-        performance: "B"
-    });
+    let submission;
+    if (resubmission) {
+        // The second attempt takes the first one's place; a file not sent again is kept.
+        Object.assign(existingSubmission, {
+            domain, githubLink, note,
+            image: image || existingSubmission.image, pdf: pdf || existingSubmission.pdf,
+            status: "Pending", reviewedOnce: false, reviewedBy: "", feedback: "No Feedback Yet",
+            performance: "B", tasksCompleted: 0, coordinatorRating: 0,
+            submittedAt: new Date(), aiCheck: null, isCaseStudy
+        });
+        submission = existingSubmission;
+    } else {
+        submission = new Submission({
+            employeeId, domain,
+            task: task || "",
+            githubLink, note,
+            image, pdf,
+            status: "Pending",
+            reviewedOnce: false,
+            isCaseStudy: isCaseStudy,
+            attendanceAllowed: false,
+            attendanceGiven: false,
+            attendanceCount: 0,
+            internshipDuration,
+            monthlyAttendance: { month1:0, month2:0, month3:0, month4:0, month5:0, month6:0 },
+            tasksCompleted: 0,
+            meetingsJoined: 0,
+            performance: "B"
+        });
+    }
 
     await submission.save();
 
@@ -4781,7 +4799,7 @@ try{
       );
     } else {
       await TaskAssignment.findOneAndUpdate(
-        { employeeId, title: task, status: "Pending" },
+        { employeeId, title: task, status: resubmission ? { $in: ["Pending", "Rejected"] } : "Pending" },
         {
           status: "Submitted",
           submittedAt: new Date(),
