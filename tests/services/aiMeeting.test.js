@@ -14,7 +14,8 @@
 
 const mockDb = {
     sessions: [], logs: [], gemini: [], claude: [], mails: [], setting: null, ready: true, claudeReady: false,
-    answer: null, claudeAnswer: null, assignments: [], progress: [], domainTasks: [], submissions: [], mailerReady: true, speechReady: false, spoken: []
+    answer: null, claudeAnswer: null, assignments: [], progress: [], domainTasks: [], submissions: [], mailerReady: true, speechReady: false, spoken: [],
+    access: null
 };
 const chain = (rows) => { const q = { sort: () => q, limit: () => q, select: () => q, lean: async () => rows, then: (res, rej) => Promise.resolve(rows).then(res, rej) }; return q; };
 const mockMatch = (doc, f) => Object.entries(f).every(([k, v]) => {
@@ -75,9 +76,16 @@ jest.mock('../../utils/mailer', () => ({
     mailerReady: () => mockDb.mailerReady,
     isSendableAddress: (a) => /@/.test(String(a || '')),
     escapeHtml: (s) => String(s).replace(/</g, '&lt;'),
-    renderEmail: (o) => `${o.heading}|${o.name}|${o.bodyHtml}|${o.panel.html}|${o.cta.url}`,
+    renderEmail: (o) => `${o.heading}|${o.name}|${o.bodyHtml}|${o.panel.label}|${o.panel.html}|${o.cta.label}|${o.cta.url}|${o.note}`,
     createEmailTransporter: () => ({ sendMail: async (m) => { mockDb.mails.push(m); } }),
     EMAIL_FROM: 'TEN <noreply@test>', PORTAL_URL: 'https://portal.test'
+}));
+// Whether the student has the course: the report email offers it, or sends them back to it.
+jest.mock('../../services/studioAccess', () => ({
+    getStudioAccess: async () => {
+        if (mockDb.access instanceof Error) throw mockDb.access;
+        return mockDb.access || { portals: { course: { granted: false } } };
+    }
 }));
 jest.mock('../../services/aiCoordinator', () => ({
     NAME: 'TEN AI Coordinator',
@@ -99,7 +107,7 @@ beforeEach(() => {
     jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] }).setSystemTime(SUNDAY);
     delete process.env.INTERVIEW_OPEN;
     Object.assign(mockDb, { sessions: [], logs: [], gemini: [], claude: [], mails: [], setting: null, ready: true, claudeReady: false,
-        answer: null, claudeAnswer: null, mailerReady: true, speechReady: false, spoken: [],
+        answer: null, claudeAnswer: null, mailerReady: true, speechReady: false, spoken: [], access: null,
         assignments: [{ title: 'Week 1: Landing page', description: 'Build a responsive landing page with a contact form.' }, { title: 'Week 2: REST API', description: 'An Express API with validation and error handling.' }],
         progress: [{ taskId: 't1', status: 'approved' }],
         domainTasks: [{ taskTitle: 'Git basics', taskDescription: 'Branches, commits, pull requests.' }],
@@ -111,12 +119,14 @@ const FACE = { checker: 'mediapipe' };
 const questions = ['What breaks in your contact form if the server is slow?', 'How does Express tell a 400 from a 500?', 'Why validate on the server when the form already validates?',
     'What does a pull request give a team that a commit does not?', 'How would you debug a 502 after deploying to Render?', 'What is idempotency, and which of your endpoints need it?',
     'Where would you add a cache in your API, and what goes wrong?', 'How do you keep a secret out of a public repository?'];
+// A model answer with code, as the AI writes it: line breaks kept, markup escaped in the email.
+const IDEAL = 'Check the request in the network tab, then the server log.  \r\nif (!res.ok) throw new Error(`HTTP ${res.status}`);\nreturn res.json();';
 function geminiAsks() {
     mockDb.answer = (prompt) => {
         const m = prompt.match(/ask question (\d) of 8/);
         if (/The interview is starting/.test(prompt)) return { question: questions[0], done: false };
-        if (m) return { score: 6, feedback: 'Right idea, no example. A strong answer names the status code and shows the handler.', question: questions[Number(m[1]) - 1], done: false };
-        return { score: 9, feedback: 'Complete.', question: '', done: true, summary: 'Strengths: clear on HTTP. Gaps: deployment debugging. Work on: reading server logs; writing one test per endpoint.', overall: 7 };
+        if (m) return { score: 6, feedback: 'Right idea, no example. A strong answer names the status code and shows the handler.', ideal: IDEAL, question: questions[Number(m[1]) - 1], done: false };
+        return { score: 9, feedback: 'Complete.', ideal: 'Keep it in an environment variable, never in the code.', question: '', done: true, summary: 'Strengths: clear on HTTP. Gaps: deployment debugging. Work on: reading server logs; writing one test per endpoint.', overall: 7 };
     };
 }
 const start = (difficulty = 'medium', who = student) => meeting.startInterview({ student: who, difficulty });
@@ -268,7 +278,7 @@ describe('which AI: Gemini or Claude, as the admin portal says', () => {
         const { sessionId } = await start('medium', other);
         expect(mockDb.sessions[1]).toMatchObject({ engine: 'claude', claudeModel: 'claude-sonnet-5-5' });
         expect(mockDb.claude[0]).toMatchObject({ model: 'claude-sonnet-5-5' });
-        expect(mockDb.claude[0].schema).toMatchObject({ type: 'object', additionalProperties: false, required: ['score', 'feedback', 'question', 'done', 'summary', 'overall'] });
+        expect(mockDb.claude[0].schema).toMatchObject({ type: 'object', additionalProperties: false, required: ['score', 'feedback', 'ideal', 'question', 'done', 'summary', 'overall'] });
         // Switched back to Gemini mid-interview: this interview keeps Claude.
         mockDb.setting.engine = 'gemini';
         await meeting.answerInterview({ student: other, sessionId, answer: 'x', proctor: FACE });
@@ -309,7 +319,7 @@ describe('which AI: Gemini or Claude, as the admin portal says', () => {
         const out = await meeting.saveAiSettings({ engine: 'claude', claudeModel: 'claude-haiku-5-5', claudeMonthlyCap: 200, by: 'tenadmin' });
         expect(out).toMatchObject({ engine: 'claude', claudeModel: 'claude-haiku-5-5', claudeMonthlyCap: 200, updatedBy: 'tenadmin' });
         expect(out.models).toEqual([
-            { id: 'claude-haiku-5-5', costPerInterviewInr: 0.5 }, { id: 'claude-sonnet-5-5', costPerInterviewInr: 9 }, { id: 'claude-opus-5-5', costPerInterviewInr: 18 }
+            { id: 'claude-haiku-5-5', costPerInterviewInr: 0.5 }, { id: 'claude-sonnet-5-5', costPerInterviewInr: 10 }, { id: 'claude-opus-5-5', costPerInterviewInr: 20 }
         ]);
     });
 });
@@ -337,10 +347,11 @@ describe('the interview', () => {
         expect(mockDb.logs.filter((l) => l.source === 'interview')).toHaveLength(9);
         expect(mockDb.logs[mockDb.logs.length - 1]).toMatchObject({ kind: 'meeting', source: 'report', employeeId: 'TEN/WEB/1005', question: '8 of 8 answered, hard, gemini', reply: expect.stringContaining('overall 7/10. Eyes on the camera 93%') });
         expect(mockDb.mails).toHaveLength(1);
-        expect(mockDb.mails[0]).toMatchObject({ to: 'priya@x.in', from: 'TEN <noreply@test>', subject: 'Your interview marks: 7/10, Hard (Sunday, 13 December 2026)' });
+        expect(mockDb.mails[0]).toMatchObject({ to: 'priya@x.in', from: 'TEN <noreply@test>', subject: 'Your interview report: 7/10, Hard (Sunday, 13 December 2026)' });
         expect(mockDb.mails[0].html).toContain('Your interview report|Priya Nair|');
-        expect(mockDb.mails[0].html).toContain('Level: <b>Hard</b>. Overall mark: <b style="font-size:20px;">7/10</b> (51 of 80 across 8 questions)');
-        expect(mockDb.mails[0].html).toContain('What to improve before the next interview:</b> Strengths: clear on HTTP.');
+        expect(mockDb.mails[0].html).toContain('7<span style="font-size:18px;color:#9a9080;">/10</span>');
+        expect(mockDb.mails[0].html).toContain('Web Development interview · <b>Hard</b> level<br>Sunday, 13 December 2026<br>51 of 80 marks across 8 questions');
+        expect(mockDb.mails[0].html).toContain('HOW IT WENT</div><p style="margin:4px 0 10px;">Strengths: clear on HTTP.');
         expect(mockDb.mails[0].html).toContain('Eyes on the camera 93%');
         expect(mockDb.mails[0].html).toContain(questions[7]);
         expect(mockDb.mails[0].html).toContain('https://portal.test/meeting');
@@ -376,7 +387,7 @@ describe('the interview', () => {
         expect(report).toMatchObject({ overall: 6, questions: 1, difficulty: 'easy', marks: { got: 6, of: 10 }, attention: 'Camera on; the attention check was not available on this device.' });
         expect(report.summary).toBe('You stopped after 1 of 8 questions, averaging 6/10; the unanswered questions count as not attempted.');
         expect(mockDb.sessions[0].proctor).toEqual({ checker: 'unavailable', attentiveMs: 0, awayMs: 0, noFaceMs: 0, awayEpisodes: 0, multiFaceEpisodes: 0, cameraOffEpisodes: 0 });
-        expect(mockDb.mails[0].subject).toBe('Your interview marks: 6/10, Easy (Sunday, 13 December 2026)');
+        expect(mockDb.mails[0].subject).toBe('Your interview report: 6/10, Easy (Sunday, 13 December 2026)');
         expect(mockDb.logs[mockDb.logs.length - 1]).toMatchObject({ source: 'report', question: '1 of 8 answered, easy, gemini' });
     });
 
@@ -506,5 +517,67 @@ describe('the greeting follows India time', () => {
         expect(partOfDay(new Date('2026-12-13T11:30:00Z'))).toBe('evening');     // 17:00 IST
         expect(partOfDay(new Date('2026-12-13T18:29:00Z'))).toBe('evening');     // 23:59 IST
         expect(partOfDay(new Date('2026-12-13T18:31:00Z'))).toBe('morning');     // 00:01 IST next day
+    });
+});
+
+describe('the report email', () => {
+    it('shows each question with what the student said and the actual answer, code line by line, and no "what you need to know"', async () => {
+        geminiAsks();
+        await fullInterview({ checker: 'mediapipe' }, 'medium');
+        const html = mockDb.mails[0].html;
+        expect(html).toContain('QUESTION 1 · 6/10');
+        expect(html).toContain('QUESTION 8 · 9/10');
+        expect(html).toContain('YOU SAID</div><div style="color:#cfcab9;white-space:pre-wrap;">“Answer 1”');
+        expect(html).toContain('THE ACTUAL ANSWER</div><div>Check the request in the network tab, then the server log.</div><div style="font-family:Consolas,Menlo,monospace;');
+        expect(html).toContain('white-space:pre-wrap;">if (!res.ok) throw new Error(`HTTP ${res.status}`);\nreturn res.json();</div>');
+        expect(html).toContain('Keep it in an environment variable, never in the code.');
+        expect(html).not.toContain('A strong answer names the status code');
+        expect(mockDb.sessions[0].turns[0].ideal).toBe('Check the request in the network tab, then the server log.\nif (!res.ok) throw new Error(`HTTP ${res.status}`);\nreturn res.json();');
+        expect((await meeting.reports({ student }))[0].turns[0].ideal).toContain('return res.json();');
+    });
+
+    // Seven answers at 4/10 and the last at 9/10.
+    const weakAnswers = () => { geminiAsks(); const base = mockDb.answer; mockDb.answer = (p) => { const r = base(p); if (r.score === 6) r.score = 4; return r; }; };
+    it('offers the course to a student without it: how many questions scored below 6, what it teaches, the Studio price', async () => {
+        weakAnswers();
+        await fullInterview({ checker: 'mediapipe' });
+        const html = mockDb.mails[0].html;
+        expect(html).toContain('|GET JOB READY|You scored below 6 on 7 of 8 questions. If you want to upgrade yourself, take the TEN course for Web Development: ' +
+            'it teaches every one of these topics in depth, with lessons, a video per topic, practice and proctored exams, and a certificate at the end. ' +
+            'Learn there what you got stuck on, and walk into your next interview job ready. ₹300, or ₹400 if you pay when you finish.|Take the course|https://portal.test/studio.html|');
+        expect(html).toContain('Your report is also in the <a href="https://portal.test/meeting"');
+        // Scoring 6 or more everywhere: an offer to go further, not to fix gaps.
+        mockDb.sessions = []; mockDb.mails = [];
+        process.env.INTERVIEW_OPEN = 'always';
+        geminiAsks();
+        await fullInterview({ checker: 'mediapipe' });
+        expect(mockDb.mails[0].html).toContain('|GET JOB READY|You scored 6 or more on every question. If you want to go further, take the TEN course for Web Development: it takes every topic deeper,');
+    });
+
+    it('sends a student who has the course back to it, and still emails if the access lookup fails', async () => {
+        weakAnswers();
+        mockDb.access = { portals: { course: { granted: true, via: 'tenure' } } };
+        await fullInterview({ checker: 'mediapipe' });
+        expect(mockDb.mails[0].html).toContain('|KEEP GOING|You already have the TEN course for Web Development. Go back to the topics behind the 7 questions where you scored below 6, ' +
+            'and take those topic exams again. That is the quickest way to be job ready before your next interview.|Continue your course|https://portal.test/learn|');
+        mockDb.sessions = []; mockDb.mails = [];
+        jest.spyOn(console, 'error').mockImplementation(() => {});
+        mockDb.access = new Error('database down');
+        process.env.INTERVIEW_OPEN = 'always';
+        await fullInterview({ checker: 'mediapipe' });
+        expect(mockDb.mails[0].html).toContain('|GET JOB READY|You scored below 6 on 7 of 8 questions.');
+        console.error.mockRestore();
+    });
+
+    it('asks the AI for the actual answer, with code for code questions; Claude must give it', () => {
+        const p = meeting._internal.interviewPrompt({ domain: 'Web Development', context: '', topics: [], turns: [{ question: 'Q?', answer: 'A.' }], answer: 'A.', number: 2, difficulty: 'medium' });
+        expect(p).toContain('In "ideal", write the actual answer to that question as a strong candidate would say it');
+        expect(p).toContain('include the few lines of code that answer it, one statement per line');
+        expect(p).toContain('"score", "feedback", "ideal", "question"');
+        expect(meeting._internal.CLAUDE_SCHEMA.required).toContain('ideal');
+        expect(meeting._internal.answerText('  a  \r\n\n\n\nb\t\n c ', 100)).toBe('a\n\nb\n c');
+        const esc = (x) => x.replace(/</g, '&lt;');
+        expect(meeting._internal.answerHtml('Use a parameterised query:\nconst rows = await db.query(sql, [id]);\nreturn rows;\nIt never pastes input into SQL.', esc).replace(/ style="[^"]*"/g, ''))
+            .toBe('<div>Use a parameterised query:</div><div>const rows = await db.query(sql, [id]);\nreturn rows;</div><div>It never pastes input into SQL.</div>');
     });
 });
