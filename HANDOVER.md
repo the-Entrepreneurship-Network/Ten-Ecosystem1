@@ -595,6 +595,18 @@ The in-house email console (`routes/growth.js`, `public/growth-os.html`,
   - Spaces are allowed: `TEN-WEB DEVELOPMENT-1001_loc.pdf`.
   - Students download through `GET /api/v2/certificates/download/:type`,
     which checks ownership. The folders themselves are not public.
+- **Course certificates** (Expert, Nano Degree, Fellowship, since #325):
+  - Earned on approved tasks: 30%, 70%, and 70% plus the top 10% of the
+    interns in the same domain (`getCertStatus`).
+  - Priced in `config/payment.js`, the one setting.
+  - The student buys one on `certificate-checkout.html`: benefits, then a UPI
+    QR, then the 12-digit UTR.
+  - An admin approves it in the admin portal, under Payments, which emails the
+    student. HR does not see these payments.
+  - The PDF is served by `GET /api/v2/certificates/course-pdf/:type`, which
+    makes it on first download.
+  - `releaseBlock` in `routes/v2/certificates.js` is the one release check:
+    earned, no Studio fee due, and paid.
 - **How documents get issued** — several paths, with different rules, so read
   the code before changing eligibility:
   - the student applies and HR approves (`routes/v2/certificateApplications.js`);
@@ -1344,7 +1356,6 @@ whoever takes over. Until then:
 
 | Problem | Effect | Where |
 |---|---|---|
-| Paid course certificates (Expert, Nano Degree, Fellowship) return 404 | Students cannot download a certificate they paid for | Since #263 (18 Nov), the `/uploads` guard in `server.js` blocks `certificates/`, but these links still point there (`routes/v2/certificates.js` `generate-pdf`). Needs an authenticated download route, not reopening the folder. (HR's links into `documents/` had the same cause and now go through `routes/privateDocuments.js`.) |
 | HR's certificate **name** correction is not stored, and the "correct once" lock does not hold | The PDF made at that moment has the corrected name, but a later regeneration prints the old one, and HR can correct without limit | Since #259 (18 Nov): `name` and `corrected` are missing from the `certificateDates` sub-schema in `models/Student.js`, so Mongoose drops them |
 | A Growth campaign interrupted by a deploy or restart stays `sending` for ever | The rest of its audience is never mailed, and its revenue shows ₹0 | `services/growthSender.js`: no resume or stop exists |
 | The `freeTenure` / `paidTenure` segments probably select the wrong students | `Student.tenure` holds labels ("1 Month"); the segments compare against keys ("1month") | `services/growthSegments.js`. **Check the stored values first** |

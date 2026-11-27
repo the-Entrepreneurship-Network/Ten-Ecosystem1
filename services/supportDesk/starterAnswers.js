@@ -2,18 +2,22 @@
 
 /**
  * The help desk's first answers, written from what the portal actually does
- * (checked against the code on 23 Nov 2026). HR edits them on the Help Desk
- * page; an edited one is never overwritten by a later release.
+ * (checked against the code on 23 Nov 2026; the course certificates on 27 Nov,
+ * when they got a working checkout). HR edits them on the Help Desk page; an
+ * edited one is never overwritten by a later release.
  *
  * Deliberately NOT answered here, so they reach a person: the Letter of
- * Recommendation (its rules differ between pages), paid course certificates
- * (their downloads fail today), fines, stipend (the pages disagree), name
- * corrections, changing domain or plan, and refunds.
+ * Recommendation (its rules differ between pages), fines, stipend (the pages
+ * disagree), name corrections, changing domain or plan, and refunds.
  *
  * `answer` goes to anyone. `personal`, when present, goes instead to a
  * registered student Gmail verified, filled in from their account
  * (services/supportDesk/facts.js lists the {{placeholders}}).
  */
+
+// The course certificate prices, from the one setting the checkout uses.
+const { CERT_PRICES } = require('../../config/payment');
+
 module.exports = [
     {
         key: 'employee-id',
@@ -171,8 +175,34 @@ module.exports = [
         ],
         answer: 'Yes. Your Letter of Completion (your internship certificate) and your offer letter are free on every ' +
             "plan, including the free ones. You don't pay anything to receive them.\n\n" +
-            'The only certificates with a price are the optional course certificates (Expert, Nano Degree and ' +
-            'Fellowship), which you choose to claim separately.'
+            'The only certificates with a price are the optional course certificates (Expert ₹' + CERT_PRICES.expert +
+            ', Nano Degree ₹' + CERT_PRICES.nano_degree + ' and Fellowship ₹' + CERT_PRICES.fellowship + '), which you ' +
+            'choose to get separately on My Certificates.'
+    },
+    {
+        key: 'course-certificate',
+        question: 'How do I get my Expert, Nano Degree or Fellowship certificate?',
+        examples: [
+            'how to get the expert certificate', 'how do i get the nano degree certificate', 'fellowship certificate kaise milega',
+            'how to claim my course certificate',
+            'i am eligible for all three certificates but could not get any of them',
+            'expert certificate unlocked but i cannot download it', 'nano degree shows claim it payment coming soon',
+            'i paid for the expert certificate when can i download it', 'i paid for the nano degree but it is not approved yet',
+            'i paid for the fellowship certificate when will it be approved', 'i paid for the expert certificate but it still says verifying',
+            'what is the price of the expert certificate', 'how much is the nano degree certificate',
+            'how to become eligible for the fellowship certificate'
+        ],
+        answer: 'These are the optional course certificates. You earn them from your progress in the Task Journey:\n' +
+            '- Expert: 30% of your tasks approved. ₹' + CERT_PRICES.expert + '.\n' +
+            '- Nano Degree: 70% of your tasks approved. ₹' + CERT_PRICES.nano_degree + '.\n' +
+            '- Fellowship: 70% of your tasks approved and a place in the top 10% of interns in your domain. ₹' +
+            CERT_PRICES.fellowship + '.\n\n' +
+            'Open My Certificates from your dashboard. An earned certificate has a "Get your certificate" button. It ' +
+            'shows what the certificate gives you, then a UPI QR code for the exact amount. Pay with any UPI app and type ' +
+            'the 12-digit UPI reference number (UTR) into the box.\n\n' +
+            'We check every payment within 24 hours and email you when it is approved. The Download button then opens on ' +
+            'My Certificates. If you have already paid, do not pay again: the card says "Payment submitted — verifying" ' +
+            'until it is approved.'
     },
     {
         key: 'completion-certificate',
