@@ -48,7 +48,15 @@ const GEMINI_MODEL = () => process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 const GEMINI_FALLBACK_MODEL = () => process.env.GEMINI_FALLBACK_MODEL || 'gemini-flash-lite-latest';
 
 /** How long to wait before giving up on a stalled connection. */
-const GEMINI_TIMEOUT_MS = 60000;
+/*
+ * 25 seconds, not 60. The live self-test on 26 Nov: the main model took over a
+ * minute to answer "Reply with {"ok":true}", while the backup answered a full
+ * exam paper in about four seconds. Every call waited the whole minute before
+ * the backup was asked, so marking an exam after Submit outlasted the proxy in
+ * front of the app. A healthy main model writes a paper well inside this; a
+ * slower answer now goes to the backup instead of being waited for.
+ */
+const GEMINI_TIMEOUT_MS = 25000;
 
 function apiKey() {
     return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GEMINI_KEY || '';
@@ -158,6 +166,8 @@ async function ask(prompt, schema) {
         const fallback = GEMINI_FALLBACK_MODEL();
         const busy = RETRY_STATUS.includes(err && err.status) || (err && err.timeout);
         if (!busy || fallback === 'off' || fallback === GEMINI_MODEL()) throw err;
+        // Logged, so a main model that is failing all day shows up as such.
+        console.warn(`[gemini] ${GEMINI_MODEL()} ${err.timeout ? 'stalled' : 'busy (' + err.status + ')'}; asking ${fallback}`);
         out = await askModel(body, fallback).catch((err2) => {
             console.error(`[gemini] ${fallback} failed too:`, err2.message);
             throw err;
