@@ -2323,78 +2323,6 @@ ctx.fillText("Domain: " + (studentData.domain || "Tech & Product Engineering"), 
         loadLeaderboard(document.getElementById("ten-x-lb-hr"), { showOverall: true, showDomain: false });
     }
 
-    async function devResetCerts(employeeId) {
-        const confirmRes = await Swal.fire({
-            title: 'Reset Certificates?',
-            text: 'This will reset your certificate redemptions so you can test them again.',
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#10b981',
-            cancelButtonColor: '#ef4444',
-            confirmButtonText: 'Yes, Reset!',
-            background: '#0c1220',
-            color: '#fff'
-        });
-        if (!confirmRes.isConfirmed) return;
-
-        try {
-            const res = await fetch("/api/v2/marketplace/dev-reset-certs", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "x-employee-id": employeeId || "" }
-            });
-            const data = await res.json();
-            if (data.success) {
-                await Swal.fire({
-                    icon: 'success',
-                    title: 'Reset Complete!',
-                    text: 'Certificate redemptions have been reset.',
-                    background: '#0c1220',
-                    color: '#fff',
-                    confirmButtonColor: '#10b981'
-                });
-                location.reload();
-            }
-        } catch (e) {
-            console.error(e);
-        }
-    }
-
-    async function devResetFlow(employeeId) {
-        const confirmRes = await Swal.fire({
-            title: 'Clear All System Data?',
-            text: 'This will reset all payments, certificate claims, verified bookings, notifications, and reset student coins to 500 for a fresh flow retest.',
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#d97706',
-            cancelButtonColor: '#ef4444',
-            confirmButtonText: 'Yes, Reset All Data!',
-            background: '#0c1220',
-            color: '#fff'
-        });
-        if (!confirmRes.isConfirmed) return;
-
-        try {
-            const res = await fetch("/api/v2/marketplace/dev-reset-flow", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "x-employee-id": employeeId || "" }
-            });
-            const data = await res.json();
-            if (data.success) {
-                await Swal.fire({
-                    icon: 'success',
-                    title: 'System Cleared!',
-                    text: 'Ecosystem flow data has been completely reset.',
-                    background: '#0c1220',
-                    color: '#fff',
-                    confirmButtonColor: '#10b981'
-                });
-                location.reload();
-            }
-        } catch (e) {
-            console.error(e);
-        }
-    }
-
     function loadRazorpay(callback) {
         if (window.Razorpay) {
             callback();
@@ -2592,7 +2520,7 @@ ctx.fillText("Domain: " + (studentData.domain || "Tech & Product Engineering"), 
         showBadgePopup, loadStreak, loadBadges, loadTimeline, loadLeaderboard,
         downloadBadge, downloadRedemptionPassPDF, showPostRedemptionPassModal, openVideoCallDetailsModal, loadMarketplace, openCheckoutModal, confirmMarketplacePayment, verifyMarketplacePayment, submitUtrVerification, addTestCoins, claimWelcomeCoins, switchPaymentMethod,
         submitCardPayment, submitNetBankingPayment, submitWalletPayment, processProviderPayment,
-        switchMktTab, loadStudentBookingsList, devResetCerts, devResetFlow, openRazorpayPayment,
+        switchMktTab, loadStudentBookingsList, openRazorpayPayment,
         loadDao, daoVote, daoRaiseToggle, daoSubmitProposal
     };
 
