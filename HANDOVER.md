@@ -914,6 +914,23 @@ the dashboard entries.
       pre-check, Gemini did not read it, or the link could not be checked.
       Older than 60 days: pre-checked, never decided. The daily report counts
       each of these.
+    - Not final. A student's hand-in or resubmission is decided right after
+      its pre-check (`run(id, { review: true })` → `reviewOne`), so a student
+      who fixes the work has the new status within a minute. A coordinator can
+      change an AI decision from the card (`reviewSubmission` lets a person
+      overwrite `reviewedBy: "ai"`); their decision is then final. The AI never
+      changes a person's decision, nor its own.
+    - **Certificates.** In the same run (`approveCertificates`), students
+      whose internship ended within the last 60 days, not yet approved, and
+      who meet both criteria (`certificateCriteria()` in `server.js`: combined
+      attendance 75% or more and five or more approved tasks, the rule the
+      `certificateEligible` milestone uses) are approved for certificate
+      consideration through `approveForCertificate()`, the same function as
+      the Students tab's "Approve for Certificate", so they reach HR's queue
+      (`GET /students/coordinator-approved`) with the AI named as approver and
+      the numbers in the remarks. HR still gives the final approval. A student
+      HR returned once, or who is not yet eligible, waits for a person; a
+      coordinator can revoke the AI's approval from the Students tab.
     - Pacing: 10 seconds apart, 2.5 minutes after a GitHub repository without
       `GITHUB_TOKEN`. At most 150 new pre-checks a day, because Gemini's free
       quota is shared with the exam papers and the chat; a decision on a fresh
@@ -1078,7 +1095,7 @@ server's clock, and **whether the EC2 box is on UTC is UNSURE**:
 | Hourly at :00, :20, :40 | Certificate pipeline: escalate to HR after 24 h; issue LOC/LOR when the rules are met (or add a fine); issue offer letters 24 h after documents are submitted | `routes/v2/certificates.js` | **none**, every process |
 | Every 30 min, and daily 09:00, 23:55, 08:00 IST | Automation crons: offer letters for pending documents; daily certificate requests; auto-approval after 24 h; auto-issue after the HR deadline; mark active students present at 23:55 (not Sundays); email-health alert at 08:00 | `services/automationCron.js` | `ENABLE_AUTOMATION_CRON=false` or `DISABLE_CRON_JOBS=true` |
 | Every 30 min (IST) | Refer & Earn settle: coins for both students, shares, reversals (§7.13) | `services/referrals.js` (`startSweep`) | `ENABLE_AUTOMATION_CRON=false` or `DISABLE_CRON_JOBS=true`; worker 0 only |
-| 02:05 and 08:35 (and a minute after each start), 09:05, 10:05 and 10:20 IST | AI Coordinator: the review of waiting submissions; the coordinators' summary; student reminders; the daily report to the team inbox (§7.14) | `services/aiCoordinatorJobs.js` (`start`) | `AI_COORDINATOR=off`, `ENABLE_AUTOMATION_CRON=false` or `DISABLE_CRON_JOBS=true`; worker 0 only |
+| 02:05 and 08:35 (and a minute after each start), 09:05, 10:05 and 10:20 IST | AI Coordinator: the review of waiting submissions and the certificate approvals for those who finished; the coordinators' summary; student reminders; the daily report to the team inbox (§7.14) | `services/aiCoordinatorJobs.js` (`start`) | `AI_COORDINATOR=off`, `ENABLE_AUTOMATION_CRON=false` or `DISABLE_CRON_JOBS=true`; worker 0 only |
 | 23:05 and 03:15 (`ATTENDANCE_TZ`, default IST) | Attendance report to WhatsApp; purge sign-in events older than 90 days | `services/v2/attendanceAgent.js` | `ATTENDANCE_AGENT_ENABLED=false` |
 | 02:37, 08:37, 14:37, 20:37 IST | College discovery crawl (sends nothing) | `services/collegeDiscovery.js` | `COLLEGE_AGENT_CRON=off` |
 | 07:17, 19:17 IST | Idea agent | `services/ideaAgent.js` | off unless `IDEA_AGENT_ENABLED=true` |

@@ -3496,6 +3496,7 @@ function renderSubmissions(submissions){
           ? `<div style="padding:12px;background:rgba(16,185,129,0.06);border-left:3px solid #10b981;border-radius:6px;">
                <div style="font-size:11px;color:#10b981;font-weight:700;margin-bottom:4px;">${sub.reviewedBy === 'ai' ? '🤖 AI COORDINATOR FEEDBACK' : '📝 COORDINATOR FEEDBACK'}</div>
                <div style="font-size:13px;color:#c8d4e8;line-height:1.6;">${sub.feedback}</div>
+               ${sub.reviewedBy === 'ai' ? `<div style="font-size:11px;color:#94a3b8;margin-top:6px;">${sub.status === 'Rejected' ? 'Fix what it asks and submit the task again: the AI checks it again straight away. ' : ''}Your coordinator can change this decision.</div>` : ''}
              </div>`
           : `<div style="font-size:12px;color:#64748b;">⏳ Feedback pending...</div>`
         }

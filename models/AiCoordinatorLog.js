@@ -10,7 +10,7 @@ const mongoose = require("mongoose");
  * restart or a second process finds it and skips.
  */
 const aiCoordinatorLogSchema = new mongoose.Schema({
-    kind:       { type: String, enum: ["answer", "handover", "precheck", "review", "reminder", "summary"], required: true },
+    kind:       { type: String, enum: ["answer", "handover", "precheck", "review", "certificate", "reminder", "summary"], required: true },
     // Set only for things that must happen once, e.g. "inactive:TEN/WEB/1005:2026-11-24".
     key:        { type: String },
     employeeId: { type: String, default: "" },
@@ -21,8 +21,8 @@ const aiCoordinatorLogSchema = new mongoose.Schema({
     // answer: saved | ai | unavailable | limit | image; handover: the reason;
     // precheck: approve | changes (question: the task, reply: the problems
     // found, reason: ai | rules, who wrote the draft); review: approve |
-    // changes (the AI's own decision; reply: the feedback sent); reminder:
-    // inactive | week | weekly.
+    // changes (the AI's own decision; reply: the feedback sent); certificate:
+    // approve (question: the criteria met); reminder: inactive | week | weekly.
     source:     { type: String, default: "" },
     reason:     { type: String, default: "" },
     createdAt:  { type: Date, default: Date.now }

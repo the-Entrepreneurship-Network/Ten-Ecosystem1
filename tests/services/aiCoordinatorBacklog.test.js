@@ -11,7 +11,7 @@
 
 const mockState = {};
 function mockReset() {
-    Object.assign(mockState, { submissions: [], logs: [], mails: [], sent: [], runs: [], reviews: [], checks: {}, profile: 'help@ten.in' });
+    Object.assign(mockState, { submissions: [], students: [], certs: [], logs: [], mails: [], sent: [], runs: [], reviews: [], checks: {}, profile: 'help@ten.in' });
 }
 mockReset();
 
@@ -32,8 +32,10 @@ jest.mock('mongoose', () => ({
         countDocuments: async (f) => mockState.submissions.filter((s) => mockWaiting(s, f)).length
     })
 }));
-// Loaded by the jobs file for the reminders and summaries; not used here.
-jest.mock('../../models/Student', () => ({}));
+// Students, for the certificate approvals; the rest is loaded by the jobs file for the reminders and summaries.
+jest.mock('../../models/Student', () => ({
+    find: async (f) => mockState.students.filter((st) => !(f.certificateApprovedByCoordinator && st.certificateApprovedByCoordinator))
+}));
 jest.mock('../../models/Attendance', () => ({}));
 jest.mock('../../models/LoginEvent', () => ({}));
 jest.mock('../../models/Notification', () => function Note() {});
@@ -83,7 +85,13 @@ const review = jest.fn(async ({ id, status, feedback, from, reviewedBy }) => {
     Object.assign(sub, { status, feedback, reviewedOnce: true, reviewedBy, reviewedFrom: from });
     return { success: true };
 });
-jobs.attach({ review });
+// server.js's certificateCriteria() and approveForCertificate(), as the Students tab uses them.
+const criteria = jest.fn(async (st) => st.criteria || { attendance: 0, approvedTasks: 0, ok: false });
+const approve = jest.fn(async (st, opts) => {
+    Object.assign(st, { certificateApprovedByCoordinator: true, approvedByCoordinatorId: opts.approver, coordinatorRemarks: opts.remarks });
+    mockState.certs.push({ employeeId: st.employeeId, opts });
+});
+jobs.attach({ review, certificate: { criteria, approve } });
 
 const DAY = 24 * 3600 * 1000;
 const ago = (days) => new Date(Date.now() - days * DAY);
@@ -100,6 +108,8 @@ beforeEach(() => {
     mockReset();
     wait.mockClear();
     review.mockClear();
+    criteria.mockClear();
+    approve.mockClear();
     delete process.env.AI_COORDINATOR;
     delete process.env.AI_COORDINATOR_REVIEW;
     delete process.env.GITHUB_TOKEN;
@@ -151,7 +161,7 @@ describe('the review of the waiting submissions', () => {
         mockState.checks.s3 = { problems: ['The GitHub repository is private or does not exist. Make it public.'], draft: 'Before it can be approved: make it public.', repo: { public: false } };
         mockState.checks.s4 = { by: 'rules' };
 
-        const out = await jobs.reviewBacklog();
+        const { backlog: out } = await jobs.dailyRun();
 
         expect(out).toMatchObject({ waiting: 7, older: 1, checked: 5, approved: 3, changes: 1, waited: 2, left: 3, stopped: '' });
         // Oldest first within the 60 days, the older one last; a screenshot is expected only where one was attached.
@@ -173,7 +183,7 @@ describe('the review of the waiting submissions', () => {
             ['TEN/WEB/0003', 'changes', 'Week 1: Landing page'], ['TEN/WEB/0008', 'approve', 'Week 1: Landing page']
         ]);
         const mail = unfold(mockState.sent[0]);
-        expect(mail).toContain('Subject: [ai-coordinator] review backlog: 3 approved, 1 asked for changes, 3 still waiting');
+        expect(mail).toContain('Subject: [ai-coordinator] daily run: 3 approved, 1 asked for changes, 3 still waiting; 0 sent to HR for certificates');
         expect(mail).toContain('3. Reviewed submissions: 4 (3 approved, 1 asked for changes), after 5 pre-check(s).');
         expect(mail).toContain('"Week 1: Landing page" -> asked for changes: Before it can be approved: make it public.');
         expect(mail).toContain('Still waiting for a coordinator: 3. Of these, 0 have no pre-check yet, 2 could not be checked automatically or Gemini did not read them (a person should look), and 1 are older than 60 days (left for a person).');
@@ -199,11 +209,11 @@ describe('the review of the waiting submissions', () => {
         const limit = jobs._internal.PRECHECKS_PER_DAY;
         mockState.logs = Array.from({ length: limit }, () => ({ kind: 'precheck', createdAt: new Date() }));
         mockState.submissions = [sub('s1'), sub('s2', { submittedAt: ago(9), aiCheck: freshCheck() })];
-        const out = await jobs.reviewBacklog();
+        const { backlog: out } = await jobs.dailyRun();
         expect(mockState.runs).toEqual([]);
         expect(out).toMatchObject({ checked: 0, approved: 1, waited: 1, left: 1 });
         expect(out.stopped).toMatch(/the rest go tomorrow/);
-        expect(unfold(mockState.sent[0])).toContain('review backlog: 1 approved, 0 asked for changes, 1 still waiting');
+        expect(unfold(mockState.sent[0])).toContain('daily run: 1 approved, 0 asked for changes, 1 still waiting; 0 sent to HR for certificates');
     });
 
     it('with AI_COORDINATOR_REVIEW=off it pre-checks and decides nothing', async () => {
@@ -223,9 +233,10 @@ describe('the review of the waiting submissions', () => {
         expect(mockState.logs.filter((l) => l.kind === 'review')).toEqual([]);
     });
 
-    it('nothing waiting: nothing done, no email', async () => {
+    it('nothing waiting and nobody finished: nothing done, no email', async () => {
         mockState.submissions = [sub('s1', { reviewedOnce: true, status: 'Approved' })];
-        expect(await jobs.reviewBacklog()).toMatchObject({ waiting: 0, checked: 0, approved: 0, left: 0 });
+        const { backlog } = await jobs.dailyRun();
+        expect(backlog).toMatchObject({ waiting: 0, checked: 0, approved: 0, left: 0 });
         expect(mockState.sent).toHaveLength(0);
     });
 
@@ -241,6 +252,56 @@ describe('the review of the waiting submissions', () => {
     });
 });
 
+describe('the certificate approvals', () => {
+    const joined = (daysAgo) => new Date(Date.now() - daysAgo * DAY).toISOString().slice(0, 10);
+    const student = (employeeId, extra) => Object.assign({
+        employeeId, domain: 'Web Development', name: 'Student ' + employeeId.slice(-4), tenure: '1 Month', joiningDate: joined(40)
+    }, extra);
+    const met = { attendance: 82, approvedTasks: 6, ok: true };
+
+    it('approves, as the coordinator would, a finished student who meets both criteria, and sends the rest nowhere', async () => {
+        mockState.students = [
+            student('TEN/WEB/2001', { criteria: met }),                                                // finished 11 days ago: approved
+            student('TEN/WEB/2002', { criteria: { attendance: 61, approvedTasks: 6, ok: false } }),     // attendance short
+            student('TEN/WEB/2003', { criteria: { attendance: 90, approvedTasks: 3, ok: false } }),     // tasks short
+            student('TEN/WEB/2004', { criteria: met, joiningDate: joined(5) }),                        // still running
+            student('TEN/WEB/2005', { criteria: met, joiningDate: joined(120) }),                      // finished 3 months ago: a person's
+            student('TEN/WEB/2006', { criteria: met, hrRejected: true }),                              // HR returned them once
+            student('TEN/WEB/2007', { criteria: met, certificateApprovedByCoordinator: true })          // already approved
+        ];
+        const out = await jobs.approveCertificates();
+        expect(out).toEqual({ finished: 4, approved: 1, notYet: 2, lowAttendance: 1, fewTasks: 1, returned: 1 });
+        expect(mockState.certs.map((c) => c.employeeId)).toEqual(['TEN/WEB/2001']);
+        const { opts } = mockState.certs[0];
+        expect(opts.approver).toBe('TEN AI Coordinator');
+        expect(opts.from).toBe('TEN AI Coordinator');
+        expect(opts.remarks).toMatch(/^Approved by the AI Coordinator: attendance 82%, 6 tasks approved, internship ended \d{4}-\d{2}-\d{2}\.$/);
+        expect(opts.message).toContain('HR gives the final approval');
+        // Criteria are only computed for those who finished and were not returned.
+        expect(criteria.mock.calls.map((c) => c[0].employeeId)).toEqual(['TEN/WEB/2001', 'TEN/WEB/2002', 'TEN/WEB/2003']);
+        expect(mockState.logs.filter((l) => l.kind === 'certificate')).toEqual([expect.objectContaining({
+            employeeId: 'TEN/WEB/2001', source: 'approve', reply: 'sent to HR'
+        })]);
+        expect(mockState.logs[0].question).toMatch(/^attendance 82%, 6 tasks approved/);
+    });
+
+    it('is part of the daily run and its one email', async () => {
+        mockState.students = [student('TEN/WEB/2001', { criteria: met })];
+        const { backlog, certificates } = await jobs.dailyRun();
+        expect(backlog.waiting).toBe(0);
+        expect(certificates.approved).toBe(1);
+        expect(unfold(mockState.sent[0])).toContain('Subject: [ai-coordinator] daily run: 0 approved, 0 asked for changes, 0 still waiting; 1 sent to HR for certificates');
+        expect(unfold(mockState.sent[0])).toContain('4. Approved for certificates and sent to HR: 1.');
+    });
+
+    it('does nothing with AI_COORDINATOR_REVIEW=off', async () => {
+        process.env.AI_COORDINATOR_REVIEW = 'off';
+        mockState.students = [student('TEN/WEB/2001', { criteria: met })];
+        expect(await jobs.approveCertificates()).toBeNull();
+        expect(approve).not.toHaveBeenCalled();
+    });
+});
+
 describe('the report', () => {
     const NOW = new Date('2026-11-28T04:50:00Z'); // 10:20 in India
     const hoursAgo = (h) => new Date(NOW.getTime() - h * 3600 * 1000);
@@ -253,6 +314,7 @@ describe('the report', () => {
             { kind: 'precheck', source: 'approve', employeeId: 'TEN/WEB/1004', question: 'Week 1: Landing page', reply: '', createdAt: hoursAgo(4) },
             { kind: 'review', source: 'approve', employeeId: 'TEN/WEB/1004', question: 'Week 1: Landing page', reply: 'Clean page. Add alt text next time.', createdAt: hoursAgo(4) },
             { kind: 'review', source: 'changes', employeeId: 'TEN/WEB/1005', question: 'Week 2: API', reply: 'The GitHub repository is private or does not exist. Make it public.', createdAt: hoursAgo(5) },
+            { kind: 'certificate', source: 'approve', employeeId: 'TEN/WEB/1006', question: 'attendance 88%, 7 tasks approved, internship ended 2026-11-20', reply: 'sent to HR', createdAt: hoursAgo(5) },
             { kind: 'reminder', source: 'inactive', createdAt: hoursAgo(6) },
             { kind: 'reminder', source: 'inactive', createdAt: hoursAgo(6) },
             { kind: 'reminder', source: 'week', createdAt: hoursAgo(6) },
@@ -277,8 +339,10 @@ describe('the report', () => {
         expect(text).toContain('"Week 1: Landing page" -> approved: Clean page. Add alt text next time.');
         expect(text).toContain('"Week 2: API" -> asked for changes: The GitHub repository is private');
         expect(text).toContain('Still waiting for a coordinator: 3. Of these, 1 have no pre-check yet, 1 could not be checked automatically or Gemini did not read them (a person should look), and 1 are older than 60 days (left for a person).');
-        expect(text).toContain('4. Reminders: 3 (2 sign-in, 1 unfinished week, 0 weekly progress).');
-        expect(text).toContain('5. Coordinator summaries: 1 domain(s); 1 email(s) sent, 1 failed.');
+        expect(text).toContain('4. Approved for certificates and sent to HR: 1.');
+        expect(text).toContain('TEN/WEB/1006: attendance 88%, 7 tasks approved, internship ended 2026-11-20');
+        expect(text).toContain('5. Reminders: 3 (2 sign-in, 1 unfinished week, 0 weekly progress).');
+        expect(text).toContain('6. Coordinator summaries: 1 domain(s); 1 email(s) sent, 1 failed.');
         expect(text).not.toContain('older than a day');
         expect(text).not.toContain('priya@gmail.com');
         expect(text).not.toContain('9876543210');

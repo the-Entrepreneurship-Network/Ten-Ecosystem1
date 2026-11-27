@@ -4805,7 +4805,7 @@ try{
     // longer writes `feedback`: that showed the student AI text as
     // "COORDINATOR FEEDBACK" before any coordinator had looked.
     // Case studies are reviewed their own way, as before.
-    if (!isCaseStudy) require("./services/submissionPrecheck").run(submission._id).catch(() => {});
+    if (!isCaseStudy) require("./services/submissionPrecheck").run(submission._id, { review: true }).catch(() => {});
 }catch(error){
     console.log(error);
     res.json({ success:false, message:"Submission Failed" });
@@ -4868,7 +4868,8 @@ try{
  *
  * The decision is written only if nobody else has reviewed it first: one
  * conditional update, not a read and then a write, so a coordinator and the
- * AI acting in the same second cannot both decide.
+ * AI acting in the same second cannot both decide. An AI decision is not
+ * final: a coordinator can change it, and a resubmission is checked afresh.
  */
 async function reviewSubmission({ id, status, feedback, rating, from = "Coordinator", reviewedBy = "" }) {
     if (status !== "Approved" && status !== "Rejected") return { success:false, message:"status must be Approved or Rejected" };
@@ -4878,7 +4879,11 @@ async function reviewSubmission({ id, status, feedback, rating, from = "Coordina
 
     const ratingValue = rating ? Number(rating) : 0;
 
-    const existing = await Submission.findOneAndUpdate({ _id: id, reviewedOnce: { $ne: true } }, {
+    // A person may change the AI Coordinator's decision (the student's resubmission
+    // or the coordinator's own call); nobody changes a person's, and the AI
+    // changes nobody's.
+    const open = reviewedBy === "ai" ? { reviewedOnce: { $ne: true } } : { $or: [{ reviewedOnce: { $ne: true } }, { reviewedBy: "ai" }] };
+    const existing = await Submission.findOneAndUpdate(Object.assign({ _id: id }, open), {
         status,
         feedback,
         reviewedOnce: true,
@@ -7170,7 +7175,7 @@ try{
 app.get("/coordinator/student-overview/:domain", async(req,res)=>{
 try{
     const domain = decodeURIComponent(req.params.domain);
-    const studentsRaw = await Student.find({ domain }).select('firstName lastName name domain collegeName college employeeId tenure joiningDate certificateApprovedByCoordinator coordinatorRemarks coordinatorApprovedAt certificateApprovedByHR hrRejected hrRejectionReason createdAt').sort({ createdAt:-1 });
+    const studentsRaw = await Student.find({ domain }).select('firstName lastName name domain collegeName college employeeId tenure joiningDate certificateApprovedByCoordinator approvedByCoordinatorId coordinatorRemarks coordinatorApprovedAt certificateApprovedByHR hrRejected hrRejectionReason createdAt').sort({ createdAt:-1 });
     // BUG FIX 2: deduplicate by employeeId so each student appears only once.
     // Earlier registrations may have produced duplicate Student docs with the
     // same employeeId; keep only the most recent.
@@ -7198,6 +7203,7 @@ try{
             performance: perf ? (perf.score + " · " + perf.grade) : "—",
             performanceObj: perf || null,
             certificateApprovedByCoordinator: s.certificateApprovedByCoordinator,
+            approvedByCoordinatorId: s.approvedByCoordinatorId,
             coordinatorRemarks: s.coordinatorRemarks,
             coordinatorApprovedAt: s.coordinatorApprovedAt,
             certificateApprovedByHR: s.certificateApprovedByHR,
@@ -7262,17 +7268,14 @@ app.post('/api/admin/recalculate-attendance', async (req, res) => {
  * `coordinatorId` out of the request body, so the record of who approved a
  * certificate was whatever the caller typed.
  */
-app.post("/students/:id/coordinator-approve", requireStaffSession, async(req,res)=>{
-try{
-    const { remarks } = req.body;
-    const s = req.session || {};
-    const approver = (s.coordinator && (s.coordinator.username || s.coordinator.name))
-        || (s.hr && (s.hr.username || "HR"))
-        || (s.adminUser && "admin")
-        || "coordinator";
-    const student = await Student.findById(req.params.id);
-    if(!student) return res.json({ success:false, message:"Student not found" });
-
+/**
+ * The coordinator's approval of a student for certificate consideration, which
+ * puts them in HR's queue (GET /students/coordinator-approved). The Approve
+ * button below and the AI Coordinator (services/aiCoordinatorJobs.js, for
+ * students who finished with both criteria met) both come here, so the record
+ * and the student's notice are the same whoever approved.
+ */
+async function approveForCertificate(student, { approver = "coordinator", remarks = "", from = "Coordinator", message } = {}) {
     student.certificateApprovedByCoordinator = true;
     student.approvedByCoordinatorId = approver;
     student.coordinatorApprovedAt = new Date();
@@ -7287,12 +7290,39 @@ try{
     // Notify the student
     const notif = new Notification({
         title:"Coordinator Approved You ✅",
-        message:"Your coordinator has approved you for certificate consideration. Awaiting HR final review.",
-        type:"success", from:"Coordinator",
+        message: message || "Your coordinator has approved you for certificate consideration. Awaiting HR final review.",
+        type:"success", from,
         targetType:"student", targetEmployeeId:student.employeeId, targetDomain:student.domain
     });
     await notif.save();
     broadcastNotification(student.domain, student.employeeId, notif);
+}
+
+/**
+ * The two criteria for a certificate, as the coordinator's Students tab shows
+ * them: combined attendance of 75% or more, and at least five approved tasks.
+ * The certificateEligible milestone and the AI Coordinator's approvals use the
+ * same rule.
+ */
+async function certificateCriteria(student){
+    const stats = await computeAttendanceStats(student.employeeId, student.joiningDate);
+    const approvedTasks = await Submission.countDocuments({ employeeId: student.employeeId, status:"Approved" });
+    const attendance = stats.combinedPct || 0;
+    return { attendance, approvedTasks, ok: attendance >= 75 && approvedTasks >= 5 };
+}
+
+app.post("/students/:id/coordinator-approve", requireStaffSession, async(req,res)=>{
+try{
+    const { remarks } = req.body;
+    const s = req.session || {};
+    const approver = (s.coordinator && (s.coordinator.username || s.coordinator.name))
+        || (s.hr && (s.hr.username || "HR"))
+        || (s.adminUser && "admin")
+        || "coordinator";
+    const student = await Student.findById(req.params.id);
+    if(!student) return res.json({ success:false, message:"Student not found" });
+
+    await approveForCertificate(student, { approver, remarks });
 
     res.json({ success:true, message:"Student approved and sent to HR for review" });
 }catch(e){ console.log(e); res.json({ success:false, message:"Failed to approve" }); }
@@ -8532,9 +8562,7 @@ async function checkCertificateEligibility(employeeId){
     try{
         const s = await Student.findOne({ employeeId });
         if(!s) return;
-        const stats = await computeAttendanceStats(employeeId, s.joiningDate);
-        const approved = await Submission.countDocuments({ employeeId, status:"Approved" });
-        if((stats.combinedPct || 0) >= 75 && approved >= 5){
+        if((await certificateCriteria(s)).ok){
             await setMilestone(employeeId, "certificateEligible");
         }
     }catch(_){}
@@ -11444,6 +11472,9 @@ app.set("io", io);
 // same delivery as everyone else's (services/aiCoordinator.js).
 const aiCoordinator = require("./services/aiCoordinator");
 aiCoordinator.attach({ deliver: deliverChatMessage, io, roster: () => app.get("rosterStaff") || [] });
+// Its reviews of clear submissions take the coordinator's own path, on
+// whichever worker takes the hand-in; the scheduled runs stay on worker 0.
+require("./services/aiCoordinatorJobs").attach({ review: reviewSubmission, certificate: { criteria: certificateCriteria, approve: approveForCertificate } });
 
 io.use(async (socket, next) => {
     try{
@@ -12326,9 +12357,7 @@ server.listen(PORT, "0.0.0.0", ()=>{
             // The AI Coordinator's reminders and coordinators' summaries.
             // AI_COORDINATOR=off switches these off too.
             try {
-                const aiJobs = require("./services/aiCoordinatorJobs");
-                aiJobs.attach({ review: reviewSubmission });
-                aiJobs.start();
+                require("./services/aiCoordinatorJobs").start();
             } catch (err) {
                 console.error("[ai-coordinator] Failed to schedule its jobs:", err.message);
             }

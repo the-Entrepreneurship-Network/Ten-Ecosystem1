@@ -16,10 +16,16 @@
  *   02:05 and 08:35,  every waiting submission, oldest first: a pre-check
  *   and on boot       where none is fresh, and, for those handed in within
  *                     the last 60 days, the AI's own review through the
- *                     coordinator's review path: approved when every check
+ *                     coordinator's review path (a hand-in or resubmission is
+ *                     decided right after its pre-check, and a coordinator can
+ *                     change an AI decision): approved when every check
  *                     passed and Gemini read it, asked for changes when a
  *                     check failed or the work is not the task. The rest
- *                     waits for a person and is named in the report.
+ *                     waits for a person and is named in the report. Then
+ *                     the students whose internship ended in those 60 days
+ *                     with 75% attendance and five approved tasks are
+ *                     approved for certificate consideration, as the
+ *                     coordinator's Students tab does it, and reach HR.
  *   10:20 every day   a report to the team inbox (SUPPORT_COPY_TO) of what the
  *                     AI did in the last 24 hours; also when a backlog run ends.
  *
@@ -376,9 +382,15 @@ const istMidnight = (d) => new Date(istDateKey(d) + 'T00:00:00+05:30');
 const reviewOn = () => !/^(off|false|0|no)$/i.test(String(process.env.AI_COORDINATOR_REVIEW || 'on').trim());
 
 let reviewFn = null;
-/** server.js hands over its reviewSubmission(), the path the coordinator's Approve button takes. */
-function attach({ review } = {}) {
+let certFns = null;
+/**
+ * server.js hands over reviewSubmission(), the path the coordinator's Approve
+ * button takes, and for certificates its criteria and approveForCertificate(),
+ * the path the Students tab's "Approve for Certificate" takes.
+ */
+function attach({ review, certificate } = {}) {
     if (review) reviewFn = review;
+    if (certificate) certFns = certificate;
 }
 
 /**
@@ -397,6 +409,42 @@ function decide(check) {
     const opened = (check.link && check.link.verdict === 'opens') || (check.repo && check.repo.public && !check.repo.empty);
     if (!opened) return { wait: 'the link could not be checked' };
     return { status: 'Approved', feedback: check.draft };
+}
+
+/**
+ * The AI's decision on one waiting submission, through the review path.
+ *   { status }   decided (and logged)
+ *   { already }  a person decided it in the meantime
+ *   { wait }     not a clear case: it waits for a person
+ */
+async function applyDecision(sub, check) {
+    const d = decide(check);
+    if (!d.status) return { wait: d.wait };
+    const r = await reviewFn({ id: sub._id, status: d.status, feedback: d.feedback, from: ai.NAME, reviewedBy: 'ai' });
+    if (!(r && r.success)) {
+        if (r && r.alreadyReviewed) return { already: true };
+        console.error('[ai-coordinator] review not saved:', (r && r.message) || 'no answer');
+        return { wait: 'the review was not saved' };
+    }
+    await AiCoordinatorLog.create({
+        kind: 'review', employeeId: sub.employeeId || '', domain: sub.domain || '',
+        question: String(sub.task || '').slice(0, 200), reply: String(d.feedback || '').slice(0, 1000),
+        source: d.status === 'Approved' ? 'approve' : 'changes', reason: check.match || ''
+    }).catch((err) => console.error('[ai-coordinator] log failed:', err.message));
+    return { status: d.status };
+}
+
+/**
+ * A student's hand-in or resubmission, right after its pre-check: decided now
+ * when it is a clear case, so the status follows what the student fixed.
+ * Returns true when a decision was made.
+ */
+async function reviewOne(id, check) {
+    if (!reviewOn() || !reviewFn || !ai.enabled() || mongoose.connection.readyState !== 1) return false;
+    const sub = await mongoose.model('Submission').findOne(pending({ _id: id })).select('employeeId domain task aiCheck').lean();
+    if (!sub) return false;
+    const out = await applyDecision(sub, check || sub.aiCheck);
+    return !!out.status;
 }
 
 let backlogRunning = false;
@@ -444,23 +492,9 @@ async function reviewBacklog() {
             }
             const inScope = new Date(sub.submittedAt || 0) >= cutoff;
             if (check && inScope && reviewOn() && reviewFn) {
-                const d = decide(check);
-                if (d.status) {
-                    const r = await reviewFn({ id: sub._id, status: d.status, feedback: d.feedback, from: ai.NAME, reviewedBy: 'ai' });
-                    if (r && r.success) {
-                        out[d.status === 'Approved' ? 'approved' : 'changes'] += 1;
-                        await AiCoordinatorLog.create({
-                            kind: 'review', employeeId: sub.employeeId || '', domain: sub.domain || '',
-                            question: String(sub.task || '').slice(0, 200), reply: String(d.feedback || '').slice(0, 1000),
-                            source: d.status === 'Approved' ? 'approve' : 'changes', reason: check.match || ''
-                        }).catch((err) => console.error('[ai-coordinator] log failed:', err.message));
-                    } else if (!(r && r.alreadyReviewed)) {
-                        console.error('[ai-coordinator] review not saved:', (r && r.message) || 'no answer');
-                        out.waited += 1;
-                    }
-                } else {
-                    out.waited += 1;
-                }
+                const r = await applyDecision(sub, check);
+                if (r.status) out[r.status === 'Approved' ? 'approved' : 'changes'] += 1;
+                else if (!r.already) out.waited += 1;
             } else if (check && inScope) {
                 out.waited += 1;
             }
@@ -474,11 +508,62 @@ async function reviewBacklog() {
     out.left = await Submission.countDocuments(pending());
     console.log(`[ai-coordinator] backlog: ${out.checked} pre-checked, ${out.approved} approved, ${out.changes} asked for changes, ` +
         `${out.left} still waiting` + (out.stopped ? ` (${out.stopped}).` : '.'));
-    if (out.checked || out.approved || out.changes) {
-        await sendReport(new Date(), `review backlog: ${out.approved} approved, ${out.changes} asked for changes, ${out.left} still waiting`)
-            .catch((err) => console.error('[ai-coordinator] report failed:', err.message));
-    }
     return out;
+}
+
+// ── Certificates: the coordinator's approval, for those who finished ─────
+
+/**
+ * Students whose internship ended within the last REVIEW_DAYS days and who
+ * meet both criteria (attendance 75% or more, five or more approved tasks)
+ * are approved for certificate consideration the way the coordinator's
+ * Students tab does it, and so reach HR's queue. The rest wait for a person:
+ * not yet eligible, or returned by HR once already.
+ */
+async function approveCertificates(now = new Date()) {
+    if (!reviewOn() || !certFns || !ai.enabled() || mongoose.connection.readyState !== 1) return null;
+    const out = { finished: 0, approved: 0, notYet: 0, lowAttendance: 0, fewTasks: 0, returned: 0 };
+    const students = await Student.find({ certificateApprovedByCoordinator: { $ne: true } });
+    for (const s of students) {
+        const start = getEffectiveStartDate(s);
+        const end = start ? getInternshipEndDate(start, s.tenure || s.v2DurationType) : null;
+        if (!end || end > now || now - end > REVIEW_DAYS * DAY) continue;
+        out.finished += 1;
+        if (s.hrRejected) { out.returned += 1; continue; }
+        const c = await certFns.criteria(s);
+        if (!c.ok) {
+            out.notYet += 1;
+            if (c.attendance < 75) out.lowAttendance += 1;
+            if (c.approvedTasks < 5) out.fewTasks += 1;
+            continue;
+        }
+        const facts = `attendance ${c.attendance}%, ${c.approvedTasks} tasks approved, internship ended ${istDateKey(end)}`;
+        await certFns.approve(s, {
+            approver: ai.NAME, from: ai.NAME,
+            remarks: `Approved by the AI Coordinator: ${facts}.`,
+            message: `The AI Coordinator approved you for certificate consideration: ${facts}. HR gives the final approval.`
+        });
+        out.approved += 1;
+        await AiCoordinatorLog.create({
+            kind: 'certificate', employeeId: s.employeeId || '', domain: s.domain || '',
+            question: facts, reply: 'sent to HR', source: 'approve'
+        }).catch((err) => console.error('[ai-coordinator] log failed:', err.message));
+    }
+    console.log(`[ai-coordinator] certificates: ${out.finished} finished in the last ${REVIEW_DAYS} days, ${out.approved} approved and sent to HR, ` +
+        `${out.notYet} not yet eligible (${out.lowAttendance} under 75% attendance, ${out.fewTasks} under 5 approved tasks), ${out.returned} returned by HR.`);
+    return out;
+}
+
+/** The scheduled run: the submissions, then the certificates, then one report of both. */
+async function dailyRun() {
+    const b = await reviewBacklog();
+    const c = await approveCertificates().catch((err) => { console.error('[ai-coordinator] certificates:', err.message); return null; });
+    const did = (b && (b.checked || b.approved || b.changes)) || (c && c.approved);
+    if (!did) return { backlog: b, certificates: c };
+    await sendReport(new Date(), `daily run: ${b ? b.approved : 0} approved, ${b ? b.changes : 0} asked for changes, ` +
+        `${b ? b.left : 0} still waiting; ${c ? c.approved : 0} sent to HR for certificates`)
+        .catch((err) => console.error('[ai-coordinator] report failed:', err.message));
+    return { backlog: b, certificates: c };
 }
 
 // ── The report: proof of what the AI did ─────────────────────────────────
@@ -499,7 +584,7 @@ async function buildReport(now = new Date()) {
     return {
         since, now, waiting, unchecked, older,
         answers: of('answer'), handovers: of('handover'), prechecks: of('precheck'), reviews: of('review'),
-        reminders: of('reminder'), summaries: of('summary'),
+        certificates: of('certificate'), reminders: of('reminder'), summaries: of('summary'),
         summaryEmails: { sent: mails.filter((m) => m.status !== 'failed').length, failed: mails.filter((m) => m.status === 'failed').length }
     };
 }
@@ -523,10 +608,13 @@ function reportText(r) {
         `   Still waiting for a coordinator: ${r.waiting}. Of these, ${r.unchecked} have no pre-check yet, ` +
             `${unsure} could not be checked automatically or Gemini did not read them (a person should look), ` +
             `and ${r.older} are older than ${REVIEW_DAYS} days (left for a person).`,
-        `4. Reminders: ${r.reminders.length} (${n(r.reminders, 'inactive')} sign-in, ${n(r.reminders, 'week')} unfinished week, ${n(r.reminders, 'weekly')} weekly progress).`,
-        `5. Coordinator summaries: ${r.summaries.length} domain(s); ${r.summaryEmails.sent} email(s) sent, ${r.summaryEmails.failed} failed.`,
+        `4. Approved for certificates and sent to HR: ${r.certificates.length}.`,
+        ...r.certificates.slice(0, 5).map((c) => `   ${at(c.createdAt)}, ${c.employeeId}: ${clip(c.question, 100)}`),
+        `5. Reminders: ${r.reminders.length} (${n(r.reminders, 'inactive')} sign-in, ${n(r.reminders, 'week')} unfinished week, ${n(r.reminders, 'weekly')} weekly progress).`,
+        `6. Coordinator summaries: ${r.summaries.length} domain(s); ${r.summaryEmails.sent} email(s) sent, ${r.summaryEmails.failed} failed.`,
         '',
         'The AI approves a submission only when every check passed and Gemini read it; it asks for changes when a check failed or the work is not the task.',
+        'It approves a student for a certificate only when the internship has ended with 75% attendance and five approved tasks; HR still decides.',
         'Anything it could not check waits for a person. Each decision is labelled as the AI\'s in both dashboards.'
     ].join('\n');
 }
@@ -537,7 +625,7 @@ async function sendReport(now = new Date(), title = '') {
     const r = await buildReport(now);
     const text = reportText(r);
     console.log(`[ai-coordinator] report: ${r.answers.length} answered, ${r.handovers.length} handed over, ` +
-        `${r.reviews.length} reviewed, ${r.prechecks.length} pre-checked, ${r.reminders.length} reminder(s), ${r.summaries.length} summary(ies).`);
+        `${r.reviews.length} reviewed, ${r.prechecks.length} pre-checked, ${r.certificates.length} sent to HR, ${r.reminders.length} reminder(s), ${r.summaries.length} summary(ies).`);
     const gmail = require('./supportDesk/gmail');
     const to = String(process.env.SUPPORT_COPY_TO || '').trim();
     if (!to || !gmail.configured()) {
@@ -559,7 +647,7 @@ function start() {
     if (started) return;
     started = true;
     const tz = { timezone: 'Asia/Kolkata' };
-    const backlog = () => reviewBacklog().catch((err) => console.error('[ai-coordinator] backlog:', err.message));
+    const backlog = () => dailyRun().catch((err) => console.error('[ai-coordinator] backlog:', err.message));
     // Twice a day: at night, when nobody is sitting an exam on the same Gemini
     // quota, and before the coordinators' morning summary.
     cron.schedule('5 2 * * *', backlog, tz);
@@ -570,11 +658,11 @@ function start() {
     // And a minute after each start, so a deploy picks up whatever is waiting.
     const soon = () => setTimeout(backlog, 60 * 1000).unref();
     if (mongoose.connection.readyState === 1) soon(); else mongoose.connection.once('connected', soon);
-    console.log('[ai-coordinator] submission review 02:05, 08:35 and on start' + (reviewOn() ? '' : ' (pre-checks only, AI_COORDINATOR_REVIEW=off)') +
+    console.log('[ai-coordinator] submission review and certificate approvals 02:05, 08:35 and on start' + (reviewOn() ? '' : ' (pre-checks only, AI_COORDINATOR_REVIEW=off)') +
         ', summaries 09:05, reminders 10:05, report 10:20 (IST) scheduled.');
 }
 
 module.exports = {
-    attach, start, runReminders, runSummaries, buildSummary, runningStudents, reviewBacklog, buildReport, sendReport,
+    attach, start, runReminders, runSummaries, buildSummary, runningStudents, reviewBacklog, reviewOne, approveCertificates, dailyRun, buildReport, sendReport,
     _internal: { summaryEmail, claim, latest, reportText, decide, wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)), PRECHECKS_PER_DAY, REVIEW_DAYS }
 };

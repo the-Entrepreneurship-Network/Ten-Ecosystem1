@@ -44,6 +44,8 @@ jest.mock('../../models/Notification', () => function Note(doc) {
 jest.mock('../../services/aiCoordinator', () => ({ scrub: (s) => String(s).replace(/\b[6-9]\d{9}\b/g, '[phone]') }));
 const mockLogs = [];
 jest.mock('../../models/AiCoordinatorLog', () => ({ create: async (row) => { mockLogs.push(row); return row; } }));
+const mockReviewOne = jest.fn(async () => false);
+jest.mock('../../services/aiCoordinatorJobs', () => ({ reviewOne: (...a) => mockReviewOne(...a) }));
 const mockFetch = jest.fn();
 jest.mock('../../services/v2/httpFetch', () => ({ httpFetch: (...a) => mockFetch(...a) }));
 
@@ -140,6 +142,8 @@ describe('checking a submission', () => {
         mockSubs.clear();
         mockNotes.length = 0;
         mockLogs.length = 0;
+        mockReviewOne.mockClear();
+        mockReviewOne.mockImplementation(async () => false);
         mockGemini.ready = false;
         mockGemini.ask.mockReset();
     });
@@ -213,6 +217,26 @@ describe('checking a submission', () => {
         await precheck.run('s5', { screenshotExpected: false, notify: false });
         expect(mockSubs.get('s5').aiCheck.problems).toEqual(['There is no link to the work.']);
         expect(mockNotes).toHaveLength(0);
+    });
+
+    it('a student\'s hand-in is handed to the AI Coordinator for its decision; decided, the student hears that instead', async () => {
+        precheck.checkLink = async () => ({ verdict: 'missing' });
+        add('s7', { githubLink: '' });
+        mockReviewOne.mockImplementation(async () => true);
+        const c = await precheck.run('s7', { review: true });
+        expect(mockReviewOne).toHaveBeenCalledWith('s7', c);
+        expect(mockNotes).toHaveLength(0);
+
+        // Not a clear case: the pre-check's own notice goes out as before.
+        add('s8', { githubLink: '' });
+        mockReviewOne.mockImplementation(async () => false);
+        await precheck.run('s8', { review: true });
+        expect(mockNotes).toHaveLength(1);
+
+        // A coordinator's re-check never asks for a decision.
+        add('s9', { githubLink: '' });
+        await precheck.run('s9', { notify: false });
+        expect(mockReviewOne).toHaveBeenCalledTimes(2);
     });
 
     it('switched off, it does nothing', async () => {

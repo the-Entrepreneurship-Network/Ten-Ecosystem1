@@ -1973,7 +1973,9 @@ function renderOverview(){
     if(s.certificateApprovedByHR){
       approvalBlock = `<div class="locked-notice">🎓 Fully approved by HR. Certificate eligible.</div>`;
     } else if(s.certificateApprovedByCoordinator){
-      approvalBlock = `<div class="locked-notice">✅ You approved this student — awaiting HR final review.</div>
+      approvalBlock = `<div class="locked-notice">${s.approvedByCoordinatorId === "TEN AI Coordinator"
+          ? "🤖 The AI Coordinator approved this student (" + aiEsc(s.coordinatorRemarks || "both criteria met") + ") — awaiting HR final review. You can revoke it."
+          : "✅ You approved this student — awaiting HR final review."}</div>
         <div class="feedback-actions"><button class="btn btn-reject" onclick="revokeStudent('${s._id}')">↩ Revoke Approval</button></div>`;
     } else {
       const rej = s.hrRejected
@@ -3155,10 +3157,11 @@ function renderSubmissions(submissions){
       ${aiCheckBlock(sub)}
       <div class="feedback-area">
         <div class="feedback-label">${sub.reviewedBy === "ai" ? "AI Coordinator Feedback" : "Coordinator Feedback"}</div>
-        ${isReviewed
+        ${isReviewed && sub.reviewedBy !== "ai"
           ? `<div style="padding:10px;color:var(--muted);font-size:13px;">📝 ${sub.feedback||"No feedback provided"}</div>
-             <div class="locked-notice">${sub.reviewedBy === "ai" ? "🤖 Reviewed by the AI Coordinator" : "🔒 Already reviewed"} (${sub.status}). Decision is permanent.</div>`
-          : `<textarea id="feedback-${sub._id}" placeholder="Write feedback for this submission...">${(sub.feedback && sub.feedback !== "No Feedback Yet") ? sub.feedback : aiEsc((sub.aiCheck && sub.aiCheck.draft) || "")}</textarea>
+             <div class="locked-notice">🔒 Already reviewed (${sub.status}). Decision is permanent.</div>`
+          : `${sub.reviewedBy === "ai" ? `<div class="locked-notice" style="margin-bottom:8px;">🤖 The AI Coordinator decided: ${sub.status}. The student can submit again and it is checked afresh; you can change the decision below, and yours is then final.</div>` : ``}
+             <textarea id="feedback-${sub._id}" placeholder="Write feedback for this submission...">${(sub.feedback && sub.feedback !== "No Feedback Yet") ? aiEsc(sub.feedback) : aiEsc((sub.aiCheck && sub.aiCheck.draft) || "")}</textarea>
              <div class="feedback-actions">
                <button class="btn btn-approve" onclick="updateStatus('${sub._id}','Approved')">✅ Approve</button>
                <button class="btn btn-reject" onclick="updateStatus('${sub._id}','Rejected')">❌ Reject</button>

@@ -1697,7 +1697,7 @@ router.post("/tasks/:taskId/submit", requireStudent, async (req, res) => {
                 // The coordinator's queue gets the same AI pre-check as a dashboard
                 // submission. A Task Journey submission has no screenshot to attach.
                 require("../../services/submissionPrecheck")
-                    .run(legSub._id, { screenshotExpected: false }).catch(() => {});
+                    .run(legSub._id, { screenshotExpected: false, review: true }).catch(() => {});
             }
         } catch (subErr) {
             console.error("V2 Sync Submission Create error:", subErr.message);
