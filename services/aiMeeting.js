@@ -50,7 +50,12 @@ const BUSY = 'The AI is busy right now. Try again in a minute; your interview co
 
 const clean = (s, max) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, max);
 const nameOf = (s) => s.name || [s.firstName, s.lastName].filter(Boolean).join(' ').trim() || 'there';
-const longDate = (key) => new Date(`${key}T12:00:00Z`).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' });
+// "Sunday, 13 December 2026" for an IST day key. Built by hand: toLocaleDateString's
+// en-IN output differs between Node versions' ICU data (Node 18 in CI writes
+// "Sunday 13 December, 2026"), and this text goes into emails and the page.
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const longDate = (key) => { const d = new Date(`${key}T12:00:00Z`); return `${DAYS[d.getUTCDay()]}, ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
 
 // ── When ─────────────────────────────────────────────────────────────────
 
