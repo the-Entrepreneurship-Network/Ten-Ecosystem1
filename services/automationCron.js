@@ -69,6 +69,20 @@ function getDomainContent(domain) {
     };
 }
 
+/**
+ * A colour softened towards white, as an opaque colour.
+ *
+ * pdfkit cannot read "#RRGGBBAA": "#A78BFA22" came out as a bright green band
+ * across every domain offer letter. Blending onto the white page gives the
+ * pale band that was meant.
+ */
+function tint(hex, alpha) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
+    if (!m) return hex;
+    return "#" + [0, 2, 4].map((i) => Math.round(255 - (255 - parseInt(m[1].slice(i, i + 2), 16)) * alpha)
+        .toString(16).padStart(2, "0")).join("");
+}
+
 // ════════════════════════════════════════════════════
 // DOMAIN-SPECIFIC OFFER LETTER PDF GENERATOR
 // ════════════════════════════════════════════════════
@@ -100,7 +114,7 @@ async function generateDomainOfferLetterPDF(studentData, outputPath) {
                 .text("hr@entrepreneurshipnetwork.net  |  www.entrepreneurshipnetwork.net", 50, 70, { width: W - 100, align: "center" });
 
             // Domain banner
-            doc.rect(0, 94, W, 28).fill(accentColor + "22");
+            doc.rect(0, 94, W, 28).fill(tint(accentColor, 0x22 / 255));
             doc.fillColor(accentColor).font("Helvetica-Bold").fontSize(10)
                 .text((studentData.domain || "Internship").toUpperCase() + " INTERNSHIP OFFER LETTER", 0, 102, { width: W, align: "center" });
 
@@ -152,7 +166,7 @@ async function generateDomainOfferLetterPDF(studentData, outputPath) {
             // Responsibilities box
             const respY = doc.y + 6;
             if (respY < 600) {
-                doc.rect(50, respY, W - 100, 16 + (domainContent.responsibilities.length * 14)).fillAndStroke(accentColor + "11", accentColor + "44");
+                doc.rect(50, respY, W - 100, 16 + (domainContent.responsibilities.length * 14)).fillAndStroke(tint(accentColor, 0x11 / 255), tint(accentColor, 0x44 / 255));
                 doc.fillColor(accentColor).font("Helvetica-Bold").fontSize(8.5).text("KEY RESPONSIBILITIES", 62, respY + 6);
                 let ry = respY + 19;
                 domainContent.responsibilities.forEach(r => {
@@ -1089,6 +1103,7 @@ function initAutomation() {
 }
 
 module.exports = {
+    tint,
     initAutomation,
     getDomainContent,
     getStarGrade,

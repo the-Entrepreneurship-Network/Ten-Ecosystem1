@@ -135,271 +135,31 @@ async function generateStarCertificate(data, outputPath) {
     });
 }
 
-/**
- * Generate Expert Certificate PDF (A4 landscape)
+/*
+ * The three course certificates: Expert, Nano Degree and Fellowship.
+ *
+ * All three are drawn by services/v2/certificateDesign.js, light, with what the
+ * holder can do in their domain, what it took (the real share of tasks
+ * approved and, for the Fellowship, their rank) and a QR code to the public
+ * verify page. They used to be three hand-drawn pages, two of them dark, that
+ * said nothing an employer could weigh.
+ *
+ * data: studentName, domain, tenure, durationText, startDate, endDate,
+ * certificateId, and when known completionPct and cohortRankPct.
+ * Resolves with outputPath once the file is written.
  */
-async function generateExpertCertificate(data, outputPath) {
-    await ensureFonts();
-    return new Promise((resolve, reject) => {
-        try {
-            const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 0 });
-            const stream = fs.createWriteStream(outputPath);
-            doc.pipe(stream);
+const certificateDesign = require("./certificateDesign");
 
-            registerFonts(doc);
-
-            const W = 841.89, H = 595.28;
-            const gold  = "#C9A84C";
-            const ivory = "#FDFAF4";
-            const dark  = "#2C1810";
-
-            // Background
-            doc.rect(0, 0, W, H).fill(ivory);
-
-            // Outer border
-            doc.rect(18, 18, W - 36, H - 36).lineWidth(1.5).strokeColor(gold).stroke();
-            doc.rect(24, 24, W - 48, H - 48).lineWidth(0.5).strokeColor(gold).stroke();
-
-            // Corner dots
-            const corners = [[28, 28], [W - 28, 28], [28, H - 28], [W - 28, H - 28]];
-            corners.forEach(([cx, cy]) => {
-                doc.circle(cx, cy, 6).lineWidth(1).strokeColor(gold).stroke();
-                doc.circle(cx, cy, 3).fill(gold);
-            });
-
-            // Watermark
-            drawLogo(doc, W / 2, H / 2, 180, 0.06, gold);
-
-            // Header
-            doc.fillColor(gold).font("Helvetica-Bold").fontSize(11)
-                .text("THE ENTREPRENEURSHIP NETWORK", 0, 52, { width: W, align: "center", characterSpacing: 3 });
-            doc.fillColor(dark).font("Helvetica").fontSize(8)
-                .text("Shaping Tomorrow's Entrepreneurs", 0, 68, { width: W, align: "center" });
-
-            // Title
-            doc.fillColor(gold).font("Helvetica-Bold").fontSize(9)
-                .text("CERTIFICATE OF COMPLETION", 0, 95, { width: W, align: "center", characterSpacing: 4 });
-
-            doc.moveTo(200, 112).lineTo(W - 200, 112).lineWidth(1).strokeColor(gold).stroke();
-
-            // "This certifies that"
-            doc.fillColor("#8B7355").font("Helvetica-Oblique").fontSize(13)
-                .text("This certifies that", 0, 122, { width: W, align: "center" });
-
-            // Name
-            doc.fillColor(dark).font("Helvetica-Bold").fontSize(38)
-                .text(data.studentName || "Student Name", 0, 145, { width: W, align: "center" });
-
-            // Domain
-            doc.fillColor("#555555").font("Helvetica").fontSize(12)
-                .text(`has successfully completed the ${data.domain || "Technology"} Internship Program`, 0, 196, { width: W, align: "center" });
-
-            // Duration + date
-            doc.fillColor("#777777").font("Helvetica").fontSize(10)
-                .text(`Duration: ${data.durationText || data.tenure || "N/A"}  ·  Period: ${data.startDate || ""} – ${data.endDate || ""}  ·  Issued: ${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" })}`,
-                    0, 220, { width: W, align: "center" });
-
-            doc.moveTo(100, 244).lineTo(W - 100, 244).lineWidth(1).strokeColor(gold).stroke();
-
-            // Signature block
-            const sigX = 100;
-            doc.moveTo(sigX, 280).lineTo(sigX + 160, 280).lineWidth(0.8).strokeColor("#333333").stroke();
-            doc.fillColor(dark).font("Helvetica-Bold").fontSize(9).text("Kamlesh Gupta", sigX, 284);
-            doc.fillColor("#777777").font("Helvetica").fontSize(8).text("Director, TEN", sigX, 296);
-
-            // Seal circular
-            const sealX = W / 2, sealY = 280;
-            drawCircularSeal(doc, sealX, sealY, 34);
-
-            // Cert ID
-            const certId = data.certificateId || generateCertificateId("expert");
-            doc.fillColor("#999999").font("Helvetica").fontSize(7)
-                .text(`Certificate ID: ${certId}`, W - 300, 275);
-            const verifyUrl = `https://www.entrepreneurshipnetwork.net/cert-verify?id=${certId}`;
-            doc.fillColor("#0066cc").font("Helvetica").fontSize(7)
-                .text(`Verify at: entrepreneurshipnetwork.net/cert-verify?id=${certId}`, W - 300, 288, {
-                    link: verifyUrl,
-                    underline: true
-                });
-
-            doc.end();
-            stream.on("finish", () => resolve({ path: outputPath, certificateId: certId }));
-            stream.on("error", reject);
-        } catch (err) {
-            reject(err);
-        }
-    });
+function generateExpertCertificate(data, outputPath) {
+    return certificateDesign.renderToFile(outputPath, (doc) => certificateDesign.drawInternshipCertificate(doc, "expert", data));
 }
 
-/**
- * Generate Nano Degree Certificate PDF (A4 landscape)
- */
-async function generateNanoCertificate(data, outputPath) {
-    await ensureFonts();
-    return new Promise((resolve, reject) => {
-        try {
-            const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 0 });
-            const stream = fs.createWriteStream(outputPath);
-            doc.pipe(stream);
-
-            registerFonts(doc);
-
-            const W = 841.89, H = 595.28;
-            const gold = "#FFD700";
-            const navy = "#0A1628";
-            const white = "#FFFFFF";
-
-            // Background
-            doc.rect(0, 0, W, H).fill(navy);
-
-            // Borders
-            doc.rect(12, 12, W - 24, H - 24).lineWidth(1).strokeColor(white).stroke();
-            doc.rect(20, 20, W - 40, H - 40).lineWidth(1).strokeColor(gold).stroke();
-
-            // Ribbon header band
-            doc.rect(0, 0, W, 80).fill("#061020");
-            doc.fillColor(gold).font("Helvetica-Bold").fontSize(12)
-                .text("THE ENTREPRENEURSHIP NETWORK", 0, 30, { width: W, align: "center", characterSpacing: 5 });
-            doc.fillColor(white).font("Helvetica").fontSize(8)
-                .text("Shaping Tomorrow's Entrepreneurs", 0, 52, { width: W, align: "center" });
-
-            // Title
-            doc.fillColor(gold).font("Helvetica-Bold").fontSize(10)
-                .text("NANO DEGREE CERTIFICATE", 0, 100, { width: W, align: "center", characterSpacing: 6 });
-
-            doc.moveTo(150, 120).lineTo(W - 150, 120).lineWidth(0.8).strokeColor(gold).stroke();
-
-            // "This certifies that"
-            doc.fillColor("#AAAAAA").font("Helvetica-Oblique").fontSize(13)
-                .text("This certifies that", 0, 132, { width: W, align: "center" });
-
-            // Name
-            doc.fillColor(gold).font("Helvetica-Bold").fontSize(44)
-                .text(data.studentName || "Student Name", 0, 155, { width: W, align: "center" });
-
-            doc.fillColor(white).font("Helvetica").fontSize(13)
-                .text(`has been awarded the Nano Degree in ${data.domain || "Technology"}`, 0, 210, { width: W, align: "center" });
-
-            doc.fillColor("#888888").font("Helvetica").fontSize(10)
-                .text(`Duration: ${data.durationText || "N/A"}  ·  Issued: ${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" })}`,
-                    0, 234, { width: W, align: "center" });
-
-            doc.moveTo(150, 256).lineTo(W - 150, 256).lineWidth(0.8).strokeColor(gold).stroke();
-
-            // Signature
-            doc.moveTo(120, 310).lineTo(280, 310).lineWidth(0.5).strokeColor("#666666").stroke();
-            doc.fillColor(white).font("Helvetica-Bold").fontSize(9).text("Kamlesh Gupta", 120, 316);
-            doc.fillColor("#888888").font("Helvetica").fontSize(8).text("Director, TEN", 120, 328);
-
-            const certId = data.certificateId || generateCertificateId("nano_degree");
-            drawCircularSeal(doc, W / 2, 316, 30);
-
-            doc.fillColor(gold).font("Helvetica-Bold").fontSize(8)
-                .text("Add to LinkedIn →", W - 280, 305);
-            doc.fillColor("#666666").font("Helvetica").fontSize(7)
-                .text(`Verify code: ${certId}`, W - 280, 318);
-            const verifyUrl = `https://www.entrepreneurshipnetwork.net/cert-verify?id=${certId}`;
-            doc.fillColor("#38BDF8").font("Helvetica").fontSize(7)
-                .text(`Verify: www.entrepreneurshipnetwork.net/cert-verify?id=${certId}`, W - 280, 332, {
-                    link: verifyUrl,
-                    underline: true
-                });
-
-            doc.end();
-            stream.on("finish", () => resolve({ path: outputPath, certificateId: certId }));
-            stream.on("error", reject);
-        } catch (err) {
-            reject(err);
-        }
-    });
+function generateNanoCertificate(data, outputPath) {
+    return certificateDesign.renderToFile(outputPath, (doc) => certificateDesign.drawInternshipCertificate(doc, "nano_degree", data));
 }
 
-/**
- * Generate Fellowship Certificate PDF (A4 landscape)
- */
-async function generateFellowshipCertificate(data, outputPath) {
-    await ensureFonts();
-    return new Promise((resolve, reject) => {
-        try {
-            const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 0 });
-            const stream = fs.createWriteStream(outputPath);
-            doc.pipe(stream);
-
-            registerFonts(doc);
-
-            const W = 841.89, H = 595.28;
-            const gold   = "#FFD700";
-            const green  = "#0D2818";
-            const white  = "#FFFFFF";
-
-            // Background
-            doc.rect(0, 0, W, H).fill(green);
-
-            // Constellation border
-            doc.rect(15, 15, W - 30, H - 30).lineWidth(1).strokeColor(gold).opacity(0.3).stroke();
-            doc.rect(22, 22, W - 44, H - 44).lineWidth(0.5).strokeColor(gold).opacity(0.2).stroke();
-            doc.opacity(1);
-
-            // Headings
-            doc.fillColor(gold).font("Helvetica-Bold").fontSize(72)
-                .text("FELLOW", 0, 30, { width: W, align: "center", characterSpacing: 28 });
-            doc.fillColor(white).font("Helvetica").fontSize(10)
-                .text("of The Entrepreneurship Network", 0, 115, { width: W, align: "center", characterSpacing: 2 });
-
-            doc.moveTo(100, 136).lineTo(W - 100, 136).lineWidth(0.8).strokeColor(gold).stroke();
-
-            // Citation
-            const citation = `This certifies that ${data.studentName || "the student"} has demonstrated exceptional dedication and commitment throughout their ${data.durationText || data.tenure || "internship"} journey at TEN. This Fellowship is awarded in recognition of achievement in the top 3% of their cohort in ${data.domain || "their domain"}.`;
-            doc.fillColor("#AAAAAA").font("Helvetica-Oblique").fontSize(10)
-                .text(citation, 80, 150, { width: W - 160, align: "center", lineGap: 3 });
-
-            // Name
-            doc.fillColor(gold).font("Helvetica-Bold").fontSize(52)
-                .text(data.studentName || "Student Name", 0, 220, { width: W, align: "center" });
-
-            doc.fillColor(white).font("Helvetica").fontSize(11)
-                .text(`Domain: ${data.domain || "Technology"}  ·  Duration: ${data.durationText || "N/A"}  ·  Issued: ${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" })}`,
-                    0, 285, { width: W, align: "center" });
-
-            doc.moveTo(100, 305).lineTo(W - 100, 305).lineWidth(0.8).strokeColor(gold).stroke();
-
-            // Wax seal style central element
-            const waxX = W / 2;
-            doc.circle(waxX, 350, 32).fill("#8B0000");
-            doc.circle(waxX, 350, 32).lineWidth(2).strokeColor(gold).stroke();
-            doc.circle(waxX, 350, 24).lineWidth(0.5).strokeColor(gold).stroke();
-            doc.fillColor(gold).font("Helvetica-Bold").fontSize(7)
-                .text("TEN", waxX - 8, 346);
-
-            // Three signature lines
-            const sigs = [
-                { x: 80,      label: "Director" },
-                { x: W / 2 - 80, label: "Program Head" },
-                { x: W - 260, label: "Domain Expert" }
-            ];
-            sigs.forEach(({ x, label }) => {
-                doc.moveTo(x, 420).lineTo(x + 160, 420).lineWidth(0.6).strokeColor("#555555").stroke();
-                doc.fillColor(white).font("Helvetica-Bold").fontSize(8).text(label, x, 426);
-                doc.fillColor("#666666").font("Helvetica").fontSize(7).text("The Entrepreneurship Network", x, 438);
-            });
-
-            const certId = data.certificateId || generateCertificateId("fellowship");
-            const verifyUrl = `https://www.entrepreneurshipnetwork.net/cert-verify?id=${certId}`;
-            doc.fillColor("#888888").font("Helvetica").fontSize(7)
-                .text(`Certificate ID: ${certId}  ·  Verify: www.entrepreneurshipnetwork.net/cert-verify?id=${certId}`, 0, H - 30, {
-                    width: W,
-                    align: "center",
-                    link: verifyUrl,
-                    underline: true
-                });
-
-            doc.end();
-            stream.on("finish", () => resolve({ path: outputPath, certificateId: certId }));
-            stream.on("error", reject);
-        } catch (err) {
-            reject(err);
-        }
-    });
+function generateFellowshipCertificate(data, outputPath) {
+    return certificateDesign.renderToFile(outputPath, (doc) => certificateDesign.drawInternshipCertificate(doc, "fellowship", data));
 }
 
 /**
