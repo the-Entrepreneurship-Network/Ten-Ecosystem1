@@ -13,10 +13,16 @@
  *                     waiting, who was handed over, who is under 75%, what the
  *                     AI answered. By email to coordinators with an address,
  *                     and in the dashboard's AI Assistant tab, always current.
+ *   08:35 every day,  the pre-check for every waiting submission that never
+ *   and on boot       had one (those handed in before the AI Coordinator went
+ *                     live, or whose check could not start), oldest first.
+ *   10:20 every day   a report to the team inbox (SUPPORT_COPY_TO) of what the
+ *                     AI did in the last 24 hours; also when a backlog run ends.
  *
  * Every reminder and summary has a key, written before it is sent, so a second
- * run or a restart never sends it twice. Nothing here costs money: no AI is
- * used, and email goes through the portal's own SMTP account.
+ * run or a restart never sends it twice. Nothing here costs money: the
+ * pre-check uses Gemini's free tier, email goes through the portal's own SMTP
+ * account, and the report through the help desk's mailbox.
  */
 
 const cron = require('node-cron');
@@ -33,6 +39,7 @@ const { getInternshipEndDate } = require('../utils/tenure');
 const { istDateKey } = require('../utils/dateKey');
 const mailer = require('../utils/mailer');
 const ai = require('./aiCoordinator');
+const precheck = require('./submissionPrecheck');
 
 const DAY = 24 * 3600 * 1000;
 const INACTIVE_FROM = 3;
@@ -340,15 +347,148 @@ async function runSummaries(now = new Date()) {
     return { domains, emails };
 }
 
+// ── The pre-check backlog ────────────────────────────────────────────────
+
+/**
+ * Gemini's free daily quota is shared with the exam papers and the chat, so the
+ * backlog stops once this many pre-checks (of any kind) were made today and
+ * carries on tomorrow. A student's own hand-in is checked whatever the count.
+ */
+const PRECHECKS_PER_DAY = 150;
+const PAUSE_MS = 10 * 1000;
+/** After a GitHub repository, without GITHUB_TOKEN: GitHub allows 60 lookups an
+ *  hour and a repository takes 2, so this uses 24 and leaves the rest for new hand-ins. */
+const GITHUB_PAUSE_MS = 5 * 60 * 1000;
+/** Waiting for a coordinator (a fresh object each time: mongoose may cast a filter in place). */
+const pending = (extra) => Object.assign({ status: 'Pending', reviewedOnce: { $ne: true } }, extra);
+const istMidnight = (d) => new Date(istDateKey(d) + 'T00:00:00+05:30');
+
+let backlogRunning = false;
+/** Pre-check, oldest first, every waiting submission that never had one. */
+async function precheckBacklog() {
+    if (backlogRunning || !ai.enabled() || mongoose.connection.readyState !== 1) return null;
+    backlogRunning = true;
+    const Submission = mongoose.model('Submission');
+    const out = { waiting: 0, checked: 0, left: 0, stopped: '' };
+    try {
+        // The list is taken once: a new hand-in is checked when it arrives.
+        const subs = await Submission.find(pending({ aiCheck: null }))
+            .sort({ submittedAt: 1 }).select('_id image').lean();
+        out.waiting = subs.length;
+        if (!subs.length) return out;
+        console.log(`[ai-coordinator] backlog: ${subs.length} waiting submission(s) without a pre-check.`);
+        for (let i = 0; i < subs.length; i++) {
+            if (!ai.enabled() || mongoose.connection.readyState !== 1) { out.stopped = ai.enabled() ? 'the database went away' : 'switched off'; break; }
+            const today = await AiCoordinatorLog.countDocuments({ kind: 'precheck', createdAt: { $gte: istMidnight(new Date()) } });
+            if (today >= PRECHECKS_PER_DAY) { out.stopped = `today's ${PRECHECKS_PER_DAY} pre-checks are made; the rest go tomorrow`; break; }
+            // A screenshot counts as missing only where one was attached and is
+            // gone: a Task Journey hand-in never has one.
+            const check = await precheck.run(subs[i]._id, { screenshotExpected: !!subs[i].image });
+            if (check) out.checked += 1;
+            if (check && out.checked % 10 === 0) console.log(`[ai-coordinator] backlog: ${out.checked} of ${subs.length} pre-checked.`);
+            if (i < subs.length - 1) {
+                await module.exports._internal.wait(check && check.repo && !process.env.GITHUB_TOKEN ? GITHUB_PAUSE_MS : PAUSE_MS);
+            }
+        }
+    } finally {
+        backlogRunning = false;
+    }
+    out.left = await Submission.countDocuments(pending({ aiCheck: null }));
+    console.log(`[ai-coordinator] backlog: ${out.checked} pre-checked, ${out.left} still without one` +
+        (out.stopped ? ` (${out.stopped}).` : '.'));
+    if (out.checked) {
+        await sendReport(new Date(), `pre-check backlog: ${out.checked} checked, ${out.left} ` +
+            (out.stopped && out.left ? 'left for tomorrow' : 'still without one'))
+            .catch((err) => console.error('[ai-coordinator] report failed:', err.message));
+    }
+    return out;
+}
+
+// ── The report: proof of what the AI did ─────────────────────────────────
+
+/** Everything the AI Coordinator did in the 24 hours to `now`, from its own log. */
+async function buildReport(now = new Date()) {
+    const since = new Date(now - DAY);
+    const Submission = mongoose.model('Submission');
+    const [logs, waiting, unchecked, mails] = await Promise.all([
+        AiCoordinatorLog.find({ createdAt: { $gt: since, $lte: now } }).sort({ createdAt: -1 }).limit(5000).lean(),
+        Submission.countDocuments(pending()),
+        Submission.countDocuments(pending({ aiCheck: null })),
+        MailHistory.find({ mailType: 'ai_coordinator_summary', sentAt: { $gt: since, $lte: now } }).select('status').lean()
+    ]);
+    const of = (kind) => logs.filter((l) => l.kind === kind);
+    return {
+        since, now, waiting, unchecked,
+        answers: of('answer'), handovers: of('handover'), prechecks: of('precheck'),
+        reminders: of('reminder'), summaries: of('summary'),
+        summaryEmails: { sent: mails.filter((m) => m.status !== 'failed').length, failed: mails.filter((m) => m.status === 'failed').length }
+    };
+}
+
+function reportText(r) {
+    const n = (rows, source) => rows.filter((x) => x.source === source).length;
+    const clip = (s, len) => { const t = String(s || '').replace(/\s+/g, ' ').trim(); return t.length > len ? t.slice(0, len - 1) + '…' : t; };
+    const at = (d) => new Date(d).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+    const byReason = Object.entries(r.handovers.reduce((m, h) => { m[h.source] = (m[h.source] || 0) + 1; return m; }, {}))
+        .map(([k, v]) => `${ai.HANDOVER_LABEL[k] || k}: ${v}`).join('; ');
+    return [
+        `What the AI Coordinator did from ${at(r.since)} to ${at(r.now)} (IST).`,
+        '',
+        `1. Answered students in Messages: ${r.answers.length} (${n(r.answers, 'saved')} from saved answers, ${n(r.answers, 'ai')} by Gemini).`,
+        ...r.answers.slice(0, 3).map((a) => `   ${at(a.createdAt)}, ${a.employeeId}: "${clip(ai.scrub(a.question), 90)}" -> "${clip(a.reply, 140)}"`),
+        `2. Handed over to a coordinator: ${r.handovers.length}${byReason ? ` (${byReason})` : ''}.`,
+        `3. Pre-checked submissions: ${r.prechecks.length} (${n(r.prechecks, 'approve')} look ready, ${n(r.prechecks, 'changes')} need changes).`,
+        `   Waiting for a coordinator now: ${r.waiting}, of which ${r.unchecked} still have no pre-check.`,
+        ...r.prechecks.slice(0, 3).map((p) => `   ${at(p.createdAt)}, ${p.employeeId}: "${clip(p.question, 70)}" -> ` +
+            (p.source === 'approve' ? 'looks ready' : 'needs changes') + (p.reply ? `: ${clip(p.reply, 120)}` : '')),
+        `4. Reminders: ${r.reminders.length} (${n(r.reminders, 'inactive')} sign-in, ${n(r.reminders, 'week')} unfinished week, ${n(r.reminders, 'weekly')} weekly progress).`,
+        `5. Coordinator summaries: ${r.summaries.length} domain(s); ${r.summaryEmails.sent} email(s) sent, ${r.summaryEmails.failed} failed.`,
+        '',
+        'The AI approves nothing: a coordinator approves, with the AI\'s draft already in the feedback box.',
+        'The details are in the coordinator dashboard, under AI Assistant.'
+    ].join('\n');
+}
+
+/** The report, to the team inbox (SUPPORT_COPY_TO) from the help desk's mailbox, as scripts/server/mail-team.js does. */
+async function sendReport(now = new Date(), title = '') {
+    if (!ai.enabled() || mongoose.connection.readyState !== 1) return null;
+    const r = await buildReport(now);
+    const text = reportText(r);
+    console.log(`[ai-coordinator] report: ${r.answers.length} answered, ${r.handovers.length} handed over, ` +
+        `${r.prechecks.length} pre-checked, ${r.reminders.length} reminder(s), ${r.summaries.length} summary(ies).`);
+    const gmail = require('./supportDesk/gmail');
+    const to = String(process.env.SUPPORT_COPY_TO || '').trim();
+    if (!to || !gmail.configured()) {
+        console.log('[ai-coordinator] no team inbox (SUPPORT_COPY_TO and the help desk mailbox), so the report is only in this log.');
+        return { sent: false, text };
+    }
+    const MailComposer = require('nodemailer/lib/mail-composer');
+    const from = (await gmail.profile()).emailAddress;
+    const subject = '[ai-coordinator] ' + (title ||
+        `daily report: ${r.answers.length} answered, ${r.prechecks.length} pre-checked, ${r.reminders.length} reminders`);
+    const raw = await new MailComposer({ from, to, subject, text }).compile().build();
+    await gmail.send(raw.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
+    return { sent: true, text };
+}
+
 let started = false;
 /** Called once from server.js on the cron worker. */
 function start() {
     if (started) return;
     started = true;
     const tz = { timezone: 'Asia/Kolkata' };
+    const backlog = () => precheckBacklog().catch((err) => console.error('[ai-coordinator] backlog:', err.message));
+    cron.schedule('35 8 * * *', backlog, tz);
     cron.schedule('5 9 * * *', () => runSummaries().catch((err) => console.error('[ai-coordinator] summaries:', err.message)), tz);
     cron.schedule('5 10 * * *', () => runReminders().catch((err) => console.error('[ai-coordinator] reminders:', err.message)), tz);
-    console.log('[ai-coordinator] reminders 10:05 and coordinator summaries 09:05 (IST) scheduled.');
+    cron.schedule('20 10 * * *', () => sendReport().catch((err) => console.error('[ai-coordinator] report:', err.message)), tz);
+    // And a minute after each start, so a deploy picks up whatever is waiting.
+    const soon = () => setTimeout(backlog, 60 * 1000).unref();
+    if (mongoose.connection.readyState === 1) soon(); else mongoose.connection.once('connected', soon);
+    console.log('[ai-coordinator] backlog pre-check 08:35 and on start, summaries 09:05, reminders 10:05, report 10:20 (IST) scheduled.');
 }
 
-module.exports = { start, runReminders, runSummaries, buildSummary, runningStudents, _internal: { summaryEmail, claim, latest } };
+module.exports = {
+    start, runReminders, runSummaries, buildSummary, runningStudents, precheckBacklog, buildReport, sendReport,
+    _internal: { summaryEmail, claim, latest, reportText, wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)), PRECHECKS_PER_DAY }
+};

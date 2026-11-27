@@ -42,6 +42,8 @@ jest.mock('../../models/Notification', () => function Note(doc) {
     this.save = async () => { mockNotes.push(this); return this; };
 });
 jest.mock('../../services/aiCoordinator', () => ({ scrub: (s) => String(s).replace(/\b[6-9]\d{9}\b/g, '[phone]') }));
+const mockLogs = [];
+jest.mock('../../models/AiCoordinatorLog', () => ({ create: async (row) => { mockLogs.push(row); return row; } }));
 const mockFetch = jest.fn();
 jest.mock('../../services/v2/httpFetch', () => ({ httpFetch: (...a) => mockFetch(...a) }));
 
@@ -119,6 +121,14 @@ describe('opening the link', () => {
         expect(await precheck.checkLink(`http://localhost:${port}/ok`, { anyPort: true })).toMatchObject({ verdict: 'broken', error: 'points inside a private network' });
         expect(await precheck.checkLink(`http://127.0.0.1:${port}/ok`, { anyPort: true })).toMatchObject({ verdict: 'broken', error: 'points inside a private network' });
     });
+    it('an address that does not exist reads as a sentence the student can act on', async () => {
+        const missing = (host, opts, cb) => cb(Object.assign(new Error('getaddrinfo ENOTFOUND ' + host), { code: 'ENOTFOUND' }));
+        const link = await precheck.checkLink('https://no-such-site.example.in/', { lookup: missing });
+        expect(link).toMatchObject({ verdict: 'broken', error: 'points to an address that does not exist' });
+        expect(precheck._internal.problemsOf({ link, github: null, repo: null, screenshot: { expected: false } }))
+            .toEqual(['The link does not open: it points to an address that does not exist.']);
+    });
+
     it('an unusual port is not opened', async () => {
         expect(await precheck.checkLink('http://example.com:8080/')).toMatchObject({ verdict: 'broken', error: 'uses an unusual port' });
     });
@@ -129,6 +139,7 @@ describe('checking a submission', () => {
     beforeEach(() => {
         mockSubs.clear();
         mockNotes.length = 0;
+        mockLogs.length = 0;
         mockGemini.ready = false;
         mockGemini.ask.mockReset();
     });
@@ -155,6 +166,12 @@ describe('checking a submission', () => {
         expect(mockNotes).toHaveLength(1);
         expect(mockNotes[0]).toMatchObject({ targetType: 'student', targetEmployeeId: 'TEN/WEB/1005', from: 'TEN AI Coordinator' });
         expect(mockNotes[0].$locals.skipEmail).toBe(true);
+        // Logged for the daily report.
+        expect(mockLogs).toEqual([expect.objectContaining({
+            kind: 'precheck', employeeId: 'TEN/WEB/1005', domain: 'Web Development', question: 'Week 1: Landing page',
+            source: 'changes', reason: 'rules'
+        })]);
+        expect(mockLogs[0].reply).toContain('Make it public.');
     });
 
     it('a good submission with Gemini: its match and draft are kept, and nobody is notified', async () => {
@@ -180,12 +197,18 @@ describe('checking a submission', () => {
         const c = await precheck.run('s3', { screenshotExpected: false });
         expect(c.decision).toBe('changes');
         expect(c.problems[0]).toMatch(/asks for a sign-in/);
+        // Nor say it matches the task: nobody could open the work.
+        expect(c.match).toBe('unclear');
+        expect(c.reason).toBe('The work could not be opened, so it was not compared with the task.');
+        // Its "Looks great!" is not left in the coordinator's feedback box.
+        expect(c.draft).toContain('Before it can be approved: The link asks for a sign-in');
     });
 
     it('a reviewed submission is left alone, and a re-check does not notify the student again', async () => {
         precheck.checkLink = async () => ({ verdict: 'missing' });
         add('s4', { githubLink: '', reviewedOnce: true });
         expect(await precheck.run('s4')).toBeNull();
+        expect(mockLogs).toHaveLength(0);
         add('s5', { githubLink: '' });
         await precheck.run('s5', { screenshotExpected: false, notify: false });
         expect(mockSubs.get('s5').aiCheck.problems).toEqual(['There is no link to the work.']);
