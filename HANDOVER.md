@@ -948,10 +948,13 @@ hidden from Messages.
 
 `/meeting` (`public/meeting.html`, `routes/v2/meeting.js`,
 `services/aiMeeting.js`, `models/MeetingSession.js`), opened from the student
-dashboard's menu and a card. The AI Coordinator interviews the student by
-voice (Chrome's speech recognition and the device's own voices, in the
-browser; typing is the fallback). `AI_COORDINATOR=off` switches the room off
-with the rest.
+dashboard's menu and a card. It looks like a company video interview: the
+interviewer's tile and the student's camera side by side, the question as
+captions underneath, the answer box and controls below. Before joining, a
+system check (camera, face, voice answers, interviewer voice) and the level.
+The student answers by voice (Chrome's speech recognition, in the browser;
+typing is the fallback). `AI_COORDINATOR=off` switches the room off with the
+rest.
 
 - **Who and when:** every student gets **one interview** (the first try is
   free; a fee may come later, no gateway). The room opens every second Sunday
@@ -985,18 +988,43 @@ with the rest.
   it, and without the key, new interviews run on Gemini. An interview keeps the
   AI it started with (`MeetingSession.engine`); a turn Claude fails is answered
   by Gemini. Anthropic's console shows the real spend.
-- **Camera:** required. MediaPipe's face landmarker runs in the browser and
-  judges four times a second whether one face is in frame with its eyes on the
-  camera; the page sends the totals with each answer. The video never leaves
-  the browser. The totals are client-reported (a cheat with the developer tools
-  could zero them); checking the video on the server would cost money.
+- **Camera and face gate:** required. MediaPipe's face landmarker runs in the
+  browser and judges four times a second whether one face is in frame with its
+  eyes on the camera. **The interview runs only while one face is in view:**
+  Join stays off until the face is verified (no time-out skip, and no start if
+  the face check cannot load on the device); during the interview a covered
+  camera, an empty frame or a second face for 1.5 s (`ATT.pauseAfterMs`), or
+  the camera switched off, pauses it: answering locks, the question blurs,
+  the interviewer stops talking, and it carries on when the face is back.
+  Looking away is allowed but counted. The page sends the totals with each
+  answer, and **the server refuses an answer sent without the face check**
+  (`NO_FACE_CHECK`). The video never leaves the browser. The totals are
+  client-reported (a cheat with the developer tools could fake them); checking
+  the video on the server would cost money.
+- **Marks** stay hidden during the interview, as in a real one: after each
+  answer the interviewer only acknowledges it and asks the next question. The
+  marks and feedback come in the report.
+- **Voice:** the interviewer's lines are written on the server
+  (`spokenLine`: a welcome with the student's name, level and domain; a short
+  acknowledgement; "the last question"; a closing line) and returned as `say`.
+  With **`AZURE_SPEECH_KEY`** (and `AZURE_SPEECH_REGION`, default
+  `centralindia`) they are spoken in Azure's Indian-English neural voice
+  (`utils/speech.js`; `INTERVIEW_VOICE`, default `en-IN-NeerjaNeural`,
+  `en-IN-PrabhatNeural` for a male voice) through `POST /api/v2/meeting/voice`,
+  which voices only these lines, for the session's owner, and caches them per
+  process. On Azure's **free F0 tier** that is 0.5 million characters a month
+  (about 190 interviews) at ₹0; past it Azure refuses until the next month and
+  the page uses the device's own voice, as it does without the key. Upgrading
+  the Azure resource to paid (S0) would bill per character: that is a cost
+  decision for the owner.
 - **Report:** marks per question and overall, the level, what to improve, the
   camera line. Saved, listed on the page, emailed to the student, and logged
   (`AiCoordinatorLog` kind `meeting`, source `report`, with the level and the
   AI) for the daily report's item 5.
 - Not built, by choice: entries in the other portals (coordinator, HR,
   partners) since the interview is about a student's own tasks; a coordinator
-  page for the marks; server-side video checking; Kokoro voices.
+  page for the marks; server-side video checking; Kokoro voices in the
+  browser (a 90 MB download per student, slow on phones).
 
 ### 8.1 The collections that matter most
 

@@ -18,6 +18,8 @@
   --accent:#8fb3ff;--accent-soft:rgba(143,179,255,0.10);--accent-line:rgba(143,179,255,0.32);
   --gold:#D4AF37;--text:#F0EEE8;--muted:#9a9080;--line:rgba(212,175,55,0.14);
   --green:#10b981;--amber:#f59e0b;--red:#ef4444;--radius:14px;
+  /* The stage is a call screen: dark in both themes. */
+  --tile:#0a1022;--tile-line:rgba(143,179,255,0.16);--tile-text:#eef2ff;--tile-muted:#9aa6c4;
 }
 [data-theme="light"]{
   --bg:#f6f4ee;--surface:#ffffff;--card:#ffffff;--card2:#faf7ef;
@@ -26,67 +28,123 @@
   --green:#047857;--amber:#b45309;--red:#b91c1c;
 }
 body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',system-ui,sans-serif;min-height:100vh;line-height:1.5}
-.topbar{display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--surface);position:sticky;top:0;z-index:5}
+[hidden]{display:none !important}
+button:focus-visible,textarea:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.topbar{display:flex;align-items:center;gap:16px;padding:12px 20px;border-bottom:1px solid var(--line);background:var(--surface);position:sticky;top:0;z-index:5;flex-wrap:wrap}
 .back{color:var(--muted);text-decoration:none;font-size:14px;font-weight:600;white-space:nowrap}
 .title{font-weight:800;font-size:17px;line-height:1.2}
 .sub{font-size:12px;color:var(--muted)}
-.pill{margin-left:auto;font-size:10.5px;font-weight:800;letter-spacing:.06em;padding:4px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent-line);white-space:nowrap}
-.wrap{max-width:1040px;margin:0 auto;padding:18px 16px 40px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:14px}
-h2{font-size:18px;font-weight:800;margin-bottom:4px}
-h3{font-size:14px;font-weight:800;letter-spacing:.02em;margin-bottom:10px;color:var(--muted);text-transform:uppercase}
+.top-right{margin-left:auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.pill{font-size:10.5px;font-weight:800;letter-spacing:.06em;padding:4px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent-line);white-space:nowrap}
+.qnum{font-size:12.5px;font-weight:800;letter-spacing:.05em;color:var(--accent);text-transform:uppercase}
+.timer{font-variant-numeric:tabular-nums;font-size:13px;color:var(--muted);font-weight:700;min-width:36px}
+.proctor{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:800;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--card)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+.ok .dot{background:var(--green)}.warn .dot{background:var(--amber)}.bad .dot{background:var(--red)}
+
+.wrap{max-width:1120px;margin:0 auto;padding:18px 16px 48px;display:flex;flex-direction:column;gap:14px}
 .muted{color:var(--muted)}
 .small{font-size:12.5px}
-.rules{margin:12px 0 0;padding-left:18px;font-size:13.5px;color:var(--muted)}
+h2{font-size:19px;font-weight:800;text-wrap:balance}
+h3{font-size:12px;font-weight:800;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:10px}
+
+/* ── The stage: interviewer and candidate, side by side ── */
+.stage{display:grid;grid-template-columns:3fr 2fr;gap:12px;position:relative}
+.tile{position:relative;border-radius:16px;overflow:hidden;background:var(--tile);border:1px solid var(--tile-line);aspect-ratio:16/11;color:var(--tile-text)}
+.tile.ai{background:radial-gradient(110% 90% at 50% 35%,#18264f 0%,#0b1430 45%,#070c1c 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+.avatar{width:118px;height:118px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle at 35% 30%,#2a3f7e,#101a3a 70%);border:2px solid rgba(212,175,55,.55);box-shadow:0 0 0 8px rgba(143,179,255,.06);transition:box-shadow .3s}
+.avatar span{font-weight:800;letter-spacing:.18em;font-size:22px;color:#D4AF37;padding-left:.18em}
+.bars{display:flex;gap:4px;align-items:flex-end;height:18px}
+.bars i{width:4px;height:4px;border-radius:2px;background:#8fb3ff;opacity:.45}
+.ai-state{font-size:13px;font-weight:600;color:var(--tile-muted);min-height:20px;text-align:center;padding:0 12px}
+.tile.ai.speaking .avatar{box-shadow:0 0 0 8px rgba(143,179,255,.16),0 0 0 18px rgba(143,179,255,.07);animation:breathe 1.6s ease-in-out infinite}
+.tile.ai.speaking .bars i{opacity:1;animation:eq .9s ease-in-out infinite}
+.tile.ai.speaking .bars i:nth-child(2){animation-delay:.15s}.tile.ai.speaking .bars i:nth-child(3){animation-delay:.3s}
+.tile.ai.speaking .bars i:nth-child(4){animation-delay:.45s}.tile.ai.speaking .bars i:nth-child(5){animation-delay:.6s}
+@keyframes eq{0%,100%{height:4px}50%{height:18px}}
+@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
+@media (prefers-reduced-motion:reduce){.tile.ai.speaking .avatar,.tile.ai.speaking .bars i{animation:none}.tile.ai.speaking .bars i{height:12px}}
+video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block;background:#000}
+.overlay{position:absolute;inset:0;cursor:pointer;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;font-size:14px;font-weight:600;color:#fff;background:rgba(3,6,14,.82)}
+.nameplate{position:absolute;left:12px;bottom:12px;background:rgba(3,6,14,.72);color:var(--tile-text);padding:4px 10px;border-radius:8px;font-size:12.5px;font-weight:700}
+.face{position:absolute;left:12px;top:12px;display:flex;align-items:center;gap:7px;background:rgba(3,6,14,.72);color:var(--tile-text);padding:5px 10px;border-radius:999px;font-size:12px;font-weight:800}
+.face.ok .dot{background:#10b981}.face.warn .dot{background:#f59e0b}.face.bad .dot{background:#ef4444}
+.face.bad{box-shadow:0 0 0 1px rgba(239,68,68,.6)}
+.tile.me{aspect-ratio:auto}
+.tile.me.bad{border-color:rgba(239,68,68,.7)}
+.paused{position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:20px;background:rgba(18,4,8,.86);color:#fff}
+.paused b{font-size:20px;letter-spacing:.01em}
+.paused span{font-size:14.5px;max-width:46ch;color:#ffd9d9}
+@media (max-width:700px){
+  .topbar{position:static;padding:10px 14px;gap:8px}
+  .topbar .pill{display:none}
+  .wrap{padding-top:12px}
+  .stage{grid-template-columns:1fr 1fr;gap:8px}
+  .tile,.tile.me{aspect-ratio:3/4}
+  .avatar{width:78px;height:78px}.avatar span{font-size:16px}
+  .ai-state{font-size:12px}
+}
+
+/* ── The question, like captions ── */
+.qcard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
+.steps{display:flex;gap:5px;margin-bottom:12px}
+.steps i{flex:1;height:4px;border-radius:2px;background:var(--card2);border:1px solid var(--line)}
+.steps i.done{background:var(--accent);border-color:var(--accent)}
+.steps i.now{background:var(--accent-soft);border-color:var(--accent)}
+.q-label{font-size:11.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);margin-bottom:6px}
+.question{font-size:clamp(17px,2.2vw,21px);font-weight:600;line-height:1.45;max-width:75ch;transition:filter .2s}
+.is-paused .question{filter:blur(8px);user-select:none}
+.link{margin-top:10px;background:none;border:0;padding:0;color:var(--accent);font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.link:disabled{opacity:.4;cursor:default}
+
+/* ── Panels ── */
+.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+.lobby-grid{display:grid;grid-template-columns:1.5fr 1fr;gap:18px;margin-top:14px}
+@media (max-width:760px){.lobby-grid{grid-template-columns:1fr}}
+.setup{list-style:none;counter-reset:step;display:flex;flex-direction:column;gap:12px}
+.setup>li{counter-increment:step;display:grid;grid-template-columns:28px 1fr;gap:10px;align-items:start}
+.setup>li::before{content:counter(step);width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:12.5px;font-weight:800;background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent-line)}
+.setup b{display:block;font-size:14.5px}
+.setup .row{margin-top:8px}
+.checks{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:14px}
+.checks ul{list-style:none;display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.checks li{display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:600}
+.checks li::before{content:'';width:9px;height:9px;border-radius:50%;background:var(--muted);flex:none}
+.checks li.ok::before{background:var(--green)}.checks li.warn::before{background:var(--amber)}.checks li.bad::before{background:var(--red)}
+.rules{margin:16px 0 0;padding:12px 0 0 18px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
 .rules li{margin:3px 0}
-.grid{display:grid;grid-template-columns:320px 1fr;gap:14px}
-@media (max-width:760px){.grid{grid-template-columns:1fr}}
-.cam-wrap{position:relative;aspect-ratio:4/3;background:#000;border-radius:10px;overflow:hidden;border:1px solid var(--line)}
-video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block}
-.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;font-size:14px;font-weight:600;color:#fff;background:rgba(0,0,0,.72)}
-.cam-status{margin-top:10px;font-size:13.5px;font-weight:700;display:flex;align-items:center;gap:8px;min-height:20px}
-.dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:none}
-.cam-status.ok .dot{background:var(--green)}.cam-status.warn .dot{background:var(--amber)}.cam-status.bad .dot{background:var(--red)}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-.between{justify-content:space-between}
-.qnum{font-size:12.5px;font-weight:800;letter-spacing:.05em;color:var(--accent);text-transform:uppercase}
-.timer{font-variant-numeric:tabular-nums;font-size:13px;color:var(--muted);font-weight:600}
-.progress{height:4px;background:var(--card2);border-radius:2px;margin:10px 0 14px;overflow:hidden}
-.progress div{height:100%;width:0;background:var(--accent);transition:width .3s}
-.question{font-size:18px;font-weight:600;line-height:1.45;min-height:54px}
-.feedback{margin-top:12px;padding:12px 14px;border-radius:10px;background:var(--card2);border:1px solid var(--line);font-size:14px;display:none}
-.feedback .score{display:inline-block;font-weight:800;padding:2px 9px;border-radius:7px;margin-right:8px;background:rgba(16,185,129,0.15);color:var(--green)}
-.feedback .score.mid{background:rgba(245,158,11,0.15);color:var(--amber)}
-.feedback .score.low{background:rgba(239,68,68,0.12);color:var(--red)}
-.answer{margin-top:14px}
-textarea{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--card2);color:var(--text);font:inherit;font-size:15px;resize:vertical}
-textarea:disabled{opacity:.5}
-.btn{padding:10px 16px;border-radius:10px;border:1px solid var(--line);background:var(--card2);color:var(--text);font:inherit;font-weight:700;cursor:pointer;font-size:14px}
+.levels{display:flex;gap:8px;flex-wrap:wrap}
+.level{flex:1;min-width:140px;text-align:left;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--card2);color:var(--text);font:inherit;cursor:pointer}
+.level b{display:block;font-size:14.5px}
+.level small{color:var(--muted);font-size:12px}
+.level[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.level[aria-pressed="true"] b{color:var(--accent)}
+.a-label{display:block;font-size:13px;font-weight:800;margin-bottom:8px}
+textarea{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--card2);color:var(--text);font:inherit;font-size:15px;resize:vertical;min-height:92px}
+textarea:disabled{opacity:.55}
+.btn{padding:10px 16px;border-radius:10px;border:1px solid var(--line);background:var(--card2);color:var(--text);font:inherit;font-weight:700;cursor:pointer;font-size:14px;white-space:nowrap}
 .btn:disabled{opacity:.45;cursor:default}
 .btn.primary{background:var(--accent);color:#061021;border-color:var(--accent)}
 [data-theme="light"] .btn.primary{color:#fff}
 .btn.ghost{color:var(--muted);background:transparent}
 .btn.live{background:var(--red);color:#fff;border-color:var(--red)}
-.status{font-size:13px;color:var(--muted);flex:1;min-width:120px}
-.controls{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
-details{margin-top:14px;font-size:13px;color:var(--muted)}
+.btn.danger{color:var(--red);border-color:rgba(239,68,68,.45);background:transparent;margin-left:auto}
+.bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.status{font-size:13.5px;color:var(--muted);min-height:20px}
+details{font-size:13px;color:var(--muted)}
 summary{cursor:pointer;font-weight:700}
 details .row{margin-top:10px}
 select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);background:var(--card2);color:var(--text);font:inherit;font-size:13px;max-width:100%}
-.report .big{font-size:40px;font-weight:800;color:var(--accent);line-height:1}
+.report .big{font-size:44px;font-weight:800;color:var(--accent);line-height:1;font-variant-numeric:tabular-nums}
 .report table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13.5px}
 .report td{padding:8px 6px;border-top:1px solid var(--line);vertical-align:top}
 .report td.n{color:var(--muted);width:28px}
-.report td.s{text-align:right;white-space:nowrap;font-weight:800}
+.report td.s{text-align:right;white-space:nowrap;font-weight:800;font-variant-numeric:tabular-nums}
 .report .fb{color:var(--muted);font-size:12.5px;margin-top:2px}
 .reports li{font-size:13.5px;padding:8px 0;border-bottom:1px dashed var(--line);list-style:none;display:flex;justify-content:space-between;gap:10px}
-.levels{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
-.level{flex:1;min-width:150px;text-align:left;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--card2);color:var(--text);font:inherit;cursor:pointer}
-.level b{display:block;font-size:15px}
-.level small{color:var(--muted);font-size:12.5px}
-.level[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
-.level[aria-pressed="true"] b{color:var(--accent)}
-.notice{padding:10px 12px;border-radius:10px;background:var(--accent-soft);border:1px solid var(--accent-line);font-size:13.5px;margin-top:10px}
+.notice{padding:10px 12px;border-radius:10px;background:var(--accent-soft);border:1px solid var(--accent-line);font-size:13.5px;margin-top:12px}
 </style>
 </head>
 <body>
@@ -97,72 +155,113 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
     <div class="title">Interview Room</div>
     <div class="sub">Technical interview · <span id="domain">your domain</span><span id="level-label"></span></div>
   </div>
-  <span class="pill">AI INTERVIEWER, NOT A PERSON</span>
+  <div class="top-right">
+    <span class="proctor" id="proctor" hidden><span class="dot"></span><span id="proctor-text">Face check on</span></span>
+    <span class="qnum" id="qnum"></span>
+    <span class="timer" id="timer" aria-label="Time on this question"></span>
+    <span class="pill">AI INTERVIEWER, NOT A PERSON</span>
+  </div>
 </header>
 
 <main class="wrap">
-  <section class="card" id="schedule-card">
-    <h2 id="when-title">Loading…</h2>
-    <p class="muted" id="when-text"></p>
-    <ul class="rules">
-      <li>Camera on, your face in the frame and your eyes on the camera. The video stays in your browser; only attention totals are sent with your answers and appear in your report.</li>
-      <li>Eight questions on the work you have been given so far, at the level of a company interview. Speak your answers; typing is the fallback.</li>
-      <li>One attempt: choose your level before you start. Your marks and a report come at the end, and a copy is emailed to you.</li>
-    </ul>
-    <div class="levels" id="levels" role="group" aria-label="Choose your level" style="display:none">
-      <button class="level" type="button" data-level="easy" aria-pressed="false"><b>Easy</b><small>The core ideas behind your tasks</small></button>
-      <button class="level" type="button" data-level="medium" aria-pressed="false"><b>Medium</b><small>A real junior-developer interview</small></button>
-      <button class="level" type="button" data-level="hard" aria-pressed="false"><b>Hard</b><small>Failure cases, trade-offs and follow-ups</small></button>
-    </div>
-  </section>
-
-  <div class="grid">
-    <section class="card">
-      <h3>Camera</h3>
-      <div class="cam-wrap">
-        <video id="cam" autoplay muted playsinline></video>
-        <div class="overlay" id="cam-overlay">The camera starts with the interview.</div>
+  <div class="stage">
+    <section class="tile ai" id="ai-tile" aria-label="Interviewer">
+      <div class="avatar" aria-hidden="true"><span>TEN</span></div>
+      <div class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="ai-state" id="ai-state">Waiting for you to join</div>
+      <div class="nameplate">TEN Interviewer · AI</div>
+      <div class="paused" id="paused" role="alert" hidden>
+        <b>Interview paused</b>
+        <span id="paused-text">We cannot see your face.</span>
       </div>
-      <div class="cam-status" id="cam-status"><span class="dot"></span><span id="cam-text">Camera not started</span></div>
-      <div class="muted small" id="cam-stats"></div>
     </section>
-
-    <section class="card">
-      <div class="row between">
-        <div class="qnum" id="qnum">Not started</div>
-        <div class="timer" id="timer"></div>
-      </div>
-      <div class="progress"><div id="bar"></div></div>
-      <div class="question" id="question">Press Start when you are ready. The first question comes after the camera has seen your face.</div>
-      <div class="feedback" id="feedback"></div>
-      <div class="answer">
-        <textarea id="input" rows="3" placeholder="Press Speak and answer aloud. Typing is the fallback." maxlength="3000" disabled></textarea>
-        <div class="row" style="margin-top:8px">
-          <button class="btn" id="mic" type="button" disabled>Speak</button>
-          <button class="btn primary" id="send" type="button" disabled>Submit answer</button>
-          <span class="status" id="status"></span>
-        </div>
-      </div>
-      <div class="row controls">
-        <button class="btn primary" id="start" type="button" disabled>Start the interview</button>
-        <button class="btn ghost" id="finish" type="button" style="display:none">End the interview</button>
-      </div>
-      <details>
-        <summary>Voice settings</summary>
-        <div class="row">
-          <label class="small"><input type="checkbox" id="speak" checked> Read the questions aloud</label>
-          <label class="small">Voice <select id="voice" aria-label="Voice"></select></label>
-          <label class="small">I speak <select id="lang" aria-label="Your language"><option value="en-IN">English (India)</option><option value="hi-IN">Hindi</option><option value="en-US">English (US)</option></select></label>
-          <button class="btn ghost" id="sample" type="button">Hear a sample</button>
-        </div>
-        <div class="small" id="voice-hint" style="margin-top:8px"></div>
-      </details>
+    <section class="tile me" id="me-tile" aria-label="Your camera">
+      <video id="cam" autoplay muted playsinline></video>
+      <div class="overlay" id="cam-overlay">Your camera is off.</div>
+      <div class="face" id="cam-status"><span class="dot"></span><span id="cam-text">Camera off</span></div>
+      <div class="nameplate">You</div>
     </section>
   </div>
 
-  <section class="card report" id="report-card" style="display:none"></section>
+  <section class="qcard" id="qcard" hidden>
+    <div class="steps" id="steps" aria-hidden="true"></div>
+    <div class="q-label">Interviewer</div>
+    <p class="question" id="question"></p>
+    <button class="link" id="repeat" type="button">Repeat the question</button>
+  </section>
 
-  <section class="card" id="reports-card" style="display:none">
+  <section class="panel" id="lobby">
+    <h2 id="when-title">Loading…</h2>
+    <p class="muted" id="when-text"></p>
+    <div class="lobby-grid">
+      <ol class="setup">
+        <li>
+          <div>
+            <b>Turn on your camera</b>
+            <span class="muted small">The interview runs only while your face is in view. If the camera is covered, turned off or you leave the frame, it pauses.</span>
+            <div class="row"><button class="btn" id="cam-btn" type="button">Turn on camera</button></div>
+          </div>
+        </li>
+        <li id="step-level">
+          <div>
+            <b>Choose your level</b>
+            <div class="levels row" id="levels" role="group" aria-label="Choose your level">
+              <button class="level" type="button" data-level="easy" aria-pressed="false"><b>Easy</b><small>The core ideas behind your tasks</small></button>
+              <button class="level" type="button" data-level="medium" aria-pressed="false"><b>Medium</b><small>A real junior-developer interview</small></button>
+              <button class="level" type="button" data-level="hard" aria-pressed="false"><b>Hard</b><small>Failure cases, trade-offs and follow-ups</small></button>
+            </div>
+          </div>
+        </li>
+        <li id="step-join">
+          <div>
+            <b>Join when the face check says “Face verified”</b>
+            <div class="row"><button class="btn primary" id="start" type="button" disabled>Join the interview</button></div>
+          </div>
+        </li>
+      </ol>
+      <div class="checks">
+        <h3>System check</h3>
+        <ul>
+          <li id="chk-camera">Camera off</li>
+          <li id="chk-face">Face check: waiting for the camera</li>
+          <li id="chk-mic">Voice answers</li>
+          <li id="chk-voice">Interviewer voice</li>
+        </ul>
+        <button class="btn ghost" id="sample" type="button">Hear the interviewer</button>
+      </div>
+    </div>
+    <ul class="rules">
+      <li>Eight questions on the work you have been given so far, at the level of a company interview. Speak your answers; typing is the fallback.</li>
+      <li>Your marks stay hidden until the end, as in a real interview. Then you get a report, and a copy is emailed to you.</li>
+      <li>The video stays in your browser. Only the face-check totals are sent with your answers, and they appear in your report.</li>
+    </ul>
+  </section>
+
+  <section class="panel" id="answer-panel" hidden>
+    <label class="a-label" for="input">Your answer</label>
+    <textarea id="input" rows="3" placeholder="Press Answer aloud and speak. Your words appear here, and you can correct them before submitting." maxlength="3000" disabled></textarea>
+    <div class="bar">
+      <button class="btn" id="mic" type="button" disabled>Answer aloud</button>
+      <button class="btn primary" id="send" type="button" disabled>Submit answer</button>
+      <button class="btn danger" id="finish" type="button">End interview</button>
+    </div>
+  </section>
+
+  <p class="status" id="status" role="status" aria-live="polite"></p>
+
+  <details>
+    <summary>Voice settings</summary>
+    <div class="row">
+      <label class="small"><input type="checkbox" id="speak" checked> Read the questions aloud</label>
+      <label class="small" id="voice-wrap">Device voice <select id="voice" aria-label="Device voice"></select></label>
+      <label class="small">I speak <select id="lang" aria-label="Your language"><option value="en-IN">English (India)</option><option value="hi-IN">Hindi</option><option value="en-US">English (US)</option></select></label>
+    </div>
+    <div class="small" id="voice-hint" style="margin-top:8px"></div>
+  </details>
+
+  <section class="panel report" id="report-card" hidden></section>
+
+  <section class="panel" id="reports-card" hidden>
     <h3>Previous interviews</h3>
     <ul class="reports" id="reports"></ul>
   </section>
@@ -173,25 +272,35 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
   var input = $('input'), status = $('status');
-  var ME = null, session = null, busy = false, running = false, qStart = 0, clock = null, number = 0, OF = 8;
+  var ME = null, session = null, busy = false, busyText = '', running = false, paused = false, qStart = 0, clock = null, number = 0, OF = 8, level = null;
+  var LEVEL_NAME = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
 
   function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
-  function setBusy(on, why) { busy = on; status.textContent = on ? (why || 'Marking…') : ''; enableAnswer(); }
+  // A busy message clears itself when the work ends; an error written meanwhile stays.
+  function setBusy(on, why) {
+    busy = on;
+    if (on) { busyText = why || ''; status.textContent = busyText; } else if (status.textContent === busyText) status.textContent = '';
+    enableAnswer(); renderLobby();
+  }
   function enableAnswer() {
-    var can = running && !busy && cam.state !== 'off';
+    var can = running && !busy && !paused;
     input.disabled = !can; $('send').disabled = !can; $('mic').disabled = !can || !SR;
+    $('repeat').disabled = !running || paused;
   }
 
-  // ── Camera and attention: MediaPipe in the browser; the video never leaves it ──
+  // ── Camera and face check: MediaPipe in the browser; the video never leaves it ──
   // ponytail: a few ratios on MediaPipe's landmarks stand in for a gaze model.
   // Tune these if the report flags honest students or misses people reading
   // from a second screen; swap in a trained gaze model if tuning is not enough.
-  var ATT = { yaw: 0.30, pitchLo: 0.35, pitchHi: 1.05, iris: 0.22, awayAfterMs: 2500, everyMs: 250 };
-  var cam = { stream: null, detector: null, checker: 'none', state: 'off', since: 0, flagged: false, loop: null,
+  // pauseAfterMs is how long the face may be missing before the interview pauses.
+  var ATT = { yaw: 0.30, pitchLo: 0.35, pitchHi: 1.05, iris: 0.22, awayAfterMs: 2500, pauseAfterMs: 1500, everyMs: 250 };
+  var cam = { stream: null, detector: null, checker: 'none', state: 'off', since: 0, good: 0, flagged: false, loop: null, error: false,
     t: { attentiveMs: 0, awayMs: 0, noFaceMs: 0, awayEpisodes: 0, multiFaceEpisodes: 0, cameraOffEpisodes: 0 } };
   // What the camera counted since the last answer; the server adds it to the interview's totals.
   function proctor() { return Object.assign({ checker: cam.checker }, cam.t); }
   function resetTotals() { for (var k in cam.t) cam.t[k] = 0; }
+  // One face in view, whether or not it is looking at the camera.
+  function faceSeen(state) { return state === 'ok' || state === 'away'; }
 
   // Is this face looking at the camera? Nose against the eye line for head
   // yaw and pitch, iris centres against the eye corners for the eyes.
@@ -225,40 +334,69 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
       cam.state = state; cam.since = now; cam.flagged = false;
       if (running && state === 'off') cam.t.cameraOffEpisodes++;
       if (running && state === 'multi') cam.t.multiFaceEpisodes++;
-      enableAnswer();
     } else if (running && !cam.flagged && (state === 'away' || state === 'noface') && now - cam.since >= ATT.awayAfterMs) {
       cam.flagged = true; cam.t.awayEpisodes++;
     }
+    cam.good = state === 'ok' ? cam.good + 1 : 0;
+    // The interview goes on only while one face is in view.
+    var stop = running && !faceSeen(state) && (state === 'off' || now - cam.since >= ATT.pauseAfterMs);
+    if (stop !== paused) setPaused(stop);
+    if (paused) $('paused-text').textContent = PAUSE_TEXT[state] || PAUSE_TEXT.noface;
     renderCam(state);
+    renderLobby();
   }
   var CAM_TEXT = {
-    off: ['bad', 'Camera off. Turn it on to continue; answering is paused.'],
-    nocheck: ['warn', 'Camera on. The attention check is not available on this device.'],
-    noface: ['bad', 'Face not visible. Move into the frame.'],
-    multi: ['bad', 'More than one face in the frame.'],
-    away: ['warn', 'Look at the camera.'],
-    ok: ['ok', 'Face in frame, eyes on the camera.']
+    off: ['bad', 'Camera off'],
+    nocheck: ['warn', 'Face check not running'],
+    noface: ['bad', 'Face not visible'],
+    multi: ['bad', 'More than one face'],
+    away: ['warn', 'Look at the camera'],
+    ok: ['ok', 'Face verified']
+  };
+  var PAUSE_TEXT = {
+    off: 'Your camera is off. Tap your camera tile to turn it back on.',
+    nocheck: 'The face check stopped working. Reload the page; your interview continues where it stopped.',
+    noface: 'We cannot see your face. Uncover the camera and look at the screen to continue.',
+    multi: 'Someone else is in view. Only you may be in the frame during the interview.'
   };
   function renderCam(state) {
     var c = CAM_TEXT[state] || ['', ''];
-    if (state === 'off' && !running) c = ['', session === null && number ? 'Camera off. The interview is over.' : 'Camera not started.'];
-    $('cam-status').className = 'cam-status ' + c[0];
+    if (state === 'nocheck' && !running) c = ['warn', cam.checker === 'unavailable' ? 'Face check unavailable' : 'Loading the face check'];
+    $('cam-status').className = 'face ' + c[0];
     $('cam-text').textContent = c[1];
-    $('cam-overlay').style.display = state === 'off' ? 'flex' : 'none';
-    if (state === 'off') $('cam-overlay').textContent = running ? 'Camera off. Tap here to turn it back on and continue.' : 'The camera starts with the interview.';
-    var total = cam.t.attentiveMs + cam.t.awayMs + cam.t.noFaceMs;
-    $('cam-stats').textContent = running && total ? 'Eyes on the camera ' + Math.round(100 * cam.t.attentiveMs / total) + '% of the time so far.' : '';
+    $('me-tile').classList.toggle('bad', running && c[0] === 'bad');
+    $('cam-overlay').hidden = state !== 'off';
+    if (state === 'off') $('cam-overlay').textContent = running ? 'Camera off. Tap here to turn it back on.' : session === null && number ? 'Interview complete.' : 'Your camera is off.';
+    $('proctor').className = 'proctor ' + (paused ? 'bad' : c[0]);
+    $('proctor-text').textContent = paused ? 'Paused: face not in view' : state === 'away' ? 'Look at the camera' : 'Face verified';
+  }
+  function setPaused(on) {
+    paused = on;
+    document.body.classList.toggle('is-paused', on);
+    $('paused').hidden = !on;
+    if (on) {
+      if (listening) { try { rec.stop(); } catch (e) {} }
+      if (!audio.paused) { audio.pause(); audioHeld = true; }
+      try { if (synth) synth.cancel(); } catch (e) {}
+      $('ai-state').textContent = 'Paused until your face is in view';
+    } else {
+      $('ai-state').textContent = running ? 'Listening for your answer' : $('ai-state').textContent;
+      if (audioHeld) { audioHeld = false; audio.play().catch(function () {}); }
+    }
+    enableAnswer();
   }
   function startCamera() {
     if (cam.stream && cam.stream.active) return Promise.resolve();
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return Promise.reject(new Error('This browser cannot open the camera. Use Chrome, Edge or Safari.'));
     return navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }, audio: false }).then(function (stream) {
-      cam.stream = stream;
+      cam.stream = stream; cam.error = false;
       var video = $('cam'); video.srcObject = stream;
       stream.getVideoTracks().forEach(function (t) { t.onended = function () { tick(); }; });
+      if (!cam.loop) cam.loop = setInterval(tick, ATT.everyMs);
       return new Promise(function (resolve) { video.onloadedmetadata = function () { video.play().catch(function () {}); resolve(); }; setTimeout(resolve, 3000); });
     }).catch(function (e) {
-      throw new Error(e && e.name === 'NotAllowedError' ? 'Allow the camera in the browser bar to start the interview.' : 'The camera could not start: ' + (e && e.message || e));
+      cam.error = true;
+      throw new Error(e && e.name === 'NotAllowedError' ? 'Allow the camera in the browser bar (the camera icon next to the address), then press Turn on camera again.' : 'The camera could not start: ' + (e && e.message || e) + '. Close other apps using the camera and try again.');
     });
   }
   function loadDetector() {
@@ -272,40 +410,43 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
         return V.FaceLandmarker.createFromOptions(files, opts('GPU')).catch(function () { return V.FaceLandmarker.createFromOptions(files, opts('CPU')); });
       });
     }).then(function (d) { cam.checker = 'mediapipe'; cam.detector = d; return d; })
-      .catch(function (e) { console.warn('attention check unavailable:', e && e.message); cam.checker = 'unavailable'; return null; });
+      .catch(function (e) { console.warn('face check unavailable:', e && e.message); cam.checker = 'unavailable'; return null; });
   }
-  // The first question waits until the camera has seen one face looking at it (up to 30 s).
-  function waitForFace() {
-    if (!cam.detector) return Promise.resolve();
-    return new Promise(function (resolve) {
-      var good = 0, waited = 0;
-      var h = setInterval(function () {
-        waited += ATT.everyMs;
-        good = cam.state === 'ok' ? good + 1 : 0;
-        if (good >= 4 || waited >= 30000) { clearInterval(h); resolve(); }
-        else status.textContent = cam.state === 'ok' ? 'Hold still…' : 'Put your face in the frame and look at the camera.';
-      }, ATT.everyMs);
-    });
-  }
-  $('cam-overlay').addEventListener('click', function () {
-    if (!running || (cam.stream && cam.stream.active)) return;
+  function turnOnCamera() {
     status.textContent = 'Starting the camera…';
-    startCamera().then(function () { status.textContent = ''; tick(); }).catch(function (e) { status.textContent = e.message; });
-  });
+    return startCamera().then(function () {
+      status.textContent = 'Loading the face check…';
+      return loadDetector();
+    }).then(function (d) {
+      status.textContent = d ? (running ? '' : 'Look at the camera until the check says “Face verified”.')
+        : 'The face check could not load on this device, so the interview cannot start. Use Chrome or Edge on a laptop or a recent phone, then press Try again.';
+      tick();
+    }).catch(function (e) { status.textContent = e.message; renderLobby(); });
+  }
+  $('cam-btn').addEventListener('click', function () { if (!busy) turnOnCamera(); });
+  $('cam-overlay').addEventListener('click', function () { if (running && !(cam.stream && cam.stream.active)) turnOnCamera(); });
   function stopCamera() {
     if (cam.loop) { clearInterval(cam.loop); cam.loop = null; }
     if (cam.stream) { cam.stream.getTracks().forEach(function (t) { t.stop(); }); cam.stream = null; }
     $('cam').srcObject = null;
-    cam.state = 'off'; renderCam('off');
+    cam.state = 'off'; cam.good = 0; renderCam('off');
   }
 
-  // ── Speaking: the device's own voices ──────────────────────────────────
+  // ── Speaking: the natural voice from the server, or the device's own ──
   var synth = window.speechSynthesis, voices = [];
+  var audio = new Audio(), audioHeld = false, spokenUrls = {}, lastLine = null;
+  function speaking(on) {
+    $('ai-tile').classList.toggle('speaking', on);
+    if (on) $('ai-state').textContent = 'Speaking';
+    else if (!paused && !busy) $('ai-state').textContent = running ? 'Listening for your answer' : number ? 'Interview complete' : 'Waiting for you to join';
+  }
+  audio.onplay = function () { speaking(true); };
+  audio.onpause = audio.onended = function () { speaking(false); };
   function pickDefault() {
     var score = function (v) {
       var n = (v.name + ' ' + v.lang).toLowerCase();
-      return (/en-in|india|heera|ravi|neerja|prabhat/.test(n) ? 40 : 0) + (/^en/.test(v.lang) ? 20 : 0) + (/hi-in|hindi/.test(n) ? 10 : 0) +
-        (/natural|neural|online|google/.test(n) ? 5 : 0) + (v.localService ? 0 : 1);
+      return (/natural|neural|online/.test(n) ? 60 : 0) + (/en-in|india|heera|ravi|neerja|prabhat/.test(n) ? 40 : 0) + (/^en/.test(v.lang) ? 20 : 0) +
+        (/hi-in|hindi/.test(n) ? 10 : 0) + (/google|samantha|daniel|serena/.test(n) ? 8 : 0) + (v.localService ? 0 : 1);
     };
     return voices.slice().sort(function (a, b) { return score(b) - score(a); })[0];
   }
@@ -317,42 +458,73 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
     sel.innerHTML = voices.map(function (v, i) { return '<option value="' + i + '">' + esc(v.name.replace(/^Microsoft |^Google /, '')) + ' · ' + esc(v.lang) + '</option>'; }).join('');
     var def = pickDefault();
     sel.value = String(voices.indexOf(voices.filter(function (v) { return v.name === saved; })[0] || def || voices[0]));
-    $('voice-hint').textContent = voices.length
-      ? 'Voices come from your device; Microsoft Edge and Android phones have the clearest Indian-English ones. Your choice is remembered.'
+    renderVoice();
+  }
+  function renderVoice() {
+    var natural = ME && ME.voice && ME.voice.natural;
+    $('voice-wrap').hidden = !!natural;
+    $('voice-hint').textContent = natural ? 'The interviewer speaks with a natural Indian-English voice. If it cannot be reached, your device\'s voice takes over.'
+      : voices.length ? 'Voices come from your device; Microsoft Edge and Android phones have the clearest ones. Your choice is remembered.'
       : 'This browser has no voices, so questions are shown as text only.';
+    setCheck('chk-voice', natural || voices.length ? 'ok' : 'warn', natural ? 'Interviewer voice: natural' : voices.length ? 'Interviewer voice: your device' : 'Questions shown as text only');
   }
   if (synth) { loadVoices(); synth.onvoiceschanged = loadVoices; }
   $('voice').addEventListener('change', function () { var v = voices[+this.value]; try { if (v) localStorage.setItem('ten-meeting-voice', v.name); } catch (e) {} });
-  function speak(text) {
-    if (!synth || !$('speak').checked || !text) return;
+  function deviceSpeak(text) {
+    if (!synth || !text) return;
     try { synth.cancel(); } catch (e) {}
     var v = voices[+$('voice').value] || null;
-    String(text).replace(/\s+/g, ' ').match(/[^.!?।]+[.!?।]*\s*/g).forEach(function (part) {
-      if (!part.trim()) return;
+    var parts = (String(text).replace(/\s+/g, ' ').match(/[^.!?।]+[.!?।]*\s*/g) || []).filter(function (p) { return p.trim(); });
+    parts.forEach(function (part, i) {
       var u = new SpeechSynthesisUtterance(part.trim());
       if (v) { u.voice = v; u.lang = v.lang; }
       u.rate = 0.95;
+      if (i === 0) u.onstart = function () { speaking(true); };
+      if (i === parts.length - 1) u.onend = function () { speaking(false); };
       synth.speak(u);
     });
   }
-  $('speak').addEventListener('change', function () { if (!this.checked && synth) synth.cancel(); });
+  // One interviewer line. ref names it for the server ({ sessionId, n, lead } or { part }),
+  // which voices only its own lines; text is what the device says if the server cannot.
+  function say(text, ref) {
+    lastLine = { text: text, ref: ref };
+    if (!$('speak').checked || !text) return;
+    try { if (synth) synth.cancel(); } catch (e) {}
+    audio.pause(); audioHeld = false;
+    if (!(ME && ME.voice && ME.voice.natural)) return deviceSpeak(text);
+    var key = JSON.stringify(ref), line = lastLine;
+    (spokenUrls[key] ? Promise.resolve(spokenUrls[key]) : fetch('/api/v2/meeting/voice', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(ref)
+    }).then(function (r) {
+      if (r.status !== 200) throw new Error('no natural voice');
+      return r.blob();
+    }).then(function (b) { return (spokenUrls[key] = URL.createObjectURL(b)); })).then(function (url) {
+      if (lastLine !== line) return;
+      audio.src = url;
+      if (paused) { audioHeld = true; return; }
+      return audio.play();
+    }).catch(function () { if (lastLine === line && !paused) deviceSpeak(text); });
+  }
+  $('speak').addEventListener('change', function () { if (!this.checked) { audio.pause(); if (synth) synth.cancel(); } });
   $('sample').addEventListener('click', function () {
     var on = $('speak').checked; $('speak').checked = true;
-    speak('Good morning. I am TEN\'s AI interviewer. Here is a sample interview question: your API returned the right data in testing but times out in production. Where do you look first, and why?');
+    say(ME && ME.voice ? ME.voice.sample : 'Hello. I am your TEN interviewer.', { part: 'sample' });
     $('speak').checked = on;
   });
+  $('repeat').addEventListener('click', function () { if (lastLine && running && !paused) say(lastLine.text, lastLine.ref); });
 
   // ── Listening: Chrome's speech recognition ──────────────────────────────
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition, rec = null, listening = false;
-  if (!SR) input.placeholder = 'Type your answer (voice input needs Chrome, Edge or Android).';
+  if (!SR) input.placeholder = 'Type your answer (answering aloud needs Chrome, Edge or Android).';
   function listen() {
-    if (!SR || busy || !running) return;
+    if (!SR || busy || !running || paused) return;
     if (listening) { try { rec.stop(); } catch (e) {} return; }
     try { if (synth) synth.cancel(); } catch (e) {}
+    audio.pause();
     rec = new SR();
     rec.lang = $('lang').value; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
-    var finalText = '';
-    rec.onstart = function () { listening = true; $('mic').classList.add('live'); $('mic').textContent = 'Stop'; status.textContent = 'Listening. Press Stop when you have finished your answer.'; };
+    var finalText = input.value ? input.value + ' ' : '';
+    rec.onstart = function () { listening = true; $('mic').classList.add('live'); $('mic').textContent = 'Done, submit'; status.textContent = 'Listening. Press “Done, submit” when you have finished your answer.'; };
     rec.onresult = function (e) {
       var interim = '';
       for (var i = e.resultIndex; i < e.results.length; i++) {
@@ -365,113 +537,134 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
         e.error === 'no-speech' ? 'Nothing was heard. Try again, closer to the microphone.' : 'Voice input stopped (' + e.error + '). You can type instead.';
     };
     rec.onend = function () {
-      listening = false; $('mic').classList.remove('live'); $('mic').textContent = 'Speak';
-      if (input.value.trim()) { if (status.textContent.indexOf('Listening') === 0) status.textContent = ''; send(); }
+      listening = false; $('mic').classList.remove('live'); $('mic').textContent = 'Answer aloud';
+      if (status.textContent.indexOf('Listening') === 0) status.textContent = '';
+      if (input.value.trim() && !paused) send();
     };
     try { rec.start(); } catch (e) { status.textContent = 'Voice input could not start. You can type instead.'; }
   }
   $('mic').addEventListener('click', listen);
+  function setCheck(id, cls, text) { $(id).className = cls; $(id).textContent = text; }
+  setCheck('chk-mic', SR ? 'ok' : 'warn', SR ? 'Voice answers: on (you can also type)' : 'Typing only: answering aloud needs Chrome or Edge');
 
   // ── The interview ───────────────────────────────────────────────────────
   function post(path, body) {
     return fetch('/api/v2/meeting' + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(body || {}) })
       .then(function (r) { return r.json().then(function (j) { if (!r.ok || j.success === false) { var e = new Error(j.message || 'Something went wrong.'); e.closed = !!j.closed; throw e; } return j; }); });
   }
+  function renderSteps(n) {
+    var html = '';
+    for (var i = 1; i <= OF; i++) html += '<i class="' + (i < n ? 'done' : i === n ? 'now' : '') + '"></i>';
+    $('steps').innerHTML = html;
+  }
   function showQuestion(n, text) {
     number = n;
     $('qnum').textContent = 'Question ' + n + ' of ' + OF;
-    $('bar').style.width = Math.round(100 * (n - 1) / OF) + '%';
+    renderSteps(n);
     $('question').textContent = text;
-    $('feedback').style.display = 'none';
     input.value = '';
     qStart = Date.now();
     if (clock) clearInterval(clock);
     clock = setInterval(function () { var s = Math.round((Date.now() - qStart) / 1000); $('timer').textContent = Math.floor(s / 60) + ':' + ('0' + s % 60).slice(-2); }, 1000);
     $('timer').textContent = '0:00';
-    speak('Question ' + n + '. ' + text);
+    $('ai-state').textContent = 'Listening for your answer';
     enableAnswer();
   }
+  // The marks stay with the server until the report, as in a real interview.
   function send() {
     var text = input.value.trim();
-    if (!text || busy || !running || cam.state === 'off') return;
+    if (!text || busy || !running || paused) return;
     if (listening) { try { rec.stop(); } catch (e) {} }
-    setBusy(true);
+    setBusy(true, 'The interviewer is noting your answer…');
+    $('ai-state').textContent = 'Noting your answer';
     var seconds = Math.round((Date.now() - qStart) / 1000);
-    var counted = proctor();
-    post('/interview/answer', { sessionId: session, answer: text, seconds: seconds, proctor: counted }).then(function (j) {
+    post('/interview/answer', { sessionId: session, answer: text, seconds: seconds, proctor: proctor() }).then(function (j) {
       resetTotals();
-      var cls = j.score >= 7 ? '' : j.score >= 4 ? 'mid' : 'low';
-      $('feedback').innerHTML = (j.score != null ? '<span class="score ' + cls + '">' + j.score + '/10</span>' : '') + esc(j.feedback || '');
-      $('feedback').style.display = 'block';
-      if (j.done) { speak(j.feedback || ''); endInterview(j.report); return; }
-      speak(j.feedback || '');
-      // The next question after the feedback has been heard; a fixed pause when voices are off.
-      setTimeout(function () { showQuestion(j.number, j.question); }, $('speak').checked && synth ? Math.min(9000, 2500 + 60 * String(j.feedback || '').length) : 1500);
+      setBusy(false);
+      if (j.done) { endInterview(j.report, j.say); return; }
+      showQuestion(j.number, j.question);
+      say(j.say || j.question, { sessionId: session, n: j.number, lead: 'ack' });
     }).catch(function (e) {
+      setBusy(false);
       status.textContent = e.message;
+      $('ai-state').textContent = 'Listening for your answer';
       if (e.closed) { running = false; enableAnswer(); }
-    }).then(function () { setBusy(false); });
+    });
   }
   $('send').addEventListener('click', send);
   input.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
 
-  var level = null;
-  var LEVEL_NAME = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
   Array.prototype.forEach.call(document.querySelectorAll('.level'), function (b) {
     b.addEventListener('click', function () {
       level = b.getAttribute('data-level');
       Array.prototype.forEach.call(document.querySelectorAll('.level'), function (x) { x.setAttribute('aria-pressed', String(x === b)); });
-      if (ME && ME.state === 'open') { $('start').disabled = false; $('start').textContent = 'Start the ' + LEVEL_NAME[level] + ' interview'; }
+      renderLobby();
     });
   });
+  function readyToJoin() {
+    return !!(ME && (ME.state === 'resume' || (ME.state === 'open' && level)) && cam.stream && cam.stream.active && cam.detector && cam.good >= 4);
+  }
+  // The pre-join checks, kept current by the camera loop.
+  function renderLobby() {
+    if (!ME || running) return;
+    var camOn = !!(cam.stream && cam.stream.active);
+    setCheck('chk-camera', camOn ? 'ok' : cam.error ? 'bad' : '', camOn ? 'Camera on' : cam.error ? 'Camera blocked or busy' : 'Camera off');
+    setCheck('chk-face', !camOn ? '' : cam.checker === 'unavailable' ? 'bad' : !cam.detector ? '' : cam.good >= 4 ? 'ok' : 'bad',
+      !camOn ? 'Face check: waiting for the camera' : cam.checker === 'unavailable' ? 'Face check could not load' : !cam.detector ? 'Face check: loading…'
+        : cam.good >= 4 ? 'Face verified' : cam.state === 'multi' ? 'Only you may be in view' : cam.state === 'away' ? 'Look at the camera' : 'Face not visible: move into the frame');
+    var retry = camOn && cam.checker === 'unavailable';
+    $('cam-btn').textContent = retry ? 'Try again' : camOn ? 'Camera on' : 'Turn on camera';
+    $('cam-btn').disabled = busy || (camOn && !retry);
+    $('start').disabled = busy || !readyToJoin();
+  }
   $('start').addEventListener('click', function () {
-    if (busy) return;
-    if (ME && ME.state === 'open' && !level) { status.textContent = 'Choose easy, medium or hard first.'; return; }
-    $('start').disabled = true;
-    setBusy(true, 'Starting the camera…');
-    startCamera().then(function () {
-      if (!cam.loop) cam.loop = setInterval(tick, ATT.everyMs);
-      status.textContent = 'Preparing the camera check…';
-      return loadDetector();
-    }).then(function () { return waitForFace(); }).then(function () {
-      status.textContent = 'Preparing your first question…';
-      return post('/interview/start', { difficulty: level });
-    }).then(function (j) {
+    if (busy || !readyToJoin()) return;
+    var resuming = ME.state === 'resume';
+    setBusy(true, resuming ? 'Rejoining your interview…' : 'The interviewer is preparing your first question…');
+    $('ai-state').textContent = 'Preparing your first question';
+    post('/interview/start', { difficulty: level }).then(function (j) {
       session = j.sessionId; running = true; OF = j.of || OF;
-      $('start').style.display = 'none'; $('finish').style.display = '';
-      $('schedule-card').style.display = 'none';
+      $('lobby').hidden = true; $('answer-panel').hidden = false; $('qcard').hidden = false; $('proctor').hidden = false; $('report-card').hidden = true; $('repeat').hidden = false;
       if (j.difficulty) $('level-label').textContent = ' · ' + LEVEL_NAME[j.difficulty];
-      if (j.resumed) status.textContent = 'Continuing your unfinished interview from today.';
+      setBusy(false);
       showQuestion(j.number, j.question);
+      say(j.say || j.question, { sessionId: session, n: j.number, lead: j.resumed ? 'resume' : 'intro' });
     }).catch(function (e) {
+      setBusy(false);
       status.textContent = e.message;
-      $('start').disabled = !!e.closed;
-      if (!running) stopCamera();
-    }).then(function () { setBusy(false); });
+      $('ai-state').textContent = 'Waiting for you to join';
+    });
   });
   $('finish').addEventListener('click', function () {
     if (busy || !session) return;
-    if (!confirm('End the interview now? Unanswered questions count as not attempted, and this is your one attempt.')) return;
+    if (!confirm('End the interview now? Unanswered questions count as not attempted' + (ME && ME.schedule && ME.schedule.trial ? '.' : ', and this is your one attempt.'))) return;
     setBusy(true, 'Preparing your report…');
-    post('/interview/finish', { sessionId: session, proctor: proctor() }).then(function (j) { endInterview(j.report); })
-      .catch(function (e) { status.textContent = e.message; }).then(function () { setBusy(false); });
+    post('/interview/finish', { sessionId: session, proctor: proctor() }).then(function (j) { setBusy(false); endInterview(j.report); })
+      .catch(function (e) { setBusy(false); status.textContent = e.message; });
   });
-  function endInterview(report) {
+  function endInterview(report, line) {
     running = false; session = null;
+    if (paused) setPaused(false);
     if (clock) { clearInterval(clock); clock = null; }
-    $('finish').style.display = 'none'; $('timer').textContent = '';
-    $('qnum').textContent = 'Interview complete'; $('bar').style.width = '100%';
+    $('answer-panel').hidden = true; $('proctor').hidden = true; $('timer').textContent = '';
+    $('qnum').textContent = 'Interview complete'; renderSteps(OF + 1);
     $('question').textContent = 'Thank you. Your report is below, and a copy has been sent to your email.';
+    $('repeat').hidden = true;
     input.value = '';
     enableAnswer();
     stopCamera();
+    $('ai-state').textContent = 'Interview complete';
     renderReport(report);
-    speak('That is the end of the interview. Your overall mark is ' + (report.overall == null ? 'not available' : report.overall + ' out of 10') + '. ' + report.summary);
-    if (ME) { ME.reports.unshift(report); ME.state = ME.schedule && ME.schedule.trial ? 'open' : 'taken'; renderReports(); renderSchedule(); if (ME.state === 'open') { $('start').style.display = ''; $('schedule-card').style.display = ''; } }
+    say(line || (ME && ME.voice && ME.voice.end) || 'That is the end of the interview. Thank you.', { part: 'end' });
+    if (ME) {
+      ME.reports.unshift(report); ME.state = ME.schedule && ME.schedule.trial ? 'open' : 'taken';
+      renderReports(); renderSchedule();
+      $('lobby').hidden = false;
+    }
   }
   function renderReport(r) {
     var card = $('report-card');
-    card.style.display = 'block';
+    card.hidden = false;
     card.innerHTML = '<h3>Your report <span class="pill" style="margin-left:6px">AI</span></h3>' +
       '<div class="row" style="align-items:flex-end;gap:16px"><div class="big">' + (r.overall != null ? r.overall + '<span style="font-size:18px;color:var(--muted)">/10</span>' : '–') + '</div>' +
       '<div class="muted small">' + (LEVEL_NAME[r.difficulty] || 'Medium') + ' · ' + r.marks.got + ' of ' + r.marks.of + ' marks across ' + (r.marks.of / 10) + ' question' + (r.marks.of === 10 ? '' : 's') + '</div></div>' +
@@ -485,33 +678,36 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
   }
   function renderReports() {
     if (!ME || !ME.reports.length) return;
-    $('reports-card').style.display = 'block';
+    $('reports-card').hidden = false;
     $('reports').innerHTML = ME.reports.map(function (r) {
       return '<li><span>' + new Date(r.startedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) + ' · ' + (LEVEL_NAME[r.difficulty] || 'Medium') + (r.trial ? ' (trial)' : '') + ' · ' + r.marks.got + '/' + r.marks.of + ' marks</span><b>' + (r.overall != null ? r.overall + '/10' : '–') + '</b></li>';
     }).join('');
   }
   function renderSchedule() {
     var w = ME.schedule, title = $('when-title'), text = $('when-text');
-    $('start').disabled = true;
-    $('levels').style.display = ME.state === 'open' ? 'flex' : 'none';
-    if (!ME.enabled) { title.textContent = 'The Interview Room is switched off'; text.textContent = 'Your coordinator is in Messages.'; return; }
+    var canJoin = ME.state === 'open' || ME.state === 'resume';
+    $('step-level').hidden = ME.state !== 'open';
+    $('step-join').hidden = !canJoin;
+    if (!ME.enabled) {
+      title.textContent = 'The Interview Room is switched off'; text.textContent = 'Your coordinator is in Messages.';
+      $('cam-btn').disabled = true; return;
+    }
     if (ME.state === 'closed') {
       title.textContent = 'Next interview: ' + w.nextLabel;
-      text.textContent = 'The room opens on alternate Sundays, India time, for the whole day. Come back then with your camera on. After that: ' + w.followingLabel + '.';
+      text.textContent = 'The room opens on alternate Sundays, India time, for the whole day. After that: ' + w.followingLabel + '. You can test your camera and the face check now.';
     } else if (ME.state === 'taken') {
       title.textContent = 'You have taken your interview';
       text.textContent = 'Your report is below and in your email.';
     } else if (ME.state === 'resume') {
       title.textContent = 'Your interview from today is unfinished';
-      text.textContent = 'Press Continue to carry on from the question you stopped at' + (ME.difficulty ? ', at the ' + LEVEL_NAME[ME.difficulty] + ' level' : '') + '.';
-      $('start').textContent = 'Continue the interview';
-      $('start').disabled = false;
+      text.textContent = 'Turn on your camera and rejoin to carry on from the question you stopped at' + (ME.difficulty ? ', at the ' + LEVEL_NAME[ME.difficulty] + ' level' : '') + '.';
+      $('start').textContent = 'Rejoin the interview';
     } else {
       title.textContent = w.trial ? 'The interview is open (trial)' : 'The interview is open today';
-      text.textContent = (w.trial ? 'Trial mode: interviews can be repeated and do not use up your one attempt. ' : 'One attempt, eight questions, about twenty minutes. ') + 'Choose your level, then start.';
-      $('start').textContent = level ? 'Start the ' + LEVEL_NAME[level] + ' interview' : 'Start the interview';
-      $('start').disabled = !level;
+      text.textContent = (w.trial ? 'Trial mode: interviews can be repeated and do not use up your one attempt. ' : 'One attempt, eight questions, about twenty minutes. ') + 'Complete the three steps below to join.';
+      $('start').textContent = 'Join the interview';
     }
+    renderLobby();
   }
 
   // ── Boot ───────────────────────────────────────────────────────────────
@@ -519,6 +715,7 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
     if (!j.success) throw new Error(j.message || 'Could not load the room.');
     ME = j; OF = j.questions || OF;
     $('domain').textContent = j.domain || 'your domain';
+    renderVoice();
     renderSchedule();
     renderReports();
   }).catch(function (e) { $('when-title').textContent = 'Could not load the room'; $('when-text').textContent = e.message; });

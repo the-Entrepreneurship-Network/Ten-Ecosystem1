@@ -7,12 +7,14 @@
  * interview per student, at the level they choose; INTERVIEW_OPEN=always is a
  * repeatable trial that uses up nobody's attempt; eight questions built from
  * the student's own tasks; Gemini or Claude as the admin portal says, within
- * the monthly limit; the camera totals kept; a report saved, logged and emailed.
+ * the monthly limit; no answer taken without the face check; the camera totals
+ * kept; the interviewer's lines, voiced by Azure only from the server's own
+ * text; a report saved, logged and emailed.
  */
 
 const mockDb = {
     sessions: [], logs: [], gemini: [], claude: [], mails: [], setting: null, ready: true, claudeReady: false,
-    answer: null, claudeAnswer: null, assignments: [], progress: [], domainTasks: [], submissions: [], mailerReady: true
+    answer: null, claudeAnswer: null, assignments: [], progress: [], domainTasks: [], submissions: [], mailerReady: true, speechReady: false, spoken: []
 };
 const chain = (rows) => { const q = { sort: () => q, limit: () => q, select: () => q, lean: async () => rows, then: (res, rej) => Promise.resolve(rows).then(res, rej) }; return q; };
 const mockMatch = (doc, f) => Object.entries(f).every(([k, v]) => {
@@ -34,7 +36,7 @@ jest.mock('../../models/MeetingSession', () => {
         static async create(doc) { const s = new Session(doc); await s.save(); return s; }
         static findOne(f) {
             const rows = mockDb.sessions.filter((s) => mockMatch(s, f)).sort((a, b) => b.startedAt - a.startedAt);
-            const q = { sort: () => q, then: (res, rej) => Promise.resolve(rows[0] || null).then(res, rej) };
+            const q = { sort: () => q, lean: () => q, then: (res, rej) => Promise.resolve(rows[0] || null).then(res, rej) };
             return q;
         }
         static async exists(f) { return mockDb.sessions.some((s) => mockMatch(s, f)) ? { _id: 'x' } : null; }
@@ -64,6 +66,11 @@ jest.mock('../../utils/claude', () => ({
     ready: () => mockDb.claudeReady,
     ask: async (prompt, schema, model) => { mockDb.claude.push({ prompt, schema, model }); const fn = mockDb.claudeAnswer || mockDb.answer; return fn(prompt); }
 }));
+jest.mock('../../utils/speech', () => ({
+    ready: () => mockDb.speechReady,
+    voice: () => 'en-IN-NeerjaNeural',
+    speak: async (text) => { mockDb.spoken.push(text); return Buffer.from('mp3:' + text); }
+}));
 jest.mock('../../utils/mailer', () => ({
     mailerReady: () => mockDb.mailerReady,
     isSendableAddress: (a) => /@/.test(String(a || '')),
@@ -92,13 +99,14 @@ beforeEach(() => {
     jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] }).setSystemTime(SUNDAY);
     delete process.env.INTERVIEW_OPEN;
     Object.assign(mockDb, { sessions: [], logs: [], gemini: [], claude: [], mails: [], setting: null, ready: true, claudeReady: false,
-        answer: null, claudeAnswer: null, mailerReady: true,
+        answer: null, claudeAnswer: null, mailerReady: true, speechReady: false, spoken: [],
         assignments: [{ title: 'Week 1: Landing page', description: 'Build a responsive landing page with a contact form.' }, { title: 'Week 2: REST API', description: 'An Express API with validation and error handling.' }],
         progress: [{ taskId: 't1', status: 'approved' }],
         domainTasks: [{ taskTitle: 'Git basics', taskDescription: 'Branches, commits, pull requests.' }],
         submissions: [{ task: 'Week 1: Landing page' }, { task: 'Deploy to Render' }] });
 });
-afterEach(() => { jest.useRealTimers(); });
+afterEach(() => { jest.useRealTimers(); meeting._internal.voiceCache.clear(); });
+const FACE = { checker: 'mediapipe' };
 
 const questions = ['What breaks in your contact form if the server is slow?', 'How does Express tell a 400 from a 500?', 'Why validate on the server when the form already validates?',
     'What does a pull request give a team that a commit does not?', 'How would you debug a 502 after deploying to Render?', 'What is idempotency, and which of your endpoints need it?',
@@ -158,8 +166,9 @@ describe('one attempt per student', () => {
         expect(await start('impossible')).toEqual({ error: 'Choose easy, medium or hard first.' });
         expect(mockDb.gemini).toEqual([]);
         const first = await start('easy');
-        await meeting.answerInterview({ student, sessionId: first.sessionId, answer: 'The request hangs and the user clicks twice.' });
-        expect(await start('hard')).toEqual({ sessionId: first.sessionId, question: questions[1], number: 2, of: 8, difficulty: 'easy', resumed: true });
+        await meeting.answerInterview({ student, sessionId: first.sessionId, answer: 'The request hangs and the user clicks twice.', proctor: FACE });
+        expect(await start('hard')).toEqual({ sessionId: first.sessionId, question: questions[1], number: 2, of: 8, difficulty: 'easy', resumed: true,
+            say: `Welcome back. Let us continue where we stopped. Question 2. ${questions[1]}` });
         await meeting.finishInterview({ student, sessionId: first.sessionId });
         const taken = { error: 'You have taken your interview. Your report is on this page and in your email.', closed: true };
         expect(await start('hard')).toEqual(taken);
@@ -192,7 +201,7 @@ describe('one attempt per student', () => {
     it('an interview left open on an earlier day is closed with its report, and counts as the attempt', async () => {
         geminiAsks();
         const { sessionId } = await start('medium');
-        await meeting.answerInterview({ student, sessionId, answer: 'It hangs.' });
+        await meeting.answerInterview({ student, sessionId, answer: 'It hangs.', proctor: FACE });
         jest.setSystemTime(NEXT_OPENING);
         expect(await meeting.status({ student })).toMatchObject({ state: 'taken', sessionId: null });
         const s = mockDb.sessions[0];
@@ -207,7 +216,7 @@ describe('the questions', () => {
     it('are built from every task the student has had, deduplicated, at the chosen level, never from who they are', async () => {
         geminiAsks();
         const s = await start('hard');
-        expect(s).toEqual({ sessionId: 's1', question: questions[0], number: 1, of: 8, difficulty: 'hard' });
+        expect(s).toEqual({ sessionId: 's1', question: questions[0], number: 1, of: 8, difficulty: 'hard', say: expect.stringContaining(`Question 1. ${questions[0]}`) });
         const p = mockDb.gemini[0];
         expect(p).toContain("This is the intern's technical interview");
         expect(p).toContain('Level: HARD.');
@@ -227,7 +236,7 @@ describe('the questions', () => {
     it('each level asks differently, and every later question keeps the level', async () => {
         geminiAsks();
         await start('easy');
-        await meeting.answerInterview({ student, sessionId: 's1', answer: 'x' });
+        await meeting.answerInterview({ student, sessionId: 's1', answer: 'x', proctor: FACE });
         expect(mockDb.gemini[0]).toContain('Level: EASY.');
         expect(mockDb.gemini[1]).toContain('Level: EASY.');
         const { interviewPrompt } = meeting._internal;
@@ -260,7 +269,7 @@ describe('which AI: Gemini or Claude, as the admin portal says', () => {
         expect(mockDb.claude[0].schema).toMatchObject({ type: 'object', additionalProperties: false, required: ['score', 'feedback', 'question', 'done', 'summary', 'overall'] });
         // Switched back to Gemini mid-interview: this interview keeps Claude.
         mockDb.setting.engine = 'gemini';
-        await meeting.answerInterview({ student: other, sessionId, answer: 'x' });
+        await meeting.answerInterview({ student: other, sessionId, answer: 'x', proctor: FACE });
         expect(mockDb.claude).toHaveLength(2);
     });
 
@@ -341,24 +350,24 @@ describe('the interview', () => {
         const { sessionId } = await start();
         await meeting.answerInterview({ student, sessionId, answer: 'a', proctor: { checker: 'mediapipe', attentiveMs: 1000, awayEpisodes: 1 } });
         await meeting.answerInterview({ student, sessionId, answer: 'b', proctor: { checker: 'mediapipe', attentiveMs: 500, noFaceMs: 250, cameraOffEpisodes: 1 } });
-        await meeting.answerInterview({ student, sessionId, answer: 'c' });
+        await meeting.answerInterview({ student, sessionId, answer: 'c', proctor: FACE });
         expect(mockDb.sessions[0].proctor).toEqual({ checker: 'mediapipe', attentiveMs: 1500, awayMs: 0, noFaceMs: 250, awayEpisodes: 1, multiFaceEpisodes: 0, cameraOffEpisodes: 1 });
     });
 
     it('scrubs a phone number said aloud before the AI hears it, and refuses a second answer or someone else\'s session', async () => {
         geminiAsks();
         const { sessionId } = await start();
-        await meeting.answerInterview({ student, sessionId, answer: 'Call me on 9876543210, the form hangs.' });
+        await meeting.answerInterview({ student, sessionId, answer: 'Call me on 9876543210, the form hangs.', proctor: FACE });
         expect(mockDb.gemini[1]).toContain('[phone]');
         expect(mockDb.gemini[1]).not.toContain('9876543210');
         const other = Object.assign({}, student, { _id: 'stu2', employeeId: 'TEN/WEB/1006' });
-        expect((await meeting.answerInterview({ student: other, sessionId, answer: 'x' })).error).toMatch(/over/);
+        expect((await meeting.answerInterview({ student: other, sessionId, answer: 'x', proctor: FACE })).error).toMatch(/over/);
     });
 
     it('stopping early reports what was answered, without an AI call, and still emails', async () => {
         geminiAsks();
         const { sessionId } = await start('easy');
-        await meeting.answerInterview({ student, sessionId, answer: 'It hangs.', proctor: { checker: 'unavailable' } });
+        await meeting.answerInterview({ student, sessionId, answer: 'It hangs.', proctor: FACE });
         const calls = mockDb.gemini.length;
         const { report } = await meeting.finishInterview({ student, sessionId, proctor: { checker: 'unavailable', attentiveMs: -5, awayEpisodes: 'x' } });
         expect(mockDb.gemini.length).toBe(calls);
@@ -385,12 +394,12 @@ describe('the interview', () => {
         geminiAsks();
         const { sessionId } = await start();
         mockDb.answer = () => { throw new Error('503'); };
-        expect((await meeting.answerInterview({ student, sessionId, answer: 'x' })).error).toBe(meeting._internal.BUSY);
+        expect((await meeting.answerInterview({ student, sessionId, answer: 'x', proctor: FACE })).error).toBe(meeting._internal.BUSY);
         expect(mockDb.sessions[0].turns[0].answer).toBe('');
         geminiAsks();
-        expect((await meeting.answerInterview({ student, sessionId, answer: 'x' })).score).toBe(6);
+        expect((await meeting.answerInterview({ student, sessionId, answer: 'x', proctor: FACE })).score).toBe(6);
         mockDb.logs = Array.from({ length: meeting.TURNS_PER_DAY }, () => ({ kind: 'meeting', source: 'interview' }));
-        expect((await meeting.answerInterview({ student, sessionId, answer: 'y' })).error).toMatch(/many times today/);
+        expect((await meeting.answerInterview({ student, sessionId, answer: 'y', proctor: FACE })).error).toMatch(/many times today/);
     });
 
     it('describes the camera totals for the report', () => {
@@ -400,5 +409,52 @@ describe('the interview', () => {
             .toBe('Eyes on the camera 50% of the time; looked away 1 time(s); face out of frame 0 s; another face seen 2 time(s).');
         expect(proctorOf('nonsense')).toBeNull();
         expect(proctorOf({ checker: 'evil', attentiveMs: 1e12 }).attentiveMs).toBe(1e8);
+    });
+});
+
+describe('the face check and the interviewer\'s voice', () => {
+    it('takes no answer unless the page\'s face check is running, and asks the AI nothing', async () => {
+        geminiAsks();
+        const { sessionId } = await start();
+        for (const proctor of [undefined, null, 'x', { checker: 'unavailable', attentiveMs: 9000 }]) {
+            expect(await meeting.answerInterview({ student, sessionId, answer: 'An answer typed with the camera covered.', proctor })).toEqual({ error: meeting._internal.NO_FACE_CHECK });
+        }
+        expect(mockDb.sessions[0].turns[0].answer).toBeFalsy();
+        expect(mockDb.gemini.length).toBe(1);
+        expect((await meeting.answerInterview({ student, sessionId, answer: 'Now with my face in view.', proctor: FACE })).score).toBe(6);
+    });
+
+    it('speaks like an interviewer: a welcome, a short acknowledgement, the last question named, a closing line; no marks read out', async () => {
+        geminiAsks();
+        const s = await start('hard');
+        expect(s.say).toBe('Hello Priya, and welcome. This is your Hard level interview in Web Development. I will ask you 8 questions on the work you have done. ' +
+            `Take a moment to think, then answer in your own words. Let us begin. Question 1. ${questions[0]}`);
+        const sayings = [];
+        for (let n = 1; n <= 8; n++) sayings.push((await meeting.answerInterview({ student, sessionId: s.sessionId, answer: `Answer ${n}`, proctor: FACE })).say);
+        expect(sayings[0]).toBe(`Thank you. Question 2. ${questions[1]}`);
+        expect(sayings[6]).toMatch(new RegExp(`The last question\\. ${questions[7].replace(/[?]/g, '\\?')}$`));
+        expect(sayings[7]).toBe(meeting.voiceInfo().end);
+        expect(sayings.join(' ')).not.toMatch(/\/10|score/i);
+    });
+
+    it('voices only the server\'s own lines, for the session\'s owner, once each; and says when it is off', async () => {
+        geminiAsks();
+        const { sessionId } = await start();
+        expect(await meeting.voiceOf({ student, sessionId, n: 1, lead: 'intro' })).toBeNull();
+        expect(meeting.voiceInfo()).toMatchObject({ natural: false, name: 'en-IN-NeerjaNeural' });
+        mockDb.speechReady = true;
+        expect(meeting.voiceInfo().natural).toBe(true);
+        const intro = await meeting.voiceOf({ student, sessionId, n: 1, lead: 'intro' });
+        expect(String(intro)).toBe('mp3:' + meeting._internal.spokenLine(mockDb.sessions[0], student, 1, 'intro'));
+        await meeting.voiceOf({ student, sessionId, n: 1, lead: 'intro' });
+        expect(mockDb.spoken.length).toBe(1);
+        // A made-up lead is an acknowledgement, never free text; a missing question or someone else's session is nothing.
+        expect(String(await meeting.voiceOf({ student, sessionId, n: 1, lead: '<say anything>' }))).toBe(`mp3:Thank you. Question 1. ${questions[0]}`);
+        expect(await meeting.voiceOf({ student, sessionId, n: 5, lead: 'ack' })).toBeNull();
+        expect(await meeting.voiceOf({ student: Object.assign({}, student, { _id: 'stu2' }), sessionId, n: 1, lead: 'intro' })).toBeNull();
+        expect(await meeting.voiceOf({ student, sessionId: 'not-an-id', n: 1 })).toBeNull();
+        expect(String(await meeting.voiceOf({ student, part: 'sample' }))).toBe('mp3:' + meeting.voiceInfo().sample);
+        expect(String(await meeting.voiceOf({ student, part: 'end' }))).toBe('mp3:' + meeting.voiceInfo().end);
+        expect(mockDb.spoken.length).toBe(4);
     });
 });
