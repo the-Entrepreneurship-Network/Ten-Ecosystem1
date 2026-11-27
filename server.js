@@ -3404,6 +3404,9 @@ const submissionSchema = new mongoose.Schema({
     feedback: { type: String, default: "No Feedback Yet" },
     status: { type: String, default: "Pending" },
     reviewedOnce: { type: Boolean, default: false },
+    // "" for a person (the coordinator's Approve button), "ai" for the AI
+    // Coordinator (services/aiCoordinatorJobs.js). Both dashboards label it.
+    reviewedBy: { type: String, default: "" },
     attendanceAllowed: { type: Boolean, default: false },
     attendanceGiven: { type: Boolean, default: false },
     attendanceCount: { type: Number, default: 0 },
@@ -4856,32 +4859,40 @@ try{
 
 // ================= UPDATE STATUS =================
 
-app.post("/update-status", async(req,res)=>{
-try{
-    const { id, status, feedback, rating } = req.body;
-
-    const existing = await Submission.findById(id);
-    if(!existing){
-        return res.json({ success:false, message:"Submission not found" });
-    }
-    if(existing.reviewedOnce){
-        return res.json({ success:false, message:"Already reviewed. Cannot change decision.", alreadyReviewed:true });
-    }
+/**
+ * One review of a submission, whoever makes it: the coordinator's Approve or
+ * Reject button (POST /update-status) and the AI Coordinator's own reviews of
+ * clear cases (services/aiCoordinatorJobs.js) both come here, so the student's
+ * notice, the Task Journey, the milestones, the certificate check and the
+ * badges happen the same way for both.
+ *
+ * The decision is written only if nobody else has reviewed it first: one
+ * conditional update, not a read and then a write, so a coordinator and the
+ * AI acting in the same second cannot both decide.
+ */
+async function reviewSubmission({ id, status, feedback, rating, from = "Coordinator", reviewedBy = "" }) {
+    if (status !== "Approved" && status !== "Rejected") return { success:false, message:"status must be Approved or Rejected" };
 
     let performance = "B";
     if(status === "Approved"){ performance = "A+"; }
 
     const ratingValue = rating ? Number(rating) : 0;
 
-    await Submission.findByIdAndUpdate(id, {
+    const existing = await Submission.findOneAndUpdate({ _id: id, reviewedOnce: { $ne: true } }, {
         status,
         feedback,
         reviewedOnce: true,
+        reviewedBy,
         attendanceAllowed: status === "Approved",
         performance,
         tasksCompleted: status === "Approved" ? 1 : 0,
         coordinatorRating: ratingValue
-    }, { new:true });
+    });
+    if(!existing){
+        const seen = await Submission.findById(id).select("reviewedOnce").lean();
+        if(!seen) return { success:false, message:"Submission not found" };
+        return { success:false, message:"Already reviewed. Cannot change decision.", alreadyReviewed:true };
+    }
 
     // Synchronize to the automated TaskAssignment if applicable
     await TaskAssignment.findOneAndUpdate(
@@ -4896,7 +4907,7 @@ try{
             title: `Task ${status}`,
             message: `Your task submission has been ${status.toLowerCase()}. Feedback: ${feedback || "No feedback provided"}`,
             type: status === "Approved" ? "success" : "warning",
-            from: "Coordinator",
+            from,
             targetType: "student",
             targetEmployeeId: submission.employeeId,
             targetDomain: submission.domain
@@ -4951,7 +4962,13 @@ try{
         await recomputeBadgesFor(submission.employeeId);
     }
 
-    res.json({ success:true, message:"Status Updated Successfully" });
+    return { success:true, message:"Status Updated Successfully" };
+}
+
+app.post("/update-status", async(req,res)=>{
+try{
+    const { id, status, feedback, rating } = req.body;
+    res.json(await reviewSubmission({ id, status, feedback, rating }));
 }catch(error){
     console.log(error);
     res.json({ success:false });
@@ -12309,7 +12326,9 @@ server.listen(PORT, "0.0.0.0", ()=>{
             // The AI Coordinator's reminders and coordinators' summaries.
             // AI_COORDINATOR=off switches these off too.
             try {
-                require("./services/aiCoordinatorJobs").start();
+                const aiJobs = require("./services/aiCoordinatorJobs");
+                aiJobs.attach({ review: reviewSubmission });
+                aiJobs.start();
             } catch (err) {
                 console.error("[ai-coordinator] Failed to schedule its jobs:", err.message);
             }

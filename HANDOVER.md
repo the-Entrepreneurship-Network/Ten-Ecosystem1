@@ -885,24 +885,41 @@ the dashboard entries.
   praise. Work nobody could open is never said to match the task.
   - The result is `Submission.aiCheck`. The coordinator's card shows it, with
     the draft already in the feedback box: approving is the existing Approve
-    button. **Re-check** runs it again (`POST
+    button. Clear cases the AI reviews itself (below). **Re-check** runs it again (`POST
     /api/v2/ai-coordinator/precheck/:id`).
   - The student's card shows a line marked as the AI's, and a portal and
     phone notice (no email) when something needs fixing.
-  - It never writes `feedback` or `status`. The step it replaced wrote
-    Gemini's text into `feedback`, where the student saw it as "COORDINATOR
-    FEEDBACK".
+  - The pre-check itself never writes `feedback` or `status`. The step it
+    replaced wrote Gemini's text into `feedback`, where the student saw it as
+    "COORDINATOR FEEDBACK".
   - Without `GITHUB_TOKEN` GitHub allows 60 lookups an hour from the server
     (2 per check); past that the repository line says "not checked". A free
     token raises it to 5,000; a token GitHub refuses is dropped and the check
     asks without it.
-  - **The backlog.** Waiting submissions that never had a pre-check (handed in
-    before the AI Coordinator went live, or whose check could not start) are
-    checked oldest first, a minute after every start and at 08:35 IST. They go
-    one at a time, 10 seconds apart, or 5 minutes after a GitHub repository
-    without `GITHUB_TOKEN`. At most 150 pre-checks a day, because Gemini's free
-    quota is shared with the exam papers and the chat; the rest go the next
-    day. A student's own hand-in is checked whatever the count.
+  - **The review of waiting submissions** (`reviewBacklog`, a minute after
+    every start, 02:05 and 08:35 IST). Every waiting submission, oldest first:
+    a pre-check where none is fresh (under 24 hours, by Gemini), then, for
+    those handed in within the last 60 days, the AI's own decision through
+    `reviewSubmission()` in `server.js`, the same function as the Approve
+    button, so the student's notice, the Task Journey, milestones, the
+    certificate check and badges happen the same way. `reviewedBy: "ai"`
+    marks it, and both dashboards label it.
+    - Approved: every check passed, Gemini read it (`by: "ai"`) and did not
+      say the work is something else, and the link opened or the repository
+      is public and not empty. Feedback is the AI's draft.
+    - Asked for changes (`Rejected`, which the student can resubmit): a check
+      failed, or Gemini said the work is not the task. Feedback says what to
+      fix.
+    - Otherwise it waits for a person and is tried again next run: no
+      pre-check, Gemini did not read it, or the link could not be checked.
+      Older than 60 days: pre-checked, never decided. The daily report counts
+      each of these.
+    - Pacing: 10 seconds apart, 2.5 minutes after a GitHub repository without
+      `GITHUB_TOKEN`. At most 150 new pre-checks a day, because Gemini's free
+      quota is shared with the exam papers and the chat; a decision on a fresh
+      check costs nothing. A student's own hand-in is checked whatever the
+      count. **`AI_COORDINATOR_REVIEW=off`** keeps the pre-checks and leaves
+      every decision to a person.
 - **Reminders** (10:05 IST):
   - every day, to students away 3 to 13 days: portal, phone and email (not
     for `emailOptOut`). At most 300 a day; the rest wait for the next day.
@@ -922,12 +939,13 @@ the dashboard entries.
     gets nothing.
 - **Daily report** (10:20 IST), the proof of what it did: to the team inbox
   (`SUPPORT_COPY_TO`) from the help desk's mailbox, like the Server ops emails.
-  It counts the last 24 hours of answers, hand-overs, pre-checks, reminders and
-  summaries, with the latest examples (contact details removed), and how many
-  submissions still wait. It is also sent when a backlog run ends. Without the
+  It counts the last 24 hours of answers, hand-overs, reviews (approved and
+  asked for changes), pre-checks, reminders and summaries, with the latest
+  examples (contact details removed), and how many submissions still wait and
+  why. It is also sent when a backlog run ends. Without the
   help desk mailbox it is only written to the log.
 - **Records:** `AiCoordinatorLog`, kept 120 days: answers, hand-overs (with
-  the question), pre-checks, reminders and summaries.
+  the question), pre-checks, reviews, reminders and summaries.
 
 ---
 
@@ -1060,7 +1078,7 @@ server's clock, and **whether the EC2 box is on UTC is UNSURE**:
 | Hourly at :00, :20, :40 | Certificate pipeline: escalate to HR after 24 h; issue LOC/LOR when the rules are met (or add a fine); issue offer letters 24 h after documents are submitted | `routes/v2/certificates.js` | **none**, every process |
 | Every 30 min, and daily 09:00, 23:55, 08:00 IST | Automation crons: offer letters for pending documents; daily certificate requests; auto-approval after 24 h; auto-issue after the HR deadline; mark active students present at 23:55 (not Sundays); email-health alert at 08:00 | `services/automationCron.js` | `ENABLE_AUTOMATION_CRON=false` or `DISABLE_CRON_JOBS=true` |
 | Every 30 min (IST) | Refer & Earn settle: coins for both students, shares, reversals (§7.13) | `services/referrals.js` (`startSweep`) | `ENABLE_AUTOMATION_CRON=false` or `DISABLE_CRON_JOBS=true`; worker 0 only |
-| 08:35 (and a minute after each start), 09:05, 10:05 and 10:20 IST | AI Coordinator: the pre-check backlog; the coordinators' summary; student reminders; the daily report to the team inbox (§7.14) | `services/aiCoordinatorJobs.js` (`start`) | `AI_COORDINATOR=off`, `ENABLE_AUTOMATION_CRON=false` or `DISABLE_CRON_JOBS=true`; worker 0 only |
+| 02:05 and 08:35 (and a minute after each start), 09:05, 10:05 and 10:20 IST | AI Coordinator: the review of waiting submissions; the coordinators' summary; student reminders; the daily report to the team inbox (§7.14) | `services/aiCoordinatorJobs.js` (`start`) | `AI_COORDINATOR=off`, `ENABLE_AUTOMATION_CRON=false` or `DISABLE_CRON_JOBS=true`; worker 0 only |
 | 23:05 and 03:15 (`ATTENDANCE_TZ`, default IST) | Attendance report to WhatsApp; purge sign-in events older than 90 days | `services/v2/attendanceAgent.js` | `ATTENDANCE_AGENT_ENABLED=false` |
 | 02:37, 08:37, 14:37, 20:37 IST | College discovery crawl (sends nothing) | `services/collegeDiscovery.js` | `COLLEGE_AGENT_CRON=off` |
 | 07:17, 19:17 IST | Idea agent | `services/ideaAgent.js` | off unless `IDEA_AGENT_ENABLED=true` |

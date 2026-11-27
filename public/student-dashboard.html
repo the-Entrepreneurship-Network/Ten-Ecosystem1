@@ -3494,7 +3494,7 @@ function renderSubmissions(submissions){
         <h4 style="font-size:13px;color:#94a3b8;font-weight:700;margin-bottom:6px;">Review &amp; Feedback</h4>
         ${sub.feedback && sub.feedback !== "No Feedback Yet"
           ? `<div style="padding:12px;background:rgba(16,185,129,0.06);border-left:3px solid #10b981;border-radius:6px;">
-               <div style="font-size:11px;color:#10b981;font-weight:700;margin-bottom:4px;">📝 ${sub.aiFeedback ? 'AI FEEDBACK' : 'COORDINATOR FEEDBACK'}</div>
+               <div style="font-size:11px;color:#10b981;font-weight:700;margin-bottom:4px;">${sub.reviewedBy === 'ai' ? '🤖 AI COORDINATOR FEEDBACK' : '📝 COORDINATOR FEEDBACK'}</div>
                <div style="font-size:13px;color:#c8d4e8;line-height:1.6;">${sub.feedback}</div>
              </div>`
           : `<div style="font-size:12px;color:#64748b;">⏳ Feedback pending...</div>`

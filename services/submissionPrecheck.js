@@ -11,8 +11,9 @@
  *     with a draft of the feedback.
  * The result is stored on the submission as `aiCheck`. The coordinator sees it
  * on the card, with the draft already in the feedback box, so approving is one
- * click. Nothing here approves or rejects: the decision stays with a person,
- * because certificates depend on it.
+ * click. Nothing here approves or rejects: that is the coordinator, or for the
+ * clear cases the AI Coordinator's review in services/aiCoordinatorJobs.js,
+ * both through the same path, because certificates depend on it.
  *
  * This replaces the old step that wrote Gemini's text straight into `feedback`,
  * where the student saw it as "COORDINATOR FEEDBACK" before any coordinator had

@@ -13,9 +13,13 @@
  *                     waiting, who was handed over, who is under 75%, what the
  *                     AI answered. By email to coordinators with an address,
  *                     and in the dashboard's AI Assistant tab, always current.
- *   08:35 every day,  the pre-check for every waiting submission that never
- *   and on boot       had one (those handed in before the AI Coordinator went
- *                     live, or whose check could not start), oldest first.
+ *   02:05 and 08:35,  every waiting submission, oldest first: a pre-check
+ *   and on boot       where none is fresh, and, for those handed in within
+ *                     the last 60 days, the AI's own review through the
+ *                     coordinator's review path: approved when every check
+ *                     passed and Gemini read it, asked for changes when a
+ *                     check failed or the work is not the task. The rest
+ *                     waits for a person and is named in the report.
  *   10:20 every day   a report to the team inbox (SUPPORT_COPY_TO) of what the
  *                     AI did in the last 24 hours; also when a backlog run ends.
  *
@@ -296,7 +300,7 @@ function summaryEmail(summary, coordinatorName) {
     return mailer.renderEmail({
         heading: `${summary.domain}: today's summary`,
         name: coordinatorName,
-        bodyHtml: '<p style="margin:0;">Here is what the AI Coordinator saw in your domain. It approves nothing: every decision is yours.</p>' + bodyHtml,
+        bodyHtml: '<p style="margin:0;">Here is what the AI Coordinator saw in your domain. It reviews the clear cases itself, labelled as its own; the rest waits for you.</p>' + bodyHtml,
         cta: { label: 'Open the AI Assistant', url: mailer.PORTAL_URL + '/coordinator-dashboard.html' },
         footerWhy: `You coordinate the ${summary.domain} domain on the TEN portal.`
     });
@@ -347,58 +351,131 @@ async function runSummaries(now = new Date()) {
     return { domains, emails };
 }
 
-// ── The pre-check backlog ────────────────────────────────────────────────
+// ── Reviewing the waiting submissions ────────────────────────────────────
 
 /**
  * Gemini's free daily quota is shared with the exam papers and the chat, so the
- * backlog stops once this many pre-checks (of any kind) were made today and
- * carries on tomorrow. A student's own hand-in is checked whatever the count.
+ * backlog stops asking it once this many pre-checks (of any kind) were made
+ * today and carries on tomorrow. A student's own hand-in is checked whatever
+ * the count, and a submission whose check is already fresh needs no new one.
  */
 const PRECHECKS_PER_DAY = 150;
+/** A pre-check this recent is reused rather than made again. */
+const FRESH_MS = 24 * 3600 * 1000;
+/** Submissions handed in within this many days are reviewed by the AI; older
+ *  ones only get their pre-check, and wait for a person. */
+const REVIEW_DAYS = 60;
 const PAUSE_MS = 10 * 1000;
 /** After a GitHub repository, without GITHUB_TOKEN: GitHub allows 60 lookups an
- *  hour and a repository takes 2, so this uses 24 and leaves the rest for new hand-ins. */
-const GITHUB_PAUSE_MS = 5 * 60 * 1000;
+ *  hour and a repository takes 2; this uses 48 and leaves 12 for new hand-ins. */
+const GITHUB_PAUSE_MS = 150 * 1000;
 /** Waiting for a coordinator (a fresh object each time: mongoose may cast a filter in place). */
 const pending = (extra) => Object.assign({ status: 'Pending', reviewedOnce: { $ne: true } }, extra);
 const istMidnight = (d) => new Date(istDateKey(d) + 'T00:00:00+05:30');
+/** AI_COORDINATOR_REVIEW=off keeps the pre-checks and leaves every decision to a person. */
+const reviewOn = () => !/^(off|false|0|no)$/i.test(String(process.env.AI_COORDINATOR_REVIEW || 'on').trim());
+
+let reviewFn = null;
+/** server.js hands over its reviewSubmission(), the path the coordinator's Approve button takes. */
+function attach({ review } = {}) {
+    if (review) reviewFn = review;
+}
+
+/**
+ * What the AI does with a pre-checked submission. Approved only when every
+ * check passed, Gemini read it and did not say the work is something else;
+ * asked for changes when a check failed or Gemini said it is not the task;
+ * otherwise nothing, and it waits for a person (the report names it).
+ *
+ *   { status: 'Approved' | 'Rejected', feedback } or { wait: why }
+ */
+function decide(check) {
+    if (!check) return { wait: 'no pre-check yet' };
+    if (check.problems && check.problems.length) return { status: 'Rejected', feedback: check.draft };
+    if (check.by !== 'ai') return { wait: 'Gemini did not read it' };
+    if (check.match === 'no') return { status: 'Rejected', feedback: check.draft };
+    const opened = (check.link && check.link.verdict === 'opens') || (check.repo && check.repo.public && !check.repo.empty);
+    if (!opened) return { wait: 'the link could not be checked' };
+    return { status: 'Approved', feedback: check.draft };
+}
 
 let backlogRunning = false;
-/** Pre-check, oldest first, every waiting submission that never had one. */
-async function precheckBacklog() {
+/**
+ * Every waiting submission, oldest first: a pre-check where there is none fresh,
+ * then, within REVIEW_DAYS, the AI's decision through the coordinator's own
+ * review path. Nothing is dropped: what it cannot decide stays waiting, is
+ * tried again next run, and is counted in the report.
+ */
+async function reviewBacklog() {
     if (backlogRunning || !ai.enabled() || mongoose.connection.readyState !== 1) return null;
     backlogRunning = true;
     const Submission = mongoose.model('Submission');
-    const out = { waiting: 0, checked: 0, left: 0, stopped: '' };
+    const out = { waiting: 0, checked: 0, approved: 0, changes: 0, waited: 0, older: 0, left: 0, stopped: '' };
+    const cutoff = new Date(Date.now() - REVIEW_DAYS * DAY);
     try {
         // The list is taken once: a new hand-in is checked when it arrives.
-        const subs = await Submission.find(pending({ aiCheck: null }))
-            .sort({ submittedAt: 1 }).select('_id image').lean();
+        const subs = await Submission.find(pending()).sort({ submittedAt: 1 }).select('_id image submittedAt aiCheck employeeId domain task').lean();
+        const recent = subs.filter((x) => new Date(x.submittedAt || 0) >= cutoff);
+        const older = subs.filter((x) => new Date(x.submittedAt || 0) < cutoff && !x.aiCheck);
         out.waiting = subs.length;
+        out.older = subs.length - recent.length;
         if (!subs.length) return out;
-        console.log(`[ai-coordinator] backlog: ${subs.length} waiting submission(s) without a pre-check.`);
-        for (let i = 0; i < subs.length; i++) {
+        console.log(`[ai-coordinator] backlog: ${subs.length} waiting submission(s), ${recent.length} within ${REVIEW_DAYS} days.`);
+
+        let budgetOut = false;
+        const fresh = (c) => c && c.at && (Date.now() - new Date(c.at)) < FRESH_MS && c.by === 'ai';
+        for (const sub of recent.concat(older)) {
             if (!ai.enabled() || mongoose.connection.readyState !== 1) { out.stopped = ai.enabled() ? 'the database went away' : 'switched off'; break; }
-            const today = await AiCoordinatorLog.countDocuments({ kind: 'precheck', createdAt: { $gte: istMidnight(new Date()) } });
-            if (today >= PRECHECKS_PER_DAY) { out.stopped = `today's ${PRECHECKS_PER_DAY} pre-checks are made; the rest go tomorrow`; break; }
-            // A screenshot counts as missing only where one was attached and is
-            // gone: a Task Journey hand-in never has one.
-            const check = await precheck.run(subs[i]._id, { screenshotExpected: !!subs[i].image });
-            if (check) out.checked += 1;
-            if (check && out.checked % 10 === 0) console.log(`[ai-coordinator] backlog: ${out.checked} of ${subs.length} pre-checked.`);
-            if (i < subs.length - 1) {
-                await module.exports._internal.wait(check && check.repo && !process.env.GITHUB_TOKEN ? GITHUB_PAUSE_MS : PAUSE_MS);
+            let check = fresh(sub.aiCheck) ? sub.aiCheck : null;
+            let network = false;
+            if (!check) {
+                if (!budgetOut) {
+                    const today = await AiCoordinatorLog.countDocuments({ kind: 'precheck', createdAt: { $gte: istMidnight(new Date()) } });
+                    budgetOut = today >= PRECHECKS_PER_DAY;
+                    if (budgetOut) out.stopped = `today's ${PRECHECKS_PER_DAY} pre-checks are made; the rest go tomorrow`;
+                }
+                if (budgetOut) { out.waited += 1; continue; }
+                // A screenshot counts as missing only where one was attached and
+                // is gone: a Task Journey hand-in never has one. The decision
+                // below tells the student what to fix, so the check stays quiet.
+                check = await precheck.run(sub._id, { screenshotExpected: !!sub.image, notify: false });
+                network = true;
+                if (check) out.checked += 1;
             }
+            const inScope = new Date(sub.submittedAt || 0) >= cutoff;
+            if (check && inScope && reviewOn() && reviewFn) {
+                const d = decide(check);
+                if (d.status) {
+                    const r = await reviewFn({ id: sub._id, status: d.status, feedback: d.feedback, from: ai.NAME, reviewedBy: 'ai' });
+                    if (r && r.success) {
+                        out[d.status === 'Approved' ? 'approved' : 'changes'] += 1;
+                        await AiCoordinatorLog.create({
+                            kind: 'review', employeeId: sub.employeeId || '', domain: sub.domain || '',
+                            question: String(sub.task || '').slice(0, 200), reply: String(d.feedback || '').slice(0, 1000),
+                            source: d.status === 'Approved' ? 'approve' : 'changes', reason: check.match || ''
+                        }).catch((err) => console.error('[ai-coordinator] log failed:', err.message));
+                    } else if (!(r && r.alreadyReviewed)) {
+                        console.error('[ai-coordinator] review not saved:', (r && r.message) || 'no answer');
+                        out.waited += 1;
+                    }
+                } else {
+                    out.waited += 1;
+                }
+            } else if (check && inScope) {
+                out.waited += 1;
+            }
+            const done = out.checked + out.approved + out.changes;
+            if (network && done % 10 === 0) console.log(`[ai-coordinator] backlog: ${out.checked} pre-checked, ${out.approved} approved, ${out.changes} asked for changes so far.`);
+            if (network) await module.exports._internal.wait(check && check.repo && !process.env.GITHUB_TOKEN ? GITHUB_PAUSE_MS : PAUSE_MS);
         }
     } finally {
         backlogRunning = false;
     }
-    out.left = await Submission.countDocuments(pending({ aiCheck: null }));
-    console.log(`[ai-coordinator] backlog: ${out.checked} pre-checked, ${out.left} still without one` +
-        (out.stopped ? ` (${out.stopped}).` : '.'));
-    if (out.checked) {
-        await sendReport(new Date(), `pre-check backlog: ${out.checked} checked, ${out.left} ` +
-            (out.stopped && out.left ? 'left for tomorrow' : 'still without one'))
+    out.left = await Submission.countDocuments(pending());
+    console.log(`[ai-coordinator] backlog: ${out.checked} pre-checked, ${out.approved} approved, ${out.changes} asked for changes, ` +
+        `${out.left} still waiting` + (out.stopped ? ` (${out.stopped}).` : '.'));
+    if (out.checked || out.approved || out.changes) {
+        await sendReport(new Date(), `review backlog: ${out.approved} approved, ${out.changes} asked for changes, ${out.left} still waiting`)
             .catch((err) => console.error('[ai-coordinator] report failed:', err.message));
     }
     return out;
@@ -409,17 +486,19 @@ async function precheckBacklog() {
 /** Everything the AI Coordinator did in the 24 hours to `now`, from its own log. */
 async function buildReport(now = new Date()) {
     const since = new Date(now - DAY);
+    const cutoff = new Date(now - REVIEW_DAYS * DAY);
     const Submission = mongoose.model('Submission');
-    const [logs, waiting, unchecked, mails] = await Promise.all([
+    const [logs, waiting, unchecked, older, mails] = await Promise.all([
         AiCoordinatorLog.find({ createdAt: { $gt: since, $lte: now } }).sort({ createdAt: -1 }).limit(5000).lean(),
         Submission.countDocuments(pending()),
         Submission.countDocuments(pending({ aiCheck: null })),
+        Submission.countDocuments(pending({ submittedAt: { $lt: cutoff } })),
         MailHistory.find({ mailType: 'ai_coordinator_summary', sentAt: { $gt: since, $lte: now } }).select('status').lean()
     ]);
     const of = (kind) => logs.filter((l) => l.kind === kind);
     return {
-        since, now, waiting, unchecked,
-        answers: of('answer'), handovers: of('handover'), prechecks: of('precheck'),
+        since, now, waiting, unchecked, older,
+        answers: of('answer'), handovers: of('handover'), prechecks: of('precheck'), reviews: of('review'),
         reminders: of('reminder'), summaries: of('summary'),
         summaryEmails: { sent: mails.filter((m) => m.status !== 'failed').length, failed: mails.filter((m) => m.status === 'failed').length }
     };
@@ -431,21 +510,24 @@ function reportText(r) {
     const at = (d) => new Date(d).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
     const byReason = Object.entries(r.handovers.reduce((m, h) => { m[h.source] = (m[h.source] || 0) + 1; return m; }, {}))
         .map(([k, v]) => `${ai.HANDOVER_LABEL[k] || k}: ${v}`).join('; ');
+    const unsure = Math.max(0, r.waiting - r.unchecked - r.older);
     return [
         `What the AI Coordinator did from ${at(r.since)} to ${at(r.now)} (IST).`,
         '',
         `1. Answered students in Messages: ${r.answers.length} (${n(r.answers, 'saved')} from saved answers, ${n(r.answers, 'ai')} by Gemini).`,
         ...r.answers.slice(0, 3).map((a) => `   ${at(a.createdAt)}, ${a.employeeId}: "${clip(ai.scrub(a.question), 90)}" -> "${clip(a.reply, 140)}"`),
         `2. Handed over to a coordinator: ${r.handovers.length}${byReason ? ` (${byReason})` : ''}.`,
-        `3. Pre-checked submissions: ${r.prechecks.length} (${n(r.prechecks, 'approve')} look ready, ${n(r.prechecks, 'changes')} need changes).`,
-        `   Waiting for a coordinator now: ${r.waiting}, of which ${r.unchecked} still have no pre-check.`,
-        ...r.prechecks.slice(0, 3).map((p) => `   ${at(p.createdAt)}, ${p.employeeId}: "${clip(p.question, 70)}" -> ` +
-            (p.source === 'approve' ? 'looks ready' : 'needs changes') + (p.reply ? `: ${clip(p.reply, 120)}` : '')),
+        `3. Reviewed submissions: ${r.reviews.length} (${n(r.reviews, 'approve')} approved, ${n(r.reviews, 'changes')} asked for changes), after ${r.prechecks.length} pre-check(s).`,
+        ...r.reviews.slice(0, 3).map((p) => `   ${at(p.createdAt)}, ${p.employeeId}: "${clip(p.question, 70)}" -> ` +
+            (p.source === 'approve' ? 'approved' : 'asked for changes') + (p.reply ? `: ${clip(p.reply, 120)}` : '')),
+        `   Still waiting for a coordinator: ${r.waiting}. Of these, ${r.unchecked} have no pre-check yet, ` +
+            `${unsure} could not be checked automatically or Gemini did not read them (a person should look), ` +
+            `and ${r.older} are older than ${REVIEW_DAYS} days (left for a person).`,
         `4. Reminders: ${r.reminders.length} (${n(r.reminders, 'inactive')} sign-in, ${n(r.reminders, 'week')} unfinished week, ${n(r.reminders, 'weekly')} weekly progress).`,
         `5. Coordinator summaries: ${r.summaries.length} domain(s); ${r.summaryEmails.sent} email(s) sent, ${r.summaryEmails.failed} failed.`,
         '',
-        'The AI approves nothing: a coordinator approves, with the AI\'s draft already in the feedback box.',
-        'The details are in the coordinator dashboard, under AI Assistant.'
+        'The AI approves a submission only when every check passed and Gemini read it; it asks for changes when a check failed or the work is not the task.',
+        'Anything it could not check waits for a person. Each decision is labelled as the AI\'s in both dashboards.'
     ].join('\n');
 }
 
@@ -455,7 +537,7 @@ async function sendReport(now = new Date(), title = '') {
     const r = await buildReport(now);
     const text = reportText(r);
     console.log(`[ai-coordinator] report: ${r.answers.length} answered, ${r.handovers.length} handed over, ` +
-        `${r.prechecks.length} pre-checked, ${r.reminders.length} reminder(s), ${r.summaries.length} summary(ies).`);
+        `${r.reviews.length} reviewed, ${r.prechecks.length} pre-checked, ${r.reminders.length} reminder(s), ${r.summaries.length} summary(ies).`);
     const gmail = require('./supportDesk/gmail');
     const to = String(process.env.SUPPORT_COPY_TO || '').trim();
     if (!to || !gmail.configured()) {
@@ -465,19 +547,22 @@ async function sendReport(now = new Date(), title = '') {
     const MailComposer = require('nodemailer/lib/mail-composer');
     const from = (await gmail.profile()).emailAddress;
     const subject = '[ai-coordinator] ' + (title ||
-        `daily report: ${r.answers.length} answered, ${r.prechecks.length} pre-checked, ${r.reminders.length} reminders`);
+        `daily report: ${r.answers.length} answered, ${r.reviews.length} reviewed, ${r.reminders.length} reminders`);
     const raw = await new MailComposer({ from, to, subject, text }).compile().build();
     await gmail.send(raw.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
     return { sent: true, text };
 }
 
 let started = false;
-/** Called once from server.js on the cron worker. */
+/** Called once from server.js on the cron worker, after attach(). */
 function start() {
     if (started) return;
     started = true;
     const tz = { timezone: 'Asia/Kolkata' };
-    const backlog = () => precheckBacklog().catch((err) => console.error('[ai-coordinator] backlog:', err.message));
+    const backlog = () => reviewBacklog().catch((err) => console.error('[ai-coordinator] backlog:', err.message));
+    // Twice a day: at night, when nobody is sitting an exam on the same Gemini
+    // quota, and before the coordinators' morning summary.
+    cron.schedule('5 2 * * *', backlog, tz);
     cron.schedule('35 8 * * *', backlog, tz);
     cron.schedule('5 9 * * *', () => runSummaries().catch((err) => console.error('[ai-coordinator] summaries:', err.message)), tz);
     cron.schedule('5 10 * * *', () => runReminders().catch((err) => console.error('[ai-coordinator] reminders:', err.message)), tz);
@@ -485,10 +570,11 @@ function start() {
     // And a minute after each start, so a deploy picks up whatever is waiting.
     const soon = () => setTimeout(backlog, 60 * 1000).unref();
     if (mongoose.connection.readyState === 1) soon(); else mongoose.connection.once('connected', soon);
-    console.log('[ai-coordinator] backlog pre-check 08:35 and on start, summaries 09:05, reminders 10:05, report 10:20 (IST) scheduled.');
+    console.log('[ai-coordinator] submission review 02:05, 08:35 and on start' + (reviewOn() ? '' : ' (pre-checks only, AI_COORDINATOR_REVIEW=off)') +
+        ', summaries 09:05, reminders 10:05, report 10:20 (IST) scheduled.');
 }
 
 module.exports = {
-    start, runReminders, runSummaries, buildSummary, runningStudents, precheckBacklog, buildReport, sendReport,
-    _internal: { summaryEmail, claim, latest, reportText, wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)), PRECHECKS_PER_DAY }
+    attach, start, runReminders, runSummaries, buildSummary, runningStudents, reviewBacklog, buildReport, sendReport,
+    _internal: { summaryEmail, claim, latest, reportText, decide, wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)), PRECHECKS_PER_DAY, REVIEW_DAYS }
 };

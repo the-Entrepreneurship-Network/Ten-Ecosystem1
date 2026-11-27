@@ -1474,7 +1474,7 @@ Test Cases:
           <div class="section-icon">🤖</div>
           <div>
             <div class="section-title" style="font-size:18px;font-weight:800;color:#fff;">TEN AI Coordinator</div>
-            <div style="font-size:12px;color:var(--muted);margin-top:2px;max-width:640px;">An AI assistant, labelled as one, that answers your students' private messages at any hour. It passes marks, complaints, payments and personal matters to you, pre-checks every submission and sends reminders. It approves nothing: you decide.</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px;max-width:640px;">An AI assistant, labelled as one, that answers your students' private messages at any hour. It passes marks, complaints, payments and personal matters to you, pre-checks every submission and sends reminders. It reviews the clear cases itself, labelled as its own: approved when every check passed and the work is the task, asked for changes when a check failed. Anything it could not check waits for you.</div>
           </div>
         </div>
         <button onclick="loadAiSummary()" style="background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.35);color:#c4b5fd;padding:8px 16px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;">↻ Refresh</button>
@@ -3154,10 +3154,10 @@ function renderSubmissions(submissions){
       </div>
       ${aiCheckBlock(sub)}
       <div class="feedback-area">
-        <div class="feedback-label">Coordinator Feedback</div>
+        <div class="feedback-label">${sub.reviewedBy === "ai" ? "AI Coordinator Feedback" : "Coordinator Feedback"}</div>
         ${isReviewed
           ? `<div style="padding:10px;color:var(--muted);font-size:13px;">📝 ${sub.feedback||"No feedback provided"}</div>
-             <div class="locked-notice">🔒 Already reviewed (${sub.status}). Decision is permanent.</div>`
+             <div class="locked-notice">${sub.reviewedBy === "ai" ? "🤖 Reviewed by the AI Coordinator" : "🔒 Already reviewed"} (${sub.status}). Decision is permanent.</div>`
           : `<textarea id="feedback-${sub._id}" placeholder="Write feedback for this submission...">${(sub.feedback && sub.feedback !== "No Feedback Yet") ? sub.feedback : aiEsc((sub.aiCheck && sub.aiCheck.draft) || "")}</textarea>
              <div class="feedback-actions">
                <button class="btn btn-approve" onclick="updateStatus('${sub._id}','Approved')">✅ Approve</button>
