@@ -1229,6 +1229,34 @@ router.get('/system/info', requireAdminAPI, async (req, res) => {
   }
 });
 
+// ─── INTERVIEW ROOM: WHICH AI ─────────────────────────────────────────────────
+// Gemini (free) or Claude (paid per interview, capped a month), for the
+// Interview Room (services/aiMeeting.js). New interviews use the choice;
+// one already running keeps the AI it started with.
+router.get('/interview-ai', requireAdminAPI, async (req, res) => {
+  try {
+    res.json({ success: true, data: await require('../services/aiMeeting').aiSummary() });
+  } catch (err) {
+    console.error('[admin] interview AI read failed:', err.message);
+    res.status(500).json({ success: false, message: 'Could not read the Interview Room setting.' });
+  }
+});
+
+router.post('/interview-ai', requireAdminAPI, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const out = await require('../services/aiMeeting').saveAiSettings({
+      engine: String(b.engine || ''), claudeModel: String(b.claudeModel || ''), claudeMonthlyCap: b.claudeMonthlyCap,
+      by: (req.session && req.session.adminUser && req.session.adminUser.username) || 'admin'
+    });
+    if (out.error) return res.status(400).json({ success: false, message: out.error });
+    res.json({ success: true, data: out });
+  } catch (err) {
+    console.error('[admin] interview AI save failed:', err.message);
+    res.status(500).json({ success: false, message: 'Could not save the Interview Room setting.' });
+  }
+});
+
 // ─── AUDIT LOG ────────────────────────────────────────────────────────────────
 
 router.get('/audit-log', requireAdminAPI, async (req, res) => {

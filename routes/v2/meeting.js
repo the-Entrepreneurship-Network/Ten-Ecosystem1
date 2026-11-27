@@ -6,8 +6,9 @@
  *
  *   GET  /                    who they are, whether the room is on, when the
  *                             interview opens, today's state, past reports
- *   POST /interview/start     today's interview: its first question, or the
- *                             question it stopped at
+ *   POST /interview/start     { difficulty } → a new interview (easy, medium or
+ *                             hard) and its first question, or the question an
+ *                             unfinished one stopped at
  *   POST /interview/answer    { sessionId, answer, seconds, proctor } → score,
  *                             feedback, next question or the report
  *   POST /interview/finish    { sessionId, proctor } → the report so far
@@ -30,7 +31,7 @@ router.get('/', async (req, res) => {
         const on = ai.enabled();
         res.json(Object.assign({
             success: true, enabled: on, name: name(s), domain: s.domain || '', assistant: ai.NAME, questions: meeting.QUESTIONS
-        }, on ? await meeting.status({ student: s }) : { schedule: meeting.schedule(), state: 'off', sessionId: null, reports: [] }));
+        }, on ? await meeting.status({ student: s }) : { schedule: meeting.schedule(), state: 'off', sessionId: null, levels: meeting.LEVELS, reports: [] }));
     } catch (err) {
         console.error('[ai-meeting] me failed:', err.message);
         res.status(500).json({ success: false, message: 'Could not load the room.' });
@@ -54,7 +55,7 @@ function answer(fn) {
 }
 
 const body = (req) => req.body || {};
-router.post('/interview/start', answer((req) => meeting.startInterview({ student: req.student })));
+router.post('/interview/start', answer((req) => meeting.startInterview({ student: req.student, difficulty: String(body(req).difficulty || '').toLowerCase() })));
 router.post('/interview/answer', answer((req) => meeting.answerInterview({
     student: req.student, sessionId: body(req).sessionId, answer: body(req).answer, seconds: body(req).seconds, proctor: body(req).proctor
 })));

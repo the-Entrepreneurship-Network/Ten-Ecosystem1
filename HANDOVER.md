@@ -944,49 +944,59 @@ hidden from Messages.
 - **Records:** `AiCoordinatorLog`, kept 120 days: pre-checks, reviews, certificate approvals, Interview Room
   turns and reports, reminders and summaries.
 
-### 7.15 Interview Room (fortnightly, on camera, free)
+### 7.15 Interview Room (one attempt, on camera; Gemini or Claude)
 
 `/meeting` (`public/meeting.html`, `routes/v2/meeting.js`,
-`services/aiMeeting.js`, `models/MeetingSession.js`), opened from the
-dashboard menu and a card. The AI Coordinator interviews the student by voice
-(Chrome's speech recognition and the device's own voices, in the browser;
-typing is the fallback), so the server only passes text and it costs nothing.
-`AI_COORDINATOR=off` switches the room off with the rest.
+`services/aiMeeting.js`, `models/MeetingSession.js`), opened from the student
+dashboard's menu and a card. The AI Coordinator interviews the student by
+voice (Chrome's speech recognition and the device's own voices, in the
+browser; typing is the fallback). `AI_COORDINATOR=off` switches the room off
+with the rest.
 
-- **When:** every second Sunday (IST) from `ANCHOR` (29 Nov 2026), one
-  interview per student per opening; an unfinished one resumes the same day.
-  Outside the opening the page shows the next date and the API answers 403.
-  `INTERVIEW_OPEN=always` opens it every day, for a trial; unset it after.
-- **Questions:** eight, written by Gemini from the topics of every task the
-  student has had so far (`TaskAssignment`, the Task Journey's `DomainTask`
-  rows the student has unlocked, submitted work), at company-interview level:
-  the ideas, trade-offs and debugging behind the tasks, never the task text;
-  a weak answer gets a follow-up. Each answer is scored 0–10, strictly, with
-  two sentences of feedback. Answers are stored scrubbed, so a phone number
-  said aloud never reaches Gemini. Gemini turns are capped at 20 per student
-  per day.
-- **Camera:** required. The page runs MediaPipe's face landmarker from a CDN
-  in the browser (about 10 MB, once) and judges, four times a second, whether
-  one face is in frame with its eyes on the camera (head yaw and pitch, iris
-  position); it waits for a face before the first question, pauses answering
-  while the camera is off, and sends the running totals with each answer. The
-  video never leaves the browser. The totals are client-reported; a cheat with
-  the developer tools could zero them, and checking the video on the server
-  would cost money. If the model cannot load, the camera is still required and
-  the report says the check was unavailable.
-- **Report:** marks per question and overall, strengths, gaps and what to
-  work on before the next interview, plus the camera line. Saved on the
-  session, listed on the page, emailed to the student
-  (`utils/mailer.renderEmail`), and logged (`AiCoordinatorLog` kind
-  `meeting`, source `report`) so the daily report's item 7 lists the day's
-  interviews with their marks. "End the interview" early reports what was
-  answered, without an AI call.
-- **Payment:** none yet, by the owner's decision; the room sits in the student
-  portal and a fee can be added later. No payment gateway (standing rule).
-- Not built, by choice: a coordinator view of the marks (the daily report and
-  the database have them), snapshots of the student's face, server-side video
-  checking, and Kokoro (an in-browser neural voice, about 90 MB) if the device
-  voices are judged unclear.
+- **Who and when:** every student gets **one interview** (the first try is
+  free; a fee may come later, no gateway). The room opens every second Sunday
+  (IST) from `ANCHOR` (29 Nov 2026), all day; an unfinished interview resumes
+  the same day, and one left open from an earlier day is closed with the report
+  of what was answered. Outside an opening the page shows the next date and the
+  API answers 403. **`INTERVIEW_OPEN=always` is a trial:** open every day,
+  interviews can be repeated (two a day at most, the daily AI cap) and are
+  marked `trial`, so they do not use up anyone's one attempt. Remove it after
+  testing.
+- **Level:** the student chooses easy, medium or hard before starting (no
+  domain choice: it is theirs). The level changes what is asked (core ideas;
+  a junior-developer interview; failure cases, trade-offs and follow-ups), not
+  the strict marking. It is stored on the session and shown on the report and
+  in the email.
+- **Questions:** eight, written from the topics of every task the student has
+  had (`TaskAssignment`, unlocked Task Journey `DomainTask` rows, submitted
+  work): the ideas and debugging behind the tasks, never the task text; a weak
+  answer gets a follow-up; each answer scored 0–10 with two sentences of
+  feedback. Answers are stored scrubbed, so a phone number said aloud never
+  reaches the AI. AI turns are capped at 20 per student per day.
+- **Which AI (admin portal, "Interview Room AI"):** Gemini (free) or Claude
+  (paid), stored in `models/InterviewSetting.js` (`_id: "interview"`), read
+  and saved through `GET/POST /api/admin-internal/interview-ai`. Claude runs
+  through `utils/claude.js` (the official `@anthropic-ai/sdk`, structured JSON
+  output, low effort; Opus and Sonnet with Anthropic's server-side fallback on
+  a safety decline) and needs **`ANTHROPIC_API_KEY`** in `.env`. The admin
+  picks the model, each shown with its cost per interview (estimates in
+  `CLAUDE_COST_INR`: Haiku 5.5 about ₹0.50, Sonnet 5.5 about ₹9, Opus 5.5
+  about ₹18), and a **monthly limit on Claude interviews** (default 50): past
+  it, and without the key, new interviews run on Gemini. An interview keeps the
+  AI it started with (`MeetingSession.engine`); a turn Claude fails is answered
+  by Gemini. Anthropic's console shows the real spend.
+- **Camera:** required. MediaPipe's face landmarker runs in the browser and
+  judges four times a second whether one face is in frame with its eyes on the
+  camera; the page sends the totals with each answer. The video never leaves
+  the browser. The totals are client-reported (a cheat with the developer tools
+  could zero them); checking the video on the server would cost money.
+- **Report:** marks per question and overall, the level, what to improve, the
+  camera line. Saved, listed on the page, emailed to the student, and logged
+  (`AiCoordinatorLog` kind `meeting`, source `report`, with the level and the
+  AI) for the daily report's item 5.
+- Not built, by choice: entries in the other portals (coordinator, HR,
+  partners) since the interview is about a student's own tasks; a coordinator
+  page for the marks; server-side video checking; Kokoro voices.
 
 ### 8.1 The collections that matter most
 
