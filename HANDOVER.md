@@ -368,6 +368,9 @@ loads.
   - Every *personal* notification (`targetType: 'student'`) is also emailed
     and pushed to the phone, by the model's post-save hook
     (`services/notificationEmail.js`, `services/notificationPush.js`).
+  - Those emails share one pooled SMTP connection at five a second. The hook
+    does not wait for them, so a loop of notices (the AI Coordinator's
+    reminders, §7.14) would otherwise be one login per message, all at once.
   - Push stays dormant until VAPID keys are set (§12).
   - A second system, `EcosystemNotification`, is written by several features
     but **never shown** anywhere (§17).

@@ -34,7 +34,13 @@ let transporter = null;
 function getTransporter() {
     // Built on first use, not at require time: the module is pulled in from a
     // mongoose hook, and .env is loaded before any of that runs.
-    if (!transporter) transporter = createEmailTransporter();
+    //
+    // Pooled: one connection, five messages a second. The hook fires this
+    // without waiting, so a job that saves many personal notices in a loop
+    // (the AI Coordinator's sign-in reminders, up to 300 a morning) would
+    // otherwise open a connection and log in once per message, all at the same
+    // moment — the burst utils/mailer.js describes the provider refusing.
+    if (!transporter) transporter = createEmailTransporter({ pool: true });
     return transporter;
 }
 
