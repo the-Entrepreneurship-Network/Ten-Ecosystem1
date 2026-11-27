@@ -276,11 +276,11 @@ describe('dates, and checking its own work before handing it over', () => {
   it('re-reads the finished page and records what it verified', async () => {
     /*
      * Everything before this chooses what to add by projection. This re-reads
-     * the result as an ATS would and goes back for more if it is short —
-     * bounded to three passes, so it cannot fail to terminate.
+     * the result as an ATS would, so the number recorded is the number the
+     * page earns. It no longer goes back for more work the student did not
+     * pick just to clear 92.
      */
     const { out } = await tailor();
-    expect(out.session.verified).toBeGreaterThanOrEqual(92);
     expect(out.session.verified).toBe(out.report.score);
   });
 });
@@ -297,6 +297,7 @@ describe('a resume built from scratch clears the same bar as one uploaded', () =
   const buildFromScratch = async () => {
     const a = agent();
     let out = await turn(a, 'build me a resume', null);
+    let beforeTailor = null;
     for (let i = 0; i < 50; i += 1) {
       if (out.kind === 'ask') {
         const opts = choices(out);
@@ -304,11 +305,12 @@ describe('a resume built from scratch clears the same bar as one uploaded', () =
         // eslint-disable-next-line no-await-in-loop
         out = await turn(a, typed !== undefined ? typed : (opts.length ? opts[0].value : 'skip'), out.session);
       } else if (out.jobs) {
+        beforeTailor = require('../../routes/v2/resumeAgent').scanResume(out.session.resumeText, out.session.scoreTarget || out.session.target).score;
         // eslint-disable-next-line no-await-in-loop
         out = await turn(a, `I want to tailor my resume for the ${out.jobs[0].title} role at ${out.jobs[0].company}`, out.session);
       } else break;
     }
-    return out;
+    return Object.assign(out, { beforeTailor });
   };
 
   it('reaches the bar instead of stopping at the conversion', async () => {
@@ -320,7 +322,10 @@ describe('a resume built from scratch clears the same bar as one uploaded', () =
      */
     const out = await buildFromScratch();
     expect(out.kind).toBe('build');
-    expect(out.report.score).toBeGreaterThanOrEqual(92);
+    /* The tailor ran on this path too: the page leaves above the conversion
+       it started from, on the work the student picked. */
+    expect(out.beforeTailor).not.toBeNull();
+    expect(out.report.score).toBeGreaterThan(out.beforeTailor);
   });
 
   it('never turns an employer into an achievement', async () => {
@@ -351,7 +356,7 @@ describe('a resume built from scratch clears the same bar as one uploaded', () =
   });
 });
 
-describe('a wrong pick is overruled, and the student is told so', () => {
+describe('only the work the student picks goes on, and the reply says what is owed', () => {
   const RESUME_B = RESUME;
   const tailorWith = async (mode) => {
     const a = agent();
@@ -377,41 +382,34 @@ describe('a wrong pick is overruled, and the student is told so', () => {
     return out;
   };
 
-  it('adds the right work anyway when the weakest option was chosen', async () => {
-    /*
-     * Somebody picking from a list of thirty will sometimes pick the weakest
-     * one for the job they are aiming at. Their pick is never removed — it is
-     * their plan and they may have a reason — but the page still has to clear
-     * the bar, so what the employer actually screens on goes on behind it.
-     */
-    const out = await tailorWith('worst');
-    expect(out.report.score).toBeGreaterThanOrEqual(92);
-    expect(out.reply).toMatch(/Your picks are on the page and stay there/);
-    expect(out.reply).toMatch(/what Netflix screens this role on/);
-  });
+  const SKILLS_OF = (text) => (String(text).split(/^SKILLS$/m)[1] || '').split('\n')[1] || '';
 
-  it('adds it anyway when they decline every suggestion, and says which', async () => {
-    /* Declining is a click. A page below the bar is filtered before a human
-       reads it, so the work goes on and the decision is stated out loud
-       rather than slipped in. */
+  it('adds nothing when they decline every suggestion, and names what the job wants', async () => {
+    /* Declining used to mean "pick for me": six projects named after the
+       employer went on, written as finished. It means none. */
     const out = await tailorWith('none');
-    expect(out.report.score).toBeGreaterThanOrEqual(92);
-    expect(out.reply).toMatch(/You did not want to pick any, so I chose/);
-    expect(out.reply).toMatch(/chaos testing|circuit breakers|streaming/);
+    expect(out.reply).not.toMatch(/I chose|went on behind them/);
+    expect(out.reply).not.toMatch(/Before you attach this/);
+    expect(out.session.plannedGuides || []).toEqual([]);
+    /* The student's own skills, plus what their bullets evidence ("Built REST
+       APIs" is rest api); nothing Netflix or the role asks for. */
+    expect(SKILLS_OF(out.text)).toMatch(/^Java, .*Spring Boot, SQL$/);
+    expect(SKILLS_OF(out.text)).not.toMatch(/chaos|streaming|circuit|canary|resilience|observability|jvm|kafka|kubernetes|python|redis|docker|postgres/i);
+    expect(out.reply).toMatch(/This job also asks for: .+ They are not on your page/);
   });
 
-  it('keeps good picks and is honest that more still went on', async () => {
-    /*
-     * Picking the two strongest options is not the same as picking enough:
-     * two projects rarely carry a page to the bar on their own. The note has
-     * to stay accurate rather than flattering — the picks are kept, and what
-     * went on behind them is named either way.
-     */
+  it('keeps the weakest pick and adds nothing behind it', async () => {
+    const out = await tailorWith('worst');
+    expect(out.reply).not.toMatch(/went on behind them/);
+    expect((out.session.plannedGuides || []).length).toBe(1);
+    expect(out.reply).toMatch(/Before you attach this: 1 project on the page is written as finished/);
+  });
+
+  it('keeps two good picks, and only those two', async () => {
     const out = await tailorWith('best');
-    expect(out.report.score).toBeGreaterThanOrEqual(92);
-    expect(out.reply).toMatch(/Your picks are on the page and stay there/);
-    /* And never the wording for somebody who picked nothing. */
-    expect(out.reply).not.toMatch(/You did not want to pick any/);
+    expect((out.session.plannedGuides || []).length).toBe(2);
+    expect(out.reply).toMatch(/Before you attach this: 2 projects on the page are written as finished/);
+    expect(out.reply).not.toMatch(/You did not want to pick any|went on behind them/);
   });
 });
 
@@ -704,21 +702,19 @@ describe('the tailor is shaped by the employer, not only by the role', () => {
     expect(offer.length).toBeGreaterThanOrEqual(12);
   });
 
-  it('names the company\'s skills on the page even with no advert to read', async () => {
+  it('names the company\'s skills in the reply even with no advert to read', async () => {
     /*
      * A target has no posting behind it, so the not-claimed list is empty and
      * the block came out blank — for exactly the student who needs it most.
-     * They go onto the SKILLS line, which is where a skills keyword has to be
-     * to count, rather than under a heading carrying a disclaimer that no
-     * parser indexes and no recruiter reads charitably.
+     * What the company screens on is named, with how to learn it. It used to
+     * go onto the SKILLS line as if the student already had it.
      */
     const { a, out } = await tailorFor('Netflix');
-    const done = await walk(a, out);
+    const done = await walk(a, out, 'first');
     expect(done.text).not.toMatch(/LEARNING \(/);
-    const skillsLine = done.text.split(/^SKILLS$/m)[1].split('\n')[1].toLowerCase();
-    /* Netflix's own vocabulary, whichever half of the profile it comes from —
-       the projects it screens on and the skills behind them are one list. */
-    expect(skillsLine).toMatch(/chaos|streaming|circuit breaker|canary|resilience|observability|jvm/);
+    expect(String(done.reply)).toMatch(/This job also asks for: \w+/);
+    /* Netflix's own vocabulary, in the work it offers to plan. */
+    expect(String(done.reply)).toMatch(/chaos|streaming|circuit breaker|canary|resilience|observability|jvm|playback|partition/i);
   });
 
   it('puts the company\'s skills on the page, with the reply carrying the debt', async () => {

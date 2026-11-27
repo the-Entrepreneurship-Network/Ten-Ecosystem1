@@ -417,22 +417,33 @@ function ChoiceList({ options, onPick, disabled }: {
  * Fetches the rendered PDF and hands it to the browser. Posting rather than
  * linking keeps the details out of the URL bar and out of server logs.
  */
-async function downloadPdf(details: Record<string, string>) {
-  const res = await fetch(`${API}/build.pdf`, {
+async function download(kind: 'pdf' | 'docx', text: string, session: Record<string, unknown> | null): Promise<string> {
+  /* The page on screen, exactly. Rebuilding it from the contact details
+     downloaded a different page, and failed silently when they had no name.
+     The planned-work record goes along so the server can refuse a page that
+     still carries projects nobody has built. */
+  const res = await fetch(`${API}/build.${kind}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ details }),
+    body: JSON.stringify({ text, convert: '0', session: JSON.stringify({ plannedGuides: session?.plannedGuides || [] }) }),
   });
-  if (!res.ok) return;
+  if (!res.ok) {
+    let why = '';
+    try { why = (await res.json()).error || ''; } catch { /* not JSON */ }
+    return why || `The download did not work (HTTP ${res.status}). Please try again.`;
+  }
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${(details.name || 'resume').replace(/[^A-Za-z0-9]+/g, '-')}-TEN.pdf`;
+  a.download = `${(text.split('\n')[0] || 'resume').trim().replace(/[^A-Za-z0-9]+/g, '-')}-TEN.${kind}`;
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
+  /* Released later, not at once: revoking while the browser still reads the
+     blob cut about one download in three short — a PDF that would not open. */
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  return '';
 }
 
 export function AgentChat() {
@@ -454,10 +465,13 @@ export function AgentChat() {
   const [openJob, setOpenJob] = useState<Job | null>(null);
   /* Whether the pane is showing the rewritten page or the list it came from. */
   const [showTailored, setShowTailored] = useState(false);
+  /* Phones show one pane at a time. The page pane used to be hidden below
+     1024px, so a phone had no jobs, no resume and no download at all. */
+  const [phoneView, setPhoneView] = useState<'chat' | 'pane'>('chat');
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [msgs, busy]);
+  }, [msgs, busy, phoneView]);
 
   /*
    * The conversation's memory. The server asks its interview questions one at
@@ -528,6 +542,8 @@ export function AgentChat() {
     if (!text.trim() && !file) return;
     setMsgs((m) => [...m, { role: 'user', text: text || 'Scan this resume', file: file?.name }]);
     setInput('');
+    /* On a phone the reply lands in the chat, so that is where to look. */
+    setPhoneView('chat');
     setBusy(true);
     try {
       const body = new FormData();
@@ -606,6 +622,15 @@ export function AgentChat() {
   const latestDetails = [...msgs].reverse().find((m) => m.details)?.details || {};
   const docName = String(latestDetails.name || 'Your resume').replace(/\s+/g, '_');
 
+  /* A refused or failed download says why, in the conversation. */
+  async function saveAs(kind: 'pdf' | 'docx') {
+    if (!latestResume) return;
+    let why = '';
+    try { why = await download(kind, latestResume, sessionRef.current); }
+    catch { why = 'Could not reach the server. Check your connection and try again.'; }
+    if (why) { setMsgs((m) => [...m, { role: 'agent', text: why }]); setPhoneView('chat'); }
+  }
+
   /*
    * Three tabs, because the agent does three things.
    *
@@ -677,9 +702,19 @@ export function AgentChat() {
           </button>
         </header>
 
+        <div className="flex shrink-0 gap-1 border-b border-[#eef1f6] bg-[#f3f4f6] p-1 lg:hidden">
+          {([['chat', 'Chat'], ['pane', jobs.length ? `Jobs & page (${jobs.length})` : 'Jobs & page']] as const).map(([id, label]) => (
+            <button key={id} onClick={() => setPhoneView(id)}
+              className={['flex-1 rounded-full px-3 py-1.5 text-[12px] font-semibold',
+                phoneView === id ? 'bg-white text-[#111827] shadow-sm' : 'text-[#6b7280]'].join(' ')}>
+              {label}
+            </button>
+          ))}
+        </div>
+
         <div className="flex min-h-0 flex-1">
           {/* ── the document, or the job, or the letter ── */}
-          <div className="hidden min-w-0 flex-1 flex-col border-r border-[#eef1f6] lg:flex">
+          <div className={`${phoneView === 'pane' ? 'flex' : 'hidden'} min-w-0 flex-1 flex-col border-r border-[#eef1f6] lg:flex`}>
             <div className="flex shrink-0 items-center gap-2 border-b border-[#eef1f6] px-4 py-2.5">
               <p className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">
                 {tab === 'jobs' ? (showTailored ? docName : 'Resume builder') : 'Cover letter'}
@@ -688,7 +723,9 @@ export function AgentChat() {
                 <>
                   <button onClick={() => navigator.clipboard?.writeText(latestResume)}
                     className="rounded-lg border border-[#d1d5db] px-2.5 py-1 text-[11px] font-semibold text-[#374151] hover:bg-[#f3f4f6]">Copy</button>
-                  <button onClick={() => downloadPdf(latestDetails)}
+                  <button onClick={() => saveAs('docx')}
+                    className="rounded-lg border border-[#d1d5db] px-2.5 py-1 text-[11px] font-semibold text-[#374151] hover:bg-[#f3f4f6]">Word</button>
+                  <button onClick={() => saveAs('pdf')}
                     className="rounded-lg bg-[#2563eb] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[#1d4ed8]">Download PDF</button>
                 </>
               )}
@@ -790,7 +827,7 @@ export function AgentChat() {
           </div>
 
           {/* ── the conversation ── */}
-          <div className="flex min-w-0 flex-1 flex-col lg:max-w-[430px]">
+          <div className={`${phoneView === 'chat' ? 'flex' : 'hidden'} min-w-0 flex-1 flex-col lg:flex lg:max-w-[430px]`}>
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
               {/*
                 * No menu of three. This seat does one errand.
@@ -827,9 +864,11 @@ export function AgentChat() {
                         <ChoiceList options={m.options} disabled={busy} onPick={(v) => send(v)} />
                       )}
                       {m.resume && (
-                        <p className="rounded-xl border border-[#c7d2fe] bg-[#f5f7ff] px-3 py-2 text-[12px] text-[#374151]">
-                          Resume updated — it is on the left, ready to download.
-                        </p>
+                        <button onClick={() => { setShowTailored(true); setPhoneView('pane'); }}
+                          className="block w-full rounded-xl border border-[#c7d2fe] bg-[#f5f7ff] px-3 py-2 text-left text-[12px] text-[#374151]">
+                          <span className="lg:hidden">Resume updated. Tap here to see it and download it.</span>
+                          <span className="hidden lg:inline">Resume updated — it is on the left, ready to download.</span>
+                        </button>
                       )}
                       {m.report && <ReportCard report={m.report} />}
                     </div>

@@ -1115,10 +1115,39 @@ router.post('/rewrite', upload.single('file'), async (req, res) => {
  * page of placeholders from nothing, and — once the placeholder guard existed
  * — rejected every download including the complete ones.
  */
+/*
+ * What on this page has not been built yet: the session's record of planned
+ * work, plus the old marker for pages written by an older version. The
+ * session arrives as text from a form and as an object from JSON; both count.
+ */
+function unbuiltOn(doc, session) {
+  let sess = null;
+  try { sess = typeof session === 'string' ? JSON.parse(session) : session; } catch (e) { sess = null; }
+  const low = String(doc || '').toLowerCase();
+  const titles = ((sess && sess.plannedGuides) || [])
+    .flatMap((g) => [g && g.build, g && g.name].map((t) => String(t || '').trim()))
+    .filter((t) => t && low.includes(t.toLowerCase()));
+  return [...new Set([...skillPlan.plannedLines(String(doc || '')), ...titles])];
+}
+
+const unbuiltError = (planned) => ({
+  ok: false,
+  error: `This page still carries ${planned.length} ${planned.length === 1 ? 'project' : 'projects'} you have not built yet. It will not export while it does — a project you cannot walk through fails the first question an interviewer asks about it. Say "I built it" and give me the real numbers, or say "apply with what I have" and I will take the planned section off.`,
+  planned,
+});
+
 router.post('/build.pdf', upload.any(), async (req, res) => {
   try {
     const b = bodyOf(req);
-    const built = buildResume(b.details || b.text || b);
+    /*
+     * The page on screen, exactly, when that is what was sent. Rebuilding it
+     * from the contact details downloaded a different page (34 where the
+     * screen said 95) and failed outright when the details had no name.
+     */
+    const page = !b.details && typeof b.text === 'string' ? b.text.trim() : '';
+    const built = page
+      ? { text: page, details: { name: page.split('\n')[0], role: b.target || b.role || '' }, report: scanResume(page, b.target || b.role) }
+      : buildResume(b.details || b.text || b);
 
     /*
      * A planned project never leaves as a PDF.
@@ -1149,20 +1178,8 @@ router.post('/build.pdf', upload.any(), async (req, res) => {
      * The marker check stays as well, for pages written by an older version
      * and for anything pasted in from one.
      */
-    let sess = null;
-    try { sess = b.session ? JSON.parse(b.session) : null; } catch (e) { sess = null; }
-    const unbuiltTitles = ((sess && sess.plannedGuides) || [])
-      .map((g) => String(g.build || '').trim())
-      .filter(Boolean)
-      .filter((t) => doc.toLowerCase().includes(t.toLowerCase()));
-    const planned = [...new Set([...skillPlan.plannedLines(doc), ...unbuiltTitles])];
-    if (planned.length) {
-      return res.status(400).json({
-        ok: false,
-        error: `This page still carries ${planned.length} project you have not built yet. It will not export while it does — a project you cannot walk through fails the first question an interviewer asks about it. Say "I built it" and give me the real numbers, or say "apply with what I have" and I will take the planned section off.`,
-        planned,
-      });
-    }
+    const planned = unbuiltOn(doc, b.session);
+    if (planned.length) return res.status(400).json(unbuiltError(planned));
 
     /* A page still carrying placeholders is not a resume, and a downloaded
        file is the one artefact nobody reviews again before sending it. */
@@ -1213,6 +1230,10 @@ router.post('/build.docx', upload.single('file'), async (req, res) => {
     if (!text.trim()) {
       return res.status(400).json({ ok: false, error: 'Send a resume: attach a file, paste the text, or give your details.' });
     }
+
+    /* The PDF's rule for work not built yet; the Word file had none. */
+    const planned = unbuiltOn(text, b.session);
+    if (planned.length) return res.status(400).json(unbuiltError(planned));
 
     if (hasPlaceholders(text)) {
       return res.status(400).json({
@@ -2203,13 +2224,14 @@ function consumeAnswer(session, field, msg) {
     const guides = session.plannedGuides || [];
     let which = guides.findIndex((g) =>
       words.some((w) => String(g.build || '').toLowerCase().includes(w)
+        || String(g.name || '').toLowerCase().includes(w)
         || String(g.term || '').toLowerCase().includes(w)));
     if (which === -1 && guides.length) which = 0;
 
     let hit = -1;
     if (which !== -1) {
-      const title = String(guides[which].build || '').trim().toLowerCase();
-      hit = lines.findIndex((l) => l.trim().toLowerCase() === title);
+      const titles = [guides[which].name, guides[which].build].map((t) => String(t || '').trim().toLowerCase()).filter(Boolean);
+      hit = lines.findIndex((l) => titles.includes(l.trim().toLowerCase()));
       if (hit !== -1) {
         /* Title and the bullets under it come off together. */
         let end = hit + 1;
@@ -2346,7 +2368,12 @@ function consumeAnswer(session, field, msg) {
     const low = String(msg).toLowerCase();
     /* Several at once: one project rarely closes a gap, and somebody
        planning a month of work should be able to plan all of it. */
-    const chosen = plan && plan.ok
+    /* The chips send exact terms, comma-separated, and one pick is one
+       project: matching inside the words made "api design" also choose
+       "api". Typed text still matches loosely. */
+    const said = low.split(/\s*,\s*/).map((x) => x.trim()).filter(Boolean);
+    const exact = plan && plan.ok ? plan.plans.filter((p) => said.includes(String(p.term).toLowerCase())) : [];
+    const chosen = exact.length ? exact : plan && plan.ok
       ? plan.plans.filter((p) => low.includes(String(p.term).toLowerCase()) || low.includes(String(p.build).toLowerCase()))
       : [];
     if (chosen.length) {
@@ -2701,16 +2728,27 @@ function aimOf(session) {
  */
 function recordPlanned(session, entries, page) {
   const seen = new Set();
-  session.plannedGuides = [...(session.plannedGuides || []), ...(entries || [])]
+  /* The page prints a project under its title, not its recipe name ("Relational
+     schema with a query plan behind it", not "A schema with real data in it"),
+     so the record keeps both. Matching on the recipe name alone let the export
+     gate and "I built it" miss most of what was on the page. */
+  const titled = (g) => (g && !g.name
+    ? { ...g, name: (skillPlan.projectEntries({ ok: true, plans: [g] }, aimOf(session))[0] || {}).name || '' }
+    : g);
+  session.plannedGuides = [...(session.plannedGuides || []), ...(entries || [])].map(titled)
     .filter((g) => {
-      const k = String(g && g.build || '').trim().toLowerCase();
+      /* One record per project as the page shows it. */
+      const k = String((g && (g.name || g.build)) || '').trim().toLowerCase();
       if (!k || seen.has(k)) return false;
       seen.add(k);
       return true;
     })
     /* Only what the page actually says. An entry the climb dropped, or one
        already struck off as built, is not owed. */
-    .filter((g) => String(page || session.resumeText || '').includes(g.build));
+    .filter((g) => {
+      const doc = String(page || session.resumeText || '');
+      return doc.includes(g.build) || Boolean(g.name && doc.includes(g.name));
+    });
   return session.plannedGuides;
 }
 
@@ -2898,7 +2936,6 @@ function climbReport(text, target) {
  * for, then the floor.
  */
 function tailorClimb(packet, session) {
-  const FLOOR = 92;
   const TAILOR_GOAL = 95;
   const before = scanResume(packet.resume, session.scoreTarget).score;
   session.bestScore = Math.max(session.bestScore || 0, session.lastScore || 0);
@@ -2914,16 +2951,6 @@ function tailorClimb(packet, session) {
   const role = session.scoreTarget || session.target || '';
   const house = session.pickedJob
     ? companyProfiles.profileFor(session.pickedJob.company, role) : null;
-  /*
-   * The employer's vocabulary, or the role's when there is no employer.
-   *
-   * With no house the climb was handed an empty skills list, so a page built
-   * when no opening could be found kept whatever single word the student had
-   * picked and lost four points on the keyword check it could not lose. The
-   * role's own expected skills are a true answer to what the job asks for,
-   * and they are the same list every other path already uses underneath.
-   */
-  const houseSkills = house ? house.skills : companyProfiles.skillsForRole(role);
   /*
    * One entry per project, however many lists it appears on.
    *
@@ -2972,49 +2999,20 @@ function tailorClimb(packet, session) {
    */
   const aim = { ...aimOf(session), role };
 
-  let lift = climbToGoal(packet.resume, session.scoreTarget, goal, bench, picked,
-    houseSkills, 12, 3, aim);
-  if (lift.projected < (session.bestScore || 0)) {
-    const deeper = climbToGoal(packet.resume, session.scoreTarget, goal, bench, picked,
-      houseSkills, 24, 40, aim);
-    if (deeper.projected > lift.projected) lift = deeper;
-  }
-  if (lift.projected < FLOOR) {
-    const everything = [
-      ...bench,
-      ...skillPlan.plansFor(Object.values(skillPlan.DEEP_BENCH).flat(), owned, 200),
-    ];
-    const forced = climbToGoal(packet.resume, session.scoreTarget, Math.max(goal, FLOOR),
-      everything, picked, houseSkills, 40, 200, aim);
-    if (forced.projected > lift.projected) lift = forced;
-  }
-
   /*
-   * The agent checks its own work before it hands it over.
+   * Only the work the student chose to build, and no skills they did not claim.
    *
-   * Everything above chooses what to add by projection. This re-reads the
-   * finished page as an ATS would, and if the result is still under the bar
-   * it goes back and adds more rather than shipping and hoping. It is the
-   * difference between a tool that produces a page and one that produces a
-   * page it has verified — and it is why a resume that came back instantly at
-   * 72 was never going to get anybody shortlisted.
-   *
-   * Bounded, because a loop that cannot fail to terminate is worth more than
-   * one that might: three passes, and the ceiling is reported honestly if the
-   * facts on the page genuinely cannot reach the bar.
+   * This used to top the page up from the whole catalogue until it scored
+   * 92+, and put the employer's skills on the SKILLS line. So "skip" to every
+   * question produced six projects named after the employer, written as
+   * finished, and sixteen skills from two: a 97 the first interview question
+   * would take apart. The score is now what the student's own page earns.
    */
-  for (let pass = 0; pass < 3; pass += 1) {
-    const check = scanResume(lift.text || packet.resume, session.scoreTarget).score;
-    if (check >= FLOOR) break;
-    const wider = [
-      ...bench,
-      ...skillPlan.plansFor(Object.values(skillPlan.DEEP_BENCH).flat(), owned, 200),
-    ];
-    const again = climbToGoal(packet.resume, session.scoreTarget, Math.max(goal, FLOOR),
-      wider, picked, houseSkills, 16 + pass * 8, 60 + pass * 60, aim);
-    if (again.projected <= lift.projected) break;
-    lift = again;
-  }
+  const chosenTerms = new Set(picked.map((t) => String(t).toLowerCase()));
+  const mine = bench.filter((p) => chosenTerms.has(String(p.term).toLowerCase()));
+  const lift = mine.length
+    ? climbToGoal(packet.resume, session.scoreTarget, goal, mine, picked, [], 12, 3, aim)
+    : { text: packet.resume, projected: before, used: [] };
   session.verified = scanResume(lift.text || packet.resume, session.scoreTarget).score;
 
   const startedAt = scanResume(packet.resume, session.scoreTarget).score;
@@ -3023,20 +3021,7 @@ function tailorClimb(packet, session) {
     if (packet.after) packet.after.checker = lift.projected;
     recordPlanned(session, lift.used, lift.text);
 
-    const chosen = new Set(picked.map((t) => String(t).toLowerCase()));
-    const addedPast = lift.used
-      .filter((p) => !chosen.has(String(p.term).toLowerCase()))
-      .map((p) => p.term);
-    const priority = new Set(
-      (house ? house.projects : []).slice(0, 8).map((t) => String(t).toLowerCase()),
-    );
-    session.overruled = {
-      picked,
-      added: addedPast,
-      theirPriorities: addedPast.filter((t) => priority.has(String(t).toLowerCase())),
-      declined: picked.length === 0,
-      company: session.pickedJob ? session.pickedJob.company : '',
-    };
+    session.overruled = null;
   }
   session.bestScore = Math.max(session.bestScore || 0,
     scanResume(packet.resume, session.scoreTarget).score);
@@ -3153,6 +3138,10 @@ function deliver(res, session, packetOrBuilt, kindNote) {
    * they are looking at the version they want to send.
    */
   const guide = session.plannedGuide;
+  /* Every delivery leaves the record matching the page: only what is on it,
+     under the titles it prints. A pick recorded under its recipe name alone
+     was invisible to the export gate, and the PDF went out with it. */
+  if ((session.plannedGuides || []).length) recordPlanned(session, [], text);
   const guides = session.plannedGuides || (guide ? [guide] : []);
 
   /* Today's number, and what the planned work is worth — side by side, so
@@ -3239,13 +3228,17 @@ function deliver(res, session, packetOrBuilt, kindNote) {
   const fromPosting = isPacket && Array.isArray(packetOrBuilt.notClaimed)
     ? packetOrBuilt.notClaimed.filter((t) => !ROLE_WORDS.test(String(t).trim()) && !isEmployer(t))
     : [];
-  const wantedSkills = [...new Set([...fromPosting, ...houseSkills])].slice(0, 6);
+  /* Not the ones the page already shows: "This job also asks for: Java" to a
+     Java developer. */
+  const owned = new Set((atsEngine.factLedger(text).statedSkills || []).map((x) => String(x).toLowerCase()));
+  const shows = (t) => owned.has(String(t).toLowerCase()) || (String(t).length > 2
+    && new RegExp(`(^|[^a-z0-9+#])${String(t).toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9+#]|$)`).test(String(text).toLowerCase()));
+  const wantedSkills = [...new Set([...fromPosting, ...houseSkills])].filter((t) => !shows(t)).slice(0, 6);
 
-  if (isPacket && wantedSkills.length && !/LEARNING \(/i.test(text)) {
-    text = skillPlan.withPlannedSkills(text, wantedSkills);
-    session.resumeText = text;
-    session.plannedSkills = wantedSkills;
-  }
+  /* Named in the reply, never written onto the page: the page went out with
+     them on the SKILLS line, unmarked, while this reply said "marked as not
+     yet true". A skill goes on when the student says they have it. */
+  if (isPacket && wantedSkills.length) session.plannedSkills = wantedSkills;
 
   /*
    * What this employer reads for, on the page they are being handed.
@@ -3259,19 +3252,6 @@ function deliver(res, session, packetOrBuilt, kindNote) {
     ? companyProfiles.noteFor(session.pickedJob.company, session.target || session.scoreTarget || '')
     : '';
 
-  const learnNote = isPacket && wantedSkills.length
-    ? [
-      `Added to your page under LEARNING: ${wantedSkills.join(', ')} — marked as not yet true, because they are not yet true.`,
-      '',
-      '**Make them real before you send this.** The page will not export while anything is marked planned, and that is the point: these are on your resume the day you can walk through them, not before.',
-      ...wantedSkills.slice(0, 3).flatMap((s) => {
-        const p = skillPlan.learnPlan(s);
-        return ['', `**${s}** · ${p.hours}`, ...p.steps.map((x, i) => `${i + 1}. ${x}`), p.proof];
-      }),
-      '',
-      'When one is done, say "I built it" with what you actually made and I will move it into your real skills.',
-    ].join('\n')
-    : '';
 
   /*
    * The whole reply: the score, then the work, in points. Nothing else.
@@ -3345,6 +3325,9 @@ function deliver(res, session, packetOrBuilt, kindNote) {
       : `Your picks are on the page and stay there. ${ov.added.length} more went on behind them, because your picks alone did not cover what ${ov.company || 'this employer'} screens this role on${ov.theirPriorities.length ? ` — specifically ${ov.theirPriorities.slice(0, 3).join(', ')}` : ''}.`)
     : '';
 
+  const projects = planned.slice(0, guides.length);
+  const skills = planned.slice(guides.length);
+  const steps = (list) => list.flatMap((p) => ['', `- **${p.title}** · ${p.hours}`, ...p.steps.map((x) => `  - ${x}`)]);
   const plan = planned.length
     ? [
       overruledNote,
@@ -3361,13 +3344,20 @@ function deliver(res, session, packetOrBuilt, kindNote) {
        * not built. It names them, and it says plainly what has to happen
        * first.
        */
-      `Before you attach this: ${planned.length} thing${planned.length === 1 ? '' : 's'} on the page ${planned.length === 1 ? 'is' : 'are'} written as finished and ${planned.length === 1 ? 'is' : 'are'} not true yet. Build ${planned.length === 1 ? 'it' : 'them'} first — each is a weekend or two, and the steps are below.`,
-      ...planned.flatMap((p) => [
+      ...(projects.length ? [
+        `Before you attach this: ${projects.length} project${projects.length === 1 ? '' : 's'} on the page ${projects.length === 1 ? 'is' : 'are'} written as finished and ${projects.length === 1 ? 'is' : 'are'} not true yet. Build ${projects.length === 1 ? 'it first — it is' : 'them first — each is'} a weekend or two, and the steps are below.`,
+        ...steps(projects),
+      ] : []),
+      /* Skills the job asks for are named here and never written onto the
+         page: the page used to carry them unmarked on the SKILLS line. */
+      ...(skills.length ? [
+        projects.length ? '' : null,
+        `This job also asks for: ${skills.map((p) => p.title).join(', ')}. They are not on your page, because your resume does not show them yet. Here is how to learn each one:`,
+        ...steps(skills),
         '',
-        `- **${p.title}** · ${p.hours}`,
-        ...p.steps.map((s) => `  - ${s}`),
-      ]),
-    ].join('\n')
+        'When you have used one in real work, tell me what you built with it in one sentence, and I will add that to your page in your words.',
+      ] : []),
+    ].filter((x) => x !== null).join('\n')
     : '';
 
   /* The score leads every delivered page, packet or not — a raise that ends
@@ -4000,8 +3990,13 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       if (out.reached) {
         session.command = 'raise';
         session.pendingRaise = null;
+        /* Picked work may already be on the page; then "nothing was invented"
+           is false, and the record needs the titles the page prints. */
+        const owed = recordPlanned(session, [], out.text).length;
         return deliver(res, session, { text: out.text, report: out.report, missing: [], potentialScore: out.report.score },
-          `You asked for ${goal}. Checker ${out.report.score}/100 — every parse, heading, verb and keyword lever spent on true facts. Nothing was invented to get here.`);
+          owed
+            ? `You asked for ${goal}. This page scores ${out.report.score}/100 with the work you picked on it.`
+            : `You asked for ${goal}. Checker ${out.report.score}/100 — every parse, heading, verb and keyword lever spent on true facts. Nothing was invented to get here.`);
       }
 
       /*
@@ -4117,10 +4112,8 @@ router.post('/chat', upload.single('file'), async (req, res) => {
        * the page stopped a few points short of the goal they had named, with
        * no word about the gap. Decline the recommendations and the turn fell
        * through to a ceiling sentence — asked for 96, told 89 and no. Both are
-       * answerable: the picks are honoured first, in their order, and the rest
-       * of the bench is added behind them until the projection clears the bar.
-       * A declined recommendation is a preference about which project, not a
-       * refusal of the score they asked for.
+       * answerable: the picks are honoured, in their order, and the reply
+       * says honestly how far the page gets without inventing anything.
        */
       const picked = (session.plannedGuides || []).map((p) => p.term);
       const declinedProjects = (session.declined || []).includes('addproject') ||
@@ -4146,8 +4139,16 @@ router.post('/chat', upload.single('file'), async (req, res) => {
 
       if (!alreadyClimbed && alreadyAsked && !session.raiseDelivered && catalogue.length) {
         session.raiseDelivered = true;
-        const climb = climbToGoal(out.text, session.scoreTarget, goal, catalogue, picked,
-          house ? house.skills : companyProfiles.skillsForRole(roleForBench), 12, 3, aimOf(session));
+        /* Their picks, and nothing behind them. Declining used to mean "pick
+           for me": the rest of the bench and the employer's skills went on
+           until the number was met, all written as finished. Short of the
+           number, the reply says what honest facts would close it. */
+        const chosen = new Set(picked.map((t) => String(t).toLowerCase()));
+        const mine = catalogue.filter((p) => chosen.has(String(p.term).toLowerCase()));
+        const now = scanResume(out.text, session.scoreTarget).score;
+        const climb = mine.length
+          ? climbToGoal(out.text, session.scoreTarget, goal, mine, picked, [], 12, 3, aimOf(session))
+          : { text: out.text, projected: now, used: [], reached: now >= goal, alsoPlanned: [] };
         session.resumeText = climb.text;
         session.pendingRaise = null;
         session.climbedTo = Math.max(session.climbedTo || 0, goal);
@@ -4181,7 +4182,7 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         const note = [
           climb.reached
             ? `You asked for ${goal}. This page scores ${climb.projected}/100 with the work below on it.`
-            : `You asked for ${goal}. ${climb.projected}/100 is the honest top for this role — the rest needs facts your page does not show, and I will not invent them.${stillShort.length ? ` Still costing points: ${stillShort.join('; ')}.` : ''}`,
+            : `You asked for ${goal}. ${picked.length ? 'The work you picked takes this page to' : 'Your page scores'} ${climb.projected}/100${picked.length ? '' : ' as it stands'}. I only add work you choose and facts you give me, so to go higher, tell me real numbers, dates and links your page does not show yet, or tailor it to a job and pick the projects you will build.${stillShort.length ? ` Still costing points: ${stillShort.join('; ')}.` : ''}`,
           picked.length && climb.used.length > picked.length
             ? `Your picks lead; ${climb.used.length - picked.length} more were added behind them to reach it.`
             : '',
@@ -4497,8 +4498,8 @@ router.post('/chat', upload.single('file'), async (req, res) => {
         return res.json({
           ok: true, kind: 'ask',
           reply: tailorHouse
-            ? `${companyProfiles.noteFor(session.pickedJob.company, tailorRole)} These are the ${offer.length} pieces of work that shows${gaps.length ? `, starting with what this posting names — ${gaps.slice(0, 3).join(', ')}` : ''}. Pick as many as you want to build. Each goes on the page marked as planned, with its steps, and stays out of the PDF until you have actually built it.`
-            : `This posting asks for ${gaps.slice(0, 3).join(', ')} and your page cannot prove ${gaps.length === 1 ? 'it' : 'them'} yet. Pick as many as you want to build. Each goes on the page marked as planned, with the steps — and stays out of the PDF until you have actually built it.`,
+            ? `${companyProfiles.noteFor(session.pickedJob.company, tailorRole)} These are the ${offer.length} pieces of work that shows${gaps.length ? `, starting with what this posting names — ${gaps.slice(0, 3).join(', ')}` : ''}. Pick as many as you want to build, or say skip. Each one you pick goes on the page with its steps, and the download stays locked until you have actually built it.`
+            : `This posting asks for ${gaps.slice(0, 3).join(', ')} and your page cannot prove ${gaps.length === 1 ? 'it' : 'them'} yet. Pick as many as you want to build, or say skip. Each one you pick goes on the page with its steps, and the download stays locked until you have actually built it.`,
           options: {
             /* Several, because one project rarely closes a gap and somebody
                planning a month of work should be able to plan all of it. */
@@ -5892,7 +5893,10 @@ router.post('/chat', upload.single('file'), async (req, res) => {
       });
     }
 
-    if (session.resumeText.trim() && msg.trim().length > 8) {
+    /* A question or a request is not a line of history: "what jobs suit me?"
+       and "make it shorter" were being filed under Experience. */
+    const ASKING = /\?\s*$|^(what|how|why|when|where|who|which|can|could|should|would|will|is|are|do|does|did|please|pls|help|tell|show|give|make|write|explain|i (want|need|would like)|let'?s|ok|okay|thanks?|thank you)\b/i;
+    if (session.resumeText.trim() && msg.trim().length > 8 && !ASKING.test(msg.trim())) {
       session.resumeText += `\n\nExperience\n- ${msg.trim()}`;
       const rescored = scanResume(session.resumeText, session.target);
       session.lastScore = rescored.score;

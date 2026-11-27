@@ -286,7 +286,7 @@ describe('the conversation advances instead of repeating', () => {
     expect(prep.reply.split('\n').filter((l) => /^\d\./.test(l))).toHaveLength(5);
   });
 
-  it('adds the posting\'s skills as work to do, never as work already done', async () => {
+  it('names the posting\'s skills as work to do, and never writes them on the page', async () => {
     /*
      * This used to be enforced by asking — "the JD asks for Docker and your
      * resume shows no evidence; have you actually used it? Name where." That
@@ -306,23 +306,19 @@ describe('the conversation advances instead of repeating', () => {
 
     expect(out.kind).toBe('build');
     /*
-     * They appear — reporting them as "missing keywords" told a student what
-     * was wrong and nothing about what to do — on the SKILLS line, where a
-     * parser indexes them, rather than under a heading that announced them as
-     * unbuilt.
+     * Named in the reply with how to learn them, and kept off the page.
      *
-     * "LEARNING ([PLANNED — not built yet] — remove or complete before
-     * applying)" was every word true and none of it sendable: a recruiter
-     * read a disclaimer, a parser read nothing, and the student could not
-     * attach the page without editing it by hand. The honesty moved to where
-     * it bites — the reply names what still has to become true, and the work
-     * itself is tracked on the session rather than stamped on the document.
+     * They used to go onto the SKILLS line, unmarked, while the reply said
+     * they were "marked as not yet true": the student downloaded a resume
+     * claiming PostgreSQL and Docker on the strength of a job advert. Saying
+     * "skip" to every question adds nothing to the page.
      */
     const skills = out.text.split(/^SKILLS$/m)[1].split(/^[A-Z][A-Z &/]{2,}$/m)[0];
-    expect(skills).toMatch(/PostgreSQL/i);
+    expect(skills).not.toMatch(/PostgreSQL|Docker/i);
     expect(out.text).not.toMatch(/PLANNED|LEARNING/);
-    expect(String(out.reply)).toMatch(/Before you attach this/i);
-    expect((out.session.plannedGuides || []).length).toBeGreaterThan(0);
+    expect(String(out.reply)).toMatch(/This job also asks for: .*PostgreSQL.* They are not on your page/i);
+    expect(String(out.reply)).not.toMatch(/Before you attach this/i);
+    expect(out.session.plannedGuides || []).toEqual([]);
     /* The experience section still claims only what it always claimed. */
     const experience = out.text.split(/^EXPERIENCE$/m)[1].split(/^[A-Z][A-Z &/]{2,}$/m)[0];
     expect(experience).not.toMatch(/PostgreSQL/i);
@@ -482,9 +478,12 @@ describe('the conversation advances instead of repeating', () => {
       if (out.report) seen.push(out.report.score);
     }
 
-    /* Every fact moved the number, and the last is well above the first. */
-    expect(seen[seen.length - 1]).toBeGreaterThan(start);
-    expect(seen[seen.length - 1]).toBeGreaterThanOrEqual(78);
+    /* Every fact moved the number, and the last is well above the first.
+       The old bar of 78 was met by putting seven skills the student never
+       named on the SKILLS line; facts alone take this page into the 70s. */
+    for (let i = 2; i < seen.length; i += 1) expect(seen[i]).toBeGreaterThan(seen[i - 1]);
+    expect(seen[seen.length - 1]).toBeGreaterThan(start + 10);
+    expect(String(out.session.resumeText).split(/^SKILLS$/mi)[1].split('\n')[1]).toBe('Java, HTML, CSS');
   });
 
   it('shows which line is holding the score down once formatting is spent', async () => {
@@ -906,6 +905,7 @@ describe('the conversation advances instead of repeating', () => {
     const reachedOrCeiling = /every parse, heading, verb and keyword lever spent/.test(out.reply)
       || /This page scores \d+\/100 with the work below on it/.test(out.reply)
       || /is the honest top for this role/.test(out.reply)
+      || /I only add work you choose and facts you give me/.test(out.reply)
       || /Ceiling: Checker \d+\/100/.test(out.reply);
     expect(reachedOrCeiling).toBe(true);
     if (/Ceiling/.test(out.reply)) expect(out.reply).toMatch(/I will not invent it|will not invent them/);
@@ -1009,5 +1009,33 @@ describe('the conversation advances instead of repeating', () => {
       expect(t3.kind).toBe('ask');
       expect(t3.session.command).toBe('tailor');
     }
+  });
+});
+
+describe('a question is not a line of history', () => {
+  /*
+   * With a resume loaded, anything over eight characters that matched no
+   * command was filed under Experience — "what jobs suit me?" went onto the
+   * page as something the student had done.
+   */
+  it.each([
+    'what jobs suit me?',
+    'can you make it shorter',
+    'please help me with this',
+    'how do I get a job at Google',
+  ])('"%s" stays off the page', async (msg) => {
+    const a = app();
+    const first = await turn(a, RESUME, null);
+    const before = first.session.resumeText;
+    const out = await turn(a, msg, first.session);
+    expect(String(out.session.resumeText)).toBe(before);
+    expect(String(out.session.resumeText)).not.toContain(msg);
+  });
+
+  it('still takes a fact the student types', async () => {
+    const a = app();
+    const first = await turn(a, RESUME, null);
+    const out = await turn(a, 'Led a team of 4 that shipped the campus app to 2,000 students', first.session);
+    expect(String(out.session.resumeText)).toContain('Led a team of 4 that shipped the campus app to 2,000 students');
   });
 });

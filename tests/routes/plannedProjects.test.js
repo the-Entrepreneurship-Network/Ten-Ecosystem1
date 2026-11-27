@@ -202,3 +202,45 @@ describe('the two ways out', () => {
     if (res.status !== 200) expect(res.body.error).not.toMatch(/have not built yet/i);
   });
 });
+/*
+ * What the page's buttons send now: the text on screen and the planned-work
+ * record, nothing else. The old button sent the contact details and the
+ * server rebuilt a different page from them (34 where the screen said 95), or
+ * failed silently when they had no name.
+ */
+describe('the download is the page on screen', () => {
+  const download = (a, kind, text, plannedGuides) => request(a)
+    .post(`/api/v2/resume/build.${kind}`)
+    .set('Content-Type', 'application/json')
+    .buffer(true)
+    .parse((res, cb) => { const c = []; res.on('data', (d) => c.push(d)); res.on('end', () => cb(null, Buffer.concat(c))); })
+    .send(JSON.stringify({ text, convert: '0', session: JSON.stringify({ plannedGuides }) }));
+
+  it('renders exactly that text as the PDF', async () => {
+    const res = await download(app(), 'pdf', RESUME, []);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/pdf/);
+    const back = (await require('pdf-parse')(res.body)).text;
+    expect(back).toMatch(/Campus portal used by 300 students/);
+    expect(back).toMatch(/Priya Nair/);
+  });
+
+  it('refuses a PDF and a Word file while picked work is unbuilt, by the title the page prints', async () => {
+    const a = app();
+    const out = await withPlanned(a);
+    const guides = out.session.plannedGuides;
+    expect(guides.length).toBeGreaterThan(0);
+    for (const kind of ['pdf', 'docx']) {
+      // eslint-disable-next-line no-await-in-loop
+      const res = await download(a, kind, out.text, guides);
+      expect(res.status).toBe(400);
+      expect(JSON.parse(res.body.toString()).error).toMatch(/have not built yet/);
+    }
+  });
+
+  it('downloads the honest page as Word', async () => {
+    const res = await download(app(), 'docx', RESUME, []);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/wordprocessingml/);
+  });
+});

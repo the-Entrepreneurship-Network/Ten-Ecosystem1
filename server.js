@@ -11296,12 +11296,14 @@ try {
     // Resume agent — scores a resume the way an ATS does and rebuilds it. Same
     // offline stance as the assistant: deterministic checks, no API key.
     const v2ResumeAgent = require('./routes/v2/resumeAgent');
-    app.use('/api/v2/resume', v2ResumeAgent);
+    // Behind the same paywall as the page (studioApi): the API was open to anyone.
+    const { studioApi } = require('./middleware/studioGate');
+    app.use('/api/v2/resume', studioApi('resume'), v2ResumeAgent);
 
     // Job agent — reads a resume, fetches live openings from the boards with a
     // public API and aims searches at the ones that require a login.
     const v2JobAgent = require('./routes/v2/jobAgent');
-    app.use('/api/v2/jobs', v2JobAgent);
+    app.use('/api/v2/jobs', studioApi('job'), v2JobAgent);
 
     // Attendance agent — who filled the attendance form and who signed in,
     // as dashboard tables and as a WhatsApp report after 11 PM.
@@ -11414,7 +11416,7 @@ try { app.use("/api/v2/learn", require("./routes/v2/learn")); } catch(e) { conso
  * separate routes: the second one puts mail in a stranger's inbox and cannot
  * be undone, so it is never reachable by accident from the first.
  */
-try { app.use("/api/v2/job-outreach", require("./routes/v2/jobOutreach")); } catch(e) { console.error("[Routes] jobOutreach:", e.message); }
+try { app.use("/api/v2/job-outreach", require("./middleware/studioGate").studioApi("job"), require("./routes/v2/jobOutreach")); } catch(e) { console.error("[Routes] jobOutreach:", e.message); }
 
 try {
     app.use("/api/v2/contractor",     require("./routes/v2/contractorDesk"));

@@ -9,10 +9,10 @@
  * reach 96 and was told no. The answer a mentor gives is the work, in order,
  * and the page that work produces — which is what these pin.
  *
- * Nothing here relaxes the truth rule. The climb adds PLANNED entries only:
- * marked, blanked, gated out of the PDF, and excluded from today's score. Two
- * numbers are reported and they mean different things — what it scores now,
- * and what it scores once the work exists.
+ * Nothing here relaxes the truth rule. The climb adds only the work the
+ * student picks to build: listed in the reply as not done yet, and gated out
+ * of the PDF until it is. Declining is honoured: nothing goes on that they
+ * did not choose, and the reply says how far their own page gets.
  */
 
 const express = require('express');
@@ -69,12 +69,13 @@ async function raiseTo(goal, answer) {
   return out;
 }
 
-describe('every number they can name is a number they reach', () => {
+describe('every number they can name is one their own picks reach', () => {
   /* Not one representative case — the whole band, because "it works for 98"
-     was the last thing that was true and 94 still stopped short. */
+     was the last thing that was true and 94 still stopped short. Six picks
+     is a month of work; the climb uses those and nothing else. */
   [90, 91, 92, 93, 94, 95, 96, 97, 98, 99].forEach((goal) => {
-    it(`reaches ${goal} by naming the work`, async () => {
-      const out = await raiseTo(goal, (o) => picks(o).slice(0, 2).map((c) => c.value).join(', ') || 'skip');
+    it(`reaches ${goal} with the work they picked`, async () => {
+      const out = await raiseTo(goal, (o) => picks(o).slice(0, 6).map((c) => c.value).join(', ') || 'skip');
       expect(out.potentialScore).toBeGreaterThanOrEqual(goal);
       /* And says so, rather than leaving the student to read a number off a
          widget they may not be looking at. */
@@ -83,36 +84,36 @@ describe('every number they can name is a number they reach', () => {
   });
 });
 
-describe('a wrong pick and a refused pick both still get there', () => {
-  it('honours the pick that does not help, then keeps climbing', async () => {
+describe('a weak pick and a refusal are both told the truth', () => {
+  it('adds the pick that does not help, and nothing behind it', async () => {
     /*
-     * Picking the weakest option is a real thing a student does, and it used
-     * to leave the page short of the goal with no word about the gap. The
-     * pick goes on — it is their plan and they may have a reason — and the
-     * bench fills in behind it.
+     * The bench used to fill in behind a weak pick until the number was met,
+     * all of it written as finished. The pick goes on — it is their plan — and
+     * the reply says how far it gets and what would take it further.
      */
     const out = await raiseTo(97, (o) => {
       const all = picks(o);
       return all.length ? all[all.length - 1].value : 'skip';
     });
-    expect(out.report.score).toBeGreaterThanOrEqual(97);
-    /* Their pick goes on and the bench fills in behind it until the number
-       is met — said in one sentence now that the steps print themselves. */
-    expect(String(out.reply)).toMatch(/Your picks lead|This page scores \d+\/100/i);
+    expect((out.session.plannedGuides || []).length).toBeLessThanOrEqual(1);
+    expect(String(out.reply)).not.toMatch(/more were added behind them/);
+    expect(String(out.reply)).toMatch(/The work you picked takes this page to \d+\/100|This page scores \d+\/100/);
   });
 
-  it('takes them to the number even when they want none of the suggestions', async () => {
-    /* "None of these" is a preference about which project, not a refusal of
-       the score they asked for. This was the ceiling sentence. */
+  it('adds nothing when they want none of the suggestions', async () => {
+    /* "None of these" used to mean "pick for me". It means none. */
     const out = await raiseTo(96, () => 'skip');
-    expect(out.potentialScore).toBeGreaterThanOrEqual(96);
-    expect(String(out.reply)).not.toMatch(/Ceiling/i);
+    expect(out.session.plannedGuides || []).toEqual([]);
+    expect(out.text).toMatch(/campus portal used by 300 students/i);
+    expect(out.text).not.toMatch(/Relational schema|Containerised|Service deployed/);
+    expect(String(out.reply)).toMatch(/Your page scores \d+\/100 as it stands\. I only add work you choose/);
+    expect(String(out.reply)).not.toMatch(/Before you attach this/);
   });
 });
 
 describe('the climb never claims anything', () => {
   it('tracks every added line, and the reply is what keeps it honest', async () => {
-    const out = await raiseTo(98, (o) => picks(o).slice(0, 2).map((c) => c.value).join(', ') || 'skip');
+    const out = await raiseTo(98, (o) => picks(o).slice(0, 6).map((c) => c.value).join(', ') || 'skip');
     /*
      * The debt is on the session, not stamped across the document.
      *
@@ -128,7 +129,8 @@ describe('the climb never claims anything', () => {
     expect(planned.length).toBeGreaterThan(0);
     expect(out.text).not.toMatch(/PLANNED|LEARNING/);
     /* And each one it lists is genuinely on the page it is talking about. */
-    planned.forEach((g) => expect(out.text).toContain(g.build));
+    /* Under the title the page prints, which is what the export gate reads. */
+    planned.forEach((g) => expect(out.text).toContain(g.name || g.build));
 
     /*
      * One number, not two.
@@ -153,8 +155,8 @@ describe('the climb never claims anything', () => {
   });
 
   it('gives the steps for each thing it added, not a list of missing keywords', async () => {
-    const out = await raiseTo(95, () => 'skip');
-    expect(String(out.reply)).toMatch(/Before you attach this: \d+ things?/);
+    const out = await raiseTo(95, (o) => picks(o).slice(0, 6).map((c) => c.value).join(', ') || 'skip');
+    expect(String(out.reply)).toMatch(/Before you attach this: \d+ projects? on the page/);
     /* Each one is a heading with its own steps under it, in points. */
     expect(String(out.reply)).toMatch(/\n- \*\*[^*]+\*\* · /);
     expect(String(out.reply)).toMatch(/\n {2}- /);
