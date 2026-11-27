@@ -41,9 +41,9 @@
  *            is answered by Gemini.
  *
  * Listening happens in the browser (Web Speech API). Speaking: the
- * interviewer's lines are written here (spokenLine) and voiced by Azure's
- * Indian-English neural voice when AZURE_SPEECH_KEY is set (utils/speech.js,
- * free tier), otherwise by the device's own voice. It is an AI and says so;
+ * interviewer's lines are written here (spokenLine) and voiced by Amazon
+ * Polly's Indian-English neural voice when the AWS_POLLY keys are set
+ * (utils/speech.js), otherwise by the device's own voice. It is an AI and says so;
  * a person can still overrule a mark.
  */
 
@@ -258,7 +258,7 @@ function attentionText(p) {
 }
 
 // ── What the interviewer says ────────────────────────────────────────────
-// The page shows the question and speaks these lines: Azure's voice when it is
+// The page shows the question and speaks these lines: Polly's voice when it is
 // set up (voiceOf), the device's voice otherwise. Fixed lines, so a student
 // cannot have the paid-for voice read out text of their own.
 const SAMPLE_LINE = 'Hello. I am your TEN interviewer. A question will sound like this: your API returned the right data in testing, but times out in production. Where do you look first, and why?';
@@ -291,7 +291,7 @@ function spokenLine(session, student, n, lead) {
 
 // ponytail: per-process memory, newest kept; enough to replay a line or survive a reload.
 const voiceCache = new Map();
-/** MP3 of one interviewer line, or null when the natural voice is off or Azure refused. */
+/** MP3 of one interviewer line, or null when the natural voice is off or Polly refused. */
 async function voiceOf({ student, sessionId, n, lead, part }) {
     if (!speech.ready()) return null;
     let key, text;

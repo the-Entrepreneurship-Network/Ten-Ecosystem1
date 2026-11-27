@@ -3,60 +3,99 @@
 /**
  * @jest-environment node
  *
- * utils/speech.js: Azure's text-to-speech REST call for the interviewer's
- * voice. Off without a key; the request carries the key, SSML with the text
- * escaped and the MP3 format; any refusal or error is null, so the page falls
+ * utils/speech.js: the interviewer's voice from Amazon Polly. Off without the
+ * keys; one signed POST to Polly's speech endpoint with Kajal, neural, Indian
+ * English and MP3; the signature is AWS Signature Version 4 (checked against
+ * AWS's published example); any refusal or error is null, so the page falls
  * back to the device's voice.
  */
 
+const https = require('https');
+const { EventEmitter } = require('events');
 const speech = require('../../utils/speech');
 
-const ENV = ['AZURE_SPEECH_KEY', 'AZURE_SPEECH_REGION', 'INTERVIEW_VOICE'];
-let calls;
+const ENV = ['AWS_POLLY_ACCESS_KEY_ID', 'AWS_POLLY_SECRET_ACCESS_KEY', 'AWS_POLLY_REGION', 'INTERVIEW_VOICE'];
+let calls; let reply;
 beforeEach(() => {
     ENV.forEach((k) => delete process.env[k]);
     calls = [];
-    global.fetch = jest.fn(async (url, opts) => { calls.push({ url, opts }); return global.__reply(); });
-    global.__reply = () => ({ ok: true, status: 200, arrayBuffer: async () => Uint8Array.from([73, 68, 51]).buffer });
+    reply = () => ({ status: 200, body: Buffer.from('ID3') });
+    jest.spyOn(https, 'request').mockImplementation((opts, cb) => {
+        const req = new EventEmitter();
+        let body = '';
+        req.destroy = (err) => req.emit('error', err);
+        req.end = (b) => {
+            body += b || '';
+            calls.push({ opts, body });
+            setImmediate(() => {
+                let r;
+                try { r = reply(); } catch (err) { req.emit('error', err); return; }
+                const res = new EventEmitter();
+                res.statusCode = r.status;
+                cb(res);
+                res.emit('data', r.body);
+                res.emit('end');
+            });
+        };
+        return req;
+    });
     jest.spyOn(console, 'warn').mockImplementation(() => {});
 });
-afterEach(() => { delete global.fetch; console.warn.mockRestore(); });
+afterEach(() => { jest.restoreAllMocks(); });
 
 describe('utils/speech', () => {
-    it('is off, and calls nothing, without AZURE_SPEECH_KEY', async () => {
+    it('is off, and calls nothing, without both AWS_POLLY keys', async () => {
+        expect(speech.ready()).toBe(false);
+        process.env.AWS_POLLY_ACCESS_KEY_ID = 'AKIDEXAMPLE';
         expect(speech.ready()).toBe(false);
         expect(await speech.speak('Hello')).toBeNull();
         expect(calls).toEqual([]);
     });
 
-    it('asks Azure for MP3 in the chosen voice, with the text escaped inside SSML', async () => {
-        process.env.AZURE_SPEECH_KEY = ' key-1 ';
-        expect(speech.voice()).toBe('en-IN-NeerjaNeural');
-        const audio = await speech.speak('Is <b> & "quotes" safe?');
+    it('asks Polly in Mumbai for Kajal, neural, Indian English, MP3, and signs the request', async () => {
+        process.env.AWS_POLLY_ACCESS_KEY_ID = ' AKIDEXAMPLE ';
+        process.env.AWS_POLLY_SECRET_ACCESS_KEY = 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY';
+        expect(speech.voice()).toBe('Kajal');
+        const audio = await speech.speak('Hi Asha, good morning. How are you doing today?');
         expect(audio).toEqual(Buffer.from('ID3'));
-        const { url, opts } = calls[0];
-        expect(url).toBe('https://centralindia.tts.speech.microsoft.com/cognitiveservices/v1');
-        expect(opts.method).toBe('POST');
-        expect(opts.headers).toMatchObject({ 'Ocp-Apim-Subscription-Key': 'key-1', 'Content-Type': 'application/ssml+xml',
-            'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3', 'User-Agent': 'ten-portal' });
-        expect(opts.body).toBe('<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-IN">' +
-            '<voice name="en-IN-NeerjaNeural"><prosody rate="-4%">Is &lt;b&gt; &amp; &quot;quotes&quot; safe?</prosody></voice></speak>');
+        const { opts, body } = calls[0];
+        expect(opts).toMatchObject({ host: 'polly.ap-south-1.amazonaws.com', path: '/v1/speech', method: 'POST' });
+        expect(JSON.parse(body)).toEqual({ Engine: 'neural', LanguageCode: 'en-IN', OutputFormat: 'mp3', Text: 'Hi Asha, good morning. How are you doing today?', TextType: 'text', VoiceId: 'Kajal' });
+        expect(opts.headers['content-type']).toBe('application/json');
+        expect(opts.headers['content-length']).toBe(Buffer.byteLength(body));
+        expect(opts.headers['x-amz-date']).toMatch(/^\d{8}T\d{6}Z$/);
+        expect(opts.headers.Authorization).toMatch(/^AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE\/\d{8}\/ap-south-1\/polly\/aws4_request, SignedHeaders=content-type;host;x-amz-date, Signature=[0-9a-f]{64}$/);
 
-        process.env.AZURE_SPEECH_REGION = 'eastus';
-        process.env.INTERVIEW_VOICE = 'en-IN-PrabhatNeural';
+        process.env.AWS_POLLY_REGION = 'us-east-1';
+        process.env.INTERVIEW_VOICE = 'Aditi';
         await speech.speak('Hi');
-        expect(calls[1].url).toBe('https://eastus.tts.speech.microsoft.com/cognitiveservices/v1');
-        expect(calls[1].opts.body).toContain('<voice name="en-IN-PrabhatNeural">');
+        expect(calls[1].opts.host).toBe('polly.us-east-1.amazonaws.com');
+        expect(JSON.parse(calls[1].body).VoiceId).toBe('Aditi');
     });
 
-    it('returns null when Azure refuses (the free allowance is used up) or cannot be reached, and warns once', async () => {
-        process.env.AZURE_SPEECH_KEY = 'key-1';
-        global.__reply = () => ({ ok: false, status: 403 });
+    it('signs exactly as AWS documents (Signature Version 4 example, IAM ListUsers)', () => {
+        const h = speech.signV4({
+            method: 'GET', host: 'iam.amazonaws.com', path: '/', query: 'Action=ListUsers&Version=2010-05-08',
+            headers: { 'content-type': 'application/x-www-form-urlencoded; charset=utf-8' }, body: '',
+            region: 'us-east-1', service: 'iam', accessKeyId: 'AKIDEXAMPLE', secretAccessKey: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY',
+            now: new Date('2015-08-30T12:36:00Z')
+        });
+        expect(h).toEqual({
+            'x-amz-date': '20150830T123600Z',
+            Authorization: 'AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/us-east-1/iam/aws4_request, SignedHeaders=content-type;host;x-amz-date, ' +
+                'Signature=5d672d79c15b13162d9279b0855cfba6789a8edb4c82c400e06b5924a6f2b5d7'
+        });
+    });
+
+    it('returns null when Polly refuses or cannot be reached, and warns once per reason', async () => {
+        process.env.AWS_POLLY_ACCESS_KEY_ID = 'AKIDEXAMPLE';
+        process.env.AWS_POLLY_SECRET_ACCESS_KEY = 'secret';
+        reply = () => ({ status: 403, body: Buffer.from(JSON.stringify({ message: 'The security token included in the request is invalid.' })) });
         expect(await speech.speak('Hello')).toBeNull();
         expect(await speech.speak('Hello again')).toBeNull();
         expect(console.warn).toHaveBeenCalledTimes(1);
-        expect(console.warn.mock.calls[0][0]).toMatch(/403 \(free monthly allowance or rate limit reached\)/);
-        global.__reply = () => { throw new Error('getaddrinfo ENOTFOUND'); };
+        expect(console.warn.mock.calls[0][0]).toMatch(/Polly answered 403 \(check the AWS_POLLY keys.*\): The security token included in the request is invalid\./);
+        reply = () => { throw new Error('getaddrinfo ENOTFOUND'); };
         expect(await speech.speak('Hello')).toBeNull();
         expect(console.warn).toHaveBeenCalledTimes(2);
     });

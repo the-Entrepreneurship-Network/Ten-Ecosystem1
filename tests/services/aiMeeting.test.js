@@ -8,7 +8,7 @@
  * repeatable trial that uses up nobody's attempt; eight questions built from
  * the student's own tasks; Gemini or Claude as the admin portal says, within
  * the monthly limit; no answer taken without the face check; the camera totals
- * kept; the interviewer's lines, voiced by Azure only from the server's own
+ * kept; the interviewer's lines, voiced by Polly only from the server's own
  * text; a report saved, logged and emailed.
  */
 
@@ -68,7 +68,7 @@ jest.mock('../../utils/claude', () => ({
 }));
 jest.mock('../../utils/speech', () => ({
     ready: () => mockDb.speechReady,
-    voice: () => 'en-IN-NeerjaNeural',
+    voice: () => 'Kajal',
     speak: async (text) => { mockDb.spoken.push(text); return Buffer.from('mp3:' + text); }
 }));
 jest.mock('../../utils/mailer', () => ({
@@ -444,7 +444,7 @@ describe('the face check and the interviewer\'s voice', () => {
         geminiAsks();
         const { sessionId } = await start();
         expect(await meeting.voiceOf({ student, sessionId, n: 1, lead: 'greet' })).toBeNull();
-        expect(meeting.voiceInfo()).toMatchObject({ natural: false, name: 'en-IN-NeerjaNeural' });
+        expect(meeting.voiceInfo()).toMatchObject({ natural: false, name: 'Kajal' });
         mockDb.speechReady = true;
         expect(meeting.voiceInfo().natural).toBe(true);
         const intro = await meeting.voiceOf({ student, sessionId, n: 1, lead: 'greet' });

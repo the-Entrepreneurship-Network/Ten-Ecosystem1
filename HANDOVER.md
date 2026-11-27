@@ -1032,16 +1032,20 @@ rest.
 - **Voice:** the interviewer's lines are written on the server
   (`spokenLine`: the greeting, the start, a short acknowledgement, "the last
   question", a closing line) and returned as `greeting` and `say`.
-  With **`AZURE_SPEECH_KEY`** (and `AZURE_SPEECH_REGION`, default
-  `centralindia`) they are spoken in Azure's Indian-English neural voice
-  (`utils/speech.js`; `INTERVIEW_VOICE`, default `en-IN-NeerjaNeural`,
-  `en-IN-PrabhatNeural` for a male voice) through `POST /api/v2/meeting/voice`,
+  With **`AWS_POLLY_ACCESS_KEY_ID`** and **`AWS_POLLY_SECRET_ACCESS_KEY`** (an
+  IAM user allowed only `polly:SynthesizeSpeech`; `AWS_POLLY_REGION`, default
+  `ap-south-1`) they are spoken in Amazon Polly's Indian-English neural voice
+  (`utils/speech.js`; `INTERVIEW_VOICE`, default `Kajal`) through
+  `POST /api/v2/meeting/voice`,
   which voices only these lines, for the session's owner, and caches them per
-  process. On Azure's **free F0 tier** that is 0.5 million characters a month
-  (about 190 interviews) at ₹0; past it Azure refuses until the next month and
-  the page uses the device's own voice, as it does without the key. Upgrading
-  the Azure resource to paid (S0) would bill per character: that is a cost
-  decision for the owner.
+  process. The request is signed by hand (AWS Signature Version 4, `signV4`,
+  checked against AWS's published example) so no AWS library is needed: the
+  current one requires Node 20. **Cost:** neural voices are billed per
+  character, about $16 per million, roughly ₹3–4 an interview. The owner's AWS
+  account pays from its sign-up credits ($100, about 2,000 interviews); AWS's
+  free plan ends after six months, and after that the account must be upgraded
+  to paid or it closes. Without the keys, or when Polly refuses, the page uses
+  the device's own voice.
 - **Report:** marks per question and overall, the level, what to improve, the
   camera line. Saved, listed on the page, emailed to the student, and logged
   (`AiCoordinatorLog` kind `meeting`, source `report`, with the level and the

@@ -20,7 +20,7 @@ jest.mock('../../services/aiMeeting', () => ({
         : answer === '' ? { error: 'Say or type your answer first.' } : { score: 7, feedback: 'ok', question: 'Q2', number: 2, of: 8, done: false, report: null, got: { seconds, proctor } })),
     finishInterview: jest.fn(async () => ({ report: { overall: 7 } })),
     warnInterview: jest.fn(async ({ kind }) => (kind === 'left' ? { warnings: 3, of: 3, ended: true, report: { overall: 4 } } : { error: 'Unknown warning.' })),
-    voiceInfo: jest.fn(() => ({ natural: true, name: 'en-IN-NeerjaNeural', sample: 'Hello.', end: 'Thank you.' })),
+    voiceInfo: jest.fn(() => ({ natural: true, name: 'Kajal', sample: 'Hello.', end: 'Thank you.' })),
     voiceOf: jest.fn(async ({ n, part }) => (part === 'sample' || n === 1 ? Buffer.from('mp3') : null)),
     _internal: { BUSY }
 }));
