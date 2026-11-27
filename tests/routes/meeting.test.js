@@ -19,6 +19,7 @@ jest.mock('../../services/aiMeeting', () => ({
     answerInterview: jest.fn(async ({ answer, seconds, proctor }) => (answer === 'busy' ? { error: BUSY }
         : answer === '' ? { error: 'Say or type your answer first.' } : { score: 7, feedback: 'ok', question: 'Q2', number: 2, of: 8, done: false, report: null, got: { seconds, proctor } })),
     finishInterview: jest.fn(async () => ({ report: { overall: 7 } })),
+    warnInterview: jest.fn(async ({ kind }) => (kind === 'left' ? { warnings: 3, of: 3, ended: true, report: { overall: 4 } } : { error: 'Unknown warning.' })),
     voiceInfo: jest.fn(() => ({ natural: true, name: 'en-IN-NeerjaNeural', sample: 'Hello.', end: 'Thank you.' })),
     voiceOf: jest.fn(async ({ n, part }) => (part === 'sample' || n === 1 ? Buffer.from('mp3') : null)),
     _internal: { BUSY }
@@ -69,6 +70,11 @@ describe('/api/v2/meeting', () => {
         expect(await call('post', '/interview/answer', { sessionId: 's1', answer: '' })).toEqual({ status: 400, body: { success: false, message: 'Say or type your answer first.', closed: false } });
         expect((await call('post', '/interview/answer', { sessionId: 's1', answer: 'busy' })).status).toBe(503);
         expect((await call('post', '/interview/finish', { sessionId: 's1', proctor })).body).toEqual({ success: true, report: { overall: 7 } });
+    });
+
+    it('records a warning and passes on the end of the interview at the third', async () => {
+        expect((await call('post', '/interview/warning', { sessionId: 's1', kind: 'left' })).body).toEqual({ success: true, warnings: 3, of: 3, ended: true, report: { overall: 4 } });
+        expect(await call('post', '/interview/warning', { sessionId: 's1', kind: 'x' })).toEqual({ status: 400, body: { success: false, message: 'Unknown warning.', closed: false } });
     });
 
     it('sends an interviewer line as MP3, or 204 for the device voice', async () => {

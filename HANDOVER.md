@@ -974,7 +974,11 @@ rest.
   had (`TaskAssignment`, unlocked Task Journey `DomainTask` rows, submitted
   work): the ideas and debugging behind the tasks, never the task text; a weak
   answer gets a follow-up; each answer scored 0–10 with two sentences of
-  feedback. Answers are stored scrubbed, so a phone number said aloud never
+  feedback. **Marked on the ideas, not the wording:** answers are spoken in
+  the student's own words, so the prompt asks for partial marks (3–5) when the
+  key idea or main keywords are there and heading the right way, 6–7 for the
+  right idea in their own words, 8–9 with an example or trade-off, and the
+  higher of two marks when in doubt; 0–2 only for wrong, empty or off-point. Answers are stored scrubbed, so a phone number said aloud never
   reaches the AI. AI turns are capped at 20 per student per day.
 - **Which AI (admin portal, "Interview Room AI"):** Gemini (free) or Claude
   (paid), stored in `models/InterviewSetting.js` (`_id: "interview"`), read
@@ -998,7 +1002,21 @@ rest.
   the interviewer stops talking, and it carries on when the face is back.
   Looking away is allowed but counted. The page sends the totals with each
   answer, and **the server refuses an answer sent without the face check**
-  (`NO_FACE_CHECK`). The video never leaves the browser. The totals are
+  (`NO_FACE_CHECK`).
+- **Warnings, three and out:** leaving the interview window (another tab
+  counts at once; another window or app after 1.5 s of lost focus, so a stray
+  click on the browser bar does not) and a phone or book held up to the camera
+  (MediaPipe's object detector, COCO `cell phone` and `book`, twice a second;
+  seen for 1 s is a warning, still there 15 s later another) are warnings.
+  The page posts each to `POST /api/v2/meeting/interview/warning`; the count
+  is kept on the session (`MeetingSession.warnings`), so a reload does not
+  reset it, and the **third ends the interview** with the report of what was
+  answered ("The interview was ended after 3 warnings."). Reloading is not a
+  warning; the microphone is asked for in the lobby with the camera, so its
+  permission prompt cannot count as leaving. The object check is extra: if it
+  cannot load, the interview runs without it. ponytail: a general object
+  detector; a phone held edge-on or filling the frame can slip past it (then
+  the face check pauses the interview). The video never leaves the browser. The totals are
   client-reported (a cheat with the developer tools could fake them); checking
   the video on the server would cost money.
 - **Marks** stay hidden during the interview, as in a real one: after each

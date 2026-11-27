@@ -315,7 +315,7 @@ describe('which AI: Gemini or Claude, as the admin portal says', () => {
 describe('the interview', () => {
     const proctor = { checker: 'mediapipe', attentiveMs: 930000, awayMs: 50000, noFaceMs: 20000, awayEpisodes: 2, multiFaceEpisodes: 0, cameraOffEpisodes: 1 };
 
-    it('scores eight answers strictly, keeps the time and camera totals, and ends with the marks, the report, the log and the email', async () => {
+    it('scores eight answers on their ideas, keeps the time and camera totals, and ends with the marks, the report, the log and the email', async () => {
         geminiAsks();
         const { out } = await fullInterview(proctor, 'hard');
         expect(out).toMatchObject({ score: 9, done: true, question: null, number: 8, of: 8 });
@@ -329,7 +329,7 @@ describe('the interview', () => {
         expect(s.turns.map((t) => t.question)).toEqual(questions);
         expect(s.turns.map((t) => t.seconds)).toEqual([41, 42, 43, 44, 45, 46, 47, 48]);
         expect(s.proctor).toEqual(proctor);
-        expect(mockDb.gemini[4]).toContain('Score it from 0 to 10, strictly');
+        expect(mockDb.gemini[4]).toContain('Score it from 0 to 10 for the ideas, not the wording');
         expect(mockDb.gemini[8]).toContain('That was question 8 of 8');
         expect(mockDb.gemini[8]).toContain('Q7: Where would you add a cache');
         expect(mockDb.logs.filter((l) => l.source === 'interview')).toHaveLength(9);
@@ -456,5 +456,40 @@ describe('the face check and the interviewer\'s voice', () => {
         expect(String(await meeting.voiceOf({ student, part: 'sample' }))).toBe('mp3:' + meeting.voiceInfo().sample);
         expect(String(await meeting.voiceOf({ student, part: 'end' }))).toBe('mp3:' + meeting.voiceInfo().end);
         expect(mockDb.spoken.length).toBe(4);
+    });
+});
+
+describe('warnings and marking', () => {
+    it('counts warnings on the session, so a reload does not reset them, and the third ends the interview with the report', async () => {
+        geminiAsks();
+        const { sessionId } = await start('medium');
+        await meeting.answerInterview({ student, sessionId, answer: 'It hangs.', proctor: FACE });
+        expect(await meeting.warnInterview({ student, sessionId, kind: 'peek' })).toEqual({ error: 'Unknown warning.' });
+        expect(await meeting.warnInterview({ student, sessionId, kind: 'left' })).toEqual({ warnings: 1, of: 3, ended: false });
+        expect(await meeting.warnInterview({ student, sessionId, kind: 'object' })).toEqual({ warnings: 2, of: 3, ended: false });
+        expect(await meeting.status({ student })).toMatchObject({ state: 'resume', warnings: 2, warningsToEnd: 3 });
+        const third = await meeting.warnInterview({ student, sessionId, kind: 'left', proctor: { checker: 'mediapipe', attentiveMs: 4000 } });
+        expect(third).toMatchObject({ warnings: 3, of: 3, ended: true });
+        expect(third.report.summary).toBe('The interview was ended after 3 warnings. You stopped after 1 of 8 questions, averaging 6/10; the unanswered questions count as not attempted.');
+        expect(third.report.attention).toMatch(/ Warnings: 3 of 3 \(left the interview window 2 time\(s\); held a phone or notes up to the camera 1 time\(s\)\)\.$/);
+        expect(third.report.warnings).toBe(3);
+        expect(mockDb.sessions[0].endedAt).toBeInstanceOf(Date);
+        expect(mockDb.sessions[0].proctor.attentiveMs).toBe(4000);
+        expect(mockDb.mails[0].html).toContain('Warnings: 3 of 3');
+        expect(await meeting.warnInterview({ student, sessionId, kind: 'left' })).toEqual({ error: 'This interview is over.' });
+        expect(await meeting.answerInterview({ student, sessionId, answer: 'x', proctor: FACE })).toEqual({ error: 'This interview is over.' });
+    });
+
+    it('marks the ideas, not the wording: partial marks for the right keywords, the higher of two marks', async () => {
+        geminiAsks();
+        const { sessionId } = await start();
+        await meeting.answerInterview({ student, sessionId, answer: 'umm the server is slow so the request hangs', proctor: FACE });
+        const prompt = mockDb.gemini[1];
+        expect(prompt).toContain('Score it from 0 to 10 for the ideas, not the wording.');
+        expect(prompt).toContain('never expect a textbook answer word for word');
+        expect(prompt).toContain('names the key idea or the main keywords and is heading the right way earns 3 to 5');
+        expect(prompt).toContain('Between two marks, give the higher one.');
+        expect(prompt).not.toMatch(/strictly|mark strictly/i);
+        expect(meeting._internal.interviewPrompt({ domain: 'x', context: '', topics: [], turns: [], number: 1, difficulty: 'easy' })).not.toMatch(/strict/i);
     });
 });

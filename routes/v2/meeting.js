@@ -12,6 +12,8 @@
  *   POST /interview/answer    { sessionId, answer, seconds, proctor } → score,
  *                             feedback, next question or the report
  *   POST /interview/finish    { sessionId, proctor } → the report so far
+ *   POST /interview/warning   { sessionId, kind: 'left'|'object', proctor } → the
+ *                             count; the third ends it with the report
  *   POST /voice               { sessionId, n, lead } or { part: 'sample'|'end' } →
  *                             that interviewer line as MP3 in the natural voice,
  *                             or 204: the page then uses the device's voice
@@ -63,6 +65,7 @@ router.post('/interview/answer', answer((req) => meeting.answerInterview({
     student: req.student, sessionId: body(req).sessionId, answer: body(req).answer, seconds: body(req).seconds, proctor: body(req).proctor
 })));
 router.post('/interview/finish', answer((req) => meeting.finishInterview({ student: req.student, sessionId: body(req).sessionId, proctor: body(req).proctor })));
+router.post('/interview/warning', answer((req) => meeting.warnInterview({ student: req.student, sessionId: body(req).sessionId, kind: body(req).kind, proctor: body(req).proctor })));
 
 router.post('/voice', async (req, res) => {
     if (!ai.enabled()) return off(res);

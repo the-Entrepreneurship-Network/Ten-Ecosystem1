@@ -144,6 +144,12 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
 .report td.s{text-align:right;white-space:nowrap;font-weight:800;font-variant-numeric:tabular-nums}
 .report .fb{color:var(--muted);font-size:12.5px;margin-top:2px}
 .reports li{font-size:13.5px;padding:8px 0;border-bottom:1px dashed var(--line);list-style:none;display:flex;justify-content:space-between;gap:10px}
+.modal{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(3,5,12,.72)}
+.modal-box{width:min(440px,100%);background:var(--card);border:1px solid rgba(245,158,11,.6);border-radius:16px;padding:22px;display:flex;flex-direction:column;gap:10px;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+.modal-box b{font-size:19px;color:var(--amber)}
+.modal-box.ended{border-color:rgba(239,68,68,.7)}.modal-box.ended b{color:var(--red)}
+.modal-box p{font-size:14.5px}
+.modal-box .btn{align-self:flex-start;margin-top:4px}
 .notice{padding:10px 12px;border-radius:10px;background:var(--accent-soft);border:1px solid var(--accent-line);font-size:13.5px;margin-top:12px}
 </style>
 </head>
@@ -157,6 +163,7 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
   </div>
   <div class="top-right">
     <span class="proctor" id="proctor" hidden><span class="dot"></span><span id="proctor-text">Face check on</span></span>
+    <span class="proctor warn" id="warn-count" hidden><span class="dot"></span><span id="warn-count-text"></span></span>
     <span class="qnum" id="qnum"></span>
     <span class="timer" id="timer" aria-label="Time on this question"></span>
     <span class="pill">AI INTERVIEWER, NOT A PERSON</span>
@@ -231,7 +238,8 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
       </div>
     </div>
     <ul class="rules">
-      <li>Eight questions on the work you have been given so far, at the level of a company interview. Speak your answers; typing is the fallback.</li>
+      <li>Eight questions on the work you have been given so far, at the level of a company interview. Speak your answers in your own words; typing is the fallback.</li>
+      <li>Stay on this page until the end. Opening another tab, window or app, or holding a phone or notes up to the camera, is a warning; the third warning ends the interview.</li>
       <li>Your marks stay hidden until the end, as in a real interview. Then you get a report, and a copy is emailed to you.</li>
       <li>The video stays in your browser. Only the face-check totals are sent with your answers, and they appear in your report.</li>
     </ul>
@@ -267,6 +275,14 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
   </section>
 </main>
 
+<div class="modal" id="warn" role="alertdialog" aria-modal="true" aria-labelledby="warn-title" hidden>
+  <div class="modal-box" id="warn-box">
+    <b id="warn-title">Warning</b>
+    <p id="warn-text"></p>
+    <button class="btn primary" id="warn-ok" type="button">Back to the interview</button>
+  </div>
+</div>
+
 <script>
 (function () {
   'use strict';
@@ -294,7 +310,14 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
   // from a second screen; swap in a trained gaze model if tuning is not enough.
   // pauseAfterMs is how long the face may be missing before the interview pauses.
   var ATT = { yaw: 0.30, pitchLo: 0.35, pitchHi: 1.05, iris: 0.22, awayAfterMs: 2500, pauseAfterMs: 1500, everyMs: 250 };
-  var cam = { stream: null, detector: null, checker: 'none', state: 'off', since: 0, good: 0, flagged: false, loop: null, error: false,
+  // Phones and notes held up to the camera: MediaPipe's object detector (COCO classes),
+  // twice a second during the interview. Seen for confirmMs is a warning; still there
+  // repeatMs later, another. ponytail: a general detector; a phone held edge-on or
+  // filling the frame can slip past it (then the face check pauses the interview).
+  var OBJ = { kinds: ['cell phone', 'book'], score: 0.5, confirmMs: 1000, repeatMs: 15000, goneMs: 2000, everyTicks: 2,
+    model: 'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/int8/1/efficientdet_lite0.tflite' };
+  var obj = { since: 0, last: 0, warnedAt: 0, n: 0 };
+  var cam = { stream: null, detector: null, objects: null, checker: 'none', state: 'off', since: 0, good: 0, flagged: false, loop: null, error: false,
     t: { attentiveMs: 0, awayMs: 0, noFaceMs: 0, awayEpisodes: 0, multiFaceEpisodes: 0, cameraOffEpisodes: 0 } };
   // What the camera counted since the last answer; the server adds it to the interview's totals.
   function proctor() { return Object.assign({ checker: cam.checker }, cam.t); }
@@ -341,6 +364,7 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
     // The interview goes on only while one face is in view.
     var stop = running && !faceSeen(state) && (state === 'off' || now - cam.since >= ATT.pauseAfterMs);
     if (stop !== paused) setPaused(stop);
+    if (running && state !== 'off') checkObjects(video, now);
     if (paused) $('paused-text').textContent = PAUSE_TEXT[state] || PAUSE_TEXT.noface;
     renderCam(state);
     renderLobby();
@@ -370,6 +394,15 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
     $('proctor').className = 'proctor ' + (paused ? 'bad' : c[0]);
     $('proctor-text').textContent = paused ? 'Paused: face not in view' : state === 'away' ? 'Look at the camera' : 'Face verified';
   }
+  function checkObjects(video, now) {
+    if (!cam.objects || ++obj.n % OBJ.everyTicks) return;
+    var seen;
+    try { seen = (cam.objects.detectForVideo(video, now).detections || []).length > 0; } catch (e) { return; }
+    if (!seen) { if (obj.since && now - obj.last > OBJ.goneMs) { obj.since = 0; obj.warnedAt = 0; } return; }
+    obj.last = now;
+    if (!obj.since) obj.since = now;
+    if (now - obj.since >= OBJ.confirmMs && (!obj.warnedAt || now - obj.warnedAt >= OBJ.repeatMs)) { obj.warnedAt = now; warn('object'); }
+  }
   function setPaused(on) {
     paused = on;
     document.body.classList.toggle('is-paused', on);
@@ -388,7 +421,14 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
   function startCamera() {
     if (cam.stream && cam.stream.active) return Promise.resolve();
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return Promise.reject(new Error('This browser cannot open the camera. Use Chrome, Edge or Safari.'));
-    return navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }, audio: false }).then(function (stream) {
+    // The microphone is asked for now, with the camera, so its permission prompt cannot
+    // pop up mid-interview and count as leaving the window; the audio itself is not kept.
+    var video = { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' };
+    return navigator.mediaDevices.getUserMedia({ video: video, audio: !!SR }).catch(function (e) {
+      if (!SR) throw e;
+      return navigator.mediaDevices.getUserMedia({ video: video, audio: false });
+    }).then(function (stream) {
+      stream.getAudioTracks().forEach(function (t) { t.stop(); stream.removeTrack(t); });
       cam.stream = stream; cam.error = false;
       var video = $('cam'); video.srcObject = stream;
       stream.getVideoTracks().forEach(function (t) { t.onended = function () { tick(); }; });
@@ -401,12 +441,16 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
   }
   function loadDetector() {
     if (cam.detector) return Promise.resolve(cam.detector);
-    if (window.__fakeDetector) { cam.checker = 'mediapipe'; cam.detector = window.__fakeDetector; return Promise.resolve(cam.detector); }
+    if (window.__fakeDetector) { cam.checker = 'mediapipe'; cam.detector = window.__fakeDetector; cam.objects = window.__fakeObjects || null; return Promise.resolve(cam.detector); }
     var base = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
     return import(base + '/vision_bundle.mjs').catch(function () { return import(base + '/+esm'); }).then(function (m) {
       var V = m.FaceLandmarker ? m : m.default;
       return V.FilesetResolver.forVisionTasks(base + '/wasm').then(function (files) {
         var opts = function (d) { return { baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task', delegate: d }, runningMode: 'VIDEO', numFaces: 2 }; };
+        // The object check is extra: the interview runs without it if it cannot load.
+        var oopts = function (d) { return { baseOptions: { modelAssetPath: OBJ.model, delegate: d }, runningMode: 'VIDEO', scoreThreshold: OBJ.score, maxResults: 3, categoryAllowlist: OBJ.kinds }; };
+        V.ObjectDetector.createFromOptions(files, oopts('GPU')).catch(function () { return V.ObjectDetector.createFromOptions(files, oopts('CPU')); })
+          .then(function (o) { cam.objects = o; }).catch(function (e) { console.warn('object check unavailable:', e && e.message); });
         return V.FaceLandmarker.createFromOptions(files, opts('GPU')).catch(function () { return V.FaceLandmarker.createFromOptions(files, opts('CPU')); });
       });
     }).then(function (d) { cam.checker = 'mediapipe'; cam.detector = d; return d; })
@@ -547,6 +591,61 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
   function setCheck(id, cls, text) { $(id).className = cls; $(id).textContent = text; }
   setCheck('chk-mic', SR ? 'ok' : 'warn', SR ? 'Voice answers: on (you can also type)' : 'Typing only: answering aloud needs Chrome or Edge');
 
+  // ── Warnings: leaving the window, or a phone or notes at the camera ─────
+  // A hidden tab counts at once; a window that only lost focus (another app or
+  // window beside it) counts after graceMs, so a stray click on the browser's own
+  // bar does not. One warning per time away. The server keeps the count.
+  var LEAVE = { graceMs: 1500 };
+  var away = false, leaveTimer = null, allowLeave = false, warnings = 0, warnLeft = 3;
+  function leaving(hidden) {
+    if (!running || allowLeave || away) return;
+    if (hidden) { clearTimeout(leaveTimer); leaveTimer = null; away = true; warn('left'); return; }
+    if (leaveTimer) return;
+    leaveTimer = setTimeout(function () {
+      leaveTimer = null;
+      if (running && !allowLeave && !away && (document.hidden || !document.hasFocus())) { away = true; warn('left'); }
+    }, LEAVE.graceMs);
+  }
+  function back() {
+    if (document.hidden || !document.hasFocus()) return;
+    clearTimeout(leaveTimer); leaveTimer = null; away = false;
+  }
+  document.addEventListener('visibilitychange', function () { if (document.hidden) leaving(true); else back(); });
+  window.addEventListener('blur', function () { leaving(false); });
+  window.addEventListener('focus', back);
+  // Reloading or leaving through a link is not a warning: the count lives on the
+  // server, and rejoining needs the face check again.
+  window.addEventListener('beforeunload', function () { allowLeave = true; });
+  // What happened, then what to do; an interview that has ended gets only the first.
+  var WARN_TEXT = {
+    left: ['You left the interview window.', 'Stay on this page until the interview ends.'],
+    object: ['A phone or notes were seen in front of the camera.', 'Keep them away until the interview ends.']
+  };
+  function renderWarnings() {
+    $('warn-count').hidden = !running || !warnings;
+    $('warn-count-text').textContent = 'Warnings ' + warnings + ' of ' + warnLeft;
+  }
+  function warn(kind) {
+    if (!running || !session) return;
+    post('/interview/warning', { sessionId: session, kind: kind, proctor: proctor() }).then(function (j) {
+      warnings = j.warnings; warnLeft = j.of || warnLeft;
+      $('warn-box').className = 'modal-box' + (j.ended ? ' ended' : '');
+      $('warn-title').textContent = j.ended ? 'Interview ended' : 'Warning ' + j.warnings + ' of ' + warnLeft;
+      $('warn-text').textContent = j.ended
+        ? WARN_TEXT[kind][0] + ' That was the ' + (warnLeft === 3 ? 'third' : 'last') + ' warning, so the interview has ended. Your report shows what you answered.'
+        : WARN_TEXT[kind].join(' ') + ' At the ' + (warnLeft === 3 ? 'third' : 'last') + ' warning the interview ends automatically.';
+      $('warn-ok').textContent = j.ended ? 'See my report' : 'Back to the interview';
+      $('warn').hidden = false;
+      $('warn-ok').focus();
+      if (j.ended) endInterview(j.report);
+      renderWarnings();
+    }).catch(function (e) { console.warn('warning not recorded:', e.message); });
+  }
+  $('warn-ok').addEventListener('click', function () {
+    $('warn').hidden = true;
+    if (!running) $('report-card').scrollIntoView({ block: 'start', behavior: 'smooth' });
+  });
+
   // ── The interview ───────────────────────────────────────────────────────
   function post(path, body) {
     return fetch('/api/v2/meeting' + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(body || {}) })
@@ -579,13 +678,15 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
     $('ai-state').textContent = 'Noting your answer';
     var seconds = Math.round((Date.now() - qStart) / 1000);
     post('/interview/answer', { sessionId: session, answer: text, seconds: seconds, proctor: proctor() }).then(function (j) {
-      resetTotals();
       setBusy(false);
+      if (!running) return;
+      resetTotals();
       if (j.done) { endInterview(j.report, j.say); return; }
       showQuestion(j.number, j.question);
       say(j.say || j.question, { sessionId: session, n: j.number, lead: 'ack' });
     }).catch(function (e) {
       setBusy(false);
+      if (!running) return;
       status.textContent = e.message;
       $('ai-state').textContent = 'Listening for your answer';
       if (e.closed) { running = false; enableAnswer(); }
@@ -624,6 +725,8 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
     $('ai-state').textContent = 'Preparing your first question';
     post('/interview/start', { difficulty: level }).then(function (j) {
       session = j.sessionId; running = true; OF = j.of || OF;
+      warnings = resuming ? ME.warnings || 0 : 0; warnLeft = ME.warningsToEnd || warnLeft; away = false; obj.since = 0; obj.warnedAt = 0;
+      renderWarnings();
       $('lobby').hidden = true; $('answer-panel').hidden = false; $('qcard').hidden = false; $('proctor').hidden = false; $('report-card').hidden = true; $('repeat').hidden = false;
       if (j.difficulty) $('level-label').textContent = ' · ' + LEVEL_NAME[j.difficulty];
       setBusy(false);
@@ -637,7 +740,10 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
   });
   $('finish').addEventListener('click', function () {
     if (busy || !session) return;
-    if (!confirm('End the interview now? Unanswered questions count as not attempted' + (ME && ME.schedule && ME.schedule.trial ? '.' : ', and this is your one attempt.'))) return;
+    allowLeave = true;
+    var sure = confirm('End the interview now? Unanswered questions count as not attempted' + (ME && ME.schedule && ME.schedule.trial ? '.' : ', and this is your one attempt.'));
+    setTimeout(function () { allowLeave = false; }, 500);
+    if (!sure) return;
     setBusy(true, 'Preparing your report…');
     post('/interview/finish', { sessionId: session, proctor: proctor() }).then(function (j) { setBusy(false); endInterview(j.report); })
       .catch(function (e) { setBusy(false); status.textContent = e.message; });
@@ -647,6 +753,8 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
     if (paused) setPaused(false);
     if (clock) { clearInterval(clock); clock = null; }
     $('answer-panel').hidden = true; $('proctor').hidden = true; $('timer').textContent = '';
+    clearTimeout(leaveTimer); leaveTimer = null;
+    renderWarnings();
     $('qnum').textContent = 'Interview complete'; renderSteps(OF + 1);
     $('question').textContent = 'Thank you. Your report is below, and a copy has been sent to your email.';
     $('repeat').hidden = true;
