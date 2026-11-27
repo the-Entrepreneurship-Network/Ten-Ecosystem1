@@ -863,7 +863,7 @@ function sourcesKeyOr(signedIn) {
  *
  * How many students signed up through each ?ref= label (utils/signupRef.js) in
  * the last `days` days, most first. `signups` counts everyone, with or without
- * a label.
+ * a label. Students' own Refer & Earn links (stu-<code>) are one row, "stu-*".
  */
 api.get('/signup-sources', sourcesKeyOr(requireGrowthAPI), async (req, res) => {
     const days = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 30));
@@ -871,7 +871,13 @@ api.get('/signup-sources', sourcesKeyOr(requireGrowthAPI), async (req, res) => {
     try {
         const rows = await Student.find({ createdAt: { $gte: since } }).select('signupRef').lean();
         const counts = new Map();
-        for (const r of rows) if (r.signupRef) counts.set(r.signupRef, (counts.get(r.signupRef) || 0) + 1);
+        for (const r of rows) {
+            if (!r.signupRef) continue;
+            // Each student's Refer & Earn link is stu-<their code>: one row for
+            // all of them, or the report drowns in one row per student.
+            const ref = r.signupRef.startsWith('stu-') ? 'stu-*' : r.signupRef;
+            counts.set(ref, (counts.get(ref) || 0) + 1);
+        }
         const sources = [...counts]
             .map(([ref, signups]) => ({ ref, signups }))
             .sort((a, b) => b.signups - a.signups || a.ref.localeCompare(b.ref));

@@ -212,6 +212,16 @@
         JOIN TEN ECOSYSTEM
       </h1>
       <p id="topSubtitle" class="text-slate-400 text-xs mt-1 font-medium">Complete your registration wizard to set up your ecosystem workspace.</p>
+      <!-- A student's Refer & Earn link (ref=stu-…): say what the friend gets. -->
+      <p id="friendLinkNote" style="display:none;margin:12px auto 0;max-width:34rem;padding:10px 14px;border-radius:10px;border:1px solid rgba(212,175,55,0.35);background:rgba(212,175,55,0.08);color:#f0eee8;font-size:13px;line-height:1.5;">
+        You are joining with a friend&#8217;s link. As an intern, you get 100 coins when you finish week 1, and 200 more when your first payment is approved.
+      </p>
+      <script>
+        (function () {
+          var ref = window.tenSignupRef ? window.tenSignupRef() : '';
+          if (ref.indexOf('stu-') === 0) document.getElementById('friendLinkNote').style.display = 'block';
+        })();
+      </script>
     </div>
 
     <!-- Container Card -->

@@ -58,20 +58,37 @@ const WELCOME_COINS = 250;
  *   - an account already there: both read the same balance and the second
  *     save overwrote the first, so the history listed two awards and the
  *     total held one.
+ *
+ * With `refKey`, the award is made at most once. The key is stored on the
+ * history entry, and the update only matches an account whose history does
+ * not hold it yet, so the check and the award are one atomic step. Referral
+ * rewards use this: the same reward settled twice at once still pays once.
  */
-async function awardCoins(studentId, action, actionArg) {
+async function awardCoins(studentId, action, actionArg, { refKey } = {}) {
     const entry = COIN_ACTIONS[action] ? COIN_ACTIONS[action](actionArg) : { label: action, coins: actionArg || 0 };
     if (!entry.coins || entry.coins <= 0) return { totalCoins: 0, awarded: 0 };
 
     const earned = { action: entry.label, coins: entry.coins, timestamp: new Date() };
+    if (refKey) earned.refKey = refKey;
+    const filter = refKey ? { studentId, 'coinsHistory.refKey': { $ne: refKey } } : { studentId };
     const addTo = () => StudentCoinModel.findOneAndUpdate(
-        { studentId },
+        filter,
         { $inc: { totalCoins: entry.coins }, $push: { coinsHistory: earned }, $set: { lastUpdated: new Date() } },
         { new: true }
     );
+    // No match with a refKey: no account yet, or this award is already in it.
+    // Ask for the key itself. "Is there an account?" is the wrong question: an
+    // account opened a moment ago by a different award does not hold this one.
+    const alreadyAwarded = async () => {
+        if (!refKey) return null;
+        const doc = await StudentCoinModel.findOne({ studentId, 'coinsHistory.refKey': refKey }).select('totalCoins').lean();
+        return doc ? { totalCoins: doc.totalCoins, awarded: 0, duplicate: true } : null;
+    };
 
     let coinDoc = await addTo();
     if (!coinDoc) {
+        const done = await alreadyAwarded();
+        if (done) return done;
         // First coins ever: open the account with its welcome bonus. If another
         // request opened it a moment ago, the unique index refuses this one and
         // the award goes onto that account instead.
@@ -85,6 +102,7 @@ async function awardCoins(studentId, action, actionArg) {
         } catch (err) {
             if (!err || err.code !== 11000) throw err;
             coinDoc = await addTo();
+            if (!coinDoc) return (await alreadyAwarded()) || { totalCoins: 0, awarded: 0 };
         }
     }
 

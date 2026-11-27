@@ -1930,4 +1930,74 @@ router.get('/game-usage', requireAdminAPI, async (req, res) => {
   }
 });
 
+// ════════════════════════════════════════════════════
+// REFER & EARN — services/referrals.js
+//
+// The overview, Campus Ambassador decisions (one per college), and the freeze
+// switch that stops new rewards for one referrer.
+// ════════════════════════════════════════════════════
+
+const referrals = require('../services/referrals');
+const OBJECT_ID = /^[a-f0-9]{24}$/i;
+
+function referralFail(res, err, what) {
+  if (err instanceof referrals.ReferralError) {
+    return res.status(err.status).json({ success: false, code: err.code, error: err.message });
+  }
+  console.error(`[admin] referrals ${what} failed:`, err.message);
+  return res.status(500).json({ success: false, error: err.message });
+}
+
+router.get('/referrals', requireAdminAPI, async (req, res) => {
+  try {
+    res.json({ success: true, ...(await referrals.adminOverview()) });
+  } catch (err) {
+    referralFail(res, err, 'overview');
+  }
+});
+
+router.post('/referrals/settle', requireAdminAPI, async (req, res) => {
+  try {
+    res.json({ success: true, ...(await referrals.settleAll()) });
+  } catch (err) {
+    referralFail(res, err, 'settle');
+  }
+});
+
+router.post('/referrals/ambassadors/:id/:action', requireAdminAPI, async (req, res) => {
+  try {
+    if (!OBJECT_ID.test(req.params.id)) return res.status(400).json({ success: false, error: 'Bad student id' });
+    const note = String((req.body && req.body.note) || '');
+    const out = await referrals.decideAmbassador(req.params.id, req.params.action, req.session.adminUser.username, note);
+    await AuditLog.create({
+      userId: req.params.id,
+      actionType: 'ambassador_' + req.params.action,
+      performedBy: 'admin',
+      description: `Admin ${req.session.adminUser.username}: Campus Ambassador ${req.params.action}${note ? ' (' + note.slice(0, 120) + ')' : ''}`,
+      newState: out
+    });
+    res.json({ success: true, ...out });
+  } catch (err) {
+    referralFail(res, err, 'ambassador decision');
+  }
+});
+
+router.post('/referrals/freeze/:id', requireAdminAPI, async (req, res) => {
+  try {
+    if (!OBJECT_ID.test(req.params.id)) return res.status(400).json({ success: false, error: 'Bad student id' });
+    const frozen = !!(req.body && req.body.frozen);
+    const out = await referrals.setFrozen(req.params.id, frozen);
+    await AuditLog.create({
+      userId: req.params.id,
+      actionType: frozen ? 'referral_frozen' : 'referral_unfrozen',
+      performedBy: 'admin',
+      description: `Admin ${req.session.adminUser.username} ${frozen ? 'froze' : 'unfroze'} referral rewards`,
+      newState: out
+    });
+    res.json({ success: true, ...out });
+  } catch (err) {
+    referralFail(res, err, 'freeze');
+  }
+});
+
 module.exports = router;

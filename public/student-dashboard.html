@@ -1498,6 +1498,8 @@ body.is-premium #premiumCard { box-shadow:0 0 0 1px rgba(212,175,55,0.25), 0 14p
     <button class="stu-nav-btn" onclick="window.location.href='my-documents.html'" style="background:linear-gradient(135deg,rgba(245,158,11,0.08),rgba(245,158,11,0.02));border:1px solid rgba(245,158,11,0.18);"><span class="nav-icon">📋</span> My Documents <span style="font-size:10px;background:rgba(245,158,11,0.2);color:#f59e0b;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
     <a class="stu-nav-btn" href="https://discord.gg/WCnHJnrWj" target="_blank" rel="noopener" style="background:linear-gradient(135deg,rgba(88,101,242,0.12),rgba(88,101,242,0.04));border:1px solid rgba(88,101,242,0.25);text-decoration:none;display:flex;align-items:center;gap:8px;"><span class="nav-icon">💬</span> Discord Community</a>
     <button class="stu-nav-btn" onclick="window.location.href='my-certificates.html'" style="background:linear-gradient(135deg,rgba(139,92,246,0.08),rgba(139,92,246,0.02));border:1px solid rgba(139,92,246,0.18);"><span class="nav-icon">🏅</span> My Certificates <span style="font-size:10px;background:rgba(139,92,246,0.2);color:#c4b5fd;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
+    <!-- Refer & Earn: services/referrals.js, public/refer.html -->
+    <button class="stu-nav-btn" onclick="window.location.href='/refer'" style="background:linear-gradient(135deg,rgba(6,182,212,0.1),rgba(6,182,212,0.03));border:1px solid rgba(6,182,212,0.22);"><span class="nav-icon">🤝</span> Refer &amp; Earn <span style="font-size:10px;background:rgba(6,182,212,0.2);color:#67e8f9;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
     <button class="stu-nav-btn" onclick="showPaymentComingSoon()" style="background:linear-gradient(135deg,rgba(16,185,129,0.08),rgba(16,185,129,0.02));border:1px solid rgba(16,185,129,0.2);"><span class="nav-icon">💳</span> Make Payment <span style="font-size:10px;background:rgba(16,185,129,0.2);color:#10b981;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
     <button class="stu-nav-btn" onclick="window.location.href='ten-network.html'" style="background:linear-gradient(135deg,rgba(212,175,55,0.12),rgba(212,175,55,0.04));border:1px solid rgba(212,175,55,0.25);"><span class="nav-icon">🌐</span> TEN Network <span style="font-size:10px;background:rgba(212,175,55,0.25);color:#D4AF37;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">NEW</span></button>
     <button class="stu-nav-btn" id="assistantNavBtn" onclick="window.location.href='/assistant'" style="display:none;background:linear-gradient(135deg,rgba(212,175,55,0.12),rgba(212,175,55,0.04));border:1px solid rgba(212,175,55,0.25);"><span class="nav-icon">∞</span> TEN Assistant <span style="font-size:10px;background:rgba(212,175,55,0.25);color:#D4AF37;padding:1px 6px;border-radius:4px;margin-left:4px;font-weight:800;">PREMIUM</span></button>
@@ -1669,6 +1671,12 @@ body.is-premium #premiumCard { box-shadow:0 0 0 1px rgba(212,175,55,0.25), 0 14p
         <div class="sec-card-icon">🏅</div>
         <div class="sec-card-title" style="color:#c4b5fd;">My Certificates <span style="font-size:10px;background:rgba(139,92,246,0.2);color:#c4b5fd;padding:1px 7px;border-radius:4px;margin-left:4px;font-weight:800;vertical-align:middle;">NEW</span></div>
         <div class="sec-card-desc">Expert, Nano Degree &amp; Fellowship certificates</div>
+      </div>
+      <!-- Refer & Earn card -->
+      <div class="sec-card" onclick="window.location.href='/refer'" style="border-color:rgba(6,182,212,0.3);background:linear-gradient(135deg,rgba(6,182,212,0.1),rgba(14,20,40,0.45));">
+        <div class="sec-card-icon">🤝</div>
+        <div class="sec-card-title" style="color:#22d3ee;">Refer &amp; Earn <span style="font-size:10px;background:rgba(6,182,212,0.2);color:#22d3ee;padding:1px 7px;border-radius:4px;margin-left:4px;font-weight:800;vertical-align:middle;">NEW</span></div>
+        <div class="sec-card-desc">Your link: coins for you and your friend, and a share of what they pay</div>
       </div>
       <!-- Payment card -->
       <div class="sec-card" onclick="showPaymentComingSoon()" style="border-color:rgba(16,185,129,0.3);background:linear-gradient(135deg,rgba(16,185,129,0.1),rgba(14,20,40,0.45));">

@@ -4,7 +4,10 @@ const mongoose = require("mongoose");
 const coinHistoryEntrySchema = new mongoose.Schema({
     action:    { type: String, required: true },
     coins:     { type: Number, required: true },
-    timestamp: { type: Date, default: Date.now }
+    timestamp: { type: Date, default: Date.now },
+    // Set only by awards that must happen once (awardCoins' `refKey` option):
+    // an award whose key is already in the history is not made again.
+    refKey:    { type: String }
 }, { _id: false });
 
 const studentCoinSchema = new mongoose.Schema({

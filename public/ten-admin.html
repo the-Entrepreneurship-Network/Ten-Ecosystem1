@@ -147,6 +147,7 @@
     <div class="nav-item" onclick="showSection('certificates')">🎓 Certificates</div>
     <div class="nav-item" onclick="showSection('cert-overrides')" id="nav-cert-overrides">🛡️ Certificate Overrides <span class="nav-badge" id="overrideBadge" style="display:none">0</span></div>
     <div class="nav-item" onclick="showSection('hackathons')" id="nav-hackathons">🏆 Hackathons <span class="nav-badge" id="hackathonBadge" style="display:none">0</span></div>
+    <div class="nav-item" onclick="showSection('referrals')" id="nav-referrals">🤝 Referrals <span class="nav-badge" id="referralBadge" style="display:none">0</span></div>
     <div class="nav-item" onclick="showSection('attendance')">🗓️ Attendance</div>
     <div class="nav-item" onclick="showSection('documents')">📄 Documents</div>
     <div class="nav-item" onclick="showSection('notifications')">📢 Notifications</div>
@@ -434,6 +435,29 @@
       <div id="schoolContent"><p style="color:#64748b;padding:16px">Loading…</p></div>
     </div>
 
+    <div class="section" id="section-referrals">
+      <div style="background:#0e1628;border:1px solid #2a3550;border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+        <div style="font-weight:700;color:#e2e8f0;margin-bottom:6px;">Refer &amp; Earn</div>
+        <div style="color:#94a3b8;font-size:13px;line-height:1.6;">
+          Students share <code style="color:#D4AF37">/register?ref=stu-&lt;code&gt;</code>. A friend counts once their first payment is approved here.
+          Coins go to both students automatically (100 at week 1, 200 at the first payment). Commissions are recorded at the
+          referrer's stage rate and unlock after 15 days; a refunded payment reverses its commission. Rewards are worked out
+          every 30 minutes, or now with <b style="color:#e2e8f0;">Settle now</b>.
+          <b style="color:#e2e8f0;">Withdrawals are not open yet</b>: nothing here pays out money.
+          <b style="color:#e2e8f0;">Freeze</b> stops new rewards for one referrer until it is lifted.
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+        <button class="btn btn-blue" onclick="loadReferrals()">Refresh</button>
+        <button class="btn btn-grey" onclick="settleReferrals()" id="settleReferralsBtn">Settle now</button>
+      </div>
+      <div class="stats-grid" id="referralTotals"></div>
+      <h3 style="color:#e2e8f0;font-size:15px;margin:8px 0 4px;">Campus Ambassador applications</h3>
+      <div id="ambassadorContent"><p style="color:#64748b;padding:16px">Loading…</p></div>
+      <h3 style="color:#e2e8f0;font-size:15px;margin:20px 0 4px;">Referrers</h3>
+      <div id="referrerContent"><p style="color:#64748b;padding:16px">Loading…</p></div>
+    </div>
+
     <div class="section" id="section-auditlog">
       <div id="auditContent"></div>
     </div>
@@ -496,6 +520,7 @@ function showSection(name) {
   if (name === 'auditlog') loadAuditLog();
   if (name === 'ideas') loadIdeas(ideaFilter);
   if (name === 'schools') loadSchools();
+  if (name === 'referrals') loadReferrals();
   if (name === 'linkedin' && window.TENLinkedInAgent) TENLinkedInAgent.mount(document.getElementById('linkedinAgentHost'), { role: 'admin' });
   if (name === 'overview') loadStats();
 }
@@ -1534,6 +1559,88 @@ async function reviewIdea(id, action) {
     return;
   }
   loadIdeas(ideaFilter);
+}
+
+// ── REFER & EARN ────────────────────────────────────────────────────────────
+function rupeesAdmin(n) {
+  return '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+async function loadReferrals() {
+  const totalsHost = document.getElementById('referralTotals');
+  const ambHost = document.getElementById('ambassadorContent');
+  const refHost = document.getElementById('referrerContent');
+  const data = await api('/referrals');
+  if (!data || !data.success) {
+    ambHost.innerHTML = '<div class="empty"><div class="icon">⚠️</div><p>Could not load referrals.</p></div>';
+    refHost.innerHTML = '';
+    return;
+  }
+  const t = data.totals;
+  totalsHost.innerHTML = [
+    ['Referrers', t.referrers, ''], ['Friends joined', t.friends, 'blue'], ['Paying friends', t.paying, 'green'],
+    ['Coins given (both sides)', Number(t.coins).toLocaleString('en-IN'), ''],
+    ['Pending', rupeesAdmin(t.pending), 'orange'], ['Available', rupeesAdmin(t.available), 'green'], ['Reversed', rupeesAdmin(t.reversed), 'red']
+  ].map(([label, value, cls]) => `<div class="stat-card ${cls}"><div class="label">${escIdea(label)}</div><div class="value" style="font-size:22px">${escIdea(value)}</div></div>`).join('');
+
+  const waiting = data.applications.filter((a) => a.status === 'applied').length;
+  const badge = document.getElementById('referralBadge');
+  if (badge) { badge.textContent = waiting; badge.style.display = waiting ? '' : 'none'; }
+
+  ambHost.innerHTML = !data.applications.length
+    ? '<div class="empty"><div class="icon">🎓</div><p>No applications. A student can apply at 10 paying friends.</p></div>'
+    : `<div class="table-wrap"><table><thead><tr><th>Student</th><th>College</th><th>Paying friends</th><th>Status</th><th></th></tr></thead><tbody>${
+      data.applications.map((a) => `<tr>
+        <td>${escIdea(a.name)}<div style="color:#64748b;font-size:11px">${escIdea(a.employeeId)} · ${escIdea(a.email)}</div></td>
+        <td>${escIdea(a.college)}${a.collegeTaken ? '<div><span class="badge badge-red">College already has an ambassador</span></div>' : ''}</td>
+        <td>${a.paying}</td>
+        <td><span class="badge ${a.status === 'approved' ? 'badge-green' : 'badge-orange'}">${escIdea(a.status)}</span>${a.frozen ? ' <span class="badge badge-red">frozen</span>' : ''}</td>
+        <td style="white-space:nowrap">${a.status === 'applied'
+          ? `<button class="btn btn-green" onclick="decideAmbassador('${escIdea(a.id)}','approve')">Approve</button>
+             <button class="btn btn-red" onclick="decideAmbassador('${escIdea(a.id)}','reject')">Reject</button>`
+          : `<button class="btn btn-grey" onclick="decideAmbassador('${escIdea(a.id)}','revoke')">Revoke</button>`}</td>
+      </tr>`).join('')}</tbody></table></div>`;
+
+  refHost.innerHTML = !data.referrers.length
+    ? '<div class="empty"><div class="icon">🤝</div><p>No one has joined through a student\'s link yet.</p></div>'
+    : `<div class="table-wrap"><table><thead><tr><th>Referrer</th><th>Joined</th><th>Paying</th><th>Coins</th><th>Pending</th><th>Available</th><th>Reversed</th><th></th></tr></thead><tbody>${
+      data.referrers.map((r) => `<tr>
+        <td>${escIdea(r.name)}<div style="color:#64748b;font-size:11px">${escIdea(r.employeeId)} · stu-${escIdea(r.code)}${r.ambassador === 'approved' ? ' · ambassador' : ''}</div></td>
+        <td>${r.joined}</td><td>${r.paying}</td><td>${Number(r.coins).toLocaleString('en-IN')}</td>
+        <td>${rupeesAdmin(r.pending)}</td><td>${rupeesAdmin(r.available)}</td><td>${rupeesAdmin(r.reversed)}</td>
+        <td>${r.frozen
+          ? `<button class="btn btn-green" onclick="freezeReferrer('${escIdea(r.id)}', false)">Unfreeze</button>`
+          : `<button class="btn btn-red" onclick="freezeReferrer('${escIdea(r.id)}', true)">Freeze</button>`}</td>
+      </tr>`).join('')}</tbody></table></div>`;
+}
+
+async function decideAmbassador(id, action) {
+  let note = '';
+  if (action === 'reject') {
+    note = prompt('Why is this not approved? The student sees this.') || '';
+  } else if (!confirm(action === 'approve' ? 'Approve this student as Campus Ambassador for their college?' : 'Revoke this Campus Ambassador? They go back to Promoter (10%).')) {
+    return;
+  }
+  const out = await api('/referrals/ambassadors/' + encodeURIComponent(id) + '/' + action, { method: 'POST', body: JSON.stringify({ note }) });
+  if (!out || !out.success) { alert((out && out.error) || 'That did not go through.'); return; }
+  loadReferrals();
+}
+
+async function freezeReferrer(id, frozen) {
+  if (!confirm(frozen ? 'Freeze this referrer? They earn no new coins or commissions until you unfreeze them.' : 'Unfreeze this referrer? Rewards held back are worked out on the next settle.')) return;
+  const out = await api('/referrals/freeze/' + encodeURIComponent(id), { method: 'POST', body: JSON.stringify({ frozen }) });
+  if (!out || !out.success) { alert((out && out.error) || 'That did not go through.'); return; }
+  loadReferrals();
+}
+
+async function settleReferrals() {
+  const btn = document.getElementById('settleReferralsBtn');
+  btn.disabled = true; btn.textContent = 'Settling…';
+  const out = await api('/referrals/settle', { method: 'POST' });
+  btn.disabled = false; btn.textContent = 'Settle now';
+  if (!out || !out.success) { alert((out && out.error) || 'Settle failed.'); return; }
+  if (out.skipped) alert('Not settled: ' + out.skipped);
+  loadReferrals();
 }
 
 async function loadAuditLog() {

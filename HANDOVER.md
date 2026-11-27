@@ -541,6 +541,9 @@ The in-house email console (`routes/growth.js`, `public/growth-os.html`,
   as `Authorization: Bearer …`; that key opens this one route only.
 - The college letter links with `ref=college-<domain>`, so each college's
   sign-ups are counted to it.
+- Students' own Refer & Earn links are `ref=stu-<code>` (§7.13). The report
+  counts them all as one row, `stu-*`. Never use the `stu-` prefix for a
+  marketing link.
 
 **College agent** (`services/collegeDiscovery.js`, `collegeOutreach.js`)
 - **Discovery** runs 4 times a day (02:37, 08:37, 14:37, 20:37 IST), about
@@ -769,6 +772,65 @@ edits at `/hr-help-desk.html` (HR portal → **Help Desk**).
   database would answer the same mail again. Skipping mail already labelled by
   the help desk narrows that window but does not close it.
 
+### 7.13 Refer & Earn (`/refer`)
+
+Code: `services/referrals.js` (every rule), `routes/v2/referrals.js` (the
+student), the Referrals section of `/ten-admin` (`routes/adminPortal.js`),
+`public/refer.html`. A menu entry and a card on the student dashboard open it.
+
+**The link.** Each student's link is `/register?ref=stu-<code>`. The code is
+made the first time they open the page (`Student.referralCode`). A friend who
+signs up through it keeps `stu-<code>` as their `signupRef` (§7.7); that is the
+only connection between the two. The sign-up page tells a visitor arriving on
+such a link what they will get.
+
+**What it earns.** All of it is worked out again from what has happened, so
+settling twice, or twice at once, changes nothing:
+- **Signing up earns nothing.**
+- The friend finishes week 1 (every week-1 task approved): **100 coins each**.
+- The friend's first approved payment: **200 coins each**. The friend now
+  counts as a **paying friend**.
+- Every approved payment in the friend's first 12 months gives the referrer a
+  share at their stage's rate. A share is **pending for 15 days** after the
+  payment, then **available**. If the payment stops being approved (a refund),
+  the share is **reversed**. Coins already given are not taken back.
+- "Approved payment" means a `Payment` with status `success`, more than ₹0, and
+  not a fee waived by a plan (`metadata.grantedBy`).
+- One payment pays the friend's own referrer only; there are no levels above.
+- A "friend" with the referrer's email or phone number is shown as not counted
+  and earns nothing.
+
+**Stages, by paying friends.** Starter 5%. Promoter 10% from 5. At 10 the
+student can apply to be **Campus Ambassador**; an admin approves one per
+college (matched on the college name, ignoring case and punctuation).
+Ambassadors earn 10%, and 20% from 20 paying friends. A share's rate counts the
+paying friend whose payment it is: the fifth paying friend's payment is
+already at 10%.
+
+**When it is settled.** Every 30 minutes on worker 0 (§10), whenever the
+referrer opens the page, and when an admin presses **Settle now**. Coin awards
+use `awardCoins(..., { refKey })` in `services/v2/coinService.js`, which pays a
+keyed award once, however many settles race. The ledger is `ReferralReward`
+(§8.1).
+
+**Notices.** Each coin reward gives both students an in-app notification, not
+an email. An ambassador approval or rejection is a notification that is also
+emailed.
+
+**Admin (`/ten-admin` → Referrals).**
+- Totals, every referrer, and the ambassador applications.
+- **Approve / Reject / Revoke** an ambassador. A second ambassador for a college
+  is refused until the first is revoked.
+- **Freeze** a referrer: no new coins or shares until unfrozen. Nothing is
+  lost; it is caught up on the next settle.
+- Each decision is written to the audit log.
+
+**Not built yet.** Withdrawals (from ₹500, monthly, to the student's own UPI,
+paid by hand with a UTR) are not open, and the page says so. Nothing here pays
+out money. Ask a CA about TDS (section 194H) before building payouts (§17.3).
+Also still to build: coin skips, the leaderboard and College Cup, and the
+extras in the approved plan.
+
 ---
 
 ## 8. Data model
@@ -796,7 +858,8 @@ field, declare it in the schema first.
 | `CollegeContact`, `CollegeSite` | a placement-office address; a college host in the crawl queue | `email` unique; `host` unique |
 | `Notification`, `EcosystemNotification`, `PushSubscription` | the two notification systems (§7.1); a browser push endpoint | |
 | `Message`, `ChatRead`, `ChatReport`, `UserBlock` | chat | DMs expire after 30 days (TTL) |
-| `StudentCoin`, `CoinRedemption`, `DaoProposal` | coins, marketplace purchases, DAO | |
+| `StudentCoin`, `CoinRedemption`, `DaoProposal` | coins, marketplace purchases, DAO | a history entry with `refKey` is an award paid once (§7.13) |
+| `ReferralReward` (`referralrewards`) | one Refer & Earn reward (§7.13) | `key` unique (`week1:<friend>`, `paid:<friend>`, `commission:<payment>`); `kind` week1_coins / paid_coins / commission; a commission is `active` or `reversed`, and pending until `availableAt`. The student side is `Student.referralCode` (unique), `referralFrozen` and `ambassador` |
 | `LearnProgress`, `LearnExamAttempt`, `ProctorIncident` | the LLM portal | exam answer keys stay on the server |
 | `AgentIdea`, `AuditLog`, `LoginEvent` | idea agent queue; admin actions; sign-in events (purged after 90 days) | |
 
@@ -897,6 +960,7 @@ server's clock, and **whether the EC2 box is on UTC is UNSURE**:
 | 30 s after boot, then every 6 h | End-of-tenure sender: generates and emails OFFER + LOC + LOR to students past their end date who have no `DocumentHistory` row. **No eligibility check** | `server.js` | **none**, every process |
 | Hourly at :00, :20, :40 | Certificate pipeline: escalate to HR after 24 h; issue LOC/LOR when the rules are met (or add a fine); issue offer letters 24 h after documents are submitted | `routes/v2/certificates.js` | **none**, every process |
 | Every 30 min, and daily 09:00, 23:55, 08:00 IST | Automation crons: offer letters for pending documents; daily certificate requests; auto-approval after 24 h; auto-issue after the HR deadline; mark active students present at 23:55 (not Sundays); email-health alert at 08:00 | `services/automationCron.js` | `ENABLE_AUTOMATION_CRON=false` or `DISABLE_CRON_JOBS=true` |
+| Every 30 min (IST) | Refer & Earn settle: coins for both students, shares, reversals (§7.13) | `services/referrals.js` (`startSweep`) | `ENABLE_AUTOMATION_CRON=false` or `DISABLE_CRON_JOBS=true`; worker 0 only |
 | 23:05 and 03:15 (`ATTENDANCE_TZ`, default IST) | Attendance report to WhatsApp; purge sign-in events older than 90 days | `services/v2/attendanceAgent.js` | `ATTENDANCE_AGENT_ENABLED=false` |
 | 02:37, 08:37, 14:37, 20:37 IST | College discovery crawl (sends nothing) | `services/collegeDiscovery.js` | `COLLEGE_AGENT_CRON=off` |
 | 07:17, 19:17 IST | Idea agent | `services/ideaAgent.js` | off unless `IDEA_AGENT_ENABLED=true` |
@@ -1395,6 +1459,8 @@ whoever takes over. Until then:
   copy of `uploads/`, to cheap storage would cover it. It adds a small
   monthly cost, so check it against the ₹3,000 ceiling first.
 - Decide on the open security list (§17.1).
+- **Refer & Earn payouts:** ask a CA how TDS (section 194H) applies to
+  referral commissions before withdrawals are built (§7.13).
 
 ### 17.4 Check on the server (UNSURE in this document)
 
