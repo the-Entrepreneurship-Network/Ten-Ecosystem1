@@ -52,11 +52,19 @@ jest.mock('../../models/Student', () => ({
   schema: { path: () => true, add: () => {} }
 }));
 
+// Every collection keyed by employeeId records being moved to a new one.
+const mockMoved = [];
+const mockKeyed = (name) => ({ updateMany: async (filter, update) => { mockMoved.push([name, filter, update]); return {}; } });
+
 jest.mock('../../models/Attendance', () => ({
   find: () => mockQ(mockState.attendance),
-  updateMany: async () => ({}),
+  updateMany: async (filter, update) => { mockMoved.push(['Attendance', filter, update]); return {}; },
   countDocuments: async () => 0
 }));
+jest.mock('../../models/Submission', () => mockKeyed('Submission'));
+jest.mock('../../models/TaskAssignment', () => mockKeyed('TaskAssignment'));
+jest.mock('../../models/BadgeAward', () => mockKeyed('BadgeAward'));
+jest.mock('../../models/DocumentHistory', () => mockKeyed('DocumentHistory'));
 
 jest.mock('../../middleware/sessionAuth', () => ({
   requireStudent: (req, res, next) => { req.student = mockState.student; next(); },
@@ -70,7 +78,7 @@ jest.mock('node-cron', () => ({ schedule: () => ({ stop() {}, start() {} }) }));
 function app() {
   const a = express();
   a.use(express.json());
-  a.use((req, res, next) => { req.session = { student: { employeeId: mockState.student.employeeId } }; next(); });
+  a.use((req, res, next) => { req.session = mockState.session = { student: { employeeId: mockState.student.employeeId } }; next(); });
   a.use('/api/v2', require('../../routes/v2/studentPortal'));
   return a;
 }
@@ -95,9 +103,65 @@ beforeEach(() => {
   mockState.student = studentRegistered(10);
   mockState.saved = null;
   mockState.attendance = [];
+  mockMoved.length = 0;
   jest.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => jest.restoreAllMocks());
+
+/*
+ * What a WhatsApp joiner types REPLACES the ID the portal issued. Nothing
+ * checked it, so a typo became their ID ("TEN/MQ/130630" for a Software
+ * Development student): the ID on their offer letter, their WhatsApp group and
+ * the attendance form then matched nothing in the portal.
+ */
+describe('the Employee ID a WhatsApp joiner types', () => {
+  const asJoiner = (updatedEmployeeId) =>
+    post({ joinerType: 'whatsapp', joiningDate: iso(Date.now() - 20 * DAY), updatedEmployeeId });
+
+  it('is saved in capitals and without stray spaces', async () => {
+    const res = await asJoiner('  ten/web/ 5555 ');
+    expect(res.status).toBe(200);
+    expect(mockState.saved.employeeId).toBe('TEN/WEB/5555');
+  });
+
+  it.each(['TEN-WEB-5555', '5555', 'TEN/WEB/', 'TEN/WEB/55A5', 'TEN//5555'])(
+    'refuses "%s", which is not shaped like one, and changes nothing', async (typed) => {
+      const res = await asJoiner(typed);
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/does not look like a TEN Employee ID/);
+      expect(mockState.saved).toBeNull();
+      expect(mockMoved).toEqual([]);
+    });
+
+  it('keeps the ID it replaces, so HR can put it back', async () => {
+    await asJoiner('TEN/WEB/5555');
+    expect(mockState.saved.employeeIdBeforeOverride).toBe('TEN/WEB/1005');
+  });
+
+  it('moves the session onto the new ID', async () => {
+    // Academics, certificates, the assistant and the attendance-form view read
+    // the ID from the session; on the old one they showed nothing.
+    await asJoiner('TEN/WEB/5555');
+    expect(mockState.session.student.employeeId).toBe('TEN/WEB/5555');
+  });
+
+  it('moves tasks, badges and documents with it, not only attendance', async () => {
+    await asJoiner('TEN/WEB/5555');
+    const names = mockMoved.map(([name]) => name).sort();
+    expect(names).toEqual(['Attendance', 'BadgeAward', 'DocumentHistory', 'Submission', 'TaskAssignment']);
+    for (const [, filter, update] of mockMoved) {
+      expect(filter).toEqual({ employeeId: 'TEN/WEB/1005' });
+      expect(update).toEqual({ $set: { employeeId: 'TEN/WEB/5555' } });
+    }
+  });
+
+  it('typing their own ID again changes nothing', async () => {
+    const res = await asJoiner('ten/web/1005');
+    expect(res.status).toBe(200);
+    expect(mockState.saved.employeeId).toBeUndefined();
+    expect(mockMoved).toEqual([]);
+  });
+});
 
 describe('the card proceeds', () => {
   it('accepts a start date well before the portal registration', async () => {

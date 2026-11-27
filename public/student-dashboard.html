@@ -3862,15 +3862,22 @@ async function loadAttendance(){
     window._attendanceStats = s;
 
     const isWhatsappJoiner = (student && student.joinerType === 'whatsapp');
-    const overridePct = (isWhatsappJoiner && student.calculatedAttendance !== undefined) ? student.calculatedAttendance : null;
-    
-    const finalSelfPct = (overridePct !== null) ? overridePct : (s.selfPct||0);
-    const finalCombinedPct = (overridePct !== null) ? overridePct : (s.combinedPct||0);
+    /*
+     * The server's own percentages, for every student.
+     *
+     * A WhatsApp joiner's used to be replaced by student.calculatedAttendance,
+     * which is a DAY COUNT taken once, at onboarding. 17 credited days read as
+     * "17%" and "Below 75%" next to a real 94%, and it never moved however many
+     * days they then attended. The server's figures already include the
+     * WhatsApp days (computeAttendanceStats, getPreportalCreditedDays).
+     */
+    const finalSelfPct = s.selfPct || 0;
+    const finalCombinedPct = s.combinedPct || 0;
 
     // Self attendance — show days not %
     var selfDays = s.selfCount || s.selfPresent || s.selfPresentDays || 0;
     document.getElementById("selfAttPct").innerText   = selfDays + (selfDays === 1 ? " day" : " days");
-    document.getElementById("selfAttCount").innerText = (overridePct !== null) ? "WhatsApp Joiner" : "self-marked";
+    document.getElementById("selfAttCount").innerText = isWhatsappJoiner ? "WhatsApp Joiner" : "self-marked";
 
     // Coordinator attendance — show days not %
     var coordDays = s.coordPresent || s.coordCount || s.coordinatorPresentDays || 0;
@@ -6018,12 +6025,32 @@ function wizardEnableEmpIdEdit() {
 
 async function wizardUpdateEmpId() {
   var input  = document.getElementById('wizardEmpIdInput');
-  var newId  = input.value.trim();
+  // Tidied the way the server tidies it: "ten/sde/1266 " is TEN/SDE/1266.
+  var newId  = input.value.trim().toUpperCase().replace(/\s+/g, '');
+  input.value = newId;
   var status = document.getElementById('wizardEmpIdStatus');
+  var currentId = (JSON.parse(localStorage.getItem('student') || '{}').employeeId) || employeeId;
 
   if (!newId) {
     status.style.color = '#f43f5e';
     status.textContent = '\u274c Employee ID cannot be empty.';
+    return;
+  }
+
+  // What they type REPLACES the ID the portal gave them, so a typo became
+  // their ID: the one on their offer letter, their WhatsApp group and the
+  // attendance form then matched nothing here. The server refuses the same
+  // shapes (utils/employeeId.typedEmployeeId); this just says so sooner.
+  if (!/^TEN\/[A-Z]{2,10}\/\d{3,10}$/.test(newId)) {
+    status.style.color = '#f43f5e';
+    status.textContent = '\u274c That does not look like a TEN Employee ID. It should look like TEN/SDE/1234. Please type it exactly as it is on your offer letter.';
+    _onboardingState.updatedEmployeeId = null;
+    return;
+  }
+  if (newId === currentId) {
+    status.style.color = '#10b981';
+    status.textContent = '\u2705 That is already your Employee ID.';
+    _onboardingState.updatedEmployeeId = null;
     return;
   }
 
@@ -6071,20 +6098,41 @@ async function wizardUpdateEmpId() {
       return;
     }
 
+    // Free is not the same as theirs. Say plainly what is about to change and
+    // let them look once more before it does.
+    // A different domain code is the commonest slip (TEN/MQ/... for an SDE
+    // student). Not refused, since an ID issued before the portal may carry an
+    // older code, but said out loud.
+    var codeOf = function (id) { return String(id || '').split('/')[1] || ''; };
+    var codeNote = (codeOf(currentId) && codeOf(newId) !== codeOf(currentId))
+      ? ' Note: its domain code (' + codeOf(newId) + ') is not the one in your current ID (' + codeOf(currentId) + ').'
+      : '';
+    var sure = await Swal.fire({
+      icon: 'question',
+      title: 'Change your Employee ID to ' + newId + '?',
+      text: 'Your portal Employee ID ' + currentId + ' will be replaced by ' + newId +
+            '. Your attendance, tasks and certificates will use the new one.' + codeNote +
+            ' Only continue if ' + newId + ' is exactly the ID on your offer letter.',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, use ' + newId,
+      cancelButtonText: 'Check it again',
+      background: '#0d1124', color: '#f0eee8', confirmButtonColor: '#10b981'
+    });
+    if (!sure || !sure.isConfirmed) {
+      status.style.color = '#fbbf24';
+      status.textContent = 'Not changed. Check the ID and press Update again, or go to the next step to keep ' + currentId + '.';
+      input.disabled = false;
+      input.focus();
+      return;
+    }
+
     _onboardingState.updatedEmployeeId = newId;
 
     status.style.color = '#10b981';
-    status.textContent = '\u2705 Employee ID is available and prepared!';
+    status.textContent = '\u2705 ' + newId + ' will be saved when you finish onboarding.';
     input.disabled = true;
     document.getElementById('wizardEmpIdEditBtn').style.display = 'block';
     document.getElementById('wizardEmpIdUpdateBtn').style.display = 'none';
-
-    Swal.fire({
-      icon: 'success',
-      title: 'Employee ID Confirmed',
-      text: 'This Employee ID is free and will be saved when you finish onboarding.',
-      background: '#0d1124', color: '#f0eee8', confirmButtonColor: '#10b981'
-    });
   } catch (err) {
     status.style.color = '#f43f5e';
     status.textContent = '\u274c ' + (err.message || 'Could not check that Employee ID. Please try again.');
@@ -6142,7 +6190,32 @@ async function wizardConfirmJoiningDate() {
     });
     return;
   }
-  
+
+  /*
+   * A WhatsApp joiner's earlier days are counted only from a start date BEFORE
+   * they registered here (utils/attendanceUtils getPreportalCreditedDays). A
+   * slip to today, or any day after registering, saved without a word and
+   * their WhatsApp days came to 0 — and this question cannot be answered again
+   * without HR. So say it before saving, not after.
+   */
+  var stuNow = JSON.parse(localStorage.getItem('student') || '{}');
+  var registeredOn = String(stuNow.joiningDate || stuNow.createdAt || '').slice(0, 10);
+  if ((_onboardingState.joinerType || stuNow.joinerType) === 'whatsapp' && registeredOn && dateVal >= registeredOn) {
+    var keep = await Swal.fire({
+      icon: 'warning',
+      title: 'No WhatsApp days will be counted',
+      text: 'You picked ' + dateVal + ', the day you registered on this portal or later. ' +
+            'Only the days before you registered are counted from WhatsApp, so with this date none are. ' +
+            'Pick the day you really started in the WhatsApp group, or continue if ' + dateVal +
+            ' is right. You cannot change it yourself afterwards.',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, ' + dateVal + ' is right',
+      cancelButtonText: 'Pick another date',
+      background: '#0d1124', color: '#f0eee8', confirmButtonColor: '#D4AF37'
+    });
+    if (!keep || !keep.isConfirmed) return;
+  }
+
   _onboardingState.joiningDate = dateVal;
 
   var originalEmpId = (JSON.parse(localStorage.getItem('student') || '{}').employeeId) || localStorage.getItem('employeeId') || (student && student.employeeId);

@@ -5,6 +5,7 @@ const express      = require("express");
 const router       = express.Router();
 const Student      = require("../../models/Student");
 const { isInternshipComplete } = require("../../utils/internshipStatus");
+const { typedEmployeeId, moveEmployeeIdRecords } = require("../../utils/employeeId");
 
 const {
   validate,
@@ -599,14 +600,23 @@ router.post("/student/complete-onboarding", requireStudent, async (req, res) => 
                 }
             }
 
-            if (updatedEmployeeId && updatedEmployeeId.trim() !== "" && updatedEmployeeId.trim() !== student.employeeId) {
-                const targetEmpId = updatedEmployeeId.trim();
-                const existing = await Student.findOne({ employeeId: targetEmpId });
-                if (existing) {
-                    return res.status(400).json({ success: false, message: "This Employee ID is already registered by another student." });
+            if (updatedEmployeeId && String(updatedEmployeeId).trim() !== "") {
+                // Tidied and checked before it replaces the ID the portal issued.
+                // See utils/employeeId.typedEmployeeId.
+                const typed = typedEmployeeId(updatedEmployeeId);
+                if (!typed.ok) {
+                    return res.status(400).json({ success: false, message: typed.reason });
                 }
-                updates.employeeId = targetEmpId;
-                updates.employeeIdOverride = targetEmpId;
+                if (typed.id !== student.employeeId) {
+                    const existing = await Student.findOne({ employeeId: typed.id });
+                    if (existing) {
+                        return res.status(400).json({ success: false, message: "This Employee ID is already registered by another student." });
+                    }
+                    updates.employeeId = typed.id;
+                    updates.employeeIdOverride = typed.id;
+                    // The one it replaces, so HR can put it back after a typo.
+                    updates.employeeIdBeforeOverride = student.employeeId;
+                }
             }
 
             const actualJoiningDate = joiningDate || student.joiningDate || student.createdAt;
@@ -753,11 +763,15 @@ router.post("/student/complete-onboarding", requireStudent, async (req, res) => 
         );
 
         if (updates.employeeId && updates.employeeId !== student.employeeId) {
+            // The session carries the Employee ID too, and the academics,
+            // certificates, assistant and attendance-form routes read it from
+            // there. Left on the old one, they looked the student up by an ID
+            // nothing holds any more and showed nothing until a fresh sign-in;
+            // and an old ID taken later by someone else would have resolved
+            // this session to them.
+            if (req.session && req.session.student) req.session.student.employeeId = updates.employeeId;
             try {
-                const Attendance = require("../../models/Attendance");
-                const Submission = require("../../models/Submission");
-                await Attendance.updateMany({ employeeId: student.employeeId }, { $set: { employeeId: updates.employeeId } });
-                await Submission.updateMany({ employeeId: student.employeeId }, { $set: { employeeId: updates.employeeId } });
+                await moveEmployeeIdRecords(student.employeeId, updates.employeeId);
             } catch (assocErr) {
                 console.error("Correlated updates error:", assocErr);
             }
