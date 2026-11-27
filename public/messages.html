@@ -66,6 +66,7 @@ html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);
 .role-coordinator{background:rgba(16,185,129,0.18);color:#6ee7b7;}
 .role-hr{background:rgba(245,197,66,0.18);color:var(--gold);}
 .role-admin{background:rgba(244,63,94,0.18);color:#fda4af;}
+.role-assistant{background:rgba(167,139,250,0.2);color:#c4b5fd;}
 
 /* ── conversation ──────────────────────────────────────────────────────── */
 .convo-head{display:flex;align-items:center;gap:12px;padding:12px 16px;
@@ -363,6 +364,8 @@ function bumpThread(m, unread){
   var t = threads[i];
   if (m.message !== undefined) t.lastMessage = m.message;
   else if (m.lastMessage !== undefined) t.lastMessage = m.lastMessage;
+  // Whose it is: a reply arriving after one of ours must lose the "You:".
+  if (m.senderId !== undefined) t.lastFromMe = isMine(m.senderId);
   t.at = m.timestamp || m.at || new Date().toISOString();
   if (unread) t.unread = (t.unread || 0) + 1;
 
@@ -470,8 +473,14 @@ async function loadMessages(room){
     box.innerHTML = "";
     var msgs = d.messages || [];
     if (!msgs.length){
-      box.innerHTML = '<div class="empty"><div class="big">👋</div>' +
-        "<div>No messages yet — say hello.</div></div>";
+      // The AI Coordinator says what it is before anyone types to it.
+      box.innerHTML = /::ten-ai(::|$)/.test(room)
+        ? '<div class="empty"><div class="big">🤖</div><div style="max-width:340px;line-height:1.6;">' +
+          "This is TEN's <b>AI Coordinator</b>, an AI assistant, not a person. Ask about your tasks, " +
+          "attendance, documents or the portal, at any hour. Marks, complaints, payments and personal " +
+          "matters go to your coordinator.</div></div>"
+        : '<div class="empty"><div class="big">👋</div>' +
+          "<div>No messages yet — say hello.</div></div>";
       return;
     }
     var lastDay = "";
@@ -504,7 +513,8 @@ function addBubble(m){
   var el = document.createElement("div");
   el.className = "bubble" + (mine ? " mine" : "");
   if (id) el.setAttribute("data-mid", String(id));
-  var html = mine ? "" : '<div class="who">' + esc(m.senderName || m.senderId) + "</div>";
+  var html = mine ? "" : '<div class="who">' + esc(m.senderName || m.senderId) +
+    (m.senderRole === "assistant" ? ' <span class="role-pill role-assistant">AI</span>' : "") + "</div>";
   if (m.message) html += esc(m.message).replace(/\n/g, "<br>");
   if (m.imageUrl) html += '<img src="' + esc(m.imageUrl) + '" alt="' + esc(m.imageName || "photo") + '">';
   var stamp = esc(new Date(m.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
@@ -660,6 +670,7 @@ async function loadProfile(userId){
     } else {
       add("Domain", p.domain);
     }
+    add("About", p.about);
     add("Email", p.email);
     add("Phone", p.phone);
 
@@ -668,7 +679,7 @@ async function loadProfile(userId){
         avatarHtml(p.name, p.id, 88) +
         '<div class="profile-name">' + (p.online ? '<span class="dot-online" title="Online now"></span>' : "") +
           esc(p.name) + "</div>" +
-        '<span class="role-pill role-' + esc(p.role) + '">' + esc(p.role) + "</span>" +
+        '<span class="role-pill role-' + esc(p.role) + '">' + esc(p.role === "assistant" ? "AI assistant" : p.role) + "</span>" +
         '<div style="margin-top:18px;">' + fields.join("") + "</div>" +
         '<div class="profile-actions">' +
           '<button class="btn-warn" onclick="reportPerson()">⚑ Report this person</button>' +
@@ -729,8 +740,9 @@ function searchPeople(){
           avatarHtml(p.name, p.id) +
           '<div class="thread-main"><div class="thread-top">' +
             '<span class="thread-name">' + esc(p.name) + "</span>" +
-            '<span class="role-pill role-' + esc(p.role) + '">' + esc(p.role) + "</span></div>" +
-            '<div class="thread-last">' + esc(p.id) + (p.domain ? " · " + esc(p.domain) : "") + "</div>" +
+            '<span class="role-pill role-' + esc(p.role) + '">' + esc(p.role === "assistant" ? "AI" : p.role) + "</span></div>" +
+            '<div class="thread-last">' + (p.role === "assistant" ? "AI assistant · answers at any hour"
+              : esc(p.id) + (p.domain ? " · " + esc(p.domain) : "")) + "</div>" +
           "</div></div>";
       }).join("");
     } catch (e) {

@@ -47,8 +47,17 @@
         try {
             const r = await fetch("/student/coordinator-details?domain=" + encodeURIComponent(student.domain || ""));
             const d = await r.json();
+            // The AI Coordinator answers at any hour, with or without a person
+            // assigned. Switched off on the server (AI_COORDINATOR=off), its
+            // dashboard card and menu entry go too.
+            if (d.ai === false) ["card-ask-ai", "nav-ask-ai"].forEach(function (id) {
+                var el = document.getElementById(id); if (el) el.style.display = "none";
+            });
+            var askAi = d.ai === false ? '' : '<button class="tx2-btn" id="tx2-ask-ai" title="An AI assistant, not a person" ' +
+                'onclick="location.href=\'/messages?to=ten-ai\'">🤖 Ask the AI Coordinator (24/7)</button>';
             if (!d.success || !d.assigned) {
-                root.innerHTML = '<div class="tx2-empty">Coordinator not yet assigned for ' + esc(student.domain) + '.</div>';
+                root.innerHTML = '<div class="tx2-empty">Coordinator not yet assigned for ' + esc(student.domain) + '.</div>' +
+                    '<div class="tx2-coord-actions" style="margin-top:10px;">' + askAi + '</div>';
                 return;
             }
             const c = d.coordinator || {};
@@ -63,6 +72,7 @@
                 + '</div>'
                 + '<div class="tx2-coord-actions">'
                 +   '<button class="tx2-btn tx2-btn-primary" id="tx2-msg-coord">💬 Message Coordinator</button>'
+                +   askAi
                 + '</div>'
                 + '</div>';
             const btn = document.getElementById("tx2-msg-coord");

@@ -156,7 +156,8 @@ describe('every role that can send is a role the schema accepts', () => {
   // only in the server log.
   const Message = require('../../models/Message');
 
-  it.each(['student', 'coordinator', 'hr', 'admin'])('accepts a message from %s', (role) => {
+  // `assistant` is the AI Coordinator (services/aiCoordinator.js).
+  it.each(['student', 'coordinator', 'hr', 'admin', 'assistant'])('accepts a message from %s', (role) => {
     const err = new Message({
       chatRoom: 'dm::TEN/AI/1663::hr.director@ten.com',
       senderId: 'someone', senderName: 'Someone', senderRole: role, message: 'hi'

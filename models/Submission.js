@@ -31,7 +31,9 @@ const submissionSchema = new mongoose.Schema({
     isOverdue: { type: Boolean, default: false },
     isCaseStudy: { type: Boolean, default: false },
     aiFeedback: { type: Boolean, default: false },
-    feedbackGeneratedAt: { type: Date, default: null }
+    feedbackGeneratedAt: { type: Date, default: null },
+    // Mirrors server.js's inline schema, which is the one in effect.
+    aiCheck: { type: mongoose.Schema.Types.Mixed, default: null }
 });
 
 // The leaderboard aggregates `{ status: "Approved" }` across the whole
