@@ -331,9 +331,11 @@ loads.
 - **Quizzes.** Per-task quizzes (`routes/v2/quiz.js`, `services/v2/quizEngine.js`)
   grow from 10 to 30 questions as the weeks go on. There is also a weekly quiz
   portal, and a domain MCQ test that coordinators set.
-- **Submissions.** `POST /submit-task`. If `GEMINI_API_KEY` is set, a
-  background step writes AI feedback and approves the submission. Coordinators
-  and HR review the rest.
+- **Submissions.** `POST /submit-task`, and the Task Journey's own submit,
+  which copies the work into the same `Submission` queue. Each new submission
+  gets the AI pre-check (§7.14): the link, the repository, the screenshot,
+  whether it fits the task, and a draft of the feedback. It approves nothing;
+  coordinators review every submission. HR sees the same rows read-only.
 - **Coding problems.** Coordinators manage them. Running code needs
   `ENABLE_CODE_RUNNER=true` (off by default; the code says it is containment,
   not a sandbox).
@@ -371,7 +373,8 @@ loads.
     but **never shown** anywhere (§17).
 - **Chat.** Domain rooms, staff rooms and DMs, with reply-to-a-message (#260),
   personal blocks, reports, admin moderation, and images under
-  `uploads/chat/`.
+  `uploads/chat/`. A student can also DM the AI Coordinator (§7.14), whose
+  messages carry the role `assistant` and an "AI" tag.
 - **Complaints.** complaints@entrepreneurshipnetwork.net is on the landing
   page footer, the student dashboard, the registration confirmation page, and under every
   email (`utils/mailer.js` `renderEmail`, with an "auto-generated" line). Its
@@ -412,6 +415,8 @@ From the sidebar of `hr-portal.html`:
 - Coding problems, task list, notice board, leaderboard.
 - Premium students (assign and review projects).
 - Mentorship bookings from the marketplace.
+- AI Assistant: today's summary from the AI Coordinator, and the AI pre-check
+  on every waiting submission (§7.14).
 
 ### 7.4 Admin console (`/ten-admin`, API `routes/adminPortal.js`)
 
@@ -831,6 +836,80 @@ out money. Ask a CA about TDS (section 194H) before building payouts (§17.3).
 Also still to build: coin skips, the leaderboard and College Cup, and the
 extras in the approved plan.
 
+### 7.14 AI Coordinator (an AI assistant, labelled as one)
+
+One assistant for every domain: `services/aiCoordinator.js` (chat),
+`services/submissionPrecheck.js` (submissions), `services/aiCoordinatorJobs.js`
+(reminders and the coordinators' summary), `routes/v2/aiCoordinator.js`.
+It costs nothing: saved answers first, Gemini's free tier second, the
+portal's own SMTP. **`AI_COORDINATOR=off` switches all of it off**, including
+the dashboard entries.
+
+- **Chat.** The student opens it from the dashboard ("AI Coordinator 24/7" in
+  the menu, a card on the main screen, and a button on the coordinator card) or
+  from Messages. It is the chat id `ten-ai`. Its replies go through
+  `deliverChatMessage` like anyone's, as role `assistant`, so the chat shows an
+  "AI" tag; it introduces itself as an AI in its first reply. For each question
+  (several quick messages count as one):
+  1. **Hand-over first**: marks or review disputes, complaints, money problems
+     and personal problems (patterns in `HANDOVER`), plus anything the help
+     desk counts as sensitive. The student is told their coordinator has it;
+     the coordinators get a dashboard notice and a phone push naming the
+     student and the topic. The notice never quotes the message: a notice is
+     shared by the whole domain's staff view, while the words stay in the AI
+     Assistant tab and the daily email. A self-harm message
+     also gets the Tele-MANAS helpline (14416) and an URGENT notice.
+  2. **A saved help-desk answer** (§7.12) when one clearly fits (score 0.6 or
+     more), with the student's own details filled in. No AI involved.
+  3. **Gemini** otherwise, with the student's record: domain, plan, dates,
+     attendance, current week's tasks, recent submissions, document status.
+     Never their name, email, phone or Employee ID, and email addresses and
+     phone numbers typed into the question are removed first. Gemini may
+     answer, or say a person must take it.
+  4. A hand-over when Gemini fails or there is no key. At most 20 Gemini
+     replies per student per day; past that, saved answers only.
+- **Submission pre-check.** After `POST /submit-task` (not for case studies)
+  and after a Task Journey submission. It checks whether the link opens for
+  someone not signed in. That covers a Google Drive link shared only with its
+  owner, which redirects to a sign-in. The server never opens private or
+  internal addresses, on any redirect hop. For a GitHub link, it also checks
+  whether the repository is public and not empty, with its language,
+  top-level files and README. It checks the screenshot, then asks Gemini
+  whether the work fits the task and to draft feedback. A failed check is
+  always "ask for changes", whatever Gemini says.
+  - The result is `Submission.aiCheck`. The coordinator's card shows it, with
+    the draft already in the feedback box: approving is the existing Approve
+    button. **Re-check** runs it again (`POST
+    /api/v2/ai-coordinator/precheck/:id`).
+  - The student's card shows a line marked as the AI's, and a portal and
+    phone notice (no email) when something needs fixing.
+  - It never writes `feedback` or `status`. The step it replaced wrote
+    Gemini's text into `feedback`, where the student saw it as "COORDINATOR
+    FEEDBACK".
+  - Without `GITHUB_TOKEN` GitHub allows 60 lookups an hour from the server
+    (2 per check); past that the repository line says "not checked". A free
+    token raises it to 5,000; a token GitHub refuses is dropped and the check
+    asks without it.
+- **Reminders** (10:05 IST):
+  - every day, to students away 3 to 13 days: portal, phone and email (not
+    for `emailOptOut`). At most 300 a day; the rest wait for the next day.
+  - Thursdays, an unfinished Task Journey week (portal and phone only).
+  - Sundays, a weekly progress line (portal and phone only).
+  - Each has a key in `AiCoordinatorLog`, so it goes once.
+- **Coordinators' summary** (09:05 IST, and live in the dashboard's AI
+  Assistant tab, `GET /api/v2/ai-coordinator/summary`):
+  - submissions waiting, oldest first, with the AI's verdict;
+  - students handed over in the last 24 hours, with their words;
+  - running students under 75% attendance (not judged in their first 3
+    working days);
+  - what the AI answered.
+  - It goes by email to every coordinator of the domain who has an address:
+    database coordinators, and roster ones whose `COORDINATOR_CREDENTIALS`
+    entry has an `email`. It also goes as a dashboard notice. A quiet domain
+    gets nothing.
+- **Records:** `AiCoordinatorLog`, kept 120 days: answers, hand-overs (with
+  the question), reminders and summaries.
+
 ---
 
 ## 8. Data model
@@ -849,7 +928,7 @@ field, declare it in the schema first.
 | `EcosystemUser` (`ecosystemusers`) | founder, mentor, investor, contractor, student or learner | `email` unique; the profile collections (`FounderProfile`, …) hold approval status |
 | `Attendance` (`attendances`) | one mark | unique on (employeeId, dateKey, markedBy, domain); `status` Present/Absent; `markedBy` self/coordinator |
 | `DomainTask`, `StudentTaskProgress`, `QuizQuestion` (`models/new/`) | the current task journey | (domain, durationType, weekNumber) unique; (studentId, taskId) unique |
-| `Submission` | a legacy task hand-in | **defined twice**: the inline model in `server.js` wins, so the fields and indexes in `models/Submission.js` are not in effect |
+| `Submission` | a legacy task hand-in | **defined twice**: the inline model in `server.js` wins, so the fields and indexes in `models/Submission.js` are not in effect. `aiCheck` (Mixed) holds the AI pre-check (§7.14) |
 | `Payment` (`payments`) | one payment attempt or claim | `orderId` unique; `studentId` ObjectId; `status` pending / pending_verification / success / failed / refunded; `purpose` such as `tenure_1month`, `studio_combo`, `cert_expert`; `txnUtr` / `providerPaymentId` hold the UTR |
 | `DocumentHistory` | one document sent | the verification registry; `documentNumber` |
 | `CertificateApplication`, `CertificateOverride`, `CertificateRequest` | a student's request; an HR override (audit); the automation cron's approval cycle | |
@@ -859,6 +938,7 @@ field, declare it in the schema first.
 | `Notification`, `EcosystemNotification`, `PushSubscription` | the two notification systems (§7.1); a browser push endpoint | |
 | `Message`, `ChatRead`, `ChatReport`, `UserBlock` | chat | DMs expire after 30 days (TTL) |
 | `StudentCoin`, `CoinRedemption`, `DaoProposal` | coins, marketplace purchases, DAO | a history entry with `refKey` is an award paid once (§7.13) |
+| `AiCoordinatorLog` (`aicoordinatorlogs`) | one thing the AI Coordinator did (§7.14) | `kind` answer / handover / reminder / summary; `key` unique and sparse, so a reminder or summary goes once; TTL 120 days |
 | `ReferralReward` (`referralrewards`) | one Refer & Earn reward (§7.13) | `key` unique (`week1:<friend>`, `paid:<friend>`, `commission:<payment>`); `kind` week1_coins / paid_coins / commission; a commission is `active` or `reversed`, and pending until `availableAt`. The student side is `Student.referralCode` (unique), `referralFrozen` and `ambassador` |
 | `LearnProgress`, `LearnExamAttempt`, `ProctorIncident` | the LLM portal | exam answer keys stay on the server |
 | `AgentIdea`, `AuditLog`, `LoginEvent` | idea agent queue; admin actions; sign-in events (purged after 90 days) | |
@@ -961,6 +1041,7 @@ server's clock, and **whether the EC2 box is on UTC is UNSURE**:
 | Hourly at :00, :20, :40 | Certificate pipeline: escalate to HR after 24 h; issue LOC/LOR when the rules are met (or add a fine); issue offer letters 24 h after documents are submitted | `routes/v2/certificates.js` | **none**, every process |
 | Every 30 min, and daily 09:00, 23:55, 08:00 IST | Automation crons: offer letters for pending documents; daily certificate requests; auto-approval after 24 h; auto-issue after the HR deadline; mark active students present at 23:55 (not Sundays); email-health alert at 08:00 | `services/automationCron.js` | `ENABLE_AUTOMATION_CRON=false` or `DISABLE_CRON_JOBS=true` |
 | Every 30 min (IST) | Refer & Earn settle: coins for both students, shares, reversals (§7.13) | `services/referrals.js` (`startSweep`) | `ENABLE_AUTOMATION_CRON=false` or `DISABLE_CRON_JOBS=true`; worker 0 only |
+| 09:05 and 10:05 IST | AI Coordinator: the coordinators' summary; student reminders (§7.14) | `services/aiCoordinatorJobs.js` (`start`) | `AI_COORDINATOR=off`, `ENABLE_AUTOMATION_CRON=false` or `DISABLE_CRON_JOBS=true`; worker 0 only |
 | 23:05 and 03:15 (`ATTENDANCE_TZ`, default IST) | Attendance report to WhatsApp; purge sign-in events older than 90 days | `services/v2/attendanceAgent.js` | `ATTENDANCE_AGENT_ENABLED=false` |
 | 02:37, 08:37, 14:37, 20:37 IST | College discovery crawl (sends nothing) | `services/collegeDiscovery.js` | `COLLEGE_AGENT_CRON=off` |
 | 07:17, 19:17 IST | Idea agent | `services/ideaAgent.js` | off unless `IDEA_AGENT_ENABLED=true` |
@@ -991,13 +1072,13 @@ above.
 | Service | Used for | Settings | When the settings are missing |
 |---|---|---|---|
 | **SMTP** (one account for all mail) | Transactional mail (welcome, password reset, documents, an email copy of every personal notification, HR alerts) **and** marketing (the Monday mail, Growth campaigns, college outreach) | `SMTP_*`, `SES_SMTP_*` or `EMAIL_*` (first non-empty wins), `EMAIL_FROM`, `HR_NOTIFY_EMAIL` | **Mail is silently not sent**: the mailer falls back to a JSON transport and reports success. Bulk senders then record mails as sent. Check with `node scripts/check-email.js` |
-| **Gemini** (`generativelanguage.googleapis.com`) | LLM-portal exams, the idea agent, Growth "Draft with AI" (all through `utils/gemini.js`, model `GEMINI_MODEL`); AI task feedback (through the SDK in `server.js`, model fixed at `gemini-2.0-flash`) | `GEMINI_API_KEY` | Those features say so and switch off |
+| **Gemini** (`generativelanguage.googleapis.com`) | LLM-portal exams, the idea agent, Growth "Draft with AI", the AI Coordinator's chat answers and the submission pre-check (all through `utils/gemini.js`, model `GEMINI_MODEL`, backup `GEMINI_FALLBACK_MODEL`) | `GEMINI_API_KEY` | Those features say so and switch off; the AI Coordinator hands questions to people and the pre-check runs without the match and draft |
 | **Web Push** (`web-push`, VAPID) | Personal notifications and chat messages to phones | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_CONTACT` | Push is off. Generate keys once with `node scripts/generate-vapid-keys.js`. **Regenerating them unsubscribes every device** |
 | **WhatsApp** (n8n webhook or the Meta Cloud API) | The daily attendance report only | `ATTENDANCE_TRANSPORT`, `N8N_*`, `WHATSAPP_*` | Dry run, printed to the log. Meta tokens last about 60 days; `scripts/whatsapp-exchange-token.js` renews one |
 | **Google Sheets** (public CSV export) | Attendance form responses | `ATTENDANCE_SHEET_*` | The report falls back to portal sign-ins |
 | **Job boards**: Remotive, RemoteOK, Arbeitnow, Jobicy, Himalayas, We Work Remotely, HN "Who is hiring", and Greenhouse / Lever / Ashby boards | The job agent | none | — |
 | **Instantly.ai** | Optional cold email for students' job applications, from their own Instantly mailbox | `INSTANTLY_API_KEY` | The feature says it is not configured. **Paid service**: check its price against the cost ceiling before enabling |
-| **GitHub API** | Importing a student's repos into a resume; committing accepted coding solutions (only with the code runner on) | `GITHUB_TOKEN`, `GITHUB_REPO_OWNER`, `GITHUB_REPO_NAME` (optional) | Unauthenticated rate limits; push skipped |
+| **GitHub API** | Importing a student's repos into a resume; the submission pre-check's repository lookup; committing accepted coding solutions (only with the code runner on) | `GITHUB_TOKEN`, `GITHUB_REPO_OWNER`, `GITHUB_REPO_NAME` (optional) | Unauthenticated rate limits (60 an hour); push skipped |
 | **Cloudflare Worker** (the Business Playground game) | Usage counts in the admin console | `GAME_BASE_URL`, `GAME_USAGE_KEY` | The panel says "not set up" |
 | **College websites + DNS (8.8.8.8, 1.1.1.1)** | The college agent; MX checks | `COLLEGE_*` | — |
 | **Payment gateways** (PaymentSetu, Setu, Razorpay) | In code; **not part of the live flow** (§7.9) | `PAYMENTSETU_*`, `SETU_*`, `RAZORPAY_*`, `PAYMENT_ENABLED` | Manual UPI only |
@@ -1012,6 +1093,9 @@ not measured.
 - The EC2 instance and its disk, and the domain.
 - The SMTP provider, if beyond its free tier.
 - Gemini, at a few calls a day: "pennies a month" per the code's own estimate.
+  The AI Coordinator stays on the free tier: a saved answer is used first, at
+  most 20 Gemini replies per student a day, and a 429 hands the question to a
+  person rather than paying for more.
 
 Web Push, the job boards and the Google Sheet are free. Instantly.ai and
 WhatsApp Business messaging cost money if switched on. **The total must stay
@@ -1052,7 +1136,7 @@ except SMTP, which fails silently (§11). By area:
 | Logins | `ADMIN_USERNAME`, `GROWTH_USERNAME`, `GROWTH_PASSWORD_HASH`, `ASSISTANT_ADMIN_TOKEN`, `STUDIO_UNVERIFIED_GRANDFATHER_UNTIL` |
 | Rate limits | `RATE_AUTH_*`, `RATE_AUTH_USER_*`, `RATE_REGISTER_*`, `RATE_PAYMENT_*` (`RATE_PUBLIC_*` is read but never applied). A signed-in person's GETs are counted apart from their writes and get three times `RATE_AUTH_USER_MAX` |
 | Email | `SMTP_USER` / `SES_SMTP_USER` / `EMAIL_USER`, the matching `*_PASS`, `*_HOST` (default: the Brevo relay), `*_PORT` (587), `SMTP_SERVICE`, `EMAIL_SECURE`, `EMAIL_FROM`, `HR_NOTIFY_EMAIL` |
-| AI | `GEMINI_API_KEY` (aliases `GOOGLE_API_KEY`, `GEMINI_KEY` work only in `utils/gemini.js`), `GEMINI_MODEL`, `IDEA_AGENT_ENABLED`, `IDEA_AGENT_CRON` |
+| AI | `GEMINI_API_KEY` (aliases `GOOGLE_API_KEY`, `GEMINI_KEY` work only in `utils/gemini.js`), `GEMINI_MODEL`, `IDEA_AGENT_ENABLED`, `IDEA_AGENT_CRON`, `AI_COORDINATOR` (`off` switches the AI Coordinator off; on by default) |
 | Push | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_CONTACT` |
 | Growth OS | `GROWTH_PROVIDER_CAP` (15,000), `GROWTH_STAGE1_LIMIT` (7,500), `GROWTH_EXTENSION_MAX` (4,000), `GROWTH_PORTAL_RESERVE` (3,500), `GROWTH_QUOTA_RESET_DAY` (1), `GROWTH_SEND_THROTTLE_MS` (2,000), `GROWTH_ATTRIBUTION_DAYS` (30), `SIGNUP_SOURCES_KEY` (24+ characters; lets the marketing agent read sign-ups by source, and nothing else) |
 | College agent | `COLLEGE_AGENT_CRON` (or `off`), `COLLEGE_AGENT_BATCH`, `COLLEGE_AGENT_CONCURRENCY`, `COLLEGE_DEADLINE_MS`, `COLLEGE_FETCH_TIMEOUT_MS`, `COLLEGE_PATH_DELAY_MS`, `COLLEGE_MAX_CONTACTS`, `COLLEGE_BATCH_SIZE`, `COLLEGE_RESUME_ON_BOOT` |

@@ -3424,7 +3424,10 @@ const submissionSchema = new mongoose.Schema({
     // F8 — task deadline tracking. The deadline itself lives on CoordinatorTask
     // (one per domain); isOverdue is a per-submission flag the cron flips when
     // the deadline elapses without an Approved review.
-    isOverdue: { type: Boolean, default: false }
+    isOverdue: { type: Boolean, default: false },
+    // The AI pre-check (services/submissionPrecheck.js): link, repository,
+    // screenshot, match and a draft of the feedback. A coordinator decides.
+    aiCheck: { type: mongoose.Schema.Types.Mixed, default: null }
 });
 
 const Submission = mongoose.model("Submission", submissionSchema);
@@ -4793,58 +4796,13 @@ try{
     await recomputeBadgesFor(employeeId);
     res.json({ success:true, message:"Task Submitted Successfully" });
 
-    // ── AI AUTO-FEEDBACK (non-blocking — runs after response) ──────────────────
-    (async () => {
-      try {
-        if (isCaseStudy) {
-          console.log(`[AI Feedback] Skipping auto-feedback for Case Study: "${task || ""}"`);
-          return;
-        }
-        // utils/gemini, not the @google/genai SDK: the SDK needs ReadableStream, which
-        // this server's Node lacks, so every feedback failed with "ReadableStream is not defined".
-        const gemini = require("./utils/gemini");
-        if (!gemini.ready()) return;
-
-        const taskTitle = req.body.task || 'Internship Task';
-        const taskNote = req.body.note || '';
-        const githubLink = req.body.githubLink || '';
-        const studentDomain = req.body.domain || '';
-
-        const prompt = `You are a senior ${studentDomain} professional reviewing an intern's task submission.
-
-Task: "${taskTitle}"
-Student's description: "${taskNote}"
-${githubLink ? `GitHub/Link: ${githubLink}` : ''}
-
-Write a SHORT, professional, human-sounding code/work review feedback (3-4 sentences). 
-Be specific to the task. Give ONE strength and ONE specific improvement suggestion.
-Sound like a real mentor — not a bot. Vary your opening (don't always start with "Great work").
-Keep it under 80 words. Do not use bullet points.`;
-
-        const out = await gemini.ask(prompt, {
-          type: gemini.Type.OBJECT,
-          properties: { feedback: { type: gemini.Type.STRING } },
-          required: ['feedback']
-        });
-        const feedback = String((out && out.feedback) || '').trim();
-
-        if (feedback && submission._id) {
-          // Feedback only. The coordinator still approves: this code never ran on the
-          // server (see above), so approving here would have been new behaviour.
-          await Submission.findByIdAndUpdate(submission._id, {
-            $set: {
-              feedback: feedback,
-              aiFeedback: true,
-              feedbackGeneratedAt: new Date()
-            }
-          });
-        }
-      } catch(aiErr) {
-        console.error('[AI Feedback] Error:', aiErr.message);
-        // Never fail the main submission due to AI error
-      }
-    })();
-    // ── END AI FEEDBACK ────────────────────────────────────────────────────────
+    // The AI pre-check, after the response: does the link open, is the
+    // repository public and about this task, is the screenshot there, and a
+    // draft of the feedback for the coordinator. It approves nothing, and it no
+    // longer writes `feedback`: that showed the student AI text as
+    // "COORDINATOR FEEDBACK" before any coordinator had looked.
+    // Case studies are reviewed their own way, as before.
+    if (!isCaseStudy) require("./services/submissionPrecheck").run(submission._id).catch(() => {});
 }catch(error){
     console.log(error);
     res.json({ success:false, message:"Submission Failed" });
@@ -8989,7 +8947,7 @@ try{
 
     const dbC = await Coordinator.findOne({ domain });
     if(dbC){
-        return res.json({ success:true, assigned:true, coordinator:{
+        return res.json({ success:true, assigned:true, ai: aiCoordinator.enabled(), coordinator:{
             name: dbC.name || dbC.username || dbC.email || "Coordinator",
             email: dbC.email || "",
             whatsapp: dbC.phone || "",
@@ -9001,11 +8959,11 @@ try{
     const entry = Object.entries(COORDINATORS).find(([_, v]) => (v.domain || "") === domain);
     if(entry){
         const [username, info] = entry;
-        return res.json({ success:true, assigned:true, coordinator:{
+        return res.json({ success:true, assigned:true, ai: aiCoordinator.enabled(), coordinator:{
             name: username, email: "", whatsapp: "", domain: info.domain, source: "legacy"
         }});
     }
-    res.json({ success:true, assigned:false });
+    res.json({ success:true, assigned:false, ai: aiCoordinator.enabled() });
 }catch(e){ console.log(e); res.status(500).json({ success:false }); }
 });
 
@@ -10960,6 +10918,15 @@ try {
     console.error('[V2] Failed to mount marketplace routes:', e.message);
 }
 
+// AI COORDINATOR — the coordinators' summary and the submission re-check
+// (services/aiCoordinator*.js, services/submissionPrecheck.js).
+try {
+    app.use('/api/v2/ai-coordinator', require('./routes/v2/aiCoordinator'));
+    console.log('[V2] AI Coordinator routes mounted at /api/v2/ai-coordinator');
+} catch(e) {
+    console.error('[V2] Failed to mount AI Coordinator routes:', e.message);
+}
+
 // REFER & EARN — services/referrals.js; the page is public/refer.html (/refer).
 try {
     app.use('/api/v2/referrals', require('./routes/v2/referrals'));
@@ -11456,6 +11423,11 @@ const io = new SocketIOServer(server, {
 // presence do not need it passed around.
 app.set("io", io);
 
+// The AI Coordinator answers a student's private messages to it, through the
+// same delivery as everyone else's (services/aiCoordinator.js).
+const aiCoordinator = require("./services/aiCoordinator");
+aiCoordinator.attach({ deliver: deliverChatMessage, io, roster: () => app.get("rosterStaff") || [] });
+
 io.use(async (socket, next) => {
     try{
         // From the session cookie, for every role. The handshake's `auth`
@@ -11628,6 +11600,10 @@ async function deliverChatMessage(identity, payload) {
             }
         }
 
+
+        // A message to the AI Coordinator gets its reply afterwards, never
+        // in the sender's way.
+        aiCoordinator.onMessage(identity, doc);
 
         return { success: true, messageId: String(doc._id), doc: doc };
     } catch (e) {
@@ -12329,6 +12305,13 @@ server.listen(PORT, "0.0.0.0", ()=>{
                 require("./services/referrals").startSweep();
             } catch (err) {
                 console.error("[referrals] Failed to start the settle sweep:", err.message);
+            }
+            // The AI Coordinator's reminders and coordinators' summaries.
+            // AI_COORDINATOR=off switches these off too.
+            try {
+                require("./services/aiCoordinatorJobs").start();
+            } catch (err) {
+                console.error("[ai-coordinator] Failed to schedule its jobs:", err.message);
             }
         }
     }

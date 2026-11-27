@@ -528,10 +528,12 @@
         var mine = isOwnMessage(m);
         var roleTag =
             m.senderRole === "student" ? "INTERN" :
-            m.senderRole === "coordinator" ? "COORDINATOR" : "HR";
+            m.senderRole === "coordinator" ? "COORDINATOR" :
+            m.senderRole === "assistant" ? "AI" : "HR";
         var roleColor =
             m.senderRole === "student" ? "#3b82f6" :
-            m.senderRole === "coordinator" ? "#10b981" : "#f5c542";
+            m.senderRole === "coordinator" ? "#10b981" :
+            m.senderRole === "assistant" ? "#a78bfa" : "#f5c542";
         var bubbleClass =
             m.senderRole === "coordinator" ? "tc-bubble coord" :
             m.senderRole === "hr" ? "tc-bubble hr" : "tc-bubble";

@@ -1681,9 +1681,10 @@ router.post("/tasks/:taskId/submit", requireStudent, async (req, res) => {
                     legSub.status = "Pending";
                     legSub.reviewedOnce = false;
                     legSub.submittedAt = new Date();
+                    legSub.aiCheck = null;   // the last check was of the last submission
                     await legSub.save();
                 } else {
-                    await Submission.create({
+                    legSub = await Submission.create({
                         employeeId: student.employeeId,
                         domain: student.domain,
                         task: taskDoc.taskTitle,
@@ -1693,6 +1694,10 @@ router.post("/tasks/:taskId/submit", requireStudent, async (req, res) => {
                         submittedAt: new Date()
                     });
                 }
+                // The coordinator's queue gets the same AI pre-check as a dashboard
+                // submission. A Task Journey submission has no screenshot to attach.
+                require("../../services/submissionPrecheck")
+                    .run(legSub._id, { screenshotExpected: false }).catch(() => {});
             }
         } catch (subErr) {
             console.error("V2 Sync Submission Create error:", subErr.message);

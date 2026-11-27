@@ -28,6 +28,7 @@ const ChatRead   = require("../models/ChatRead");
 // username, so a conversation listed in this inbox failed the membership check
 // on the endpoint that loads its messages — the red "Forbidden" people saw.
 const chatIdentity = require("../services/chatIdentity");
+const aiCoordinator = require("../services/aiCoordinator");
 
 /** Who is calling, from the session alone. */
 function identityOf(req) {
@@ -69,6 +70,11 @@ router.get("/directory", requireChatUser, async (req, res) => {
         const q = String(req.query.q || "").trim();
         const rx = q ? new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") : null;
         const people = [];
+        // A student's first choice: the AI Coordinator answers at any hour.
+        if (me.role === "student" && aiCoordinator.enabled() &&
+            (!rx || rx.test([aiCoordinator.NAME, aiCoordinator.ID, "ai assistant coordinator"].join(" ")))) {
+            people.push(aiCoordinator.directoryRow(me));
+        }
 
         const staffFilter = rx ? { $or: [{ name: rx }, { email: rx }, { username: rx }] } : {};
         const [coordinators, hrs] = await Promise.all([
@@ -263,7 +269,8 @@ router.get("/dm/threads", requireChatUser, async (req, res) => {
                 // The name is only known from a message the OTHER person sent;
                 // when every message is ours, fall back to their id and let the
                 // profile lookup fill it in.
-                withName: fromMe ? other : (row.senderName || other),
+                withName: aiCoordinator.isAssistantId(other) ? aiCoordinator.NAME
+                    : (fromMe ? other : (row.senderName || other)),
                 lastMessage: row.imageUrl && !row.message ? "\uD83D\uDCF7 Photo" : (row.message || "").slice(0, 90),
                 lastFromMe: fromMe,
                 at: row.timestamp,
@@ -352,6 +359,8 @@ router.get("/profile/:userId", requireChatUser, async (req, res) => {
         if (hidden.has(wanted)) {
             return res.status(403).json({ success: false, message: "This profile is unavailable." });
         }
+
+        if (aiCoordinator.isAssistantId(wanted)) return res.json({ success: true, profile: aiCoordinator.profile(req.me) });
 
         const isStaff = ["hr", "coordinator", "admin"].indexOf(req.me.role) !== -1;
 
