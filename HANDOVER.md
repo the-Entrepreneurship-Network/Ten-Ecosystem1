@@ -987,8 +987,9 @@ rest.
   output, low effort; Opus and Sonnet with Anthropic's server-side fallback on
   a safety decline) and needs **`ANTHROPIC_API_KEY`** in `.env`. The admin
   picks the model, each shown with its cost per interview (estimates in
-  `CLAUDE_COST_INR`: Haiku 5.5 about ₹0.50, Sonnet 5.5 about ₹9, Opus 5.5
-  about ₹18), and a **monthly limit on Claude interviews** (default 50): past
+  `CLAUDE_COST_INR`: Haiku 5.5 about ₹0.50, Sonnet 5.5 about ₹10, Opus 5.5
+  about ₹20, including the model answers for the report), and a **monthly
+  limit on Claude interviews** (default 50): past
   it, and without the key, new interviews run on Gemini. An interview keeps the
   AI it started with (`MeetingSession.engine`); a turn Claude fails is answered
   by Gemini. Anthropic's console shows the real spend.
@@ -1046,10 +1047,23 @@ rest.
   free plan ends after six months, and after that the account must be upgraded
   to paid or it closes. Without the keys, or when Polly refuses, the page uses
   the device's own voice.
-- **Report:** marks per question and overall, the level, what to improve, the
-  camera line. Saved, listed on the page, emailed to the student, and logged
-  (`AiCoordinatorLog` kind `meeting`, source `report`, with the level and the
-  AI) for the daily report's item 5.
+- **Report:** marks per question and overall, the level, how it went (the
+  strengths, the gaps, what to work on), the camera line, and **for each
+  question what the student said beside the actual answer**: the AI writes
+  that model answer (`ideal`, on each turn) while marking, with the lines of
+  code when the question is about code; the email sets code lines in a
+  monospace block (`answerHtml`). No "what you need to know" advice per
+  question, as the owner asked. Saved, listed on the page, emailed to the
+  student, and logged (`AiCoordinatorLog` kind `meeting`, source `report`,
+  with the level and the AI) for the daily report's item 5.
+- **The course offer in the report email** (`courseOffer`): a student who
+  has the Career Studio course (bought, deferred, or included with a paid
+  track, per `services/studioAccess.js`) gets "Continue your course" → `/learn`
+  and is pointed at the topics where they scored below 6. Anyone else gets
+  "Take the course" → `/studio.html`, with how many questions scored below 6,
+  what the course teaches, and the price from `config/studioPricing.js`
+  (₹300, or ₹400 paid at the end). If the access lookup fails, the offer is
+  shown. There is no discount code: the portal has no coupon system.
 - Not built, by choice: entries in the other portals (coordinator, HR,
   partners) since the interview is about a student's own tasks; a coordinator
   page for the marks; server-side video checking; Kokoro voices in the

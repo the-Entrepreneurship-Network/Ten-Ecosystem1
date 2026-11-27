@@ -12,6 +12,9 @@ const turnSchema = new mongoose.Schema({
     answer:   { type: String, default: "" },
     score:    { type: Number, default: null },
     feedback: { type: String, default: "" },
+    // The actual answer to the question, as a strong candidate would give it (code kept
+    // line by line): the report shows it beside what the student said.
+    ideal:    { type: String, default: "" },
     seconds:  { type: Number, default: 0 },
     at:       { type: Date, default: Date.now }
 }, { _id: false });

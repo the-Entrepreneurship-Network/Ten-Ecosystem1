@@ -143,6 +143,10 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
 .report td.n{color:var(--muted);width:28px}
 .report td.s{text-align:right;white-space:nowrap;font-weight:800;font-variant-numeric:tabular-nums}
 .report .fb{color:var(--muted);font-size:12.5px;margin-top:2px}
+.report .tag{display:block;margin-top:8px;font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--muted)}
+.report .tag.ok{color:var(--green)}
+.report .said{color:var(--muted);font-size:13px;white-space:pre-wrap}
+.report .ideal{font-size:13.5px;white-space:pre-wrap}
 .reports li{font-size:13.5px;padding:8px 0;border-bottom:1px dashed var(--line);list-style:none;display:flex;justify-content:space-between;gap:10px}
 .modal{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(3,5,12,.72)}
 .modal-box{width:min(440px,100%);background:var(--card);border:1px solid rgba(245,158,11,.6);border-radius:16px;padding:22px;display:flex;flex-direction:column;gap:10px;box-shadow:0 20px 60px rgba(0,0,0,.45)}
@@ -797,7 +801,10 @@ select{padding:7px 10px;border-radius:8px;border:1px solid var(--line);backgroun
       '<p style="margin-top:12px"><b>What to improve before the next interview:</b> ' + esc(r.summary) + '</p>' +
       '<p class="muted small" style="margin-top:8px">Camera: ' + esc(r.attention) + '</p>' +
       '<table>' + r.turns.filter(function (t) { return t.answer; }).map(function (t, i) {
-        return '<tr><td class="n">' + (i + 1) + '.</td><td>' + esc(t.question) + '<div class="fb">' + esc(t.feedback || '') + '</div></td><td class="s">' + (t.score != null ? t.score + '/10' : '–') + '</td></tr>';
+        return '<tr><td class="n">' + (i + 1) + '.</td><td><b>' + esc(t.question) + '</b>' +
+          '<span class="tag">YOU SAID</span><div class="said">“' + esc(t.answer) + '”</div>' +
+          (t.ideal ? '<span class="tag ok">THE ACTUAL ANSWER</span><div class="ideal">' + esc(t.ideal) + '</div>' : '<div class="fb">' + esc(t.feedback || '') + '</div>') +
+          '</td><td class="s">' + (t.score != null ? t.score + '/10' : '–') + '</td></tr>';
       }).join('') + '</table>' +
       '<div class="notice">' + (r.emailed ? 'A copy of this report has been emailed to you.' : 'The email could not be sent; this page keeps your report.') + ' The interviewer is an AI; a coordinator can review any mark.</div>';
     card.scrollIntoView({ block: 'start', behavior: 'smooth' });
