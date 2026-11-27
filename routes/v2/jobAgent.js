@@ -30,6 +30,7 @@ const { tailorResume, coverLetter, coldEmail, hrEmail } = require('../../service
 const directLink = require('../../services/v2/jobDirectLink');
 const jobCache = require('../../services/v2/jobCache');
 const atsBoards = require('../../services/v2/atsBoards');
+const jobStore = require('../../services/v2/jobStore');
 const recruiterContacts = require('../../services/v2/recruiterContacts');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
@@ -349,6 +350,97 @@ async function fromRemotive(profile) {
 
 /* Jobicy — remote board with an open API, heavier on non-engineering roles
    than the others, which widens what a business or design student sees. */
+/*
+ * A source that answers 200 with no rows has probably changed its format, or
+ * the key is for another country. Said once, with the shape, never the data.
+ */
+const shapeSeen = new Set();
+function shapeOnce(name, data) {
+  if (shapeSeen.has(name)) return;
+  shapeSeen.add(name);
+  console.warn(`[job-agent] ${name} answered with no openings; top-level keys: ${Object.keys(data || {}).slice(0, 12).join(', ') || '(none)'}`);
+}
+
+/* Where a city was read, use it; "india" and "remote" are not cities. */
+const cityOf = (profile) => (profile.location && !/^(india|remote)$/i.test(profile.location) ? profile.location : '');
+
+/* Adzuna's lakh figures, unless Adzuna only predicted them. */
+const lakh = (n) => (n / 100000).toFixed(n % 100000 ? 1 : 0);
+function adzunaSalary(j) {
+  if (String(j.salary_is_predicted) === '1' || !j.salary_min) return '';
+  return j.salary_max && j.salary_max !== j.salary_min
+    ? `₹${lakh(j.salary_min)}–${lakh(j.salary_max)} lakh a year` : `₹${lakh(j.salary_min)} lakh a year`;
+}
+
+/*
+ * Adzuna's India index: the strongest free source of Indian openings. Off
+ * until ADZUNA_APP_ID and ADZUNA_APP_KEY are set (a free key from
+ * developer.adzuna.com). Its links go through Adzuna to the advert, so they
+ * are kept as Adzuna's and labelled that way.
+ */
+async function fromAdzuna(profile) {
+  const id = process.env.ADZUNA_APP_ID;
+  const key = process.env.ADZUNA_APP_KEY;
+  if (!id || !key) return [];
+  const city = cityOf(profile);
+  const url = `https://api.adzuna.com/v1/api/jobs/in/search/1?app_id=${encodeURIComponent(id)}&app_key=${encodeURIComponent(key)}`
+    + `&results_per_page=50&max_days_old=60&what=${encodeURIComponent(profile.role)}${city ? `&where=${encodeURIComponent(city)}` : ''}`;
+  const data = await getJSON(url, 9000);
+  const rows = Array.isArray(data.results) ? data.results : [];
+  if (!rows.length) shapeOnce('Adzuna', data);
+  return rows.map((j) => ({
+    source: 'Adzuna',
+    preMatched: true,
+    title: clean(j.title),
+    company: clean(j.company && j.company.display_name),
+    location: clean(j.location && j.location.display_name) || 'India',
+    type: [j.contract_time, j.contract_type].filter(Boolean).join(' ').replace(/_/g, '-'),
+    tags: [],
+    url: j.redirect_url,
+    directUrl: j.redirect_url,
+    directKind: 'via',
+    posted: j.created || null,
+    salary: adzunaSalary(j),
+    description: clean(j.description).slice(0, 4000),
+  }));
+}
+
+/*
+ * Jooble, an aggregator with an Indian site. Off until JOOBLE_API_KEY is set
+ * (a free key from in.jooble.org/api/about). JOOBLE_HOST is there because a
+ * key is issued per country site; the default is the Indian one.
+ */
+async function fromJooble(profile) {
+  const key = process.env.JOOBLE_API_KEY;
+  if (!key) return [];
+  const host = process.env.JOOBLE_HOST || 'in.jooble.org';
+  const res = await httpFetch(`https://${host}/api/${encodeURIComponent(key)}`, {
+    method: 'POST',
+    headers: Object.assign({ 'Content-Type': 'application/json' }, UA),
+    body: JSON.stringify({ keywords: profile.role, location: cityOf(profile) || 'India' }),
+    timeoutMs: 9000,
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+  const data = await res.json();
+  const rows = Array.isArray(data.jobs) ? data.jobs : [];
+  if (!rows.length) shapeOnce('Jooble', data);
+  return rows.map((j) => ({
+    source: 'Jooble',
+    preMatched: true,
+    title: clean(j.title),
+    company: clean(j.company),
+    location: clean(j.location) || 'India',
+    type: clean(j.type),
+    tags: [],
+    url: j.link,
+    directUrl: j.link,
+    directKind: 'via',
+    posted: j.updated || null,
+    salary: clean(j.salary),
+    description: clean(j.snippet).slice(0, 4000),
+  }));
+}
+
 async function fromJobicy(profile) {
   const data = await getJSON('https://jobicy.com/api/v2/remote-jobs?count=50');
   const terms = matchTerms(profile);
@@ -798,6 +890,75 @@ async function textFromUpload(file) {
   return file.buffer.toString('utf8');
 }
 
+/* ── fetching, live and in the background ───────────────────────────────── */
+
+/* Enough relevant stored openings to answer without a live hunt. */
+const SHELF_ENOUGH = 25;
+
+const SOURCES = [
+  ['Adzuna', fromAdzuna], ['Jooble', fromJooble],
+  ['Remotive', fromRemotive], ['RemoteOK', fromRemoteOK], ['Arbeitnow', fromArbeitnow],
+  ['HN Who is Hiring', fromHackerNews], ['Jobicy', fromJobicy], ['Himalayas', fromHimalayas],
+  ['Freelancer', fromFreelancer], ['WeWorkRemotely', fromWeWorkRemotely],
+];
+
+/** Every source at once for one profile, plus the company boards when asked. */
+async function fetchOpenings(profile, boards) {
+  const settled = await Promise.allSettled([
+    ...SOURCES.map(([, fetcher]) => fetcher(profile)),
+    boards ? atsBoards.huntBoards(boards.match, boards) : Promise.resolve([]),
+  ]);
+  const names = [...SOURCES.map(([name]) => name), 'Company ATS boards'];
+  const sources = settled.map((r, i) => ({
+    name: names[i],
+    ok: r.status === 'fulfilled',
+    count: r.status === 'fulfilled' ? r.value.length : 0,
+    error: r.status === 'rejected' ? String(r.reason && r.reason.message || r.reason).slice(0, 60) : null,
+  }));
+  return { rows: settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : [])), sources };
+}
+
+/*
+ * The collector. Every company board once, then each role the reader knows,
+ * with the links checked and the employer's page looked for — the slow part
+ * of a search, done with nobody waiting — and stored for every search to
+ * read. One run at a time.
+ */
+let collecting = null;
+function collectOnce() {
+  if (collecting) return collecting;
+  collecting = (async () => {
+    const started = Date.now();
+    const counts = {};
+    const prepare = async (rows) => {
+      const inWindow = rows.filter((j) => {
+        const age = ageOf(j.posted);
+        return age.days === null || age.days <= MAX_POSTING_DAYS;
+      });
+      inWindow.forEach((j) => {
+        if (j.directUrl || !j.description) return;
+        const inText = directLink.extractApplyLink(j.description, j.url);
+        if (inText) { j.directUrl = inText.url; j.directKind = inText.kind; }
+      });
+      await directLink.resolveBatch(inWindow.filter((j) => !j.directUrl).slice(0, 40), { budgetMs: 20000 });
+      return verifyLinks(inWindow, 20000);
+    };
+    let stored = 0;
+    const boardRows = await atsBoards.huntBoards(null, { budgetMs: 60000, perBoard: 1000 }).catch(() => []);
+    counts['Company ATS boards'] = boardRows.length;
+    stored += await jobStore.save(await prepare(boardRows));
+    for (const [role] of TITLE_HINTS) {
+      const { rows, sources } = await fetchOpenings({ role, skills: [], location: 'india', seniority: 'entry' });
+      sources.forEach((src) => { if (src.name !== 'Company ATS boards') counts[src.name] = (counts[src.name] || 0) + src.count; });
+      stored += await jobStore.save(await prepare(rows));
+    }
+    const seconds = Math.round((Date.now() - started) / 1000);
+    console.log(`[job-collector] stored ${stored} openings in ${seconds}s: ${JSON.stringify(counts)}`);
+    return { stored, counts, seconds };
+  })().finally(() => { collecting = null; });
+  return collecting;
+}
+
 router.post('/profile', upload.single('file'), async (req, res) => {
   try {
     const b = bodyOf(req);
@@ -841,33 +1002,23 @@ router.post('/search', upload.single('file'), async (req, res) => {
     const boardMatch = (row) =>
       relevance(`${row.title} ${row.tags.join(' ')} ${row.location}`.toLowerCase(), boardTerms).relevant;
 
-    const settled = await Promise.allSettled([
-      fromRemotive(profile),
-      fromRemoteOK(profile),
-      fromArbeitnow(profile),
-      fromHackerNews(profile),
-      fromJobicy(profile),
-      fromHimalayas(profile),
-      fromFreelancer(profile),
-      fromWeWorkRemotely(profile),
-      atsBoards.huntBoards(boardMatch, {
+    /*
+     * Stored openings first. The collector fetched them in the background,
+     * links checked and employer pages found, so a search reads them in a
+     * second or two. Only a role the shelf cannot answer is hunted live.
+     */
+    const stored = await jobStore.find(profile).catch(() => []);
+    const fromShelf = rank(stored, profile).length >= SHELF_ENOUGH;
+    const { rows: fetched, sources } = fromShelf
+      ? { rows: [], sources: [{ name: 'Saved openings, checked every 6 hours', ok: true, count: stored.length, error: null }] }
+      : await fetchOpenings(profile, {
+        match: boardMatch,
         budgetMs: 6000,
         perBoard: 4,
         /* Rotate the window so the roster is covered across sessions. */
         offset: Math.floor(Date.now() / 3600000),
-      }),
-    ]);
-
-    const names = ['Remotive', 'RemoteOK', 'Arbeitnow', 'HN Who is Hiring', 'Jobicy', 'Himalayas',
-      'Freelancer', 'WeWorkRemotely', 'Company ATS boards'];
-    const sources = settled.map((s, i) => ({
-      name: names[i],
-      ok: s.status === 'fulfilled',
-      count: s.status === 'fulfilled' ? s.value.length : 0,
-      error: s.status === 'rejected' ? String(s.reason && s.reason.message || s.reason).slice(0, 60) : null,
-    }));
-
-    const all = settled.flatMap((s) => (s.status === 'fulfilled' ? s.value : []));
+      });
+    const all = [...stored, ...fetched];
     /* the same role is often syndicated to two boards */
     const seen = new Set();
     const deduped = all.filter((j) => {
@@ -898,7 +1049,7 @@ router.post('/search', upload.single('file'), async (req, res) => {
       const age = ageOf(j.posted);
       return age.days === null || age.days <= MAX_POSTING_DAYS;
     });
-    const scored = rank(inWindow, profile).slice(0, 40).map((job) => ({
+    const scored = rank(inWindow, profile).slice(0, 80).map((job) => ({
       ...job,
       jobId: jobIdOf(job),
       stale: isStale(job.posted),
@@ -953,15 +1104,16 @@ router.post('/search', upload.single('file'), async (req, res) => {
        * top eight rows, and whatever it misses stays a labelled board link
        * rather than holding up the answer.
        */
-      await directLink.resolveBatch(live.filter((j) => !j.directUrl).slice(0, 8), { budgetMs: 6000 });
+      await directLink.resolveBatch(live.filter((j) => !j.directUrl && !j.fromStore).slice(0, 8), { budgetMs: 6000 });
 
       /* Direct openings are the product; they lead. Within each group the
          fit ordering stands unchanged. */
-      live.sort((a, j2) => (j2.directUrl ? 1 : 0) - (a.directUrl ? 1 : 0) || (ordering(j2) - ordering(a)));
+      const linkRank = (j) => (j.directUrl ? (j.directKind === 'via' ? 1 : 2) : 0); /* employer, then via Adzuna/Jooble */
+      live.sort((a, j2) => linkRank(j2) - linkRank(a) || (ordering(j2) - ordering(a)));
     }
 
     /* This hunt feeds the memory the next one reads — resolved links included. */
-    jobCache.remember(live.filter((j) => !j.fromCache));
+    jobCache.remember(live.filter((j) => !j.fromCache && !j.fromStore));
 
     /*
      * Direct links only, by default.
@@ -978,7 +1130,7 @@ router.post('/search', upload.single('file'), async (req, res) => {
     live.forEach((j) => {
       j.fit5 = Math.max(1, Math.min(5, Math.round((j.fit.percent || 0) / 20)));
       j.linkLabel = j.directUrl
-        ? (j.directKind === 'ats' ? 'Apply — company ATS' : 'Apply — company site')
+        ? (j.directKind === 'ats' ? 'Apply — company ATS' : j.directKind === 'via' ? `Apply — via ${j.source}` : 'Apply — company site')
         : `Opening via ${j.source}`;
     });
 
@@ -1104,7 +1256,7 @@ async function verifyLinks(jobs, budgetMs = 4000) {
      buys nothing and costs the student seconds of spinner. It is skipped from
      CHECKING, not from the results: filtering the working list here would
      have deleted every company posting from the answer. */
-  const toCheck = jobs.filter((j) => !(j.directKind === 'ats' && j.directUrl));
+  const toCheck = jobs.filter((j) => !(j.directKind === 'ats' && j.directUrl) && !j.fromStore);
 
   for (let i = 0; i < toCheck.length; i += BATCH) {
     if (Date.now() > deadline) break;   // whatever is unchecked stays in, unmarked
@@ -1437,3 +1589,5 @@ module.exports.isStale = isStale;
 module.exports.xray = xray;
 module.exports.platformSearches = platformSearches;
 module.exports.rank = rank;
+module.exports.collectOnce = collectOnce;
+module.exports.fetchOpenings = fetchOpenings;

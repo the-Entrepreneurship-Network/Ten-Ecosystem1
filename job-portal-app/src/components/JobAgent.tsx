@@ -101,6 +101,37 @@ function workType(job: Job): string {
   return job.location ? 'Onsite' : 'Not stated';
 }
 
+/*
+ * The filters a job site has. All of them read what the posting says, on the
+ * rows the hunt already returned; nothing is guessed about a posting that
+ * does not say.
+ */
+type Filters = { where: 'all' | 'india' | 'remote'; kind: 'all' | 'internship' | 'job'; freshers: boolean; days: 7 | 30 | 183 };
+const FRESHER = /\b(intern|internship|fresher|freshers|graduate|trainee|entry[- ]level|junior)\b/i;
+const SENIOR = /\b(senior|sr\.?|lead|principal|staff|architect|manager|head|director|vp)\b/i;
+const ageDays = (posted: string | null) => {
+  const t = posted ? Date.parse(posted) : NaN;
+  return Number.isNaN(t) ? null : Math.floor((Date.now() - t) / 86400000);
+};
+function openToFreshers(j: Job): boolean {
+  if (FRESHER.test(`${j.title} ${j.type || ''}`)) return true;
+  if (SENIOR.test(j.title)) return false;
+  const years = String(j.description || '').match(/(\d+)\s*\+?\s*(?:-|to)?\s*(?:\d+\s*)?(?:years|yrs)/i);
+  return !years || Number(years[1]) <= 1;
+}
+function passes(j: Job, f: Filters): boolean {
+  const days = ageDays(j.posted);
+  if (days !== null && days > f.days) return false;
+  if (f.where === 'india' && placeOf(j).country !== 'India') return false;
+  if (f.where === 'remote' && workType(j) !== 'Remote') return false;
+  const intern = /intern/i.test(`${j.title} ${j.type || ''}`);
+  if (f.kind === 'internship' && !intern) return false;
+  if (f.kind === 'job' && intern) return false;
+  return !f.freshers || openToFreshers(j);
+}
+/* India first; freelance marketplaces are not job searches. */
+const SEARCH_ORDER = ['Naukri', 'LinkedIn', 'Internshala', 'Unstop', 'Wellfound', 'Foundit (Monster)', 'Indeed', 'Instahyre', 'Cutshort', 'Hirist', 'Google Jobs'];
+
 function loadTracker(): TrackRow[] {
   try { return JSON.parse(localStorage.getItem(TRACKER_KEY) || '[]'); } catch { return []; }
 }
@@ -122,7 +153,7 @@ type Job = {
   source: string; title: string; company: string; location: string; type: string;
   tags: string[]; url: string; posted: string | null; matched: string[]; score: number;
   fit?: Fit; jobId?: string; stale?: boolean;
-  directUrl?: string; directKind?: 'ats' | 'company'; linkLabel?: string; fit5?: number;
+  directUrl?: string; directKind?: 'ats' | 'company' | 'via'; linkLabel?: string; fit5?: number; description?: string;
   fromCache?: boolean; seenDaysAgo?: number; postedAgo?: string;
 };
 type Search = { platform: string; why: string; url: string };
@@ -153,6 +184,7 @@ export default function JobAgent() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [searches, setSearches] = useState<Search[]>([]);
+  const [filters, setFilters] = useState<Filters>({ where: 'all', kind: 'all', freshers: false, days: 30 });
   const [sources, setSources] = useState<SourceStat[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -256,6 +288,7 @@ export default function JobAgent() {
   }
 
   const started = profile !== null;
+  const shown = jobs.filter((j) => passes(j, filters));
 
   return (
     <KineticGrid>
@@ -355,16 +388,40 @@ export default function JobAgent() {
                 <div>
                   <div className="mb-3 flex items-baseline justify-between">
                     <h2 className="text-xl font-semibold text-white">
-                      Openings for you <span className="text-white/40">({jobs.length})</span>
+                      Openings for you <span className="text-white/40">({shown.length} of {jobs.length})</span>
                     </h2>
                     <span className="text-[11px] uppercase tracking-[0.14em] text-emerald-300/80">
-                      direct company links only
+                      employer links first
                     </span>
                   </div>
                   <p className="mb-4 text-[12px] leading-relaxed text-white/45">
-                    Every link opens the employer's own posting — their careers page or their ATS.
-                    Nothing here routes through a board or a search page.
+                    Links open the employer's own posting — their careers page or their ATS. Openings found
+                    through Adzuna or Jooble open through them, straight to the advert, and say so.
                   </p>
+
+                  {/* Filters: what a job site has, read from what each posting says. */}
+                  <div className="mb-4 flex flex-wrap items-center gap-2 text-[12px]">
+                    {([
+                      ['where', [['all', 'Anywhere'], ['india', 'India'], ['remote', 'Remote']]],
+                      ['kind', [['all', 'Jobs and internships'], ['internship', 'Internships'], ['job', 'Jobs']]],
+                      ['days', [[7, 'Last 7 days'], [30, 'Last 30 days'], [183, 'Last 6 months']]],
+                    ] as const).map(([key, opts]) => (
+                      <div key={key} className="flex gap-1 rounded-full border border-white/10 bg-white/[0.03] p-1">
+                        {opts.map(([value, label]) => (
+                          <button key={String(value)} type="button" aria-pressed={filters[key] === value}
+                            onClick={() => setFilters((f) => ({ ...f, [key]: value }))}
+                            className={['rounded-full px-3 py-1', filters[key] === value ? 'bg-white text-black' : 'text-white/65 hover:text-white'].join(' ')}>
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    ))}
+                    <button type="button" aria-pressed={filters.freshers}
+                      onClick={() => setFilters((f) => ({ ...f, freshers: !f.freshers }))}
+                      className={['rounded-full border px-3 py-1.5', filters.freshers ? 'border-white bg-white text-black' : 'border-white/10 text-white/65 hover:text-white'].join(' ')}>
+                      Open to freshers
+                    </button>
+                  </div>
 
                   {cacheNote && (
                     <p className="mb-3 rounded-xl border border-violet-400/25 bg-violet-400/[0.07] p-3 text-[12.5px] leading-relaxed text-violet-100/85">
@@ -378,7 +435,7 @@ export default function JobAgent() {
                     beside it, so a student can scan the whole hunt in one
                     pass instead of reading cards.
                   */}
-                  {jobs.length > 0 && (
+                  {shown.length > 0 && (
                     <div className="mb-6 overflow-x-auto rounded-2xl border border-white/10">
                       <table className="w-full min-w-[900px] border-collapse text-[12.5px]">
                         <thead>
@@ -392,7 +449,7 @@ export default function JobAgent() {
                           </tr>
                         </thead>
                         <tbody>
-                          {jobs.map((j, i) => (
+                          {shown.map((j, i) => (
                             <tr key={'row' + j.url + i} className="border-t border-white/[0.07] align-top hover:bg-white/[0.03]">
                               {/* Job — who is hiring. */}
                               <td className="px-3 py-2 font-semibold text-white">{j.company || '—'}</td>
@@ -413,6 +470,9 @@ export default function JobAgent() {
                                 {j.postedAgo && (
                                   <span className="ml-1 whitespace-nowrap text-white/40">({j.postedAgo})</span>
                                 )}
+                                {j.directKind === 'via' && (
+                                  <span className="ml-1 whitespace-nowrap text-white/40">via {j.source}</span>
+                                )}
                               </td>
                             </tr>
                           ))}
@@ -429,7 +489,13 @@ export default function JobAgent() {
                         refresh through the day; try again shortly.
                       </p>
                     )}
-                    {jobs.map((j, i) => (
+                    {jobs.length > 0 && shown.length === 0 && (
+                      <p className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-[13px] leading-relaxed text-white/55">
+                        None of the {jobs.length} openings match these filters. Widen one — "Last 6 months" or
+                        "Anywhere" — to see them.
+                      </p>
+                    )}
+                    {shown.map((j, i) => (
                       <div
                         key={j.url + i}
                         className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur-sm transition-colors hover:border-white/25 hover:bg-white/[0.07]"
@@ -446,6 +512,9 @@ export default function JobAgent() {
                             </a>
                             {j.postedAgo && (
                               <span className="font-normal text-white/45">{' '}({j.postedAgo})</span>
+                            )}
+                            {j.directKind === 'via' && (
+                              <span className="font-normal text-white/45">{' '}· via {j.source}</span>
                             )}
                           </p>
                           {j.fit && <div className="shrink-0"><FitBadge fit={j.fit} /></div>}
@@ -636,12 +705,28 @@ export default function JobAgent() {
                 )}
 
                 {/*
-                  The platform search cards are gone. They listed board names —
-                  LinkedIn, Naukri, Glassdoor — and every click landed on a
-                  search page rather than a job, which is the opposite of what
-                  this portal promises. If a listing cannot be resolved to the
-                  employer's own posting it is not shown at all.
+                  Searches on the sites that need a login, kept apart from the
+                  openings. They were once mixed into the list, where a click
+                  on "Naukri" landed on a search page instead of a job; here
+                  they are labelled as what they are.
                 */}
+                {searches.some((x) => SEARCH_ORDER.includes(x.platform)) && (
+                  <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <p className="mb-1 text-[13px] font-semibold text-white">Search these sites yourself</p>
+                    <p className="mb-3 text-[12px] leading-relaxed text-white/45">
+                      Each opens that site's own search with your role and city, signed in as you. These are
+                      searches, not openings, so they are kept apart from the list above.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {SEARCH_ORDER.map((name) => searches.find((x) => x.platform === name)).filter(Boolean).map((x) => (
+                        <a key={x!.platform} href={x!.url} target="_blank" rel="noopener noreferrer" title={x!.why}
+                          className="rounded-full border border-white/15 px-3 py-1.5 text-[12px] text-white/80 hover:border-white/40 hover:text-white">
+                          {x!.platform.replace(' (Monster)', '')} ↗
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
