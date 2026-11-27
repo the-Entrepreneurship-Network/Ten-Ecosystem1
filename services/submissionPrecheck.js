@@ -75,14 +75,15 @@ function guardedLookup(hostname, options, callback) {
     });
 }
 
+/** Each one is read after "The link does not open: it …". */
 const WHY = {
     EBLOCKED: 'points inside a private network',
-    ENOTFOUND: 'the address does not exist',
-    EAI_AGAIN: 'the address does not exist',
-    ECONNREFUSED: 'the site refused the connection',
-    ECONNRESET: 'the site closed the connection',
-    ETIMEDOUT: 'the site did not answer in time',
-    CERT_HAS_EXPIRED: 'the site has an expired certificate'
+    ENOTFOUND: 'points to an address that does not exist',
+    EAI_AGAIN: 'points to an address that does not exist',
+    ECONNREFUSED: 'was refused by the site',
+    ECONNRESET: 'was cut off by the site',
+    ETIMEDOUT: 'got no answer from the site in time',
+    CERT_HAS_EXPIRED: 'is on a site whose certificate has expired'
 };
 
 /**
@@ -350,21 +351,44 @@ async function run(id, { screenshotExpected = true, notify = true } = {}) {
                     check.match = ['yes', 'partly', 'no'].includes(m) ? m : 'unclear';
                     check.reason = String((out && out.reason) || '').trim().slice(0, 300);
                     check.draft = draft.slice(0, 1200);
-                    // A failed check is never "approve", whatever the model says.
-                    check.decision = !problems.length && /approve/i.test(String(out.decision || '')) ? 'approve' : 'changes';
+                    // A failed check is never "approve", whatever the model says,
+                    // and a model that would approve it wrote praise: the checks'
+                    // own draft, which says what to fix, goes in the box instead.
+                    const wouldApprove = /approve/i.test(String(out.decision || ''));
+                    check.decision = !problems.length && wouldApprove ? 'approve' : 'changes';
+                    if (problems.length && wouldApprove) check.draft = draftWithoutAi(task, problems);
                     check.by = 'ai';
                 }
             } catch (err) {
                 console.warn('[pre-check] Gemini did not answer:', err.message);
             }
         }
+        // Nor can it say work matches the task when nobody could open the work.
+        if (link.verdict !== 'opens' && !(repo && repo.public)) {
+            check.match = 'unclear';
+            check.reason = 'The work could not be opened, so it was not compared with the task.';
+        }
 
         const saved = await Submission.updateOne({ _id: sub._id, reviewedOnce: { $ne: true } }, { $set: { aiCheck: check } });
-        if (notify && problems.length && saved && (saved.modifiedCount || saved.nModified)) await tellStudent(sub, task, problems);
+        const stored = !!(saved && (saved.modifiedCount || saved.nModified));
+        if (stored) logCheck(sub, task, check);
+        if (notify && problems.length && stored) await tellStudent(sub, task, problems);
         return check;
     } catch (err) {
         console.error('[pre-check] failed:', err.message);
         return null;
+    }
+}
+
+/** For the daily report and the backlog's daily limit. A log that fails changes nothing else. */
+function logCheck(sub, task, check) {
+    try {
+        require('../models/AiCoordinatorLog').create({
+            kind: 'precheck', employeeId: sub.employeeId || '', domain: sub.domain || '',
+            question: task, reply: check.problems.join(' ').slice(0, 1000), source: check.decision, reason: check.by
+        }).catch((err) => console.error('[pre-check] log failed:', err.message));
+    } catch (err) {
+        console.error('[pre-check] log failed:', err.message);
     }
 }
 
