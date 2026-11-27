@@ -30,7 +30,8 @@ module.exports = [
             'i didn\'t get employee id till now', 'still no employee id', 'did not receive employee id yet',
             'please generate my employee id', 'assign me a new employee id', 'kindly generate employee id for my internship',
             'i filled the google form but did not get employee id', 'request for employee id', 'could you please share my employee id to complete my onboarding', 'i joined as an intern please share my employee id',
-            'i am shortlisted please provide my employee id', 'got shortlisted mail need my employee id'
+            'i am shortlisted please provide my employee id', 'got shortlisted mail need my employee id',
+            'i joined the group and filled the google form when will i get my employee id', 'when will i get my employee id'
         ],
         answer: 'You get your Employee ID the moment you register. It looks like TEN/WEB/1005, and you will find it in ' +
             'your welcome email and at the top of your dashboard.\n\n' +
@@ -293,7 +294,9 @@ module.exports = [
             'what are the steps i have to follow daily', 'what should i do daily', 'i am new here what do i do',
             'daily work of an intern', 'roz kya karna hai', 'what is my daily task', 'how does the internship work',
             'i am new here can anyone tell me the process',
-            'i am shortlisted what is my work', 'please explain what is my work', 'selected for internship what do i have to do'
+            'i am shortlisted what is my work', 'please explain what is my work', 'selected for internship what do i have to do',
+            'what are the next steps in the internship', 'what do i have to do in the 3 months internship',
+            'next steps after joining the group', 'what is the process for the whole internship'
         ],
         answer: "Here's what to do as an intern:\n" +
             '1. Mark your attendance every day from Monday to Saturday: first the official Google Form, then ' +
