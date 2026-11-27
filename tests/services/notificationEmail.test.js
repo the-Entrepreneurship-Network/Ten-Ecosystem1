@@ -51,6 +51,13 @@ describe('notification → email mirror', () => {
         }
     });
 
+    it('sends over one pooled connection, so many notices at once are not many logins', () => {
+        // The AI Coordinator's reminders save up to 300 personal notices in a
+        // loop and the hook does not wait for the email: unpooled, that is 300
+        // simultaneous SMTP logins, which the provider refuses.
+        expect(read('services/notificationEmail.js')).toContain('createEmailTransporter({ pool: true })');
+    });
+
     it('respects the opt-out for events that send their own mail', async () => {
         process.env.SMTP_USER = 'u';
         process.env.SMTP_PASS = 'p';
