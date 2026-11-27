@@ -549,8 +549,13 @@ const mxCache = new Map();
  * would catch — and that gets the sending IP blocklisted while most Indian
  * college servers accept-all anyway, so it would buy false confidence rather
  * than fewer bounces. If bounce rates stay high after this, read the bounces.
+ *
+ * `unknown` is the answer when the resolver itself fails (a timeout, a
+ * SERVFAIL): false by default, because a send list should skip what it
+ * cannot confirm. A list a person only reads — the job agent's recruiter
+ * table — passes null ("not known"), so a DNS blip does not hide a contact.
  */
-async function hasMx(domain) {
+async function hasMx(domain, { unknown = false } = {}) {
     const d = String(domain || '').trim().toLowerCase();
     if (!d || !d.includes('.')) return false;
     if (mxCache.has(d)) return mxCache.get(d);
@@ -569,7 +574,7 @@ async function hasMx(domain) {
         // to the A-record rule below. Anything else (timeout, SERVFAIL) is the
         // resolver having a bad moment, so it is NOT cached: a blip must not
         // condemn a real college for the lifetime of the process.
-        if (code !== 'ENODATA') return false;
+        if (code !== 'ENODATA') return unknown;
     }
 
     // RFC 5321 §5.1: a domain with an address record and no MX still takes

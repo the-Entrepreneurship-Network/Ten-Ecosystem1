@@ -195,8 +195,15 @@ function profileFromResume(text) {
     ? (raw.match(/^.*\b(?:b\.?tech|b\.?e\.?|bachelor|master|m\.?tech|mba|b\.?sc|m\.?sc)\b.*$/im) || [])[0] || true
     : null;
 
+  /* The college, for the "alumni at this company" search: the part of the
+     line that names an institution, without the degree or the years. */
+  const SCHOOL = /\b(university|institute|college|iit|nit|iiit|bits|school of)\b/i;
+  const schoolLine = raw.split(/\r?\n/).map((l) => l.trim()).find((l) => SCHOOL.test(l) && l.length < 160) || '';
+  const college = (schoolLine.split(/[,|–—]| - /).map((x) => x.trim()).find((x) => SCHOOL.test(x)) || '')
+    .replace(/\s*\b(19|20)\d\d\b.*$/, '').replace(/[()]/g, '').trim().slice(0, 80);
+
   return {
-    name, role, seniority, location,
+    name, role, seniority, location, college,
     skills: skills.slice(0, 18),
     keywordCount: skills.length,
     years, projects, education,
@@ -309,6 +316,13 @@ async function getJSON(url, ms = 7000) {
 const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#x27': "'", '#x2F': '/', '#39': "'", '#47': '/' };
 const clean = (s) =>
   String(s || '')
+    /* A link's target is the fact. "Apply here" pointing at mailto:jobs@… or
+       at the employer's ATS kept neither once the tags came off, so the
+       target stays beside its words: "Apply here (jobs@kite.in)". A mail
+       link loses its ?subject=; a web link stays whole; "#top" is noise. */
+    .replace(/<a\b[^>]*?\bhref\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (m, href, text) =>
+      (/^mailto:/i.test(href) ? ` ${text} (${href.slice(7).replace(/\?.*$/, '')}) `
+        : /^https?:\/\//i.test(href) ? ` ${text} (${href}) ` : ` ${text} `))
     .replace(/<[^>]*>/g, ' ')
     .replace(/&(#x?[0-9a-fA-F]+|[a-z]+);/gi, (m, code) => {
       const key = code.toLowerCase();
@@ -1153,7 +1167,7 @@ router.post('/search', upload.single('file'), async (req, res) => {
        * filtering it away with the job was throwing out the thing being
        * asked for.
        */
-      recruiters: recruiterContacts.collectRecruiters(
+      recruiters: await deliverable(recruiterContacts.collectRecruiters(
         deduped
           /*
            * Six weeks, and only postings for the work this person does.
@@ -1202,7 +1216,7 @@ router.post('/search', upload.single('file'), async (req, res) => {
               .filter((s) => hasWord(roleSpan, s)).length;
             return skillHits >= 2;
           })
-          .map((j) => ({ ...j, postedAgo: ageOfContact(j.posted).label }))),
+          .map((j) => ({ ...j, postedAgo: ageOfContact(j.posted).label })))),
       counts: {
         total: shown.length,
         strong: shown.filter((j) => j.fit.band === 'strong').length,
@@ -1318,6 +1332,25 @@ function ageOf(posted) {
  * is the difference between writing today and not bothering.
  */
 const RECRUITER_MAX_DAYS = 42;
+
+/*
+ * An address whose domain cannot receive mail is not a contact: a typo in an
+ * advert, or a domain that has lapsed. Checked the way the college agent
+ * checks (an MX record, or an A record), once per domain. A slow answer is
+ * not a no: a resolver that fails or takes past 2.5 s leaves the contact in,
+ * so a bad resolver hides nothing. Only a confirmed domain is marked checked.
+ */
+async function deliverable(rows) {
+  const { hasMx } = require('../../services/collegeDiscovery');
+  const domainOf = (r) => (String(r.email || '').split('@')[1] || '').toLowerCase();
+  const domains = [...new Set(rows.filter((r) => r.email).map(domainOf))];
+  /* true: takes mail. false: cannot. null: not known in time. */
+  const verdict = new Map(await Promise.all(domains.map(async (d) => [d,
+    await Promise.race([hasMx(d, { unknown: null }).catch(() => null), new Promise((done) => setTimeout(done, 2500, null))])])));
+  return rows
+    .filter((r) => !r.email || verdict.get(domainOf(r)) !== false)
+    .map((r) => (r.email && verdict.get(domainOf(r)) === true ? { ...r, mailChecked: true } : r));
+}
 
 function ageOfContact(posted) {
   if (!posted) return { days: null, label: '' };
