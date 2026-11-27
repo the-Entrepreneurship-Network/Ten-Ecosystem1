@@ -101,11 +101,27 @@ async function main() {
         const withRecord = new Set((await Student.find({}).select('email').lean())
             .map((s) => String(s.email || '').trim().toLowerCase()));
         const missing = users.filter((u) => !withRecord.has(String(u.email || '').trim().toLowerCase()));
-        await mongoose.disconnect();
         const list = missing.slice(0, 50).map((u) => '      ' + u.email + '  (since ' + new Date(u.createdAt).toISOString().slice(0, 10) + ')');
         return missing.length + ' of ' + users.length + ' student accounts have no internship record'
             + (list.length ? '\n' + list.join('\n') + (missing.length > 50 ? '\n      …' : '') : '');
     });
+
+    // The 11:55 pm class auto-mark (services/automationCron
+    // autoMarkCoordinatorAttendance) leaves no trace but its rows, so count
+    // them: a run of empty nights means the job is not running.
+    await check('nightly class auto-mark', async () => {
+        const Attendance = require(path.join(ROOT, 'models/Attendance'));
+        const since = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
+        const nights = await Attendance.aggregate([
+            { $match: { coordinatorId: 'AUTO_SYSTEM', dateKey: { $gte: since } } },
+            { $group: { _id: '$dateKey', marked: { $sum: 1 } } },
+            { $sort: { _id: -1 } }
+        ]);
+        return nights.length
+            ? 'class marks made by the agent: ' + nights.map((n) => n._id + ' ' + n.marked).join(', ')
+            : 'no automatic class marks in the last 7 days: check the job is running';
+    });
+    await mongoose.disconnect().catch(() => {});
 
     const failed = results.filter((r) => !r.ok);
     console.log(`Live self-test: ${results.length - failed.length} passed, ${failed.length} failed.\n`);
