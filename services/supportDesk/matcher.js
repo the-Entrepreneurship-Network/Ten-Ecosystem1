@@ -67,8 +67,12 @@ const STOP = new Set((
  * Always a person, whatever matches. The first line is what needs a human
  * because of what it is. The rest is where the portal itself is inconsistent
  * today (HANDOVER §17.2), so any fixed answer would be wrong for someone:
- * stipend, the Letter of Recommendation, fines, course certificates, name
- * corrections, changing domain or plan, and end dates.
+ * stipend, the Letter of Recommendation, fines, name corrections, changing
+ * domain or plan, and end dates.
+ *
+ * The course certificates (Expert, Nano Degree, Fellowship) were on this list
+ * while their Download was a 404 and two tiers said "Payment coming soon".
+ * They have one price setting and one checkout now, so they have an answer.
  */
 const SENSITIVE = new RegExp('\\b(?:' + [
     'refunds?|money back|charge-?back|cheat(?:ed|ing)?|scam|fraud|fake|police|legal|lawyer|advocate|court|consumer forum',
@@ -78,7 +82,6 @@ const SENSITIVE = new RegExp('\\b(?:' + [
     'lor|letters? of recommendation|recommendation letters?',
     // Not a bare "fine": "it was working fine" is not about money.
     'fines|fine amount|(?:pay|paid|paying) (?:the |a |my )?fine|(?:attendance|lor|loc) fine|penalt(?:y|ies)',
-    'nano ?degree|fellowship|expert certificate',
     'wrong name|name (?:is )?wrong|name correction|correct(?:ion)? (?:in |of )?my name|spelling (?:mistake|error)|misspelt|misspelled',
     'change (?:my |the )?(?:domain|plan|tenure)|switch (?:my |the )?(?:domain|plan)',
     'end date|extend (?:my )?internship|internship extension'

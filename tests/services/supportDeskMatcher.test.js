@@ -39,7 +39,13 @@ describe('emails get the answer they ask for', () => {
         ["I didn't got employee email id", 'employee-id'],
         ['Please provide my employee id , feel free to contact me if any further details are required.', 'employee-id'],
         ['I am unable to join the domain group using the invitation link provided. Could you please check the issue and help me get access to the group? If necessary, kindly share a new invitation link or guide me through the joining process.', 'whatsapp-link-reset'],
-        ['when i open the whatsapp group link it says the link was reset', 'whatsapp-link-reset']
+        ['when i open the whatsapp group link it says the link was reset', 'whatsapp-link-reset'],
+        // The course certificates, once they had a checkout (27 Nov 2026). The
+        // first is a WhatsApp report, reworded: eligible for all three, got none.
+        ['I am eligible for all 3 certificates but I am not able to get any of them', 'course-certificate'],
+        ['Nano degree is showing Claim It (Payment coming soon)', 'course-certificate'],
+        ['I paid for my fellowship certificate yesterday, when will it be approved?', 'course-certificate'],
+        ['how much is the expert certificate', 'course-certificate']
     ])('%s', (text, key) => {
         expect(answerFor(text)).toBe(key);
     });
@@ -62,7 +68,10 @@ describe('a person answers', () => {
         // Job seekers asking for a referral, 25 Nov 2026: not an intern's Employee ID.
         'I am currently looking for internship opportunities. I kindly request you to share your Employee ID or referral details so that I can apply through the appropriate referral process.',
         // A question about which document to send instead: HR decides.
-        'I do not have my latest semester marksheet available. Could you please advise me on what alternative document I can submit in its place, or if I can submit it at a later date?'
+        'I do not have my latest semester marksheet available. Could you please advise me on what alternative document I can submit in its place, or if I can submit it at a later date?',
+        // Which certificate? It could be the Letter of Completion or a course one.
+        'when I click download on my certificate it says page not found',
+        'I want a refund for my expert certificate'
     ])('%s', (text) => {
         expect(answerFor(text)).toBe('PERSON');
     });
@@ -94,4 +103,14 @@ describe('the matcher itself', () => {
     test('every starter answer is found by its own question', () => {
         for (const s of starters) expect([s.key, answerFor(s.question)]).toEqual([s.key, s.key]);
     });
+});
+
+test('the course certificate answer quotes the checkout\'s prices and the 24-hour check', () => {
+    const { CERT_PRICES } = require('../../config/payment');
+    const { answer } = starters.find((s) => s.key === 'course-certificate');
+    for (const price of Object.values(CERT_PRICES)) expect(answer).toContain('₹' + price);
+    expect(answer).toContain('within 24 hours');
+    // Its examples never echo onto the neighbouring certificate questions.
+    expect(answerFor('how to download my certificate')).toBe('completion-certificate');
+    expect(match('how can a company verify my certificate', starters).answers.map((a) => a.entry.key)).toEqual(['verify-certificate']);
 });

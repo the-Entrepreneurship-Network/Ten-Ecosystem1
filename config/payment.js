@@ -1,9 +1,12 @@
 // NEW FEATURE: Payment Skeleton — PAYMENT_ENABLED=false by default
 // Set PAYMENT_ENABLED=true in .env to activate everything with zero code changes.
 
-const expert_price = 100;
-const nano_price = 1000;
-const fellowship_price = 2500;
+// Course certificate fees, in rupees: the one place they are set. The
+// My Certificates page, the checkout, the payment routes, the marketplace's
+// coin prices and the admin labels all read these.
+const expert_price = 300;
+const nano_price = 500;
+const fellowship_price = 1000;
 
 const BUSINESS_UPI = {
   upiId: 'paytmqr5k0ods@ptys',

@@ -108,6 +108,7 @@ body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans
 .cert-action-btn.claim-btn{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#0a0600;}
 .cert-action-btn.claim-btn:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(212,175,55,0.3);}
 .cert-action-btn.claimed-btn{background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);color:var(--green);}
+.cert-verify-note{margin-top:8px;font-size:12px;line-height:1.5;color:var(--muted);text-align:center;}
 
 .price-tag{display:inline-block;padding:4px 12px;border-radius:99px;font-size:12px;font-weight:700;background:rgba(212,175,55,0.1);color:var(--gold);border:1px solid rgba(212,175,55,0.2);margin-right:8px;}
 
@@ -209,12 +210,13 @@ let EMP_ID = localStorage.getItem('employeeId') || sessionStorage.getItem('emplo
 let muted      = false;
 let certData   = {};
 let currentRevealType = null;
-let currentPdfUrl = null;
 
+// Prices are not written here: they come from the server (d.prices), which
+// reads the one figure in config/payment.js that the checkout charges.
 const CERT_LABELS = {
-  expert:     { name: 'Expert Certificate',  desc: 'Awarded for 30% course completion', tier: 'TIER 1 — ₹100', tierClass: 'expert' },
-  nano_degree:{ name: 'Nano Degree',         desc: 'Awarded for 70% course completion', tier: 'TIER 2 — ₹1000', tierClass: 'nano_degree' },
-  fellowship: { name: 'Fellowship',          desc: 'Top 10% of cohort only',            tier: 'TIER 3 — ₹2500', tierClass: 'fellowship' }
+  expert:     { name: 'Expert Certificate',  desc: 'Awarded for 30% course completion', tierClass: 'expert' },
+  nano_degree:{ name: 'Nano Degree',         desc: 'Awarded for 70% course completion', tierClass: 'nano_degree' },
+  fellowship: { name: 'Fellowship',          desc: 'Top 10% of cohort only',            tierClass: 'fellowship' }
 };
 
 async function loadCerts() {
@@ -303,7 +305,8 @@ function renderCerts(d) {
     const certInfo = d[type];
     const unlocked = certInfo?.unlocked;
     const pct      = certInfo?.completionPct || 0;
-    const rankPct  = d.fellowship?.cohortRankPct ?? 50;
+    // The very top of a cohort is "Top 1%", not "Top 0%".
+    const rankPct  = Math.max(1, d.fellowship?.cohortRankPct ?? 50);
     const threshold= type === 'expert' ? 30 : type === 'nano_degree' ? 70 : 10;
     const record   = certInfo?.record;
     const price    = d.prices?.[type] || 0;
@@ -320,6 +323,8 @@ function renderCerts(d) {
      */
     const paid     = certInfo?.feeSettled?.covered || d.feeSettled?.[type]?.covered || false;
     const paidVia  = certInfo?.feeSettled?.via || d.feeSettled?.[type]?.via || null;
+    // A UPI payment submitted and waiting for the admin: not paid yet, not "buy" either.
+    const verifying = !paid && !!(certInfo?.feeSettled?.verifying || d.feeSettled?.[type]?.verifying);
     const planName = d.planName || '';
     /* A Studio fee the student chose to pay after completion. Said on the card
        rather than sprung on them at the download button. */
@@ -351,22 +356,26 @@ function renderCerts(d) {
     if (!unlocked) {
       // Not earned yet. When the fee is already settled the wording says so —
       // the certificate is theirs, waiting on the requirement, not on money.
+      // The Fellowship needs BOTH a top-10% rank and 70% completion; a student
+      // already in the top 10% is waiting on completion, so say that.
       const need = type === 'fellowship'
-        ? `Top 10% ranking needed (currently Top ${rankPct}%)`
+        ? (rankPct <= 10 ? `70% completion needed (${Math.min(100,pct)}% done)` : `Top 10% ranking needed (currently Top ${rankPct}%)`)
         : `${threshold}% completion needed (${Math.min(100,pct)}% done)`;
       actionBtn = paid
         ? `<button class="cert-action-btn locked reserved">🔓 Reserved for you — ${need}</button>`
         : `<button class="cert-action-btn locked">🔒 Locked — ${need}</button>`;
-    } else if (record?.pdfUrl) {
-      actionBtn = `<button class="cert-action-btn claimed-btn" onclick="downloadCert('${record.pdfUrl}','${type}')">⬇ Download Certificate</button>`;
     } else if (studioDue) {
       // Earned, and waiting only on the fee they chose to defer.
       actionBtn = `<button class="cert-action-btn locked reserved" onclick="location.href='/studio.html'">💳 Settle ₹${studioDue.amount} to release this</button>`;
     } else if (paid) {
-      actionBtn = `<button class="cert-action-btn claim-btn" onclick="claimCert('${type}')">🎉 Claim It — already paid</button>`;
+      // Earned and paid (approved UPI payment, paid track or coins).
+      actionBtn = `<button class="cert-action-btn claimed-btn" onclick="downloadCert('${type}')">⬇ Download Certificate</button>`;
+    } else if (verifying) {
+      actionBtn = `<button class="cert-action-btn locked reserved" disabled>⏳ Payment submitted — verifying</button>
+        <div class="cert-verify-note">We verify payments within 24 hours. You will get an email when it is approved, and the download opens here.</div>`;
     } else {
-      const payLabel = d.paymentEnabled ? `Claim It → ₹${price}` : `Claim It (Payment coming soon)`;
-      actionBtn = `<button class="cert-action-btn claim-btn" onclick="claimCert('${type}')">🎉 ${payLabel}</button>`;
+      // Earned, not paid: the benefits page first, then the payment.
+      actionBtn = `<button class="cert-action-btn claim-btn" onclick="location.href='/certificate-checkout.html?type=${type}'">🎉 Get your certificate — ₹${price}</button>`;
     }
 
     let barPct;
@@ -405,77 +414,6 @@ function renderCerts(d) {
   document.getElementById('certGrid').innerHTML = html || '<div style="text-align:center;padding:40px;color:var(--muted);">No certificates available yet. Complete tasks to unlock them!</div>';
 }
 
-async function claimCert(type) {
-  try {
-    const r = await fetch(`/api/v2/certificates/claim/${type}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-employee-id': EMP_ID }
-    });
-    const d = await r.json();
-    if (!d.success) { Swal.fire({ icon: 'error', title: 'Error', text: d.message, background: '#0e1428', color: '#F0EEE8' }); return; }
-
-    if (d.status === 'payment_coming_soon') {
-      Swal.fire({ icon: 'info', title: '🎉 You Qualified!', text: 'Payment is coming soon — we will notify you by email when it is ready to claim!', background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#D4AF37' });
-      // Trigger the reveal animation anyway
-      triggerRevealAnimation(type);
-    } else if (d.status === 'payment_initiated') {
-      // Razorpay checkout (runs only when PAYMENT_ENABLED=true)
-      openRazorpay(d, type);
-    } else if (d.status === 'payment_bypassed') {
-      Swal.fire({
-        title: 'Verifying Purchase...',
-        text: 'Please wait while we generate your certificate PDF.',
-        background: '#0e1428', color: '#F0EEE8',
-        allowOutsideClick: false,
-        didOpen: () => { Swal.showLoading(); }
-      });
-      const pdfRes = await fetch(`/api/v2/certificates/generate-pdf/${type}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-employee-id': EMP_ID }
-      });
-      const pdfData = await pdfRes.json();
-      Swal.close();
-      if (pdfData.success) {
-        currentPdfUrl = pdfData.pdfUrl;
-        triggerRevealAnimation(type);
-        loadCerts(); // Refresh
-      } else {
-        Swal.fire({ icon: 'error', title: 'Generation Failed', text: pdfData.message || 'Error generating PDF.', background: '#0e1428', color: '#F0EEE8' });
-      }
-    }
-  } catch(e) {
-    Swal.fire({ icon: 'error', title: 'Error', text: 'Network error. Please try again.', background: '#0e1428', color: '#F0EEE8' });
-  }
-}
-
-function openRazorpay(orderData, type) {
-  const options = {
-    key:         orderData.keyId,
-    amount:      orderData.amount,
-    currency:    orderData.currency,
-    order_id:    orderData.orderId,
-    name:        'The Entrepreneurship Network',
-    description: CERT_LABELS[type]?.name + ' Certificate',
-    handler: async function(response) {
-      // Payment successful — generate PDF
-      const r = await fetch(`/api/v2/certificates/generate-pdf/${type}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-employee-id': EMP_ID },
-        body: JSON.stringify({ paymentId: response.razorpay_payment_id })
-      });
-      const d = await r.json();
-      if (d.success) {
-        currentPdfUrl = d.pdfUrl;
-        triggerRevealAnimation(type);
-        loadCerts(); // Refresh
-      }
-    },
-    theme: { color: '#D4AF37' }
-  };
-  const rzp = new Razorpay(options);
-  rzp.open();
-}
-
 /**
  * Open a certificate PDF.
  *
@@ -488,46 +426,23 @@ function openPdf(url) {
   if (!win) window.location.href = url;
 }
 
-async function downloadCert(pdfUrl, type) {
-  // The list renders onclick="downloadCert('${record.pdfUrl}', ...)", so a
-  // missing URL arrives here as the STRING 'null', which is truthy.
-  currentPdfUrl    = (pdfUrl && pdfUrl !== 'null') ? pdfUrl : null;
+/*
+ * The PDF comes from the signed-in download route. The file itself is private
+ * (the server turns /uploads/certificates away), which is why the old link —
+ * straight at the file — was a 404 for every student. The route also makes the
+ * PDF on first download, so there is nothing to generate first.
+ */
+function downloadCert(type) {
   currentRevealType = type;
-
-  if (currentPdfUrl) return openPdf(currentPdfUrl);
-
-  // No PDF yet, so make one. Every failure below says so out loud: a button
-  // that does nothing reads as a broken site, and a student cannot tell
-  // "still working" apart from "gave up".
-  try {
-    const r = await fetch(`/api/v2/certificates/generate-pdf/${type}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-employee-id': EMP_ID }
-    });
-    const d = await r.json();
-    if (!d.success || !d.pdfUrl) throw new Error(d.message || 'The certificate could not be prepared.');
-    currentPdfUrl = d.pdfUrl;
-    openPdf(d.pdfUrl);
-  } catch (err) {
-    Swal.fire({
-      icon: 'error', title: 'Download failed', text: err.message,
-      background: '#0e1428', color: '#F0EEE8', confirmButtonColor: '#D4AF37'
-    });
-  }
+  openPdf('/api/v2/certificates/course-pdf/' + encodeURIComponent(type));
 }
 
-/**
- * The Download PDF button on the reveal overlay.
- *
- * This used to open currentPdfUrl and do nothing whatsoever when it was null.
- * That is every student who reaches the overlay through claimCert's
- * "payment coming soon" branch or through a psychology trigger, because
- * neither of those sets it — so the button was dead for most people who saw
- * it. Delegating generates the PDF on demand, exactly as the certificate
- * list already does.
- */
+/* The reveal overlay's main button: download when it is theirs, otherwise the
+   checkout, which starts with what the certificate is worth. */
 function downloadCurrentCert() {
-  return downloadCert(currentPdfUrl, currentRevealType);
+  const type = currentRevealType;
+  if (certData?.feeSettled?.[type]?.covered) return downloadCert(type);
+  location.href = '/certificate-checkout.html?type=' + encodeURIComponent(type);
 }
 
 function shareLinkedIn() {
@@ -553,6 +468,8 @@ function triggerRevealAnimation(type) {
   const studentName = localStorage.getItem('studentName') || 'You';
 
   nameEl.textContent = studentName;
+  document.getElementById('revealDownloadBtn').textContent =
+    certData?.feeSettled?.[type]?.covered ? '⬇ Download PDF' : '🎉 Get your certificate';
   overlay.classList.add('show');
 
   // Sequence

@@ -33,18 +33,18 @@ describe('config/payment', () => {
   it('has correct CERT_PRICES in rupees', () => {
     const cfg = loadPaymentConfig();
     expect(cfg.CERT_PRICES).toEqual({
-      expert: 100,
-      nano_degree: 1000,
-      fellowship: 2500,
+      expert: 300,
+      nano_degree: 500,
+      fellowship: 1000,
     });
   });
 
   it('has correct CERT_PRICES_PAISE (rupee * 100)', () => {
     const cfg = loadPaymentConfig();
     expect(cfg.CERT_PRICES_PAISE).toEqual({
-      expert: 10000,
-      nano_degree: 100000,
-      fellowship: 250000,
+      expert: 30000,
+      nano_degree: 50000,
+      fellowship: 100000,
     });
   });
 

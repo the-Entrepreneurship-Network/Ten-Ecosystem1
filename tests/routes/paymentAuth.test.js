@@ -30,7 +30,7 @@ describe('nobody can approve a payment by saying they are HR', () => {
   });
 
   it('the HR payment routes are behind the session guard', () => {
-    expect(payment).toContain("const { requireHR } = require('../../middleware/sessionAuth')");
+    expect(payment).toMatch(/const \{ requireHR(, findSessionStudent)? \} = require\('\.\.\/\.\.\/middleware\/sessionAuth'\)/);
     expect(payment).toContain("router.get('/hr-all-payments', requireHR,");
     expect(payment).toContain("router.post('/hr-verify', requireHR,");
   });

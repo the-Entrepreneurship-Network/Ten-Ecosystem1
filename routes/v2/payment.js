@@ -17,7 +17,7 @@ const { normalizeTenure } = require('../../utils/tenure');
  * underscore. The same hole was found and closed in hr.js, documents.js,
  * certificates.js and coordinator.js; these were missed.
  */
-const { requireHR } = require('../../middleware/sessionAuth');
+const { requireHR, findSessionStudent } = require('../../middleware/sessionAuth');
 
 const rateLimit = require("express-rate-limit");
 const paymentLimiter = rateLimit({
@@ -411,13 +411,92 @@ router.get('/status/:orderId', async (req, res) => {
 });
 
 // Helper for robust student authentication
+/*
+ * Who is paying comes from the session, never from the request. This used to
+ * fall back to an x-employee-id header, body or query field, so anyone could
+ * start, confirm or read payments in another student's name. The marketplace
+ * had the same hole (findSessionStudent is what closed it there).
+ */
 async function getAuthenticatedStudent(req) {
-  if (req.session?.student?._id) {
-    return await Student.findById(req.session.student._id);
+  return findSessionStudent(req);
+}
+
+/* One bank transaction pays for one thing. A UTR already on a payment that is
+   approved or awaiting approval cannot be submitted again. */
+async function utrAlreadyUsed(utr, exceptId) {
+  const q = { txnUtr: utr, status: { $in: ['pending_verification', 'success'] } };
+  if (exceptId) q._id = { $ne: exceptId };
+  return !!(await Payment.findOne(q).select('_id').lean());
+}
+
+const CERT_PURPOSES = {
+  cert_expert:      { type: 'expert',      label: 'Expert Certificate' },
+  cert_nano_degree: { type: 'nano_degree', label: 'Nano Degree' },
+  cert_fellowship:  { type: 'fellowship',  label: 'Fellowship' }
+};
+
+/*
+ * Start (or resume) paying for a course certificate.
+ *
+ * The rules are the certificate page's own — routes/v2/certificates.js
+ * releaseBlock — so a student can only be billed for a certificate they have
+ * earned and do not already own, and the amount is the configured price, never
+ * a figure from the browser. Returns what the checkout needs to draw the QR.
+ */
+async function startCertificatePayment(res, student, purpose) {
+  const { type, label } = CERT_PURPOSES[purpose];
+  const certs = require('./certificates');
+  const block = await certs.releaseBlock(student, type);
+  if (!block) {
+    return res.status(400).json({ success: false, owned: true,
+      message: `Your ${label} is already yours. Download it from My Certificates.` });
   }
-  const employeeId = req.headers['x-employee-id'] || req.body.employeeId || req.query.employeeId;
-  if (!employeeId) return null;
-  return await Student.findOne({ employeeId: String(employeeId) });
+  if (block.code !== 402 || block.studioFeeDue || block.verifying) {
+    return res.status(block.code).json({ success: false, ...block });
+  }
+
+  const amount = certs.getCertificatePrice(type);
+  const { BUSINESS_UPI } = require('../../config/payment');
+
+  // One open order per certificate: coming back to the checkout resumes it.
+  let payment = await Payment.findOne({ studentId: student._id, purpose, status: 'pending' }).sort({ createdAt: -1 });
+  if (payment && payment.amount !== amount) {
+    payment.status = 'failed';
+    payment.rejectionReason = 'Price changed before payment';
+    await payment.save();
+    payment = null;
+  }
+  if (!payment) {
+    payment = await Payment.create({
+      orderId:       `CERT-${type}-${crypto.randomBytes(4).toString('hex')}-${Date.now()}`,
+      studentId:     student._id,
+      employeeId:    student.employeeId,
+      amount,
+      amountRupees:  amount,
+      amountPaisa:   amount * 100,
+      provider:      'manual',
+      mode:          'manual',
+      purpose,
+      status:        'pending',
+      description:   label,
+      customerName:  student.name || '',
+      customerEmail: student.email || ''
+    });
+  }
+
+  // The note travels with the UPI payment, so HR can match it to the student.
+  const note = `${label} ${student.employeeId || ''}`.trim().slice(0, 60);
+  return res.json({
+    success:   true,
+    orderId:   payment.orderId,
+    purpose,
+    label,
+    amount,
+    upiId:     BUSINESS_UPI.upiId,
+    payeeName: BUSINESS_UPI.payeeName,
+    note,
+    qrUrl:     `/api/upi-qr?amount=${amount}&note=${encodeURIComponent(note)}`
+  });
 }
 
 // GET /api/v2/payment/my-obligations
@@ -518,34 +597,14 @@ router.post('/initiate', async (req, res) => {
 
     const { purpose, fineId } = req.body;
     if (!purpose) return res.status(400).json({ success: false, message: 'Purpose is required' });
+    if (CERT_PURPOSES[purpose]) return startCertificatePayment(res, student, purpose);
 
     const paymentConfig = require('../../config/payment');
 
     let amount = 0;
     let isEligible = false;
 
-    if (purpose === 'cert_expert') {
-      isEligible = student.locStatus && student.locStatus !== 'not_eligible';
-      amount = paymentConfig.CERT_PRICES.expert || 100;
-      if (isEligible) {
-        const successPay = await Payment.findOne({ studentId: student._id, purpose: 'cert_expert', status: 'success' });
-        if (successPay) return res.status(400).json({ success: false, message: 'Expert Certificate already paid' });
-      }
-    } else if (purpose === 'cert_nano_degree') {
-      isEligible = student.lorStatus && student.lorStatus !== 'not_eligible';
-      amount = paymentConfig.CERT_PRICES.nano_degree || 1000;
-      if (isEligible) {
-        const successPay = await Payment.findOne({ studentId: student._id, purpose: 'cert_nano_degree', status: 'success' });
-        if (successPay) return res.status(400).json({ success: false, message: 'Nano Degree Certificate already paid' });
-      }
-    } else if (purpose === 'cert_fellowship') {
-      isEligible = student.starStatus && student.starStatus !== 'not_submitted' && student.starStatus !== 'rejected';
-      amount = paymentConfig.CERT_PRICES.fellowship || 2500;
-      if (isEligible) {
-        const successPay = await Payment.findOne({ studentId: student._id, purpose: 'cert_fellowship', status: 'success' });
-        if (successPay) return res.status(400).json({ success: false, message: 'Fellowship Certificate already paid' });
-      }
-    } else if (purpose === 'fine_low_attendance') {
+    if (purpose === 'fine_low_attendance') {
       let matchingFine = null;
       if (student.pendingFines && student.pendingFines.length > 0) {
         if (fineId) {
@@ -604,10 +663,20 @@ router.post('/utr-confirm', async (req, res) => {
     const student = await getAuthenticatedStudent(req);
     if (!student) return res.status(401).json({ success: false, message: 'Unauthorised' });
 
-    const { utr, amount, description, orderId, studentName, employeeId, domain, email } = req.body;
-    if (!utr || String(utr).trim().length < 6) {
+    const { amount, description, orderId, studentName, employeeId, domain, email } = req.body;
+    const utr = String(req.body.utr || '').replace(/\s+/g, '');
+    if (utr.length < 6) {
       return res.status(400).json({ success: false, message: 'Invalid UTR' });
     }
+
+    /*
+     * A certificate's price and purpose are fixed when the checkout starts it
+     * (startCertificatePayment). The browser used to be able to rewrite both
+     * here — confirm a ₹300 order as ₹1, or turn any order into a
+     * "cert_fellowship" — so for certificates they are never taken from the
+     * request, and no other order can be renamed into one.
+     */
+    const isCertPurpose = (p) => /^cert_/.test(String(p || ''));
 
     let payment;
     if (orderId) {
@@ -618,6 +687,10 @@ router.post('/utr-confirm', async (req, res) => {
       // Verify payment ownership
       if (payment.studentId && String(payment.studentId) !== String(student._id)) {
         return res.status(403).json({ success: false, message: 'Unauthorised payment ownership' });
+      }
+      if (isCertPurpose(payment.purpose) && !/^\d{12}$/.test(utr)) {
+        return res.status(400).json({ success: false,
+          message: 'Enter the 12-digit UPI reference number (UTR) from your payment app.' });
       }
 
       if (payment.status === 'pending_verification') {
@@ -630,17 +703,22 @@ router.post('/utr-confirm', async (req, res) => {
         return res.status(400).json({ success: false, message: 'This payment was rejected. Please initiate a new payment' });
       }
 
+      if (await utrAlreadyUsed(utr, payment._id)) {
+        return res.status(409).json({ success: false,
+          message: 'This UPI reference number has already been used for a payment. Check it and try again.' });
+      }
+
       // Update payment
       payment.status = 'pending_verification';
-      payment.txnUtr = String(utr).trim();
-      payment.providerPaymentId = String(utr).trim();
+      payment.txnUtr = utr;
+      payment.providerPaymentId = utr;
       payment.mode = 'manual';
-      payment.invoiceRef = 'UTR-' + String(utr).trim();
-      if (description) {
+      payment.invoiceRef = 'UTR-' + utr;
+      if (description && !isCertPurpose(payment.purpose) && !isCertPurpose(description)) {
         payment.purpose = description;
         payment.description = description;
       }
-      if (amount) {
+      if (amount && !isCertPurpose(payment.purpose)) {
         const cleanAmount = parseFloat(amount) || 0;
         payment.amount = cleanAmount;
         payment.amountRupees = cleanAmount;
@@ -649,12 +727,20 @@ router.post('/utr-confirm', async (req, res) => {
       await payment.save();
     } else {
       // Legacy or custom creation path when orderId is missing
+      if (isCertPurpose(description)) {
+        return res.status(400).json({ success: false,
+          message: 'Pay for a certificate from My Certificates, so the amount is right.' });
+      }
+      if (await utrAlreadyUsed(utr, null)) {
+        return res.status(409).json({ success: false,
+          message: 'This UPI reference number has already been used for a payment. Check it and try again.' });
+      }
       const generatedOrderId = 'UPIPAY-' + (employeeId || student.employeeId) + '-' + Date.now();
       const cleanAmount = parseFloat(amount) || 0;
 
       payment = new Payment({
         orderId:        generatedOrderId,
-        invoiceRef:     'UTR-' + String(utr).trim(),
+        invoiceRef:     'UTR-' + utr,
         studentId:      student._id,
         employeeId:     student.employeeId,
         amount:         cleanAmount,
@@ -663,8 +749,8 @@ router.post('/utr-confirm', async (req, res) => {
         amountRupees:   cleanAmount,
         amountPaisa:    Math.round(cleanAmount * 100),
         status:         'pending_verification',
-        txnUtr:         String(utr).trim(),
-        providerPaymentId: String(utr).trim(),
+        txnUtr:         utr,
+        providerPaymentId: utr,
         customerName:   student.name  || '',
         customerEmail:  student.email || '',
         description:    description   || 'Direct UPI Payment',
@@ -683,26 +769,32 @@ router.post('/utr-confirm', async (req, res) => {
         const sDomain = domain || student.domain;
         const sEmail = email || student.email;
 
+        const certLabel = CERT_PURPOSES[payment.purpose] && CERT_PURPOSES[payment.purpose].label;
         transporter.sendMail({
           // EMAIL_FROM, not EMAIL_USER — the mailer accepts SMTP_USER too, and a
           // bare address with no display name is the first thing a spam filter
           // holds against a payment notice.
           from: EMAIL_FROM,
           to: HR_NOTIFY_EMAIL,
-          subject: `Manual Payment Verification Required - ${payment.orderId}`,
+          subject: certLabel
+            ? `${certLabel} payment to verify (within 24 hours) - ${payment.orderId}`
+            : `Manual Payment Verification Required - ${payment.orderId}`,
           html: `<p>A manual UPI payment has been initiated by <strong>${sName}</strong> (${empId}, ${sDomain}).</p>
                  <p><strong>Order ID:</strong> ${payment.orderId}</p>
                  <p><strong>UTR / Transaction ID:</strong> ${utr}</p>
                  <p><strong>Amount:</strong> ₹${payment.amount}</p>
                  <p><strong>Purpose:</strong> ${payment.purpose}</p>
                  <p><strong>Student Email:</strong> ${sEmail}</p>
-                 <p>Please log in to the HR / admin portal to verify and approve this payment.</p>`
+                 <p>${certLabel
+                   ? 'Approve or reject it in the admin portal, under Payments, within 24 hours. The student is emailed when it is approved, and the download opens on My Certificates.'
+                   : 'Please log in to the HR / admin portal to verify and approve this payment.'}</p>`
         }).catch(err => console.log('Background email error:', err.message));
       } catch (mailErr) {
         console.log('[PAYMENT] Verification email handled with simulated fallback.');
       }
 
-    try {
+    // HR's bell, for the payments HR approves; certificates go to the admin portal.
+    if (!CERT_PURPOSES[payment.purpose]) try {
       await new Notification({
         title:            '💳 Payment Confirmation Received',
         message:          `Student ${student.employeeId} submitted UTR ${utr} for ₹${payment.amount}. Please verify.`,
@@ -737,7 +829,8 @@ router.get('/my-payments', async (req, res) => {
 // GET /api/v2/payment/hr-all-payments
 router.get('/hr-all-payments', requireHR, async (req, res) => {
   try {
-    const payments = await Payment.find({}).sort({ createdAt: -1 })
+    // Certificate payments are approved in the admin portal (Payments), not here.
+    const payments = await Payment.find({ purpose: { $nin: Object.keys(CERT_PURPOSES) } }).sort({ createdAt: -1 })
       .populate('studentId', 'name email employeeId domain');
     return res.json({ success: true, total: payments.length, payments });
   } catch (err) {
@@ -762,6 +855,10 @@ router.post('/hr-verify', requireHR, async (req, res) => {
     if (!payment) {
       return res.status(404).json({ success: false, message: 'Payment record not found' });
     }
+    if (CERT_PURPOSES[payment.purpose]) {
+      return res.status(403).json({ success: false,
+        message: 'Certificate payments are approved in the admin portal, under Payments.' });
+    }
 
     if (payment.status === 'success' && approve) {
       return res.status(400).json({ success: false, message: 'Payment is already marked as successful' });
@@ -778,7 +875,9 @@ router.post('/hr-verify', requireHR, async (req, res) => {
       try {
         await new Notification({
           title:            '💳 Payment Approved!',
-          message:          `Your manual payment of ₹${payment.amountRupees || payment.amount} (UTR: ${payment.txnUtr}) has been approved and verified.`,
+          message:          CERT_PURPOSES[payment.purpose]
+            ? `Your ${CERT_PURPOSES[payment.purpose].label} payment (UTR ${payment.txnUtr}) is approved. Open My Certificates to download it.`
+            : `Your manual payment of ₹${payment.amountRupees || payment.amount} (UTR: ${payment.txnUtr}) has been approved and verified.`,
           type:             'success',
           from:             'System',
           targetType:       'student',

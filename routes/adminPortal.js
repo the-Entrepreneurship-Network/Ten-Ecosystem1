@@ -224,10 +224,14 @@ router.get('/payments/all', requireAdminAPI, async (req, res) => {
   }
 });
 
+// Course certificates, named once; their prices come from config/payment.js.
+const CERT_LABELS = { cert_expert: 'Expert Certificate', cert_nano_degree: 'Nano Degree', cert_fellowship: 'Fellowship' };
 const PURPOSE_LABELS = {
-  cert_expert: 'Expert Certificate (₹100)',
-  cert_nano_degree: 'Nano Degree Certificate (₹1000)',
-  cert_fellowship: 'Fellowship Certificate (₹2500)',
+  ...(() => {
+    const { CERT_PRICES } = require('../config/payment');
+    const price = { cert_expert: CERT_PRICES.expert, cert_nano_degree: CERT_PRICES.nano_degree, cert_fellowship: CERT_PRICES.fellowship };
+    return Object.fromEntries(Object.entries(CERT_LABELS).map(([k, label]) => [k, `${label} (₹${price[k].toLocaleString('en-IN')})`]));
+  })(),
   fine_low_attendance: 'Attendance Fine (₹400)',
   donation: 'Program Donation',
   // Tenure course fees — canonical keys (normalised, no spaces)
@@ -279,32 +283,7 @@ router.post('/payments/verify/:paymentId', requireAdminAPI, async (req, res) => 
       payment.status = 'success';
       await payment.save();
 
-      // Handle cert generation
       try {
-        if (student && ['cert_expert', 'cert_nano_degree', 'cert_fellowship'].includes(payment.purpose)) {
-          const typeMap = {
-            cert_expert: 'expert',
-            cert_nano_degree: 'nano_degree',
-            cert_fellowship: 'fellowship'
-          };
-          const certType = typeMap[payment.purpose];
-          const { generateAndSaveCert } = require('./v2/certificates');
-          await generateAndSaveCert(payment.studentId, certType, student, 'admin');
-          await DocumentHistory.logSend({
-            studentId: student._id,
-            studentName: student.name,
-            studentEmail: student.email,
-            employeeId: student.employeeId,
-            college: student.college || student.collegeName,
-            domain: student.domain,
-            documentType: certType,
-            documentKey: certType,
-            sentBy: 'admin',
-            sentToEmail: student.email,
-            method: 'manual'
-          }, 'manual');
-        }
-
         if (student && payment.purpose === 'fine_low_attendance') {
           const fine = student.pendingFines && student.pendingFines.find(f => f.fineType === 'low_attendance' && !f.paid);
           if (fine) {
@@ -316,6 +295,37 @@ router.post('/payments/verify/:paymentId', requireAdminAPI, async (req, res) => 
         }
       } catch (certErr) {
         console.error('Cert generation error after payment approval:', certErr);
+      }
+
+      /*
+       * A course certificate needs no grant either: services/certificateEntitlement
+       * reads this Payment row, so approving it IS what opens the Download on My
+       * Certificates. What it needs is the mail saying so. (This used to call the
+       * HR letter generator, which builds LOC/LOR/STAR/offer letters only and
+       * threw on every certificate, silently, inside the catch above.)
+       */
+      const certLabel = CERT_LABELS[payment.purpose];
+      if (certLabel && student) {
+        try {
+          const { createEmailTransporter, mailerReady, isSendableAddress, renderEmail, EMAIL_FROM, PORTAL_URL } = require('../utils/mailer');
+          if (mailerReady() && isSendableAddress(student.email)) {
+            await createEmailTransporter().sendMail({
+              from: EMAIL_FROM,
+              to: student.email,
+              subject: `Approved — your ${certLabel} is ready to download`,
+              html: renderEmail({
+                heading: 'Your certificate is ready',
+                name: student.name || '',
+                bodyHtml: `<p>Your payment of ₹${payment.amountRupees || payment.amount} for the <b>${certLabel}</b> is approved.</p>`
+                  + '<p>Sign in to the portal and open <b>My Certificates</b>: the download is open now.</p>',
+                cta: { label: 'Download my certificate →', url: PORTAL_URL + '/my-certificates.html' },
+                footerWhy: 'You are receiving this because your TEN certificate payment was approved.'
+              })
+            });
+          }
+        } catch (mailErr) {
+          console.error('[admin] certificate approval mail failed:', mailErr.message);
+        }
       }
 
       /*
@@ -413,7 +423,12 @@ router.post('/payments/verify/:paymentId', requireAdminAPI, async (req, res) => 
       // is how they hear about it.
       if (!student) return res.json({ success: true, message: 'Payment approved and processed' });
 
-      await Notification.notifyStudent(student, {
+      await Notification.notifyStudent(student, certLabel ? {
+        title: 'Certificate payment approved ✓',
+        message: `Your ${certLabel} payment is approved. Download it from My Certificates.`,
+        type: 'success',
+        email: false   // the certificate mail above is the email
+      } : {
         title: 'Payment Approved ✓',
         message: `Your payment for ${PURPOSE_LABELS[payment.purpose] || payment.purpose} has been approved and processed.`,
         type: 'success'
