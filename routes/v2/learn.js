@@ -833,27 +833,19 @@ router.get('/module/:slug/certificate', requireLearner(async (req, res, who) => 
         await progress.save();
     }
 
-    // One page, one certificate — pdfkit straight to the response.
+    // One page, one certificate, straight to the response, in the design all
+    // TEN certificates share (services/v2/certificateDesign.js): what was
+    // studied and passed, and a QR code to the public verify route below.
     const PDFDocument = require('pdfkit');
+    const design = require('../../services/v2/certificateDesign');
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="TEN-${mod.shortCode}-certificate.pdf"`);
     const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 0 });
+    try { require('../../services/v2/pdfHelpers').registerFonts(doc); } catch (_) { /* standard fonts */ }
     doc.pipe(res);
-    const W = doc.page.width, H = doc.page.height;
-    doc.rect(0, 0, W, H).fill('#0c1220');
-    doc.rect(18, 18, W - 36, H - 36).lineWidth(2).stroke('#f5c542');
-    doc.fillColor('#f5c542').fontSize(13).font('Helvetica-Bold')
-        .text('THE ENTREPRENEURSHIP NETWORK', 0, 70, { align: 'center', characterSpacing: 4 });
-    doc.fillColor('#fff7d6').fontSize(30).text('Certificate of Completion', 0, 110, { align: 'center' });
-    doc.fillColor('#9aa4b8').fontSize(13).font('Helvetica').text('This certifies that', 0, 175, { align: 'center' });
-    doc.fillColor('#ffffff').fontSize(26).font('Helvetica-Bold').text(who.name, 0, 200, { align: 'center' });
-    doc.fillColor('#9aa4b8').fontSize(13).font('Helvetica')
-        .text('has completed every module, passed the proctored final examination, and finished the', 0, 245, { align: 'center' })
-        .text(`course of study in`, 0, 262, { align: 'center' });
-    doc.fillColor('#f5c542').fontSize(20).font('Helvetica-Bold').text(mod.name, 0, 285, { align: 'center' });
-    doc.fillColor('#7d8698').fontSize(10).font('Helvetica')
-        .text(`Certificate ID: ${progress.certificateId}`, 0, 340, { align: 'center' })
-        .text(`Issued ${new Date(progress.certIssuedAt).toDateString()} · verify at ${(process.env.PORTAL_URL || 'https://virtualinternships.entrepreneurshipnetwork.net')}/api/v2/learn/verify/${progress.certificateId}`, 0, 356, { align: 'center' });
+    const base = (process.env.PORTAL_URL || 'https://virtualinternships.entrepreneurshipnetwork.net').replace(/\/$/, '');
+    await design.drawCourseCertificate(doc, { name: who.name, course: mod, certificateId: progress.certificateId,
+        issuedAt: progress.certIssuedAt, verifyUrl: `${base}/api/v2/learn/verify/${progress.certificateId}` });
     doc.end();
 }));
 

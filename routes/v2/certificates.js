@@ -174,6 +174,9 @@ async function issueCoursePdf(student, type) {
     const endDate  = new Date(joining.getTime() + tenureDays * 24 * 3600 * 1000);
     const fmt = d => d.toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
 
+    // The certificate states what it took, so it gets the real figures: the
+    // share of tasks approved and, for the Fellowship, the cohort rank.
+    const status = await getCertStatus(student).catch(() => ({}));
     const data = {
         studentName:   student.name,
         domain:        student.domain,
@@ -181,7 +184,10 @@ async function issueCoursePdf(student, type) {
         durationText:  student.tenure,
         startDate:     fmt(joining),
         endDate:       fmt(endDate),
-        certificateId: certRecord.certificateId
+        certificateId: certRecord.certificateId,
+        completionPct: status.completionPct,
+        cohortRankPct: status.cohortRankPct,
+        issuedAt:      certRecord.issuedAt || new Date()
     };
 
     if (type === "expert")           await generateExpertCertificate(data, outPath);
