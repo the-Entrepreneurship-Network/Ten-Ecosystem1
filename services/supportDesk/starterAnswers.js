@@ -142,6 +142,19 @@ module.exports = [
         personal: '{{offerLetterStatus}}'
     },
     {
+        key: 'offer-letter-download-fails',
+        question: 'The Download Offer Letter button is not working, the download fails.',
+        examples: [
+            'not able to download offer letter', 'offer letter download not working', 'download offer letter button not working',
+            'offer letter download fails', 'offer letter shows 404', 'offer letter not opening', 'cannot download my offer letter',
+            'offer letter download nahi ho raha', 'download fails to initiate offer letter'
+        ],
+        answer: 'The Download Offer Letter button in My Documents had a fault that stopped the file from opening. It is ' +
+            'fixed now. Sign in, open My Documents and press Download Offer Letter again; you can also download it from the ' +
+            'Offer Letter row under the My Documents tab. If your documents are still under review, the button appears ' +
+            'once HR approves them.'
+    },
+    {
         key: 'documents',
         question: 'How do I upload my documents?',
         examples: [

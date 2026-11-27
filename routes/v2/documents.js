@@ -219,6 +219,25 @@ async function tryAutoGenerateLOC(student) {
     }
 }
 
+/*
+ * The links a student is given for their own issued letters.
+ *
+ * The record stores where each PDF sits on disk (/uploads/offer-letters/...,
+ * /uploads/certificates/..., /uploads/loc/...), but those folders are private:
+ * server.js answers 404 for them. my-status handed that stored path to
+ * my-documents.html as the "Download Offer Letter" link, so the button opened
+ * a 404 for every student with an offer letter. A student gets the signed-in
+ * download route instead, the one the My Documents table already uses.
+ */
+function studentDownloadLinks(doc, student) {
+    const dl = (type) => `/api/v2/certificates/download/${type}?employeeId=${encodeURIComponent((student && student.employeeId) || "")}`;
+    return {
+        offer: doc && doc.offerLetterUrl ? dl("OFFER") : null,
+        lor:   doc && doc.lorUrl         ? dl("LOR")   : null,
+        loc:   doc && doc.locUrl         ? dl("LOC")   : null
+    };
+}
+
 router.get("/documents/my-status", requireStudent, async (req, res) => {
     try {
         let doc = await StudentDocument.findOne({ studentId: req.student._id });
@@ -228,21 +247,22 @@ router.get("/documents/my-status", requireStudent, async (req, res) => {
 
         tryAutoGenerateLOC(req.student).catch(() => {});
 
+        const links = studentDownloadLinks(doc, req.student);
         res.json({
             success:         true,
             status:          doc.uploadStatus,
             addressProofUrl: doc.addressProofUrl ? `/uploads/documents/${path.basename(doc.addressProofUrl)}` : null,
             marksheetUrl:    doc.marksheetUrl    ? `/uploads/documents/${path.basename(doc.marksheetUrl)}`    : null,
             rejectionReason: doc.rejectionReason,
-            offer_letter_url: doc.offerLetterUrl || null,
-            offerLetterUrl:   doc.offerLetterUrl || null,
+            offer_letter_url: links.offer,
+            offerLetterUrl:   links.offer,
             offerLetterSentAt: doc.offerLetterSentAt || null,
-            lor_url:          doc.lorUrl || null,
-            lorUrl:           doc.lorUrl || null,
+            lor_url:          links.lor,
+            lorUrl:           links.lor,
             lorSentAt:        doc.lorSentAt || null,
             lorDocumentNumber: doc.lorDocumentNumber || null,
-            loc_url:          doc.locUrl || null,
-            locUrl:           doc.locUrl || null,
+            loc_url:          links.loc,
+            locUrl:           links.loc,
             locSentAt:        doc.locSentAt || null,
             locDocumentNumber: doc.locDocumentNumber || null,
             uploadedAt:       doc.uploadedAt
@@ -780,3 +800,4 @@ router.patch("/admin/documents/reject/:studentId", requireHR, async (req, res) =
 });
 
 module.exports = router;
+module.exports.studentDownloadLinks = studentDownloadLinks;
