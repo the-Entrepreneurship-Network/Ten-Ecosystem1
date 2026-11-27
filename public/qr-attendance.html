@@ -59,8 +59,8 @@ h1{ font-size:20px; font-weight:800; margin-bottom:6px; }
     <div id="msg"></div>
     <div id="form">
       <div class="field"><label for="domain">Your domain</label><select id="domain"><option value="" disabled selected>Choose your domain</option></select></div>
-      <div class="field"><label for="employeeId">Employee ID</label><input type="text" id="employeeId" placeholder="e.g. TEN/WEB/1001" autocomplete="username"></div>
-      <div class="field"><label for="password">Password</label><input type="password" id="password" placeholder="Your portal password" autocomplete="current-password"></div>
+      <div class="field"><label for="employeeId">Employee ID or email</label><input type="text" id="employeeId" placeholder="e.g. TEN/WEB/1001 or your email" autocomplete="username"></div>
+      <div class="field"><label for="password">Password</label><input type="password" id="password" placeholder="The password you sign in to your dashboard with" autocomplete="current-password"></div>
       <button class="btn" id="submitBtn" onclick="markIt()">✅ Mark My Attendance</button>
     </div>
   </div>
@@ -110,7 +110,7 @@ async function markIt(){
     password: document.getElementById("password").value
   };
   if(!body.domain){ setMsg("Choose your domain.", "error"); return; }
-  if(!body.employeeId || !body.password){ setMsg("Employee ID and password are required.", "error"); return; }
+  if(!body.employeeId || !body.password){ setMsg("Enter your Employee ID or email, and your password.", "error"); return; }
   const btn = document.getElementById("submitBtn");
   const label = btn.textContent;
   btn.disabled = true; btn.textContent = "Checking...";

@@ -9436,13 +9436,20 @@ try{
     if(!domain)
         return res.json({ success:false, message:"Choose your domain" });
     if(!employeeId || !password)
-        return res.json({ success:false, message:"Employee ID and password are required" });
+        return res.json({ success:false, message:"Your Employee ID or email, and your password, are required" });
 
     // Passwords are bcrypt hashes. Looking the student up by { employeeId,
     // password } matched the typed password against the hash itself, so no
     // QR scan ever found anyone: "Invalid Employee ID or Password", every
     // time. Checked the way /student-login checks it, lockout included.
-    const student = await Student.findOne({ employeeId: String(employeeId) });
+    // The dashboard sign-in takes an email or an Employee ID, typed in any
+    // case or with any separator; this page took the Employee ID exactly as
+    // stored. A student who signs in by email every day typed it here and was
+    // told "Invalid Employee ID or Password". Same lookup as /login.
+    const loginId = String(employeeId).trim();
+    const student = loginIdentity.looksLikeEmail(loginId)
+        ? await loginIdentity.findStudentByEmail(Student, loginId)
+        : await loginIdentity.findStudentByEmployeeId(Student, loginId);
     if(!student) return res.json({ success:false, message:"Invalid Employee ID or Password" });
     if (await checkLockout(res, student, Student)) return;
     let pwdMatch = false;
