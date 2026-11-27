@@ -478,6 +478,8 @@ const profile = (me) => ({
 module.exports = {
     ID, NAME, enabled, isAssistantId, identityFor, attach, onMessage, directoryRow, profile,
     coordinatorsFor, domainsWithCoordinators, progressOf, attendanceOf, scrub, HANDOVER_LABEL,
+    // the same brain, hand-over notice and student context for the AI Meeting Room (services/aiMeeting.js)
+    decide, notifyCoordinators, contextFor,
     // for tests
     _internal: { handoverReason, handoverReply, scrub, buildPrompt, decide, reply, contextFor, STATUS_LABEL, AI_PER_DAY, INTRO }
 };

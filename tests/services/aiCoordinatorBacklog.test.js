@@ -315,6 +315,9 @@ describe('the report', () => {
             { kind: 'review', source: 'approve', employeeId: 'TEN/WEB/1004', question: 'Week 1: Landing page', reply: 'Clean page. Add alt text next time.', createdAt: hoursAgo(4) },
             { kind: 'review', source: 'changes', employeeId: 'TEN/WEB/1005', question: 'Week 2: API', reply: 'The GitHub repository is private or does not exist. Make it public.', createdAt: hoursAgo(5) },
             { kind: 'certificate', source: 'approve', employeeId: 'TEN/WEB/1006', question: 'attendance 88%, 7 tasks approved, internship ended 2026-11-20', reply: 'sent to HR', createdAt: hoursAgo(5) },
+            { kind: 'meeting', source: 'ask', createdAt: hoursAgo(2) },
+            { kind: 'meeting', source: 'interview', createdAt: hoursAgo(2) },
+            { kind: 'meeting', source: 'interview', createdAt: hoursAgo(2) },
             { kind: 'reminder', source: 'inactive', createdAt: hoursAgo(6) },
             { kind: 'reminder', source: 'inactive', createdAt: hoursAgo(6) },
             { kind: 'reminder', source: 'week', createdAt: hoursAgo(6) },
@@ -343,6 +346,7 @@ describe('the report', () => {
         expect(text).toContain('TEN/WEB/1006: attendance 88%, 7 tasks approved, internship ended 2026-11-20');
         expect(text).toContain('5. Reminders: 3 (2 sign-in, 1 unfinished week, 0 weekly progress).');
         expect(text).toContain('6. Coordinator summaries: 1 domain(s); 1 email(s) sent, 1 failed.');
+        expect(text).toContain('7. Meeting Room: 1 question(s) answered, 2 interview turn(s), 0 handed over.');
         expect(text).not.toContain('older than a day');
         expect(text).not.toContain('priya@gmail.com');
         expect(text).not.toContain('9876543210');

@@ -962,7 +962,36 @@ the dashboard entries.
   why. It is also sent when a backlog run ends. Without the
   help desk mailbox it is only written to the log.
 - **Records:** `AiCoordinatorLog`, kept 120 days: answers, hand-overs (with
-  the question), pre-checks, reviews, reminders and summaries.
+  the question), pre-checks, reviews, certificate approvals, Meeting Room
+  turns, reminders and summaries.
+
+### 7.15 AI Meeting Room (voice, free)
+
+`/meeting` (`public/meeting.html`, `routes/v2/meeting.js`,
+`services/aiMeeting.js`, `models/MeetingSession.js`), opened from the
+dashboard menu and a card. The student talks to the AI Coordinator by voice or
+text. Listening is Chrome's speech recognition and speaking is the device's own
+voices (Web Speech API), both in the browser, so the server only passes text
+and it costs nothing. Voice input works in Chrome, Edge and Android; elsewhere
+the page is text only. The voice picker is remembered per device; Edge and
+Android have the clearest Indian-English voices. `AI_COORDINATOR=off` switches
+the room off with the rest.
+
+- **Ask a question:** `aiCoordinator.decide()`, the chat's own brain, so the
+  same hand-overs (with the coordinators' notice), saved answers and Gemini
+  with the student's progress, never their name, email, phone or ID.
+- **Mock interview:** five questions for the domain and the student's current
+  task, one at a time. Each spoken or typed answer is scored out of 10 with two
+  sentences of feedback; the fifth ends with a report (summary, overall score)
+  saved in `MeetingSession`, listed on the page. "Finish early" reports what
+  was answered without an AI call. Gemini turns in the room are capped at 40
+  per student per day. It is a practice report, not a mark: coordinators do not
+  see it.
+- The daily report's item 7 counts the room's questions, interview turns and
+  hand-overs (`AiCoordinatorLog` kind `meeting`).
+- Not built, by choice: Kokoro (an in-browser neural voice, about 90 MB to
+  download once) and cloud voices (Azure, Cloudflare). Add Kokoro if the owner
+  finds the device voices unclear.
 
 ---
 

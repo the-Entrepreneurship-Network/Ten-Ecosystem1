@@ -584,7 +584,7 @@ async function buildReport(now = new Date()) {
     return {
         since, now, waiting, unchecked, older,
         answers: of('answer'), handovers: of('handover'), prechecks: of('precheck'), reviews: of('review'),
-        certificates: of('certificate'), reminders: of('reminder'), summaries: of('summary'),
+        certificates: of('certificate'), meetings: of('meeting'), reminders: of('reminder'), summaries: of('summary'),
         summaryEmails: { sent: mails.filter((m) => m.status !== 'failed').length, failed: mails.filter((m) => m.status === 'failed').length }
     };
 }
@@ -612,6 +612,7 @@ function reportText(r) {
         ...r.certificates.slice(0, 5).map((c) => `   ${at(c.createdAt)}, ${c.employeeId}: ${clip(c.question, 100)}`),
         `5. Reminders: ${r.reminders.length} (${n(r.reminders, 'inactive')} sign-in, ${n(r.reminders, 'week')} unfinished week, ${n(r.reminders, 'weekly')} weekly progress).`,
         `6. Coordinator summaries: ${r.summaries.length} domain(s); ${r.summaryEmails.sent} email(s) sent, ${r.summaryEmails.failed} failed.`,
+        `7. Meeting Room: ${n(r.meetings, 'ask') + n(r.meetings, 'ask-ai')} question(s) answered, ${n(r.meetings, 'interview')} interview turn(s), ${n(r.meetings, 'handover')} handed over.`,
         '',
         'The AI approves a submission only when every check passed and Gemini read it; it asks for changes when a check failed or the work is not the task.',
         'It approves a student for a certificate only when the internship has ended with 75% attendance and five approved tasks; HR still decides.',

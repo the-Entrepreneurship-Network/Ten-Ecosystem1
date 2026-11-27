@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Meeting Room — TEN Portal</title>
+<meta name="theme-color" content="#0e1628">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>
+  try { document.documentElement.setAttribute('data-theme', localStorage.getItem('ten-theme') || 'dark'); } catch (e) {}
+</script>
+<script src="/session-guard.js"></script>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#05070e;--surface:#090d1a;--card:#0e1428;--card2:#121933;
+  --ai:#a78bfa;--ai-soft:rgba(167,139,250,0.12);--ai-line:rgba(167,139,250,0.3);
+  --text:#F0EEE8;--muted:#9a9080;--line:rgba(212,175,55,0.12);
+  --green:#10b981;--amber:#f59e0b;--red:#ef4444;--radius:16px;
+}
+[data-theme="light"]{
+  --bg:#f6f4ee;--surface:#ffffff;--card:#ffffff;--card2:#faf7ef;
+  --ai:#6d4fd1;--ai-soft:rgba(109,79,209,0.08);--ai-line:rgba(109,79,209,0.3);
+  --text:#1b1813;--muted:#6b6457;--line:rgba(146,102,10,0.16);
+  --green:#047857;--amber:#b45309;--red:#b91c1c;
+}
+body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',system-ui,sans-serif;min-height:100vh;line-height:1.5}
+.topbar{display:flex;align-items:center;gap:14px;padding:14px 18px;border-bottom:1px solid var(--line);background:var(--surface);position:sticky;top:0;z-index:5}
+.back-btn{color:var(--muted);text-decoration:none;font-size:14px;font-weight:600}
+.topbar-title{font-weight:800;font-size:17px}
+.ai-pill{font-size:11px;font-weight:800;letter-spacing:.04em;padding:3px 9px;border-radius:999px;background:var(--ai-soft);color:var(--ai);border:1px solid var(--ai-line)}
+.wrap{max-width:860px;margin:0 auto;padding:18px 16px 120px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:14px}
+.modes{display:flex;gap:8px;margin-bottom:14px}
+.mode{flex:1;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--text);font:inherit;font-weight:700;cursor:pointer}
+.mode.on{border-color:var(--ai-line);background:var(--ai-soft);color:var(--ai)}
+.mode small{display:block;font-weight:500;color:var(--muted);font-size:12px;margin-top:2px}
+.transcript{display:flex;flex-direction:column;gap:10px;min-height:200px}
+.bubble{max-width:85%;padding:11px 14px;border-radius:14px;font-size:15px;white-space:pre-wrap;word-break:break-word}
+.bubble.me{align-self:flex-end;background:var(--card2);border:1px solid var(--line);border-bottom-right-radius:4px}
+.bubble.ai{align-self:flex-start;background:var(--ai-soft);border:1px solid var(--ai-line);border-bottom-left-radius:4px}
+.bubble .tag{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.06em;color:var(--ai);margin-bottom:4px}
+.bubble.sys{align-self:center;background:transparent;color:var(--muted);font-size:13px;text-align:center}
+.score{display:inline-block;font-weight:800;padding:2px 8px;border-radius:8px;margin-right:6px;background:rgba(16,185,129,0.15);color:var(--green)}
+.score.mid{background:rgba(245,158,11,0.15);color:var(--amber)}
+.score.low{background:rgba(239,68,68,0.12);color:var(--red)}
+.composer{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom))}
+.composer-in{max-width:860px;margin:0 auto;display:flex;gap:8px;align-items:center}
+.composer input{flex:1;min-width:0;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--text);font:inherit;font-size:15px}
+.btn{padding:11px 16px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--text);font:inherit;font-weight:700;cursor:pointer}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.primary{background:var(--ai);color:#fff;border-color:var(--ai)}
+.btn.ghost{color:var(--muted)}
+.mic{width:50px;height:50px;border-radius:50%;border:1px solid var(--ai-line);background:var(--ai-soft);color:var(--ai);font-size:22px;cursor:pointer;flex:none}
+.mic.live{background:var(--red);color:#fff;border-color:var(--red);animation:pulse 1s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(239,68,68,.5)}100%{box-shadow:0 0 0 14px rgba(239,68,68,0)}}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.row label{font-size:13px;color:var(--muted)}
+select{padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--text);font:inherit;font-size:13px;max-width:100%}
+.hint{font-size:12px;color:var(--muted);margin-top:8px}
+.status{font-size:13px;color:var(--muted);min-height:18px;margin-top:6px}
+.report{border:1px solid var(--ai-line);border-radius:12px;padding:12px;margin-top:10px;background:var(--ai-soft)}
+.report h3{font-size:15px;margin-bottom:6px}
+.report .big{font-size:28px;font-weight:800;color:var(--ai)}
+.reports li{font-size:13px;padding:6px 0;border-bottom:1px dashed var(--line);list-style:none;display:flex;justify-content:space-between;gap:10px}
+.switch{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer}
+@media (prefers-reduced-motion:reduce){.mic.live{animation:none}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="back-btn" href="student-dashboard.html">← Dashboard</a>
+  <div class="topbar-title">🎙️ AI Meeting Room</div>
+  <span class="ai-pill">AI ASSISTANT, NOT A PERSON</span>
+</div>
+
+<main class="wrap">
+  <div class="modes" role="tablist">
+    <button class="mode on" id="mode-ask" role="tab" aria-selected="true">Ask a question<small>Your tasks, attendance, documents, the portal</small></button>
+    <button class="mode" id="mode-interview" role="tab" aria-selected="false">Mock interview<small>Five questions for your domain, scored</small></button>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <label class="switch"><input type="checkbox" id="speak" checked> Speak the replies</label>
+      <label>Voice <select id="voice" aria-label="Voice"></select></label>
+      <label>I speak <select id="lang" aria-label="Your language"><option value="en-IN">English (India)</option><option value="hi-IN">Hindi</option><option value="en-US">English (US)</option></select></label>
+      <button class="btn ghost" id="sample" type="button">🔊 Hear a sample</button>
+    </div>
+    <div class="hint" id="voice-hint"></div>
+  </div>
+
+  <div class="card">
+    <div class="transcript" id="transcript" aria-live="polite"></div>
+    <div id="interview-bar" class="row" style="margin-top:12px;display:none">
+      <button class="btn primary" id="start" type="button">Start a mock interview</button>
+      <button class="btn ghost" id="finish" type="button" style="display:none">Finish early</button>
+      <span class="status" id="progress"></span>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card" id="reports-card" style="display:none">
+    <h3 style="font-size:15px;margin-bottom:8px">Your practice reports</h3>
+    <ul class="reports" id="reports"></ul>
+  </div>
+</main>
+
+<div class="composer">
+  <div class="composer-in">
+    <button class="mic" id="mic" type="button" title="Speak" aria-label="Speak">🎤</button>
+    <input id="input" type="text" placeholder="Type, or press the microphone and speak" autocomplete="off" maxlength="2000">
+    <button class="btn primary" id="send" type="button">Send</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var transcript = $('transcript'), input = $('input'), status = $('status');
+  var ME = null, mode = 'ask', session = null, busy = false;
+
+  function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function bubble(kind, html) {
+    var d = document.createElement('div');
+    d.className = 'bubble ' + kind;
+    d.innerHTML = (kind === 'ai' ? '<span class="tag">AI</span><br>' : '') + html;
+    transcript.appendChild(d);
+    d.scrollIntoView({ block: 'end', behavior: 'smooth' });
+    return d;
+  }
+  function say(text) { bubble('sys', esc(text)); }
+  function setBusy(on, why) { busy = on; $('send').disabled = on; $('mic').disabled = on; status.textContent = on ? (why || 'Thinking…') : ''; }
+
+  // ── Speaking: the device's own voices, free and unlimited ──────────────
+  var synth = window.speechSynthesis;
+  var voices = [];
+  function pickDefault() {
+    var score = function (v) {
+      var n = (v.name + ' ' + v.lang).toLowerCase();
+      return (/en-in|india|heera|ravi|neerja|prabhat/.test(n) ? 40 : 0) + (/^en/.test(v.lang) ? 20 : 0) + (/hi-in|hindi/.test(n) ? 10 : 0) +
+        (/natural|neural|online|google/.test(n) ? 5 : 0) + (v.localService ? 0 : 1);
+    };
+    return voices.slice().sort(function (a, b) { return score(b) - score(a); })[0];
+  }
+  function loadVoices() {
+    if (!synth) return;
+    voices = synth.getVoices().filter(function (v) { return /^(en|hi)/i.test(v.lang); });
+    var sel = $('voice'), saved = null;
+    try { saved = localStorage.getItem('ten-meeting-voice'); } catch (e) {}
+    sel.innerHTML = voices.map(function (v, i) { return '<option value="' + i + '">' + esc(v.name.replace(/^Microsoft |^Google /, '')) + ' · ' + esc(v.lang) + '</option>'; }).join('');
+    var def = pickDefault();
+    sel.value = String(voices.indexOf(voices.filter(function (v) { return v.name === saved; })[0] || def || voices[0]));
+    $('voice-hint').textContent = voices.length
+      ? 'Voices come from your device. Microsoft Edge and Android phones have the clearest Indian-English ones; pick the one you like, it is remembered.'
+      : 'This browser has no voices, so replies are shown as text. Chrome, Edge or an Android phone can speak them.';
+  }
+  if (synth) { loadVoices(); synth.onvoiceschanged = loadVoices; }
+  $('voice').addEventListener('change', function () { var v = voices[+this.value]; try { if (v) localStorage.setItem('ten-meeting-voice', v.name); } catch (e) {} });
+  function speak(text) {
+    if (!synth || !$('speak').checked || !text) return;
+    try { synth.cancel(); } catch (e) {}
+    var v = voices[+$('voice').value] || null;
+    // Long utterances stop midway in Chrome; one sentence at a time does not.
+    String(text).replace(/\s+/g, ' ').match(/[^.!?।]+[.!?।]*\s*/g).forEach(function (part) {
+      if (!part.trim()) return;
+      var u = new SpeechSynthesisUtterance(part.trim());
+      if (v) { u.voice = v; u.lang = v.lang; }
+      u.rate = 0.95;
+      synth.speak(u);
+    });
+  }
+  $('speak').addEventListener('change', function () { if (!this.checked && synth) synth.cancel(); });
+  $('sample').addEventListener('click', function () {
+    var on = $('speak').checked; $('speak').checked = true;
+    speak('Hello! I am TEN\'s AI Coordinator, an AI assistant. Here is a sample interview question: can you explain the difference between an array and a linked list, and when you would use each?');
+    $('speak').checked = on;
+  });
+
+  // ── Listening: Chrome's speech recognition, in the browser ─────────────
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var rec = null, listening = false;
+  if (!SR) {
+    $('mic').style.display = 'none';
+    input.placeholder = 'Type your question or answer (voice input needs Chrome, Edge or Android)';
+  }
+  function listen() {
+    if (!SR || busy) return;
+    if (listening) { try { rec.stop(); } catch (e) {} return; }
+    try { if (synth) synth.cancel(); } catch (e) {}
+    rec = new SR();
+    rec.lang = $('lang').value;
+    rec.interimResults = true;
+    rec.continuous = false;
+    rec.maxAlternatives = 1;
+    var finalText = '';
+    rec.onstart = function () { listening = true; $('mic').classList.add('live'); status.textContent = 'Listening… tap the microphone again when you finish.'; };
+    rec.onresult = function (e) {
+      var interim = '';
+      for (var i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) finalText += e.results[i][0].transcript + ' '; else interim += e.results[i][0].transcript;
+      }
+      input.value = (finalText + interim).trim();
+    };
+    rec.onerror = function (e) {
+      status.textContent = e.error === 'not-allowed' ? 'Allow the microphone in the browser bar, then try again.' :
+        e.error === 'no-speech' ? 'I did not hear anything. Try again, a little closer to the microphone.' : 'Voice input stopped (' + e.error + '). You can type instead.';
+    };
+    rec.onend = function () {
+      listening = false; $('mic').classList.remove('live');
+      if (input.value.trim()) { if (status.textContent.indexOf('Listening') === 0) status.textContent = ''; send(); }
+    };
+    try { rec.start(); } catch (e) { status.textContent = 'Voice input could not start. You can type instead.'; }
+  }
+  $('mic').addEventListener('click', listen);
+
+  // ── The two modes ──────────────────────────────────────────────────────
+  function setMode(m) {
+    mode = m;
+    $('mode-ask').classList.toggle('on', m === 'ask'); $('mode-ask').setAttribute('aria-selected', m === 'ask');
+    $('mode-interview').classList.toggle('on', m === 'interview'); $('mode-interview').setAttribute('aria-selected', m === 'interview');
+    $('interview-bar').style.display = m === 'interview' ? 'flex' : 'none';
+    $('reports-card').style.display = m === 'interview' && ME && ME.reports.length ? 'block' : 'none';
+    transcript.innerHTML = '';
+    input.placeholder = m === 'ask' ? 'Type, or press the microphone and speak' : 'Your answer: speak or type it';
+    if (m === 'ask') say('Ask me anything about your tasks, attendance, documents or the portal. Marks, complaints, payments and personal matters go to your coordinator.');
+    else say('A five-question interview for ' + (ME ? ME.domain : 'your domain') + '. Each answer is scored out of 10 with feedback, and you get a report at the end. ' + (session ? '' : 'Press Start when you are ready.'));
+  }
+  $('mode-ask').addEventListener('click', function () { setMode('ask'); });
+  $('mode-interview').addEventListener('click', function () { setMode('interview'); });
+
+  function post(path, body) {
+    return fetch('/api/v2/meeting' + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(body || {}) })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok || j.success === false) throw new Error(j.message || 'Something went wrong.'); return j; }); });
+  }
+
+  function send() {
+    var text = input.value.trim();
+    if (!text || busy) return;
+    if (mode === 'interview' && !session) { say('Press Start a mock interview first.'); return; }
+    input.value = '';
+    bubble('me', esc(text));
+    setBusy(true);
+    var p = mode === 'ask' ? post('/ask', { text: text }) : post('/interview/answer', { sessionId: session, answer: text });
+    p.then(function (j) {
+      if (mode === 'ask') {
+        bubble('ai', esc(j.reply) + (j.handover ? '<div class="hint">Your coordinator has been told.</div>' : ''));
+        speak(j.reply);
+        return;
+      }
+      var cls = j.score >= 7 ? '' : j.score >= 4 ? 'mid' : 'low';
+      var fb = (j.score != null ? '<span class="score ' + cls + '">' + j.score + '/10</span>' : '') + esc(j.feedback || '');
+      var next = j.question ? '<div style="margin-top:8px"><b>Question ' + j.number + ' of ' + j.of + ':</b> ' + esc(j.question) + '</div>' : '';
+      bubble('ai', fb + next);
+      speak((j.feedback || '') + (j.question ? ' Next question. ' + j.question : ''));
+      if (j.done) endInterview(j.report);
+      else $('progress').textContent = 'Question ' + j.number + ' of ' + j.of;
+    }).catch(function (e) { say(e.message); }).then(function () { setBusy(false); input.focus(); });
+  }
+  $('send').addEventListener('click', send);
+  input.addEventListener('keydown', function (e) { if (e.key === 'Enter') send(); });
+
+  $('start').addEventListener('click', function () {
+    if (busy) return;
+    setBusy(true, 'Preparing your first question…');
+    post('/interview/start').then(function (j) {
+      session = j.sessionId;
+      $('start').style.display = 'none'; $('finish').style.display = '';
+      $('progress').textContent = 'Question 1 of ' + j.of;
+      bubble('ai', '<b>Question 1 of ' + j.of + ':</b> ' + esc(j.question));
+      speak('Question one. ' + j.question);
+    }).catch(function (e) { say(e.message); }).then(function () { setBusy(false); });
+  });
+  $('finish').addEventListener('click', function () {
+    if (busy || !session) return;
+    setBusy(true);
+    post('/interview/finish', { sessionId: session }).then(function (j) { endInterview(j.report); }).catch(function (e) { say(e.message); }).then(function () { setBusy(false); });
+  });
+  function endInterview(report) {
+    session = null;
+    $('start').style.display = ''; $('start').textContent = 'Start another interview'; $('finish').style.display = 'none'; $('progress').textContent = '';
+    var r = document.createElement('div'); r.className = 'report';
+    r.innerHTML = '<h3>Your report <span class="ai-pill">AI</span></h3>' +
+      (report.overall != null ? '<div class="big">' + report.overall + '/10</div>' : '') +
+      '<p>' + esc(report.summary) + '</p>' +
+      '<ol style="margin:8px 0 0 18px;font-size:13px">' + report.turns.filter(function (t) { return t.answer; }).map(function (t) {
+        return '<li><b>' + (t.score != null ? t.score + '/10' : '–') + '</b> · ' + esc(t.question) + '</li>'; }).join('') + '</ol>' +
+      '<div class="hint">A practice report, written by an AI. It is not a mark and your coordinator does not see it unless you share it.</div>';
+    transcript.appendChild(r); r.scrollIntoView({ block: 'end', behavior: 'smooth' });
+    speak('That is the end of the interview. ' + report.summary);
+    if (ME) { ME.reports.unshift(report); renderReports(); }
+  }
+  function renderReports() {
+    if (!ME || !ME.reports.length) return;
+    $('reports-card').style.display = mode === 'interview' ? 'block' : 'none';
+    $('reports').innerHTML = ME.reports.map(function (r) {
+      return '<li><span>' + new Date(r.startedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) + ' · ' + r.questions + ' question' + (r.questions === 1 ? '' : 's') + '</span><b>' + (r.overall != null ? r.overall + '/10' : '–') + '</b></li>';
+    }).join('');
+  }
+
+  // ── Boot ───────────────────────────────────────────────────────────────
+  fetch('/api/v2/meeting', { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (j) {
+    if (!j.success) throw new Error(j.message || 'Could not load the room.');
+    ME = j;
+    if (!j.enabled) { say('The AI Meeting Room is switched off right now. Your coordinator is in Messages.'); $('send').disabled = true; $('mic').disabled = true; return; }
+    var q = new URLSearchParams(location.search);
+    setMode(q.get('mode') === 'interview' ? 'interview' : 'ask');
+    renderReports();
+  }).catch(function (e) { say(e.message); });
+})();
+</script>
+</body>
+</html>

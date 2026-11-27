@@ -50,7 +50,7 @@
             // The AI Coordinator answers at any hour, with or without a person
             // assigned. Switched off on the server (AI_COORDINATOR=off), its
             // dashboard card and menu entry go too.
-            if (d.ai === false) ["card-ask-ai", "nav-ask-ai"].forEach(function (id) {
+            if (d.ai === false) ["card-ask-ai", "nav-ask-ai", "card-meeting", "nav-meeting"].forEach(function (id) {
                 var el = document.getElementById(id); if (el) el.style.display = "none";
             });
             var askAi = d.ai === false ? '' : '<button class="tx2-btn" id="tx2-ask-ai" title="An AI assistant, not a person" ' +
